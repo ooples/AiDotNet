@@ -57,6 +57,7 @@ namespace AiDotNet.Interpretability
         /// <param name="predictiveParity">The predictive parity metric value.</param>
         /// <param name="disparateImpact">The disparate impact metric value.</param>
         /// <param name="statisticalParityDifference">The statistical parity difference metric value.</param>
+        /// <exception cref="ArgumentNullException">Thrown when any parameter is null and T is a reference type.</exception>
         public FairnessMetrics(
             T demographicParity,
             T equalOpportunity,
@@ -65,6 +66,17 @@ namespace AiDotNet.Interpretability
             T disparateImpact,
             T statisticalParityDifference)
         {
+            // Validate parameters for reference types to prevent null assignment
+            if (default(T) == null)
+            {
+                ArgumentNullException.ThrowIfNull(demographicParity);
+                ArgumentNullException.ThrowIfNull(equalOpportunity);
+                ArgumentNullException.ThrowIfNull(equalizedOdds);
+                ArgumentNullException.ThrowIfNull(predictiveParity);
+                ArgumentNullException.ThrowIfNull(disparateImpact);
+                ArgumentNullException.ThrowIfNull(statisticalParityDifference);
+            }
+
             DemographicParity = demographicParity;
             EqualOpportunity = equalOpportunity;
             EqualizedOdds = equalizedOdds;
@@ -77,15 +89,21 @@ namespace AiDotNet.Interpretability
         /// <summary>
         /// Initializes a new instance of the FairnessMetrics class.
         /// </summary>
-        [Obsolete("Use the constructor that accepts all metric values to avoid null reference types. This constructor will be removed in a future version.")]
+        /// <remarks>
+        /// WARNING: This constructor uses default(T)! (null-forgiving operator) to initialize non-nullable properties.
+        /// For reference types, this assigns null to non-nullable properties, which may cause NullReferenceException at runtime.
+        /// For value types, this assigns the type's default value (e.g., 0 for numeric types).
+        /// This approach suppresses compiler warnings but does not eliminate runtime null reference risks.
+        /// </remarks>
+        [Obsolete("Use the constructor that accepts all metric values to avoid assigning null to non-nullable properties. This constructor will be removed in a future version.")]
         public FairnessMetrics()
         {
-            DemographicParity = default(T);
-            EqualOpportunity = default(T);
-            EqualizedOdds = default(T);
-            PredictiveParity = default(T);
-            DisparateImpact = default(T);
-            StatisticalParityDifference = default(T);
+            DemographicParity = default(T)!;
+            EqualOpportunity = default(T)!;
+            EqualizedOdds = default(T)!;
+            PredictiveParity = default(T)!;
+            DisparateImpact = default(T)!;
+            StatisticalParityDifference = default(T)!;
             AdditionalMetrics = new Dictionary<string, T>();
         }
     }
