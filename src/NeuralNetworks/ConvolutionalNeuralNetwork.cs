@@ -319,6 +319,29 @@ public class ConvolutionalNeuralNetwork<T> : NeuralNetworkBase<T>
         return _lossFunction.CalculateDerivative(prediction.ToVector(), expectedOutput.ToVector());
     }
 
+    /// <inheritdoc/>
+    /// <remarks>
+    /// <para>
+    /// For CNNs, the parameter count includes weights and biases from convolutional layers, pooling layers,
+    /// and fully connected layers. The computation typically includes:
+    /// </para>
+    /// <list type="bullet">
+    /// <item><description>Convolutional layer parameters: (kernel_height × kernel_width × input_channels × output_channels) + output_channels (biases)</description></item>
+    /// <item><description>Fully connected layer parameters: (input_size × output_size) + output_size (biases)</description></item>
+    /// <item><description>Pooling layers typically have no trainable parameters</description></item>
+    /// </list>
+    /// <para>
+    /// <b>For Beginners:</b> CNNs usually have parameters in their convolutional filters (which detect features like
+    /// edges and patterns) and in their fully connected layers (which make the final classification). The total number
+    /// depends on the filter sizes, number of filters, and size of the fully connected layers. Larger kernels and more
+    /// filters mean more parameters and thus more computational requirements.
+    /// </para>
+    /// </remarks>
+    public new int GetParameterCount()
+    {
+        return base.GetParameterCount();
+    }
+
     /// <summary>
     /// Retrieves metadata about the convolutional neural network model.
     /// </summary>
