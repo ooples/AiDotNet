@@ -472,6 +472,16 @@ internal class PredictionModelResult<T, TInput, TOutput> : IPredictiveModel<T, T
     /// </remarks>
     public void LoadModel(string filePath)
     {
+        if (string.IsNullOrWhiteSpace(filePath))
+        {
+            throw new ArgumentException("File path must not be null or empty.", nameof(filePath));
+        }
+
+        if (!File.Exists(filePath))
+        {
+            throw new FileNotFoundException($"The specified model file does not exist: {filePath}", filePath);
+        }
+
         var data = File.ReadAllBytes(filePath);
         Deserialize(data);
     }
