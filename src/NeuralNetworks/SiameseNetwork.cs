@@ -150,14 +150,14 @@ public class SiameseNetwork<T> : NeuralNetworkBase<T>
     /// This method adds together:
     /// 1. The number of parameters in the shared subnetwork (which processes each input)
     /// 2. The number of parameters in the output layer (which compares the embeddings)
-    /// 
+    ///
     /// You might use this information to:
     /// - Estimate how much memory your model will need
     /// - Compare the complexity of different network architectures
     /// - Determine if you have enough training data (typically you want many times more examples than parameters)
     /// </para>
     /// </remarks>
-    public int GetParameterCount()
+    public override int GetParameterCount()
     {
         return _subnetwork.GetParameterCount() + _outputLayer.ParameterCount;
     }
