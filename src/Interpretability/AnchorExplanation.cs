@@ -17,17 +17,17 @@ namespace AiDotNet.Interpretability
         /// <summary>
         /// Gets or sets the precision of the anchor (how often the anchor holds).
         /// </summary>
-        public T Precision { get; set; } = default!;
+        public T Precision { get; set; } = default(T);
 
         /// <summary>
         /// Gets or sets the coverage of the anchor (fraction of instances covered).
         /// </summary>
-        public T Coverage { get; set; } = default!;
+        public T Coverage { get; set; } = default(T);
 
         /// <summary>
         /// Gets or sets the threshold used for anchor construction.
         /// </summary>
-        public T Threshold { get; set; } = default!;
+        public T Threshold { get; set; } = default(T);
 
         /// <summary>
         /// Gets or sets the features involved in the anchor.
