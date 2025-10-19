@@ -549,25 +549,6 @@ public class OccupancyNeuralNetwork<T> : NeuralNetworkBase<T>
         return error;
     }
 
-    /// <summary>
-    /// Gets the total number of trainable parameters in the network.
-    /// </summary>
-    /// <returns>The total count of parameters across all layers.</returns>
-    /// <remarks>
-    /// <para>
-    /// This method returns the total number of trainable parameters (weights and biases)
-    /// in the occupancy neural network by delegating to the base class ParameterCount property.
-    /// </para>
-    /// <para>
-    /// <b>For Beginners:</b> Parameters are the internal values that the network adjusts during
-    /// training to improve its predictions. More parameters allow the network to learn more
-    /// complex patterns, but also require more data and computational resources.
-    /// </para>
-    /// </remarks>
-    private int GetParameterCount()
-    {
-        return ParameterCount;
-    }
 
     /// <summary>
     /// Gets metadata about the occupancy neural network.
@@ -618,7 +599,7 @@ public class OccupancyNeuralNetwork<T> : NeuralNetworkBase<T>
                 { "HistoryWindowSize", _historyWindowSize },
                 { "LayerCount", Layers.Count },
                 { "LayerTypes", layerTypeCount },
-                { "TotalParameters", GetParameterCount() },
+                { "TotalParameters", ParameterCount },
                 { "HiddenLayerSizes", Architecture.GetHiddenLayerSizes() }
             },
             ModelData = this.Serialize()
