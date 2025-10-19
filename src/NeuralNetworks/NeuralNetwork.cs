@@ -231,8 +231,7 @@ public class NeuralNetwork<T> : NeuralNetworkBase<T>
         SetTrainingMode(true);
 
         // Step 1: Forward pass with memory for backpropagation
-        Vector<T> inputVector = input.ToVector();
-        Vector<T> outputVector = ForwardWithMemory(Tensor<T>.FromVector(inputVector)).ToVector();
+        Vector<T> outputVector = ForwardWithMemory(input).ToVector();
 
         // Step 2: Calculate loss/error (e.g., mean squared error)
         Vector<T> expectedVector = expectedOutput.ToVector();
