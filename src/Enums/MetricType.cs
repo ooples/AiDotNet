@@ -10,34 +10,34 @@ public enum MetricType
     /// </summary>
     /// <remarks>
     /// <para>
-    /// <b>For Beginners:</b> R� (R-squared) tells you how well your model fits the data, on a scale from 0 to 1.
+    /// <b>For Beginners:</b> R² (R-squared) tells you how well your model fits the data, on a scale from 0 to 1.
     /// A value of 1 means your model perfectly predicts the data, while 0 means it's no better than
-    /// just guessing the average value. For example, an R� of 0.75 means your model explains 75% of
+    /// just guessing the average value. For example, an R² of 0.75 means your model explains 75% of
     /// the variation in the data.
     /// </para>
     /// </remarks>
     R2,
 
     /// <summary>
-    /// R-Squared (alias for R2) - Coefficient of determination.
+    /// Alias of <see cref="R2"/>. R-Squared (R²) - Coefficient of determination measuring model fit quality.
     /// </summary>
     /// <remarks>
     /// <para>
-    /// <b>For Beginners:</b> RSquared is another name for R2. They mean exactly the same thing.
-    /// Some frameworks use "RSquared" while others use "R2". This is the proportion of variance
-    /// in the dependent variable explained by the model. Values range from 0 to 1, with higher being better.
+    /// <b>For Beginners:</b> RSquared is another name for R². It measures how well your model explains
+    /// the variance in the data on a scale from 0 to 1. A higher value means better fit. For example,
+    /// RSquared = 0.80 means your model explains 80% of the variation in the target variable.
     /// </para>
     /// </remarks>
-    RSquared,
+    RSquared = R2,
 
     /// <summary>
-    /// A modified version of R� that accounts for the number of predictors in the model.
+    /// A modified version of R² that accounts for the number of predictors in the model.
     /// </summary>
     /// <remarks>
     /// <para>
-    /// <b>For Beginners:</b> Adjusted R� is similar to R�, but it penalizes you for adding too many input variables
+    /// <b>For Beginners:</b> Adjusted R² is similar to R², but it penalizes you for adding too many input variables
     /// that don't help much. This prevents "overfitting" - when your model becomes too complex and starts
-    /// memorizing the training data rather than learning general patterns. Use this instead of regular R�
+    /// memorizing the training data rather than learning general patterns. Use this instead of regular R²
     /// when comparing models with different numbers of input variables.
     /// </para>
     /// </remarks>
@@ -49,8 +49,8 @@ public enum MetricType
     /// <remarks>
     /// <para>
     /// <b>For Beginners:</b> Explained Variance Score measures how much of the variation in your data is captured
-    /// by your model. Like R�, it ranges from 0 to 1, with higher values being better. The main difference
-    /// is that this metric focuses purely on variance explained, while R� also considers how far predictions
+    /// by your model. Like R², it ranges from 0 to 1, with higher values being better. The main difference
+    /// is that this metric focuses purely on variance explained, while R² also considers how far predictions
     /// are from the actual values.
     /// </para>
     /// </remarks>
@@ -150,9 +150,9 @@ public enum MetricType
     /// <para>
     /// <b>For Beginners:</b> Pearson Correlation measures how well the relationship between your predictions and
     /// actual values can be described with a straight line. It ranges from -1 to 1, where:
-    /// � 1 means perfect positive correlation (when actual values increase, predictions increase)
-    /// � 0 means no correlation
-    /// � -1 means perfect negative correlation (when actual values increase, predictions decrease)
+    /// - 1 means perfect positive correlation (when actual values increase, predictions increase)
+    /// - 0 means no correlation
+    /// - -1 means perfect negative correlation (when actual values increase, predictions decrease)
     /// A high positive value indicates your model is capturing the right patterns, even if the exact values differ.
     /// </para>
     /// </remarks>
@@ -895,17 +895,18 @@ public enum MetricType
     AUCROC,
 
     /// <summary>
-    /// AUC (alias for AUCROC) - Area Under the Curve (ROC).
+    /// Alias of <see cref="AUCROC"/>. Area Under the Curve - Measures the area under the ROC curve for classification models.
     /// </summary>
     /// <remarks>
     /// <para>
-    /// <b>For Beginners:</b> AUC is another name for AUCROC. They mean exactly the same thing.
-    /// Some frameworks use "AUC" while others use "AUCROC". In most contexts, "AUC" specifically
-    /// refers to the area under the ROC curve, which is a common metric for classification models.
-    /// Values range from 0 to 1, with higher values indicating better performance.
+    /// <b>For Beginners:</b> AUC (Area Under the Curve) is another name for AUCROC. It measures how well
+    /// your classification model can distinguish between classes. Values range from 0 to 1:
+    /// - 0.5 means random guessing
+    /// - 1.0 means perfect classification
+    /// Higher AUC values indicate better model performance at separating classes.
     /// </para>
     /// </remarks>
-    AUC,
+    AUC = AUCROC,
 
     /// <summary>
     /// Symmetric Mean Absolute Percentage Error - A variant of MAPE that handles zero or near-zero values better.

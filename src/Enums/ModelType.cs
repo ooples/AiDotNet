@@ -17,6 +17,20 @@ public enum ModelType
     /// Represents no model selection.
     /// </summary>
     None,
+
+    /// <summary>
+    /// An automated machine learning model that automatically selects and trains the best model.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> AutoML (Automated Machine Learning) automates the process of selecting and
+    /// configuring the best machine learning model for your data. Instead of manually trying different
+    /// models, AutoML experiments with various algorithms, evaluates them, and chooses the one that
+    /// performs best. It's like having an AI assistant that tests different approaches and picks the
+    /// winner for you, saving you time and expertise.
+    /// </para>
+    /// </remarks>
+    AutoML,
     
     /// <summary>
     /// A basic model that finds the relationship between a single input variable and an output variable.
@@ -98,7 +112,7 @@ public enum ModelType
     /// <remarks>
     /// <para>
     /// <b>For Beginners:</b> Decision Tree works like a flowchart of yes/no questions. For example,
-    /// to predict if someone will buy ice cream: "Is temperature > 75°F? If yes, is it a weekend?
+    /// to predict if someone will buy ice cream: "Is temperature > 75Â°F? If yes, is it a weekend?
     /// If no, is there a special event?" and so on. It's easy to understand but can be less
     /// accurate than more complex models.
     /// </para>
@@ -323,9 +337,9 @@ public enum ModelType
     /// </summary>
     /// <remarks>
     /// <para>
-    /// <b>For Beginners:</b> Symbolic Regression tries to find an actual mathematical formula that explains 
-    /// your data. Instead of just fitting parameters to a pre-defined equation, it searches for the 
-    /// equation itself. For example, it might discover that your data follows "y = x² + 3x - 2" rather 
+    /// <b>For Beginners:</b> Symbolic Regression tries to find an actual mathematical formula that explains
+    /// your data. Instead of just fitting parameters to a pre-defined equation, it searches for the
+    /// equation itself. For example, it might discover that your data follows "y = xÂ² + 3x - 2" rather 
     /// than just giving you numbers. This provides insights into the underlying relationships and can 
     /// be more interpretable than other complex models.
     /// </para>

@@ -1124,12 +1124,12 @@ public class SpikingNeuralNetwork<T> : NeuralNetworkBase<T>
     /// - Simulation steps: How many time steps to run for each input
     ///   - More steps allow longer temporal patterns to develop
     ///   - But require more computation time
-    /// 
-    /// The total simulation time is: timeStep × simulationSteps
-    /// 
+    ///
+    /// The total simulation time is: <c>timeStep * simulationSteps</c>
+    ///
     /// For example:
-    /// - 0.1 time step × 100 steps = 10 time units of simulation
-    /// - 0.01 time step × 1000 steps = 10 time units with 10× more precision
+    /// - 0.1 time step Ã— 100 steps = 10 time units of simulation
+    /// - 0.01 time step Ã— 1000 steps = 10 time units with 10Ã— more precision
     /// </para>
     /// </remarks>
     public void SetSimulationParameters(double timeStep, int simulationSteps)
