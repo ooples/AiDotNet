@@ -1588,7 +1588,6 @@ public class DifferentiableNeuralComputer<T> : NeuralNetworkBase<T>
         }
     }
 
-
     /// <summary>
     /// Gets metadata about the Differentiable Neural Computer model.
     /// </summary>

@@ -394,7 +394,7 @@ public class ResidualNeuralNetwork<T> : NeuralNetworkBase<T>
         // Set back to inference mode after training
         SetTrainingMode(false);
     }
-   
+
     /// <summary>
     /// Gets metadata about the Residual Neural Network model.
     /// </summary>
