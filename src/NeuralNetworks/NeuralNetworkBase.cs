@@ -707,7 +707,7 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>
         if (!Architecture.IsInitialized)
         {
             // Initialize from cached data
-            Architecture.InitializeFromCachedData<Tensor<T>, Tensor<T>>();
+            Architecture.InitializeFromCachedData();
 
             // Initialize network-specific layers
             InitializeLayers();
