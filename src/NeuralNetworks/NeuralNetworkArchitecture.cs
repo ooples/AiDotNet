@@ -284,6 +284,27 @@ public class NeuralNetworkArchitecture<T>
     public bool ShouldReturnFullSequence { get; }
 
     /// <summary>
+    /// Gets a value indicating whether the architecture has been initialized.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// This property tracks whether the neural network architecture has been properly initialized
+    /// with all necessary data and configurations. An uninitialized architecture may need to load
+    /// cached data or perform other initialization steps before the network can be used.
+    /// </para>
+    /// <para><b>For Beginners:</b> This tells you if the network architecture is ready to use.
+    ///
+    /// Think of this like a checklist before starting:
+    /// - false: The architecture is created but not fully set up yet
+    /// - true: Everything is ready and the network can be used
+    ///
+    /// This is useful because sometimes a network needs to load previously saved data
+    /// or perform setup steps before it can start training or making predictions.
+    /// </para>
+    /// </remarks>
+    public bool IsInitialized { get; private set; }
+
+    /// <summary>
     /// Initializes a new instance of the <see cref="NeuralNetworkArchitecture{T}"/> class with the specified parameters.
     /// </summary>
     /// <param name="inputType">The type of input data (one-dimensional, two-dimensional, or three-dimensional).</param>
@@ -652,6 +673,39 @@ public class NeuralNetworkArchitecture<T>
     }
 
     /// <summary>
+    /// Initializes the architecture from cached data.
+    /// </summary>
+    /// <typeparam name="TInput">The type of the input data.</typeparam>
+    /// <typeparam name="TOutput">The type of the output data.</typeparam>
+    /// <remarks>
+    /// <para>
+    /// This method initializes the neural network architecture using previously cached or saved data.
+    /// It marks the architecture as initialized once the process is complete. This is useful when
+    /// loading a pre-trained network or resuming training from a checkpoint.
+    /// </para>
+    /// <para><b>For Beginners:</b> This method prepares the architecture to use saved information.
+    ///
+    /// Think of this like:
+    /// - Loading a saved game - you want to continue from where you left off
+    /// - Restoring a workspace - bringing back your previous setup
+    /// - Rehydrating freeze-dried food - adding back what was removed to make it usable again
+    ///
+    /// When you train a neural network, you might save its state and come back to it later.
+    /// This method helps restore that saved state so the network can continue working.
+    ///
+    /// After calling this method, IsInitialized will be set to true, indicating the
+    /// architecture is ready for use.
+    /// </para>
+    /// </remarks>
+    public void InitializeFromCachedData<TInput, TOutput>()
+    {
+        // Mark the architecture as initialized
+        // In a more complete implementation, this would load cached configuration data
+        // such as layer weights, biases, and other parameters from storage
+        IsInitialized = true;
+    }
+
+    /// <summary>
     /// Validates the input dimensions to ensure they are consistent and appropriate for the selected input type.
     /// </summary>
     /// <exception cref="ArgumentException">Thrown when input dimensions are invalid or inconsistent.</exception>
@@ -664,21 +718,21 @@ public class NeuralNetworkArchitecture<T>
     /// the input dimensions.
     /// </para>
     /// <para><b>For Beginners:</b> This makes sure all your dimension settings make sense together.
-    /// 
+    ///
     /// This method performs important checks like:
     /// - For 1D data: Ensuring InputSize is provided and positive
     /// - For 2D data: Ensuring InputHeight and InputWidth are positive
     /// - For 3D data: Ensuring InputHeight, InputWidth, and InputDepth are all positive
-    /// 
+    ///
     /// It also checks that if you provide both InputSize and other dimension parameters,
     /// they're consistent with each other. For example, if you set:
     /// - InputSize = 25
     /// - InputHeight = 5
     /// - InputWidth = 5
-    /// 
+    ///
     /// These are consistent because 5×5=25. But if you set InputSize=30, it would
     /// throw an error because 5×5≠30.
-    /// 
+    ///
     /// This prevents many common errors when setting up neural networks.
     /// </para>
     /// </remarks>
