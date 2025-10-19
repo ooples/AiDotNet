@@ -10,9 +10,9 @@ public enum MetricType
     /// </summary>
     /// <remarks>
     /// <para>
-    /// <b>For Beginners:</b> R� (R-squared) tells you how well your model fits the data, on a scale from 0 to 1.
+    /// <b>For Beginners:</b> R² (R-squared) tells you how well your model fits the data, on a scale from 0 to 1.
     /// A value of 1 means your model perfectly predicts the data, while 0 means it's no better than
-    /// just guessing the average value. For example, an R� of 0.75 means your model explains 75% of
+    /// just guessing the average value. For example, an R² of 0.75 means your model explains 75% of
     /// the variation in the data.
     /// </para>
     /// </remarks>
@@ -28,16 +28,16 @@ public enum MetricType
     /// RSquared = 0.80 means your model explains 80% of the variation in the target variable.
     /// </para>
     /// </remarks>
-    RSquared,
+    RSquared = R2,
 
     /// <summary>
-    /// A modified version of R� that accounts for the number of predictors in the model.
+    /// A modified version of R² that accounts for the number of predictors in the model.
     /// </summary>
     /// <remarks>
     /// <para>
-    /// <b>For Beginners:</b> Adjusted R� is similar to R�, but it penalizes you for adding too many input variables
+    /// <b>For Beginners:</b> Adjusted R² is similar to R², but it penalizes you for adding too many input variables
     /// that don't help much. This prevents "overfitting" - when your model becomes too complex and starts
-    /// memorizing the training data rather than learning general patterns. Use this instead of regular R�
+    /// memorizing the training data rather than learning general patterns. Use this instead of regular R²
     /// when comparing models with different numbers of input variables.
     /// </para>
     /// </remarks>
@@ -49,8 +49,8 @@ public enum MetricType
     /// <remarks>
     /// <para>
     /// <b>For Beginners:</b> Explained Variance Score measures how much of the variation in your data is captured
-    /// by your model. Like R�, it ranges from 0 to 1, with higher values being better. The main difference
-    /// is that this metric focuses purely on variance explained, while R� also considers how far predictions
+    /// by your model. Like R², it ranges from 0 to 1, with higher values being better. The main difference
+    /// is that this metric focuses purely on variance explained, while R² also considers how far predictions
     /// are from the actual values.
     /// </para>
     /// </remarks>
@@ -150,9 +150,9 @@ public enum MetricType
     /// <para>
     /// <b>For Beginners:</b> Pearson Correlation measures how well the relationship between your predictions and
     /// actual values can be described with a straight line. It ranges from -1 to 1, where:
-    /// � 1 means perfect positive correlation (when actual values increase, predictions increase)
-    /// � 0 means no correlation
-    /// � -1 means perfect negative correlation (when actual values increase, predictions decrease)
+    /// - 1 means perfect positive correlation (when actual values increase, predictions increase)
+    /// - 0 means no correlation
+    /// - -1 means perfect negative correlation (when actual values increase, predictions decrease)
     /// A high positive value indicates your model is capturing the right patterns, even if the exact values differ.
     /// </para>
     /// </remarks>
@@ -906,7 +906,7 @@ public enum MetricType
     /// Higher AUC values indicate better model performance at separating classes.
     /// </para>
     /// </remarks>
-    AUC,
+    AUC = AUCROC,
 
     /// <summary>
     /// Symmetric Mean Absolute Percentage Error - A variant of MAPE that handles zero or near-zero values better.
