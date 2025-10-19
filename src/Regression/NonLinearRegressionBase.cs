@@ -797,7 +797,7 @@ public abstract class NonLinearRegressionBase<T> : INonLinearRegression<T>
         int expectedParamCount = Alphas.Length + 1; // Alphas.Length + 1 (for Bias term)
         if (parameters.Length != expectedParamCount)
         {
-            throw new ArgumentException($"Expected {expectedParamCount} parameters, but got {parameters.Length}");
+            throw new ArgumentException($"Expected {expectedParamCount} parameters, but got {parameters.Length}", nameof(parameters));
         }
 
         for (int i = 0; i < Alphas.Length; i++)

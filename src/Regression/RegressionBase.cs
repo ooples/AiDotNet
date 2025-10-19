@@ -444,7 +444,7 @@ public abstract class RegressionBase<T> : IRegression<T>
     {
         if (parameters.Length != ExpectedParameterCount)
         {
-            throw new ArgumentException($"Expected {ExpectedParameterCount} parameters, but got {parameters.Length}");
+            throw new ArgumentException($"Expected {ExpectedParameterCount} parameters, but got {parameters.Length}", nameof(parameters));
         }
     
         // Create a new instance of the model
@@ -565,7 +565,7 @@ public abstract class RegressionBase<T> : IRegression<T>
     {
         if (parameters.Length != ExpectedParameterCount)
         {
-            throw new ArgumentException($"Expected {ExpectedParameterCount} parameters, but got {parameters.Length}");
+            throw new ArgumentException($"Expected {ExpectedParameterCount} parameters, but got {parameters.Length}", nameof(parameters));
         }
 
         // Extract and set coefficients

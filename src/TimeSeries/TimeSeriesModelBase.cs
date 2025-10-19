@@ -1110,7 +1110,7 @@ public abstract class TimeSeriesModelBase<T> : ITimeSeriesModel<T>
     {
         if (parameters.Length != ModelParameters.Length)
         {
-            throw new ArgumentException($"Expected {ModelParameters.Length} parameters, but got {parameters.Length}");
+            throw new ArgumentException($"Expected {ModelParameters.Length} parameters, but got {parameters.Length}", nameof(parameters));
         }
 
         for (int i = 0; i < ModelParameters.Length; i++)

@@ -775,7 +775,7 @@ public class VectorModel<T> : IFullModel<T, Matrix<T>, Vector<T>>
     {
         if (parameters.Length != Coefficients.Length)
         {
-            throw new ArgumentException($"Expected {Coefficients.Length} parameters, but got {parameters.Length}");
+            throw new ArgumentException($"Expected {Coefficients.Length} parameters, but got {parameters.Length}", nameof(parameters));
         }
 
         for (int i = 0; i < Coefficients.Length; i++)
