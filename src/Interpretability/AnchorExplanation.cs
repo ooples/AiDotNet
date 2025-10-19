@@ -17,17 +17,17 @@ namespace AiDotNet.Interpretability
         /// <summary>
         /// Gets or sets the precision of the anchor (how often the anchor holds).
         /// </summary>
-        public required T Precision { get; set; }
+        public T Precision { get; set; }
 
         /// <summary>
         /// Gets or sets the coverage of the anchor (fraction of instances covered).
         /// </summary>
-        public required T Coverage { get; set; }
+        public T Coverage { get; set; }
 
         /// <summary>
         /// Gets or sets the threshold used for anchor construction.
         /// </summary>
-        public required T Threshold { get; set; }
+        public T Threshold { get; set; }
 
         /// <summary>
         /// Gets or sets the features involved in the anchor.
@@ -47,6 +47,9 @@ namespace AiDotNet.Interpretability
             AnchorRules = new Dictionary<int, (T Min, T Max)>();
             AnchorFeatures = new List<int>();
             Description = string.Empty;
+            Precision = default(T);
+            Coverage = default(T);
+            Threshold = default(T);
         }
     }
 }
