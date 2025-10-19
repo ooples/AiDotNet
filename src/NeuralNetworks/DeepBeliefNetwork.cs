@@ -571,7 +571,7 @@ public class DeepBeliefNetwork<T> : NeuralNetworkBase<T>
                     var y = batchY.GetRow(i);
                     
                     // Forward pass with memory to save intermediate states
-                    // NOTE: This optimization uses predictionTensor directly instead of converting to Vector<T> and back.
+                    // NOTE: This optimization uses the prediction tensor directly instead of converting to Vector<T> and back.
                     // This is the recommended pattern for consistency across all neural network implementations.
                     var prediction = ForwardWithMemory(Tensor<T>.FromVector(x));
                     
