@@ -798,6 +798,7 @@ public class MemoryNetwork<T> : NeuralNetworkBase<T>
         }
     }
 
+
     /// <summary>
     /// Gets metadata about the memory network model.
     /// </summary>
@@ -850,7 +851,7 @@ public class MemoryNetwork<T> : NeuralNetworkBase<T>
             {
                 { "MemorySize", _memorySize },
                 { "EmbeddingSize", _embeddingSize },
-                { "TotalParameters", GetParameterCount() },
+                { "TotalParameters", ParameterCount },
                 { "LayerCount", Layers.Count },
                 { "AvgMemoryValue", avgMemValue },
                 { "MinMemoryValue", minMemValue },

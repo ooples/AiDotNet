@@ -549,6 +549,7 @@ public class OccupancyNeuralNetwork<T> : NeuralNetworkBase<T>
         return error;
     }
 
+
     /// <summary>
     /// Gets metadata about the occupancy neural network.
     /// </summary>
@@ -598,7 +599,7 @@ public class OccupancyNeuralNetwork<T> : NeuralNetworkBase<T>
                 { "HistoryWindowSize", _historyWindowSize },
                 { "LayerCount", Layers.Count },
                 { "LayerTypes", layerTypeCount },
-                { "TotalParameters", GetParameterCount() },
+                { "TotalParameters", ParameterCount },
                 { "HiddenLayerSizes", Architecture.GetHiddenLayerSizes() }
             },
             ModelData = this.Serialize()
