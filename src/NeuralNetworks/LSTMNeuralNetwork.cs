@@ -1895,6 +1895,7 @@ public class LSTMNeuralNetwork<T> : NeuralNetworkBase<T>
         }
     }
 
+
     /// <summary>
     /// Gets metadata about the LSTM model.
     /// </summary>
@@ -1943,7 +1944,7 @@ public class LSTMNeuralNetwork<T> : NeuralNetworkBase<T>
                 { "LSTMLayerCount", lstmLayerCount },
                 { "LSTMLayerSizes", lstmSizes },
                 { "TotalLayers", Layers.Count },
-                { "TotalParameters", GetParameterCount() },
+                { "TotalParameters", ParameterCount },
                 { "InputSize", Architecture.InputSize },
                 { "OutputSize", Architecture.OutputSize }
             },

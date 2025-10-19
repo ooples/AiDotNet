@@ -1151,6 +1151,7 @@ public class NeuralTuringMachine<T> : NeuralNetworkBase<T>
         }
     }
 
+
     /// <summary>
     /// Gets metadata about the Neural Turing Machine model.
     /// </summary>
@@ -1165,7 +1166,7 @@ public class NeuralTuringMachine<T> : NeuralNetworkBase<T>
                 { "MemorySize", _memorySize },
                 { "MemoryVectorSize", _memoryVectorSize },
                 { "ControllerSize", _controllerSize },
-                { "TotalParameters", GetParameterCount() },
+                { "TotalParameters", ParameterCount },
                 { "LayerCount", Layers.Count }
             },
             ModelData = this.Serialize()

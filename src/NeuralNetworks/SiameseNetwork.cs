@@ -132,34 +132,36 @@ public class SiameseNetwork<T> : NeuralNetworkBase<T>
     /// <summary>
     /// Gets the total number of trainable parameters in the Siamese network.
     /// </summary>
-    /// <returns>The total count of parameters in both the subnetwork and output layer.</returns>
     /// <remarks>
     /// <para>
-    /// <b>For Beginners:</b> This method tells you how many numbers (parameters) define your neural network.
-    /// 
-    /// Neural networks learn by adjusting these parameters during training. The parameter count gives you 
+    /// <b>For Beginners:</b> This property tells you how many numbers (parameters) define your neural network.
+    ///
+    /// Neural networks learn by adjusting these parameters during training. The parameter count gives you
     /// an idea of how complex your model is:
-    /// 
+    ///
     /// - A network with more parameters can potentially learn more complex patterns
     /// - A network with too many parameters might "memorize" the training data instead of learning general patterns
     /// - More parameters require more training data and computational resources
-    /// 
-    /// For example, a Siamese network for face recognition might have millions of parameters to capture 
+    ///
+    /// For example, a Siamese network for face recognition might have millions of parameters to capture
     /// all the subtle features that distinguish different faces.
-    /// 
-    /// This method adds together:
+    ///
+    /// This property adds together:
     /// 1. The number of parameters in the shared subnetwork (which processes each input)
     /// 2. The number of parameters in the output layer (which compares the embeddings)
-    /// 
+    ///
     /// You might use this information to:
     /// - Estimate how much memory your model will need
     /// - Compare the complexity of different network architectures
     /// - Determine if you have enough training data (typically you want many times more examples than parameters)
     /// </para>
     /// </remarks>
-    public int GetParameterCount()
+    public override int ParameterCount
     {
-        return _subnetwork.GetParameterCount() + _outputLayer.ParameterCount;
+        get
+        {
+            return _subnetwork.ParameterCount + _outputLayer.ParameterCount;
+        }
     }
 
     /// <summary>
