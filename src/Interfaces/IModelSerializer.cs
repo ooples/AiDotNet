@@ -81,4 +81,30 @@ public interface IModelSerializer
     /// </remarks>
     /// <param name="data">The byte array containing the serialized model data.</param>
     void Deserialize(byte[] data);
+
+    /// <summary>
+    /// Saves the model to a file.
+    /// </summary>
+    /// <param name="filePath">The path where the model should be saved.</param>
+    /// <remarks>
+    /// This method provides a convenient way to save the model directly to disk.
+    /// It combines serialization with file I/O operations.
+    ///
+    /// <b>For Beginners:</b> This is like clicking "Save As" in a document editor.
+    /// Instead of manually calling Serialize() and then writing to a file, this method does both steps for you.
+    /// </remarks>
+    void SaveModel(string filePath);
+
+    /// <summary>
+    /// Loads the model from a file.
+    /// </summary>
+    /// <param name="filePath">The path to the file containing the saved model.</param>
+    /// <remarks>
+    /// This method provides a convenient way to load a model directly from disk.
+    /// It combines file I/O operations with deserialization.
+    ///
+    /// <b>For Beginners:</b> This is like clicking "Open" in a document editor.
+    /// Instead of manually reading from a file and then calling Deserialize(), this method does both steps for you.
+    /// </remarks>
+    void LoadModel(string filePath);
 }
