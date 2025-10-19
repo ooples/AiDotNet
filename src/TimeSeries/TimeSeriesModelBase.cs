@@ -1488,7 +1488,7 @@ public abstract class TimeSeriesModelBase<T> : ITimeSeriesModel<T>
         {
             features[featureIndex++] = NumOps.FromDouble(step + 1);
         }
-        
+
         // Add seasonal dummies if seasonal
         if (Options.SeasonalPeriod > 0)
         {
@@ -1498,7 +1498,22 @@ public abstract class TimeSeriesModelBase<T> : ITimeSeriesModel<T>
                 features[featureIndex++] = NumOps.FromDouble(s == season ? 1.0 : 0.0);
             }
         }
-        
+
         return features;
+    }
+
+    public virtual int ParameterCount
+    {
+        get { return ModelParameters.Length; }
+    }
+
+    public virtual void SaveModel(string filePath)
+    {
+        throw new NotImplementedException("SaveModel is not yet implemented for this model type.");
+    }
+
+    public virtual void LoadModel(string filePath)
+    {
+        throw new NotImplementedException("SaveModel is not yet implemented for this model type.");
     }
 }
