@@ -675,8 +675,6 @@ public class NeuralNetworkArchitecture<T>
     /// <summary>
     /// Initializes the architecture from cached data.
     /// </summary>
-    /// <typeparam name="TInput">The type of the input data.</typeparam>
-    /// <typeparam name="TOutput">The type of the output data.</typeparam>
     /// <remarks>
     /// <para>
     /// This method initializes the neural network architecture using previously cached or saved data.
@@ -697,7 +695,7 @@ public class NeuralNetworkArchitecture<T>
     /// architecture is ready for use.
     /// </para>
     /// </remarks>
-    public void InitializeFromCachedData<TInput, TOutput>()
+    public void InitializeFromCachedData()
     {
         // Mark the architecture as initialized
         // In a more complete implementation, this would load cached configuration data
