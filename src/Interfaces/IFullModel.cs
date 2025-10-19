@@ -27,7 +27,7 @@ namespace AiDotNet.Interfaces;
 /// - Loaded quickly when needed to make predictions
 /// - Possibly updated with new data periodically
 /// </remarks>
-public interface IFullModel<T, TInput, TOutput> : IModel<TInput, TOutput, ModelMetaData<T>>, 
-    IModelSerializer, IParameterizable<T, TInput, TOutput>, IFeatureAware, ICloneable<IFullModel<T, TInput, TOutput>>
+public interface IFullModel<T, TInput, TOutput> : IModel<TInput, TOutput, ModelMetaData<T>>,
+    IModelSerializer, IParameterizable<T, TInput, TOutput>, IFeatureAware, IFeatureImportance<T>, ICloneable<IFullModel<T, TInput, TOutput>>
 {
 }

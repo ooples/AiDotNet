@@ -77,6 +77,22 @@ public abstract class RegressionBase<T> : IRegression<T>
     public bool HasIntercept => Options.UseIntercept;
 
     /// <summary>
+    /// Gets or sets the feature names.
+    /// </summary>
+    /// <value>
+    /// An array of feature names. If not set, feature indices will be used as names.
+    /// </value>
+    public string[]? FeatureNames { get; set; }
+
+    /// <summary>
+    /// Gets the expected number of parameters (coefficients plus intercept if used).
+    /// </summary>
+    /// <value>
+    /// The total number of parameters, which equals the number of coefficients plus 1 if an intercept is used, or just the number of coefficients otherwise.
+    /// </value>
+    protected int ExpectedParameterCount => Coefficients.Length + (Options.UseIntercept ? 1 : 0);
+
+    /// <summary>
     /// Initializes a new instance of the RegressionBase class with the specified options and regularization.
     /// </summary>
     /// <param name="options">Configuration options for the regression model. If null, default options will be used.</param>
@@ -426,12 +442,9 @@ public abstract class RegressionBase<T> : IRegression<T>
     /// </remarks>
     public virtual IFullModel<T, Matrix<T>, Vector<T>> WithParameters(Vector<T> parameters)
     {
-        // Calculate expected parameter count
-        int expectedParamCount = Coefficients.Length + (Options.UseIntercept ? 1 : 0);
-    
-        if (parameters.Length != expectedParamCount)
+        if (parameters.Length != ExpectedParameterCount)
         {
-            throw new ArgumentException($"Expected {expectedParamCount} parameters, but got {parameters.Length}");
+            throw new ArgumentException($"Expected {ExpectedParameterCount} parameters, but got {parameters.Length}", nameof(parameters));
         }
     
         // Create a new instance of the model
@@ -527,8 +540,112 @@ public abstract class RegressionBase<T> : IRegression<T>
             throw new ArgumentOutOfRangeException(nameof(featureIndex), 
                 $"Feature index must be between 0 and {Coefficients.Length - 1}");
         }
-    
+
         return !NumOps.Equals(Coefficients[featureIndex], NumOps.Zero);
+    }
+
+    /// <summary>
+    /// Sets the parameters for this model.
+    /// </summary>
+    /// <param name="parameters">A vector containing all model parameters (coefficients and intercept).</param>
+    /// <exception cref="ArgumentException">Thrown when the parameters vector has an incorrect length.</exception>
+    /// <remarks>
+    /// <para>
+    /// This method updates the model's parameters in-place. The parameters vector should contain
+    /// coefficients followed by the intercept (if the model uses one).
+    /// </para>
+    /// <para><b>For Beginners:</b> This method updates the model's parameters directly.
+    ///
+    /// Unlike WithParameters() which creates a new model, this method modifies the current model.
+    /// The parameters include the coefficients (how much each feature affects the prediction) and
+    /// the intercept (the baseline value).
+    /// </para>
+    /// </remarks>
+    public virtual void SetParameters(Vector<T> parameters)
+    {
+        if (parameters.Length != ExpectedParameterCount)
+        {
+            throw new ArgumentException($"Expected {ExpectedParameterCount} parameters, but got {parameters.Length}", nameof(parameters));
+        }
+
+        // Extract and set coefficients
+        for (int i = 0; i < Coefficients.Length; i++)
+        {
+            Coefficients[i] = parameters[i];
+        }
+
+        // Set the intercept if used
+        if (Options.UseIntercept)
+        {
+            Intercept = parameters[Coefficients.Length];
+        }
+    }
+
+    /// <summary>
+    /// Sets the active feature indices for this model.
+    /// </summary>
+    /// <param name="featureIndices">The indices of features to activate.</param>
+    /// <remarks>
+    /// <para>
+    /// This method sets the coefficients for the specified features to their current values
+    /// and sets all other coefficients to zero, effectively activating only the specified features.
+    /// </para>
+    /// <para><b>For Beginners:</b> This method selectively activates only certain features.
+    ///
+    /// You provide a list of feature positions (indices), and the method will:
+    /// - Keep the coefficients for those features
+    /// - Set all other feature coefficients to zero
+    ///
+    /// This is useful for feature selection, where you want to use only a subset of available features.
+    /// </para>
+    /// </remarks>
+    public virtual void SetActiveFeatureIndices(IEnumerable<int> featureIndices)
+    {
+        // Create a set for fast lookup
+        var activeSet = new HashSet<int>(featureIndices);
+
+        // Set coefficients to zero for inactive features
+        for (int i = 0; i < Coefficients.Length; i++)
+        {
+            if (!activeSet.Contains(i))
+            {
+                Coefficients[i] = NumOps.Zero;
+            }
+        }
+    }
+
+    /// <summary>
+    /// Gets the feature importance scores as a dictionary.
+    /// </summary>
+    /// <returns>A dictionary mapping feature names to their importance scores.</returns>
+    /// <remarks>
+    /// <para>
+    /// This method returns feature importance scores based on the absolute values of coefficients.
+    /// If feature names are not available, it uses indices as names (e.g., "Feature_0", "Feature_1").
+    /// </para>
+    /// <para><b>For Beginners:</b> This method tells you which features are most important.
+    ///
+    /// It returns a dictionary where:
+    /// - Keys are feature names (or "Feature_0", "Feature_1", etc. if names aren't set)
+    /// - Values are importance scores (higher means more important)
+    ///
+    /// In regression models, importance is typically based on the absolute value of coefficients.
+    /// </para>
+    /// </remarks>
+    public virtual Dictionary<string, T> GetFeatureImportance()
+    {
+        var importances = CalculateFeatureImportances();
+        var result = new Dictionary<string, T>();
+
+        for (int i = 0; i < importances.Length; i++)
+        {
+            string featureName = FeatureNames != null && i < FeatureNames.Length
+                ? FeatureNames[i]
+                : $"Feature_{i}";
+            result[featureName] = importances[i];
+        }
+
+        return result;
     }
 
     /// <summary>
