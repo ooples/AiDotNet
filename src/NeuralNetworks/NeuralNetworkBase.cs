@@ -1138,9 +1138,9 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>
     
         // Get the first layer for analysis
         var firstLayer = Layers[0];
-    
+
         // If the first layer is not a dense or convolutional layer, we can't easily determine active features
-        if (!(firstLayer is DenseLayer<T> || firstLayer is ConvolutionalLayer<T>))
+        if (firstLayer is not (DenseLayer<T> or ConvolutionalLayer<T>))
         {
             // Return all indices as potentially active (conservative approach)
             return Enumerable.Range(0, firstLayer.GetInputShape()[0]);
@@ -1579,7 +1579,7 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>
         var firstLayer = Layers[0];
 
         // If the first layer is not a dense or convolutional layer, we can't easily determine importance
-        if (!(firstLayer is DenseLayer<T> || firstLayer is ConvolutionalLayer<T>))
+        if (firstLayer is not (DenseLayer<T> or ConvolutionalLayer<T>))
         {
             // Return uniform importance for all features (conservative approach)
             int inputSize = firstLayer.GetInputShape()[0];
