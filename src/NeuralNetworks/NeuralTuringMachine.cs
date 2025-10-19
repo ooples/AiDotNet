@@ -1152,6 +1152,26 @@ public class NeuralTuringMachine<T> : NeuralNetworkBase<T>
     }
 
     /// <summary>
+    /// Gets the total number of trainable parameters in the network.
+    /// </summary>
+    /// <returns>The total count of parameters across all layers.</returns>
+    /// <remarks>
+    /// <para>
+    /// This method returns the total number of trainable parameters (weights and biases)
+    /// in the Neural Turing Machine by delegating to the base class ParameterCount property.
+    /// </para>
+    /// <para>
+    /// <b>For Beginners:</b> Parameters are the internal values that the network adjusts during
+    /// training to improve its predictions. More parameters allow the network to learn more
+    /// complex patterns, but also require more data and computational resources.
+    /// </para>
+    /// </remarks>
+    private int GetParameterCount()
+    {
+        return ParameterCount;
+    }
+
+    /// <summary>
     /// Gets metadata about the Neural Turing Machine model.
     /// </summary>
     /// <returns>A ModelMetaData object containing information about the NTM.</returns>

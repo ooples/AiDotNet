@@ -56,7 +56,7 @@ public class NeuralNetwork<T> : NeuralNetworkBase<T>
     /// before you start "training" it (like furnishing the rooms).
     /// 
     /// For example, a simple network for classifying handwritten digits might have:
-    /// - 784 inputs (for a 28×28 pixel image)
+    /// - 784 inputs (for a 28ï¿½28 pixel image)
     /// - 2 hidden layers with 128 neurons each
     /// - 10 outputs (one for each digit 0-9)
     /// </para>
@@ -260,6 +260,26 @@ public class NeuralNetwork<T> : NeuralNetworkBase<T>
                 layer.UpdateParameters(learningRate);
             }
         }
+    }
+
+    /// <summary>
+    /// Gets the total number of trainable parameters in the network.
+    /// </summary>
+    /// <returns>The total count of parameters across all layers.</returns>
+    /// <remarks>
+    /// <para>
+    /// This method returns the total number of trainable parameters (weights and biases)
+    /// in the neural network by delegating to the base class ParameterCount property.
+    /// </para>
+    /// <para>
+    /// <b>For Beginners:</b> Parameters are the internal values that the network adjusts during
+    /// training to improve its predictions. More parameters allow the network to learn more
+    /// complex patterns, but also require more data and computational resources.
+    /// </para>
+    /// </remarks>
+    private int GetParameterCount()
+    {
+        return ParameterCount;
     }
 
     /// <summary>
