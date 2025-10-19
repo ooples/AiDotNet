@@ -49,8 +49,35 @@ namespace AiDotNet.Interpretability
         public int SensitiveFeatureIndex { get; set; }
 
         /// <summary>
+        /// Initializes a new instance of the FairnessMetrics class with all metric values.
+        /// </summary>
+        /// <param name="demographicParity">The demographic parity metric value.</param>
+        /// <param name="equalOpportunity">The equal opportunity metric value.</param>
+        /// <param name="equalizedOdds">The equalized odds metric value.</param>
+        /// <param name="predictiveParity">The predictive parity metric value.</param>
+        /// <param name="disparateImpact">The disparate impact metric value.</param>
+        /// <param name="statisticalParityDifference">The statistical parity difference metric value.</param>
+        public FairnessMetrics(
+            T demographicParity,
+            T equalOpportunity,
+            T equalizedOdds,
+            T predictiveParity,
+            T disparateImpact,
+            T statisticalParityDifference)
+        {
+            DemographicParity = demographicParity;
+            EqualOpportunity = equalOpportunity;
+            EqualizedOdds = equalizedOdds;
+            PredictiveParity = predictiveParity;
+            DisparateImpact = disparateImpact;
+            StatisticalParityDifference = statisticalParityDifference;
+            AdditionalMetrics = new Dictionary<string, T>();
+        }
+
+        /// <summary>
         /// Initializes a new instance of the FairnessMetrics class.
         /// </summary>
+        [Obsolete("Use the constructor that accepts all metric values to avoid null reference types. This constructor will be removed in a future version.")]
         public FairnessMetrics()
         {
             DemographicParity = default(T);
