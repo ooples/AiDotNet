@@ -9,25 +9,27 @@ namespace AiDotNet.Interpretability
     /// <typeparam name="T">The numeric type for calculations.</typeparam>
     public class CounterfactualExplanation<T>
     {
+        private static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();
+
         /// <summary>
         /// Gets or sets the original input.
         /// </summary>
-        public Tensor<T> OriginalInput { get; set; }
+        public Tensor<T>? OriginalInput { get; set; }
 
         /// <summary>
         /// Gets or sets the counterfactual input (modified version).
         /// </summary>
-        public Tensor<T> CounterfactualInput { get; set; }
+        public Tensor<T>? CounterfactualInput { get; set; }
 
         /// <summary>
         /// Gets or sets the original prediction.
         /// </summary>
-        public Tensor<T> OriginalPrediction { get; set; }
+        public Tensor<T>? OriginalPrediction { get; set; }
 
         /// <summary>
         /// Gets or sets the counterfactual prediction.
         /// </summary>
-        public Tensor<T> CounterfactualPrediction { get; set; }
+        public Tensor<T>? CounterfactualPrediction { get; set; }
 
         /// <summary>
         /// Gets or sets the feature changes made.
@@ -50,12 +52,8 @@ namespace AiDotNet.Interpretability
         /// </summary>
         public CounterfactualExplanation()
         {
-            OriginalInput = new Tensor<T>();
-            CounterfactualInput = new Tensor<T>();
-            OriginalPrediction = new Tensor<T>();
-            CounterfactualPrediction = new Tensor<T>();
             FeatureChanges = new Dictionary<int, T>();
-            Distance = default(T);
+            Distance = NumOps.Zero;
         }
     }
 }
