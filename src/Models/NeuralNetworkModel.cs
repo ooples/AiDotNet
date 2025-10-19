@@ -340,13 +340,14 @@ public class NeuralNetworkModel<T> : IFullModel<T, Tensor<T>, Tensor<T>>
         Vector<T> expectedOutputVector = expectedOutput.ToVector();
         
         // Forward pass with memory to store intermediate values for backpropagation
-        Vector<T> outputVector = Network.ForwardWithMemory(inputVector);
-        
+        Tensor<T> outputTensor = Network.ForwardWithMemory(Tensor<T>.FromVector(inputVector));
+        Vector<T> outputVector = outputTensor.ToVector();
+
         // Calculate error gradient
         Vector<T> error = CalculateError(outputVector, expectedOutputVector);
-        
+
         // Backpropagate error
-        Network.Backpropagate(error);
+        Network.Backpropagate(Tensor<T>.FromVector(error));
         
         // Update weights using the calculated gradients
         Vector<T> gradients = Network.GetParameterGradients();
@@ -427,13 +428,14 @@ public class NeuralNetworkModel<T> : IFullModel<T, Tensor<T>, Tensor<T>>
         }
         
         // Forward pass with memory to store intermediate values
-        Vector<T> output = Network.ForwardWithMemory(input.ToVector());
-        
+        Tensor<T> outputTensor = Network.ForwardWithMemory(input);
+        Vector<T> output = outputTensor.ToVector();
+
         // Calculate error gradient
         Vector<T> error = CalculateError(output, expectedOutput.ToVector());
-        
+
         // Backpropagate error
-        Network.Backpropagate(error);
+        Network.Backpropagate(Tensor<T>.FromVector(error));
         
         // Update weights using the calculated gradients
         Vector<T> gradients = Network.GetParameterGradients();

@@ -1587,7 +1587,8 @@ public class DifferentiableNeuralComputer<T> : NeuralNetworkBase<T>
             }
         }
     }
-    
+
+
     /// <summary>
     /// Gets metadata about the Differentiable Neural Computer model.
     /// </summary>
@@ -1625,7 +1626,7 @@ public class DifferentiableNeuralComputer<T> : NeuralNetworkBase<T>
                 { "InputSize", Architecture.InputSize },
                 { "OutputSize", Architecture.OutputSize },
                 { "LayerCount", Layers.Count },
-                { "ParameterCount", GetParameterCount() }
+                { "ParameterCount", ParameterCount }
             },
             ModelData = this.Serialize()
         };
