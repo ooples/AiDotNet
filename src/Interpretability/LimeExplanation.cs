@@ -41,6 +41,9 @@ namespace AiDotNet.Interpretability
         public LimeExplanation()
         {
             FeatureImportance = new Dictionary<int, T>();
+            Intercept = default(T);
+            PredictedValue = default(T);
+            LocalModelScore = default(T);
         }
     }
 }
