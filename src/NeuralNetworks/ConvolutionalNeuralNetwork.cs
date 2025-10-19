@@ -319,26 +319,27 @@ public class ConvolutionalNeuralNetwork<T> : NeuralNetworkBase<T>
         return _lossFunction.CalculateDerivative(prediction.ToVector(), expectedOutput.ToVector());
     }
 
-    /// <summary>
-    /// Gets the total number of trainable parameters in the convolutional neural network.
-    /// </summary>
-    /// <returns>The total number of parameters across all layers.</returns>
+    /// <inheritdoc/>
     /// <remarks>
     /// <para>
-    /// This method calculates the total number of trainable parameters by summing the parameter
-    /// counts from all layers in the network. Parameters include weights and biases that are
-    /// adjusted during training.
+    /// For CNNs, the parameter count includes weights and biases from convolutional layers, pooling layers,
+    /// and fully connected layers. The computation typically includes:
     /// </para>
+    /// <list type="bullet">
+    /// <item><description>Convolutional layer parameters: (kernel_height × kernel_width × input_channels × output_channels) + output_channels (biases)</description></item>
+    /// <item><description>Fully connected layer parameters: (input_size × output_size) + output_size (biases)</description></item>
+    /// <item><description>Pooling layers typically have no trainable parameters</description></item>
+    /// </list>
     /// <para>
-    /// <b>For Beginners:</b> This tells you how many individual values the network needs to learn
-    /// during training. Think of it like counting all the knobs and switches the network can adjust
-    /// to improve its performance. A network with more parameters can learn more complex patterns,
-    /// but also needs more training data to learn effectively.
+    /// <b>For Beginners:</b> CNNs usually have parameters in their convolutional filters (which detect features like
+    /// edges and patterns) and in their fully connected layers (which make the final classification). The total number
+    /// depends on the filter sizes, number of filters, and size of the fully connected layers. Larger kernels and more
+    /// filters mean more parameters and thus more computational requirements.
     /// </para>
     /// </remarks>
-    public int GetParameterCount()
+    public new int GetParameterCount()
     {
-        return Layers.Sum(layer => layer.ParameterCount);
+        return base.GetParameterCount();
     }
 
     /// <summary>

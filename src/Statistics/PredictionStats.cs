@@ -618,7 +618,6 @@ public class PredictionStats<T>
         return metricType switch
         {
             MetricType.R2 => R2,
-            MetricType.RSquared => RSquared,
             MetricType.AdjustedR2 => AdjustedR2,
             MetricType.ExplainedVarianceScore => ExplainedVarianceScore,
             MetricType.MeanPredictionError => MeanPredictionError,
@@ -660,7 +659,6 @@ public class PredictionStats<T>
         return metricType switch
         {
             MetricType.R2 => true,
-            MetricType.RSquared => true,
             MetricType.AdjustedR2 => true,
             MetricType.ExplainedVarianceScore => true,
             MetricType.MeanPredictionError => true,
