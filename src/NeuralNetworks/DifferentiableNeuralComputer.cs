@@ -662,9 +662,10 @@ public class DifferentiableNeuralComputer<T> : NeuralNetworkBase<T>
 
         // Calculate gradients from the loss
         Vector<T> outputGradients = _lossFunction.CalculateDerivative(flattenedPredictions, flattenedExpected);
-        
+
         // Backpropagate the error through the network
-        Vector<T> inputGradients = Backpropagate(outputGradients);
+        Tensor<T> inputGradientsTensor = Backpropagate(Tensor<T>.FromVector(outputGradients));
+        Vector<T> inputGradients = inputGradientsTensor.ToVector();
         
         // Get parameter gradients
         Vector<T> parameterGradients = GetParameterGradients();
