@@ -1413,6 +1413,8 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
 
     /// <summary>
     /// Base model instance for interpretability delegation.
+    /// Typed as object to support generic SetBaseModel method that accepts IModel with varying type parameters.
+    /// This design allows the base class to store models with different generic type signatures.
     /// </summary>
     protected object? _baseModel;
 

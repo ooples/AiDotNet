@@ -21,6 +21,7 @@ namespace AiDotNet.Interpretability
             IInterpretableModel<T> model,
             HashSet<InterpretationMethod> enabledMethods)
         {
+            // Parameters will be used when this method is fully implemented.
             if (!enabledMethods.Contains(InterpretationMethod.FeatureImportance))
             {
                 throw new InvalidOperationException("FeatureImportance method is not enabled.");
@@ -43,6 +44,7 @@ namespace AiDotNet.Interpretability
             HashSet<InterpretationMethod> enabledMethods,
             Tensor<T> input)
         {
+            // Parameters will be used when this method is fully implemented.
             if (!enabledMethods.Contains(InterpretationMethod.FeatureImportance))
             {
                 throw new InvalidOperationException("FeatureImportance method is not enabled.");
@@ -63,6 +65,7 @@ namespace AiDotNet.Interpretability
             IInterpretableModel<T> model,
             HashSet<InterpretationMethod> enabledMethods)
         {
+            // Parameters will be used when this method is fully implemented.
             if (!enabledMethods.Contains(InterpretationMethod.SHAP))
             {
                 throw new InvalidOperationException("SHAP method is not enabled.");
@@ -153,6 +156,7 @@ namespace AiDotNet.Interpretability
         public static Task<Dictionary<string, object>> GetModelSpecificInterpretabilityAsync<T>(
             IInterpretableModel<T> model)
         {
+            // Parameters will be used when this method is fully implemented.
             // Return placeholder implementation
             return Task.FromResult(new Dictionary<string, object>());
         }
@@ -170,6 +174,7 @@ namespace AiDotNet.Interpretability
             Tensor<T> input,
             Tensor<T> prediction)
         {
+            // Parameters will be used when this method is fully implemented.
             // Return placeholder implementation
             return Task.FromResult("Explanation not yet implemented.");
         }
