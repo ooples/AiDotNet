@@ -464,18 +464,26 @@ internal class PredictionModelResult<T, TInput, TOutput> : IPredictiveModel<T, T
     /// - You're sharing models between different applications
     /// 
     /// For example, you might load a model with:
-    /// `var model = PredictionModelResult<double>.LoadModel("C:\\Models\\house_price_predictor.model");`
-    /// 
-    /// This method is static, so you call it on the class itself, not on an instance.
+    /// ```csharp
+    /// var model = new PredictionModelResult<double, Matrix<double>, Vector<double>>();
+    /// model.LoadModel("C:\\Models\\house_price_predictor.model");
+    /// ```
     /// </para>
     /// </remarks>
-    public static PredictionModelResult<T, TInput, TOutput> LoadModel(string filePath)
+    public void LoadModel(string filePath)
     {
-        var data = File.ReadAllBytes(filePath);
-        var result = new PredictionModelResult<T, TInput, TOutput>();
-        result.Deserialize(data);
+        if (string.IsNullOrWhiteSpace(filePath))
+        {
+            throw new ArgumentException("File path must not be null or empty.", nameof(filePath));
+        }
 
-        return result;
+        if (!File.Exists(filePath))
+        {
+            throw new FileNotFoundException($"The specified model file does not exist: {filePath}", filePath);
+        }
+
+        var data = File.ReadAllBytes(filePath);
+        Deserialize(data);
     }
 
     public void Train(TInput input, TOutput expectedOutput)
