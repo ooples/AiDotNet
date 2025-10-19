@@ -1,4 +1,7 @@
-﻿namespace AiDotNet.Genetics;
+using System;
+using System.Collections.Generic;
+
+namespace AiDotNet.Genetics;
 
 /// <summary>
 /// Represents an individual that is also a full model, allowing direct evolution of models
@@ -224,6 +227,16 @@ public class ModelIndividual<T, TInput, TOutput, TGene> :
         throw new NotImplementedException();
     }
 
+    public virtual Dictionary<string, T> GetFeatureImportance()
+    {
+        throw new NotImplementedException("GetFeatureImportance is not yet implemented for this model type.");
+    }
+
+    public virtual void SetActiveFeatureIndices(IEnumerable<int> featureIndices)
+    {
+        throw new NotImplementedException("SetActiveFeatureIndices is not yet implemented for this model type.");
+    }
+
     public bool IsFeatureUsed(int featureIndex)
     {
         throw new NotImplementedException();
@@ -237,6 +250,26 @@ public class ModelIndividual<T, TInput, TOutput, TGene> :
     IFullModel<T, TInput, TOutput> ICloneable<IFullModel<T, TInput, TOutput>>.Clone()
     {
         throw new NotImplementedException();
+    }
+
+    public virtual void SetParameters(Vector<T> parameters)
+    {
+        throw new NotImplementedException("SetParameters is not yet implemented for this model type.");
+    }
+
+    public virtual int ParameterCount
+    {
+        get { throw new NotImplementedException("ParameterCount is not yet implemented for this model type."); }
+    }
+
+    public virtual void SaveModel(string filePath)
+    {
+        throw new NotImplementedException("SaveModel is not yet implemented for this model type.");
+    }
+
+    public virtual void LoadModel(string filePath)
+    {
+        throw new NotImplementedException("LoadModel is not yet implemented for this model type.");
     }
 
     #endregion

@@ -1,3 +1,5 @@
+using System;
+using System.Collections.Generic;
 using AiDotNet.Interfaces;
 using AiDotNet.Regression;
 using AiDotNet.Models.Options;
@@ -248,5 +250,35 @@ internal class MappedRandomForestModel<T> : IFullModel<T, Matrix<T>, Vector<T>>
     public IFullModel<T, Matrix<T>, Vector<T>> Clone()
     {
         return DeepCopy();
+    }
+
+    public virtual void SetParameters(Vector<T> parameters)
+    {
+        _baseModel.SetParameters(parameters);
+    }
+
+    public virtual int ParameterCount
+    {
+        get { return _baseModel.ParameterCount; }
+    }
+
+    public virtual void SaveModel(string filePath)
+    {
+        throw new NotImplementedException("SaveModel is not yet implemented for this model type.");
+    }
+
+    public virtual void LoadModel(string filePath)
+    {
+        throw new NotImplementedException("LoadModel is not yet implemented for this model type.");
+    }
+
+    public virtual Dictionary<string, T> GetFeatureImportance()
+    {
+        throw new NotImplementedException("GetFeatureImportance is not yet implemented for this model type.");
+    }
+
+    public virtual void SetActiveFeatureIndices(IEnumerable<int> featureIndices)
+    {
+        throw new NotImplementedException("SetActiveFeatureIndices is not yet implemented for this model type.");
     }
 }

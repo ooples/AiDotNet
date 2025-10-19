@@ -921,14 +921,29 @@ public abstract class NonLinearRegressionBase<T> : INonLinearRegression<T>
     {
         // Create a new instance using the factory method
         var clone = (NonLinearRegressionBase<T>)CreateInstance();
-    
+
         // Copy the model parameters
         clone.SupportVectors = SupportVectors;  // Shallow copy
         clone.Alphas = Alphas;                 // Shallow copy
         clone.B = B;                          // Value types are copied by value
         clone.Options = Options;              // Shallow copy
         clone.Regularization = Regularization; // Shallow copy
-    
+
         return clone;
+    }
+
+    public virtual int ParameterCount
+    {
+        get { return Alphas.Length + 1; } // Alphas + bias term
+    }
+
+    public virtual void SaveModel(string filePath)
+    {
+        throw new NotImplementedException("SaveModel is not yet implemented for this model type.");
+    }
+
+    public virtual void LoadModel(string filePath)
+    {
+        throw new NotImplementedException("LoadModel is not yet implemented for this model type.");
     }
 }
