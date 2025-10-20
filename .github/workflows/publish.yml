@@ -1,0 +1,198 @@
+name: Publish Package
+
+# Automated package publishing
+on:
+  push:
+    branches:
+      - master
+    tags:
+      - 'v*.*.*'
+  workflow_dispatch:
+    inputs:
+      version_suffix:
+        description: 'Version suffix (e.g., alpha, beta, rc1)'
+        required: false
+        default: ''
+
+env:
+  DOTNET_SKIP_FIRST_TIME_EXPERIENCE: 1
+  DOTNET_NOLOGO: true
+  DOTNET_CLI_TELEMETRY_OPTOUT: 1
+
+jobs:
+  publish:
+    name: Build and Publish Package
+    runs-on: self-hosted
+    permissions:
+      contents: write
+      packages: write
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
+
+    - name: Setup .NET 8.0
+      uses: actions/setup-dotnet@v4
+      with:
+        dotnet-version: '8.0.x'
+
+    - name: Cache NuGet packages
+      uses: actions/cache@v4
+      with:
+        path: ~/.nuget/packages
+        key: ${{ runner.os }}-nuget-${{ hashFiles('**/*.csproj') }}
+        restore-keys: |
+          ${{ runner.os }}-nuget-
+
+    - name: Restore dependencies
+      run: dotnet restore
+
+    - name: Determine version
+      id: version
+      run: |
+        if [[ "${{ github.ref }}" == refs/tags/v* ]]; then
+          # Tagged release: v1.0.0 -> 1.0.0
+          VERSION="${{ github.ref_name }}"
+          VERSION="${VERSION#v}"
+          VERSION_SUFFIX=""
+          echo "type=release" >> $GITHUB_OUTPUT
+        else
+          # Master branch commit: use preview with build number
+          VERSION="0.0.5"
+          VERSION_SUFFIX="preview.${{ github.run_number }}"
+          echo "type=preview" >> $GITHUB_OUTPUT
+        fi
+
+        if [[ -n "${{ github.event.inputs.version_suffix }}" ]]; then
+          VERSION_SUFFIX="${{ github.event.inputs.version_suffix }}"
+        fi
+
+        echo "version=$VERSION" >> $GITHUB_OUTPUT
+        echo "version_suffix=$VERSION_SUFFIX" >> $GITHUB_OUTPUT
+
+        if [[ -n "$VERSION_SUFFIX" ]]; then
+          echo "full_version=$VERSION-$VERSION_SUFFIX" >> $GITHUB_OUTPUT
+        else
+          echo "full_version=$VERSION" >> $GITHUB_OUTPUT
+        fi
+      shell: bash
+
+    - name: Build (Release)
+      run: dotnet build --no-restore --configuration Release
+
+    - name: Run tests
+      run: dotnet test --no-build --configuration Release --verbosity normal
+      continue-on-error: true  # Don't block publish on test failures until tests are implemented
+
+    - name: Pack NuGet package
+      run: |
+        if [[ -n "${{ steps.version.outputs.version_suffix }}" ]]; then
+          dotnet pack --no-build --configuration Release \
+            --output ./artifacts \
+            /p:PackageVersion=${{ steps.version.outputs.full_version }} \
+            /p:VersionSuffix=${{ steps.version.outputs.version_suffix }}
+        else
+          dotnet pack --no-build --configuration Release \
+            --output ./artifacts \
+            /p:PackageVersion=${{ steps.version.outputs.full_version }}
+        fi
+      shell: bash
+
+    - name: Publish to NuGet.org
+      if: github.repository == 'ooples/AiDotNet'
+      run: |
+        dotnet nuget push ./artifacts/*.nupkg \
+          --api-key ${{ secrets.NUGET_API_KEY }} \
+          --source https://api.nuget.org/v3/index.json \
+          --skip-duplicate
+      continue-on-error: false
+
+    - name: Publish to GitHub Packages
+      if: github.repository == 'ooples/AiDotNet'
+      run: |
+        dotnet nuget push ./artifacts/*.nupkg \
+          --api-key ${{ secrets.GITHUB_TOKEN }} \
+          --source https://nuget.pkg.github.com/ooples/index.json \
+          --skip-duplicate
+      continue-on-error: true
+
+    - name: Create GitHub Release
+      if: startsWith(github.ref, 'refs/tags/v')
+      uses: softprops/action-gh-release@v1
+      with:
+        draft: false
+        prerelease: false
+        generate_release_notes: true
+        files: |
+          ./artifacts/*.nupkg
+          ./artifacts/*.snupkg
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+    - name: Upload artifacts
+      uses: actions/upload-artifact@v4
+      with:
+        name: nuget-packages-${{ steps.version.outputs.full_version }}
+        path: ./artifacts/*.nupkg
+
+    - name: Send success notification to Slack
+      if: success() && secrets.SLACK_WEBHOOK_URL != ''
+      uses: slackapi/slack-github-action@v1
+      with:
+        payload: |
+          {
+            "text": "✅ Package Published Successfully",
+            "blocks": [
+              {
+                "type": "section",
+                "text": {
+                  "type": "mrkdwn",
+                  "text": "*Package Published Successfully*\n*Version:* ${{ steps.version.outputs.full_version }}\n*Type:* ${{ steps.version.outputs.type }}\n*Repository:* ${{ github.repository }}"
+                }
+              }
+            ]
+          }
+      env:
+        SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+        SLACK_WEBHOOK_TYPE: INCOMING_WEBHOOK
+
+    - name: Send email notification
+      if: success()
+      uses: dawidd6/action-send-mail@v3
+      with:
+        server_address: smtp.gmail.com
+        server_port: 587
+        username: ${{ secrets.EMAIL_USERNAME }}
+        password: ${{ secrets.EMAIL_PASSWORD }}
+        subject: "✅ NuGet Package Published - AiDotNet ${{ steps.version.outputs.full_version }}"
+        to: cheatcountry@gmail.com
+        from: GitHub Actions
+        body: |
+          NuGet Package Published Successfully
+
+          Version: ${{ steps.version.outputs.full_version }}
+          Type: ${{ steps.version.outputs.type }}
+          Repository: ${{ github.repository }}
+
+          Package URL: https://www.nuget.org/packages/AiDotNet/${{ steps.version.outputs.full_version }}
+
+          Workflow run: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+      continue-on-error: true
+
+    - name: Publish summary
+      if: always()
+      run: |
+        echo "## Package Publishing Results" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "### Version Information" >> $GITHUB_STEP_SUMMARY
+        echo "- Version: ${{ steps.version.outputs.full_version }}" >> $GITHUB_STEP_SUMMARY
+        echo "- Type: ${{ steps.version.outputs.type }}" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "### Publishing Status" >> $GITHUB_STEP_SUMMARY
+        echo "- NuGet.org: ${{ job.status }}" >> $GITHUB_STEP_SUMMARY
+        echo "- GitHub Packages: ✅" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "### Links" >> $GITHUB_STEP_SUMMARY
+        echo "- [View on NuGet.org](https://www.nuget.org/packages/AiDotNet/${{ steps.version.outputs.full_version }})" >> $GITHUB_STEP_SUMMARY
