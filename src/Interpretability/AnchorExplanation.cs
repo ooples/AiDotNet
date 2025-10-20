@@ -9,6 +9,8 @@ namespace AiDotNet.Interpretability
     /// <typeparam name="T">The numeric type for calculations.</typeparam>
     public class AnchorExplanation<T>
     {
+        private static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();
+
         /// <summary>
         /// Gets or sets the anchor rules (feature indices and their conditions).
         /// </summary>
@@ -47,9 +49,9 @@ namespace AiDotNet.Interpretability
             AnchorRules = new Dictionary<int, (T Min, T Max)>();
             AnchorFeatures = new List<int>();
             Description = string.Empty;
-            Precision = default(T);
-            Coverage = default(T);
-            Threshold = default(T);
+            Precision = NumOps.Zero;
+            Coverage = NumOps.Zero;
+            Threshold = NumOps.Zero;
         }
     }
 }
