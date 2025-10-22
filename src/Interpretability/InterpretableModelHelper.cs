@@ -22,13 +22,12 @@ namespace AiDotNet.Interpretability
             IInterpretableModel<T> model,
             HashSet<InterpretationMethod> enabledMethods)
         {
-            _ = model;
             if (!enabledMethods.Contains(InterpretationMethod.FeatureImportance))
             {
                 throw new InvalidOperationException("FeatureImportance method is not enabled.");
             }
 
-            throw new NotImplementedException("Global feature importance calculation is not yet implemented.");
+            return model.GetGlobalFeatureImportanceAsync();
         }
 
         /// <summary>
@@ -44,14 +43,12 @@ namespace AiDotNet.Interpretability
             HashSet<InterpretationMethod> enabledMethods,
             Tensor<T> input)
         {
-            _ = model;
-            _ = input;
             if (!enabledMethods.Contains(InterpretationMethod.FeatureImportance))
             {
                 throw new InvalidOperationException("FeatureImportance method is not enabled.");
             }
 
-            throw new NotImplementedException("Local feature importance calculation is not yet implemented.");
+            return model.GetLocalFeatureImportanceAsync(input);
         }
 
         /// <summary>
@@ -142,8 +139,7 @@ namespace AiDotNet.Interpretability
         public static Task<Dictionary<string, object>> GetModelSpecificInterpretabilityAsync<T>(
             IInterpretableModel<T> model)
         {
-            _ = model;
-            throw new NotImplementedException("Model-specific interpretability information retrieval is not yet implemented.");
+            return model.GetModelSpecificInterpretabilityAsync();
         }
 
         /// <summary>
@@ -159,11 +155,7 @@ namespace AiDotNet.Interpretability
             Tensor<T> input,
             Tensor<T> prediction)
         {
-            _ = model;
-            _ = input;
-            _ = prediction;
-            // Return placeholder implementation
-            return Task.FromResult("Explanation not yet implemented.");
+            return model.GenerateTextExplanationAsync(input, prediction);
         }
 
         /// <summary>
