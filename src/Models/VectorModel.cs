@@ -905,6 +905,7 @@ public class VectorModel<T> : IFullModel<T, Matrix<T>, Vector<T>>
             throw new ArgumentException("File path must not be null or empty.", nameof(filePath));
         }
         var data = Serialize();
+        // Ensure directory exists before writing to avoid DirectoryNotFoundException
         var directory = Path.GetDirectoryName(filePath);
         if (!string.IsNullOrEmpty(directory) && !Directory.Exists(directory))
         {
