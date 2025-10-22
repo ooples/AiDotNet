@@ -248,6 +248,10 @@ public class BayesianOptimizer<T, TInput, TOutput> : OptimizerBase<T, TInput, TO
                 var z = NumOps.Divide(improvement, stdDev);
                 var cdf = StatisticsHelper<T>.CalculateNormalCDF(mean, stdDev, z);
                 return NumOps.Multiply(improvement, cdf);
+            case AcquisitionFunctionType.ProbabilityOfImprovement:
+                var best = _sampledValues.Max();
+                var zPi = NumOps.Divide(NumOps.Subtract(mean, best), stdDev);
+                return StatisticsHelper<T>.CalculateNormalCDF(mean, stdDev, zPi);
             default:
                 throw new NotImplementedException("Unsupported acquisition function.");
         }
