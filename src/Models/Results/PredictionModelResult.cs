@@ -497,6 +497,10 @@ internal class PredictionModelResult<T, TInput, TOutput> : IPredictiveModel<T, T
 
     public ModelMetaData<T> GetModelMetaData()
     {
+        if (Model == null)
+        {
+            throw new InvalidOperationException("Model is not initialized.");
+        }
         // Return the stored metadata (populated from the underlying model when available)
         return ModelMetadata;
     }
@@ -516,7 +520,8 @@ internal class PredictionModelResult<T, TInput, TOutput> : IPredictiveModel<T, T
         {
             throw new InvalidOperationException("Model is not initialized.");
         }
-        return Model.WithParameters(parameters);
+        var updated = Model.WithParameters(parameters);
+        return new PredictionModelResult<T, TInput, TOutput>(updated, OptimizationResult, NormalizationInfo);
     }
 
     public IEnumerable<int> GetActiveFeatureIndices()
@@ -544,7 +549,8 @@ internal class PredictionModelResult<T, TInput, TOutput> : IPredictiveModel<T, T
         {
             throw new InvalidOperationException("Model is not initialized.");
         }
-        return Model.DeepCopy();
+        var copy = Model.DeepCopy();
+        return new PredictionModelResult<T, TInput, TOutput>(copy, OptimizationResult, NormalizationInfo);
     }
 
     public IFullModel<T, TInput, TOutput> Clone()
@@ -553,6 +559,7 @@ internal class PredictionModelResult<T, TInput, TOutput> : IPredictiveModel<T, T
         {
             throw new InvalidOperationException("Model is not initialized.");
         }
-        return Model.Clone();
+        var clone = Model.Clone();
+        return new PredictionModelResult<T, TInput, TOutput>(clone, OptimizationResult, NormalizationInfo);
     }
 }
