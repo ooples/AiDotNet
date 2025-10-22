@@ -8,7 +8,7 @@
 ## Verification
 - [ ] Builds succeed (scoped to changed projects)
 - [ ] Unit tests pass locally
-- [ ] Code coverage ≥ 90% for touched code
+- [ ] Code coverage >= 90% for touched code
 - [ ] Codecov upload succeeded (if token configured)
 - [ ] TFM verification (net46, net6.0, net8.0) passes (if packaging)
 - [ ] No unresolved Copilot comments on HEAD
@@ -26,3 +26,4 @@ Record counts before/after your last push:
 - Any follow-ups, caveats, or migration details
 
 <!-- end -->
+
