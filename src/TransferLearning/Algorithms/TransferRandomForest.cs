@@ -264,21 +264,21 @@ internal class MappedRandomForestModel<T> : IFullModel<T, Matrix<T>, Vector<T>>
 
     public virtual void SaveModel(string filePath)
     {
-        throw new NotImplementedException("SaveModel is not yet implemented for this model type.");
+        _baseModel.SaveModel(filePath);
     }
 
     public virtual void LoadModel(string filePath)
     {
-        throw new NotImplementedException("LoadModel is not yet implemented for this model type.");
+        _baseModel.LoadModel(filePath);
     }
 
     public virtual Dictionary<string, T> GetFeatureImportance()
     {
-        throw new NotImplementedException("GetFeatureImportance is not yet implemented for this model type.");
+        return _baseModel.GetFeatureImportance();
     }
 
     public virtual void SetActiveFeatureIndices(IEnumerable<int> featureIndices)
     {
-        throw new NotImplementedException("SetActiveFeatureIndices is not yet implemented for this model type.");
+        _baseModel.SetActiveFeatureIndices(featureIndices);
     }
 }
