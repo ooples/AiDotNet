@@ -2,9 +2,9 @@ name: Quality Gates (.NET)
 
 on:
   pull_request:
-    branches: [ master ]
+    branches: [ merge-dev2-to-master ]
   push:
-    branches: [ master ]
+    branches: [ merge-dev2-to-master ]
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
