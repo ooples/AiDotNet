@@ -905,7 +905,19 @@ public class VectorModel<T> : IFullModel<T, Matrix<T>, Vector<T>>
             throw new ArgumentException("File path must not be null or empty.", nameof(filePath));
         }
         var data = Serialize();
-        File.WriteAllBytes(filePath, data);
+        var directory = Path.GetDirectoryName(filePath);
+        if (!string.IsNullOrEmpty(directory) && !Directory.Exists(directory))
+        {
+            Directory.CreateDirectory(directory);
+        }
+        try
+        {
+            File.WriteAllBytes(filePath, data);
+        }
+        catch (Exception ex) when (ex is IOException || ex is UnauthorizedAccessException || ex is System.Security.SecurityException)
+        {
+            throw new InvalidOperationException($"Failed to save model to '{filePath}': {ex.Message}", ex);
+        }
     }
 
     public virtual void LoadModel(string filePath)
@@ -918,7 +930,14 @@ public class VectorModel<T> : IFullModel<T, Matrix<T>, Vector<T>>
         {
             throw new FileNotFoundException($"The specified model file does not exist: {filePath}", filePath);
         }
-        var data = File.ReadAllBytes(filePath);
-        Deserialize(data);
+        try
+        {
+            var data = File.ReadAllBytes(filePath);
+            Deserialize(data);
+        }
+        catch (Exception ex)
+        {
+            throw new InvalidOperationException($"Failed to load or deserialize model from file '{filePath}'.", ex);
+        }
     }
 }
