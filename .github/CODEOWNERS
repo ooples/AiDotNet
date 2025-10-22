@@ -1,6 +1,5 @@
-# CODEOWNERS for AiDotNet
-# Update these handles to your actual maintainers/teams.
-# Lines are of the form:  <pattern>  <owner1> <owner2>
+# CODEOWNERS enforces review from code owners on PRs touching matching paths.
+# Adjust as needed to match your GitHub users/teams.
 
-* @cheat  # TODO: replace with your org/team, e.g. @ooples/core or @ooples/ai-team
+* @ooples
 
