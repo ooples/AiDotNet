@@ -181,6 +181,7 @@ internal class MappedRandomForestModel<T> : IFullModel<T, Matrix<T>, Vector<T>>
     private readonly IFeatureMapper<T> _mapper;
     private readonly int _targetFeatures;
     private readonly INumericOperations<T> _numOps;
+    private static System.Reflection.MethodInfo? _inverseMapMethod;
 
     public MappedRandomForestModel(
         IFullModel<T, Matrix<T>, Vector<T>> baseModel,
@@ -302,7 +303,12 @@ internal class MappedRandomForestModel<T> : IFullModel<T, Matrix<T>, Vector<T>>
         {
             writer.Write(0x4D52464D); // 'MRFM' magic
             writer.Write(_targetFeatures);
-            try { writer.Write(Convert.ToDouble(_mapper.GetMappingConfidence())); } catch { writer.Write(0.0); }
+            try { writer.Write(Convert.ToDouble(_mapper.GetMappingConfidence())); }
+            catch (Exception ex)
+            {
+                Console.Error.WriteLine($"Failed to write mapping confidence: {ex}");
+                writer.Write(0.0);
+            }
             var baseBytes = _baseModel.Serialize();
             writer.Write(baseBytes.Length);
             writer.Write(baseBytes);
@@ -332,6 +338,11 @@ internal class MappedRandomForestModel<T> : IFullModel<T, Matrix<T>, Vector<T>>
             if (magic == 0x4D52464D)
             {
                 var target = reader.ReadInt32();
+                // Validate target feature count consistency
+                if (target != _targetFeatures)
+                {
+                    throw new InvalidOperationException($"Deserialized target feature count ({target}) does not match current instance ({_targetFeatures}).");
+                }
                 var confidence = reader.ReadDouble();
                 var len = reader.ReadInt32();
                 var baseBytes = reader.ReadBytes(len);
@@ -350,13 +361,18 @@ internal class MappedRandomForestModel<T> : IFullModel<T, Matrix<T>, Vector<T>>
     {
         var baseImportance = _baseModel.GetFeatureImportance();
         var mappedImportance = new Dictionary<string, T>(baseImportance.Count);
-        var mapMethod = _mapper.GetType().GetMethod("InverseMapFeatureName", new[] { typeof(string) });
+        var mapMethod = _inverseMapMethod ??= _mapper.GetType().GetMethod("InverseMapFeatureName", new[] { typeof(string) });
         foreach (var kvp in baseImportance)
         {
             var key = kvp.Key;
             if (mapMethod != null)
             {
-                try { key = (string)mapMethod.Invoke(_mapper, new object[] { kvp.Key })!; } catch { /* ignore */ }
+                try { key = (string)mapMethod.Invoke(_mapper, new object[] { kvp.Key })!; }
+                catch (Exception ex)
+                {
+                    Console.Error.WriteLine($"Failed to inverse map feature name '{kvp.Key}': {ex}");
+                    // Fall back to original key
+                }
             }
             mappedImportance[key] = kvp.Value;
         }
