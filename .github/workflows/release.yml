@@ -48,7 +48,7 @@ jobs:
       - name: Pack NuGet
         run: |
           if [ -f "src/AiDotNet.csproj" ]; then
-            dotnet pack src/AiDotNet.csproj -c Release -o out /p:PackageVersion=${{ steps.version.outputs.version }}
+            dotnet pack src/AiDotNet.csproj -c Release -o out /p:PackageVersion=${{ steps.version.outputs.version }} # pack AiDotNet
           fi
 
       - name: Verify TFMs in package (net46, net6.0, net8.0)
