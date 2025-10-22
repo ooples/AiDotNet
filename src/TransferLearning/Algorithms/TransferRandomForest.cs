@@ -210,45 +210,24 @@ internal class MappedRandomForestModel<T> : IFullModel<T, Matrix<T>, Vector<T>>
         return _baseModel.GetModelMetaData();
     }
 
-        public byte[] Serialize()
+    public byte[] Serialize()
     {
         using var ms = new MemoryStream();
         using var writer = new BinaryWriter(ms);
-        // Write a simple header for wrapper metadata
-        writer.Write(0x4D52464D); // 'MRFM' magic
-        writer.Write(_targetFeatures);
-        // Mapper confidence if available
-        try { writer.Write(Convert.ToDouble(_mapper.GetMappingConfidence())); } catch { writer.Write(0.0); }
-        // Base model payload
         var baseBytes = _baseModel.Serialize();
-        writer.Write(baseBytes.Length);
-        writer.Write(baseBytes);
-        writer.Flush();
+        WriteWrapper(writer, baseBytes);
         return ms.ToArray();
     }
 
-        public void Deserialize(byte[] data)
+    public void Deserialize(byte[] data)
     {
         using var ms = new MemoryStream(data);
         using var reader = new BinaryReader(ms);
-        try
+        if (TryReadWrapper(reader, out var baseBytes))
         {
-            var magic = reader.ReadInt32();
-            if (magic == 0x4D52464D)
-            {
-                var target = reader.ReadInt32();
-                var confidence = reader.ReadDouble();
-                var len = reader.ReadInt32();
-                var baseBytes = reader.ReadBytes(len);
-                _baseModel.Deserialize(baseBytes);
-                return;
-            }
+            _baseModel.Deserialize(baseBytes);
+            return;
         }
-        catch
-        {
-            // Fall back to plain base model payload format
-        }
-        // If not our wrapper format, treat as base model bytes
         _baseModel.Deserialize(data);
     }
 
@@ -301,18 +280,8 @@ internal class MappedRandomForestModel<T> : IFullModel<T, Matrix<T>, Vector<T>>
         using var ms = new MemoryStream();
         using (var writer = new BinaryWriter(ms))
         {
-            writer.Write(0x4D52464D); // 'MRFM' magic
-            writer.Write(_targetFeatures);
-            try { writer.Write(Convert.ToDouble(_mapper.GetMappingConfidence())); }
-            catch (Exception ex)
-            {
-                Console.Error.WriteLine($"Failed to write mapping confidence: {ex}");
-                writer.Write(0.0);
-            }
             var baseBytes = _baseModel.Serialize();
-            writer.Write(baseBytes.Length);
-            writer.Write(baseBytes);
-            writer.Flush();
+            WriteWrapper(writer, baseBytes);
         }
         var data = ms.ToArray();
         var directory = Path.GetDirectoryName(filePath);
@@ -332,27 +301,10 @@ internal class MappedRandomForestModel<T> : IFullModel<T, Matrix<T>, Vector<T>>
         var data = File.ReadAllBytes(filePath);
         using var ms = new MemoryStream(data);
         using var reader = new BinaryReader(ms);
-        try
+        if (TryReadWrapper(reader, out var baseBytes))
         {
-            var magic = reader.ReadInt32();
-            if (magic == 0x4D52464D)
-            {
-                var target = reader.ReadInt32();
-                // Validate target feature count consistency
-                if (target != _targetFeatures)
-                {
-                    throw new InvalidOperationException($"Deserialized target feature count ({target}) does not match current instance ({_targetFeatures}).");
-                }
-                var confidence = reader.ReadDouble();
-                var len = reader.ReadInt32();
-                var baseBytes = reader.ReadBytes(len);
-                _baseModel.Deserialize(baseBytes);
-                return;
-            }
-        }
-        catch
-        {
-            // Fall back to underlying model loader if not wrapper format
+            _baseModel.Deserialize(baseBytes);
+            return;
         }
         _baseModel.LoadModel(filePath);
     }
@@ -373,10 +325,49 @@ internal class MappedRandomForestModel<T> : IFullModel<T, Matrix<T>, Vector<T>>
                     Console.Error.WriteLine($"Failed to inverse map feature name '{kvp.Key}': {ex}");
                     // Fall back to original key
                 }
-            }
-            mappedImportance[key] = kvp.Value;
+        }
+        mappedImportance[key] = kvp.Value;
         }
         return mappedImportance;
+    }
+
+    private void WriteWrapper(BinaryWriter writer, byte[] baseBytes)
+    {
+        writer.Write(0x4D52464D); // 'MRFM' magic
+        writer.Write(_targetFeatures);
+        try { writer.Write(Convert.ToDouble(_mapper.GetMappingConfidence())); }
+        catch (Exception ex)
+        {
+            Console.Error.WriteLine($"Failed to write mapping confidence: {ex}");
+            writer.Write(0.0);
+        }
+        writer.Write(baseBytes.Length);
+        writer.Write(baseBytes);
+        writer.Flush();
+    }
+
+    private bool TryReadWrapper(BinaryReader reader, out byte[] baseBytes)
+    {
+        try
+        {
+            var magic = reader.ReadInt32();
+            if (magic != 0x4D52464D) { baseBytes = Array.Empty<byte>(); return false; }
+            var target = reader.ReadInt32();
+            if (target != _targetFeatures)
+            {
+                throw new InvalidOperationException($"Deserialized target feature count ({target}) does not match current instance ({_targetFeatures}).");
+            }
+            var confidence = reader.ReadDouble(); // reserved
+            var len = reader.ReadInt32();
+            baseBytes = reader.ReadBytes(len);
+            return true;
+        }
+        catch (Exception ex)
+        {
+            Console.Error.WriteLine($"Wrapper deserialization fallback: {ex.Message}");
+            baseBytes = Array.Empty<byte>();
+            return false;
+        }
     }
 
     public virtual void SetActiveFeatureIndices(IEnumerable<int> featureIndices)
