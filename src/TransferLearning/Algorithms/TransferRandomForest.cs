@@ -296,11 +296,53 @@ internal class MappedRandomForestModel<T> : IFullModel<T, Matrix<T>, Vector<T>>
 
     public virtual void SaveModel(string filePath)
     {
-        _baseModel.SaveModel(filePath);
+        // Persist wrapper metadata and base model bytes together
+        using var ms = new MemoryStream();
+        using (var writer = new BinaryWriter(ms))
+        {
+            writer.Write(0x4D52464D); // 'MRFM' magic
+            writer.Write(_targetFeatures);
+            try { writer.Write(Convert.ToDouble(_mapper.GetMappingConfidence())); } catch { writer.Write(0.0); }
+            var baseBytes = _baseModel.Serialize();
+            writer.Write(baseBytes.Length);
+            writer.Write(baseBytes);
+            writer.Flush();
+        }
+        var data = ms.ToArray();
+        var directory = Path.GetDirectoryName(filePath);
+        if (!string.IsNullOrEmpty(directory) && !Directory.Exists(directory))
+        {
+            Directory.CreateDirectory(directory);
+        }
+        File.WriteAllBytes(filePath, data);
     }
 
     public virtual void LoadModel(string filePath)
     {
+        if (!File.Exists(filePath))
+        {
+            throw new FileNotFoundException($"The specified model file does not exist: {filePath}", filePath);
+        }
+        var data = File.ReadAllBytes(filePath);
+        using var ms = new MemoryStream(data);
+        using var reader = new BinaryReader(ms);
+        try
+        {
+            var magic = reader.ReadInt32();
+            if (magic == 0x4D52464D)
+            {
+                var target = reader.ReadInt32();
+                var confidence = reader.ReadDouble();
+                var len = reader.ReadInt32();
+                var baseBytes = reader.ReadBytes(len);
+                _baseModel.Deserialize(baseBytes);
+                return;
+            }
+        }
+        catch
+        {
+            // Fall back to underlying model loader if not wrapper format
+        }
         _baseModel.LoadModel(filePath);
     }
 
