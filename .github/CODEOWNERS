@@ -1,0 +1,4 @@
+# CODEOWNERS enforces review from code owners on PRs touching matching paths.
+# Adjust as needed to match your GitHub users/teams.
+
+* @ooples
