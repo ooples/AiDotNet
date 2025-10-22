@@ -16,5 +16,4 @@ jobs:
         uses: wagoid/commitlint-github-action@v6
         with:
           # An empty configFile parameter relies on commitlint's default configuration discovery.
-          # Explicit repo config also present: .commitlintrc.json
 
