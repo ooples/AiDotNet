@@ -44,10 +44,21 @@ public static class ActivationFunctionFactory<T>
     /// </remarks>
     public static IActivationFunction<T> CreateActivationFunction(ActivationFunction activationFunction)
     {
-        return activationFunction switch
+                return activationFunction switch
         {
             ActivationFunction.ReLU => new ReLUActivation<T>(),
+            ActivationFunction.Sigmoid => new SigmoidActivation<T>(),
+            ActivationFunction.Tanh => new TanhActivation<T>(),
+            ActivationFunction.Linear => new IdentityActivation<T>(),
+            ActivationFunction.LeakyReLU => new LeakyReLUActivation<T>(),
+            ActivationFunction.ELU => new ELUActivation<T>(),
+            ActivationFunction.SELU => new SELUActivation<T>(),
             ActivationFunction.Softmax => throw new NotSupportedException("Softmax is not applicable to single values. Use CreateVectorActivationFunction for Softmax."),
+            ActivationFunction.Softplus => new SoftPlusActivation<T>(),
+            ActivationFunction.SoftSign => new SoftSignActivation<T>(),
+            ActivationFunction.Swish => new SwishActivation<T>(),
+            ActivationFunction.GELU => new GELUActivation<T>(),
+            ActivationFunction.Identity => new IdentityActivation<T>(),
             _ => throw new NotImplementedException($"Activation function {activationFunction} not implemented.")
         };
     }
@@ -77,7 +88,18 @@ public static class ActivationFunctionFactory<T>
         return activationFunction switch
         {
             ActivationFunction.Softmax => new SoftmaxActivation<T>(),
+            ActivationFunction.ReLU => new ReLUActivation<T>(),
+            ActivationFunction.Sigmoid => new SigmoidActivation<T>(),
+            ActivationFunction.Tanh => new TanhActivation<T>(),
+            ActivationFunction.Linear => new IdentityActivation<T>(),
+            ActivationFunction.LeakyReLU => new LeakyReLUActivation<T>(),
+            ActivationFunction.ELU => new ELUActivation<T>(),
+            ActivationFunction.SELU => new SELUActivation<T>(),
+            ActivationFunction.Softplus => new SoftPlusActivation<T>(),
+            ActivationFunction.SoftSign => new SoftSignActivation<T>(),
+            ActivationFunction.Swish => new SwishActivation<T>(),
+            ActivationFunction.GELU => new GELUActivation<T>(),
+            ActivationFunction.Identity => new IdentityActivation<T>(),
             _ => throw new NotImplementedException($"Vector activation function {activationFunction} not implemented.")
-        };
-    }
+        };    }
 }
