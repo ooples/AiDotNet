@@ -49,8 +49,6 @@ jobs:
         run: |
           if [ -f "src/AiDotNet.csproj" ]; then
             dotnet pack src/AiDotNet.csproj -c Release -o out /p:PackageVersion=${{ steps.version.outputs.version }}
-          else
-            echo "src/AiDotNet.csproj not found; skipping pack"
           fi
 
       - name: Verify TFMs in package (net46, net6.0, net8.0)
@@ -106,6 +104,10 @@ jobs:
         with:
           name: nuget-out-${{ github.sha }}
           path: out/
+          if-no-files-found: error
+
+      - name: List downloaded artifacts
+        run: ls -la out
 
       - name: Create Release
         uses: softprops/action-gh-release@v2
