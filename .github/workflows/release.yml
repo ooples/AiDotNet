@@ -86,6 +86,7 @@ jobs:
         with:
           name: nuget-out-${{ github.sha }}
           path: out/
+          if-no-files-found: error
 
       - name: Push to NuGet
         run: |
