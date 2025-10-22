@@ -67,7 +67,7 @@ jobs:
             done
           done
 
-      - name: Upload package artifact (required)
+      - name: Upload package artifact (required) # both upload and download use if-no-files-found: error
         uses: actions/upload-artifact@v4
         with:
           # Required for downstream GitHub Release; fail if missing
@@ -120,4 +120,5 @@ jobs:
           files: out/*.nupkg
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
 
