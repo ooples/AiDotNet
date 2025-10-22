@@ -209,13 +209,45 @@ internal class MappedRandomForestModel<T> : IFullModel<T, Matrix<T>, Vector<T>>
         return _baseModel.GetModelMetaData();
     }
 
-    public byte[] Serialize()
+        public byte[] Serialize()
     {
-        return _baseModel.Serialize();
+        using var ms = new MemoryStream();
+        using var writer = new BinaryWriter(ms);
+        // Write a simple header for wrapper metadata
+        writer.Write(0x4D52464D); // 'MRFM' magic
+        writer.Write(_targetFeatures);
+        // Mapper confidence if available
+        try { writer.Write(Convert.ToDouble(_mapper.GetMappingConfidence())); } catch { writer.Write(0.0); }
+        // Base model payload
+        var baseBytes = _baseModel.Serialize();
+        writer.Write(baseBytes.Length);
+        writer.Write(baseBytes);
+        writer.Flush();
+        return ms.ToArray();
     }
 
-    public void Deserialize(byte[] data)
+        public void Deserialize(byte[] data)
     {
+        using var ms = new MemoryStream(data);
+        using var reader = new BinaryReader(ms);
+        try
+        {
+            var magic = reader.ReadInt32();
+            if (magic == 0x4D52464D)
+            {
+                var target = reader.ReadInt32();
+                var confidence = reader.ReadDouble();
+                var len = reader.ReadInt32();
+                var baseBytes = reader.ReadBytes(len);
+                _baseModel.Deserialize(baseBytes);
+                return;
+            }
+        }
+        catch
+        {
+            // Fall back to plain base model payload format
+        }
+        // If not our wrapper format, treat as base model bytes
         _baseModel.Deserialize(data);
     }
 
@@ -272,9 +304,21 @@ internal class MappedRandomForestModel<T> : IFullModel<T, Matrix<T>, Vector<T>>
         _baseModel.LoadModel(filePath);
     }
 
-    public virtual Dictionary<string, T> GetFeatureImportance()
+        public virtual Dictionary<string, T> GetFeatureImportance()
     {
-        return _baseModel.GetFeatureImportance();
+        var baseImportance = _baseModel.GetFeatureImportance();
+        var mappedImportance = new Dictionary<string, T>(baseImportance.Count);
+        var mapMethod = _mapper.GetType().GetMethod("InverseMapFeatureName", new[] { typeof(string) });
+        foreach (var kvp in baseImportance)
+        {
+            var key = kvp.Key;
+            if (mapMethod != null)
+            {
+                try { key = (string)mapMethod.Invoke(_mapper, new object[] { kvp.Key })!; } catch { /* ignore */ }
+            }
+            mappedImportance[key] = kvp.Value;
+        }
+        return mappedImportance;
     }
 
     public virtual void SetActiveFeatureIndices(IEnumerable<int> featureIndices)
@@ -282,3 +326,4 @@ internal class MappedRandomForestModel<T> : IFullModel<T, Matrix<T>, Vector<T>>
         _baseModel.SetActiveFeatureIndices(featureIndices);
     }
 }
+
