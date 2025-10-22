@@ -49,7 +49,7 @@ jobs:
         run: |
           if [ -f "src/AiDotNet.csproj" ]; then
             dotnet pack src/AiDotNet.csproj -c Release -o out /p:PackageVersion=${{ steps.version.outputs.version }}
-      - name: Verify TFMs in package (net46, net6.0, net8.0)
+          fi\n\n      - name: Verify TFMs in package (net46, net6.0, net8.0)
         run: |
           set -e
           shopt -s nullglob
@@ -79,7 +79,7 @@ jobs:
     name: Publish to NuGet
     runs-on: ubuntu-latest
     needs: build-test-pack
-    if: ${{ secrets.NUGET_API_KEY != '' }}
+    if: secrets.NUGET_API_KEY != ''
     steps:
       - name: Download package
         uses: actions/download-artifact@v4
@@ -109,4 +109,5 @@ jobs:
             out/*.nupkg
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
 

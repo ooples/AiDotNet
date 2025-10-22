@@ -31,7 +31,7 @@ run: dotnet restore AiDotNet.sln
           dotnet tool update -g dotnet-format || dotnet tool install -g dotnet-format
           export PATH="$PATH:$HOME/.dotnet/tools"
           dotnet format AiDotNet.sln --verify-no-changes || (echo "Run 'dotnet format' locally to fix style issues." && exit 1)
-build:
+  build:
   name: Build
   strategy:
     matrix:
@@ -177,5 +177,6 @@ run: dotnet restore AiDotNet.sln
             **/bin/Release/
           if-no-files-found: ignore
           retention-days: 7
+
 
 
