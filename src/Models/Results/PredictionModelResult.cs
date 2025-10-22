@@ -488,41 +488,71 @@ internal class PredictionModelResult<T, TInput, TOutput> : IPredictiveModel<T, T
 
     public void Train(TInput input, TOutput expectedOutput)
     {
-        throw new NotImplementedException();
+        if (Model == null)
+        {
+            throw new InvalidOperationException("Model is not initialized.");
+        }
+        Model.Train(input, expectedOutput);
     }
 
     public ModelMetaData<T> GetModelMetaData()
     {
-        throw new NotImplementedException();
+        // Return the stored metadata (populated from the underlying model when available)
+        return ModelMetadata;
     }
 
     public Vector<T> GetParameters()
     {
-        throw new NotImplementedException();
+        if (Model == null)
+        {
+            throw new InvalidOperationException("Model is not initialized.");
+        }
+        return Model.GetParameters();
     }
 
     public IFullModel<T, TInput, TOutput> WithParameters(Vector<T> parameters)
     {
-        throw new NotImplementedException();
+        if (Model == null)
+        {
+            throw new InvalidOperationException("Model is not initialized.");
+        }
+        return Model.WithParameters(parameters);
     }
 
     public IEnumerable<int> GetActiveFeatureIndices()
     {
-        throw new NotImplementedException();
+        if (Model == null)
+        {
+            // No model initialized; no active features to report
+            return Array.Empty<int>();
+        }
+        return Model.GetActiveFeatureIndices();
     }
 
     public bool IsFeatureUsed(int featureIndex)
     {
-        throw new NotImplementedException();
+        if (Model == null)
+        {
+            return false;
+        }
+        return Model.IsFeatureUsed(featureIndex);
     }
 
     public IFullModel<T, TInput, TOutput> DeepCopy()
     {
-        throw new NotImplementedException();
+        if (Model == null)
+        {
+            throw new InvalidOperationException("Model is not initialized.");
+        }
+        return Model.DeepCopy();
     }
 
     public IFullModel<T, TInput, TOutput> Clone()
     {
-        throw new NotImplementedException();
+        if (Model == null)
+        {
+            throw new InvalidOperationException("Model is not initialized.");
+        }
+        return Model.Clone();
     }
 }
