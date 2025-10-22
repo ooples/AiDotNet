@@ -56,6 +56,17 @@ jobs:
       - name: Build
         run: dotnet build AiDotNet.sln --configuration Release --no-restore
 
+      - name: Test with coverage
+        run: dotnet test AiDotNet.sln -c Release --no-build --collect:"XPlat Code Coverage" --results-directory ./TestResults
+
+      - name: Upload coverage to Codecov
+        if: secrets.CODECOV_TOKEN != ''
+        uses: codecov/codecov-action@v4
+        with:
+          token: ${{ secrets.CODECOV_TOKEN }}
+          directory: ./TestResults
+          fail_ci_if_error: true
+
       - name: Publish core library (sanity)
         run: |
           if [ -f "src/AiDotNet.csproj" ]; then
