@@ -60,12 +60,15 @@ jobs:
         run: dotnet test AiDotNet.sln -c Release --no-build --collect:"XPlat Code Coverage" --results-directory ./TestResults
 
       - name: Upload coverage to Codecov
-        if: ${{ secrets.CODECOV_TOKEN != '' }}
-        uses: codecov/codecov-action@v4
-        with:
-          token: ${{ secrets.CODECOV_TOKEN }}
-          directory: ./TestResults
-          fail_ci_if_error: true
+        run: |
+          if [ -n "${CODECOV_TOKEN}" ]; then
+            echo "Uploading coverage to Codecov..."
+            npx codecov -t "${CODECOV_TOKEN}" -d "./TestResults" || echo "Codecov upload failed"
+          else
+            echo "CODECOV_TOKEN not set; skipping Codecov upload."
+          fi
+        env:
+          CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
 
       - name: Publish core library (sanity)
         run: |
@@ -151,6 +154,7 @@ jobs:
         run: |
           [ "${{ needs.lint-and-format.result }}" = "success" ] || (echo "Lint/format failed" && exit 1)
           [ "${{ needs.build.result }}" = "success" ] || (echo "Build failed" && exit 1)
+          [ "${{ needs.build-netfx.result }}" = "success" ] || (echo ".NET Framework build failed" && exit 1)
           [ "${{ needs.test.result }}" = "success" ] || (echo "Tests failed" && exit 1)
           [ "${{ needs.integration-test.result }}" = "success" ] || (echo "Integration tests failed" && exit 1)
           echo "All checks passed!"
