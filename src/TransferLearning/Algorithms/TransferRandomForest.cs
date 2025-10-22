@@ -192,6 +192,8 @@ internal class MappedRandomForestModel<T> : IFullModel<T, Matrix<T>, Vector<T>>
         _mapper = mapper;
         _targetFeatures = targetFeatures;
         _numOps = AiDotNet.Helpers.MathHelper.GetNumericOperations<T>();
+        // Initialize inverse-map reflection method once per process if available
+        _inverseMapMethod ??= _mapper.GetType().GetMethod("InverseMapFeatureName", new[] { typeof(string) });
     }
 
     public void Train(Matrix<T> input, Vector<T> expectedOutput)
@@ -313,13 +315,20 @@ internal class MappedRandomForestModel<T> : IFullModel<T, Matrix<T>, Vector<T>>
     {
         var baseImportance = _baseModel.GetFeatureImportance();
         var mappedImportance = new Dictionary<string, T>(baseImportance.Count);
-        var mapMethod = _inverseMapMethod ??= _mapper.GetType().GetMethod("InverseMapFeatureName", new[] { typeof(string) });
+        var mapMethod = _inverseMapMethod;
         foreach (var kvp in baseImportance)
         {
             var key = kvp.Key;
             if (mapMethod != null)
             {
-                try { key = (string)mapMethod.Invoke(_mapper, new object[] { kvp.Key })!; }
+                try
+                {
+                    var mappedKey = mapMethod.Invoke(_mapper, new object[] { kvp.Key });
+                    if (mappedKey is string s && s != null)
+                    {
+                        key = s;
+                    }
+                }
                 catch (Exception ex)
                 {
                     Console.Error.WriteLine($"Failed to inverse map feature name '{kvp.Key}': {ex}");
