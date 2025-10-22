@@ -154,6 +154,7 @@ jobs:
         run: |
           [ "${{ needs.lint-and-format.result }}" = "success" ] || (echo "Lint/format failed" && exit 1)
           [ "${{ needs.build.result }}" = "success" ] || (echo "Build failed" && exit 1)
+          # Include .NET Framework 4.6 job in status gate
           [ "${{ needs.build-netfx.result }}" = "success" ] || (echo ".NET Framework build failed" && exit 1)
           [ "${{ needs.test.result }}" = "success" ] || (echo "Tests failed" && exit 1)
           [ "${{ needs.integration-test.result }}" = "success" ] || (echo "Integration tests failed" && exit 1)
