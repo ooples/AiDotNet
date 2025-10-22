@@ -35,7 +35,8 @@ jobs:
             shopt -s nullglob
             for p in src/*.csproj; do
               dotnet publish "$p" -c Release -o publish
-              if [ $? -ne 0 ]; then
+              status=$?
+              if [ $status -ne 0 ]; then
                 echo "Publish failed for $p"
                 failed_projects="$failed_projects $p"
               fi
