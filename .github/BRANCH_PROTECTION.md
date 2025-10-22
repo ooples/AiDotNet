@@ -17,5 +17,5 @@ Also enable:
 - Require branches to be up to date before merging
 - Require CODEOWNERS review
 
-Note: The exact names shown in GitHub’s UI may include the workflow/job prefixes. Use the checks as they appear on a PR to configure the protection rules.
+Note: The exact names shown in GitHub's UI may include the workflow/job prefixes. Use the exact check names shown on a PR when configuring protection rules.
 

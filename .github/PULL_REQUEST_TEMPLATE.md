@@ -24,7 +24,3 @@ Record counts before/after your last push:
 
 ## Notes
 - Any follow-ups, caveats, or migration details
-
-<!-- end -->
-
-

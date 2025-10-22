@@ -103,10 +103,10 @@ jobs:
       - name: Download package
         uses: actions/download-artifact@v4
         with:
-          # Release requires artifacts to exist; fail if missing
-          if-no-files-found: error
           name: nuget-out-${{ github.sha }}
           path: out/
+          # Release requires artifacts to exist; fail if missing
+          if-no-files-found: error
 
       - name: List downloaded artifacts
         # Ensure artifacts are present prior to release creation (paired with 'error' above)
