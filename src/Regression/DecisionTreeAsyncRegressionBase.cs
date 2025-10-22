@@ -838,7 +838,20 @@ public abstract class AsyncDecisionTreeRegressionBase<T> : IAsyncTreeBasedModel<
             throw new ArgumentException("File path must not be null or empty.", nameof(filePath));
         }
         var data = Serialize();
-        File.WriteAllBytes(filePath, data);
+        // Ensure directory exists and handle IO exceptions with clearer context
+        var directory = Path.GetDirectoryName(filePath);
+        if (!string.IsNullOrEmpty(directory) && !Directory.Exists(directory))
+        {
+            Directory.CreateDirectory(directory);
+        }
+        try
+        {
+            File.WriteAllBytes(filePath, data);
+        }
+        catch (Exception ex) when (ex is IOException || ex is UnauthorizedAccessException || ex is System.Security.SecurityException)
+        {
+            throw new InvalidOperationException($"Failed to save model to '{filePath}': {ex.Message}", ex);
+        }
     }
 
     /// <summary>
@@ -855,8 +868,15 @@ public abstract class AsyncDecisionTreeRegressionBase<T> : IAsyncTreeBasedModel<
         {
             throw new FileNotFoundException($"The specified model file does not exist: {filePath}", filePath);
         }
-        var data = File.ReadAllBytes(filePath);
-        Deserialize(data);
+        try
+        {
+            var data = File.ReadAllBytes(filePath);
+            Deserialize(data);
+        }
+        catch (Exception ex)
+        {
+            throw new InvalidOperationException($"Failed to load or deserialize model from file '{filePath}'.", ex);
+        }
     }
 
     public virtual int ParameterCount
