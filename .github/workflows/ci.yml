@@ -1,15 +1,12 @@
 name: CI (.NET)
-
 on:
   pull_request:
     branches: [ merge-dev2-to-master ]
   push:
     branches: [ merge-dev2-to-master ]
-
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
-
 jobs:
   lint-and-format:
     name: Lint and Format Check
@@ -18,21 +15,17 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
-
       - name: Setup .NET 8.0.x
         uses: actions/setup-dotnet@v4
         with:
           dotnet-version: 8.0.x
-
       - name: Restore
         run: dotnet restore AiDotNet.sln
-
       - name: Verify code style (dotnet format)
         run: |
           dotnet tool update -g dotnet-format || dotnet tool install -g dotnet-format
           export PATH="$PATH:$HOME/.dotnet/tools"
           dotnet format AiDotNet.sln --verify-no-changes || (echo "Run 'dotnet format' locally to fix style issues." && exit 1)
-
   build:
     name: Build
     runs-on: ubuntu-latest
@@ -44,21 +37,16 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
-
       - name: Setup .NET ${{ matrix.dotnet }}
         uses: actions/setup-dotnet@v4
         with:
           dotnet-version: ${{ matrix.dotnet }}
-
       - name: Restore
         run: dotnet restore AiDotNet.sln
-
       - name: Build
         run: dotnet build AiDotNet.sln --configuration Release --no-restore
-
       - name: Test with coverage
         run: dotnet test AiDotNet.sln -c Release --no-build --collect:"XPlat Code Coverage" --results-directory ./TestResults
-
       - name: Upload coverage to Codecov
         uses: codecov/codecov-action@v4
         with:
@@ -66,7 +54,6 @@ jobs:
           files: ./TestResults/**/coverage.cobertura.xml
           flags: unittests
           fail_ci_if_error: false
-
       - name: Publish core library (sanity)
         run: |
           if [ -f "src/AiDotNet.csproj" ]; then
@@ -74,7 +61,6 @@ jobs:
           else
             echo "AiDotNet.csproj not found, skipping publish sanity"
           fi
-
       - name: Upload build artifacts
         uses: actions/upload-artifact@v4
         with:
@@ -84,7 +70,6 @@ jobs:
             **/bin/Release/
           if-no-files-found: ignore
           retention-days: 7
-
   test:
     name: Test (.NET ${{ matrix.dotnet }})
     runs-on: ubuntu-latest
@@ -96,18 +81,15 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
-
       - name: Setup .NET ${{ matrix.dotnet }}
         uses: actions/setup-dotnet@v4
         with:
           dotnet-version: ${{ matrix.dotnet }}
-
       - name: Restore
         run: dotnet restore AiDotNet.sln
       - name: Run tests with coverage
         run: |
           dotnet test AiDotNet.sln --configuration Release --collect:"XPlat Code Coverage" --results-directory ./TestResults
-
       - name: Upload coverage to Codecov (unit tests)
         uses: codecov/codecov-action@v4
         with:
@@ -115,7 +97,6 @@ jobs:
           files: ./TestResults/**/coverage.cobertura.xml
           flags: unittests
           fail_ci_if_error: false
-
   integration-test:
     name: Integration Tests
     runs-on: ubuntu-latest
@@ -124,12 +105,10 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
-
       - name: Setup .NET 8.0.x
         uses: actions/setup-dotnet@v4
         with:
           dotnet-version: 8.0.x
-
       - name: Run integration console (if present)
         run: |
           if [ -f "testconsole/AiDotNetTestConsole.csproj" ]; then
@@ -137,7 +116,6 @@ jobs:
           else
             echo "No integration console project found; skipping"
           fi
-
   build-netfx:
     name: Build (.NET Framework 4.6)
     runs-on: windows-latest
@@ -145,23 +123,19 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
-
       - name: Setup .NET SDK
         uses: actions/setup-dotnet@v4
         with:
           dotnet-version: 8.0.x
-
       - name: Restore
         shell: pwsh
         run: |
           dotnet restore
-
       - name: Build (Windows MSBuild)
         shell: pwsh
         run: |
           # Build all projects; if multi-targeting includes net46, MSBuild will build it on Windows
           dotnet build -c Release --no-restore
-
       - name: Upload netfx build artifacts
         if: always()
         uses: actions/upload-artifact@v4
@@ -171,7 +145,6 @@ jobs:
             **/bin/Release/
           if-no-files-found: ignore
           retention-days: 7
-
   status-check:
     name: All Checks Passed
     runs-on: ubuntu-latest
@@ -189,14 +162,3 @@ jobs:
           [ "${{ needs.test.result }}" = "success" ] || (echo "Tests failed" && exit 1)
           [ "${{ needs.integration-test.result }}" = "success" ] || (echo "Integration tests failed" && exit 1)
           echo "All checks passed!"
-
-
-
-
-
-
-
-  
-
-
-

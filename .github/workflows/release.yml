@@ -67,7 +67,7 @@ jobs:
             done
           done
 
-      - name: Upload package artifact
+      - name: Upload package artifact (required)
         uses: actions/upload-artifact@v4
         with:
           # Required for downstream GitHub Release; fail if missing
