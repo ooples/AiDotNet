@@ -31,8 +31,19 @@ jobs:
           if [ -f "src/AiDotNet.csproj" ]; then
             dotnet publish src/AiDotNet.csproj -c Release -o publish
           else
-            # fallback: publish all projects in src
-            for p in src/*.csproj; do dotnet publish "$p" -c Release -o publish || true; done
+            failed_projects=""
+            shopt -s nullglob
+            for p in src/*.csproj; do
+              dotnet publish "$p" -c Release -o publish
+              if [ $? -ne 0 ]; then
+                echo "Publish failed for $p"
+                failed_projects="$failed_projects $p"
+              fi
+            done
+            if [ -n "$failed_projects" ]; then
+              echo "Error: The following projects failed to publish:$failed_projects"
+              exit 1
+            fi
           fi
 
       - name: Analyze size vs baseline

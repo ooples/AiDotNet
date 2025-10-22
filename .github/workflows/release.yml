@@ -62,9 +62,9 @@ jobs:
           for pkg in "${pkgs[@]}"; do
             echo "Inspecting $pkg"
             files=$(unzip -Z1 "$pkg")
-            echo "$files" | grep -qE '^lib/net46/.+\.dll$' || { echo "Missing net46 lib in package"; exit 1; }
-            echo "$files" | grep -qE '^lib/net6\.0/.+\.dll$' || { echo "Missing net6.0 lib in package"; exit 1; }
-            echo "$files" | grep -qE '^lib/net8\.0/.+\.dll$' || { echo "Missing net8.0 lib in package"; exit 1; }
+            for tfm in net46 net6.0 net8.0; do
+              echo "$files" | grep -qE "^lib/${tfm}/.+\\.dll$" || { echo "Missing ${tfm} lib in package"; exit 1; }
+            done
           done
 
       - name: Upload package artifact

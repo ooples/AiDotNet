@@ -60,7 +60,7 @@ jobs:
         run: dotnet test AiDotNet.sln -c Release --no-build --collect:"XPlat Code Coverage" --results-directory ./TestResults
 
       - name: Upload coverage to Codecov
-        if: secrets.CODECOV_TOKEN != ''
+        if: ${{ secrets.CODECOV_TOKEN != '' }}
         uses: codecov/codecov-action@v4
         with:
           token: ${{ secrets.CODECOV_TOKEN }}
@@ -109,14 +109,15 @@ jobs:
           dotnet test AiDotNet.sln --configuration Release --collect:"XPlat Code Coverage" --results-directory ./TestResults
 
       - name: Upload coverage to Codecov (only if token set)
-        if: ${{ secrets.CODECOV_TOKEN != '' }}
-        uses: codecov/codecov-action@v4
-        with:
-          token: ${{ secrets.CODECOV_TOKEN }}
-          files: |
-            ./TestResults/**/coverage.cobertura.xml
-          flags: unittests
-          fail_ci_if_error: false
+        run: |
+          if [ -n "${CODECOV_TOKEN}" ]; then
+            echo "Uploading coverage to Codecov..."
+            npx codecov -t "${CODECOV_TOKEN}" -f "./TestResults/**/coverage.cobertura.xml" -F unittests || echo "Codecov upload failed"
+          else
+            echo "CODECOV_TOKEN not set; skipping Codecov upload."
+          fi
+        env:
+          CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
 
   integration-test:
     name: Integration Tests
