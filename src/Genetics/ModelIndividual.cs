@@ -173,7 +173,8 @@ public class ModelIndividual<T, TInput, TOutput, TGene> :
     /// <param name="parameters">The new parameters.</param>
     public void UpdateParameters(Vector<T> parameters)
     {
-        _innerModel.WithParameters(parameters);
+        // Update the inner model with the provided parameters
+        _innerModel = _innerModel.WithParameters(parameters);
     }
 
     /// <summary>
@@ -211,32 +212,60 @@ public class ModelIndividual<T, TInput, TOutput, TGene> :
 
     public void Train(TInput input, TOutput expectedOutput)
     {
-        throw new NotImplementedException();
+        _innerModel.Train(input, expectedOutput);
     }
 
     public ModelMetaData<T> GetModelMetaData()
     {
-        throw new NotImplementedException();
+        return _innerModel.GetModelMetaData();
     }
 
     public IEnumerable<int> GetActiveFeatureIndices()
     {
-        throw new NotImplementedException();
+        return _innerModel.GetActiveFeatureIndices();
     }
 
     public bool IsFeatureUsed(int featureIndex)
     {
-        throw new NotImplementedException();
+        return _innerModel.IsFeatureUsed(featureIndex);
     }
 
     public IFullModel<T, TInput, TOutput> DeepCopy()
     {
-        throw new NotImplementedException();
+        // Deep copy the inner model and wrap it in a new ModelIndividual to preserve context
+        var copiedInner = _innerModel.DeepCopy();
+        return new ModelIndividual<T, TInput, TOutput, TGene>(copiedInner, _genes, _modelFactory);
     }
 
     IFullModel<T, TInput, TOutput> ICloneable<IFullModel<T, TInput, TOutput>>.Clone()
     {
-        throw new NotImplementedException();
+        // Clone the inner model and wrap it in a new ModelIndividual to preserve genes and factory
+        var clonedInner = _innerModel is ICloneable<IFullModel<T, TInput, TOutput>> cl
+            ? cl.Clone()
+            : _innerModel.DeepCopy();
+
+        return new ModelIndividual<T, TInput, TOutput, TGene>(clonedInner, _genes, _modelFactory);
+    }
+
+    /// <summary>
+    /// Gets the total number of parameters for this model.
+    /// </summary>
+    public virtual int ParameterCount
+    {
+        get
+        {
+            var parameters = _innerModel.GetParameters();
+            return parameters?.Length ?? 0;
+        }
+    }
+
+    /// <summary>
+    /// Sets parameters on the inner model by creating a new model instance with the given parameters.
+    /// </summary>
+    /// <param name="parameters">The parameters to apply.</param>
+    public void SetParameters(Vector<T> parameters)
+    {
+        _innerModel = _innerModel.WithParameters(parameters);
     }
 
     #endregion
