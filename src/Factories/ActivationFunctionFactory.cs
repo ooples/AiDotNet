@@ -103,3 +103,4 @@ public static class ActivationFunctionFactory<T>
             _ => throw new NotImplementedException($"Vector activation function {activationFunction} not implemented.")
         };    }
 }
+
