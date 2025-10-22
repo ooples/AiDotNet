@@ -114,8 +114,7 @@ jobs:
         with:
           tag_name: v${{ needs.build-test-pack.outputs.package_version }}
           name: v${{ needs.build-test-pack.outputs.package_version }}
-          files: |
-            out/*.nupkg
+          files: out/*.nupkg
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
