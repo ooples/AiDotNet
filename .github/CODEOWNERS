@@ -1,0 +1,6 @@
+# CODEOWNERS for AiDotNet
+# Update these handles to your actual maintainers/teams.
+# Lines are of the form:  <pattern>  <owner1> <owner2>
+
+* @cheat  # TODO: replace with your org/team, e.g. @ooples/core or @ooples/ai-team
+

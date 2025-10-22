@@ -1,0 +1,112 @@
+name: Release (.NET)
+
+on:
+  push:
+    branches:
+      - master
+
+permissions:
+  contents: write
+  issues: write
+  pull-requests: write
+  id-token: write
+
+jobs:
+  build-test-pack:
+    name: Build, Test, Pack
+    runs-on: ubuntu-latest
+    outputs:
+      package_version: ${{ steps.version.outputs.version }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 8.0.x
+
+      - name: Determine version (Git tags)
+        id: version
+        run: |
+          # Simple versioning: use latest tag or default 0.1.0
+          VERSION=$(git describe --tags --abbrev=0 2>/dev/null || echo "0.1.0")
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          echo "Using version: $VERSION"
+
+      - name: Restore
+        run: dotnet restore
+
+      - name: Build
+        run: dotnet build -c Release --no-restore
+
+      - name: Test
+        run: dotnet test -c Release --no-build --collect:"XPlat Code Coverage" --results-directory ./TestResults
+
+      - name: Pack NuGet
+        run: |
+          if [ -f "src/AiDotNet.csproj" ]; then
+            dotnet pack src/AiDotNet.csproj -c Release -o out /p:PackageVersion=${{ steps.version.outputs.version }}
+      - name: Verify TFMs in package (net46, net6.0, net8.0)
+        run: |
+          set -e
+          shopt -s nullglob
+          pkgs=(out/*.nupkg)
+          if [ ${#pkgs[@]} -eq 0 ]; then
+            echo "No packages found in out/"; exit 1
+          fi
+          for pkg in "${pkgs[@]}"; do
+            echo "Inspecting $pkg"
+            files=$(unzip -Z1 "$pkg")
+            echo "$files" | grep -qE '^lib/net46/.+\.dll$' || { echo "Missing net46 lib in package"; exit 1; }
+            echo "$files" | grep -qE '^lib/net6\.0/.+\.dll$' || { echo "Missing net6.0 lib in package"; exit 1; }
+            echo "$files" | grep -qE '^lib/net8\.0/.+\.dll$' || { echo "Missing net8.0 lib in package"; exit 1; }
+          done
+          else
+            echo "src/AiDotNet.csproj not found; skipping pack"
+          fi
+
+      - name: Upload package artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: nuget-out-${{ github.sha }}
+          path: out/*.nupkg
+          if-no-files-found: ignore
+
+  publish-nuget:
+    name: Publish to NuGet
+    runs-on: ubuntu-latest
+    needs: build-test-pack
+    if: ${{ secrets.NUGET_API_KEY != '' }}
+    steps:
+      - name: Download package
+        uses: actions/download-artifact@v4
+        with:
+          name: nuget-out-${{ github.sha }}
+          path: out/
+
+      - name: Push to NuGet
+        run: |
+          for pkg in out/*.nupkg; do
+            dotnet nuget push "$pkg" --api-key $NUGET_API_KEY --source https://api.nuget.org/v3/index.json --skip-duplicate
+          done
+        env:
+          NUGET_API_KEY: ${{ secrets.NUGET_API_KEY }}
+
+  github-release:
+    name: Create GitHub Release
+    runs-on: ubuntu-latest
+    needs: build-test-pack
+    steps:
+      - name: Create Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v${{ needs.build-test-pack.outputs.package_version }}
+          name: v${{ needs.build-test-pack.outputs.package_version }}
+          files: |
+            out/*.nupkg
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
