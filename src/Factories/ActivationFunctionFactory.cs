@@ -48,6 +48,16 @@ public static class ActivationFunctionFactory<T>
         {
             ActivationFunction.ReLU => new ReLUActivation<T>(),
             ActivationFunction.Softmax => throw new NotSupportedException("Softmax is not applicable to single values. Use CreateVectorActivationFunction for Softmax."),
+            ActivationFunction.Sigmoid => new SigmoidActivation<T>(),
+            ActivationFunction.Tanh => new TanhActivation<T>(),
+            ActivationFunction.Identity => new IdentityActivation<T>(),
+            ActivationFunction.LeakyReLU => new LeakyReLUActivation<T>(),
+            ActivationFunction.ELU => new ELUActivation<T>(),
+            ActivationFunction.SELU => new SELUActivation<T>(),
+            ActivationFunction.Softplus => new SoftPlusActivation<T>(),
+            ActivationFunction.SoftSign => new SoftSignActivation<T>(),
+            ActivationFunction.Swish => new SwishActivation<T>(),
+            ActivationFunction.GELU => new GELUActivation<T>(),
             _ => throw new NotImplementedException($"Activation function {activationFunction} not implemented.")
         };
     }
@@ -77,6 +87,16 @@ public static class ActivationFunctionFactory<T>
         return activationFunction switch
         {
             ActivationFunction.Softmax => new SoftmaxActivation<T>(),
+            ActivationFunction.Sigmoid => new SigmoidActivation<T>(),
+            ActivationFunction.Tanh => new TanhActivation<T>(),
+            ActivationFunction.Identity => new IdentityActivation<T>(),
+            ActivationFunction.LeakyReLU => new LeakyReLUActivation<T>(),
+            ActivationFunction.ELU => new ELUActivation<T>(),
+            ActivationFunction.SELU => new SELUActivation<T>(),
+            ActivationFunction.Softplus => new SoftPlusActivation<T>(),
+            ActivationFunction.SoftSign => new SoftSignActivation<T>(),
+            ActivationFunction.Swish => new SwishActivation<T>(),
+            ActivationFunction.GELU => new GELUActivation<T>(),
             _ => throw new NotImplementedException($"Vector activation function {activationFunction} not implemented.")
         };
     }
