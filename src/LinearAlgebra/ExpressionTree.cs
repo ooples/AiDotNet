@@ -1049,7 +1049,20 @@ public class ExpressionTree<T, TInput, TOutput> : IFullModel<T, TInput, TOutput>
 
     public virtual void SetParameters(Vector<T> parameters)
     {
-        throw new NotImplementedException("SetParameters is not yet implemented for this model type.");
+            // Assign parameter values to constant nodes in a deterministic traversal order
+            int index = 0;
+
+            void Assign(ExpressionTree<T, TInput, TOutput> node)
+            {
+                if (node.Type == ExpressionNodeType.Constant && index < parameters.Length)
+                {
+                    node.SetValue(parameters[index++]);
+                }
+                if (node.Left != null) Assign(node.Left);
+                if (node.Right != null) Assign(node.Right);
+            }
+
+            Assign(this);
     }
 
     public virtual int ParameterCount
