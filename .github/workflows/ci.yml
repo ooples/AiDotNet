@@ -65,7 +65,7 @@ jobs:
           token: ${{ secrets.CODECOV_TOKEN }}
           files: ./TestResults/**/coverage.cobertura.xml
           flags: unittests
-          fail_ci_if_error: true
+          fail_ci_if_error: false
 
       - name: Publish core library (sanity)
         run: |
@@ -138,30 +138,6 @@ jobs:
             echo "No integration console project found; skipping"
           fi
 
-  status-check:
-    name: All Checks Passed
-    runs-on: ubuntu-latest
-    if: always()
-    needs: [lint-and-format, build, build-netfx, test, integration-test]
-    steps:
-      - name: Context
-        run: echo "Gating jobs: lint-and-format, build, build-netfx, test, integration-test"
-      - name: Verify job outcomes
-        run: |
-          [ "${{ needs.lint-and-format.result }}" = "success" ] || (echo "Lint/format failed" && exit 1)
-          [ "${{ needs.build.result }}" = "success" ] || (echo "Build failed" && exit 1)
-          # Include .NET Framework 4.6 job in status gate
-          [ "${{ needs.build-netfx.result }}" = "success" ] || (echo ".NET Framework build failed" && exit 1)
-          [ "${{ needs.test.result }}" = "success" ] || (echo "Tests failed" && exit 1)
-          [ "${{ needs.integration-test.result }}" = "success" ] || (echo "Integration tests failed" && exit 1)
-          echo "All checks passed!"
-
-
-
-
-
-
-
   build-netfx:
     name: Build (.NET Framework 4.6)
     runs-on: windows-latest
@@ -195,6 +171,32 @@ jobs:
             **/bin/Release/
           if-no-files-found: ignore
           retention-days: 7
+
+  status-check:
+    name: All Checks Passed
+    runs-on: ubuntu-latest
+    if: always()
+    needs: [lint-and-format, build, build-netfx, test, integration-test]
+    steps:
+      - name: Context
+        run: echo "Gating jobs: lint-and-format, build, build-netfx, test, integration-test"
+      - name: Verify job outcomes
+        run: |
+          [ "${{ needs.lint-and-format.result }}" = "success" ] || (echo "Lint/format failed" && exit 1)
+          [ "${{ needs.build.result }}" = "success" ] || (echo "Build failed" && exit 1)
+          # Include .NET Framework 4.6 job in status gate
+          [ "${{ needs.build-netfx.result }}" = "success" ] || (echo ".NET Framework build failed" && exit 1)
+          [ "${{ needs.test.result }}" = "success" ] || (echo "Tests failed" && exit 1)
+          [ "${{ needs.integration-test.result }}" = "success" ] || (echo "Integration tests failed" && exit 1)
+          echo "All checks passed!"
+
+
+
+
+
+
+
+  
 
 
 
