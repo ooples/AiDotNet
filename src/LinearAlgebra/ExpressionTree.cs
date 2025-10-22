@@ -829,7 +829,28 @@ public class ExpressionTree<T, TInput, TOutput> : IFullModel<T, TInput, TOutput>
     /// </remarks>
     public virtual Dictionary<string, T> GetFeatureImportance()
     {
-        throw new NotImplementedException("GetFeatureImportance is not yet implemented for this model type.");
+        // Importance based on variable occurrence count within the tree
+        var counts = new Dictionary<int, int>();
+
+        void Traverse(ExpressionTree<T, TInput, TOutput> node)
+        {
+            if (node.Type == ExpressionNodeType.Variable)
+            {
+                int idx = _numOps.ToInt32(node.Value);
+                counts[idx] = counts.TryGetValue(idx, out var c) ? c + 1 : 1;
+            }
+            if (node.Left != null) Traverse(node.Left);
+            if (node.Right != null) Traverse(node.Right);
+        }
+
+        Traverse(this);
+
+        var result = new Dictionary<string, T>();
+        foreach (var kvp in counts)
+        {
+            result[$"Feature_{kvp.Key}"] = _numOps.FromDouble(kvp.Value);
+        }
+        return result;
     }
 
     /// <summary>
@@ -842,7 +863,28 @@ public class ExpressionTree<T, TInput, TOutput> : IFullModel<T, TInput, TOutput>
     /// </remarks>
     public virtual void SetActiveFeatureIndices(IEnumerable<int> featureIndices)
     {
-        throw new NotImplementedException("SetActiveFeatureIndices is not yet implemented for this model type.");
+        var allowed = new HashSet<int>(featureIndices);
+
+        void Prune(ExpressionTree<T, TInput, TOutput> node)
+        {
+            if (node.Type == ExpressionNodeType.Variable)
+            {
+                int idx = _numOps.ToInt32(node.Value);
+                if (!allowed.Contains(idx))
+                {
+                    // Replace disallowed variable with constant zero
+                    node.SetType(ExpressionNodeType.Constant);
+                    node.SetValue(_numOps.Zero);
+                    node.SetLeft(null);
+                    node.SetRight(null);
+                }
+                return;
+            }
+            if (node.Left != null) Prune(node.Left);
+            if (node.Right != null) Prune(node.Right);
+        }
+
+        Prune(this);
     }
 
     /// <summary>
