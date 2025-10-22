@@ -47,6 +47,8 @@ public static class ActivationFunctionFactory<T>
         return activationFunction switch
         {
             ActivationFunction.ReLU => new ReLUActivation<T>(),
+            ActivationFunction.Sigmoid => new SigmoidActivation<T>(),
+            ActivationFunction.Tanh => new TanhActivation<T>(),
             ActivationFunction.Softmax => throw new NotSupportedException("Softmax is not applicable to single values. Use CreateVectorActivationFunction for Softmax."),
             _ => throw new NotImplementedException($"Activation function {activationFunction} not implemented.")
         };
@@ -77,6 +79,8 @@ public static class ActivationFunctionFactory<T>
         return activationFunction switch
         {
             ActivationFunction.Softmax => new SoftmaxActivation<T>(),
+            ActivationFunction.Sigmoid => new SigmoidActivation<T>(),
+            ActivationFunction.Tanh => new TanhActivation<T>(),
             _ => throw new NotImplementedException($"Vector activation function {activationFunction} not implemented.")
         };
     }
