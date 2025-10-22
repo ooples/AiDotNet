@@ -15,6 +15,7 @@ jobs:
       - name: Lint commits
         uses: wagoid/commitlint-github-action@v6
         with:
+          # An empty configFile parameter relies on commitlint's default configuration discovery.
           # Use explicit config for clarity; falls back to discovery if missing
           configFile: .commitlintrc.json
 

@@ -107,7 +107,7 @@ jobs:
           if-no-files-found: error
 
       - name: List downloaded artifacts
-        # Ensure artifacts are present prior to release creation
+        # Ensure artifacts are present prior to release creation (paired with 'error' above)
         run: ls -la out
 
       - name: Create Release
