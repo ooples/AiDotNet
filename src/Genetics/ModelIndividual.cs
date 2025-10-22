@@ -261,12 +261,20 @@ public class ModelIndividual<T, TInput, TOutput, TGene> :
 
     public virtual void SaveModel(string filePath)
     {
-        throw new NotImplementedException("SaveModel is not yet implemented for this model type.");
+        if (_innerModel == null)
+        {
+            throw new InvalidOperationException("Inner model is not initialized.");
+        }
+        _innerModel.SaveModel(filePath);
     }
 
     public virtual void LoadModel(string filePath)
     {
-        throw new NotImplementedException("LoadModel is not yet implemented for this model type.");
+        if (_innerModel == null)
+        {
+            _innerModel = _modelFactory(_genes);
+        }
+        _innerModel.LoadModel(filePath);
     }
 
     #endregion
