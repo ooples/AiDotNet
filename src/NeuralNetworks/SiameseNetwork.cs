@@ -157,7 +157,7 @@ public class SiameseNetwork<T> : NeuralNetworkBase<T>
     /// - Determine if you have enough training data (typically you want many times more examples than parameters)
     /// </para>
     /// </remarks>
-    public override int GetParameterCount()
+    public int GetParameterCount()
     {
         return _subnetwork.GetParameterCount() + _outputLayer.ParameterCount;
     }

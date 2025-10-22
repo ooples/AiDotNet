@@ -233,12 +233,12 @@ public class GRUNeuralNetwork<T> : NeuralNetworkBase<T>
     /// <remarks>
     /// <para><b>For Beginners:</b> This method processes the input through the network while
     /// remembering intermediate values needed for learning.
-    /// 
+    ///
     /// Think of it like solving a math problem and showing your work - the network
     /// needs to keep track of intermediate steps to understand how to improve.
     /// </para>
     /// </remarks>
-    private Tensor<T> ForwardWithMemory(Tensor<T> input)
+    public override Tensor<T> ForwardWithMemory(Tensor<T> input)
     {
         var current = input;
     

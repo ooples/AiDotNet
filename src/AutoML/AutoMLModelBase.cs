@@ -433,9 +433,12 @@ namespace AiDotNet.AutoML
         public virtual IFullModel<T, TInput, TOutput> WithParameters(Vector<T> parameters)
         {
             if (BestModel == null)
-                throw new InvalidOperationException("No best model found.");
+                throw new InvalidOperationException("No best model found. Run SearchAsync, Search, or SearchBestModel first.");
 
-            throw new NotImplementedException("AutoML models should be recreated with SearchAsync");
+            // Create a deep copy and set the new parameters
+            var copy = DeepCopy();
+            copy.SetParameters(parameters);
+            return copy;
         }
 
         #endregion
@@ -496,11 +499,16 @@ namespace AiDotNet.AutoML
         #region ICloneable Implementation
 
         /// <summary>
-        /// Creates a deep copy of the AutoML model
+        /// Creates a memberwise clone of the AutoML model using MemberwiseClone().
+        /// This performs a shallow copy where reference types are shared between the original and clone.
         /// </summary>
+        /// <returns>A memberwise clone of the current AutoML model</returns>
+        /// <remarks>
+        /// For a deep copy with independent collections and state, use DeepCopy() instead.
+        /// </remarks>
         public virtual IFullModel<T, TInput, TOutput> Clone()
         {
-            throw new NotImplementedException("AutoML models should be recreated with SearchAsync");
+            return (AutoMLModelBase<T, TInput, TOutput>)MemberwiseClone();
         }
 
         /// <summary>
@@ -508,8 +516,71 @@ namespace AiDotNet.AutoML
         /// </summary>
         public virtual IFullModel<T, TInput, TOutput> DeepCopy()
         {
-            throw new NotImplementedException("AutoML models should be recreated with SearchAsync");
+            // Create a new instance using the factory method to avoid sharing readonly collections
+            var copy = CreateInstanceForCopy();
+
+            // Deep copy collections under lock to ensure thread safety
+            lock (_lock)
+            {
+                // Deep copy trial history
+                foreach (var t in _trialHistory)
+                {
+                    copy._trialHistory.Add(t.Clone());
+                }
+
+                // Deep copy search space parameters
+                // ParameterRange implements ICloneable, so we always call Clone()
+                foreach (var kvp in _searchSpace)
+                {
+                    copy._searchSpace[kvp.Key] = (ParameterRange)kvp.Value.Clone();
+                }
+
+                // Copy candidate models (ModelType is an enum, so no deep copy needed)
+                foreach (var model in _candidateModels)
+                {
+                    copy._candidateModels.Add(model);
+                }
+
+                // Deep copy constraints
+                // SearchConstraint implements ICloneable, so we always call Clone()
+                foreach (var constraint in _constraints)
+                {
+                    copy._constraints.Add((SearchConstraint)constraint.Clone());
+                }
+            }
+
+            // Deep copy the best model if it exists
+            copy.BestModel = BestModel?.DeepCopy();
+
+            // Copy value types and other properties
+            copy._optimizationMetric = _optimizationMetric;
+            copy._maximize = _maximize;
+            copy._earlyStoppingPatience = _earlyStoppingPatience;
+            copy._earlyStoppingMinDelta = _earlyStoppingMinDelta;
+            copy._trialsSinceImprovement = _trialsSinceImprovement;
+            copy.BestScore = BestScore;
+            copy.TimeLimit = TimeLimit;
+            copy.TrialLimit = TrialLimit;
+            copy.Status = Status;
+            copy.FeatureNames = (string[])FeatureNames.Clone();
+            copy._modelEvaluator = _modelEvaluator; // Shared reference is acceptable for the evaluator
+
+            return copy;
         }
+
+        /// <summary>
+        /// Factory method for creating a new instance for deep copy.
+        /// Derived classes must implement this to return a new instance of themselves.
+        /// This ensures each copy has its own collections and lock object.
+        /// </summary>
+        /// <returns>A fresh instance of the derived class with default parameters</returns>
+        /// <remarks>
+        /// When implementing this method, derived classes should create a fresh instance with default parameters,
+        /// and should not attempt to preserve runtime or initialization state from the original instance.
+        /// The deep copy logic will transfer relevant state (trial history, search space, etc.) after construction.
+        /// </remarks>
+        protected abstract AutoMLModelBase<T, TInput, TOutput> CreateInstanceForCopy();
+
 
         #endregion
 
