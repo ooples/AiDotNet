@@ -65,7 +65,8 @@ public class ModelIndividual<T, TInput, TOutput, TGene> :
         Func<ICollection<TGene>, IFullModel<T, TInput, TOutput>> modelFactory)
     {
         _innerModel = model;
-        _genes = [];
+        // Initialize with a copy of provided genes to avoid shared references
+        _genes = [.. genes];
         _modelFactory = modelFactory;
         _fitness = _numOps.Zero;
     }
@@ -245,22 +246,50 @@ public class ModelIndividual<T, TInput, TOutput, TGene> :
     public IFullModel<T, TInput, TOutput> DeepCopy()
     {
         var copiedInner = _innerModel.DeepCopy();
-        return new ModelIndividual<T, TInput, TOutput, TGene>(copiedInner, _genes, _modelFactory);
+        // Deep copy genes where possible
+        var clonedGenes = new List<TGene>(_genes.Count);
+        foreach (var gene in _genes)
+        {
+            if (gene is ICloneable cloneable)
+            {
+                clonedGenes.Add((TGene)cloneable.Clone());
+            }
+            else
+            {
+                clonedGenes.Add(gene);
+            }
+        }
+        return new ModelIndividual<T, TInput, TOutput, TGene>(copiedInner, clonedGenes, _modelFactory);
     }
 
     IFullModel<T, TInput, TOutput> ICloneable<IFullModel<T, TInput, TOutput>>.Clone()
     {
         var cloned = _innerModel.Clone();
-        return new ModelIndividual<T, TInput, TOutput, TGene>(cloned, _genes, _modelFactory);
+        // Deep copy genes where possible
+        var clonedGenes = new List<TGene>(_genes.Count);
+        foreach (var gene in _genes)
+        {
+            if (gene is ICloneable cloneable)
+            {
+                clonedGenes.Add((TGene)cloneable.Clone());
+            }
+            else
+            {
+                clonedGenes.Add(gene);
+            }
+        }
+        return new ModelIndividual<T, TInput, TOutput, TGene>(cloned, clonedGenes, _modelFactory);
     }
 
     public virtual void SetParameters(Vector<T> parameters)
     {
         _innerModel = _innerModel.WithParameters(parameters);
+        _parameterCountCache = null; // invalidate cache
     }
 
+    private int? _parameterCountCache;
     public virtual int ParameterCount
-        => _innerModel.GetParameters()?.Length ?? 0;
+        => _parameterCountCache ??= _innerModel.GetParameters()?.Length ?? 0;
 
     public virtual void SaveModel(string filePath)
     {
