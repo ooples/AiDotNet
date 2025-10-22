@@ -1,0 +1,29 @@
+name: Copilot Review Gate
+
+on:
+  pull_request:
+    branches: [ merge-dev2-to-master ]
+
+permissions:
+  pull-requests: read
+  contents: read
+
+jobs:
+  gate:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check unresolved Copilot comments on HEAD
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -e
+          REPO="${{ github.repository }}"
+          PR_NUMBER="${{ github.event.pull_request.number }}"
+          HEAD=$(gh pr view "$PR_NUMBER" --repo "$REPO" --json headRefOid --jq .headRefOid)
+          COUNT=$(gh api repos/$REPO/pulls/$PR_NUMBER/comments --paginate \
+            --jq "[ .[] | select((.user.login|test(\"copilot\|advanced\|security\|bot\";\"i\")) and .commit_id == \"$HEAD\") ] | length")
+          echo "Unresolved Copilot comments on HEAD: $COUNT"
+          if [ "$COUNT" -gt 0 ]; then
+            echo "Found $COUNT unresolved Copilot comments on HEAD $HEAD"
+            exit 1
+          fi

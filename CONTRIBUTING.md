@@ -1,39 +1,26 @@
-## Contributing
+# Contributing
 
-[fork]: /fork
-[pr]: /compare
-[code-of-conduct]: CODE_OF_CONDUCT.md
+## Base Branch
+- Use `merge-dev2-to-master` as the working base for CI and PRs.
 
-Hi there! We're thrilled that you'd like to contribute to this project. Your help is essential for keeping it great.
+## Copilot Review Loop (Mandatory)
+1. Get the PR `headRefOid` (HEAD SHA).
+2. Retrieve review comments and filter to those where `commit_id == headRefOid` and author matches "copilot".
+3. Apply suggestions exactly (or implement an equivalent real fix).
+4. Commit (no force push), wait 30–60s for re-review, re-check unresolved count.
+5. Iterate until unresolved count = 0.
 
-Please note that this project is released with a [Contributor Code of Conduct][code-of-conduct]. By participating in this project you agree to abide by its terms.
+## CI/CD Expectations
+- Multi-TFM: net46, net6.0, net8.0.
+- Coverage ≥ 90% for modified code paths; upload to Codecov if `CODECOV_TOKEN` is set.
+- Release workflow validates packaged TFMs before publishing.
 
-## Issues and PRs
+## Scope Discipline
+- Only modify files relevant to the user story or bug.
+- Don’t introduce unrelated refactors.
 
-If you have suggestions for how this project could be improved, or want to report a bug, open an issue! We'd love all and any contributions. If you have questions, too, we'd love to hear them.
+## YAML Hygiene
+- No literal `\n` in names; correct indentation; steps under `steps`.
+- Shell `if` blocks must close with `fi` before next step.
+- Use `${{ ... }}` expression syntax for job/step `if` where supported.
 
-We'd also love PRs. If you're thinking of a large PR, we advise opening up an issue first to talk about it, though! Look at the links below if you're not sure how to open a PR.
-
-## Submitting a pull request
-
-1. [Fork][fork] and clone the repository.
-1. Install the .NET 8 SDK if you don't have it installed already.
-1. Make sure the unit tests pass on your machine (make sure to run all unit tests inside the unit test project).
-1. Create a new branch: `git checkout -b my-branch-name`.
-1. Make your change, add tests, and make sure the tests still pass.
-1. Push to your fork and [submit a pull request][pr].
-1. Pat your self on the back and wait for your pull request to be reviewed and merged.
-
-Here are a few things you can do that will increase the likelihood of your pull request being accepted:
-
-- Write and update unit tests.
-- Keep your changes as focused as possible. If there are multiple changes you would like to make that are not dependent upon each other, consider submitting them as separate pull requests.
-- Write a [good commit message](http://tbaggery.com/2008/04/19/a-note-about-git-commit-messages.html).
-
-Work in Progress pull requests are also welcome to get feedback early on, or if there is something blocked you.
-
-## Resources
-
-- [How to Contribute to Open Source](https://opensource.guide/how-to-contribute/)
-- [Using Pull Requests](https://help.github.com/articles/about-pull-requests/)
-- [GitHub Help](https://help.github.com)
