@@ -49,7 +49,11 @@ jobs:
         run: |
           if [ -f "src/AiDotNet.csproj" ]; then
             dotnet pack src/AiDotNet.csproj -c Release -o out /p:PackageVersion=${{ steps.version.outputs.version }}
-          fi\n\n      - name: Verify TFMs in package (net46, net6.0, net8.0)
+          else
+            echo "src/AiDotNet.csproj not found; skipping pack"
+          fi
+
+      - name: Verify TFMs in package (net46, net6.0, net8.0)
         run: |
           set -e
           shopt -s nullglob
@@ -64,9 +68,6 @@ jobs:
             echo "$files" | grep -qE '^lib/net6\.0/.+\.dll$' || { echo "Missing net6.0 lib in package"; exit 1; }
             echo "$files" | grep -qE '^lib/net8\.0/.+\.dll$' || { echo "Missing net8.0 lib in package"; exit 1; }
           done
-          else
-            echo "src/AiDotNet.csproj not found; skipping pack"
-          fi
 
       - name: Upload package artifact
         uses: actions/upload-artifact@v4

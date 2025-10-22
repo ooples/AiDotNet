@@ -2,9 +2,9 @@ name: CI (.NET)
 
 on:
   pull_request:
-    branches: [ master ]
+    branches: [ merge-dev2-to-master ]
   push:
-    branches: [ master ]
+    branches: [ merge-dev2-to-master ]
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
@@ -25,31 +25,34 @@ jobs:
           dotnet-version: 8.0.x
 
       - name: Restore
-run: dotnet restore AiDotNet.sln
+        run: dotnet restore AiDotNet.sln
+
       - name: Verify code style (dotnet format)
         run: |
           dotnet tool update -g dotnet-format || dotnet tool install -g dotnet-format
           export PATH="$PATH:$HOME/.dotnet/tools"
           dotnet format AiDotNet.sln --verify-no-changes || (echo "Run 'dotnet format' locally to fix style issues." && exit 1)
+
   build:
-  name: Build
-  strategy:
-    matrix:
-      dotnet: ['6.0.x', '8.0.x']
-    fail-fast: false
+    name: Build
     runs-on: ubuntu-latest
     timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        dotnet: ['6.0.x', '8.0.x']
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Setup .NET 8.0.x
+      - name: Setup .NET ${{ matrix.dotnet }}
         uses: actions/setup-dotnet@v4
         with:
-          dotnet-version: 8.0.x
+          dotnet-version: ${{ matrix.dotnet }}
 
       - name: Restore
-run: dotnet restore AiDotNet.sln
+        run: dotnet restore AiDotNet.sln
+
       - name: Build
         run: dotnet build AiDotNet.sln --configuration Release --no-restore
 
