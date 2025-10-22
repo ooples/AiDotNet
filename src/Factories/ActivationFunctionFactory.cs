@@ -47,13 +47,13 @@ public static class ActivationFunctionFactory<T>
         return activationFunction switch
         {
             ActivationFunction.ReLU => new ReLUActivation<T>(),
-            ActivationFunction.Softmax => throw new NotSupportedException("Softmax is not applicable to single values. Use CreateVectorActivationFunction for Softmax."),
             ActivationFunction.Sigmoid => new SigmoidActivation<T>(),
             ActivationFunction.Tanh => new TanhActivation<T>(),
-            ActivationFunction.Identity => new IdentityActivation<T>(),
+            ActivationFunction.Linear or ActivationFunction.Identity => new IdentityActivation<T>(),
             ActivationFunction.LeakyReLU => new LeakyReLUActivation<T>(),
             ActivationFunction.ELU => new ELUActivation<T>(),
             ActivationFunction.SELU => new SELUActivation<T>(),
+            ActivationFunction.Softmax => throw new NotSupportedException("Softmax is not applicable to single values. Use CreateVectorActivationFunction for Softmax."),
             ActivationFunction.Softplus => new SoftPlusActivation<T>(),
             ActivationFunction.SoftSign => new SoftSignActivation<T>(),
             ActivationFunction.Swish => new SwishActivation<T>(),
@@ -87,9 +87,10 @@ public static class ActivationFunctionFactory<T>
         return activationFunction switch
         {
             ActivationFunction.Softmax => new SoftmaxActivation<T>(),
+            ActivationFunction.ReLU => new ReLUActivation<T>(),
             ActivationFunction.Sigmoid => new SigmoidActivation<T>(),
             ActivationFunction.Tanh => new TanhActivation<T>(),
-            ActivationFunction.Identity => new IdentityActivation<T>(),
+            ActivationFunction.Linear or ActivationFunction.Identity => new IdentityActivation<T>(),
             ActivationFunction.LeakyReLU => new LeakyReLUActivation<T>(),
             ActivationFunction.ELU => new ELUActivation<T>(),
             ActivationFunction.SELU => new SELUActivation<T>(),
