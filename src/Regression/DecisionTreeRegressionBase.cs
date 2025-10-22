@@ -941,11 +941,45 @@ public abstract class DecisionTreeRegressionBase<T> : ITreeBasedRegression<T>
 
     public virtual void SaveModel(string filePath)
     {
-        throw new NotImplementedException("SaveModel is not yet implemented for this model type.");
+        if (string.IsNullOrWhiteSpace(filePath))
+        {
+            throw new ArgumentException("File path must not be null or empty.", nameof(filePath));
+        }
+        var data = Serialize();
+        // Ensure directory exists and handle IO exceptions with clearer context
+        var directory = Path.GetDirectoryName(filePath);
+        if (!string.IsNullOrEmpty(directory) && !Directory.Exists(directory))
+        {
+            Directory.CreateDirectory(directory);
+        }
+        try
+        {
+            File.WriteAllBytes(filePath, data);
+        }
+        catch (Exception ex) when (ex is IOException || ex is UnauthorizedAccessException || ex is System.Security.SecurityException)
+        {
+            throw new InvalidOperationException($"Failed to save model to '{filePath}': {ex.Message}", ex);
+        }
     }
 
     public virtual void LoadModel(string filePath)
     {
-        throw new NotImplementedException("LoadModel is not yet implemented for this model type.");
+        if (string.IsNullOrWhiteSpace(filePath))
+        {
+            throw new ArgumentException("File path must not be null or empty.", nameof(filePath));
+        }
+        if (!File.Exists(filePath))
+        {
+            throw new FileNotFoundException($"The specified model file does not exist: {filePath}", filePath);
+        }
+        try
+        {
+            var data = File.ReadAllBytes(filePath);
+            Deserialize(data);
+        }
+        catch (Exception ex)
+        {
+            throw new InvalidOperationException($"Failed to load or deserialize model from file '{filePath}'.", ex);
+        }
     }
 }

@@ -65,7 +65,8 @@ public class ModelIndividual<T, TInput, TOutput, TGene> :
         Func<ICollection<TGene>, IFullModel<T, TInput, TOutput>> modelFactory)
     {
         _innerModel = model;
-        _genes = [];
+        // Initialize with a copy of provided genes to avoid shared references
+        _genes = [.. genes];
         _modelFactory = modelFactory;
         _fitness = _numOps.Zero;
     }
@@ -176,7 +177,7 @@ public class ModelIndividual<T, TInput, TOutput, TGene> :
     /// <param name="parameters">The new parameters.</param>
     public void UpdateParameters(Vector<T> parameters)
     {
-        _innerModel.WithParameters(parameters);
+        _innerModel = _innerModel.WithParameters(parameters);
     }
 
     /// <summary>
@@ -214,50 +215,81 @@ public class ModelIndividual<T, TInput, TOutput, TGene> :
 
     public void Train(TInput input, TOutput expectedOutput)
     {
-        throw new NotImplementedException();
+        _innerModel.Train(input, expectedOutput);
     }
 
     public ModelMetaData<T> GetModelMetaData()
     {
-        throw new NotImplementedException();
+        return _innerModel.GetModelMetaData();
     }
 
     public IEnumerable<int> GetActiveFeatureIndices()
     {
-        throw new NotImplementedException();
+        return _innerModel.GetActiveFeatureIndices();
     }
 
     public virtual Dictionary<string, T> GetFeatureImportance()
     {
-        throw new NotImplementedException("GetFeatureImportance is not yet implemented for this model type.");
+        return _innerModel.GetFeatureImportance();
     }
 
     public virtual void SetActiveFeatureIndices(IEnumerable<int> featureIndices)
     {
-        throw new NotImplementedException("SetActiveFeatureIndices is not yet implemented for this model type.");
+        _innerModel.SetActiveFeatureIndices(featureIndices);
     }
 
     public bool IsFeatureUsed(int featureIndex)
     {
-        throw new NotImplementedException();
+        return _innerModel.IsFeatureUsed(featureIndex);
     }
 
     public IFullModel<T, TInput, TOutput> DeepCopy()
     {
-        throw new NotImplementedException();
+        var copiedInner = _innerModel.DeepCopy();
+        // Deep copy genes where possible
+        var clonedGenes = new List<TGene>(_genes.Count);
+        foreach (var gene in _genes)
+        {
+            if (gene is ICloneable cloneable)
+            {
+                clonedGenes.Add((TGene)cloneable.Clone());
+            }
+            else
+            {
+                clonedGenes.Add(gene);
+            }
+        }
+        return new ModelIndividual<T, TInput, TOutput, TGene>(copiedInner, clonedGenes, _modelFactory);
     }
 
     IFullModel<T, TInput, TOutput> ICloneable<IFullModel<T, TInput, TOutput>>.Clone()
     {
-        throw new NotImplementedException();
+        var cloned = _innerModel.Clone();
+        // Deep copy genes where possible
+        var clonedGenes = new List<TGene>(_genes.Count);
+        foreach (var gene in _genes)
+        {
+            if (gene is ICloneable cloneable)
+            {
+                clonedGenes.Add((TGene)cloneable.Clone());
+            }
+            else
+            {
+                clonedGenes.Add(gene);
+            }
+        }
+        return new ModelIndividual<T, TInput, TOutput, TGene>(cloned, clonedGenes, _modelFactory);
     }
 
     public virtual void SetParameters(Vector<T> parameters)
     {
-        throw new NotImplementedException("SetParameters is not yet implemented for this model type.");
+        _innerModel = _innerModel.WithParameters(parameters);
+        _parameterCountCache = null; // invalidate cache
     }
 
-    public virtual int ParameterCount => throw new NotImplementedException("ParameterCount is not yet implemented for this model type.");
+    private int? _parameterCountCache;
+    public virtual int ParameterCount
+        => _parameterCountCache ??= _innerModel.GetParameters()?.Length ?? 0;
 
     public virtual void SaveModel(string filePath)
     {
