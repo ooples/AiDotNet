@@ -58,7 +58,7 @@ public static class ActivationFunctionFactory<T>
             ActivationFunction.SoftSign => new SoftSignActivation<T>(),
             ActivationFunction.Swish => new SwishActivation<T>(),
             ActivationFunction.GELU => new GELUActivation<T>(),
-            _ => throw new ArgumentException($"Activation function {activationFunction} is not supported.", nameof(activationFunction))
+            _ => throw new ArgumentException($"Unsupported activation function value: {activationFunction}.", nameof(activationFunction))
         };
     }
 
@@ -98,7 +98,7 @@ public static class ActivationFunctionFactory<T>
             ActivationFunction.SoftSign => new SoftSignActivation<T>(),
             ActivationFunction.Swish => new SwishActivation<T>(),
             ActivationFunction.GELU => new GELUActivation<T>(),
-            _ => throw new ArgumentException($"Vector activation function {activationFunction} is not supported.", nameof(activationFunction))
+            _ => throw new ArgumentException($"Unsupported vector activation function value: {activationFunction}", nameof(activationFunction))
         };
     }
 }
