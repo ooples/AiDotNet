@@ -1271,7 +1271,18 @@ public class ExpressionTree<T, TInput, TOutput> : IFullModel<T, TInput, TOutput>
     /// </remarks>
     public virtual int ParameterCount
     {
-        get { return Coefficients.Length; }
+        get
+        {
+            int CountConstants(ExpressionTree<T, TInput, TOutput>? node)
+            {
+                if (node == null) return 0;
+                int count = node.Type == ExpressionNodeType.Constant ? 1 : 0;
+                count += CountConstants(node.Left);
+                count += CountConstants(node.Right);
+                return count;
+            }
+            return CountConstants(this);
+        }
     }
 
     public virtual void SaveModel(string filePath)
