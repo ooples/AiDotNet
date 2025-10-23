@@ -49,14 +49,14 @@ public class TransferNeuralNetwork<T> : TransferLearningBase<T, Matrix<T>, Vecto
     /// <remarks>
     /// NOTE: This implementation requires source domain data to properly train the feature mapper.
     /// The current API limitations prevent passing source data, so this method will throw
-    /// NotImplementedException. Users should use the public Transfer() method that accepts source data.
+    /// InvalidOperationException. Users should use the public Transfer() method that accepts source data.
     /// </remarks>
     protected override IFullModel<T, Matrix<T>, Vector<T>> TransferCrossDomain(
         IFullModel<T, Matrix<T>, Vector<T>> sourceModel,
         Matrix<T> targetData,
         Vector<T> targetLabels)
     {
-        throw new NotImplementedException(
+        throw new InvalidOperationException(
             "Cross-domain transfer requires source domain data for proper feature mapping. " +
             "The protected TransferCrossDomain method cannot access source data due to API limitations. " +
             "Please use the public Transfer(sourceModel, sourceData, targetData, targetLabels) method instead, " +
