@@ -18,18 +18,18 @@ namespace AiDotNet.TimeSeries;
 /// <para>
 /// <b>For Beginners:</b>
 /// A time series model helps predict future values based on past observations.
-/// 
-/// Think of a time series like a sequence of measurements taken over time - for example, 
+///
+/// Think of a time series like a sequence of measurements taken over time - for example,
 /// daily temperatures, monthly sales, or hourly website visits. These models analyze the patterns
 /// in historical data to make predictions about what will happen next.
-/// 
+///
 /// This base class is like a blueprint that all specific time series models follow.
 /// It ensures that every model can:
 /// - Be trained on historical data to learn patterns
 /// - Make predictions for future periods based on what it learned
 /// - Evaluate how accurate its predictions are compared to actual values
 /// - Be saved to disk and loaded later without retraining
-/// 
+///
 /// Time series models are used in many real-world applications, including:
 /// - Weather forecasting
 /// - Stock market prediction
@@ -59,7 +59,7 @@ public abstract class TimeSeriesModelBase<T> : ITimeSeriesModel<T>
     /// </para>
     /// </remarks>
     protected TimeSeriesRegressionOptions<T> Options { get; private set; }
-    
+
     /// <summary>
     /// Provides numeric operations for the specific type T.
     /// </summary>
@@ -71,7 +71,7 @@ public abstract class TimeSeriesModelBase<T> : ITimeSeriesModel<T>
     /// </para>
     /// <para>
     /// <b>For Beginners:</b>
-    /// This is a helper that knows how to do math (addition, multiplication, etc.) with 
+    /// This is a helper that knows how to do math (addition, multiplication, etc.) with
     /// your specific number type, whether that's a regular double, a precise decimal value,
     /// or something else. It allows the model to work with different types of numbers
     /// without changing its core logic.
@@ -141,13 +141,13 @@ public abstract class TimeSeriesModelBase<T> : ITimeSeriesModel<T>
     /// <para>
     /// <b>For Beginners:</b>
     /// This constructor sets up the basic configuration for any time series model.
-    /// 
+    ///
     /// It takes an options object that specifies important settings like:
     /// - How many past values to consider (lag order)
     /// - Whether to include a trend component (like steady growth or decline)
     /// - The length of seasonal patterns (e.g., 7 for weekly, 12 for monthly)
     /// - Whether to correct for autocorrelation in errors (systematic errors)
-    /// 
+    ///
     /// It also checks that these settings make sense - for example, you can't have a negative
     /// number of past values or a seasonal period less than 2.
     /// </para>
@@ -161,7 +161,7 @@ public abstract class TimeSeriesModelBase<T> : ITimeSeriesModel<T>
         }
 
         ValidateOptions(options);
-        
+
         Options = options;
         NumOps = MathHelper.GetNumericOperations<T>();
         ModelParameters = new Vector<T>(0); // Initialize with empty vector
@@ -195,12 +195,12 @@ public abstract class TimeSeriesModelBase<T> : ITimeSeriesModel<T>
         {
             throw new ArgumentException("Seasonal period must be non-negative.", nameof(options));
         }
-        
+
         if (options.SeasonalPeriod == 1)
         {
             throw new ArgumentException("Seasonal period must be at least 2 if seasonality is enabled.", nameof(options));
         }
-        
+
         // Additional model-specific validation can be implemented in derived classes
     }
 
@@ -219,14 +219,14 @@ public abstract class TimeSeriesModelBase<T> : ITimeSeriesModel<T>
     /// <para>
     /// <b>For Beginners:</b>
     /// Training is the process where the model learns patterns from historical data.
-    /// 
+    ///
     /// During training, the model analyzes the relationship between:
     /// - Input features (x): These might include past values, time indicators, or external factors
     /// - Target values (y): The actual observed values we want to predict
-    /// 
+    ///
     /// After training, the model will have learned parameters that capture the patterns
     /// in your data, which it can then use to make predictions for new inputs.
-    /// 
+    ///
     /// This is an abstract method, meaning each specific model type (ARIMA, TBATS, etc.)
     /// will implement its own training algorithm.
     /// </para>
@@ -235,13 +235,13 @@ public abstract class TimeSeriesModelBase<T> : ITimeSeriesModel<T>
     {
         // Input validation
         ValidateTrainingInputs(x, y);
-        
+
         // Reset model state before training
         Reset();
-        
+
         // Perform model-specific training (implemented by derived classes)
         TrainCore(x, y);
-        
+
         // Mark the model as trained
         IsTrained = true;
     }
@@ -292,31 +292,31 @@ public abstract class TimeSeriesModelBase<T> : ITimeSeriesModel<T>
         {
             throw new ArgumentNullException(nameof(x), "Input features matrix cannot be null.");
         }
-        
+
         if (y == null)
         {
             throw new ArgumentNullException(nameof(y), "Target values vector cannot be null.");
         }
-        
+
         if (x.Rows != y.Length)
         {
             throw new ArgumentException(
                 $"Number of rows in input matrix ({x.Rows}) must match the length of target vector ({y.Length}).");
         }
-        
+
         if (x.Rows <= Options.LagOrder)
         {
             throw new ArgumentException(
                 $"Number of samples ({x.Rows}) must be greater than lag order ({Options.LagOrder}).");
         }
-        
+
         // Check for sufficient data to handle seasonality
         if (Options.SeasonalPeriod > 0 && x.Rows < 2 * Options.SeasonalPeriod)
         {
             throw new ArgumentException(
                 $"For seasonal models, the number of samples ({x.Rows}) should be at least twice the seasonal period ({Options.SeasonalPeriod}).");
         }
-        
+
         // Additional validation can be added in derived classes
     }
 
@@ -337,12 +337,12 @@ public abstract class TimeSeriesModelBase<T> : ITimeSeriesModel<T>
     /// <para>
     /// <b>For Beginners:</b>
     /// This method uses the patterns learned during training to predict future values.
-    /// 
+    ///
     /// The input matrix typically contains:
     /// - Past values of the time series
     /// - Time indicators (e.g., month, day of week)
     /// - Any external factors that might influence the forecast
-    /// 
+    ///
     /// The output is a vector of predicted values, one for each row in the input matrix.
     /// Each prediction represents what the model thinks will happen at that future time point.
     /// </para>
@@ -354,19 +354,19 @@ public abstract class TimeSeriesModelBase<T> : ITimeSeriesModel<T>
         {
             throw new InvalidOperationException("The model must be trained before making predictions.");
         }
-        
+
         // Validate input
         ValidatePredictionInput(input);
-        
+
         // Create output vector for predictions
         var predictions = new Vector<T>(input.Rows);
-        
+
         // Generate predictions for each input row
         for (int i = 0; i < input.Rows; i++)
         {
             predictions[i] = PredictSingle(input.GetRow(i));
         }
-        
+
         return predictions;
     }
 
@@ -395,7 +395,7 @@ public abstract class TimeSeriesModelBase<T> : ITimeSeriesModel<T>
         {
             throw new ArgumentNullException(nameof(input), "Input features matrix cannot be null.");
         }
-        
+
         // Additional validation can be added in derived classes
     }
 
@@ -437,17 +437,17 @@ public abstract class TimeSeriesModelBase<T> : ITimeSeriesModel<T>
     /// <para>
     /// <b>For Beginners:</b>
     /// This method tests how well the model performs by comparing its predictions to actual values.
-    /// 
+    ///
     /// It works by:
     /// 1. Using the model to make predictions based on the test inputs
     /// 2. Comparing these predictions to the actual test values
     /// 3. Calculating various error metrics to quantify the accuracy
-    /// 
+    ///
     /// Common metrics include:
     /// - Mean Absolute Error (MAE): Average of absolute differences between predictions and actual values
     /// - Root Mean Squared Error (RMSE): Square root of the average squared differences
     /// - Mean Absolute Percentage Error (MAPE): Average percentage differences
-    /// 
+    ///
     /// These metrics help you understand how accurate your model is and compare different models.
     /// Lower values indicate better performance for all these metrics.
     /// </para>
@@ -459,33 +459,33 @@ public abstract class TimeSeriesModelBase<T> : ITimeSeriesModel<T>
         {
             throw new InvalidOperationException("The model must be trained before evaluation.");
         }
-        
+
         // Validate inputs
         if (xTest == null)
         {
             throw new ArgumentNullException(nameof(xTest), "Test features matrix cannot be null.");
         }
-        
+
         if (yTest == null)
         {
             throw new ArgumentNullException(nameof(yTest), "Test target vector cannot be null.");
         }
-        
+
         if (xTest.Rows != yTest.Length)
         {
             throw new ArgumentException(
                 $"Number of rows in test matrix ({xTest.Rows}) must match the length of test vector ({yTest.Length}).");
         }
-        
+
         // Generate predictions
         Vector<T> predictions = Predict(xTest);
-        
+
         // Calculate error metrics
         Dictionary<string, T> metrics = CalculateErrorMetrics(predictions, yTest);
-        
+
         // Store metrics for later reference
         LastEvaluationMetrics = metrics;
-        
+
         return metrics;
     }
 
@@ -504,11 +504,11 @@ public abstract class TimeSeriesModelBase<T> : ITimeSeriesModel<T>
     /// <b>For Beginners:</b>
     /// This method calculates how far off the model's predictions are from the actual values.
     /// It computes several different ways of measuring the prediction errors:
-    /// 
+    ///
     /// - MAE (Mean Absolute Error): The average magnitude of errors, ignoring whether they're positive or negative
     /// - RMSE (Root Mean Squared Error): Emphasizes larger errors by squaring them before averaging
     /// - MAPE (Mean Absolute Percentage Error): Shows errors as percentages of the actual values
-    /// 
+    ///
     /// These metrics help you understand not just how accurate the model is overall,
     /// but also what kinds of errors it tends to make.
     /// </para>
@@ -517,7 +517,7 @@ public abstract class TimeSeriesModelBase<T> : ITimeSeriesModel<T>
     {
         int n = predictions.Length;
         var metrics = new Dictionary<string, T>();
-        
+
         // Calculate MAE (Mean Absolute Error)
         T sumAbsoluteError = NumOps.Zero;
         for (int i = 0; i < n; i++)
@@ -527,7 +527,7 @@ public abstract class TimeSeriesModelBase<T> : ITimeSeriesModel<T>
         }
         T mae = NumOps.Divide(sumAbsoluteError, NumOps.FromDouble(n));
         metrics["MAE"] = mae;
-        
+
         // Calculate MSE (Mean Squared Error) and RMSE (Root Mean Squared Error)
         T sumSquaredError = NumOps.Zero;
         for (int i = 0; i < n; i++)
@@ -539,7 +539,7 @@ public abstract class TimeSeriesModelBase<T> : ITimeSeriesModel<T>
         T rmse = NumOps.Sqrt(mse);
         metrics["MSE"] = mse;
         metrics["RMSE"] = rmse;
-        
+
         // Calculate MAPE (Mean Absolute Percentage Error)
         // Only if actuals don't contain zeros or very small values
         bool canCalculateMape = true;
@@ -551,14 +551,14 @@ public abstract class TimeSeriesModelBase<T> : ITimeSeriesModel<T>
                 canCalculateMape = false;
                 break;
             }
-            
+
             T percentageError = NumOps.Divide(
                 NumOps.Abs(NumOps.Subtract(predictions[i], actuals[i])),
                 NumOps.Abs(actuals[i])
             );
             sumAbsolutePercentageError = NumOps.Add(sumAbsolutePercentageError, percentageError);
         }
-        
+
         if (canCalculateMape)
         {
             T mape = NumOps.Multiply(
@@ -567,7 +567,7 @@ public abstract class TimeSeriesModelBase<T> : ITimeSeriesModel<T>
             );
             metrics["MAPE"] = mape;
         }
-        
+
         return metrics;
     }
 
@@ -584,7 +584,7 @@ public abstract class TimeSeriesModelBase<T> : ITimeSeriesModel<T>
     /// <b>For Beginners:</b>
     /// Serialization converts the model's state into a format that can be saved to disk
     /// or transmitted over a network.
-    /// 
+    ///
     /// This method:
     /// 1. Creates a memory stream to hold the serialized data
     /// 2. Writes the common configuration options shared by all models
@@ -592,7 +592,7 @@ public abstract class TimeSeriesModelBase<T> : ITimeSeriesModel<T>
     /// 4. Writes the model parameters learned during training
     /// 5. Calls the model-specific serialization method to write specialized data
     /// 6. Returns everything as a byte array
-    /// 
+    ///
     /// This allows you to save a trained model and load it later without having to retrain it,
     /// which can save significant time for complex models trained on large datasets.
     /// </para>
@@ -608,10 +608,10 @@ public abstract class TimeSeriesModelBase<T> : ITimeSeriesModel<T>
         writer.Write(Options.SeasonalPeriod);
         writer.Write(Options.AutocorrelationCorrection);
         writer.Write((int)Options.ModelType);
-        
+
         // Serialize trained state
         writer.Write(IsTrained);
-        
+
         // Serialize model parameters if trained
         if (IsTrained)
         {
@@ -620,7 +620,7 @@ public abstract class TimeSeriesModelBase<T> : ITimeSeriesModel<T>
             {
                 writer.Write(Convert.ToDouble(ModelParameters[i]));
             }
-            
+
             // Serialize evaluation metrics
             writer.Write(LastEvaluationMetrics.Count);
             foreach (var kvp in LastEvaluationMetrics)
@@ -650,17 +650,17 @@ public abstract class TimeSeriesModelBase<T> : ITimeSeriesModel<T>
     /// <para>
     /// <b>For Beginners:</b>
     /// Deserialization is the process of loading a previously saved model from a byte array.
-    /// 
+    ///
     /// This method:
     /// 1. Creates a memory stream from the provided byte array
     /// 2. Reads the common configuration options shared by all models
     /// 3. Reads whether the model has been trained
     /// 4. Reads the model parameters learned during training
     /// 5. Calls the model-specific deserialization method to read specialized data
-    /// 
+    ///
     /// After deserialization, the model is restored to the same state it was in when serialized,
     /// allowing you to make predictions without retraining the model.
-    /// 
+    ///
     /// This is particularly useful for:
     /// - Deploying models to production environments
     /// - Sharing models between different applications
@@ -673,7 +673,7 @@ public abstract class TimeSeriesModelBase<T> : ITimeSeriesModel<T>
         {
             throw new ArgumentNullException(nameof(data), "Serialized data cannot be null.");
         }
-        
+
         try
         {
             using var ms = new MemoryStream(data);
@@ -685,10 +685,10 @@ public abstract class TimeSeriesModelBase<T> : ITimeSeriesModel<T>
             Options.SeasonalPeriod = reader.ReadInt32();
             Options.AutocorrelationCorrection = reader.ReadBoolean();
             Options.ModelType = (TimeSeriesModelType)reader.ReadInt32();
-            
+
             // Deserialize trained state
             IsTrained = reader.ReadBoolean();
-            
+
             // Deserialize model parameters if trained
             if (IsTrained)
             {
@@ -698,7 +698,7 @@ public abstract class TimeSeriesModelBase<T> : ITimeSeriesModel<T>
                 {
                     ModelParameters[i] = NumOps.FromDouble(reader.ReadDouble());
                 }
-                
+
                 // Deserialize evaluation metrics
                 int metricsCount = reader.ReadInt32();
                 LastEvaluationMetrics.Clear();
@@ -733,12 +733,12 @@ public abstract class TimeSeriesModelBase<T> : ITimeSeriesModel<T>
     /// This method is responsible for saving the specific details that make each type of
     /// time series model unique. Different models have different internal structures and parameters
     /// that need to be saved separately from the common elements.
-    /// 
+    ///
     /// For example:
     /// - An ARIMA model would save its AR, I, and MA coefficients
     /// - A TBATS model would save its level, trend, and seasonal components
     /// - A neural network model would save its weights and biases
-    /// 
+    ///
     /// This separation allows the base class to handle common serialization tasks
     /// while each model type handles its specialized data.
     /// </para>
@@ -759,10 +759,10 @@ public abstract class TimeSeriesModelBase<T> : ITimeSeriesModel<T>
     /// This method is responsible for loading the specific details that make each type of
     /// time series model unique. It reads exactly what was written by SerializeCore, in the
     /// same order, reconstructing the specialized parts of the model.
-    /// 
+    ///
     /// It's the counterpart to SerializeCore and should read data in exactly the same
     /// order and format that it was written.
-    /// 
+    ///
     /// This separation allows the base class to handle common deserialization tasks
     /// while each model type handles its specialized data.
     /// </para>
@@ -783,14 +783,14 @@ public abstract class TimeSeriesModelBase<T> : ITimeSeriesModel<T>
     /// <b>For Beginners:</b>
     /// This method provides important information about the model that can help you understand
     /// its characteristics and performance.
-    /// 
+    ///
     /// The metadata includes:
     /// - The type of model (e.g., ARIMA, TBATS, Neural Network)
     /// - Configuration details (e.g., lag order, seasonality period)
     /// - Whether the model has been trained
     /// - Performance metrics from the last evaluation
     /// - Information about which features (time periods) are most influential
-    /// 
+    ///
     /// This information is useful for documentation, model comparison, and debugging.
     /// It's like a complete summary of everything important about the model.
     /// </para>
@@ -810,13 +810,13 @@ public abstract class TimeSeriesModelBase<T> : ITimeSeriesModel<T>
     /// <para>
     /// <b>For Beginners:</b>
     /// This method returns all the numerical values that the model has learned during training.
-    /// 
+    ///
     /// For time series models, these parameters typically include:
     /// - Coefficients for each lag (how much each past value influences the prediction)
     /// - Trend coefficients (if trend is included)
     /// - Seasonal coefficients (if seasonality is included)
     /// - Error correction terms (if autocorrelation correction is enabled)
-    /// 
+    ///
     /// These parameters can be:
     /// - Analyzed to understand what the model has learned
     /// - Saved for later use
@@ -830,7 +830,7 @@ public abstract class TimeSeriesModelBase<T> : ITimeSeriesModel<T>
         {
             throw new InvalidOperationException("Cannot get parameters for an untrained model.");
         }
-        
+
         return ModelParameters.Clone();
     }
 
@@ -849,13 +849,13 @@ public abstract class TimeSeriesModelBase<T> : ITimeSeriesModel<T>
     /// <para>
     /// <b>For Beginners:</b>
     /// This method creates a copy of the current model but with different parameter values.
-    /// 
+    ///
     /// This allows you to:
     /// - Create a model with manually specified parameters (e.g., from expert knowledge)
     /// - Make small adjustments to a trained model without full retraining
     /// - Implement ensemble models that combine multiple parameter sets
     /// - Perform what-if analysis by changing specific parameters
-    /// 
+    ///
     /// The parameters must be in the same order and have the same meaning as those
     /// returned by the GetParameters method.
     /// </para>
@@ -866,16 +866,16 @@ public abstract class TimeSeriesModelBase<T> : ITimeSeriesModel<T>
         {
             throw new ArgumentNullException(nameof(parameters), "Parameters vector cannot be null.");
         }
-        
+
         // Create a clone of the current model
         var newModel = (TimeSeriesModelBase<T>)this.Clone();
-        
+
         // Apply the new parameters to the cloned model
         newModel.ApplyParameters(parameters);
-        
+
         // Mark as trained since parameters have been specified
         newModel.IsTrained = true;
-        
+
         return newModel;
     }
 
@@ -895,7 +895,7 @@ public abstract class TimeSeriesModelBase<T> : ITimeSeriesModel<T>
     /// This method updates the model's internal parameters with new values.
     /// It's the counterpart to GetParameters and should understand the parameter
     /// vector in exactly the same way.
-    /// 
+    ///
     /// For example, if the first 5 elements of the parameters vector represent
     /// lag coefficients, this method should apply them as lag coefficients in
     /// the model's internal structure.
@@ -907,10 +907,10 @@ public abstract class TimeSeriesModelBase<T> : ITimeSeriesModel<T>
         {
             throw new ArgumentNullException(nameof(parameters), "Parameters vector cannot be null.");
         }
-        
+
         // Store the parameters
         ModelParameters = parameters.Clone();
-        
+
         // Derived classes should override this to apply parameters to their specific structures
     }
 
@@ -927,15 +927,15 @@ public abstract class TimeSeriesModelBase<T> : ITimeSeriesModel<T>
     /// <para>
     /// <b>For Beginners:</b>
     /// This method tells you which past time periods (lags) are most important for predictions.
-    /// 
+    ///
     /// For example, if the result includes indices [1, 7, 12], this means:
     /// - The value from 1 period ago strongly influences the prediction
     /// - The value from 7 periods ago strongly influences the prediction (could be weekly seasonality)
     /// - The value from 12 periods ago strongly influences the prediction (could be yearly for monthly data)
-    /// 
+    ///
     /// These active features are determined by the model's structure and learned parameters.
     /// For instance, in an ARIMA model, non-zero AR coefficients indicate active features.
-    /// 
+    ///
     /// Understanding active features helps interpret how the model works and which
     /// historical points matter most for forecasting.
     /// </para>
@@ -946,9 +946,9 @@ public abstract class TimeSeriesModelBase<T> : ITimeSeriesModel<T>
         {
             throw new InvalidOperationException("The model must be trained before getting active feature indices.");
         }
-        
+
         List<int> activeIndices = new List<int>();
-        
+
         // Consider common lag patterns based on model configuration
         for (int lag = 1; lag <= Options.LagOrder; lag++)
         {
@@ -957,7 +957,7 @@ public abstract class TimeSeriesModelBase<T> : ITimeSeriesModel<T>
                 activeIndices.Add(lag);
             }
         }
-        
+
         // If seasonal, also include seasonal lags
         if (Options.SeasonalPeriod > 0)
         {
@@ -970,7 +970,7 @@ public abstract class TimeSeriesModelBase<T> : ITimeSeriesModel<T>
                 }
             }
         }
-        
+
         return activeIndices;
     }
 
@@ -990,15 +990,15 @@ public abstract class TimeSeriesModelBase<T> : ITimeSeriesModel<T>
     /// <b>For Beginners:</b>
     /// This method checks if a specific past time period (lag) has a significant
     /// influence on the model's predictions.
-    /// 
+    ///
     /// For example:
     /// - IsFeatureUsed(1) checks if the value from 1 period ago matters
     /// - IsFeatureUsed(7) checks if the value from 7 periods ago matters
     /// - IsFeatureUsed(12) checks if the value from 12 periods ago matters
-    /// 
+    ///
     /// A feature is typically considered "used" if its coefficient or weight
     /// in the model is significantly different from zero.
-    /// 
+    ///
     /// This information helps understand which historical points the model
     /// considers important when making predictions.
     /// </para>
@@ -1009,12 +1009,12 @@ public abstract class TimeSeriesModelBase<T> : ITimeSeriesModel<T>
         {
             throw new InvalidOperationException("The model must be trained before checking feature usage.");
         }
-        
+
         if (featureIndex < 0)
         {
             throw new ArgumentOutOfRangeException(nameof(featureIndex), "Feature index cannot be negative.");
         }
-        
+
         if (featureIndex > Options.LagOrder)
         {
             // For indices beyond the lag order, check if it's a valid seasonal lag
@@ -1022,10 +1022,10 @@ public abstract class TimeSeriesModelBase<T> : ITimeSeriesModel<T>
             {
                 return NumOps.GreaterThan(GetFeatureImportance(featureIndex), NumOps.FromDouble(0.01));
             }
-            
+
             return false;
         }
-        
+
         // For standard lags, check if the feature importance exceeds a threshold
         T importance = GetFeatureImportance(featureIndex);
         return NumOps.GreaterThan(importance, NumOps.FromDouble(0.01));
@@ -1047,12 +1047,12 @@ public abstract class TimeSeriesModelBase<T> : ITimeSeriesModel<T>
     /// <b>For Beginners:</b>
     /// This method estimates how important a specific past time period is
     /// for making predictions. Higher values indicate more influential features.
-    /// 
+    ///
     /// For example, in many time series models:
     /// - Recent lags (like lag 1) often have higher importance
     /// - Seasonal lags (like lag 7 for weekly data) often have higher importance
     /// - Some lags may have near-zero importance, meaning they don't affect predictions much
-    /// 
+    ///
     /// This information helps understand the model's internal logic and which past
     /// time periods it considers most predictive of future values.
     /// </para>
@@ -1063,24 +1063,24 @@ public abstract class TimeSeriesModelBase<T> : ITimeSeriesModel<T>
         {
             throw new InvalidOperationException("The model must be trained before getting feature importance.");
         }
-        
+
         if (featureIndex < 0)
         {
             throw new ArgumentOutOfRangeException(nameof(featureIndex), "Feature index cannot be negative.");
         }
-        
+
         // Default implementation - derived classes should override with model-specific logic
         // For time series models, standard importance calculation might consider:
         // 1. The magnitude of coefficients for each lag
         // 2. The recency of the lag (more recent lags may be more important)
         // 3. Seasonal patterns (lags at seasonal intervals may be more important)
-        
+
         // As a simple default, if the feature index is within the parameter range, use its absolute value
         if (featureIndex < ModelParameters.Length)
         {
             return NumOps.Abs(ModelParameters[featureIndex]);
         }
-        
+
         // Otherwise, define some heuristic defaults
         if (featureIndex == 1)
         {
@@ -1097,7 +1097,7 @@ public abstract class TimeSeriesModelBase<T> : ITimeSeriesModel<T>
             // Recent lags are moderately important
             return NumOps.FromDouble(0.2);
         }
-        
+
         // Default to very low importance for other lags
         return NumOps.FromDouble(0.01);
     }
@@ -1166,18 +1166,18 @@ public abstract class TimeSeriesModelBase<T> : ITimeSeriesModel<T>
     /// <para>
     /// <b>For Beginners:</b>
     /// This method creates a completely independent copy of the current model.
-    /// 
+    ///
     /// A deep copy means that all components of the model are duplicated,
     /// including:
     /// - Configuration options
     /// - Learned parameters
     /// - Internal state variables
-    /// 
+    ///
     /// This is useful when you need to:
     /// - Create multiple variations of a model for experimentation
     /// - Save a model at a specific point during training
     /// - Use the same model structure for different datasets
-    /// 
+    ///
     /// Changes to the copy won't affect the original model and vice versa.
     /// </para>
     /// </remarks>
@@ -1205,11 +1205,11 @@ public abstract class TimeSeriesModelBase<T> : ITimeSeriesModel<T>
     /// <b>For Beginners:</b>
     /// This method creates a copy of the current model with the same configuration
     /// and parameters.
-    /// 
+    ///
     /// While DeepCopy creates a fully independent duplicate of everything in the model,
     /// Clone sometimes creates a more lightweight copy that might share some non-essential
     /// components with the original (depending on the specific model implementation).
-    /// 
+    ///
     /// This is useful for:
     /// - Creating variations of a model for ensemble methods
     /// - Saving a snapshot of the model before making changes
@@ -1220,25 +1220,25 @@ public abstract class TimeSeriesModelBase<T> : ITimeSeriesModel<T>
     {
         // Create a new instance
         var clone = (TimeSeriesModelBase<T>)CreateInstance();
-        
+
         // Copy options (shallow copy is usually sufficient for options)
         clone.Options = this.Options;
-        
+
         // Copy trained status
         clone.IsTrained = this.IsTrained;
-        
+
         // Copy model parameters if trained
         if (this.IsTrained)
         {
             clone.ModelParameters = this.ModelParameters.Clone();
-            
+
             // Copy evaluation metrics
             foreach (var kvp in this.LastEvaluationMetrics)
             {
                 clone.LastEvaluationMetrics[kvp.Key] = kvp.Value;
             }
         }
-        
+
         return clone;
     }
 
@@ -1257,7 +1257,7 @@ public abstract class TimeSeriesModelBase<T> : ITimeSeriesModel<T>
     /// This method creates a new, empty instance of the specific model type.
     /// It's used during cloning and deep copying to ensure that the copy
     /// is of the same specific type as the original.
-    /// 
+    ///
     /// For example, if the original model is an ARIMA model, this method
     /// would create a new ARIMA model. If it's a TBATS model, it would
     /// create a new TBATS model.
@@ -1275,12 +1275,12 @@ public abstract class TimeSeriesModelBase<T> : ITimeSeriesModel<T>
     /// <para>
     /// <b>For Beginners:</b>
     /// This method erases all the patterns the model has learned.
-    /// 
+    ///
     /// After calling this method:
     /// - All coefficients and learned parameters are cleared
     /// - The model behaves as if it was never trained
     /// - You would need to train it again before making predictions
-    /// 
+    ///
     /// This is useful when you want to:
     /// - Experiment with different training data on the same model
     /// - Retrain a model from scratch with new parameters
@@ -1291,13 +1291,13 @@ public abstract class TimeSeriesModelBase<T> : ITimeSeriesModel<T>
     {
         // Clear model parameters
         ModelParameters = new Vector<T>(0);
-        
+
         // Reset trained flag
         IsTrained = false;
-        
+
         // Clear evaluation metrics
         LastEvaluationMetrics.Clear();
-        
+
         // Derived classes should override this to reset any additional state
     }
 
@@ -1319,12 +1319,12 @@ public abstract class TimeSeriesModelBase<T> : ITimeSeriesModel<T>
     /// <b>For Beginners:</b>
     /// This method ensures a value stays within a specified range (between min and max).
     /// It's like setting boundaries that a value cannot cross.
-    /// 
+    ///
     /// For example, if you clip a value with min=0 and max=1:
     /// - If the value is -0.5, it returns 0 (the minimum)
     /// - If the value is 1.5, it returns 1 (the maximum)
     /// - If the value is 0.7, it returns 0.7 (unchanged, as it's within range)
-    /// 
+    ///
     /// This is useful for:
     /// - Preventing parameters from taking extreme values
     /// - Constraining predictions to reasonable ranges
@@ -1337,12 +1337,12 @@ public abstract class TimeSeriesModelBase<T> : ITimeSeriesModel<T>
         {
             return min;
         }
-        
+
         if (NumOps.GreaterThan(value, max))
         {
             return max;
         }
-        
+
         return value;
     }
 
@@ -1364,13 +1364,13 @@ public abstract class TimeSeriesModelBase<T> : ITimeSeriesModel<T>
     /// <para>
     /// <b>For Beginners:</b>
     /// This method predicts multiple future values in sequence.
-    /// 
+    ///
     /// For example, if you have daily data and want to forecast the next 7 days:
     /// 1. It first predicts day 1 using your historical data
     /// 2. Then it adds that prediction to the history
     /// 3. Then it predicts day 2 using the updated history (including the day 1 prediction)
     /// 4. And so on, until it has predicted all 7 days
-    /// 
+    ///
     /// This approach lets you make predictions further into the future,
     /// but be aware that errors tend to accumulate with each step (predictions
     /// become less accurate the further ahead you forecast).
@@ -1382,48 +1382,48 @@ public abstract class TimeSeriesModelBase<T> : ITimeSeriesModel<T>
         {
             throw new InvalidOperationException("The model must be trained before forecasting.");
         }
-        
+
         if (history == null)
         {
             throw new ArgumentNullException(nameof(history), "History cannot be null.");
         }
-        
+
         if (steps <= 0)
         {
             throw new ArgumentException("Number of forecast steps must be positive.", nameof(steps));
         }
-        
+
         if (history.Length < Options.LagOrder)
         {
             throw new ArgumentException(
                 $"History length ({history.Length}) must be at least equal to lag order ({Options.LagOrder}).",
                 nameof(history));
         }
-        
+
         // Create a working copy of the history that we can extend
         List<T> extendedHistory = new List<T>(history.Length + steps);
         for (int i = 0; i < history.Length; i++)
         {
             extendedHistory.Add(history[i]);
         }
-        
+
         // Generate forecasts one step at a time
         Vector<T> forecasts = new Vector<T>(steps);
         for (int step = 0; step < steps; step++)
         {
             // Prepare input features for this forecast step
             Vector<T> features = PrepareForecastFeatures(extendedHistory, step);
-            
+
             // Make prediction
             T forecast = PredictSingle(features);
-            
+
             // Store forecast
             forecasts[step] = forecast;
-            
+
             // Add forecast to extended history for next step
             extendedHistory.Add(forecast);
         }
-        
+
         return forecasts;
     }
 
@@ -1449,26 +1449,26 @@ public abstract class TimeSeriesModelBase<T> : ITimeSeriesModel<T>
     {
         // This is a basic implementation that derived classes should override
         // to include model-specific feature preparation
-        
+
         // For a simple AR model, we would just include the last LagOrder values
         int historyLength = extendedHistory.Count;
         int featureCount = Options.LagOrder;
-        
+
         // Add space for trend if included
         if (Options.IncludeTrend)
         {
             featureCount += 1;
         }
-        
+
         // Add space for seasonal dummies if seasonal
         if (Options.SeasonalPeriod > 0)
         {
             featureCount += Options.SeasonalPeriod;
         }
-        
+
         Vector<T> features = new Vector<T>(featureCount);
         int featureIndex = 0;
-        
+
         // Add lag features
         for (int lag = 1; lag <= Options.LagOrder; lag++)
         {
@@ -1482,7 +1482,7 @@ public abstract class TimeSeriesModelBase<T> : ITimeSeriesModel<T>
                 features[featureIndex++] = NumOps.Zero;
             }
         }
-        
+
         // Add trend feature if included
         if (Options.IncludeTrend)
         {
@@ -1509,11 +1509,36 @@ public abstract class TimeSeriesModelBase<T> : ITimeSeriesModel<T>
 
     public virtual void SaveModel(string filePath)
     {
-        throw new NotImplementedException("SaveModel is not yet implemented for this model type.");
+        if (string.IsNullOrWhiteSpace(filePath))
+            throw new ArgumentException("File path must not be null or empty.", nameof(filePath));
+
+        try
+        {
+            var data = Serialize();
+            var directory = Path.GetDirectoryName(filePath);
+            if (!string.IsNullOrEmpty(directory) && !Directory.Exists(directory))
+                Directory.CreateDirectory(directory);
+            File.WriteAllBytes(filePath, data);
+        }
+        catch (IOException ex) { throw new InvalidOperationException($"Failed to save model to '{filePath}': {ex.Message}", ex); }
+        catch (UnauthorizedAccessException ex) { throw new InvalidOperationException($"Access denied when saving model to '{filePath}': {ex.Message}", ex); }
+        catch (System.Security.SecurityException ex) { throw new InvalidOperationException($"Security error when saving model to '{filePath}': {ex.Message}", ex); }
     }
 
     public virtual void LoadModel(string filePath)
     {
-        throw new NotImplementedException("LoadModel is not yet implemented for this model type.");
+        if (string.IsNullOrWhiteSpace(filePath))
+            throw new ArgumentException("File path must not be null or empty.", nameof(filePath));
+
+        try
+        {
+            var data = File.ReadAllBytes(filePath);
+            Deserialize(data);
+        }
+        catch (FileNotFoundException ex) { throw new FileNotFoundException($"The specified model file does not exist: {filePath}", filePath, ex); }
+        catch (IOException ex) { throw new InvalidOperationException($"File I/O error while loading model from '{filePath}': {ex.Message}", ex); }
+        catch (UnauthorizedAccessException ex) { throw new InvalidOperationException($"Access denied when loading model from '{filePath}': {ex.Message}", ex); }
+        catch (System.Security.SecurityException ex) { throw new InvalidOperationException($"Security error when loading model from '{filePath}': {ex.Message}", ex); }
+        catch (Exception ex) { throw new InvalidOperationException($"Failed to deserialize model from file '{filePath}'. The file may be corrupted or incompatible: {ex.Message}", ex); }
     }
 }
