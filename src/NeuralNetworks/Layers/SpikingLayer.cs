@@ -735,7 +735,7 @@ public class SpikingLayer<T> : LayerBase<T>
             SpikingNeuronType.Izhikevich => UpdateIzhikevich(current),
             SpikingNeuronType.HodgkinHuxley => UpdateHodgkinHuxley(current),
             SpikingNeuronType.AdaptiveExponential => UpdateAdaptiveExponential(current),
-            _ => throw new ArgumentOutOfRangeException(nameof(_neuronType), _neuronType, $"Neuron type {_neuronType} is not supported."),
+            _ => throw new ArgumentOutOfRangeException("neuronType", _neuronType, $"Neuron type {_neuronType} is not supported."),
         };
     }
     
