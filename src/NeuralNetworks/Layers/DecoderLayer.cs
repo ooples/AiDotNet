@@ -372,7 +372,6 @@ public class DecoderLayer<T> : LayerBase<T>
     /// Single-input forward pass is not supported for DecoderLayer.
     /// </summary>
     /// <param name="input">The input tensor.</param>
-    /// <returns>Not applicable - this method always throws an exception.</returns>
     /// <exception cref="NotSupportedException">Always thrown because DecoderLayer requires multiple inputs.</exception>
     /// <remarks>
     /// <para><b>For Beginners:</b> DecoderLayer cannot operate with a single input because it needs both
