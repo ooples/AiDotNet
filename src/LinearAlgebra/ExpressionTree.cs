@@ -543,9 +543,9 @@ public class ExpressionTree<T, TInput, TOutput> : IFullModel<T, TInput, TOutput>
     /// </remarks>
     public Vector<T> Predict(Matrix<T> input)
     {
-        if (input.Columns != FeatureCount)
+        if (input.Columns < FeatureCount)
         {
-            throw new ArgumentException($"Input matrix has {input.Columns} columns, but the model expects {FeatureCount} features.");
+            throw new ArgumentException($"Input matrix has {input.Columns} columns, but the model requires at least {FeatureCount} features.");
         }
 
         Vector<T> predictions = new(input.Rows);
