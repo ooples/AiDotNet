@@ -379,7 +379,7 @@ internal class MappedRandomForestModel<T> : IFullModel<T, Matrix<T>, Vector<T>>
             baseBytes = reader.ReadBytes(len);
             return true;
         }
-        catch (Exception ex)
+        catch (Exception)
         {
             // Failed to read wrapper format; fallback for backward compatibility with non-wrapped models
             baseBytes = Array.Empty<byte>();
