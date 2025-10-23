@@ -19,15 +19,6 @@ namespace AiDotNet.TransferLearning.Algorithms;
 public class TransferNeuralNetwork<T> : TransferLearningBase<T, Matrix<T>, Vector<T>>
 {
     /// <summary>
-    /// The weight for true labels when combining with soft labels during knowledge distillation.
-    /// </summary>
-    /// <remarks>
-    /// A value of 0.7 means true labels have 70% weight and soft labels have 30% weight.
-    /// Higher values trust the true labels more, lower values trust the source model predictions more.
-    /// </remarks>
-    private const double KnowledgeDistillationWeight = 0.7;
-
-    /// <summary>
     /// Transfers a Neural Network model to a target domain with the same feature space.
     /// </summary>
     /// <remarks>
@@ -56,46 +47,20 @@ public class TransferNeuralNetwork<T> : TransferLearningBase<T, Matrix<T>, Vecto
     /// Transfers a Neural Network model to a target domain with a different feature space.
     /// </summary>
     /// <remarks>
-    /// This method assumes the FeatureMapper has been pre-trained with source data.
-    /// If the mapper is not trained, an exception will be thrown.
-    /// For automatic training, use the public Transfer() method that accepts source data.
+    /// NOTE: This implementation requires source domain data to properly train the feature mapper.
+    /// The current API limitations prevent passing source data, so this method will throw
+    /// InvalidOperationException. Users should use the public Transfer() method that accepts source data.
     /// </remarks>
     protected override IFullModel<T, Matrix<T>, Vector<T>> TransferCrossDomain(
         IFullModel<T, Matrix<T>, Vector<T>> sourceModel,
         Matrix<T> targetData,
         Vector<T> targetLabels)
     {
-        // Validate that feature mapper is available and trained
-        if (FeatureMapper == null)
-        {
-            throw new InvalidOperationException(
-                "Cross-domain transfer requires a feature mapper. Use SetFeatureMapper() before transfer.");
-        }
-
-        if (!FeatureMapper.IsTrained)
-        {
-            throw new InvalidOperationException(
-                "FeatureMapper must be trained before calling TransferCrossDomain. " +
-                "Either pre-train the mapper or use the public Transfer() method with source data.");
-        }
-
-        // Get dimensions
-        int sourceFeatures = sourceModel.GetActiveFeatureIndices().Count();
-
-        // Map target data to source feature space
-        Matrix<T> mappedTargetData = FeatureMapper.MapToSource(targetData, sourceFeatures);
-
-        // Use source model for predictions (knowledge distillation)
-        Vector<T> softLabels = sourceModel.Predict(mappedTargetData);
-
-        // Combine soft labels with true labels
-        Vector<T> combinedLabels = CombineLabels(softLabels, targetLabels, KnowledgeDistillationWeight);
-
-        // Create and train a new model on the target domain
-        var targetModel = sourceModel.DeepCopy();
-        targetModel.Train(mappedTargetData, combinedLabels);
-
-        return targetModel;
+        throw new InvalidOperationException(
+            "Cross-domain transfer requires source domain data for proper feature mapping. " +
+            "The protected TransferCrossDomain method cannot access source data due to API limitations. " +
+            "Please use the public Transfer(sourceModel, sourceData, targetData, targetLabels) method instead, " +
+            "or pre-train the FeatureMapper with source data before calling this method.");
     }
 
     /// <summary>
@@ -147,7 +112,7 @@ public class TransferNeuralNetwork<T> : TransferLearningBase<T, Matrix<T>, Vecto
 
         // Step 6: Create and train a new model on the target domain
         var targetModel = sourceModel.DeepCopy();
-        targetModel.Train(mappedTargetData, combinedLabels);
+        targetModel.Train(targetData, combinedLabels);
 
         return targetModel;
     }
