@@ -331,7 +331,7 @@ internal class MappedRandomForestModel<T> : IFullModel<T, Matrix<T>, Vector<T>>
                         key = s;
                     }
                 }
-                catch (Exception ex)
+                catch
                 {
                     // Failed to inverse map feature name; using original key as fallback
                 }
@@ -349,7 +349,7 @@ internal class MappedRandomForestModel<T> : IFullModel<T, Matrix<T>, Vector<T>>
         {
             writer.Write(Convert.ToDouble(_mapper.GetMappingConfidence()));
         }
-        catch (Exception ex)
+        catch
         {
             // Failed to write mapping confidence, fallback to 0.0
             writer.Write(0.0);
@@ -379,7 +379,7 @@ internal class MappedRandomForestModel<T> : IFullModel<T, Matrix<T>, Vector<T>>
             baseBytes = reader.ReadBytes(len);
             return true;
         }
-        catch (Exception ex)
+        catch
         {
             // Failed to read wrapper format; fallback for backward compatibility with non-wrapped models
             baseBytes = Array.Empty<byte>();
