@@ -106,8 +106,7 @@ namespace AiDotNet.AutoML
             var clonedList = new List<object>(list.Count);
             foreach (var item in list)
             {
-                // Allow null items to be preserved; DeepCloneObject may legitimately return null
-                clonedList.Add(DeepCloneObject(item)!);
+                clonedList.Add(DeepCloneObject(item) ?? throw new InvalidOperationException("Cloned object cannot be null"));
             }
             return clonedList;
         }

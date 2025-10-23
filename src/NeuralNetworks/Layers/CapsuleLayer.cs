@@ -103,6 +103,11 @@ public class CapsuleLayer<T> : LayerBase<T>
     public CapsuleLayer(int inputCapsules, int inputDimension, int numCapsules, int capsuleDimension, int numRoutingIterations, IActivationFunction<T>? activationFunction = null)
         : base([inputCapsules, inputDimension], [numCapsules, capsuleDimension], activationFunction ?? new SquashActivation<T>())
     {
+        if (numRoutingIterations < 1)
+        {
+            throw new ArgumentException("Number of routing iterations must be at least 1.", nameof(numRoutingIterations));
+        }
+
         _numCapsules = numCapsules;
         _capsuleDimension = capsuleDimension;
         _numRoutingIterations = numRoutingIterations;
@@ -233,7 +238,7 @@ public class CapsuleLayer<T> : LayerBase<T>
         couplingCoefficients.Fill(NumOps.FromDouble(1.0 / _numCapsules));
 
         // Declare output tensor outside the loop
-        Tensor<T> output = null!;
+        Tensor<T>? output = null;
 
         // Perform dynamic routing
         for (int i = 0; i < _numRoutingIterations; i++)
@@ -293,7 +298,8 @@ public class CapsuleLayer<T> : LayerBase<T>
             }
         }
 
-        _lastOutput = output;
+        // output is guaranteed to be non-null because _numRoutingIterations is validated to be >= 1
+        _lastOutput = output!;
         _lastCouplingCoefficients = couplingCoefficients;
 
         return _lastOutput;

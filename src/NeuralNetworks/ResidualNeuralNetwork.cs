@@ -342,23 +342,33 @@ public class ResidualNeuralNetwork<T> : NeuralNetworkBase<T>
                 {
                     var x = batchX.GetRow(i);
                     var y = batchY.GetRow(i);
-                    
+
+                    // Convert input vector to tensor once before forward pass
+                    var xTensor = Tensor<T>.FromVector(x);
+
                     // Forward pass with memory to save intermediate states
-                    var prediction = ForwardWithMemory(x);
-                    
+                    var prediction = ForwardWithMemory(xTensor);
+
+                    // Cache prediction vector to avoid repeated conversions
+                    Vector<T> predictionVector = prediction.ToVector();
+
                     // Calculate loss and gradients for this example
-                    T loss = LossFunction.CalculateLoss(prediction, y);
+                    T loss = LossFunction.CalculateLoss(predictionVector, y);
                     totalLoss = NumOps.Add(totalLoss, loss);
-                    
+
                     // Calculate output gradients
-                    Vector<T> outputGradients = LossFunction.CalculateDerivative(prediction, y);
-                    
+                    Vector<T> outputGradients = LossFunction.CalculateDerivative(predictionVector, y);
+
+                    // Convert output gradients to tensor once before backpropagation
+                    var outputGradientsTensor = Tensor<T>.FromVector(outputGradients);
+
                     // Backpropagate to compute gradients for all parameters
-                    Backpropagate(outputGradients);
-                    
-                    // Accumulate gradients
+                    Backpropagate(outputGradientsTensor);
+
+                    // Accumulate gradients - convert once before adding
                     var gradients = GetParameterGradients();
-                    totalGradient = totalGradient.Add(Tensor<T>.FromVector(gradients));
+                    var gradientsTensor = Tensor<T>.FromVector(gradients);
+                    totalGradient = totalGradient.Add(gradientsTensor);
                 }
                 
                 // Average the gradients across the batch
@@ -384,7 +394,7 @@ public class ResidualNeuralNetwork<T> : NeuralNetworkBase<T>
         // Set back to inference mode after training
         SetTrainingMode(false);
     }
-   
+
     /// <summary>
     /// Gets metadata about the Residual Neural Network model.
     /// </summary>

@@ -340,13 +340,14 @@ public class NeuralNetworkModel<T> : IFullModel<T, Tensor<T>, Tensor<T>>
         Vector<T> expectedOutputVector = expectedOutput.ToVector();
         
         // Forward pass with memory to store intermediate values for backpropagation
-        Vector<T> outputVector = Network.ForwardWithMemory(inputVector);
-        
+        Tensor<T> outputTensor = Network.ForwardWithMemory(Tensor<T>.FromVector(inputVector));
+        Vector<T> outputVector = outputTensor.ToVector();
+
         // Calculate error gradient
         Vector<T> error = CalculateError(outputVector, expectedOutputVector);
-        
+
         // Backpropagate error
-        Network.Backpropagate(error);
+        Network.Backpropagate(Tensor<T>.FromVector(error));
         
         // Update weights using the calculated gradients
         Vector<T> gradients = Network.GetParameterGradients();
@@ -427,13 +428,14 @@ public class NeuralNetworkModel<T> : IFullModel<T, Tensor<T>, Tensor<T>>
         }
         
         // Forward pass with memory to store intermediate values
-        Vector<T> output = Network.ForwardWithMemory(input.ToVector());
-        
+        Tensor<T> outputTensor = Network.ForwardWithMemory(input);
+        Vector<T> output = outputTensor.ToVector();
+
         // Calculate error gradient
         Vector<T> error = CalculateError(output, expectedOutput.ToVector());
-        
+
         // Backpropagate error
-        Network.Backpropagate(error);
+        Network.Backpropagate(Tensor<T>.FromVector(error));
         
         // Update weights using the calculated gradients
         Vector<T> gradients = Network.GetParameterGradients();
@@ -756,6 +758,51 @@ public class NeuralNetworkModel<T> : IFullModel<T, Tensor<T>, Tensor<T>>
     }
 
     /// <summary>
+    /// Sets the parameters for this model.
+    /// </summary>
+    /// <param name="parameters">A vector containing the model parameters.</param>
+    public void SetParameters(Vector<T> parameters)
+    {
+        if (Network == null)
+        {
+            throw new InvalidOperationException("Network has not been initialized.");
+        }
+
+        Network.SetParameters(parameters);
+    }
+
+    /// <summary>
+    /// Sets the active feature indices for this model.
+    /// </summary>
+    /// <param name="featureIndices">The indices of features to activate.</param>
+    public void SetActiveFeatureIndices(IEnumerable<int> featureIndices)
+    {
+        // Neural networks typically don't support feature masking after training
+        throw new NotSupportedException("Neural networks do not support setting active features after network construction.");
+    }
+
+    /// <summary>
+    /// Gets the feature importance scores as a dictionary.
+    /// </summary>
+    /// <returns>A dictionary mapping feature names to their importance scores.</returns>
+    /// <exception cref="NotSupportedException">
+    /// This method is not supported for neural networks. Feature importance in neural networks
+    /// requires specialized techniques like gradient-based attribution or permutation importance.
+    /// </exception>
+    public Dictionary<string, T> GetFeatureImportance()
+    {
+        // Neural network feature importance requires specialized techniques like:
+        // - Gradient-based attribution methods (e.g., Integrated Gradients, SHAP)
+        // - Permutation importance
+        // - Layer-wise relevance propagation
+        // These are complex to implement correctly and beyond the scope of this basic method.
+        throw new NotSupportedException(
+            "Feature importance is not supported for neural networks through this method. " +
+            "Neural networks require specialized techniques like gradient-based attribution, " +
+            "permutation importance, or SHAP values to properly assess feature importance.");
+    }
+
+    /// <summary>
     /// Creates a deep copy of this model.
     /// </summary>
     /// <returns>A new instance with the same architecture and parameters.</returns>
@@ -809,7 +856,7 @@ public class NeuralNetworkModel<T> : IFullModel<T, Tensor<T>, Tensor<T>>
     /// with the IFullModel interface.
     /// </para>
     /// <para><b>For Beginners:</b> This method creates a copy of the neural network model.
-    /// 
+    ///
     /// In this implementation, Clone and DeepCopy do the same thing - they
     /// both create a completely independent copy of the model with the same
     /// architecture and parameters. Both methods are provided for compatibility
@@ -819,5 +866,45 @@ public class NeuralNetworkModel<T> : IFullModel<T, Tensor<T>, Tensor<T>>
     public IFullModel<T, Tensor<T>, Tensor<T>> Clone()
     {
         return DeepCopy();
+    }
+
+    public virtual int ParameterCount
+    {
+        get { return Network.GetParameterCount(); }
+    }
+
+    public virtual void SaveModel(string filePath)
+    {
+        if (string.IsNullOrWhiteSpace(filePath))
+            throw new ArgumentException("File path must not be null or empty.", nameof(filePath));
+
+        try
+        {
+            var data = Serialize();
+            var directory = Path.GetDirectoryName(filePath);
+            if (!string.IsNullOrEmpty(directory) && !Directory.Exists(directory))
+                Directory.CreateDirectory(directory);
+            File.WriteAllBytes(filePath, data);
+        }
+        catch (IOException ex) { throw new InvalidOperationException($"Failed to save model to '{filePath}': {ex.Message}", ex); }
+        catch (UnauthorizedAccessException ex) { throw new InvalidOperationException($"Access denied when saving model to '{filePath}': {ex.Message}", ex); }
+        catch (System.Security.SecurityException ex) { throw new InvalidOperationException($"Security error when saving model to '{filePath}': {ex.Message}", ex); }
+    }
+
+    public virtual void LoadModel(string filePath)
+    {
+        if (string.IsNullOrWhiteSpace(filePath))
+            throw new ArgumentException("File path must not be null or empty.", nameof(filePath));
+
+        try
+        {
+            var data = File.ReadAllBytes(filePath);
+            Deserialize(data);
+        }
+        catch (FileNotFoundException ex) { throw new FileNotFoundException($"The specified model file does not exist: {filePath}", filePath, ex); }
+        catch (IOException ex) { throw new InvalidOperationException($"File I/O error while loading model from '{filePath}': {ex.Message}", ex); }
+        catch (UnauthorizedAccessException ex) { throw new InvalidOperationException($"Access denied when loading model from '{filePath}': {ex.Message}", ex); }
+        catch (System.Security.SecurityException ex) { throw new InvalidOperationException($"Security error when loading model from '{filePath}': {ex.Message}", ex); }
+        catch (Exception ex) { throw new InvalidOperationException($"Failed to deserialize model from file '{filePath}'. The file may be corrupted or incompatible: {ex.Message}", ex); }
     }
 }

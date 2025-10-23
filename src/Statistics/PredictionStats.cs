@@ -245,12 +245,23 @@ public class PredictionStats<T>
     /// - 1 means your model perfectly predicts all values
     /// - 0 means your model does no better than simply predicting the average for every case
     /// - Values in between indicate the percentage of variance your model explains
-    /// 
+    ///
     /// For example, an R² of 0.75 means your model explains 75% of the variability in the target variable.
-    /// 
+    ///
     /// Be careful: a high R² doesn't necessarily mean your model is good - it could be overfitting!
     /// </remarks>
     public T R2 { get; private set; }
+
+    /// <summary>
+    /// R-Squared - Alias for R2 property (Coefficient of determination).
+    /// </summary>
+    /// <remarks>
+    /// For Beginners:
+    /// This is an alternative name for the R2 property, providing the same value.
+    /// Some frameworks and documentation use "RSquared" while others use "R2".
+    /// Both refer to the proportion of variance in the dependent variable explained by the model.
+    /// </remarks>
+    public T RSquared => R2;
 
     /// <summary>
     /// R² adjusted for the number of predictors in the model.

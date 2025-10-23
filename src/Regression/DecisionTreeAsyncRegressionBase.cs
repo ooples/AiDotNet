@@ -93,6 +93,14 @@ public abstract class AsyncDecisionTreeRegressionBase<T> : IAsyncTreeBasedModel<
     protected Random Random => new(Options.Seed ?? Environment.TickCount);
 
     /// <summary>
+    /// Gets or sets the feature names.
+    /// </summary>
+    /// <value>
+    /// An array of feature names. If not set, feature indices will be used as names.
+    /// </value>
+    public string[]? FeatureNames { get; set; }
+
+    /// <summary>
     /// Initializes a new instance of the AsyncDecisionTreeRegressionBase class.
     /// </summary>
     /// <param name="options">The options for configuring the decision tree.</param>
@@ -521,6 +529,70 @@ public abstract class AsyncDecisionTreeRegressionBase<T> : IAsyncTreeBasedModel<
     }
 
     /// <summary>
+    /// Sets the parameters for this model.
+    /// </summary>
+    /// <param name="parameters">A vector containing the model parameters.</param>
+    public virtual void SetParameters(Vector<T> parameters)
+    {
+        throw new NotSupportedException("Decision trees do not support direct parameter setting. Use WithParameters to create a new model with different parameters.");
+    }
+
+    /// <summary>
+    /// Sets the active feature indices for this model.
+    /// </summary>
+    /// <param name="featureIndices">The indices of features to activate.</param>
+    public virtual void SetActiveFeatureIndices(IEnumerable<int> featureIndices)
+    {
+        throw new NotSupportedException("Decision trees do not support setting active features after training. Features are selected during tree construction.");
+    }
+
+    /// <summary>
+    /// Gets the feature importance scores as a dictionary.
+    /// </summary>
+    /// <returns>A dictionary mapping feature names to their importance scores.</returns>
+    public virtual Dictionary<string, T> GetFeatureImportance()
+    {
+        if (Root == null)
+        {
+            return new Dictionary<string, T>();
+        }
+
+        var importanceScores = new Dictionary<int, T>();
+        CalculateFeatureImportanceRecursive(Root, importanceScores);
+
+        var result = new Dictionary<string, T>();
+        foreach (var kvp in importanceScores)
+        {
+            string featureName = FeatureNames != null && kvp.Key < FeatureNames.Length
+                ? FeatureNames[kvp.Key]
+                : $"Feature_{kvp.Key}";
+            result[featureName] = kvp.Value;
+        }
+
+        return result;
+    }
+
+    private void CalculateFeatureImportanceRecursive(DecisionTreeNode<T>? node, Dictionary<int, T> importanceScores)
+    {
+        if (node == null || node.IsLeaf)
+            return;
+
+        if (!importanceScores.ContainsKey(node.FeatureIndex))
+        {
+            importanceScores[node.FeatureIndex] = NumOps.Zero;
+        }
+
+        // NOTE: This is a simple count-based approach to feature importance.
+        // It increments the score for each time a feature is used to split a node,
+        // but does NOT account for the quality of the split (e.g., reduction in impurity or error).
+        // This limitation means the importance scores may not reflect the true predictive power of each feature.
+        importanceScores[node.FeatureIndex] = NumOps.Add(importanceScores[node.FeatureIndex], NumOps.One);
+
+        CalculateFeatureImportanceRecursive(node.Left, importanceScores);
+        CalculateFeatureImportanceRecursive(node.Right, importanceScores);
+    }
+
+    /// <summary>
     /// Creates a deep copy of the decision tree model.
     /// </summary>
     /// <returns>A new instance of the model with the same parameters and tree structure.</returns>
@@ -744,14 +816,71 @@ public abstract class AsyncDecisionTreeRegressionBase<T> : IAsyncTreeBasedModel<
             Prediction = node.Prediction,
             IsLeaf = node.IsLeaf
         };
-    
+
         // Recursively clone child nodes
         if (node.Left != null)
             clone.Left = DeepCloneNode(node.Left);
-    
+
         if (node.Right != null)
             clone.Right = DeepCloneNode(node.Right);
-    
+
         return clone;
+    }
+
+    /// <summary>
+    /// Saves the model to a file.
+    /// </summary>
+    /// <param name="filePath">The path where the model should be saved.</param>
+    public virtual void SaveModel(string filePath)
+    {
+        if (string.IsNullOrWhiteSpace(filePath))
+        {
+            throw new ArgumentException("File path must not be null or empty.", nameof(filePath));
+        }
+        var data = Serialize();
+        // Ensure directory exists and handle IO exceptions with clearer context
+        var directory = Path.GetDirectoryName(filePath);
+        if (!string.IsNullOrEmpty(directory) && !Directory.Exists(directory))
+        {
+            Directory.CreateDirectory(directory);
+        }
+        try
+        {
+            File.WriteAllBytes(filePath, data);
+        }
+        catch (Exception ex) when (ex is IOException || ex is UnauthorizedAccessException || ex is System.Security.SecurityException)
+        {
+            throw new InvalidOperationException($"Failed to save model to '{filePath}': {ex.Message}", ex);
+        }
+    }
+
+    /// <summary>
+    /// Loads the model from a file.
+    /// </summary>
+    /// <param name="filePath">The path from which to load the model.</param>
+    public virtual void LoadModel(string filePath)
+    {
+        if (string.IsNullOrWhiteSpace(filePath))
+        {
+            throw new ArgumentException("File path must not be null or empty.", nameof(filePath));
+        }
+        if (!File.Exists(filePath))
+        {
+            throw new FileNotFoundException($"The specified model file does not exist: {filePath}", filePath);
+        }
+        try
+        {
+            var data = File.ReadAllBytes(filePath);
+            Deserialize(data);
+        }
+        catch (Exception ex)
+        {
+            throw new InvalidOperationException($"Failed to load or deserialize model from file '{filePath}'.", ex);
+        }
+    }
+
+    public virtual int ParameterCount
+    {
+        get { return CountNodes(Root) * 4 + 1; }
     }
 }

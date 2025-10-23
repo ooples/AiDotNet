@@ -1,4 +1,7 @@
-﻿namespace AiDotNet.Genetics;
+using System;
+using System.Collections.Generic;
+
+namespace AiDotNet.Genetics;
 
 /// <summary>
 /// Represents an individual that is also a full model, allowing direct evolution of models
@@ -62,7 +65,8 @@ public class ModelIndividual<T, TInput, TOutput, TGene> :
         Func<ICollection<TGene>, IFullModel<T, TInput, TOutput>> modelFactory)
     {
         _innerModel = model;
-        _genes = [];
+        // Initialize with a copy of provided genes to avoid shared references
+        _genes = [.. genes];
         _modelFactory = modelFactory;
         _fitness = _numOps.Zero;
     }
@@ -173,7 +177,6 @@ public class ModelIndividual<T, TInput, TOutput, TGene> :
     /// <param name="parameters">The new parameters.</param>
     public void UpdateParameters(Vector<T> parameters)
     {
-        // Replace the inner model with a new instance containing the updated parameters
         _innerModel = _innerModel.WithParameters(parameters);
     }
 
@@ -225,6 +228,16 @@ public class ModelIndividual<T, TInput, TOutput, TGene> :
         return _innerModel.GetActiveFeatureIndices();
     }
 
+    public virtual Dictionary<string, T> GetFeatureImportance()
+    {
+        return _innerModel.GetFeatureImportance();
+    }
+
+    public virtual void SetActiveFeatureIndices(IEnumerable<int> featureIndices)
+    {
+        _innerModel.SetActiveFeatureIndices(featureIndices);
+    }
+
     public bool IsFeatureUsed(int featureIndex)
     {
         return _innerModel.IsFeatureUsed(featureIndex);
@@ -232,40 +245,60 @@ public class ModelIndividual<T, TInput, TOutput, TGene> :
 
     public IFullModel<T, TInput, TOutput> DeepCopy()
     {
-        // Deep copy the inner model and wrap it in a new ModelIndividual to preserve genes and factory
         var copiedInner = _innerModel.DeepCopy();
-        return new ModelIndividual<T, TInput, TOutput, TGene>(copiedInner, _genes, _modelFactory);
+        // Deep copy genes where possible
+        var clonedGenes = new List<TGene>(_genes.Count);
+        foreach (var gene in _genes)
+        {
+            if (gene is ICloneable cloneable)
+            {
+                clonedGenes.Add((TGene)cloneable.Clone());
+            }
+            else
+            {
+                clonedGenes.Add(gene);
+            }
+        }
+        return new ModelIndividual<T, TInput, TOutput, TGene>(copiedInner, clonedGenes, _modelFactory);
     }
 
     IFullModel<T, TInput, TOutput> ICloneable<IFullModel<T, TInput, TOutput>>.Clone()
     {
-        // Clone the inner model and wrap it in a new ModelIndividual to preserve genes and factory
-        var clonedInner = _innerModel is ICloneable<IFullModel<T, TInput, TOutput>> cl
-            ? cl.Clone()
-            : _innerModel.DeepCopy();
-
-        return new ModelIndividual<T, TInput, TOutput, TGene>(clonedInner, _genes, _modelFactory);
-    }
-
-    /// <summary>
-    /// Gets the total number of parameters for this model.
-    /// </summary>
-    public virtual int ParameterCount
-    {
-        get
+        var cloned = _innerModel.Clone();
+        // Deep copy genes where possible
+        var clonedGenes = new List<TGene>(_genes.Count);
+        foreach (var gene in _genes)
         {
-            var parameters = _innerModel.GetParameters();
-            return parameters?.Length ?? 0;
+            if (gene is ICloneable cloneable)
+            {
+                clonedGenes.Add((TGene)cloneable.Clone());
+            }
+            else
+            {
+                clonedGenes.Add(gene);
+            }
         }
+        return new ModelIndividual<T, TInput, TOutput, TGene>(cloned, clonedGenes, _modelFactory);
     }
 
-    /// <summary>
-    /// Sets parameters on the inner model by creating a new model instance with the given parameters.
-    /// </summary>
-    /// <param name="parameters">The parameters to apply.</param>
-    public void SetParameters(Vector<T> parameters)
+    public virtual void SetParameters(Vector<T> parameters)
     {
         _innerModel = _innerModel.WithParameters(parameters);
+        _parameterCountCache = null; // invalidate cache
+    }
+
+    private int? _parameterCountCache;
+    public virtual int ParameterCount
+        => _parameterCountCache ??= _innerModel.GetParameters()?.Length ?? 0;
+
+    public virtual void SaveModel(string filePath)
+    {
+        throw new NotImplementedException("SaveModel is not yet implemented for this model type.");
+    }
+
+    public virtual void LoadModel(string filePath)
+    {
+        throw new NotImplementedException("LoadModel is not yet implemented for this model type.");
     }
 
     #endregion

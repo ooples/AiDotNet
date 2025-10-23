@@ -49,10 +49,40 @@ namespace AiDotNet.Interpretability
         public int SensitiveFeatureIndex { get; set; }
 
         /// <summary>
-        /// Initializes a new instance of the FairnessMetrics class.
+        /// Initializes a new instance of the FairnessMetrics class with all metric values.
         /// </summary>
-        public FairnessMetrics()
+        /// <param name="demographicParity">The demographic parity metric value.</param>
+        /// <param name="equalOpportunity">The equal opportunity metric value.</param>
+        /// <param name="equalizedOdds">The equalized odds metric value.</param>
+        /// <param name="predictiveParity">The predictive parity metric value.</param>
+        /// <param name="disparateImpact">The disparate impact metric value.</param>
+        /// <param name="statisticalParityDifference">The statistical parity difference metric value.</param>
+        /// <exception cref="ArgumentNullException">Thrown when any parameter is null and T is a reference type.</exception>
+        public FairnessMetrics(
+            T demographicParity,
+            T equalOpportunity,
+            T equalizedOdds,
+            T predictiveParity,
+            T disparateImpact,
+            T statisticalParityDifference)
         {
+            // Validate parameters for reference types to prevent null assignment
+            if (!typeof(T).IsValueType)
+            {
+                if (demographicParity == null) throw new ArgumentNullException(nameof(demographicParity));
+                if (equalOpportunity == null) throw new ArgumentNullException(nameof(equalOpportunity));
+                if (equalizedOdds == null) throw new ArgumentNullException(nameof(equalizedOdds));
+                if (predictiveParity == null) throw new ArgumentNullException(nameof(predictiveParity));
+                if (disparateImpact == null) throw new ArgumentNullException(nameof(disparateImpact));
+                if (statisticalParityDifference == null) throw new ArgumentNullException(nameof(statisticalParityDifference));
+            }
+
+            DemographicParity = demographicParity;
+            EqualOpportunity = equalOpportunity;
+            EqualizedOdds = equalizedOdds;
+            PredictiveParity = predictiveParity;
+            DisparateImpact = disparateImpact;
+            StatisticalParityDifference = statisticalParityDifference;
             AdditionalMetrics = new Dictionary<string, T>();
         }
     }

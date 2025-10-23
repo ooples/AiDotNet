@@ -469,7 +469,7 @@ public class OccupancyNeuralNetwork<T> : NeuralNetworkBase<T>
         Vector<T> gradients = LossFunction.CalculateDerivative(predictedVector, expectedVector);
 
         // Backpropagation
-        Backpropagate(gradients);
+        Backpropagate(Tensor<T>.FromVector(gradients));
 
         // Update parameters with optimizer
         T learningRate = NumOps.FromDouble(0.01);
@@ -504,7 +504,7 @@ public class OccupancyNeuralNetwork<T> : NeuralNetworkBase<T>
         Vector<T> gradients = LossFunction.CalculateDerivative(predictedVector, expectedVector);
 
         // Backpropagation
-        Backpropagate(gradients);
+        Backpropagate(Tensor<T>.FromVector(gradients));
 
         // Update parameters with optimizer
         T learningRate = NumOps.FromDouble(0.01);
@@ -548,6 +548,7 @@ public class OccupancyNeuralNetwork<T> : NeuralNetworkBase<T>
     
         return error;
     }
+
 
     /// <summary>
     /// Gets metadata about the occupancy neural network.
@@ -598,7 +599,7 @@ public class OccupancyNeuralNetwork<T> : NeuralNetworkBase<T>
                 { "HistoryWindowSize", _historyWindowSize },
                 { "LayerCount", Layers.Count },
                 { "LayerTypes", layerTypeCount },
-                { "TotalParameters", GetParameterCount() },
+                { "TotalParameters", ParameterCount },
                 { "HiddenLayerSizes", Architecture.GetHiddenLayerSizes() }
             },
             ModelData = this.Serialize()

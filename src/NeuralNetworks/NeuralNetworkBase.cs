@@ -1,4 +1,5 @@
 using AiDotNet.Interpretability;
+using AiDotNet.Interfaces;
 
 namespace AiDotNet.NeuralNetworks;
 
@@ -13,7 +14,7 @@ namespace AiDotNet.NeuralNetworks;
 /// This class provides the foundation for building different types of neural networks.
 /// </para>
 /// </remarks>
-public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>
+public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpretableModel<T>
 {
     /// <summary>
     /// The internal collection of layers that make up this neural network.
@@ -162,6 +163,7 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>
         MaxGradNorm = NumOps.FromDouble(maxGradNorm);
         LossFunction = lossFunction;
         _cachedParameterCount = null;
+        _sensitiveFeatures = new Vector<int>(0);
     }
 
     /// <summary>
@@ -428,6 +430,26 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>
             }
             return _cachedParameterCount.Value;
         }
+    }
+
+    /// <summary>
+    /// Gets the total number of parameters in the model.
+    /// </summary>
+    /// <returns>The total number of parameters in the neural network.</returns>
+    /// <remarks>
+    /// <para>
+    /// This method returns the total count of all trainable parameters across all layers
+    /// in the neural network. It uses the cached ParameterCount property for efficiency.
+    /// </para>
+    /// <para>
+    /// <b>For Beginners:</b> This tells you how many adjustable values (weights and biases)
+    /// your neural network has. More parameters mean the network can learn more complex patterns,
+    /// but also requires more training data and computational resources.
+    /// </para>
+    /// </remarks>
+    public int GetParameterCount()
+    {
+        return ParameterCount;
     }
 
     /// <summary>
@@ -706,7 +728,7 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>
         if (!Architecture.IsInitialized)
         {
             // Initialize from cached data
-            Architecture.InitializeFromCachedData<Tensor<T>, Tensor<T>>();
+            Architecture.InitializeFromCachedData();
 
             // Initialize network-specific layers
             InitializeLayers();
@@ -911,6 +933,35 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>
 
         byte[] serializedData = Serialize();
         File.WriteAllBytes(filePath, serializedData);
+    }
+
+    /// <summary>
+    /// Loads a neural network model from a file.
+    /// </summary>
+    /// <param name="filePath">The path to the file containing the saved model.</param>
+    /// <exception cref="ArgumentException">Thrown when the file path is null or empty.</exception>
+    /// <exception cref="FileNotFoundException">Thrown when the file does not exist.</exception>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> This method allows you to load a previously saved neural network model
+    /// from a file on disk. This is the counterpart to SaveModel and uses the Deserialize method
+    /// to reconstruct the network from the saved data.
+    /// </para>
+    /// </remarks>
+    public virtual void LoadModel(string filePath)
+    {
+        if (string.IsNullOrWhiteSpace(filePath))
+        {
+            throw new ArgumentException("File path cannot be null or empty.", nameof(filePath));
+        }
+
+        if (!File.Exists(filePath))
+        {
+            throw new FileNotFoundException($"Model file not found: {filePath}", filePath);
+        }
+
+        byte[] data = File.ReadAllBytes(filePath);
+        Deserialize(data);
     }
 
     /// <summary>
@@ -1392,7 +1443,12 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>
     /// <summary>
     /// Base model instance for interpretability delegation.
     /// </summary>
-    protected IModel<Tensor<T>, Tensor<T>, ModelMetaData<T>> _baseModel;
+    /// <remarks>
+    /// Typed as <see cref="IFullModel{T, TInput, TOutput}"/> to maintain type safety while supporting
+    /// the interpretability infrastructure. This field stores models that implement the full model interface,
+    /// which includes training, prediction, serialization, and parameterization capabilities.
+    /// </remarks>
+    protected IFullModel<T, Tensor<T>, Tensor<T>>? _baseModel;
 
     /// <summary>
     /// Gets the global feature importance across all predictions.
@@ -1485,9 +1541,13 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>
     /// <summary>
     /// Sets the base model for interpretability analysis.
     /// </summary>
-    public virtual void SetBaseModel(IModel<Tensor<T>, Tensor<T>, ModelMetaData<T>> model)
+    /// <typeparam name="TInput">The input type for the model.</typeparam>
+    /// <typeparam name="TOutput">The output type for the model.</typeparam>
+    /// <param name="model">The model to use for interpretability analysis. Must implement IFullModel.</param>
+    /// <exception cref="ArgumentNullException">Thrown when model is null.</exception>
+    public virtual void SetBaseModel<TInput, TOutput>(IFullModel<T, TInput, TOutput> model)
     {
-        _baseModel = model ?? throw new ArgumentNullException(nameof(model));
+        _baseModel = (model ?? throw new ArgumentNullException(nameof(model))) as IFullModel<T, Tensor<T>, Tensor<T>>;
     }
 
     /// <summary>

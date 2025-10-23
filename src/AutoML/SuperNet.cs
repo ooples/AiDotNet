@@ -556,7 +556,17 @@ namespace AiDotNet.AutoML
                 throw new ArgumentException("File path cannot be null or empty.", nameof(filePath));
 
             // Validate path security: prevent directory traversal attacks
+            // Use canonicalized path and ensure it is within the current working directory
             var fullPath = System.IO.Path.GetFullPath(filePath);
+
+            // Additional validation: ensure the resolved path doesn't escape the working directory
+            var currentDirectory = System.IO.Path.GetFullPath(Environment.CurrentDirectory);
+            // Ensure trailing separator for strict directory containment (prevents /app vs /app-data bypass)
+            var currentDirWithSep = currentDirectory.EndsWith(System.IO.Path.DirectorySeparatorChar.ToString())
+                ? currentDirectory
+                : currentDirectory + System.IO.Path.DirectorySeparatorChar;
+            if (!fullPath.StartsWith(currentDirWithSep, StringComparison.OrdinalIgnoreCase))
+                throw new UnauthorizedAccessException($"Attempted to save model outside of the current directory. Path: {fullPath}");
 
             using var fs = new System.IO.FileStream(fullPath, System.IO.FileMode.Create);
             using var writer = new System.IO.BinaryWriter(fs);
@@ -599,7 +609,17 @@ namespace AiDotNet.AutoML
                 throw new ArgumentException("File path cannot be null or empty.", nameof(filePath));
 
             // Validate path security: prevent directory traversal attacks
+            // Use canonicalized path and ensure it is within the current working directory
             var fullPath = System.IO.Path.GetFullPath(filePath);
+
+            // Additional validation: ensure the resolved path doesn't escape the working directory
+            var currentDirectory = System.IO.Path.GetFullPath(Environment.CurrentDirectory);
+            // Ensure trailing separator for strict directory containment (prevents /app vs /app-data bypass)
+            var currentDirWithSep = currentDirectory.EndsWith(System.IO.Path.DirectorySeparatorChar.ToString())
+                ? currentDirectory
+                : currentDirectory + System.IO.Path.DirectorySeparatorChar;
+            if (!fullPath.StartsWith(currentDirWithSep, StringComparison.OrdinalIgnoreCase))
+                throw new UnauthorizedAccessException($"Attempted to load model from outside the current directory. Path: {fullPath}");
 
             if (!System.IO.File.Exists(fullPath))
                 throw new System.IO.FileNotFoundException($"Model file not found: {filePath}");
