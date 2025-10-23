@@ -109,7 +109,7 @@ public class TransferNeuralNetwork<T> : TransferLearningBase<T, Matrix<T>, Vecto
 
         // Step 5: Combine soft labels with true labels
         // trueWeight of 0.7 means combinedLabels = 0.7 * trueLabels + 0.3 * softLabels (favors true labels for more accurate target domain learning)
-        Vector<T> combinedLabels = CombineLabels(softLabels, targetLabels, trueWeight: 0.7);
+        Vector<T> combinedLabels = CombineLabels(softLabels, targetLabels, 0.7);
 
         // Step 6: Create and train a new model on the target domain
         // Use original targetData (not mapped) since the model should learn in target feature space
