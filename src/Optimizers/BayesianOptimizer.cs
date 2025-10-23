@@ -272,7 +272,7 @@ public class BayesianOptimizer<T, TInput, TOutput> : OptimizerBase<T, TInput, TO
         }
         else
         {
-            throw new ArgumentException("Invalid options type. Expected BayesianOptimizerOptions.");
+            throw new InvalidOperationException("Invalid options type. Expected BayesianOptimizerOptions.");
         }
     }
 
