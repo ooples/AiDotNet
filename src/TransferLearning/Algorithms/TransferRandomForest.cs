@@ -177,6 +177,7 @@ public class TransferRandomForest<T> : TransferLearningBase<T, Matrix<T>, Vector
 /// </summary>
 internal class MappedRandomForestModel<T> : IFullModel<T, Matrix<T>, Vector<T>>
 {
+    private const int WrapperMagic = 0x4D52464D; // 'MRFM'
     private readonly IFullModel<T, Matrix<T>, Vector<T>> _baseModel;
     private readonly IFeatureMapper<T> _mapper;
     private readonly int _targetFeatures;
@@ -303,12 +304,11 @@ internal class MappedRandomForestModel<T> : IFullModel<T, Matrix<T>, Vector<T>>
         var data = File.ReadAllBytes(filePath);
         using var ms = new MemoryStream(data);
         using var reader = new BinaryReader(ms);
-        if (TryReadWrapper(reader, out var baseBytes))
+        if (!TryReadWrapper(reader, out var baseBytes))
         {
-            _baseModel.Deserialize(baseBytes);
-            return;
+            throw new InvalidOperationException("Failed to deserialize MappedRandomForestModel wrapper format. The file may be corrupted or in an incompatible format.");
         }
-        _baseModel.LoadModel(filePath);
+        _baseModel.Deserialize(baseBytes);
     }
 
         public virtual Dictionary<string, T> GetFeatureImportance()
@@ -324,15 +324,13 @@ internal class MappedRandomForestModel<T> : IFullModel<T, Matrix<T>, Vector<T>>
                 try
                 {
                     var mappedKey = mapMethod.Invoke(_mapper, new object[] { kvp.Key });
-                    if (mappedKey is string s && s != null)
+                    if (mappedKey is string s)
                     {
                         key = s;
                     }
                 }
                 catch (Exception ex)
-                {
-                    Console.Error.WriteLine($"Failed to inverse map feature name '{kvp.Key}': {ex}");
-                    // Fall back to original key
+                {                    // Failed to inverse map feature name, fallback to original key
                 }
         }
         mappedImportance[key] = kvp.Value;
@@ -342,12 +340,15 @@ internal class MappedRandomForestModel<T> : IFullModel<T, Matrix<T>, Vector<T>>
 
     private void WriteWrapper(BinaryWriter writer, byte[] baseBytes)
     {
-        writer.Write(0x4D52464D); // 'MRFM' magic
+        writer.Write(WrapperMagic);
         writer.Write(_targetFeatures);
-        try { writer.Write(Convert.ToDouble(_mapper.GetMappingConfidence())); }
-        catch (Exception ex)
+        try
         {
-            Console.Error.WriteLine($"Failed to write mapping confidence: {ex}");
+            writer.Write(Convert.ToDouble(_mapper.GetMappingConfidence()));
+        }
+        catch
+        {
+            // Failed to write mapping confidence, fallback to 0.0
             writer.Write(0.0);
         }
         writer.Write(baseBytes.Length);
@@ -373,7 +374,7 @@ internal class MappedRandomForestModel<T> : IFullModel<T, Matrix<T>, Vector<T>>
         }
         catch (Exception ex)
         {
-            Console.Error.WriteLine($"Wrapper deserialization fallback: {ex.Message}");
+            // Wrapper deserialization fallback
             baseBytes = Array.Empty<byte>();
             return false;
         }
