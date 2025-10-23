@@ -795,7 +795,7 @@ public class ExpressionTree<T, TInput, TOutput> : IFullModel<T, TInput, TOutput>
     /// </remarks>
     public IEnumerable<int> GetActiveFeatureIndices()
     {
-        HashSet<int> activeIndices = new HashSet<int>();
+        HashSet<int> activeIndices = new();
 
         void CollectFeatureIndices(ExpressionTree<T, TInput, TOutput> node)
         {
@@ -831,7 +831,7 @@ public class ExpressionTree<T, TInput, TOutput> : IFullModel<T, TInput, TOutput>
     public virtual Dictionary<string, T> GetFeatureImportance()
     {
         // Count occurrences of each feature in the tree
-        Dictionary<int, int> featureCounts = new Dictionary<int, int>();
+        Dictionary<int, int> featureCounts = new();
 
         void CountFeatureOccurrences(ExpressionTree<T, TInput, TOutput> node)
         {
@@ -870,7 +870,7 @@ public class ExpressionTree<T, TInput, TOutput> : IFullModel<T, TInput, TOutput>
             totalCount += count;
         }
 
-        Dictionary<string, T> importance = new Dictionary<string, T>();
+        Dictionary<string, T> importance = new();
         if (totalCount > 0)
         {
             foreach (var kvp in featureCounts)
@@ -900,7 +900,7 @@ public class ExpressionTree<T, TInput, TOutput> : IFullModel<T, TInput, TOutput>
             throw new ArgumentNullException(nameof(featureIndices));
         }
 
-        HashSet<int> activeSet = new HashSet<int>(featureIndices);
+        HashSet<int> activeSet = new(featureIndices);
 
         void DeactivateInactiveFeatures(ExpressionTree<T, TInput, TOutput> node)
         {
