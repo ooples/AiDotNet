@@ -1049,6 +1049,11 @@ public class ExpressionTree<T, TInput, TOutput> : IFullModel<T, TInput, TOutput>
 
     public virtual void SetParameters(Vector<T> parameters)
     {
+        // Note: This implementation uses two tree traversals (counting and assignment)
+        // to validate parameter count BEFORE modifying the tree. This ensures atomicity:
+        // if the parameter count is wrong, the tree remains unchanged. A single-pass
+        // approach would leave the tree partially modified on error, which is undesirable.
+
         // Count the number of constant nodes in the tree
         int constantNodeCount = 0;
 
@@ -1073,20 +1078,37 @@ public class ExpressionTree<T, TInput, TOutput> : IFullModel<T, TInput, TOutput>
         }
 
         // Assign parameter values to constant nodes in a deterministic traversal order
-        int index = 0;
-
-        void Assign(ExpressionTree<T, TInput, TOutput> node)
+        // Refactored to avoid shared state mutation through closures - each recursive call
+        // returns the next index to use, improving thread-safety and code clarity
+        int AssignAndReturnNextIndex(ExpressionTree<T, TInput, TOutput> node, int currentIndex)
         {
-            if (node == null) return;
+            if (node == null) return currentIndex;
+
+            int nextIndex = currentIndex;
             if (node.Type == ExpressionNodeType.Constant)
             {
-                node.SetValue(parameters[index++]);
+                node.SetValue(parameters[nextIndex]);
+                nextIndex++;
             }
-            if (node.Left != null) Assign(node.Left);
-            if (node.Right != null) Assign(node.Right);
+
+            if (node.Left != null)
+                nextIndex = AssignAndReturnNextIndex(node.Left, nextIndex);
+            if (node.Right != null)
+                nextIndex = AssignAndReturnNextIndex(node.Right, nextIndex);
+
+            return nextIndex;
         }
 
-        Assign(this);
+        int finalIndex = AssignAndReturnNextIndex(this, 0);
+
+        // Validate that all parameters were consumed during assignment
+        // This catches any discrepancy between counting and assignment traversals
+        if (finalIndex != parameters.Length)
+        {
+            throw new InvalidOperationException(
+                $"Internal error: expected to consume {parameters.Length} parameters, but only consumed {finalIndex}. " +
+                "This indicates a mismatch between counting and assignment traversals.");
+        }
     }
 
     public virtual int ParameterCount
