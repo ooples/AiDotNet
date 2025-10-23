@@ -1075,7 +1075,7 @@ public class VectorModel<T> : IFullModel<T, Matrix<T>, Vector<T>>
         protected readonly HashSet<InterpretationMethod> _enabledMethods = new();
         protected Vector<int> _sensitiveFeatures;
         protected readonly List<FairnessMetric> _fairnessMetrics = new();
-        protected IFullModel<T, Matrix<T>, Vector<T>>? _baseModel = null;
+        protected IFullModel<T, Matrix<T>, Vector<T>>? _baseModel;
 
         /// <summary>
         /// Gets the global feature importance across all predictions.
