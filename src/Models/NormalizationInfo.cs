@@ -122,4 +122,29 @@ public class NormalizationInfo<T, TInput, TOutput>
     /// </para>
     /// </remarks>
     public NormalizationParameters<T> YParams { get; set; } = new();
+
+    /// <summary>
+    /// Creates a deep copy of this NormalizationInfo instance.
+    /// </summary>
+    /// <returns>A new NormalizationInfo with copied values.</returns>
+    public NormalizationInfo<T, TInput, TOutput> DeepCopy()
+    {
+        return new NormalizationInfo<T, TInput, TOutput>
+        {
+            Normalizer = Normalizer,
+            XParams = new List<NormalizationParameters<T>>(XParams),
+            YParams = YParams
+        };
+    }
+
+    /// <summary>
+    /// Creates a new NormalizationInfo instance. Since normalization parameters are independent of model parameters,
+    /// this returns a copy with the same normalization settings.
+    /// </summary>
+    /// <param name="parameters">The model parameters (not used for normalization info).</param>
+    /// <returns>A new NormalizationInfo with the same normalization settings.</returns>
+    public NormalizationInfo<T, TInput, TOutput> WithParameters(Vector<T> parameters)
+    {
+        return DeepCopy();
+    }
 }
