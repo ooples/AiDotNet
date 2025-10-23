@@ -781,10 +781,25 @@ public class GraphNeuralNetwork<T> : NeuralNetworkBase<T>
     {
         // Create a new instance with the same architecture and activation functions
         // Determine which constructor to use based on which activation functions are set
-        if (_graphConvolutionalVectorActivation != null ||
-            _activationLayerVectorActivation != null ||
-            _finalDenseLayerVectorActivation != null ||
-            _finalActivationLayerVectorActivation != null)
+        bool hasVectorActivations = _graphConvolutionalVectorActivation != null ||
+                                    _activationLayerVectorActivation != null ||
+                                    _finalDenseLayerVectorActivation != null ||
+                                    _finalActivationLayerVectorActivation != null;
+
+        bool hasScalarActivations = _graphConvolutionalScalarActivation != null ||
+                                    _activationLayerScalarActivation != null ||
+                                    _finalDenseLayerScalarActivation != null ||
+                                    _finalActivationLayerScalarActivation != null;
+
+        // Validate that we don't have a mix of vector and scalar activations
+        if (hasVectorActivations && hasScalarActivations)
+        {
+            throw new InvalidOperationException(
+                "Cannot create new instance with mixed vector and scalar activation functions. " +
+                "All activation functions must be either vector-based or scalar-based, not a combination of both.");
+        }
+
+        if (hasVectorActivations)
         {
             return new GraphNeuralNetwork<T>(
                 Architecture,
