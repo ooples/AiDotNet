@@ -128,16 +128,16 @@ public class BayesianOptimizerOptions<T, TInput, TOutput> : OptimizationAlgorith
     /// The kernel function determines how the algorithm measures similarity between points in the search space,
     /// which affects how it generalizes from observed data points to unobserved points.
     /// </para>
-    /// <para><b>For Beginners:</b> The kernel function helps the algorithm understand how similar different points are 
-    /// to each other. The default Gaussian kernel (also called Radial Basis Function kernel) assumes that points close to each other will 
-    /// have similar values, with the similarity decreasing smoothly as distance increases. This is like assuming that in 
-    /// our hilly landscape, nearby locations tend to have similar heights. The Gaussian kernel works well for many problems, 
+    /// <para><b>For Beginners:</b> The kernel function helps the algorithm understand how similar different points are
+    /// to each other. The default Gaussian kernel (also called Radial Basis Function kernel) assumes that points close to each other will
+    /// have similar values, with the similarity decreasing smoothly as distance increases. This is like assuming that in
+    /// our hilly landscape, nearby locations tend to have similar heights. The Gaussian kernel works well for many problems,
     /// especially when the underlying function is smooth.</para>
     /// </remarks>
-    
+    public IKernel<T>? Kernel { get; set; } = new GaussianKernel<T>();
+
     /// <summary>
     /// Gets or sets whether the objective should be maximized (true) or minimized (false).
     /// </summary>
     public bool IsMaximization { get; set; } = true;
-     set; } = new GaussianKernel<T>();
 }
