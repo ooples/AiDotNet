@@ -71,12 +71,13 @@ public class LinearFeatureMapper<T> : IFeatureMapper<T>
         _projectionMatrix = ComputeProjectionMatrix(centeredSource, sourceDim, targetDim);
         _reverseProjectionMatrix = ComputeProjectionMatrix(centeredTarget, targetDim, sourceDim);
 
+        // Mark as trained before calling MapToTarget/MapToSource (they check IsTrained flag)
+        IsTrained = true;
+
         // Compute mapping confidence based on reconstruction error
         var reconstructed = MapToTarget(sourceData, targetDim);
         var reverseReconstructed = MapToSource(reconstructed, sourceDim);
         _confidence = ComputeReconstructionConfidence(sourceData, reverseReconstructed);
-
-        IsTrained = true;
     }
 
     /// <summary>
