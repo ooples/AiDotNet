@@ -1164,7 +1164,7 @@ public class ExpressionTree<T, TInput, TOutput> : IFullModel<T, TInput, TOutput>
         // Count the number of constant nodes in the tree
         int constantNodeCount = 0;
 
-        void CountConstants(ExpressionTree<T, TInput, TOutput> node)
+        void CountConstants(ExpressionTree<T, TInput, TOutput>? node)
         {
             if (node == null) return;
             if (node.Type == ExpressionNodeType.Constant)
@@ -1187,7 +1187,7 @@ public class ExpressionTree<T, TInput, TOutput> : IFullModel<T, TInput, TOutput>
         // Assign parameter values to constant nodes in a deterministic traversal order
         // Refactored to avoid shared state mutation through closures - each recursive call
         // returns the next index to use, improving thread-safety and code clarity
-        int AssignAndReturnNextIndex(ExpressionTree<T, TInput, TOutput> node, int currentIndex)
+        int AssignAndReturnNextIndex(ExpressionTree<T, TInput, TOutput>? node, int currentIndex)
         {
             if (node == null) return currentIndex;
 
