@@ -329,8 +329,9 @@ internal class MappedRandomForestModel<T> : IFullModel<T, Matrix<T>, Vector<T>>
                         key = s;
                     }
                 }
-                catch (Exception ex)
-                {                    // Failed to inverse map feature name, fallback to original key
+                catch (Exception)
+                {
+                    // Failed to inverse map feature name, fallback to original key
                 }
         }
         mappedImportance[key] = kvp.Value;
@@ -361,7 +362,11 @@ internal class MappedRandomForestModel<T> : IFullModel<T, Matrix<T>, Vector<T>>
         try
         {
             var magic = reader.ReadInt32();
-            if (magic != 0x4D52464D) { baseBytes = Array.Empty<byte>(); return false; }
+            if (magic != WrapperMagic)
+            {
+                baseBytes = Array.Empty<byte>();
+                return false;
+            }
             var target = reader.ReadInt32();
             if (target != _targetFeatures)
             {
@@ -372,7 +377,7 @@ internal class MappedRandomForestModel<T> : IFullModel<T, Matrix<T>, Vector<T>>
             baseBytes = reader.ReadBytes(len);
             return true;
         }
-        catch (Exception ex)
+        catch (Exception)
         {
             // Wrapper deserialization fallback
             baseBytes = Array.Empty<byte>();
