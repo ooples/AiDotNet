@@ -124,6 +124,28 @@ public class ExpressionTree<T, TInput, TOutput> : IFullModel<T, TInput, TOutput>
     private readonly INumericOperations<T> _numOps;
 
     /// <summary>
+    /// Thread-static random number generator for genetic operations.
+    /// Each thread gets its own Random instance to avoid thread-safety issues.
+    /// </summary>
+    [ThreadStatic]
+    private static Random? _threadRandom;
+
+    /// <summary>
+    /// Gets a thread-safe Random instance. Creates a new instance if one does not exist for this thread.
+    /// </summary>
+    private static Random ThreadRandom
+    {
+        get
+        {
+            if (_threadRandom == null)
+            {
+                _threadRandom = new Random(Guid.NewGuid().GetHashCode());
+            }
+            return _threadRandom;
+        }
+    }
+
+    /// <summary>
     /// Creates a new expression tree node with the specified properties.
     /// </summary>
     /// <param name="type">The type of node to create.</param>
@@ -310,7 +332,7 @@ public class ExpressionTree<T, TInput, TOutput> : IFullModel<T, TInput, TOutput>
     public IFullModel<T, TInput, TOutput> Mutate(double mutationRate)
     {
         ExpressionTree<T, TInput, TOutput> mutatedTree = (ExpressionTree<T, TInput, TOutput>)Copy();
-        Random random = new Random();
+        Random random = ThreadRandom;
 
         if (random.NextDouble() < mutationRate)
         {
@@ -369,7 +391,7 @@ public class ExpressionTree<T, TInput, TOutput> : IFullModel<T, TInput, TOutput>
         }
 
         ExpressionTree<T, TInput, TOutput> offspring = (ExpressionTree<T, TInput, TOutput>)Copy();
-        Random random = new Random();
+        Random random = ThreadRandom;
 
         if (random.NextDouble() < crossoverRate)
         {
@@ -412,7 +434,7 @@ public class ExpressionTree<T, TInput, TOutput> : IFullModel<T, TInput, TOutput>
     /// </remarks>
     private ExpressionTree<T, TInput, TOutput> GenerateRandomTree(int maxDepth)
     {
-        Random random = new Random();
+        Random random = ThreadRandom;
         if (maxDepth == 0 || random.NextDouble() < 0.3) // 30% chance of leaf node
         {
             if (random.NextDouble() < 0.5)
@@ -447,7 +469,7 @@ public class ExpressionTree<T, TInput, TOutput> : IFullModel<T, TInput, TOutput>
     /// </remarks>
     private ExpressionTree<T, TInput, TOutput> SelectRandomSubtree(ExpressionTree<T, TInput, TOutput> tree)
     {
-        Random random = new Random();
+        Random random = ThreadRandom;
         if (tree.Left == null && tree.Right == null)
         {
             return tree;
@@ -480,7 +502,7 @@ public class ExpressionTree<T, TInput, TOutput> : IFullModel<T, TInput, TOutput>
     /// </remarks>
     private void ReplaceRandomSubtree(ExpressionTree<T, TInput, TOutput> tree, ExpressionTree<T, TInput, TOutput> replacement)
     {
-        Random random = new Random();
+        Random random = ThreadRandom;
         if (random.NextDouble() < 0.3) // 30% chance of replacing current node
         {
             tree.Type = replacement.Type;
