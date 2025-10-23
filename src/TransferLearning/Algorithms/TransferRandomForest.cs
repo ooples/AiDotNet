@@ -308,6 +308,8 @@ internal class MappedRandomForestModel<T> : IFullModel<T, Matrix<T>, Vector<T>>
         {
             throw new InvalidOperationException("Failed to deserialize MappedRandomForestModel wrapper format. The file may be corrupted or in an incompatible format.");
         }
+        // Intentionally overwrites _baseModel with deserialized state.
+        // The wrapper metadata (_mapper, _targetFeatures) is immutable and set at construction.
         _baseModel.Deserialize(baseBytes);
     }
 
@@ -331,11 +333,9 @@ internal class MappedRandomForestModel<T> : IFullModel<T, Matrix<T>, Vector<T>>
                 }
                 catch (Exception ex)
                 {
-                    // Failed to inverse map feature name, fallback to original key
-                    System.Diagnostics.Debug.WriteLine($"Failed to inverse map feature name '{kvp.Key}': {ex.Message}
-{ex.StackTrace}");
+                    // Failed to inverse map feature name; using original key as fallback
                 }
-        }
+            }
         mappedImportance[key] = kvp.Value;
         }
         return mappedImportance;
@@ -349,7 +349,7 @@ internal class MappedRandomForestModel<T> : IFullModel<T, Matrix<T>, Vector<T>>
         {
             writer.Write(Convert.ToDouble(_mapper.GetMappingConfidence()));
         }
-        catch
+        catch (Exception ex)
         {
             // Failed to write mapping confidence, fallback to 0.0
             writer.Write(0.0);
@@ -364,21 +364,24 @@ internal class MappedRandomForestModel<T> : IFullModel<T, Matrix<T>, Vector<T>>
         try
         {
             var magic = reader.ReadInt32();
-            if (magic != 0x4D52464D) { baseBytes = Array.Empty<byte>(); return false; }
+            if (magic != WrapperMagic)
+            {
+                baseBytes = Array.Empty<byte>();
+                return false;
+            }
             var target = reader.ReadInt32();
             if (target != _targetFeatures)
             {
                 throw new InvalidOperationException($"Deserialized target feature count ({target}) does not match current instance ({_targetFeatures}).");
             }
-            var confidence = reader.ReadDouble(); // reserved
+            var confidence = reader.ReadDouble(); // Read mapping confidence (currently unused; read to maintain stream compatibility, reserved for future validation/versioning)
             var len = reader.ReadInt32();
             baseBytes = reader.ReadBytes(len);
             return true;
         }
         catch (Exception ex)
         {
-            // Wrapper deserialization fallback
-            Console.Error.WriteLine($"Exception in TryReadWrapper: {ex}");
+            // Failed to read wrapper format; fallback for backward compatibility with non-wrapped models
             baseBytes = Array.Empty<byte>();
             return false;
         }
