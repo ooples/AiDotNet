@@ -1177,6 +1177,17 @@ public abstract class OptimizerBase<T, TInput, TOutput> : IOptimizer<T, TInput, 
         if (lowerBounds.Length != upperBounds.Length)
             throw new ArgumentException("Lower and upper bounds must have the same length");
 
+        // Validate bounds
+        for (int i = 0; i < lowerBounds.Length; i++)
+        {
+            if (NumOps.GreaterThan(lowerBounds[i], upperBounds[i]))
+            {
+                throw new ArgumentException(
+                    $"Lower bound ({lowerBounds[i]}) is greater than upper bound ({upperBounds[i]}) at dimension {i}.",
+                    nameof(lowerBounds));
+            }
+        }
+
         var solution = new Vector<T>(lowerBounds.Length);
         for (int i = 0; i < lowerBounds.Length; i++)
         {
