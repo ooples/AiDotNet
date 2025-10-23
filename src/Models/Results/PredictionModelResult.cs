@@ -494,13 +494,23 @@ public class PredictionModelResult<T, TInput, TOutput> : IPredictiveModel<T, TIn
         try
         {
             var jsonString = Encoding.UTF8.GetString(data);
-            var settings = new JsonSerializerSettings
-            {
-                TypeNameHandling = TypeNameHandling.All
-            };
 
-            var tempResult = JsonConvert.DeserializeObject<PredictionModelResult<T, TInput, TOutput>>(jsonString, settings);
-            return tempResult?.ModelMetadata ?? new ModelMetadata<T>();
+            // Use JObject to extract only the ModelMetadata property without deserializing the entire model
+            var jObject = JObject.Parse(jsonString);
+            var metadataToken = jObject["ModelMetadata"];
+
+            if (metadataToken != null)
+            {
+                var settings = new JsonSerializerSettings
+                {
+                    TypeNameHandling = TypeNameHandling.Auto
+                };
+
+                var metadata = metadataToken.ToObject<ModelMetadata<T>>(JsonSerializer.Create(settings));
+                return metadata ?? new ModelMetadata<T>();
+            }
+
+            return new ModelMetadata<T>();
         }
         catch (Exception ex)
         {
@@ -720,7 +730,7 @@ public class PredictionModelResult<T, TInput, TOutput> : IPredictiveModel<T, TIn
 
         var copiedModel = Model.DeepCopy();
         var copiedOptimizationResult = OptimizationResult.DeepCopy();
-        var copiedNormalizationInfo = NormalizationInfo.DeepCopy();
+        var copiedNormalizationInfo = NormalizationInfo?.DeepCopy() ?? new NormalizationInfo<T, TInput, TOutput>();
 
         return new PredictionModelResult<T, TInput, TOutput>(copiedOptimizationResult, copiedNormalizationInfo)
         {
