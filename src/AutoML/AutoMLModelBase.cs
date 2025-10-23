@@ -205,7 +205,9 @@ namespace AiDotNet.AutoML
         }
 
         /// <summary>
-        /// Trains the model (legacy method - use SearchAsync instead)
+        /// Trains the model using legacy array-based interface.
+        /// Implementation is mandatory but may throw NotSupportedException if the derived class
+        /// does not support this legacy interface. Prefer using SearchAsync for AutoML workflows.
         /// </summary>
         public virtual void Train(double[][] inputs, double[] outputs)
         {
@@ -321,7 +323,11 @@ namespace AiDotNet.AutoML
         #region IModel Implementation
 
         /// <summary>
-        /// Trains the AutoML model by searching for the best configuration
+        /// Trains the AutoML model with the given input and expected output.
+        /// Derived classes define their own training logic, which may include searching for
+        /// the best configuration, traditional training, or other approaches.
+        /// This default implementation throws an exception; override to provide custom behavior.
+        /// For standard AutoML workflows, prefer using SearchAsync instead.
         /// </summary>
         public virtual void Train(TInput input, TOutput expectedOutput)
         {
