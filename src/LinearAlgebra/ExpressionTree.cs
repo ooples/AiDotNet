@@ -1193,9 +1193,10 @@ public class ExpressionTree<T, TInput, TOutput> : IFullModel<T, TInput, TOutput>
         // Count the number of constant nodes in the tree
         int constantNodeCount = 0;
 
-        // Local function to count constants - assumes node is non-null (called only from this method with 'this')
-        void CountConstants(ExpressionTree<T, TInput, TOutput> node)
+        // Local function to count constants - includes null check for safety
+        void CountConstants(ExpressionTree<T, TInput, TOutput>? node)
         {
+            if (node == null) return;
             if (node.Type == ExpressionNodeType.Constant)
             {
                 constantNodeCount++;
@@ -1214,9 +1215,10 @@ public class ExpressionTree<T, TInput, TOutput> : IFullModel<T, TInput, TOutput>
         }
 
         // Assign parameter values to constant nodes in a deterministic traversal order
-        // Local function returns next index to use - assumes node is non-null (called carefully)
-        int AssignAndReturnNextIndex(ExpressionTree<T, TInput, TOutput> node, int currentIndex)
+        // Local function returns next index to use - includes null check for safety
+        int AssignAndReturnNextIndex(ExpressionTree<T, TInput, TOutput>? node, int currentIndex)
         {
+            if (node == null) return currentIndex;
             int nextIndex = currentIndex;
             if (node.Type == ExpressionNodeType.Constant)
             {
@@ -1250,7 +1252,7 @@ public class ExpressionTree<T, TInput, TOutput> : IFullModel<T, TInput, TOutput>
     /// <remarks>
     /// <b>For Beginners:</b> This tells you how many constant values are in your formula.
     /// For example, if your formula is "2x + 3y + 5", there are 3 parameters: 2, 3, and 5.
-    /// This value is obtained from the Coefficients property.
+    /// This value is obtained from the Coefficients property, which returns a vector of all constant values.
     /// </remarks>
     public virtual int ParameterCount
     {
