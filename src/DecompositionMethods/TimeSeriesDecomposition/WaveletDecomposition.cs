@@ -78,7 +78,7 @@ public class WaveletDecomposition<T> : TimeSeriesDecompositionBase<T>
                 DecomposeSWT();
                 break;
             default:
-                throw new ArgumentOutOfRangeException(nameof(_algorithm), _algorithm, $"Unsupported wavelet decomposition algorithm: {_algorithm}");
+                throw new ArgumentOutOfRangeException(nameof(_algorithm), _algorithm, "Unsupported wavelet decomposition algorithm.");
         }
     }
 
