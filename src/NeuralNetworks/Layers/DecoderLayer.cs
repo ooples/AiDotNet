@@ -368,9 +368,19 @@ public class DecoderLayer<T> : LayerBase<T>
         _norm3.ResetState();
     }
 
+    /// <summary>
+    /// Single-parameter forward pass is not supported for DecoderLayer.
+    /// </summary>
+    /// <param name="input">The input tensor.</param>
+    /// <returns>Not applicable - this method always throws.</returns>
+    /// <exception cref="NotSupportedException">Always thrown as this layer requires multiple inputs.</exception>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> The DecoderLayer requires at least two inputs (decoder input and encoder output),
+    /// so it cannot work with just a single input tensor. Use the multi-parameter Forward method instead.</para>
+    /// </remarks>
     public override Tensor<T> Forward(Tensor<T> input)
     {
-        throw new NotImplementedException();
+        throw new NotSupportedException("DecoderLayer requires multiple inputs. Use Forward(params Tensor<T>[] inputs) with at least two tensors: decoder input and encoder output.");
     }
 
     /// <summary>
