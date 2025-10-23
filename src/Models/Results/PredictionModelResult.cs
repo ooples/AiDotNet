@@ -1,4 +1,4 @@
-﻿global using Newtonsoft.Json;
+global using Newtonsoft.Json;
 global using Formatting = Newtonsoft.Json.Formatting;
 
 namespace AiDotNet.Models.Results;
@@ -575,6 +575,8 @@ public class PredictionModelResult<T, TInput, TOutput> : IPredictiveModel<T, TIn
 
     public void Train(TInput input, TOutput expectedOutput)
     {
+        if (input == null) throw new ArgumentNullException(nameof(input));
+        if (expectedOutput == null) throw new ArgumentNullException(nameof(expectedOutput));
         if (Model == null)
         {
             throw new InvalidOperationException("Model has not been initialized. Cannot train.");
@@ -666,7 +668,8 @@ public class PredictionModelResult<T, TInput, TOutput> : IPredictiveModel<T, TIn
 
         return new PredictionModelResult<T, TInput, TOutput>(newOptimizationResult, newNormalizationInfo)
         {
-            Model = newModel
+            Model = newModel,
+            ModelMetadata = this.ModelMetadata
         };
     }
 
@@ -735,7 +738,8 @@ public class PredictionModelResult<T, TInput, TOutput> : IPredictiveModel<T, TIn
 
         return new PredictionModelResult<T, TInput, TOutput>(copiedOptimizationResult, copiedNormalizationInfo)
         {
-            Model = copiedModel
+            Model = copiedModel,
+            ModelMetadata = this.ModelMetadata
         };
     }
 
@@ -750,7 +754,8 @@ public class PredictionModelResult<T, TInput, TOutput> : IPredictiveModel<T, TIn
 
         return new PredictionModelResult<T, TInput, TOutput>(OptimizationResult, NormalizationInfo)
         {
-            Model = clonedModel
+            Model = clonedModel,
+            ModelMetadata = ModelMetadata
         };
     }
 
