@@ -504,7 +504,6 @@ public class OptimizationResult<T, TInput, TOutput>
         };
     }
 
-
     /// <summary>
     /// Represents detailed results and statistics for a specific dataset (training, validation, or test).
     /// </summary>
