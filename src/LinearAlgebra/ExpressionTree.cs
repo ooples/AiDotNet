@@ -859,7 +859,19 @@ public class ExpressionTree<T, TInput, TOutput> : IFullModel<T, TInput, TOutput>
     /// <param name="featureIndices">The feature indices to use.</param>
     /// <remarks>
     /// <b>For Beginners:</b> This would restrict the formula to only use specific input variables.
-    /// This is not yet implemented for expression trees.
+    /// Variables not in the allowed set are replaced with constant zero values.
+    /// <para>
+    /// <b>Warning:</b> Pruning variables to zero may produce mathematically invalid expressions
+    /// in certain contexts. For example:
+    /// <list type="bullet">
+    /// <item><description>Division operations (x / y): Replacing y with 0 causes divide-by-zero errors</description></item>
+    /// <item><description>Logarithm operations (log(x)): Replacing x with 0 is undefined</description></item>
+    /// <item><description>Power operations (x^y): Some combinations with 0 may be undefined (e.g., 0^0)</description></item>
+    /// </list>
+    /// Ensure that pruning inactive features will not create invalid mathematical operations
+    /// in your expression tree. Consider validating the tree structure after pruning, or
+    /// restructure expressions to handle zero-valued features gracefully.
+    /// </para>
     /// </remarks>
     public virtual void SetActiveFeatureIndices(IEnumerable<int> featureIndices)
     {
@@ -877,6 +889,9 @@ public class ExpressionTree<T, TInput, TOutput> : IFullModel<T, TInput, TOutput>
                     node.SetValue(_numOps.Zero);
                     node.SetLeft(null);
                     node.SetRight(null);
+                    // Note: This may create redundant operations like 'x + 0' or '0 * y'.
+                    // Future enhancement: implement algebraic simplification to optimize
+                    // these patterns (e.g., 'x + 0' -> 'x', '0 * y' -> '0', etc.)
                 }
                 return;
             }
