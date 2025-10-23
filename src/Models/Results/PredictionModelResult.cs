@@ -496,7 +496,7 @@ public class PredictionModelResult<T, TInput, TOutput> : IPredictiveModel<T, TIn
     /// </para>
     /// <para><b>For Beginners:</b> This method loads a model from a file on disk.
     ///
-    /// The LoadModel method:
+    /// The LoadFromFile method:
     /// - Takes a file path where the model is stored
     /// - Reads the byte array from the file
     /// - Deserializes the byte array to restore the model
@@ -507,10 +507,12 @@ public class PredictionModelResult<T, TInput, TOutput> : IPredictiveModel<T, TIn
     /// - You want to deploy a pre-trained model in a production environment
     ///
     /// For example, to load a model, you might use:
-    /// `myModel.LoadModel("C:\\Models\\house_price_predictor.model");`
+    /// `myModel.LoadFromFile("C:\\Models\\house_price_predictor.model");`
+    ///
+    /// <b>Note:</b> This method is distinct from the static LoadModel overload which requires a model factory.
     /// </para>
     /// </remarks>
-    public void LoadModel(string filePath)
+    public void LoadFromFile(string filePath)
     {
         if (string.IsNullOrWhiteSpace(filePath))
         {
@@ -524,6 +526,15 @@ public class PredictionModelResult<T, TInput, TOutput> : IPredictiveModel<T, TIn
 
         var data = File.ReadAllBytes(filePath);
         Deserialize(data);
+    }
+
+    /// <summary>
+    /// Explicit implementation of IModelSerializer.LoadModel to avoid confusion with static LoadModel method.
+    /// </summary>
+    /// <param name="filePath">The path to the file containing the saved model.</param>
+    void IModelSerializer.LoadModel(string filePath)
+    {
+        LoadFromFile(filePath);
     }
 
     /// <summary>
