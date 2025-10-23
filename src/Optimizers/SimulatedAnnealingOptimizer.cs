@@ -245,7 +245,7 @@ public class SimulatedAnnealingOptimizer<T, TInput, TOutput> : OptimizerBase<T, 
     /// </remarks>
     private void UpdateTemperature(T currentFitness, T previousFitness)
     {
-        if (_fitnessCalculator.IsBetterFitness(currentFitness, previousFitness))
+        if (FitnessCalculator.IsBetterFitness(currentFitness, previousFitness))
         {
             _currentTemperature = NumOps.Multiply(_currentTemperature, NumOps.FromDouble(_saOptions.CoolingRate));
         }
@@ -283,7 +283,7 @@ public class SimulatedAnnealingOptimizer<T, TInput, TOutput> : OptimizerBase<T, 
     /// </remarks>
     private void UpdateNeighborGenerationParameters(T currentFitness, T previousFitness)
     {
-        if (_fitnessCalculator.IsBetterFitness(currentFitness, previousFitness))
+        if (FitnessCalculator.IsBetterFitness(currentFitness, previousFitness))
         {
             _saOptions.NeighborGenerationRange *= 0.95;
         }
@@ -353,7 +353,7 @@ public class SimulatedAnnealingOptimizer<T, TInput, TOutput> : OptimizerBase<T, 
     /// </remarks>
     private bool AcceptNewSolution(T currentFitness, T newFitness)
     {
-        if (_fitnessCalculator.IsBetterFitness(newFitness, currentFitness))
+        if (FitnessCalculator.IsBetterFitness(newFitness, currentFitness))
         {
             return true;
         }
