@@ -308,6 +308,8 @@ internal class MappedRandomForestModel<T> : IFullModel<T, Matrix<T>, Vector<T>>
         {
             throw new InvalidOperationException("Failed to deserialize MappedRandomForestModel wrapper format. The file may be corrupted or in an incompatible format.");
         }
+        // Intentionally overwrites _baseModel with deserialized state.
+        // The wrapper metadata (_mapper, _targetFeatures) is immutable and set at construction.
         _baseModel.Deserialize(baseBytes);
     }
 
@@ -329,10 +331,9 @@ internal class MappedRandomForestModel<T> : IFullModel<T, Matrix<T>, Vector<T>>
                         key = s;
                     }
                 }
-                catch (Exception ex)
+                catch (Exception)
                 {
                     // Failed to inverse map feature name, fallback to original key
-                    System.Diagnostics.Debug.WriteLine($"Inverse mapping failed for feature '{kvp.Key}': {ex.Message}");
                 }
         }
         mappedImportance[key] = kvp.Value;
@@ -363,7 +364,7 @@ internal class MappedRandomForestModel<T> : IFullModel<T, Matrix<T>, Vector<T>>
         try
         {
             var magic = reader.ReadInt32();
-            if (magic != 0x4D52464D) { baseBytes = Array.Empty<byte>(); return false; }
+            if (magic != WrapperMagic) { baseBytes = Array.Empty<byte>(); return false; }
             var target = reader.ReadInt32();
             if (target != _targetFeatures)
             {
@@ -374,10 +375,9 @@ internal class MappedRandomForestModel<T> : IFullModel<T, Matrix<T>, Vector<T>>
             baseBytes = reader.ReadBytes(len);
             return true;
         }
-        catch (Exception ex)
+        catch (Exception)
         {
-            // Wrapper deserialization fallback - may indicate corrupted data format
-            System.Diagnostics.Debug.WriteLine($"Wrapper deserialization failed: {ex.Message}");
+            // Wrapper deserialization fallback
             baseBytes = Array.Empty<byte>();
             return false;
         }

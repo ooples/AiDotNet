@@ -937,84 +937,38 @@ public abstract class NonLinearRegressionBase<T> : INonLinearRegression<T>
         get { return Alphas.Length + 1; } // Alphas + bias term
     }
 
-    /// <summary>
-    /// Saves the model to a file at the specified path.
-    /// </summary>
-    /// <param name="filePath">The path where the model should be saved.</param>
-    /// <exception cref="ArgumentNullException">Thrown when filePath is null.</exception>
-    /// <exception cref="ArgumentException">Thrown when filePath is empty or whitespace.</exception>
-    /// <remarks>
-    /// <para>
-    /// This method serializes the model's state (including options, support vectors, alpha coefficients,
-    /// bias term, and regularization) and writes it to a file.
-    /// </para>
-    /// <para>
-    /// For Beginners:
-    /// This method saves your trained model to a file on disk. After training a model, you can use this
-    /// method to save it so you don't have to retrain it every time you want to make predictions.
-    /// Think of it like saving your progress in a video game.
-    /// </para>
-    /// </remarks>
     public virtual void SaveModel(string filePath)
     {
-        if (filePath == null)
-        {
-            throw new ArgumentNullException(nameof(filePath));
-        }
-
         if (string.IsNullOrWhiteSpace(filePath))
-        {
-            throw new ArgumentException("File path cannot be empty or whitespace.", nameof(filePath));
-        }
+            throw new ArgumentException("File path must not be null or empty.", nameof(filePath));
 
-        var directory = Path.GetDirectoryName(filePath);
-        if (!string.IsNullOrEmpty(directory) && !Directory.Exists(directory))
+        try
         {
-            Directory.CreateDirectory(directory);
+            var data = Serialize();
+            var directory = Path.GetDirectoryName(filePath);
+            if (!string.IsNullOrEmpty(directory) && !Directory.Exists(directory))
+                Directory.CreateDirectory(directory);
+            File.WriteAllBytes(filePath, data);
         }
-
-        var modelData = Serialize();
-        File.WriteAllBytes(filePath, modelData);
+        catch (IOException ex) { throw new InvalidOperationException($"Failed to save model to '{filePath}': {ex.Message}", ex); }
+        catch (UnauthorizedAccessException ex) { throw new InvalidOperationException($"Access denied when saving model to '{filePath}': {ex.Message}", ex); }
+        catch (System.Security.SecurityException ex) { throw new InvalidOperationException($"Security error when saving model to '{filePath}': {ex.Message}", ex); }
     }
 
-    /// <summary>
-    /// Loads the model from a file at the specified path.
-    /// </summary>
-    /// <param name="filePath">The path to the file containing the saved model.</param>
-    /// <exception cref="ArgumentNullException">Thrown when filePath is null.</exception>
-    /// <exception cref="ArgumentException">Thrown when filePath is empty or whitespace.</exception>
-    /// <exception cref="FileNotFoundException">Thrown when the specified file does not exist.</exception>
-    /// <remarks>
-    /// <para>
-    /// This method reads a previously saved model from a file and restores the model's state
-    /// (including options, support vectors, alpha coefficients, bias term, and regularization).
-    /// </para>
-    /// <para>
-    /// For Beginners:
-    /// This method loads a previously trained model from a file on disk. After you've trained
-    /// and saved a model, you can use this method to load it back so you can make predictions
-    /// without having to retrain it. Think of it like loading a saved game to continue where
-    /// you left off.
-    /// </para>
-    /// </remarks>
     public virtual void LoadModel(string filePath)
     {
-        if (filePath == null)
-        {
-            throw new ArgumentNullException(nameof(filePath));
-        }
-
         if (string.IsNullOrWhiteSpace(filePath))
-        {
-            throw new ArgumentException("File path cannot be empty or whitespace.", nameof(filePath));
-        }
+            throw new ArgumentException("File path must not be null or empty.", nameof(filePath));
 
-        if (!File.Exists(filePath))
+        try
         {
-            throw new FileNotFoundException($"Model file not found at path: {filePath}", filePath);
+            var data = File.ReadAllBytes(filePath);
+            Deserialize(data);
         }
-
-        var modelData = File.ReadAllBytes(filePath);
-        Deserialize(modelData);
+        catch (FileNotFoundException ex) { throw new FileNotFoundException($"The specified model file does not exist: {filePath}", filePath, ex); }
+        catch (IOException ex) { throw new InvalidOperationException($"File I/O error while loading model from '{filePath}': {ex.Message}", ex); }
+        catch (UnauthorizedAccessException ex) { throw new InvalidOperationException($"Access denied when loading model from '{filePath}': {ex.Message}", ex); }
+        catch (System.Security.SecurityException ex) { throw new InvalidOperationException($"Security error when loading model from '{filePath}': {ex.Message}", ex); }
+        catch (Exception ex) { throw new InvalidOperationException($"Failed to deserialize model from file '{filePath}'. The file may be corrupted or incompatible: {ex.Message}", ex); }
     }
 }
