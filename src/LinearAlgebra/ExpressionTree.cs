@@ -134,15 +134,6 @@ public class ExpressionTree<T, TInput, TOutput> : IFullModel<T, TInput, TOutput>
     private static readonly ThreadLocal<Random> _random = new ThreadLocal<Random>(() => new Random());
 
     /// <summary>
-    /// Disposes the static ThreadLocal<Random> instance to prevent resource leaks.
-    /// Call this method when the application/library is shutting down.
-    /// </summary>
-    public static void DisposeRandom()
-    {
-        _random.Dispose();
-    }
-
-    /// <summary>
     /// Creates a new expression tree node with the specified properties.
     /// </summary>
     /// <param name="type">The type of node to create.</param>
