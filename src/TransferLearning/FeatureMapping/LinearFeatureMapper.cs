@@ -71,7 +71,7 @@ public class LinearFeatureMapper<T> : IFeatureMapper<T>
         _projectionMatrix = ComputeProjectionMatrix(centeredSource, sourceDim, targetDim);
         _reverseProjectionMatrix = ComputeProjectionMatrix(centeredTarget, targetDim, sourceDim);
 
-        // Mark as trained before calling MapToTarget/MapToSource (they check IsTrained flag)
+        // Set trained flag before calling MapToTarget/MapToSource
         IsTrained = true;
 
         // Compute mapping confidence based on reconstruction error
