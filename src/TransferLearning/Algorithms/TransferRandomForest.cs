@@ -333,10 +333,9 @@ internal class MappedRandomForestModel<T> : IFullModel<T, Matrix<T>, Vector<T>>
                 }
                 catch (Exception ex)
                 {
-                    // Failed to inverse map feature name, fallback to original key
-                    Console.WriteLine($"[TransferRandomForest] Failed to inverse map feature name '{kvp.Key}': {ex.Message}");
+                    // Failed to inverse map feature name; using original key as fallback
                 }
-        }
+            }
         mappedImportance[key] = kvp.Value;
         }
         return mappedImportance;
@@ -350,25 +349,9 @@ internal class MappedRandomForestModel<T> : IFullModel<T, Matrix<T>, Vector<T>>
         {
             writer.Write(Convert.ToDouble(_mapper.GetMappingConfidence()));
         }
-        catch (InvalidCastException ex)
-        {
-            // Mapping confidence could not be converted to double (e.g., not a numeric value).
-            // This field is reserved and not critical for deserialization, so fallback to 0.0.
-            // Exception: ex.Message
-            writer.Write(0.0);
-        }
-        catch (FormatException ex)
-        {
-            // Mapping confidence format is invalid.
-            // This field is reserved and not critical for deserialization, so fallback to 0.0.
-            // Exception: ex.Message
-            writer.Write(0.0);
-        }
         catch (Exception ex)
         {
-            // Unexpected exception when writing mapping confidence.
-            // This field is reserved and not critical for deserialization, so fallback to 0.0.
-            // Exception: ex.Message
+            // Failed to write mapping confidence, fallback to 0.0
             writer.Write(0.0);
         }
         writer.Write(baseBytes.Length);
@@ -381,23 +364,24 @@ internal class MappedRandomForestModel<T> : IFullModel<T, Matrix<T>, Vector<T>>
         try
         {
             var magic = reader.ReadInt32();
-            if (magic != WrapperMagic) { baseBytes = Array.Empty<byte>(); return false; }
+            if (magic != WrapperMagic)
+            {
+                baseBytes = Array.Empty<byte>();
+                return false;
+            }
             var target = reader.ReadInt32();
             if (target != _targetFeatures)
             {
                 throw new InvalidOperationException($"Deserialized target feature count ({target}) does not match current instance ({_targetFeatures}).");
             }
-            var confidence = reader.ReadDouble(); // reserved
+            var confidence = reader.ReadDouble(); // Read mapping confidence (currently unused; read to maintain stream compatibility, reserved for future validation/versioning)
             var len = reader.ReadInt32();
             baseBytes = reader.ReadBytes(len);
             return true;
         }
         catch (Exception ex)
         {
-            // Wrapper deserialization fallback.
-            // Expected exceptions: EndOfStreamException, IOException, InvalidOperationException, etc.
-            // Log the exception for troubleshooting failed deserializations.
-            System.Diagnostics.Debug.WriteLine($"[MappedRandomForestModel] Wrapper deserialization failed: {ex}");
+            // Failed to read wrapper format; fallback for backward compatibility with non-wrapped models
             baseBytes = Array.Empty<byte>();
             return false;
         }

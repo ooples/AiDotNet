@@ -150,6 +150,11 @@ public class ExpressionTree<T, TInput, TOutput> : IFullModel<T, TInput, TOutput>
     private int _featureCount;
 
     /// <summary>
+    /// Cached count of parameters (constant nodes) in this expression tree.
+    /// </summary>
+    private int _parameterCount;
+
+    /// <summary>
     /// Gets the number of features (variables) used in this expression tree.
     /// </summary>
     /// <remarks>
@@ -1113,7 +1118,14 @@ public class ExpressionTree<T, TInput, TOutput> : IFullModel<T, TInput, TOutput>
 
     public virtual int ParameterCount
     {
-        get { return Coefficients.Length; }
+        get
+        {
+            if (_parameterCount == 0)
+            {
+                _parameterCount = Coefficients.Length;
+            }
+            return _parameterCount;
+        }
     }
 
     public virtual void SaveModel(string filePath)

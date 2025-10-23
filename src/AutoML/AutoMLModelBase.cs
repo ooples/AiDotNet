@@ -327,7 +327,7 @@ namespace AiDotNet.AutoML
         {
             // AutoML doesn't use traditional training - it searches for the best model
             // This would typically be called internally during the search process
-            throw new NotImplementedException("Use SearchAsync method instead for AutoML");
+            throw new InvalidOperationException("Use SearchAsync method instead for AutoML");
         }
 
         /// <summary>
