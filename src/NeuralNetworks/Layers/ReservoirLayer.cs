@@ -254,61 +254,61 @@ public class ReservoirLayer<T> : LayerBase<T>
     /// </summary>
     /// <param name="outputGradient">The gradient of the loss with respect to the layer's output.</param>
     /// <returns>This method does not return; it throws an exception.</returns>
-    /// <exception cref="NotImplementedException">Always thrown because backward pass is not implemented for ReservoirLayer.</exception>
+    /// <exception cref="InvalidOperationException">Always thrown because backward pass is not supported for ReservoirLayer.</exception>
     /// <remarks>
     /// <para>
-    /// This method is not implemented because Echo State Networks do not train the reservoir through backpropagation.
+    /// This method is not supported because Echo State Networks do not train the reservoir through backpropagation.
     /// In ESNs, only the output layer (typically a separate layer after the reservoir) is trained, while the
     /// reservoir weights remain fixed. Therefore, there is no need to compute gradients with respect to the
     /// reservoir parameters or inputs.
     /// </para>
     /// <para><b>For Beginners:</b> This method throws an error because reservoir layers don't do backward passes.
-    /// 
+    ///
     /// In a standard neural network, the backward pass:
     /// - Calculates how to adjust weights to reduce error
     /// - Propagates error signals backward through the network
-    /// 
+    ///
     /// But in Echo State Networks:
     /// - The reservoir weights are fixed and never change
     /// - There's no need to calculate gradients or propagate errors backward
     /// - Only the output layer (after the reservoir) is trained
-    /// 
+    ///
     /// If you try to call this method, you'll get an error. Instead, you should:
     /// 1. Collect reservoir states for your entire dataset
     /// 2. Train a simple readout layer (like a linear regression) on these states
     /// 3. Use the trained readout layer to make predictions
-    /// 
+    ///
     /// This is what makes Echo State Networks faster and simpler to train than traditional RNNs.
     /// </para>
     /// </remarks>
     public override Tensor<T> Backward(Tensor<T> outputGradient)
     {
         // In ESN, we don't backpropagate through the reservoir
-        throw new NotImplementedException("Backward pass is not implemented for ReservoirLayer in Echo State Networks.");
+        throw new InvalidOperationException("Backward pass is not supported for ReservoirLayer in Echo State Networks as reservoir weights are typically fixed.");
     }
 
     /// <summary>
     /// Updates the parameters of the reservoir layer.
     /// </summary>
     /// <param name="learningRate">The learning rate to use for the parameter updates.</param>
-    /// <exception cref="NotImplementedException">Always thrown because parameter updates are not implemented for ReservoirLayer.</exception>
+    /// <exception cref="InvalidOperationException">Always thrown because parameter updates are not supported for ReservoirLayer.</exception>
     /// <remarks>
     /// <para>
-    /// This method is not implemented because Echo State Networks do not update the reservoir weights during training.
+    /// This method is not supported because Echo State Networks do not update the reservoir weights during training.
     /// In ESNs, only the output layer (typically a separate layer after the reservoir) is trained, while the
     /// reservoir weights remain fixed as initially set. Therefore, there is no need to update the reservoir parameters.
     /// </para>
     /// <para><b>For Beginners:</b> This method throws an error because reservoir layers don't update their weights.
-    /// 
+    ///
     /// In a standard neural network, this method would:
     /// - Update the weights based on the gradients calculated during backward pass
     /// - Adjust the network to better fit the training data
-    /// 
+    ///
     /// But in Echo State Networks:
     /// - The reservoir weights are fixed and never change
     /// - No updates are applied to the weights after initialization
     /// - Only the output layer (after the reservoir) is trained
-    /// 
+    ///
     /// If you try to call this method, you'll get an error. This is normal and expected
     /// because the core principle of Echo State Networks is that the reservoir itself
     /// remains unchanged during training.
@@ -317,7 +317,7 @@ public class ReservoirLayer<T> : LayerBase<T>
     public override void UpdateParameters(T learningRate)
     {
         // In ESN, we don't update the reservoir weights
-        throw new NotImplementedException("Parameter update is not implemented for ReservoirLayer in Echo State Networks.");
+        throw new InvalidOperationException("Parameter update is not supported for ReservoirLayer in Echo State Networks as reservoir weights are typically fixed.");
     }
 
     /// <summary>
