@@ -135,6 +135,16 @@ public class PredictionModelResult<T, TInput, TOutput> : IPredictiveModel<T, TIn
     #region IModelSerializer Implementation
 
     /// <summary>
+    /// Data Transfer Object for serialization of PredictionModelResult.
+    /// </summary>
+    private class SerializationDto
+    {
+        public byte[] Model { get; set; } = Array.Empty<byte>();
+        public OptimizationResult<T, TInput, TOutput>? OptimizationResult { get; set; }
+        public NormalizationInfo<T, TInput, TOutput>? NormalizationInfo { get; set; }
+    }
+
+    /// <summary>
     /// Converts the current state of the model into a binary format.
     /// </summary>
     /// <returns>A byte array containing the serialized model data.</returns>
@@ -145,14 +155,24 @@ public class PredictionModelResult<T, TInput, TOutput> : IPredictiveModel<T, TIn
             throw new InvalidOperationException("Model has not been initialized. Cannot serialize.");
         }
 
-        var data = new
+        if (_optimizationResult == null)
+        {
+            throw new InvalidOperationException("OptimizationResult is missing. Cannot serialize.");
+        }
+
+        if (_normalizationInfo == null)
+        {
+            throw new InvalidOperationException("NormalizationInfo is missing. Cannot serialize.");
+        }
+
+        var dto = new SerializationDto
         {
             Model = _innerModel.Serialize(),
             OptimizationResult = _optimizationResult,
             NormalizationInfo = _normalizationInfo
         };
 
-        return JsonSerializer.SerializeToUtf8Bytes(data);
+        return JsonSerializer.SerializeToUtf8Bytes(dto);
     }
 
     /// <summary>
@@ -166,8 +186,8 @@ public class PredictionModelResult<T, TInput, TOutput> : IPredictiveModel<T, TIn
             throw new ArgumentNullException(nameof(data));
         }
 
-        var jsonData = JsonSerializer.Deserialize<Dictionary<string, object>>(data);
-        if (jsonData == null)
+        var dto = JsonSerializer.Deserialize<SerializationDto>(data);
+        if (dto == null)
         {
             throw new InvalidOperationException("Failed to deserialize model data.");
         }
@@ -255,7 +275,7 @@ public class PredictionModelResult<T, TInput, TOutput> : IPredictiveModel<T, TIn
         {
             if (_innerModel == null)
             {
-                return 0;
+                throw new InvalidOperationException("Model has not been initialized. Cannot get parameter count.");
             }
 
             return _innerModel.ParameterCount;
@@ -304,7 +324,7 @@ public class PredictionModelResult<T, TInput, TOutput> : IPredictiveModel<T, TIn
     {
         if (_innerModel == null)
         {
-            return Enumerable.Empty<int>();
+            throw new InvalidOperationException("Model has not been initialized. Cannot get active feature indices.");
         }
 
         return _innerModel.GetActiveFeatureIndices();
@@ -351,7 +371,7 @@ public class PredictionModelResult<T, TInput, TOutput> : IPredictiveModel<T, TIn
     {
         if (_innerModel == null)
         {
-            return new Dictionary<string, T>();
+            throw new InvalidOperationException("Model has not been initialized. Cannot get feature importance.");
         }
 
         return _innerModel.GetFeatureImportance();
