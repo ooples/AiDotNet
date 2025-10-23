@@ -120,20 +120,18 @@ public class BayesianOptimizerOptions<T, TInput, TOutput> : OptimizationAlgorith
     public AcquisitionFunctionType AcquisitionFunction { get; set; } = AcquisitionFunctionType.UpperConfidenceBound;
 
     /// <summary>
-    /// Gets or sets the kernel function used by the Gaussian Process model for measuring similarity between points.
+    /// Gets or sets the kernel function used by the Gaussian Process model.
     /// </summary>
     /// <value>The kernel function, defaulting to Gaussian kernel (also known as Radial Basis Function kernel).</value>
     /// <remarks>
     /// <para>
-    /// The kernel function determines how the algorithm measures similarity between points in the search space,
-    /// which affects how it generalizes from observed data points to unobserved points. Different kernel functions
-    /// can be used depending on the expected structure of the objective function.
+    /// The kernel function determines how the algorithm measures similarity between points in the search space, which affects how it generalizes from observed data points to unobserved points.
+    /// Different kernel functions can be used depending on the expected structure of the objective function.
     /// </para>
-    /// <para><b>For Beginners:</b> The kernel function helps the algorithm understand how similar different points are
-    /// to each other. The default Gaussian kernel (also called Radial Basis Function kernel) assumes that points close to each other will
-    /// have similar values, with the similarity decreasing smoothly as distance increases. This is like assuming that in
-    /// our hilly landscape, nearby locations tend to have similar heights. The Gaussian kernel works well for many problems,
-    /// especially when the underlying function is smooth.</para>
+    /// <para><b>For Beginners:</b> The kernel function helps the algorithm understand how similar different points are to each other.
+    /// The default Gaussian kernel (also called Radial Basis Function kernel) assumes that points close to each other will have similar values, with the similarity decreasing smoothly as distance increases.
+    /// This is like assuming that in our hilly landscape, nearby locations tend to have similar heights.
+    /// The Gaussian kernel works well for many problems, especially when the underlying function is smooth.</para>
     /// </remarks>
     public IKernelFunction<T> Kernel { get; set; } = new GaussianKernel<T>();
 
