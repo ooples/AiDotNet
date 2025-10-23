@@ -68,7 +68,7 @@ public class TransferRandomForest<T> : TransferLearningBase<T, Matrix<T>, Vector
     /// <remarks>
     /// NOTE: This implementation requires source domain data to properly train the feature mapper
     /// and domain adapter. The current API limitations prevent passing source data, so this method
-    /// will throw InvalidOperationException. Users should provide source data through the feature
+    /// will throw NotImplementedException. Users should provide source data through the feature
     /// mapper and domain adapter before calling transfer, or use the public Transfer() method
     /// that accepts source data.
     /// </remarks>
@@ -77,7 +77,7 @@ public class TransferRandomForest<T> : TransferLearningBase<T, Matrix<T>, Vector
         Matrix<T> targetData,
         Vector<T> targetLabels)
     {
-        throw new InvalidOperationException(
+        throw new NotImplementedException(
             "Cross-domain transfer requires source domain data for proper feature mapping and domain adaptation. " +
             "The protected TransferCrossDomain method cannot access source data due to API limitations. " +
             "Please use the public Transfer(sourceModel, sourceData, targetData, targetLabels) method instead, " +
@@ -308,12 +308,10 @@ internal class MappedRandomForestModel<T> : IFullModel<T, Matrix<T>, Vector<T>>
         {
             throw new InvalidOperationException("Failed to deserialize MappedRandomForestModel wrapper format. The file may be corrupted or in an incompatible format.");
         }
-        // Intentionally overwrites _baseModel with deserialized state.
-        // The wrapper metadata (_mapper, _targetFeatures) is immutable and set at construction.
         _baseModel.Deserialize(baseBytes);
     }
 
-        public virtual Dictionary<string, T> GetFeatureImportance()
+    public virtual Dictionary<string, T> GetFeatureImportance()
     {
         var baseImportance = _baseModel.GetFeatureImportance();
         var mappedImportance = new Dictionary<string, T>(baseImportance.Count);
@@ -336,7 +334,7 @@ internal class MappedRandomForestModel<T> : IFullModel<T, Matrix<T>, Vector<T>>
                     // Failed to inverse map feature name; using original key as fallback
                 }
             }
-        mappedImportance[key] = kvp.Value;
+            mappedImportance[key] = kvp.Value;
         }
         return mappedImportance;
     }
@@ -392,4 +390,3 @@ internal class MappedRandomForestModel<T> : IFullModel<T, Matrix<T>, Vector<T>>
         _baseModel.SetActiveFeatureIndices(featureIndices);
     }
 }
-
