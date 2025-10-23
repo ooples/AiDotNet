@@ -1219,9 +1219,9 @@ public class ExpressionTree<T, TInput, TOutput> : IFullModel<T, TInput, TOutput>
         {
             if (node == null)
                 return currentIndex;
-            if (node == null)
-                return currentIndex;
-            if (node == null) return currentIndex;
+            
+            
+            
             int nextIndex = currentIndex;
             if (node.Type == ExpressionNodeType.Constant)
             {
