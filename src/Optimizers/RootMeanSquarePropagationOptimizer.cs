@@ -1,3 +1,5 @@
+using Newtonsoft.Json;
+
 /// <summary>
 /// Implements the Root Mean Square Propagation (RMSProp) optimization algorithm, an adaptive learning rate method.
 /// </summary>

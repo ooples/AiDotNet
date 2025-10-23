@@ -1,3 +1,5 @@
+using Newtonsoft.Json;
+
 namespace AiDotNet.TimeSeries;
 
 /// <summary>

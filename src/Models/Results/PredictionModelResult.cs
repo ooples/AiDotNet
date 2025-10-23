@@ -1,4 +1,4 @@
-﻿global using Newtonsoft.Json;
+global using Newtonsoft.Json;
 global using Formatting = Newtonsoft.Json.Formatting;
 
 namespace AiDotNet.Models.Results;
