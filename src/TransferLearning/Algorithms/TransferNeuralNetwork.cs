@@ -19,6 +19,15 @@ namespace AiDotNet.TransferLearning.Algorithms;
 public class TransferNeuralNetwork<T> : TransferLearningBase<T, Matrix<T>, Vector<T>>
 {
     /// <summary>
+    /// The weight for true labels when combining with soft labels during knowledge distillation.
+    /// </summary>
+    /// <remarks>
+    /// A value of 0.7 means true labels have 70% weight and soft labels have 30% weight.
+    /// Higher values trust the true labels more, lower values trust the source model predictions more.
+    /// </remarks>
+    private const double KnowledgeDistillationWeight = 0.7;
+
+    /// <summary>
     /// Transfers a Neural Network model to a target domain with the same feature space.
     /// </summary>
     /// <remarks>
@@ -80,11 +89,11 @@ public class TransferNeuralNetwork<T> : TransferLearningBase<T, Matrix<T>, Vecto
         Vector<T> softLabels = sourceModel.Predict(mappedTargetData);
 
         // Combine soft labels with true labels
-        Vector<T> combinedLabels = CombineLabels(softLabels, targetLabels, 0.7);
+        Vector<T> combinedLabels = CombineLabels(softLabels, targetLabels, KnowledgeDistillationWeight);
 
         // Create and train a new model on the target domain
         var targetModel = sourceModel.DeepCopy();
-        targetModel.Train(targetData, combinedLabels);
+        targetModel.Train(mappedTargetData, combinedLabels);
 
         return targetModel;
     }
