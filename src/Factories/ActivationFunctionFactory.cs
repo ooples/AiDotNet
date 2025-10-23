@@ -24,17 +24,26 @@ public static class ActivationFunctionFactory<T>
     /// <param name="activationFunction">The type of activation function to create.</param>
     /// <returns>An implementation of IActivationFunction<T> for the specified activation function type.</returns>
     /// <exception cref="NotSupportedException">Thrown when trying to create a Softmax activation function, which requires vector input.</exception>
-    /// <exception cref="NotImplementedException">Thrown when the requested activation function type is not implemented.</exception>
+    /// <exception cref="ArgumentException">Thrown when the requested activation function type is not supported.</exception>
     /// <remarks>
     /// <para>
     /// <b>For Beginners:</b> Single-value activation functions process one number at a time. They're typically 
     /// used in the hidden layers of neural networks to introduce non-linearity.
     /// </para>
     /// <para>
-    /// Currently supported activation functions:
+    /// Supported scalar activation functions:
     /// <list type="bullet">
-    /// <item><description>ReLU (Rectified Linear Unit): Outputs the input if it's positive, otherwise outputs zero. 
-    /// It's like a gate that only lets positive values through.</description></item>
+    /// <item><description>ReLU (Rectified Linear Unit): Outputs the input if it's positive, otherwise outputs zero.</description></item>
+    /// <item><description>Sigmoid: Maps inputs to values between 0 and 1.</description></item>
+    /// <item><description>Tanh: Maps inputs to values between -1 and 1.</description></item>
+    /// <item><description>Linear/Identity: Returns the input value unchanged.</description></item>
+    /// <item><description>LeakyReLU: Similar to ReLU but allows small negative values.</description></item>
+    /// <item><description>ELU: Exponential Linear Unit with smooth negative values.</description></item>
+    /// <item><description>SELU: Scaled Exponential Linear Unit for self-normalizing networks.</description></item>
+    /// <item><description>Softplus: Smooth approximation of ReLU.</description></item>
+    /// <item><description>SoftSign: Maps inputs to values between -1 and 1 with smooth asymptotes.</description></item>
+    /// <item><description>Swish: Self-gated activation function (x * sigmoid(x)).</description></item>
+    /// <item><description>GELU: Gaussian Error Linear Unit used in transformers.</description></item>
     /// </list>
     /// </para>
     /// <para>
@@ -58,7 +67,7 @@ public static class ActivationFunctionFactory<T>
             ActivationFunction.SoftSign => new SoftSignActivation<T>(),
             ActivationFunction.Swish => new SwishActivation<T>(),
             ActivationFunction.GELU => new GELUActivation<T>(),
-            _ => throw new NotImplementedException($"Activation function {activationFunction} not implemented.")
+            _ => throw new ArgumentException($"Unsupported activation function: {activationFunction}", nameof(activationFunction))
         };
     }
 
@@ -67,18 +76,27 @@ public static class ActivationFunctionFactory<T>
     /// </summary>
     /// <param name="activationFunction">The type of activation function to create.</param>
     /// <returns>An implementation of IVectorActivationFunction<T> for the specified activation function type.</returns>
-    /// <exception cref="NotImplementedException">Thrown when the requested vector activation function type is not implemented.</exception>
+    /// <exception cref="ArgumentException">Thrown when the requested vector activation function type is not supported.</exception>
     /// <remarks>
     /// <para>
     /// <b>For Beginners:</b> Vector activation functions process multiple numbers together as a group. 
     /// They're typically used in the output layer of neural networks for classification tasks.
     /// </para>
     /// <para>
-    /// Currently supported vector activation functions:
+    /// Supported vector activation functions (all scalar functions can also be applied element-wise to vectors):
     /// <list type="bullet">
-    /// <item><description>Softmax: Converts a vector of numbers into a probability distribution (values between 0 and 1 
-    /// that sum to 1). It's commonly used in the output layer of classification networks to represent the probability 
-    /// of each possible class.</description></item>
+    /// <item><description>Softmax: Converts a vector into a probability distribution (values sum to 1).</description></item>
+    /// <item><description>ReLU: Applied element-wise to each value in the vector.</description></item>
+    /// <item><description>Sigmoid: Applied element-wise to each value in the vector.</description></item>
+    /// <item><description>Tanh: Applied element-wise to each value in the vector.</description></item>
+    /// <item><description>Linear/Identity: Applied element-wise to each value in the vector.</description></item>
+    /// <item><description>LeakyReLU: Applied element-wise to each value in the vector.</description></item>
+    /// <item><description>ELU: Applied element-wise to each value in the vector.</description></item>
+    /// <item><description>SELU: Applied element-wise to each value in the vector.</description></item>
+    /// <item><description>Softplus: Applied element-wise to each value in the vector.</description></item>
+    /// <item><description>SoftSign: Applied element-wise to each value in the vector.</description></item>
+    /// <item><description>Swish: Applied element-wise to each value in the vector.</description></item>
+    /// <item><description>GELU: Applied element-wise to each value in the vector.</description></item>
     /// </list>
     /// </para>
     /// </remarks>
@@ -98,7 +116,7 @@ public static class ActivationFunctionFactory<T>
             ActivationFunction.SoftSign => new SoftSignActivation<T>(),
             ActivationFunction.Swish => new SwishActivation<T>(),
             ActivationFunction.GELU => new GELUActivation<T>(),
-            _ => throw new NotImplementedException($"Vector activation function {activationFunction} not implemented.")
+            _ => throw new ArgumentException($"Unsupported vector activation function: {activationFunction}", nameof(activationFunction))
         };
     }
 }
