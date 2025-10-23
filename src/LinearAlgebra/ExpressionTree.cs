@@ -1227,7 +1227,7 @@ public class ExpressionTree<T, TInput, TOutput> : IFullModel<T, TInput, TOutput>
 
         // Assign parameter values to constant nodes in a deterministic traversal order
         // Local function returns next index to use - includes null check for safety
-        int AssignAndReturnNextIndex(ExpressionTree<T, TInput, TOutput>? node, int currentIndex)
+            if (node == null) return currentIndex;
         {
             if (node == null)
                 return currentIndex;
