@@ -308,6 +308,8 @@ internal class MappedRandomForestModel<T> : IFullModel<T, Matrix<T>, Vector<T>>
         {
             throw new InvalidOperationException("Failed to deserialize MappedRandomForestModel wrapper format. The file may be corrupted or in an incompatible format.");
         }
+        // Intentionally overwrites _baseModel with deserialized state.
+        // The wrapper metadata (_mapper, _targetFeatures) is immutable and set at construction.
         _baseModel.Deserialize(baseBytes);
     }
 
@@ -379,7 +381,7 @@ internal class MappedRandomForestModel<T> : IFullModel<T, Matrix<T>, Vector<T>>
         }
         catch (Exception ex)
         {
-            // Wrapper deserialization fallback
+            // Failed to read wrapper format; fallback for backward compatibility with non-wrapped models
             baseBytes = Array.Empty<byte>();
             return false;
         }
