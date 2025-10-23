@@ -1,4 +1,6 @@
-﻿namespace AiDotNet.Genetics;
+using Newtonsoft.Json;
+
+namespace AiDotNet.Genetics;
 
 /// <summary>
 /// Provides a base implementation of IGeneticModel that handles common genetic algorithm operations.

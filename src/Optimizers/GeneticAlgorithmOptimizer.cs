@@ -1,4 +1,5 @@
 global using AiDotNet.Genetics;
+using Newtonsoft.Json;
 
 namespace AiDotNet.Optimizers;
 
