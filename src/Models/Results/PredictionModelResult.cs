@@ -16,8 +16,13 @@ namespace AiDotNet.Models.Results;
 /// - Information about how the model was optimized
 /// - Details about how the data was normalized
 ///
-/// This wrapper allows the model to be used for predictions, saved, loaded, and provides access
+/// This wrapper allows the model to be used for predictions and provides access
 /// to all the metadata about how it was created and how well it performs.
+///
+/// <b>IMPORTANT LIMITATION:</b> SaveModel and LoadModel methods are not yet fully implemented.
+/// While SaveModel will serialize the model data to a file, LoadModel cannot currently deserialize
+/// the data back into a working model due to incomplete type reconstruction logic. Use with caution
+/// in production scenarios that require model persistence.
 /// </remarks>
 public class PredictionModelResult<T, TInput, TOutput> : IPredictiveModel<T, TInput, TOutput>, IFullModel<T, TInput, TOutput>
 {
