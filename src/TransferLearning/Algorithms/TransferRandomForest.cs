@@ -66,59 +66,22 @@ public class TransferRandomForest<T> : TransferLearningBase<T, Matrix<T>, Vector
     /// Transfers a Random Forest model to a target domain with a different feature space.
     /// </summary>
     /// <remarks>
-    /// This method assumes the FeatureMapper has been pre-trained with source data.
-    /// If the mapper is not trained, an exception will be thrown.
-    /// For automatic training, use the public Transfer() method that accepts source data.
+    /// NOTE: This implementation requires source domain data to properly train the feature mapper
+    /// and domain adapter. The current API limitations prevent passing source data, so this method
+    /// will throw NotImplementedException. Users should provide source data through the feature
+    /// mapper and domain adapter before calling transfer, or use the public Transfer() method
+    /// that accepts source data.
     /// </remarks>
     protected override IFullModel<T, Matrix<T>, Vector<T>> TransferCrossDomain(
         IFullModel<T, Matrix<T>, Vector<T>> sourceModel,
         Matrix<T> targetData,
         Vector<T> targetLabels)
     {
-        // Validate that feature mapper is available and trained
-        if (FeatureMapper == null)
-        {
-            throw new InvalidOperationException(
-                "Cross-domain transfer requires a feature mapper. Use SetFeatureMapper() before transfer.");
-        }
-
-        if (!FeatureMapper.IsTrained)
-        {
-            throw new InvalidOperationException(
-                "FeatureMapper must be trained before calling TransferCrossDomain. " +
-                "Either pre-train the mapper or use the public Transfer() method with source data.");
-        }
-
-        // Get source model's feature dimension
-        int sourceFeatures = sourceModel.GetActiveFeatureIndices().Count();
-
-        // Map target features to source feature space
-        Matrix<T> mappedTargetData = FeatureMapper.MapToSource(targetData, sourceFeatures);
-
-        // Apply domain adaptation if available and not requiring additional training
-        if (DomainAdapter != null)
-        {
-            if (DomainAdapter.RequiresTraining)
-            {
-                throw new InvalidOperationException(
-                    "DomainAdapter requires training but no source data is available. " +
-                    "Either pre-train the DomainAdapter or use the public Transfer() method with source data.");
-            }
-            mappedTargetData = DomainAdapter.AdaptSource(mappedTargetData, targetData);
-        }
-
-        // Use source model for predictions on mapped data (knowledge distillation)
-        Vector<T> pseudoLabels = sourceModel.Predict(mappedTargetData);
-
-        // Combine pseudo-labels with true labels
-        var combinedLabels = CombineLabels(pseudoLabels, targetLabels, 0.7); // 70% weight on true labels
-
-        // Train new model on target domain with combined labels
-        var targetModel = new RandomForestRegression<T>(_options, _regularization);
-        targetModel.Train(targetData, combinedLabels);
-
-        // Wrap the model to handle feature mapping at prediction time
-        return new MappedRandomForestModel<T>(targetModel, FeatureMapper, sourceFeatures);
+        throw new NotImplementedException(
+            "Cross-domain transfer requires source domain data for proper feature mapping and domain adaptation. " +
+            "The protected TransferCrossDomain method cannot access source data due to API limitations. " +
+            "Please use the public Transfer(sourceModel, sourceData, targetData, targetLabels) method instead, " +
+            "or pre-train the FeatureMapper and DomainAdapter with source data before calling this method.");
     }
 
     /// <summary>
@@ -345,6 +308,8 @@ internal class MappedRandomForestModel<T> : IFullModel<T, Matrix<T>, Vector<T>>
         {
             throw new InvalidOperationException("Failed to deserialize MappedRandomForestModel wrapper format. The file may be corrupted or in an incompatible format.");
         }
+        // Intentionally overwrites _baseModel with deserialized state.
+        // The wrapper metadata (_mapper, _targetFeatures) is immutable and set at construction.
         _baseModel.Deserialize(baseBytes);
     }
 
@@ -368,7 +333,7 @@ internal class MappedRandomForestModel<T> : IFullModel<T, Matrix<T>, Vector<T>>
                 }
                 catch (Exception)
                 {
-                    // Failed to inverse map feature name, fallback to original key.
+                    // Failed to inverse map feature name, fallback to original key
                 }
         }
         mappedImportance[key] = kvp.Value;
@@ -386,7 +351,7 @@ internal class MappedRandomForestModel<T> : IFullModel<T, Matrix<T>, Vector<T>>
         }
         catch
         {
-            // Failed to write mapping confidence, fallback to 0.0.
+            // Failed to write mapping confidence, fallback to 0.0
             writer.Write(0.0);
         }
         writer.Write(baseBytes.Length);
@@ -399,7 +364,7 @@ internal class MappedRandomForestModel<T> : IFullModel<T, Matrix<T>, Vector<T>>
         try
         {
             var magic = reader.ReadInt32();
-            if (magic != 0x4D52464D) { baseBytes = Array.Empty<byte>(); return false; }
+            if (magic != WrapperMagic) { baseBytes = Array.Empty<byte>(); return false; }
             var target = reader.ReadInt32();
             if (target != _targetFeatures)
             {
@@ -412,7 +377,7 @@ internal class MappedRandomForestModel<T> : IFullModel<T, Matrix<T>, Vector<T>>
         }
         catch (Exception)
         {
-            // Wrapper deserialization fallback.
+            // Wrapper deserialization fallback
             baseBytes = Array.Empty<byte>();
             return false;
         }
