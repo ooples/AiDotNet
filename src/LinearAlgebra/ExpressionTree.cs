@@ -835,8 +835,6 @@ public class ExpressionTree<T, TInput, TOutput> : IFullModel<T, TInput, TOutput>
 
         void CountFeatureOccurrences(ExpressionTree<T, TInput, TOutput> node)
         {
-            if (node == null) return;
-
             if (node.Type == ExpressionNodeType.Variable)
             {
                 int featureIndex = _numOps.ToInt32(node.Value);
@@ -864,11 +862,7 @@ public class ExpressionTree<T, TInput, TOutput> : IFullModel<T, TInput, TOutput>
         CountFeatureOccurrences(this);
 
         // Convert counts to importance scores (normalized by total occurrences)
-        int totalCount = 0;
-        foreach (var count in featureCounts.Values)
-        {
-            totalCount += count;
-        }
+        int totalCount = featureCounts.Values.Sum();
 
         Dictionary<string, T> importance = new Dictionary<string, T>();
         if (totalCount > 0)
@@ -904,8 +898,6 @@ public class ExpressionTree<T, TInput, TOutput> : IFullModel<T, TInput, TOutput>
 
         void DeactivateInactiveFeatures(ExpressionTree<T, TInput, TOutput> node)
         {
-            if (node == null) return;
-
             // If this is a variable node and it's not in the active set, replace it with zero
             if (node.Type == ExpressionNodeType.Variable)
             {
