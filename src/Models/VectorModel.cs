@@ -85,6 +85,11 @@ public class VectorModel<T> : IFullModel<T, Matrix<T>, Vector<T>>
     private static readonly INumericOperations<T> _numOps = MathHelper.GetNumericOperations<T>();
 
     /// <summary>
+    /// Cached feature importance to avoid recreating on every GetModelMetaData() call.
+    /// </summary>
+    private Dictionary<string, T>? _cachedFeatureImportance;
+
+    /// <summary>
     /// Initializes a new instance of the VectorModel class with the specified coefficients.
     /// </summary>
     /// <param name="coefficients">The vector of coefficients for the model.</param>
@@ -355,6 +360,9 @@ public class VectorModel<T> : IFullModel<T, Matrix<T>, Vector<T>>
             {
                 Coefficients[i] = newCoefficients[i];
             }
+
+            // Invalidate cached feature importance
+            _cachedFeatureImportance = null;
         }
         catch (Exception ex)
         {
@@ -586,6 +594,9 @@ public class VectorModel<T> : IFullModel<T, Matrix<T>, Vector<T>>
             {
                 Coefficients[i] = _numOps.FromDouble(reader.ReadDouble());
             }
+
+            // Invalidate cached feature importance
+            _cachedFeatureImportance = null;
         }
         catch (Exception ex) when (!(ex is ArgumentNullException || ex is ArgumentException || ex is InvalidOperationException))
         {
@@ -620,7 +631,26 @@ public class VectorModel<T> : IFullModel<T, Matrix<T>, Vector<T>>
             throw new ArgumentNullException(nameof(filePath));
         }
 
-        File.WriteAllBytes(filePath, Serialize());
+        try
+        {
+            File.WriteAllBytes(filePath, Serialize());
+        }
+        catch (UnauthorizedAccessException ex)
+        {
+            throw new InvalidOperationException($"Access denied when saving model to '{filePath}'. Check file permissions.", ex);
+        }
+        catch (DirectoryNotFoundException ex)
+        {
+            throw new InvalidOperationException($"Directory not found when saving model to '{filePath}'. Ensure the directory exists.", ex);
+        }
+        catch (IOException ex)
+        {
+            throw new InvalidOperationException($"IO error occurred while saving model to '{filePath}'. The file may be in use or the disk may be full.", ex);
+        }
+        catch (Exception ex) when (!(ex is ArgumentNullException || ex is InvalidOperationException))
+        {
+            throw new InvalidOperationException($"Unexpected error saving model to '{filePath}'.", ex);
+        }
     }
 
     /// <summary>
@@ -656,8 +686,27 @@ public class VectorModel<T> : IFullModel<T, Matrix<T>, Vector<T>>
             throw new FileNotFoundException($"Model file not found: {filePath}", filePath);
         }
 
-        byte[] data = File.ReadAllBytes(filePath);
-        Deserialize(data);
+        try
+        {
+            byte[] data = File.ReadAllBytes(filePath);
+            Deserialize(data);
+        }
+        catch (UnauthorizedAccessException ex)
+        {
+            throw new InvalidOperationException($"Access denied when loading model from '{filePath}'. Check file permissions.", ex);
+        }
+        catch (IOException ex)
+        {
+            throw new InvalidOperationException($"IO error occurred while loading model from '{filePath}'. The file may be in use or corrupted.", ex);
+        }
+        catch (ArgumentException ex)
+        {
+            throw new InvalidOperationException($"Invalid model file format at '{filePath}'. The file may be corrupted or not a valid VectorModel.", ex);
+        }
+        catch (Exception ex) when (!(ex is ArgumentNullException || ex is FileNotFoundException || ex is InvalidOperationException))
+        {
+            throw new InvalidOperationException($"Unexpected error loading model from '{filePath}'.", ex);
+        }
     }
 
     /// <summary>
@@ -803,6 +852,9 @@ public class VectorModel<T> : IFullModel<T, Matrix<T>, Vector<T>>
         {
             Coefficients[i] = parameters[i];
         }
+
+        // Invalidate cached feature importance
+        _cachedFeatureImportance = null;
     }
 
     /// <summary>
@@ -974,6 +1026,9 @@ public class VectorModel<T> : IFullModel<T, Matrix<T>, Vector<T>>
                 Coefficients[i] = _numOps.Zero;
             }
         }
+
+        // Invalidate cached feature importance
+        _cachedFeatureImportance = null;
     }
 
     /// <summary>
@@ -1001,11 +1056,17 @@ public class VectorModel<T> : IFullModel<T, Matrix<T>, Vector<T>>
     /// </remarks>
     public Dictionary<string, T> GetFeatureImportance()
     {
+        if (_cachedFeatureImportance != null)
+        {
+            return _cachedFeatureImportance;
+        }
+
         var importance = new Dictionary<string, T>();
         for (int i = 0; i < Coefficients.Length; i++)
         {
             importance.Add($"Feature_{i}", _numOps.Abs(Coefficients[i]));
         }
+        _cachedFeatureImportance = importance;
         return importance;
     }
 
