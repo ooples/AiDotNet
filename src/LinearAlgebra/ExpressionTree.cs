@@ -185,36 +185,44 @@ public class ExpressionTree<T, TInput, TOutput> : IFullModel<T, TInput, TOutput>
     }
 
     /// <summary>
-    /// Calculates the number of features required by this expression tree.
+    /// Calculates the number of unique features used in this expression tree.
     /// </summary>
-    /// <returns>The minimum number of features required (highest feature index + 1).</returns>
+    /// <returns>The count of unique features actually used in the tree.</returns>
     /// <remarks>
-    /// This method returns the highest feature index used plus one, which represents
-    /// the minimum number of features required to evaluate this tree. For example,
-    /// if the tree uses features x[0] and x[5], this returns 6 (not 2), because
-    /// the input must have at least 6 features to access index 5.
+    /// This method counts the unique feature indices used in the tree. For example,
+    /// if the tree uses features x[0] and x[5], this returns 2 (the count of unique features),
+    /// not 6. This accurately represents how many different input variables the formula uses.
     /// </remarks>
     private int CalculateFeatureCount()
     {
-        return CalculateFeatureCountRecursive(this);
+        HashSet<int> uniqueFeatures = new HashSet<int>();
+        CollectUniqueFeatures(this, uniqueFeatures);
+        return uniqueFeatures.Count;
     }
 
     /// <summary>
-    /// Recursively finds the highest feature index used in a node and its children.
+    /// Recursively collects unique feature indices used in a node and its children.
     /// </summary>
     /// <param name="node">The node to check.</param>
-    /// <returns>The highest feature index + 1 (to represent minimum required features).</returns>
-    private int CalculateFeatureCountRecursive(ExpressionTree<T, TInput, TOutput> node)
+    /// <param name="uniqueFeatures">The set to collect unique feature indices.</param>
+    private void CollectUniqueFeatures(ExpressionTree<T, TInput, TOutput> node, HashSet<int> uniqueFeatures)
     {
+        if (node == null) return;
+
         if (node.Type == ExpressionNodeType.Variable)
         {
-            return _numOps.ToInt32(node.Value) + 1; // Add 1 because feature indices are 0-based
+            uniqueFeatures.Add(_numOps.ToInt32(node.Value));
         }
 
-        int leftCount = node.Left != null ? CalculateFeatureCountRecursive(node.Left) : 0;
-        int rightCount = node.Right != null ? CalculateFeatureCountRecursive(node.Right) : 0;
+        if (node.Left != null)
+        {
+            CollectUniqueFeatures(node.Left, uniqueFeatures);
+        }
 
-        return Math.Max(leftCount, rightCount);
+        if (node.Right != null)
+        {
+            CollectUniqueFeatures(node.Right, uniqueFeatures);
+        }
     }
 
     /// <summary>
