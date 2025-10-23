@@ -1168,9 +1168,9 @@ public abstract class OptimizerBase<T, TInput, TOutput> : IOptimizer<T, TInput, 
     /// <summary>
     /// Initializes a random solution within the given bounds.
     /// </summary>
-    /// <param name="lowerBounds">Lower bounds for each parameter</param>
-    /// <param name="upperBounds">Upper bounds for each parameter</param>
-    /// <returns>A vector representing a random solution</returns>
+    /// <param name="lowerBounds">Lower bounds for each parameter.</param>
+    /// <param name="upperBounds">Upper bounds for each parameter.</param>
+    /// <returns>A vector representing a random solution.</returns>
     protected virtual Vector<T> InitializeRandomSolution(Vector<T> lowerBounds, Vector<T> upperBounds)
     {
         if (lowerBounds == null) throw new ArgumentNullException(nameof(lowerBounds));
