@@ -201,7 +201,10 @@ public class PredictionModelResult<T, TInput, TOutput> : IPredictiveModel<T, TIn
         // 1. Deserialize the inner model type information
         // 2. Reconstruct the inner model using the appropriate type
         // 3. Properly deserialize OptimizationResult and NormalizationInfo
-        throw new NotImplementedException("Full deserialization logic needs to be implemented based on specific model types.");
+        throw new NotSupportedException(
+            "Deserialization is not currently supported due to incomplete type reconstruction logic. " +
+            "SaveModel will serialize the model data, but LoadModel cannot restore it. " +
+            "See class-level documentation for details about this limitation.");
     }
 
     /// <summary>
