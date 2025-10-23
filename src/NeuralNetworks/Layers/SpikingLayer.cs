@@ -735,7 +735,7 @@ public class SpikingLayer<T> : LayerBase<T>
             SpikingNeuronType.Izhikevich => UpdateIzhikevich(current),
             SpikingNeuronType.HodgkinHuxley => UpdateHodgkinHuxley(current),
             SpikingNeuronType.AdaptiveExponential => UpdateAdaptiveExponential(current),
-            _ => throw new NotImplementedException($"Neuron type {_neuronType} not implemented."),
+            _ => throw new ArgumentOutOfRangeException(nameof(_neuronType), _neuronType, $"Neuron type {_neuronType} is not supported."),
         };
     }
     
@@ -1039,9 +1039,9 @@ public class SpikingLayer<T> : LayerBase<T>
         double ENa = 50.0;   // Sodium reversal potential (mV)
         double EK = -77.0;   // Potassium reversal potential (mV)
         double EL = -54.387; // Leak reversal potential (mV)
-        double gNa = 120.0;  // Maximum sodium conductance (mS/cm²)
-        double gK = 36.0;    // Maximum potassium conductance (mS/cm²)
-        double gL = 0.3;     // Leak conductance (mS/cm²)
+        double gNa = 120.0;  // Maximum sodium conductance (mS/cmï¿½)
+        double gK = 36.0;    // Maximum potassium conductance (mS/cmï¿½)
+        double gL = 0.3;     // Leak conductance (mS/cmï¿½)
         double dt = 0.01;    // Time step (ms)
     
         for (int i = 0; i < _membranePotential.Length; i++)
@@ -1490,7 +1490,7 @@ public class SpikingLayer<T> : LayerBase<T>
     /// After calculating how the weights and biases should change in the backward pass:
     /// 1. The method applies these changes using the learning rate to control their size
     /// 2. For each weight and bias:
-    ///    - Compute the update as learning rate × gradient
+    ///    - Compute the update as learning rate ï¿½ gradient
     ///    - Subtract this update from the current value (moving in the opposite direction of the gradient)
     ///    - Reset the gradient accumulator to zero for the next batch
     /// 

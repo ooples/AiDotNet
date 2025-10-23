@@ -136,8 +136,12 @@ public class BayesianOptimizerOptions<T, TInput, TOutput> : OptimizationAlgorith
     /// </remarks>
     
     /// <summary>
+    /// Gets or sets the kernel function used by the Gaussian Process model.
+    /// </summary>
+    public IKernel<T> Kernel { get; set; } = new GaussianKernel<T>();
+
+    /// <summary>
     /// Gets or sets whether the objective should be maximized (true) or minimized (false).
     /// </summary>
     public bool IsMaximization { get; set; } = true;
-     set; } = new GaussianKernel<T>();
 }
