@@ -937,13 +937,78 @@ public abstract class NonLinearRegressionBase<T> : INonLinearRegression<T>
         get { return Alphas.Length + 1; } // Alphas + bias term
     }
 
+    /// <summary>
+    /// Saves the model to a file at the specified path.
+    /// </summary>
+    /// <param name="filePath">The path where the model should be saved.</param>
+    /// <exception cref="ArgumentNullException">Thrown when filePath is null.</exception>
+    /// <exception cref="ArgumentException">Thrown when filePath is empty or whitespace.</exception>
+    /// <remarks>
+    /// <para>
+    /// This method serializes the model's state (including options, support vectors, alpha coefficients,
+    /// bias term, and regularization) and writes it to a file.
+    /// </para>
+    /// <para>
+    /// For Beginners:
+    /// This method saves your trained model to a file on disk. After training a model, you can use this
+    /// method to save it so you don't have to retrain it every time you want to make predictions.
+    /// Think of it like saving your progress in a video game.
+    /// </para>
+    /// </remarks>
     public virtual void SaveModel(string filePath)
     {
-        throw new NotImplementedException("SaveModel is not yet implemented for this model type.");
+        if (filePath == null)
+        {
+            throw new ArgumentNullException(nameof(filePath));
+        }
+
+        if (string.IsNullOrWhiteSpace(filePath))
+        {
+            throw new ArgumentException("File path cannot be empty or whitespace.", nameof(filePath));
+        }
+
+        var modelData = Serialize();
+        File.WriteAllBytes(filePath, modelData);
     }
 
+    /// <summary>
+    /// Loads the model from a file at the specified path.
+    /// </summary>
+    /// <param name="filePath">The path to the file containing the saved model.</param>
+    /// <exception cref="ArgumentNullException">Thrown when filePath is null.</exception>
+    /// <exception cref="ArgumentException">Thrown when filePath is empty or whitespace.</exception>
+    /// <exception cref="FileNotFoundException">Thrown when the specified file does not exist.</exception>
+    /// <remarks>
+    /// <para>
+    /// This method reads a previously saved model from a file and restores the model's state
+    /// (including options, support vectors, alpha coefficients, bias term, and regularization).
+    /// </para>
+    /// <para>
+    /// For Beginners:
+    /// This method loads a previously trained model from a file on disk. After you've trained
+    /// and saved a model, you can use this method to load it back so you can make predictions
+    /// without having to retrain it. Think of it like loading a saved game to continue where
+    /// you left off.
+    /// </para>
+    /// </remarks>
     public virtual void LoadModel(string filePath)
     {
-        throw new NotImplementedException("LoadModel is not yet implemented for this model type.");
+        if (filePath == null)
+        {
+            throw new ArgumentNullException(nameof(filePath));
+        }
+
+        if (string.IsNullOrWhiteSpace(filePath))
+        {
+            throw new ArgumentException("File path cannot be empty or whitespace.", nameof(filePath));
+        }
+
+        if (!File.Exists(filePath))
+        {
+            throw new FileNotFoundException($"Model file not found at path: {filePath}", filePath);
+        }
+
+        var modelData = File.ReadAllBytes(filePath);
+        Deserialize(modelData);
     }
 }
