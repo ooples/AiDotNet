@@ -1205,6 +1205,8 @@ public class ExpressionTree<T, TInput, TOutput> : IFullModel<T, TInput, TOutput>
         // Local function to count constants - includes null check for safety
         void CountConstants(ExpressionTree<T, TInput, TOutput>? node)
         {
+            if (node == null)
+                return;
             if (node == null) return;
             if (node.Type == ExpressionNodeType.Constant)
             {
