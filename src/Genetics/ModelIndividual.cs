@@ -173,7 +173,7 @@ public class ModelIndividual<T, TInput, TOutput, TGene> :
     /// <param name="parameters">The new parameters.</param>
     public void UpdateParameters(Vector<T> parameters)
     {
-        // Update the inner model with the provided parameters
+        // Replace the inner model with a new instance containing the updated parameters
         _innerModel = _innerModel.WithParameters(parameters);
     }
 
@@ -232,7 +232,7 @@ public class ModelIndividual<T, TInput, TOutput, TGene> :
 
     public IFullModel<T, TInput, TOutput> DeepCopy()
     {
-        // Deep copy the inner model and wrap it in a new ModelIndividual to preserve context
+        // Deep copy the inner model and wrap it in a new ModelIndividual to preserve genes and factory
         var copiedInner = _innerModel.DeepCopy();
         return new ModelIndividual<T, TInput, TOutput, TGene>(copiedInner, _genes, _modelFactory);
     }
