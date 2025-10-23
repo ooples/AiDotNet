@@ -124,28 +124,6 @@ public class ExpressionTree<T, TInput, TOutput> : IFullModel<T, TInput, TOutput>
     private readonly INumericOperations<T> _numOps;
 
     /// <summary>
-    /// Thread-static random number generator for genetic operations.
-    /// Each thread gets its own Random instance to avoid thread-safety issues.
-    /// </summary>
-    [ThreadStatic]
-    private static Random? _threadRandom;
-
-    /// <summary>
-    /// Gets a thread-safe Random instance. Creates a new instance if one does not exist for this thread.
-    /// </summary>
-    private static Random ThreadRandom
-    {
-        get
-        {
-            if (_threadRandom == null)
-            {
-                _threadRandom = new Random(Guid.NewGuid().GetHashCode());
-            }
-            return _threadRandom;
-        }
-    }
-
-    /// <summary>
     /// Creates a new expression tree node with the specified properties.
     /// </summary>
     /// <param name="type">The type of node to create.</param>
@@ -170,12 +148,6 @@ public class ExpressionTree<T, TInput, TOutput> : IFullModel<T, TInput, TOutput>
     /// Cached count of features used in this expression tree.
     /// </summary>
     private int _featureCount;
-
-    /// <summary>
-    /// Cached count of parameters (constant nodes) in this expression tree.
-    /// Nullable to distinguish between "not yet calculated" (null) and "calculated as zero" (0).
-    /// </summary>
-    private int? _parameterCount;
 
     /// <summary>
     /// Gets the number of features (variables) used in this expression tree.
@@ -332,7 +304,7 @@ public class ExpressionTree<T, TInput, TOutput> : IFullModel<T, TInput, TOutput>
     public IFullModel<T, TInput, TOutput> Mutate(double mutationRate)
     {
         ExpressionTree<T, TInput, TOutput> mutatedTree = (ExpressionTree<T, TInput, TOutput>)Copy();
-        Random random = ThreadRandom;
+        Random random = new Random();
 
         if (random.NextDouble() < mutationRate)
         {
@@ -391,7 +363,7 @@ public class ExpressionTree<T, TInput, TOutput> : IFullModel<T, TInput, TOutput>
         }
 
         ExpressionTree<T, TInput, TOutput> offspring = (ExpressionTree<T, TInput, TOutput>)Copy();
-        Random random = ThreadRandom;
+        Random random = new Random();
 
         if (random.NextDouble() < crossoverRate)
         {
@@ -434,7 +406,7 @@ public class ExpressionTree<T, TInput, TOutput> : IFullModel<T, TInput, TOutput>
     /// </remarks>
     private ExpressionTree<T, TInput, TOutput> GenerateRandomTree(int maxDepth)
     {
-        Random random = ThreadRandom;
+        Random random = new Random();
         if (maxDepth == 0 || random.NextDouble() < 0.3) // 30% chance of leaf node
         {
             if (random.NextDouble() < 0.5)
@@ -469,7 +441,7 @@ public class ExpressionTree<T, TInput, TOutput> : IFullModel<T, TInput, TOutput>
     /// </remarks>
     private ExpressionTree<T, TInput, TOutput> SelectRandomSubtree(ExpressionTree<T, TInput, TOutput> tree)
     {
-        Random random = ThreadRandom;
+        Random random = new Random();
         if (tree.Left == null && tree.Right == null)
         {
             return tree;
@@ -502,7 +474,7 @@ public class ExpressionTree<T, TInput, TOutput> : IFullModel<T, TInput, TOutput>
     /// </remarks>
     private void ReplaceRandomSubtree(ExpressionTree<T, TInput, TOutput> tree, ExpressionTree<T, TInput, TOutput> replacement)
     {
-        Random random = ThreadRandom;
+        Random random = new Random();
         if (random.NextDouble() < 0.3) // 30% chance of replacing current node
         {
             tree.Type = replacement.Type;
@@ -823,7 +795,7 @@ public class ExpressionTree<T, TInput, TOutput> : IFullModel<T, TInput, TOutput>
     /// </remarks>
     public IEnumerable<int> GetActiveFeatureIndices()
     {
-        HashSet<int> activeIndices = new HashSet<int>();
+        HashSet<int> activeIndices = new();
 
         void CollectFeatureIndices(ExpressionTree<T, TInput, TOutput> node)
         {
@@ -853,11 +825,63 @@ public class ExpressionTree<T, TInput, TOutput> : IFullModel<T, TInput, TOutput>
     /// <returns>A dictionary mapping feature names to importance scores.</returns>
     /// <remarks>
     /// <b>For Beginners:</b> Feature importance tells you which input variables matter most in your formula.
-    /// This is not yet implemented for expression trees.
+    /// For expression trees, importance is calculated by counting how many times each variable appears in the formula.
+    /// Variables that appear more frequently are considered more important.
     /// </remarks>
     public virtual Dictionary<string, T> GetFeatureImportance()
     {
-        throw new NotImplementedException("GetFeatureImportance is not yet implemented for this model type.");
+        // Count occurrences of each feature in the tree
+        Dictionary<int, int> featureCounts = new();
+
+        void CountFeatureOccurrences(ExpressionTree<T, TInput, TOutput> node)
+        {
+            if (node == null) return;
+
+            if (node.Type == ExpressionNodeType.Variable)
+            {
+                int featureIndex = _numOps.ToInt32(node.Value);
+                if (featureCounts.ContainsKey(featureIndex))
+                {
+                    featureCounts[featureIndex]++;
+                }
+                else
+                {
+                    featureCounts[featureIndex] = 1;
+                }
+            }
+
+            if (node.Left != null)
+            {
+                CountFeatureOccurrences(node.Left);
+            }
+
+            if (node.Right != null)
+            {
+                CountFeatureOccurrences(node.Right);
+            }
+        }
+
+        CountFeatureOccurrences(this);
+
+        // Convert counts to importance scores (normalized by total occurrences)
+        int totalCount = 0;
+        foreach (var count in featureCounts.Values)
+        {
+            totalCount += count;
+        }
+
+        Dictionary<string, T> importance = new();
+        if (totalCount > 0)
+        {
+            foreach (var kvp in featureCounts)
+            {
+                string featureName = $"x[{kvp.Key}]";
+                double normalizedImportance = (double)kvp.Value / totalCount;
+                importance[featureName] = _numOps.FromDouble(normalizedImportance);
+            }
+        }
+
+        return importance;
     }
 
     /// <summary>
@@ -865,12 +889,50 @@ public class ExpressionTree<T, TInput, TOutput> : IFullModel<T, TInput, TOutput>
     /// </summary>
     /// <param name="featureIndices">The feature indices to use.</param>
     /// <remarks>
-    /// <b>For Beginners:</b> This would restrict the formula to only use specific input variables.
-    /// This is not yet implemented for expression trees.
+    /// <b>For Beginners:</b> This restricts the formula to only use specific input variables.
+    /// Any variables in the tree that are not in the active set will be replaced with constant zero values.
+    /// This is useful for feature selection and understanding which variables are most important.
     /// </remarks>
     public virtual void SetActiveFeatureIndices(IEnumerable<int> featureIndices)
     {
-        throw new NotImplementedException("SetActiveFeatureIndices is not yet implemented for this model type.");
+        if (featureIndices == null)
+        {
+            throw new ArgumentNullException(nameof(featureIndices));
+        }
+
+        HashSet<int> activeSet = new(featureIndices);
+
+        void DeactivateInactiveFeatures(ExpressionTree<T, TInput, TOutput> node)
+        {
+            if (node == null) return;
+
+            // If this is a variable node and it's not in the active set, replace it with zero
+            if (node.Type == ExpressionNodeType.Variable)
+            {
+                int featureIndex = _numOps.ToInt32(node.Value);
+                if (!activeSet.Contains(featureIndex))
+                {
+                    node.SetType(ExpressionNodeType.Constant);
+                    node.SetValue(_numOps.Zero);
+                }
+            }
+
+            // Recursively process children
+            if (node.Left != null)
+            {
+                DeactivateInactiveFeatures(node.Left);
+            }
+
+            if (node.Right != null)
+            {
+                DeactivateInactiveFeatures(node.Right);
+            }
+        }
+
+        DeactivateInactiveFeatures(this);
+
+        // Clear the cached feature count since we've modified the tree
+        _featureCount = 0;
     }
 
     /// <summary>
@@ -1141,14 +1203,7 @@ public class ExpressionTree<T, TInput, TOutput> : IFullModel<T, TInput, TOutput>
 
     public virtual int ParameterCount
     {
-        get
-        {
-            if (_parameterCount == null)
-            {
-                _parameterCount = Coefficients.Length;
-            }
-            return _parameterCount.Value;
-        }
+        get { return Coefficients.Length; }
     }
 
     public virtual void SaveModel(string filePath)
