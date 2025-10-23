@@ -134,7 +134,7 @@ public class BayesianOptimizerOptions<T, TInput, TOutput> : OptimizationAlgorith
     /// our hilly landscape, nearby locations tend to have similar heights. The Gaussian kernel works well for many problems,
     /// especially when the underlying function is smooth.</para>
     /// </remarks>
-    public IKernel<T>? Kernel { get; set; } = new GaussianKernel<T>();
+    public IKernelFunction<T> Kernel { get; set; } = new GaussianKernel<T>();
 
     /// <summary>
     /// Gets or sets whether the objective should be maximized (true) or minimized (false).

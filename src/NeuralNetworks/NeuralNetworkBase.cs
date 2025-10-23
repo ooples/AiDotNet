@@ -1773,7 +1773,7 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
     /// </summary>
     public virtual void AddConvolutionalLayer(int filters, int kernelSize, int stride, ActivationFunction activation)
     {
-        throw new NotImplementedException(
+        throw new InvalidOperationException(
             "AddConvolutionalLayer requires additional parameters that are not provided in this method signature. " +
             "Use ConvolutionalLayer.Configure() with the full input shape, or create the layer directly with " +
             "new ConvolutionalLayer<T>(inputDepth, outputDepth, kernelSize, inputHeight, inputWidth, stride, padding, activation) " +
@@ -1785,7 +1785,7 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
     /// </summary>
     public virtual void AddLSTMLayer(int units, bool returnSequences = false)
     {
-        throw new NotImplementedException(
+        throw new InvalidOperationException(
             "AddLSTMLayer requires additional parameters that are not provided in this method signature. " +
             "Create the layer directly with new LSTMLayer<T>(inputSize, hiddenSize, inputShape, activation, recurrentActivation) " +
             "and add it to Layers manually.");
