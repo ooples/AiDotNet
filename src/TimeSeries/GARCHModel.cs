@@ -1,4 +1,6 @@
-ï»¿namespace AiDotNet.TimeSeries;
+using Newtonsoft.Json;
+
+namespace AiDotNet.TimeSeries;
 
 /// <summary>
 /// Represents a Generalized Autoregressive Conditional Heteroskedasticity (GARCH) model for time series with changing volatility.
@@ -85,7 +87,7 @@ public class GARCHModel<T> : TimeSeriesModelBase<T>
     /// </para>
     /// <para><b>For Beginners:</b> This is the minimum level of volatility in the model.
     /// 
-    /// Omega (Ï‰):
+    /// Omega (?):
     /// - Sets a baseline or minimum level of volatility
     /// - Ensures the model never predicts zero volatility
     /// - Represents the long-term average contribution to volatility
@@ -106,7 +108,7 @@ public class GARCHModel<T> : TimeSeriesModelBase<T>
     /// </para>
     /// <para><b>For Beginners:</b> These determine how much recent surprises affect volatility.
     /// 
-    /// Alpha (Î±) coefficients:
+    /// Alpha (a) coefficients:
     /// - Measure how sensitive volatility is to recent surprises or shocks
     /// - Higher values mean volatility reacts strongly to new information
     /// - Lower values mean volatility is more stable
@@ -127,7 +129,7 @@ public class GARCHModel<T> : TimeSeriesModelBase<T>
     /// </para>
     /// <para><b>For Beginners:</b> These determine how persistent volatility is over time.
     /// 
-    /// Beta (Î²) coefficients:
+    /// Beta (ß) coefficients:
     /// - Measure how much current volatility depends on past volatility
     /// - Higher values mean volatility persists for longer periods
     /// - Lower values mean volatility dissipates more quickly
@@ -1067,8 +1069,8 @@ public class GARCHModel<T> : TimeSeriesModelBase<T>
     /// 
     /// This approach provides not just an expected value, but also incorporates
     /// the appropriate level of randomness based on current volatility conditions.
-    /// It's like predicting that tomorrow's temperature will be 75Â°F, but with 
-    /// a range of Â±3Â° because weather conditions are currently stable.
+    /// It's like predicting that tomorrow's temperature will be 75°F, but with 
+    /// a range of ±3° because weather conditions are currently stable.
     /// </para>
     /// </remarks>
     public override T PredictSingle(Vector<T> input)

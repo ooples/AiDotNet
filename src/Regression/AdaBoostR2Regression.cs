@@ -1,4 +1,6 @@
-﻿namespace AiDotNet.Regression;
+using Newtonsoft.Json;
+
+namespace AiDotNet.Regression;
 
 /// <summary>
 /// Implements the AdaBoost.R2 algorithm for regression problems, an ensemble learning method that combines
@@ -113,7 +115,7 @@ public class AdaBoostR2Regression<T> : AsyncDecisionTreeRegressionBase<T>
     ///    a. Train a decision tree on the weighted data.
     ///    b. Calculate prediction errors for each sample.
     ///    c. Compute the weighted average error.
-    ///    d. If the average error is ≥ 0.5, stop the training (the learner is too weak).
+    ///    d. If the average error is = 0.5, stop the training (the learner is too weak).
     ///    e. Calculate the weight for the current tree based on its error.
     ///    f. Update sample weights to focus more on poorly predicted samples.
     /// 3. Calculate feature importances across all trees in the ensemble.
@@ -126,7 +128,7 @@ public class AdaBoostR2Regression<T> : AsyncDecisionTreeRegressionBase<T>
     ///    - It trains a decision tree that pays attention to the importance weights
     ///    - It checks how well the tree performed on each example
     ///    - It calculates an overall error rate for the tree
-    ///    - If the tree is too inaccurate (error ≥ 0.5), it stops adding more trees
+    ///    - If the tree is too inaccurate (error = 0.5), it stops adding more trees
     ///    - Otherwise, it calculates how much voting power this tree should get
     ///    - It updates the importance weights to focus more on examples that were predicted poorly
     /// 3. Finally, it calculates how important each feature (input variable) is for making predictions
@@ -285,7 +287,7 @@ public class AdaBoostR2Regression<T> : AsyncDecisionTreeRegressionBase<T>
     /// 
     /// This average error value has an important role:
     /// - It determines how much influence the tree will have in the final ensemble
-    /// - If it's too high (≥ 0.5), the tree is considered too weak and training stops
+    /// - If it's too high (= 0.5), the tree is considered too weak and training stops
     /// </para>
     /// </remarks>
     private T CalculateAverageError(Vector<T> errors, Vector<T> sampleWeights)

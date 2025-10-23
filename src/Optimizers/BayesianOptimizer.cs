@@ -1,4 +1,5 @@
 global using AiDotNet.GaussianProcesses;
+using Newtonsoft.Json;
 
 namespace AiDotNet.Optimizers;
 
