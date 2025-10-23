@@ -4,7 +4,6 @@ global using Formatting = Newtonsoft.Json.Formatting;
 namespace AiDotNet.Models.Results;
 
 /// <summary>
-<<<<<<< HEAD
 /// Represents a complete predictive model with its optimization results, normalization information, and metadata.
 /// This class implements the IPredictiveModel interface and provides serialization capabilities.
 /// </summary>
@@ -450,7 +449,6 @@ public class PredictionModelResult<T, TInput, TOutput> : IPredictiveModel<T, TIn
         {
             throw new InvalidOperationException($"Failed to deserialize the model: {ex.Message}", ex);
         }
-=======
 /// Represents the complete result of a prediction model building process, including the trained model,
 /// optimization results, and normalization information.
 /// </summary>
@@ -650,13 +648,11 @@ public class PredictionModelResult<T, TInput, TOutput> : IPredictiveModel<T, TIn
         // 2. Reconstruct the inner model using the appropriate type
         // 3. Properly deserialize OptimizationResult and NormalizationInfo
         throw new NotImplementedException("Full deserialization logic needs to be implemented based on specific model types.");
->>>>>>> origin/merge-dev2-to-master
     }
 
     /// <summary>
     /// Saves the model to a file.
     /// </summary>
-<<<<<<< HEAD
     /// <param name="filePath">The path where the model will be saved.</param>
     /// <remarks>
     /// <para>
@@ -782,7 +778,6 @@ public class PredictionModelResult<T, TInput, TOutput> : IPredictiveModel<T, TIn
         throw new NotImplementedException();
     }
 }
-=======
     /// <param name="filePath">The path where the model should be saved.</param>
     public void SaveModel(string filePath)
     {
@@ -1026,4 +1021,3 @@ public class PredictionModelResult<T, TInput, TOutput> : IPredictiveModel<T, TIn
 
     #endregion
 }
->>>>>>> origin/merge-dev2-to-master
