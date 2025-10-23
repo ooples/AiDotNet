@@ -967,6 +967,12 @@ public abstract class NonLinearRegressionBase<T> : INonLinearRegression<T>
             throw new ArgumentException("File path cannot be empty or whitespace.", nameof(filePath));
         }
 
+        var directory = Path.GetDirectoryName(filePath);
+        if (!string.IsNullOrEmpty(directory) && !Directory.Exists(directory))
+        {
+            Directory.CreateDirectory(directory);
+        }
+
         var modelData = Serialize();
         File.WriteAllBytes(filePath, modelData);
     }
