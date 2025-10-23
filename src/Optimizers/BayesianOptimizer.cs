@@ -249,7 +249,7 @@ public class BayesianOptimizer<T, TInput, TOutput> : OptimizerBase<T, TInput, TO
                 var cdf = StatisticsHelper<T>.CalculateNormalCDF(mean, stdDev, z);
                 return NumOps.Multiply(improvement, cdf);
             default:
-                throw new ArgumentException($"Unsupported acquisition function: {_options.AcquisitionFunction}", nameof(_options.AcquisitionFunction));
+                throw new InvalidOperationException($"Unsupported acquisition function: {_options.AcquisitionFunction}");
         }
     }
 
