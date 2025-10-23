@@ -108,6 +108,7 @@ public class TransferNeuralNetwork<T> : TransferLearningBase<T, Matrix<T>, Vecto
         Vector<T> softLabels = sourceModel.Predict(mappedTargetData);
 
         // Step 5: Combine soft labels with true labels
+        // trueWeight of 0.7 means combinedLabels = 0.7 * trueLabels + 0.3 * softLabels (favors true labels for more accurate target domain learning)
         Vector<T> combinedLabels = CombineLabels(softLabels, targetLabels, 0.7);
 
         // Step 6: Create and train a new model on the target domain
