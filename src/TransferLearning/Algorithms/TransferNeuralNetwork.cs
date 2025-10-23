@@ -111,10 +111,11 @@ public class TransferNeuralNetwork<T> : TransferLearningBase<T, Matrix<T>, Vecto
         // Weight of 0.7 favors true labels over soft labels for more accurate target domain learning
         Vector<T> combinedLabels = CombineLabels(softLabels, targetLabels, trueWeight: 0.7);
 
-        // Step 6: Create and train a new model on the mapped target data
-        // Training must use mappedTargetData to match the feature space of the combined labels
+        // Step 6: Create and train a new model on the target domain
+        // Use original targetData (not mapped) since the model should learn in target feature space
+        // The mapping was only needed to get predictions from source model for knowledge distillation
         var targetModel = sourceModel.DeepCopy();
-        targetModel.Train(mappedTargetData, combinedLabels);
+        targetModel.Train(targetData, combinedLabels);
 
         return targetModel;
     }
