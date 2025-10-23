@@ -579,8 +579,6 @@ public class PredictionModelResult<T, TInput, TOutput> : IPredictiveModel<T, TIn
         throw new NotImplementedException();
     }
 
-    #endregion
-
     #region IModelSerializer Implementation
 
     /// <summary>
