@@ -121,6 +121,14 @@ public abstract class NonLinearRegressionBase<T> : INonLinearRegression<T>
     protected T B { get; set; }
 
     /// <summary>
+    /// Gets or sets the feature names.
+    /// </summary>
+    /// <value>
+    /// An array of feature names. If not set, feature indices will be used as names.
+    /// </value>
+    public string[]? FeatureNames { get; set; }
+
+    /// <summary>
     /// Initializes a new instance of the NonLinearRegressionBase class with the specified options and regularization.
     /// </summary>
     /// <param name="options">Configuration options for the non-linear regression model. If null, default options will be used.</param>
@@ -393,7 +401,7 @@ public abstract class NonLinearRegressionBase<T> : INonLinearRegression<T>
                 return NumOps.Exp(NumOps.Multiply(NumOps.FromDouble(-Options.Gamma), l1Distance));
 
             default:
-                throw new NotImplementedException("Unsupported kernel type");
+                throw new ArgumentOutOfRangeException(nameof(Options.KernelType), Options.KernelType, "Unsupported kernel type");
         }
     }
 
@@ -781,6 +789,76 @@ public abstract class NonLinearRegressionBase<T> : INonLinearRegression<T>
     }
 
     /// <summary>
+    /// Sets the parameters for this model.
+    /// </summary>
+    /// <param name="parameters">A vector containing the model parameters.</param>
+    public virtual void SetParameters(Vector<T> parameters)
+    {
+        int expectedParamCount = Alphas.Length + 1; // Alphas.Length + 1 (for Bias term)
+        if (parameters.Length != expectedParamCount)
+        {
+            throw new ArgumentException($"Expected {expectedParamCount} parameters, but got {parameters.Length}", nameof(parameters));
+        }
+
+        for (int i = 0; i < Alphas.Length; i++)
+        {
+            Alphas[i] = parameters[i];
+        }
+        B = parameters[Alphas.Length];
+    }
+
+    /// <summary>
+    /// Sets the active feature indices for this model.
+    /// </summary>
+    /// <param name="featureIndices">The indices of features to activate.</param>
+    public virtual void SetActiveFeatureIndices(IEnumerable<int> featureIndices)
+    {
+        var activeSet = new HashSet<int>(featureIndices);
+
+        for (int i = 0; i < SupportVectors.Rows; i++)
+        {
+            for (int j = 0; j < SupportVectors.Columns; j++)
+            {
+                if (!activeSet.Contains(j))
+                {
+                    SupportVectors[i, j] = NumOps.Zero;
+                }
+            }
+        }
+    }
+
+    /// <summary>
+    /// Gets the feature importance scores as a dictionary.
+    /// </summary>
+    /// <returns>A dictionary mapping feature names to their importance scores.</returns>
+    public virtual Dictionary<string, T> GetFeatureImportance()
+    {
+        var result = new Dictionary<string, T>();
+        var importance = new T[SupportVectors.Columns];
+
+        for (int j = 0; j < SupportVectors.Columns; j++)
+        {
+            T sum = NumOps.Zero;
+            for (int i = 0; i < Alphas.Length; i++)
+            {
+                T weighted = NumOps.Multiply(NumOps.Abs(Alphas[i]), NumOps.Abs(SupportVectors[i, j]));
+                sum = NumOps.Add(sum, weighted);
+            }
+            importance[j] = sum;
+        }
+
+        for (int i = 0; i < importance.Length; i++)
+        {
+            string featureName = FeatureNames != null && i < FeatureNames.Length
+                ? FeatureNames[i]
+                : $"Feature_{i}";
+            result[featureName] = importance[i];
+        }
+
+        return result;
+    }
+
+    /// <summary>
     /// Creates a deep copy of the model.
     /// </summary>
     /// <returns>A new model instance that is a deep copy of the current model.</returns>
@@ -843,14 +921,54 @@ public abstract class NonLinearRegressionBase<T> : INonLinearRegression<T>
     {
         // Create a new instance using the factory method
         var clone = (NonLinearRegressionBase<T>)CreateInstance();
-    
+
         // Copy the model parameters
         clone.SupportVectors = SupportVectors;  // Shallow copy
         clone.Alphas = Alphas;                 // Shallow copy
         clone.B = B;                          // Value types are copied by value
         clone.Options = Options;              // Shallow copy
         clone.Regularization = Regularization; // Shallow copy
-    
+
         return clone;
+    }
+
+    public virtual int ParameterCount
+    {
+        get { return Alphas.Length + 1; } // Alphas + bias term
+    }
+
+    public virtual void SaveModel(string filePath)
+    {
+        if (string.IsNullOrWhiteSpace(filePath))
+            throw new ArgumentException("File path must not be null or empty.", nameof(filePath));
+
+        try
+        {
+            var data = Serialize();
+            var directory = Path.GetDirectoryName(filePath);
+            if (!string.IsNullOrEmpty(directory) && !Directory.Exists(directory))
+                Directory.CreateDirectory(directory);
+            File.WriteAllBytes(filePath, data);
+        }
+        catch (IOException ex) { throw new InvalidOperationException($"Failed to save model to '{filePath}': {ex.Message}", ex); }
+        catch (UnauthorizedAccessException ex) { throw new InvalidOperationException($"Access denied when saving model to '{filePath}': {ex.Message}", ex); }
+        catch (System.Security.SecurityException ex) { throw new InvalidOperationException($"Security error when saving model to '{filePath}': {ex.Message}", ex); }
+    }
+
+    public virtual void LoadModel(string filePath)
+    {
+        if (string.IsNullOrWhiteSpace(filePath))
+            throw new ArgumentException("File path must not be null or empty.", nameof(filePath));
+
+        try
+        {
+            var data = File.ReadAllBytes(filePath);
+            Deserialize(data);
+        }
+        catch (FileNotFoundException ex) { throw new FileNotFoundException($"The specified model file does not exist: {filePath}", filePath, ex); }
+        catch (IOException ex) { throw new InvalidOperationException($"File I/O error while loading model from '{filePath}': {ex.Message}", ex); }
+        catch (UnauthorizedAccessException ex) { throw new InvalidOperationException($"Access denied when loading model from '{filePath}': {ex.Message}", ex); }
+        catch (System.Security.SecurityException ex) { throw new InvalidOperationException($"Security error when loading model from '{filePath}': {ex.Message}", ex); }
+        catch (Exception ex) { throw new InvalidOperationException($"Failed to deserialize model from file '{filePath}'. The file may be corrupted or incompatible: {ex.Message}", ex); }
     }
 }

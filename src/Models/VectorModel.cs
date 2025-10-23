@@ -1,3 +1,14 @@
+using System.Threading.Tasks;
+using AiDotNet.Interpretability;
+using AiDotNet.Interfaces;
+using AiDotNet.LinearAlgebra;
+using AiDotNet.Helpers;
+using AiDotNet.Enums;
+using System;
+using System.Collections.Generic;
+using System.IO;
+using System.Linq;
+
 namespace AiDotNet.Models;
 
 /// <summary>
@@ -19,7 +30,7 @@ namespace AiDotNet.Models;
 /// - It supports genetic algorithm operations for optimization
 /// 
 /// For example, if predicting house prices, the model might learn that:
-/// price = 50,000 × bedrooms + 100 × square_feet + 20,000 × bathrooms
+/// price = 50,000 ï¿½ bedrooms + 100 ï¿½ square_feet + 20,000 ï¿½ bathrooms
 /// 
 /// This is one of the simplest and most interpretable machine learning models,
 /// making it a good starting point for many problems.
@@ -219,10 +230,10 @@ public class VectorModel<T> : IFullModel<T, Matrix<T>, Vector<T>>
     /// - Throws an error if the input has the wrong number of features
     /// 
     /// This is the core of how a linear model works - it's just a weighted sum:
-    /// prediction = (input1 × coefficient1) + (input2 × coefficient2) + ...
+    /// prediction = (input1 ï¿½ coefficient1) + (input2 ï¿½ coefficient2) + ...
     /// 
     /// For example, with coefficients [50000, 100, 20000] and input [3, 1500, 2],
-    /// the prediction would be: 3×50000 + 1500×100 + 2×20000 = 350,000
+    /// the prediction would be: 3ï¿½50000 + 1500ï¿½100 + 2ï¿½20000 = 350,000
     /// </para>
     /// </remarks>
     public T Evaluate(Vector<T> input)
@@ -414,14 +425,14 @@ public class VectorModel<T> : IFullModel<T, Matrix<T>, Vector<T>>
     /// - Visualizing or reporting on the model
     /// </para>
     /// </remarks>
-    public ModelMetaData<T> GetModelMetaData()
+    public ModelMetadata<T> GetModelMetadata()
     {
         T norm = Coefficients.Norm();
         norm ??= _numOps.Zero;
 
         int nonZeroCount = Coefficients.Count(c => !_numOps.Equals(c, _numOps.Zero));
         
-        return new ModelMetaData<T>
+        return new ModelMetadata<T>
         {
             FeatureCount = FeatureCount,
             Complexity = nonZeroCount,
@@ -666,6 +677,48 @@ public class VectorModel<T> : IFullModel<T, Matrix<T>, Vector<T>>
     }
 
     /// <summary>
+    /// Sets the parameters of the model.
+    /// </summary>
+    /// <param name="parameters">The parameters to set.</param>
+    /// <exception cref="ArgumentNullException">Thrown when parameters is null.</exception>
+    /// <exception cref="ArgumentException">Thrown when parameters has a different length than the model's coefficients.</exception>
+    /// <remarks>
+    /// <para>
+    /// This method sets the coefficients of the model from the provided parameters vector.
+    /// For a vector model, the parameters are simply the coefficients vector.
+    /// </para>
+    /// <para><b>For Beginners:</b> This method updates all the weights the model uses.
+    /// 
+    /// For a linear model:
+    /// - The parameters are simply the coefficients (weights)
+    /// - This method updates those coefficients
+    /// 
+    /// This is useful for:
+    /// - Loading a saved model
+    /// - Updating weights during optimization
+    /// - Implementing learning algorithms
+    /// </para>
+    /// </remarks>
+    public void SetParameters(Vector<T> parameters)
+    {
+        if (parameters == null)
+        {
+            throw new ArgumentNullException(nameof(parameters));
+        }
+        
+        if (parameters.Length != Coefficients.Length)
+        {
+            throw new ArgumentException($"Parameters length ({parameters.Length}) must match coefficients length ({Coefficients.Length}).", nameof(parameters));
+        }
+        
+        // Update coefficients from parameters
+        for (int i = 0; i < parameters.Length; i++)
+        {
+            Coefficients[i] = parameters[i];
+        }
+    }
+
+    /// <summary>
     /// Updates the model with new parameter values.
     /// </summary>
     /// <param name="parameters">The new parameter values to use.</param>
@@ -806,4 +859,159 @@ public class VectorModel<T> : IFullModel<T, Matrix<T>, Vector<T>>
     {
         return DeepCopy();
     }
+
+    public void SetActiveFeatureIndices(IEnumerable<int> featureIndices)
+    {
+        if (featureIndices == null)
+            throw new ArgumentNullException(nameof(featureIndices));
+        
+        var indices = featureIndices.ToList();
+        
+        // Validate indices
+        foreach (var index in indices)
+        {
+            if (index < 0 || index >= FeatureCount)
+            {
+                throw new ArgumentOutOfRangeException(nameof(featureIndices), 
+                    $"Feature index {index} is out of range. Must be between 0 and {FeatureCount - 1}.");
+            }
+        }
+        
+        // Since Coefficients is read-only, we need to modify the underlying data
+        // Set non-active features to zero
+        for (int i = 0; i < FeatureCount; i++)
+        {
+            if (!indices.Contains(i))
+            {
+                // Zero out the coefficient for inactive features
+                Coefficients[i] = _numOps.Zero;
+            }
+        }
+    }
+
+    #region IInterpretableModel Implementation
+
+        protected readonly HashSet<InterpretationMethod> _enabledMethods = new();
+        protected Vector<int> _sensitiveFeatures;
+        protected readonly List<FairnessMetric> _fairnessMetrics = new();
+        protected IModel<Matrix<T>, Vector<T>, ModelMetadata<T>> _baseModel;
+
+        /// <summary>
+        /// Gets the global feature importance across all predictions.
+        /// </summary>
+        public virtual async Task<Dictionary<int, T>> GetGlobalFeatureImportanceAsync()
+        {
+        return await InterpretableModelHelper.GetGlobalFeatureImportanceAsync(this, _enabledMethods);
+        }
+
+        /// <summary>
+        /// Gets the local feature importance for a specific input.
+        /// </summary>
+        public virtual async Task<Dictionary<int, T>> GetLocalFeatureImportanceAsync(Matrix<T> input)
+        {
+        return await InterpretableModelHelper.GetLocalFeatureImportanceAsync(this, _enabledMethods, input);
+        }
+
+        /// <summary>
+        /// Gets SHAP values for the given inputs.
+        /// </summary>
+        public virtual async Task<Matrix<T>> GetShapValuesAsync(Matrix<T> inputs)
+        {
+        return await InterpretableModelHelper.GetShapValuesAsync(this, _enabledMethods);
+        }
+
+        /// <summary>
+        /// Gets LIME explanation for a specific input.
+        /// </summary>
+        public virtual async Task<LimeExplanation<T>> GetLimeExplanationAsync(Matrix<T> input, int numFeatures = 10)
+        {
+        return await InterpretableModelHelper.GetLimeExplanationAsync<T>(_enabledMethods, numFeatures);
+        }
+
+        /// <summary>
+        /// Gets partial dependence data for specified features.
+        /// </summary>
+        public virtual async Task<PartialDependenceData<T>> GetPartialDependenceAsync(Vector<int> featureIndices, int gridResolution = 20)
+        {
+        return await InterpretableModelHelper.GetPartialDependenceAsync<T>(_enabledMethods, featureIndices, gridResolution);
+        }
+
+        /// <summary>
+        /// Gets counterfactual explanation for a given input and desired output.
+        /// </summary>
+        public virtual async Task<CounterfactualExplanation<T>> GetCounterfactualAsync(Matrix<T> input, Vector<T> desiredOutput, int maxChanges = 5)
+        {
+        return await InterpretableModelHelper.GetCounterfactualAsync<T>(_enabledMethods, maxChanges);
+        }
+
+        /// <summary>
+        /// Gets model-specific interpretability information.
+        /// </summary>
+        public virtual async Task<Dictionary<string, object>> GetModelSpecificInterpretabilityAsync()
+        {
+        return await InterpretableModelHelper.GetModelSpecificInterpretabilityAsync(this);
+        }
+
+        /// <summary>
+        /// Generates a text explanation for a prediction.
+        /// </summary>
+        public virtual async Task<string> GenerateTextExplanationAsync(Matrix<T> input, Vector<T> prediction)
+        {
+        return await InterpretableModelHelper.GenerateTextExplanationAsync(this, input, prediction);
+        }
+
+        /// <summary>
+        /// Gets feature interaction effects between two features.
+        /// </summary>
+        public virtual async Task<T> GetFeatureInteractionAsync(int feature1Index, int feature2Index)
+        {
+        return await InterpretableModelHelper.GetFeatureInteractionAsync<T>(_enabledMethods, feature1Index, feature2Index);
+        }
+
+        /// <summary>
+        /// Validates fairness metrics for the given inputs.
+        /// </summary>
+        public virtual async Task<FairnessMetrics<T>> ValidateFairnessAsync(Matrix<T> inputs, int sensitiveFeatureIndex)
+        {
+        return await InterpretableModelHelper.ValidateFairnessAsync<T>(_fairnessMetrics);
+        }
+
+        /// <summary>
+        /// Gets anchor explanation for a given input.
+        /// </summary>
+        public virtual async Task<AnchorExplanation<T>> GetAnchorExplanationAsync(Matrix<T> input, T threshold)
+        {
+        return await InterpretableModelHelper.GetAnchorExplanationAsync(_enabledMethods, threshold);
+        }
+
+        /// <summary>
+        /// Sets the base model for interpretability analysis.
+        /// </summary>
+        public virtual void SetBaseModel(IModel<Matrix<T>, Vector<T>, ModelMetadata<T>> model)
+        {
+        _baseModel = model ?? throw new ArgumentNullException(nameof(model));
+        }
+
+        /// <summary>
+        /// Enables specific interpretation methods.
+        /// </summary>
+        public virtual void EnableMethod(params InterpretationMethod[] methods)
+        {
+        foreach (var method in methods)
+        {
+            _enabledMethods.Add(method);
+        }
+        }
+
+        /// <summary>
+        /// Configures fairness evaluation settings.
+        /// </summary>
+        public virtual void ConfigureFairness(Vector<int> sensitiveFeatures, params FairnessMetric[] fairnessMetrics)
+        {
+        _sensitiveFeatures = sensitiveFeatures ?? throw new ArgumentNullException(nameof(sensitiveFeatures));
+        _fairnessMetrics.Clear();
+        _fairnessMetrics.AddRange(fairnessMetrics);
+        }
+
+    #endregion
 }

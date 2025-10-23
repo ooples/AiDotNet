@@ -49,37 +49,37 @@ public abstract class OptimizerBase<T, TInput, TOutput> : IOptimizer<T, TInput, 
     /// <summary>
     /// Options for prediction statistics calculations.
     /// </summary>
-    protected readonly PredictionStatsOptions _predictionOptions;
+    protected readonly PredictionStatsOptions PredictionOptions;
 
     /// <summary>
     /// Options for model statistics calculations.
     /// </summary>
-    protected readonly ModelStatsOptions _modelStatsOptions;
+    protected readonly ModelStatsOptions ModelStatsOptions;
 
     /// <summary>
     /// Evaluates the performance of models.
     /// </summary>
-    protected readonly IModelEvaluator<T, TInput, TOutput> _modelEvaluator;
+    protected readonly IModelEvaluator<T, TInput, TOutput> ModelEvaluator;
 
     /// <summary>
     /// Detects the quality of fit for models.
     /// </summary>
-    protected readonly IFitDetector<T, TInput, TOutput> _fitDetector;
+    protected readonly IFitDetector<T, TInput, TOutput> FitDetector;
 
     /// <summary>
     /// Calculates the fitness score of models.
     /// </summary>
-    protected readonly IFitnessCalculator<T, TInput, TOutput> _fitnessCalculator;
+    protected readonly IFitnessCalculator<T, TInput, TOutput> FitnessCalculator;
 
     /// <summary>
     /// Stores the fitness scores of evaluated models.
     /// </summary>
-    protected readonly List<T> _fitnessList;
+    protected readonly List<T> FitnessList;
 
     /// <summary>
     /// Stores information about each optimization iteration.
     /// </summary>
-    protected readonly List<OptimizationIterationInfo<T>> _iterationHistoryList;
+    protected readonly List<OptimizationIterationInfo<T>> IterationHistoryList;
 
     /// <summary>
     /// Caches evaluated models to avoid redundant calculations.
@@ -107,22 +107,44 @@ public abstract class OptimizerBase<T, TInput, TOutput> : IOptimizer<T, TInput, 
     protected int IterationsWithImprovement;
 
     /// <summary>
+    /// Gets the model that this optimizer is configured to optimize.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// This property provides access to the model that the optimizer is working with.
+    /// It implements the IOptimizer interface property to expose the protected Model field.
+    /// </para>
+    /// <para><b>For Beginners:</b> This property lets external code see which model 
+    /// the optimizer is currently working with, without being able to change it.
+    /// It's like a window that lets you look at the model but not touch it.
+    /// </para>
+    /// </remarks>
+    public IFullModel<T, TInput, TOutput> Model => _model;
+
+    /// <summary>
+    /// The model that this optimizer is configured to optimize.
+    /// </summary>
+    private IFullModel<T, TInput, TOutput> _model = default!;
+
+    /// <summary>
     /// Initializes a new instance of the OptimizerBase class.
     /// </summary>
+    /// <param name="model">The model to be optimized.</param>
     /// <param name="options">The optimization algorithm options.</param>
-    protected OptimizerBase(
+    protected OptimizerBase(IFullModel<T, TInput, TOutput> model,
         OptimizationAlgorithmOptions<T, TInput, TOutput> options)
     {
+        _model = model;
         Random = new();
         NumOps = MathHelper.GetNumericOperations<T>();
         Options = options ?? new OptimizationAlgorithmOptions<T, TInput, TOutput>();
-        _predictionOptions = Options.PredictionOptions;
-        _modelStatsOptions = Options.ModelStatsOptions;
-        _modelEvaluator = Options.ModelEvaluator;
-        _fitDetector = Options.FitDetector;
-        _fitnessCalculator = Options.FitnessCalculator;
-        _fitnessList = [];
-        _iterationHistoryList = [];
+        PredictionOptions = Options.PredictionOptions;
+        ModelStatsOptions = Options.ModelStatsOptions;
+        ModelEvaluator = Options.ModelEvaluator;
+        FitDetector = Options.FitDetector;
+        FitnessCalculator = Options.FitnessCalculator;
+        FitnessList = [];
+        IterationHistoryList = [];
         ModelCache = Options.ModelCache;
         CurrentLearningRate = NumOps.Zero;
         CurrentMomentum = NumOps.Zero;
@@ -156,11 +178,131 @@ public abstract class OptimizerBase<T, TInput, TOutput> : IOptimizer<T, TInput, 
     }
 
     /// <summary>
-    /// Resets the optimizer state, clearing the model cache.
+    /// Adjusts the parameters (weights) of a model.
     /// </summary>
-    public virtual void Reset()
+    /// <param name="model">The model whose parameters should be adjusted.</param>
+    /// <param name="adjustmentScale">Scale factor for parameter adjustments.</param>
+    /// <param name="signFlipProbability">Probability of flipping a parameter's sign.</param>
+    /// <remarks>
+    /// <b>For Beginners:</b> This is like adjusting the quantities of ingredients in your recipe.
+    /// While keeping the same ingredients, you're changing how much of each one you use to
+    /// find the perfect balance.
+    /// </remarks>
+    protected virtual void AdjustModelParameters(
+        IFullModel<T, TInput, TOutput> model,
+        double adjustmentScale = 0.1,
+        double signFlipProbability = 0.05)
     {
-        ModelCache.ClearCache();
+        // Get current parameters
+        var currentParameters = model.GetParameters();
+
+        // Create new parameters by applying random adjustments
+        var newParameters = AdjustParameters(
+            currentParameters,
+            adjustmentScale * Options.ExplorationRate,
+            signFlipProbability);
+
+        // Apply the new parameters to the model
+        var updatedModel = model.WithParameters(newParameters);
+    }
+
+    /// <summary>
+    /// Randomly selects a subset of features to use in a model.
+    /// </summary>
+    /// <param name="totalFeatures">The total number of available features.</param>
+    /// <param name="minFeatures">The minimum number of features to select.</param>
+    /// <param name="maxFeatures">The maximum number of features to select.</param>
+    /// <returns>A list of selected feature indices.</returns>
+    /// <remarks>
+    /// <b>For Beginners:</b> This is like randomly selecting a subset of ingredients from
+    /// your pantry to include in your recipe experiment.
+    /// </remarks>
+    protected virtual List<int> RandomlySelectFeatures(
+        int totalFeatures,
+        int? minFeatures = null,
+        int? maxFeatures = null)
+    {
+        int min = minFeatures ?? Options.MinimumFeatures;
+        int max = maxFeatures ?? Math.Min(Options.MaximumFeatures, totalFeatures);
+
+        // Ensure min/max values are valid
+        min = Math.Max(1, Math.Min(min, totalFeatures));
+        max = Math.Min(max, totalFeatures);
+
+        // If min > max (due to constraints), set them equal
+        if (min > max)
+        {
+            max = min;
+        }
+
+        var selectedFeatures = new List<int>();
+        int numFeatures = Random.Next(min, max + 1);
+
+        while (selectedFeatures.Count < numFeatures)
+        {
+            int feature = Random.Next(totalFeatures);
+            if (!selectedFeatures.Contains(feature))
+            {
+                selectedFeatures.Add(feature);
+            }
+        }
+
+        return selectedFeatures;
+    }
+
+    /// <summary>
+    /// Applies the selected features to a model.
+    /// </summary>
+    /// <param name="model">The model to apply feature selection to.</param>
+    /// <param name="selectedFeatures">The list of selected feature indices.</param>
+    protected virtual void ApplyFeatureSelection(IFullModel<T, TInput, TOutput> model, List<int> selectedFeatures)
+    {
+        if (model == null)
+            throw new ArgumentNullException(nameof(model));
+
+        if (selectedFeatures == null || selectedFeatures.Count == 0)
+            throw new ArgumentException("At least one feature must be selected.", nameof(selectedFeatures));
+
+        // Apply features if model supports it
+        if (model is IFeatureAware featureAwareModel)
+        {
+            featureAwareModel.SetActiveFeatureIndices(selectedFeatures);
+        }
+    }
+
+    /// <summary>
+    /// Adjusts a vector of parameters by applying random modifications.
+    /// </summary>
+    /// <param name="parameters">The original parameters.</param>
+    /// <param name="adjustmentScale">Scale factor for parameter adjustments.</param>
+    /// <param name="signFlipProbability">Probability of flipping a parameter's sign.</param>
+    /// <returns>A new vector with adjusted parameters.</returns>
+    protected virtual Vector<T> AdjustParameters(
+        Vector<T> parameters,
+        double adjustmentScale,
+        double signFlipProbability)
+    {
+        var newParameters = new Vector<T>(parameters.Length);
+
+        for (int i = 0; i < parameters.Length; i++)
+        {
+            // Generate a random adjustment factor
+            double factor = 1.0 + ((Random.NextDouble() * 2.0 - 1.0) * adjustmentScale);
+
+            // Apply the adjustment
+            T originalValue = parameters[i];
+            T newValue = NumOps.Multiply(originalValue, NumOps.FromDouble(factor));
+
+            // Add some probability of the parameter flipping sign
+            if (Random.NextDouble() < signFlipProbability)
+            {
+                newValue = NumOps.Negate(newValue);
+            }
+
+            newParameters[i] = newValue;
+        }
+
+        return newParameters;
     }
 
     /// <summary>
@@ -173,44 +315,65 @@ public abstract class OptimizerBase<T, TInput, TOutput> : IOptimizer<T, TInput, 
         IFullModel<T, TInput, TOutput> solution, 
         OptimizationInputData<T, TInput, TOutput> inputData)
     {
-        string cacheKey = solution.GetHashCode().ToString();
-        var cachedStepData = GetCachedStepData(cacheKey);
-    
+        string cacheKey = ModelCache.GenerateCacheKey(solution, inputData);
+        var cachedStepData = ModelCache.GetCachedStepData(cacheKey);
+
         if (cachedStepData != null)
         {
             return cachedStepData;
         }
 
         var stepData = PrepareAndEvaluateSolution(solution, inputData);
-        CacheStepData(cacheKey, stepData);
+        ModelCache.CacheStepData(cacheKey, stepData);
 
         return stepData;
     }
 
     /// <summary>
-    /// Prepares and evaluates a solution, creating subsets of data based on selected features.
+    /// Prepares and evaluates a solution, applying feature selection before checking the cache.
     /// </summary>
     /// <param name="solution">The solution to evaluate.</param>
     /// <param name="inputData">The input data for evaluation.</param>
     /// <returns>The evaluation results for the solution.</returns>
+    /// <remarks>
+    /// <b>For Beginners:</b> This method prepares a model with a specific set of features,
+    /// checks if we've already trained this exact configuration before, and if not,
+    /// trains and evaluates the model with the selected features.
+    /// </remarks>
     protected OptimizationStepData<T, TInput, TOutput> PrepareAndEvaluateSolution(
-        IFullModel<T, TInput, TOutput> solution, 
+        IFullModel<T, TInput, TOutput> solution,
         OptimizationInputData<T, TInput, TOutput> inputData)
     {
-        string cacheKey = solution.GetHashCode().ToString();
-        var cachedStepData = GetCachedStepData(cacheKey);
-    
+        // Step 1: Generate random feature selection independent of model state
+        var selectedFeaturesIndices = RandomlySelectFeatures(
+            InputHelper<T, TInput>.GetInputSize(inputData.XTrain),
+            Options.MinimumFeatures,
+            Options.MaximumFeatures);
+
+        // Step 2: Apply feature selection to the model BEFORE we check the cache
+        ApplyFeatureSelection(solution, selectedFeaturesIndices);
+
+        // Step 3: Generate cache key based on the selected features and check cache
+        string cacheKey = ModelCache.GenerateCacheKey(solution, inputData);
+        var cachedStepData = ModelCache.GetCachedStepData(cacheKey);
+
         if (cachedStepData != null)
         {
             return cachedStepData;
         }
 
-        var selectedFeatures = ModelHelper<T, TInput, TOutput>.GetColumnVectors(inputData.XTrain, 
-            [.. solution.GetActiveFeatureIndices()]);
-        var XTrainSubset = OptimizerHelper<T, TInput, TOutput>.SelectFeatures(inputData.XTrain, selectedFeatures);
-        var XValSubset = OptimizerHelper<T, TInput, TOutput>.SelectFeatures(inputData.XValidation, selectedFeatures);
-        var XTestSubset = OptimizerHelper<T, TInput, TOutput>.SelectFeatures(inputData.XTest, selectedFeatures);
+        // Step 4: Apply feature selection to input data
+        var selectedFeatures = ModelHelper<T, TInput, TOutput>.GetColumnVectors(
+            inputData.XTrain, [.. selectedFeaturesIndices]);
 
+        var XTrainSubset = OptimizerHelper<T, TInput, TOutput>.SelectFeatures(
+            inputData.XTrain, selectedFeaturesIndices);
+        var XValSubset = OptimizerHelper<T, TInput, TOutput>.SelectFeatures(
+            inputData.XValidation, selectedFeaturesIndices);
+        var XTestSubset = OptimizerHelper<T, TInput, TOutput>.SelectFeatures(
+            inputData.XTest, selectedFeaturesIndices);
+
+        // Step 5: Create input data with selected features
         var subsetInputData = new OptimizationInputData<T, TInput, TOutput>
         {
             XTrain = XTrainSubset,
@@ -221,18 +384,23 @@ public abstract class OptimizerBase<T, TInput, TOutput> : IOptimizer<T, TInput, 
             YTest = inputData.YTest
         };
 
+        // Step 6: Create evaluation input
         var input = new ModelEvaluationInput<T, TInput, TOutput>
         {
             Model = solution,
             InputData = subsetInputData
         };
 
-        var (currentFitnessScore, fitDetectionResult, evaluationData) = TrainAndEvaluateSolution(input);
-        _fitnessList.Add(currentFitnessScore);
+        // Step 7: Train and evaluate
+        var (currentFitnessScore, fitDetectionResult, evaluationData) =
+            TrainAndEvaluateSolution(input);
 
+        FitnessList.Add(currentFitnessScore);
+
+        // Step 8: Create and store step data
         var stepData = new OptimizationStepData<T, TInput, TOutput>
         {
-            Solution = solution,
+            Solution = solution.DeepCopy(),  // Now trained, so DeepCopy works
             SelectedFeatures = selectedFeatures,
             XTrainSubset = XTrainSubset,
             XValSubset = XValSubset,
@@ -242,7 +410,8 @@ public abstract class OptimizerBase<T, TInput, TOutput> : IOptimizer<T, TInput, 
             EvaluationData = evaluationData
         };
 
-        CacheStepData(cacheKey, stepData);
+        // Step 9: Cache the results
+        ModelCache.CacheStepData(cacheKey, stepData);
 
         return stepData;
     }
@@ -259,9 +428,9 @@ public abstract class OptimizerBase<T, TInput, TOutput> : IOptimizer<T, TInput, 
         input.Model?.Train(input.InputData.XTrain, input.InputData.YTrain);
 
         // Evaluate the trained model
-        var evaluationData = _modelEvaluator.EvaluateModel(input);
-        var fitDetectionResult = _fitDetector.DetectFit(evaluationData);
-        var currentFitnessScore = _fitnessCalculator.CalculateFitnessScore(evaluationData);
+        var evaluationData = ModelEvaluator.EvaluateModel(input);
+        var fitDetectionResult = FitDetector.DetectFit(evaluationData);
+        var currentFitnessScore = FitnessCalculator.CalculateFitnessScore(evaluationData);
 
         return (currentFitnessScore, fitDetectionResult, evaluationData);
     }
@@ -277,7 +446,7 @@ public abstract class OptimizerBase<T, TInput, TOutput> : IOptimizer<T, TInput, 
         OptimizationInputData<T, TInput, TOutput> inputData)
     {
         var stepData = EvaluateSolution(solution, inputData);
-        return _fitnessCalculator.CalculateFitnessScore(stepData.EvaluationData);
+        return FitnessCalculator.CalculateFitnessScore(stepData.EvaluationData);
     }
 
     /// <summary>
@@ -305,12 +474,13 @@ public abstract class OptimizerBase<T, TInput, TOutput> : IOptimizer<T, TInput, 
     /// </remarks>
     protected OptimizationResult<T, TInput, TOutput> CreateOptimizationResult(OptimizationStepData<T, TInput, TOutput> bestStepData, OptimizationInputData<T, TInput, TOutput> input)
     {
+        var modelType = bestStepData.Solution.GetModelMetadata().ModelType;
         return OptimizerHelper<T, TInput, TOutput>.CreateOptimizationResult(
             bestStepData.Solution,
             bestStepData.FitnessScore,
-            _fitnessList,
+            FitnessList,
             bestStepData.SelectedFeatures,
-            new OptimizationResult<T, TInput, TOutput>.DatasetResult
+            new OptimizationResult<T, TInput, TOutput>.DatasetResult(modelType)
             {
                 X = bestStepData.XTrainSubset,
                 Y = input.YTrain,
@@ -320,7 +490,7 @@ public abstract class OptimizerBase<T, TInput, TOutput> : IOptimizer<T, TInput, 
                 PredictedBasicStats = bestStepData.EvaluationData.TrainingSet.PredictedBasicStats,
                 PredictionStats = bestStepData.EvaluationData.TrainingSet.PredictionStats
             },
-            new OptimizationResult<T, TInput, TOutput>.DatasetResult
+            new OptimizationResult<T, TInput, TOutput>.DatasetResult(modelType)
             {
                 X = bestStepData.XValSubset,
                 Y = input.YValidation,
@@ -330,7 +500,7 @@ public abstract class OptimizerBase<T, TInput, TOutput> : IOptimizer<T, TInput, 
                 PredictedBasicStats = bestStepData.EvaluationData.ValidationSet.PredictedBasicStats,
                 PredictionStats = bestStepData.EvaluationData.ValidationSet.PredictionStats
             },
-            new OptimizationResult<T, TInput, TOutput>.DatasetResult
+            new OptimizationResult<T, TInput, TOutput>.DatasetResult(modelType)
             {
                 X = bestStepData.XTestSubset,
                 Y = input.YTest,
@@ -341,8 +511,92 @@ public abstract class OptimizerBase<T, TInput, TOutput> : IOptimizer<T, TInput, 
                 PredictionStats = bestStepData.EvaluationData.TestSet.PredictionStats
             },
             bestStepData.FitDetectionResult,
-            _iterationHistoryList.Count
+            IterationHistoryList.Count
         );
+    }
+
+    /// <summary>
+    /// Applies feature selection to a model.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// This method selects a subset of features to be used by the model, potentially
+    /// improving its performance by focusing on the most relevant data dimensions.
+    /// </para>
+    /// <para><b>For Beginners:</b>
+    /// This is like deciding which ingredients to include in your recipe. Some ingredients
+    /// might not be necessary or might even make the dish worse, so you're experimenting
+    /// with different combinations to find which ones are truly important.
+    /// </para>
+    /// </remarks>
+    /// <param name="model">The model to apply feature selection to.</param>
+    /// <param name="totalFeatures">The total number of available features.</param>
+    protected virtual void ApplyFeatureSelection(IFullModel<T, TInput, TOutput> model, int totalFeatures)
+    {
+        // Randomly select features
+        var selectedFeatures = RandomlySelectFeatures(
+            totalFeatures,
+            Options.MinimumFeatures,
+            Options.MaximumFeatures);
+
+        // Apply the selected features to the model using the base class method
+        ApplyFeatureSelection(model, selectedFeatures);
+    }
+
+    /// <summary>
+    /// Creates a potential solution based on the optimization mode.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// This method creates a new model variant by either selecting features, adjusting parameters,
+    /// or both, depending on the optimization mode.
+    /// </para>
+    /// <para><b>For Beginners:</b> This is like creating a new version of the recipe. Depending on what you're focusing on,
+    /// you might change which ingredients you use, how much of each ingredient you add,
+    /// or both aspects at once.
+    /// </para>
+    /// </remarks>
+    /// <param name="xTrain">Training data used to determine data dimensions.</param>
+    /// <returns>A new potential solution (model variant).</returns>
+    protected virtual IFullModel<T, TInput, TOutput> CreateSolution(TInput xTrain)
+    {
+        // Create a deep copy of the model to avoid modifying the original
+        var solution = Model.DeepCopy();
+
+        int numFeatures = InputHelper<T, TInput>.GetInputSize(xTrain);
+
+        switch (Options.OptimizationMode)
+        {
+            case OptimizationMode.FeatureSelectionOnly:
+                ApplyFeatureSelection(solution, numFeatures);
+                break;
+
+            case OptimizationMode.ParametersOnly:
+                AdjustModelParameters(
+                    solution,
+                    Options.ParameterAdjustmentScale,
+                    Options.SignFlipProbability);
+                break;
+
+            case OptimizationMode.Both:
+            default:
+                // With some probability, apply both or just one type of optimization
+                if (Random.NextDouble() < Options.FeatureSelectionProbability)
+                {
+                    ApplyFeatureSelection(solution, numFeatures);
+                }
+
+                if (Random.NextDouble() < Options.ParameterAdjustmentProbability)
+                {
+                    AdjustModelParameters(
+                        solution,
+                        Options.ParameterAdjustmentScale,
+                        Options.SignFlipProbability);
+                }
+                break;
+        }
+
+        return solution;
     }
 
     /// <summary>
@@ -369,7 +623,7 @@ public abstract class OptimizerBase<T, TInput, TOutput> : IOptimizer<T, TInput, 
     /// </remarks>
     private void UpdateAndApplyBestSolution(ModelResult<T, TInput, TOutput> currentResult, ref ModelResult<T, TInput, TOutput> bestResult)
     {
-        if (_fitnessCalculator.IsBetterFitness(currentResult.Fitness, bestResult.Fitness))
+        if (FitnessCalculator.IsBetterFitness(currentResult.Fitness, bestResult.Fitness))
         {
             bestResult.Solution = currentResult.Solution;
             bestResult.Fitness = currentResult.Fitness;
@@ -460,6 +714,15 @@ public abstract class OptimizerBase<T, TInput, TOutput> : IOptimizer<T, TInput, 
     }
 
     /// <summary>
+    /// Resets the optimizer state, clearing the model cache.
+    /// </summary>
+    public virtual void Reset()
+    {
+        ModelCache.ClearCache();
+        ResetAdaptiveParameters();
+    }
+
+    /// <summary>
     /// Resets the adaptive parameters back to their initial values.
     /// </summary>
     /// <remarks>
@@ -511,7 +774,7 @@ public abstract class OptimizerBase<T, TInput, TOutput> : IOptimizer<T, TInput, 
     {
         if (Options.UseAdaptiveLearningRate)
         {
-            if (_fitnessCalculator.IsBetterFitness(currentStepData.FitnessScore, previousStepData.FitnessScore))
+            if (FitnessCalculator.IsBetterFitness(currentStepData.FitnessScore, previousStepData.FitnessScore))
             {
                 CurrentLearningRate = NumOps.Multiply(CurrentLearningRate, NumOps.FromDouble(Options.LearningRateDecay));
                 IterationsWithoutImprovement++;
@@ -571,7 +834,7 @@ public abstract class OptimizerBase<T, TInput, TOutput> : IOptimizer<T, TInput, 
     /// </remarks>
     protected bool UpdateIterationHistoryAndCheckEarlyStopping(int iteration, OptimizationStepData<T, TInput, TOutput> stepData)
     {
-        _iterationHistoryList.Add(new OptimizationIterationInfo<T>
+        IterationHistoryList.Add(new OptimizationIterationInfo<T>
         {
             Iteration = iteration,
             Fitness = stepData.FitnessScore,
@@ -611,18 +874,18 @@ public abstract class OptimizerBase<T, TInput, TOutput> : IOptimizer<T, TInput, 
     /// </remarks>
     public virtual bool ShouldEarlyStop()
     {
-        if (_iterationHistoryList.Count < Options.EarlyStoppingPatience)
+        if (IterationHistoryList.Count < Options.EarlyStoppingPatience)
         {
             return false;
         }
 
-        var recentIterations = _iterationHistoryList.Skip(Math.Max(0, _iterationHistoryList.Count - Options.EarlyStoppingPatience)).ToList();
+        var recentIterations = IterationHistoryList.Skip(Math.Max(0, IterationHistoryList.Count - Options.EarlyStoppingPatience)).ToList();
 
         // Find the best fitness score
-        T bestFitness = _iterationHistoryList[0].Fitness;
-        foreach (var iteration in _iterationHistoryList)
+        T bestFitness = IterationHistoryList[0].Fitness;
+        foreach (var iteration in IterationHistoryList)
         {
-            if (_fitnessCalculator.IsBetterFitness(iteration.Fitness, bestFitness))
+            if (FitnessCalculator.IsBetterFitness(iteration.Fitness, bestFitness))
             {
                 bestFitness = iteration.Fitness;
             }
@@ -632,7 +895,7 @@ public abstract class OptimizerBase<T, TInput, TOutput> : IOptimizer<T, TInput, 
         bool noImprovement = true;
         foreach (var iteration in recentIterations)
         {
-            if (_fitnessCalculator.IsBetterFitness(iteration.Fitness, bestFitness))
+            if (FitnessCalculator.IsBetterFitness(iteration.Fitness, bestFitness))
             {
                 noImprovement = false;
                 break;
@@ -654,71 +917,6 @@ public abstract class OptimizerBase<T, TInput, TOutput> : IOptimizer<T, TInput, 
         }
 
         return noImprovement || consecutiveBadFits >= Options.BadFitPatience;
-    }
-
-    /// <summary>
-    /// Creates a random initial solution for the optimization process.
-    /// </summary>
-    /// <param name="input">The input data to base model dimensions on.</param>
-    /// <param name="minFeaturesUsed">The minimum number of features to include (default is 1).</param>
-    /// <param name="maxFeaturesUsed">The maximum number of features to include (default is all available features).</param>
-    /// <returns>A randomly initialized model appropriate for the input/output types.</returns>
-    /// <remarks>
-    /// <para>
-    /// This method creates a random starting point for the optimization process by:
-    /// 1. Determining the total available features from the input data
-    /// 2. Randomly selecting a subset of features within the specified range
-    /// 3. Creating an appropriate model for those features using ModelHelper
-    /// </para>
-    /// <para><b>For Beginners:</b> This method creates a smart starting point for optimization.
-    /// 
-    /// Imagine you have a dataset with many different measurements (features) for each sample:
-    /// - This method picks a random subset of features to use
-    /// - It then creates a model that works with just those features
-    /// - Each time you call it, you get a different random starting point
-    /// 
-    /// This approach helps explore different combinations efficiently, increasing the chances
-    /// of finding the best possible model.
-    /// </para>
-    /// </remarks>
-    protected IFullModel<T, TInput, TOutput> InitializeRandomSolution(
-        TInput input, 
-        int minFeaturesUsed = 1, 
-        int? maxFeaturesUsed = null)
-    {
-        // Determine total number of features from the input
-        int totalFeatures = InputHelper<T, TInput>.GetInputSize(input);
-    
-        // Ensure min/max values are valid
-        minFeaturesUsed = Math.Max(1, Math.Min(minFeaturesUsed, totalFeatures));
-        maxFeaturesUsed = maxFeaturesUsed.HasValue 
-            ? Math.Min(maxFeaturesUsed.Value, totalFeatures) 
-            : totalFeatures;
-    
-        // If min > max (due to constraints), set them equal
-        if (minFeaturesUsed > maxFeaturesUsed)
-        {
-            maxFeaturesUsed = minFeaturesUsed;
-        }
-    
-        // Decide how many features to include (between min and max)
-        int featuresToInclude = Random.Next(minFeaturesUsed, maxFeaturesUsed.Value + 1);
-    
-        // Randomly select which features to include
-        var selectedFeatureIndices = new HashSet<int>();
-        while (selectedFeatureIndices.Count < featuresToInclude)
-        {
-            selectedFeatureIndices.Add(Random.Next(totalFeatures));
-        }
-    
-        // Convert to sorted array for consistent ordering
-        int[] activeFeatures = [.. selectedFeatureIndices.OrderBy(i => i)];
-    
-        // Use ModelHelper to create an appropriate random model that uses the selected features
-        return ModelHelper<T, TInput, TOutput>.CreateRandomModelWithFeatures(
-            activeFeatures, 
-            totalFeatures,
-            Options.UseExpressionTrees);
     }
 
     /// <summary>
@@ -881,20 +1079,65 @@ public abstract class OptimizerBase<T, TInput, TOutput> : IOptimizer<T, TInput, 
     protected abstract void UpdateOptions(OptimizationAlgorithmOptions<T, TInput, TOutput> options);
 
     /// <summary>
+    /// Performs a single optimization step, updating the model parameters based on gradients.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// This method performs one iteration of parameter updates. The default implementation
+    /// throws a NotImplementedException, and gradient-based optimizers should override this method
+    /// to implement their specific parameter update logic.
+    /// </para>
+    /// <para>
+    /// <b>For Beginners:</b> This is like taking one small step toward a better model.
+    /// After calculating how wrong the model is (gradients), this method adjusts the
+    /// model's parameters slightly to make it more accurate.
+    ///
+    /// Think of it like adjusting a recipe:
+    /// 1. You taste the dish (check model performance)
+    /// 2. You determine what needs changing (calculate gradients)
+    /// 3. You adjust the ingredients (this Step method updates parameters)
+    /// 4. Repeat until the dish tastes good (model is accurate)
+    ///
+    /// Most training loops call this method many times, each time making the model
+    /// a little bit better.
+    /// </para>
+    /// </remarks>
+    public virtual void Step()
+    {
+        throw new NotImplementedException(
+            "Step() method is not implemented for this optimizer type. " +
+            "This optimizer may be a non-gradient-based optimizer that uses the Optimize() method instead, " +
+            "or the derived class needs to implement the Step() method.");
+    }
+
+    /// <summary>
+    /// Calculates the parameter update based on the provided gradients.
+    /// </summary>
+    /// <param name="gradients">The gradients used to compute the parameter updates.</param>
+    /// <returns>The calculated parameter updates as a dictionary mapping parameter names to their update vectors.</returns>
+    public virtual Dictionary<string, Vector<T>> CalculateUpdate(Dictionary<string, Vector<T>> gradients)
+    {
+        throw new NotImplementedException(
+            "CalculateUpdate() method is not implemented for this optimizer type. " +
+            "This optimizer may be a non-gradient-based optimizer that uses the Optimize() method instead, " +
+            "or the derived class needs to implement the CalculateUpdate() method.");
+    }
+
+    /// <summary>
     /// Gets the current options for this optimizer.
     /// </summary>
     /// <returns>The current optimization algorithm options.</returns>
     /// <remarks>
     /// <para>
-    /// This abstract method must be implemented by derived classes to return their current 
+    /// This abstract method must be implemented by derived classes to return their current
     /// configuration options.
     /// </para>
     /// <para><b>For Beginners:</b> This method retrieves the current settings of the optimizer.
-    /// 
+    ///
     /// It's like checking the current configuration of your device:
     /// - It returns all the settings that control how the optimizer behaves
     /// - Each type of optimizer will implement this differently to return its specific settings
-    /// 
+    ///
     /// This is useful for:
     /// - Seeing what settings are currently active
     /// - Making a copy of settings to modify and apply later
@@ -902,4 +1145,32 @@ public abstract class OptimizerBase<T, TInput, TOutput> : IOptimizer<T, TInput, 
     /// </para>
     /// </remarks>
     public abstract OptimizationAlgorithmOptions<T, TInput, TOutput> GetOptions();
+    
+    /// <summary>
+    /// Calculates the parameter updates based on the gradients.
+    /// </summary>
+    /// <param name="gradients">The gradients of the loss function with respect to the parameters.</param>
+    /// <param name="parameters">The current parameter values.</param>
+    /// <returns>The updates to be applied to the parameters.</returns>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> This base implementation returns the gradients as-is,
+    /// which represents vanilla gradient descent. Derived classes should override this
+    /// to implement specific optimization algorithms (like Adam, SGD with momentum, etc.).</para>
+    /// </remarks>
+    public virtual Vector<T> CalculateUpdate(Vector<T> gradients, Vector<T> parameters)
+    {
+        // Base implementation: return gradients as-is (vanilla gradient descent)
+        // Derived classes should override this for specific optimization algorithms
+        return gradients;
+    }
+
+    public virtual void SaveModel(string filePath)
+    {
+        throw new NotImplementedException("SaveModel is not yet implemented for this optimizer type.");
+    }
+
+    public virtual void LoadModel(string filePath)
+    {
+        throw new NotImplementedException("LoadModel is not yet implemented for this optimizer type.");
+    }
 }

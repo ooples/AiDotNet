@@ -185,30 +185,44 @@ public class ExpressionTree<T, TInput, TOutput> : IFullModel<T, TInput, TOutput>
     }
 
     /// <summary>
-    /// Calculates the number of features used in this expression tree.
+    /// Calculates the number of unique features used in this expression tree.
     /// </summary>
-    /// <returns>The number of features used.</returns>
+    /// <returns>The count of unique features actually used in the tree.</returns>
+    /// <remarks>
+    /// This method counts the unique feature indices used in the tree. For example,
+    /// if the tree uses features x[0] and x[5], this returns 2 (the count of unique features),
+    /// not 6. This accurately represents how many different input variables the formula uses.
+    /// </remarks>
     private int CalculateFeatureCount()
     {
-        return CalculateFeatureCountRecursive(this);
+        HashSet<int> uniqueFeatures = new HashSet<int>();
+        CollectUniqueFeatures(this, uniqueFeatures);
+        return uniqueFeatures.Count;
     }
 
     /// <summary>
-    /// Recursively calculates the number of features used in a node and its children.
+    /// Recursively collects unique feature indices used in a node and its children.
     /// </summary>
     /// <param name="node">The node to check.</param>
-    /// <returns>The number of features used.</returns>
-    private int CalculateFeatureCountRecursive(ExpressionTree<T, TInput, TOutput> node)
+    /// <param name="uniqueFeatures">The set to collect unique feature indices.</param>
+    private void CollectUniqueFeatures(ExpressionTree<T, TInput, TOutput> node, HashSet<int> uniqueFeatures)
     {
+        if (node == null) return;
+
         if (node.Type == ExpressionNodeType.Variable)
         {
-            return _numOps.ToInt32(node.Value) + 1; // Add 1 because feature indices are 0-based
+            uniqueFeatures.Add(_numOps.ToInt32(node.Value));
         }
 
-        int leftCount = node.Left != null ? CalculateFeatureCountRecursive(node.Left) : 0;
-        int rightCount = node.Right != null ? CalculateFeatureCountRecursive(node.Right) : 0;
+        if (node.Left != null)
+        {
+            CollectUniqueFeatures(node.Left, uniqueFeatures);
+        }
 
-        return Math.Max(leftCount, rightCount);
+        if (node.Right != null)
+        {
+            CollectUniqueFeatures(node.Right, uniqueFeatures);
+        }
     }
 
     /// <summary>
@@ -524,9 +538,9 @@ public class ExpressionTree<T, TInput, TOutput> : IFullModel<T, TInput, TOutput>
         // For ExpressionTree, we don't actually train the model
         // The structure is defined by the tree, and we don't adjust it based on data
         // However, we can use this method to validate that our tree can process the input
-        if (x.Columns != FeatureCount)
+        if (x.Columns < FeatureCount)
         {
-            throw new ArgumentException($"Input matrix has {x.Columns} columns, but the model expects {FeatureCount} features.");
+            throw new ArgumentException($"Input matrix has {x.Columns} columns, but the model expects at least {FeatureCount} features.");
         }
     }
 
@@ -543,9 +557,9 @@ public class ExpressionTree<T, TInput, TOutput> : IFullModel<T, TInput, TOutput>
     /// </remarks>
     public Vector<T> Predict(Matrix<T> input)
     {
-        if (input.Columns != FeatureCount)
+        if (input.Columns < FeatureCount)
         {
-            throw new ArgumentException($"Input matrix has {input.Columns} columns, but the model expects {FeatureCount} features.");
+            throw new ArgumentException($"Input matrix has {input.Columns} columns, but the model expects at least {FeatureCount} features.");
         }
 
         Vector<T> predictions = new(input.Rows);
@@ -795,28 +809,144 @@ public class ExpressionTree<T, TInput, TOutput> : IFullModel<T, TInput, TOutput>
     /// </remarks>
     public IEnumerable<int> GetActiveFeatureIndices()
     {
-        HashSet<int> activeIndices = new HashSet<int>();
-    
+        HashSet<int> activeIndices = new();
+
         void CollectFeatureIndices(ExpressionTree<T, TInput, TOutput> node)
         {
             if (node.Type == ExpressionNodeType.Variable)
             {
                 activeIndices.Add(_numOps.ToInt32(node.Value));
             }
-        
+
             if (node.Left != null)
             {
                 CollectFeatureIndices(node.Left);
             }
-        
+
             if (node.Right != null)
             {
                 CollectFeatureIndices(node.Right);
             }
         }
-    
+
         CollectFeatureIndices(this);
         return activeIndices;
+    }
+
+    /// <summary>
+    /// Gets the feature importance scores for this expression tree.
+    /// </summary>
+    /// <returns>A dictionary mapping feature names to importance scores.</returns>
+    /// <remarks>
+    /// <b>For Beginners:</b> Feature importance tells you which input variables matter most in your formula.
+    /// For expression trees, importance is calculated by counting how many times each variable appears in the formula.
+    /// Variables that appear more frequently are considered more important.
+    /// </remarks>
+    public virtual Dictionary<string, T> GetFeatureImportance()
+    {
+        // Count occurrences of each feature in the tree
+        Dictionary<int, int> featureCounts = new();
+
+        void CountFeatureOccurrences(ExpressionTree<T, TInput, TOutput> node)
+        {
+            if (node == null) return;
+
+            if (node.Type == ExpressionNodeType.Variable)
+            {
+                int featureIndex = _numOps.ToInt32(node.Value);
+                if (featureCounts.ContainsKey(featureIndex))
+                {
+                    featureCounts[featureIndex]++;
+                }
+                else
+                {
+                    featureCounts[featureIndex] = 1;
+                }
+            }
+
+            if (node.Left != null)
+            {
+                CountFeatureOccurrences(node.Left);
+            }
+
+            if (node.Right != null)
+            {
+                CountFeatureOccurrences(node.Right);
+            }
+        }
+
+        CountFeatureOccurrences(this);
+
+        // Convert counts to importance scores (normalized by total occurrences)
+        int totalCount = 0;
+        foreach (var count in featureCounts.Values)
+        {
+            totalCount += count;
+        }
+
+        Dictionary<string, T> importance = new();
+        if (totalCount > 0)
+        {
+            foreach (var kvp in featureCounts)
+            {
+                string featureName = $"x[{kvp.Key}]";
+                double normalizedImportance = (double)kvp.Value / totalCount;
+                importance[featureName] = _numOps.FromDouble(normalizedImportance);
+            }
+        }
+
+        return importance;
+    }
+
+    /// <summary>
+    /// Sets the active feature indices for this expression tree.
+    /// </summary>
+    /// <param name="featureIndices">The feature indices to use.</param>
+    /// <remarks>
+    /// <b>For Beginners:</b> This restricts the formula to only use specific input variables.
+    /// Any variables in the tree that are not in the active set will be replaced with constant zero values.
+    /// This is useful for feature selection and understanding which variables are most important.
+    /// </remarks>
+    public virtual void SetActiveFeatureIndices(IEnumerable<int> featureIndices)
+    {
+        if (featureIndices == null)
+        {
+            throw new ArgumentNullException(nameof(featureIndices));
+        }
+
+        HashSet<int> activeSet = new(featureIndices);
+
+        void DeactivateInactiveFeatures(ExpressionTree<T, TInput, TOutput> node)
+        {
+            if (node == null) return;
+
+            // If this is a variable node and it's not in the active set, replace it with zero
+            if (node.Type == ExpressionNodeType.Variable)
+            {
+                int featureIndex = _numOps.ToInt32(node.Value);
+                if (!activeSet.Contains(featureIndex))
+                {
+                    node.SetType(ExpressionNodeType.Constant);
+                    node.SetValue(_numOps.Zero);
+                }
+            }
+
+            // Recursively process children
+            if (node.Left != null)
+            {
+                DeactivateInactiveFeatures(node.Left);
+            }
+
+            if (node.Right != null)
+            {
+                DeactivateInactiveFeatures(node.Right);
+            }
+        }
+
+        DeactivateInactiveFeatures(this);
+
+        // Clear the cached feature count since we've modified the tree
+        _featureCount = 0;
     }
 
     /// <summary>
@@ -1019,5 +1149,84 @@ public class ExpressionTree<T, TInput, TOutput> : IFullModel<T, TInput, TOutput>
             CollectCoefficients(this);
             return new Vector<T>(coefficients.ToArray());
         }
+    }
+
+    public virtual void SetParameters(Vector<T> parameters)
+    {
+        // Note: This implementation uses two tree traversals (counting and assignment)
+        // to validate parameter count BEFORE modifying the tree. This ensures atomicity:
+        // if the parameter count is wrong, the tree remains unchanged. A single-pass
+        // approach would leave the tree partially modified on error, which is undesirable.
+
+        // Count the number of constant nodes in the tree
+        int constantNodeCount = 0;
+
+        void CountConstants(ExpressionTree<T, TInput, TOutput> node)
+        {
+            if (node == null) return;
+            if (node.Type == ExpressionNodeType.Constant)
+            {
+                constantNodeCount++;
+            }
+            if (node.Left != null) CountConstants(node.Left);
+            if (node.Right != null) CountConstants(node.Right);
+        }
+
+        CountConstants(this);
+
+        if (parameters.Length != constantNodeCount)
+        {
+            throw new ArgumentException(
+                $"Parameter count mismatch: expected {constantNodeCount} parameters (one for each constant node), but got {parameters.Length}.",
+                nameof(parameters));
+        }
+
+        // Assign parameter values to constant nodes in a deterministic traversal order
+        // Refactored to avoid shared state mutation through closures - each recursive call
+        // returns the next index to use, improving thread-safety and code clarity
+        int AssignAndReturnNextIndex(ExpressionTree<T, TInput, TOutput> node, int currentIndex)
+        {
+            if (node == null) return currentIndex;
+
+            int nextIndex = currentIndex;
+            if (node.Type == ExpressionNodeType.Constant)
+            {
+                node.SetValue(parameters[nextIndex]);
+                nextIndex++;
+            }
+
+            if (node.Left != null)
+                nextIndex = AssignAndReturnNextIndex(node.Left, nextIndex);
+            if (node.Right != null)
+                nextIndex = AssignAndReturnNextIndex(node.Right, nextIndex);
+
+            return nextIndex;
+        }
+
+        int finalIndex = AssignAndReturnNextIndex(this, 0);
+
+        // Validate that all parameters were consumed during assignment
+        // This catches any discrepancy between counting and assignment traversals
+        if (finalIndex != parameters.Length)
+        {
+            throw new InvalidOperationException(
+                $"Internal error: expected to consume {parameters.Length} parameters, but only consumed {finalIndex}. " +
+                "This indicates a mismatch between counting and assignment traversals.");
+        }
+    }
+
+    public virtual int ParameterCount
+    {
+        get { return Coefficients.Length; }
+    }
+
+    public virtual void SaveModel(string filePath)
+    {
+        throw new NotImplementedException("SaveModel is not yet implemented for this model type.");
+    }
+
+    public virtual void LoadModel(string filePath)
+    {
+        throw new NotImplementedException("LoadModel is not yet implemented for this model type.");
     }
 }

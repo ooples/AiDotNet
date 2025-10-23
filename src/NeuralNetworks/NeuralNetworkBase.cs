@@ -1,4 +1,5 @@
 using AiDotNet.Interpretability;
+using AiDotNet.Interfaces;
 
 namespace AiDotNet.NeuralNetworks;
 
@@ -13,7 +14,7 @@ namespace AiDotNet.NeuralNetworks;
 /// This class provides the foundation for building different types of neural networks.
 /// </para>
 /// </remarks>
-public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>
+public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpretableModel<T>
 {
     /// <summary>
     /// The internal collection of layers that make up this neural network.
@@ -162,6 +163,7 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>
         MaxGradNorm = NumOps.FromDouble(maxGradNorm);
         LossFunction = lossFunction;
         _cachedParameterCount = null;
+        _sensitiveFeatures = new Vector<int>(0);
     }
 
     /// <summary>
@@ -428,6 +430,26 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>
             }
             return _cachedParameterCount.Value;
         }
+    }
+
+    /// <summary>
+    /// Gets the total number of parameters in the model.
+    /// </summary>
+    /// <returns>The total number of parameters in the neural network.</returns>
+    /// <remarks>
+    /// <para>
+    /// This method returns the total count of all trainable parameters across all layers
+    /// in the neural network. It uses the cached ParameterCount property for efficiency.
+    /// </para>
+    /// <para>
+    /// <b>For Beginners:</b> This tells you how many adjustable values (weights and biases)
+    /// your neural network has. More parameters mean the network can learn more complex patterns,
+    /// but also requires more training data and computational resources.
+    /// </para>
+    /// </remarks>
+    public int GetParameterCount()
+    {
+        return ParameterCount;
     }
 
     /// <summary>
@@ -706,7 +728,7 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>
         if (!Architecture.IsInitialized)
         {
             // Initialize from cached data
-            Architecture.InitializeFromCachedData<Tensor<T>, Tensor<T>>();
+            Architecture.InitializeFromCachedData();
 
             // Initialize network-specific layers
             InitializeLayers();
@@ -911,6 +933,35 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>
 
         byte[] serializedData = Serialize();
         File.WriteAllBytes(filePath, serializedData);
+    }
+
+    /// <summary>
+    /// Loads a neural network model from a file.
+    /// </summary>
+    /// <param name="filePath">The path to the file containing the saved model.</param>
+    /// <exception cref="ArgumentException">Thrown when the file path is null or empty.</exception>
+    /// <exception cref="FileNotFoundException">Thrown when the file does not exist.</exception>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> This method allows you to load a previously saved neural network model
+    /// from a file on disk. This is the counterpart to SaveModel and uses the Deserialize method
+    /// to reconstruct the network from the saved data.
+    /// </para>
+    /// </remarks>
+    public virtual void LoadModel(string filePath)
+    {
+        if (string.IsNullOrWhiteSpace(filePath))
+        {
+            throw new ArgumentException("File path cannot be null or empty.", nameof(filePath));
+        }
+
+        if (!File.Exists(filePath))
+        {
+            throw new FileNotFoundException($"Model file not found: {filePath}", filePath);
+        }
+
+        byte[] data = File.ReadAllBytes(filePath);
+        Deserialize(data);
     }
 
     /// <summary>
@@ -1392,7 +1443,12 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>
     /// <summary>
     /// Base model instance for interpretability delegation.
     /// </summary>
-    protected IModel<Tensor<T>, Tensor<T>, ModelMetaData<T>> _baseModel;
+    /// <remarks>
+    /// Typed as <see cref="IFullModel{T, TInput, TOutput}"/> to maintain type safety while supporting
+    /// the interpretability infrastructure. This field stores models that implement the full model interface,
+    /// which includes training, prediction, serialization, and parameterization capabilities.
+    /// </remarks>
+    protected IFullModel<T, Tensor<T>, Tensor<T>>? _baseModel;
 
     /// <summary>
     /// Gets the global feature importance across all predictions.
@@ -1415,7 +1471,7 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>
     /// </summary>
     public virtual async Task<Matrix<T>> GetShapValuesAsync(Tensor<T> inputs)
     {
-        return await InterpretableModelHelper.GetShapValuesAsync(this, _enabledMethods);
+        return await InterpretableModelHelper.GetShapValuesAsync(this, _enabledMethods, inputs);
     }
 
     /// <summary>
@@ -1423,7 +1479,7 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>
     /// </summary>
     public virtual async Task<LimeExplanation<T>> GetLimeExplanationAsync(Tensor<T> input, int numFeatures = 10)
     {
-        return await InterpretableModelHelper.GetLimeExplanationAsync<T>(_enabledMethods, numFeatures);
+        return await InterpretableModelHelper.GetLimeExplanationAsync(this, _enabledMethods, input, numFeatures);
     }
 
     /// <summary>
@@ -1431,7 +1487,7 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>
     /// </summary>
     public virtual async Task<PartialDependenceData<T>> GetPartialDependenceAsync(Vector<int> featureIndices, int gridResolution = 20)
     {
-        return await InterpretableModelHelper.GetPartialDependenceAsync<T>(_enabledMethods, featureIndices, gridResolution);
+        return await InterpretableModelHelper.GetPartialDependenceAsync(this, _enabledMethods, featureIndices, gridResolution);
     }
 
     /// <summary>
@@ -1439,7 +1495,7 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>
     /// </summary>
     public virtual async Task<CounterfactualExplanation<T>> GetCounterfactualAsync(Tensor<T> input, Tensor<T> desiredOutput, int maxChanges = 5)
     {
-        return await InterpretableModelHelper.GetCounterfactualAsync<T>(_enabledMethods, maxChanges);
+        return await InterpretableModelHelper.GetCounterfactualAsync(this, _enabledMethods, input, desiredOutput, maxChanges);
     }
 
     /// <summary>
@@ -1479,15 +1535,19 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>
     /// </summary>
     public virtual async Task<AnchorExplanation<T>> GetAnchorExplanationAsync(Tensor<T> input, T threshold)
     {
-        return await InterpretableModelHelper.GetAnchorExplanationAsync(_enabledMethods, threshold);
+        return await InterpretableModelHelper.GetAnchorExplanationAsync(this, _enabledMethods, input, threshold);
     }
 
     /// <summary>
     /// Sets the base model for interpretability analysis.
     /// </summary>
-    public virtual void SetBaseModel(IModel<Tensor<T>, Tensor<T>, ModelMetaData<T>> model)
+    /// <typeparam name="TInput">The input type for the model.</typeparam>
+    /// <typeparam name="TOutput">The output type for the model.</typeparam>
+    /// <param name="model">The model to use for interpretability analysis. Must implement IFullModel.</param>
+    /// <exception cref="ArgumentNullException">Thrown when model is null.</exception>
+    public virtual void SetBaseModel<TInput, TOutput>(IFullModel<T, TInput, TOutput> model)
     {
-        _baseModel = model ?? throw new ArgumentNullException(nameof(model));
+        _baseModel = (model ?? throw new ArgumentNullException(nameof(model))) as IFullModel<T, Tensor<T>, Tensor<T>>;
     }
 
     /// <summary>
@@ -1713,7 +1773,7 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>
     /// </summary>
     public virtual void AddConvolutionalLayer(int filters, int kernelSize, int stride, ActivationFunction activation)
     {
-        throw new NotImplementedException(
+        throw new InvalidOperationException(
             "AddConvolutionalLayer requires additional parameters that are not provided in this method signature. " +
             "Use ConvolutionalLayer.Configure() with the full input shape, or create the layer directly with " +
             "new ConvolutionalLayer<T>(inputDepth, outputDepth, kernelSize, inputHeight, inputWidth, stride, padding, activation) " +
@@ -1725,7 +1785,7 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>
     /// </summary>
     public virtual void AddLSTMLayer(int units, bool returnSequences = false)
     {
-        throw new NotImplementedException(
+        throw new InvalidOperationException(
             "AddLSTMLayer requires additional parameters that are not provided in this method signature. " +
             "Create the layer directly with new LSTMLayer<T>(inputSize, hiddenSize, inputShape, activation, recurrentActivation) " +
             "and add it to Layers manually.");

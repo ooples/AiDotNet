@@ -1,0 +1,170 @@
+name: Documentation
+
+# Auto-generate and publish API documentation
+on:
+  push:
+    branches:
+      - master
+    paths:
+      - 'src/**/*.cs'
+      - 'docs/**'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pages: write
+  id-token: write
+
+env:
+  DOTNET_SKIP_FIRST_TIME_EXPERIENCE: 1
+  DOTNET_NOLOGO: true
+
+jobs:
+  build-docs:
+    name: Build and Publish Docs
+    runs-on: self-hosted
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Setup .NET 8.0
+      uses: actions/setup-dotnet@v4
+      with:
+        dotnet-version: '8.0.x'
+
+    - name: Install DocFX
+      run: dotnet tool install --global docfx || true
+
+    - name: Create DocFX project if not exists
+      run: |
+        if [ ! -f "docfx.json" ]; then
+          cat > docfx.json << 'EOF'
+        {
+          "metadata": [
+            {
+              "src": [
+                {
+                  "files": [ "src/**/*.csproj" ],
+                  "src": "."
+                }
+              ],
+              "dest": "api",
+              "includePrivateMembers": false,
+              "disableGitFeatures": false,
+              "disableDefaultFilter": false,
+              "noRestore": false,
+              "namespaceLayout": "nested",
+              "memberLayout": "samePage",
+              "EnumSortOrder": "alphabetic"
+            }
+          ],
+          "build": {
+            "content": [
+              {
+                "files": [ "api/**.yml", "api/index.md" ]
+              },
+              {
+                "files": [ "**.md", "toc.yml" ],
+                "src": "docs",
+                "dest": "."
+              }
+            ],
+            "resource": [
+              {
+                "files": [ "images/**" ],
+                "src": "docs"
+              }
+            ],
+            "output": "_site",
+            "globalMetadataFiles": [],
+            "fileMetadataFiles": [],
+            "template": [ "default", "modern" ],
+            "postProcessors": [],
+            "keepFileLink": false,
+            "disableGitFeatures": false,
+            "globalMetadata": {
+              "_appTitle": "AiDotNet Documentation",
+              "_appName": "AiDotNet",
+              "_appFooter": "AiDotNet - Enterprise AI/ML Library for .NET",
+              "_enableSearch": true,
+              "_enableNewTab": true
+            }
+          }
+        }
+        EOF
+        fi
+
+        # Create docs structure if not exists
+        mkdir -p docs/images
+        if [ ! -f "docs/index.md" ]; then
+          cat > docs/index.md << 'EOF'
+        # AiDotNet Documentation
+
+        Welcome to the AiDotNet API documentation.
+
+        ## Overview
+
+        AiDotNet is a comprehensive AI/ML library for .NET, supporting multiple target frameworks.
+
+        ## Features
+
+        - Neural Networks
+        - Time Series Analysis
+        - Regression Models
+        - Genetic Algorithms
+        - And much more...
+
+        ## Getting Started
+
+        Install via NuGet:
+        ```
+        dotnet add package AiDotNet
+        ```
+
+        ## API Reference
+
+        Browse the [API Reference](api/index.md) for detailed documentation.
+        EOF
+        fi
+
+        if [ ! -f "docs/toc.yml" ]; then
+          cat > docs/toc.yml << 'EOF'
+        - name: Home
+          href: index.md
+        - name: API Reference
+          href: api/
+        EOF
+        fi
+      shell: bash
+
+    - name: Build documentation
+      run: docfx docfx.json
+
+    - name: Upload documentation artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: documentation
+        path: _site/
+
+    - name: Deploy to GitHub Pages
+      uses: peaceiris/actions-gh-pages@v3
+      if: github.ref == 'refs/heads/master'
+      with:
+        github_token: ${{ secrets.GITHUB_TOKEN }}
+        publish_dir: ./_site
+        force_orphan: true
+
+    - name: Documentation summary
+      run: |
+        echo "## Documentation Build Results" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "✅ Documentation built successfully" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "### Links" >> $GITHUB_STEP_SUMMARY
+        echo "- [View Documentation](https://${{ github.repository_owner }}.github.io/AiDotNet/)" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "### Next Steps" >> $GITHUB_STEP_SUMMARY
+        echo "1. Enable GitHub Pages in repository settings" >> $GITHUB_STEP_SUMMARY
+        echo "2. Set source to 'gh-pages' branch" >> $GITHUB_STEP_SUMMARY
+        echo "3. Documentation will be available at the link above" >> $GITHUB_STEP_SUMMARY

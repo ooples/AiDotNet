@@ -535,7 +535,7 @@ public class GraphNeuralNetwork<T> : NeuralNetworkBase<T>
         var outputGradients = LossFunction.CalculateDerivative(flattenedPredictions, flattenedExpected);
 
         // Backpropagate to get parameter gradients
-        Vector<T> gradients = Backpropagate(outputGradients);
+        Vector<T> gradients = Backpropagate(Tensor<T>.FromVector(outputGradients)).ToVector();
 
         // Get parameter gradients for all trainable layers
         Vector<T> parameterGradients = GetParameterGradients();
@@ -599,7 +599,7 @@ public class GraphNeuralNetwork<T> : NeuralNetworkBase<T>
         var outputGradients = new MeanSquaredErrorLoss<T>().CalculateDerivative(flattenedPredictions, flattenedExpected);
 
         // Back-propagate the gradients
-        Vector<T> backpropGradients = Backpropagate(outputGradients);
+        Vector<T> backpropGradients = Backpropagate(Tensor<T>.FromVector(outputGradients)).ToVector();
         
         // Get parameter gradients
         Vector<T> parameterGradients = GetParameterGradients();
@@ -779,6 +779,45 @@ public class GraphNeuralNetwork<T> : NeuralNetworkBase<T>
 
     protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
     {
-        throw new NotImplementedException();
+        // Create a new instance with the same architecture and activation functions
+        // Determine which constructor to use based on which activation functions are set
+        bool hasVectorActivations = _graphConvolutionalVectorActivation != null ||
+                                    _activationLayerVectorActivation != null ||
+                                    _finalDenseLayerVectorActivation != null ||
+                                    _finalActivationLayerVectorActivation != null;
+
+        bool hasScalarActivations = _graphConvolutionalScalarActivation != null ||
+                                    _activationLayerScalarActivation != null ||
+                                    _finalDenseLayerScalarActivation != null ||
+                                    _finalActivationLayerScalarActivation != null;
+
+        // Validate that we don't have a mix of vector and scalar activations
+        if (hasVectorActivations && hasScalarActivations)
+        {
+            throw new InvalidOperationException(
+                "Cannot create new instance with mixed vector and scalar activation functions. " +
+                "All activation functions must be either vector-based or scalar-based, not a combination of both.");
+        }
+
+        if (hasVectorActivations)
+        {
+            return new GraphNeuralNetwork<T>(
+                Architecture,
+                LossFunction,
+                _graphConvolutionalVectorActivation,
+                _activationLayerVectorActivation,
+                _finalDenseLayerVectorActivation,
+                _finalActivationLayerVectorActivation);
+        }
+        else
+        {
+            return new GraphNeuralNetwork<T>(
+                Architecture,
+                LossFunction,
+                _graphConvolutionalScalarActivation,
+                _activationLayerScalarActivation,
+                _finalDenseLayerScalarActivation,
+                _finalActivationLayerScalarActivation);
+        }
     }
 }

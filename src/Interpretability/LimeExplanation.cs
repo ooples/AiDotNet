@@ -9,6 +9,8 @@ namespace AiDotNet.Interpretability
     /// <typeparam name="T">The numeric type for calculations.</typeparam>
     public class LimeExplanation<T>
     {
+        private static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();
+
         /// <summary>
         /// Gets or sets the feature importance scores for the explanation.
         /// Keys are feature indices, values are importance scores.
@@ -41,6 +43,9 @@ namespace AiDotNet.Interpretability
         public LimeExplanation()
         {
             FeatureImportance = new Dictionary<int, T>();
+            Intercept = NumOps.Zero;
+            PredictedValue = NumOps.Zero;
+            LocalModelScore = NumOps.Zero;
         }
     }
 }

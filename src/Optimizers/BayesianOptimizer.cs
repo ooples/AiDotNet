@@ -243,13 +243,13 @@ public class BayesianOptimizer<T, TInput, TOutput> : OptimizerBase<T, TInput, TO
             case AcquisitionFunctionType.UpperConfidenceBound:
                 return NumOps.Add(mean, NumOps.Multiply(NumOps.FromDouble(_options.ExplorationFactor), stdDev));
             case AcquisitionFunctionType.ExpectedImprovement:
-                var maxObservedValue = _sampledValues.Max();
-                var improvement = NumOps.Subtract(mean, maxObservedValue);
+                var bestObserved = _options.IsMaximization ? _sampledValues.Max() : _sampledValues.Min();
+                var improvement = _options.IsMaximization ? NumOps.Subtract(mean, bestObserved) : NumOps.Subtract(bestObserved, mean);
                 var z = NumOps.Divide(improvement, stdDev);
                 var cdf = StatisticsHelper<T>.CalculateNormalCDF(mean, stdDev, z);
                 return NumOps.Multiply(improvement, cdf);
             default:
-                throw new NotImplementedException("Unsupported acquisition function.");
+                throw new InvalidOperationException($"Unsupported acquisition function: {_options.AcquisitionFunction}");
         }
     }
 
@@ -378,3 +378,4 @@ public class BayesianOptimizer<T, TInput, TOutput> : OptimizerBase<T, TInput, TO
         }
     }
 }
+

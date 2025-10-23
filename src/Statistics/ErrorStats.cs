@@ -261,11 +261,127 @@ public class ErrorStats<T>
     /// For Beginners:
     /// MeanSquaredLogError is useful when you care more about relative errors than absolute ones.
     /// It's calculated by applying logarithms to actual and predicted values before computing MSE.
-    /// 
+    ///
     /// MSLE penalizes underestimation (predicting too low) more heavily than overestimation.
     /// This is useful in scenarios where underestimating would be more problematic, like inventory forecasting.
     /// </remarks>
     public T MeanSquaredLogError { get; private set; }
+
+    /// <summary>
+    /// Mean Absolute Error - Alias for MAE property.
+    /// </summary>
+    /// <remarks>
+    /// For Beginners:
+    /// This is an alternative name for the MAE property, providing the same value.
+    /// Some frameworks and documentation prefer the full name "MeanAbsoluteError" while others use "MAE".
+    /// Both refer to the average absolute difference between predicted and actual values.
+    /// </remarks>
+    public T MeanAbsoluteError => MAE;
+
+    /// <summary>
+    /// Mean Squared Error - Alias for MSE property.
+    /// </summary>
+    /// <remarks>
+    /// For Beginners:
+    /// This is an alternative name for the MSE property, providing the same value.
+    /// Some frameworks and documentation prefer the full name "MeanSquaredError" while others use "MSE".
+    /// Both refer to the average of squared differences between predicted and actual values.
+    /// </remarks>
+    public T MeanSquaredError => MSE;
+
+    /// <summary>
+    /// Root Mean Squared Error - Alias for RMSE property.
+    /// </summary>
+    /// <remarks>
+    /// For Beginners:
+    /// This is an alternative name for the RMSE property, providing the same value.
+    /// Some frameworks and documentation prefer the full name "RootMeanSquaredError" while others use "RMSE".
+    /// Both refer to the square root of the Mean Squared Error.
+    /// </remarks>
+    public T RootMeanSquaredError => RMSE;
+
+    /// <summary>
+    /// Area Under the Curve (ROC) - Alias for AUCROC property.
+    /// </summary>
+    /// <remarks>
+    /// For Beginners:
+    /// This is an alternative name for the AUCROC property, providing the same value.
+    /// In many contexts, "AUC" specifically refers to the area under the ROC curve.
+    /// This metric is commonly used to evaluate classification models.
+    /// </remarks>
+    public T AUC => AUCROC;
+
+    /// <summary>
+    /// Classification accuracy - The proportion of correct predictions (for classification tasks).
+    /// </summary>
+    /// <remarks>
+    /// For Beginners:
+    /// Accuracy is a simple metric for classification problems. It's the percentage of predictions
+    /// that match the actual values.
+    ///
+    /// For example, if your model correctly classifies 90 out of 100 samples, the accuracy is 0.9 or 90%.
+    ///
+    /// Note: This property is typically used for classification tasks. For regression tasks,
+    /// other metrics like MAE, MSE, or R² are more appropriate.
+    ///
+    /// While intuitive, accuracy can be misleading for imbalanced classes. For example, if 95% of your
+    /// data belongs to class A, a model that always predicts class A would have 95% accuracy
+    /// despite being useless for class B.
+    /// </remarks>
+    public T Accuracy { get; private set; }
+
+    /// <summary>
+    /// The proportion of positive predictions that were actually correct (for classification).
+    /// </summary>
+    /// <remarks>
+    /// For Beginners:
+    /// Precision answers the question: "Of all the items labeled as positive, how many actually were positive?"
+    ///
+    /// It ranges from 0 to 1, with 1 being perfect.
+    ///
+    /// For example, if your model identifies 100 emails as spam, and 90 of them actually are spam,
+    /// the precision is 0.9 or 90%.
+    ///
+    /// Precision is important when the cost of false positives is high. In the spam example,
+    /// high precision means fewer important emails mistakenly marked as spam.
+    /// </remarks>
+    public T Precision { get; private set; }
+
+    /// <summary>
+    /// The proportion of actual positive cases that were correctly identified (for classification).
+    /// </summary>
+    /// <remarks>
+    /// For Beginners:
+    /// Recall answers the question: "Of all the actual positive items, how many did the model identify?"
+    ///
+    /// It ranges from 0 to 1, with 1 being perfect.
+    ///
+    /// For example, if there are 100 spam emails, and your model identifies 80 of them,
+    /// the recall is 0.8 or 80%.
+    ///
+    /// Recall is important when the cost of false negatives is high. In a medical context,
+    /// high recall means catching most cases of a disease, even if it means some false alarms.
+    /// </remarks>
+    public T Recall { get; private set; }
+
+    /// <summary>
+    /// The harmonic mean of precision and recall (for classification).
+    /// </summary>
+    /// <remarks>
+    /// For Beginners:
+    /// F1Score balances precision and recall in a single metric, which is helpful because
+    /// there's often a trade-off between them.
+    ///
+    /// It ranges from 0 to 1, with 1 being perfect.
+    ///
+    /// F1Score is particularly useful when:
+    /// - You need a single metric to compare models
+    /// - Classes are imbalanced (one class is much more common than others)
+    /// - You care equally about false positives and false negatives
+    ///
+    /// It's calculated as 2 * (precision * recall) / (precision + recall).
+    /// </remarks>
+    public T F1Score { get; private set; }
 
     /// <summary>
     /// Creates a new ErrorStats instance and calculates all error metrics.
@@ -300,10 +416,14 @@ public class ErrorStats<T>
         AUCPR = _numOps.Zero;
         AUCROC = _numOps.Zero;
         SMAPE = _numOps.Zero;
+        Accuracy = _numOps.Zero;
+        Precision = _numOps.Zero;
+        Recall = _numOps.Zero;
+        F1Score = _numOps.Zero;
 
         ErrorList = [];
 
-        CalculateErrorStats(inputs.Actual, inputs.Predicted, inputs.FeatureCount);
+        CalculateErrorStats(inputs.Actual, inputs.Predicted, inputs.FeatureCount, inputs.PredictionType);
     }
 
     /// <summary>
@@ -327,19 +447,21 @@ public class ErrorStats<T>
     /// <param name="actual">Vector of actual values (ground truth).</param>
     /// <param name="predicted">Vector of predicted values from your model.</param>
     /// <param name="numberOfParameters">Number of features or parameters in your model.</param>
+    /// <param name="predictionType">The type of prediction task (regression or classification).</param>
     /// <remarks>
     /// For Beginners:
     /// This private method does the actual work of calculating all the error metrics.
-    /// 
+    ///
     /// - actual: These are the true values you're trying to predict
     /// - predicted: These are your model's predictions
-    /// - numberOfParameters: This is how many input features your model uses, which is needed 
+    /// - numberOfParameters: This is how many input features your model uses, which is needed
     ///   for metrics that account for model complexity (like AIC, BIC)
-    /// 
-    /// The method calculates each error metric using specialized helper methods and 
+    /// - predictionType: Whether this is a regression or classification task
+    ///
+    /// The method calculates each error metric using specialized helper methods and
     /// stores the results in the corresponding properties.
     /// </remarks>
-    private void CalculateErrorStats(Vector<T> actual, Vector<T> predicted, int numberOfParameters)
+    private void CalculateErrorStats(Vector<T> actual, Vector<T> predicted, int numberOfParameters, PredictionType predictionType = PredictionType.Regression)
     {
         int n = actual.Length;
 
@@ -369,6 +491,10 @@ public class ErrorStats<T>
         AIC = StatisticsHelper<T>.CalculateAIC(n, numberOfParameters, RSS);
         BIC = StatisticsHelper<T>.CalculateBIC(n, numberOfParameters, RSS);
         AICAlt = StatisticsHelper<T>.CalculateAICAlternative(n, numberOfParameters, RSS);
+
+        // Calculate classification metrics
+        Accuracy = StatisticsHelper<T>.CalculateAccuracy(actual, predicted, predictionType);
+        (Precision, Recall, F1Score) = StatisticsHelper<T>.CalculatePrecisionRecallF1(actual, predicted, predictionType);
 
         // Populate error list
         ErrorList = [..StatisticsHelper<T>.CalculateResiduals(actual, predicted)];
@@ -418,6 +544,13 @@ public class ErrorStats<T>
             MetricType.AUCROC => AUCROC,
             MetricType.SMAPE => SMAPE,
             MetricType.MeanSquaredLogError => MeanSquaredLogError,
+            MetricType.MeanAbsoluteError => MeanAbsoluteError,
+            MetricType.MeanSquaredError => MeanSquaredError,
+            MetricType.RootMeanSquaredError => RootMeanSquaredError,
+            MetricType.Accuracy => Accuracy,
+            MetricType.Precision => Precision,
+            MetricType.Recall => Recall,
+            MetricType.F1Score => F1Score,
             _ => throw new ArgumentException($"Metric {metricType} is not available in ErrorStats.", nameof(metricType)),
         };
     }
@@ -465,6 +598,13 @@ public class ErrorStats<T>
             MetricType.AUCROC => true,
             MetricType.SMAPE => true,
             MetricType.MeanSquaredLogError => true,
+            MetricType.MeanAbsoluteError => true,
+            MetricType.MeanSquaredError => true,
+            MetricType.RootMeanSquaredError => true,
+            MetricType.Accuracy => true,
+            MetricType.Precision => true,
+            MetricType.Recall => true,
+            MetricType.F1Score => true,
             _ => false,
         };
     }

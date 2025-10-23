@@ -1,4 +1,8 @@
-﻿namespace AiDotNet.Genetics;
+using System;
+using System.Collections.Generic;
+using System.IO;
+
+namespace AiDotNet.Genetics;
 
 /// <summary>
 /// Represents an individual that is also a full model, allowing direct evolution of models
@@ -62,7 +66,8 @@ public class ModelIndividual<T, TInput, TOutput, TGene> :
         Func<ICollection<TGene>, IFullModel<T, TInput, TOutput>> modelFactory)
     {
         _innerModel = model;
-        _genes = [];
+        // Initialize with a copy of provided genes to avoid shared references
+        _genes = [.. genes];
         _modelFactory = modelFactory;
         _fitness = _numOps.Zero;
     }
@@ -173,7 +178,7 @@ public class ModelIndividual<T, TInput, TOutput, TGene> :
     /// <param name="parameters">The new parameters.</param>
     public void UpdateParameters(Vector<T> parameters)
     {
-        _innerModel.WithParameters(parameters);
+        _innerModel = _innerModel.WithParameters(parameters);
     }
 
     /// <summary>
@@ -211,32 +216,115 @@ public class ModelIndividual<T, TInput, TOutput, TGene> :
 
     public void Train(TInput input, TOutput expectedOutput)
     {
-        throw new NotImplementedException();
+        _innerModel.Train(input, expectedOutput);
     }
 
     public ModelMetaData<T> GetModelMetaData()
     {
-        throw new NotImplementedException();
+        return _innerModel.GetModelMetaData();
     }
 
     public IEnumerable<int> GetActiveFeatureIndices()
     {
-        throw new NotImplementedException();
+        return _innerModel.GetActiveFeatureIndices();
+    }
+
+    public virtual Dictionary<string, T> GetFeatureImportance()
+    {
+        return _innerModel.GetFeatureImportance();
+    }
+
+    public virtual void SetActiveFeatureIndices(IEnumerable<int> featureIndices)
+    {
+        _innerModel.SetActiveFeatureIndices(featureIndices);
     }
 
     public bool IsFeatureUsed(int featureIndex)
     {
-        throw new NotImplementedException();
+        return _innerModel.IsFeatureUsed(featureIndex);
     }
 
     public IFullModel<T, TInput, TOutput> DeepCopy()
     {
-        throw new NotImplementedException();
+        var copiedInner = _innerModel.DeepCopy();
+        // Deep copy genes where possible
+        var clonedGenes = new List<TGene>(_genes.Count);
+        foreach (var gene in _genes)
+        {
+            if (gene is ICloneable cloneable)
+            {
+                clonedGenes.Add((TGene)cloneable.Clone());
+            }
+            else
+            {
+                clonedGenes.Add(gene);
+            }
+        }
+        return new ModelIndividual<T, TInput, TOutput, TGene>(copiedInner, clonedGenes, _modelFactory);
     }
 
     IFullModel<T, TInput, TOutput> ICloneable<IFullModel<T, TInput, TOutput>>.Clone()
     {
-        throw new NotImplementedException();
+        var cloned = _innerModel.Clone();
+        // Deep copy genes where possible
+        var clonedGenes = new List<TGene>(_genes.Count);
+        foreach (var gene in _genes)
+        {
+            if (gene is ICloneable cloneable)
+            {
+                clonedGenes.Add((TGene)cloneable.Clone());
+            }
+            else
+            {
+                clonedGenes.Add(gene);
+            }
+        }
+        return new ModelIndividual<T, TInput, TOutput, TGene>(cloned, clonedGenes, _modelFactory);
+    }
+
+    public virtual void SetParameters(Vector<T> parameters)
+    {
+        _innerModel = _innerModel.WithParameters(parameters);
+        _parameterCountCache = null; // invalidate cache
+    }
+
+    private int? _parameterCountCache;
+    public virtual int ParameterCount
+        => _parameterCountCache ??= _innerModel.GetParameters()?.Length ?? 0;
+
+    public virtual void SaveModel(string filePath)
+    {
+        if (string.IsNullOrWhiteSpace(filePath))
+            throw new ArgumentException("File path must not be null or empty.", nameof(filePath));
+
+        try
+        {
+            var data = Serialize();
+            var directory = Path.GetDirectoryName(filePath);
+            if (!string.IsNullOrEmpty(directory) && !Directory.Exists(directory))
+                Directory.CreateDirectory(directory);
+            File.WriteAllBytes(filePath, data);
+        }
+        catch (IOException ex) { throw new InvalidOperationException($"Failed to save model to '{filePath}': {ex.Message}", ex); }
+        catch (UnauthorizedAccessException ex) { throw new InvalidOperationException($"Access denied when saving model to '{filePath}': {ex.Message}", ex); }
+        catch (System.Security.SecurityException ex) { throw new InvalidOperationException($"Security error when saving model to '{filePath}': {ex.Message}", ex); }
+    }
+
+    public virtual void LoadModel(string filePath)
+    {
+        if (string.IsNullOrWhiteSpace(filePath))
+            throw new ArgumentException("File path must not be null or empty.", nameof(filePath));
+
+        try
+        {
+            var data = File.ReadAllBytes(filePath);
+            Deserialize(data);
+        }
+        catch (FileNotFoundException ex) { throw new FileNotFoundException($"The specified model file does not exist: {filePath}", filePath, ex); }
+        catch (IOException ex) { throw new InvalidOperationException($"File I/O error while loading model from '{filePath}': {ex.Message}", ex); }
+        catch (UnauthorizedAccessException ex) { throw new InvalidOperationException($"Access denied when loading model from '{filePath}': {ex.Message}", ex); }
+        catch (System.Security.SecurityException ex) { throw new InvalidOperationException($"Security error when loading model from '{filePath}': {ex.Message}", ex); }
+        catch (Exception ex) { throw new InvalidOperationException($"Failed to deserialize model from file '{filePath}'. The file may be corrupted or incompatible: {ex.Message}", ex); }
     }
 
     #endregion
