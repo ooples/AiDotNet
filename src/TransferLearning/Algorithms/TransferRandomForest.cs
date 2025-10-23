@@ -331,7 +331,7 @@ internal class MappedRandomForestModel<T> : IFullModel<T, Matrix<T>, Vector<T>>
                         key = s;
                     }
                 }
-                catch (Exception ex)
+                catch (Exception)
                 {
                     // Failed to inverse map feature name; using original key as fallback
                 }
