@@ -107,7 +107,7 @@ namespace AiDotNet.AutoML
             foreach (var item in list)
             {
                 // Allow null items to be preserved; DeepCloneObject may legitimately return null
-                clonedList.Add(DeepCloneObject(item));
+                clonedList.Add(DeepCloneObject(item)!);
             }
             return clonedList;
         }
