@@ -485,6 +485,30 @@ public class PredictionModelResult<T, TInput, TOutput> : IPredictiveModel<T, TIn
     }
 
     /// <summary>
+    /// Extracts metadata from serialized data.
+    /// </summary>
+    /// <param name="data">The serialized data.</param>
+    /// <returns>The extracted ModelMetadata.</returns>
+    private static ModelMetadata<T> ExtractMetadataFromSerializedData(byte[] data)
+    {
+        try
+        {
+            var jsonString = Encoding.UTF8.GetString(data);
+            var settings = new JsonSerializerSettings
+            {
+                TypeNameHandling = TypeNameHandling.All
+            };
+
+            var tempResult = JsonConvert.DeserializeObject<PredictionModelResult<T, TInput, TOutput>>(jsonString, settings);
+            return tempResult?.ModelMetadata ?? new ModelMetadata<T>();
+        }
+        catch (Exception ex)
+        {
+            throw new InvalidOperationException($"Failed to extract metadata from serialized data: {ex.Message}", ex);
+        }
+    }
+
+    /// <summary>
     /// Loads a model from a file.
     /// </summary>
     /// <param name="filePath">The path of the file containing the serialized model.</param>
@@ -497,20 +521,20 @@ public class PredictionModelResult<T, TInput, TOutput> : IPredictiveModel<T, TIn
     /// before deserialization.
     /// </para>
     /// <para><b>For Beginners:</b> This method loads a previously saved model from a file.
-    /// 
+    ///
     /// The LoadModel method:
     /// - Takes a file path where the model is stored
     /// - Uses the model factory to create the right type of model based on metadata
     /// - Reads the file and deserializes the data into a new PredictionModelResult object
     /// - Returns the fully loaded model ready for making predictions
-    /// 
+    ///
     /// The model factory is important because:
     /// - Different types of models (linear regression, neural networks, etc.) need different deserialization logic
     /// - The factory knows how to create the right type of model based on information in the saved file
-    /// 
+    ///
     /// For example, you might load a model with:
     /// `var model = PredictionModelResult<double, Matrix<double>, Vector<double>>.LoadModel(
-    ///     "C:\\Models\\house_price_predictor.model", 
+    ///     "C:\\Models\\house_price_predictor.model",
     ///     metadata => new LinearRegressionModel<double>());`
     /// </para>
     /// </remarks>
@@ -541,60 +565,26 @@ public class PredictionModelResult<T, TInput, TOutput> : IPredictiveModel<T, TIn
 
     public void Train(TInput input, TOutput expectedOutput)
     {
-        throw new NotImplementedException();
+        if (Model == null)
+        {
+            throw new InvalidOperationException("Model has not been initialized. Cannot train.");
+        }
+
+        Model.Train(input, expectedOutput);
     }
 
     public ModelMetaData<T> GetModelMetaData()
     {
-        throw new NotImplementedException();
-    }
-
-    public Vector<T> GetParameters()
-    {
-        throw new NotImplementedException();
-    }
-
-    public IFullModel<T, TInput, TOutput> WithParameters(Vector<T> parameters)
-    {
-        throw new NotImplementedException();
-    }
-
-    public IEnumerable<int> GetActiveFeatureIndices()
-    {
-        throw new NotImplementedException();
-    }
-
-    public bool IsFeatureUsed(int featureIndex)
-    {
-        throw new NotImplementedException();
-    }
-
-    public IFullModel<T, TInput, TOutput> DeepCopy()
-    {
-        throw new NotImplementedException();
-    }
-
-    public IFullModel<T, TInput, TOutput> Clone()
-    {
-        throw new NotImplementedException();
+        return new ModelMetaData<T>
+        {
+            FeatureNames = ModelMetadata.FeatureNames,
+            TargetName = ModelMetadata.TargetName,
+            ModelType = ModelMetadata.ModelType,
+            CreatedDate = ModelMetadata.CreatedDate
+        };
     }
 
     #region IModelSerializer Implementation
-
-    /// <summary>
-    /// Saves the model to a file.
-    /// </summary>
-    /// <param name="filePath">The path where the model should be saved.</param>
-    public void SaveModel(string filePath)
-    {
-        if (string.IsNullOrWhiteSpace(filePath))
-        {
-            throw new ArgumentException("File path cannot be null or empty.", nameof(filePath));
-        }
-
-        var data = Serialize();
-        File.WriteAllBytes(filePath, data);
-    }
 
     /// <summary>
     /// Loads the model from a file.
@@ -620,209 +610,137 @@ public class PredictionModelResult<T, TInput, TOutput> : IPredictiveModel<T, TIn
 
     #region IParameterizable Implementation
 
-    /// <summary>
-    /// Gets the parameters that can be optimized.
-    /// </summary>
-    /// <returns>A vector containing the model parameters.</returns>
     public Vector<T> GetParameters()
     {
-        if (_innerModel == null)
+        if (Model == null)
         {
             throw new InvalidOperationException("Model has not been initialized. Cannot get parameters.");
         }
 
-        return _innerModel.GetParameters();
+        return Model.GetParameters();
     }
 
-    /// <summary>
-    /// Sets the model parameters.
-    /// </summary>
-    /// <param name="parameters">The parameter vector to set.</param>
     public void SetParameters(Vector<T> parameters)
     {
-        if (_innerModel == null)
+        if (Model == null)
         {
             throw new InvalidOperationException("Model has not been initialized. Cannot set parameters.");
         }
 
-        _innerModel.SetParameters(parameters);
+        Model.SetParameters(parameters);
     }
 
-    /// <summary>
-    /// Gets the number of parameters in the model.
-    /// </summary>
     public int ParameterCount
     {
         get
         {
-            if (_innerModel == null)
+            if (Model == null)
             {
                 throw new InvalidOperationException("Model has not been initialized. Cannot get parameter count.");
             }
 
-            return _innerModel.ParameterCount;
+            return Model.ParameterCount;
         }
     }
 
-    /// <summary>
-    /// Creates a new instance with the specified parameters.
-    /// </summary>
-    /// <param name="parameters">The parameters to use for the new instance.</param>
-    /// <returns>A new model instance with the specified parameters.</returns>
-    /// <exception cref="InvalidOperationException">Thrown when the model or required metadata is not initialized.</exception>
     public IFullModel<T, TInput, TOutput> WithParameters(Vector<T> parameters)
     {
-        if (_innerModel == null)
+        if (Model == null)
         {
             throw new InvalidOperationException("Model has not been initialized. Cannot create instance with parameters.");
         }
 
-        if (_optimizationResult == null)
-        {
-            throw new InvalidOperationException("OptimizationResult is missing. Cannot create instance with parameters.");
-        }
+        var newModel = Model.WithParameters(parameters);
+        var newOptimizationResult = OptimizationResult.WithParameters(parameters);
 
-        if (_normalizationInfo == null)
+        return new PredictionModelResult<T, TInput, TOutput>(newOptimizationResult, NormalizationInfo)
         {
-            throw new InvalidOperationException("NormalizationInfo is missing. Cannot create instance with parameters.");
-        }
-
-        var newInnerModel = _innerModel.WithParameters(parameters);
-        var newOptimizationResult = _optimizationResult.WithParameters(parameters);
-        var newNormalizationInfo = _normalizationInfo.WithParameters(parameters);
-        return new PredictionModelResult<T, TInput, TOutput>(
-            newInnerModel,
-            newOptimizationResult,
-            newNormalizationInfo);
+            Model = newModel
+        };
     }
 
     #endregion
 
     #region IFeatureAware Implementation
 
-    /// <summary>
-    /// Gets the indices of features that are actively used by this model.
-    /// </summary>
-    /// <returns>An enumerable of feature indices.</returns>
     public IEnumerable<int> GetActiveFeatureIndices()
     {
-        if (_innerModel == null)
+        if (Model == null)
         {
             throw new InvalidOperationException("Model has not been initialized. Cannot get active feature indices.");
         }
 
-        return _innerModel.GetActiveFeatureIndices();
+        return Model.GetActiveFeatureIndices();
     }
 
-    /// <summary>
-    /// Sets the active feature indices for this model.
-    /// </summary>
-    /// <param name="featureIndices">The feature indices to set as active.</param>
     public void SetActiveFeatureIndices(IEnumerable<int> featureIndices)
     {
-        if (_innerModel == null)
+        if (Model == null)
         {
             throw new InvalidOperationException("Model has not been initialized. Cannot set active feature indices.");
         }
 
-        _innerModel.SetActiveFeatureIndices(featureIndices);
+        Model.SetActiveFeatureIndices(featureIndices);
     }
 
-    /// <summary>
-    /// Checks if a specific feature is used by this model.
-    /// </summary>
-    /// <param name="featureIndex">The index of the feature to check.</param>
-    /// <returns>True if the feature is used; otherwise, false.</returns>
     public bool IsFeatureUsed(int featureIndex)
     {
-        if (_innerModel == null)
+        if (Model == null)
         {
             return false;
         }
 
-        return _innerModel.IsFeatureUsed(featureIndex);
+        return Model.IsFeatureUsed(featureIndex);
     }
 
     #endregion
 
     #region IFeatureImportance Implementation
 
-    /// <summary>
-    /// Gets the feature importance scores.
-    /// </summary>
-    /// <returns>A dictionary mapping feature names to importance scores.</returns>
     public Dictionary<string, T> GetFeatureImportance()
     {
-        if (_innerModel == null)
+        if (Model == null)
         {
             throw new InvalidOperationException("Model has not been initialized. Cannot get feature importance.");
         }
 
-        return _innerModel.GetFeatureImportance();
+        return Model.GetFeatureImportance();
     }
 
     #endregion
 
     #region ICloneable Implementation
 
-    /// <summary>
-    /// Creates a deep copy of this object.
-    /// </summary>
-    /// <returns>A deep copy of the prediction model result.</returns>
-    /// <exception cref="InvalidOperationException">Thrown when the model or required metadata is not initialized.</exception>
     public IFullModel<T, TInput, TOutput> DeepCopy()
     {
-        if (_innerModel == null)
+        if (Model == null)
         {
             throw new InvalidOperationException("Model has not been initialized. Cannot create deep copy.");
         }
 
-        if (_optimizationResult == null)
-        {
-            throw new InvalidOperationException("OptimizationResult is missing. Cannot create deep copy.");
-        }
+        var copiedModel = Model.DeepCopy();
+        var copiedOptimizationResult = OptimizationResult.DeepCopy();
+        var copiedNormalizationInfo = NormalizationInfo.DeepCopy();
 
-        if (_normalizationInfo == null)
+        return new PredictionModelResult<T, TInput, TOutput>(copiedOptimizationResult, copiedNormalizationInfo)
         {
-            throw new InvalidOperationException("NormalizationInfo is missing. Cannot create deep copy.");
-        }
-
-        var copiedInnerModel = _innerModel.DeepCopy();
-        var copiedOptimizationResult = _optimizationResult.DeepCopy();
-        var copiedNormalizationInfo = _normalizationInfo.DeepCopy();
-        return new PredictionModelResult<T, TInput, TOutput>(
-            copiedInnerModel,
-            copiedOptimizationResult,
-            copiedNormalizationInfo);
+            Model = copiedModel
+        };
     }
 
-    /// <summary>
-    /// Creates a shallow copy of this object.
-    /// </summary>
-    /// <returns>A shallow copy of the prediction model result.</returns>
-    /// <exception cref="InvalidOperationException">Thrown when the model or required metadata is not initialized.</exception>
     public IFullModel<T, TInput, TOutput> Clone()
     {
-        if (_innerModel == null)
+        if (Model == null)
         {
             throw new InvalidOperationException("Model has not been initialized. Cannot create clone.");
         }
 
-        if (_optimizationResult == null)
-        {
-            throw new InvalidOperationException("OptimizationResult is missing. Cannot create clone.");
-        }
+        var clonedModel = Model.Clone();
 
-        if (_normalizationInfo == null)
+        return new PredictionModelResult<T, TInput, TOutput>(OptimizationResult, NormalizationInfo)
         {
-            throw new InvalidOperationException("NormalizationInfo is missing. Cannot create clone.");
-        }
-
-        var clonedInnerModel = _innerModel.Clone();
-        return new PredictionModelResult<T, TInput, TOutput>(
-            clonedInnerModel,
-            _optimizationResult,
-            _normalizationInfo);
+            Model = clonedModel
+        };
     }
 
     #endregion
