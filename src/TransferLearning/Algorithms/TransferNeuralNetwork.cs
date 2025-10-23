@@ -138,7 +138,7 @@ public class TransferNeuralNetwork<T> : TransferLearningBase<T, Matrix<T>, Vecto
 
         // Step 6: Create and train a new model on the target domain
         var targetModel = sourceModel.DeepCopy();
-        targetModel.Train(targetData, combinedLabels);
+        targetModel.Train(mappedTargetData, combinedLabels);
 
         return targetModel;
     }
