@@ -139,5 +139,6 @@ public class BayesianOptimizerOptions<T, TInput, TOutput> : OptimizationAlgorith
     /// Gets or sets whether the objective should be maximized (true) or minimized (false).
     /// </summary>
     public bool IsMaximization { get; set; } = true;
-     set; } = new GaussianKernel<T>();
+
+    public IKernel<T> Kernel { get; set; } = new GaussianKernel<T>();
 }
