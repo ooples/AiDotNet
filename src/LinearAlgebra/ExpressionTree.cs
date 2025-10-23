@@ -185,19 +185,25 @@ public class ExpressionTree<T, TInput, TOutput> : IFullModel<T, TInput, TOutput>
     }
 
     /// <summary>
-    /// Calculates the number of features used in this expression tree.
+    /// Calculates the number of features required by this expression tree.
     /// </summary>
-    /// <returns>The number of features used.</returns>
+    /// <returns>The minimum number of features required (highest feature index + 1).</returns>
+    /// <remarks>
+    /// This method returns the highest feature index used plus one, which represents
+    /// the minimum number of features required to evaluate this tree. For example,
+    /// if the tree uses features x[0] and x[5], this returns 6 (not 2), because
+    /// the input must have at least 6 features to access index 5.
+    /// </remarks>
     private int CalculateFeatureCount()
     {
         return CalculateFeatureCountRecursive(this);
     }
 
     /// <summary>
-    /// Recursively calculates the number of features used in a node and its children.
+    /// Recursively finds the highest feature index used in a node and its children.
     /// </summary>
     /// <param name="node">The node to check.</param>
-    /// <returns>The number of features used.</returns>
+    /// <returns>The highest feature index + 1 (to represent minimum required features).</returns>
     private int CalculateFeatureCountRecursive(ExpressionTree<T, TInput, TOutput> node)
     {
         if (node.Type == ExpressionNodeType.Variable)
@@ -524,9 +530,9 @@ public class ExpressionTree<T, TInput, TOutput> : IFullModel<T, TInput, TOutput>
         // For ExpressionTree, we don't actually train the model
         // The structure is defined by the tree, and we don't adjust it based on data
         // However, we can use this method to validate that our tree can process the input
-        if (x.Columns != FeatureCount)
+        if (x.Columns < FeatureCount)
         {
-            throw new ArgumentException($"Input matrix has {x.Columns} columns, but the model expects {FeatureCount} features.");
+            throw new ArgumentException($"Input matrix has {x.Columns} columns, but the model expects at least {FeatureCount} features.");
         }
     }
 
@@ -543,9 +549,9 @@ public class ExpressionTree<T, TInput, TOutput> : IFullModel<T, TInput, TOutput>
     /// </remarks>
     public Vector<T> Predict(Matrix<T> input)
     {
-        if (input.Columns != FeatureCount)
+        if (input.Columns < FeatureCount)
         {
-            throw new ArgumentException($"Input matrix has {input.Columns} columns, but the model expects {FeatureCount} features.");
+            throw new ArgumentException($"Input matrix has {input.Columns} columns, but the model expects at least {FeatureCount} features.");
         }
 
         Vector<T> predictions = new(input.Rows);
