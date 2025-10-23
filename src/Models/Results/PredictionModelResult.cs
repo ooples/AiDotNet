@@ -267,6 +267,7 @@ public class PredictionModelResult<T, TInput, TOutput> : IPredictiveModel<T, TIn
     /// </summary>
     /// <param name="parameters">The parameters to use for the new instance.</param>
     /// <returns>A new model instance with the specified parameters.</returns>
+    /// <exception cref="InvalidOperationException">Thrown when the model or required metadata is not initialized.</exception>
     public IFullModel<T, TInput, TOutput> WithParameters(Vector<T> parameters)
     {
         if (_innerModel == null)
@@ -274,11 +275,21 @@ public class PredictionModelResult<T, TInput, TOutput> : IPredictiveModel<T, TIn
             throw new InvalidOperationException("Model has not been initialized. Cannot create instance with parameters.");
         }
 
+        if (_optimizationResult == null)
+        {
+            throw new InvalidOperationException("OptimizationResult is missing. Cannot create instance with parameters.");
+        }
+
+        if (_normalizationInfo == null)
+        {
+            throw new InvalidOperationException("NormalizationInfo is missing. Cannot create instance with parameters.");
+        }
+
         var newInnerModel = _innerModel.WithParameters(parameters);
         return new PredictionModelResult<T, TInput, TOutput>(
             newInnerModel,
-            _optimizationResult ?? new OptimizationResult<T, TInput, TOutput>(),
-            _normalizationInfo ?? new NormalizationInfo<T, TInput, TOutput>());
+            _optimizationResult,
+            _normalizationInfo);
     }
 
     #endregion
@@ -354,6 +365,7 @@ public class PredictionModelResult<T, TInput, TOutput> : IPredictiveModel<T, TIn
     /// Creates a deep copy of this object.
     /// </summary>
     /// <returns>A deep copy of the prediction model result.</returns>
+    /// <exception cref="InvalidOperationException">Thrown when the model or required metadata is not initialized.</exception>
     public IFullModel<T, TInput, TOutput> DeepCopy()
     {
         if (_innerModel == null)
@@ -361,17 +373,28 @@ public class PredictionModelResult<T, TInput, TOutput> : IPredictiveModel<T, TIn
             throw new InvalidOperationException("Model has not been initialized. Cannot create deep copy.");
         }
 
+        if (_optimizationResult == null)
+        {
+            throw new InvalidOperationException("OptimizationResult is missing. Cannot create deep copy.");
+        }
+
+        if (_normalizationInfo == null)
+        {
+            throw new InvalidOperationException("NormalizationInfo is missing. Cannot create deep copy.");
+        }
+
         var copiedInnerModel = _innerModel.DeepCopy();
         return new PredictionModelResult<T, TInput, TOutput>(
             copiedInnerModel,
-            _optimizationResult ?? new OptimizationResult<T, TInput, TOutput>(),
-            _normalizationInfo ?? new NormalizationInfo<T, TInput, TOutput>());
+            _optimizationResult,
+            _normalizationInfo);
     }
 
     /// <summary>
     /// Creates a shallow copy of this object.
     /// </summary>
     /// <returns>A shallow copy of the prediction model result.</returns>
+    /// <exception cref="InvalidOperationException">Thrown when the model or required metadata is not initialized.</exception>
     public IFullModel<T, TInput, TOutput> Clone()
     {
         if (_innerModel == null)
@@ -379,11 +402,21 @@ public class PredictionModelResult<T, TInput, TOutput> : IPredictiveModel<T, TIn
             throw new InvalidOperationException("Model has not been initialized. Cannot create clone.");
         }
 
+        if (_optimizationResult == null)
+        {
+            throw new InvalidOperationException("OptimizationResult is missing. Cannot create clone.");
+        }
+
+        if (_normalizationInfo == null)
+        {
+            throw new InvalidOperationException("NormalizationInfo is missing. Cannot create clone.");
+        }
+
         var clonedInnerModel = _innerModel.Clone();
         return new PredictionModelResult<T, TInput, TOutput>(
             clonedInnerModel,
-            _optimizationResult ?? new OptimizationResult<T, TInput, TOutput>(),
-            _normalizationInfo ?? new NormalizationInfo<T, TInput, TOutput>());
+            _optimizationResult,
+            _normalizationInfo);
     }
 
     #endregion
