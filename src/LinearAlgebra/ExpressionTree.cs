@@ -151,8 +151,9 @@ public class ExpressionTree<T, TInput, TOutput> : IFullModel<T, TInput, TOutput>
 
     /// <summary>
     /// Cached count of parameters (constant nodes) in this expression tree.
+    /// Nullable to distinguish between "not yet calculated" (null) and "calculated as zero" (0).
     /// </summary>
-    private int _parameterCount;
+    private int? _parameterCount;
 
     /// <summary>
     /// Gets the number of features (variables) used in this expression tree.
@@ -1120,11 +1121,11 @@ public class ExpressionTree<T, TInput, TOutput> : IFullModel<T, TInput, TOutput>
     {
         get
         {
-            if (_parameterCount == 0)
+            if (_parameterCount == null)
             {
                 _parameterCount = Coefficients.Length;
             }
-            return _parameterCount;
+            return _parameterCount.Value;
         }
     }
 
