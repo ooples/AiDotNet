@@ -100,6 +100,30 @@ When updating interfaces, maintain generic `TInput` and `TOutput` parameters to 
 throw new ArgumentException($"Expected {ExpectedParameterCount} parameters, but got {parameters.Length}", nameof(parameters));
 ```
 
+## Critical Files - NEVER DELETE OR EMPTY
+
+**ABSOLUTE PROHIBITION**: The following base class files are critical to the project and protected by pre-commit hooks:
+
+- `src/Regression/RegressionBase.cs` - Base class for all regression models (746 lines)
+- `src/Optimizers/OptimizerBase.cs` - Base class for optimization algorithms (286 lines)
+- `src/Models/NeuralNetworkModel.cs` - Core neural network implementation
+- `src/TimeSeries/TimeSeriesModelBase.cs` - Base class for time series models
+- `src/Regression/DecisionTreeRegressionBase.cs` - Base class for decision tree regression
+- `src/Regression/DecisionTreeAsyncRegressionBase.cs` - Base class for async decision tree regression
+- `src/Regression/NonLinearRegressionBase.cs` - Base class for non-linear regression
+
+**If you need to modify these files**:
+1. ✅ Adding new methods is OK
+2. ✅ Fixing bugs in existing methods is OK
+3. ✅ Improving documentation is OK
+4. ❌ NEVER delete or empty these files
+5. ❌ NEVER remove critical methods without team discussion
+6. ⚠️ Refactoring requires creating new files first, then migrating
+
+**Pre-commit hook protection**: Commits that delete or empty these files (< 100 bytes) will be automatically blocked.
+
+**Incident history**: On 2025-10-23, RegressionBase.cs and OptimizerBase.cs were accidentally emptied. See `.claude/CRITICAL_FILE_SAFEGUARDS.md` for details.
+
 ## Common Mistakes to Avoid
 
 1. **Using IModel instead of IFullModel** - Always use IFullModel for model references
@@ -108,6 +132,8 @@ throw new ArgumentException($"Expected {ExpectedParameterCount} parameters, but 
 4. **Using .NET 6+ only APIs** - Check compatibility with net462 target framework
 5. **Removing generic type parameters** - Maintain flexibility unless explicitly required
 6. **Missing parameter names in exceptions** - Always use `nameof(param)` in ArgumentException
+7. **Deleting or emptying critical base class files** - Protected by pre-commit hooks (see above)
+8. **Using hardcoded primitive types** - Use generic types (TInput, TOutput, T) instead of double[][]
 
 ## Common Build Errors and Solutions
 
