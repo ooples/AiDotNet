@@ -578,7 +578,14 @@ public class PredictionModelResult<T, TInput, TOutput> : IPredictiveModel<T, TIn
     {
         throw new NotImplementedException();
     }
-}
+
+    #endregion
+
+    #region IModelSerializer Implementation
+
+    /// <summary>
+    /// Saves the model to a file.
+    /// </summary>
     /// <param name="filePath">The path where the model should be saved.</param>
     public void SaveModel(string filePath)
     {
