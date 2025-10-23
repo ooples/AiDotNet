@@ -568,9 +568,13 @@ public class ExpressionTree<T, TInput, TOutput> : IFullModel<T, TInput, TOutput>
     /// <returns>A vector containing the predicted values for each input sample.</returns>
     /// <exception cref="ArgumentException">Thrown when the input matrix has incorrect dimensions.</exception>
     /// <remarks>
-    /// <b>For Beginners:</b> This method takes your data (like height, weight, age values) and 
+    /// <b>For Beginners:</b> This method takes your data (like height, weight, age values) and
     /// runs each row through the mathematical formula represented by this tree to get predictions.
     /// For example, if your tree represents "2x + y", and your input has values [3,4], the prediction would be 2*3 + 4 = 10.
+    ///
+    /// <b>Note:</b> If the input has more features than the model requires, the extra features are allowed but ignored.
+    /// Only the first FeatureCount features are used in predictions. This flexibility supports transfer learning scenarios
+    /// where input data may contain additional features not used by this particular model.
     /// </remarks>
     public Vector<T> Predict(Matrix<T> input)
     {

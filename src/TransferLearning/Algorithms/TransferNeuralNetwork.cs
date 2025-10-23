@@ -112,6 +112,8 @@ public class TransferNeuralNetwork<T> : TransferLearningBase<T, Matrix<T>, Vecto
         Vector<T> combinedLabels = CombineLabels(softLabels, targetLabels, 0.7);
 
         // Step 6: Create and train a new model on the target domain
+        // Use original targetData (not mapped) since the model should learn in target feature space
+        // The mapping was only needed to get predictions from source model for knowledge distillation
         var targetModel = sourceModel.DeepCopy();
         targetModel.Train(targetData, combinedLabels);
 

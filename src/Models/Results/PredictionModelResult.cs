@@ -1,4 +1,4 @@
-﻿global using Newtonsoft.Json;
+global using Newtonsoft.Json;
 global using Formatting = Newtonsoft.Json.Formatting;
 
 namespace AiDotNet.Models.Results;
@@ -133,32 +133,32 @@ public class PredictionModelResult<T, TInput, TOutput> : IPredictiveModel<T, TIn
     /// <summary>
     /// Gets or sets the metadata associated with the model.
     /// </summary>
-    /// <value>A ModelMetadata&lt;T&gt; object containing descriptive information about the model.</value>
+    /// <value>A ModelMetaData&lt;T&gt; object containing descriptive information about the model.</value>
     /// <remarks>
     /// <para>
-    /// This property contains metadata about the model, such as the names of the input features, the name of the target 
-    /// variable, the date and time the model was created, the type of model, and any additional descriptive information. 
-    /// This metadata is useful for understanding what the model does and how it should be used, without having to examine 
+    /// This property contains metadata about the model, such as the names of the input features, the name of the target
+    /// variable, the date and time the model was created, the type of model, and any additional descriptive information.
+    /// This metadata is useful for understanding what the model does and how it should be used, without having to examine
     /// the model itself. It can also be used for documentation, versioning, and tracking purposes.
     /// </para>
     /// <para><b>For Beginners:</b> This contains descriptive information about the model.
-    /// 
+    ///
     /// The model metadata:
     /// - Stores information like feature names and target variable name
     /// - Records when the model was created
     /// - Describes what type of model it is
     /// - May include additional descriptive information
-    /// 
+    ///
     /// This information is useful because:
     /// - It helps you understand what the model is predicting and what inputs it needs
     /// - It provides documentation for the model
     /// - It can help with versioning and tracking different models
-    /// 
+    ///
     /// For example, the metadata might tell you that this model predicts "house_price"
     /// based on features like "square_footage", "num_bedrooms", and "location_score".
     /// </para>
     /// </remarks>
-    public ModelMetadata<T> ModelMetadata { get; private set; } = new();
+    public ModelMetaData<T> ModelMetaData { get; private set; } = new();
 
     /// <summary>
     /// Initializes a new instance of the PredictionModelResult class with the specified model, optimization results, and normalization information.
@@ -196,7 +196,7 @@ public class PredictionModelResult<T, TInput, TOutput> : IPredictiveModel<T, TIn
         Model = optimizationResult.BestSolution;
         OptimizationResult = optimizationResult;
         NormalizationInfo = normalizationInfo;
-        ModelMetadata = Model?.GetModelMetadata() ?? new();
+        ModelMetaData = Model?.GetModelMetadata() ?? new();
     }
 
     /// <summary>
@@ -231,33 +231,33 @@ public class PredictionModelResult<T, TInput, TOutput> : IPredictiveModel<T, TIn
     /// <summary>
     /// Gets the metadata associated with the model.
     /// </summary>
-    /// <returns>A ModelMetadata&lt;T&gt; object containing descriptive information about the model.</returns>
+    /// <returns>A ModelMetaData&lt;T&gt; object containing descriptive information about the model.</returns>
     /// <remarks>
     /// <para>
-    /// This method returns the metadata associated with the model, which is stored in the ModelMetadata property. It is 
-    /// implemented to satisfy the IPredictiveModel interface, which requires a method to retrieve model metadata. The 
-    /// metadata includes information such as the names of the input features, the name of the target variable, the date 
+    /// This method returns the metadata associated with the model, which is stored in the ModelMetaData property. It is
+    /// implemented to satisfy the IPredictiveModel interface, which requires a method to retrieve model metadata. The
+    /// metadata includes information such as the names of the input features, the name of the target variable, the date
     /// and time the model was created, the type of model, and any additional descriptive information.
     /// </para>
     /// <para><b>For Beginners:</b> This method returns descriptive information about the model.
-    /// 
+    ///
     /// The GetModelMetadata method:
-    /// - Returns the metadata stored in the ModelMetadata property
+    /// - Returns the metadata stored in the ModelMetaData property
     /// - Is required by the IPredictiveModel interface
     /// - Provides access to information about what the model does and how it works
-    /// 
+    ///
     /// This method is useful when:
     /// - You want to display information about the model
     /// - You need to check what features the model expects
     /// - You're working with multiple models and need to identify them
-    /// 
+    ///
     /// For example, you might call this method to get the list of feature names
     /// so you can ensure your input data has the correct columns.
     /// </para>
     /// </remarks>
-    public ModelMetadata<T> GetModelMetadata()
+    public ModelMetaData<T> GetModelMetadata()
     {
-        return ModelMetadata;
+        return ModelMetaData;
     }
 
     /// <summary>
@@ -438,7 +438,7 @@ public class PredictionModelResult<T, TInput, TOutput> : IPredictiveModel<T, TIn
                 Model = deserializedObject.Model;
                 OptimizationResult = deserializedObject.OptimizationResult;
                 NormalizationInfo = deserializedObject.NormalizationInfo;
-                ModelMetadata = deserializedObject.ModelMetadata;
+                ModelMetaData = deserializedObject.ModelMetaData;
             }
             else
             {
@@ -457,31 +457,84 @@ public class PredictionModelResult<T, TInput, TOutput> : IPredictiveModel<T, TIn
     /// <param name="filePath">The path where the model will be saved.</param>
     /// <remarks>
     /// <para>
-    /// This method saves the serialized model to a file at the specified path. It first serializes the model to a byte array 
-    /// using the Serialize method, then writes the byte array to the specified file. If the file already exists, it will be 
+    /// This method saves the serialized model to a file at the specified path. It first serializes the model to a byte array
+    /// using the Serialize method, then writes the byte array to the specified file. If the file already exists, it will be
     /// overwritten. This method provides a convenient way to persist the model for later use.
     /// </para>
     /// <para><b>For Beginners:</b> This method saves the model to a file on disk.
-    /// 
+    ///
     /// The SaveModel method:
     /// - Takes a file path where the model should be saved
     /// - Serializes the model to a byte array
     /// - Writes the byte array to the specified file
-    /// 
+    ///
     /// This method is useful when:
     /// - You want to save a trained model for later use
     /// - You need to share a model with others
     /// - You want to deploy a model to a production environment
-    /// 
+    ///
     /// For example, after training a model, you might save it with:
     /// `myModel.SaveModel("C:\\Models\\house_price_predictor.model");`
-    /// 
+    ///
     /// If the file already exists, it will be overwritten.
     /// </para>
     /// </remarks>
     public void SaveModel(string filePath)
     {
         File.WriteAllBytes(filePath, Serialize());
+    }
+
+    /// <summary>
+    /// Loads the model from a file.
+    /// </summary>
+    /// <param name="filePath">The path to the file containing the saved model.</param>
+    /// <remarks>
+    /// <para>
+    /// This method loads a serialized model from a file at the specified path. It reads the byte array from the file
+    /// and then deserializes it using the Deserialize method. This method provides a convenient way to load a previously
+    /// saved model.
+    /// </para>
+    /// <para><b>For Beginners:</b> This method loads a model from a file on disk.
+    ///
+    /// The LoadFromFile method:
+    /// - Takes a file path where the model is stored
+    /// - Reads the byte array from the file
+    /// - Deserializes the byte array to restore the model
+    ///
+    /// This method is useful when:
+    /// - You want to load a previously trained and saved model
+    /// - You need to use a model that was shared with you
+    /// - You want to deploy a pre-trained model in a production environment
+    ///
+    /// For example, to load a model, you might use:
+    /// `myModel.LoadFromFile("C:\\Models\\house_price_predictor.model");`
+    ///
+    /// <b>Note:</b> This method is distinct from the static LoadModel overload which requires a model factory.
+    /// </para>
+    /// </remarks>
+    public void LoadFromFile(string filePath)
+    {
+        if (string.IsNullOrWhiteSpace(filePath))
+        {
+            throw new ArgumentException("File path cannot be null or empty.", nameof(filePath));
+        }
+
+        if (!File.Exists(filePath))
+        {
+            throw new FileNotFoundException($"Model file not found at path: {filePath}", filePath);
+        }
+
+        var data = File.ReadAllBytes(filePath);
+        Deserialize(data);
+    }
+
+    /// <summary>
+    /// Explicit implementation of IModelSerializer.LoadModel to avoid confusion with static LoadModel method.
+    /// </summary>
+    /// <param name="filePath">The path to the file containing the saved model.</param>
+    void IModelSerializer.LoadModel(string filePath)
+    {
+        LoadFromFile(filePath);
     }
 
     /// <summary>
@@ -516,7 +569,7 @@ public class PredictionModelResult<T, TInput, TOutput> : IPredictiveModel<T, TIn
     /// </remarks>
     public static PredictionModelResult<T, TInput, TOutput> LoadModel(
         string filePath,
-        Func<ModelMetadata<T>, IFullModel<T, TInput, TOutput>> modelFactory)
+        Func<ModelMetaData<T>, IFullModel<T, TInput, TOutput>> modelFactory)
     {
         // First, we need to read the file
         byte[] data = File.ReadAllBytes(filePath);
@@ -539,291 +592,14 @@ public class PredictionModelResult<T, TInput, TOutput> : IPredictiveModel<T, TIn
         return result;
     }
 
-    public void Train(TInput input, TOutput expectedOutput)
+    private static ModelMetaData<T> ExtractMetadataFromSerializedData(byte[] data)
     {
-        throw new NotImplementedException();
-    }
-
-    public ModelMetaData<T> GetModelMetaData()
-    {
-        throw new NotImplementedException();
-    }
-
-    public Vector<T> GetParameters()
-    {
-        throw new NotImplementedException();
-    }
-
-    public IFullModel<T, TInput, TOutput> WithParameters(Vector<T> parameters)
-    {
-        throw new NotImplementedException();
-    }
-
-    public IEnumerable<int> GetActiveFeatureIndices()
-    {
-        throw new NotImplementedException();
-    }
-
-    public bool IsFeatureUsed(int featureIndex)
-    {
-        throw new NotImplementedException();
-    }
-
-    public IFullModel<T, TInput, TOutput> DeepCopy()
-    {
-        throw new NotImplementedException();
-    }
-
-    public IFullModel<T, TInput, TOutput> Clone()
-    {
-        throw new NotImplementedException();
-    }
-
-    #region IModelSerializer Implementation
-
-    /// <summary>
-    /// Saves the model to a file.
-    /// </summary>
-    /// <param name="filePath">The path where the model should be saved.</param>
-    public void SaveModel(string filePath)
-    {
-        if (string.IsNullOrWhiteSpace(filePath))
+        var jsonString = Encoding.UTF8.GetString(data);
+        var settings = new JsonSerializerSettings
         {
-            throw new ArgumentException("File path cannot be null or empty.", nameof(filePath));
-        }
-
-        var data = Serialize();
-        File.WriteAllBytes(filePath, data);
+            TypeNameHandling = TypeNameHandling.All
+        };
+        var deserializedObject = JsonConvert.DeserializeObject<PredictionModelResult<T, TInput, TOutput>>(jsonString, settings);
+        return deserializedObject?.ModelMetaData ?? new();
     }
-
-    /// <summary>
-    /// Loads the model from a file.
-    /// </summary>
-    /// <param name="filePath">The path to the file containing the saved model.</param>
-    public void LoadModel(string filePath)
-    {
-        if (string.IsNullOrWhiteSpace(filePath))
-        {
-            throw new ArgumentException("File path cannot be null or empty.", nameof(filePath));
-        }
-
-        if (!File.Exists(filePath))
-        {
-            throw new FileNotFoundException($"Model file not found at path: {filePath}", filePath);
-        }
-
-        var data = File.ReadAllBytes(filePath);
-        Deserialize(data);
-    }
-
-    #endregion
-
-    #region IParameterizable Implementation
-
-    /// <summary>
-    /// Gets the parameters that can be optimized.
-    /// </summary>
-    /// <returns>A vector containing the model parameters.</returns>
-    public Vector<T> GetParameters()
-    {
-        if (_innerModel == null)
-        {
-            throw new InvalidOperationException("Model has not been initialized. Cannot get parameters.");
-        }
-
-        return _innerModel.GetParameters();
-    }
-
-    /// <summary>
-    /// Sets the model parameters.
-    /// </summary>
-    /// <param name="parameters">The parameter vector to set.</param>
-    public void SetParameters(Vector<T> parameters)
-    {
-        if (_innerModel == null)
-        {
-            throw new InvalidOperationException("Model has not been initialized. Cannot set parameters.");
-        }
-
-        _innerModel.SetParameters(parameters);
-    }
-
-    /// <summary>
-    /// Gets the number of parameters in the model.
-    /// </summary>
-    public int ParameterCount
-    {
-        get
-        {
-            if (_innerModel == null)
-            {
-                throw new InvalidOperationException("Model has not been initialized. Cannot get parameter count.");
-            }
-
-            return _innerModel.ParameterCount;
-        }
-    }
-
-    /// <summary>
-    /// Creates a new instance with the specified parameters.
-    /// </summary>
-    /// <param name="parameters">The parameters to use for the new instance.</param>
-    /// <returns>A new model instance with the specified parameters.</returns>
-    /// <exception cref="InvalidOperationException">Thrown when the model or required metadata is not initialized.</exception>
-    public IFullModel<T, TInput, TOutput> WithParameters(Vector<T> parameters)
-    {
-        if (_innerModel == null)
-        {
-            throw new InvalidOperationException("Model has not been initialized. Cannot create instance with parameters.");
-        }
-
-        if (_optimizationResult == null)
-        {
-            throw new InvalidOperationException("OptimizationResult is missing. Cannot create instance with parameters.");
-        }
-
-        if (_normalizationInfo == null)
-        {
-            throw new InvalidOperationException("NormalizationInfo is missing. Cannot create instance with parameters.");
-        }
-
-        var newInnerModel = _innerModel.WithParameters(parameters);
-        var newOptimizationResult = _optimizationResult.WithParameters(parameters);
-        var newNormalizationInfo = _normalizationInfo.WithParameters(parameters);
-        return new PredictionModelResult<T, TInput, TOutput>(
-            newInnerModel,
-            newOptimizationResult,
-            newNormalizationInfo);
-    }
-
-    #endregion
-
-    #region IFeatureAware Implementation
-
-    /// <summary>
-    /// Gets the indices of features that are actively used by this model.
-    /// </summary>
-    /// <returns>An enumerable of feature indices.</returns>
-    public IEnumerable<int> GetActiveFeatureIndices()
-    {
-        if (_innerModel == null)
-        {
-            throw new InvalidOperationException("Model has not been initialized. Cannot get active feature indices.");
-        }
-
-        return _innerModel.GetActiveFeatureIndices();
-    }
-
-    /// <summary>
-    /// Sets the active feature indices for this model.
-    /// </summary>
-    /// <param name="featureIndices">The feature indices to set as active.</param>
-    public void SetActiveFeatureIndices(IEnumerable<int> featureIndices)
-    {
-        if (_innerModel == null)
-        {
-            throw new InvalidOperationException("Model has not been initialized. Cannot set active feature indices.");
-        }
-
-        _innerModel.SetActiveFeatureIndices(featureIndices);
-    }
-
-    /// <summary>
-    /// Checks if a specific feature is used by this model.
-    /// </summary>
-    /// <param name="featureIndex">The index of the feature to check.</param>
-    /// <returns>True if the feature is used; otherwise, false.</returns>
-    public bool IsFeatureUsed(int featureIndex)
-    {
-        if (_innerModel == null)
-        {
-            return false;
-        }
-
-        return _innerModel.IsFeatureUsed(featureIndex);
-    }
-
-    #endregion
-
-    #region IFeatureImportance Implementation
-
-    /// <summary>
-    /// Gets the feature importance scores.
-    /// </summary>
-    /// <returns>A dictionary mapping feature names to importance scores.</returns>
-    public Dictionary<string, T> GetFeatureImportance()
-    {
-        if (_innerModel == null)
-        {
-            throw new InvalidOperationException("Model has not been initialized. Cannot get feature importance.");
-        }
-
-        return _innerModel.GetFeatureImportance();
-    }
-
-    #endregion
-
-    #region ICloneable Implementation
-
-    /// <summary>
-    /// Creates a deep copy of this object.
-    /// </summary>
-    /// <returns>A deep copy of the prediction model result.</returns>
-    /// <exception cref="InvalidOperationException">Thrown when the model or required metadata is not initialized.</exception>
-    public IFullModel<T, TInput, TOutput> DeepCopy()
-    {
-        if (_innerModel == null)
-        {
-            throw new InvalidOperationException("Model has not been initialized. Cannot create deep copy.");
-        }
-
-        if (_optimizationResult == null)
-        {
-            throw new InvalidOperationException("OptimizationResult is missing. Cannot create deep copy.");
-        }
-
-        if (_normalizationInfo == null)
-        {
-            throw new InvalidOperationException("NormalizationInfo is missing. Cannot create deep copy.");
-        }
-
-        var copiedInnerModel = _innerModel.DeepCopy();
-        var copiedOptimizationResult = _optimizationResult.DeepCopy();
-        var copiedNormalizationInfo = _normalizationInfo.DeepCopy();
-        return new PredictionModelResult<T, TInput, TOutput>(
-            copiedInnerModel,
-            copiedOptimizationResult,
-            copiedNormalizationInfo);
-    }
-
-    /// <summary>
-    /// Creates a shallow copy of this object.
-    /// </summary>
-    /// <returns>A shallow copy of the prediction model result.</returns>
-    /// <exception cref="InvalidOperationException">Thrown when the model or required metadata is not initialized.</exception>
-    public IFullModel<T, TInput, TOutput> Clone()
-    {
-        if (_innerModel == null)
-        {
-            throw new InvalidOperationException("Model has not been initialized. Cannot create clone.");
-        }
-
-        if (_optimizationResult == null)
-        {
-            throw new InvalidOperationException("OptimizationResult is missing. Cannot create clone.");
-        }
-
-        if (_normalizationInfo == null)
-        {
-            throw new InvalidOperationException("NormalizationInfo is missing. Cannot create clone.");
-        }
-
-        var clonedInnerModel = _innerModel.Clone();
-        return new PredictionModelResult<T, TInput, TOutput>(
-            clonedInnerModel,
-            _optimizationResult,
-            _normalizationInfo);
-    }
-
-    #endregion
 }
