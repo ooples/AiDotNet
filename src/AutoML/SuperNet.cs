@@ -409,17 +409,15 @@ namespace AiDotNet.AutoML
 
                 case 1: // 3x3 Conv (simplified as weighted pass)
                     {
-                        int weightIdx = 0;
                         for (int batchIdx = 0; batchIdx < input.Shape[0]; batchIdx++)
                         {
                             for (int featureIdx = 0; featureIdx < input.Shape[1]; featureIdx++)
                             {
-                                if (weightIdx < weight.Length)
+                                if (featureIdx < weight.Length)
                                 {
                                     output[batchIdx, featureIdx] = _ops.Multiply(
                                         input[batchIdx, featureIdx],
-                                        _ops.Add(_ops.One, weight[weightIdx]));
-                                    weightIdx++;
+                                        _ops.Add(_ops.One, weight[featureIdx]));
                                 }
                             }
                         }
@@ -428,17 +426,15 @@ namespace AiDotNet.AutoML
 
                 case 2: // 5x5 Conv (simplified)
                     {
-                        int weightIdx = 0;
                         for (int batchIdx = 0; batchIdx < input.Shape[0]; batchIdx++)
                         {
                             for (int featureIdx = 0; featureIdx < input.Shape[1]; featureIdx++)
                             {
-                                if (weightIdx < weight.Length)
+                                if (featureIdx < weight.Length)
                                 {
                                     output[batchIdx, featureIdx] = _ops.Multiply(
                                         input[batchIdx, featureIdx],
-                                        _ops.Add(_ops.One, _ops.Multiply(_ops.FromDouble(1.5), weight[weightIdx])));
-                                    weightIdx++;
+                                        _ops.Add(_ops.One, _ops.Multiply(_ops.FromDouble(1.5), weight[featureIdx])));
                                 }
                             }
                         }
