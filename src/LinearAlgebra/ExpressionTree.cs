@@ -1202,7 +1202,7 @@ public class ExpressionTree<T, TInput, TOutput> : IFullModel<T, TInput, TOutput>
         // Count the number of constant nodes in the tree
         int constantNodeCount = 0;
 
-        // Local function to count constants - includes null check for safety
+        // Local function to count constant nodes in the tree via recursive traversal
         void CountConstants(ExpressionTree<T, TInput, TOutput>? node)
         {
             if (node == null)
