@@ -662,8 +662,9 @@ public class PredictionModelResult<T, TInput, TOutput> : IPredictiveModel<T, TIn
 
         var newModel = Model.WithParameters(parameters);
         var newOptimizationResult = OptimizationResult.WithParameters(parameters);
+        var newNormalizationInfo = NormalizationInfo?.DeepCopy() ?? new NormalizationInfo<T, TInput, TOutput>();
 
-        return new PredictionModelResult<T, TInput, TOutput>(newOptimizationResult, NormalizationInfo)
+        return new PredictionModelResult<T, TInput, TOutput>(newOptimizationResult, newNormalizationInfo)
         {
             Model = newModel
         };
