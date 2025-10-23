@@ -85,6 +85,11 @@ public class VectorModel<T> : IFullModel<T, Matrix<T>, Vector<T>>
     private static readonly INumericOperations<T> _numOps = MathHelper.GetNumericOperations<T>();
 
     /// <summary>
+    /// Cached feature importance to avoid recreating on every GetModelMetaData() call.
+    /// </summary>
+    private Dictionary<string, T>? _cachedFeatureImportance;
+
+    /// <summary>
     /// Initializes a new instance of the VectorModel class with the specified coefficients.
     /// </summary>
     /// <param name="coefficients">The vector of coefficients for the model.</param>
@@ -169,6 +174,25 @@ public class VectorModel<T> : IFullModel<T, Matrix<T>, Vector<T>>
     /// </para>
     /// </remarks>
     public int Complexity => Coefficients.Count(c => !_numOps.Equals(c, _numOps.Zero));
+
+    /// <summary>
+    /// Gets the number of trainable parameters in the model.
+    /// </summary>
+    /// <value>An integer representing the number of parameters.</value>
+    /// <remarks>
+    /// <para>
+    /// For a VectorModel, the number of parameters equals the number of coefficients,
+    /// as each coefficient is a trainable parameter.
+    /// </para>
+    /// <para><b>For Beginners:</b> This tells you how many weights the model has to learn.
+    ///
+    /// For a linear model:
+    /// - Each coefficient is a parameter that can be trained
+    /// - More parameters generally means more complexity
+    /// - The parameter count equals the number of features
+    /// </para>
+    /// </remarks>
+    public int ParameterCount => Coefficients.Length;
 
     /// <summary>
     /// Determines whether a specific feature is used by the model.
@@ -336,6 +360,9 @@ public class VectorModel<T> : IFullModel<T, Matrix<T>, Vector<T>>
             {
                 Coefficients[i] = newCoefficients[i];
             }
+
+            // Invalidate cached feature importance
+            _cachedFeatureImportance = null;
         }
         catch (Exception ex)
         {
@@ -425,18 +452,19 @@ public class VectorModel<T> : IFullModel<T, Matrix<T>, Vector<T>>
     /// - Visualizing or reporting on the model
     /// </para>
     /// </remarks>
-    public ModelMetadata<T> GetModelMetadata()
+    public ModelMetaData<T> GetModelMetaData()
     {
         T norm = Coefficients.Norm();
         norm ??= _numOps.Zero;
 
         int nonZeroCount = Coefficients.Count(c => !_numOps.Equals(c, _numOps.Zero));
-        
-        return new ModelMetadata<T>
+
+        return new ModelMetaData<T>
         {
             FeatureCount = FeatureCount,
             Complexity = nonZeroCount,
             Description = $"Vector model with {FeatureCount} features ({nonZeroCount} active)",
+            FeatureImportance = GetFeatureImportance(),
             AdditionalInfo = new Dictionary<string, object>
             {
                 { "CoefficientNorm", norm! },
@@ -566,10 +594,118 @@ public class VectorModel<T> : IFullModel<T, Matrix<T>, Vector<T>>
             {
                 Coefficients[i] = _numOps.FromDouble(reader.ReadDouble());
             }
+
+            // Invalidate cached feature importance
+            _cachedFeatureImportance = null;
         }
         catch (Exception ex) when (!(ex is ArgumentNullException || ex is ArgumentException || ex is InvalidOperationException))
         {
             throw new ArgumentException("Failed to deserialize the model. The data may be corrupted or in an invalid format.", nameof(data), ex);
+        }
+    }
+
+    /// <summary>
+    /// Saves the model to a file.
+    /// </summary>
+    /// <param name="filePath">The path where the model will be saved.</param>
+    /// <exception cref="ArgumentNullException">Thrown when filePath is null.</exception>
+    /// <remarks>
+    /// <para>
+    /// This method saves the model to a file by serializing it to a byte array and writing it to disk.
+    /// The model can later be loaded using the LoadModel method.
+    /// </para>
+    /// <para><b>For Beginners:</b> This method saves the model to a file so you can use it later.
+    ///
+    /// To use this method:
+    /// - Provide a file path where the model should be saved
+    /// - The model will be serialized and written to disk
+    /// - You can load it later with LoadModel
+    ///
+    /// For example: model.SaveModel("my_model.bin");
+    /// </para>
+    /// </remarks>
+    public void SaveModel(string filePath)
+    {
+        if (filePath == null)
+        {
+            throw new ArgumentNullException(nameof(filePath));
+        }
+
+        try
+        {
+            File.WriteAllBytes(filePath, Serialize());
+        }
+        catch (UnauthorizedAccessException ex)
+        {
+            throw new InvalidOperationException($"Access denied when saving model to '{filePath}'. Check file permissions.", ex);
+        }
+        catch (DirectoryNotFoundException ex)
+        {
+            throw new InvalidOperationException($"Directory not found when saving model to '{filePath}'. Ensure the directory exists.", ex);
+        }
+        catch (IOException ex)
+        {
+            throw new InvalidOperationException($"IO error occurred while saving model to '{filePath}'. The file may be in use or the disk may be full.", ex);
+        }
+        catch (Exception ex) when (!(ex is ArgumentNullException || ex is InvalidOperationException))
+        {
+            throw new InvalidOperationException($"Unexpected error saving model to '{filePath}'.", ex);
+        }
+    }
+
+    /// <summary>
+    /// Loads a model from a file into the current instance.
+    /// </summary>
+    /// <param name="filePath">The path of the file containing the serialized model.</param>
+    /// <exception cref="ArgumentNullException">Thrown when filePath is null.</exception>
+    /// <exception cref="FileNotFoundException">Thrown when the file does not exist.</exception>
+    /// <remarks>
+    /// <para>
+    /// This method loads a model from a file by reading the byte array and deserializing it.
+    /// The model must have been saved using the SaveModel method.
+    /// </para>
+    /// <para><b>For Beginners:</b> This method loads a saved model from a file.
+    ///
+    /// To use this method:
+    /// - Provide the file path where the model was saved
+    /// - The model will be loaded and replace the current model's coefficients
+    /// - The file must have been created with SaveModel
+    ///
+    /// For example: model.LoadModel("my_model.bin");
+    /// </para>
+    /// </remarks>
+    public void LoadModel(string filePath)
+    {
+        if (filePath == null)
+        {
+            throw new ArgumentNullException(nameof(filePath));
+        }
+
+        if (!File.Exists(filePath))
+        {
+            throw new FileNotFoundException($"Model file not found: {filePath}", filePath);
+        }
+
+        try
+        {
+            byte[] data = File.ReadAllBytes(filePath);
+            Deserialize(data);
+        }
+        catch (UnauthorizedAccessException ex)
+        {
+            throw new InvalidOperationException($"Access denied when loading model from '{filePath}'. Check file permissions.", ex);
+        }
+        catch (IOException ex)
+        {
+            throw new InvalidOperationException($"IO error occurred while loading model from '{filePath}'. The file may be in use or corrupted.", ex);
+        }
+        catch (ArgumentException ex)
+        {
+            throw new InvalidOperationException($"Invalid model file format at '{filePath}'. The file may be corrupted or not a valid VectorModel.", ex);
+        }
+        catch (Exception ex) when (!(ex is ArgumentNullException || ex is FileNotFoundException || ex is InvalidOperationException))
+        {
+            throw new InvalidOperationException($"Unexpected error loading model from '{filePath}'.", ex);
         }
     }
 
@@ -716,6 +852,9 @@ public class VectorModel<T> : IFullModel<T, Matrix<T>, Vector<T>>
         {
             Coefficients[i] = parameters[i];
         }
+
+        // Invalidate cached feature importance
+        _cachedFeatureImportance = null;
     }
 
     /// <summary>
@@ -887,6 +1026,48 @@ public class VectorModel<T> : IFullModel<T, Matrix<T>, Vector<T>>
                 Coefficients[i] = _numOps.Zero;
             }
         }
+
+        // Invalidate cached feature importance
+        _cachedFeatureImportance = null;
+    }
+
+    /// <summary>
+    /// Gets the feature importance scores.
+    /// </summary>
+    /// <returns>A dictionary mapping feature names to importance scores.</returns>
+    /// <remarks>
+    /// <para>
+    /// This method returns the feature importance scores for the model. For a VectorModel,
+    /// the importance is based on the absolute value of each coefficient, as larger absolute
+    /// values have a greater impact on predictions.
+    /// </para>
+    /// <para><b>For Beginners:</b> This method shows which features matter most to the model.
+    ///
+    /// For a linear model:
+    /// - Features with larger coefficients (positive or negative) are more important
+    /// - The importance is the absolute value of each coefficient
+    /// - Features are named "Feature_0", "Feature_1", etc.
+    ///
+    /// This is useful for:
+    /// - Understanding which features drive predictions
+    /// - Feature selection (identifying which features to keep)
+    /// - Model interpretation and explanation
+    /// </para>
+    /// </remarks>
+    public Dictionary<string, T> GetFeatureImportance()
+    {
+        if (_cachedFeatureImportance != null)
+        {
+            return new Dictionary<string, T>(_cachedFeatureImportance);
+        }
+
+        var importance = new Dictionary<string, T>();
+        for (int i = 0; i < Coefficients.Length; i++)
+        {
+            importance.Add($"Feature_{i}", _numOps.Abs(Coefficients[i]));
+        }
+        _cachedFeatureImportance = importance;
+        return new Dictionary<string, T>(importance);
     }
 
     #region IInterpretableModel Implementation
@@ -894,7 +1075,7 @@ public class VectorModel<T> : IFullModel<T, Matrix<T>, Vector<T>>
         protected readonly HashSet<InterpretationMethod> _enabledMethods = new();
         protected Vector<int> _sensitiveFeatures;
         protected readonly List<FairnessMetric> _fairnessMetrics = new();
-        protected IModel<Matrix<T>, Vector<T>, ModelMetadata<T>> _baseModel;
+        protected IFullModel<T, Matrix<T>, Vector<T>>? _baseModel = null;
 
         /// <summary>
         /// Gets the global feature importance across all predictions.
@@ -987,7 +1168,7 @@ public class VectorModel<T> : IFullModel<T, Matrix<T>, Vector<T>>
         /// <summary>
         /// Sets the base model for interpretability analysis.
         /// </summary>
-        public virtual void SetBaseModel(IModel<Matrix<T>, Vector<T>, ModelMetadata<T>> model)
+        public virtual void SetBaseModel(IFullModel<T, Matrix<T>, Vector<T>> model)
         {
         _baseModel = model ?? throw new ArgumentNullException(nameof(model));
         }
