@@ -368,7 +368,7 @@ namespace AiDotNet.AutoML
                 // from the serialized data. For now, we'll assume BestModel is already set or can be inferred.
                 throw new InvalidOperationException("Cannot load model: BestModel is null. AutoML models should be recreated with SearchAsync or BestModel should be initialized before loading.");
             }
-            BestModel.LoadModel(filePath);
+            BestModel.LoadFromFile(filePath);
         }
 
         /// <summary>
