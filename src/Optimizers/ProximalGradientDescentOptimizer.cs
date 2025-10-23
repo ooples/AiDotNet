@@ -1,3 +1,5 @@
+using Newtonsoft.Json;
+
 /// <summary>
 /// Implements a Proximal Gradient Descent optimization algorithm which combines gradient descent with regularization.
 /// </summary>
