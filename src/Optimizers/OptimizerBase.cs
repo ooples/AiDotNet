@@ -1194,18 +1194,9 @@ public abstract class OptimizerBase<T, TInput, TOutput> : IOptimizer<T, TInput, 
         {
             // Generate random value between lower and upper bounds
             var range = NumOps.Subtract(upperBounds[i], lowerBounds[i]);
-
-            // Handle edge case where bounds are equal
-            if (NumOps.Equals(range, NumOps.Zero))
-            {
-                solution[i] = lowerBounds[i];  // Use the bound value directly
-            }
-            else
-            {
-                var randomFraction = NumOps.FromDouble(Random.NextDouble());
-                var randomValue = NumOps.Add(lowerBounds[i], NumOps.Multiply(range, randomFraction));
-                solution[i] = randomValue;
-            }
+            var randomFraction = NumOps.FromDouble(Random.NextDouble());
+            var randomValue = NumOps.Add(lowerBounds[i], NumOps.Multiply(range, randomFraction));
+            solution[i] = randomValue;
         }
         return solution;
     }
