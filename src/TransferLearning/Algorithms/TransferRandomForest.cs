@@ -331,11 +331,11 @@ internal class MappedRandomForestModel<T> : IFullModel<T, Matrix<T>, Vector<T>>
                         key = s;
                     }
                 }
-                catch (Exception)
+                catch (Exception ex)
                 {
-                    // Failed to inverse map feature name, fallback to original key
+                    // Failed to inverse map feature name; using original key as fallback
                 }
-        }
+            }
         mappedImportance[key] = kvp.Value;
         }
         return mappedImportance;
@@ -349,7 +349,7 @@ internal class MappedRandomForestModel<T> : IFullModel<T, Matrix<T>, Vector<T>>
         {
             writer.Write(Convert.ToDouble(_mapper.GetMappingConfidence()));
         }
-        catch
+        catch (Exception ex)
         {
             // Failed to write mapping confidence, fallback to 0.0
             writer.Write(0.0);
@@ -364,20 +364,24 @@ internal class MappedRandomForestModel<T> : IFullModel<T, Matrix<T>, Vector<T>>
         try
         {
             var magic = reader.ReadInt32();
-            if (magic != WrapperMagic) { baseBytes = Array.Empty<byte>(); return false; }
+            if (magic != WrapperMagic)
+            {
+                baseBytes = Array.Empty<byte>();
+                return false;
+            }
             var target = reader.ReadInt32();
             if (target != _targetFeatures)
             {
                 throw new InvalidOperationException($"Deserialized target feature count ({target}) does not match current instance ({_targetFeatures}).");
             }
-            var confidence = reader.ReadDouble(); // reserved
+            var confidence = reader.ReadDouble(); // Read mapping confidence (currently unused; read to maintain stream compatibility, reserved for future validation/versioning)
             var len = reader.ReadInt32();
             baseBytes = reader.ReadBytes(len);
             return true;
         }
-        catch (Exception)
+        catch (Exception ex)
         {
-            // Wrapper deserialization fallback
+            // Failed to read wrapper format; fallback for backward compatibility with non-wrapped models
             baseBytes = Array.Empty<byte>();
             return false;
         }
