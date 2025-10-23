@@ -369,18 +369,22 @@ public class DecoderLayer<T> : LayerBase<T>
     }
 
     /// <summary>
-    /// Single-parameter forward pass is not supported for DecoderLayer.
+    /// Single-input forward pass is not supported for DecoderLayer.
     /// </summary>
     /// <param name="input">The input tensor.</param>
-    /// <returns>Not applicable - this method always throws.</returns>
-    /// <exception cref="NotSupportedException">Always thrown as this layer requires multiple inputs.</exception>
+    /// <returns>Not applicable - this method always throws an exception.</returns>
+    /// <exception cref="NotSupportedException">Always thrown because DecoderLayer requires multiple inputs.</exception>
     /// <remarks>
-    /// <para><b>For Beginners:</b> The DecoderLayer requires at least two inputs (decoder input and encoder output),
-    /// so it cannot work with just a single input tensor. Use the multi-parameter Forward method instead.</para>
+    /// <para><b>For Beginners:</b> DecoderLayer cannot operate with a single input because it needs both
+    /// the decoder input and the encoder output to function properly. Use the overload that accepts
+    /// multiple tensors: <see cref="Forward(Tensor{T}[])" /> instead.</para>
     /// </remarks>
     public override Tensor<T> Forward(Tensor<T> input)
     {
-        throw new NotSupportedException("DecoderLayer requires multiple inputs. Use Forward(params Tensor<T>[] inputs) with at least two tensors: decoder input and encoder output.");
+        throw new NotSupportedException(
+            "DecoderLayer requires multiple inputs (decoder input and encoder output). " +
+            "Use Forward(params Tensor<T>[] inputs) instead, providing at least two tensors: " +
+            "the decoder input and the encoder output, and optionally an attention mask.");
     }
 
     /// <summary>
