@@ -57,29 +57,34 @@ namespace AiDotNet.Interpretability
         /// <typeparam name="T">The numeric type for calculations.</typeparam>
         /// <param name="model">The model to analyze.</param>
         /// <param name="enabledMethods">The set of enabled interpretation methods.</param>
+        /// <param name="inputs">The inputs to analyze.</param>
         /// <returns>A matrix containing SHAP values.</returns>
         public static Task<Matrix<T>> GetShapValuesAsync<T>(
             IInterpretableModel<T> model,
-            HashSet<InterpretationMethod> enabledMethods)
+            HashSet<InterpretationMethod> enabledMethods,
+            Tensor<T> inputs)
         {
-            _ = model;
             if (!enabledMethods.Contains(InterpretationMethod.SHAP))
             {
                 throw new InvalidOperationException("SHAP method is not enabled.");
             }
 
-            throw new NotImplementedException("SHAP values calculation is not yet implemented.");
+            return model.GetShapValuesAsync(inputs);
         }
 
         /// <summary>
         /// Gets LIME explanation for a specific input.
         /// </summary>
         /// <typeparam name="T">The numeric type for calculations.</typeparam>
+        /// <param name="model">The model to analyze.</param>
         /// <param name="enabledMethods">The set of enabled interpretation methods.</param>
+        /// <param name="input">The input to explain.</param>
         /// <param name="numFeatures">The number of features to include in the explanation.</param>
         /// <returns>A LIME explanation.</returns>
         public static Task<LimeExplanation<T>> GetLimeExplanationAsync<T>(
+            IInterpretableModel<T> model,
             HashSet<InterpretationMethod> enabledMethods,
+            Tensor<T> input,
             int numFeatures = 10)
         {
             if (!enabledMethods.Contains(InterpretationMethod.LIME))
@@ -87,18 +92,20 @@ namespace AiDotNet.Interpretability
                 throw new InvalidOperationException("LIME method is not enabled.");
             }
 
-            throw new NotImplementedException("LIME explanation generation is not yet implemented.");
+            return model.GetLimeExplanationAsync(input, numFeatures);
         }
 
         /// <summary>
         /// Gets partial dependence data for specified features.
         /// </summary>
         /// <typeparam name="T">The numeric type for calculations.</typeparam>
+        /// <param name="model">The model to analyze.</param>
         /// <param name="enabledMethods">The set of enabled interpretation methods.</param>
         /// <param name="featureIndices">The feature indices to analyze.</param>
         /// <param name="gridResolution">The grid resolution to use.</param>
         /// <returns>Partial dependence data.</returns>
         public static Task<PartialDependenceData<T>> GetPartialDependenceAsync<T>(
+            IInterpretableModel<T> model,
             HashSet<InterpretationMethod> enabledMethods,
             Vector<int> featureIndices,
             int gridResolution = 20)
@@ -108,18 +115,24 @@ namespace AiDotNet.Interpretability
                 throw new InvalidOperationException("PartialDependence method is not enabled.");
             }
 
-            throw new NotImplementedException("Partial dependence calculation is not yet implemented.");
+            return model.GetPartialDependenceAsync(featureIndices, gridResolution);
         }
 
         /// <summary>
         /// Gets counterfactual explanation for a given input and desired output.
         /// </summary>
         /// <typeparam name="T">The numeric type for calculations.</typeparam>
+        /// <param name="model">The model to analyze.</param>
         /// <param name="enabledMethods">The set of enabled interpretation methods.</param>
+        /// <param name="input">The input to analyze.</param>
+        /// <param name="desiredOutput">The desired output.</param>
         /// <param name="maxChanges">The maximum number of changes allowed.</param>
         /// <returns>A counterfactual explanation.</returns>
         public static Task<CounterfactualExplanation<T>> GetCounterfactualAsync<T>(
+            IInterpretableModel<T> model,
             HashSet<InterpretationMethod> enabledMethods,
+            Tensor<T> input,
+            Tensor<T> desiredOutput,
             int maxChanges = 5)
         {
             if (!enabledMethods.Contains(InterpretationMethod.Counterfactual))
@@ -127,7 +140,7 @@ namespace AiDotNet.Interpretability
                 throw new InvalidOperationException("Counterfactual method is not enabled.");
             }
 
-            throw new NotImplementedException("Counterfactual explanation generation is not yet implemented.");
+            return model.GetCounterfactualAsync(input, desiredOutput, maxChanges);
         }
 
         /// <summary>
@@ -205,11 +218,15 @@ namespace AiDotNet.Interpretability
         /// Gets anchor explanation for a given input.
         /// </summary>
         /// <typeparam name="T">The numeric type for calculations.</typeparam>
+        /// <param name="model">The model to analyze.</param>
         /// <param name="enabledMethods">The set of enabled interpretation methods.</param>
+        /// <param name="input">The input to explain.</param>
         /// <param name="threshold">The threshold for anchor construction.</param>
         /// <returns>An anchor explanation.</returns>
         public static Task<AnchorExplanation<T>> GetAnchorExplanationAsync<T>(
+            IInterpretableModel<T> model,
             HashSet<InterpretationMethod> enabledMethods,
+            Tensor<T> input,
             T threshold)
         {
             if (!enabledMethods.Contains(InterpretationMethod.Anchor))
@@ -217,7 +234,7 @@ namespace AiDotNet.Interpretability
                 throw new InvalidOperationException("Anchor method is not enabled.");
             }
 
-            throw new NotImplementedException("Anchor explanation generation is not yet implemented.");
+            return model.GetAnchorExplanationAsync(input, threshold);
         }
     }
 }
