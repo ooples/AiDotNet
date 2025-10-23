@@ -117,7 +117,7 @@ public class ParticleSwarmOptimizer<T, TInput, TOutput> : OptimizerBase<T, TInpu
             
             // Update global best if needed
             if (globalBest.Solution == null || 
-                _fitnessCalculator.IsBetterFitness(stepData.FitnessScore, globalBest.FitnessScore))
+                FitnessCalculator.IsBetterFitness(stepData.FitnessScore, globalBest.FitnessScore))
             {
                 globalBest = stepData;
             }
@@ -162,7 +162,7 @@ public class ParticleSwarmOptimizer<T, TInput, TOutput> : OptimizerBase<T, TInpu
                 
                 // Update current iteration's best solution
                 if (currentIterationBest.Solution == null ||
-                    _fitnessCalculator.IsBetterFitness(stepData.FitnessScore, currentIterationBest.FitnessScore))
+                    FitnessCalculator.IsBetterFitness(stepData.FitnessScore, currentIterationBest.FitnessScore))
                 {
                     currentIterationBest = stepData;
                 }

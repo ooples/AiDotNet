@@ -171,7 +171,7 @@ public class AntColonyOptimizer<T, TInput, TOutput> : OptimizerBase<T, TInput, T
                 solutions.Add(solution);
 
                 currentStepData = EvaluateSolution(solution, inputData);
-                _fitnessList.Add(currentStepData.FitnessScore);
+                FitnessList.Add(currentStepData.FitnessScore);
                 UpdateBestSolution(currentStepData, ref bestStepData);
             }
 
@@ -345,7 +345,7 @@ public class AntColonyOptimizer<T, TInput, TOutput> : OptimizerBase<T, TInput, T
         {
             var model = solutions[k];
             var parameters = model.GetParameters();
-            var deposit = NumOps.Divide(_currentPheromoneIntensity, NumOps.Add(NumOps.One, _fitnessList[k]));
+            var deposit = NumOps.Divide(_currentPheromoneIntensity, NumOps.Add(NumOps.One, FitnessList[k]));
             
             for (int i = 0; i < parameters.Length; i++)
             {
