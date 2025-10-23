@@ -120,13 +120,14 @@ public class BayesianOptimizerOptions<T, TInput, TOutput> : OptimizationAlgorith
     public AcquisitionFunctionType AcquisitionFunction { get; set; } = AcquisitionFunctionType.UpperConfidenceBound;
 
     /// <summary>
-    /// Gets or sets the kernel function used by the Gaussian Process model.
+    /// Gets or sets the kernel function used by the Gaussian Process model for measuring similarity between points.
     /// </summary>
     /// <value>The kernel function, defaulting to Gaussian kernel (also known as Radial Basis Function kernel).</value>
     /// <remarks>
     /// <para>
     /// The kernel function determines how the algorithm measures similarity between points in the search space,
-    /// which affects how it generalizes from observed data points to unobserved points.
+    /// which affects how it generalizes from observed data points to unobserved points. Different kernel functions
+    /// can be used depending on the expected structure of the objective function.
     /// </para>
     /// <para><b>For Beginners:</b> The kernel function helps the algorithm understand how similar different points are
     /// to each other. The default Gaussian kernel (also called Radial Basis Function kernel) assumes that points close to each other will
