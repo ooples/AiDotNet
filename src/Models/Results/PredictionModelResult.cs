@@ -306,10 +306,12 @@ public class PredictionModelResult<T, TInput, TOutput> : IPredictiveModel<T, TIn
         }
 
         var newInnerModel = _innerModel.WithParameters(parameters);
+        var newOptimizationResult = _optimizationResult.WithParameters(parameters);
+        var newNormalizationInfo = _normalizationInfo.WithParameters(parameters);
         return new PredictionModelResult<T, TInput, TOutput>(
             newInnerModel,
-            _optimizationResult,
-            _normalizationInfo);
+            newOptimizationResult,
+            newNormalizationInfo);
     }
 
     #endregion
@@ -404,10 +406,12 @@ public class PredictionModelResult<T, TInput, TOutput> : IPredictiveModel<T, TIn
         }
 
         var copiedInnerModel = _innerModel.DeepCopy();
+        var copiedOptimizationResult = _optimizationResult.DeepCopy();
+        var copiedNormalizationInfo = _normalizationInfo.DeepCopy();
         return new PredictionModelResult<T, TInput, TOutput>(
             copiedInnerModel,
-            _optimizationResult,
-            _normalizationInfo);
+            copiedOptimizationResult,
+            copiedNormalizationInfo);
     }
 
     /// <summary>
