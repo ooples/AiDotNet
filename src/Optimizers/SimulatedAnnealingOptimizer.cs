@@ -91,6 +91,7 @@ public class SimulatedAnnealingOptimizer<T, TInput, TOutput> : OptimizerBase<T, 
     /// <summary>
     /// Initializes a new instance of the <see cref="SimulatedAnnealingOptimizer{T}"/> class with the specified options and components.
     /// </summary>
+    /// <param name="model">The model to be optimized.</param>
     /// <param name="options">The simulated annealing options, or null to use default options.</param>
     /// <param name="predictionOptions">The prediction statistics options, or null to use default options.</param>
     /// <param name="modelOptions">The model statistics options, or null to use default options.</param>
@@ -105,19 +106,20 @@ public class SimulatedAnnealingOptimizer<T, TInput, TOutput> : OptimizerBase<T, 
     /// number generator, options, and starting temperature.
     /// </para>
     /// <para><b>For Beginners:</b> This is the starting point for creating a new optimizer.
-    /// 
+    ///
     /// Think of it like preparing for a hiking expedition:
     /// - You can provide custom settings (options) or use the default ones
     /// - You can provide specialized tools (evaluators, calculators) or use the basic ones
     /// - It initializes the random number generator for making probabilistic decisions
     /// - It sets the starting temperature to begin the annealing process
-    /// 
+    ///
     /// This constructor gets everything ready so you can start the optimization process.
     /// </para>
     /// </remarks>
     public SimulatedAnnealingOptimizer(
+        IFullModel<T, TInput, TOutput> model,
         SimulatedAnnealingOptions<T, TInput, TOutput>? options = null)
-        : base(options ?? new())
+        : base(model, options ?? new())
     {
         _random = new Random();
         _saOptions = options ?? new SimulatedAnnealingOptions<T, TInput, TOutput>();
