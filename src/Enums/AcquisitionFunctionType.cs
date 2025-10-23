@@ -83,5 +83,32 @@ public enum AcquisitionFunctionType
     /// finds good solutions with relatively few evaluations.
     /// </para>
     /// </remarks>
-    ExpectedImprovement
+    ExpectedImprovement,
+
+    /// <summary>
+    /// Probability of Improvement acquisition function that maximizes the probability of finding better solutions.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> Probability of Improvement (PI) is like a cautious explorer who asks:
+    /// "What's the chance that this location is better than the best I've found so far?"
+    ///
+    /// PI works by:
+    ///
+    /// 1. Keeping track of the best solution found so far
+    /// 2. For each unexplored point, calculating the probability that it's better than the current best
+    /// 3. Selecting the point with the highest probability of improvement
+    ///
+    /// Key characteristics:
+    /// - Simpler than Expected Improvement (focuses on probability, not magnitude)
+    /// - Very exploitation-focused once good solutions are found
+    /// - Tends to be more conservative than EI or UCB
+    /// - Good when you want high confidence of improvement
+    /// - May explore less than other methods
+    ///
+    /// PI is useful when you want to be confident that each new evaluation will be better
+    /// than what you've already found, even if the improvement is small.
+    /// </para>
+    /// </remarks>
+    ProbabilityOfImprovement
 }
