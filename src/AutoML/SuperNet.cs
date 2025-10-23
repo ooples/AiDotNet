@@ -122,11 +122,14 @@ namespace AiDotNet.AutoML
                         var weight = softmaxWeights[prevNodeIdx, opIdx];
 
                         // Accumulate weighted operation outputs
-                        for (int i = 0; i < Math.Min(nodeOutput.Length, opOutput.Length); i++)
+                        for (int batchIdx = 0; batchIdx < nodeOutput.Shape[0]; batchIdx++)
                         {
-                            var nodeIndices = GetTensorIndices(nodeOutput, i);
-                            var opIndices = GetTensorIndices(opOutput, i);
-                            nodeOutput[nodeIndices] = _ops.Add(nodeOutput[nodeIndices], _ops.Multiply(weight, opOutput[opIndices]));
+                            for (int featureIdx = 0; featureIdx < nodeOutput.Shape[1]; featureIdx++)
+                            {
+                                nodeOutput[batchIdx, featureIdx] = _ops.Add(
+                                    nodeOutput[batchIdx, featureIdx],
+                                    _ops.Multiply(weight, opOutput[batchIdx, featureIdx]));
+                            }
                         }
                     }
                 }
@@ -172,32 +175,20 @@ namespace AiDotNet.AutoML
         private T ComputeLoss(Tensor<T> predictions, Tensor<T> targets)
         {
             T sumSquaredError = _ops.Zero;
-            int count = Math.Min(predictions.Length, targets.Length);
+            int count = 0;
 
-            // Access tensors using single flat index
-            for (int i = 0; i < count; i++)
+            // Access tensors using proper 2D indexing
+            for (int batchIdx = 0; batchIdx < predictions.Shape[0]; batchIdx++)
             {
-                // Convert flat index to multi-dimensional indices
-                var predIndices = GetTensorIndices(predictions, i);
-                var targIndices = GetTensorIndices(targets, i);
-
-                var diff = _ops.Subtract(predictions[predIndices], targets[targIndices]);
-                sumSquaredError = _ops.Add(sumSquaredError, _ops.Multiply(diff, diff));
+                for (int featureIdx = 0; featureIdx < predictions.Shape[1]; featureIdx++)
+                {
+                    var diff = _ops.Subtract(predictions[batchIdx, featureIdx], targets[batchIdx, featureIdx]);
+                    sumSquaredError = _ops.Add(sumSquaredError, _ops.Multiply(diff, diff));
+                    count++;
+                }
             }
 
             return _ops.Divide(sumSquaredError, _ops.FromDouble(count));
-        }
-
-        private int[] GetTensorIndices(Tensor<T> tensor, int flatIndex)
-        {
-            var indices = new int[tensor.Rank];
-            int remainder = flatIndex;
-            for (int i = tensor.Rank - 1; i >= 0; i--)
-            {
-                indices[i] = remainder % tensor.Shape[i];
-                remainder /= tensor.Shape[i];
-            }
-            return indices;
         }
 
         /// <summary>
@@ -403,60 +394,84 @@ namespace AiDotNet.AutoML
             var output = new Tensor<T>(input.Shape);
             var weight = _weights[weightKey];
 
-            // Apply operation (simplified) using tensor indexing
+            // Apply operation (simplified) using proper 2D tensor indexing
             switch (opIdx)
             {
                 case 0: // Identity
-                    for (int i = 0; i < input.Length; i++)
+                    for (int batchIdx = 0; batchIdx < input.Shape[0]; batchIdx++)
                     {
-                        var inIndices = GetTensorIndices(input, i);
-                        var outIndices = GetTensorIndices(output, i);
-                        output[outIndices] = input[inIndices];
+                        for (int featureIdx = 0; featureIdx < input.Shape[1]; featureIdx++)
+                        {
+                            output[batchIdx, featureIdx] = input[batchIdx, featureIdx];
+                        }
                     }
                     break;
 
                 case 1: // 3x3 Conv (simplified as weighted pass)
-                    for (int i = 0; i < Math.Min(input.Length, weight.Length); i++)
                     {
-                        var inIndices = GetTensorIndices(input, i);
-                        var outIndices = GetTensorIndices(output, i);
-                        output[outIndices] = _ops.Multiply(input[inIndices], _ops.Add(_ops.One, weight[i]));
+                        int weightIdx = 0;
+                        for (int batchIdx = 0; batchIdx < input.Shape[0]; batchIdx++)
+                        {
+                            for (int featureIdx = 0; featureIdx < input.Shape[1]; featureIdx++)
+                            {
+                                if (weightIdx < weight.Length)
+                                {
+                                    output[batchIdx, featureIdx] = _ops.Multiply(
+                                        input[batchIdx, featureIdx],
+                                        _ops.Add(_ops.One, weight[weightIdx]));
+                                    weightIdx++;
+                                }
+                            }
+                        }
                     }
                     break;
 
                 case 2: // 5x5 Conv (simplified)
-                    for (int i = 0; i < Math.Min(input.Length, weight.Length); i++)
                     {
-                        var inIndices = GetTensorIndices(input, i);
-                        var outIndices = GetTensorIndices(output, i);
-                        output[outIndices] = _ops.Multiply(input[inIndices], _ops.Add(_ops.One, _ops.Multiply(_ops.FromDouble(1.5), weight[i])));
+                        int weightIdx = 0;
+                        for (int batchIdx = 0; batchIdx < input.Shape[0]; batchIdx++)
+                        {
+                            for (int featureIdx = 0; featureIdx < input.Shape[1]; featureIdx++)
+                            {
+                                if (weightIdx < weight.Length)
+                                {
+                                    output[batchIdx, featureIdx] = _ops.Multiply(
+                                        input[batchIdx, featureIdx],
+                                        _ops.Add(_ops.One, _ops.Multiply(_ops.FromDouble(1.5), weight[weightIdx])));
+                                    weightIdx++;
+                                }
+                            }
+                        }
                     }
                     break;
 
                 case 3: // MaxPool (simplified)
-                    for (int i = 0; i < input.Length; i++)
+                    for (int batchIdx = 0; batchIdx < input.Shape[0]; batchIdx++)
                     {
-                        var inIndices = GetTensorIndices(input, i);
-                        var outIndices = GetTensorIndices(output, i);
-                        output[outIndices] = _ops.Multiply(input[inIndices], _ops.FromDouble(0.9));
+                        for (int featureIdx = 0; featureIdx < input.Shape[1]; featureIdx++)
+                        {
+                            output[batchIdx, featureIdx] = _ops.Multiply(input[batchIdx, featureIdx], _ops.FromDouble(0.9));
+                        }
                     }
                     break;
 
                 case 4: // AvgPool (simplified)
-                    for (int i = 0; i < input.Length; i++)
+                    for (int batchIdx = 0; batchIdx < input.Shape[0]; batchIdx++)
                     {
-                        var inIndices = GetTensorIndices(input, i);
-                        var outIndices = GetTensorIndices(output, i);
-                        output[outIndices] = _ops.Multiply(input[inIndices], _ops.FromDouble(0.8));
+                        for (int featureIdx = 0; featureIdx < input.Shape[1]; featureIdx++)
+                        {
+                            output[batchIdx, featureIdx] = _ops.Multiply(input[batchIdx, featureIdx], _ops.FromDouble(0.8));
+                        }
                     }
                     break;
 
                 default:
-                    for (int i = 0; i < input.Length; i++)
+                    for (int batchIdx = 0; batchIdx < input.Shape[0]; batchIdx++)
                     {
-                        var inIndices = GetTensorIndices(input, i);
-                        var outIndices = GetTensorIndices(output, i);
-                        output[outIndices] = input[inIndices];
+                        for (int featureIdx = 0; featureIdx < input.Shape[1]; featureIdx++)
+                        {
+                            output[batchIdx, featureIdx] = input[batchIdx, featureIdx];
+                        }
                     }
                     break;
             }
