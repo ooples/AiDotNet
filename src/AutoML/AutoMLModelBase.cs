@@ -205,10 +205,13 @@ namespace AiDotNet.AutoML
         }
 
         /// <summary>
-        /// Trains the model (legacy method - use SearchAsync instead).
-        /// This method must be implemented by derived classes if they support legacy training interfaces.
+        /// Trains the model (legacy method - use SearchAsync instead)
         /// </summary>
-        public abstract void Train(double[][] inputs, double[] outputs);
+        public virtual void Train(double[][] inputs, double[] outputs)
+        {
+            // AutoML models are trained through SearchAsync
+            throw new NotSupportedException("Use SearchAsync to train AutoML models");
+        }
 
         /// <summary>
         /// Makes predictions using the best model (legacy method)
@@ -318,10 +321,14 @@ namespace AiDotNet.AutoML
         #region IModel Implementation
 
         /// <summary>
-        /// Trains the AutoML model by searching for the best configuration.
-        /// This method must be implemented by derived classes to define their specific training logic.
+        /// Trains the AutoML model by searching for the best configuration
         /// </summary>
-        public abstract void Train(TInput input, TOutput expectedOutput);
+        public virtual void Train(TInput input, TOutput expectedOutput)
+        {
+            // AutoML doesn't use traditional training - it searches for the best model
+            // This would typically be called internally during the search process
+            throw new InvalidOperationException("AutoML models are trained using the SearchAsync method, not the traditional Train method. Please call SearchAsync to initiate the AutoML process.");
+        }
 
         /// <summary>
         /// Makes predictions using the best model found
