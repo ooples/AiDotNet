@@ -143,18 +143,6 @@ public class ExpressionTree<T, TInput, TOutput> : IFullModel<T, TInput, TOutput>
     }
 
     /// <summary>
-    /// Disposes the ThreadLocal Random instance to prevent resource leaks.
-    /// </summary>
-    /// <remarks>
-    /// <b>For Beginners:</b> This method should be called when you're completely done
-    /// using ExpressionTree instances in your application to clean up resources properly.
-    /// </remarks>
-    public static void DisposeRandomGenerator()
-    {
-        _random?.Dispose();
-    }
-
-    /// <summary>
     /// Creates a new expression tree node with the specified properties.
     /// </summary>
     /// <param name="type">The type of node to create.</param>
