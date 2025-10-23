@@ -401,7 +401,7 @@ public abstract class NonLinearRegressionBase<T> : INonLinearRegression<T>
                 return NumOps.Exp(NumOps.Multiply(NumOps.FromDouble(-Options.Gamma), l1Distance));
 
             default:
-                throw new ArgumentOutOfRangeException(nameof(Options.KernelType), Options.KernelType, $"Unsupported kernel type: {Options.KernelType}");
+                throw new ArgumentOutOfRangeException(nameof(Options.KernelType), Options.KernelType, "Unsupported kernel type");
         }
     }
 
