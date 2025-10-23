@@ -377,7 +377,7 @@ public class DecoderLayer<T> : LayerBase<T>
     /// <remarks>
     /// <para><b>For Beginners:</b> DecoderLayer cannot operate with a single input because it needs both
     /// the decoder input and the encoder output to function properly. Use the overload that accepts
-    /// multiple tensors: Forward(params Tensor&lt;T&gt;[] inputs) instead.</para>
+    /// multiple tensors: <see cref="Forward(Tensor{T}[])" /> instead.</para>
     /// </remarks>
     public override Tensor<T> Forward(Tensor<T> input)
     {
