@@ -1058,7 +1058,7 @@ public class VectorModel<T> : IFullModel<T, Matrix<T>, Vector<T>>
     {
         if (_cachedFeatureImportance != null)
         {
-            return _cachedFeatureImportance;
+            return new Dictionary<string, T>(_cachedFeatureImportance);
         }
 
         var importance = new Dictionary<string, T>();
@@ -1067,7 +1067,7 @@ public class VectorModel<T> : IFullModel<T, Matrix<T>, Vector<T>>
             importance.Add($"Feature_{i}", _numOps.Abs(Coefficients[i]));
         }
         _cachedFeatureImportance = importance;
-        return importance;
+        return new Dictionary<string, T>(importance);
     }
 
     #region IInterpretableModel Implementation
@@ -1075,7 +1075,7 @@ public class VectorModel<T> : IFullModel<T, Matrix<T>, Vector<T>>
         protected readonly HashSet<InterpretationMethod> _enabledMethods = new();
         protected Vector<int> _sensitiveFeatures;
         protected readonly List<FairnessMetric> _fairnessMetrics = new();
-        protected IFullModel<T, Matrix<T>, Vector<T>> _baseModel;
+        protected IFullModel<T, Matrix<T>, Vector<T>>? _baseModel = null;
 
         /// <summary>
         /// Gets the global feature importance across all predictions.
