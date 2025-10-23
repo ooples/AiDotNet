@@ -49,12 +49,9 @@ namespace AiDotNet.Interpretability
             AnchorRules = new Dictionary<int, (T Min, T Max)>();
             AnchorFeatures = new List<int>();
             Description = string.Empty;
-<<<<<<< HEAD
             Precision = NumOps.Zero;
             Coverage = NumOps.Zero;
             Threshold = NumOps.Zero;
-=======
->>>>>>> origin/master
         }
     }
 }
