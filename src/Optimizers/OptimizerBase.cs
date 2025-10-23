@@ -1164,6 +1164,31 @@ public abstract class OptimizerBase<T, TInput, TOutput> : IOptimizer<T, TInput, 
         return gradients;
     }
 
+    /// <summary>
+    /// Initializes a random solution within the given bounds.
+    /// </summary>
+    /// <param name="lowerBounds">Lower bounds for each parameter</param>
+    /// <param name="upperBounds">Upper bounds for each parameter</param>
+    /// <returns>A vector representing a random solution</returns>
+    protected virtual Vector<T> InitializeRandomSolution(Vector<T> lowerBounds, Vector<T> upperBounds)
+    {
+        if (lowerBounds == null) throw new ArgumentNullException(nameof(lowerBounds));
+        if (upperBounds == null) throw new ArgumentNullException(nameof(upperBounds));
+        if (lowerBounds.Length != upperBounds.Length)
+            throw new ArgumentException("Lower and upper bounds must have the same length");
+
+        var solution = new Vector<T>(lowerBounds.Length);
+        for (int i = 0; i < lowerBounds.Length; i++)
+        {
+            // Generate random value between lower and upper bounds
+            var range = NumOps.Subtract(upperBounds[i], lowerBounds[i]);
+            var randomFraction = NumOps.FromDouble(Random.NextDouble());
+            var randomValue = NumOps.Add(lowerBounds[i], NumOps.Multiply(range, randomFraction));
+            solution[i] = randomValue;
+        }
+        return solution;
+    }
+
     public virtual void SaveModel(string filePath)
     {
         throw new NotImplementedException("SaveModel is not yet implemented for this optimizer type.");
