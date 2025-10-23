@@ -1,4 +1,5 @@
 global using AiDotNet.Factories;
+using Newtonsoft.Json;
 
 namespace AiDotNet.Regression;
 

@@ -1,10 +1,9 @@
-﻿global using Newtonsoft.Json;
+global using Newtonsoft.Json;
 global using Formatting = Newtonsoft.Json.Formatting;
 
 namespace AiDotNet.Models.Results;
 
 /// <summary>
-<<<<<<< HEAD
 /// Represents a complete predictive model with its optimization results, normalization information, and metadata.
 /// This class implements the IPredictiveModel interface and provides serialization capabilities.
 /// </summary>
@@ -450,213 +449,11 @@ public class PredictionModelResult<T, TInput, TOutput> : IPredictiveModel<T, TIn
         {
             throw new InvalidOperationException($"Failed to deserialize the model: {ex.Message}", ex);
         }
-=======
-/// Represents the complete result of a prediction model building process, including the trained model,
-/// optimization results, and normalization information.
-/// </summary>
-/// <typeparam name="T">The numeric type used for calculations (e.g., float, double).</typeparam>
-/// <typeparam name="TInput">The type of input data (e.g., Matrix&lt;T&gt;, Tensor&lt;T&gt;).</typeparam>
-/// <typeparam name="TOutput">The type of output data (e.g., Vector&lt;T&gt;, Tensor&lt;T&gt;).</typeparam>
-/// <remarks>
-/// <b>For Beginners:</b> This class wraps a trained prediction model along with all the information
-/// needed to use it effectively. It includes:
-/// - The trained model itself
-/// - Information about how the model was optimized
-/// - Details about how the data was normalized
-///
-/// This wrapper allows the model to be used for predictions and provides access
-/// to all the metadata about how it was created and how well it performs.
-///
-/// <b>IMPORTANT LIMITATION:</b> SaveModel and LoadModel methods are not yet fully implemented.
-/// While SaveModel will serialize the model data to a file, LoadModel cannot currently deserialize
-/// the data back into a working model due to incomplete type reconstruction logic. Use with caution
-/// in production scenarios that require model persistence.
-/// </remarks>
-public class PredictionModelResult<T, TInput, TOutput> : IPredictiveModel<T, TInput, TOutput>, IFullModel<T, TInput, TOutput>
-{
-    private IFullModel<T, TInput, TOutput>? _innerModel;
-    private OptimizationResult<T, TInput, TOutput>? _optimizationResult;
-    private NormalizationInfo<T, TInput, TOutput>? _normalizationInfo;
-
-    /// <summary>
-    /// Gets the inner model used for predictions.
-    /// </summary>
-    public IFullModel<T, TInput, TOutput>? Model => _innerModel;
-
-    /// <summary>
-    /// Gets the optimization result containing detailed information about the training process.
-    /// </summary>
-    public OptimizationResult<T, TInput, TOutput>? OptimizationResult => _optimizationResult;
-
-    /// <summary>
-    /// Gets the normalization information used to preprocess the data.
-    /// </summary>
-    public NormalizationInfo<T, TInput, TOutput>? NormalizationInfo => _normalizationInfo;
-
-    /// <summary>
-    /// Initializes a new instance of the PredictionModelResult class.
-    /// </summary>
-    /// <param name="model">The trained model.</param>
-    /// <param name="optimizationResult">The optimization results.</param>
-    /// <param name="normalizationInfo">The normalization information.</param>
-    public PredictionModelResult(
-        IFullModel<T, TInput, TOutput>? model,
-        OptimizationResult<T, TInput, TOutput> optimizationResult,
-        NormalizationInfo<T, TInput, TOutput> normalizationInfo)
-    {
-        _innerModel = model;
-        _optimizationResult = optimizationResult ?? throw new ArgumentNullException(nameof(optimizationResult));
-        _normalizationInfo = normalizationInfo ?? throw new ArgumentNullException(nameof(normalizationInfo));
-    }
-
-    /// <summary>
-    /// Initializes a new instance of the PredictionModelResult class for deserialization.
-    /// </summary>
-    public PredictionModelResult()
-    {
-        _innerModel = null;
-        _optimizationResult = null;
-        _normalizationInfo = null;
-    }
-
-    #region IPredictiveModel Implementation
-
-    /// <summary>
-    /// Makes predictions using the trained model on new input data.
-    /// </summary>
-    /// <param name="input">The input data to make predictions for.</param>
-    /// <returns>The predicted output values.</returns>
-    public TOutput Predict(TInput input)
-    {
-        if (_innerModel == null)
-        {
-            throw new InvalidOperationException("Model has not been initialized. Cannot make predictions.");
-        }
-
-        return _innerModel.Predict(input);
-    }
-
-    /// <summary>
-    /// Retrieves metadata and performance information about the trained model.
-    /// </summary>
-    /// <returns>Metadata about the model's performance and configuration.</returns>
-    public ModelMetaData<T> GetModelMetadata()
-    {
-        if (_innerModel == null)
-        {
-            throw new InvalidOperationException("Model has not been initialized. Cannot retrieve metadata.");
-        }
-
-        return _innerModel.GetModelMetaData();
-    }
-
-    #endregion
-
-    #region IModel Implementation
-
-    /// <summary>
-    /// Trains the model using input features and their corresponding target values.
-    /// </summary>
-    /// <param name="input">The input training data.</param>
-    /// <param name="expectedOutput">The expected output values.</param>
-    public void Train(TInput input, TOutput expectedOutput)
-    {
-        if (_innerModel == null)
-        {
-            throw new InvalidOperationException("Model has not been initialized. Cannot train.");
-        }
-
-        _innerModel.Train(input, expectedOutput);
-    }
-
-    /// <summary>
-    /// Retrieves metadata and performance metrics about the trained model.
-    /// </summary>
-    /// <returns>An object containing metadata and performance metrics about the trained model.</returns>
-    public ModelMetaData<T> GetModelMetaData()
-    {
-        if (_innerModel == null)
-        {
-            throw new InvalidOperationException("Model has not been initialized. Cannot retrieve metadata.");
-        }
-
-        return _innerModel.GetModelMetaData();
-    }
-
-    #endregion
-
-    #region IModelSerializer Implementation
-
-    /// <summary>
-    /// Data Transfer Object for serialization of PredictionModelResult.
-    /// </summary>
-    private class SerializationDto
-    {
-        public byte[] Model { get; set; } = Array.Empty<byte>();
-        public OptimizationResult<T, TInput, TOutput>? OptimizationResult { get; set; }
-        public NormalizationInfo<T, TInput, TOutput>? NormalizationInfo { get; set; }
-    }
-
-    /// <summary>
-    /// Converts the current state of the model into a binary format.
-    /// </summary>
-    /// <returns>A byte array containing the serialized model data.</returns>
-    public byte[] Serialize()
-    {
-        if (_innerModel == null)
-        {
-            throw new InvalidOperationException("Model has not been initialized. Cannot serialize.");
-        }
-
-        if (_optimizationResult == null)
-        {
-            throw new InvalidOperationException("OptimizationResult is missing. Cannot serialize.");
-        }
-
-        if (_normalizationInfo == null)
-        {
-            throw new InvalidOperationException("NormalizationInfo is missing. Cannot serialize.");
-        }
-
-        var dto = new SerializationDto
-        {
-            Model = _innerModel.Serialize(),
-            OptimizationResult = _optimizationResult,
-            NormalizationInfo = _normalizationInfo
-        };
-
-        return JsonSerializer.SerializeToUtf8Bytes(dto);
-    }
-
-    /// <summary>
-    /// Loads a previously serialized model from binary data.
-    /// </summary>
-    /// <param name="data">The byte array containing the serialized model data.</param>
-    public void Deserialize(byte[] data)
-    {
-        if (data == null)
-        {
-            throw new ArgumentNullException(nameof(data));
-        }
-
-        var dto = JsonSerializer.Deserialize<SerializationDto>(data);
-        if (dto == null)
-        {
-            throw new InvalidOperationException("Failed to deserialize model data.");
-        }
-
-        // Note: This is a simplified implementation. A full implementation would need to:
-        // 1. Deserialize the inner model type information
-        // 2. Reconstruct the inner model using the appropriate type
-        // 3. Properly deserialize OptimizationResult and NormalizationInfo
-        throw new NotImplementedException("Full deserialization logic needs to be implemented based on specific model types.");
->>>>>>> origin/merge-dev2-to-master
     }
 
     /// <summary>
     /// Saves the model to a file.
     /// </summary>
-<<<<<<< HEAD
     /// <param name="filePath">The path where the model will be saved.</param>
     /// <remarks>
     /// <para>
@@ -781,8 +578,12 @@ public class PredictionModelResult<T, TInput, TOutput> : IPredictiveModel<T, TIn
     {
         throw new NotImplementedException();
     }
-}
-=======
+
+    #region IModelSerializer Implementation
+
+    /// <summary>
+    /// Saves the model to a file.
+    /// </summary>
     /// <param name="filePath">The path where the model should be saved.</param>
     public void SaveModel(string filePath)
     {
@@ -1026,4 +827,3 @@ public class PredictionModelResult<T, TInput, TOutput> : IPredictiveModel<T, TIn
 
     #endregion
 }
->>>>>>> origin/merge-dev2-to-master

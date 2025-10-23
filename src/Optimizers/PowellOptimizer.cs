@@ -1,3 +1,5 @@
+using Newtonsoft.Json;
+
 /// <summary>
 /// Implements Powell's method, a derivative-free optimization algorithm for finding local minima or maxima.
 /// </summary>

@@ -1,4 +1,6 @@
-﻿namespace AiDotNet.Optimizers;
+using Newtonsoft.Json;
+
+namespace AiDotNet.Optimizers;
 
 /// <summary>
 /// Implements a normal optimization algorithm with adaptive parameters.
