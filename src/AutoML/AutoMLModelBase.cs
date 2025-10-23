@@ -206,7 +206,7 @@ namespace AiDotNet.AutoML
 
         /// <summary>
         /// Trains the model (legacy method - use SearchAsync instead).
-        /// This method must be implemented by derived classes if they support legacy training interfaces.
+        /// This abstract method must be implemented by all derived classes. If a derived class does not support legacy training interfaces, its implementation should throw a <see cref="NotSupportedException"/>.
         /// </summary>
         public abstract void Train(double[][] inputs, double[] outputs);
 
@@ -318,8 +318,8 @@ namespace AiDotNet.AutoML
         #region IModel Implementation
 
         /// <summary>
-        /// Trains the AutoML model by searching for the best configuration.
-        /// This method must be implemented by derived classes to define their specific training logic.
+        /// Trains the AutoML model. Derived classes must implement their own training logic,
+        /// which may involve searching for the best configuration or other strategies.
         /// </summary>
         public abstract void Train(TInput input, TOutput expectedOutput);
 
