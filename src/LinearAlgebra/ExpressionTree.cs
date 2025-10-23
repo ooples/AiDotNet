@@ -836,7 +836,17 @@ public class ExpressionTree<T, TInput, TOutput> : IFullModel<T, TInput, TOutput>
         {
             if (node.Type == ExpressionNodeType.Variable)
             {
-                int idx = _numOps.ToInt32(node.Value);
+                int idx;
+                try
+                {
+                    idx = _numOps.ToInt32(node.Value);
+                }
+                catch (Exception ex)
+                {
+                    throw new InvalidOperationException(
+                        $"Variable node's Value ('{node.Value}') could not be converted to int. " +
+                        "Ensure that for variable nodes, Value contains the feature index.", ex);
+                }
                 counts[idx] = counts.TryGetValue(idx, out var c) ? c + 1 : 1;
             }
             if (node.Left != null) Traverse(node.Left);
@@ -881,7 +891,17 @@ public class ExpressionTree<T, TInput, TOutput> : IFullModel<T, TInput, TOutput>
         {
             if (node.Type == ExpressionNodeType.Variable)
             {
-                int idx = _numOps.ToInt32(node.Value);
+                int idx;
+                try
+                {
+                    idx = _numOps.ToInt32(node.Value);
+                }
+                catch (Exception ex)
+                {
+                    throw new InvalidOperationException(
+                        $"Variable node's Value ('{node.Value}') could not be converted to int. " +
+                        "Ensure that for variable nodes, Value contains the feature index.", ex);
+                }
                 if (!allowed.Contains(idx))
                 {
                     // Replace disallowed variable with constant zero
