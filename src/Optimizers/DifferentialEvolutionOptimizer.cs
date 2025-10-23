@@ -68,6 +68,7 @@ public class DifferentialEvolutionOptimizer<T, TInput, TOutput> : OptimizerBase<
     /// <summary>
     /// Initializes a new instance of the DifferentialEvolutionOptimizer class.
     /// </summary>
+    /// <param name="model">The model to be optimized.</param>
     /// <param name="options">The options for configuring the Differential Evolution algorithm.</param>
     /// <remarks>
     /// <para><b>For Beginners:</b> This constructor sets up the Differential Evolution optimizer with its initial configuration.
@@ -75,8 +76,9 @@ public class DifferentialEvolutionOptimizer<T, TInput, TOutput> : OptimizerBase<
     /// </para>
     /// </remarks>
     public DifferentialEvolutionOptimizer(
+        IFullModel<T, TInput, TOutput> model,
         DifferentialEvolutionOptions<T, TInput, TOutput>? options = null)
-        : base(options ?? new())
+        : base(model, options ?? new())
     {
         _deOptions = options ?? new DifferentialEvolutionOptions<T, TInput, TOutput>();
         _currentCrossoverRate = NumOps.Zero;

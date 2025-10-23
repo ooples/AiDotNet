@@ -38,14 +38,17 @@ public class AntColonyOptimizer<T, TInput, TOutput> : OptimizerBase<T, TInput, T
     /// <summary>
     /// Initializes a new instance of the AntColonyOptimizer class.
     /// </summary>
+    /// <param name="model">The model to be optimized.</param>
     /// <param name="options">The options for configuring the Ant Colony Optimization algorithm.</param>
     /// <remarks>
     /// <para><b>For Beginners:</b> This sets up the Ant Colony Optimizer with its initial configuration.
     /// You can customize various aspects of how it works, or use default settings.
     /// </para>
     /// </remarks>
-    public AntColonyOptimizer(AntColonyOptimizationOptions<T, TInput, TOutput>? options = null)
-        : base(options ?? new())
+    public AntColonyOptimizer(
+        IFullModel<T, TInput, TOutput> model,
+        AntColonyOptimizationOptions<T, TInput, TOutput>? options = null)
+        : base(model, options ?? new())
     {
         _antColonyOptions = options ?? new AntColonyOptimizationOptions<T, TInput, TOutput>();
         _currentPheromoneEvaporationRate = NumOps.Zero;
