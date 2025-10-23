@@ -331,9 +331,10 @@ internal class MappedRandomForestModel<T> : IFullModel<T, Matrix<T>, Vector<T>>
                         key = s;
                     }
                 }
-                catch (Exception)
+                catch (Exception ex)
                 {
                     // Failed to inverse map feature name, fallback to original key
+                    Console.WriteLine($"[TransferRandomForest] Failed to inverse map feature name '{kvp.Key}': {ex.Message}");
                 }
         }
         mappedImportance[key] = kvp.Value;
@@ -349,9 +350,25 @@ internal class MappedRandomForestModel<T> : IFullModel<T, Matrix<T>, Vector<T>>
         {
             writer.Write(Convert.ToDouble(_mapper.GetMappingConfidence()));
         }
-        catch
+        catch (InvalidCastException ex)
         {
-            // Failed to write mapping confidence, fallback to 0.0
+            // Mapping confidence could not be converted to double (e.g., not a numeric value).
+            // This field is reserved and not critical for deserialization, so fallback to 0.0.
+            // Exception: ex.Message
+            writer.Write(0.0);
+        }
+        catch (FormatException ex)
+        {
+            // Mapping confidence format is invalid.
+            // This field is reserved and not critical for deserialization, so fallback to 0.0.
+            // Exception: ex.Message
+            writer.Write(0.0);
+        }
+        catch (Exception ex)
+        {
+            // Unexpected exception when writing mapping confidence.
+            // This field is reserved and not critical for deserialization, so fallback to 0.0.
+            // Exception: ex.Message
             writer.Write(0.0);
         }
         writer.Write(baseBytes.Length);
@@ -375,9 +392,12 @@ internal class MappedRandomForestModel<T> : IFullModel<T, Matrix<T>, Vector<T>>
             baseBytes = reader.ReadBytes(len);
             return true;
         }
-        catch (Exception)
+        catch (Exception ex)
         {
-            // Wrapper deserialization fallback
+            // Wrapper deserialization fallback.
+            // Expected exceptions: EndOfStreamException, IOException, InvalidOperationException, etc.
+            // Log the exception for troubleshooting failed deserializations.
+            System.Diagnostics.Debug.WriteLine($"[MappedRandomForestModel] Wrapper deserialization failed: {ex}");
             baseBytes = Array.Empty<byte>();
             return false;
         }
