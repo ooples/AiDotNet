@@ -734,7 +734,7 @@ public class PredictionModelResult<T, TInput, TOutput> : IPredictiveModel<T, TIn
 
         var copiedModel = Model.DeepCopy();
         var copiedOptimizationResult = OptimizationResult.DeepCopy();
-        var copiedNormalizationInfo = NormalizationInfo?.DeepCopy() ?? new NormalizationInfo<T, TInput, TOutput>();
+        var copiedNormalizationInfo = NormalizationInfo.DeepCopy();
 
         return new PredictionModelResult<T, TInput, TOutput>(copiedOptimizationResult, copiedNormalizationInfo)
         {
