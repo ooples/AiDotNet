@@ -1229,6 +1229,8 @@ public class ExpressionTree<T, TInput, TOutput> : IFullModel<T, TInput, TOutput>
         // Local function returns next index to use - includes null check for safety
         int AssignAndReturnNextIndex(ExpressionTree<T, TInput, TOutput>? node, int currentIndex)
         {
+            if (node == null)
+                return currentIndex;
             if (node == null) return currentIndex;
             int nextIndex = currentIndex;
             if (node.Type == ExpressionNodeType.Constant)
