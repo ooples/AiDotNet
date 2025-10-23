@@ -505,53 +505,6 @@ public class OptimizationResult<T, TInput, TOutput>
     }
 
     /// <summary>
-    /// Creates a deep copy of this OptimizationResult instance.
-    /// </summary>
-    /// <returns>A new OptimizationResult with copied values.</returns>
-    public OptimizationResult<T, TInput, TOutput> DeepCopy()
-    {
-        return new OptimizationResult<T, TInput, TOutput>
-        {
-            BestSolution = BestSolution?.DeepCopy(),
-            BestIntercept = BestIntercept,
-            BestFitnessScore = BestFitnessScore,
-            Iterations = Iterations,
-            FitnessHistory = new Vector<T>(FitnessHistory.ToArray()),
-            SelectedFeatures = SelectedFeatures.Select(v => new Vector<T>(v.ToArray())).ToList(),
-            TrainingResult = TrainingResult,
-            ValidationResult = ValidationResult,
-            TestResult = TestResult,
-            FitDetectionResult = FitDetectionResult,
-            CoefficientLowerBounds = new Vector<T>(CoefficientLowerBounds.ToArray()),
-            CoefficientUpperBounds = new Vector<T>(CoefficientUpperBounds.ToArray())
-        };
-    }
-
-    /// <summary>
-    /// Creates a new OptimizationResult instance with the best solution updated to use the specified parameters.
-    /// </summary>
-    /// <param name="parameters">The parameters to apply to the best solution.</param>
-    /// <returns>A new OptimizationResult with the updated model.</returns>
-    public OptimizationResult<T, TInput, TOutput> WithParameters(Vector<T> parameters)
-    {
-        return new OptimizationResult<T, TInput, TOutput>
-        {
-            BestSolution = BestSolution?.WithParameters(parameters),
-            BestIntercept = BestIntercept,
-            BestFitnessScore = BestFitnessScore,
-            Iterations = Iterations,
-            FitnessHistory = FitnessHistory,
-            SelectedFeatures = SelectedFeatures,
-            TrainingResult = TrainingResult,
-            ValidationResult = ValidationResult,
-            TestResult = TestResult,
-            FitDetectionResult = FitDetectionResult,
-            CoefficientLowerBounds = CoefficientLowerBounds,
-            CoefficientUpperBounds = CoefficientUpperBounds
-        };
-    }
-
-    /// <summary>
     /// Represents detailed results and statistics for a specific dataset (training, validation, or test).
     /// </summary>
     /// <remarks>
