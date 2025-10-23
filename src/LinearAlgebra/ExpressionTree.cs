@@ -1049,20 +1049,44 @@ public class ExpressionTree<T, TInput, TOutput> : IFullModel<T, TInput, TOutput>
 
     public virtual void SetParameters(Vector<T> parameters)
     {
-            // Assign parameter values to constant nodes in a deterministic traversal order
-            int index = 0;
+        // Count the number of constant nodes in the tree
+        int constantNodeCount = 0;
 
-            void Assign(ExpressionTree<T, TInput, TOutput> node)
+        void CountConstants(ExpressionTree<T, TInput, TOutput> node)
+        {
+            if (node == null) return;
+            if (node.Type == ExpressionNodeType.Constant)
             {
-                if (node.Type == ExpressionNodeType.Constant && index < parameters.Length)
-                {
-                    node.SetValue(parameters[index++]);
-                }
-                if (node.Left != null) Assign(node.Left);
-                if (node.Right != null) Assign(node.Right);
+                constantNodeCount++;
             }
+            if (node.Left != null) CountConstants(node.Left);
+            if (node.Right != null) CountConstants(node.Right);
+        }
 
-            Assign(this);
+        CountConstants(this);
+
+        if (parameters.Length != constantNodeCount)
+        {
+            throw new ArgumentException(
+                $"Parameter count mismatch: expected {constantNodeCount} parameters (one for each constant node), but got {parameters.Length}.",
+                nameof(parameters));
+        }
+
+        // Assign parameter values to constant nodes in a deterministic traversal order
+        int index = 0;
+
+        void Assign(ExpressionTree<T, TInput, TOutput> node)
+        {
+            if (node == null) return;
+            if (node.Type == ExpressionNodeType.Constant)
+            {
+                node.SetValue(parameters[index++]);
+            }
+            if (node.Left != null) Assign(node.Left);
+            if (node.Right != null) Assign(node.Right);
+        }
+
+        Assign(this);
     }
 
     public virtual int ParameterCount
