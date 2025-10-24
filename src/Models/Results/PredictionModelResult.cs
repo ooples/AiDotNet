@@ -196,7 +196,7 @@ public class PredictionModelResult<T, TInput, TOutput> : IPredictiveModel<T, TIn
         Model = optimizationResult.BestSolution;
         OptimizationResult = optimizationResult;
         NormalizationInfo = normalizationInfo;
-        ModelMetaData = Model?.GetModelMetaData() ?? new();
+        ModelMetaData = Model?.GetModelMetadata() ?? new();
     }
 
     /// <summary>
@@ -338,8 +338,9 @@ public class PredictionModelResult<T, TInput, TOutput> : IPredictiveModel<T, TIn
     {
         try
         {
+            // TODO: JsonConverterRegistry not yet implemented
             // Register all converters using our centralized registry
-            JsonConverterRegistry.RegisterAllConverters();
+            // JsonConverterRegistry.RegisterAllConverters();
 
             // Create JSON settings with custom converters for our types
             var settings = new JsonSerializerSettings
@@ -348,19 +349,20 @@ public class PredictionModelResult<T, TInput, TOutput> : IPredictiveModel<T, TIn
                 Formatting = Formatting.Indented
             };
 
+            // TODO: Add converters from registry when implemented
             // Add all needed converters from the registry
-            var allConverters = JsonConverterRegistry.GetAllConverters();
+            // var allConverters = JsonConverterRegistry.GetAllConverters();
 
             // Add type-specific converters for T
-            var typeSpecificConverters = JsonConverterRegistry.GetConvertersForType<T>();
+            // var typeSpecificConverters = JsonConverterRegistry.GetConvertersForType<T>();
 
             // Combine converters
-            var converters = new List<JsonConverter>();
-            converters.AddRange(allConverters);
-            converters.AddRange(typeSpecificConverters);
+            // var converters = new List<JsonConverter>();
+            // converters.AddRange(allConverters);
+            // converters.AddRange(typeSpecificConverters);
 
             // Set the converters on our settings
-            settings.Converters = converters;
+            // settings.Converters = converters;
 
             // Serialize the object
             var jsonString = JsonConvert.SerializeObject(this, settings);
@@ -405,8 +407,9 @@ public class PredictionModelResult<T, TInput, TOutput> : IPredictiveModel<T, TIn
     {
         try
         {
+            // TODO: JsonConverterRegistry not yet implemented
             // Register all converters using our centralized registry
-            JsonConverterRegistry.RegisterAllConverters();
+            // JsonConverterRegistry.RegisterAllConverters();
 
             var jsonString = Encoding.UTF8.GetString(data);
 
@@ -416,19 +419,20 @@ public class PredictionModelResult<T, TInput, TOutput> : IPredictiveModel<T, TIn
                 TypeNameHandling = TypeNameHandling.All
             };
 
+            // TODO: Add converters from registry when implemented
             // Add all needed converters from the registry
-            var allConverters = JsonConverterRegistry.GetAllConverters();
+            // var allConverters = JsonConverterRegistry.GetAllConverters();
 
             // Add type-specific converters for T
-            var typeSpecificConverters = JsonConverterRegistry.GetConvertersForType<T>();
+            // var typeSpecificConverters = JsonConverterRegistry.GetConvertersForType<T>();
 
             // Combine converters
-            var converters = new List<JsonConverter>();
-            converters.AddRange(allConverters);
-            converters.AddRange(typeSpecificConverters);
+            // var converters = new List<JsonConverter>();
+            // converters.AddRange(allConverters);
+            // converters.AddRange(typeSpecificConverters);
 
             // Set the converters on our settings
-            settings.Converters = converters;
+            // settings.Converters = converters;
 
             // Deserialize the object
             var deserializedObject = JsonConvert.DeserializeObject<PredictionModelResult<T, TInput, TOutput>>(jsonString, settings);
