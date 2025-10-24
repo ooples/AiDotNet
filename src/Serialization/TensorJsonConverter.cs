@@ -109,28 +109,61 @@ namespace AiDotNet.Serialization
             }
 
             var jObject = JObject.Load(reader);
-            var shape = jObject["shape"].ToObject<int[]>();
+            var shape = jObject["shape"]?.ToObject<int[]>();
             var dataToken = jObject["data"];
+
+            if (shape == null)
+            {
+                throw new JsonSerializationException("Tensor JSON must contain 'shape' property.");
+            }
 
             // Get the element type (T) from Tensor<T>
             var elementType = objectType.GetGenericArguments()[0];
 
             // Convert data to array of the correct type
             var arrayType = elementType.MakeArrayType();
-            var dataArray = dataToken.ToObject(arrayType);
+            var dataArray = (Array?)dataToken?.ToObject(arrayType);
 
-            // First, try the constructor with IEnumerable<T> and int[] (note: constructors declared with 'params int[]' are represented as 'int[]' at runtime)
+            if (dataArray == null)
+            {
+                throw new JsonSerializationException("Tensor JSON must contain 'data' property.");
+            }
+
+            // Validate that flattened data length matches product of shape dimensions
+            int expectedLength = 1;
+            foreach (int dim in shape)
+            {
+                expectedLength *= dim;
+            }
+
+            if (dataArray.Length != expectedLength)
+            {
+                throw new JsonSerializationException(
+                    $"Tensor data length mismatch: expected {expectedLength} elements (from shape [{string.Join(", ", shape)}]), " +
+                    $"but got {dataArray.Length} elements.");
+            }
+
+            // Try constructors in order: (IEnumerable<T>, int[]), then (T[], int[])
             var enumerableType = typeof(System.Collections.Generic.IEnumerable<>).MakeGenericType(elementType);
             var tensorConstructor = objectType.GetConstructor(new[] { enumerableType, typeof(int[]) });
 
-            if (tensorConstructor == null)
+            if (tensorConstructor != null)
             {
-                throw new JsonSerializationException($"Cannot find constructor for {objectType.Name}(IEnumerable<{elementType.Name}>, int[])");
+                return tensorConstructor.Invoke(new object[] { dataArray, shape });
             }
 
-            var tensor = tensorConstructor.Invoke(new object[] { dataArray, shape });
+            // Fallback: try constructor with T[] and int[]
+            tensorConstructor = objectType.GetConstructor(new[] { arrayType, typeof(int[]) });
 
-            return tensor;
+            if (tensorConstructor != null)
+            {
+                return tensorConstructor.Invoke(new object[] { dataArray, shape });
+            }
+
+            // No suitable constructor found
+            throw new JsonSerializationException(
+                $"Cannot find suitable constructor for {objectType.Name}. " +
+                $"Expected constructor with signature ({elementType.Name}[], int[]) or (IEnumerable<{elementType.Name}>, int[]).");
         }
     }
 }
