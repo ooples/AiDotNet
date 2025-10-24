@@ -73,7 +73,7 @@ public class CMAESOptimizer<T, TInput, TOutput> : OptimizerBase<T, TInput, TOutp
         CMAESOptimizerOptions<T, TInput, TOutput>? options = null)
         : base(options ?? new())
     {
-        _options = options ?? new CMAESOptimizerOptions<T, TInput, TOutput>();
+        _options = (CMAESOptimizerOptions<T, TInput, TOutput>)Options;
         _population = Matrix<T>.Empty();
         _mean = Vector<T>.Empty();
         _C = Matrix<T>.Empty();
@@ -123,6 +123,7 @@ public class CMAESOptimizer<T, TInput, TOutput> : OptimizerBase<T, TInput, TOutp
 
         InitializeAdaptiveParameters();
         int dimensions = InputHelper<T, TInput>.GetInputSize(inputData.XTrain);
+        // Always use a deep copy of Model to avoid mutating the original during optimization
         var initialSolution = InitializeRandomSolution(inputData.XTrain);
         _mean = initialSolution.GetParameters();
         _C = Matrix<T>.CreateIdentity(dimensions);
