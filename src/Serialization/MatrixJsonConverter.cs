@@ -20,11 +20,24 @@ namespace AiDotNet.Serialization
         /// Determines whether this converter can handle the specified type.
         /// </summary>
         /// <param name="objectType">The type to check.</param>
-        /// <returns>True if the type is Matrix&lt;T&gt;, false otherwise.</returns>
+        /// <returns>True if the type is Matrix&lt;T&gt; or a subclass thereof, false otherwise.</returns>
+        /// <remarks>
+        /// This method walks the inheritance chain to support subclasses of Matrix&lt;T&gt;.
+        /// </remarks>
         public override bool CanConvert(Type objectType)
         {
-            return objectType.IsGenericType &&
-                   objectType.GetGenericTypeDefinition() == typeof(Matrix<>);
+            // Walk the inheritance chain to support subclasses
+            Type? currentType = objectType;
+            while (currentType != null)
+            {
+                if (currentType.IsGenericType &&
+                    currentType.GetGenericTypeDefinition() == typeof(Matrix<>))
+                {
+                    return true;
+                }
+                currentType = currentType.BaseType;
+            }
+            return false;
         }
 
         /// <summary>

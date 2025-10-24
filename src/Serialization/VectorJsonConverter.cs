@@ -20,11 +20,24 @@ namespace AiDotNet.Serialization
         /// Determines whether this converter can handle the specified type.
         /// </summary>
         /// <param name="objectType">The type to check.</param>
-        /// <returns>True if the type is Vector&lt;T&gt;, false otherwise.</returns>
+        /// <returns>True if the type is Vector&lt;T&gt; or a subclass thereof, false otherwise.</returns>
+        /// <remarks>
+        /// This method walks the inheritance chain to support subclasses of Vector&lt;T&gt;.
+        /// </remarks>
         public override bool CanConvert(Type objectType)
         {
-            return objectType.IsGenericType &&
-                   objectType.GetGenericTypeDefinition() == typeof(Vector<>);
+            // Walk the inheritance chain to support subclasses
+            Type? currentType = objectType;
+            while (currentType != null)
+            {
+                if (currentType.IsGenericType &&
+                    currentType.GetGenericTypeDefinition() == typeof(Vector<>))
+                {
+                    return true;
+                }
+                currentType = currentType.BaseType;
+            }
+            return false;
         }
 
         /// <summary>
