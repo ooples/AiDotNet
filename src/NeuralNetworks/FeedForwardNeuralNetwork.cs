@@ -7,7 +7,7 @@ namespace AiDotNet.NeuralNetworks;
 /// <remarks>
 /// <para>
 /// A Feed-Forward Neural Network is the simplest type of artificial neural network, where connections
-/// between nodes do not form a cycle. Information moves in only one direction—forward—from the input
+/// between nodes do not form a cycle. Information moves in only one directionï¿½forwardï¿½from the input
 /// nodes, through the hidden nodes (if any), and to the output nodes.
 /// </para>
 /// <para>
@@ -73,8 +73,8 @@ public class FeedForwardNeuralNetwork<T> : NeuralNetworkBase<T>
         ILossFunction<T>? lossFunction = null,
         double maxGradNorm = 1.0) : base(architecture, lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(architecture.TaskType), maxGradNorm)
     {
-        _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>();
-        
+        _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
+
         // Select appropriate loss function based on task type if not provided
         _lossFunction = lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(architecture.TaskType);
 

@@ -544,7 +544,7 @@ public class GraphNeuralNetwork<T> : NeuralNetworkBase<T>
         parameterGradients = ClipGradient(parameterGradients);
 
         // Create optimizer
-        var optimizer = new AdamOptimizer<T, Tensor<T>, Tensor<T>>();
+        var optimizer = new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
 
         // Get current parameters
         Vector<T> currentParameters = GetParameters();
@@ -603,19 +603,19 @@ public class GraphNeuralNetwork<T> : NeuralNetworkBase<T>
         
         // Get parameter gradients
         Vector<T> parameterGradients = GetParameterGradients();
-        
+
         // Apply gradient clipping
         parameterGradients = ClipGradient(parameterGradients);
-        
+
         // Use adaptive optimizer (Adam)
-        var optimizer = new AdamOptimizer<T, Tensor<T>, Tensor<T>>();
-        
+        var optimizer = new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
+
         // Get current parameters
         Vector<T> currentParameters = GetParameters();
-        
+
         // Update parameters
         Vector<T> updatedParameters = optimizer.UpdateParameters(currentParameters, parameterGradients);
-        
+
         // Apply updated parameters
         UpdateParameters(updatedParameters);
     }

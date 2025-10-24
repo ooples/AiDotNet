@@ -236,6 +236,56 @@ public class OptimizationAlgorithmOptions<T, TInput, TOutput> : ModelOptions
     public double MaxExplorationRate { get; set; } = 0.9;
 
     /// <summary>
+    /// Gets or sets the scale factor for parameter adjustments during optimization.
+    /// </summary>
+    /// <value>The parameter adjustment scale, defaulting to 0.1.</value>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> This controls how much model parameters are adjusted during exploration.
+    /// A value of 0.1 means parameters can be adjusted by up to 10% of their current value.</para>
+    /// </remarks>
+    public double ParameterAdjustmentScale { get; set; } = 0.1;
+
+    /// <summary>
+    /// Gets or sets the probability of flipping the sign of a parameter during adjustment.
+    /// </summary>
+    /// <value>The sign flip probability, defaulting to 0.05.</value>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> This adds randomness by occasionally flipping parameters from positive
+    /// to negative or vice versa. A value of 0.05 means there's a 5% chance of this happening for each parameter.</para>
+    /// </remarks>
+    public double SignFlipProbability { get; set; } = 0.05;
+
+    /// <summary>
+    /// Gets or sets the probability of applying feature selection during optimization.
+    /// </summary>
+    /// <value>The feature selection probability, defaulting to 0.5.</value>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> When using mixed optimization mode, this controls how often feature selection
+    /// is applied. A value of 0.5 means feature selection happens 50% of the time.</para>
+    /// </remarks>
+    public double FeatureSelectionProbability { get; set; } = 0.5;
+
+    /// <summary>
+    /// Gets or sets the probability of adjusting parameters during optimization.
+    /// </summary>
+    /// <value>The parameter adjustment probability, defaulting to 0.5.</value>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> When using mixed optimization mode, this controls how often parameter adjustment
+    /// is applied. A value of 0.5 means parameter adjustment happens 50% of the time.</para>
+    /// </remarks>
+    public double ParameterAdjustmentProbability { get; set; } = 0.5;
+
+    /// <summary>
+    /// Gets or sets the optimization mode (feature selection, parameters, or both).
+    /// </summary>
+    /// <value>The optimization mode, defaulting to Both.</value>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> This determines what the optimizer will try to improve:
+    /// features (which inputs to use), parameters (model weights), or both.</para>
+    /// </remarks>
+    public OptimizationMode OptimizationMode { get; set; } = OptimizationMode.Both;
+
+    /// <summary>
     /// Gets or sets the convergence tolerance for the optimization algorithm.
     /// </summary>
     /// <value>The convergence tolerance, defaulting to 0.000001 (1e-6).</value>

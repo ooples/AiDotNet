@@ -430,11 +430,20 @@ public class MultilayerPerceptronOptions<T, TInput, TOutput> : NonLinearRegressi
     /// models behave during training.
     /// </para>
     /// </remarks>
-    public IOptimizer<T, TInput, TOutput> Optimizer { get; set; } = new AdamOptimizer<T, TInput, TOutput>(new AdamOptimizerOptions<T, TInput, TOutput>
+    public IOptimizer<T, TInput, TOutput>? Optimizer { get; set; } = null;
+
+    /// <summary>
+    /// Gets or sets the optimizer options for creating a default AdamOptimizer if no custom optimizer is provided.
+    /// </summary>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> These are the settings used to create the default Adam optimizer if you don't
+    /// provide a custom optimizer. The default values work well for most problems.</para>
+    /// </remarks>
+    public AdamOptimizerOptions<T, TInput, TOutput> OptimizerOptions { get; set; } = new AdamOptimizerOptions<T, TInput, TOutput>
     {
         LearningRate = 0.001,
         Beta1 = 0.9,
         Beta2 = 0.999,
         Epsilon = 1e-8
-    });
+    };
 }

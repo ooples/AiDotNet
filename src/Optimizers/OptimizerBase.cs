@@ -316,7 +316,7 @@ public abstract class OptimizerBase<T, TInput, TOutput> : IOptimizer<T, TInput, 
         IFullModel<T, TInput, TOutput> solution, 
         OptimizationInputData<T, TInput, TOutput> inputData)
     {
-        string cacheKey = ModelCache.GenerateCacheKey(solution, inputData);
+        string cacheKey = $"{solution?.GetHashCode() ?? 0}_{inputData?.GetHashCode() ?? 0}";
         var cachedStepData = ModelCache.GetCachedStepData(cacheKey);
 
         if (cachedStepData != null)
@@ -355,7 +355,7 @@ public abstract class OptimizerBase<T, TInput, TOutput> : IOptimizer<T, TInput, 
         ApplyFeatureSelection(solution, selectedFeaturesIndices);
 
         // Step 3: Generate cache key based on the selected features and check cache
-        string cacheKey = ModelCache.GenerateCacheKey(solution, inputData);
+        string cacheKey = $"{solution?.GetHashCode() ?? 0}_{inputData?.GetHashCode() ?? 0}";
         var cachedStepData = ModelCache.GetCachedStepData(cacheKey);
 
         if (cachedStepData != null)
@@ -481,7 +481,7 @@ public abstract class OptimizerBase<T, TInput, TOutput> : IOptimizer<T, TInput, 
             bestStepData.FitnessScore,
             FitnessList,
             bestStepData.SelectedFeatures,
-            new OptimizationResult<T, TInput, TOutput>.DatasetResult(modelType)
+            new OptimizationResult<T, TInput, TOutput>.DatasetResult()
             {
                 X = bestStepData.XTrainSubset,
                 Y = input.YTrain,
@@ -491,7 +491,7 @@ public abstract class OptimizerBase<T, TInput, TOutput> : IOptimizer<T, TInput, 
                 PredictedBasicStats = bestStepData.EvaluationData.TrainingSet.PredictedBasicStats,
                 PredictionStats = bestStepData.EvaluationData.TrainingSet.PredictionStats
             },
-            new OptimizationResult<T, TInput, TOutput>.DatasetResult(modelType)
+            new OptimizationResult<T, TInput, TOutput>.DatasetResult()
             {
                 X = bestStepData.XValSubset,
                 Y = input.YValidation,
@@ -501,7 +501,7 @@ public abstract class OptimizerBase<T, TInput, TOutput> : IOptimizer<T, TInput, 
                 PredictedBasicStats = bestStepData.EvaluationData.ValidationSet.PredictedBasicStats,
                 PredictionStats = bestStepData.EvaluationData.ValidationSet.PredictionStats
             },
-            new OptimizationResult<T, TInput, TOutput>.DatasetResult(modelType)
+            new OptimizationResult<T, TInput, TOutput>.DatasetResult()
             {
                 X = bestStepData.XTestSubset,
                 Y = input.YTest,

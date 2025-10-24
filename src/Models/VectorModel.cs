@@ -119,6 +119,7 @@ public class VectorModel<T> : IFullModel<T, Matrix<T>, Vector<T>>
     public VectorModel(Vector<T> coefficients)
     {
         Coefficients = coefficients ?? throw new ArgumentNullException(nameof(coefficients));
+        _sensitiveFeatures = new Vector<int>(0);
     }
 
     /// <summary>
