@@ -116,9 +116,33 @@ namespace AiDotNet.Serialization
             }
 
             var jObject = JObject.Load(reader);
-            var rows = jObject["rows"].Value<int>();
-            var columns = jObject["columns"].Value<int>();
-            var dataToken = jObject["data"];
+
+            // Validate required tokens exist
+            var rowsToken = jObject["rows"];
+            var columnsToken = jObject["columns"];
+            var dataArray = jObject["data"] as JArray;
+
+            if (rowsToken == null || columnsToken == null || dataArray == null)
+            {
+                throw new JsonSerializationException("Matrix JSON must contain 'rows', 'columns', and 'data' (array).");
+            }
+
+            var rows = rowsToken.Value<int>();
+            var columns = columnsToken.Value<int>();
+
+            // Validate dimensions are non-negative
+            if (rows < 0 || columns < 0)
+            {
+                throw new JsonSerializationException("Matrix 'rows' and 'columns' must be non-negative.");
+            }
+
+            // Validate data length matches dimensions
+            int expectedLength = rows * columns;
+            if (dataArray.Count != expectedLength)
+            {
+                throw new JsonSerializationException(
+                    $"Matrix data length {dataArray.Count} does not match rows*columns {expectedLength}.");
+            }
 
             // Get the element type (T) from Matrix<T>
             var elementType = objectType.GetGenericArguments()[0];
@@ -139,13 +163,13 @@ namespace AiDotNet.Serialization
                 throw new JsonSerializationException($"Cannot find indexer for {objectType.Name}");
             }
 
-            // Populate the matrix
+            // Populate the matrix using the provided serializer
             int index = 0;
             for (int i = 0; i < rows; i++)
             {
                 for (int j = 0; j < columns; j++)
                 {
-                    var value = dataToken[index++].ToObject(elementType);
+                    var value = dataArray[index++].ToObject(elementType, serializer);
                     indexer.SetValue(matrix, value, new object[] { i, j });
                 }
             }
