@@ -323,13 +323,15 @@ public class SymbolicRegression<T> : NonLinearRegressionBase<T>
         : base(options, regularization)
     {
         _options = options ?? new SymbolicRegressionOptions();
-        _optimizer = new GeneticAlgorithmOptimizer<T, Matrix<T>, Vector<T>>(new GeneticAlgorithmOptimizerOptions<T, Matrix<T>, Vector<T>>
-        {
-            PopulationSize = _options.PopulationSize,
-            MaxGenerations = _options.MaxGenerations,
-            MutationRate = _options.MutationRate,
-            CrossoverRate = _options.CrossoverRate
-        });
+        _optimizer = new GeneticAlgorithmOptimizer<T, Matrix<T>, Vector<T>>(
+            null!,
+            new GeneticAlgorithmOptimizerOptions<T, Matrix<T>, Vector<T>>
+            {
+                PopulationSize = _options.PopulationSize,
+                MaxGenerations = _options.MaxGenerations,
+                MutationRate = _options.MutationRate,
+                CrossoverRate = _options.CrossoverRate
+            });
         _fitnessCalculator = fitnessCalculator ?? new RSquaredFitnessCalculator<T, Matrix<T>, Vector<T>>();
         _normalizer = normalizer ?? new NoNormalizer<T, Matrix<T>, Vector<T>>();
         _featureSelector = featureSelector ?? new NoFeatureSelector<T, Matrix<T>>();

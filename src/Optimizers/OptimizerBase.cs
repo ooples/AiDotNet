@@ -307,16 +307,41 @@ public abstract class OptimizerBase<T, TInput, TOutput> : IOptimizer<T, TInput, 
     }
 
     /// <summary>
+    /// Generates a cache key for a model solution based on its parameters.
+    /// </summary>
+    /// <param name="solution">The model solution.</param>
+    /// <param name="inputData">The input data (used for additional context if needed).</param>
+    /// <returns>A string cache key representing the model's current state.</returns>
+    protected virtual string GenerateCacheKey(
+        IFullModel<T, TInput, TOutput> solution,
+        OptimizationInputData<T, TInput, TOutput> inputData)
+    {
+        // Generate a cache key based on model parameters
+        var parameters = solution.GetParameters();
+        var hashCode = 17;
+
+        for (int i = 0; i < parameters.Length && i < 10; i++) // Use first 10 parameters for performance
+        {
+            hashCode = hashCode * 31 + parameters[i].GetHashCode();
+        }
+
+        // Include parameter count to differentiate models with different structures
+        hashCode = hashCode * 31 + parameters.Length.GetHashCode();
+
+        return $"model_{hashCode}";
+    }
+
+    /// <summary>
     /// Evaluates a solution, using cached results if available.
     /// </summary>
     /// <param name="solution">The solution to evaluate.</param>
     /// <param name="inputData">The input data for evaluation.</param>
     /// <returns>The evaluation results for the solution.</returns>
     protected virtual OptimizationStepData<T, TInput, TOutput> EvaluateSolution(
-        IFullModel<T, TInput, TOutput> solution, 
+        IFullModel<T, TInput, TOutput> solution,
         OptimizationInputData<T, TInput, TOutput> inputData)
     {
-        string cacheKey = ModelCache.GenerateCacheKey(solution, inputData);
+        string cacheKey = GenerateCacheKey(solution, inputData);
         var cachedStepData = ModelCache.GetCachedStepData(cacheKey);
 
         if (cachedStepData != null)
@@ -355,7 +380,7 @@ public abstract class OptimizerBase<T, TInput, TOutput> : IOptimizer<T, TInput, 
         ApplyFeatureSelection(solution, selectedFeaturesIndices);
 
         // Step 3: Generate cache key based on the selected features and check cache
-        string cacheKey = ModelCache.GenerateCacheKey(solution, inputData);
+        string cacheKey = GenerateCacheKey(solution, inputData);
         var cachedStepData = ModelCache.GetCachedStepData(cacheKey);
 
         if (cachedStepData != null)
@@ -475,7 +500,7 @@ public abstract class OptimizerBase<T, TInput, TOutput> : IOptimizer<T, TInput, 
     /// </remarks>
     protected OptimizationResult<T, TInput, TOutput> CreateOptimizationResult(OptimizationStepData<T, TInput, TOutput> bestStepData, OptimizationInputData<T, TInput, TOutput> input)
     {
-        var modelType = bestStepData.Solution.GetModelMetadata().ModelType;
+        var modelType = bestStepData.Solution.GetModelMetaData().ModelType;
         return OptimizerHelper<T, TInput, TOutput>.CreateOptimizationResult(
             bestStepData.Solution,
             bestStepData.FitnessScore,

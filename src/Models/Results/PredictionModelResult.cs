@@ -196,7 +196,7 @@ public class PredictionModelResult<T, TInput, TOutput> : IPredictiveModel<T, TIn
         Model = optimizationResult.BestSolution;
         OptimizationResult = optimizationResult;
         NormalizationInfo = normalizationInfo;
-        ModelMetaData = Model?.GetModelMetadata() ?? new();
+        ModelMetaData = Model?.GetModelMetaData() ?? new();
     }
 
     /// <summary>

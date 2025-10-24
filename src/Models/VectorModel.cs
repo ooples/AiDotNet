@@ -1114,7 +1114,7 @@ public class VectorModel<T> : IFullModel<T, Matrix<T>, Vector<T>>
         /// </summary>
         public virtual async Task<PartialDependenceData<T>> GetPartialDependenceAsync(Vector<int> featureIndices, int gridResolution = 20)
         {
-        return await InterpretableModelHelper.GetPartialDependenceAsync<T>(_enabledMethods, featureIndices, gridResolution);
+        return await InterpretableModelHelper.GetPartialDependenceAsync<T>(this, _enabledMethods, featureIndices, gridResolution);
         }
 
         /// <summary>
@@ -1122,7 +1122,22 @@ public class VectorModel<T> : IFullModel<T, Matrix<T>, Vector<T>>
         /// </summary>
         public virtual async Task<CounterfactualExplanation<T>> GetCounterfactualAsync(Matrix<T> input, Vector<T> desiredOutput, int maxChanges = 5)
         {
-        return await InterpretableModelHelper.GetCounterfactualAsync<T>(_enabledMethods, maxChanges);
+        var inputTensor = new Tensor<T>(new[] { input.Rows, input.Columns });
+        for (int i = 0; i < input.Rows; i++)
+        {
+            for (int j = 0; j < input.Columns; j++)
+            {
+                inputTensor[i, j] = input[i, j];
+            }
+        }
+
+        var desiredTensor = new Tensor<T>(new[] { desiredOutput.Length });
+        for (int i = 0; i < desiredOutput.Length; i++)
+        {
+            desiredTensor[i] = desiredOutput[i];
+        }
+
+        return await InterpretableModelHelper.GetCounterfactualAsync<T>(this, _enabledMethods, inputTensor, desiredTensor, maxChanges);
         }
 
         /// <summary>
