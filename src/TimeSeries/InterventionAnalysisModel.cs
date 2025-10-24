@@ -223,7 +223,7 @@ public class InterventionAnalysisModel<T> : TimeSeriesModelBase<T>
     public InterventionAnalysisModel(InterventionAnalysisOptions<T, Matrix<T>, Vector<T>>? options = null) : base(options ?? new())
     {
         _iaOptions = options ?? new InterventionAnalysisOptions<T, Matrix<T>, Vector<T>>();
-        _optimizer = _iaOptions.Optimizer ?? new LBFGSOptimizer<T, Matrix<T>, Vector<T>>();
+        _optimizer = _iaOptions.Optimizer ?? new LBFGSOptimizer<T, Matrix<T>, Vector<T>>(this);
         _interventionEffects = [];
         _arParameters = Vector<T>.Empty();
         _maParameters = Vector<T>.Empty();

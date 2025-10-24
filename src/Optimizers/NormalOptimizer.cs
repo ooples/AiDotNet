@@ -38,8 +38,10 @@ public class NormalOptimizer<T, TInput, TOutput> : OptimizerBase<T, TInput, TOut
     /// </para>
     /// </remarks>
     /// <param name="options">The optimization options.</param>
-    public NormalOptimizer(GeneticAlgorithmOptimizerOptions<T, TInput, TOutput>? options = null)
-		: base(options ?? new())
+    public NormalOptimizer(
+        IFullModel<T, TInput, TOutput> model,
+        GeneticAlgorithmOptimizerOptions<T, TInput, TOutput>? options = null)
+		: base(model, options ?? new())
 	{
         _normalOptions = options ?? new();
 
