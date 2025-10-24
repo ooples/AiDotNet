@@ -42,6 +42,7 @@ public class BayesianOptimizer<T, TInput, TOutput> : OptimizerBase<T, TInput, TO
     /// <summary>
     /// Initializes a new instance of the BayesianOptimizer class.
     /// </summary>
+    /// <param name="model">The model to optimize.</param>
     /// <param name="options">The options for configuring the Bayesian Optimization algorithm.</param>
     /// <param name="gaussianProcess"> The Gaussian Process model to use for approximating the objective function.</param>
     /// <remarks>
@@ -51,14 +52,15 @@ public class BayesianOptimizer<T, TInput, TOutput> : OptimizerBase<T, TInput, TO
     /// </para>
     /// </remarks>
     public BayesianOptimizer(
+        IFullModel<T, TInput, TOutput> model,
         BayesianOptimizerOptions<T, TInput, TOutput>? options = null,
         IGaussianProcess<T>? gaussianProcess = null)
-        : base(null, options ?? new())
+        : base(model, options ?? new())
     {
         _options = options ?? new BayesianOptimizerOptions<T, TInput, TOutput>();
         _sampledPoints = Matrix<T>.Empty();
         _sampledValues = Vector<T>.Empty();
-        _gaussianProcess = gaussianProcess ?? new StandardGaussianProcess<T>(_options.Kernel);
+        _gaussianProcess = gaussianProcess ?? new StandardGaussianProcess<T>(_options.KernelFunction);
 
         InitializeAdaptiveParameters();
     }
@@ -269,7 +271,7 @@ public class BayesianOptimizer<T, TInput, TOutput> : OptimizerBase<T, TInput, TO
         if (options is BayesianOptimizerOptions<T, TInput, TOutput> bayesianOptions)
         {
             _options = bayesianOptions;
-            _gaussianProcess.UpdateKernel(_options.Kernel);
+            _gaussianProcess.UpdateKernel(_options.KernelFunction);
         }
         else
         {
@@ -375,7 +377,7 @@ public class BayesianOptimizer<T, TInput, TOutput> : OptimizerBase<T, TInput, TO
                 _sampledValues[i] = NumOps.FromDouble(reader.ReadDouble());
             }
 
-            _gaussianProcess = new StandardGaussianProcess<T>(_options.Kernel);
+            _gaussianProcess = new StandardGaussianProcess<T>(_options.KernelFunction);
         }
     }
 }

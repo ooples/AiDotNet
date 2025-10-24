@@ -117,7 +117,8 @@ public class GeneticAlgorithmRegression<T> : RegressionBase<T>
         : base(options, regularization)
     {
         _gaOptions = gaOptions ?? new GeneticAlgorithmOptimizerOptions<T, Matrix<T>, Vector<T>>();
-        _optimizer = new GeneticAlgorithmOptimizer<T, Matrix<T>, Vector<T>>(null, gaOptions);
+        var dummyModel = new VectorModel<T>(Vector<T>.Empty());
+        _optimizer = new GeneticAlgorithmOptimizer<T, Matrix<T>, Vector<T>>(dummyModel, _gaOptions);
         _normalizer = normalizer ?? new NoNormalizer<T, Matrix<T>, Vector<T>>();
         _featureSelector = featureSelector ?? new NoFeatureSelector<T, Matrix<T>>();
         _outlierRemoval = outlierRemoval ?? new NoOutlierRemoval<T, Matrix<T>, Vector<T>>();

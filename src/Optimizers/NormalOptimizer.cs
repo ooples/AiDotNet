@@ -37,9 +37,10 @@ public class NormalOptimizer<T, TInput, TOutput> : OptimizerBase<T, TInput, TOut
     /// and setting up rules for how you'll explore the mountain range.
     /// </para>
     /// </remarks>
+    /// <param name="model">The model to optimize.</param>
     /// <param name="options">The optimization options.</param>
-    public NormalOptimizer(GeneticAlgorithmOptimizerOptions<T, TInput, TOutput>? options = null)
-		: base(null, options ?? new())
+    public NormalOptimizer(IFullModel<T, TInput, TOutput> model, GeneticAlgorithmOptimizerOptions<T, TInput, TOutput>? options = null)
+		: base(model, options ?? new())
 	{
         _normalOptions = options ?? new();
 

@@ -42,10 +42,12 @@ public class NewtonMethodOptimizer<T, TInput, TOutput> : GradientBasedOptimizerB
     /// You're setting up how you'll make decisions and what information you'll use along the way.
     /// </para>
     /// </remarks>
+    /// <param name="model">The model to optimize.</param>
     /// <param name="options">The Newton's Method-specific optimization options.</param>
     public NewtonMethodOptimizer(
+        IFullModel<T, TInput, TOutput> model,
         NewtonMethodOptimizerOptions<T, TInput, TOutput>? options = null)
-        : base(null, options ?? new())
+        : base(model, options ?? new())
     {
         _options = options ?? new NewtonMethodOptimizerOptions<T, TInput, TOutput>();
 
