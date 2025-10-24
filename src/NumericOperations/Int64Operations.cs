@@ -1,4 +1,4 @@
-ï»¿namespace AiDotNet.NumericOperations;
+namespace AiDotNet.NumericOperations;
 
 /// <summary>
 /// Provides operations for long integer numbers in neural network computations.
@@ -69,7 +69,7 @@ public class Int64Operations : INumericOperations<long>
     /// This method performs multiplication of two long integer values and returns their product.
     /// Multiplication is used extensively in neural networks, particularly for weight applications.
     /// </para>
-    /// <para><b>For Beginners:</b> This method multiplies two numbers together, like 2000000L Ã— 4000L = 8000000000L.
+    /// <para><b>For Beginners:</b> This method multiplies two numbers together, like 2000000L × 4000L = 8000000000L.
     /// 
     /// In neural networks, multiplication is often used when:
     /// - Applying weights to inputs
@@ -97,9 +97,9 @@ public class Int64Operations : INumericOperations<long>
     /// <para><b>For Beginners:</b> This method divides the first number by the second, but drops any remainder.
     /// 
     /// For example:
-    /// - 10000000000L Ã· 2L = 5000000000L (exact division, no remainder)
-    /// - 7000000000L Ã· 2L = 3500000000L (exact division, no remainder)
-    /// - 5L Ã· 10L = 0L (less than 1, so the integer result is 0)
+    /// - 10000000000L ÷ 2L = 5000000000L (exact division, no remainder)
+    /// - 7000000000L ÷ 2L = 3500000000L (exact division, no remainder)
+    /// - 5L ÷ 10L = 0L (less than 1, so the integer result is 0)
     /// 
     /// This is different from regular division you might do with a calculator because:
     /// - It only gives you the whole number part of the answer
@@ -196,8 +196,8 @@ public class Int64Operations : INumericOperations<long>
     /// 
     /// The square root of a number is a value that, when multiplied by itself, gives the original number.
     /// For example:
-    /// - The square root of 9 is 3 (because 3 Ã— 3 = 9)
-    /// - The square root of 16 is 4 (because 4 Ã— 4 = 16)
+    /// - The square root of 9 is 3 (because 3 × 3 = 9)
+    /// - The square root of 16 is 4 (because 4 × 4 = 16)
     /// - The square root of 2 would be approximately 1.414, but this method returns 1 (the whole number part only)
     /// 
     /// This method drops any decimal part of the result, so:
@@ -335,9 +335,9 @@ public class Int64Operations : INumericOperations<long>
     /// <para><b>For Beginners:</b> This method multiplies a number by itself.
     /// 
     /// For example:
-    /// - Square(4L) returns 16L (4L Ã— 4L = 16L)
-    /// - Square(-3L) returns 9L (-3L Ã— -3L = 9L)
-    /// - Square(1000000L) returns 1000000000000L (1000000L Ã— 1000000L = 1000000000000L)
+    /// - Square(4L) returns 16L (4L × 4L = 16L)
+    /// - Square(-3L) returns 9L (-3L × -3L = 9L)
+    /// - Square(1000000L) returns 1000000000000L (1000000L × 1000000L = 1000000000000L)
     /// 
     /// In neural networks, squaring is commonly used for:
     /// - Calculating squared errors (a measure of how far predictions are from actual values)
@@ -365,10 +365,10 @@ public class Int64Operations : INumericOperations<long>
     /// 
     /// In mathematics, "e" is a special number (approximately 2.71828) that appears naturally in many calculations.
     /// This method computes e^value and rounds to the nearest whole number:
-    /// - Exp(1L) returns 3L (eÂ¹ â‰ˆ 2.71828, rounded to 3)
-    /// - Exp(2L) returns 7L (eÂ² â‰ˆ 7.38906, rounded to 7)
-    /// - Exp(0L) returns 1L (eâ° = 1)
-    /// - Exp(10L) returns 22026L (eÂ¹â° â‰ˆ 22026.4658)
+    /// - Exp(1L) returns 3L (e¹ ˜ 2.71828, rounded to 3)
+    /// - Exp(2L) returns 7L (e² ˜ 7.38906, rounded to 7)
+    /// - Exp(0L) returns 1L (e° = 1)
+    /// - Exp(10L) returns 22026L (e¹° ˜ 22026.4658)
     /// 
     /// Because long integers can't store decimal values, this operation loses precision compared to
     /// its floating-point equivalent. It's generally more common to use floating-point types
@@ -418,11 +418,11 @@ public class Int64Operations : INumericOperations<long>
     /// <para><b>For Beginners:</b> This method raises a number to a power and gives a whole number result.
     /// 
     /// For example:
-    /// - Power(2L, 3L) returns 8L (2Â³ = 2Ã—2Ã—2 = 8)
-    /// - Power(3L, 2L) returns 9L (3Â² = 3Ã—3 = 9)
-    /// - Power(10L, 9L) returns 1000000000L (10â¹ = 1 billion)
+    /// - Power(2L, 3L) returns 8L (2³ = 2×2×2 = 8)
+    /// - Power(3L, 2L) returns 9L (3² = 3×3 = 9)
+    /// - Power(10L, 9L) returns 1000000000L (10? = 1 billion)
     /// - Power(5L, 0L) returns 1L (any number raised to the power of 0 is 1)
-    /// - Power(2L, -1L) returns 0L (2â»Â¹ = 1/2 = 0.5, but as a long integer this becomes 0)
+    /// - Power(2L, -1L) returns 0L (2?¹ = 1/2 = 0.5, but as a long integer this becomes 0)
     /// 
     /// In neural networks, power functions with integer results might be used for:
     /// - Implementing certain discrete activation functions
@@ -451,10 +451,10 @@ public class Int64Operations : INumericOperations<long>
     /// <para><b>For Beginners:</b> This method calculates the natural logarithm of a number and gives a whole number result.
     /// 
     /// The natural logarithm tells you what power you need to raise "e" to get your number:
-    /// - Log(3L) returns 1L (because eÂ¹ â‰ˆ 2.718, and the long integer result of ln(3) â‰ˆ 1.099 is 1)
-    /// - Log(10L) returns 2L (because ln(10) â‰ˆ 2.303)
-    /// - Log(1000000000L) returns 20L (because ln(1000000000) â‰ˆ 20.723)
-    /// - Log(1L) returns 0L (because eâ° = 1)
+    /// - Log(3L) returns 1L (because e¹ ˜ 2.718, and the long integer result of ln(3) ˜ 1.099 is 1)
+    /// - Log(10L) returns 2L (because ln(10) ˜ 2.303)
+    /// - Log(1000000000L) returns 20L (because ln(1000000000) ˜ 20.723)
+    /// - Log(1L) returns 0L (because e° = 1)
     /// 
     /// This integer version of logarithm loses a lot of precision compared to its floating-point
     /// equivalent. In neural networks, it's generally better to use floating-point types for
@@ -537,7 +537,7 @@ public class Int64Operations : INumericOperations<long>
     /// - ToInt32(3000000000L) would cause truncation because 3000000000 is outside the range of standard integers
     /// 
     /// Be careful when using this method with large values. If the long integer is too large to fit
-    /// in a standard integer (beyond roughly Â±2.1 billion), the conversion will cause unexpected results
+    /// in a standard integer (beyond roughly ±2.1 billion), the conversion will cause unexpected results
     /// due to truncation.
     /// 
     /// In neural networks, this conversion might be needed when:

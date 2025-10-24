@@ -1,4 +1,4 @@
-﻿namespace AiDotNet.Models;
+namespace AiDotNet.Models;
 
 /// <summary>
 /// Represents the effect of an intervention in a time series or sequential data, capturing the starting point,

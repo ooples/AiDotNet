@@ -1,4 +1,4 @@
-﻿global using AiDotNet.Models.Options;
+global using AiDotNet.Models.Options;
 
 namespace AiDotNet.Regression;
 
@@ -151,7 +151,7 @@ public class GaussianProcessRegression<T> : NonLinearRegressionBase<T>
         // Apply regularization to the kernel matrix
         Matrix<T> regularizedKernelMatrix = Regularization.Regularize(_kernelMatrix);
 
-        // Solve (K + σ²I + R)α = y, where R is the regularization term
+        // Solve (K + s�I + R)a = y, where R is the regularization term
         _alpha = MatrixSolutionHelper.SolveLinearSystem(regularizedKernelMatrix, y, Options.DecompositionType);
 
         // Apply regularization to the alpha coefficients
@@ -384,9 +384,9 @@ public class GaussianProcessRegression<T> : NonLinearRegressionBase<T>
     /// ```
     /// </para>
     /// </remarks>
-    public override ModelMetaData<T> GetModelMetaData()
+    public override ModelMetadata<T> GetModelMetadata()
     {
-        var metadata = base.GetModelMetaData();
+        var metadata = base.GetModelMetadata();
         metadata.AdditionalInfo["NoiseLevel"] = Options.NoiseLevel;
         metadata.AdditionalInfo["OptimizeHyperparameters"] = Options.OptimizeHyperparameters;
         metadata.AdditionalInfo["MaxIterations"] = Options.MaxIterations;

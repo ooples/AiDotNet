@@ -158,7 +158,7 @@ public class PredictionModelResult<T, TInput, TOutput> : IPredictiveModel<T, TIn
     /// based on features like "square_footage", "num_bedrooms", and "location_score".
     /// </para>
     /// </remarks>
-    public ModelMetaData<T> ModelMetaData { get; private set; } = new();
+    public ModelMetadata<T> ModelMetaData { get; private set; } = new();
 
     /// <summary>
     /// Initializes a new instance of the PredictionModelResult class with the specified model, optimization results, and normalization information.
@@ -255,7 +255,7 @@ public class PredictionModelResult<T, TInput, TOutput> : IPredictiveModel<T, TIn
     /// so you can ensure your input data has the correct columns.
     /// </para>
     /// </remarks>
-    public ModelMetaData<T> GetModelMetadata()
+    public ModelMetadata<T> GetModelMetadata()
     {
         return ModelMetaData;
     }
@@ -569,7 +569,7 @@ public class PredictionModelResult<T, TInput, TOutput> : IPredictiveModel<T, TIn
     /// </remarks>
     public static PredictionModelResult<T, TInput, TOutput> LoadModel(
         string filePath,
-        Func<ModelMetaData<T>, IFullModel<T, TInput, TOutput>> modelFactory)
+        Func<ModelMetadata<T>, IFullModel<T, TInput, TOutput>> modelFactory)
     {
         // First, we need to read the file
         byte[] data = File.ReadAllBytes(filePath);
@@ -592,7 +592,7 @@ public class PredictionModelResult<T, TInput, TOutput> : IPredictiveModel<T, TIn
         return result;
     }
 
-    private static ModelMetaData<T> ExtractMetadataFromSerializedData(byte[] data)
+    private static ModelMetadata<T> ExtractMetadataFromSerializedData(byte[] data)
     {
         var jsonString = Encoding.UTF8.GetString(data);
         var settings = new JsonSerializerSettings

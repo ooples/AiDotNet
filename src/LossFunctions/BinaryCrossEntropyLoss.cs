@@ -1,4 +1,4 @@
-﻿namespace AiDotNet.LossFunctions;
+namespace AiDotNet.LossFunctions;
 
 /// <summary>
 /// Implements the Binary Cross Entropy loss function for binary classification problems.
@@ -9,7 +9,7 @@
 /// <b>For Beginners:</b> Binary Cross Entropy is used when classifying data into two categories,
 /// such as spam/not-spam, positive/negative sentiment, or disease/no-disease.
 /// 
-/// The formula is: BCE = -(1/n) * ∑[actual * log(predicted) + (1-actual) * log(1-predicted)]
+/// The formula is: BCE = -(1/n) * ?[actual * log(predicted) + (1-actual) * log(1-predicted)]
 /// 
 /// It measures how well predicted probabilities match actual binary outcomes:
 /// - When the actual value is 1, it evaluates how close the prediction is to 1

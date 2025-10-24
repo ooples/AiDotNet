@@ -769,9 +769,9 @@ public class NeuralNetworkARIMAModel<T> : TimeSeriesModelBase<T>
     /// engine size, and features.
     /// </para>
     /// </remarks>
-    public override ModelMetaData<T> GetModelMetaData()
+    public override ModelMetadata<T> GetModelMetadata()
     {
-        var metaData = new ModelMetaData<T>
+        var metaData = new ModelMetadata<T>
         {
             ModelType = ModelType.NeuralNetworkARIMA,
             AdditionalInfo = new Dictionary<string, object>

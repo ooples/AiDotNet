@@ -1,4 +1,4 @@
-﻿namespace AiDotNet.Normalizers;
+namespace AiDotNet.Normalizers;
 
 /// <summary>
 /// A normalizer that does not modify the data but maintains the same interface as other normalizers.

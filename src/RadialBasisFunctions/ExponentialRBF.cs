@@ -1,13 +1,13 @@
-﻿namespace AiDotNet.RadialBasisFunctions;
+namespace AiDotNet.RadialBasisFunctions;
 
 /// <summary>
-/// Implements an Exponential Radial Basis Function (RBF) of the form exp(-ε*r).
+/// Implements an Exponential Radial Basis Function (RBF) of the form exp(-e*r).
 /// </summary>
 /// <typeparam name="T">The numeric type used for calculations, typically float or double.</typeparam>
 /// <remarks>
 /// <para>
 /// This class provides an implementation of a Radial Basis Function (RBF) that uses an exponential decay
-/// of the form φ(r) = exp(-ε*r), where r is the radial distance and ε (epsilon) is a width parameter
+/// of the form f(r) = exp(-e*r), where r is the radial distance and e (epsilon) is a width parameter
 /// controlling how quickly the function decreases with distance. The exponential RBF is sometimes called
 /// the Laplacian RBF and is related to the distribution of the same name. It decreases less rapidly than
 /// the Gaussian RBF for small distances but has a more gradual asymptotic behavior for large distances.
@@ -19,7 +19,7 @@
 /// Think of it like a hill or mountain that starts at its highest point in the center and then gradually
 /// slopes downward in all directions, never quite reaching zero.
 /// 
-/// This specific RBF has a parameter called epsilon (ε) that controls how quickly the "hill" drops off:
+/// This specific RBF has a parameter called epsilon (e) that controls how quickly the "hill" drops off:
 /// - A larger epsilon value creates a steeper hill that drops off quickly with distance
 /// - A smaller epsilon value creates a more gradual slope that extends further
 /// 
@@ -69,11 +69,11 @@ public class ExponentialRBF<T> : IRadialBasisFunction<T>
     /// Computes the value of the Exponential Radial Basis Function for a given radius.
     /// </summary>
     /// <param name="r">The radius or distance from the center point.</param>
-    /// <returns>The computed function value exp(-ε*r).</returns>
+    /// <returns>The computed function value exp(-e*r).</returns>
     /// <remarks>
     /// <para>
     /// This method calculates the value of the Exponential RBF for a given radius r. The formula used is
-    /// exp(-ε*r), which decreases exponentially with distance. The function equals 1 at r = 0 and approaches 0
+    /// exp(-e*r), which decreases exponentially with distance. The function equals 1 at r = 0 and approaches 0
     /// as r approaches infinity.
     /// </para>
     /// <para><b>For Beginners:</b> This method computes the "height" or "value" of the Exponential function
@@ -104,7 +104,7 @@ public class ExponentialRBF<T> : IRadialBasisFunction<T>
     /// <remarks>
     /// <para>
     /// This method calculates the derivative of the Exponential RBF with respect to the radius r.
-    /// The formula for the derivative is -ε * exp(-ε*r), which is always negative for positive r and ε,
+    /// The formula for the derivative is -e * exp(-e*r), which is always negative for positive r and e,
     /// indicating that the function always decreases with distance.
     /// </para>
     /// <para><b>For Beginners:</b> This method computes how fast the function's value changes
@@ -121,7 +121,7 @@ public class ExponentialRBF<T> : IRadialBasisFunction<T>
     /// </remarks>
     public T ComputeDerivative(T r)
     {
-        // Derivative with respect to r: -ε * exp(-ε*r)
+        // Derivative with respect to r: -e * exp(-e*r)
         T negativeEpsilon = _numOps.Negate(_epsilon);
         return _numOps.Multiply(negativeEpsilon, Compute(r));
     }
@@ -134,7 +134,7 @@ public class ExponentialRBF<T> : IRadialBasisFunction<T>
     /// <remarks>
     /// <para>
     /// This method calculates the derivative of the Exponential RBF with respect to the width parameter epsilon.
-    /// The formula for this derivative is -r * exp(-ε*r). The sign of this derivative depends on r: it is
+    /// The formula for this derivative is -r * exp(-e*r). The sign of this derivative depends on r: it is
     /// negative for positive r, indicating that increasing epsilon decreases the function value at any positive radius.
     /// </para>
     /// <para><b>For Beginners:</b> This method calculates how the function's value would change
@@ -151,7 +151,7 @@ public class ExponentialRBF<T> : IRadialBasisFunction<T>
     /// </remarks>
     public T ComputeWidthDerivative(T r)
     {
-        // Derivative with respect to ε: -r * exp(-ε*r)
+        // Derivative with respect to e: -r * exp(-e*r)
         T negativeR = _numOps.Negate(r);
         return _numOps.Multiply(negativeR, Compute(r));
     }

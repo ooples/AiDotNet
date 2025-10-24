@@ -1,4 +1,4 @@
-﻿namespace AiDotNet.Extensions;
+namespace AiDotNet.Extensions;
 
 /// <summary>
 /// Provides extension methods for serializing and deserializing data used in AI models.

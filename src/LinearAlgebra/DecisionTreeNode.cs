@@ -1,4 +1,4 @@
-ï»¿namespace AiDotNet.LinearAlgebra;
+namespace AiDotNet.LinearAlgebra;
 
 /// <summary>
 /// Represents a node in a decision tree for machine learning algorithms.
@@ -11,7 +11,7 @@
 /// </para>
 /// <para>
 /// <b>For Beginners:</b> Think of a decision tree like a flowchart of questions. Starting at the top (root),
-/// each question (node) splits the data based on a feature (like "Is temperature > 70Â°F?").
+/// each question (node) splits the data based on a feature (like "Is temperature > 70°F?").
 /// Following the answers (branches) leads you to more questions or eventually to a final answer (leaf node).
 /// Decision trees are popular because they're easy to understand and visualize - they make decisions
 /// similar to how humans think.
@@ -34,8 +34,8 @@ public class DecisionTreeNode<T>
     /// </summary>
     /// <remarks>
     /// <b>For Beginners:</b> This is the specific value used in the question.
-    /// For example, if FeatureIndex refers to temperature, Threshold might be 70Â°F,
-    /// so the question becomes "Is temperature > 70Â°F?"
+    /// For example, if FeatureIndex refers to temperature, Threshold might be 70°F,
+    /// so the question becomes "Is temperature > 70°F?"
     /// </remarks>
     public T Threshold { get; set; }
 
@@ -62,7 +62,7 @@ public class DecisionTreeNode<T>
     /// Gets or sets the left child node (typically represents the "less than" or "no" branch).
     /// </summary>
     /// <remarks>
-    /// <b>For Beginners:</b> If the answer to the node's question is "no" or "less than" (e.g., "Is temperature > 70Â°F?" "No"),
+    /// <b>For Beginners:</b> If the answer to the node's question is "no" or "less than" (e.g., "Is temperature > 70°F?" "No"),
     /// the decision tree follows this path to the next question or answer.
     /// </remarks>
     public DecisionTreeNode<T>? Left { get; set; }
@@ -72,7 +72,7 @@ public class DecisionTreeNode<T>
     /// </summary>
     /// <remarks>
     /// <b>For Beginners:</b> If the answer to the node's question is "yes" or "greater than or equal to" 
-    /// (e.g., "Is temperature > 70Â°F?" "Yes"), the decision tree follows this path to the next question or answer.
+    /// (e.g., "Is temperature > 70°F?" "Yes"), the decision tree follows this path to the next question or answer.
     /// </remarks>
     public DecisionTreeNode<T>? Right { get; set; }
 

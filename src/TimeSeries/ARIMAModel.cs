@@ -410,9 +410,9 @@ public class ARIMAModel<T> : TimeSeriesModelBase<T>
     /// - Comparing different models to see which performs best
     /// - Understanding what patterns the model has identified in your data
     /// </remarks>
-    public override ModelMetaData<T> GetModelMetaData()
+    public override ModelMetadata<T> GetModelMetadata()
     {
-        var metadata = new ModelMetaData<T>
+        var metadata = new ModelMetadata<T>
         {
             ModelType = ModelType.ARIMAModel,
             AdditionalInfo = new Dictionary<string, object>

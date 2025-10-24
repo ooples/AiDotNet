@@ -1,4 +1,4 @@
-﻿namespace AiDotNet.Enums;
+namespace AiDotNet.Enums;
 
 /// <summary>
 /// Represents different methods for measuring the distance or similarity between data points.
@@ -32,7 +32,7 @@ public enum DistanceMetricType
     /// Euclidean distance is the most common and intuitive distance measure - it's the straight-line 
     /// distance between two points "as the crow flies."
     /// 
-    /// Formula: sqrt((x₂-x₁)² + (y₂-y₁)² + ...)
+    /// Formula: sqrt((x2-x1)� + (y2-y1)� + ...)
     /// 
     /// Think of it as measuring distance with a ruler in a straight line.
     /// 
@@ -60,7 +60,7 @@ public enum DistanceMetricType
     /// Manhattan distance measures the distance between two points by summing the absolute differences 
     /// of their coordinates.
     /// 
-    /// Formula: |x₂-x₁| + |y₂-y₁| + ...
+    /// Formula: |x2-x1| + |y2-y1| + ...
     /// 
     /// Think of it as the distance a taxi would drive in a city with a grid layout, where you can only 
     /// travel along the streets (horizontal and vertical movements).
@@ -92,7 +92,7 @@ public enum DistanceMetricType
     /// Two people facing north are similar (cosine = 1), even if one walked 1 mile and the other 100 miles.
     /// People facing opposite directions have maximum dissimilarity (cosine = -1).
     /// 
-    /// Formula: cos(θ) = (A·B)/(||A||·||B||)
+    /// Formula: cos(?) = (A�B)/(||A||�||B||)
     /// 
     /// Best used for:
     /// - Text documents (comparing document topics regardless of length)
@@ -124,7 +124,7 @@ public enum DistanceMetricType
     /// - How many items appear on at least one list?
     /// - The ratio of these gives you the similarity
     /// 
-    /// Formula: 1 - |A∩B|/|A∪B| (1 minus the size of intersection divided by size of union)
+    /// Formula: 1 - |AnB|/|A?B| (1 minus the size of intersection divided by size of union)
     /// 
     /// Best used for:
     /// - Binary data (presence/absence)
@@ -154,10 +154,10 @@ public enum DistanceMetricType
     /// Think of it as comparing two multiple-choice tests and counting how many answers are different.
     /// 
     /// For example, comparing "CART" and "PART":
-    /// - Position 1: C vs P (different) → +1
-    /// - Position 2: A vs A (same) → +0
-    /// - Position 3: R vs R (same) → +0
-    /// - Position 4: T vs T (same) → +0
+    /// - Position 1: C vs P (different) ? +1
+    /// - Position 2: A vs A (same) ? +0
+    /// - Position 3: R vs R (same) ? +0
+    /// - Position 4: T vs T (same) ? +0
     /// - Hamming distance = 1
     /// 
     /// Best used for:
@@ -194,7 +194,7 @@ public enum DistanceMetricType
     /// - If you have height and weight data, these are correlated (taller people tend to weigh more)
     /// - Mahalanobis distance accounts for this correlation when measuring similarity
     /// 
-    /// Formula: sqrt((x-μ)ᵀ S⁻¹ (x-μ)) where S is the covariance matrix
+    /// Formula: sqrt((x-�)? S?� (x-�)) where S is the covariance matrix
     /// 
     /// Best used for:
     /// - Multivariate data with correlated features

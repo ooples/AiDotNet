@@ -1,4 +1,4 @@
-ï»¿namespace AiDotNet.RadialBasisFunctions;
+namespace AiDotNet.RadialBasisFunctions;
 
 /// <summary>
 /// Implements a Polyharmonic Spline Radial Basis Function (RBF) with different forms based on a parameter k.
@@ -7,9 +7,9 @@
 /// <remarks>
 /// <para>
 /// This class provides an implementation of Polyharmonic Spline Radial Basis Functions, which are defined as:
-/// Ï†(r) = r^k for odd k
-/// Ï†(r) = r^k * log(r) for even k
-/// where r is the radial distance and k is an integer parameter (typically k â‰¥ 1).
+/// f(r) = r^k for odd k
+/// f(r) = r^k * log(r) for even k
+/// where r is the radial distance and k is an integer parameter (typically k = 1).
 /// </para>
 /// <para>
 /// Polyharmonic splines are used in scattered data interpolation, numerical solutions of partial differential
@@ -34,8 +34,8 @@
 /// 
 /// Common choices for k include:
 /// - k = 1: "Linear" (r)
-/// - k = 2: "Thin plate spline" (rÂ² log r)
-/// - k = 3: "Cubic" (rÂ³)
+/// - k = 2: "Thin plate spline" (r² log r)
+/// - k = 3: "Cubic" (r³)
 /// </para>
 /// </remarks>
 public class PolyharmonicSplineRBF<T> : IRadialBasisFunction<T>
@@ -65,8 +65,8 @@ public class PolyharmonicSplineRBF<T> : IRadialBasisFunction<T>
     /// 
     /// The k parameter controls the "order" or "smoothness" of the function:
     /// - k = 1: Creates a linear function (r)
-    /// - k = 2: Creates a thin plate spline (rÂ² log r), which is the default and commonly used
-    /// - k = 3: Creates a cubic function (rÂ³)
+    /// - k = 2: Creates a thin plate spline (r² log r), which is the default and commonly used
+    /// - k = 3: Creates a cubic function (r³)
     /// - Higher values of k create even smoother functions
     /// 
     /// Higher values of k produce smoother interpolations, but can sometimes lead to numerical issues.
@@ -103,7 +103,7 @@ public class PolyharmonicSplineRBF<T> : IRadialBasisFunction<T>
     /// For example, with the default k = 2:
     /// - At r = 0, the value is 0
     /// - At r = 1, the value is 0 (since log(1) = 0)
-    /// - At r = 2, the value is 2Â² * log(2) â‰ˆ 4 * 0.693 â‰ˆ 2.77
+    /// - At r = 2, the value is 2² * log(2) ˜ 4 * 0.693 ˜ 2.77
     /// </para>
     /// </remarks>
     public T Compute(T r)
@@ -151,7 +151,7 @@ public class PolyharmonicSplineRBF<T> : IRadialBasisFunction<T>
     /// 
     /// For example, with k = 2:
     /// - At r = 1, the derivative is 1^1 * (2 * log(1) + 1) = 1 * (0 + 1) = 1
-    /// - At r = 2, the derivative is 2^1 * (2 * log(2) + 1) = 2 * (2 * 0.693 + 1) â‰ˆ 2 * 2.386 â‰ˆ 4.77
+    /// - At r = 2, the derivative is 2^1 * (2 * log(2) + 1) = 2 * (2 * 0.693 + 1) ˜ 2 * 2.386 ˜ 4.77
     /// </para>
     /// </remarks>
     public T ComputeDerivative(T r)

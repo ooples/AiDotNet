@@ -285,9 +285,9 @@ public class QuantileRegressionForests<T> : AsyncDecisionTreeRegressionBase<T>
     /// variables are most influential in making predictions.
     /// </para>
     /// </remarks>
-    public override ModelMetaData<T> GetModelMetaData()
+    public override ModelMetadata<T> GetModelMetadata()
     {
-        var metadata = new ModelMetaData<T>
+        var metadata = new ModelMetadata<T>
         {
             ModelType = ModelType.QuantileRegressionForests,
             AdditionalInfo = new Dictionary<string, object>

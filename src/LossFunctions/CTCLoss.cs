@@ -1,4 +1,4 @@
-﻿namespace AiDotNet.LossFunctions;
+namespace AiDotNet.LossFunctions;
 
 /// <summary>
 /// Implements the Connectionist Temporal Classification (CTC) loss function for sequence-to-sequence learning.

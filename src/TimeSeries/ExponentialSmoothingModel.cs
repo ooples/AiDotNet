@@ -694,10 +694,10 @@ public class ExponentialSmoothingModel<T> : TimeSeriesModelBase<T>
     /// - Sharing model information with others
     /// </para>
     /// </remarks>
-    public override ModelMetaData<T> GetModelMetaData()
+    public override ModelMetadata<T> GetModelMetadata()
     {
         var esOptions = (ExponentialSmoothingOptions<T>)Options;
-        var metadata = new ModelMetaData<T>
+        var metadata = new ModelMetadata<T>
         {
             ModelType = ModelType.ExponentialSmoothingModel,
             AdditionalInfo = new Dictionary<string, object>

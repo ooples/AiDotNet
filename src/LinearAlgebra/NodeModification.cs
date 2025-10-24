@@ -1,4 +1,4 @@
-﻿namespace AiDotNet.LinearAlgebra;
+namespace AiDotNet.LinearAlgebra;
 
 /// <summary>
 /// Represents a modification to be applied to a node in a computational graph.

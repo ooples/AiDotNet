@@ -85,7 +85,7 @@ public class VectorModel<T> : IFullModel<T, Matrix<T>, Vector<T>>
     private static readonly INumericOperations<T> _numOps = MathHelper.GetNumericOperations<T>();
 
     /// <summary>
-    /// Cached feature importance to avoid recreating on every GetModelMetaData() call.
+    /// Cached feature importance to avoid recreating on every GetModelMetadata() call.
     /// </summary>
     private Dictionary<string, T>? _cachedFeatureImportance;
 
@@ -452,14 +452,14 @@ public class VectorModel<T> : IFullModel<T, Matrix<T>, Vector<T>>
     /// - Visualizing or reporting on the model
     /// </para>
     /// </remarks>
-    public ModelMetaData<T> GetModelMetaData()
+    public ModelMetadata<T> GetModelMetadata()
     {
         T norm = Coefficients.Norm();
         norm ??= _numOps.Zero;
 
         int nonZeroCount = Coefficients.Count(c => !_numOps.Equals(c, _numOps.Zero));
 
-        return new ModelMetaData<T>
+        return new ModelMetadata<T>
         {
             FeatureCount = FeatureCount,
             Complexity = nonZeroCount,

@@ -1,4 +1,4 @@
-﻿namespace AiDotNet.Enums.AlgorithmTypes;
+namespace AiDotNet.Enums.AlgorithmTypes;
 
 /// <summary>
 /// Represents different algorithm types for Cholesky decomposition of matrices.
@@ -8,7 +8,7 @@
 /// <b>For Beginners:</b> Cholesky decomposition is a way to break down a special type of matrix (called a 
 /// symmetric positive-definite matrix) into simpler parts that make calculations faster and more stable.
 /// 
-/// In simple terms, it's like factoring a number (e.g., 12 = 3 × 4), but for matrices. The Cholesky 
+/// In simple terms, it's like factoring a number (e.g., 12 = 3 � 4), but for matrices. The Cholesky 
 /// decomposition factors a matrix into a lower triangular matrix and its transpose (mirror image).
 /// 
 /// Why is this useful? Many problems in machine learning, statistics, and optimization require solving 

@@ -1,4 +1,4 @@
-﻿namespace AiDotNet.Interpolation;
+namespace AiDotNet.Interpolation;
 
 /// <summary>
 /// Implements Sinc interpolation for 1D data points.
@@ -6,7 +6,7 @@
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
 /// <remarks>
 /// <para>
-/// Sinc interpolation is a technique based on the Whittaker–Shannon interpolation formula,
+/// Sinc interpolation is a technique based on the Whittaker�Shannon interpolation formula,
 /// which is theoretically perfect for band-limited signals.
 /// </para>
 /// <para>
@@ -124,7 +124,7 @@ public class SincInterpolation<T> : IInterpolation<T>
     }
 
     /// <summary>
-    /// Calculates the Sinc function value: sin(πx)/(πx).
+    /// Calculates the Sinc function value: sin(px)/(px).
     /// </summary>
     /// <param name="x">The input value.</param>
     /// <returns>The Sinc function value.</returns>
@@ -134,7 +134,7 @@ public class SincInterpolation<T> : IInterpolation<T>
     /// a wave with a peak at zero and smaller oscillations that diminish as you move away from zero.
     /// </para>
     /// <para>
-    /// It's defined as sin(πx)/(πx) when x is not zero, and 1 when x is zero.
+    /// It's defined as sin(px)/(px) when x is not zero, and 1 when x is zero.
     /// </para>
     /// <para>
     /// In Sinc interpolation, this function acts as a "weight function" that determines
