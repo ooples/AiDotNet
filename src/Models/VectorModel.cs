@@ -425,14 +425,14 @@ public class VectorModel<T> : IFullModel<T, Matrix<T>, Vector<T>>
     /// - Visualizing or reporting on the model
     /// </para>
     /// </remarks>
-    public ModelMetadata<T> GetModelMetadata()
+    public ModelMetaData<T> GetModelMetaData()
     {
         T norm = Coefficients.Norm();
         norm ??= _numOps.Zero;
 
         int nonZeroCount = Coefficients.Count(c => !_numOps.Equals(c, _numOps.Zero));
-        
-        return new ModelMetadata<T>
+
+        return new ModelMetaData<T>
         {
             FeatureCount = FeatureCount,
             Complexity = nonZeroCount,
@@ -894,7 +894,7 @@ public class VectorModel<T> : IFullModel<T, Matrix<T>, Vector<T>>
         protected readonly HashSet<InterpretationMethod> _enabledMethods = new();
         protected Vector<int> _sensitiveFeatures;
         protected readonly List<FairnessMetric> _fairnessMetrics = new();
-        protected IModel<Matrix<T>, Vector<T>, ModelMetadata<T>> _baseModel;
+        protected IModel<Matrix<T>, Vector<T>, ModelMetaData<T>> _baseModel;
 
         /// <summary>
         /// Gets the global feature importance across all predictions.
@@ -987,7 +987,7 @@ public class VectorModel<T> : IFullModel<T, Matrix<T>, Vector<T>>
         /// <summary>
         /// Sets the base model for interpretability analysis.
         /// </summary>
-        public virtual void SetBaseModel(IModel<Matrix<T>, Vector<T>, ModelMetadata<T>> model)
+        public virtual void SetBaseModel(IModel<Matrix<T>, Vector<T>, ModelMetaData<T>> model)
         {
         _baseModel = model ?? throw new ArgumentNullException(nameof(model));
         }
@@ -1012,6 +1012,65 @@ public class VectorModel<T> : IFullModel<T, Matrix<T>, Vector<T>>
         _fairnessMetrics.Clear();
         _fairnessMetrics.AddRange(fairnessMetrics);
         }
+
+    #endregion
+
+    #region IModelSerializer Implementation
+
+    /// <summary>
+    /// Saves the model to a file.
+    /// </summary>
+    /// <param name="filePath">The path where the model should be saved.</param>
+    public virtual void SaveModel(string filePath)
+    {
+        if (string.IsNullOrWhiteSpace(filePath))
+            throw new ArgumentException("File path cannot be null or empty", nameof(filePath));
+
+        var data = Serialize();
+        File.WriteAllBytes(filePath, data);
+    }
+
+    /// <summary>
+    /// Loads the model from a file.
+    /// </summary>
+    /// <param name="filePath">The path to the file containing the saved model.</param>
+    public virtual void LoadModel(string filePath)
+    {
+        if (string.IsNullOrWhiteSpace(filePath))
+            throw new ArgumentException("File path cannot be null or empty", nameof(filePath));
+
+        if (!File.Exists(filePath))
+            throw new FileNotFoundException($"Model file not found: {filePath}", filePath);
+
+        var data = File.ReadAllBytes(filePath);
+        Deserialize(data);
+    }
+
+    #endregion
+
+    #region IParameterizable Implementation
+
+    /// <summary>
+    /// Gets the number of parameters in the model.
+    /// </summary>
+    public virtual int ParameterCount => Coefficients.Length;
+
+    #endregion
+
+    #region IFeatureImportance Implementation
+
+    /// <summary>
+    /// Gets the feature importance scores.
+    /// </summary>
+    public virtual Dictionary<string, T> GetFeatureImportance()
+    {
+        var importance = new Dictionary<string, T>();
+        for (int i = 0; i < Coefficients.Length; i++)
+        {
+            importance[$"Feature_{i}"] = _numOps.Abs(Coefficients[i]);
+        }
+        return importance;
+    }
 
     #endregion
 }
