@@ -81,7 +81,13 @@ public class NeuralNetworkRegression<T> : NonLinearRegressionBase<T>
         : base(options, regularization)
     {
         _options = options ?? new NeuralNetworkRegressionOptions<T, Matrix<T>, Vector<T>>();
-        _optimizer = _options.Optimizer ?? new AdamOptimizer<T, Matrix<T>, Vector<T>>();
+        _optimizer = _options.Optimizer ?? new AdamOptimizer<T, Matrix<T>, Vector<T>>(this, new AdamOptimizerOptions<T, Matrix<T>, Vector<T>>
+        {
+            LearningRate = 0.001,
+            Beta1 = 0.9,
+            Beta2 = 0.999,
+            Epsilon = 1e-8
+        });
         _weights = [];
         _biases = [];
 

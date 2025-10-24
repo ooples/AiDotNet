@@ -285,7 +285,7 @@ public class OptimizationAlgorithmOptions<T, TInput, TOutput> : ModelOptions
     /// parameters. A value of 0.1 means parameters change by about 10%. Increase this if optimization is too slow,
     /// decrease it if the optimizer seems to be overshooting good solutions.</para>
     /// </remarks>
-    public T ParameterAdjustmentScale { get; set; } = NumOps.FromDouble(0.1);
+    public double ParameterAdjustmentScale { get; set; } = 0.1;
 
     /// <summary>
     /// Gets or sets the probability of flipping the sign of a parameter during perturbation.
