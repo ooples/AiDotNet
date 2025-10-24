@@ -1,4 +1,4 @@
-﻿namespace AiDotNet.Models.Options;
+namespace AiDotNet.Models.Options;
 
 /// <summary>
 /// Configuration options for the TBATS (Trigonometric seasonality, Box-Cox transformation, ARMA errors, 
@@ -46,7 +46,7 @@ public class TBATSModelOptions<T> : TimeSeriesRegressionOptions<T>
     /// <para>
     /// This property specifies the parameter for the Box-Cox transformation, which is used to stabilize the 
     /// variance in the time series. The Box-Cox transformation is a power transformation defined as 
-    /// (y^λ - 1)/λ for λ ≠ 0 and log(y) for λ = 0. A value of 1 means no transformation is applied. A value 
+    /// (y^? - 1)/? for ? ? 0 and log(y) for ? = 0. A value of 1 means no transformation is applied. A value 
     /// of 0 corresponds to a logarithmic transformation, which is useful for data with multiplicative patterns. 
     /// Other common values include 0.5 (square root transformation) and -1 (reciprocal transformation). The 
     /// optimal value depends on the characteristics of the data, particularly the relationship between the 

@@ -980,9 +980,9 @@ public class GARCHModel<T> : TimeSeriesModelBase<T>
     /// - Storing model details in a database or registry
     /// </para>
     /// </remarks>
-    public override ModelMetaData<T> GetModelMetaData()
+    public override ModelMetadata<T> GetModelMetadata()
     {
-        var metadata = new ModelMetaData<T>
+        var metadata = new ModelMetadata<T>
         {
             ModelType = ModelType.GARCHModel,
             AdditionalInfo = new Dictionary<string, object>

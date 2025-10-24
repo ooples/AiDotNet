@@ -871,7 +871,7 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
     /// Gets the metadata for this neural network model.
     /// </summary>
     /// <returns>A ModelMetaData object containing information about the model.</returns>
-    public abstract ModelMetaData<T> GetModelMetaData();
+    public abstract ModelMetadata<T> GetModelMetadata();
 
     /// <summary>
     /// Resets the internal state of the different layers, clearing any remembered information.

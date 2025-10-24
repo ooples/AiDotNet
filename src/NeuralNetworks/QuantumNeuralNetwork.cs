@@ -248,9 +248,9 @@ public class QuantumNeuralNetwork<T> : NeuralNetworkBase<T>
     /// a blueprint of the network's current state.
     /// </para>
     /// </remarks>
-    public override ModelMetaData<T> GetModelMetaData()
+    public override ModelMetadata<T> GetModelMetadata()
     {
-        return new ModelMetaData<T>
+        return new ModelMetadata<T>
         {
             ModelType = ModelType.QuantumNeuralNetwork,
             AdditionalInfo = new Dictionary<string, object>

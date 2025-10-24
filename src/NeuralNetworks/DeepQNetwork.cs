@@ -698,9 +698,9 @@ public class DeepQNetwork<T> : NeuralNetworkBase<T>
     /// This information is useful for documentation, debugging, and when saving/loading models.
     /// </para>
     /// </remarks>
-    public override ModelMetaData<T> GetModelMetaData()
+    public override ModelMetadata<T> GetModelMetadata()
     {
-        return new ModelMetaData<T>
+        return new ModelMetadata<T>
         {
             ModelType = ModelType.DeepQNetwork,
             AdditionalInfo = new Dictionary<string, object>

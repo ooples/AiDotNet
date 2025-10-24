@@ -1612,9 +1612,9 @@ public class DifferentiableNeuralComputer<T> : NeuralNetworkBase<T>
     /// and for saving/loading models for later use.
     /// </para>
     /// </remarks>
-    public override ModelMetaData<T> GetModelMetaData()
+    public override ModelMetadata<T> GetModelMetadata()
     {
-        return new ModelMetaData<T>
+        return new ModelMetadata<T>
         {
             ModelType = ModelType.DifferentiableNeuralComputer,
             AdditionalInfo = new Dictionary<string, object>

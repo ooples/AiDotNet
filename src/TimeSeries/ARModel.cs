@@ -1,4 +1,4 @@
-﻿namespace AiDotNet.TimeSeries;
+namespace AiDotNet.TimeSeries;
 
 /// <summary>
 /// Implements an AR (AutoRegressive) model for time series forecasting.
@@ -281,11 +281,11 @@ public class ARModel<T> : TimeSeriesModelBase<T>
     /// For example, if yesterday's temperature was high, today's might also be high.
     /// 
     /// The prediction is calculated as:
-    /// prediction = (coefficient1 × value1) + (coefficient2 × value2) + ... + (coefficientp × valuep)
+    /// prediction = (coefficient1 � value1) + (coefficient2 � value2) + ... + (coefficientp � valuep)
     /// 
     /// Where:
-    /// - coefficientⁿ is the importance of each past value
-    /// - valueⁿ is the actual value at that past time point
+    /// - coefficientn is the importance of each past value
+    /// - valuen is the actual value at that past time point
     /// 
     /// The method handles cases where we don't have enough history (e.g., at the beginning
     /// of the series) by only using the available information.
@@ -446,10 +446,10 @@ public class ARModel<T> : TimeSeriesModelBase<T>
     /// all the important information about how it works and was configured.
     /// </para>
     /// </remarks>
-    public override ModelMetaData<T> GetModelMetaData()
+    public override ModelMetadata<T> GetModelMetadata()
     {
         var arOptions = (ARModelOptions<T>)Options;
-        var metadata = new ModelMetaData<T>
+        var metadata = new ModelMetadata<T>
         {
             ModelType = ModelType.ARModel,
             AdditionalInfo = new Dictionary<string, object>

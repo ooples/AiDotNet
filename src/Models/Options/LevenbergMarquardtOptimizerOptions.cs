@@ -1,4 +1,4 @@
-ï»¿namespace AiDotNet.Models.Options;
+namespace AiDotNet.Models.Options;
 
 /// <summary>
 /// Configuration options for the Levenberg-Marquardt optimization algorithm, which is used
@@ -39,7 +39,7 @@ public class LevenbergMarquardtOptimizerOptions<T, TInput, TOutput> : GradientBa
     /// <value>The initial damping factor, defaulting to 0.1.</value>
     /// <remarks>
     /// <para>
-    /// The damping factor (Î¼) controls the balance between the Gauss-Newton method and gradient descent.
+    /// The damping factor (µ) controls the balance between the Gauss-Newton method and gradient descent.
     /// Higher values make the algorithm behave more like gradient descent (more stable but slower),
     /// while lower values make it behave more like Gauss-Newton (faster but potentially unstable).
     /// This parameter sets the initial value used when optimization begins.
@@ -77,7 +77,7 @@ public class LevenbergMarquardtOptimizerOptions<T, TInput, TOutput> : GradientBa
     /// 
     /// The default value of 10.0 means:
     /// - If the current damping is 0.1 and an adjustment fails
-    /// - The new damping becomes 0.1 Ã— 10.0 = 1.0
+    /// - The new damping becomes 0.1 × 10.0 = 1.0
     /// - The next adjustment will be about 10 times more cautious
     /// 
     /// This helps the algorithm recover quickly from poor steps without getting completely stuck.
@@ -105,7 +105,7 @@ public class LevenbergMarquardtOptimizerOptions<T, TInput, TOutput> : GradientBa
     /// 
     /// The default value of 0.1 means:
     /// - If the current damping is 1.0 and an adjustment succeeds
-    /// - The new damping becomes 1.0 Ã— 0.1 = 0.1
+    /// - The new damping becomes 1.0 × 0.1 = 0.1
     /// - The next adjustment will be about 10 times more aggressive
     /// 
     /// This helps the algorithm learn faster when it's on the right track, speeding up training.

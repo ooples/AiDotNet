@@ -1,4 +1,4 @@
-﻿namespace AiDotNet.FitnessCalculators;
+namespace AiDotNet.FitnessCalculators;
 
 /// <summary>
 /// A fitness calculator that uses Mean Absolute Error (MAE) to evaluate model performance, particularly for regression tasks.
@@ -85,8 +85,8 @@ public class MeanAbsoluteErrorFitnessCalculator<T, TInput, TOutput> : FitnessCal
     /// 
     /// A lower score means better performance (0 would be perfect).
     /// 
-    /// The formula is: MAE = (1/n) * Σ|predicted - actual|
-    /// where n is the number of predictions and Σ means "sum of".
+    /// The formula is: MAE = (1/n) * S|predicted - actual|
+    /// where n is the number of predictions and S means "sum of".
     /// 
     /// This method simply retrieves the pre-calculated MAE from the dataSet's ErrorStats property,
     /// which contains various error metrics that have already been computed.

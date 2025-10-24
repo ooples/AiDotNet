@@ -1,4 +1,4 @@
-﻿namespace AiDotNet.ActivationFunctions;
+namespace AiDotNet.ActivationFunctions;
 
 /// <summary>
 /// Implements the Spherical Softmax activation function, which normalizes inputs to the unit sphere before applying softmax.
@@ -123,7 +123,7 @@ public class SphericalSoftmaxActivation<T> : ActivationFunctionBase<T>
     /// - term1: How the softmax output changes if its own input increases
     /// - term2: How the normalization affects this relationship
     /// 
-    /// For off-diagonal elements (when i≠j):
+    /// For off-diagonal elements (when i?j):
     /// - term1: How one output changes when a different input increases
     /// - term2: How the normalization creates interdependencies between inputs
     /// 

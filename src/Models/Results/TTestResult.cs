@@ -1,4 +1,4 @@
-﻿namespace AiDotNet.Models.Results;
+namespace AiDotNet.Models.Results;
 
 /// <summary>
 /// Represents the results of a t-test, which is a statistical hypothesis test used to determine if there is a significant 
@@ -87,7 +87,7 @@ public class TTestResult<T>
     /// - Influences how conservative the test is
     /// 
     /// For common t-tests:
-    /// - Independent samples t-test: df = n₁ + n₂ - 2 (where n₁ and n₂ are the sample sizes)
+    /// - Independent samples t-test: df = n1 + n2 - 2 (where n1 and n2 are the sample sizes)
     /// - Paired t-test: df = n - 1 (where n is the number of pairs)
     /// - Welch's t-test: uses a more complex formula that accounts for unequal variances
     /// 
@@ -107,7 +107,7 @@ public class TTestResult<T>
     /// This property represents the p-value of the t-test, which is the probability of observing a t-statistic as extreme 
     /// as, or more extreme than, the one calculated from the sample data, assuming the null hypothesis is true. The null 
     /// hypothesis typically states that there is no difference between the means of the groups being compared. A small 
-    /// p-value (typically ≤ 0.05) suggests that the observed difference is unlikely under the null hypothesis, leading to 
+    /// p-value (typically = 0.05) suggests that the observed difference is unlikely under the null hypothesis, leading to 
     /// its rejection in favor of the alternative hypothesis that the means differ. The p-value is calculated from the 
     /// t-statistic and the degrees of freedom using the cumulative distribution function of the t-distribution.
     /// </para>
@@ -119,8 +119,8 @@ public class TTestResult<T>
     /// - Represents the probability of seeing your results (or more extreme) if the groups are actually the same
     /// 
     /// Common interpretation:
-    /// - p ≤ 0.05: Results are statistically significant (commonly used threshold)
-    /// - p ≤ 0.01: Results are highly significant
+    /// - p = 0.05: Results are statistically significant (commonly used threshold)
+    /// - p = 0.01: Results are highly significant
     /// - p > 0.05: Results are not statistically significant
     /// 
     /// For example, a p-value of 0.03 means there's only a 3% chance of seeing a difference

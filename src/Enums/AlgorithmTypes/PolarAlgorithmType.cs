@@ -1,4 +1,4 @@
-﻿namespace AiDotNet.Enums.AlgorithmTypes;
+namespace AiDotNet.Enums.AlgorithmTypes;
 
 /// <summary>
 /// Represents different algorithm types for computing the polar decomposition of matrices.
@@ -183,7 +183,7 @@ public enum PolarAlgorithmType
     /// 
     /// 4. Balances computational efficiency with numerical stability
     /// 
-    /// 5. Works by first scaling the matrix so its norm is small, then applying a Padé approximation or 
+    /// 5. Works by first scaling the matrix so its norm is small, then applying a Pad� approximation or 
     ///    Taylor series, followed by repeated squaring
     /// 
     /// In machine learning, this method is useful when implementing certain types of recurrent neural networks, 

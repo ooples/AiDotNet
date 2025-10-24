@@ -1,4 +1,4 @@
-﻿namespace AiDotNet.Enums;
+namespace AiDotNet.Enums;
 
 /// <summary>
 /// Represents different types of statistical tests used to evaluate hypotheses and determine significance in data analysis.

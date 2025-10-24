@@ -493,9 +493,9 @@ public class HopfieldNetwork<T> : NeuralNetworkBase<T>
     /// - Analyzing the network's properties
     /// </para>
     /// </remarks>
-    public override ModelMetaData<T> GetModelMetaData()
+    public override ModelMetadata<T> GetModelMetadata()
     {
-        return new ModelMetaData<T>
+        return new ModelMetadata<T>
         {
             ModelType = ModelType.HopfieldNetwork,
             AdditionalInfo = new Dictionary<string, object>

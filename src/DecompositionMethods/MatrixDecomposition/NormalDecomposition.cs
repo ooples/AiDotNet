@@ -1,4 +1,4 @@
-﻿namespace AiDotNet.DecompositionMethods.MatrixDecomposition;
+namespace AiDotNet.DecompositionMethods.MatrixDecomposition;
 
 /// <summary>
 /// Implements the Normal Equation method for solving linear systems, especially useful for overdetermined systems.

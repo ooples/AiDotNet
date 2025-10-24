@@ -1,4 +1,4 @@
-﻿namespace AiDotNet.LossFunctions;
+namespace AiDotNet.LossFunctions;
 
 /// <summary>
 /// Implements the Elastic Net Loss function, which combines Mean Squared Error with L1 and L2 regularization.
@@ -12,12 +12,12 @@
 /// - L1 regularization (also called Lasso): Helps select only the most important features by pushing some weights to zero
 /// - L2 regularization (also called Ridge): Prevents any single weight from becoming too large
 /// 
-/// The formula is: MSE + α * [l1Ratio * |weights|_1 + (1-l1Ratio) * 0.5 * |weights|_2²]
+/// The formula is: MSE + a * [l1Ratio * |weights|_1 + (1-l1Ratio) * 0.5 * |weights|_2�]
 /// Where:
 /// - MSE is the Mean Squared Error
 /// - |weights|_1 is the L1 norm (sum of absolute values)
-/// - |weights|_2² is the squared L2 norm (sum of squared values)
-/// - α is the regularization strength
+/// - |weights|_2� is the squared L2 norm (sum of squared values)
+/// - a is the regularization strength
 /// - l1Ratio controls the mix between L1 and L2 regularization
 /// 
 /// The l1Ratio parameter (between 0 and 1) controls the balance:
@@ -123,13 +123,13 @@ public class ElasticNetLoss<T> : LossFunctionBase<T>
                 )
             );
             
-            // L1 gradient component: α * l1Ratio * sign(predicted)
+            // L1 gradient component: a * l1Ratio * sign(predicted)
             T l1Gradient = NumOps.Multiply(
                 NumOps.Multiply(_alpha, _l1Ratio),
                 SignOf(predicted[i])
             );
             
-            // L2 gradient component: α * (1-l1Ratio) * predicted
+            // L2 gradient component: a * (1-l1Ratio) * predicted
             T l2Gradient = NumOps.Multiply(
                 NumOps.Multiply(_alpha, NumOps.Subtract(NumOps.One, _l1Ratio)),
                 predicted[i]

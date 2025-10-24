@@ -1,4 +1,4 @@
-﻿namespace AiDotNet.FitDetectors;
+namespace AiDotNet.FitDetectors;
 
 /// <summary>
 /// A fit detector that uses Gaussian Process regression to analyze model uncertainty and performance.
@@ -423,7 +423,7 @@ public class GaussianProcessFitDetector<T, TInput, TOutput> : FitDetectorBase<T,
     /// high kernel values, while distant points will have low kernel values.
     /// </para>
     /// <para>
-    /// The resulting matrix has dimensions [X1.Rows × X2.Rows], where each element [i,j] represents 
+    /// The resulting matrix has dimensions [X1.Rows � X2.Rows], where each element [i,j] represents 
     /// the similarity between point i from X1 and point j from X2.
     /// </para>
     /// </remarks>
@@ -454,12 +454,12 @@ public class GaussianProcessFitDetector<T, TInput, TOutput> : FitDetectorBase<T,
     /// </para>
     /// <para>
     /// The RBF kernel is defined as:
-    /// k(x₁, x₂) = exp(-||x₁ - x₂||² / (2 * lengthScale²))
+    /// k(x1, x2) = exp(-||x1 - x2||� / (2 * lengthScale�))
     /// </para>
     /// <para>
     /// Where:
     /// <list type="bullet">
-    /// <item><description>||x₁ - x₂||² is the squared Euclidean distance between the points</description></item>
+    /// <item><description>||x1 - x2||� is the squared Euclidean distance between the points</description></item>
     /// <item><description>lengthScale is a hyperparameter that controls how quickly the similarity decreases with distance</description></item>
     /// </list>
     /// </para>

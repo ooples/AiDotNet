@@ -1,4 +1,4 @@
-﻿namespace AiDotNet.DecompositionMethods.MatrixDecomposition;
+namespace AiDotNet.DecompositionMethods.MatrixDecomposition;
 
 /// <summary>
 /// Implements the Polar Decomposition of a matrix, which factors a matrix A into the product of 
@@ -108,7 +108,7 @@ public class PolarDecomposition<T> : IMatrixDecomposition<T>
     /// </summary>
     /// <remarks>
     /// <para>
-    /// This method computes U = U_svd * V_svd^T and P = V_svd * Σ * V_svd^T.
+    /// This method computes U = U_svd * V_svd^T and P = V_svd * S * V_svd^T.
     /// </para>
     /// <para>
     /// <b>For Beginners:</b> This is the most reliable method for polar decomposition. It works by first
@@ -365,7 +365,7 @@ public class PolarDecomposition<T> : IMatrixDecomposition<T>
     /// Solves the linear system Ax = b using the polar decomposition.
     /// </summary>
     /// <param name="b">The right-hand side vector.</param>
-    /// <returns>The solution vector x such that Ax ≈ b.</returns>
+    /// <returns>The solution vector x such that Ax � b.</returns>
     /// <remarks>
     /// <para>
     /// This method solves the system by first solving Px = b, then computing y = U^T * x.
@@ -396,7 +396,7 @@ public class PolarDecomposition<T> : IMatrixDecomposition<T>
     /// </para>
     /// <para>
     /// <b>For Beginners:</b> The inverse of a matrix is like the reciprocal of a number - when you multiply
-    /// a matrix by its inverse, you get the identity matrix (similar to how 5 × 1/5 = 1). This method
+    /// a matrix by its inverse, you get the identity matrix (similar to how 5 � 1/5 = 1). This method
     /// finds the inverse by using the special properties of the polar decomposition, which makes the
     /// calculation more reliable than directly inverting the original matrix.
     /// </para>

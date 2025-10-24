@@ -1,4 +1,4 @@
-﻿namespace AiDotNet.LinearAlgebra;
+namespace AiDotNet.LinearAlgebra;
 
 /// <summary>
 /// Represents the velocity (rate and direction of change) for an expression tree during optimization.
