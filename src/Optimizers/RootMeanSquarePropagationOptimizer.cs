@@ -115,8 +115,9 @@ public class RootMeanSquarePropagationOptimizer<T, TInput, TOutput> : GradientBa
     /// </para>
     /// </remarks>
     public RootMeanSquarePropagationOptimizer(
+        IFullModel<T, TInput, TOutput> model,
         RootMeanSquarePropagationOptimizerOptions<T, TInput, TOutput>? options = null)
-        : base(options ?? new())
+        : base(model, options ?? new())
     {
         _t = 0;
         _squaredGradient = Vector<T>.Empty();
