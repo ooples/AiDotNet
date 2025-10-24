@@ -36,8 +36,9 @@ public class GeneticAlgorithmRegression<T> : RegressionBase<T>
     
     /// <summary>
     /// The genetic algorithm optimizer that finds optimal model parameters.
+    /// Created during training when input dimensions are known.
     /// </summary>
-    private GeneticAlgorithmOptimizer<T, Matrix<T>, Vector<T>> _optimizer;
+    private GeneticAlgorithmOptimizer<T, Matrix<T>, Vector<T>>? _optimizer;
     
     /// <summary>
     /// Component responsible for normalizing feature values to a common scale.
@@ -116,8 +117,6 @@ public class GeneticAlgorithmRegression<T> : RegressionBase<T>
         : base(options, regularization)
     {
         _gaOptions = gaOptions ?? new GeneticAlgorithmOptimizerOptions<T, Matrix<T>, Vector<T>>();
-        _bestModel = new VectorModel<T>(Vector<T>.Empty());
-        _optimizer = new GeneticAlgorithmOptimizer<T, Matrix<T>, Vector<T>>(_bestModel, _gaOptions);
         _normalizer = normalizer ?? new NoNormalizer<T, Matrix<T>, Vector<T>>();
         _featureSelector = featureSelector ?? new NoFeatureSelector<T, Matrix<T>>();
         _outlierRemoval = outlierRemoval ?? new NoOutlierRemoval<T, Matrix<T>, Vector<T>>();
@@ -165,6 +164,11 @@ public class GeneticAlgorithmRegression<T> : RegressionBase<T>
 
         // Split the data
         var (xTrain, yTrain, xVal, yVal, xTest, yTest) = _dataPreprocessor.SplitData(preprocessedX, preprocessedY);
+
+        // Initialize optimizer with proper dimensions based on input data
+        int featureCount = xTrain.Columns + (HasIntercept ? 1 : 0);
+        _bestModel = new VectorModel<T>(new Vector<T>(featureCount));
+        _optimizer = new GeneticAlgorithmOptimizer<T, Matrix<T>, Vector<T>>(_bestModel, _gaOptions);
 
         var result = _optimizer.Optimize(OptimizerHelper<T, Matrix<T>, Vector<T>>.CreateOptimizationInputData(xTrain, yTrain, xVal, yVal, xTest, yTest));
 
@@ -351,7 +355,11 @@ public class GeneticAlgorithmRegression<T> : RegressionBase<T>
         };
 
         // Recreate the optimizer with the deserialized options
-        _optimizer = new GeneticAlgorithmOptimizer<T, Matrix<T>, Vector<T>>(_bestModel!, gaOptions);
+        if (_bestModel == null)
+        {
+            throw new InvalidOperationException("Deserialization failed: _bestModel is null. Model coefficients may be missing or corrupted.");
+        }
+        _optimizer = new GeneticAlgorithmOptimizer<T, Matrix<T>, Vector<T>>(_bestModel, gaOptions);
 
         // Update coefficients and intercept
         UpdateCoefficientsAndIntercept();
