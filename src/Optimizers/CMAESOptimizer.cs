@@ -119,6 +119,7 @@ public class CMAESOptimizer<T, TInput, TOutput> : OptimizerBase<T, TInput, TOutp
 
         InitializeAdaptiveParameters();
         int dimensions = InputHelper<T, TInput>.GetInputSize(inputData.XTrain);
+        // Always use a deep copy of Model to avoid mutating the original during optimization
         var initialSolution = Model.DeepCopy();
         _mean = initialSolution.GetParameters();
         _C = Matrix<T>.CreateIdentity(dimensions);
