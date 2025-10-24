@@ -63,7 +63,7 @@ public class AdamOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, T
     /// </para>
     /// </remarks>
     public AdamOptimizer(
-        IFullModel<T, TInput, TOutput> model,
+        IFullModel<T, TInput, TOutput>? model,
         AdamOptimizerOptions<T, TInput, TOutput>? options = null)
         : base(model, options ?? new())
     {

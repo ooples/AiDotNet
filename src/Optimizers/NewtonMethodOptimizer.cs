@@ -45,7 +45,7 @@ public class NewtonMethodOptimizer<T, TInput, TOutput> : GradientBasedOptimizerB
     /// <param name="options">The Newton's Method-specific optimization options.</param>
     public NewtonMethodOptimizer(
         NewtonMethodOptimizerOptions<T, TInput, TOutput>? options = null)
-        : base(options ?? new())
+        : base(null, options ?? new())
     {
         _options = options ?? new NewtonMethodOptimizerOptions<T, TInput, TOutput>();
 

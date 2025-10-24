@@ -57,7 +57,7 @@ public class CoordinateDescentOptimizer<T, TInput, TOutput> : GradientBasedOptim
     /// </remarks>
     public CoordinateDescentOptimizer(
         CoordinateDescentOptimizerOptions<T, TInput, TOutput>? options = null)
-        : base(options ?? new())
+        : base(null, options ?? new())
     {
         _options = options ?? new CoordinateDescentOptimizerOptions<T, TInput, TOutput>();
         _learningRates = Vector<T>.Empty();

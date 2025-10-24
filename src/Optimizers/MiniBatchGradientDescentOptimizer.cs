@@ -46,7 +46,7 @@ public class MiniBatchGradientDescentOptimizer<T, TInput, TOutput> : GradientBas
     /// </remarks>
     public MiniBatchGradientDescentOptimizer(
         MiniBatchGradientDescentOptions<T, TInput, TOutput>? options = null)
-        : base(options ?? new())
+        : base(null, options ?? new())
     {
         _options = options ?? new MiniBatchGradientDescentOptions<T, TInput, TOutput>();
 

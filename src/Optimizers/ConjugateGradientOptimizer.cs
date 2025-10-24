@@ -57,7 +57,7 @@ public class ConjugateGradientOptimizer<T, TInput, TOutput> : GradientBasedOptim
     /// </remarks>
     public ConjugateGradientOptimizer(
         ConjugateGradientOptimizerOptions<T, TInput, TOutput>? options = null)
-        : base(options ?? new())
+        : base(null, options ?? new())
     {
         _options = options ?? new ConjugateGradientOptimizerOptions<T, TInput, TOutput>();
         _previousGradient = Vector<T>.Empty();

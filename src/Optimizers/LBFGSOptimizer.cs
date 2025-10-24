@@ -3,12 +3,12 @@ using Newtonsoft.Json;
 namespace AiDotNet.Optimizers;
 
 /// <summary>
-/// Implements the Limited-memory Broyden–Fletcher–Goldfarb–Shanno (L-BFGS) optimization algorithm.
+/// Implements the Limited-memory Broydenï¿½Fletcherï¿½Goldfarbï¿½Shanno (L-BFGS) optimization algorithm.
 /// </summary>
 /// <remarks>
 /// <para>
 /// L-BFGS is a quasi-Newton method for solving unconstrained nonlinear optimization problems. It approximates the 
-/// Broyden–Fletcher–Goldfarb–Shanno (BFGS) algorithm using a limited amount of computer memory, making it suitable 
+/// Broydenï¿½Fletcherï¿½Goldfarbï¿½Shanno (BFGS) algorithm using a limited amount of computer memory, making it suitable 
 /// for optimization problems with many variables.
 /// </para>
 /// <para><b>For Beginners:</b> 
@@ -63,7 +63,7 @@ public class LBFGSOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, 
     /// <param name="options">Options for the L-BFGS optimizer. If null, default options are used.</param>
     public LBFGSOptimizer(
         LBFGSOptimizerOptions<T, TInput, TOutput>? options = null)
-        : base(options ?? new())
+        : base(null, options ?? new())
     {
         _options = options ?? new LBFGSOptimizerOptions<T, TInput, TOutput>();
         _s = [];

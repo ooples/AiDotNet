@@ -57,7 +57,7 @@ public class DFPOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, TI
     /// </remarks>
     public DFPOptimizer(
         DFPOptimizerOptions<T, TInput, TOutput>? options = null)
-        : base(options ?? new())
+        : base(null, options ?? new())
     {
         _options = options ?? new DFPOptimizerOptions<T, TInput, TOutput>();
         _previousGradient = Vector<T>.Empty();

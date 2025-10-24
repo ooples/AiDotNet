@@ -52,7 +52,7 @@ public class LevenbergMarquardtOptimizer<T, TInput, TOutput> : GradientBasedOpti
     /// <param name="options">Custom options for the Levenberg-Marquardt algorithm.</param>
     public LevenbergMarquardtOptimizer(
         LevenbergMarquardtOptimizerOptions<T, TInput, TOutput>? options = null)
-        : base(options ?? new())
+        : base(null, options ?? new())
     {
         _options = options ?? new LevenbergMarquardtOptimizerOptions<T, TInput, TOutput>();
         _dampingFactor = NumOps.Zero;
