@@ -894,7 +894,7 @@ public class VectorModel<T> : IFullModel<T, Matrix<T>, Vector<T>>
         protected readonly HashSet<InterpretationMethod> _enabledMethods = new();
         protected Vector<int> _sensitiveFeatures;
         protected readonly List<FairnessMetric> _fairnessMetrics = new();
-        protected IModel<Matrix<T>, Vector<T>, ModelMetaData<T>> _baseModel;
+        protected IFullModel<T, Matrix<T>, Vector<T>> _baseModel;
 
         /// <summary>
         /// Gets the global feature importance across all predictions.
@@ -987,9 +987,9 @@ public class VectorModel<T> : IFullModel<T, Matrix<T>, Vector<T>>
         /// <summary>
         /// Sets the base model for interpretability analysis.
         /// </summary>
-        public virtual void SetBaseModel(IModel<Matrix<T>, Vector<T>, ModelMetaData<T>> model)
+        public virtual void SetBaseModel(IFullModel<T, Matrix<T>, Vector<T>> model)
         {
-        _baseModel = model ?? throw new ArgumentNullException(nameof(model));
+            _baseModel = model ?? throw new ArgumentNullException(nameof(model));
         }
 
         /// <summary>
@@ -1008,10 +1008,60 @@ public class VectorModel<T> : IFullModel<T, Matrix<T>, Vector<T>>
         /// </summary>
         public virtual void ConfigureFairness(Vector<int> sensitiveFeatures, params FairnessMetric[] fairnessMetrics)
         {
-        _sensitiveFeatures = sensitiveFeatures ?? throw new ArgumentNullException(nameof(sensitiveFeatures));
-        _fairnessMetrics.Clear();
-        _fairnessMetrics.AddRange(fairnessMetrics);
+            _sensitiveFeatures = sensitiveFeatures ?? throw new ArgumentNullException(nameof(sensitiveFeatures));
+            _fairnessMetrics.Clear();
+            _fairnessMetrics.AddRange(fairnessMetrics);
         }
+
+    #endregion
+
+    #region IFullModel Required Members (Placeholder Implementations)
+
+    /// <summary>
+    /// Saves the model to the specified file path.
+    /// </summary>
+    /// <remarks>
+    /// TODO: Implement in future user story. Placeholder for IModelSerializer interface requirement.
+    /// </remarks>
+    public void SaveModel(string filePath)
+    {
+        throw new NotImplementedException("SaveModel is not yet implemented for VectorModel. This will be implemented in a future user story.");
+    }
+
+    /// <summary>
+    /// Loads a model from the specified file path.
+    /// </summary>
+    /// <remarks>
+    /// TODO: Implement in future user story. Placeholder for IModelSerializer interface requirement.
+    /// </remarks>
+    public void LoadModel(string filePath)
+    {
+        throw new NotImplementedException("LoadModel is not yet implemented for VectorModel. This will be implemented in a future user story.");
+    }
+
+    /// <summary>
+    /// Gets the total number of trainable parameters in the model.
+    /// </summary>
+    /// <remarks>
+    /// TODO: Implement in future user story. Placeholder for IParameterizable interface requirement.
+    /// For VectorModel, this should return the number of coefficients.
+    /// </remarks>
+    public int ParameterCount
+    {
+        get { throw new NotImplementedException("ParameterCount is not yet implemented for VectorModel. This will be implemented in a future user story."); }
+    }
+
+    /// <summary>
+    /// Gets the importance of each feature in the model.
+    /// </summary>
+    /// <remarks>
+    /// TODO: Implement in future user story. Placeholder for IFeatureImportance interface requirement.
+    /// For VectorModel, this should return the absolute values of coefficients as a dictionary.
+    /// </remarks>
+    public Dictionary<string, T> GetFeatureImportance()
+    {
+        throw new NotImplementedException("GetFeatureImportance is not yet implemented for VectorModel. This will be implemented in a future user story.");
+    }
 
     #endregion
 }
