@@ -1098,7 +1098,9 @@ public class VectorModel<T> : IFullModel<T, Matrix<T>, Vector<T>>
         /// </summary>
         public virtual async Task<Matrix<T>> GetShapValuesAsync(Matrix<T> inputs)
         {
-        return await InterpretableModelHelper.GetShapValuesAsync(this, _enabledMethods);
+            // Convert Matrix<T> to Tensor<T> for InterpretableModelHelper
+            var inputTensor = new Tensor<T>(new[] { inputs.Rows, inputs.Columns }, inputs);
+            return await InterpretableModelHelper.GetShapValuesAsync(this, _enabledMethods, inputTensor);
         }
 
         /// <summary>
@@ -1106,7 +1108,9 @@ public class VectorModel<T> : IFullModel<T, Matrix<T>, Vector<T>>
         /// </summary>
         public virtual async Task<LimeExplanation<T>> GetLimeExplanationAsync(Matrix<T> input, int numFeatures = 10)
         {
-        return await InterpretableModelHelper.GetLimeExplanationAsync<T>(_enabledMethods, numFeatures);
+            // Convert Matrix<T> to Tensor<T> for InterpretableModelHelper
+            var inputTensor = new Tensor<T>(new[] { input.Rows, input.Columns }, input);
+            return await InterpretableModelHelper.GetLimeExplanationAsync<T>(this, _enabledMethods, inputTensor, numFeatures);
         }
 
         /// <summary>
@@ -1122,7 +1126,11 @@ public class VectorModel<T> : IFullModel<T, Matrix<T>, Vector<T>>
         /// </summary>
         public virtual async Task<CounterfactualExplanation<T>> GetCounterfactualAsync(Matrix<T> input, Vector<T> desiredOutput, int maxChanges = 5)
         {
-        return await InterpretableModelHelper.GetCounterfactualAsync<T>(_enabledMethods, maxChanges);
+            // Convert Matrix<T> to Tensor<T> for input
+            var inputTensor = new Tensor<T>(new[] { input.Rows, input.Columns }, input);
+            // Convert Vector<T> to Tensor<T> for desiredOutput
+            var desiredOutputTensor = new Tensor<T>(new[] { desiredOutput.Length }, desiredOutput);
+            return await InterpretableModelHelper.GetCounterfactualAsync<T>(this, _enabledMethods, inputTensor, desiredOutputTensor, maxChanges);
         }
 
         /// <summary>
@@ -1162,7 +1170,9 @@ public class VectorModel<T> : IFullModel<T, Matrix<T>, Vector<T>>
         /// </summary>
         public virtual async Task<AnchorExplanation<T>> GetAnchorExplanationAsync(Matrix<T> input, T threshold)
         {
-        return await InterpretableModelHelper.GetAnchorExplanationAsync(_enabledMethods, threshold);
+            // Convert Matrix<T> to Tensor<T> for InterpretableModelHelper
+            var inputTensor = new Tensor<T>(new[] { input.Rows, input.Columns }, input);
+            return await InterpretableModelHelper.GetAnchorExplanationAsync(this, _enabledMethods, inputTensor, threshold);
         }
 
         /// <summary>
