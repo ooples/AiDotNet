@@ -396,47 +396,67 @@ public class MultilayerPerceptronOptions<T, TInput, TOutput> : NonLinearRegressi
     /// <summary>
     /// Gets or sets the optimization algorithm used to update the network weights during training.
     /// </summary>
-    /// <value>The optimizer, defaulting to Adam with specific parameters.</value>
+    /// <value>The optimizer. If null, a default Adam optimizer will be created when needed.</value>
     /// <remarks>
     /// <para>
     /// The optimizer determines how the network weights are updated based on the computed gradients during
     /// backpropagation. Adam (Adaptive Moment Estimation) is a popular choice that combines the benefits of
     /// two other optimizers: AdaGrad and RMSProp. It maintains adaptive learning rates for each parameter
-    /// based on both the first moment (mean) and the second moment (variance) of the gradients. This default
-    /// configuration of Adam uses standard recommended values for its hyperparameters, but different optimizers
-    /// or parameters may be more effective for specific problems.
+    /// based on both the first moment (mean) and the second moment (variance) of the gradients. When this
+    /// property is null (the default), an Adam optimizer with standard recommended values will be created
+    /// automatically when the model is instantiated.
     /// </para>
     /// <para><b>For Beginners:</b> This setting determines the algorithm used to adjust the network's
     /// internal parameters during training.
-    /// 
+    ///
     /// The optimizer is like a strategy for learning:
     /// - It decides how to use the error information to update the network
     /// - Different optimizers have different strengths and weaknesses
     /// - Some are faster, some are more stable, some work better for certain types of problems
-    /// 
-    /// The default Adam (Adaptive Moment Estimation) optimizer:
-    /// - Adapts the learning rate differently for each parameter
-    /// - Combines the benefits of several other optimization techniques
-    /// - Works well across a wide range of problems
-    /// - Has its own set of configurable parameters (shown in the default)
-    /// 
+    ///
+    /// If you leave this as null (the default), the system will automatically create an Adam
+    /// (Adaptive Moment Estimation) optimizer with these settings:
+    /// - Learning rate: 0.001
+    /// - Beta1: 0.9 (first moment decay rate)
+    /// - Beta2: 0.999 (second moment decay rate)
+    /// - Epsilon: 1e-8 (numerical stability constant)
+    ///
     /// You might want to change this to:
     /// - SGD (Stochastic Gradient Descent): Simpler, sometimes more predictable
     /// - RMSProp: Good for recurrent neural networks
     /// - AdaGrad: Good when some parameters need very different learning rates
-    /// 
-    /// For most cases, Adam is an excellent default choice. If you're just starting with neural networks,
-    /// you probably don't need to change this until you have more experience with how your specific
-    /// models behave during training.
+    ///
+    /// For most cases, the default Adam optimizer is an excellent choice. If you're just starting with
+    /// neural networks, you probably don't need to change this until you have more experience with how
+    /// your specific models behave during training.
     /// </para>
     /// </remarks>
-    public IOptimizer<T, TInput, TOutput> Optimizer { get; set; } = new AdamOptimizer<T, TInput, TOutput>(
-        null!,
-        new AdamOptimizerOptions<T, TInput, TOutput>
-        {
-            LearningRate = 0.001,
-            Beta1 = 0.9,
-            Beta2 = 0.999,
-            Epsilon = 1e-8
-        });
+    public IOptimizer<T, TInput, TOutput>? Optimizer { get; set; } = null;
+
+    /// <summary>
+    /// Creates a default Adam optimizer with standard recommended parameters.
+    /// </summary>
+    /// <param name="model">The model to be optimized.</param>
+    /// <returns>A configured Adam optimizer instance.</returns>
+    /// <remarks>
+    /// <para>
+    /// This method is called internally when the Optimizer property is null and an optimizer is needed.
+    /// It creates an Adam optimizer with learning rate 0.001, beta1 0.9, beta2 0.999, and epsilon 1e-8.
+    /// </para>
+    /// <para><b>For Beginners:</b> This is a helper method that creates a standard Adam optimizer
+    /// when you haven't specified a custom one. You typically won't call this directly.
+    /// </para>
+    /// </remarks>
+    public static IOptimizer<T, TInput, TOutput> CreateDefaultOptimizer(IFullModel<T, TInput, TOutput> model)
+    {
+        return new AdamOptimizer<T, TInput, TOutput>(
+            model,
+            new AdamOptimizerOptions<T, TInput, TOutput>
+            {
+                LearningRate = 0.001,
+                Beta1 = 0.9,
+                Beta2 = 0.999,
+                Epsilon = 1e-8
+            });
+    }
 }

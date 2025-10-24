@@ -1073,7 +1073,7 @@ public class VectorModel<T> : IFullModel<T, Matrix<T>, Vector<T>>
     #region IInterpretableModel Implementation
 
         protected readonly HashSet<InterpretationMethod> _enabledMethods = new();
-        protected Vector<int> _sensitiveFeatures;
+        protected Vector<int> _sensitiveFeatures = new Vector<int>(0);
         protected readonly List<FairnessMetric> _fairnessMetrics = new();
         protected IFullModel<T, Matrix<T>, Vector<T>>? _baseModel;
 
@@ -1122,20 +1122,8 @@ public class VectorModel<T> : IFullModel<T, Matrix<T>, Vector<T>>
         /// </summary>
         public virtual async Task<CounterfactualExplanation<T>> GetCounterfactualAsync(Matrix<T> input, Vector<T> desiredOutput, int maxChanges = 5)
         {
-        var inputTensor = new Tensor<T>(new[] { input.Rows, input.Columns });
-        for (int i = 0; i < input.Rows; i++)
-        {
-            for (int j = 0; j < input.Columns; j++)
-            {
-                inputTensor[i, j] = input[i, j];
-            }
-        }
-
-        var desiredTensor = new Tensor<T>(new[] { desiredOutput.Length });
-        for (int i = 0; i < desiredOutput.Length; i++)
-        {
-            desiredTensor[i] = desiredOutput[i];
-        }
+        var inputTensor = MatrixToTensor(input);
+        var desiredTensor = VectorToTensor(desiredOutput);
 
         return await InterpretableModelHelper.GetCounterfactualAsync<T>(this, _enabledMethods, inputTensor, desiredTensor, maxChanges);
         }
@@ -1207,6 +1195,61 @@ public class VectorModel<T> : IFullModel<T, Matrix<T>, Vector<T>>
         _sensitiveFeatures = sensitiveFeatures ?? throw new ArgumentNullException(nameof(sensitiveFeatures));
         _fairnessMetrics.Clear();
         _fairnessMetrics.AddRange(fairnessMetrics);
+        }
+
+    #endregion
+
+    #region Helper Methods
+
+        /// <summary>
+        /// Converts a Matrix to a Tensor for interpretability methods.
+        /// </summary>
+        /// <param name="matrix">The matrix to convert.</param>
+        /// <returns>A tensor representation of the matrix.</returns>
+        /// <remarks>
+        /// <para>
+        /// This helper method efficiently converts a Matrix to a Tensor without nested loops,
+        /// improving performance for interpretability operations.
+        /// </para>
+        /// <para><b>For Beginners:</b> This method converts a 2D matrix into a tensor format
+        /// that some interpretability algorithms require. It's optimized for performance.
+        /// </para>
+        /// </remarks>
+        private static Tensor<T> MatrixToTensor(Matrix<T> matrix)
+        {
+            var tensor = new Tensor<T>(new[] { matrix.Rows, matrix.Columns });
+            for (int i = 0; i < matrix.Rows; i++)
+            {
+                for (int j = 0; j < matrix.Columns; j++)
+                {
+                    tensor[i, j] = matrix[i, j];
+                }
+            }
+            return tensor;
+        }
+
+        /// <summary>
+        /// Converts a Vector to a Tensor for interpretability methods.
+        /// </summary>
+        /// <param name="vector">The vector to convert.</param>
+        /// <returns>A tensor representation of the vector.</returns>
+        /// <remarks>
+        /// <para>
+        /// This helper method efficiently converts a Vector to a Tensor without explicit loops,
+        /// improving performance for interpretability operations.
+        /// </para>
+        /// <para><b>For Beginners:</b> This method converts a 1D vector into a tensor format
+        /// that some interpretability algorithms require. It's optimized for performance.
+        /// </para>
+        /// </remarks>
+        private static Tensor<T> VectorToTensor(Vector<T> vector)
+        {
+            var tensor = new Tensor<T>(new[] { vector.Length });
+            for (int i = 0; i < vector.Length; i++)
+            {
+                tensor[i] = vector[i];
+            }
+            return tensor;
         }
 
     #endregion

@@ -194,21 +194,24 @@ public class SymbolicRegression<T> : NonLinearRegressionBase<T>
     /// <para>
     /// The optimizer implements the evolutionary algorithm that generates, selects, and evolves
     /// symbolic expressions. It typically uses genetic programming techniques like mutation,
-    /// crossover, and selection to find optimal expressions.
+    /// crossover, and selection to find optimal expressions. This field is initialized lazily
+    /// in the OptimizeModel method when training data dimensions are known.
     /// </para>
     /// <para><b>For Beginners:</b> This is the engine that powers the formula discovery process.
-    /// 
+    ///
     /// The optimizer:
     /// - Creates generations of candidate formulas
     /// - Tests how well each formula performs
     /// - Keeps the best formulas for the next generation
     /// - Combines successful formulas to create new ones
     /// - Occasionally introduces random changes to explore new possibilities
-    /// 
+    ///
     /// It mimics natural evolution, but for mathematical formulas instead of organisms.
+    /// Note that it's not set up immediately when creating this class, but instead when
+    /// you start training, since we need to know the data dimensions first.
     /// </para>
     /// </remarks>
-    private readonly IOptimizer<T, Matrix<T>, Vector<T>> _optimizer;
+    private IOptimizer<T, Matrix<T>, Vector<T>>? _optimizer;
     
     /// <summary>
     /// The best symbolic model found during the optimization process.
@@ -323,15 +326,6 @@ public class SymbolicRegression<T> : NonLinearRegressionBase<T>
         : base(options, regularization)
     {
         _options = options ?? new SymbolicRegressionOptions();
-        _optimizer = new GeneticAlgorithmOptimizer<T, Matrix<T>, Vector<T>>(
-            null!,
-            new GeneticAlgorithmOptimizerOptions<T, Matrix<T>, Vector<T>>
-            {
-                PopulationSize = _options.PopulationSize,
-                MaxGenerations = _options.MaxGenerations,
-                MutationRate = _options.MutationRate,
-                CrossoverRate = _options.CrossoverRate
-            });
         _fitnessCalculator = fitnessCalculator ?? new RSquaredFitnessCalculator<T, Matrix<T>, Vector<T>>();
         _normalizer = normalizer ?? new NoNormalizer<T, Matrix<T>, Vector<T>>();
         _featureSelector = featureSelector ?? new NoFeatureSelector<T, Matrix<T>>();
@@ -339,6 +333,9 @@ public class SymbolicRegression<T> : NonLinearRegressionBase<T>
         _outlierRemoval = outlierRemoval ?? new NoOutlierRemoval<T, Matrix<T>, Vector<T>>();
         _dataPreprocessor = dataPreprocessor ?? new DefaultDataPreprocessor<T, Matrix<T>, Vector<T>>(_normalizer, _featureSelector, _outlierRemoval);
         _bestFitness = _fitnessCalculator.IsHigherScoreBetter ? NumOps.MinValue : NumOps.MaxValue;
+
+        // Note: Optimizer initialization deferred until OptimizeModel is called, when _bestModel is available
+        _optimizer = null;
     }
 
     /// <summary>
@@ -376,6 +373,23 @@ public class SymbolicRegression<T> : NonLinearRegressionBase<T>
         var (preprocessedX, preprocessedY, _) = _dataPreprocessor.PreprocessData(x, y);
         // Split the data
         var (XTrain, yTrain, XVal, yVal, XTest, yTest) = _dataPreprocessor.SplitData(preprocessedX, preprocessedY);
+
+        // Initialize optimizer now that we're ready to use it (deferred from constructor)
+        if (_optimizer == null)
+        {
+            // Create a placeholder model for the optimizer - it will be replaced during optimization
+            var placeholderModel = new VectorModel<T>(new Vector<T>(preprocessedX.Columns));
+            _optimizer = new GeneticAlgorithmOptimizer<T, Matrix<T>, Vector<T>>(
+                placeholderModel,
+                new GeneticAlgorithmOptimizerOptions<T, Matrix<T>, Vector<T>>
+                {
+                    PopulationSize = _options.PopulationSize,
+                    MaxGenerations = _options.MaxGenerations,
+                    MutationRate = _options.MutationRate,
+                    CrossoverRate = _options.CrossoverRate
+                });
+        }
+
         // Optimize the model
         var optimizationResult = _optimizer.Optimize(OptimizerHelper<T, Matrix<T>, Vector<T>>.CreateOptimizationInputData(XTrain, yTrain, XVal, yVal, XTest, yTest));
         _bestFitness = optimizationResult.BestFitnessScore;

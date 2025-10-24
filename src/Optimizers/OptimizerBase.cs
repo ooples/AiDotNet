@@ -103,6 +103,13 @@ public abstract class OptimizerBase<T, TInput, TOutput> : IOptimizer<T, TInput, 
     protected int IterationsWithoutImprovement;
 
     /// <summary>
+    /// Maximum number of parameters to include in cache key generation for performance.
+    /// Using only a subset of parameters reduces hash computation overhead while still
+    /// providing good uniqueness for cache keys.
+    /// </summary>
+    private const int MaxParametersForCacheKey = 10;
+
+    /// <summary>
     /// Counts the number of consecutive iterations with improvement.
     /// </summary>
     protected int IterationsWithImprovement;
@@ -320,7 +327,7 @@ public abstract class OptimizerBase<T, TInput, TOutput> : IOptimizer<T, TInput, 
         var parameters = solution.GetParameters();
         var hashCode = 17;
 
-        for (int i = 0; i < parameters.Length && i < 10; i++) // Use first 10 parameters for performance
+        for (int i = 0; i < parameters.Length && i < MaxParametersForCacheKey; i++)
         {
             hashCode = hashCode * 31 + parameters[i].GetHashCode();
         }
