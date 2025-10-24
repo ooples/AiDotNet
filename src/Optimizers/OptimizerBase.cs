@@ -481,7 +481,7 @@ public abstract class OptimizerBase<T, TInput, TOutput> : IOptimizer<T, TInput, 
             bestStepData.FitnessScore,
             FitnessList,
             bestStepData.SelectedFeatures,
-            new OptimizationResult<T, TInput, TOutput>.DatasetResult(modelType)
+            new OptimizationResult<T, TInput, TOutput>.DatasetResult()
             {
                 X = bestStepData.XTrainSubset,
                 Y = input.YTrain,
@@ -491,7 +491,7 @@ public abstract class OptimizerBase<T, TInput, TOutput> : IOptimizer<T, TInput, 
                 PredictedBasicStats = bestStepData.EvaluationData.TrainingSet.PredictedBasicStats,
                 PredictionStats = bestStepData.EvaluationData.TrainingSet.PredictionStats
             },
-            new OptimizationResult<T, TInput, TOutput>.DatasetResult(modelType)
+            new OptimizationResult<T, TInput, TOutput>.DatasetResult()
             {
                 X = bestStepData.XValSubset,
                 Y = input.YValidation,
@@ -501,7 +501,7 @@ public abstract class OptimizerBase<T, TInput, TOutput> : IOptimizer<T, TInput, 
                 PredictedBasicStats = bestStepData.EvaluationData.ValidationSet.PredictedBasicStats,
                 PredictionStats = bestStepData.EvaluationData.ValidationSet.PredictionStats
             },
-            new OptimizationResult<T, TInput, TOutput>.DatasetResult(modelType)
+            new OptimizationResult<T, TInput, TOutput>.DatasetResult()
             {
                 X = bestStepData.XTestSubset,
                 Y = input.YTest,
@@ -566,36 +566,14 @@ public abstract class OptimizerBase<T, TInput, TOutput> : IOptimizer<T, TInput, 
 
         int numFeatures = InputHelper<T, TInput>.GetInputSize(xTrain);
 
-        switch (Options.OptimizationMode)
+        // Apply feature selection if minimum/maximum features are set
+        if (Options.MinimumFeatures > 0 || Options.MaximumFeatures > 0)
         {
-            case OptimizationMode.FeatureSelectionOnly:
-                ApplyFeatureSelection(solution, numFeatures);
-                break;
-
-            case OptimizationMode.ParametersOnly:
-                AdjustModelParameters(
-                    solution,
-                    Options.ParameterAdjustmentScale,
-                    Options.SignFlipProbability);
-                break;
-
-            case OptimizationMode.Both:
-            default:
-                // With some probability, apply both or just one type of optimization
-                if (Random.NextDouble() < Options.FeatureSelectionProbability)
-                {
-                    ApplyFeatureSelection(solution, numFeatures);
-                }
-
-                if (Random.NextDouble() < Options.ParameterAdjustmentProbability)
-                {
-                    AdjustModelParameters(
-                        solution,
-                        Options.ParameterAdjustmentScale,
-                        Options.SignFlipProbability);
-                }
-                break;
+            ApplyFeatureSelection(solution, numFeatures);
         }
+
+        // Apply parameter adjustments with default values
+        AdjustModelParameters(solution, 0.1, 0.05);
 
         return solution;
     }

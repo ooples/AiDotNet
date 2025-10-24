@@ -40,13 +40,16 @@ public class MiniBatchGradientDescentOptimizer<T, TInput, TOutput> : GradientBas
     /// it uses default settings. It also initializes a random number generator for shuffling data.
     /// </para>
     /// <para><b>For Beginners:</b>
-    /// This is like setting up your hiking gear before starting the journey to find the valley's bottom. You're 
+    /// This is like setting up your hiking gear before starting the journey to find the valley's bottom. You're
     /// deciding on your strategy (options) and packing your tools (dependencies) that you'll use along the way.
     /// </para>
     /// </remarks>
+    /// <param name="model">The model to optimize.</param>
+    /// <param name="options">The optimization options.</param>
     public MiniBatchGradientDescentOptimizer(
+        IFullModel<T, TInput, TOutput> model,
         MiniBatchGradientDescentOptions<T, TInput, TOutput>? options = null)
-        : base(options ?? new())
+        : base(model, options ?? new())
     {
         _options = options ?? new MiniBatchGradientDescentOptions<T, TInput, TOutput>();
 

@@ -137,7 +137,11 @@ public class DefaultModelCache<T, TInput, TOutput> : IModelCache<T, TInput, TOut
             int hash = 17;
             for (int i = 0; i < parameters.Length; i++)
             {
-                hash = hash * 31 + parameters[i].GetHashCode();
+                T value = parameters[i];
+                if (value != null)
+                {
+                    hash = hash * 31 + value.GetHashCode();
+                }
             }
             return hash;
         }

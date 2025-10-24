@@ -82,7 +82,7 @@ public class EnhancedRegressionExample
             Console.WriteLine("\n1. Training Multiple Linear Regression model...");
             var linearModel = modelBuilder
                 .ConfigureDataPreprocessor(dataPreprocessor)
-                .ConfigureOptimizer(new AdamOptimizer<double, Matrix<double>, Vector<double>>(new AdamOptimizerOptions<double, Matrix<double>, Vector<double>>
+                .ConfigureOptimizer(new AdamOptimizer<double, Matrix<double>, Vector<double>>(null!, new AdamOptimizerOptions<double, Matrix<double>, Vector<double>>
                 {
                     LearningRate = 0.01,
                     MaxIterations = 2000,
@@ -106,7 +106,7 @@ public class EnhancedRegressionExample
                     Type = RegularizationType.L2,
                     Strength = alpha
                 }))
-                .ConfigureOptimizer(new AdamOptimizer<double, Matrix<double>, Vector<double>>(new AdamOptimizerOptions<double, Matrix<double>, Vector<double>>
+                .ConfigureOptimizer(new AdamOptimizer<double, Matrix<double>, Vector<double>>(null!, new AdamOptimizerOptions<double, Matrix<double>, Vector<double>>
                 {
                     LearningRate = 0.01,
                     MaxIterations = 2000,

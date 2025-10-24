@@ -70,8 +70,9 @@ public class CMAESOptimizer<T, TInput, TOutput> : OptimizerBase<T, TInput, TOutp
     /// </para>
     /// </remarks>
     public CMAESOptimizer(
+        IFullModel<T, TInput, TOutput> model,
         CMAESOptimizerOptions<T, TInput, TOutput>? options = null)
-        : base(options ?? new())
+        : base(model, options ?? new())
     {
         _options = options ?? new CMAESOptimizerOptions<T, TInput, TOutput>();
         _population = Matrix<T>.Empty();
