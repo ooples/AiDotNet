@@ -69,7 +69,12 @@ namespace AiDotNet.Serialization
                 throw new JsonSerializationException($"Cannot serialize vector type {vectorType.Name}: missing required properties.");
             }
 
-            var length = (int)lengthProperty.GetValue(value);
+            object? lengthObj = lengthProperty.GetValue(value);
+            if (lengthObj == null)
+            {
+                throw new JsonSerializationException($"Cannot serialize vector: Length property returned null.");
+            }
+            var length = (int)lengthObj;
 
             writer.WriteStartObject();
             writer.WritePropertyName("length");

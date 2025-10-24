@@ -191,7 +191,8 @@ public class DefaultModelEvaluator<T, TInput, TOutput> : IModelEvaluator<T, TInp
     /// </remarks>
     private static ModelStats<T, TInput, TOutput> CalculateModelStats(IFullModel<T, TInput, TOutput>? model, TInput xTrain, NormalizationInfo<T, TInput, TOutput> normInfo)
     {
-        var predictionModelResult = new PredictionModelResult<T, TInput, TOutput>(new OptimizationResult<T, TInput, TOutput>(), normInfo);
+        var optimizationResult = new OptimizationResult<T, TInput, TOutput> { BestSolution = model };
+        var predictionModelResult = new PredictionModelResult<T, TInput, TOutput>(optimizationResult, normInfo);
 
         return new ModelStats<T, TInput, TOutput>(new ModelStatsInputs<T, TInput, TOutput>
         {

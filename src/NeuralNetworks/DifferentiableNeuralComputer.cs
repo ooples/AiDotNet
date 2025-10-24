@@ -675,7 +675,7 @@ public class DifferentiableNeuralComputer<T> : NeuralNetworkBase<T>
         
         // Create optimizer (here we use a simple gradient descent optimizer)
         var optimizer = new GradientDescentOptimizer<T, Tensor<T>, Tensor<T>>(this);
-        
+
         // Get current parameters
         Vector<T> currentParameters = GetParameters();
         

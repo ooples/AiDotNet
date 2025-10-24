@@ -339,29 +339,12 @@ public class PredictionModelResult<T, TInput, TOutput> : IPredictiveModel<T, TIn
     {
         try
         {
-            // Register all converters using our centralized registry
-            JsonConverterRegistry.RegisterAllConverters();
-
             // Create JSON settings with custom converters for our types
             var settings = new JsonSerializerSettings
             {
                 TypeNameHandling = TypeNameHandling.All,
                 Formatting = Formatting.Indented
             };
-
-            // Add all needed converters from the registry
-            var allConverters = JsonConverterRegistry.GetAllConverters();
-
-            // Add type-specific converters for T
-            var typeSpecificConverters = JsonConverterRegistry.GetConvertersForType<T>();
-
-            // Combine converters
-            var converters = new List<JsonConverter>();
-            converters.AddRange(allConverters);
-            converters.AddRange(typeSpecificConverters);
-
-            // Set the converters on our settings
-            settings.Converters = converters;
 
             // Serialize the object
             var jsonString = JsonConvert.SerializeObject(this, settings);
@@ -406,9 +389,6 @@ public class PredictionModelResult<T, TInput, TOutput> : IPredictiveModel<T, TIn
     {
         try
         {
-            // Register all converters using our centralized registry
-            JsonConverterRegistry.RegisterAllConverters();
-
             var jsonString = Encoding.UTF8.GetString(data);
 
             // Create JSON settings with custom converters for our types
@@ -416,20 +396,6 @@ public class PredictionModelResult<T, TInput, TOutput> : IPredictiveModel<T, TIn
             {
                 TypeNameHandling = TypeNameHandling.All
             };
-
-            // Add all needed converters from the registry
-            var allConverters = JsonConverterRegistry.GetAllConverters();
-
-            // Add type-specific converters for T
-            var typeSpecificConverters = JsonConverterRegistry.GetConvertersForType<T>();
-
-            // Combine converters
-            var converters = new List<JsonConverter>();
-            converters.AddRange(allConverters);
-            converters.AddRange(typeSpecificConverters);
-
-            // Set the converters on our settings
-            settings.Converters = converters;
 
             // Deserialize the object
             var deserializedObject = JsonConvert.DeserializeObject<PredictionModelResult<T, TInput, TOutput>>(jsonString, settings);

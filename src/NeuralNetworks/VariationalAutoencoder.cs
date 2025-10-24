@@ -772,8 +772,7 @@ public class VariationalAutoencoder<T> : NeuralNetworkBase<T>
     protected override void DeserializeNetworkSpecificData(BinaryReader reader)
     {
         LatentSize = reader.ReadInt32();
-        var dummyModel = ModelHelper<T, Tensor<T>, Tensor<T>>.CreateDefaultModel();
-        _optimizer = DeserializationHelper.DeserializeInterface<IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>>(reader) ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(dummyModel);
+        _optimizer = DeserializationHelper.DeserializeInterface<IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>>(reader) ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
     }
 
     /// <summary>

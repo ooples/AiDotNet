@@ -163,7 +163,7 @@ public class ParticleSwarmOptimizer<T, TInput, TOutput> : OptimizerBase<T, TInpu
                 {
                     personalBests[i] = stepData;
                 }
-                
+
                 // Update current iteration's best solution
                 if (currentIterationBest.Solution == null ||
                     FitnessCalculator.IsBetterFitness(stepData.FitnessScore, currentIterationBest.FitnessScore))

@@ -30,20 +30,4 @@ namespace AiDotNet.Interfaces;
 public interface IFullModel<T, TInput, TOutput> : IModel<TInput, TOutput, ModelMetadata<T>>,
     IModelSerializer, IParameterizable<T, TInput, TOutput>, IFeatureAware, IFeatureImportance<T>, ICloneable<IFullModel<T, TInput, TOutput>>
 {
-    /// <summary>
-    /// Loads the model from a file (alias for LoadModel).
-    /// </summary>
-    /// <param name="filePath">The path to the file containing the saved model.</param>
-    /// <remarks>
-    /// <para>
-    /// This method is an alias for LoadModel and provides the same functionality.
-    /// It exists for backward compatibility and naming preference.
-    /// </para>
-    /// <para><b>For Beginners:</b> This method loads a previously saved model from a file on your computer.
-    /// It's the same as LoadModel - use whichever name you prefer.</para>
-    /// </remarks>
-    void LoadFromFile(string filePath)
-    {
-        LoadModel(filePath);
-    }
 }

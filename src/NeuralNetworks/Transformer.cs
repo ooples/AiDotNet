@@ -114,8 +114,7 @@ public class Transformer<T> : NeuralNetworkBase<T>
         base(architecture, lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(architecture.TaskType))
     {
         _transformerArchitecture = architecture;
-        var dummyModel = ModelHelper<T, Tensor<T>, Tensor<T>>.CreateDefaultModel();
-        _optimizer = optimizer ?? new GradientDescentOptimizer<T, Tensor<T>, Tensor<T>>(dummyModel);
+        _optimizer = optimizer ?? new GradientDescentOptimizer<T, Tensor<T>, Tensor<T>>(this);
 
         InitializeLayers();
     }

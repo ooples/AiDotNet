@@ -71,8 +71,14 @@ namespace AiDotNet.Serialization
                 throw new JsonSerializationException($"Cannot serialize matrix type {matrixType.Name}: missing required properties.");
             }
 
-            var rows = (int)rowsProperty.GetValue(value);
-            var columns = (int)columnsProperty.GetValue(value);
+            object? rowsObj = rowsProperty.GetValue(value);
+            object? columnsObj = columnsProperty.GetValue(value);
+            if (rowsObj == null || columnsObj == null)
+            {
+                throw new JsonSerializationException($"Cannot serialize matrix: Rows or Columns property returned null.");
+            }
+            var rows = (int)rowsObj;
+            var columns = (int)columnsObj;
 
             writer.WriteStartObject();
             writer.WritePropertyName("rows");

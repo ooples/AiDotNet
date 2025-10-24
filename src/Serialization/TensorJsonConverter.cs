@@ -69,8 +69,14 @@ namespace AiDotNet.Serialization
                 throw new JsonSerializationException($"Cannot serialize tensor type {tensorType.Name}: missing required properties.");
             }
 
-            var shape = (int[])shapeProperty.GetValue(value);
-            var length = (int)lengthProperty.GetValue(value);
+            object? shapeObj = shapeProperty.GetValue(value);
+            object? lengthObj = lengthProperty.GetValue(value);
+            if (shapeObj == null || lengthObj == null)
+            {
+                throw new JsonSerializationException($"Cannot serialize tensor: Shape or Length property returned null.");
+            }
+            var shape = (int[])shapeObj;
+            var length = (int)lengthObj;
 
             // Get the ToArray method to extract all data
             var toArrayMethod = tensorType.GetMethod("ToArray");
