@@ -75,11 +75,11 @@ public class DefaultModelCache<T, TInput, TOutput> : IModelCache<T, TInput, TOut
     /// <remarks>
     /// <para>
     /// <b>For Beginners:</b> This method saves information about a training step so it can be used later.
-    /// 
+    ///
     /// During model training, each step produces valuable information about how the model is changing
     /// and improving. This method stores that information with a unique label (the key) so you can
     /// retrieve it later.
-    /// 
+    ///
     /// If data with the same key already exists in the cache, it will be replaced with the new data.
     /// This is useful for updating the cache with the latest information as training progresses.
     /// </para>
@@ -87,5 +87,55 @@ public class DefaultModelCache<T, TInput, TOutput> : IModelCache<T, TInput, TOut
     public void CacheStepData(string key, OptimizationStepData<T, TInput, TOutput> stepData)
     {
         _cache[key] = stepData;
+    }
+
+    /// <summary>
+    /// Generates a unique cache key based on the model and input data.
+    /// </summary>
+    /// <param name="solution">The model configuration to generate a key for.</param>
+    /// <param name="inputData">The input data to include in the key generation.</param>
+    /// <returns>A unique string that identifies this specific model and data combination.</returns>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> This method creates a unique identifier (like a fingerprint) for a specific
+    /// combination of model settings and data. This "fingerprint" is used to check if we've already
+    /// calculated results for this exact combination before.
+    ///
+    /// The key is generated from:
+    /// - The model's parameters (if the model supports parameter access)
+    /// - The model's hash code (a unique identifier for the model instance)
+    /// - The input data's hash code
+    ///
+    /// If the same model and data are used again, the same key will be generated, allowing the system
+    /// to retrieve previous results instead of recalculating.
+    /// </para>
+    /// </remarks>
+    public string GenerateCacheKey(IFullModel<T, TInput, TOutput> solution, OptimizationInputData<T, TInput, TOutput> inputData)
+    {
+        // Create a hash-based key from model parameters and input data
+        var keyBuilder = new System.Text.StringBuilder();
+
+        // Add model identifier
+        keyBuilder.Append("Model:");
+        keyBuilder.Append(solution.GetHashCode());
+        keyBuilder.Append("|");
+
+        // Add parameter information if available
+        if (solution is IParameterizable<T, TInput, TOutput> parameterizable)
+        {
+            keyBuilder.Append("Params:");
+            var parameters = parameterizable.GetParameters();
+            if (parameters != null && parameters.Count > 0)
+            {
+                keyBuilder.Append(parameters.GetHashCode());
+            }
+            keyBuilder.Append("|");
+        }
+
+        // Add input data identifier
+        keyBuilder.Append("Data:");
+        keyBuilder.Append(inputData.GetHashCode());
+
+        return keyBuilder.ToString();
     }
 }
