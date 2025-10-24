@@ -164,6 +164,16 @@ public class LiquidStateMachine<T> : NeuralNetworkBase<T>
     private double _leakingRate;
 
     /// <summary>
+    /// Optimizer instance that persists across training steps to maintain internal state.
+    /// </summary>
+    private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer;
+
+    /// <summary>
+    /// Tracks the parameter count of the optimizer to detect when model architecture changes require reinitialization.
+    /// </summary>
+    private int _optimizerParamCount = -1;
+
+    /// <summary>
     /// Initializes a new instance of the <see cref="LiquidStateMachine{T}"/> class with the specified architecture and parameters.
     /// </summary>
     /// <param name="architecture">The neural network architecture defining the structure of the network.</param>
@@ -445,14 +455,18 @@ public class LiquidStateMachine<T> : NeuralNetworkBase<T>
         // Clip gradients to prevent exploding gradients
         parameterGradients = ClipGradient(parameterGradients);
 
-        // Create optimizer
-        var optimizer = new GradientDescentOptimizer<T, Tensor<T>, Tensor<T>>();
+        // (Re)initialize optimizer when missing or when parameter shape changed
+        if (_optimizer == null || _optimizerParamCount != ParameterCount)
+        {
+            _optimizer = new GradientDescentOptimizer<T, Tensor<T>, Tensor<T>>(this);
+            _optimizerParamCount = ParameterCount;
+        }
 
         // Get current parameters
         Vector<T> currentParameters = GetParameters();
 
         // Update parameters using the optimizer
-        Vector<T> updatedParameters = optimizer.UpdateParameters(currentParameters, parameterGradients);
+        Vector<T> updatedParameters = _optimizer.UpdateParameters(currentParameters, parameterGradients);
 
         // Apply updated parameters
         UpdateParameters(updatedParameters);

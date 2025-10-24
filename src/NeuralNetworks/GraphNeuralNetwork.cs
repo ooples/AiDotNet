@@ -165,6 +165,16 @@ public class GraphNeuralNetwork<T> : NeuralNetworkBase<T>
     private IActivationFunction<T>? _finalActivationLayerScalarActivation { get; set; }
 
     /// <summary>
+    /// Optimizer instance that persists across training steps to maintain internal state.
+    /// </summary>
+    private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer;
+
+    /// <summary>
+    /// Tracks the parameter count of the optimizer to detect when model architecture changes require reinitialization.
+    /// </summary>
+    private int _optimizerParamCount = -1;
+
+    /// <summary>
     /// Initializes a new instance of the <see cref="GraphNeuralNetwork{T}"/> class with vector activation functions.
     /// </summary>
     /// <param name="architecture">The neural network architecture defining the structure of the network.</param>
@@ -543,14 +553,18 @@ public class GraphNeuralNetwork<T> : NeuralNetworkBase<T>
         // Clip gradients to prevent exploding gradients
         parameterGradients = ClipGradient(parameterGradients);
 
-        // Create optimizer
-        var optimizer = new AdamOptimizer<T, Tensor<T>, Tensor<T>>();
+        // (Re)initialize optimizer when missing or when parameter shape changed
+        if (_optimizer == null || _optimizerParamCount != ParameterCount)
+        {
+            _optimizer = new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
+            _optimizerParamCount = ParameterCount;
+        }
 
         // Get current parameters
         Vector<T> currentParameters = GetParameters();
 
         // Update parameters using the optimizer
-        Vector<T> updatedParameters = optimizer.UpdateParameters(currentParameters, parameterGradients);
+        Vector<T> updatedParameters = _optimizer.UpdateParameters(currentParameters, parameterGradients);
 
         // Apply updated parameters
         UpdateParameters(updatedParameters);
@@ -606,15 +620,19 @@ public class GraphNeuralNetwork<T> : NeuralNetworkBase<T>
         
         // Apply gradient clipping
         parameterGradients = ClipGradient(parameterGradients);
-        
-        // Use adaptive optimizer (Adam)
-        var optimizer = new AdamOptimizer<T, Tensor<T>, Tensor<T>>();
-        
+
+        // (Re)initialize optimizer when missing or when parameter shape changed
+        if (_optimizer == null || _optimizerParamCount != ParameterCount)
+        {
+            _optimizer = new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
+            _optimizerParamCount = ParameterCount;
+        }
+
         // Get current parameters
         Vector<T> currentParameters = GetParameters();
-        
+
         // Update parameters
-        Vector<T> updatedParameters = optimizer.UpdateParameters(currentParameters, parameterGradients);
+        Vector<T> updatedParameters = _optimizer.UpdateParameters(currentParameters, parameterGradients);
         
         // Apply updated parameters
         UpdateParameters(updatedParameters);
