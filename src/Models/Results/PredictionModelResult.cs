@@ -1,5 +1,6 @@
 global using Newtonsoft.Json;
 global using Formatting = Newtonsoft.Json.Formatting;
+using AiDotNet.Serialization;
 
 namespace AiDotNet.Models.Results;
 
