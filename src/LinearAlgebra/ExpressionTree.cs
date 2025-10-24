@@ -1186,7 +1186,6 @@ public class ExpressionTree<T, TInput, TOutput> : IFullModel<T, TInput, TOutput>
         {
             if (node == null)
                 return;
-            if (node == null) return;
             if (node.Type == ExpressionNodeType.Constant)
             {
                 constantNodeCount++;
@@ -1206,13 +1205,11 @@ public class ExpressionTree<T, TInput, TOutput> : IFullModel<T, TInput, TOutput>
 
         // Assign parameter values to constant nodes in a deterministic traversal order
         // Local function returns next index to use - includes null check for safety
-            if (node == null) return currentIndex;
+        int AssignAndReturnNextIndex(ExpressionTree<T, TInput, TOutput>? node, int currentIndex)
         {
             if (node == null)
                 return currentIndex;
-            
-            
-            
+
             int nextIndex = currentIndex;
             if (node.Type == ExpressionNodeType.Constant)
             {
