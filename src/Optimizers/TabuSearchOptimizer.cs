@@ -50,14 +50,16 @@ public class TabuSearchOptimizer<T, TInput, TOutput> : OptimizerBase<T, TInput, 
     /// <summary>
     /// Initializes a new instance of the TabuSearchOptimizer class.
     /// </summary>
+    /// <param name="model">The model to be optimized.</param>
     /// <param name="options">Options specific to the Tabu Search algorithm.</param>
     /// <param name="geneticAlgorithm">The genetic algorithm to use for mutations. If null, a StandardGeneticAlgorithm will be used.</param>
     public TabuSearchOptimizer(
+        IFullModel<T, TInput, TOutput> model,
         TabuSearchOptions<T, TInput, TOutput>? options = null,
         GeneticBase<T, TInput, TOutput>? geneticAlgorithm = null,
         IFitnessCalculator<T, TInput, TOutput>? fitnessCalculator = null,
         IModelEvaluator<T, TInput, TOutput>? modelEvaluator = null)
-        : base(options ?? new())
+        : base(model, options ?? new())
     {
         _tabuOptions = options ?? new TabuSearchOptions<T, TInput, TOutput>();
 
