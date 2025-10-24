@@ -1082,7 +1082,7 @@ public class VectorModel<T> : IFullModel<T, Matrix<T>, Vector<T>>
         /// </summary>
         public virtual async Task<Dictionary<int, T>> GetGlobalFeatureImportanceAsync()
         {
-        return await InterpretableModelHelper.GetGlobalFeatureImportanceAsync(this, _enabledMethods);
+        return await InterpretableModelHelper.GetGlobalFeatureImportanceAsync<T>((this as IInterpretableModel<T>)!, _enabledMethods);
         }
 
         /// <summary>
@@ -1090,7 +1090,8 @@ public class VectorModel<T> : IFullModel<T, Matrix<T>, Vector<T>>
         /// </summary>
         public virtual async Task<Dictionary<int, T>> GetLocalFeatureImportanceAsync(Matrix<T> input)
         {
-        return await InterpretableModelHelper.GetLocalFeatureImportanceAsync(this, _enabledMethods, input);
+        var inputTensor = MatrixToTensor(input);
+        return await InterpretableModelHelper.GetLocalFeatureImportanceAsync<T>((this as IInterpretableModel<T>)!, _enabledMethods, inputTensor);
         }
 
         /// <summary>
@@ -1098,7 +1099,8 @@ public class VectorModel<T> : IFullModel<T, Matrix<T>, Vector<T>>
         /// </summary>
         public virtual async Task<Matrix<T>> GetShapValuesAsync(Matrix<T> inputs)
         {
-        return await InterpretableModelHelper.GetShapValuesAsync(this, _enabledMethods);
+        var inputsTensor = MatrixToTensor(inputs);
+        return await InterpretableModelHelper.GetShapValuesAsync<T>((this as IInterpretableModel<T>)!, _enabledMethods, inputsTensor);
         }
 
         /// <summary>
@@ -1106,7 +1108,8 @@ public class VectorModel<T> : IFullModel<T, Matrix<T>, Vector<T>>
         /// </summary>
         public virtual async Task<LimeExplanation<T>> GetLimeExplanationAsync(Matrix<T> input, int numFeatures = 10)
         {
-        return await InterpretableModelHelper.GetLimeExplanationAsync<T>(_enabledMethods, numFeatures);
+        var inputTensor = MatrixToTensor(input);
+        return await InterpretableModelHelper.GetLimeExplanationAsync<T>((this as IInterpretableModel<T>)!, _enabledMethods, inputTensor, numFeatures);
         }
 
         /// <summary>
@@ -1114,7 +1117,7 @@ public class VectorModel<T> : IFullModel<T, Matrix<T>, Vector<T>>
         /// </summary>
         public virtual async Task<PartialDependenceData<T>> GetPartialDependenceAsync(Vector<int> featureIndices, int gridResolution = 20)
         {
-        return await InterpretableModelHelper.GetPartialDependenceAsync<T>(this, _enabledMethods, featureIndices, gridResolution);
+        return await InterpretableModelHelper.GetPartialDependenceAsync<T>((this as IInterpretableModel<T>)!, _enabledMethods, featureIndices, gridResolution);
         }
 
         /// <summary>
@@ -1125,7 +1128,7 @@ public class VectorModel<T> : IFullModel<T, Matrix<T>, Vector<T>>
         var inputTensor = MatrixToTensor(input);
         var desiredTensor = VectorToTensor(desiredOutput);
 
-        return await InterpretableModelHelper.GetCounterfactualAsync<T>(this, _enabledMethods, inputTensor, desiredTensor, maxChanges);
+        return await InterpretableModelHelper.GetCounterfactualAsync<T>((this as IInterpretableModel<T>)!, _enabledMethods, inputTensor, desiredTensor, maxChanges);
         }
 
         /// <summary>
@@ -1133,7 +1136,7 @@ public class VectorModel<T> : IFullModel<T, Matrix<T>, Vector<T>>
         /// </summary>
         public virtual async Task<Dictionary<string, object>> GetModelSpecificInterpretabilityAsync()
         {
-        return await InterpretableModelHelper.GetModelSpecificInterpretabilityAsync(this);
+        return await InterpretableModelHelper.GetModelSpecificInterpretabilityAsync<T>((this as IInterpretableModel<T>)!);
         }
 
         /// <summary>
@@ -1141,7 +1144,9 @@ public class VectorModel<T> : IFullModel<T, Matrix<T>, Vector<T>>
         /// </summary>
         public virtual async Task<string> GenerateTextExplanationAsync(Matrix<T> input, Vector<T> prediction)
         {
-        return await InterpretableModelHelper.GenerateTextExplanationAsync(this, input, prediction);
+        var inputTensor = MatrixToTensor(input);
+        var predictionTensor = VectorToTensor(prediction);
+        return await InterpretableModelHelper.GenerateTextExplanationAsync<T>((this as IInterpretableModel<T>)!, inputTensor, predictionTensor);
         }
 
         /// <summary>
@@ -1165,7 +1170,8 @@ public class VectorModel<T> : IFullModel<T, Matrix<T>, Vector<T>>
         /// </summary>
         public virtual async Task<AnchorExplanation<T>> GetAnchorExplanationAsync(Matrix<T> input, T threshold)
         {
-        return await InterpretableModelHelper.GetAnchorExplanationAsync(_enabledMethods, threshold);
+        var inputTensor = MatrixToTensor(input);
+        return await InterpretableModelHelper.GetAnchorExplanationAsync<T>((this as IInterpretableModel<T>)!, _enabledMethods, inputTensor, threshold);
         }
 
         /// <summary>

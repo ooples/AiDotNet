@@ -329,7 +329,7 @@ public abstract class OptimizerBase<T, TInput, TOutput> : IOptimizer<T, TInput, 
 
         for (int i = 0; i < parameters.Length && i < MaxParametersForCacheKey; i++)
         {
-            hashCode = hashCode * 31 + parameters[i].GetHashCode();
+            hashCode = hashCode * 31 + (parameters[i]?.GetHashCode() ?? 0);
         }
 
         // Include parameter count to differentiate models with different structures
@@ -598,35 +598,16 @@ public abstract class OptimizerBase<T, TInput, TOutput> : IOptimizer<T, TInput, 
 
         int numFeatures = InputHelper<T, TInput>.GetInputSize(xTrain);
 
-        switch (Options.OptimizationMode)
+        // Apply both feature selection and parameter adjustment with some probability
+        // This provides a balanced approach to optimization
+        if (Random.NextDouble() < 0.7)
         {
-            case OptimizationMode.FeatureSelectionOnly:
-                ApplyFeatureSelection(solution, numFeatures);
-                break;
+            ApplyFeatureSelection(solution, numFeatures);
+        }
 
-            case OptimizationMode.ParametersOnly:
-                AdjustModelParameters(
-                    solution,
-                    Options.ParameterAdjustmentScale,
-                    Options.SignFlipProbability);
-                break;
-
-            case OptimizationMode.Both:
-            default:
-                // With some probability, apply both or just one type of optimization
-                if (Random.NextDouble() < Options.FeatureSelectionProbability)
-                {
-                    ApplyFeatureSelection(solution, numFeatures);
-                }
-
-                if (Random.NextDouble() < Options.ParameterAdjustmentProbability)
-                {
-                    AdjustModelParameters(
-                        solution,
-                        Options.ParameterAdjustmentScale,
-                        Options.SignFlipProbability);
-                }
-                break;
+        if (Random.NextDouble() < 0.5)
+        {
+            AdjustModelParameters(solution, 0.1, 0.05);
         }
 
         return solution;
