@@ -147,7 +147,7 @@ public class TabuSearchOptimizer<T, TInput, TOutput> : OptimizerBase<T, TInput, 
                     var neighborStepData = EvaluateSolution(neighbor, inputData);
 
                     if (bestNeighbor == null ||
-                        _fitnessCalculator.IsBetterFitness(neighborStepData.FitnessScore, bestNeighborStepData.FitnessScore))
+                        FitnessCalculator.IsBetterFitness(neighborStepData.FitnessScore, bestNeighborStepData.FitnessScore))
                     {
                         bestNeighbor = neighbor;
                         bestNeighborStepData = neighborStepData;
@@ -163,7 +163,7 @@ public class TabuSearchOptimizer<T, TInput, TOutput> : OptimizerBase<T, TInput, 
                     var neighborStepData = EvaluateSolution(neighbor, inputData);
 
                     if (bestNeighbor == null ||
-                        _fitnessCalculator.IsBetterFitness(neighborStepData.FitnessScore, bestNeighborStepData.FitnessScore))
+                        FitnessCalculator.IsBetterFitness(neighborStepData.FitnessScore, bestNeighborStepData.FitnessScore))
                     {
                         bestNeighbor = neighbor;
                         bestNeighborStepData = neighborStepData;
