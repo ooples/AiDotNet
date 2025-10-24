@@ -1,4 +1,4 @@
-﻿namespace AiDotNet.LinearAlgebra;
+namespace AiDotNet.LinearAlgebra;
 
 /// <summary>
 /// Represents a symbolic expression tree for mathematical operations that can be used for symbolic regression.
@@ -588,9 +588,9 @@ public class ExpressionTree<T, TInput, TOutput> : IFullModel<T, TInput, TOutput>
     /// <b>For Beginners:</b> This provides useful information about your formula, like how complex it is
     /// and how many input variables it needs. Think of it as a summary sheet about your mathematical model.
     /// </remarks>
-    public ModelMetaData<T> GetModelMetaData()
+    public ModelMetadata<T> GetModelMetadata()
     {
-        return new ModelMetaData<T>
+        return new ModelMetadata<T>
         {
             ModelType = ModelType.ExpressionTree,
             FeatureCount = FeatureCount,
@@ -1186,7 +1186,6 @@ public class ExpressionTree<T, TInput, TOutput> : IFullModel<T, TInput, TOutput>
         {
             if (node == null)
                 return;
-            if (node == null) return;
             if (node.Type == ExpressionNodeType.Constant)
             {
                 constantNodeCount++;
@@ -1206,13 +1205,11 @@ public class ExpressionTree<T, TInput, TOutput> : IFullModel<T, TInput, TOutput>
 
         // Assign parameter values to constant nodes in a deterministic traversal order
         // Local function returns next index to use - includes null check for safety
-            if (node == null) return currentIndex;
+        int AssignAndReturnNextIndex(ExpressionTree<T, TInput, TOutput>? node, int currentIndex)
         {
             if (node == null)
                 return currentIndex;
-            
-            
-            
+
             int nextIndex = currentIndex;
             if (node.Type == ExpressionNodeType.Constant)
             {

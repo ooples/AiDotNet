@@ -422,9 +422,9 @@ public class SupportVectorRegression<T> : NonLinearRegressionBase<T>
     /// which settings worked best for your problem.
     /// </para>
     /// </remarks>
-    public override ModelMetaData<T> GetModelMetaData()
+    public override ModelMetadata<T> GetModelMetadata()
     {
-        var metadata = base.GetModelMetaData();
+        var metadata = base.GetModelMetadata();
         metadata.AdditionalInfo["Epsilon"] = _options.Epsilon;
         metadata.AdditionalInfo["C"] = _options.C;
         metadata.AdditionalInfo["RegularizationType"] = Regularization.GetType().Name;

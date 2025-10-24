@@ -1,4 +1,4 @@
-﻿namespace AiDotNet.Kernels;
+namespace AiDotNet.Kernels;
 
 /// <summary>
 /// Implements the Piecewise Polynomial kernel for measuring similarity between data points.
@@ -22,7 +22,7 @@
 /// </para>
 /// <para>
 /// The formula for this kernel is:
-/// k(x, y) = (1 - ||x-y||/c)^(j+1) if ||x-y|| ≤ c, and 0 otherwise
+/// k(x, y) = (1 - ||x-y||/c)^(j+1) if ||x-y|| = c, and 0 otherwise
 /// where:
 /// - x and y are the two data points being compared
 /// - ||x-y|| is the Euclidean distance between them

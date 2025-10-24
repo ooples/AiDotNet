@@ -824,7 +824,7 @@ public class MemoryNetwork<T> : NeuralNetworkBase<T>
     /// - Tracking memory usage and performance
     /// </para>
     /// </remarks>
-    public override ModelMetaData<T> GetModelMetaData()
+    public override ModelMetadata<T> GetModelMetadata()
     {
         // Calculate memory statistics
         double avgMemValue = 0.0;
@@ -844,7 +844,7 @@ public class MemoryNetwork<T> : NeuralNetworkBase<T>
     
         avgMemValue /= _memorySize * _embeddingSize;
     
-        return new ModelMetaData<T>
+        return new ModelMetadata<T>
         {
             ModelType = ModelType.MemoryNetwork,
             AdditionalInfo = new Dictionary<string, object>

@@ -1013,9 +1013,9 @@ public class ProphetModel<T, TInput, TOutput> : TimeSeriesModelBase<T>
     /// - Saving the model's configuration for future reference
     /// </para>
     /// </remarks>
-    public override ModelMetaData<T> GetModelMetaData()
+    public override ModelMetadata<T> GetModelMetadata()
     {
-        var metadata = new ModelMetaData<T>
+        var metadata = new ModelMetadata<T>
         {
             ModelType = ModelType.ProphetModel,
             AdditionalInfo = []

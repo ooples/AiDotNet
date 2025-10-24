@@ -182,9 +182,9 @@ public abstract class RegressionBase<T> : IRegression<T>
     /// comparing different models.
     /// </para>
     /// </remarks>
-    public virtual ModelMetaData<T> GetModelMetaData()
+    public virtual ModelMetadata<T> GetModelMetadata()
     {
-        return new ModelMetaData<T>
+        return new ModelMetadata<T>
         {
             ModelType = GetModelType(),
             FeatureCount = Coefficients.Length,
@@ -262,7 +262,7 @@ public abstract class RegressionBase<T> : IRegression<T>
             { "RegularizationOptions", Regularization.GetOptions() }
         };
 
-        var modelMetadata = GetModelMetaData();
+        var modelMetadata = GetModelMetadata();
         modelMetadata.ModelData = Encoding.UTF8.GetBytes(JsonConvert.SerializeObject(modelData));
 
         return Encoding.UTF8.GetBytes(JsonConvert.SerializeObject(modelMetadata));
@@ -288,7 +288,7 @@ public abstract class RegressionBase<T> : IRegression<T>
     public virtual void Deserialize(byte[] modelData)
     {
         var jsonString = Encoding.UTF8.GetString(modelData);
-        var modelMetadata = JsonConvert.DeserializeObject<ModelMetaData<T>>(jsonString);
+        var modelMetadata = JsonConvert.DeserializeObject<ModelMetadata<T>>(jsonString);
 
         if (modelMetadata == null || modelMetadata.ModelData == null)
         {

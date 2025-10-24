@@ -44,7 +44,7 @@ namespace AiDotNet.AutoML
         private readonly HashSet<InterpretationMethod> _enabledMethods = new();
         private Vector<int>? _sensitiveFeatures;
         private readonly List<FairnessMetric> _fairnessMetrics = new();
-        private IModel<Tensor<T>, Tensor<T>, ModelMetaData<T>>? _baseModel;
+        private IModel<Tensor<T>, Tensor<T>, ModelMetadata<T>>? _baseModel;
 
         public ModelType Type => ModelType.NeuralNetwork;
         public string[] FeatureNames { get; set; } = Array.Empty<string>();
@@ -544,9 +544,9 @@ namespace AiDotNet.AutoML
             return clone;
         }
 
-        public ModelMetaData<T> GetModelMetaData()
+        public ModelMetadata<T> GetModelMetadata()
         {
-            return new ModelMetaData<T>
+            return new ModelMetadata<T>
             {
                 ModelType = ModelType.NeuralNetwork,
                 Description = "Differentiable Architecture Search SuperNet",
@@ -1126,7 +1126,7 @@ namespace AiDotNet.AutoML
         /// <summary>
         /// Sets the base model for interpretability analysis.
         /// </summary>
-        public virtual void SetBaseModel(IModel<Tensor<T>, Tensor<T>, ModelMetaData<T>> model)
+        public virtual void SetBaseModel(IModel<Tensor<T>, Tensor<T>, ModelMetadata<T>> model)
         {
             _baseModel = model ?? throw new ArgumentNullException(nameof(model));
         }

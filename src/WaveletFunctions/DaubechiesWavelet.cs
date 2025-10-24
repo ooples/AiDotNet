@@ -1,4 +1,4 @@
-﻿namespace AiDotNet.WaveletFunctions;
+namespace AiDotNet.WaveletFunctions;
 
 /// <summary>
 /// Implements Daubechies wavelets, which are a family of orthogonal wavelets characterized by
@@ -115,7 +115,7 @@ public class DaubechiesWavelet<T> : IWaveletFunction<T>
     /// Instead, they're defined implicitly through their scaling coefficients and a
     /// recursive relationship called the two-scale relation:
     /// 
-    /// φ(t) = Σ h_k · φ(2t-k)
+    /// f(t) = S h_k � f(2t-k)
     /// 
     /// This method approximates the wavelet value using:
     /// 1. The cascade algorithm to compute the scaling function values
@@ -160,7 +160,7 @@ public class DaubechiesWavelet<T> : IWaveletFunction<T>
     /// when no explicit formula exists.
     /// 
     /// The scaling function satisfies a two-scale relation:
-    /// φ(t) = Σ h_k · φ(2t-k)
+    /// f(t) = S h_k � f(2t-k)
     /// 
     /// This is a recursive definition, which makes exact calculation challenging.
     /// The cascade algorithm solves this by:
@@ -300,7 +300,7 @@ public class DaubechiesWavelet<T> : IWaveletFunction<T>
     /// For Daubechies wavelets, these coefficients are derived from the scaling coefficients using
     /// the quadrature mirror filter relationship:
     /// 
-    /// g[n] = (-1)^n · h[L-1-n]
+    /// g[n] = (-1)^n � h[L-1-n]
     /// 
     /// Where:
     /// - g[n] are the wavelet coefficients
@@ -332,10 +332,10 @@ public class DaubechiesWavelet<T> : IWaveletFunction<T>
     /// 
     /// Currently, it implements the coefficients for the D4 wavelet (order=4), which are:
     /// 
-    /// h[0] = (1+√3)/(4√2)
-    /// h[1] = (3+√3)/(4√2)
-    /// h[2] = (3-√3)/(4√2)
-    /// h[3] = (1-√3)/(4√2)
+    /// h[0] = (1+v3)/(4v2)
+    /// h[1] = (3+v3)/(4v2)
+    /// h[2] = (3-v3)/(4v2)
+    /// h[3] = (1-v3)/(4v2)
     /// 
     /// These specific values were derived by Ingrid Daubechies to satisfy several
     /// mathematical conditions:
@@ -373,7 +373,7 @@ public class DaubechiesWavelet<T> : IWaveletFunction<T>
     /// using the quadrature mirror filter relationship.
     /// 
     /// The formula used is:
-    /// g[n] = (-1)^n · h[L-1-n]
+    /// g[n] = (-1)^n � h[L-1-n]
     /// 
     /// Where:
     /// - g[n] are the wavelet coefficients

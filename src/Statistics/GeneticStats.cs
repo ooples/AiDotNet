@@ -1,4 +1,4 @@
-﻿namespace AiDotNet.Statistics;
+namespace AiDotNet.Statistics;
 
 /// <summary>
 /// Represents statistics about the evolutionary process.

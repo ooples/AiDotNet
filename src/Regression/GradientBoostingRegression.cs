@@ -349,9 +349,9 @@ public class GradientBoostingRegression<T> : AsyncDecisionTreeRegressionBase<T>
     /// ```
     /// </para>
     /// </remarks>
-    public override ModelMetaData<T> GetModelMetaData()
+    public override ModelMetadata<T> GetModelMetadata()
     {
-        return new ModelMetaData<T>
+        return new ModelMetadata<T>
         {
             ModelType = ModelType.GradientBoosting,
             AdditionalInfo = new Dictionary<string, object>

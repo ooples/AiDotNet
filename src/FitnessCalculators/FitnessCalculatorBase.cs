@@ -1,4 +1,4 @@
-﻿namespace AiDotNet.FitnessCalculators;
+namespace AiDotNet.FitnessCalculators;
 
 /// <summary>
 /// Base class for all fitness calculators that evaluate how well a model performs.
