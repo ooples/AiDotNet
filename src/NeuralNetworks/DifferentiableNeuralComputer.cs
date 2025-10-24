@@ -301,6 +301,11 @@ public class DifferentiableNeuralComputer<T> : NeuralNetworkBase<T>
     private ILossFunction<T> _lossFunction;
 
     /// <summary>
+    /// Optimizer instance that persists across training steps to maintain internal state.
+    /// </summary>
+    private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer;
+
+    /// <summary>
     /// Initializes a new instance of the <see cref="DifferentiableNeuralComputer{T}"/> class with the specified parameters.
     /// </summary>
     /// <param name="architecture">The neural network architecture configuration.</param>
@@ -672,15 +677,15 @@ public class DifferentiableNeuralComputer<T> : NeuralNetworkBase<T>
         
         // Apply gradient clipping to prevent exploding gradients
         parameterGradients = ClipGradient(parameterGradients);
-        
-        // Create optimizer (here we use a simple gradient descent optimizer)
-        var optimizer = new GradientDescentOptimizer<T, Tensor<T>, Tensor<T>>();
-        
+
+        // Lazy initialize optimizer to preserve internal state across training steps
+        _optimizer ??= new GradientDescentOptimizer<T, Tensor<T>, Tensor<T>>(this);
+
         // Get current parameters
         Vector<T> currentParameters = GetParameters();
-        
+
         // Update parameters using the optimizer
-        Vector<T> updatedParameters = optimizer.UpdateParameters(currentParameters, parameterGradients);
+        Vector<T> updatedParameters = _optimizer.UpdateParameters(currentParameters, parameterGradients);
         
         // Apply updated parameters
         UpdateParameters(updatedParameters);
