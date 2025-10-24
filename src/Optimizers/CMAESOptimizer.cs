@@ -57,21 +57,17 @@ public class CMAESOptimizer<T, TInput, TOutput> : OptimizerBase<T, TInput, TOutp
     /// <summary>
     /// Initializes a new instance of the CMAESOptimizer class.
     /// </summary>
+    /// <param name="model">The model to be optimized.</param>
     /// <param name="options">The options for configuring the CMA-ES algorithm.</param>
-    /// <param name="predictionOptions">Options for prediction statistics.</param>
-    /// <param name="modelOptions">Options for model statistics.</param>
-    /// <param name="modelEvaluator">The model evaluator to use.</param>
-    /// <param name="fitDetector">The fit detector to use.</param>
-    /// <param name="fitnessCalculator">The fitness calculator to use.</param>
-    /// <param name="modelCache">The model cache to use.</param>
     /// <remarks>
     /// <para><b>For Beginners:</b> This constructor sets up the CMA-ES optimizer with its initial configuration.
     /// You can customize various aspects of how it works, or use default settings.
     /// </para>
     /// </remarks>
     public CMAESOptimizer(
+        IFullModel<T, TInput, TOutput> model,
         CMAESOptimizerOptions<T, TInput, TOutput>? options = null)
-        : base(options ?? new())
+        : base(model, options ?? new())
     {
         _options = options ?? new CMAESOptimizerOptions<T, TInput, TOutput>();
         _population = Matrix<T>.Empty();
@@ -123,7 +119,7 @@ public class CMAESOptimizer<T, TInput, TOutput> : OptimizerBase<T, TInput, TOutp
 
         InitializeAdaptiveParameters();
         int dimensions = InputHelper<T, TInput>.GetInputSize(inputData.XTrain);
-        var initialSolution = InitializeRandomSolution(inputData.XTrain);
+        var initialSolution = Model.DeepCopy();
         _mean = initialSolution.GetParameters();
         _C = Matrix<T>.CreateIdentity(dimensions);
         _pc = new Vector<T>(dimensions);
