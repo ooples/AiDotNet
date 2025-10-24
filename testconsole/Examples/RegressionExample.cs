@@ -52,18 +52,6 @@ public class RegressionExample
             // Create and configure the model builder
             var modelBuilder = new PredictionModelBuilder<double, Matrix<double>, Vector<double>>();
 
-            // Configure Adam optimizer for training
-            var adamOptions = new AdamOptimizerOptions<double, Matrix<double>, Vector<double>>
-            {
-                LearningRate = 0.01,
-                MaxIterations = 1000,
-                Beta1 = 0.9,
-                Beta2 = 0.999,
-                Epsilon = 1e-8
-            };
-
-            var optimizer = new AdamOptimizer<double, Matrix<double>, Vector<double>>(adamOptions);
-
             // Use MultipleRegression since we have multiple input features
             var regressionOptions = new RegressionOptions<double>
             {
@@ -72,7 +60,6 @@ public class RegressionExample
 
             // Build a multiple regression model
             var model = modelBuilder
-                .ConfigureOptimizer(optimizer)
                 .ConfigureModel(new MultipleRegression<double>(regressionOptions))
                 .Build(houseFeatures, housePrices);
 

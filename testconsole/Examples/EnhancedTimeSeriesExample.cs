@@ -385,15 +385,6 @@ public class EnhancedTimeSeriesExample
     {
         var modelBuilder = new PredictionModelBuilder<double, Matrix<double>, Vector<double>>();
 
-        // Configure Adam optimizer
-        var adamOptions = new AdamOptimizerOptions<double, Matrix<double>, Vector<double>>
-        {
-            LearningRate = 0.01,
-            MaxIterations = 1000,
-            Tolerance = 1e-6
-        };
-        var optimizer = new AdamOptimizer<double, Matrix<double>, Vector<double>>(adamOptions);
-
         // Configure Prophet model options
         var prophetOptions = new ProphetOptions<double, Matrix<double>, Vector<double>>
         {
@@ -404,7 +395,6 @@ public class EnhancedTimeSeriesExample
 
         // Build and return the model
         return modelBuilder
-            .ConfigureOptimizer(optimizer)
             .ConfigureModel(new ProphetModel<double, Matrix<double>, Vector<double>>(prophetOptions))
             .Build(features, target);
     }
@@ -414,15 +404,6 @@ public class EnhancedTimeSeriesExample
         Matrix<double> features, Vector<double> target)
     {
         var modelBuilder = new PredictionModelBuilder<double, Matrix<double>, Vector<double>>();
-
-        // Configure Adam optimizer
-        var adamOptions = new AdamOptimizerOptions<double, Matrix<double>, Vector<double>>
-        {
-            LearningRate = 0.01,
-            MaxIterations = 1000,
-            Tolerance = 1e-6
-        };
-        var optimizer = new AdamOptimizer<double, Matrix<double>, Vector<double>>(adamOptions);
 
         // Configure ARIMA model options
         var arimaOptions = new ARIMAOptions<double>
@@ -434,7 +415,6 @@ public class EnhancedTimeSeriesExample
 
         // Build and return the model
         return modelBuilder
-            .ConfigureOptimizer(optimizer)
             .ConfigureModel(new ARIMAModel<double>(arimaOptions))
             .Build(features, target);
     }
@@ -444,15 +424,6 @@ public class EnhancedTimeSeriesExample
         Matrix<double> features, Vector<double> target)
     {
         var modelBuilder = new PredictionModelBuilder<double, Matrix<double>, Vector<double>>();
-
-        // Configure Adam optimizer
-        var adamOptions = new AdamOptimizerOptions<double, Matrix<double>, Vector<double>>
-        {
-            LearningRate = 0.01,
-            MaxIterations = 1000,
-            Tolerance = 1e-6
-        };
-        var optimizer = new AdamOptimizer<double, Matrix<double>, Vector<double>>(adamOptions);
 
         // Configure Exponential Smoothing model options
         var esOptions = new ExponentialSmoothingOptions<double>
@@ -465,7 +436,6 @@ public class EnhancedTimeSeriesExample
 
         // Build and return the model
         return modelBuilder
-            .ConfigureOptimizer(optimizer)
             .ConfigureModel(new ExponentialSmoothingModel<double>(esOptions))
             .Build(features, target);
     }
