@@ -42,10 +42,12 @@ public class GradientDescentOptimizer<T, TInput, TOutput> : GradientBasedOptimiz
     /// will be, and how you'll adjust your path to avoid getting stuck in small dips.
     /// </para>
     /// </remarks>
+    /// <param name="model">The model to optimize.</param>
     /// <param name="options">Options for the Gradient Descent optimizer.</param>
     public GradientDescentOptimizer(
+        IFullModel<T, TInput, TOutput> model,
         GradientDescentOptimizerOptions<T, TInput, TOutput>? options = null)
-        : base(options ?? new GradientDescentOptimizerOptions<T, TInput, TOutput>())
+        : base(model, options ?? new GradientDescentOptimizerOptions<T, TInput, TOutput>())
     {
         _gdOptions = options ?? new GradientDescentOptimizerOptions<T, TInput, TOutput>();
         _regularization = _gdOptions.Regularization ?? CreateRegularization(_gdOptions);
