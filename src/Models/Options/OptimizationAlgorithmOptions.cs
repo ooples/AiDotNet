@@ -1,3 +1,5 @@
+using AiDotNet.Enums;
+
 namespace AiDotNet.Models.Options;
 
 /// <summary>
@@ -252,6 +254,86 @@ public class OptimizationAlgorithmOptions<T, TInput, TOutput> : ModelOptions
     /// it's close enough to the best answer and stops searching.</para>
     /// </remarks>
     public double Tolerance { get; set; } = 1e-6;
+
+    /// <summary>
+    /// Gets or sets the optimization mode (feature selection, parameter tuning, or both).
+    /// </summary>
+    /// <value>The optimization mode, defaulting to Both.</value>
+    /// <remarks>
+    /// <para>
+    /// OptimizationMode determines what aspects of the model the optimizer will modify.
+    /// FeatureSelectionOnly only selects which features to use, ParametersOnly only adjusts model parameters,
+    /// and Both allows the optimizer to do both.
+    /// </para>
+    /// <para><b>For Beginners:</b> This controls what the optimizer is allowed to change. It can choose
+    /// which features (input variables) to use, adjust the model's internal settings, or do both. The default
+    /// is 'Both', which gives the optimizer maximum flexibility to improve your model.</para>
+    /// </remarks>
+    public OptimizationMode OptimizationMode { get; set; } = OptimizationMode.Both;
+
+    /// <summary>
+    /// Gets or sets the scale factor for parameter adjustments during optimization.
+    /// </summary>
+    /// <value>The parameter adjustment scale, defaulting to 0.1.</value>
+    /// <remarks>
+    /// <para>
+    /// ParameterAdjustmentScale controls how much model parameters are changed during each perturbation.
+    /// Larger values result in bigger parameter changes, which can speed up exploration but may overshoot
+    /// optimal values. Smaller values make smaller changes, leading to more precise but slower optimization.
+    /// </para>
+    /// <para><b>For Beginners:</b> This controls how big the changes are when the optimizer adjusts your model's
+    /// parameters. A value of 0.1 means parameters change by about 10%. Increase this if optimization is too slow,
+    /// decrease it if the optimizer seems to be overshooting good solutions.</para>
+    /// </remarks>
+    public T ParameterAdjustmentScale { get; set; } = NumOps.FromDouble(0.1);
+
+    /// <summary>
+    /// Gets or sets the probability of flipping the sign of a parameter during perturbation.
+    /// </summary>
+    /// <value>The sign flip probability, defaulting to 0.1 (10% chance).</value>
+    /// <remarks>
+    /// <para>
+    /// SignFlipProbability determines how often parameter signs are randomly flipped during optimization.
+    /// This helps the optimizer explore different regions of the solution space by allowing parameters to
+    /// change direction. Value must be between 0 and 1.
+    /// </para>
+    /// <para><b>For Beginners:</b> Sometimes the optimizer tries flipping a parameter from positive to negative
+    /// (or vice versa) to see if that improves the model. This setting controls how often that happens.
+    /// A value of 0.1 means there's a 10% chance of flipping each time.</para>
+    /// </remarks>
+    public double SignFlipProbability { get; set; } = 0.1;
+
+    /// <summary>
+    /// Gets or sets the probability of selecting a feature during feature selection mode.
+    /// </summary>
+    /// <value>The feature selection probability, defaulting to 0.5 (50% chance).</value>
+    /// <remarks>
+    /// <para>
+    /// FeatureSelectionProbability controls how likely each feature is to be included when the optimizer
+    /// is performing feature selection. Higher values mean more features will typically be selected, while
+    /// lower values result in sparser feature sets. Value must be between 0 and 1.
+    /// </para>
+    /// <para><b>For Beginners:</b> When the optimizer is choosing which features (input variables) to use,
+    /// this setting controls how likely each one is to be included. A value of 0.5 means each feature has
+    /// a 50/50 chance of being selected. Increase this to use more features, decrease it to use fewer.</para>
+    /// </remarks>
+    public double FeatureSelectionProbability { get; set; } = 0.5;
+
+    /// <summary>
+    /// Gets or sets the probability of adjusting a parameter during parameter tuning mode.
+    /// </summary>
+    /// <value>The parameter adjustment probability, defaulting to 0.3 (30% chance).</value>
+    /// <remarks>
+    /// <para>
+    /// ParameterAdjustmentProbability determines how likely each parameter is to be modified during
+    /// parameter tuning. Lower values result in more conservative updates (fewer parameters changed),
+    /// while higher values make more aggressive updates. Value must be between 0 and 1.
+    /// </para>
+    /// <para><b>For Beginners:</b> When the optimizer is adjusting model parameters, this controls how many
+    /// of them get changed at once. A value of 0.3 means each parameter has a 30% chance of being adjusted.
+    /// Lower values make smaller, more careful changes; higher values make bigger, bolder changes.</para>
+    /// </remarks>
+    public double ParameterAdjustmentProbability { get; set; } = 0.3;
 
     /// <summary>
     /// Gets or sets the options for prediction statistics calculation.

@@ -1,6 +1,7 @@
 global using AiDotNet.Models.Inputs;
 global using AiDotNet.Evaluation;
 global using AiDotNet.Caching;
+global using AiDotNet.Enums;
 using Newtonsoft.Json;
 
 namespace AiDotNet.Optimizers;
