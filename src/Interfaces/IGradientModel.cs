@@ -1,4 +1,4 @@
-﻿namespace AiDotNet.Interfaces;
+namespace AiDotNet.Interfaces;
 
 /// <summary>
 /// Represents a gradient for optimization algorithms.

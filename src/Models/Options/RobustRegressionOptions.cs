@@ -1,4 +1,4 @@
-﻿namespace AiDotNet.Models.Options;
+namespace AiDotNet.Models.Options;
 
 /// <summary>
 /// Configuration options for robust regression models, which are designed to be less sensitive

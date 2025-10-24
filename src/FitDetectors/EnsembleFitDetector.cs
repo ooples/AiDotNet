@@ -1,4 +1,4 @@
-﻿namespace AiDotNet.FitDetectors;
+namespace AiDotNet.FitDetectors;
 
 /// <summary>
 /// A fit detector that combines the results of multiple individual fit detectors to provide a more robust assessment.
@@ -135,9 +135,9 @@ public class EnsembleFitDetector<T, TInput, TOutput> : FitDetectorBase<T, TInput
     /// <para>
     /// The mapping from average to fit type uses these thresholds:
     /// <list type="bullet">
-    /// <item><description>≤ 1.5: Very Poor Fit</description></item>
-    /// <item><description>≤ 2.5: Poor Fit</description></item>
-    /// <item><description>≤ 3.5: Moderate Fit</description></item>
+    /// <item><description>= 1.5: Very Poor Fit</description></item>
+    /// <item><description>= 2.5: Poor Fit</description></item>
+    /// <item><description>= 3.5: Moderate Fit</description></item>
     /// <item><description>> 3.5: Good Fit</description></item>
     /// </list>
     /// </para>

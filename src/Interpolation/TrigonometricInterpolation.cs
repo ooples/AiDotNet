@@ -1,4 +1,4 @@
-﻿namespace AiDotNet.Interpolation;
+namespace AiDotNet.Interpolation;
 
 /// <summary>
 /// Implements trigonometric interpolation for periodic data using Fourier series.
@@ -121,8 +121,8 @@ public class TrigonometricInterpolation<T> : IInterpolation<T>
     /// cosine waves) that was calculated to fit your data.
     /// </para>
     /// <para>
-    /// The formula looks like: y = a₀ + a₁cos(2πx/P) + b₁sin(2πx/P) + a₂cos(4πx/P) + b₂sin(4πx/P) + ...
-    /// where P is the period, and a₀, a₁, b₁, etc. are the coefficients calculated from your data.
+    /// The formula looks like: y = a0 + a1cos(2px/P) + b1sin(2px/P) + a2cos(4px/P) + b2sin(4px/P) + ...
+    /// where P is the period, and a0, a1, b1, etc. are the coefficients calculated from your data.
     /// </para>
     /// <para>
     /// Since this is a periodic function, you can even ask for x-values outside your original data range,

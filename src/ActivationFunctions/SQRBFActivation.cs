@@ -1,4 +1,4 @@
-ï»¿namespace AiDotNet.ActivationFunctions;
+namespace AiDotNet.ActivationFunctions;
 
 /// <summary>
 /// Implements the Squared Radial Basis Function (SQRBF) activation function.
@@ -6,7 +6,7 @@
 /// <typeparam name="T">The numeric data type used for calculations.</typeparam>
 /// <remarks>
 /// <para>
-/// The SQRBF activation function is defined as f(x) = exp(-Î² * xÂ²), where Î² is a parameter that controls
+/// The SQRBF activation function is defined as f(x) = exp(-ß * x²), where ß is a parameter that controls
 /// the width of the Gaussian bell curve. This function outputs values between 0 and 1, with the maximum value
 /// of 1 occurring when the input is 0, and values approaching 0 as the input moves away from 0 in either direction.
 /// </para>
@@ -17,9 +17,9 @@
 /// 
 /// Think of SQRBF like a "proximity detector" - it gives its highest output (1.0) when the input is exactly 0,
 /// and progressively smaller outputs as the input moves away from 0 in either direction (positive or negative).
-/// The Î² parameter controls how quickly the output drops off as you move away from 0:
-/// - A larger Î² makes the bell curve narrower (drops off quickly)
-/// - A smaller Î² makes the bell curve wider (drops off slowly)
+/// The ß parameter controls how quickly the output drops off as you move away from 0:
+/// - A larger ß makes the bell curve narrower (drops off quickly)
+/// - A smaller ß makes the bell curve wider (drops off slowly)
 /// 
 /// This is useful in machine learning when you want to measure how close an input is to a specific reference point.
 /// </para>
@@ -72,7 +72,7 @@ public class SQRBFActivation<T> : ActivationFunctionBase<T>
     /// <returns>The result of applying the SQRBF function to the input.</returns>
     /// <remarks>
     /// <para>
-    /// The SQRBF function is calculated as f(x) = exp(-Î² * xÂ²), where Î² is the width parameter.
+    /// The SQRBF function is calculated as f(x) = exp(-ß * x²), where ß is the width parameter.
     /// </para>
     /// <para>
     /// <b>For Beginners:</b> This method takes an input value and returns a value between 0 and 1:
@@ -89,7 +89,7 @@ public class SQRBFActivation<T> : ActivationFunctionBase<T>
     /// </remarks>
     public override T Activate(T input)
     {
-        // f(x) = exp(-Î² * x^2)
+        // f(x) = exp(-ß * x^2)
         T square = NumOps.Multiply(input, input);
         T negBetaSquare = NumOps.Negate(NumOps.Multiply(_beta, square));
 
@@ -103,7 +103,7 @@ public class SQRBFActivation<T> : ActivationFunctionBase<T>
     /// <returns>The derivative of the SQRBF function at the input value.</returns>
     /// <remarks>
     /// <para>
-    /// The derivative of the SQRBF function is calculated as f'(x) = -2Î²x * exp(-Î² * xÂ²).
+    /// The derivative of the SQRBF function is calculated as f'(x) = -2ßx * exp(-ß * x²).
     /// This derivative is used during the backpropagation step of neural network training.
     /// </para>
     /// <para>
@@ -120,7 +120,7 @@ public class SQRBFActivation<T> : ActivationFunctionBase<T>
     /// </remarks>
     public override T Derivative(T input)
     {
-        // f'(x) = -2Î²x * exp(-Î² * x^2)
+        // f'(x) = -2ßx * exp(-ß * x^2)
         T activationValue = Activate(input);
         T negTwoBeta = NumOps.Negate(NumOps.Multiply(NumOps.FromDouble(2), _beta));
 

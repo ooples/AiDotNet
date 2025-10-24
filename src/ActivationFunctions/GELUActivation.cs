@@ -1,4 +1,4 @@
-ï»¿namespace AiDotNet.ActivationFunctions;
+namespace AiDotNet.ActivationFunctions;
 
 /// <summary>
 /// Implements the Gaussian Error Linear Unit (GELU) activation function for neural networks.
@@ -50,12 +50,12 @@ public class GELUActivation<T> : ActivationFunctionBase<T>
     /// with sharp transitions (like ReLU).
     /// 
     /// The mathematical formula used is an approximation:
-    /// GELU(x) = 0.5 * x * (1 + tanh(sqrt(2/Ï€) * (x + 0.044715 * xÂ³)))
+    /// GELU(x) = 0.5 * x * (1 + tanh(sqrt(2/p) * (x + 0.044715 * x³)))
     /// </para>
     /// </remarks>
     public override T Activate(T input)
     {
-        // GELU(x) = 0.5 * x * (1 + tanh(sqrt(2/Ï€) * (x + 0.044715 * x^3)))
+        // GELU(x) = 0.5 * x * (1 + tanh(sqrt(2/p) * (x + 0.044715 * x^3)))
         T sqrt2OverPi = NumOps.Sqrt(NumOps.FromDouble(2.0 / Math.PI));
         T x3 = NumOps.Multiply(NumOps.Multiply(input, input), input);
         T inner = NumOps.Add(input, NumOps.Multiply(NumOps.FromDouble(0.044715), x3));
@@ -85,10 +85,10 @@ public class GELUActivation<T> : ActivationFunctionBase<T>
     /// can become permanently inactive during training.
     /// 
     /// The mathematical formula is complex but has been simplified to:
-    /// d/dx GELU(x) = 0.5 * tanh(0.0356774 * xÂ³ + 0.797885 * x) + 
-    ///                (0.0535161 * xÂ³ + 0.398942 * x) * sechÂ²(0.0356774 * xÂ³ + 0.797885 * x) + 0.5
+    /// d/dx GELU(x) = 0.5 * tanh(0.0356774 * x³ + 0.797885 * x) + 
+    ///                (0.0535161 * x³ + 0.398942 * x) * sech²(0.0356774 * x³ + 0.797885 * x) + 0.5
     /// 
-    /// Where sechÂ²(x) = 1 - tanhÂ²(x)
+    /// Where sech²(x) = 1 - tanh²(x)
     /// </para>
     /// </remarks>
     public override T Derivative(T input)

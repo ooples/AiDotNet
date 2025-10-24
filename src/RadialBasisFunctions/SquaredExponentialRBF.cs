@@ -1,13 +1,13 @@
-﻿namespace AiDotNet.RadialBasisFunctions;
+namespace AiDotNet.RadialBasisFunctions;
 
 /// <summary>
-/// Implements a Squared Exponential (Gaussian) Radial Basis Function (RBF) of the form exp(-(εr)²).
+/// Implements a Squared Exponential (Gaussian) Radial Basis Function (RBF) of the form exp(-(er)�).
 /// </summary>
 /// <typeparam name="T">The numeric type used for calculations, typically float or double.</typeparam>
 /// <remarks>
 /// <para>
 /// This class provides an implementation of a Radial Basis Function (RBF) that uses a squared exponential form
-/// of φ(r) = exp(-(εr)²), where r is the radial distance and ε (epsilon) is a shape parameter
+/// of f(r) = exp(-(er)�), where r is the radial distance and e (epsilon) is a shape parameter
 /// controlling the width of the function. The squared exponential RBF, also known as the Gaussian RBF,
 /// is one of the most widely used RBFs due to its smoothness properties. It is infinitely differentiable
 /// and has exponential decay, making it suitable for a wide range of applications in machine learning,
@@ -26,7 +26,7 @@
 /// a mountain peak - it's at its highest at the center point (with a value of 1) and gradually decreases
 /// in all directions, eventually approaching zero but never quite reaching it.
 /// 
-/// This RBF has a parameter called epsilon (ε) that controls the width of the bell curve:
+/// This RBF has a parameter called epsilon (e) that controls the width of the bell curve:
 /// - A larger epsilon value creates a narrower bell curve that drops off quickly with distance
 /// - A smaller epsilon value creates a wider bell curve that extends further
 /// 
@@ -85,20 +85,20 @@ public class SquaredExponentialRBF<T> : IRadialBasisFunction<T>
     /// Computes the value of the Squared Exponential Radial Basis Function for a given radius.
     /// </summary>
     /// <param name="r">The radius or distance from the center point.</param>
-    /// <returns>The computed function value exp(-(εr)²).</returns>
+    /// <returns>The computed function value exp(-(er)�).</returns>
     /// <remarks>
     /// <para>
     /// This method calculates the value of the Squared Exponential RBF for a given radius r. The formula used is
-    /// exp(-(εr)²), which decreases exponentially with the square of the distance. The function equals 1
+    /// exp(-(er)�), which decreases exponentially with the square of the distance. The function equals 1
     /// at r = 0 and approaches 0 as r approaches infinity.
     /// </para>
     /// <para><b>For Beginners:</b> This method computes the "height" or "value" of the Squared Exponential function
     /// at a specific distance (r) from the center.
     /// 
     /// The calculation involves:
-    /// 1. Multiplying the distance (r) by the epsilon parameter (εr)
-    /// 2. Squaring this product ((εr)²)
-    /// 3. Negating this squared value (-(εr)²)
+    /// 1. Multiplying the distance (r) by the epsilon parameter (er)
+    /// 2. Squaring this product ((er)�)
+    /// 3. Negating this squared value (-(er)�)
     /// 4. Computing the exponential function (e raised to this power)
     /// 
     /// The result is a single number representing the function's value at the given distance.
@@ -124,7 +124,7 @@ public class SquaredExponentialRBF<T> : IRadialBasisFunction<T>
     /// <remarks>
     /// <para>
     /// This method calculates the derivative of the Squared Exponential RBF with respect to the radius r.
-    /// The formula for the derivative is -2ε²r * exp(-(εr)²), which is always negative for positive r and ε,
+    /// The formula for the derivative is -2e�r * exp(-(er)�), which is always negative for positive r and e,
     /// indicating that the function always decreases with distance.
     /// </para>
     /// <para><b>For Beginners:</b> This method computes how fast the function's value changes
@@ -143,33 +143,33 @@ public class SquaredExponentialRBF<T> : IRadialBasisFunction<T>
     /// </remarks>
     public T ComputeDerivative(T r)
     {
-        // Derivative with respect to r: -2ε²r * exp(-(εr)²)
+        // Derivative with respect to r: -2e�r * exp(-(er)�)
         
-        // Calculate εr
+        // Calculate er
         T epsilonR = _numOps.Multiply(_epsilon, r);
         
-        // Calculate (εr)²
+        // Calculate (er)�
         T squaredEpsilonR = _numOps.Multiply(epsilonR, epsilonR);
         
-        // Calculate -(εr)²
+        // Calculate -(er)�
         T negativeSquaredEpsilonR = _numOps.Negate(squaredEpsilonR);
         
-        // Calculate exp(-(εr)²)
+        // Calculate exp(-(er)�)
         T expTerm = _numOps.Exp(negativeSquaredEpsilonR);
         
-        // Calculate ε²
+        // Calculate e�
         T epsilonSquared = _numOps.Multiply(_epsilon, _epsilon);
         
-        // Calculate 2ε²r
+        // Calculate 2e�r
         T twoEpsilonSquaredR = _numOps.Multiply(
             _numOps.Multiply(_numOps.FromDouble(2.0), epsilonSquared),
             r
         );
         
-        // Calculate -2ε²r
+        // Calculate -2e�r
         T negativeTwoEpsilonSquaredR = _numOps.Negate(twoEpsilonSquaredR);
         
-        // Return -2ε²r * exp(-(εr)²)
+        // Return -2e�r * exp(-(er)�)
         return _numOps.Multiply(negativeTwoEpsilonSquaredR, expTerm);
     }
     
@@ -181,7 +181,7 @@ public class SquaredExponentialRBF<T> : IRadialBasisFunction<T>
     /// <remarks>
     /// <para>
     /// This method calculates the derivative of the Squared Exponential RBF with respect to the shape parameter epsilon.
-    /// The formula for this derivative is -2εr² * exp(-(εr)²). The sign of this derivative depends on r: it is
+    /// The formula for this derivative is -2er� * exp(-(er)�). The sign of this derivative depends on r: it is
     /// negative for non-zero r, indicating that increasing epsilon decreases the function value at any non-zero radius.
     /// </para>
     /// <para><b>For Beginners:</b> This method calculates how the function's value would change
@@ -200,33 +200,33 @@ public class SquaredExponentialRBF<T> : IRadialBasisFunction<T>
     /// </remarks>
     public T ComputeWidthDerivative(T r)
     {
-        // Derivative with respect to ε: -2εr² * exp(-(εr)²)
+        // Derivative with respect to e: -2er� * exp(-(er)�)
         
-        // Calculate εr
+        // Calculate er
         T epsilonR = _numOps.Multiply(_epsilon, r);
         
-        // Calculate (εr)²
+        // Calculate (er)�
         T squaredEpsilonR = _numOps.Multiply(epsilonR, epsilonR);
         
-        // Calculate -(εr)²
+        // Calculate -(er)�
         T negativeSquaredEpsilonR = _numOps.Negate(squaredEpsilonR);
         
-        // Calculate exp(-(εr)²)
+        // Calculate exp(-(er)�)
         T expTerm = _numOps.Exp(negativeSquaredEpsilonR);
         
-        // Calculate r²
+        // Calculate r�
         T rSquared = _numOps.Multiply(r, r);
         
-        // Calculate 2εr²
+        // Calculate 2er�
         T twoEpsilonRSquared = _numOps.Multiply(
             _numOps.Multiply(_numOps.FromDouble(2.0), _epsilon),
             rSquared
         );
         
-        // Calculate -2εr²
+        // Calculate -2er�
         T negativeTwoEpsilonRSquared = _numOps.Negate(twoEpsilonRSquared);
         
-        // Return -2εr² * exp(-(εr)²)
+        // Return -2er� * exp(-(er)�)
         return _numOps.Multiply(negativeTwoEpsilonRSquared, expTerm);
     }
 }

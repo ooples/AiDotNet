@@ -1,4 +1,4 @@
-﻿namespace AiDotNet.Enums;
+namespace AiDotNet.Enums;
 
 /// <summary>
 /// Represents the types of modifications that can be applied to a model structure.

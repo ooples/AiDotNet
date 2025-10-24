@@ -1,4 +1,4 @@
-﻿namespace AiDotNet.ActivationFunctions;
+namespace AiDotNet.ActivationFunctions;
 
 /// <summary>
 /// Implements the Hard Tanh activation function for neural networks.
@@ -15,8 +15,8 @@
 /// 2. Less smooth but still useful for many neural network applications
 /// 
 /// The function works like this:
-/// - If input ≤ -1: output = -1
-/// - If input ≥ 1: output = 1
+/// - If input = -1: output = -1
+/// - If input = 1: output = 1
 /// - If -1 &lt; input &lt; 1: output = input (unchanged)
 /// 
 /// This creates a function that "clips" or "saturates" any input to the range [-1, 1],

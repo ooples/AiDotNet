@@ -727,9 +727,9 @@ public class VariationalAutoencoder<T> : NeuralNetworkBase<T>
     /// latent size, and layer configuration. This information is useful for model management, serialization,
     /// and transfer learning.
     /// </remarks>
-    public override ModelMetaData<T> GetModelMetaData()
+    public override ModelMetadata<T> GetModelMetadata()
     {
-        return new ModelMetaData<T>
+        return new ModelMetadata<T>
         {
             ModelType = ModelType.VariationalAutoencoder,
             AdditionalInfo = new Dictionary<string, object>

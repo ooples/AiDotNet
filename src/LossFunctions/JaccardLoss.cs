@@ -1,4 +1,4 @@
-﻿namespace AiDotNet.LossFunctions;
+namespace AiDotNet.LossFunctions;
 
 /// <summary>
 /// Implements the Jaccard loss function, commonly used for measuring dissimilarity between sets.
@@ -9,10 +9,10 @@
 /// <b>For Beginners:</b> Jaccard loss measures how dissimilar two sets are. It's calculated as 1 minus 
 /// the size of the intersection divided by the size of the union.
 /// 
-/// The formula is: 1 - |A ∩ B| / |A ∪ B|
+/// The formula is: 1 - |A n B| / |A ? B|
 /// Where:
-/// - A ∩ B is the intersection of sets A and B (elements in both)
-/// - A ∪ B is the union of sets A and B (elements in either)
+/// - A n B is the intersection of sets A and B (elements in both)
+/// - A ? B is the union of sets A and B (elements in either)
 /// 
 /// For continuous values (like probabilities), the intersection is the sum of the minimum values,
 /// and the union is the sum of the maximum values at each position.
@@ -106,7 +106,7 @@ public class JaccardLoss<T> : LossFunctionBase<T>
         {
             if (NumOps.GreaterThan(predicted[i], actual[i]))
             {
-                // If predicted > actual, derivative = (union - intersection) / union²
+                // If predicted > actual, derivative = (union - intersection) / union�
                 derivative[i] = NumOps.Divide(
                     NumOps.Subtract(union, intersection),
                     NumOps.Power(union, NumOps.FromDouble(2))
@@ -114,7 +114,7 @@ public class JaccardLoss<T> : LossFunctionBase<T>
             }
             else if (NumOps.LessThan(predicted[i], actual[i]))
             {
-                // If predicted < actual, derivative = -(union - intersection) / union²
+                // If predicted < actual, derivative = -(union - intersection) / union�
                 derivative[i] = NumOps.Negate(
                     NumOps.Divide(
                         NumOps.Subtract(union, intersection),

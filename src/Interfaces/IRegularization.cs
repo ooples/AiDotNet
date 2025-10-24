@@ -1,4 +1,4 @@
-﻿namespace AiDotNet.Interfaces;
+namespace AiDotNet.Interfaces;
 
 /// <summary>
 /// Defines methods for applying regularization techniques to machine learning models.

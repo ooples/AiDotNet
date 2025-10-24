@@ -451,9 +451,9 @@ public abstract class NonLinearRegressionBase<T> : INonLinearRegression<T>
     /// can be useful for understanding the model's complexity and for debugging purposes.
     /// </para>
     /// </remarks>
-    public virtual ModelMetaData<T> GetModelMetaData()
+    public virtual ModelMetadata<T> GetModelMetadata()
     {
-        var metadata = new ModelMetaData<T>
+        var metadata = new ModelMetadata<T>
         {
             ModelType = GetModelType(),
             AdditionalInfo = new Dictionary<string, object>

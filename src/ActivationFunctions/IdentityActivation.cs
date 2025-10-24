@@ -1,4 +1,4 @@
-﻿namespace AiDotNet.ActivationFunctions;
+namespace AiDotNet.ActivationFunctions;
 
 /// <summary>
 /// Implements the Identity activation function for neural networks.
@@ -9,8 +9,8 @@
 /// <b>For Beginners:</b> The Identity activation function is the simplest activation function - it returns exactly what you give it.
 /// 
 /// When you pass a value through this function:
-/// - Input of 2 → Output of 2
-/// - Input of -3.5 → Output of -3.5
+/// - Input of 2 ? Output of 2
+/// - Input of -3.5 ? Output of -3.5
 /// - And so on...
 /// 
 /// Think of it like a straight line on a graph where y = x.

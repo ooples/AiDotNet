@@ -1,4 +1,4 @@
-﻿namespace AiDotNet.Models.Options;
+namespace AiDotNet.Models.Options;
 
 /// <summary>
 /// Configuration options for the K-Nearest Neighbors algorithm, which makes predictions based on the

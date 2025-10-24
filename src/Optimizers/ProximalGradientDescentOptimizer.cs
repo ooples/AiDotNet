@@ -95,7 +95,7 @@ public class ProximalGradientDescentOptimizer<T, TInput, TOutput> : GradientBase
     /// Initializes a new instance of the <see cref="ProximalGradientDescentOptimizer{T}"/> class with the specified options and components.
     /// </summary>
     /// <param name="model">The model to optimize.</param>
-    /// <param name="options">The Proximal Gradient Descent optimization options, or null to use default options.</param>
+    /// <param name="options">The proximal gradient descent optimization options, or null to use default options.</param>
     /// <remarks>
     /// <para>
     /// This constructor creates a new proximal gradient descent optimizer with the specified options and components.
@@ -103,13 +103,13 @@ public class ProximalGradientDescentOptimizer<T, TInput, TOutput> : GradientBase
     /// regularization strategy, and adaptive parameters.
     /// </para>
     /// <para><b>For Beginners:</b> This is the starting point for creating a new optimizer.
-    /// 
+    ///
     /// Think of it like setting up equipment for a mountain hike:
     /// - You can provide custom settings (options) or use the default ones
     /// - You can provide specialized tools (evaluators, calculators) or use the basic ones
     /// - You can specify how to enforce boundaries (regularization) or use no boundaries
     /// - It gets everything ready so you can start the optimization process
-    /// 
+    ///
     /// The options control things like how fast to move, when to stop, and how to adapt during the journey.
     /// </para>
     /// </remarks>

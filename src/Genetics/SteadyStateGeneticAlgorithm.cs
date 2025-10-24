@@ -1,4 +1,4 @@
-﻿namespace AiDotNet.Genetics;
+namespace AiDotNet.Genetics;
 
 public class SteadyStateGeneticAlgorithm<T, TInput, TOutput> :
     StandardGeneticAlgorithm<T, TInput, TOutput>
@@ -70,7 +70,7 @@ public class SteadyStateGeneticAlgorithm<T, TInput, TOutput> :
         return sortedPopulation!;
     }
 
-    public override ModelMetaData<T> GetMetaData()
+    public override ModelMetadata<T> GetMetaData()
     {
         var metadata = base.GetMetaData();
         metadata.ModelType = ModelType.GeneticAlgorithmRegression;

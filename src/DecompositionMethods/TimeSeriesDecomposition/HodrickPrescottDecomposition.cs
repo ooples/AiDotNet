@@ -1,4 +1,4 @@
-﻿namespace AiDotNet.DecompositionMethods.TimeSeriesDecomposition;
+namespace AiDotNet.DecompositionMethods.TimeSeriesDecomposition;
 
 /// <summary>
 /// Implements the Hodrick-Prescott filter for decomposing time series data into trend and cyclical components.

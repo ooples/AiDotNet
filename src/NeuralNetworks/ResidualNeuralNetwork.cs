@@ -419,11 +419,11 @@ public class ResidualNeuralNetwork<T> : NeuralNetworkBase<T>
     /// - Reproducing your model setup later
     /// </para>
     /// </remarks>
-    public override ModelMetaData<T> GetModelMetaData()
+    public override ModelMetadata<T> GetModelMetadata()
     {
         var layerSizes = Layers.Select(layer => layer.GetOutputShape()[0]).ToList();
         
-        return new ModelMetaData<T>
+        return new ModelMetadata<T>
         {
             ModelType = ModelType.ResidualNeuralNetwork,
             AdditionalInfo = new Dictionary<string, object>

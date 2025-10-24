@@ -1,4 +1,4 @@
-﻿namespace AiDotNet.Enums;
+namespace AiDotNet.Enums;
 
 /// <summary>
 /// Represents different types of model fit quality and common issues in machine learning models.
