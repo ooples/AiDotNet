@@ -446,7 +446,7 @@ public class LiquidStateMachine<T> : NeuralNetworkBase<T>
         parameterGradients = ClipGradient(parameterGradients);
 
         // Create optimizer
-        var optimizer = new GradientDescentOptimizer<T, Tensor<T>, Tensor<T>>();
+        var optimizer = new GradientDescentOptimizer<T, Tensor<T>, Tensor<T>>(this);
 
         // Get current parameters
         Vector<T> currentParameters = GetParameters();

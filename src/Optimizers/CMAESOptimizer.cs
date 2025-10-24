@@ -57,6 +57,7 @@ public class CMAESOptimizer<T, TInput, TOutput> : OptimizerBase<T, TInput, TOutp
     /// <summary>
     /// Initializes a new instance of the CMAESOptimizer class.
     /// </summary>
+    /// <param name="model">The model to optimize.</param>
     /// <param name="options">The options for configuring the CMA-ES algorithm.</param>
     /// <param name="predictionOptions">Options for prediction statistics.</param>
     /// <param name="modelOptions">Options for model statistics.</param>
@@ -70,8 +71,9 @@ public class CMAESOptimizer<T, TInput, TOutput> : OptimizerBase<T, TInput, TOutp
     /// </para>
     /// </remarks>
     public CMAESOptimizer(
+        IFullModel<T, TInput, TOutput> model,
         CMAESOptimizerOptions<T, TInput, TOutput>? options = null)
-        : base(options ?? new())
+        : base(model, options ?? new())
     {
         _options = (CMAESOptimizerOptions<T, TInput, TOutput>)Options;
         _population = Matrix<T>.Empty();

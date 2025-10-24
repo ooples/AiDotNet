@@ -866,7 +866,7 @@ public class UnobservedComponentsModel<T, TInput, TOutput> : TimeSeriesModelBase
     private void OptimizeParameters(Matrix<T> x, Vector<T> y)
     {
         // Use the user-defined optimizer if provided, otherwise use LBFGSOptimizer as default
-        var optimizer = _ucOptions.Optimizer ?? new LBFGSOptimizer<T, Matrix<T>, Vector<T>>();
+        var optimizer = _ucOptions.Optimizer ?? new LBFGSOptimizer<T, Matrix<T>, Vector<T>>(this);
 
         // Prepare the optimization input data
         var inputData = new OptimizationInputData<T, Matrix<T>, Vector<T>>
@@ -1037,8 +1037,8 @@ public class UnobservedComponentsModel<T, TInput, TOutput> : TimeSeriesModelBase
     /// - RMSE (Root Mean Squared Error): The square root of MSE, which gives errors in the same units
     ///   as your original data. For example, if forecasting sales in dollars, RMSE is also in dollars.
     /// 
-    /// - R² (R-squared): The proportion of variance in the dependent variable explained by the model.
-    ///   Values range from 0 to 1, with higher values indicating better fit. An R² of 0.75 means
+    /// - Rï¿½ (R-squared): The proportion of variance in the dependent variable explained by the model.
+    ///   Values range from 0 to 1, with higher values indicating better fit. An Rï¿½ of 0.75 means
     ///   the model explains 75% of the variation in the data.
     /// 
     /// These metrics together provide a comprehensive assessment of model performance.

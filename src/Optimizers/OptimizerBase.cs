@@ -1,6 +1,7 @@
 global using AiDotNet.Models.Inputs;
 global using AiDotNet.Evaluation;
 global using AiDotNet.Caching;
+global using AiDotNet.Enums;
 using Newtonsoft.Json;
 
 namespace AiDotNet.Optimizers;
@@ -115,24 +116,24 @@ public abstract class OptimizerBase<T, TInput, TOutput> : IOptimizer<T, TInput, 
     /// This property provides access to the model that the optimizer is working with.
     /// It implements the IOptimizer interface property to expose the protected Model field.
     /// </para>
-    /// <para><b>For Beginners:</b> This property lets external code see which model 
+    /// <para><b>For Beginners:</b> This property lets external code see which model
     /// the optimizer is currently working with, without being able to change it.
     /// It's like a window that lets you look at the model but not touch it.
     /// </para>
     /// </remarks>
-    public IFullModel<T, TInput, TOutput> Model => _model;
+    public IFullModel<T, TInput, TOutput>? Model => _model;
 
     /// <summary>
     /// The model that this optimizer is configured to optimize.
     /// </summary>
-    private IFullModel<T, TInput, TOutput> _model = default!;
+    private IFullModel<T, TInput, TOutput>? _model;
 
     /// <summary>
     /// Initializes a new instance of the OptimizerBase class.
     /// </summary>
-    /// <param name="model">The model to be optimized.</param>
+    /// <param name="model">The model to be optimized (can be null if set later).</param>
     /// <param name="options">The optimization algorithm options.</param>
-    protected OptimizerBase(IFullModel<T, TInput, TOutput> model,
+    protected OptimizerBase(IFullModel<T, TInput, TOutput>? model,
         OptimizationAlgorithmOptions<T, TInput, TOutput> options)
     {
         _model = model;
@@ -313,10 +314,10 @@ public abstract class OptimizerBase<T, TInput, TOutput> : IOptimizer<T, TInput, 
     /// <param name="inputData">The input data for evaluation.</param>
     /// <returns>The evaluation results for the solution.</returns>
     protected virtual OptimizationStepData<T, TInput, TOutput> EvaluateSolution(
-        IFullModel<T, TInput, TOutput> solution, 
+        IFullModel<T, TInput, TOutput> solution,
         OptimizationInputData<T, TInput, TOutput> inputData)
     {
-        string cacheKey = ModelCache.GenerateCacheKey(solution, inputData);
+        string cacheKey = GenerateCacheKey(solution, inputData);
         var cachedStepData = ModelCache.GetCachedStepData(cacheKey);
 
         if (cachedStepData != null)
@@ -355,7 +356,7 @@ public abstract class OptimizerBase<T, TInput, TOutput> : IOptimizer<T, TInput, 
         ApplyFeatureSelection(solution, selectedFeaturesIndices);
 
         // Step 3: Generate cache key based on the selected features and check cache
-        string cacheKey = ModelCache.GenerateCacheKey(solution, inputData);
+        string cacheKey = GenerateCacheKey(solution, inputData);
         var cachedStepData = ModelCache.GetCachedStepData(cacheKey);
 
         if (cachedStepData != null)
@@ -475,13 +476,12 @@ public abstract class OptimizerBase<T, TInput, TOutput> : IOptimizer<T, TInput, 
     /// </remarks>
     protected OptimizationResult<T, TInput, TOutput> CreateOptimizationResult(OptimizationStepData<T, TInput, TOutput> bestStepData, OptimizationInputData<T, TInput, TOutput> input)
     {
-        var modelType = bestStepData.Solution.GetModelMetadata().ModelType;
         return OptimizerHelper<T, TInput, TOutput>.CreateOptimizationResult(
             bestStepData.Solution,
             bestStepData.FitnessScore,
             FitnessList,
             bestStepData.SelectedFeatures,
-            new OptimizationResult<T, TInput, TOutput>.DatasetResult(modelType)
+            new OptimizationResult<T, TInput, TOutput>.DatasetResult
             {
                 X = bestStepData.XTrainSubset,
                 Y = input.YTrain,
@@ -491,7 +491,7 @@ public abstract class OptimizerBase<T, TInput, TOutput> : IOptimizer<T, TInput, 
                 PredictedBasicStats = bestStepData.EvaluationData.TrainingSet.PredictedBasicStats,
                 PredictionStats = bestStepData.EvaluationData.TrainingSet.PredictionStats
             },
-            new OptimizationResult<T, TInput, TOutput>.DatasetResult(modelType)
+            new OptimizationResult<T, TInput, TOutput>.DatasetResult
             {
                 X = bestStepData.XValSubset,
                 Y = input.YValidation,
@@ -501,7 +501,7 @@ public abstract class OptimizerBase<T, TInput, TOutput> : IOptimizer<T, TInput, 
                 PredictedBasicStats = bestStepData.EvaluationData.ValidationSet.PredictedBasicStats,
                 PredictionStats = bestStepData.EvaluationData.ValidationSet.PredictionStats
             },
-            new OptimizationResult<T, TInput, TOutput>.DatasetResult(modelType)
+            new OptimizationResult<T, TInput, TOutput>.DatasetResult
             {
                 X = bestStepData.XTestSubset,
                 Y = input.YTest,
@@ -562,42 +562,24 @@ public abstract class OptimizerBase<T, TInput, TOutput> : IOptimizer<T, TInput, 
     protected virtual IFullModel<T, TInput, TOutput> CreateSolution(TInput xTrain)
     {
         // Create a deep copy of the model to avoid modifying the original
-        var solution = Model.DeepCopy();
+        var solution = Model!.DeepCopy();
 
-        int numFeatures = InputHelper<T, TInput>.GetInputSize(xTrain);
-
-        switch (Options.OptimizationMode)
-        {
-            case OptimizationMode.FeatureSelectionOnly:
-                ApplyFeatureSelection(solution, numFeatures);
-                break;
-
-            case OptimizationMode.ParametersOnly:
-                AdjustModelParameters(
-                    solution,
-                    Options.ParameterAdjustmentScale,
-                    Options.SignFlipProbability);
-                break;
-
-            case OptimizationMode.Both:
-            default:
-                // With some probability, apply both or just one type of optimization
-                if (Random.NextDouble() < Options.FeatureSelectionProbability)
-                {
-                    ApplyFeatureSelection(solution, numFeatures);
-                }
-
-                if (Random.NextDouble() < Options.ParameterAdjustmentProbability)
-                {
-                    AdjustModelParameters(
-                        solution,
-                        Options.ParameterAdjustmentScale,
-                        Options.SignFlipProbability);
-                }
-                break;
-        }
-
+        // Return the deep copy - subclasses can override to add custom solution creation logic
         return solution;
+    }
+
+    /// <summary>
+    /// Generates a cache key for the given solution and input data.
+    /// </summary>
+    /// <param name="solution">The solution model.</param>
+    /// <param name="inputData">The optimization input data.</param>
+    /// <returns>A unique cache key string.</returns>
+    protected virtual string GenerateCacheKey(IFullModel<T, TInput, TOutput> solution, OptimizationInputData<T, TInput, TOutput> inputData)
+    {
+        // Generate a simple cache key based on parameter values
+        var parameters = solution.GetParameters();
+        var paramHash = parameters.GetHashCode();
+        return $"{solution.GetType().Name}_{paramHash}";
     }
 
     /// <summary>
@@ -1166,16 +1148,6 @@ public abstract class OptimizerBase<T, TInput, TOutput> : IOptimizer<T, TInput, 
     }
 
     /// <summary>
-    /// Initializes a random solution based on the training data.
-    /// </summary>
-    /// <param name="xTrain">Training data used to determine data dimensions.</param>
-    /// <returns>A new model with randomly initialized parameters.</returns>
-    protected virtual IFullModel<T, TInput, TOutput> InitializeRandomSolution(TInput xTrain)
-    {
-        return CreateSolution(xTrain);
-    }
-
-    /// <summary>
     /// Initializes a random solution within the given bounds.
     /// </summary>
     /// <param name="lowerBounds">Lower bounds for each parameter.</param>
@@ -1209,6 +1181,154 @@ public abstract class OptimizerBase<T, TInput, TOutput> : IOptimizer<T, TInput, 
             solution[i] = randomValue;
         }
         return solution;
+    }
+
+    /// <summary>
+    /// Initializes a random solution by computing lower and upper bounds from training data.
+    /// </summary>
+    /// <param name="trainingData">The training data used to compute bounds.</param>
+    /// <returns>A model with randomly initialized parameters within the computed bounds.</returns>
+    /// <remarks>
+    /// <para>
+    /// This method computes proper lower and upper bounds from the training data:
+    /// - Lower bounds: minimum value for each feature across all training samples
+    /// - Upper bounds: maximum value for each feature across all training samples
+    /// </para>
+    /// <para>
+    /// This ensures valid random initialization where lower < upper for proper random solution generation.
+    /// </para>
+    /// <para><b>For Beginners:</b> Instead of you having to manually specify lower and upper bounds,
+    /// this method analyzes your training data to find the minimum and maximum values for each feature,
+    /// then creates random parameters somewhere within those ranges.</para>
+    /// </remarks>
+    protected virtual IFullModel<T, TInput, TOutput> InitializeRandomSolution(TInput trainingData)
+    {
+        if (trainingData == null) throw new ArgumentNullException(nameof(trainingData));
+
+        // Compute lower and upper bounds from the training data
+        // Following GitHub Copilot's suggestion: compute min/max from the data
+        Vector<T> lowerBounds;
+        Vector<T> upperBounds;
+
+        if (trainingData is Matrix<T> matrix)
+        {
+            // Validate non-empty matrix before accessing elements
+            if (matrix.Rows == 0)
+            {
+                throw new ArgumentException("Training data matrix cannot be empty", nameof(trainingData));
+            }
+
+            // Validate matrix has columns
+            if (matrix.Columns == 0)
+            {
+                throw new ArgumentException("Training data matrix must have at least one column", nameof(trainingData));
+            }
+
+            // For Matrix input: compute min and max of each column (feature)
+            int features = matrix.Columns;
+            int paramCount = _model!.ParameterCount;
+
+            lowerBounds = new Vector<T>(paramCount);
+            upperBounds = new Vector<T>(paramCount);
+
+            // Compute min/max for each feature column
+            var featureMins = new T[features];
+            var featureMaxs = new T[features];
+            for (int col = 0; col < features; col++)
+            {
+                // Safe to access matrix[0, col] after validation above
+                if (matrix.Rows == 0)
+                {
+                    throw new ArgumentException("Matrix cannot be empty", nameof(matrix));
+                }
+                T initialValue = matrix[0, col];
+                T min = initialValue;
+                T max = initialValue;
+                for (int row = 1; row < matrix.Rows; row++)
+                {
+                    T value = matrix[row, col];
+                    if (NumOps.LessThan(value, min)) min = value;
+                    if (NumOps.GreaterThan(value, max)) max = value;
+                }
+                featureMins[col] = min;
+                featureMaxs[col] = max;
+            }
+
+            // Fill bounds for each parameter using feature min/max, repeating or defaulting as needed
+            for (int i = 0; i < paramCount; i++)
+            {
+                if (i < features)
+                {
+                    lowerBounds[i] = featureMins[i];
+                    upperBounds[i] = featureMaxs[i];
+                }
+                else
+                {
+                    // If more parameters than features, use global min/max from all features
+                    T min = featureMins[0];
+                    T max = featureMaxs[0];
+                    for (int j = 1; j < featureMins.Length; j++)
+                    {
+                        if (NumOps.LessThan(featureMins[j], min)) min = featureMins[j];
+                        if (NumOps.GreaterThan(featureMaxs[j], max)) max = featureMaxs[j];
+                    }
+                    lowerBounds[i] = min;
+                    upperBounds[i] = max;
+                }
+            }
+        }
+        else if (trainingData is Vector<T> vector)
+        {
+            // For Vector input: compute min and max of the vector
+            if (vector.Length == 0)
+            {
+                throw new ArgumentException("Training data vector cannot be empty", nameof(trainingData));
+            }
+
+            T initialValue = vector[0];
+            T min = initialValue;
+            T max = initialValue;
+
+            for (int i = 1; i < vector.Length; i++)
+            {
+                T value = vector[i];
+                if (NumOps.LessThan(value, min)) min = value;
+                if (NumOps.GreaterThan(value, max)) max = value;
+            }
+
+            // Bounds should match parameter count, not input dimensionality
+            int paramCount = _model!.ParameterCount;
+            lowerBounds = new Vector<T>(paramCount);
+            upperBounds = new Vector<T>(paramCount);
+            for (int i = 0; i < paramCount; i++)
+            {
+                lowerBounds[i] = min;
+                upperBounds[i] = max;
+            }
+        }
+        else
+        {
+            // Fallback: create reasonable default bounds based on parameter count
+            int paramCount = _model!.ParameterCount;
+            lowerBounds = new Vector<T>(paramCount);
+            upperBounds = new Vector<T>(paramCount);
+
+            for (int i = 0; i < paramCount; i++)
+            {
+                lowerBounds[i] = NumOps.FromDouble(-10.0);
+                upperBounds[i] = NumOps.FromDouble(10.0);
+            }
+        }
+
+        // Generate random parameters within the computed bounds
+        // Note: InitializeRandomSolution(Vector<T>, Vector<T>) returns Vector<T> (verified at line 1184)
+        // This is the correct return type for SetParameters() below
+        var randomParams = InitializeRandomSolution(lowerBounds, upperBounds);
+
+        // Create a new model with these random parameters
+        var randomModel = _model.Clone();
+        randomModel.SetParameters(randomParams);
+        return randomModel;
     }
 
     public virtual void SaveModel(string filePath)

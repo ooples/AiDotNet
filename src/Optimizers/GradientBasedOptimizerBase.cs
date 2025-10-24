@@ -66,7 +66,7 @@ public abstract class GradientBasedOptimizerBase<T, TInput, TOutput> : Optimizer
     /// will be, and how much you'll consider your previous direction when choosing your next step.
     /// </para>
     /// </remarks>
-    /// <param name="model">The model to optimize.</param>
+    /// <param name="model">The model to optimize (can be null if set later).</param>
     /// <param name="options">Options for the gradient-based optimizer.</param>
     /// <param name="predictionOptions">Options for prediction statistics.</param>
     /// <param name="modelOptions">Options for model statistics.</param>
@@ -76,7 +76,7 @@ public abstract class GradientBasedOptimizerBase<T, TInput, TOutput> : Optimizer
     /// <param name="modelCache">The model cache to use.</param>
     /// <param name="gradientCache">The gradient cache to use.</param>
     protected GradientBasedOptimizerBase(
-        IFullModel<T, TInput, TOutput> model,
+        IFullModel<T, TInput, TOutput>? model,
         GradientBasedOptimizerOptions<T, TInput, TOutput> options) :
         base(model, options)
     {

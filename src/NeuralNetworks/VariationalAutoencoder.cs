@@ -133,17 +133,20 @@ public class VariationalAutoencoder<T> : NeuralNetworkBase<T>
     /// </para>
     /// </remarks>
     public VariationalAutoencoder(
-        NeuralNetworkArchitecture<T> architecture, 
+        NeuralNetworkArchitecture<T> architecture,
         int latentSize,
         IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
         ILossFunction<T>? lossFunction = null,
-        double maxGradNorm = 1.0) : 
+        double maxGradNorm = 1.0) :
         base(architecture, lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(architecture.TaskType), maxGradNorm)
     {
         LatentSize = latentSize;
-        _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>();
 
+        // Initialize layers first so the model is fully constructed
         InitializeLayers();
+
+        // Now bind optimizer to this fully-initialized model instance
+        _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
     }
 
     /// <summary>
@@ -769,7 +772,7 @@ public class VariationalAutoencoder<T> : NeuralNetworkBase<T>
     protected override void DeserializeNetworkSpecificData(BinaryReader reader)
     {
         LatentSize = reader.ReadInt32();
-        _optimizer = DeserializationHelper.DeserializeInterface<IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>>(reader) ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>();
+        _optimizer = DeserializationHelper.DeserializeInterface<IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>>(reader) ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
     }
 
     /// <summary>
