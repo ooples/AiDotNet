@@ -207,9 +207,9 @@ public class RandomForestRegression<T> : AsyncDecisionTreeRegressionBase<T>
     /// variables are most influential in making predictions.
     /// </para>
     /// </remarks>
-    public override ModelMetaData<T> GetModelMetaData()
+    public override ModelMetadata<T> GetModelMetadata()
     {
-        return new ModelMetaData<T>
+        return new ModelMetadata<T>
         {
             ModelType = ModelType.RandomForest,
             AdditionalInfo = new Dictionary<string, object>

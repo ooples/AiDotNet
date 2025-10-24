@@ -1,4 +1,4 @@
-ï»¿namespace AiDotNet.Enums.AlgorithmTypes;
+namespace AiDotNet.Enums.AlgorithmTypes;
 
 /// <summary>
 /// Represents different algorithm types for Hessenberg decomposition of matrices.
@@ -19,7 +19,7 @@
 ///    help understand the fundamental properties of data). Hessenberg form makes finding these values much faster.
 /// 
 /// 2. Computational Efficiency: Converting to Hessenberg form reduces the number of operations needed for 
-///    many matrix calculations from O(nÂ³) to O(nÂ²), making algorithms run much faster for large datasets.
+///    many matrix calculations from O(n³) to O(n²), making algorithms run much faster for large datasets.
 /// 
 /// 3. Numerical Stability: These transformations improve the accuracy of calculations by reducing 
 ///    rounding errors that can accumulate when working with floating-point numbers.

@@ -1,4 +1,4 @@
-﻿namespace AiDotNet.LossFunctions;
+namespace AiDotNet.LossFunctions;
 
 /// <summary>
 /// Implements the Kullback-Leibler Divergence, a measure of how one probability distribution differs from another.
@@ -16,7 +16,7 @@
 /// 
 /// Key properties:
 /// - It's always non-negative (zero only when the distributions are identical)
-/// - It's not symmetric: KL(P||Q) ≠ KL(Q||P)
+/// - It's not symmetric: KL(P||Q) ? KL(Q||P)
 /// - It's not a true distance metric due to this asymmetry
 /// 
 /// KL divergence is commonly used in:

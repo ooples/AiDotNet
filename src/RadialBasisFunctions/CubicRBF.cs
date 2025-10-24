@@ -1,4 +1,4 @@
-Ôªønamespace AiDotNet.RadialBasisFunctions;
+namespace AiDotNet.RadialBasisFunctions;
 
 /// <summary>
 /// Implements a Cubic Radial Basis Function (RBF) that grows with the cube of the distance.
@@ -7,7 +7,7 @@
 /// <remarks>
 /// <para>
 /// This class provides an implementation of a Radial Basis Function (RBF) that uses a cubic function
-/// of the form œÜ(r) = (r/width)¬≥, where r is the radial distance and width is a scaling parameter.
+/// of the form f(r) = (r/width)≥, where r is the radial distance and width is a scaling parameter.
 /// Unlike many other RBFs that decrease with distance, the cubic RBF increases with the cube of the distance.
 /// This makes it useful for certain regression and interpolation problems where larger responses are expected
 /// for points farther from the centers.
@@ -17,7 +17,7 @@
 /// 
 /// The Cubic RBF is unique compared to many other RBFs because its value grows larger as you move
 /// away from the center, rather than smaller. Specifically, it grows with the cube of the distance
-/// (distance √ó distance √ó distance).
+/// (distance ◊ distance ◊ distance).
 /// 
 /// Think of it like a bowl shape turned upside down - the further you go from the center,
 /// the higher the value becomes, and it grows quite rapidly with distance.
@@ -70,11 +70,11 @@ public class CubicRBF<T> : IRadialBasisFunction<T>
     /// Computes the value of the Cubic Radial Basis Function for a given radius.
     /// </summary>
     /// <param name="r">The radius or distance from the center point.</param>
-    /// <returns>The computed function value (r/width)¬≥.</returns>
+    /// <returns>The computed function value (r/width)≥.</returns>
     /// <remarks>
     /// <para>
     /// This method calculates the value of the Cubic RBF for a given radius r. The formula used is
-    /// (r/width)¬≥, which grows as the cube of the normalized distance.
+    /// (r/width)≥, which grows as the cube of the normalized distance.
     /// </para>
     /// <para><b>For Beginners:</b> This method computes the "height" or "value" of the Cubic function
     /// at a specific distance (r) from the center.
@@ -101,7 +101,7 @@ public class CubicRBF<T> : IRadialBasisFunction<T>
     /// <remarks>
     /// <para>
     /// This method calculates the derivative of the Cubic RBF with respect to the radius r.
-    /// The formula for the derivative is 3r¬≤/width¬≥, which is always positive for r > 0,
+    /// The formula for the derivative is 3r≤/width≥, which is always positive for r > 0,
     /// indicating that the function always increases with distance.
     /// </para>
     /// <para><b>For Beginners:</b> This method computes how fast the function's value changes
@@ -132,7 +132,7 @@ public class CubicRBF<T> : IRadialBasisFunction<T>
     /// <remarks>
     /// <para>
     /// This method calculates the derivative of the Cubic RBF with respect to the width parameter.
-    /// The formula for this derivative is -3r¬≥/width‚Å¥. The negative sign indicates that increasing
+    /// The formula for this derivative is -3r≥/width4. The negative sign indicates that increasing
     /// the width parameter decreases the function value at any given radius.
     /// </para>
     /// <para><b>For Beginners:</b> This method calculates how the function's value would change
@@ -149,7 +149,7 @@ public class CubicRBF<T> : IRadialBasisFunction<T>
     /// </remarks>
     public T ComputeWidthDerivative(T r)
     {
-        // For œÜ(r) = (r/width)¬≥, the width derivative is -3r¬≥/width‚Å¥
+        // For f(r) = (r/width)≥, the width derivative is -3r≥/width4
         T rCubed = _numOps.Multiply(r, _numOps.Multiply(r, r));
         T widthSquared = _numOps.Multiply(_width, _width);
         T widthFourth = _numOps.Multiply(widthSquared, widthSquared);

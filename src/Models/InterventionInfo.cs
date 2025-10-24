@@ -1,4 +1,4 @@
-﻿namespace AiDotNet.Models;
+namespace AiDotNet.Models;
 
 /// <summary>
 /// Represents information about an intervention in a time series or sequential data, specifying when it started

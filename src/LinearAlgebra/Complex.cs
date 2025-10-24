@@ -1,4 +1,4 @@
-ï»¿namespace AiDotNet.LinearAlgebra;
+namespace AiDotNet.LinearAlgebra;
 
 /// <summary>
 /// Represents a complex number with real and imaginary parts.
@@ -90,7 +90,7 @@ public readonly struct Complex<T>
     /// </para>
     /// <para>
     /// <b>For Beginners:</b> The magnitude is like the "size" of the complex number. It's calculated
-    /// using the Pythagorean theorem: sqrt(realÂ² + imaginaryÂ²).
+    /// using the Pythagorean theorem: sqrt(real² + imaginary²).
     /// </para>
     /// <para>
     /// Think of a complex number as a point on a 2D graph, where the real part is the x-coordinate
@@ -98,7 +98,7 @@ public readonly struct Complex<T>
     /// from the origin (0,0) to that point.
     /// </para>
     /// <para>
-    /// For example, the magnitude of 3 + 4i is sqrt(3Â² + 4Â²) = sqrt(9 + 16) = sqrt(25) = 5.
+    /// For example, the magnitude of 3 + 4i is sqrt(3² + 4²) = sqrt(9 + 16) = sqrt(25) = 5.
     /// </para>
     /// </remarks>
     public T Magnitude => _ops.Sqrt(_ops.Add(_ops.Square(Real), _ops.Square(Imaginary)));
@@ -113,7 +113,7 @@ public readonly struct Complex<T>
     /// </para>
     /// <para>
     /// <b>For Beginners:</b> The phase is the angle that the complex number makes with the positive
-    /// x-axis when plotted on a 2D graph. It's measured in radians (a full circle is 2Ï€ radians
+    /// x-axis when plotted on a 2D graph. It's measured in radians (a full circle is 2p radians
     /// or about 6.28 radians).
     /// </para>
     /// <para>
@@ -125,9 +125,9 @@ public readonly struct Complex<T>
     /// <para>
     /// For example:
     /// - The phase of 1 + 0i is 0 radians (0 degrees)
-    /// - The phase of 0 + 1i is Ï€/2 radians (90 degrees)
-    /// - The phase of -1 + 0i is Ï€ radians (180 degrees)
-    /// - The phase of 0 - 1i is -Ï€/2 radians (-90 degrees)
+    /// - The phase of 0 + 1i is p/2 radians (90 degrees)
+    /// - The phase of -1 + 0i is p radians (180 degrees)
+    /// - The phase of 0 - 1i is -p/2 radians (-90 degrees)
     /// </para>
     /// </remarks>
     public T Phase => _ops.FromDouble(Math.Atan2(Convert.ToDouble(Imaginary), Convert.ToDouble(Real)));
@@ -186,7 +186,7 @@ public readonly struct Complex<T>
     /// <returns>A new complex number that is the product of the two complex numbers.</returns>
     /// <remarks>
     /// <para>
-    /// Multiplication of complex numbers follows the distributive property and the rule that iÂ² = -1.
+    /// Multiplication of complex numbers follows the distributive property and the rule that i² = -1.
     /// </para>
     /// <para>
     /// <b>For Beginners:</b> Multiplying complex numbers is a bit more involved than addition or subtraction.
@@ -199,7 +199,7 @@ public readonly struct Complex<T>
     /// </para>
     /// <para>
     /// This is similar to multiplying two binomials (a + b)(c + d), but with the special rule
-    /// that iÂ² = -1, which is why the term bd becomes negative.
+    /// that i² = -1, which is why the term bd becomes negative.
     /// </para>
     /// </remarks>
     public static Complex<T> operator *(Complex<T> a, Complex<T> b)
@@ -229,12 +229,12 @@ public readonly struct Complex<T>
     /// 3. Then we can separate the real and imaginary parts of the result
     /// </para>
     /// <para>
-    /// For example, to calculate (3 + 2i) Ã· (1 + i):
+    /// For example, to calculate (3 + 2i) ÷ (1 + i):
     /// - First, we multiply both top and bottom by the conjugate of (1 + i), which is (1 - i)
-    /// - This gives us: [(3 + 2i)(1 - i)] Ã· [(1 + i)(1 - i)]
-    /// - The denominator becomes (1Â² + 1Â²) = 2
-    /// - The numerator becomes (3 + 2i)(1 - i) = 3 - 3i + 2i - 2iÂ² = 3 - 3i + 2i + 2 = 5 - i
-    /// - So the result is (5 - i) Ã· 2 = 2.5 - 0.5i
+    /// - This gives us: [(3 + 2i)(1 - i)] ÷ [(1 + i)(1 - i)]
+    /// - The denominator becomes (1² + 1²) = 2
+    /// - The numerator becomes (3 + 2i)(1 - i) = 3 - 3i + 2i - 2i² = 3 - 3i + 2i + 2 = 5 - i
+    /// - So the result is (5 - i) ÷ 2 = 2.5 - 0.5i
     /// </para>
     /// </remarks>
     public static Complex<T> operator /(Complex<T> a, Complex<T> b)
@@ -363,17 +363,17 @@ public readonly struct Complex<T>
     /// </para>
     /// <para>
     /// 1. Rectangular form: a + bi (using real and imaginary parts)
-    /// 2. Polar form: râˆ Î¸ (using magnitude and angle)
+    /// 2. Polar form: r?? (using magnitude and angle)
     /// </para>
     /// <para>
     /// This method converts from polar form to the standard rectangular form. The magnitude (r)
-    /// represents the distance from the origin, and the phase (Î¸) represents the angle from the
+    /// represents the distance from the origin, and the phase (?) represents the angle from the
     /// positive x-axis (measured in radians).
     /// </para>
     /// <para>
     /// For example, to create the complex number 3 + 4i using polar coordinates:
-    /// - First, calculate the magnitude: sqrt(3Â² + 4Â²) = 5
-    /// - Then, calculate the phase: arctan(4/3) â‰ˆ 0.9273 radians
+    /// - First, calculate the magnitude: sqrt(3² + 4²) = 5
+    /// - Then, calculate the phase: arctan(4/3) ˜ 0.9273 radians
     /// - Use FromPolarCoordinates(5, 0.9273)
     /// </para>
     /// </remarks>

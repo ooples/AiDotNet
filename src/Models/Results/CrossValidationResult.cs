@@ -1,4 +1,4 @@
-ï»¿namespace AiDotNet.Models.Results;
+namespace AiDotNet.Models.Results;
 
 
 /// <summary>
@@ -25,7 +25,7 @@ public class CrossValidationResult<T>
     public int FoldCount => FoldResults.Count;
 
     /// <summary>
-    /// Gets basic statistics (mean, standard deviation, etc.) for RÂ² values across folds.
+    /// Gets basic statistics (mean, standard deviation, etc.) for R² values across folds.
     /// </summary>
     public BasicStats<T> R2Stats { get; }
 
@@ -195,17 +195,17 @@ public class CrossValidationResult<T>
         report.AppendLine($"Average Training Time: {AverageTrainingTime.TotalSeconds:F2} seconds");
         report.AppendLine();
 
-        report.AppendLine("Performance Metrics (Mean Â± Standard Deviation):");
-        report.AppendLine($"RÂ² Score: {R2Stats.Mean} Â± {R2Stats.StandardDeviation}");
-        report.AppendLine($"RMSE: {RMSEStats.Mean} Â± {RMSEStats.StandardDeviation}");
-        report.AppendLine($"MAE: {MAEStats.Mean} Â± {MAEStats.StandardDeviation}");
+        report.AppendLine("Performance Metrics (Mean ± Standard Deviation):");
+        report.AppendLine($"R² Score: {R2Stats.Mean} ± {R2Stats.StandardDeviation}");
+        report.AppendLine($"RMSE: {RMSEStats.Mean} ± {RMSEStats.StandardDeviation}");
+        report.AppendLine($"MAE: {MAEStats.Mean} ± {MAEStats.StandardDeviation}");
         report.AppendLine();
 
         // Add other metrics that might be of interest
         try
         {
             var mapeStats = GetMetricStats(MetricType.MAPE);
-            report.AppendLine($"MAPE: {mapeStats.Mean} Â± {mapeStats.StandardDeviation}");
+            report.AppendLine($"MAPE: {mapeStats.Mean} ± {mapeStats.StandardDeviation}");
         }
         catch (ArgumentException)
         {
@@ -215,7 +215,7 @@ public class CrossValidationResult<T>
         // Add feature importance if available
         if (FeatureImportanceStats.Count > 0)
         {
-            report.AppendLine("Feature Importance (Mean Â± Standard Deviation):");
+            report.AppendLine("Feature Importance (Mean ± Standard Deviation):");
 
             // Sort features by mean importance (descending)
             var sortedFeatures = FeatureImportanceStats
@@ -226,7 +226,7 @@ public class CrossValidationResult<T>
             {
                 var feature = kvp.Key;
                 var stats = kvp.Value;
-                report.AppendLine($"- {feature}: {stats.Mean:F4} Â± {stats.StandardDeviation:F4}");
+                report.AppendLine($"- {feature}: {stats.Mean:F4} ± {stats.StandardDeviation:F4}");
             }
         }
 

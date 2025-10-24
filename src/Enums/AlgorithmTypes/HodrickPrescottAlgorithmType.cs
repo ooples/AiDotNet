@@ -1,4 +1,4 @@
-﻿namespace AiDotNet.Enums.AlgorithmTypes;
+namespace AiDotNet.Enums.AlgorithmTypes;
 
 /// <summary>
 /// Represents different algorithm types for implementing the Hodrick-Prescott filter.
@@ -26,7 +26,7 @@
 /// 1. Making the trend component fit the original data well
 /// 2. Making the trend component as smooth as possible
 /// 
-/// A parameter called lambda (λ) controls this balance - higher values create a smoother trend line, 
+/// A parameter called lambda (?) controls this balance - higher values create a smoother trend line, 
 /// while lower values make the trend follow the original data more closely.
 /// 
 /// This enum specifies which specific algorithm to use for implementing the HP filter, as different methods 

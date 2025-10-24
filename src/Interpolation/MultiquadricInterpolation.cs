@@ -1,4 +1,4 @@
-﻿namespace AiDotNet.Interpolation;
+namespace AiDotNet.Interpolation;
 
 /// <summary>
 /// Implements Multiquadric Radial Basis Function interpolation for two-dimensional data points.
@@ -172,7 +172,7 @@ public class MultiquadricInterpolation<T> : I2DInterpolation<T>
     /// Calculates the multiquadric radial basis function for a given distance.
     /// </summary>
     /// <remarks>
-    /// This method implements the standard multiquadric function: sqrt(r² + ε²).
+    /// This method implements the standard multiquadric function: sqrt(r� + e�).
     /// 
     /// <b>For Beginners:</b> This is the mathematical function that determines how the influence of a data point
     /// decreases with distance. The multiquadric function creates a smooth "hill" shape around each data point.

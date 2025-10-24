@@ -1,4 +1,4 @@
-﻿namespace AiDotNet.WaveletFunctions;
+namespace AiDotNet.WaveletFunctions;
 
 /// <summary>
 /// Implements Coiflet wavelets, which are compactly supported wavelets with a high number of vanishing moments
@@ -145,7 +145,7 @@ public class CoifletWavelet<T> : IWaveletFunction<T>
     /// The scaling function is the basic building block used to construct the wavelet.
     /// 
     /// For Coiflet wavelets, the scaling function satisfies a two-scale relation:
-    /// φ(t) = Σ c_k φ(2t-k)
+    /// f(t) = S c_k f(2t-k)
     /// 
     /// This is a recursive definition, which makes exact calculation challenging.
     /// This method implements a simple recursive approximation that:

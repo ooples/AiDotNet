@@ -1,4 +1,4 @@
-﻿namespace AiDotNet.Enums;
+namespace AiDotNet.Enums;
 
 /// <summary>
 /// Represents different probability distributions used in statistical modeling and machine learning.
@@ -33,8 +33,8 @@ public enum DistributionType
     /// symmetric bell shape.
     /// 
     /// It's defined by two parameters:
-    /// - Mean (μ): The center of the distribution
-    /// - Standard deviation (σ): How spread out the values are
+    /// - Mean (�): The center of the distribution
+    /// - Standard deviation (s): How spread out the values are
     /// 
     /// Think of it as a distribution where:
     /// - Most values cluster around the mean
@@ -70,7 +70,7 @@ public enum DistributionType
     /// - It has fatter tails, meaning extreme values are more likely
     /// 
     /// It's defined by two parameters:
-    /// - Location (μ): The center of the distribution
+    /// - Location (�): The center of the distribution
     /// - Scale (b): Controls how spread out the values are
     /// 
     /// Best used for:
@@ -101,7 +101,7 @@ public enum DistributionType
     /// - As the degrees of freedom increase, it gets closer to a Normal distribution
     /// 
     /// It's defined by one parameter:
-    /// - Degrees of freedom (ν): Controls the heaviness of the tails
+    /// - Degrees of freedom (?): Controls the heaviness of the tails
     ///   - Lower values = heavier tails
     ///   - Higher values = more like a Normal distribution
     /// 
@@ -133,8 +133,8 @@ public enum DistributionType
     /// - Most values are clustered on the left side
     /// 
     /// It's defined by two parameters:
-    /// - μ: The mean of the logarithm of the data
-    /// - σ: The standard deviation of the logarithm of the data
+    /// - �: The mean of the logarithm of the data
+    /// - s: The standard deviation of the logarithm of the data
     /// 
     /// Best used for:
     /// - Quantities that are the product of many small independent factors
@@ -166,7 +166,7 @@ public enum DistributionType
     /// - It has the "memoryless" property: the probability of waiting another hour doesn't depend on how long you've already waited
     /// 
     /// It's defined by one parameter:
-    /// - λ (lambda): The rate parameter, which is the average number of events per unit time
+    /// - ? (lambda): The rate parameter, which is the average number of events per unit time
     /// 
     /// Best used for:
     /// - Time between events in a Poisson process
@@ -201,7 +201,7 @@ public enum DistributionType
     ///   - k < 1: Failure rate decreases over time
     ///   - k = 1: Constant failure rate (becomes Exponential distribution)
     ///   - k > 1: Failure rate increases over time
-    /// - λ (scale): Stretches or compresses the distribution
+    /// - ? (scale): Stretches or compresses the distribution
     /// 
     /// Best used for:
     /// - Lifetime modeling

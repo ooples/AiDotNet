@@ -1,4 +1,4 @@
-ï»¿namespace AiDotNet.Regression;
+namespace AiDotNet.Regression;
 
 /// <summary>
 /// Implements a Generalized Additive Model (GAM) for regression, which models the target as a sum of smooth functions
@@ -18,7 +18,7 @@
 /// all these individual curves to make a prediction.
 /// 
 /// Think of it this way:
-/// - Linear regression: House price = a Ã— Size + b Ã— Age + c Ã— Location + ...
+/// - Linear regression: House price = a × Size + b × Age + c × Location + ...
 /// - GAM: House price = f1(Size) + f2(Age) + f3(Location) + ...
 ///   Where f1, f2, f3 are curves rather than straight lines
 /// 
@@ -297,9 +297,9 @@ public class GeneralizedAdditiveModel<T> : RegressionBase<T>
     /// ```
     /// </para>
     /// </remarks>
-    public override ModelMetaData<T> GetModelMetaData()
+    public override ModelMetadata<T> GetModelMetadata()
     {
-        return new ModelMetaData<T>
+        return new ModelMetadata<T>
         {
             ModelType = GetModelType(),
             AdditionalInfo = new Dictionary<string, object>

@@ -1,4 +1,4 @@
-﻿namespace AiDotNet.Genetics;
+namespace AiDotNet.Genetics;
 
 /// <summary>
 /// Represents a node in a genetic programming tree.
