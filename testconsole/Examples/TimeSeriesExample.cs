@@ -46,14 +46,6 @@ public class TimeSeriesExample
             // Create and configure the model builder
             var modelBuilder = new PredictionModelBuilder<double, Matrix<double>, Vector<double>>();
 
-            // Configure optimizer
-            var adamOptions = new AdamOptimizerOptions<double, Matrix<double>, Vector<double>>
-            {
-                LearningRate = 0.01,
-                MaxIterations = 1000
-            };
-            var optimizer = new AdamOptimizer<double, Matrix<double>, Vector<double>>(adamOptions);
-
             // Configure time series model (e.g., Prophet-like model)
             var timeSeriesOptions = new ProphetOptions<double, Matrix<double>, Vector<double>>
             {
@@ -62,10 +54,21 @@ public class TimeSeriesExample
                 ForecastHorizon = 30                    // Forecast 30 days ahead
             };
 
+            // Create the model first
+            var timeSeriesModel = new ProphetModel<double, Matrix<double>, Vector<double>>(timeSeriesOptions);
+
+            // Configure optimizer
+            var adamOptions = new AdamOptimizerOptions<double, Matrix<double>, Vector<double>>
+            {
+                LearningRate = 0.01,
+                MaxIterations = 1000
+            };
+            var optimizer = new AdamOptimizer<double, Matrix<double>, Vector<double>>(timeSeriesModel, adamOptions);
+
             // Build the time series model
             var model = modelBuilder
                 .ConfigureOptimizer(optimizer)
-                .ConfigureModel(new ProphetModel<double, Matrix<double>, Vector<double>>(timeSeriesOptions))
+                .ConfigureModel(timeSeriesModel)
                 .Build(timeFeatures, priceVector);
 
             Console.WriteLine("Model trained successfully!");

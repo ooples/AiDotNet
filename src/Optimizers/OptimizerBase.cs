@@ -324,6 +324,9 @@ public abstract class OptimizerBase<T, TInput, TOutput> : IOptimizer<T, TInput, 
             return cachedStepData;
         }
 
+        if (solution == null) throw new ArgumentNullException(nameof(solution));
+        if (inputData == null) throw new ArgumentNullException(nameof(inputData));
+
         var stepData = PrepareAndEvaluateSolution(solution, inputData);
         ModelCache.CacheStepData(cacheKey, stepData);
 
@@ -364,6 +367,10 @@ public abstract class OptimizerBase<T, TInput, TOutput> : IOptimizer<T, TInput, 
         }
 
         // Step 4: Apply feature selection to input data
+        if (inputData == null || inputData.XTrain == null)
+        {
+            throw new ArgumentNullException(nameof(inputData), "Training data cannot be null");
+        }
         var selectedFeatures = ModelHelper<T, TInput, TOutput>.GetColumnVectors(
             inputData.XTrain, [.. selectedFeaturesIndices]);
 
@@ -399,6 +406,10 @@ public abstract class OptimizerBase<T, TInput, TOutput> : IOptimizer<T, TInput, 
         FitnessList.Add(currentFitnessScore);
 
         // Step 8: Create and store step data
+        if (solution == null)
+        {
+            throw new InvalidOperationException("Solution cannot be null");
+        }
         var stepData = new OptimizationStepData<T, TInput, TOutput>
         {
             Solution = solution.DeepCopy(),  // Now trained, so DeepCopy works

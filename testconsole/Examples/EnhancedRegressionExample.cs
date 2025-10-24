@@ -80,25 +80,32 @@ public class EnhancedRegressionExample
 
             // Linear regression model
             Console.WriteLine("\n1. Training Multiple Linear Regression model...");
+            var linearRegressionModel = new MultipleRegression<double>(new RegressionOptions<double>
+            {
+                UseIntercept = true
+            });
             var linearModel = modelBuilder
                 .ConfigureDataPreprocessor(dataPreprocessor)
-                .ConfigureOptimizer(new AdamOptimizer<double, Matrix<double>, Vector<double>>(new AdamOptimizerOptions<double, Matrix<double>, Vector<double>>
-                {
-                    LearningRate = 0.01,
-                    MaxIterations = 2000,
-                    Tolerance = 1e-6,
-                    UseAdaptiveLearningRate = true
-                }))
-                .ConfigureModel(new MultipleRegression<double>(new RegressionOptions<double>
-                {
-                    UseIntercept = true
-                }))
+                .ConfigureOptimizer(new AdamOptimizer<double, Matrix<double>, Vector<double>>(
+                    linearRegressionModel,
+                    new AdamOptimizerOptions<double, Matrix<double>, Vector<double>>
+                    {
+                        LearningRate = 0.01,
+                        MaxIterations = 2000,
+                        Tolerance = 1e-6,
+                        UseAdaptiveLearningRate = true
+                    }))
+                .ConfigureModel(linearRegressionModel)
                 .ConfigureFitnessCalculator(new RSquaredFitnessCalculator<double, Matrix<double>, Vector<double>>())
                 .Build(features, prices);
 
             // Ridge regression model (with L2 regularization)
             Console.WriteLine("\n2. Training Ridge Regression model (with regularization)...");
             double alpha = 1.0;
+            var ridgeRegressionModel = new MultipleRegression<double>(new RegressionOptions<double>
+            {
+                UseIntercept = true
+            });
             var ridgeModel = modelBuilder
                 .ConfigureDataPreprocessor(dataPreprocessor)
                 .ConfigureRegularization(new L2Regularization<double, Matrix<double>, Vector<double>>(new RegularizationOptions
@@ -106,17 +113,16 @@ public class EnhancedRegressionExample
                     Type = RegularizationType.L2,
                     Strength = alpha
                 }))
-                .ConfigureOptimizer(new AdamOptimizer<double, Matrix<double>, Vector<double>>(new AdamOptimizerOptions<double, Matrix<double>, Vector<double>>
-                {
-                    LearningRate = 0.01,
-                    MaxIterations = 2000,
-                    Tolerance = 1e-6,
-                    UseAdaptiveLearningRate = true
-                }))
-                .ConfigureModel(new MultipleRegression<double>(new RegressionOptions<double>
-                {
-                    UseIntercept = true
-                }))
+                .ConfigureOptimizer(new AdamOptimizer<double, Matrix<double>, Vector<double>>(
+                    ridgeRegressionModel,
+                    new AdamOptimizerOptions<double, Matrix<double>, Vector<double>>
+                    {
+                        LearningRate = 0.01,
+                        MaxIterations = 2000,
+                        Tolerance = 1e-6,
+                        UseAdaptiveLearningRate = true
+                    }))
+                .ConfigureModel(ridgeRegressionModel)
                 .ConfigureFitnessCalculator(new RSquaredFitnessCalculator<double, Matrix<double>, Vector<double>>())
                 .Build(features, prices);
 

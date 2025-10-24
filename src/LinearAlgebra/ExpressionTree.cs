@@ -329,7 +329,7 @@ public class ExpressionTree<T, TInput, TOutput> : IFullModel<T, TInput, TOutput>
     {
         ExpressionTree<T, TInput, TOutput> mutatedTree = (ExpressionTree<T, TInput, TOutput>)Copy();
 
-        if (_random.Value.NextDouble() < mutationRate)
+        if (_random.Value != null && _random.Value.NextDouble() < mutationRate)
         {
             switch (_random.Value.Next(3))
             {
@@ -387,7 +387,7 @@ public class ExpressionTree<T, TInput, TOutput> : IFullModel<T, TInput, TOutput>
 
         ExpressionTree<T, TInput, TOutput> offspring = (ExpressionTree<T, TInput, TOutput>)Copy();
 
-        if (_random.Value.NextDouble() < crossoverRate)
+        if (_random.Value != null && _random.Value.NextDouble() < crossoverRate)
         {
             // Select a random subtree from the other parent
             ExpressionTree<T, TInput, TOutput> selectedSubtree = SelectRandomSubtree(otherTree);
@@ -428,6 +428,11 @@ public class ExpressionTree<T, TInput, TOutput> : IFullModel<T, TInput, TOutput>
     /// </remarks>
     private ExpressionTree<T, TInput, TOutput> GenerateRandomTree(int maxDepth)
     {
+        if (_random.Value == null)
+        {
+            throw new InvalidOperationException("Random generator is not initialized");
+        }
+
         if (maxDepth == 0 || _random.Value.NextDouble() < 0.3) // 30% chance of leaf node
         {
             if (_random.Value.NextDouble() < 0.5)
@@ -462,6 +467,11 @@ public class ExpressionTree<T, TInput, TOutput> : IFullModel<T, TInput, TOutput>
     /// </remarks>
     private ExpressionTree<T, TInput, TOutput> SelectRandomSubtree(ExpressionTree<T, TInput, TOutput> tree)
     {
+        if (_random.Value == null)
+        {
+            throw new InvalidOperationException("Random generator is not initialized");
+        }
+
         if (tree.Left == null && tree.Right == null)
         {
             return tree;
@@ -478,7 +488,11 @@ public class ExpressionTree<T, TInput, TOutput> : IFullModel<T, TInput, TOutput>
             }
             else
             {
-                return SelectRandomSubtree(tree.Right!);
+                if (tree.Right == null)
+                {
+                    throw new InvalidOperationException("Right subtree is null");
+                }
+                return SelectRandomSubtree(tree.Right);
             }
         }
     }
@@ -494,6 +508,11 @@ public class ExpressionTree<T, TInput, TOutput> : IFullModel<T, TInput, TOutput>
     /// </remarks>
     private void ReplaceRandomSubtree(ExpressionTree<T, TInput, TOutput> tree, ExpressionTree<T, TInput, TOutput> replacement)
     {
+        if (_random.Value == null)
+        {
+            throw new InvalidOperationException("Random generator is not initialized");
+        }
+
         if (_random.Value.NextDouble() < 0.3) // 30% chance of replacing current node
         {
             tree.Type = replacement.Type;

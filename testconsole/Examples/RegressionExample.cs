@@ -52,6 +52,15 @@ public class RegressionExample
             // Create and configure the model builder
             var modelBuilder = new PredictionModelBuilder<double, Matrix<double>, Vector<double>>();
 
+            // Use MultipleRegression since we have multiple input features
+            var regressionOptions = new RegressionOptions<double>
+            {
+                UseIntercept = true // Include intercept term (bias)
+            };
+
+            // Create the regression model first
+            var regressionModel = new MultipleRegression<double>(regressionOptions);
+
             // Configure Adam optimizer for training
             var adamOptions = new AdamOptimizerOptions<double, Matrix<double>, Vector<double>>
             {
@@ -62,18 +71,12 @@ public class RegressionExample
                 Epsilon = 1e-8
             };
 
-            var optimizer = new AdamOptimizer<double, Matrix<double>, Vector<double>>(adamOptions);
-
-            // Use MultipleRegression since we have multiple input features
-            var regressionOptions = new RegressionOptions<double>
-            {
-                UseIntercept = true // Include intercept term (bias)
-            };
+            var optimizer = new AdamOptimizer<double, Matrix<double>, Vector<double>>(regressionModel, adamOptions);
 
             // Build a multiple regression model
             var model = modelBuilder
                 .ConfigureOptimizer(optimizer)
-                .ConfigureModel(new MultipleRegression<double>(regressionOptions))
+                .ConfigureModel(regressionModel)
                 .Build(houseFeatures, housePrices);
 
             Console.WriteLine("Model trained successfully!");
