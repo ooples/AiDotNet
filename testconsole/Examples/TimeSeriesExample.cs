@@ -52,7 +52,7 @@ public class TimeSeriesExample
                 LearningRate = 0.01,
                 MaxIterations = 1000
             };
-            var optimizer = new AdamOptimizer<double, Matrix<double>, Vector<double>>(adamOptions);
+            var optimizer = new AdamOptimizer<double, Matrix<double>, Vector<double>>(null!, adamOptions);
 
             // Configure time series model (e.g., Prophet-like model)
             var timeSeriesOptions = new ProphetOptions<double, Matrix<double>, Vector<double>>

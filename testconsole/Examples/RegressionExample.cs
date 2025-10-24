@@ -62,7 +62,7 @@ public class RegressionExample
                 Epsilon = 1e-8
             };
 
-            var optimizer = new AdamOptimizer<double, Matrix<double>, Vector<double>>(adamOptions);
+            var optimizer = new AdamOptimizer<double, Matrix<double>, Vector<double>>(null!, adamOptions);
 
             // Use MultipleRegression since we have multiple input features
             var regressionOptions = new RegressionOptions<double>

@@ -866,7 +866,7 @@ public class UnobservedComponentsModel<T, TInput, TOutput> : TimeSeriesModelBase
     private void OptimizeParameters(Matrix<T> x, Vector<T> y)
     {
         // Use the user-defined optimizer if provided, otherwise use LBFGSOptimizer as default
-        var optimizer = _ucOptions.Optimizer ?? new LBFGSOptimizer<T, Matrix<T>, Vector<T>>();
+        var optimizer = _ucOptions.Optimizer ?? new LBFGSOptimizer<T, Matrix<T>, Vector<T>>(this);
 
         // Prepare the optimization input data
         var inputData = new OptimizationInputData<T, Matrix<T>, Vector<T>>

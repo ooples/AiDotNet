@@ -1,3 +1,4 @@
+using AiDotNet.Interfaces;
 using Newtonsoft.Json;
 
 namespace AiDotNet.Optimizers;
@@ -51,8 +52,9 @@ public class LevenbergMarquardtOptimizer<T, TInput, TOutput> : GradientBasedOpti
     /// </remarks>
     /// <param name="options">Custom options for the Levenberg-Marquardt algorithm.</param>
     public LevenbergMarquardtOptimizer(
+        IFullModel<T, TInput, TOutput> model,
         LevenbergMarquardtOptimizerOptions<T, TInput, TOutput>? options = null)
-        : base(options ?? new())
+        : base(model, options ?? new())
     {
         _options = options ?? new LevenbergMarquardtOptimizerOptions<T, TInput, TOutput>();
         _dampingFactor = NumOps.Zero;

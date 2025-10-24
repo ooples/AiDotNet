@@ -1,3 +1,4 @@
+using AiDotNet.Interfaces;
 using Newtonsoft.Json;
 
 namespace AiDotNet.Optimizers;
@@ -56,8 +57,9 @@ public class DFPOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, TI
     /// </para>
     /// </remarks>
     public DFPOptimizer(
+        IFullModel<T, TInput, TOutput> model,
         DFPOptimizerOptions<T, TInput, TOutput>? options = null)
-        : base(options ?? new())
+        : base(model, options ?? new())
     {
         _options = options ?? new DFPOptimizerOptions<T, TInput, TOutput>();
         _previousGradient = Vector<T>.Empty();

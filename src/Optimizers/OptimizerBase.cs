@@ -313,10 +313,12 @@ public abstract class OptimizerBase<T, TInput, TOutput> : IOptimizer<T, TInput, 
     /// <param name="inputData">The input data for evaluation.</param>
     /// <returns>The evaluation results for the solution.</returns>
     protected virtual OptimizationStepData<T, TInput, TOutput> EvaluateSolution(
-        IFullModel<T, TInput, TOutput> solution, 
+        IFullModel<T, TInput, TOutput> solution,
         OptimizationInputData<T, TInput, TOutput> inputData)
     {
-        string cacheKey = ModelCache.GenerateCacheKey(solution, inputData);
+        // Generate cache key from solution parameters
+        var parameters = solution.GetParameters();
+        string cacheKey = $"{solution.GetType().Name}_{string.Join("_", parameters.Select(p => p!.ToString()))}";
         var cachedStepData = ModelCache.GetCachedStepData(cacheKey);
 
         if (cachedStepData != null)
@@ -355,7 +357,8 @@ public abstract class OptimizerBase<T, TInput, TOutput> : IOptimizer<T, TInput, 
         ApplyFeatureSelection(solution, selectedFeaturesIndices);
 
         // Step 3: Generate cache key based on the selected features and check cache
-        string cacheKey = ModelCache.GenerateCacheKey(solution, inputData);
+        var parameters = solution.GetParameters();
+        string cacheKey = $"{solution.GetType().Name}_{string.Join("_", parameters.Select(p => p!.ToString()))}";
         var cachedStepData = ModelCache.GetCachedStepData(cacheKey);
 
         if (cachedStepData != null)
@@ -475,13 +478,12 @@ public abstract class OptimizerBase<T, TInput, TOutput> : IOptimizer<T, TInput, 
     /// </remarks>
     protected OptimizationResult<T, TInput, TOutput> CreateOptimizationResult(OptimizationStepData<T, TInput, TOutput> bestStepData, OptimizationInputData<T, TInput, TOutput> input)
     {
-        var modelType = bestStepData.Solution.GetModelMetadata().ModelType;
         return OptimizerHelper<T, TInput, TOutput>.CreateOptimizationResult(
             bestStepData.Solution,
             bestStepData.FitnessScore,
             FitnessList,
             bestStepData.SelectedFeatures,
-            new OptimizationResult<T, TInput, TOutput>.DatasetResult(modelType)
+            new OptimizationResult<T, TInput, TOutput>.DatasetResult()
             {
                 X = bestStepData.XTrainSubset,
                 Y = input.YTrain,
@@ -491,7 +493,7 @@ public abstract class OptimizerBase<T, TInput, TOutput> : IOptimizer<T, TInput, 
                 PredictedBasicStats = bestStepData.EvaluationData.TrainingSet.PredictedBasicStats,
                 PredictionStats = bestStepData.EvaluationData.TrainingSet.PredictionStats
             },
-            new OptimizationResult<T, TInput, TOutput>.DatasetResult(modelType)
+            new OptimizationResult<T, TInput, TOutput>.DatasetResult()
             {
                 X = bestStepData.XValSubset,
                 Y = input.YValidation,
@@ -501,7 +503,7 @@ public abstract class OptimizerBase<T, TInput, TOutput> : IOptimizer<T, TInput, 
                 PredictedBasicStats = bestStepData.EvaluationData.ValidationSet.PredictedBasicStats,
                 PredictionStats = bestStepData.EvaluationData.ValidationSet.PredictionStats
             },
-            new OptimizationResult<T, TInput, TOutput>.DatasetResult(modelType)
+            new OptimizationResult<T, TInput, TOutput>.DatasetResult()
             {
                 X = bestStepData.XTestSubset,
                 Y = input.YTest,
@@ -564,37 +566,18 @@ public abstract class OptimizerBase<T, TInput, TOutput> : IOptimizer<T, TInput, 
         // Create a deep copy of the model to avoid modifying the original
         var solution = Model.DeepCopy();
 
-        int numFeatures = InputHelper<T, TInput>.GetInputSize(xTrain);
-
-        switch (Options.OptimizationMode)
+        // Optionally apply randomization to model parameters
+        // This provides variation for optimization algorithms
+        if (Random.NextDouble() < 0.1) // 10% chance to randomize parameters
         {
-            case OptimizationMode.FeatureSelectionOnly:
-                ApplyFeatureSelection(solution, numFeatures);
-                break;
-
-            case OptimizationMode.ParametersOnly:
-                AdjustModelParameters(
-                    solution,
-                    Options.ParameterAdjustmentScale,
-                    Options.SignFlipProbability);
-                break;
-
-            case OptimizationMode.Both:
-            default:
-                // With some probability, apply both or just one type of optimization
-                if (Random.NextDouble() < Options.FeatureSelectionProbability)
-                {
-                    ApplyFeatureSelection(solution, numFeatures);
-                }
-
-                if (Random.NextDouble() < Options.ParameterAdjustmentProbability)
-                {
-                    AdjustModelParameters(
-                        solution,
-                        Options.ParameterAdjustmentScale,
-                        Options.SignFlipProbability);
-                }
-                break;
+            var parameters = solution.GetParameters();
+            for (int i = 0; i < parameters.Length; i++)
+            {
+                // Small random perturbation
+                var perturbation = NumOps.FromDouble((Random.NextDouble() - 0.5) * 0.1);
+                parameters[i] = NumOps.Add(parameters[i], perturbation);
+            }
+            solution.SetParameters(parameters);
         }
 
         return solution;

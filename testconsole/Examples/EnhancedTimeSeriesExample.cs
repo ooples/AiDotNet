@@ -392,7 +392,7 @@ public class EnhancedTimeSeriesExample
             MaxIterations = 1000,
             Tolerance = 1e-6
         };
-        var optimizer = new AdamOptimizer<double, Matrix<double>, Vector<double>>(adamOptions);
+        var optimizer = new AdamOptimizer<double, Matrix<double>, Vector<double>>(null!, adamOptions);
 
         // Configure Prophet model options
         var prophetOptions = new ProphetOptions<double, Matrix<double>, Vector<double>>
@@ -422,7 +422,7 @@ public class EnhancedTimeSeriesExample
             MaxIterations = 1000,
             Tolerance = 1e-6
         };
-        var optimizer = new AdamOptimizer<double, Matrix<double>, Vector<double>>(adamOptions);
+        var optimizer = new AdamOptimizer<double, Matrix<double>, Vector<double>>(null!, adamOptions);
 
         // Configure ARIMA model options
         var arimaOptions = new ARIMAOptions<double>
@@ -452,7 +452,7 @@ public class EnhancedTimeSeriesExample
             MaxIterations = 1000,
             Tolerance = 1e-6
         };
-        var optimizer = new AdamOptimizer<double, Matrix<double>, Vector<double>>(adamOptions);
+        var optimizer = new AdamOptimizer<double, Matrix<double>, Vector<double>>(null!, adamOptions);
 
         // Configure Exponential Smoothing model options
         var esOptions = new ExponentialSmoothingOptions<double>

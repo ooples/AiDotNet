@@ -1,3 +1,4 @@
+using AiDotNet.Interfaces;
 using Newtonsoft.Json;
 
 namespace AiDotNet.Optimizers;
@@ -44,8 +45,9 @@ public class NewtonMethodOptimizer<T, TInput, TOutput> : GradientBasedOptimizerB
     /// </remarks>
     /// <param name="options">The Newton's Method-specific optimization options.</param>
     public NewtonMethodOptimizer(
+        IFullModel<T, TInput, TOutput> model,
         NewtonMethodOptimizerOptions<T, TInput, TOutput>? options = null)
-        : base(options ?? new())
+        : base(model, options ?? new())
     {
         _options = options ?? new NewtonMethodOptimizerOptions<T, TInput, TOutput>();
 
