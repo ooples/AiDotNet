@@ -1223,7 +1223,7 @@ public abstract class OptimizerBase<T, TInput, TOutput> : IOptimizer<T, TInput, 
     /// - Upper bounds: maximum value for each feature across all training samples
     /// </para>
     /// <para>
-    /// This ensures valid random initialization where lower &lt; upper for proper random solution generation.
+    /// This ensures valid random initialization where lower < upper for proper random solution generation.
     /// </para>
     /// <para><b>For Beginners:</b> Instead of you having to manually specify lower and upper bounds,
     /// this method analyzes your training data to find the minimum and maximum values for each feature,
@@ -1265,8 +1265,13 @@ public abstract class OptimizerBase<T, TInput, TOutput> : IOptimizer<T, TInput, 
             for (int col = 0; col < features; col++)
             {
                 // Safe to access matrix[0, col] after validation above
-                T min = matrix[0, col];
-                T max = matrix[0, col];
+                if (matrix.Rows == 0)
+                {
+                    throw new ArgumentException("Matrix cannot be empty", nameof(matrix));
+                }
+                T initialValue = matrix[0, col];
+                T min = initialValue;
+                T max = initialValue;
                 for (int row = 1; row < matrix.Rows; row++)
                 {
                     T value = matrix[row, col];
@@ -1308,8 +1313,9 @@ public abstract class OptimizerBase<T, TInput, TOutput> : IOptimizer<T, TInput, 
                 throw new ArgumentException("Training data vector cannot be empty", nameof(trainingData));
             }
 
-            T min = vector[0];
-            T max = vector[0];
+            T initialValue = vector[0];
+            T min = initialValue;
+            T max = initialValue;
 
             for (int i = 1; i < vector.Length; i++)
             {
