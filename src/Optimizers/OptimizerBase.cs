@@ -1201,6 +1201,100 @@ public abstract class OptimizerBase<T, TInput, TOutput> : IOptimizer<T, TInput, 
         return solution;
     }
 
+    /// <summary>
+    /// Initializes a random solution by computing lower and upper bounds from training data.
+    /// </summary>
+    /// <param name="trainingData">The training data used to compute bounds.</param>
+    /// <returns>A model with randomly initialized parameters within the computed bounds.</returns>
+    /// <remarks>
+    /// <para>
+    /// This method computes proper lower and upper bounds from the training data:
+    /// - Lower bounds: minimum value for each feature across all training samples
+    /// - Upper bounds: maximum value for each feature across all training samples
+    /// </para>
+    /// <para>
+    /// This ensures valid random initialization where lower &lt; upper for proper random solution generation.
+    /// </para>
+    /// <para><b>For Beginners:</b> Instead of you having to manually specify lower and upper bounds,
+    /// this method analyzes your training data to find the minimum and maximum values for each feature,
+    /// then creates random parameters somewhere within those ranges.</para>
+    /// </remarks>
+    protected virtual IFullModel<T, TInput, TOutput> InitializeRandomSolution(TInput trainingData)
+    {
+        if (trainingData == null) throw new ArgumentNullException(nameof(trainingData));
+
+        // Compute lower and upper bounds from the training data
+        // Following GitHub Copilot's suggestion: compute min/max from the data
+        Vector<T> lowerBounds;
+        Vector<T> upperBounds;
+
+        if (trainingData is Matrix<T> matrix)
+        {
+            // For Matrix input: compute min and max of each column (feature)
+            int features = matrix.Columns;
+            lowerBounds = new Vector<T>(features);
+            upperBounds = new Vector<T>(features);
+
+            for (int col = 0; col < features; col++)
+            {
+                T min = matrix[0, col];
+                T max = matrix[0, col];
+
+                for (int row = 1; row < matrix.Rows; row++)
+                {
+                    T value = matrix[row, col];
+                    if (NumOps.LessThan(value, min)) min = value;
+                    if (NumOps.GreaterThan(value, max)) max = value;
+                }
+
+                lowerBounds[col] = min;
+                upperBounds[col] = max;
+            }
+        }
+        else if (trainingData is Vector<T> vector)
+        {
+            // For Vector input: compute min and max of the vector
+            if (vector.Length == 0)
+            {
+                throw new ArgumentException("Training data vector cannot be empty", nameof(trainingData));
+            }
+
+            T min = vector[0];
+            T max = vector[0];
+
+            for (int i = 1; i < vector.Length; i++)
+            {
+                T value = vector[i];
+                if (NumOps.LessThan(value, min)) min = value;
+                if (NumOps.GreaterThan(value, max)) max = value;
+            }
+
+            lowerBounds = new Vector<T>(1) { [0] = min };
+            upperBounds = new Vector<T>(1) { [0] = max };
+        }
+        else
+        {
+            // Fallback: create reasonable default bounds based on parameter count
+            int paramCount = _model.ParameterCount;
+            lowerBounds = new Vector<T>(paramCount);
+            upperBounds = new Vector<T>(paramCount);
+
+            for (int i = 0; i < paramCount; i++)
+            {
+                lowerBounds[i] = NumOps.FromDouble(-10.0);
+                upperBounds[i] = NumOps.FromDouble(10.0);
+            }
+        }
+
+        // Generate random parameters within the computed bounds
+        var randomParams = InitializeRandomSolution(lowerBounds, upperBounds);
+
+        // Create a new model with these random parameters
+        var randomModel = _model.Clone();
+        randomModel.SetParameters(randomParams);
+        return randomModel;
+    }
+
     public virtual void SaveModel(string filePath)
     {
         throw new NotImplementedException("SaveModel is not yet implemented for this optimizer type.");
