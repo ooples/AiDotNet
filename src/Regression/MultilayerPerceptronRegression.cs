@@ -432,7 +432,7 @@ public class MultilayerPerceptronRegression<T> : NonLinearRegressionBase<T>
     /// 
     /// The forward pass:
     /// - Takes the input features
-    /// - For each layer, calculates: activation = activation_function(weights � previous_activation + biases)
+    /// - For each layer, calculates: activation = activation_function(weights * previous_activation + biases)
     /// - Repeats this process through all layers
     /// - Returns the final output from the last layer
     /// 
