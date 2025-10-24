@@ -86,6 +86,7 @@ public class AdaDeltaOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<
     /// <summary>
     /// Initializes a new instance of the <see cref="AdaDeltaOptimizer{T}"/> class.
     /// </summary>
+    /// <param name="model">The model to optimize.</param>
     /// <param name="options">The options for configuring the AdaDelta optimizer.</param>
     /// <remarks>
     /// <para>
@@ -93,19 +94,20 @@ public class AdaDeltaOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<
     /// If no options are provided, default AdaDelta options are used.
     /// </para>
     /// <para><b>For Beginners:</b> This is like setting up your learning assistant (the optimizer) with specific instructions.
-    /// 
+    ///
     /// You can customize how it works by providing different options and tools:
     /// - options: Special settings for AdaDelta (like how much it remembers from past steps)
     /// - predictionOptions and modelOptions: Rules for measuring how well the model is doing
     /// - modelEvaluator, fitDetector, fitnessCalculator: Different ways to check the model's performance
     /// - modelCache and gradientCache: Places to store information to speed up learning
-    /// 
+    ///
     /// If you don't provide these, the optimizer will use default settings.
     /// </para>
     /// </remarks>
     public AdaDeltaOptimizer(
+        IFullModel<T, TInput, TOutput> model,
         AdaDeltaOptimizerOptions<T, TInput, TOutput>? options = null)
-        : base(options ?? new())
+        : base(model, options ?? new())
     {
         _options = options ?? new AdaDeltaOptimizerOptions<T, TInput, TOutput>();
 

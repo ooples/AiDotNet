@@ -55,6 +55,7 @@ public class AdamOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, T
     /// <summary>
     /// Initializes a new instance of the AdamOptimizer class.
     /// </summary>
+    /// <param name="model">The model to optimize.</param>
     /// <param name="options">The options for configuring the Adam optimizer.</param>
     /// <remarks>
     /// <para><b>For Beginners:</b> This sets up the Adam optimizer with its initial configuration.
@@ -62,8 +63,9 @@ public class AdamOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, T
     /// </para>
     /// </remarks>
     public AdamOptimizer(
+        IFullModel<T, TInput, TOutput> model,
         AdamOptimizerOptions<T, TInput, TOutput>? options = null)
-        : base(options ?? new())
+        : base(model, options ?? new())
     {
         _m = Vector<T>.Empty();
         _v = Vector<T>.Empty();
