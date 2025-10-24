@@ -137,6 +137,23 @@ public class BayesianOptimizerOptions<T, TInput, TOutput> : OptimizationAlgorith
     public IKernelFunction<T> Kernel { get; set; } = new GaussianKernel<T>();
 
     /// <summary>
+    /// Gets or sets the kernel function used by the Gaussian Process model.
+    /// This is an alias for the Kernel property to maintain backward compatibility.
+    /// </summary>
+    /// <value>The kernel function, defaulting to Gaussian kernel (also known as Radial Basis Function kernel).</value>
+    /// <remarks>
+    /// <para>
+    /// This property is provided for backward compatibility with code that uses KernelFunction.
+    /// It delegates to the Kernel property. Setting either property will update both.
+    /// </para>
+    /// </remarks>
+    public IKernelFunction<T> KernelFunction
+    {
+        get => Kernel;
+        set => Kernel = value;
+    }
+
+    /// <summary>
     /// Gets or sets whether the objective should be maximized (true) or minimized (false).
     /// </summary>
     public bool IsMaximization { get; set; } = true;
