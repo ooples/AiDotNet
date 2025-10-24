@@ -1186,7 +1186,6 @@ public class ExpressionTree<T, TInput, TOutput> : IFullModel<T, TInput, TOutput>
         {
             if (node == null)
                 return;
-            if (node == null) return;
             if (node.Type == ExpressionNodeType.Constant)
             {
                 constantNodeCount++;
