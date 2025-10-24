@@ -100,6 +100,7 @@ public class AdaMaxOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T,
     /// <summary>
     /// Initializes a new instance of the AdaMaxOptimizer class.
     /// </summary>
+    /// <param name="model">The model to optimize.</param>
     /// <param name="options">The options for configuring the AdaMax optimizer.</param>
     /// <remarks>
     /// <para>
@@ -107,19 +108,20 @@ public class AdaMaxOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T,
     /// If no options are provided, it uses default AdaMaxOptimizerOptions.
     /// </para>
     /// <para><b>For Beginners:</b> This is like setting up your smart learning assistant with specific instructions.
-    /// 
+    ///
     /// You can customize:
     /// - How fast it learns (learning rate)
     /// - How it remembers past information (beta parameters)
     /// - How long it should try to learn (max iterations)
     /// - And many other aspects of its learning process
-    /// 
+    ///
     /// If you don't provide custom settings, it will use default settings that work well in many situations.
     /// </para>
     /// </remarks>
     public AdaMaxOptimizer(
+        IFullModel<T, TInput, TOutput> model,
         AdaMaxOptimizerOptions<T, TInput, TOutput>? options = null)
-        : base(options ?? new())
+        : base(model, options ?? new())
     {
         _options = options ?? new AdaMaxOptimizerOptions<T, TInput, TOutput>();
         InitializeAdaptiveParameters();

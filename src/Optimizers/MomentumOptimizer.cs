@@ -54,6 +54,8 @@ public class MomentumOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<
     /// <summary>
     /// Initializes a new instance of the MomentumOptimizer class.
     /// </summary>
+    /// <param name="model">The model to optimize.</param>
+    /// <param name="options">The options for configuring the Momentum optimizer.</param>
     /// <remarks>
     /// <para>
     /// This constructor sets up the optimizer with the provided options and dependencies. If no options are provided,
@@ -65,8 +67,9 @@ public class MomentumOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<
     /// </para>
     /// </remarks>
     public MomentumOptimizer(
+        IFullModel<T, TInput, TOutput> model,
         MomentumOptimizerOptions<T, TInput, TOutput>? options = null)
-        : base(options ?? new())
+        : base(model, options ?? new())
     {
         _options = options ?? new MomentumOptimizerOptions<T, TInput, TOutput>();
         InitializeAdaptiveParameters();
