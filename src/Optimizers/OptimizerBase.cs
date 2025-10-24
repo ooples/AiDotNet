@@ -1240,10 +1240,16 @@ public abstract class OptimizerBase<T, TInput, TOutput> : IOptimizer<T, TInput, 
 
         if (trainingData is Matrix<T> matrix)
         {
-            // Validate non-empty matrix
+            // Validate non-empty matrix before accessing elements
             if (matrix.Rows == 0)
             {
                 throw new ArgumentException("Training data matrix cannot be empty", nameof(trainingData));
+            }
+
+            // Validate matrix has columns
+            if (matrix.Columns == 0)
+            {
+                throw new ArgumentException("Training data matrix must have at least one column", nameof(trainingData));
             }
 
             // For Matrix input: compute min and max of each column (feature)
@@ -1258,6 +1264,7 @@ public abstract class OptimizerBase<T, TInput, TOutput> : IOptimizer<T, TInput, 
             var featureMaxs = new T[features];
             for (int col = 0; col < features; col++)
             {
+                // Safe to access matrix[0, col] after validation above
                 T min = matrix[0, col];
                 T max = matrix[0, col];
                 for (int row = 1; row < matrix.Rows; row++)
@@ -1336,6 +1343,8 @@ public abstract class OptimizerBase<T, TInput, TOutput> : IOptimizer<T, TInput, 
         }
 
         // Generate random parameters within the computed bounds
+        // Note: InitializeRandomSolution(Vector<T>, Vector<T>) returns Vector<T> (verified at line 1184)
+        // This is the correct return type for SetParameters() below
         var randomParams = InitializeRandomSolution(lowerBounds, upperBounds);
 
         // Create a new model with these random parameters
