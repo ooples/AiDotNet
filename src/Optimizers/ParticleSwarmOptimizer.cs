@@ -172,7 +172,7 @@ public class ParticleSwarmOptimizer<T, TInput, TOutput> : OptimizerBase<T, TInpu
                 }
 
                 // Update global best
-                if (_fitnessCalculator.IsBetterFitness(stepData.FitnessScore, globalBest.FitnessScore))
+                if (FitnessCalculator.IsBetterFitness(stepData.FitnessScore, globalBest.FitnessScore))
                 {
                     globalBest = stepData;
                 }

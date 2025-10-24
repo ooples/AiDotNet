@@ -430,11 +430,5 @@ public class MultilayerPerceptronOptions<T, TInput, TOutput> : NonLinearRegressi
     /// models behave during training.
     /// </para>
     /// </remarks>
-    public IOptimizer<T, TInput, TOutput> Optimizer { get; set; } = new AdamOptimizer<T, TInput, TOutput>(new AdamOptimizerOptions<T, TInput, TOutput>
-    {
-        LearningRate = 0.001,
-        Beta1 = 0.9,
-        Beta2 = 0.999,
-        Epsilon = 1e-8
-    });
+    public IOptimizer<T, TInput, TOutput>? Optimizer { get; set; } = null;
 }

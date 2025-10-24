@@ -144,7 +144,13 @@ public class MultilayerPerceptronRegression<T> : NonLinearRegressionBase<T>
         : base(options, regularization)
     {
         _options = options ?? new MultilayerPerceptronOptions<T, Matrix<T>, Vector<T>>();
-        _optimizer = _options.Optimizer ?? new AdamOptimizer<T, Matrix<T>, Vector<T>>();
+        _optimizer = _options.Optimizer ?? new AdamOptimizer<T, Matrix<T>, Vector<T>>(this, new AdamOptimizerOptions<T, Matrix<T>, Vector<T>>
+        {
+            LearningRate = 0.001,
+            Beta1 = 0.9,
+            Beta2 = 0.999,
+            Epsilon = 1e-8
+        });
         _weights = [];
         _biases = [];
 
@@ -426,7 +432,7 @@ public class MultilayerPerceptronRegression<T> : NonLinearRegressionBase<T>
     /// 
     /// The forward pass:
     /// - Takes the input features
-    /// - For each layer, calculates: activation = activation_function(weights × previous_activation + biases)
+    /// - For each layer, calculates: activation = activation_function(weights ï¿½ previous_activation + biases)
     /// - Repeats this process through all layers
     /// - Returns the final output from the last layer
     /// 
