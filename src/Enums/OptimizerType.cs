@@ -1,4 +1,4 @@
-ï»¿namespace AiDotNet.Enums;
+namespace AiDotNet.Enums;
 
 /// <summary>
 /// Defines different optimization algorithms used to train machine learning models.
@@ -147,7 +147,7 @@ public enum OptimizerType
     /// <remarks>
     /// <para>
     /// <b>For Beginners:</b> Adagrad adjusts the learning rate for each parameter based on how frequently 
-    /// it's been updated. Imagine having different step sizes for different terrains â€“ taking smaller steps 
+    /// it's been updated. Imagine having different step sizes for different terrains – taking smaller steps 
     /// on well-explored paths and larger steps in new areas. This works well for sparse data (where many 
     /// features are rarely seen) but can cause the learning rate to become too small over time as it 
     /// continuously shrinks, eventually making learning too slow.
@@ -178,7 +178,7 @@ public enum OptimizerType
     /// goes a step further than RMSprop. It not only tracks a moving average of past squared gradients but 
     /// also maintains a moving average of past parameter updates. This allows it to continue learning even 
     /// when the gradients become very small. Adadelta is unique because it doesn't even require setting an 
-    /// initial learning rate â€“ it's like a hiker who can naturally adjust their pace based on both the 
+    /// initial learning rate – it's like a hiker who can naturally adjust their pace based on both the 
     /// terrain and their own recent energy expenditure.
     /// </para>
     /// </remarks>
@@ -206,7 +206,7 @@ public enum OptimizerType
     /// <b>For Beginners:</b> Nadam (Nesterov-accelerated Adam) combines the benefits of Adam with those of 
     /// Nesterov momentum. It takes Adam's ability to adapt learning rates individually for each parameter 
     /// and adds Nesterov's "look-ahead" approach. This gives you both adaptive step sizes and better 
-    /// directional awareness â€“ like a hiker who not only adjusts their stride based on the terrain but 
+    /// directional awareness – like a hiker who not only adjusts their stride based on the terrain but 
     /// also scouts ahead before committing to a direction.
     /// </para>
     /// </remarks>
@@ -220,7 +220,7 @@ public enum OptimizerType
     /// <b>For Beginners:</b> AdamW improves on Adam by handling weight decay (a technique to prevent overfitting) 
     /// in a more effective way. Regular Adam applies weight decay to the already-adapted gradients, which can 
     /// make it less effective. AdamW applies weight decay directly to the weights instead. This seemingly small 
-    /// change leads to better generalization â€“ like making sure your backpack stays light throughout your journey, 
+    /// change leads to better generalization – like making sure your backpack stays light throughout your journey, 
     /// rather than only thinking about its weight when deciding how fast to walk. This helps the model perform 
     /// better on new, unseen examples.
     /// </para>
@@ -246,7 +246,7 @@ public enum OptimizerType
     /// </summary>
     /// <remarks>
     /// <para>
-    /// <b>For Beginners:</b> LBFGS (Limited-memory Broydenâ€“Fletcherâ€“Goldfarbâ€“Shanno) is an advanced optimizer 
+    /// <b>For Beginners:</b> LBFGS (Limited-memory Broyden–Fletcher–Goldfarb–Shanno) is an advanced optimizer 
     /// that uses information about the curvature of the error surface (not just the slope). While first-order 
     /// methods like SGD only know which way is downhill, LBFGS also has an idea of how quickly the slope is 
     /// changing in different directions. This is like having not just a compass but also a detailed topographic 

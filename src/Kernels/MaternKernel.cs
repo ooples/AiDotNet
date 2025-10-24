@@ -1,28 +1,28 @@
-ï»¿namespace AiDotNet.Kernels;
+namespace AiDotNet.Kernels;
 
 /// <summary>
-/// Implements the MatÃ©rn kernel for measuring similarity between data points.
+/// Implements the Matérn kernel for measuring similarity between data points.
 /// </summary>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
 /// <remarks>
 /// <para>
-/// The MatÃ©rn kernel is a flexible kernel function that generalizes the Radial Basis Function (RBF) kernel
+/// The Matérn kernel is a flexible kernel function that generalizes the Radial Basis Function (RBF) kernel
 /// by introducing a parameter that controls the smoothness of the resulting function.
 /// </para>
 /// <para>
 /// <b>For Beginners:</b> A kernel function is a mathematical tool that measures how similar two data points are.
-/// The MatÃ©rn kernel is particularly useful because it lets you control exactly how "smooth" your model's
+/// The Matérn kernel is particularly useful because it lets you control exactly how "smooth" your model's
 /// predictions will be.
 /// </para>
 /// <para>
-/// Think of the MatÃ©rn kernel as a "similarity detector" with an adjustable sensitivity. When two points
+/// Think of the Matérn kernel as a "similarity detector" with an adjustable sensitivity. When two points
 /// are close together, the kernel gives a high similarity score. As the points get farther apart, the
-/// similarity decreases. The special thing about the MatÃ©rn kernel is that you can control exactly how
+/// similarity decreases. The special thing about the Matérn kernel is that you can control exactly how
 /// quickly this similarity drops off and how smooth the transition is.
 /// </para>
 /// <para>
 /// This kernel has two important parameters:
-/// - The nu (Î½) parameter controls the smoothness of the function
+/// - The nu (?) parameter controls the smoothness of the function
 /// - The length parameter controls how quickly the similarity decreases with distance
 /// </para>
 /// <para>
@@ -30,7 +30,7 @@
 /// and 2.5 (which is twice differentiable). The default value is 1.5, which works well for many applications.
 /// </para>
 /// <para>
-/// The MatÃ©rn kernel is particularly useful for modeling physical processes, spatial data, and any application
+/// The Matérn kernel is particularly useful for modeling physical processes, spatial data, and any application
 /// where you need precise control over the smoothness assumptions in your model.
 /// </para>
 /// </remarks>
@@ -79,13 +79,13 @@ public class MaternKernel<T> : IKernelFunction<T>
     private readonly INumericOperations<T> _numOps;
 
     /// <summary>
-    /// Initializes a new instance of the MatÃ©rn kernel with optional parameters.
+    /// Initializes a new instance of the Matérn kernel with optional parameters.
     /// </summary>
     /// <param name="nu">Controls the smoothness of the kernel function. Default is 1.5.</param>
     /// <param name="length">Controls how quickly similarity decreases with distance. Default is 1.0.</param>
     /// <remarks>
     /// <para>
-    /// <b>For Beginners:</b> This constructor sets up the MatÃ©rn kernel for use. You can optionally
+    /// <b>For Beginners:</b> This constructor sets up the Matérn kernel for use. You can optionally
     /// provide values for the two parameters that control how the kernel behaves.
     /// </para>
     /// <para>
@@ -111,7 +111,7 @@ public class MaternKernel<T> : IKernelFunction<T>
     }
 
     /// <summary>
-    /// Calculates the MatÃ©rn kernel value between two vectors.
+    /// Calculates the Matérn kernel value between two vectors.
     /// </summary>
     /// <param name="x1">The first vector.</param>
     /// <param name="x2">The second vector.</param>
@@ -119,7 +119,7 @@ public class MaternKernel<T> : IKernelFunction<T>
     /// <remarks>
     /// <para>
     /// <b>For Beginners:</b> This method takes two data points (represented as vectors) and calculates
-    /// how similar they are to each other using the MatÃ©rn kernel formula.
+    /// how similar they are to each other using the Matérn kernel formula.
     /// </para>
     /// <para>
     /// The calculation works by:
@@ -162,8 +162,8 @@ public class MaternKernel<T> : IKernelFunction<T>
     /// <returns>The value of the modified Bessel function.</returns>
     /// <remarks>
     /// <b>For Beginners:</b> This is a helper method that implements a special mathematical function
-    /// needed for the MatÃ©rn kernel calculation. You don't need to understand the details of this
-    /// function to use the MatÃ©rn kernel effectively.
+    /// needed for the Matérn kernel calculation. You don't need to understand the details of this
+    /// function to use the Matérn kernel effectively.
     /// </remarks>
     private T ModifiedBesselFunction(T order, T x)
     {
@@ -258,14 +258,14 @@ public class MaternKernel<T> : IKernelFunction<T>
     /// - Correction terms (p and q) that improve the accuracy of the approximation
     /// </para>
     /// <para>
-    /// You don't need to understand the mathematical details to use the MatÃ©rn kernel effectively.
+    /// You don't need to understand the mathematical details to use the Matérn kernel effectively.
     /// This method is just part of the internal machinery that makes the kernel work correctly.
     /// </para>
     /// </remarks>
     private T ModifiedBesselFunctionAsymptotic(T order, T x)
     {
         /// <summary>
-        /// Calculates the square root of Ï€/(2x) term used in the asymptotic expansion.
+        /// Calculates the square root of p/(2x) term used in the asymptotic expansion.
         /// </summary>
         T sqrtPiOver2x = _numOps.Divide(_numOps.Sqrt(_numOps.FromDouble(Math.PI / 2)), _numOps.Sqrt(x));
     

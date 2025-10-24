@@ -1,4 +1,4 @@
-﻿namespace AiDotNet.WindowFunctions;
+namespace AiDotNet.WindowFunctions;
 
 /// <summary>
 /// Implements the Tukey window function (also known as tapered cosine window) for signal processing applications.
@@ -8,14 +8,14 @@
 /// The Tukey window is a flexible window function that combines a flat top (Rectangular window)
 /// with cosine tapered edges. It is defined by a piecewise function controlled by the alpha parameter:
 /// 
-/// For 0 ≤ n ≤ αN/2:
-///   w(n) = 0.5 * (1 + cos(π * (2n/αN - 1)))
-/// For αN/2 &lt; n &lt; N - αN/2:
+/// For 0 = n = aN/2:
+///   w(n) = 0.5 * (1 + cos(p * (2n/aN - 1)))
+/// For aN/2 &lt; n &lt; N - aN/2:
 ///   w(n) = 1
-/// For N - αN/2 ≤ n ≤ N:
-///   w(n) = 0.5 * (1 + cos(π * (2n/αN - 2/α + 1)))
+/// For N - aN/2 = n = N:
+///   w(n) = 0.5 * (1 + cos(p * (2n/aN - 2/a + 1)))
 /// 
-/// where n is the sample index, N is (windowSize - 1), and α (alpha) is a parameter between 0 and 1
+/// where n is the sample index, N is (windowSize - 1), and a (alpha) is a parameter between 0 and 1
 /// that controls the width of the cosine tapered regions.
 /// </para>
 /// <para><b>For Beginners:</b> A window function is like a special filter that helps analyze signals more accurately.
@@ -55,9 +55,9 @@ public class TukeyWindow<T> : IWindowFunction<T>
     /// <para>
     /// This parameter controls the proportion of the window that has cosine tapered edges.
     /// It must be between 0 and 1, where:
-    /// - α = 0 produces a Rectangular window (no tapering)
-    /// - α = 1 produces a Hann window (fully tapered)
-    /// - 0 &lt; α &lt; 1 produces a flat top with cosine tapered edges
+    /// - a = 0 produces a Rectangular window (no tapering)
+    /// - a = 1 produces a Hann window (fully tapered)
+    /// - 0 &lt; a &lt; 1 produces a flat top with cosine tapered edges
     /// </para>
     /// <para><b>For Beginners:</b> The alpha parameter adjusts the balance between the flat section and tapered edges.
     /// 
@@ -113,12 +113,12 @@ public class TukeyWindow<T> : IWindowFunction<T>
     /// <para>
     /// This method implements the Tukey window function formula, which is a piecewise function:
     /// 
-    /// For 0 ≤ n ≤ αN/2:
-    ///   w(n) = 0.5 * (1 + cos(π * (2n/αN - 1)))
-    /// For αN/2 &lt; n &lt; N - αN/2:
+    /// For 0 = n = aN/2:
+    ///   w(n) = 0.5 * (1 + cos(p * (2n/aN - 1)))
+    /// For aN/2 &lt; n &lt; N - aN/2:
     ///   w(n) = 1
-    /// For N - αN/2 ≤ n ≤ N:
-    ///   w(n) = 0.5 * (1 + cos(π * (2n/αN - 2/α + 1)))
+    /// For N - aN/2 = n = N:
+    ///   w(n) = 0.5 * (1 + cos(p * (2n/aN - 2/a + 1)))
     /// 
     /// It calculates the window function value for each point from 0 to windowSize-1.
     /// </para>

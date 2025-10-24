@@ -1,4 +1,4 @@
-﻿namespace AiDotNet.Enums.AlgorithmTypes;
+namespace AiDotNet.Enums.AlgorithmTypes;
 
 /// <summary>
 /// Represents different algorithm types for Singular Value Decomposition (SVD).
@@ -11,12 +11,12 @@
 /// 
 /// Here's what SVD does in simple terms:
 /// 
-/// 1. It takes a matrix A and decomposes it into three matrices: U, Σ (Sigma), and V^T
-///    A = U × Σ × V^T
+/// 1. It takes a matrix A and decomposes it into three matrices: U, S (Sigma), and V^T
+///    A = U � S � V^T
 /// 
 /// 2. Each of these matrices has special properties:
 ///    - U contains the "left singular vectors" (think of these as the basic patterns in the rows of A)
-///    - Σ is a diagonal matrix containing the "singular values" (think of these as importance scores)
+///    - S is a diagonal matrix containing the "singular values" (think of these as importance scores)
 ///    - V^T contains the "right singular vectors" (think of these as the basic patterns in the columns of A)
 /// 
 /// Why is SVD important in AI and machine learning?

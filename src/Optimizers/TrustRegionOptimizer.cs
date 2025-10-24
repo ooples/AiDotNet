@@ -56,10 +56,12 @@ public class TrustRegionOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBa
     /// <summary>
     /// Initializes a new instance of the TrustRegionOptimizer class.
     /// </summary>
+    /// <param name="model">The model to optimize.</param>
     /// <param name="options">Options for configuring the Trust Region optimizer.</param>
     public TrustRegionOptimizer(
+        IFullModel<T, TInput, TOutput> model,
         TrustRegionOptimizerOptions<T, TInput, TOutput>? options = null)
-        : base(options ?? new())
+        : base(model, options ?? new())
     {
         _options = options ?? new TrustRegionOptimizerOptions<T, TInput, TOutput>();
         _trustRegionRadius = NumOps.Zero;

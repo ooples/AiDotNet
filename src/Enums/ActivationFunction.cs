@@ -1,4 +1,4 @@
-﻿namespace AiDotNet.Enums;
+namespace AiDotNet.Enums;
 
 /// <summary>
 /// Represents different activation functions used in neural networks and deep learning.
@@ -180,10 +180,10 @@ public enum ActivationFunction
     /// 
     /// How it works:
     /// - For positive inputs: same as ReLU, output equals input
-    /// - For negative inputs: output equals α * (e^x - 1), where α is typically 1.0
-    ///   This creates a smooth curve that approaches -α for large negative inputs
+    /// - For negative inputs: output equals a * (e^x - 1), where a is typically 1.0
+    ///   This creates a smooth curve that approaches -a for large negative inputs
     /// 
-    /// Formula: f(x) = x if x > 0, α * (e^x - 1) if x ≤ 0
+    /// Formula: f(x) = x if x > 0, a * (e^x - 1) if x = 0
     /// 
     /// Advantages:
     /// - Smooth function including for negative values (helps with learning)
@@ -193,7 +193,7 @@ public enum ActivationFunction
     /// 
     /// Limitations:
     /// - More computationally expensive than ReLU due to exponential operation
-    /// - Has an extra hyperparameter α to tune
+    /// - Has an extra hyperparameter a to tune
     /// 
     /// ELU is a good choice when you want better performance than ReLU and can afford the 
     /// slightly higher computational cost.
@@ -211,11 +211,11 @@ public enum ActivationFunction
     /// 
     /// How it works:
     /// - Similar to ELU but with carefully chosen scaling parameters
-    /// - For positive inputs: output equals input multiplied by a scale factor λ
-    /// - For negative inputs: output equals λ * α * (e^x - 1)
-    ///   where λ ≈ 1.0507 and α ≈ 1.6733 are specific constants
+    /// - For positive inputs: output equals input multiplied by a scale factor ?
+    /// - For negative inputs: output equals ? * a * (e^x - 1)
+    ///   where ? � 1.0507 and a � 1.6733 are specific constants
     /// 
-    /// Formula: f(x) = λ * x if x > 0, λ * α * (e^x - 1) if x ≤ 0
+    /// Formula: f(x) = ? * x if x > 0, ? * a * (e^x - 1) if x = 0
     /// 
     /// Advantages:
     /// - Self-normalizing property helps maintain stable activations across many layers
@@ -247,7 +247,7 @@ public enum ActivationFunction
     /// - Applies exponential function (e^x) to each number
     /// - Divides each result by the sum of all exponentials
     /// 
-    /// Formula: softmax(x_i) = e^x_i / Σ(e^x_j) for all j
+    /// Formula: softmax(x_i) = e^x_i / S(e^x_j) for all j
     /// 
     /// Advantages:
     /// - Outputs are between 0 and 1 and sum to exactly 1 (perfect for probabilities)
@@ -372,7 +372,7 @@ public enum ActivationFunction
     /// - For positive inputs, behaves similarly to ReLU but with a smooth curve
     /// - For negative inputs, allows small negative values with a smooth transition
     /// 
-    /// Formula: f(x) = 0.5 * x * (1 + tanh(sqrt(2/π) * (x + 0.044715 * x^3)))
+    /// Formula: f(x) = 0.5 * x * (1 + tanh(sqrt(2/p) * (x + 0.044715 * x^3)))
     /// (This is an approximation of the actual formula for computational efficiency)
     /// 
     /// Advantages:

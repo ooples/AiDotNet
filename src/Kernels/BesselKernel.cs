@@ -1,4 +1,4 @@
-﻿namespace AiDotNet.Kernels;
+namespace AiDotNet.Kernels;
 
 /// <summary>
 /// Implements the Bessel kernel function for measuring similarity between data points.
@@ -173,7 +173,7 @@ public class BesselKernel<T> : IKernelFunction<T>
     /// until the result is precise enough (when additional terms become extremely small).
     /// </para>
     /// <para>
-    /// This approach is similar to how you might approximate π by adding more and more decimal places.
+    /// This approach is similar to how you might approximate p by adding more and more decimal places.
     /// </para>
     /// </remarks>
     private T BesselFunctionSeries(T order, T x)

@@ -1,4 +1,4 @@
-ï»¿namespace AiDotNet.Interfaces;
+namespace AiDotNet.Interfaces;
 
 /// <summary>
 /// Defines activation functions that operate on vectors and tensors in neural networks.
@@ -11,9 +11,9 @@
 /// <b>For Beginners:</b> Activation functions are like "decision makers" in neural networks.
 /// 
 /// Imagine you're deciding whether to go outside based on the temperature:
-/// - If it's below 60Â°F, you definitely won't go (output = 0)
-/// - If it's above 75Â°F, you definitely will go (output = 1)
-/// - If it's between 60-75Â°F, you're somewhat likely to go (output between 0 and 1)
+/// - If it's below 60°F, you definitely won't go (output = 0)
+/// - If it's above 75°F, you definitely will go (output = 1)
+/// - If it's between 60-75°F, you're somewhat likely to go (output between 0 and 1)
 /// 
 /// This is similar to how activation functions work. They take the input from previous
 /// calculations in the neural network and transform it into an output that determines

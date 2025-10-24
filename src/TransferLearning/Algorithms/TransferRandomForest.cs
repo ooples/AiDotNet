@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using AiDotNet.Interfaces;
 using AiDotNet.Regression;
@@ -208,9 +208,9 @@ internal class MappedRandomForestModel<T> : IFullModel<T, Matrix<T>, Vector<T>>
         return _baseModel.Predict(input);
     }
 
-    public ModelMetaData<T> GetModelMetaData()
+    public ModelMetadata<T> GetModelMetadata()
     {
-        return _baseModel.GetModelMetaData();
+        return _baseModel.GetModelMetadata();
     }
 
     public byte[] Serialize()

@@ -1,14 +1,14 @@
-﻿namespace AiDotNet.RadialBasisFunctions;
+namespace AiDotNet.RadialBasisFunctions;
 
 /// <summary>
-/// Implements a Linear Radial Basis Function (RBF) of the form φ(r) = r.
+/// Implements a Linear Radial Basis Function (RBF) of the form f(r) = r.
 /// </summary>
 /// <typeparam name="T">The numeric type used for calculations, typically float or double.</typeparam>
 /// <remarks>
 /// <para>
 /// This class provides an implementation of a Radial Basis Function (RBF) that simply returns the radius itself.
 /// Unlike most RBFs which reach their maximum at the center and decrease with distance, the Linear RBF
-/// increases linearly with distance from the center. It has the simplest possible form of any RBF: φ(r) = r.
+/// increases linearly with distance from the center. It has the simplest possible form of any RBF: f(r) = r.
 /// Note that this function does not have a width parameter like most other RBFs.
 /// </para>
 /// <para>
@@ -46,7 +46,7 @@ public class LinearRBF<T> : IRadialBasisFunction<T>
     /// <remarks>
     /// <para>
     /// The constructor initializes the Linear Radial Basis Function. Unlike most other RBFs,
-    /// the Linear RBF does not take any parameters as it has the fixed form φ(r) = r.
+    /// the Linear RBF does not take any parameters as it has the fixed form f(r) = r.
     /// </para>
     /// <para><b>For Beginners:</b> This creates a new Linear RBF.
     /// 
@@ -68,7 +68,7 @@ public class LinearRBF<T> : IRadialBasisFunction<T>
     /// <remarks>
     /// <para>
     /// This method calculates the value of the Linear RBF for a given radius r.
-    /// For the Linear RBF, this is simply the radius itself: φ(r) = r.
+    /// For the Linear RBF, this is simply the radius itself: f(r) = r.
     /// </para>
     /// <para><b>For Beginners:</b> This method simply returns the distance value unchanged.
     /// 
@@ -120,7 +120,7 @@ public class LinearRBF<T> : IRadialBasisFunction<T>
     /// <remarks>
     /// <para>
     /// This method calculates the derivative of the Linear RBF with respect to a width parameter.
-    /// Since the Linear RBF does not have a width parameter (it has the fixed form φ(r) = r),
+    /// Since the Linear RBF does not have a width parameter (it has the fixed form f(r) = r),
     /// this derivative is zero. The method is implemented only to satisfy the interface requirements.
     /// </para>
     /// <para><b>For Beginners:</b> This method would normally tell you how the function's value

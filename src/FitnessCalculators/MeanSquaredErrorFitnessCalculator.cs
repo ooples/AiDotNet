@@ -1,4 +1,4 @@
-﻿namespace AiDotNet.FitnessCalculators;
+namespace AiDotNet.FitnessCalculators;
 
 /// <summary>
 /// A fitness calculator that uses Mean Squared Error (MSE) to evaluate model performance, particularly for regression tasks.
@@ -89,8 +89,8 @@ public class MeanSquaredErrorFitnessCalculator<T, TInput, TOutput> : FitnessCalc
     /// 
     /// A lower score means better performance (0 would be perfect).
     /// 
-    /// The formula is: MSE = (1/n) * Σ(predicted - actual)²
-    /// where n is the number of predictions and Σ means "sum of".
+    /// The formula is: MSE = (1/n) * S(predicted - actual)�
+    /// where n is the number of predictions and S means "sum of".
     /// 
     /// This method simply retrieves the pre-calculated MSE from the dataSet's ErrorStats property,
     /// which contains various error metrics that have already been computed.

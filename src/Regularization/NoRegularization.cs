@@ -1,4 +1,4 @@
-﻿
+
 namespace AiDotNet.Regularization;
 
 /// <summary>

@@ -1,4 +1,4 @@
-﻿namespace AiDotNet.LinearAlgebra;
+namespace AiDotNet.LinearAlgebra;
 
 /// <summary>
 /// Represents a single data sample consisting of features and a target value for machine learning algorithms.

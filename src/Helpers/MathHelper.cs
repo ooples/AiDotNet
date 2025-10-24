@@ -1,4 +1,4 @@
-﻿namespace AiDotNet.Helpers;
+namespace AiDotNet.Helpers;
 
 /// <summary>
 /// Provides mathematical utility methods for various numeric operations used in AI algorithms.
@@ -99,13 +99,13 @@ public static class MathHelper
     /// </summary>
     /// <typeparam name="T">The numeric type to use for calculations.</typeparam>
     /// <param name="x">The input value.</param>
-    /// <returns>The value of the Bessel function I₀(x).</returns>
+    /// <returns>The value of the Bessel function I0(x).</returns>
     /// <remarks>
     /// <para>
     /// <b>For Beginners:</b> Bessel functions are special mathematical functions that appear in many 
     /// AI and physics problems, especially those involving circular or cylindrical shapes.
     /// 
-    /// The modified Bessel function I₀(x) is used in probability distributions (like the 
+    /// The modified Bessel function I0(x) is used in probability distributions (like the 
     /// von Mises distribution) which are important in directional statistics and some 
     /// machine learning algorithms.
     /// 
@@ -138,14 +138,14 @@ public static class MathHelper
     /// </summary>
     /// <typeparam name="T">The numeric type to use for calculations.</typeparam>
     /// <param name="x">The input value.</param>
-    /// <returns>The Gamma function value Γ(x).</returns>
+    /// <returns>The Gamma function value G(x).</returns>
     /// <remarks>
     /// <para>
     /// <b>For Beginners:</b> The Gamma function is an extension of the factorial function to real numbers.
     /// While factorial (n!) is only defined for positive integers, the Gamma function works for 
     /// almost any real number.
     /// 
-    /// For positive integers n: Γ(n) = (n-1)!
+    /// For positive integers n: G(n) = (n-1)!
     /// 
     /// This function is important in many probability distributions used in machine learning,
     /// like the Beta and Dirichlet distributions, which are used in Bayesian methods.
@@ -293,7 +293,7 @@ public static class MathHelper
     }
 
     /// <summary>
-    /// Calculates the sinc function (sin(πx)/(πx)) for a given value.
+    /// Calculates the sinc function (sin(px)/(px)) for a given value.
     /// </summary>
     /// <typeparam name="T">The numeric type to use for calculations.</typeparam>
     /// <param name="x">The input value.</param>
@@ -301,7 +301,7 @@ public static class MathHelper
     /// <remarks>
     /// <para>
     /// <b>For Beginners:</b> The sinc function is a mathematical function that appears frequently in 
-    /// signal processing and Fourier analysis. It's defined as sin(πx)/(πx) for x ≠ 0, and 1 for x = 0.
+    /// signal processing and Fourier analysis. It's defined as sin(px)/(px) for x ? 0, and 1 for x = 0.
     /// The sinc function creates a wave that gradually diminishes as you move away from the center,
     /// making it useful for filtering and interpolation in digital signal processing.
     /// </para>
@@ -638,7 +638,7 @@ public static class MathHelper
     /// <remarks>
     /// <para>
     /// <b>For Beginners:</b> The factorial of a number (written as n!) is the product of all positive 
-    /// integers less than or equal to n. For example, 5! = 5 × 4 × 3 × 2 × 1 = 120.
+    /// integers less than or equal to n. For example, 5! = 5 � 4 � 3 � 2 � 1 = 120.
     /// Factorials are used in many probability and statistics calculations.
     /// </para>
     /// </remarks>
@@ -659,13 +659,13 @@ public static class MathHelper
     }
 
     /// <summary>
-    /// Returns the mathematical constant Pi (π) converted to the specified numeric type.
+    /// Returns the mathematical constant Pi (p) converted to the specified numeric type.
     /// </summary>
     /// <typeparam name="T">The numeric type to convert Pi to.</typeparam>
     /// <returns>The value of Pi as type T.</returns>
     /// <remarks>
     /// <para>
-    /// <b>For Beginners:</b> Pi (π) is a fundamental mathematical constant representing the ratio of a 
+    /// <b>For Beginners:</b> Pi (p) is a fundamental mathematical constant representing the ratio of a 
     /// circle's circumference to its diameter, approximately equal to 3.14159. It appears in many 
     /// mathematical formulas, especially those involving circles, waves, and periodic functions.
     /// </para>
@@ -686,7 +686,7 @@ public static class MathHelper
     /// <b>For Beginners:</b> The sine function is a fundamental trigonometric function that relates the 
     /// angles of a right triangle to the ratios of the lengths of its sides. In the context of 
     /// a unit circle, sine represents the y-coordinate of a point on the circle at a given angle.
-    /// The input angle must be in radians, not degrees (2π radians = 360 degrees).
+    /// The input angle must be in radians, not degrees (2p radians = 360 degrees).
     /// </para>
     /// </remarks>
     public static T Sin<T>(T x)
@@ -705,7 +705,7 @@ public static class MathHelper
     /// <b>For Beginners:</b> The cosine function is a fundamental trigonometric function that relates the 
     /// angles of a right triangle to the ratios of the lengths of its sides. In the context of 
     /// a unit circle, cosine represents the x-coordinate of a point on the circle at a given angle.
-    /// The input angle must be in radians, not degrees (2π radians = 360 degrees).
+    /// The input angle must be in radians, not degrees (2p radians = 360 degrees).
     /// </para>
     /// </remarks>
     public static T Cos<T>(T x)
@@ -746,8 +746,8 @@ public static class MathHelper
     /// <exception cref="ArgumentOutOfRangeException">Thrown when x is less than or equal to zero.</exception>
     /// <remarks>
     /// <para>
-    /// <b>For Beginners:</b> The base-2 logarithm (log₂) tells you what power you need to raise 2 to in order 
-    /// to get a specific number. For example, log₂(8) = 3 because 2³ = 8. Base-2 logarithms are commonly 
+    /// <b>For Beginners:</b> The base-2 logarithm (log2) tells you what power you need to raise 2 to in order 
+    /// to get a specific number. For example, log2(8) = 3 because 2� = 8. Base-2 logarithms are commonly 
     /// used in computer science and information theory because computers use binary (base-2) number systems.
     /// </para>
     /// </remarks>
@@ -812,7 +812,7 @@ public static class MathHelper
     {
         var numOps = GetNumericOperations<T>();
     
-        // ArcCos(x) = π/2 - ArcSin(x)
+        // ArcCos(x) = p/2 - ArcSin(x)
         var arcSin = MathHelper.ArcSin(x);
         var halfPi = numOps.Divide(Pi<T>(), numOps.FromDouble(2.0));
     
@@ -830,7 +830,7 @@ public static class MathHelper
     /// <para>
     /// <b>For Beginners:</b> The arc sine function is the inverse of the sine function. While sine 
     /// takes an angle and returns a value between -1 and 1, arc sine takes a value between -1 and 1 
-    /// and returns the corresponding angle in radians. For example, since sin(π/2) = 1, arcsin(1) = π/2.
+    /// and returns the corresponding angle in radians. For example, since sin(p/2) = 1, arcsin(1) = p/2.
     /// This is useful when you know the sine value and need to find the original angle.
     /// </para>
     /// </remarks>
@@ -957,7 +957,7 @@ public static class MathHelper
     /// before considering any features.
     /// </para>
     /// <para>
-    /// This method uses the formula: y-intercept = mean(y) - (coefficient₁ × mean(x₁) + coefficient₂ × mean(x₂) + ...)
+    /// This method uses the formula: y-intercept = mean(y) - (coefficient1 � mean(x1) + coefficient2 � mean(x2) + ...)
     /// which ensures that the regression line passes through the point of means (the average of all data points).
     /// </para>
     /// <para>
