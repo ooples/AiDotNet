@@ -475,13 +475,12 @@ public abstract class OptimizerBase<T, TInput, TOutput> : IOptimizer<T, TInput, 
     /// </remarks>
     protected OptimizationResult<T, TInput, TOutput> CreateOptimizationResult(OptimizationStepData<T, TInput, TOutput> bestStepData, OptimizationInputData<T, TInput, TOutput> input)
     {
-        var modelType = bestStepData.Solution.GetModelMetadata().ModelType;
         return OptimizerHelper<T, TInput, TOutput>.CreateOptimizationResult(
             bestStepData.Solution,
             bestStepData.FitnessScore,
             FitnessList,
             bestStepData.SelectedFeatures,
-            new OptimizationResult<T, TInput, TOutput>.DatasetResult(modelType)
+            new OptimizationResult<T, TInput, TOutput>.DatasetResult
             {
                 X = bestStepData.XTrainSubset,
                 Y = input.YTrain,
@@ -491,7 +490,7 @@ public abstract class OptimizerBase<T, TInput, TOutput> : IOptimizer<T, TInput, 
                 PredictedBasicStats = bestStepData.EvaluationData.TrainingSet.PredictedBasicStats,
                 PredictionStats = bestStepData.EvaluationData.TrainingSet.PredictionStats
             },
-            new OptimizationResult<T, TInput, TOutput>.DatasetResult(modelType)
+            new OptimizationResult<T, TInput, TOutput>.DatasetResult
             {
                 X = bestStepData.XValSubset,
                 Y = input.YValidation,
@@ -501,7 +500,7 @@ public abstract class OptimizerBase<T, TInput, TOutput> : IOptimizer<T, TInput, 
                 PredictedBasicStats = bestStepData.EvaluationData.ValidationSet.PredictedBasicStats,
                 PredictionStats = bestStepData.EvaluationData.ValidationSet.PredictionStats
             },
-            new OptimizationResult<T, TInput, TOutput>.DatasetResult(modelType)
+            new OptimizationResult<T, TInput, TOutput>.DatasetResult
             {
                 X = bestStepData.XTestSubset,
                 Y = input.YTest,

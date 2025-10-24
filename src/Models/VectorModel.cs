@@ -1114,7 +1114,9 @@ public class VectorModel<T> : IFullModel<T, Matrix<T>, Vector<T>>
         /// </summary>
         public virtual async Task<PartialDependenceData<T>> GetPartialDependenceAsync(Vector<int> featureIndices, int gridResolution = 20)
         {
-        return await InterpretableModelHelper.GetPartialDependenceAsync<T>(_enabledMethods, featureIndices, gridResolution);
+            // TODO: Implement partial dependence calculation
+            await Task.CompletedTask;
+            return new PartialDependenceData<T>();
         }
 
         /// <summary>
