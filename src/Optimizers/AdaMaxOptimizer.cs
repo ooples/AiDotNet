@@ -311,7 +311,6 @@ public class AdaMaxOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T,
     /// <summary>
     /// Updates the optimizer options with new AdaMax-specific options.
     /// </summary>
-    /// <param name="model">The model to optimize.</param>
     /// <param name="options">The new options to set.</param>
     /// <exception cref="ArgumentException">Thrown when the provided options are not of type AdaMaxOptimizerOptions.</exception>
     /// <remarks>
@@ -320,12 +319,12 @@ public class AdaMaxOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T,
     /// AdaMax-specific options are applied.
     /// </para>
     /// <para><b>For Beginners:</b> This method is like updating the settings on your learning assistant.
-    /// 
+    ///
     /// Imagine you have a robot helper for studying:
     /// - You can give it new instructions on how to help you (new options)
     /// - But you need to make sure you're giving it the right kind of instructions (AdaMax-specific)
     /// - If you try to give it instructions for a different type of helper, it will let you know there's a mistake
-    /// 
+    ///
     /// This ensures that your optimizer always has the correct and up-to-date settings to work with.
     /// </para>
     /// </remarks>

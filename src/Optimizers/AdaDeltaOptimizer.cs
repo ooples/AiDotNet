@@ -292,7 +292,6 @@ public class AdaDeltaOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<
     /// <summary>
     /// Updates the optimizer options.
     /// </summary>
-    /// <param name="model">The model to optimize.</param>
     /// <param name="options">The new options to set.</param>
     /// <exception cref="ArgumentException">Thrown when the provided options are not of type AdaDeltaOptimizerOptions.</exception>
     /// <remarks>
@@ -301,7 +300,7 @@ public class AdaDeltaOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<
     /// AdaDeltaOptimizerOptions are used with this optimizer.
     /// </para>
     /// <para><b>For Beginners:</b> This is like changing the settings on your learning assistant.
-    /// 
+    ///
     /// You can use this to adjust how the optimizer works, but you need to make sure you're
     /// using the right type of settings (AdaDeltaOptimizerOptions). If you try to use the wrong
     /// type of settings, it will give you an error message.

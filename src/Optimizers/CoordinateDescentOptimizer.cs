@@ -248,7 +248,6 @@ public class CoordinateDescentOptimizer<T, TInput, TOutput> : GradientBasedOptim
     /// <summary>
     /// Updates the options for the Coordinate Descent optimizer.
     /// </summary>
-    /// <param name="model">The model to optimize.</param>
     /// <param name="options">The new options to be set.</param>
     /// <exception cref="ArgumentException">Thrown when the provided options are not of type CoordinateDescentOptimizerOptions.</exception>
     /// <remarks>

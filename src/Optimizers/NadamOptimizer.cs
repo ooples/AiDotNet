@@ -238,7 +238,6 @@ public class NadamOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, 
     /// using rules that work for this specific type of smart ball (Nadam optimization).
     /// </para>
     /// </remarks>
-    /// <param name="model">The model to optimize.</param>
     /// <param name="options">The new options to be applied to the optimizer.</param>
     /// <exception cref="ArgumentException">Thrown when the provided options are not of the correct type.</exception>
     protected override void UpdateOptions(OptimizationAlgorithmOptions<T, TInput, TOutput> options)

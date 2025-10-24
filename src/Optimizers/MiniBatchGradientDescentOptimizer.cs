@@ -218,11 +218,10 @@ public class MiniBatchGradientDescentOptimizer<T, TInput, TOutput> : GradientBas
     /// option types are used with this optimizer.
     /// </para>
     /// <para><b>For Beginners:</b>
-    /// This is like changing your hiking strategy mid-journey. It makes sure you're only using strategies 
+    /// This is like changing your hiking strategy mid-journey. It makes sure you're only using strategies
     /// that work for this specific type of journey (Mini-Batch Gradient Descent).
     /// </para>
     /// </remarks>
-    /// <param name="model">The model to optimize.</param>
     /// <param name="options">The new options to be applied to the optimizer.</param>
     /// <exception cref="ArgumentException">Thrown when the provided options are not of the correct type.</exception>
     protected override void UpdateOptions(OptimizationAlgorithmOptions<T, TInput, TOutput> options)

@@ -3,7 +3,7 @@ using Newtonsoft.Json;
 namespace AiDotNet.Optimizers;
 
 /// <summary>
-/// Implements the Broyden–Fletcher–Goldfarb–Shanno (BFGS) optimization algorithm.
+/// Implements the Broydenï¿½Fletcherï¿½Goldfarbï¿½Shanno (BFGS) optimization algorithm.
 /// </summary>
 /// <typeparam name="T">The numeric type used for calculations (e.g., float, double).</typeparam>
 /// <remarks>
@@ -230,7 +230,6 @@ public class BFGSOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, T
     /// <summary>
     /// Updates the options for the BFGS optimizer.
     /// </summary>
-    /// <param name="model">The model to optimize.</param>
     /// <param name="options">The new options to be set.</param>
     /// <exception cref="ArgumentException">Thrown when the provided options are not of the correct type.</exception>
     /// <remarks>

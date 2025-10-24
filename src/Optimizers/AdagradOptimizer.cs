@@ -289,7 +289,6 @@ public class AdagradOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T
     /// <summary>
     /// Updates the options for the Adagrad optimizer.
     /// </summary>
-    /// <param name="model">The model to optimize.</param>
     /// <param name="options">The new options to be set.</param>
     /// <exception cref="ArgumentException">Thrown when the provided options are not of type AdagradOptimizerOptions.</exception>
     /// <remarks>
@@ -298,11 +297,11 @@ public class AdagradOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T
     /// AdagradOptimizerOptions are used to configure this optimizer.
     /// </para>
     /// <para><b>For Beginners:</b> This is like updating the instructions for your learning assistant.
-    /// 
+    ///
     /// - It checks if the new instructions are the right type for this specific assistant (Adagrad)
     /// - If they are, it updates the assistant's settings
     /// - If they're not, it reports an error
-    /// 
+    ///
     /// This helps prevent accidentally using the wrong type of settings, which could cause problems.
     /// </para>
     /// </remarks>

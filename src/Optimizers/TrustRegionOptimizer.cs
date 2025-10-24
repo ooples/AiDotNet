@@ -474,13 +474,12 @@ public class TrustRegionOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBa
     /// <summary>
     /// Updates the optimizer options.
     /// </summary>
-    /// <param name="model">The model to optimize.</param>
     /// <param name="options">The new options to be set.</param>
     /// <exception cref="ArgumentException">Thrown when the provided options are not of type TrustRegionOptimizerOptions.</exception>
     /// <remarks>
     /// This method allows updating the optimizer's configuration during runtime. It ensures that only
     /// the correct type of options (TrustRegionOptimizerOptions) can be set for this optimizer.
-    /// 
+    ///
     /// <para><b>For Beginners:</b> This is like changing the settings on your GPS mid-journey:
     /// - You can adjust how the optimizer behaves without starting over.
     /// - It checks to make sure you're using the right kind of settings for this specific optimizer.
