@@ -52,7 +52,6 @@ public class NadamOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, 
     /// </para>
     /// </remarks>
     /// <param name="model">The model to optimize.</param>
-    /// <param name="model">The model to optimize.</param>
     /// <param name="options">The Nadam-specific optimization options.</param>
     public NadamOptimizer(
         IFullModel<T, TInput, TOutput> model,

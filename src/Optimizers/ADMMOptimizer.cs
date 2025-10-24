@@ -274,7 +274,6 @@ public class ADMMOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, T
     /// <summary>
     /// Creates a regularization object based on the provided options.
     /// </summary>
-    /// <param name="model">The model to optimize.</param>
     /// <param name="options">The ADMM optimizer options containing regularization settings.</param>
     /// <returns>An instance of IRegularization<T> based on the specified regularization type.</returns>
     /// <remarks>

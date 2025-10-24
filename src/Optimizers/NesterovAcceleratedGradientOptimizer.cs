@@ -43,7 +43,6 @@ public class NesterovAcceleratedGradientOptimizer<T, TInput, TOutput> : Gradient
     /// </para>
     /// </remarks>
     /// <param name="model">The model to optimize.</param>
-    /// <param name="model">The model to optimize.</param>
     /// <param name="options">The NAG-specific optimization options.</param>
     /// <param name="predictionOptions">Options for prediction statistics.</param>
     /// <param name="modelOptions">Options for model statistics.</param>

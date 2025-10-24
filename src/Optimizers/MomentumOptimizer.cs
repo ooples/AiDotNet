@@ -57,7 +57,6 @@ public class MomentumOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<
     /// Initializes a new instance of the MomentumOptimizer class.
     /// </summary>
     /// <param name="model">The model to optimize.</param>
-    /// <param name="model">The model to optimize.</param>
     /// <param name="options">The options for configuring the Momentum optimizer.</param>
     /// <remarks>
     /// <para>
