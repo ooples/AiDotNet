@@ -425,14 +425,14 @@ public class VectorModel<T> : IFullModel<T, Matrix<T>, Vector<T>>
     /// - Visualizing or reporting on the model
     /// </para>
     /// </remarks>
-    public ModelMetadata<T> GetModelMetadata()
+    public ModelMetaData<T> GetModelMetaData()
     {
         T norm = Coefficients.Norm();
         norm ??= _numOps.Zero;
 
         int nonZeroCount = Coefficients.Count(c => !_numOps.Equals(c, _numOps.Zero));
-        
-        return new ModelMetadata<T>
+
+        return new ModelMetaData<T>
         {
             FeatureCount = FeatureCount,
             Complexity = nonZeroCount,
@@ -894,7 +894,7 @@ public class VectorModel<T> : IFullModel<T, Matrix<T>, Vector<T>>
         protected readonly HashSet<InterpretationMethod> _enabledMethods = new();
         protected Vector<int> _sensitiveFeatures;
         protected readonly List<FairnessMetric> _fairnessMetrics = new();
-        protected IModel<Matrix<T>, Vector<T>, ModelMetadata<T>> _baseModel;
+        protected IModel<Matrix<T>, Vector<T>, ModelMetaData<T>> _baseModel;
 
         /// <summary>
         /// Gets the global feature importance across all predictions.
@@ -987,7 +987,7 @@ public class VectorModel<T> : IFullModel<T, Matrix<T>, Vector<T>>
         /// <summary>
         /// Sets the base model for interpretability analysis.
         /// </summary>
-        public virtual void SetBaseModel(IModel<Matrix<T>, Vector<T>, ModelMetadata<T>> model)
+        public virtual void SetBaseModel(IModel<Matrix<T>, Vector<T>, ModelMetaData<T>> model)
         {
         _baseModel = model ?? throw new ArgumentNullException(nameof(model));
         }

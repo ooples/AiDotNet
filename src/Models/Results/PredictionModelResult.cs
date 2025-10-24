@@ -158,7 +158,7 @@ public class PredictionModelResult<T, TInput, TOutput> : IPredictiveModel<T, TIn
     /// based on features like "square_footage", "num_bedrooms", and "location_score".
     /// </para>
     /// </remarks>
-    public ModelMetadata<T> ModelMetadata { get; private set; } = new();
+    public ModelMetaData<T> ModelMetadata { get; private set; } = new();
 
     /// <summary>
     /// Initializes a new instance of the PredictionModelResult class with the specified model, optimization results, and normalization information.
@@ -255,7 +255,7 @@ public class PredictionModelResult<T, TInput, TOutput> : IPredictiveModel<T, TIn
     /// so you can ensure your input data has the correct columns.
     /// </para>
     /// </remarks>
-    public ModelMetadata<T> GetModelMetadata()
+    public ModelMetaData<T> GetModelMetadata()
     {
         return ModelMetadata;
     }
@@ -489,7 +489,7 @@ public class PredictionModelResult<T, TInput, TOutput> : IPredictiveModel<T, TIn
     /// </summary>
     /// <param name="data">The serialized data.</param>
     /// <returns>The extracted ModelMetadata.</returns>
-    private static ModelMetadata<T> ExtractMetadataFromSerializedData(byte[] data)
+    private static ModelMetaData<T> ExtractMetadataFromSerializedData(byte[] data)
     {
         try
         {
@@ -506,11 +506,11 @@ public class PredictionModelResult<T, TInput, TOutput> : IPredictiveModel<T, TIn
                     TypeNameHandling = TypeNameHandling.Auto
                 };
 
-                var metadata = metadataToken.ToObject<ModelMetadata<T>>(JsonSerializer.Create(settings));
-                return metadata ?? new ModelMetadata<T>();
+                var metadata = metadataToken.ToObject<ModelMetaData<T>>(JsonSerializer.Create(settings));
+                return metadata ?? new ModelMetaData<T>();
             }
 
-            return new ModelMetadata<T>();
+            return new ModelMetaData<T>();
         }
         catch (Exception ex)
         {
@@ -550,7 +550,7 @@ public class PredictionModelResult<T, TInput, TOutput> : IPredictiveModel<T, TIn
     /// </remarks>
     public static PredictionModelResult<T, TInput, TOutput> LoadModel(
         string filePath,
-        Func<ModelMetadata<T>, IFullModel<T, TInput, TOutput>> modelFactory)
+        Func<ModelMetaData<T>, IFullModel<T, TInput, TOutput>> modelFactory)
     {
         // First, we need to read the file
         byte[] data = File.ReadAllBytes(filePath);
