@@ -56,10 +56,12 @@ public class ParticleSwarmOptimizer<T, TInput, TOutput> : OptimizerBase<T, TInpu
     /// <summary>
     /// Initializes a new instance of the ParticleSwarmOptimizer class with the specified options.
     /// </summary>
+    /// <param name="model">The model to be optimized.</param>
     /// <param name="options">The particle swarm optimization options, or null to use default options.</param>
     public ParticleSwarmOptimizer(
+        IFullModel<T, TInput, TOutput> model,
         ParticleSwarmOptimizationOptions<T, TInput, TOutput>? options = null)
-        : base(options ?? new())
+        : base(model, options ?? new())
     {
         _random = new Random();
         _psoOptions = options ?? new ParticleSwarmOptimizationOptions<T, TInput, TOutput>();
@@ -117,7 +119,7 @@ public class ParticleSwarmOptimizer<T, TInput, TOutput> : OptimizerBase<T, TInpu
             
             // Update global best if needed
             if (globalBest.Solution == null || 
-                _fitnessCalculator.IsBetterFitness(stepData.FitnessScore, globalBest.FitnessScore))
+                FitnessCalculator.IsBetterFitness(stepData.FitnessScore, globalBest.FitnessScore))
             {
                 globalBest = stepData;
             }
@@ -162,7 +164,7 @@ public class ParticleSwarmOptimizer<T, TInput, TOutput> : OptimizerBase<T, TInpu
                 
                 // Update current iteration's best solution
                 if (currentIterationBest.Solution == null ||
-                    _fitnessCalculator.IsBetterFitness(stepData.FitnessScore, currentIterationBest.FitnessScore))
+                    FitnessCalculator.IsBetterFitness(stepData.FitnessScore, currentIterationBest.FitnessScore))
                 {
                     currentIterationBest = stepData;
                 }
