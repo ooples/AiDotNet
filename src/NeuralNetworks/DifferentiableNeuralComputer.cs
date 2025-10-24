@@ -672,10 +672,10 @@ public class DifferentiableNeuralComputer<T> : NeuralNetworkBase<T>
         
         // Apply gradient clipping to prevent exploding gradients
         parameterGradients = ClipGradient(parameterGradients);
-        
+
         // Create optimizer (here we use a simple gradient descent optimizer)
-        var optimizer = new GradientDescentOptimizer<T, Tensor<T>, Tensor<T>>();
-        
+        var optimizer = new GradientDescentOptimizer<T, Tensor<T>, Tensor<T>>(this);
+
         // Get current parameters
         Vector<T> currentParameters = GetParameters();
         

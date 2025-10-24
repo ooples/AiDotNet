@@ -114,7 +114,7 @@ public class Transformer<T> : NeuralNetworkBase<T>
         base(architecture, lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(architecture.TaskType))
     {
         _transformerArchitecture = architecture;
-        _optimizer = optimizer ?? new GradientDescentOptimizer<T, Tensor<T>, Tensor<T>>();
+        _optimizer = optimizer ?? new GradientDescentOptimizer<T, Tensor<T>, Tensor<T>>(this);
 
         InitializeLayers();
     }
@@ -472,7 +472,7 @@ public class Transformer<T> : NeuralNetworkBase<T>
         T dropoutRate = NumOps.FromDouble(reader.ReadDouble());
 
         // Read and reconstruct loss function and optimizer
-        _optimizer = DeserializationHelper.DeserializeInterface<IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>>(reader) ?? new GradientDescentOptimizer<T, Tensor<T>, Tensor<T>>();
+        _optimizer = DeserializationHelper.DeserializeInterface<IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>>(reader) ?? new GradientDescentOptimizer<T, Tensor<T>, Tensor<T>>(this);
     }
 
     /// <summary>
