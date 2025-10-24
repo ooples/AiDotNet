@@ -184,9 +184,9 @@ public class QuantileRegression<T> : RegressionBase<T>
     /// This information can be useful for understanding and comparing different models.
     /// </para>
     /// </remarks>
-    public override ModelMetaData<T> GetModelMetaData()
+    public override ModelMetadata<T> GetModelMetadata()
     {
-        var metadata = base.GetModelMetaData();
+        var metadata = base.GetModelMetadata();
         metadata.AdditionalInfo["Quantile"] = _options.Quantile;
 
         return metadata;

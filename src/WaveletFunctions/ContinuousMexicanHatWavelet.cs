@@ -1,4 +1,4 @@
-ï»¿namespace AiDotNet.WaveletFunctions;
+namespace AiDotNet.WaveletFunctions;
 
 /// <summary>
 /// Implements the Mexican Hat wavelet (also known as the Ricker wavelet or the second derivative of a Gaussian),
@@ -60,7 +60,7 @@ public class ContinuousMexicanHatWavelet<T> : IWaveletFunction<T>
     /// - The scale (width) of the wavelet is adjusted during the transform process, not in the constructor
     /// 
     /// The Mexican Hat wavelet is defined by the formula:
-    /// Ïˆ(t) = (2/âˆš3) Â· Ï€^(-1/4) Â· (1-tÂ²) Â· e^(-tÂ²/2)
+    /// ?(t) = (2/v3) · p^(-1/4) · (1-t²) · e^(-t²/2)
     /// 
     /// This formula creates the characteristic central peak with symmetric valleys on either side.
     /// </para>
@@ -81,16 +81,16 @@ public class ContinuousMexicanHatWavelet<T> : IWaveletFunction<T>
     /// This method gives you the actual value of the Mexican Hat wavelet at a specific point.
     /// 
     /// The Mexican Hat wavelet is defined by the formula:
-    /// Ïˆ(t) = (2/âˆš3) Â· Ï€^(-1/4) Â· (1-tÂ²) Â· e^(-tÂ²/2)
+    /// ?(t) = (2/v3) · p^(-1/4) · (1-t²) · e^(-t²/2)
     /// 
     /// Breaking this down:
-    /// 1. (1-tÂ²): This term creates the basic shape with a positive center and negative sides
-    /// 2. e^(-tÂ²/2): This is the Gaussian envelope that makes the function decay to zero as t moves away from the center
-    /// 3. (2/âˆš3) Â· Ï€^(-1/4): This is a normalization factor that ensures the wavelet has unit energy
+    /// 1. (1-t²): This term creates the basic shape with a positive center and negative sides
+    /// 2. e^(-t²/2): This is the Gaussian envelope that makes the function decay to zero as t moves away from the center
+    /// 3. (2/v3) · p^(-1/4): This is a normalization factor that ensures the wavelet has unit energy
     /// 
     /// The result is a function that:
     /// - Equals 1 at x=0 (after normalization)
-    /// - Has negative valleys at x = Â±âˆš2
+    /// - Has negative valleys at x = ±v2
     /// - Approaches zero as x moves further from the center
     /// 
     /// You might use this method to visualize the wavelet or to directly apply the wavelet
@@ -173,7 +173,7 @@ public class ContinuousMexicanHatWavelet<T> : IWaveletFunction<T>
     /// 
     /// This method creates a sinc function-based low-pass filter:
     /// 
-    /// sinc(x) = sin(Ï€x)/(Ï€x)
+    /// sinc(x) = sin(px)/(px)
     /// 
     /// The sinc function is the ideal low-pass filter in signal processing theory.
     /// It lets through all frequencies below a cutoff point and blocks all frequencies above it.
@@ -224,7 +224,7 @@ public class ContinuousMexicanHatWavelet<T> : IWaveletFunction<T>
     /// For the Mexican Hat wavelet, these coefficients are a discretized version of the
     /// Mexican Hat function:
     /// 
-    /// Ïˆ(t) = (1-tÂ²) Â· e^(-tÂ²/2)
+    /// ?(t) = (1-t²) · e^(-t²/2)
     /// 
     /// This method:
     /// 1. Creates a discretized Mexican Hat wavelet of specified length

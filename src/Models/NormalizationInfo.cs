@@ -1,4 +1,4 @@
-﻿namespace AiDotNet.Models;
+namespace AiDotNet.Models;
 
 /// <summary>
 /// Represents information about how data normalization is performed for a model, including the normalizer and parameters.

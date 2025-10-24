@@ -1,4 +1,4 @@
-﻿namespace AiDotNet.Kernels;
+namespace AiDotNet.Kernels;
 
 /// <summary>
 /// Implements the Spherical kernel for measuring similarity between data points.
@@ -23,12 +23,12 @@
 /// </para>
 /// <para>
 /// The formula for the Spherical kernel is:
-/// k(x, y) = 1.5 * (1 - ||x - y||/σ) if ||x - y|| ≤ σ
-/// k(x, y) = 0 if ||x - y|| > σ
+/// k(x, y) = 1.5 * (1 - ||x - y||/s) if ||x - y|| = s
+/// k(x, y) = 0 if ||x - y|| > s
 /// where:
 /// - x and y are the two data points being compared
 /// - ||x - y|| is the Euclidean distance between them
-/// - σ (sigma) is the radius parameter that determines the kernel's range
+/// - s (sigma) is the radius parameter that determines the kernel's range
 /// </para>
 /// <para>
 /// Common uses include:

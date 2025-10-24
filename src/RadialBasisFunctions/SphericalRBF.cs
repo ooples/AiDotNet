@@ -1,4 +1,4 @@
-﻿namespace AiDotNet.RadialBasisFunctions;
+namespace AiDotNet.RadialBasisFunctions;
 
 /// <summary>
 /// Implements a Spherical Radial Basis Function (RBF) with compact support.
@@ -8,15 +8,15 @@
 /// <para>
 /// This class provides an implementation of a Spherical Radial Basis Function, which is a compactly
 /// supported RBF defined as:
-/// φ(r) = 1 - 1.5(r/ε) + 0.5(r/ε)³  for r ≤ ε
-/// φ(r) = 0                        for r > ε
-/// where r is the radial distance and ε (epsilon) is a shape parameter controlling the support radius.
+/// f(r) = 1 - 1.5(r/e) + 0.5(r/e)�  for r = e
+/// f(r) = 0                        for r > e
+/// where r is the radial distance and e (epsilon) is a shape parameter controlling the support radius.
 /// </para>
 /// <para>
 /// Unlike many other RBFs that have non-zero values for all distances, the Spherical RBF becomes exactly
-/// zero beyond a certain radius (ε), giving it "compact support." This property can be computationally
+/// zero beyond a certain radius (e), giving it "compact support." This property can be computationally
 /// advantageous when working with large datasets, as it leads to sparse matrices in many applications.
-/// The function is C² continuous, meaning it has continuous derivatives up to order 2.
+/// The function is C� continuous, meaning it has continuous derivatives up to order 2.
 /// </para>
 /// <para><b>For Beginners:</b> A Radial Basis Function (RBF) is a special type of mathematical function
 /// that depends only on the distance from a center point.
@@ -85,8 +85,8 @@ public class SphericalRBF<T> : IRadialBasisFunction<T>
     /// <remarks>
     /// <para>
     /// This method calculates the value of the Spherical RBF for a given radius r. The formula used is
-    /// 1 - 1.5(r/ε) + 0.5(r/ε)³ for r ≤ ε, and 0 for r > ε. The function equals 1 at r = 0 and
-    /// smoothly decreases to 0 at r = ε, remaining 0 for all larger values of r.
+    /// 1 - 1.5(r/e) + 0.5(r/e)� for r = e, and 0 for r > e. The function equals 1 at r = 0 and
+    /// smoothly decreases to 0 at r = e, remaining 0 for all larger values of r.
     /// </para>
     /// <para><b>For Beginners:</b> This method computes the function's value at a specific distance (r) from the center.
     /// 
@@ -125,8 +125,8 @@ public class SphericalRBF<T> : IRadialBasisFunction<T>
     /// <remarks>
     /// <para>
     /// This method calculates the derivative of the Spherical RBF with respect to the radius r.
-    /// For r > ε, the derivative is 0. For r ≤ ε, the formula for the derivative is (1.5/ε)[(r/ε)² - 1].
-    /// The derivative is negative for r < ε, indicating that the function decreases with distance within its support.
+    /// For r > e, the derivative is 0. For r = e, the formula for the derivative is (1.5/e)[(r/e)� - 1].
+    /// The derivative is negative for r < e, indicating that the function decreases with distance within its support.
     /// </para>
     /// <para><b>For Beginners:</b> This method computes how fast the function's value changes
     /// as you move away from the center point.
@@ -146,25 +146,25 @@ public class SphericalRBF<T> : IRadialBasisFunction<T>
     /// </remarks>
     public T ComputeDerivative(T r)
     {
-        // For r > ε, the derivative is 0
+        // For r > e, the derivative is 0
         if (_numOps.GreaterThan(r, _epsilon))
         {
             return _numOps.Zero;
         }
         
-        // Calculate r/ε
+        // Calculate r/e
         T rDividedByEpsilon = _numOps.Divide(r, _epsilon);
         
-        // Calculate (r/ε)²
+        // Calculate (r/e)�
         T rDividedByEpsilonSquared = _numOps.Multiply(rDividedByEpsilon, rDividedByEpsilon);
         
-        // Calculate (r/ε)² - 1
+        // Calculate (r/e)� - 1
         T term = _numOps.Subtract(rDividedByEpsilonSquared, _numOps.One);
         
-        // Calculate 1.5/ε
+        // Calculate 1.5/e
         T factor = _numOps.Divide(_numOps.FromDouble(1.5), _epsilon);
         
-        // Return (1.5/ε)[(r/ε)² - 1]
+        // Return (1.5/e)[(r/e)� - 1]
         return _numOps.Multiply(factor, term);
     }
     
@@ -176,8 +176,8 @@ public class SphericalRBF<T> : IRadialBasisFunction<T>
     /// <remarks>
     /// <para>
     /// This method calculates the derivative of the Spherical RBF with respect to the shape parameter epsilon.
-    /// For r > ε, the derivative is 0 for practical purposes, though theoretically it involves a Dirac delta function
-    /// at the boundary. For r ≤ ε, the formula is (1.5r/ε²)[1 - (r/ε)²]. This derivative is useful for
+    /// For r > e, the derivative is 0 for practical purposes, though theoretically it involves a Dirac delta function
+    /// at the boundary. For r = e, the formula is (1.5r/e�)[1 - (r/e)�]. This derivative is useful for
     /// optimizing the support radius parameter.
     /// </para>
     /// <para><b>For Beginners:</b> This method calculates how the function's value would change
@@ -200,30 +200,30 @@ public class SphericalRBF<T> : IRadialBasisFunction<T>
     /// </remarks>
     public T ComputeWidthDerivative(T r)
     {
-        // For r > ε, the width derivative requires special handling
+        // For r > e, the width derivative requires special handling
         if (_numOps.GreaterThan(r, _epsilon))
         {
             // The derivative at the boundary is a delta function, which we can't represent directly
-            // For practical purposes, we return 0 for r > ε
+            // For practical purposes, we return 0 for r > e
             return _numOps.Zero;
         }
         
-        // Calculate r/ε
+        // Calculate r/e
         T rDividedByEpsilon = _numOps.Divide(r, _epsilon);
         
-        // Calculate (r/ε)²
+        // Calculate (r/e)�
         T rDividedByEpsilonSquared = _numOps.Multiply(rDividedByEpsilon, rDividedByEpsilon);
         
-        // Calculate 1 - (r/ε)²
+        // Calculate 1 - (r/e)�
         T term = _numOps.Subtract(_numOps.One, rDividedByEpsilonSquared);
         
-        // Calculate 1.5r/ε²
+        // Calculate 1.5r/e�
         T factor = _numOps.Divide(
             _numOps.Multiply(_numOps.FromDouble(1.5), r),
             _numOps.Multiply(_epsilon, _epsilon)
         );
         
-        // Return (1.5r/ε²)[1 - (r/ε)²]
+        // Return (1.5r/e�)[1 - (r/e)�]
         return _numOps.Multiply(factor, term);
     }
 }

@@ -424,10 +424,10 @@ public class SiameseNetwork<T> : NeuralNetworkBase<T>
     /// is useful for documentation, debugging, and understanding the network's configuration.
     /// </para>
     /// </remarks>
-    public override ModelMetaData<T> GetModelMetaData()
+    public override ModelMetadata<T> GetModelMetadata()
     {
         // Prepare Siamese-specific information
-        var metadata = new ModelMetaData<T>
+        var metadata = new ModelMetadata<T>
         {
             ModelType = ModelType.SiameseNetwork,
             AdditionalInfo = new Dictionary<string, object>

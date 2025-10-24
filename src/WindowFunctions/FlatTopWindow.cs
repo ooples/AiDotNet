@@ -1,4 +1,4 @@
-﻿namespace AiDotNet.WindowFunctions;
+namespace AiDotNet.WindowFunctions;
 
 /// <summary>
 /// Implements the Flat Top window function for signal processing applications.
@@ -7,7 +7,7 @@
 /// <para>
 /// The Flat Top window is a specialized window function designed for amplitude accuracy in spectral analysis.
 /// It uses a weighted sum of cosine terms:
-/// w(n) = 1.0 - 1.93 * cos(2πn/(N-1)) + 1.29 * cos(4πn/(N-1)) - 0.388 * cos(6πn/(N-1)) + 0.028 * cos(8πn/(N-1))
+/// w(n) = 1.0 - 1.93 * cos(2pn/(N-1)) + 1.29 * cos(4pn/(N-1)) - 0.388 * cos(6pn/(N-1)) + 0.028 * cos(8pn/(N-1))
 /// where n is the sample index and N is the window size.
 /// The Flat Top window has superior amplitude accuracy but poorer frequency resolution compared to other windows.
 /// </para>
@@ -59,7 +59,7 @@ public class FlatTopWindow<T> : IWindowFunction<T>
     /// <remarks>
     /// <para>
     /// This method implements the Flat Top window function formula:
-    /// w(n) = 1.0 - 1.93 * cos(2πn/(N-1)) + 1.29 * cos(4πn/(N-1)) - 0.388 * cos(6πn/(N-1)) + 0.028 * cos(8πn/(N-1))
+    /// w(n) = 1.0 - 1.93 * cos(2pn/(N-1)) + 1.29 * cos(4pn/(N-1)) - 0.388 * cos(6pn/(N-1)) + 0.028 * cos(8pn/(N-1))
     /// It calculates the window function value for each point from 0 to windowSize-1.
     /// </para>
     /// <para><b>For Beginners:</b> This method creates the actual window values based on the size you specify.

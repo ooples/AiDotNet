@@ -1,4 +1,4 @@
-﻿namespace AiDotNet.NeuralNetworks.Layers;
+namespace AiDotNet.NeuralNetworks.Layers;
 
 /// <summary>
 /// Represents a layer that detects anomalies by comparing predictions with actual inputs.

@@ -1,4 +1,4 @@
-﻿namespace AiDotNet.FeatureSelectors;
+namespace AiDotNet.FeatureSelectors;
 
 /// <summary>
 /// A feature selector that chooses features based on their Pearson correlation with each other.

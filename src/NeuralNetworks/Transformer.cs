@@ -388,9 +388,9 @@ public class Transformer<T> : NeuralNetworkBase<T>
     /// experimenting with multiple configurations.
     /// </para>
     /// </remarks>
-    public override ModelMetaData<T> GetModelMetaData()
+    public override ModelMetadata<T> GetModelMetadata()
     {
-        return new ModelMetaData<T>
+        return new ModelMetadata<T>
         {
             ModelType = ModelType.Transformer,
             AdditionalInfo = new Dictionary<string, object>

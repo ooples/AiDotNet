@@ -1,4 +1,4 @@
-﻿global using AiDotNet.LossFunctions;
+global using AiDotNet.LossFunctions;
 
 namespace AiDotNet.NeuralNetworks;
 
@@ -20,7 +20,7 @@ namespace AiDotNet.NeuralNetworks;
 /// - The decoder part takes this compressed version and tries to recreate the original data
 /// 
 /// For example, with images:
-/// - You might compress a 256×256 pixel image (65,536 values) into just 100 numbers
+/// - You might compress a 256�256 pixel image (65,536 values) into just 100 numbers
 /// - The network learns which features are most important to preserve
 /// - It then learns to reconstruct the image from only those 100 numbers
 /// 
@@ -225,7 +225,7 @@ public class Autoencoder<T> : NeuralNetworkBase<T>
     /// <para><b>For Beginners:</b> This method checks if the layers you provided will work for an autoencoder.
     /// 
     /// It makes sure:
-    /// - You have at least 3 layers (input → encoded → output)
+    /// - You have at least 3 layers (input ? encoded ? output)
     /// - The input and output layers are the same size (since an autoencoder reconstructs its input)
     /// - The network is symmetric (decoder mirrors encoder)
     /// - The activation functions are symmetric (same functions used in corresponding encoder/decoder layers)
@@ -640,9 +640,9 @@ public class Autoencoder<T> : NeuralNetworkBase<T>
     /// encoded size, and layer configuration. This information is useful for model management, serialization,
     /// and transfer learning.
     /// </remarks>
-    public override ModelMetaData<T> GetModelMetaData()
+    public override ModelMetadata<T> GetModelMetadata()
     {
-        return new ModelMetaData<T>
+        return new ModelMetadata<T>
         {
             ModelType = ModelType.Autoencoder,
             AdditionalInfo = new Dictionary<string, object>

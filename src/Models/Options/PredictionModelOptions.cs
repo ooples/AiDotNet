@@ -1,4 +1,4 @@
-ï»¿namespace AiDotNet.Models;
+namespace AiDotNet.Models;
 
 /// <summary>
 /// Configuration options for prediction statistics generation, which provides statistical analysis
@@ -17,15 +17,15 @@
 /// <para><b>For Beginners:</b> Prediction statistics help you understand how reliable your model's predictions are and how your model improves with more data.
 /// 
 /// Think of prediction statistics like weather forecasting:
-/// - Weather forecasts don't just say "tomorrow will be 75Â°F"
-/// - They often say "75Â°F with a 90% chance of being between 72-78Â°F"
+/// - Weather forecasts don't just say "tomorrow will be 75°F"
+/// - They often say "75°F with a 90% chance of being between 72-78°F"
 /// - They also show how forecast accuracy improves with more data points
 /// 
 /// What these statistics do:
 /// 
 /// 1. Confidence Intervals: Show the range where the true value is likely to fall
 ///    - Instead of a single prediction like "house price will be $300,000"
-///    - You get "house price will be $300,000 Â± $15,000 with 95% confidence"
+///    - You get "house price will be $300,000 ± $15,000 with 95% confidence"
 ///    - This helps you understand how certain or uncertain each prediction is
 /// 
 /// 2. Learning Curves: Show how your model improves as you give it more training data
@@ -71,7 +71,7 @@ public class PredictionStatsOptions
     /// - In exploratory analysis where approximate ranges are sufficient
     /// - When communicating results to audiences who prefer precision over certainty
     /// 
-    /// In statistical terms, this is equivalent to the significance level Î± = 1 - ConfidenceLevel
+    /// In statistical terms, this is equivalent to the significance level a = 1 - ConfidenceLevel
     /// (e.g., 95% confidence = 5% significance level).
     /// </para>
     /// </remarks>

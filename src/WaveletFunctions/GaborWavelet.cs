@@ -1,4 +1,4 @@
-﻿namespace AiDotNet.WaveletFunctions;
+namespace AiDotNet.WaveletFunctions;
 
 /// <summary>
 /// Represents a Gabor wavelet function implementation for time-frequency analysis and signal processing.
@@ -313,7 +313,7 @@ public class GaborWavelet<T> : IWaveletFunction<T>
     /// <para>
     /// This method implements the core Gabor function calculation, which combines a Gaussian envelope
     /// with either a cosine wave (real part) or a sine wave (imaginary part). It applies a rotation
-    /// to the input coordinate by π/4 radians before calculating the function, which is a common
+    /// to the input coordinate by p/4 radians before calculating the function, which is a common
     /// approach in image processing applications to create oriented filters.
     /// </para>
     /// <para><b>For Beginners:</b> This helper method calculates either the cosine or sine version of the Gabor function.

@@ -1,4 +1,4 @@
-﻿namespace AiDotNet.Models.Options;
+namespace AiDotNet.Models.Options;
 
 using AiDotNet.ActivationFunctions;
 using AiDotNet.LossFunctions;
@@ -386,9 +386,9 @@ public class MultilayerPerceptronOptions<T, TInput, TOutput> : NonLinearRegressi
     /// - Categorical Cross-Entropy: For multi-class classification problems
     /// 
     /// The loss function should match your problem type and output activation function. For example:
-    /// - Regression → MSE + Linear output activation
-    /// - Binary classification → Binary Cross-Entropy + Sigmoid output activation
-    /// - Multi-class classification → Categorical Cross-Entropy + Softmax output activation
+    /// - Regression ? MSE + Linear output activation
+    /// - Binary classification ? Binary Cross-Entropy + Sigmoid output activation
+    /// - Multi-class classification ? Categorical Cross-Entropy + Softmax output activation
     /// </para>
     /// </remarks>
     public ILossFunction<T>? LossFunction { get; set; } = new MeanSquaredErrorLoss<T>();

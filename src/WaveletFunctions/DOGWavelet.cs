@@ -1,4 +1,4 @@
-ï»¿namespace AiDotNet.WaveletFunctions;
+namespace AiDotNet.WaveletFunctions;
 
 /// <summary>
 /// Implements the Derivative of Gaussian (DOG) wavelet, which is based on the nth derivative
@@ -98,16 +98,16 @@ public class DOGWavelet<T> : IWaveletFunction<T>
     /// This method gives you the actual value of the DOG wavelet at a specific point.
     /// 
     /// The DOG wavelet is defined as the nth derivative of the Gaussian function:
-    /// Ïˆ(x) = (-1)^n Â· d^n/dx^n(e^(-xÂ²/2))
+    /// ?(x) = (-1)^n · d^n/dx^n(e^(-x²/2))
     /// 
     /// For specific orders, this gives:
-    /// - Order 1: Ïˆ(x) = -x Â· e^(-xÂ²/2)
-    /// - Order 2: Ïˆ(x) = (xÂ² - 1) Â· e^(-xÂ²/2)
-    /// - Order 3: Ïˆ(x) = -(xÂ³ - 3x) Â· e^(-xÂ²/2)
+    /// - Order 1: ?(x) = -x · e^(-x²/2)
+    /// - Order 2: ?(x) = (x² - 1) · e^(-x²/2)
+    /// - Order 3: ?(x) = -(x³ - 3x) · e^(-x²/2)
     /// 
     /// The implementation uses a combination of:
     /// 1. The appropriate polynomial term based on the order
-    /// 2. The Gaussian envelope e^(-xÂ²/2)
+    /// 2. The Gaussian envelope e^(-x²/2)
     /// 3. A normalization factor to ensure proper scaling
     /// 
     /// The result is a function that:
@@ -195,7 +195,7 @@ public class DOGWavelet<T> : IWaveletFunction<T>
     /// 
     /// For DOG wavelets, these coefficients are derived from the Gaussian function:
     /// 
-    /// g(x) = e^(-xÂ²)
+    /// g(x) = e^(-x²)
     /// 
     /// The Gaussian function is a natural choice for the scaling function because:
     /// - It's smooth and has good localization properties
@@ -246,7 +246,7 @@ public class DOGWavelet<T> : IWaveletFunction<T>
     /// For DOG wavelets, these coefficients are a discretized version of the
     /// first derivative of the Gaussian function:
     /// 
-    /// Ïˆ(t) = -2t Â· e^(-tÂ²)
+    /// ?(t) = -2t · e^(-t²)
     /// 
     /// This method:
     /// 1. Creates a discretized version of this function with specified length

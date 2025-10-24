@@ -1,4 +1,4 @@
-﻿namespace AiDotNet.Normalizers;
+namespace AiDotNet.Normalizers;
 
 /// <summary>
 /// Normalizes data by taking the logarithm and then applying mean-variance normalization.

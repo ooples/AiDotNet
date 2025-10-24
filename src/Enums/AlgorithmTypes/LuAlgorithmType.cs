@@ -1,4 +1,4 @@
-﻿namespace AiDotNet.Enums.AlgorithmTypes;
+namespace AiDotNet.Enums.AlgorithmTypes;
 
 /// <summary>
 /// Represents different algorithm types for LU decomposition of matrices.

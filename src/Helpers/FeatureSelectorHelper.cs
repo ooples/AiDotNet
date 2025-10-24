@@ -1,4 +1,4 @@
-﻿namespace AiDotNet.FeatureSelectors;
+namespace AiDotNet.FeatureSelectors;
 
 /// <summary>
 /// Provides common helper methods for feature selection algorithms.

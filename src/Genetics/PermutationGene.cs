@@ -1,4 +1,4 @@
-﻿namespace AiDotNet.Genetics;
+namespace AiDotNet.Genetics;
 
 /// <summary>
 /// Represents a gene in a permutation (the index of an element in a sequence).

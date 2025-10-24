@@ -356,9 +356,9 @@ public class ConvolutionalNeuralNetwork<T> : NeuralNetworkBase<T>
     /// the network is set up.
     /// </para>
     /// </remarks>
-    public override ModelMetaData<T> GetModelMetaData()
+    public override ModelMetadata<T> GetModelMetadata()
     {
-        return new ModelMetaData<T>
+        return new ModelMetadata<T>
         {
             ModelType = ModelType.ConvolutionalNeuralNetwork,
             AdditionalInfo = new Dictionary<string, object>
