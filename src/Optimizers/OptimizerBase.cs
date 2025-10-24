@@ -1230,25 +1230,57 @@ public abstract class OptimizerBase<T, TInput, TOutput> : IOptimizer<T, TInput, 
 
         if (trainingData is Matrix<T> matrix)
         {
+            // Validate non-empty matrix
+            if (matrix.Rows == 0)
+            {
+                throw new ArgumentException("Training data matrix cannot be empty", nameof(trainingData));
+            }
+
             // For Matrix input: compute min and max of each column (feature)
             int features = matrix.Columns;
-            lowerBounds = new Vector<T>(features);
-            upperBounds = new Vector<T>(features);
+            int paramCount = _model.ParameterCount;
 
+            lowerBounds = new Vector<T>(paramCount);
+            upperBounds = new Vector<T>(paramCount);
+
+            // Compute min/max for each feature column
+            var featureMins = new T[features];
+            var featureMaxs = new T[features];
             for (int col = 0; col < features; col++)
             {
                 T min = matrix[0, col];
                 T max = matrix[0, col];
-
                 for (int row = 1; row < matrix.Rows; row++)
                 {
                     T value = matrix[row, col];
                     if (NumOps.LessThan(value, min)) min = value;
                     if (NumOps.GreaterThan(value, max)) max = value;
                 }
+                featureMins[col] = min;
+                featureMaxs[col] = max;
+            }
 
-                lowerBounds[col] = min;
-                upperBounds[col] = max;
+            // Fill bounds for each parameter using feature min/max, repeating or defaulting as needed
+            for (int i = 0; i < paramCount; i++)
+            {
+                if (i < features)
+                {
+                    lowerBounds[i] = featureMins[i];
+                    upperBounds[i] = featureMaxs[i];
+                }
+                else
+                {
+                    // If more parameters than features, use global min/max from all features
+                    T min = featureMins[0];
+                    T max = featureMaxs[0];
+                    for (int j = 1; j < featureMins.Length; j++)
+                    {
+                        if (NumOps.LessThan(featureMins[j], min)) min = featureMins[j];
+                        if (NumOps.GreaterThan(featureMaxs[j], max)) max = featureMaxs[j];
+                    }
+                    lowerBounds[i] = min;
+                    upperBounds[i] = max;
+                }
             }
         }
         else if (trainingData is Vector<T> vector)
@@ -1269,8 +1301,15 @@ public abstract class OptimizerBase<T, TInput, TOutput> : IOptimizer<T, TInput, 
                 if (NumOps.GreaterThan(value, max)) max = value;
             }
 
-            lowerBounds = new Vector<T>(1) { [0] = min };
-            upperBounds = new Vector<T>(1) { [0] = max };
+            // Bounds should match parameter count, not input dimensionality
+            int paramCount = _model.ParameterCount;
+            lowerBounds = new Vector<T>(paramCount);
+            upperBounds = new Vector<T>(paramCount);
+            for (int i = 0; i < paramCount; i++)
+            {
+                lowerBounds[i] = min;
+                upperBounds[i] = max;
+            }
         }
         else
         {
