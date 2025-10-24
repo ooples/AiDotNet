@@ -169,6 +169,11 @@ public class LiquidStateMachine<T> : NeuralNetworkBase<T>
     private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer;
 
     /// <summary>
+    /// Tracks the parameter count of the optimizer to detect when model architecture changes require reinitialization.
+    /// </summary>
+    private int _optimizerParamCount = -1;
+
+    /// <summary>
     /// Initializes a new instance of the <see cref="LiquidStateMachine{T}"/> class with the specified architecture and parameters.
     /// </summary>
     /// <param name="architecture">The neural network architecture defining the structure of the network.</param>
@@ -450,8 +455,12 @@ public class LiquidStateMachine<T> : NeuralNetworkBase<T>
         // Clip gradients to prevent exploding gradients
         parameterGradients = ClipGradient(parameterGradients);
 
-        // Lazy initialize optimizer to preserve internal state across training steps
-        _optimizer ??= new GradientDescentOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        // (Re)initialize optimizer when missing or when parameter shape changed
+        if (_optimizer == null || _optimizerParamCount != ParameterCount)
+        {
+            _optimizer = new GradientDescentOptimizer<T, Tensor<T>, Tensor<T>>(this);
+            _optimizerParamCount = ParameterCount;
+        }
 
         // Get current parameters
         Vector<T> currentParameters = GetParameters();

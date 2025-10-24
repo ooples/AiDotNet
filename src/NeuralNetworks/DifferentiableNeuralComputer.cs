@@ -306,6 +306,11 @@ public class DifferentiableNeuralComputer<T> : NeuralNetworkBase<T>
     private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer;
 
     /// <summary>
+    /// Tracks the parameter count of the optimizer to detect when model architecture changes require reinitialization.
+    /// </summary>
+    private int _optimizerParamCount = -1;
+
+    /// <summary>
     /// Initializes a new instance of the <see cref="DifferentiableNeuralComputer{T}"/> class with the specified parameters.
     /// </summary>
     /// <param name="architecture">The neural network architecture configuration.</param>
@@ -678,8 +683,12 @@ public class DifferentiableNeuralComputer<T> : NeuralNetworkBase<T>
         // Apply gradient clipping to prevent exploding gradients
         parameterGradients = ClipGradient(parameterGradients);
 
-        // Lazy initialize optimizer to preserve internal state across training steps
-        _optimizer ??= new GradientDescentOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        // (Re)initialize optimizer when missing or when parameter shape changed
+        if (_optimizer == null || _optimizerParamCount != ParameterCount)
+        {
+            _optimizer = new GradientDescentOptimizer<T, Tensor<T>, Tensor<T>>(this);
+            _optimizerParamCount = ParameterCount;
+        }
 
         // Get current parameters
         Vector<T> currentParameters = GetParameters();

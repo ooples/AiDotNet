@@ -170,6 +170,11 @@ public class GraphNeuralNetwork<T> : NeuralNetworkBase<T>
     private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer;
 
     /// <summary>
+    /// Tracks the parameter count of the optimizer to detect when model architecture changes require reinitialization.
+    /// </summary>
+    private int _optimizerParamCount = -1;
+
+    /// <summary>
     /// Initializes a new instance of the <see cref="GraphNeuralNetwork{T}"/> class with vector activation functions.
     /// </summary>
     /// <param name="architecture">The neural network architecture defining the structure of the network.</param>
@@ -548,8 +553,12 @@ public class GraphNeuralNetwork<T> : NeuralNetworkBase<T>
         // Clip gradients to prevent exploding gradients
         parameterGradients = ClipGradient(parameterGradients);
 
-        // Lazy initialize optimizer to preserve internal state across training steps
-        _optimizer ??= new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        // (Re)initialize optimizer when missing or when parameter shape changed
+        if (_optimizer == null || _optimizerParamCount != ParameterCount)
+        {
+            _optimizer = new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
+            _optimizerParamCount = ParameterCount;
+        }
 
         // Get current parameters
         Vector<T> currentParameters = GetParameters();
@@ -612,8 +621,12 @@ public class GraphNeuralNetwork<T> : NeuralNetworkBase<T>
         // Apply gradient clipping
         parameterGradients = ClipGradient(parameterGradients);
 
-        // Lazy initialize optimizer to preserve internal state across training steps
-        _optimizer ??= new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        // (Re)initialize optimizer when missing or when parameter shape changed
+        if (_optimizer == null || _optimizerParamCount != ParameterCount)
+        {
+            _optimizer = new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
+            _optimizerParamCount = ParameterCount;
+        }
 
         // Get current parameters
         Vector<T> currentParameters = GetParameters();
