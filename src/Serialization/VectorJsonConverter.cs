@@ -107,36 +107,91 @@ namespace AiDotNet.Serialization
             }
 
             var jObject = JObject.Load(reader);
-            var length = jObject["length"].Value<int>();
+
+            // Validate that 'length' token exists and is an integer
+            var lengthToken = jObject["length"];
+            if (lengthToken == null || lengthToken.Type != JTokenType.Integer)
+            {
+                throw new JsonSerializationException("Vector JSON must contain 'length' property as an integer.");
+            }
+            int length = lengthToken.Value<int>();
+
+            // Validate that 'data' token exists and is a JArray
             var dataToken = jObject["data"];
+            if (dataToken == null || dataToken.Type != JTokenType.Array)
+            {
+                throw new JsonSerializationException("Vector JSON must contain 'data' property as an array.");
+            }
+
+            var dataArray = (JArray)dataToken;
+
+            // Validate that data count matches length
+            if (dataArray.Count != length)
+            {
+                throw new JsonSerializationException(
+                    $"Vector data count mismatch: length property is {length}, but data array contains {dataArray.Count} elements.");
+            }
 
             // Get the element type (T) from Vector<T>
             var elementType = objectType.GetGenericArguments()[0];
+            var arrayType = elementType.MakeArrayType();
 
-            // Create vector constructor: Vector<T>(int length)
-            var vectorConstructor = objectType.GetConstructor(new[] { typeof(int) });
-            if (vectorConstructor == null)
-            {
-                throw new JsonSerializationException($"Cannot find constructor for {objectType.Name}(int)");
-            }
-
-            var vector = vectorConstructor.Invoke(new object[] { length });
-
-            // Get the indexer property for setting values
-            var indexer = objectType.GetProperty("Item", new[] { typeof(int) });
-            if (indexer == null)
-            {
-                throw new JsonSerializationException($"Cannot find indexer for {objectType.Name}");
-            }
-
-            // Populate the vector
+            // Build a T[] array using serializer.Deserialize to respect converters
+            var array = Array.CreateInstance(elementType, length);
             for (int i = 0; i < length; i++)
             {
-                var value = dataToken[i].ToObject(elementType);
-                indexer.SetValue(vector, value, new object[] { i });
+                using (var tokenReader = dataArray[i].CreateReader())
+                {
+                    var element = serializer.Deserialize(tokenReader, elementType);
+                    array.SetValue(element, i);
+                }
             }
 
-            return vector;
+            // Try to find a writable indexer first (for mutable vectors)
+            var indexer = objectType.GetProperty("Item", new[] { typeof(int) });
+            bool hasWritableIndexer = indexer != null && indexer.CanWrite;
+
+            if (hasWritableIndexer)
+            {
+                // Use constructor with int length and populate via indexer
+                var vectorConstructor = objectType.GetConstructor(new[] { typeof(int) });
+                if (vectorConstructor != null)
+                {
+                    var vector = vectorConstructor.Invoke(new object[] { length });
+
+                    for (int i = 0; i < length; i++)
+                    {
+                        indexer!.SetValue(vector, array.GetValue(i), new object[] { i });
+                    }
+
+                    return vector;
+                }
+            }
+
+            // Fallback: Try factory method Vector<T>.FromArray(T[])
+            var fromArrayMethod = objectType.GetMethod("FromArray",
+                System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Static,
+                null,
+                new[] { arrayType },
+                null);
+
+            if (fromArrayMethod != null)
+            {
+                return fromArrayMethod.Invoke(null, new object[] { array });
+            }
+
+            // Fallback: Try constructor taking T[]
+            var arrayConstructor = objectType.GetConstructor(new[] { arrayType });
+            if (arrayConstructor != null)
+            {
+                return arrayConstructor.Invoke(new object[] { array });
+            }
+
+            // No suitable construction method found
+            throw new JsonSerializationException(
+                $"Cannot construct {objectType.Name} from JSON. " +
+                $"Type requires either: a constructor taking int with writable indexer, " +
+                $"a static FromArray({elementType.Name}[]) method, or a constructor taking {elementType.Name}[].");
         }
     }
 }
