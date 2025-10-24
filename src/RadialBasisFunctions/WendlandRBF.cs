@@ -1,4 +1,4 @@
-﻿namespace AiDotNet.RadialBasisFunctions;
+namespace AiDotNet.RadialBasisFunctions;
 
 /// <summary>
 /// Implements Wendland's compactly supported Radial Basis Functions with different smoothness orders.
@@ -8,9 +8,9 @@
 /// <para>
 /// This class provides an implementation of Wendland's family of compactly supported Radial Basis Functions.
 /// These functions are defined by a smoothness parameter k and have the form:
-/// - For k = 0: φ(r) = (1 - r)²  (for r ≤ 1, 0 otherwise)
-/// - For k = 1: φ(r) = (1 - r)⁴(1 + 4r)  (for r ≤ 1, 0 otherwise)
-/// - For k = 2: φ(r) = (1 - r)⁶(3 + 18r + 35r²)  (for r ≤ 1, 0 otherwise)
+/// - For k = 0: f(r) = (1 - r)�  (for r = 1, 0 otherwise)
+/// - For k = 1: f(r) = (1 - r)4(1 + 4r)  (for r = 1, 0 otherwise)
+/// - For k = 2: f(r) = (1 - r)6(3 + 18r + 35r�)  (for r = 1, 0 otherwise)
 /// where r is the normalized radial distance (actual distance divided by the support radius).
 /// </para>
 /// <para>
@@ -93,15 +93,15 @@ public class WendlandRBF<T> : IRadialBasisFunction<T>
     /// Computes the value of the Wendland Radial Basis Function for a given radius.
     /// </summary>
     /// <param name="r">The radius or distance from the center point.</param>
-    /// <returns>The computed function value based on the k parameter, or zero if r ≥ supportRadius.</returns>
+    /// <returns>The computed function value based on the k parameter, or zero if r = supportRadius.</returns>
     /// <remarks>
     /// <para>
     /// This method calculates the value of the Wendland RBF for a given radius r. The formula used depends
     /// on the k parameter and only applies when r is less than the support radius. If r is greater than or
     /// equal to the support radius, the function returns 0. The formulas are:
-    /// - For k = 0: (1 - r)²
-    /// - For k = 1: (1 - r)⁴(1 + 4r)
-    /// - For k = 2: (1 - r)⁶(3 + 18r + 35r²)
+    /// - For k = 0: (1 - r)�
+    /// - For k = 1: (1 - r)4(1 + 4r)
+    /// - For k = 2: (1 - r)6(3 + 18r + 35r�)
     /// where r is normalized by dividing by the support radius.
     /// </para>
     /// <para><b>For Beginners:</b> This method computes the function's value at a specific distance (r) from the center.
@@ -154,7 +154,7 @@ public class WendlandRBF<T> : IRadialBasisFunction<T>
     /// Computes the derivative of the Wendland RBF with respect to the radius.
     /// </summary>
     /// <param name="r">The radius or distance from the center point.</param>
-    /// <returns>The derivative value of the function with respect to r, or zero if r ≥ supportRadius or r = 0.</returns>
+    /// <returns>The derivative value of the function with respect to r, or zero if r = supportRadius or r = 0.</returns>
     /// <remarks>
     /// <para>
     /// This method calculates the derivative of the Wendland RBF with respect to the radius r.
@@ -162,8 +162,8 @@ public class WendlandRBF<T> : IRadialBasisFunction<T>
     /// and less than the support radius. If r is greater than or equal to the support radius or equal to 0,
     /// the derivative is 0. The formulas for the derivatives are:
     /// - For k = 0: -2(1-r)
-    /// - For k = 1: (1-r)³(-4-20r)
-    /// - For k = 2: (1-r)⁵(-18-180r-210r²)
+    /// - For k = 1: (1-r)�(-4-20r)
+    /// - For k = 2: (1-r)5(-18-180r-210r�)
     /// where r is normalized by dividing by the support radius.
     /// </para>
     /// <para><b>For Beginners:</b> This method computes how fast the function's value changes
@@ -224,12 +224,12 @@ public class WendlandRBF<T> : IRadialBasisFunction<T>
     /// Computes the derivative of the Wendland RBF with respect to the support radius parameter.
     /// </summary>
     /// <param name="r">The radius or distance from the center point.</param>
-    /// <returns>The derivative value of the function with respect to the support radius, or zero if r ≥ supportRadius.</returns>
+    /// <returns>The derivative value of the function with respect to the support radius, or zero if r = supportRadius.</returns>
     /// <remarks>
     /// <para>
     /// This method calculates the derivative of the Wendland RBF with respect to the support radius parameter.
-    /// For a function φ(r/σ) where σ is the support radius, the derivative with respect to σ is
-    /// -r/σ² × φ'(r/σ), where φ' is the derivative of φ with respect to its argument. This derivative
+    /// For a function f(r/s) where s is the support radius, the derivative with respect to s is
+    /// -r/s� � f'(r/s), where f' is the derivative of f with respect to its argument. This derivative
     /// is useful for optimizing the support radius parameter in applications.
     /// </para>
     /// <para><b>For Beginners:</b> This method calculates how the function's value would change
@@ -258,19 +258,19 @@ public class WendlandRBF<T> : IRadialBasisFunction<T>
             return _numOps.Zero;
         }
 
-        // For width derivative, we need to compute d/dσ[φ(r/σ)]
-        // This equals -r/σ^2 * φ'(r/σ) where φ' is the derivative of φ
+        // For width derivative, we need to compute d/ds[f(r/s)]
+        // This equals -r/s^2 * f'(r/s) where f' is the derivative of f
     
-        // First, compute r/σ^2
+        // First, compute r/s^2
         T rOverSigmaSquared = _numOps.Divide(r, _numOps.Power(_supportRadius, _numOps.FromDouble(2)));
     
-        // Then compute the derivative at r/σ
+        // Then compute the derivative at r/s
         T derivativeValue = ComputeDerivative(r);
     
         // Multiply by -1
         T negativeOne = _numOps.FromDouble(-1);
     
-        // Return -r/σ^2 * φ'(r/σ)
+        // Return -r/s^2 * f'(r/s)
         return _numOps.Multiply(negativeOne, _numOps.Multiply(rOverSigmaSquared, derivativeValue));
     }
 }

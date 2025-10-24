@@ -1,4 +1,4 @@
-﻿namespace AiDotNet.Helpers;
+namespace AiDotNet.Helpers;
 
 /// <summary>
 /// Provides methods for calculating weights used in robust regression techniques.
@@ -127,7 +127,7 @@ public static class WeightFunctionHelper<T>
     /// <returns>A vector of weights for each data point.</returns>
     /// <remarks>
     /// <b>For Beginners:</b> Andrews weights use a sine function to determine weights:
-    /// - If a residual is small (less than π times the tuning constant), the weight is calculated using
+    /// - If a residual is small (less than p times the tuning constant), the weight is calculated using
     ///   a sine function that gradually decreases as the residual gets larger
     /// - If a residual is large, the data point gets a weight of 0 (no influence at all)
     /// 

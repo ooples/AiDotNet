@@ -1,4 +1,4 @@
-﻿namespace AiDotNet.LossFunctions;
+namespace AiDotNet.LossFunctions;
 
 /// <summary>
 /// Implements the Poisson loss function for count data modeling.

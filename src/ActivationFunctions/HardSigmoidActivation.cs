@@ -1,4 +1,4 @@
-﻿namespace AiDotNet.ActivationFunctions;
+namespace AiDotNet.ActivationFunctions;
 
 /// <summary>
 /// Implements the Hard Sigmoid activation function for neural networks.
@@ -15,8 +15,8 @@
 /// 2. Less smooth but still useful for many neural network applications
 /// 
 /// The function works like this:
-/// - If input ≤ -1: output = 0
-/// - If input ≥ 1: output = 1
+/// - If input = -1: output = 0
+/// - If input = 1: output = 1
 /// - If -1 &lt; input &lt; 1: output = (input + 1) / 2
 /// 
 /// This creates a straight line between (-1, 0) and (1, 1), with values clamped to the range [0, 1].

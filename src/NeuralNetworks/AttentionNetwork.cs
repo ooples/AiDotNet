@@ -318,9 +318,9 @@ public class AttentionNetwork<T> : NeuralNetworkBase<T>
     /// or comparing different network configurations.
     /// </para>
     /// </remarks>
-    public override ModelMetaData<T> GetModelMetaData()
+    public override ModelMetadata<T> GetModelMetadata()
     {
-        return new ModelMetaData<T>
+        return new ModelMetadata<T>
         {
             ModelType = ModelType.AttentionNetwork,
             AdditionalInfo = new Dictionary<string, object>

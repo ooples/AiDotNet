@@ -1,4 +1,4 @@
-﻿namespace AiDotNet.Enums.AlgorithmTypes;
+namespace AiDotNet.Enums.AlgorithmTypes;
 
 /// <summary>
 /// Represents different algorithm types for computing the Schur decomposition of matrices.
@@ -12,7 +12,7 @@
 /// A = QTQ*
 /// 
 /// Where:
-/// - Q is a unitary matrix (a special kind of matrix where Q* × Q = I, the identity matrix)
+/// - Q is a unitary matrix (a special kind of matrix where Q* � Q = I, the identity matrix)
 /// - T is an upper triangular matrix (has zeros below the diagonal)
 /// - Q* is the conjugate transpose of Q (flip the matrix over its diagonal and take complex conjugates)
 /// 
@@ -81,8 +81,8 @@ public enum SchurAlgorithmType
     /// <b>For Beginners:</b> The Implicit algorithm is a variation that focuses on numerical stability and efficiency 
     /// by avoiding explicit calculations of certain intermediate results.
     /// 
-    /// Think of it like mental math: instead of writing down every step when calculating 5×18, you might think 
-    /// "5×20=100, then subtract 5×2=10, so the answer is 90." You're implicitly handling the calculation without 
+    /// Think of it like mental math: instead of writing down every step when calculating 5�18, you might think 
+    /// "5�20=100, then subtract 5�2=10, so the answer is 90." You're implicitly handling the calculation without 
     /// explicitly writing out each step.
     /// 
     /// The Implicit algorithm:
@@ -118,9 +118,9 @@ public enum SchurAlgorithmType
     /// getting closer to the triangular form with each iteration.
     /// 
     /// The basic process works like this:
-    /// 1. Start with your matrix A₀
-    /// 2. Compute the QR decomposition: A₀ = Q₁R₁
-    /// 3. Form a new matrix by multiplying in the reverse order: A₁ = R₁Q₁
+    /// 1. Start with your matrix A0
+    /// 2. Compute the QR decomposition: A0 = Q1R1
+    /// 3. Form a new matrix by multiplying in the reverse order: A1 = R1Q1
     /// 4. Repeat steps 2-3 until the matrix converges to triangular form
     /// 
     /// The QR algorithm:

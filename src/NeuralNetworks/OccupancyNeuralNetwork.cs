@@ -1,4 +1,4 @@
-﻿namespace AiDotNet.NeuralNetworks;
+namespace AiDotNet.NeuralNetworks;
 
 /// <summary>
 /// Represents a Neural Network specialized for occupancy detection and prediction in spaces.
@@ -571,7 +571,7 @@ public class OccupancyNeuralNetwork<T> : NeuralNetworkBase<T>
     /// or debugging issues with the network's performance.
     /// </para>
     /// </remarks>
-    public override ModelMetaData<T> GetModelMetaData()
+    public override ModelMetadata<T> GetModelMetadata()
     {
         // Count layer types
         var layerTypeCount = new Dictionary<string, int>();
@@ -588,7 +588,7 @@ public class OccupancyNeuralNetwork<T> : NeuralNetworkBase<T>
             }
         }
         
-        return new ModelMetaData<T>
+        return new ModelMetadata<T>
         {
             ModelType = ModelType.OccupancyNetwork,
             AdditionalInfo = new Dictionary<string, object>

@@ -1,4 +1,4 @@
-ï»¿namespace AiDotNet.DecompositionMethods.MatrixDecomposition;
+namespace AiDotNet.DecompositionMethods.MatrixDecomposition;
 
 /// <summary>
 /// Implements the Takagi factorization for complex symmetric matrices.
@@ -269,7 +269,7 @@ public class TakagiDecomposition<T> : IMatrixDecomposition<T>
     /// <remarks>
     /// <para>
     /// <b>For Beginners:</b> The magnitude of a complex number is its distance from zero in the complex plane.
-    /// It's calculated using the Pythagorean theorem: sqrt(realÂ² + imaginaryÂ²).
+    /// It's calculated using the Pythagorean theorem: sqrt(real² + imaginary²).
     /// </para>
     /// </remarks>
     private T CalculateMagnitude(Complex<T> complex)

@@ -1,4 +1,4 @@
-﻿namespace AiDotNet.ActivationFunctions;
+namespace AiDotNet.ActivationFunctions;
 
 /// <summary>
 /// Implements the Thresholded ReLU activation function, a variant of the standard ReLU function with an adjustable threshold.
@@ -9,12 +9,12 @@
 /// <b>For Beginners:</b> The Thresholded ReLU (Rectified Linear Unit) is a variation of the standard ReLU activation function.
 /// 
 /// While a standard ReLU outputs the input value when it's positive and zero when it's negative (f(x) = max(0, x)),
-/// the Thresholded ReLU adds an additional parameter called "theta" (θ) that acts as a threshold.
+/// the Thresholded ReLU adds an additional parameter called "theta" (?) that acts as a threshold.
 /// 
 /// The Thresholded ReLU only activates (returns the input value) when the input exceeds this threshold.
 /// Otherwise, it returns zero. The formula is:
 /// 
-/// f(x) = x if x > θ, otherwise f(x) = 0
+/// f(x) = x if x > ?, otherwise f(x) = 0
 /// 
 /// This allows the neural network to ignore small positive activations that might be noise, potentially
 /// creating more robust models. By adjusting the threshold value, you can control how sensitive the

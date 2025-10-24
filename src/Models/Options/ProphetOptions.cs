@@ -1,4 +1,4 @@
-﻿namespace AiDotNet.Models.Options;
+namespace AiDotNet.Models.Options;
 
 /// <summary>
 /// Configuration options for Prophet, a procedure for forecasting time series data based on an additive model

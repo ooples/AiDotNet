@@ -1,4 +1,4 @@
-﻿namespace AiDotNet.Enums;
+namespace AiDotNet.Enums;
 
 /// <summary>
 /// Specifies how data is organized in matrices when working with arrays of data.

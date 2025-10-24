@@ -1,4 +1,4 @@
-﻿namespace AiDotNet.Models.Options;
+namespace AiDotNet.Models.Options;
 
 /// <summary>
 /// Configuration options for Vector Autoregressive (VAR) models, which model the linear interdependencies

@@ -63,16 +63,12 @@ public class NelderMeadOptimizer<T, TInput, TOutput> : OptimizerBase<T, TInput, 
     /// You're giving them their initial instructions and tools.
     /// </para>
     /// </remarks>
+    /// <param name="model">The model to optimize.</param>
     /// <param name="options">The Nelder-Mead-specific optimization options.</param>
-    /// <param name="predictionOptions">Options for prediction statistics.</param>
-    /// <param name="modelOptions">Options for model statistics.</param>
-    /// <param name="modelEvaluator">The model evaluator to use.</param>
-    /// <param name="fitDetector">The fit detector to use.</param>
-    /// <param name="fitnessCalculator">The fitness calculator to use.</param>
-    /// <param name="modelCache">The model cache to use.</param>
     public NelderMeadOptimizer(
+        IFullModel<T, TInput, TOutput> model,
         NelderMeadOptimizerOptions<T, TInput, TOutput>? options = null)
-        : base(options ?? new())
+        : base(model, options ?? new())
     {
         _options = options ?? new NelderMeadOptimizerOptions<T, TInput, TOutput>();
         _alpha = NumOps.Zero;

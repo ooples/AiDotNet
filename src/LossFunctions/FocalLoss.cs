@@ -1,4 +1,4 @@
-﻿namespace AiDotNet.LossFunctions;
+namespace AiDotNet.LossFunctions;
 
 /// <summary>
 /// Implements the Focal Loss function, which gives more weight to hard-to-classify examples.
@@ -12,17 +12,17 @@
 /// It modifies the standard cross-entropy loss by adding a factor that reduces the loss contribution
 /// from easy-to-classify examples and increases the importance of hard-to-classify examples.
 /// 
-/// The formula is: -α(1-p)^γ * log(p) for positive class
-///                 -(1-α)p^γ * log(1-p) for negative class
+/// The formula is: -a(1-p)^? * log(p) for positive class
+///                 -(1-a)p^? * log(1-p) for negative class
 /// Where:
 /// - p is the model's estimated probability for the correct class
-/// - α is a weighting factor that balances positive vs negative examples
-/// - γ (gamma) is the focusing parameter that adjusts how much to focus on hard examples
+/// - a is a weighting factor that balances positive vs negative examples
+/// - ? (gamma) is the focusing parameter that adjusts how much to focus on hard examples
 /// 
 /// Key properties:
-/// - When γ=0, Focal Loss equals Cross-Entropy Loss
-/// - Higher γ values increase focus on hard-to-classify examples
-/// - α helps handle class imbalance by giving more weight to the minority class
+/// - When ?=0, Focal Loss equals Cross-Entropy Loss
+/// - Higher ? values increase focus on hard-to-classify examples
+/// - a helps handle class imbalance by giving more weight to the minority class
 /// 
 /// This loss function is ideal for:
 /// - Highly imbalanced datasets
@@ -84,7 +84,7 @@ public class FocalLoss<T> : LossFunctionBase<T>
             // (1-pt)^gamma is the focusing term
             T focusingTerm = NumOps.Power(NumOps.Subtract(NumOps.One, pt), _gamma);
             
-            // -α(1-pt)^γlog(pt)
+            // -a(1-pt)^?log(pt)
             T sampleLoss = NumOps.Multiply(
                 NumOps.Negate(alphaT),
                 NumOps.Multiply(focusingTerm, NumOps.Log(pt))

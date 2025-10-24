@@ -1,4 +1,4 @@
-﻿namespace AiDotNet.Extensions;
+namespace AiDotNet.Extensions;
 
 public static class TensorExtensions
 {

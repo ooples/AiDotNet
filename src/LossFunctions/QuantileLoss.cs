@@ -1,4 +1,4 @@
-﻿namespace AiDotNet.LossFunctions;
+namespace AiDotNet.LossFunctions;
 
 /// <summary>
 /// Implements the Quantile loss function for quantile regression.

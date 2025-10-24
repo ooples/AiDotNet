@@ -1,4 +1,4 @@
-﻿namespace AiDotNet.WindowFunctions;
+namespace AiDotNet.WindowFunctions;
 
 /// <summary>
 /// Implements the Hanning window function (also known as Hann window) for signal processing applications.
@@ -7,7 +7,7 @@
 /// <para>
 /// The Hanning window is a popular window function that provides good frequency resolution and 
 /// reduced spectral leakage. It is defined by the equation:
-/// w(n) = 0.5 * (1 - cos(2πn/(N-1)))
+/// w(n) = 0.5 * (1 - cos(2pn/(N-1)))
 /// where n is the sample index and N is the window size. The Hanning window reaches exactly zero 
 /// at both ends, which makes it particularly useful for analyzing periodic signals.
 /// </para>
@@ -58,7 +58,7 @@ public class HanningWindow<T> : IWindowFunction<T>
     /// <remarks>
     /// <para>
     /// This method implements the Hanning window function formula:
-    /// w(n) = 0.5 * (1 - cos(2πn/(N-1)))
+    /// w(n) = 0.5 * (1 - cos(2pn/(N-1)))
     /// It calculates the window function value for each point from 0 to windowSize-1.
     /// </para>
     /// <para><b>For Beginners:</b> This method creates the actual window values based on the size you specify.

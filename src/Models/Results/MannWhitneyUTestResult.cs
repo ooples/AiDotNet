@@ -1,4 +1,4 @@
-﻿namespace AiDotNet.Models.Results;
+namespace AiDotNet.Models.Results;
 
 /// <summary>
 /// Represents the results of a Mann-Whitney U test, which is a non-parametric statistical test used to determine 
@@ -80,7 +80,7 @@ public class MannWhitneyUTestResult<T>
     /// calculated by subtracting the expected value of U (under the null hypothesis) from the observed U statistic, 
     /// and then dividing by the standard deviation of U. For large sample sizes, the Z-score approximately follows 
     /// a standard normal distribution, which allows for the calculation of the p-value. A Z-score with a large 
-    /// absolute value (typically > 1.96 for a two-tailed test at α = 0.05) suggests that the observed U statistic 
+    /// absolute value (typically > 1.96 for a two-tailed test at a = 0.05) suggests that the observed U statistic 
     /// is significantly different from what would be expected if the null hypothesis were true.
     /// </para>
     /// <para><b>For Beginners:</b> This value standardizes the U statistic to make it easier to interpret.
@@ -92,7 +92,7 @@ public class MannWhitneyUTestResult<T>
     /// 
     /// Interpretation:
     /// - Z-scores close to 0 suggest the groups are similar
-    /// - Z-scores with absolute values greater than 1.96 (for α = 0.05) suggest significant differences
+    /// - Z-scores with absolute values greater than 1.96 (for a = 0.05) suggest significant differences
     /// - Negative Z-scores indicate the first group tends to have lower values
     /// - Positive Z-scores indicate the first group tends to have higher values
     /// 
@@ -111,7 +111,7 @@ public class MannWhitneyUTestResult<T>
     /// This property represents the p-value of the Mann-Whitney U test, which is the probability of observing a U 
     /// statistic as extreme as, or more extreme than, the one calculated from the sample data, assuming the null 
     /// hypothesis is true. The null hypothesis typically states that the two samples come from the same distribution 
-    /// or have the same median. A small p-value (typically ≤ 0.05) suggests that the observed data is unlikely under 
+    /// or have the same median. A small p-value (typically = 0.05) suggests that the observed data is unlikely under 
     /// the null hypothesis, leading to its rejection in favor of the alternative hypothesis that the distributions 
     /// differ. The p-value is calculated from the Z-score using the cumulative distribution function of the standard 
     /// normal distribution for large samples, or from tables of critical values for small samples.
@@ -124,8 +124,8 @@ public class MannWhitneyUTestResult<T>
     /// - Represents the probability of seeing your results (or more extreme) if the groups are actually the same
     /// 
     /// Common interpretation:
-    /// - p ≤ 0.05: Results are statistically significant (commonly used threshold)
-    /// - p ≤ 0.01: Results are highly significant
+    /// - p = 0.05: Results are statistically significant (commonly used threshold)
+    /// - p = 0.01: Results are highly significant
     /// - p > 0.05: Results are not statistically significant
     /// 
     /// For example, a p-value of 0.03 means there's only a 3% chance of seeing your results

@@ -1,4 +1,4 @@
-﻿namespace AiDotNet.Models.Options;
+namespace AiDotNet.Models.Options;
 
 /// <summary>
 /// Configuration options for the Partial Dependence Plot Fit Detector, which uses partial dependence plots

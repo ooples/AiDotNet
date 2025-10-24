@@ -1,4 +1,4 @@
-﻿namespace AiDotNet.DecompositionMethods.MatrixDecomposition;
+namespace AiDotNet.DecompositionMethods.MatrixDecomposition;
 
 /// <summary>
 /// A wrapper class that adapts a real-valued matrix decomposition to work with complex numbers.
@@ -61,7 +61,7 @@ public class ComplexMatrixDecomposition<T> : IMatrixDecomposition<Complex<T>>
     /// Calculates the inverse of the original matrix.
     /// </summary>
     /// <remarks>
-    /// The inverse of a matrix A is another matrix A⁻¹ such that A × A⁻¹ = I, 
+    /// The inverse of a matrix A is another matrix A?� such that A � A?� = I, 
     /// where I is the identity matrix. This method uses the base decomposition
     /// to calculate the inverse and then converts it to complex form.
     /// </remarks>

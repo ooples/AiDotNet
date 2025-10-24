@@ -605,9 +605,9 @@ public class M5ModelTree<T> : AsyncDecisionTreeRegressionBase<T>
     /// - Saving important details along with the model
     /// </para>
     /// </remarks>
-    public override ModelMetaData<T> GetModelMetaData()
+    public override ModelMetadata<T> GetModelMetadata()
     {
-        return new ModelMetaData<T>
+        return new ModelMetadata<T>
         {
             ModelType = ModelType.M5ModelTree,
             AdditionalInfo = new Dictionary<string, object>

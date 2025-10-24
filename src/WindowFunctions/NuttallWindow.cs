@@ -1,4 +1,4 @@
-﻿namespace AiDotNet.WindowFunctions;
+namespace AiDotNet.WindowFunctions;
 
 /// <summary>
 /// Implements the Nuttall window function for signal processing applications.
@@ -7,7 +7,7 @@
 /// <para>
 /// The Nuttall window is a high-performance window function that provides excellent side lobe 
 /// suppression. It uses a weighted sum of cosine terms:
-/// w(n) = 0.355768 - 0.487396 * cos(2πn/(N-1)) + 0.144232 * cos(4πn/(N-1)) - 0.012604 * cos(6πn/(N-1))
+/// w(n) = 0.355768 - 0.487396 * cos(2pn/(N-1)) + 0.144232 * cos(4pn/(N-1)) - 0.012604 * cos(6pn/(N-1))
 /// where n is the sample index and N is the window size. The Nuttall window was designed to provide
 /// very low side lobe levels with a continuous first derivative.
 /// </para>
@@ -59,7 +59,7 @@ public class NuttallWindow<T> : IWindowFunction<T>
     /// <remarks>
     /// <para>
     /// This method implements the Nuttall window function formula:
-    /// w(n) = 0.355768 - 0.487396 * cos(2πn/(N-1)) + 0.144232 * cos(4πn/(N-1)) - 0.012604 * cos(6πn/(N-1))
+    /// w(n) = 0.355768 - 0.487396 * cos(2pn/(N-1)) + 0.144232 * cos(4pn/(N-1)) - 0.012604 * cos(6pn/(N-1))
     /// It calculates the window function value for each point from 0 to windowSize-1.
     /// </para>
     /// <para><b>For Beginners:</b> This method creates the actual window values based on the size you specify.

@@ -1,4 +1,4 @@
-﻿namespace AiDotNet.TimeSeries;
+namespace AiDotNet.TimeSeries;
 
 /// <summary>
 /// Implements an Unobserved Components Model (UCM) for time series decomposition and forecasting.
@@ -1037,8 +1037,8 @@ public class UnobservedComponentsModel<T, TInput, TOutput> : TimeSeriesModelBase
     /// - RMSE (Root Mean Squared Error): The square root of MSE, which gives errors in the same units
     ///   as your original data. For example, if forecasting sales in dollars, RMSE is also in dollars.
     /// 
-    /// - R² (R-squared): The proportion of variance in the dependent variable explained by the model.
-    ///   Values range from 0 to 1, with higher values indicating better fit. An R² of 0.75 means
+    /// - R� (R-squared): The proportion of variance in the dependent variable explained by the model.
+    ///   Values range from 0 to 1, with higher values indicating better fit. An R� of 0.75 means
     ///   the model explains 75% of the variation in the data.
     /// 
     /// These metrics together provide a comprehensive assessment of model performance.
@@ -1611,12 +1611,12 @@ public class UnobservedComponentsModel<T, TInput, TOutput> : TimeSeriesModelBase
                 // Cycle is decreasing
                 if (NumOps.LessThan(_cycle[startIndex], NumOps.Zero))
                 {
-                    // In the negative half and decreasing (between π and 3π/2)
+                    // In the negative half and decreasing (between p and 3p/2)
                     cyclePhase = NumOps.FromDouble(4 * Math.PI / 3);
                 }
                 else
                 {
-                    // In the positive half and decreasing (between π/2 and π)
+                    // In the positive half and decreasing (between p/2 and p)
                     cyclePhase = NumOps.FromDouble(3 * Math.PI / 4);
                 }
             }
@@ -1625,12 +1625,12 @@ public class UnobservedComponentsModel<T, TInput, TOutput> : TimeSeriesModelBase
                 // Cycle is increasing
                 if (NumOps.LessThan(_cycle[startIndex], NumOps.Zero))
                 {
-                    // In the negative half and increasing (between 3π/2 and 2π)
+                    // In the negative half and increasing (between 3p/2 and 2p)
                     cyclePhase = NumOps.FromDouble(7 * Math.PI / 4);
                 }
                 else
                 {
-                    // In the positive half and increasing (between 0 and π/2)
+                    // In the positive half and increasing (between 0 and p/2)
                     cyclePhase = NumOps.FromDouble(Math.PI / 4);
                 }
             }
@@ -1813,9 +1813,9 @@ public class UnobservedComponentsModel<T, TInput, TOutput> : TimeSeriesModelBase
     /// - Sharing model information with others
     /// </para>
     /// </remarks>
-    public override ModelMetaData<T> GetModelMetaData()
+    public override ModelMetadata<T> GetModelMetadata()
     {
-        var metadata = new ModelMetaData<T>
+        var metadata = new ModelMetadata<T>
         {
             ModelType = ModelType.UnobservedComponentsModel,
             AdditionalInfo = new Dictionary<string, object>

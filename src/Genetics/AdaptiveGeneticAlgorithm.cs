@@ -1,4 +1,4 @@
-﻿namespace AiDotNet.Genetics;
+namespace AiDotNet.Genetics;
 
 public class AdaptiveGeneticAlgorithm<T, TInput, TOutput> :
     StandardGeneticAlgorithm<T, TInput, TOutput>
@@ -96,7 +96,7 @@ public class AdaptiveGeneticAlgorithm<T, TInput, TOutput> :
         GeneticParams.CrossoverRate = _currentCrossoverRate;
     }
 
-    public override ModelMetaData<T> GetMetaData()
+    public override ModelMetadata<T> GetMetaData()
     {
         var metadata = base.GetMetaData();
         metadata.ModelType = ModelType.GeneticAlgorithmRegression;

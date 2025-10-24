@@ -1,4 +1,4 @@
-﻿namespace AiDotNet.WaveletFunctions;
+namespace AiDotNet.WaveletFunctions;
 
 /// <summary>
 /// Represents a Paul wavelet function implementation for complex signal analysis and processing.
@@ -154,7 +154,7 @@ public class PaulWavelet<T> : IWaveletFunction<T>
         Complex<T> xComplex = new Complex<T>(x, _numOps.Zero);
         var complexOps = MathHelper.GetNumericOperations<Complex<T>>();
 
-        // Calculate (2^m * i^m * m!) / sqrt(π * (2m)!)
+        // Calculate (2^m * i^m * m!) / sqrt(p * (2m)!)
         double m = _order;
         double numerator = Math.Pow(2, m) * Convert.ToDouble(MathHelper.Factorial<T>(_order));
         double denominator = Math.Sqrt(Math.PI * Convert.ToDouble(MathHelper.Factorial<T>(2 * _order)));

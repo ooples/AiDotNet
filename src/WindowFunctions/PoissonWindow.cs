@@ -1,4 +1,4 @@
-﻿namespace AiDotNet.WindowFunctions;
+namespace AiDotNet.WindowFunctions;
 
 /// <summary>
 /// Implements the Poisson window function for signal processing applications.
@@ -6,8 +6,8 @@
 /// <remarks>
 /// <para>
 /// The Poisson window is an exponential window function defined by the equation:
-/// w(n) = exp(-α|n-N/2|/(N/2))
-/// where n is the sample index, N is the window size, and α (alpha) is a parameter
+/// w(n) = exp(-a|n-N/2|/(N/2))
+/// where n is the sample index, N is the window size, and a (alpha) is a parameter
 /// that controls the rate of decay from the center of the window to the edges.
 /// </para>
 /// <para><b>For Beginners:</b> A window function is like a special filter that helps analyze signals more accurately.
@@ -99,7 +99,7 @@ public class PoissonWindow<T> : IWindowFunction<T>
     /// <remarks>
     /// <para>
     /// This method implements the Poisson window function formula:
-    /// w(n) = exp(-α|n-N/2|/(N/2))
+    /// w(n) = exp(-a|n-N/2|/(N/2))
     /// It calculates the window function value for each point from 0 to windowSize-1.
     /// </para>
     /// <para><b>For Beginners:</b> This method creates the actual window values based on the size you specify.

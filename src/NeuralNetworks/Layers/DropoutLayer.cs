@@ -1,4 +1,4 @@
-﻿namespace AiDotNet.NeuralNetworks.Layers;
+namespace AiDotNet.NeuralNetworks.Layers;
 
 /// <summary>
 /// Implements a dropout layer for neural networks to prevent overfitting.
@@ -69,13 +69,13 @@ public class DropoutLayer<T> : LayerBase<T>
     /// When some neurons are turned off:
     /// - The total signal would be weaker (reduced by the dropout percentage)
     /// - To compensate, we make the remaining neurons stronger
-    /// - If we drop 50% of neurons, we make the remaining ones 2× stronger
+    /// - If we drop 50% of neurons, we make the remaining ones 2� stronger
     /// 
     /// The formula is simple: scale = 1 / (1 - dropout_rate)
     /// 
     /// Examples:
-    /// - Dropout rate = 0.2 → Scale = 1.25 (each remaining neuron is 25% stronger)
-    /// - Dropout rate = 0.5 → Scale = 2.0 (each remaining neuron is twice as strong)
+    /// - Dropout rate = 0.2 ? Scale = 1.25 (each remaining neuron is 25% stronger)
+    /// - Dropout rate = 0.5 ? Scale = 2.0 (each remaining neuron is twice as strong)
     /// 
     /// This scaling ensures the expected sum of the activations remains the same during
     /// training and inference, which helps with stable learning.
