@@ -103,6 +103,7 @@ public class AdaMaxOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T,
     /// Initializes a new instance of the AdaMaxOptimizer class.
     /// </summary>
     /// <param name="model">The model to optimize.</param>
+    /// <param name="model">The model to optimize.</param>
     /// <param name="options">The options for configuring the AdaMax optimizer.</param>
     /// <remarks>
     /// <para>
@@ -311,6 +312,7 @@ public class AdaMaxOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T,
     /// <summary>
     /// Updates the optimizer options with new AdaMax-specific options.
     /// </summary>
+    /// <param name="model">The model to optimize.</param>
     /// <param name="options">The new options to set.</param>
     /// <exception cref="ArgumentException">Thrown when the provided options are not of type AdaMaxOptimizerOptions.</exception>
     /// <remarks>

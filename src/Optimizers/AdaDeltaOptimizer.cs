@@ -87,6 +87,7 @@ public class AdaDeltaOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<
     /// Initializes a new instance of the <see cref="AdaDeltaOptimizer{T}"/> class.
     /// </summary>
     /// <param name="model">The model to optimize.</param>
+    /// <param name="model">The model to optimize.</param>
     /// <param name="options">The options for configuring the AdaDelta optimizer.</param>
     /// <remarks>
     /// <para>
@@ -292,6 +293,7 @@ public class AdaDeltaOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<
     /// <summary>
     /// Updates the optimizer options.
     /// </summary>
+    /// <param name="model">The model to optimize.</param>
     /// <param name="options">The new options to set.</param>
     /// <exception cref="ArgumentException">Thrown when the provided options are not of type AdaDeltaOptimizerOptions.</exception>
     /// <remarks>

@@ -42,6 +42,7 @@ public class DFPOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, TI
     /// <summary>
     /// Initializes a new instance of the DFPOptimizer class.
     /// </summary>
+    /// <param name="model">The model to optimize.</param>
     /// <param name="options">The options for configuring the DFP algorithm.</param>
     /// <param name="predictionOptions">Options for prediction statistics.</param>
     /// <param name="modelOptions">Options for model statistics.</param>
@@ -56,8 +57,9 @@ public class DFPOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, TI
     /// </para>
     /// </remarks>
     public DFPOptimizer(
+        IFullModel<T, TInput, TOutput> model,
         DFPOptimizerOptions<T, TInput, TOutput>? options = null)
-        : base(options ?? new())
+        : base(model, options ?? new())
     {
         _options = options ?? new DFPOptimizerOptions<T, TInput, TOutput>();
         _previousGradient = Vector<T>.Empty();
@@ -243,6 +245,7 @@ public class DFPOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, TI
     /// <summary>
     /// Updates the options for the DFP optimizer.
     /// </summary>
+    /// <param name="model">The model to optimize.</param>
     /// <param name="options">The new options to be set.</param>
     /// <exception cref="ArgumentException">Thrown when the provided options are not of type DFPOptimizerOptions.</exception>
     /// <remarks>

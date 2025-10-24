@@ -42,10 +42,12 @@ public class GradientDescentOptimizer<T, TInput, TOutput> : GradientBasedOptimiz
     /// will be, and how you'll adjust your path to avoid getting stuck in small dips.
     /// </para>
     /// </remarks>
+    /// <param name="model">The model to optimize.</param>
     /// <param name="options">Options for the Gradient Descent optimizer.</param>
     public GradientDescentOptimizer(
+        IFullModel<T, TInput, TOutput> model,
         GradientDescentOptimizerOptions<T, TInput, TOutput>? options = null)
-        : base(options ?? new GradientDescentOptimizerOptions<T, TInput, TOutput>())
+        : base(model, options ?? new GradientDescentOptimizerOptions<T, TInput, TOutput>())
     {
         _gdOptions = options ?? new GradientDescentOptimizerOptions<T, TInput, TOutput>();
         _regularization = _gdOptions.Regularization ?? CreateRegularization(_gdOptions);
@@ -166,6 +168,7 @@ public class GradientDescentOptimizer<T, TInput, TOutput> : GradientBasedOptimiz
     /// while it's running. It's like adjusting your hiking strategy mid-journey based on the terrain you encounter.
     /// </para>
     /// </remarks>
+    /// <param name="model">The model to optimize.</param>
     /// <param name="options">The new options to apply to the optimizer.</param>
     /// <exception cref="ArgumentException">Thrown when the provided options are not of the correct type.</exception>
     protected override void UpdateOptions(OptimizationAlgorithmOptions<T, TInput, TOutput> options)

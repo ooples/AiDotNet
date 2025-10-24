@@ -45,6 +45,7 @@ public class ADMMOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, T
     /// <summary>
     /// Initializes a new instance of the ADMMOptimizer class.
     /// </summary>
+    /// <param name="model">The model to optimize.</param>
     /// <param name="options">The options for configuring the ADMM optimizer.</param>
     /// <remarks>
     /// <para><b>For Beginners:</b> This sets up the ADMM optimizer with its initial configuration.
@@ -52,8 +53,9 @@ public class ADMMOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, T
     /// </para>
     /// </remarks>
     public ADMMOptimizer(
+        IFullModel<T, TInput, TOutput> model,
         ADMMOptimizerOptions<T, TInput, TOutput>? options = null)
-        : base(options ?? new())
+        : base(model, options ?? new())
     {
         _options = options ?? new ADMMOptimizerOptions<T, TInput, TOutput>();
         _regularization = _options.Regularization;
@@ -248,6 +250,7 @@ public class ADMMOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, T
     /// <summary>
     /// Updates the optimizer's options with new settings.
     /// </summary>
+    /// <param name="model">The model to optimize.</param>
     /// <param name="options">The new options to be applied to the optimizer.</param>
     /// <exception cref="ArgumentException">Thrown when the provided options are not of the correct type.</exception>
     /// <remarks>
@@ -271,6 +274,7 @@ public class ADMMOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, T
     /// <summary>
     /// Creates a regularization object based on the provided options.
     /// </summary>
+    /// <param name="model">The model to optimize.</param>
     /// <param name="options">The ADMM optimizer options containing regularization settings.</param>
     /// <returns>An instance of IRegularization<T> based on the specified regularization type.</returns>
     /// <remarks>

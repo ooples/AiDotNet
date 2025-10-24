@@ -49,10 +49,12 @@ public class LevenbergMarquardtOptimizer<T, TInput, TOutput> : GradientBasedOpti
     /// to do its job well.
     /// </para>
     /// </remarks>
+    /// <param name="model">The model to optimize.</param>
     /// <param name="options">Custom options for the Levenberg-Marquardt algorithm.</param>
     public LevenbergMarquardtOptimizer(
+        IFullModel<T, TInput, TOutput> model,
         LevenbergMarquardtOptimizerOptions<T, TInput, TOutput>? options = null)
-        : base(options ?? new())
+        : base(model, options ?? new())
     {
         _options = options ?? new LevenbergMarquardtOptimizerOptions<T, TInput, TOutput>();
         _dampingFactor = NumOps.Zero;
@@ -375,6 +377,7 @@ public class LevenbergMarquardtOptimizer<T, TInput, TOutput> : GradientBasedOpti
     /// type of settings, it lets them know there's a problem.
     /// </para>
     /// </remarks>
+    /// <param name="model">The model to optimize.</param>
     /// <param name="options">The new options to be applied to the optimizer.</param>
     /// <exception cref="ArgumentException">Thrown when the provided options are not of the correct type.</exception>
     protected override void UpdateOptions(OptimizationAlgorithmOptions<T, TInput, TOutput> options)

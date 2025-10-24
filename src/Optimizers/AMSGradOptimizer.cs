@@ -45,6 +45,7 @@ public class AMSGradOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T
     /// <summary>
     /// Initializes a new instance of the AMSGradOptimizer class.
     /// </summary>
+    /// <param name="model">The model to optimize.</param>
     /// <param name="options">The options for configuring the AMSGrad optimizer.</param>
     /// <remarks>
     /// <para><b>For Beginners:</b> This sets up the AMSGrad optimizer with its initial configuration.
@@ -52,8 +53,9 @@ public class AMSGradOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T
     /// </para>
     /// </remarks>
     public AMSGradOptimizer(
+        IFullModel<T, TInput, TOutput> model,
         AMSGradOptimizerOptions<T, TInput, TOutput>? options = null)
-        : base(options ?? new())
+        : base(model, options ?? new())
     {
         _options = options ?? new AMSGradOptimizerOptions<T, TInput, TOutput>();
 
@@ -204,6 +206,7 @@ public class AMSGradOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T
     /// <summary>
     /// Updates the optimizer's options with new settings.
     /// </summary>
+    /// <param name="model">The model to optimize.</param>
     /// <param name="options">The new options to be applied to the optimizer.</param>
     /// <exception cref="ArgumentException">Thrown when the provided options are not of the correct type.</exception>
     /// <remarks>

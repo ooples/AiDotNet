@@ -66,6 +66,7 @@ public class AdagradOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T
     /// Initializes a new instance of the AdagradOptimizer class.
     /// </summary>
     /// <param name="model">The model to optimize.</param>
+    /// <param name="model">The model to optimize.</param>
     /// <param name="options">The options for configuring the Adagrad optimizer.</param>
     /// <remarks>
     /// <para>
@@ -289,6 +290,7 @@ public class AdagradOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T
     /// <summary>
     /// Updates the options for the Adagrad optimizer.
     /// </summary>
+    /// <param name="model">The model to optimize.</param>
     /// <param name="options">The new options to be set.</param>
     /// <exception cref="ArgumentException">Thrown when the provided options are not of type AdagradOptimizerOptions.</exception>
     /// <remarks>

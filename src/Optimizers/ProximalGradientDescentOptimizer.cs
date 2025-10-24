@@ -94,7 +94,8 @@ public class ProximalGradientDescentOptimizer<T, TInput, TOutput> : GradientBase
     /// <summary>
     /// Initializes a new instance of the <see cref="ProximalGradientDescentOptimizer{T}"/> class with the specified options and components.
     /// </summary>
-    /// <param name="options">The proximal gradient descent optimization options, or null to use default options.</param>
+    /// <param name="model">The model to optimize.</param>
+    /// <param name="options">The Proximal Gradient Descent optimization options, or null to use default options.</param>
     /// <remarks>
     /// <para>
     /// This constructor creates a new proximal gradient descent optimizer with the specified options and components.
@@ -113,8 +114,9 @@ public class ProximalGradientDescentOptimizer<T, TInput, TOutput> : GradientBase
     /// </para>
     /// </remarks>
     public ProximalGradientDescentOptimizer(
+        IFullModel<T, TInput, TOutput> model,
         ProximalGradientDescentOptimizerOptions<T, TInput, TOutput>? options = null)
-        : base(options ?? new())
+        : base(model, options ?? new())
     {
         _options = options ?? new ProximalGradientDescentOptimizerOptions<T, TInput, TOutput>();
         _regularization = _options.Regularization ?? new NoRegularization<T, TInput, TOutput>();

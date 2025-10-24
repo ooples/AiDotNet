@@ -95,6 +95,7 @@ public class RootMeanSquarePropagationOptimizer<T, TInput, TOutput> : GradientBa
     /// <summary>
     /// Initializes a new instance of the <see cref="RootMeanSquarePropagationOptimizer{T}"/> class with the specified options and components.
     /// </summary>
+    /// <param name="model">The model to optimize.</param>
     /// <param name="options">The RMSProp optimization options, or null to use default options.</param>
     /// <remarks>
     /// <para>
@@ -115,8 +116,9 @@ public class RootMeanSquarePropagationOptimizer<T, TInput, TOutput> : GradientBa
     /// </para>
     /// </remarks>
     public RootMeanSquarePropagationOptimizer(
+        IFullModel<T, TInput, TOutput> model,
         RootMeanSquarePropagationOptimizerOptions<T, TInput, TOutput>? options = null)
-        : base(options ?? new())
+        : base(model, options ?? new())
     {
         _t = 0;
         _squaredGradient = Vector<T>.Empty();

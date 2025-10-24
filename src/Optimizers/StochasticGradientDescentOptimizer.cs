@@ -29,6 +29,7 @@ public class StochasticGradientDescentOptimizer<T, TInput, TOutput> : GradientBa
     /// <summary>
     /// Initializes a new instance of the StochasticGradientDescentOptimizer class.
     /// </summary>
+    /// <param name="model">The model to optimize.</param>
     /// <param name="options">Options specific to the SGD optimizer.</param>
     /// <param name="predictionOptions">Options for prediction statistics.</param>
     /// <param name="modelOptions">Options for model statistics.</param>
@@ -51,8 +52,9 @@ public class StochasticGradientDescentOptimizer<T, TInput, TOutput> : GradientBa
     /// </para>
     /// </remarks>
     public StochasticGradientDescentOptimizer(
+        IFullModel<T, TInput, TOutput> model,
         StochasticGradientDescentOptimizerOptions<T, TInput, TOutput>? options = null)
-        : base(options ?? new())
+        : base(model, options ?? new())
     {
         _options = options ?? new();
     }

@@ -60,10 +60,12 @@ public class LBFGSOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, 
     /// <summary>
     /// Initializes a new instance of the LBFGSOptimizer class.
     /// </summary>
+    /// <param name="model">The model to optimize.</param>
     /// <param name="options">Options for the L-BFGS optimizer. If null, default options are used.</param>
     public LBFGSOptimizer(
+        IFullModel<T, TInput, TOutput> model,
         LBFGSOptimizerOptions<T, TInput, TOutput>? options = null)
-        : base(options ?? new())
+        : base(model, options ?? new())
     {
         _options = options ?? new LBFGSOptimizerOptions<T, TInput, TOutput>();
         _s = [];
@@ -266,6 +268,7 @@ public class LBFGSOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, 
     /// for this specific type of optimizer.
     /// </para>
     /// </remarks>
+    /// <param name="model">The model to optimize.</param>
     /// <param name="options">The new options to apply to the optimizer.</param>
     /// <exception cref="ArgumentException">Thrown when the provided options are not of type LBFGSOptimizerOptions.</exception>
     protected override void UpdateOptions(OptimizationAlgorithmOptions<T, TInput, TOutput> options)
