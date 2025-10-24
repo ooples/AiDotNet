@@ -691,9 +691,9 @@ public class DeepBoltzmannMachine<T> : NeuralNetworkBase<T>
     /// layer sizes, and training parameters. This information can be useful for model management
     /// and serialization.
     /// </remarks>
-    public override ModelMetaData<T> GetModelMetaData()
+    public override ModelMetadata<T> GetModelMetadata()
     {
-        return new ModelMetaData<T>
+        return new ModelMetadata<T>
         {
             ModelType = ModelType.DeepBoltzmannMachine,
             AdditionalInfo = new Dictionary<string, object>

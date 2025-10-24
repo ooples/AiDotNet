@@ -1,4 +1,4 @@
-﻿namespace AiDotNet.LossFunctions;
+namespace AiDotNet.LossFunctions;
 
 /// <summary>
 /// Implements the Mean Absolute Error (MAE) loss function.
@@ -9,7 +9,7 @@
 /// <b>For Beginners:</b> Mean Absolute Error measures the average absolute difference between 
 /// predicted and actual values.
 /// 
-/// The formula is: MAE = (1/n) * ∑|predicted - actual|
+/// The formula is: MAE = (1/n) * ?|predicted - actual|
 /// 
 /// MAE has these key properties:
 /// - It treats all errors linearly (unlike MSE which squares errors)

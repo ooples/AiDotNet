@@ -1,4 +1,4 @@
-Ôªønamespace AiDotNet.Models.Results;
+namespace AiDotNet.Models.Results;
 
 /// <summary>
 /// Represents the comprehensive results of an optimization process for a symbolic model, including the best solution found,
@@ -58,7 +58,7 @@ public class OptimizationResult<T, TInput, TOutput>
     /// - May be human-readable (for symbolic models) or more complex (for neural networks)
     /// 
     /// For example:
-    /// - In symbolic regression, this might be an equation like: y = 3.2x‚ÇÅ¬≤ + 1.7x‚ÇÇ - 0.5
+    /// - In symbolic regression, this might be an equation like: y = 3.2x1≤ + 1.7x2 - 0.5
     /// - For a neural network, it would contain the optimized network structure and weights
     /// 
     /// This property is important because:
@@ -120,7 +120,7 @@ public class OptimizationResult<T, TInput, TOutput>
     /// - Higher values usually indicate better performance
     /// 
     /// Common fitness metrics include:
-    /// - R¬≤ (R-squared): Measures the proportion of variance explained (higher is better)
+    /// - R≤ (R-squared): Measures the proportion of variance explained (higher is better)
     /// - Negative MSE (Mean Squared Error): Measures prediction error (closer to zero is better)
     /// - Accuracy: For classification problems, the percentage of correct predictions
     /// 
@@ -653,8 +653,8 @@ public class OptimizationResult<T, TInput, TOutput>
         /// - Focus on the relationship between predictions and actual values
         /// 
         /// Common prediction metrics include:
-        /// - R¬≤ (R-squared): Proportion of variance explained by the model (0-1, higher is better)
-        /// - Adjusted R¬≤: R-squared adjusted for the number of predictors
+        /// - R≤ (R-squared): Proportion of variance explained by the model (0-1, higher is better)
+        /// - Adjusted R≤: R-squared adjusted for the number of predictors
         /// - Correlation: How strongly predictions and actual values are related
         /// 
         /// These metrics help you understand how well your model captures

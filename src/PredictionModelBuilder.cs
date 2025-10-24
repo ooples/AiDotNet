@@ -1,4 +1,4 @@
-﻿global using AiDotNet.FeatureSelectors;
+global using AiDotNet.FeatureSelectors;
 global using AiDotNet.FitnessCalculators;
 global using AiDotNet.Regularization;
 global using AiDotNet.Optimizers;

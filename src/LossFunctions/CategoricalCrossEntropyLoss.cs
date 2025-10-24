@@ -1,4 +1,4 @@
-﻿namespace AiDotNet.LossFunctions;
+namespace AiDotNet.LossFunctions;
 
 /// <summary>
 /// Implements the Categorical Cross Entropy loss function for multi-class classification.
@@ -11,7 +11,7 @@
 /// 
 /// It measures how well the predicted probability distribution matches the actual distribution of classes.
 /// 
-/// The formula is: CCE = -(1/n) * ∑[∑(actual_j * log(predicted_j))]
+/// The formula is: CCE = -(1/n) * ?[?(actual_j * log(predicted_j))]
 /// 
 /// Where:
 /// - actual_j is usually a one-hot encoded vector (1 for the correct class, 0 for others)
@@ -58,7 +58,7 @@ public class CategoricalCrossEntropyLoss<T> : LossFunctionBase<T>
             // Clamp values to prevent log(0)
             T p = MathHelper.Clamp(predicted[i], _epsilon, NumOps.Subtract(NumOps.One, _epsilon));
             
-            // -∑(actual * log(predicted))
+            // -?(actual * log(predicted))
             sum = NumOps.Add(sum, NumOps.Multiply(actual[i], NumOps.Log(p)));
         }
         

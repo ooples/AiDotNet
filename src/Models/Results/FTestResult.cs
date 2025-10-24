@@ -1,4 +1,4 @@
-﻿namespace AiDotNet.Models.Results;
+namespace AiDotNet.Models.Results;
 
 /// <summary>
 /// Represents the results of an F-test, which is used to compare the variances of two populations.
@@ -66,7 +66,7 @@ public class FTestResult<T>
     /// This property represents the p-value of the F-test, which is the probability of observing an F-statistic as 
     /// extreme as, or more extreme than, the one calculated from the sample data, assuming the null hypothesis is true. 
     /// The null hypothesis typically states that the two populations have equal variances. A small p-value (typically 
-    /// ≤ 0.05) suggests that the observed data is unlikely under the null hypothesis, leading to its rejection in favor 
+    /// = 0.05) suggests that the observed data is unlikely under the null hypothesis, leading to its rejection in favor 
     /// of the alternative hypothesis that the variances are different. The p-value is calculated from the F-statistic 
     /// and the degrees of freedom using the cumulative distribution function of the F-distribution.
     /// </para>
@@ -78,8 +78,8 @@ public class FTestResult<T>
     /// - Represents the probability of seeing your results (or more extreme) if the variances are actually equal
     /// 
     /// Common interpretation:
-    /// - p ≤ 0.05: Results are statistically significant (commonly used threshold)
-    /// - p ≤ 0.01: Results are highly significant
+    /// - p = 0.05: Results are statistically significant (commonly used threshold)
+    /// - p = 0.01: Results are highly significant
     /// - p > 0.05: Results are not statistically significant
     /// 
     /// For example, a p-value of 0.02 means there's only a 2% chance of seeing your results
@@ -96,14 +96,14 @@ public class FTestResult<T>
     /// <remarks>
     /// <para>
     /// This property represents the degrees of freedom for the numerator of the F-statistic, which is typically one 
-    /// less than the sample size of the first group (n₁ - 1). The numerator degrees of freedom is one of the parameters 
+    /// less than the sample size of the first group (n1 - 1). The numerator degrees of freedom is one of the parameters 
     /// of the F-distribution used to calculate the p-value. It affects the shape of the F-distribution and thus the 
     /// interpretation of the F-statistic.
     /// </para>
     /// <para><b>For Beginners:</b> This value is related to the sample size of the first group.
     /// 
     /// The numerator degrees of freedom:
-    /// - Is typically calculated as (n₁ - 1), where n₁ is the sample size of the first group
+    /// - Is typically calculated as (n1 - 1), where n1 is the sample size of the first group
     /// - Is a parameter needed to interpret the F-statistic
     /// - Helps determine the shape of the F-distribution used to calculate the p-value
     /// 
@@ -119,14 +119,14 @@ public class FTestResult<T>
     /// <remarks>
     /// <para>
     /// This property represents the degrees of freedom for the denominator of the F-statistic, which is typically one 
-    /// less than the sample size of the second group (n₂ - 1). The denominator degrees of freedom is one of the 
+    /// less than the sample size of the second group (n2 - 1). The denominator degrees of freedom is one of the 
     /// parameters of the F-distribution used to calculate the p-value. It affects the shape of the F-distribution and 
     /// thus the interpretation of the F-statistic.
     /// </para>
     /// <para><b>For Beginners:</b> This value is related to the sample size of the second group.
     /// 
     /// The denominator degrees of freedom:
-    /// - Is typically calculated as (n₂ - 1), where n₂ is the sample size of the second group
+    /// - Is typically calculated as (n2 - 1), where n2 is the sample size of the second group
     /// - Is a parameter needed to interpret the F-statistic
     /// - Helps determine the shape of the F-distribution used to calculate the p-value
     /// 

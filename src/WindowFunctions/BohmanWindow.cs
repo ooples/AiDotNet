@@ -1,4 +1,4 @@
-﻿namespace AiDotNet.WindowFunctions;
+namespace AiDotNet.WindowFunctions;
 
 /// <summary>
 /// Implements the Bohman window function for signal processing applications.
@@ -7,7 +7,7 @@
 /// <para>
 /// The Bohman window is a specialized window function that provides excellent spectral characteristics
 /// with very low sidelobe levels. It's defined by a more complex formula compared to simpler windows:
-/// w(n) = (1 - |x|) * cos(π|x|) + (1/π) * sin(π|x|)
+/// w(n) = (1 - |x|) * cos(p|x|) + (1/p) * sin(p|x|)
 /// where x = 2n/(N-1) - 1 and n is the sample index and N is the window size.
 /// </para>
 /// <para><b>For Beginners:</b> A window function is like a special filter that helps analyze signals more accurately.

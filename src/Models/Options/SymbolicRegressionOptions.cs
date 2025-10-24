@@ -1,4 +1,4 @@
-﻿namespace AiDotNet.Models.Options;
+namespace AiDotNet.Models.Options;
 
 /// <summary>
 /// Configuration options for Symbolic Regression, an evolutionary approach to finding
@@ -147,7 +147,7 @@ public class SymbolicRegressionOptions : NonLinearRegressionOptions
     /// 
     /// The default value of 0.1 means:
     /// - Each formula has a 10% chance of being mutated in each generation
-    /// - Mutations might include changing an operation (+ to ×), adding a term, etc.
+    /// - Mutations might include changing an operation (+ to �), adding a term, etc.
     /// 
     /// Think of it like this:
     /// - Higher values (e.g., 0.3): More exploration, more diversity, but may disrupt good solutions

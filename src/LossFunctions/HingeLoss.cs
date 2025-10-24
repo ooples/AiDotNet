@@ -1,4 +1,4 @@
-﻿namespace AiDotNet.LossFunctions;
+namespace AiDotNet.LossFunctions;
 
 /// <summary>
 /// Implements the Hinge loss function commonly used in support vector machines.
@@ -15,7 +15,7 @@
 /// 
 /// Key properties of hinge loss:
 /// - It penalizes predictions that are incorrect or not confident enough
-/// - It's zero when the prediction is correct and confident (y*f(x) ≥ 1)
+/// - It's zero when the prediction is correct and confident (y*f(x) = 1)
 /// - It increases linearly when the prediction is incorrect or not confident enough
 /// - It encourages the model to find a decision boundary with a large margin between classes
 /// 

@@ -1,4 +1,4 @@
-﻿using AiDotNet.Enums;
+using AiDotNet.Enums;
 
 namespace AiDotNet.Models.Options;
 

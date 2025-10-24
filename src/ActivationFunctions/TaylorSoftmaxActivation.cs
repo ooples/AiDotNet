@@ -1,4 +1,4 @@
-Ôªønamespace AiDotNet.ActivationFunctions;
+namespace AiDotNet.ActivationFunctions;
 
 /// <summary>
 /// Implements the Taylor Softmax activation function, which is a computationally efficient approximation of the standard Softmax function.
@@ -113,7 +113,7 @@ public class TaylorSoftmaxActivation<T> : ActivationFunctionBase<T>
     /// This matrix is used during backpropagation to update the weights in the neural network.
     /// 
     /// The diagonal elements (where i=j) represent how an output is affected by its corresponding input.
-    /// The off-diagonal elements (where i‚â†j) represent how an output is affected by other inputs.
+    /// The off-diagonal elements (where i?j) represent how an output is affected by other inputs.
     /// </para>
     /// </remarks>
     public override Matrix<T> Derivative(Vector<T> input)
@@ -152,12 +152,12 @@ public class TaylorSoftmaxActivation<T> : ActivationFunctionBase<T>
     /// technique called a Taylor series. Instead of calculating the exact value of e^x, which can be
     /// computationally expensive, it uses a sum of simpler terms to get close to the right answer.
     /// 
-    /// The formula used is: e^x ‚âà 1 + x + x¬≤/2! + x¬≥/3! + ... + x‚Åø/n!
+    /// The formula used is: e^x ò 1 + x + x≤/2! + x≥/3! + ... + xn/n!
     /// 
     /// Where:
     /// - x is the input value
     /// - n is the order of approximation
-    /// - n! (factorial) means n √ó (n-1) √ó (n-2) √ó ... √ó 1
+    /// - n! (factorial) means n ◊ (n-1) ◊ (n-2) ◊ ... ◊ 1
     /// 
     /// Higher orders give more accurate results but require more computation.
     /// </para>

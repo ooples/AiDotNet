@@ -1,4 +1,4 @@
-﻿namespace AiDotNet.Regression;
+namespace AiDotNet.Regression;
 
 /// <summary>
 /// Represents an abstract base class for asynchronous decision tree regression models.
@@ -162,7 +162,7 @@ public abstract class AsyncDecisionTreeRegressionBase<T> : IAsyncTreeBasedModel<
     /// It's like getting a report card for your model, showing how well it learned and what it learned.
     /// </para>
     /// </remarks>
-    public abstract ModelMetaData<T> GetModelMetaData();
+    public abstract ModelMetadata<T> GetModelMetadata();
 
     /// <summary>
     /// Asynchronously calculates the importance of each feature in the model.

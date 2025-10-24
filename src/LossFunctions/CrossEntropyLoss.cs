@@ -1,4 +1,4 @@
-﻿namespace AiDotNet.LossFunctions;
+namespace AiDotNet.LossFunctions;
 
 /// <summary>
 /// Implements the Cross Entropy loss function for multi-class classification problems.
@@ -9,7 +9,7 @@
 /// <b>For Beginners:</b> Cross-Entropy loss measures how different two probability distributions are.
 /// It's commonly used for classification problems where the model outputs probabilities.
 /// 
-/// The formula is: -∑(actual_i * log(predicted_i))
+/// The formula is: -?(actual_i * log(predicted_i))
 /// 
 /// Key properties:
 /// - Lower values indicate that the predicted distribution is closer to the actual distribution
@@ -52,7 +52,7 @@ public class CrossEntropyLoss<T> : LossFunctionBase<T>
             // Clamp predicted values to prevent log(0)
             T p = MathHelper.Clamp(predicted[i], _epsilon, NumOps.Subtract(NumOps.One, _epsilon));
             
-            // -∑(actual_i * log(predicted_i))
+            // -?(actual_i * log(predicted_i))
             sum = NumOps.Add(sum, NumOps.Multiply(actual[i], NumOps.Log(p)));
         }
         

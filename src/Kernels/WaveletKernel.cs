@@ -1,4 +1,4 @@
-﻿global using AiDotNet.WaveletFunctions;
+global using AiDotNet.WaveletFunctions;
 
 namespace AiDotNet.Kernels;
 
@@ -24,12 +24,12 @@ namespace AiDotNet.Kernels;
 /// </para>
 /// <para>
 /// The formula for the Wavelet kernel is:
-/// k(x, y) = ∏ h((x_i - y_i)/a) * √c
+/// k(x, y) = ? h((x_i - y_i)/a) * vc
 /// where:
 /// - h is the wavelet function (like the Mexican Hat wavelet)
 /// - a is a dilation parameter that controls the width of the wavelet
 /// - c is a scaling parameter
-/// - ∏ means multiply all the results together for each dimension i
+/// - ? means multiply all the results together for each dimension i
 /// </para>
 /// <para>
 /// Common uses include:

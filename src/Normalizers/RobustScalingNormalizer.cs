@@ -1,4 +1,4 @@
-ï»¿namespace AiDotNet.Normalizers;
+namespace AiDotNet.Normalizers;
 
 /// <summary>
 /// Normalizes data using robust scaling based on median and interquartile range (IQR).
@@ -272,10 +272,10 @@ public class RobustScalingNormalizer<T, TInput, TOutput> : NormalizerBase<T, TIn
     /// 
     /// For example, if your normalized data was [-1.0, -0.33, 0.33, 1.0] with median = $60K and IQR = $30K:
     /// - The denormalized values would be:
-    ///   * -1.0 Ã— $30K + $60K = $30K
-    ///   * -0.33 Ã— $30K + $60K = $50K
-    ///   * 0.33 Ã— $30K + $60K = $70K
-    ///   * 1.0 Ã— $30K + $60K = $90K
+    ///   * -1.0 × $30K + $60K = $30K
+    ///   * -0.33 × $30K + $60K = $50K
+    ///   * 0.33 × $30K + $60K = $70K
+    ///   * 1.0 × $30K + $60K = $90K
     /// 
     /// This allows you to go back to the original measurements after performing calculations
     /// or analysis on the normalized data.
@@ -339,7 +339,7 @@ public class RobustScalingNormalizer<T, TInput, TOutput> : NormalizerBase<T, TIn
     /// - The output's IQR was $10K (meaning it was divided by $10K during normalization)
     /// - The model learned a coefficient of 0.9 for this feature on normalized data
     /// 
-    /// The denormalized coefficient would be 0.9 Ã— ($10K Ã· $30K) = 0.3
+    /// The denormalized coefficient would be 0.9 × ($10K ÷ $30K) = 0.3
     /// 
     /// This ensures that predictions made using original data will be properly scaled.
     /// </para>
