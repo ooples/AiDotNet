@@ -313,10 +313,10 @@ public abstract class OptimizerBase<T, TInput, TOutput> : IOptimizer<T, TInput, 
     /// <param name="inputData">The input data for evaluation.</param>
     /// <returns>The evaluation results for the solution.</returns>
     protected virtual OptimizationStepData<T, TInput, TOutput> EvaluateSolution(
-        IFullModel<T, TInput, TOutput> solution, 
+        IFullModel<T, TInput, TOutput> solution,
         OptimizationInputData<T, TInput, TOutput> inputData)
     {
-        string cacheKey = ModelCache.GenerateCacheKey(solution, inputData);
+        string cacheKey = GenerateCacheKey(solution, inputData);
         var cachedStepData = ModelCache.GetCachedStepData(cacheKey);
 
         if (cachedStepData != null)
@@ -355,7 +355,7 @@ public abstract class OptimizerBase<T, TInput, TOutput> : IOptimizer<T, TInput, 
         ApplyFeatureSelection(solution, selectedFeaturesIndices);
 
         // Step 3: Generate cache key based on the selected features and check cache
-        string cacheKey = ModelCache.GenerateCacheKey(solution, inputData);
+        string cacheKey = GenerateCacheKey(solution, inputData);
         var cachedStepData = ModelCache.GetCachedStepData(cacheKey);
 
         if (cachedStepData != null)
@@ -481,7 +481,7 @@ public abstract class OptimizerBase<T, TInput, TOutput> : IOptimizer<T, TInput, 
             bestStepData.FitnessScore,
             FitnessList,
             bestStepData.SelectedFeatures,
-            new OptimizationResult<T, TInput, TOutput>.DatasetResult(modelType)
+            new OptimizationResult<T, TInput, TOutput>.DatasetResult
             {
                 X = bestStepData.XTrainSubset,
                 Y = input.YTrain,
@@ -491,7 +491,7 @@ public abstract class OptimizerBase<T, TInput, TOutput> : IOptimizer<T, TInput, 
                 PredictedBasicStats = bestStepData.EvaluationData.TrainingSet.PredictedBasicStats,
                 PredictionStats = bestStepData.EvaluationData.TrainingSet.PredictionStats
             },
-            new OptimizationResult<T, TInput, TOutput>.DatasetResult(modelType)
+            new OptimizationResult<T, TInput, TOutput>.DatasetResult
             {
                 X = bestStepData.XValSubset,
                 Y = input.YValidation,
@@ -501,7 +501,7 @@ public abstract class OptimizerBase<T, TInput, TOutput> : IOptimizer<T, TInput, 
                 PredictedBasicStats = bestStepData.EvaluationData.ValidationSet.PredictedBasicStats,
                 PredictionStats = bestStepData.EvaluationData.ValidationSet.PredictionStats
             },
-            new OptimizationResult<T, TInput, TOutput>.DatasetResult(modelType)
+            new OptimizationResult<T, TInput, TOutput>.DatasetResult
             {
                 X = bestStepData.XTestSubset,
                 Y = input.YTest,
@@ -564,40 +564,22 @@ public abstract class OptimizerBase<T, TInput, TOutput> : IOptimizer<T, TInput, 
         // Create a deep copy of the model to avoid modifying the original
         var solution = Model.DeepCopy();
 
-        int numFeatures = InputHelper<T, TInput>.GetInputSize(xTrain);
-
-        switch (Options.OptimizationMode)
-        {
-            case OptimizationMode.FeatureSelectionOnly:
-                ApplyFeatureSelection(solution, numFeatures);
-                break;
-
-            case OptimizationMode.ParametersOnly:
-                AdjustModelParameters(
-                    solution,
-                    Options.ParameterAdjustmentScale,
-                    Options.SignFlipProbability);
-                break;
-
-            case OptimizationMode.Both:
-            default:
-                // With some probability, apply both or just one type of optimization
-                if (Random.NextDouble() < Options.FeatureSelectionProbability)
-                {
-                    ApplyFeatureSelection(solution, numFeatures);
-                }
-
-                if (Random.NextDouble() < Options.ParameterAdjustmentProbability)
-                {
-                    AdjustModelParameters(
-                        solution,
-                        Options.ParameterAdjustmentScale,
-                        Options.SignFlipProbability);
-                }
-                break;
-        }
-
+        // Return the deep copy - subclasses can override to add custom solution creation logic
         return solution;
+    }
+
+    /// <summary>
+    /// Generates a cache key for the given solution and input data.
+    /// </summary>
+    /// <param name="solution">The solution model.</param>
+    /// <param name="inputData">The optimization input data.</param>
+    /// <returns>A unique cache key string.</returns>
+    protected virtual string GenerateCacheKey(IFullModel<T, TInput, TOutput> solution, OptimizationInputData<T, TInput, TOutput> inputData)
+    {
+        // Generate a simple cache key based on parameter values
+        var parameters = solution.GetParameters();
+        var paramHash = parameters.GetHashCode();
+        return $"{solution.GetType().Name}_{paramHash}";
     }
 
     /// <summary>

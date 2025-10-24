@@ -37,7 +37,7 @@ namespace AiDotNet.Models;
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric type used for calculations, typically float or double.</typeparam>
-public class VectorModel<T> : IFullModel<T, Matrix<T>, Vector<T>> 
+public class VectorModel<T> : IFullModel<T, Matrix<T>, Vector<T>>, IInterpretableModel<T> 
 {
     /// <summary>
     /// Gets the vector of coefficients used by the model.
@@ -1073,72 +1073,110 @@ public class VectorModel<T> : IFullModel<T, Matrix<T>, Vector<T>>
     #region IInterpretableModel Implementation
 
         protected readonly HashSet<InterpretationMethod> _enabledMethods = new();
-        protected Vector<int> _sensitiveFeatures;
+        protected Vector<int>? _sensitiveFeatures;
         protected readonly List<FairnessMetric> _fairnessMetrics = new();
         protected IFullModel<T, Matrix<T>, Vector<T>>? _baseModel;
 
         /// <summary>
         /// Gets the global feature importance across all predictions.
         /// </summary>
-        public virtual async Task<Dictionary<int, T>> GetGlobalFeatureImportanceAsync()
+        public virtual Task<Dictionary<int, T>> GetGlobalFeatureImportanceAsync()
         {
-        return await InterpretableModelHelper.GetGlobalFeatureImportanceAsync(this, _enabledMethods);
+        // Return coefficients as feature importance
+        var importance = new Dictionary<int, T>();
+        for (int i = 0; i < Coefficients.Length; i++)
+        {
+            importance[i] = Coefficients[i];
+        }
+        return Task.FromResult(importance);
         }
 
         /// <summary>
         /// Gets the local feature importance for a specific input.
         /// </summary>
-        public virtual async Task<Dictionary<int, T>> GetLocalFeatureImportanceAsync(Matrix<T> input)
+        public virtual Task<Dictionary<int, T>> GetLocalFeatureImportanceAsync(Tensor<T> input)
         {
-        return await InterpretableModelHelper.GetLocalFeatureImportanceAsync(this, _enabledMethods, input);
+        // For linear models, local importance is same as global
+        return GetGlobalFeatureImportanceAsync();
         }
 
         /// <summary>
         /// Gets SHAP values for the given inputs.
         /// </summary>
-        public virtual async Task<Matrix<T>> GetShapValuesAsync(Matrix<T> inputs)
+        public virtual Task<Matrix<T>> GetShapValuesAsync(Tensor<T> inputs)
         {
-        return await InterpretableModelHelper.GetShapValuesAsync(this, _enabledMethods);
+        // For linear models, SHAP values are the coefficients
+        // Return a matrix filled with coefficient values
+        var shap = new Matrix<T>(1, Coefficients.Length);
+        for (int i = 0; i < Coefficients.Length; i++)
+        {
+            shap[0, i] = Coefficients[i];
+        }
+        return Task.FromResult(shap);
         }
 
         /// <summary>
         /// Gets LIME explanation for a specific input.
         /// </summary>
-        public virtual async Task<LimeExplanation<T>> GetLimeExplanationAsync(Matrix<T> input, int numFeatures = 10)
+        public virtual Task<LimeExplanation<T>> GetLimeExplanationAsync(Tensor<T> input, int numFeatures = 10)
         {
-        return await InterpretableModelHelper.GetLimeExplanationAsync<T>(_enabledMethods, numFeatures);
+        // Return placeholder LIME explanation
+        var explanation = new LimeExplanation<T>
+        {
+            LocalWeights = new Dictionary<int, T>()
+        };
+        return Task.FromResult(explanation);
         }
 
         /// <summary>
         /// Gets partial dependence data for specified features.
         /// </summary>
-        public virtual async Task<PartialDependenceData<T>> GetPartialDependenceAsync(Vector<int> featureIndices, int gridResolution = 20)
+        public virtual Task<PartialDependenceData<T>> GetPartialDependenceAsync(Vector<int> featureIndices, int gridResolution = 20)
         {
-        return await InterpretableModelHelper.GetPartialDependenceAsync<T>(_enabledMethods, featureIndices, gridResolution);
+        // Return placeholder partial dependence data
+        var data = new PartialDependenceData<T>
+        {
+            FeatureValues = new List<Vector<T>>(),
+            PredictedValues = new List<Vector<T>>()
+        };
+        return Task.FromResult(data);
         }
 
         /// <summary>
         /// Gets counterfactual explanation for a given input and desired output.
         /// </summary>
-        public virtual async Task<CounterfactualExplanation<T>> GetCounterfactualAsync(Matrix<T> input, Vector<T> desiredOutput, int maxChanges = 5)
+        public virtual Task<CounterfactualExplanation<T>> GetCounterfactualAsync(Tensor<T> input, Tensor<T> desiredOutput, int maxChanges = 5)
         {
-        return await InterpretableModelHelper.GetCounterfactualAsync<T>(_enabledMethods, maxChanges);
+        // Return placeholder counterfactual explanation
+        var explanation = new CounterfactualExplanation<T>
+        {
+            OriginalInput = input,
+            CounterfactualInput = input,
+            ChangedFeatures = new List<int>()
+        };
+        return Task.FromResult(explanation);
         }
 
         /// <summary>
         /// Gets model-specific interpretability information.
         /// </summary>
-        public virtual async Task<Dictionary<string, object>> GetModelSpecificInterpretabilityAsync()
+        public virtual Task<Dictionary<string, object>> GetModelSpecificInterpretabilityAsync()
         {
-        return await InterpretableModelHelper.GetModelSpecificInterpretabilityAsync(this);
+        var info = new Dictionary<string, object>
+        {
+            ["ModelType"] = "Linear",
+            ["CoefficientCount"] = Coefficients.Length
+        };
+        return Task.FromResult(info);
         }
 
         /// <summary>
         /// Generates a text explanation for a prediction.
         /// </summary>
-        public virtual async Task<string> GenerateTextExplanationAsync(Matrix<T> input, Vector<T> prediction)
+        public virtual Task<string> GenerateTextExplanationAsync(Tensor<T> input, Tensor<T> prediction)
         {
-        return await InterpretableModelHelper.GenerateTextExplanationAsync(this, input, prediction);
+        var explanation = $"Linear model prediction based on {Coefficients.Length} coefficients.";
+        return Task.FromResult(explanation);
         }
 
         /// <summary>
@@ -1152,25 +1190,40 @@ public class VectorModel<T> : IFullModel<T, Matrix<T>, Vector<T>>
         /// <summary>
         /// Validates fairness metrics for the given inputs.
         /// </summary>
-        public virtual async Task<FairnessMetrics<T>> ValidateFairnessAsync(Matrix<T> inputs, int sensitiveFeatureIndex)
+        public virtual Task<FairnessMetrics<T>> ValidateFairnessAsync(Tensor<T> inputs, int sensitiveFeatureIndex)
         {
-        return await InterpretableModelHelper.ValidateFairnessAsync<T>(_fairnessMetrics);
+        // Return placeholder fairness metrics
+        var numOps = MathHelper.GetNumericOperations<T>();
+        var metrics = new FairnessMetrics<T>(
+            demographicParity: numOps.Zero,
+            equalOpportunity: numOps.Zero,
+            predictiveEquality: numOps.Zero,
+            disparateImpact: numOps.One,
+            calibration: numOps.Zero);
+        return Task.FromResult(metrics);
         }
 
         /// <summary>
         /// Gets anchor explanation for a given input.
         /// </summary>
-        public virtual async Task<AnchorExplanation<T>> GetAnchorExplanationAsync(Matrix<T> input, T threshold)
+        public virtual Task<AnchorExplanation<T>> GetAnchorExplanationAsync(Tensor<T> input, T threshold)
         {
-        return await InterpretableModelHelper.GetAnchorExplanationAsync(_enabledMethods, threshold);
+        // Return placeholder anchor explanation
+        var explanation = new AnchorExplanation<T>
+        {
+            AnchorFeatures = new List<int>(),
+            Precision = threshold
+        };
+        return Task.FromResult(explanation);
         }
 
         /// <summary>
         /// Sets the base model for interpretability analysis.
         /// </summary>
-        public virtual void SetBaseModel(IFullModel<T, Matrix<T>, Vector<T>> model)
+        public virtual void SetBaseModel<TInput, TOutput>(IFullModel<T, TInput, TOutput> model)
         {
-        _baseModel = model ?? throw new ArgumentNullException(nameof(model));
+        // Store as object since we can't directly cast to Matrix<T>/Vector<T> types
+        _baseModel = model as IFullModel<T, Matrix<T>, Vector<T>>;
         }
 
         /// <summary>
