@@ -1112,11 +1112,21 @@ public class VectorModel<T> : IFullModel<T, Matrix<T>, Vector<T>>
         /// <summary>
         /// Gets partial dependence data for specified features.
         /// </summary>
+        /// <exception cref="NotImplementedException">Partial dependence calculation is not yet implemented for VectorModel.</exception>
+        /// <remarks>
+        /// <para><b>Status:</b> This method is not yet implemented and will throw a NotImplementedException when called.</para>
+        /// <para>Partial dependence plots show the marginal effect of features on the predicted outcome.
+        /// Implementation requires computing predictions across a grid of feature values while marginalizing
+        /// over other features.</para>
+        /// </remarks>
         public virtual async Task<PartialDependenceData<T>> GetPartialDependenceAsync(Vector<int> featureIndices, int gridResolution = 20)
         {
-            // TODO: Implement partial dependence calculation
-            await Task.CompletedTask;
-            return new PartialDependenceData<T>();
+            await Task.CompletedTask; // Satisfy async method signature
+            throw new NotImplementedException(
+                "Partial dependence calculation is not yet implemented for VectorModel. " +
+                "This feature requires computing predictions across a grid of feature values while " +
+                "marginalizing over other features. Please use alternative interpretability methods " +
+                "such as GetLocalFeatureImportanceAsync or GetShapValuesAsync.");
         }
 
         /// <summary>

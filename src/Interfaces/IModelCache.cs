@@ -112,26 +112,42 @@ public interface IModelCache<T, TInput, TOutput>
     void ClearCache();
 
     /// <summary>
-    /// Generates a unique cache key based on the solution model and input data.
+    /// Generates a deterministic cache key based on the solution model and input data.
     /// </summary>
     /// <remarks>
-    /// This method creates a unique identifier (key) based on the current model state and input data.
-    /// The same inputs and model state will always produce the same key, allowing consistent caching.
-    ///
-    /// <b>For Beginners:</b> This is like creating a unique file name based on the contents.
-    ///
+    /// <para>
+    /// This method creates a deterministic identifier (key) based on the current model state and input data.
+    /// The same inputs and model state will always produce the same key, allowing consistent caching
+    /// across process restarts and different machines.
+    /// </para>
+    /// <para>
+    /// <b>Implementation Requirements:</b>
+    /// - Must use deterministic hashing (e.g., SHA-256) instead of GetHashCode()
+    /// - Must serialize parameters in a stable, ordered format
+    /// - Must handle null values consistently
+    /// - Must use culture-invariant string formatting for numbers
+    /// - Keys must remain valid across process restarts
+    /// </para>
+    /// <para>
+    /// <b>For Beginners:</b> This is like creating a unique file name based on the contents
+    /// that stays the same forever, even if you restart your computer or run the program again.
+    /// </para>
+    /// <para>
     /// When training a model:
     /// - Each combination of model parameters and input data produces different results
-    /// - This method generates a unique "fingerprint" for each combination
-    /// - The fingerprint is used to save and retrieve cached results
-    ///
+    /// - This method generates a unique "fingerprint" for each combination using cryptographic hashing
+    /// - The fingerprint is used to save and retrieve cached results persistently
+    /// </para>
+    /// <para>
     /// For example:
-    /// - Two identical models with identical inputs will get the same key
+    /// - Two identical models with identical inputs will get the same key, always
     /// - The cached result can be retrieved using this key instead of recalculating
     /// - This saves time by avoiding redundant calculations
+    /// - Persisted caches remain valid even after restarting the application
+    /// </para>
     /// </remarks>
     /// <param name="solution">The model solution to generate a key for.</param>
     /// <param name="inputData">The input data to include in the key generation.</param>
-    /// <returns>A unique string key for caching.</returns>
+    /// <returns>A deterministic string key for caching (typically a hex-encoded cryptographic hash).</returns>
     string GenerateCacheKey(IFullModel<T, TInput, TOutput> solution, OptimizationInputData<T, TInput, TOutput> inputData);
 }
