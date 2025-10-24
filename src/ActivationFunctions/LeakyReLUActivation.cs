@@ -1,4 +1,4 @@
-﻿namespace AiDotNet.ActivationFunctions;
+namespace AiDotNet.ActivationFunctions;
 
 /// <summary>
 /// Implements the Leaky Rectified Linear Unit (Leaky ReLU) activation function for neural networks.
@@ -10,7 +10,7 @@
 /// 
 /// How it works:
 /// - For positive inputs (x > 0): It returns the input unchanged (like a straight line)
-/// - For negative inputs (x ≤ 0): It returns a small fraction of the input (α * x)
+/// - For negative inputs (x = 0): It returns a small fraction of the input (a * x)
 /// 
 /// The main advantage of Leaky ReLU over standard ReLU is that it never completely "turns off" 
 /// neurons for negative inputs. Instead, it allows a small gradient to flow through, which helps
@@ -70,12 +70,12 @@ public class LeakyReLUActivation<T> : ActivationFunctionBase<T>
     /// <b>For Beginners:</b> This method transforms an input value using the formula:
     /// 
     /// f(x) = x        if x > 0
-    /// f(x) = α * x    if x ≤ 0
+    /// f(x) = a * x    if x = 0
     /// 
-    /// For example, with the default α = 0.01:
-    /// - Input of 5 → Output of 5 (unchanged)
-    /// - Input of 0 → Output of 0
-    /// - Input of -5 → Output of -0.05 (5 * 0.01)
+    /// For example, with the default a = 0.01:
+    /// - Input of 5 ? Output of 5 (unchanged)
+    /// - Input of 0 ? Output of 0
+    /// - Input of -5 ? Output of -0.05 (5 * 0.01)
     /// </para>
     /// </remarks>
     public override T Activate(T input)
@@ -109,7 +109,7 @@ public class LeakyReLUActivation<T> : ActivationFunctionBase<T>
     /// 
     /// For the Leaky ReLU function, the derivative is very simple:
     /// - For positive inputs (x > 0): The derivative is 1 (output changes at the same rate as input)
-    /// - For negative inputs (x ≤ 0): The derivative is alpha (output changes at alpha times the rate of input)
+    /// - For negative inputs (x = 0): The derivative is alpha (output changes at alpha times the rate of input)
     /// 
     /// Unlike some other activation functions, Leaky ReLU's derivative never becomes zero,
     /// which helps prevent neurons from "dying" during training.
@@ -138,7 +138,7 @@ public class LeakyReLUActivation<T> : ActivationFunctionBase<T>
     /// 
     /// For Leaky ReLU, each diagonal value will be either:
     /// - 1 (for inputs > 0)
-    /// - alpha (for inputs ≤ 0)
+    /// - alpha (for inputs = 0)
     /// </para>
     /// </remarks>
     public override Matrix<T> Derivative(Vector<T> input)

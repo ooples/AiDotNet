@@ -480,9 +480,9 @@ public class LiquidStateMachine<T> : NeuralNetworkBase<T>
     /// especially when experimenting with multiple settings.
     /// </para>
     /// </remarks>
-    public override ModelMetaData<T> GetModelMetaData()
+    public override ModelMetadata<T> GetModelMetadata()
     {
-        return new ModelMetaData<T>
+        return new ModelMetadata<T>
         {
             ModelType = ModelType.LiquidStateMachine,
             AdditionalInfo = new Dictionary<string, object>

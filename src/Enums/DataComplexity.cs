@@ -1,4 +1,4 @@
-﻿namespace AiDotNet.Enums;
+namespace AiDotNet.Enums;
 
 /// <summary>
 /// Represents the level of complexity in a dataset, which helps determine appropriate model selection and preprocessing.

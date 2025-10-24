@@ -1328,9 +1328,9 @@ public class GenerativeAdversarialNetwork<T> : NeuralNetworkBase<T>
     /// comparing experimental results, and documenting your work.
     /// </para>
     /// </remarks>
-    public override ModelMetaData<T> GetModelMetaData()
+    public override ModelMetadata<T> GetModelMetadata()
     {
-        return new ModelMetaData<T>
+        return new ModelMetadata<T>
         {
             ModelType = ModelType.GenerativeAdversarialNetwork,
             AdditionalInfo = new Dictionary<string, object>
@@ -1338,8 +1338,8 @@ public class GenerativeAdversarialNetwork<T> : NeuralNetworkBase<T>
                 { "GeneratorParameters", Generator.GetParameterCount() },
                 { "DiscriminatorParameters", Discriminator.GetParameterCount() },
                 { "TotalParameters", Generator.GetParameterCount() + Discriminator.GetParameterCount() },
-                { "GeneratorArchitecture", Generator.GetModelMetaData() },
-                { "DiscriminatorArchitecture", Discriminator.GetModelMetaData() },
+                { "GeneratorArchitecture", Generator.GetModelMetadata() },
+                { "DiscriminatorArchitecture", Discriminator.GetModelMetadata() },
                 { "OptimizationType", "Adam" }
             },
             ModelData = this.Serialize()

@@ -1,4 +1,4 @@
-﻿namespace AiDotNet.FeatureSelectors;
+namespace AiDotNet.FeatureSelectors;
 
 /// <summary>
 /// A feature selector that uses Recursive Feature Elimination (RFE) to select the most important features.

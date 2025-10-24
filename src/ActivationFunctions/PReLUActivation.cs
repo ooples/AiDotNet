@@ -1,4 +1,4 @@
-﻿namespace AiDotNet.ActivationFunctions;
+namespace AiDotNet.ActivationFunctions;
 
 /// <summary>
 /// Implements the Parametric Rectified Linear Unit (PReLU) activation function for neural networks.
@@ -13,7 +13,7 @@
 /// 
 /// How PReLU works:
 /// - For positive inputs (x > 0): PReLU returns the input unchanged (just like ReLU)
-/// - For negative inputs (x ≤ 0): PReLU returns alpha * x (a scaled-down version of the input)
+/// - For negative inputs (x = 0): PReLU returns alpha * x (a scaled-down version of the input)
 /// 
 /// The alpha parameter is typically a small positive number (default 0.01). This "leakiness"
 /// helps prevent a problem called "dying ReLU" where neurons can get stuck and stop learning.
@@ -64,11 +64,11 @@ public class PReLUActivation<T> : ActivationFunctionBase<T>
     /// <b>For Beginners:</b> This method transforms a single number using the PReLU formula:
     /// 
     /// - If the input is positive (> 0): the output is the same as the input
-    /// - If the input is negative (≤ 0): the output is alpha * input
+    /// - If the input is negative (= 0): the output is alpha * input
     /// 
     /// For example, with the default alpha = 0.01:
-    /// - Input of 5 → Output of 5
-    /// - Input of -5 → Output of -0.05 (5 * 0.01)
+    /// - Input of 5 ? Output of 5
+    /// - Input of -5 ? Output of -0.05 (5 * 0.01)
     /// </para>
     /// </remarks>
     public override T Activate(T input)
@@ -92,7 +92,7 @@ public class PReLUActivation<T> : ActivationFunctionBase<T>
     /// 
     /// For PReLU, the derivative is very simple:
     /// - If the input is positive (> 0): the derivative is 1
-    /// - If the input is negative (≤ 0): the derivative is alpha
+    /// - If the input is negative (= 0): the derivative is alpha
     /// 
     /// A derivative of 1 means the output changes at the same rate as the input.
     /// A derivative of alpha means the output changes at alpha times the rate of the input.

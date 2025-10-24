@@ -1,4 +1,4 @@
-﻿namespace AiDotNet.TimeSeries;
+namespace AiDotNet.TimeSeries;
 
 /// <summary>
 /// Implements a Moving Average (MA) model for time series forecasting.
@@ -7,9 +7,9 @@
 /// <remarks>
 /// <para>
 /// MA models predict future values based on past prediction errors (residuals). 
-/// The model is defined as: Yt = μ + εt + θ1εt-1 + θ2εt-2 + ... + θqεt-q
-/// where Yt is the value at time t, μ is the mean, εt is the error term at time t,
-/// and θi are the MA coefficients.
+/// The model is defined as: Yt = � + et + ?1et-1 + ?2et-2 + ... + ?qet-q
+/// where Yt is the value at time t, � is the mean, et is the error term at time t,
+/// and ?i are the MA coefficients.
 /// </para>
 /// 
 /// <para>
@@ -397,7 +397,7 @@ public class MAModel<T> : TimeSeriesModelBase<T>
         {
             variance = NumOps.Divide(variance, NumOps.FromDouble(n));
             
-            // log-likelihood = -n/2 * log(2π) - n/2 * log(variance) - 1/(2*variance) * sum(errors²)
+            // log-likelihood = -n/2 * log(2p) - n/2 * log(variance) - 1/(2*variance) * sum(errors�)
             // We ignore the constant terms and return negative log-likelihood
             T logVariance = NumOps.Log(variance);
             T scaledVariance = NumOps.Multiply(NumOps.FromDouble(n), logVariance);
@@ -632,7 +632,7 @@ public class MAModel<T> : TimeSeriesModelBase<T>
             y[i] = NumOps.Subtract(newGradient[i], oldGradient[i]);
         }
         
-        // Calculate ρ = 1 / (y^T * s)
+        // Calculate ? = 1 / (y^T * s)
         T dotProduct = NumOps.Zero;
         for (int i = 0; i < q; i++)
         {
@@ -648,7 +648,7 @@ public class MAModel<T> : TimeSeriesModelBase<T>
         T rho = NumOps.Divide(NumOps.One, dotProduct);
         
         // BFGS update formula:
-        // H_{k+1} = (I - ρ*s*y^T) * H_k * (I - ρ*y*s^T) + ρ*s*s^T
+        // H_{k+1} = (I - ?*s*y^T) * H_k * (I - ?*y*s^T) + ?*s*s^T
         
         // Calculate H_k * y
         Vector<T> Hy = new Vector<T>(q);
@@ -711,7 +711,7 @@ public class MAModel<T> : TimeSeriesModelBase<T>
             }
         }
         
-        // Calculate ρ*s*s^T
+        // Calculate ?*s*s^T
         Matrix<T> rhoss = new Matrix<T>(q, q);
         for (int i = 0; i < q; i++)
         {
@@ -851,8 +851,8 @@ public class MAModel<T> : TimeSeriesModelBase<T>
     /// get adjusted based on recent prediction errors. The input parameter is typically
     /// not used in pure MA models since predictions depend only on past errors.
     /// 
-    /// For example, if the average temperature is 70°F but we've been consistently
-    /// underestimating by 2°F recently, the model might predict 72°F for tomorrow.
+    /// For example, if the average temperature is 70�F but we've been consistently
+    /// underestimating by 2�F recently, the model might predict 72�F for tomorrow.
     /// </remarks>
     public override T PredictSingle(Vector<T> input)
     {
@@ -1102,9 +1102,9 @@ public class MAModel<T> : TimeSeriesModelBase<T>
     /// - Comparing different models to see which performs best
     /// - Understanding what patterns the model has identified in your data
     /// </remarks>
-    public override ModelMetaData<T> GetModelMetaData()
+    public override ModelMetadata<T> GetModelMetadata()
     {
-        var metadata = new ModelMetaData<T>
+        var metadata = new ModelMetadata<T>
         {
             ModelType = ModelType.MAModel,
             AdditionalInfo = new Dictionary<string, object>

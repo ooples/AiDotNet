@@ -310,9 +310,9 @@ public class ExtremelyRandomizedTreesRegression<T> : AsyncDecisionTreeRegression
     /// ```
     /// </para>
     /// </remarks>
-    public override ModelMetaData<T> GetModelMetaData()
+    public override ModelMetadata<T> GetModelMetadata()
     {
-        var metadata = new ModelMetaData<T>
+        var metadata = new ModelMetadata<T>
         {
             ModelType = ModelType.ExtremelyRandomizedTrees,
             AdditionalInfo = new Dictionary<string, object>

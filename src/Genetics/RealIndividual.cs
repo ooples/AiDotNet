@@ -1,4 +1,4 @@
-﻿namespace AiDotNet.Genetics;
+namespace AiDotNet.Genetics;
 
 /// <summary>
 /// Represents an individual encoded with real-valued genes, suitable for numerical optimization problems.

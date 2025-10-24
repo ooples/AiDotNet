@@ -644,9 +644,9 @@ public class GraphNeuralNetwork<T> : NeuralNetworkBase<T>
     /// - Saving the model for later use
     /// </para>
     /// </remarks>
-    public override ModelMetaData<T> GetModelMetaData()
+    public override ModelMetadata<T> GetModelMetadata()
     {
-        return new ModelMetaData<T>
+        return new ModelMetadata<T>
         {
             ModelType = ModelType.GraphNeuralNetwork,
             AdditionalInfo = new Dictionary<string, object>

@@ -1,4 +1,4 @@
-﻿namespace AiDotNet.Models.Inputs;
+namespace AiDotNet.Models.Inputs;
 
 /// <summary>
 /// Represents a container for inputs needed to calculate various statistics and metrics for a model.

@@ -1,4 +1,4 @@
-﻿namespace AiDotNet.Enums;
+namespace AiDotNet.Enums;
 
 /// <summary>
 /// Defines the different types of biorthogonal wavelets that can be used for signal processing and analysis.

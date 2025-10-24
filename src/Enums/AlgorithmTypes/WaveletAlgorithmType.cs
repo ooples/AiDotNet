@@ -1,4 +1,4 @@
-﻿namespace AiDotNet.Enums.AlgorithmTypes;
+namespace AiDotNet.Enums.AlgorithmTypes;
 
 /// <summary>
 /// Represents different types of wavelet transform algorithms for signal processing.
@@ -86,7 +86,7 @@ public enum WaveletAlgorithmType
     /// <remarks>
     /// <para>
     /// <b>For Beginners:</b> The Stationary Wavelet Transform (SWT) is very similar to MODWT and is sometimes 
-    /// called the "undecimated wavelet transform" or "algorithme à trous" (algorithm with holes).
+    /// called the "undecimated wavelet transform" or "algorithme � trous" (algorithm with holes).
     /// 
     /// Like MODWT, SWT:
     /// 

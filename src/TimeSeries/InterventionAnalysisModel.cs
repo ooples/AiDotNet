@@ -757,9 +757,9 @@ public class InterventionAnalysisModel<T> : TimeSeriesModelBase<T>
     /// - Understanding the relative importance of different interventions
     /// </para>
     /// </remarks>
-    public override ModelMetaData<T> GetModelMetaData()
+    public override ModelMetadata<T> GetModelMetadata()
     {
-        var metadata = new ModelMetaData<T>
+        var metadata = new ModelMetadata<T>
         {
             ModelType = ModelType.InterventionAnalysisModel,
             AdditionalInfo = new Dictionary<string, object>

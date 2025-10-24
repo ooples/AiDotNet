@@ -1,4 +1,4 @@
-ï»¿namespace AiDotNet.LossFunctions;
+namespace AiDotNet.LossFunctions;
 
 /// <summary>
 /// Implements the Contrastive Loss function for learning similarity metrics.
@@ -14,8 +14,8 @@
 /// that far apart.
 /// 
 /// The formula has two components:
-/// - For similar pairs (y=1): distanceÂ²
-/// - For dissimilar pairs (y=0): max(0, margin - distance)Â²
+/// - For similar pairs (y=1): distance²
+/// - For dissimilar pairs (y=0): max(0, margin - distance)²
 /// 
 /// Contrastive Loss is commonly used in:
 /// - Siamese neural networks
@@ -54,13 +54,13 @@ public class ContrastiveLoss<T> : LossFunctionBase<T>
         // Calculate the Euclidean distance between the vectors
         T distance = EuclideanDistance(output1, output2);
         
-        // Calculate the loss for similar pairs: y * distanceÂ²
+        // Calculate the loss for similar pairs: y * distance²
         T similarTerm = NumOps.Multiply(
             similarityLabel, 
             NumOps.Power(distance, NumOps.FromDouble(2))
         );
         
-        // Calculate the loss for dissimilar pairs: (1-y) * max(0, margin - distance)Â²
+        // Calculate the loss for dissimilar pairs: (1-y) * max(0, margin - distance)²
         T dissimilarTerm = NumOps.Multiply(
             NumOps.Subtract(NumOps.One, similarityLabel),
             NumOps.Power(

@@ -1,4 +1,4 @@
-﻿namespace AiDotNet.Models.Results;
+namespace AiDotNet.Models.Results;
 
 /// <summary>
 /// Represents the result of fitting a statistical distribution to a dataset, including the distribution type,

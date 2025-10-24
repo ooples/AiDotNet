@@ -223,9 +223,9 @@ public class CapsuleNetwork<T> : NeuralNetworkBase<T>
     /// This information is useful for understanding the network's capabilities and for saving/loading the network.
     /// </para>
     /// </remarks>
-    public override ModelMetaData<T> GetModelMetaData()
+    public override ModelMetadata<T> GetModelMetadata()
     {
-        return new ModelMetaData<T>
+        return new ModelMetadata<T>
         {
             ModelType = ModelType.CapsuleNetwork,
             AdditionalInfo = new Dictionary<string, object>

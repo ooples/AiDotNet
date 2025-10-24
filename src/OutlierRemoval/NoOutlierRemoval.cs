@@ -1,4 +1,4 @@
-﻿namespace AiDotNet.OutlierRemoval;
+namespace AiDotNet.OutlierRemoval;
 
 /// <summary>
 /// Implements a pass-through outlier removal strategy that does not remove any data points.

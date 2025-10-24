@@ -1459,10 +1459,10 @@ public class DynamicRegressionWithARIMAErrors<T> : TimeSeriesModelBase<T>
     /// - Comparing different models to choose the best one
     /// </para>
     /// </remarks>
-    public override ModelMetaData<T> GetModelMetaData()
+    public override ModelMetadata<T> GetModelMetadata()
     {
         var options = (DynamicRegressionWithARIMAErrorsOptions<T>)Options;
-        var metadata = new ModelMetaData<T>
+        var metadata = new ModelMetadata<T>
         {
             ModelType = ModelType.DynamicRegressionWithARIMAErrors,
             AdditionalInfo = new Dictionary<string, object>

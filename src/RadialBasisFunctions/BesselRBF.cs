@@ -1,4 +1,4 @@
-﻿namespace AiDotNet.RadialBasisFunctions;
+namespace AiDotNet.RadialBasisFunctions;
 
 /// <summary>
 /// Implements the Bessel Radial Basis Function based on Bessel functions of the first kind.
@@ -7,8 +7,8 @@
 /// <remarks>
 /// <para>
 /// This class provides an implementation of a Radial Basis Function (RBF) using Bessel functions of the first kind.
-/// The Bessel RBF is defined as J_ν(ε*r)/(ε*r)^ν, where J_ν is the Bessel function of the first kind of order ν,
-/// ε is the width parameter, and r is the radial distance. This RBF is particularly useful for problems with
+/// The Bessel RBF is defined as J_?(e*r)/(e*r)^?, where J_? is the Bessel function of the first kind of order ?,
+/// e is the width parameter, and r is the radial distance. This RBF is particularly useful for problems with
 /// circular or spherical symmetry, and in cases where oscillatory behavior is expected.
 /// </para>
 /// <para><b>For Beginners:</b> A Radial Basis Function (RBF) is a special type of mathematical function
@@ -19,8 +19,8 @@
 /// like the vibrations on a circular drum or the pattern of ripples on a pond.
 /// 
 /// This particular RBF has two main parameters:
-/// - epsilon (ε): Controls the width of the function (how quickly it changes with distance)
-/// - nu (ν): Controls the order of the Bessel function (affects the shape and oscillatory behavior)
+/// - epsilon (e): Controls the width of the function (how quickly it changes with distance)
+/// - nu (?): Controls the order of the Bessel function (affects the shape and oscillatory behavior)
 /// 
 /// Bessel RBFs are useful when your data or problem has circular patterns or oscillatory features.
 /// </para>
@@ -52,7 +52,7 @@ public class BesselRBF<T> : IRadialBasisFunction<T>
     /// The constructor initializes the Bessel Radial Basis Function with specified width and order parameters.
     /// The width parameter (epsilon) controls how quickly the function decreases with distance, while the
     /// order parameter (nu) determines the specific Bessel function used. Common values for nu include 0 and 1,
-    /// corresponding to the Bessel functions J₀ and J₁.
+    /// corresponding to the Bessel functions J0 and J1.
     /// </para>
     /// <para><b>For Beginners:</b> This creates a new Bessel RBF with specific settings.
     /// 
@@ -62,7 +62,7 @@ public class BesselRBF<T> : IRadialBasisFunction<T>
     /// - nu: Controls the "shape" of the function - different values give different patterns of peaks and valleys
     /// 
     /// If you're not sure what values to use, the defaults (epsilon = 1.0, nu = 0.0) are a good starting point.
-    /// These defaults use the zero-order Bessel function (J₀) with a moderate width.
+    /// These defaults use the zero-order Bessel function (J0) with a moderate width.
     /// </para>
     /// </remarks>
     public BesselRBF(double epsilon = 1.0, double nu = 0.0)
@@ -76,11 +76,11 @@ public class BesselRBF<T> : IRadialBasisFunction<T>
     /// Computes the value of the Bessel Radial Basis Function for a given radius.
     /// </summary>
     /// <param name="r">The radius or distance from the center point.</param>
-    /// <returns>The computed function value J_ν(ε*r)/(ε*r)^ν.</returns>
+    /// <returns>The computed function value J_?(e*r)/(e*r)^?.</returns>
     /// <remarks>
     /// <para>
     /// This method calculates the value of the Bessel RBF for a given radius r. The formula used is
-    /// J_ν(ε*r)/(ε*r)^ν, where J_ν is the Bessel function of the first kind of order ν.
+    /// J_?(e*r)/(e*r)^?, where J_? is the Bessel function of the first kind of order ?.
     /// For r = 0, a special case is handled to avoid division by zero, returning 1.
     /// </para>
     /// <para><b>For Beginners:</b> This method computes the "height" or "value" of the Bessel function
@@ -121,8 +121,8 @@ public class BesselRBF<T> : IRadialBasisFunction<T>
     /// <remarks>
     /// <para>
     /// This method calculates the derivative of the Bessel RBF with respect to the radius r.
-    /// The formula for the derivative is complex and involves both the Bessel function of order ν
-    /// and order ν-1. Special cases are handled for r = 0, depending on the value of ν.
+    /// The formula for the derivative is complex and involves both the Bessel function of order ?
+    /// and order ?-1. Special cases are handled for r = 0, depending on the value of ?.
     /// </para>
     /// <para><b>For Beginners:</b> This method computes how fast the function's value changes
     /// as you move away from the center point.
@@ -181,7 +181,7 @@ public class BesselRBF<T> : IRadialBasisFunction<T>
     /// <para>
     /// This method calculates the derivative of the Bessel RBF with respect to the width parameter epsilon.
     /// This derivative is useful for gradient-based optimization of the width parameter. The formula
-    /// involves both the Bessel function of order ν and order ν-1, as well as special cases for r = 0.
+    /// involves both the Bessel function of order ? and order ?-1, as well as special cases for r = 0.
     /// </para>
     /// <para><b>For Beginners:</b> This method calculates how the function's value would change
     /// if you were to adjust the width parameter (epsilon).

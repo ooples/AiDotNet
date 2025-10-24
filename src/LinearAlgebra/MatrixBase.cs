@@ -1,4 +1,4 @@
-ï»¿global using System.Text;
+global using System.Text;
 
 namespace AiDotNet.LinearAlgebra;
 
@@ -296,7 +296,7 @@ public abstract class MatrixBase<T>
     /// <exception cref="IndexOutOfRangeException">Thrown when the row index is out of range.</exception>
     /// <remarks>
     /// <para><b>For Beginners:</b> This method extracts a single row from the matrix and returns it as a vector.
-    /// For example, if you have a 3Ã—4 matrix and call GetRow(1), you'll get a vector with 4 elements containing
+    /// For example, if you have a 3×4 matrix and call GetRow(1), you'll get a vector with 4 elements containing
     /// all values from the second row (remember that indices start at 0).</para>
     /// </remarks>
     public virtual Vector<T> GetRow(int row)
@@ -313,7 +313,7 @@ public abstract class MatrixBase<T>
     /// <exception cref="IndexOutOfRangeException">Thrown when the column index is out of range.</exception>
     /// <remarks>
     /// <para><b>For Beginners:</b> This method extracts a single column from the matrix and returns it as a vector.
-    /// For example, if you have a 3Ã—4 matrix and call GetColumn(2), you'll get a vector with 3 elements containing
+    /// For example, if you have a 3×4 matrix and call GetColumn(2), you'll get a vector with 3 elements containing
     /// all values from the third column (remember that indices start at 0).</para>
     /// </remarks>
     public virtual Vector<T> GetColumn(int col)
@@ -356,7 +356,7 @@ public abstract class MatrixBase<T>
     /// <remarks>
     /// <para><b>For Beginners:</b> This method extracts a rectangular portion of the matrix.
     /// Think of it like cutting out a rectangular section from the original matrix.
-    /// For example, SubMatrix(1, 2, 3, 2) would extract a 3Ã—2 matrix starting from position [1,2]
+    /// For example, SubMatrix(1, 2, 3, 2) would extract a 3×2 matrix starting from position [1,2]
     /// (the 2nd row and 3rd column, since indices start at 0).</para>
     /// </remarks>
     public Matrix<T> SubMatrix(int startRow, int startCol, int numRows, int numCols)
@@ -580,7 +580,7 @@ public abstract class MatrixBase<T>
     /// <remarks>
     /// <para><b>For Beginners:</b> The transpose of a matrix is created by flipping the matrix over its diagonal.
     /// This means that rows become columns and columns become rows.
-    /// For example, if you have a 2Ã—3 matrix, its transpose will be a 3Ã—2 matrix.
+    /// For example, if you have a 2×3 matrix, its transpose will be a 3×2 matrix.
     /// The element at position [i,j] in the original matrix will be at position [j,i] in the transposed matrix.
     /// Transposing is commonly used in many mathematical operations and algorithms.</para>
     /// </remarks>

@@ -1,4 +1,4 @@
-﻿namespace AiDotNet.Interfaces;
+namespace AiDotNet.Interfaces;
 
 /// <summary>
 /// Defines the common interface for all regression algorithms in the AiDotNet library.

@@ -1,4 +1,4 @@
-﻿namespace AiDotNet.Kernels;
+namespace AiDotNet.Kernels;
 
 /// <summary>
 /// Implements the Wave kernel for measuring similarity between data points.
@@ -22,10 +22,10 @@
 /// </para>
 /// <para>
 /// The formula for the Wave kernel is:
-/// k(x, y) = sin(||x-y||/σ) / (||x-y||/σ)
+/// k(x, y) = sin(||x-y||/s) / (||x-y||/s)
 /// where:
 /// - ||x-y|| is the Euclidean distance between vectors x and y
-/// - σ (sigma) is a parameter that controls the width of the waves
+/// - s (sigma) is a parameter that controls the width of the waves
 /// </para>
 /// <para>
 /// Common uses include:
@@ -118,7 +118,7 @@ public class WaveKernel<T> : IKernelFunction<T>
     /// <para>
     /// What is Euclidean distance? It's the straight-line distance between two points, calculated
     /// using the Pythagorean theorem. For example, the Euclidean distance between points (1,2) and
-    /// (4,6) is √((4-1)² + (6-2)²) = √(9 + 16) = √25 = 5.
+    /// (4,6) is v((4-1)� + (6-2)�) = v(9 + 16) = v25 = 5.
     /// </para>
     /// <para>
     /// What makes this kernel special is its oscillating behavior, which can be useful for capturing

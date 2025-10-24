@@ -1,4 +1,4 @@
-﻿namespace AiDotNet.Models.Inputs;
+namespace AiDotNet.Models.Inputs;
 
 internal class ErrorStatsInputs<T>
 {
