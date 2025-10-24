@@ -1166,6 +1166,16 @@ public abstract class OptimizerBase<T, TInput, TOutput> : IOptimizer<T, TInput, 
     }
 
     /// <summary>
+    /// Initializes a random solution based on the training data.
+    /// </summary>
+    /// <param name="xTrain">Training data used to determine data dimensions.</param>
+    /// <returns>A new model with randomly initialized parameters.</returns>
+    protected virtual IFullModel<T, TInput, TOutput> InitializeRandomSolution(TInput xTrain)
+    {
+        return CreateSolution(xTrain);
+    }
+
+    /// <summary>
     /// Initializes a random solution within the given bounds.
     /// </summary>
     /// <param name="lowerBounds">Lower bounds for each parameter.</param>

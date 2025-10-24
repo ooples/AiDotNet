@@ -42,6 +42,7 @@ public class NesterovAcceleratedGradientOptimizer<T, TInput, TOutput> : Gradient
     /// This is like preparing your skis and gear before you start your descent. You're setting up all the tools and rules you'll use during your optimization journey.
     /// </para>
     /// </remarks>
+    /// <param name="model">The model to optimize.</param>
     /// <param name="options">The NAG-specific optimization options.</param>
     /// <param name="predictionOptions">Options for prediction statistics.</param>
     /// <param name="modelOptions">Options for model statistics.</param>
@@ -51,8 +52,9 @@ public class NesterovAcceleratedGradientOptimizer<T, TInput, TOutput> : Gradient
     /// <param name="modelCache">The model cache to use.</param>
     /// <param name="gradientCache">The gradient cache to use.</param>
     public NesterovAcceleratedGradientOptimizer(
+        IFullModel<T, TInput, TOutput> model,
         NesterovAcceleratedGradientOptimizerOptions<T, TInput, TOutput>? options = null)
-        : base(options ?? new())
+        : base(model, options ?? new())
     {
         _options = options ?? new NesterovAcceleratedGradientOptimizerOptions<T, TInput, TOutput>();
 
