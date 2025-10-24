@@ -317,7 +317,7 @@ public abstract class OptimizerBase<T, TInput, TOutput> : IOptimizer<T, TInput, 
         IFullModel<T, TInput, TOutput> solution, 
         OptimizationInputData<T, TInput, TOutput> inputData)
     {
-        string cacheKey = ModelCache.GenerateCacheKey(solution, inputData);
+        string cacheKey = GenerateCacheKey(solution, inputData);
         var cachedStepData = ModelCache.GetCachedStepData(cacheKey);
 
         if (cachedStepData != null)
@@ -356,7 +356,7 @@ public abstract class OptimizerBase<T, TInput, TOutput> : IOptimizer<T, TInput, 
         ApplyFeatureSelection(solution, selectedFeaturesIndices);
 
         // Step 3: Generate cache key based on the selected features and check cache
-        string cacheKey = ModelCache.GenerateCacheKey(solution, inputData);
+        string cacheKey = GenerateCacheKey(solution, inputData);
         var cachedStepData = ModelCache.GetCachedStepData(cacheKey);
 
         if (cachedStepData != null)
@@ -476,13 +476,12 @@ public abstract class OptimizerBase<T, TInput, TOutput> : IOptimizer<T, TInput, 
     /// </remarks>
     protected OptimizationResult<T, TInput, TOutput> CreateOptimizationResult(OptimizationStepData<T, TInput, TOutput> bestStepData, OptimizationInputData<T, TInput, TOutput> input)
     {
-        var modelType = bestStepData.Solution.GetModelMetadata().ModelType;
         return OptimizerHelper<T, TInput, TOutput>.CreateOptimizationResult(
             bestStepData.Solution,
             bestStepData.FitnessScore,
             FitnessList,
             bestStepData.SelectedFeatures,
-            new OptimizationResult<T, TInput, TOutput>.DatasetResult(modelType)
+            new OptimizationResult<T, TInput, TOutput>.DatasetResult()
             {
                 X = bestStepData.XTrainSubset,
                 Y = input.YTrain,
@@ -492,7 +491,7 @@ public abstract class OptimizerBase<T, TInput, TOutput> : IOptimizer<T, TInput, 
                 PredictedBasicStats = bestStepData.EvaluationData.TrainingSet.PredictedBasicStats,
                 PredictionStats = bestStepData.EvaluationData.TrainingSet.PredictionStats
             },
-            new OptimizationResult<T, TInput, TOutput>.DatasetResult(modelType)
+            new OptimizationResult<T, TInput, TOutput>.DatasetResult()
             {
                 X = bestStepData.XValSubset,
                 Y = input.YValidation,
@@ -502,7 +501,7 @@ public abstract class OptimizerBase<T, TInput, TOutput> : IOptimizer<T, TInput, 
                 PredictedBasicStats = bestStepData.EvaluationData.ValidationSet.PredictedBasicStats,
                 PredictionStats = bestStepData.EvaluationData.ValidationSet.PredictionStats
             },
-            new OptimizationResult<T, TInput, TOutput>.DatasetResult(modelType)
+            new OptimizationResult<T, TInput, TOutput>.DatasetResult()
             {
                 X = bestStepData.XTestSubset,
                 Y = input.YTest,
@@ -576,8 +575,8 @@ public abstract class OptimizerBase<T, TInput, TOutput> : IOptimizer<T, TInput, 
             case OptimizationMode.ParametersOnly:
                 AdjustModelParameters(
                     solution,
-                    Options.ParameterAdjustmentScale,
-                    Options.SignFlipProbability);
+                    Convert.ToDouble(Options.ParameterAdjustmentScale),
+                    Convert.ToDouble(Options.SignFlipProbability));
                 break;
 
             case OptimizationMode.Both:
@@ -592,8 +591,8 @@ public abstract class OptimizerBase<T, TInput, TOutput> : IOptimizer<T, TInput, 
                 {
                     AdjustModelParameters(
                         solution,
-                        Options.ParameterAdjustmentScale,
-                        Options.SignFlipProbability);
+                        Convert.ToDouble(Options.ParameterAdjustmentScale),
+                        Convert.ToDouble(Options.SignFlipProbability));
                 }
                 break;
         }
@@ -1220,5 +1219,20 @@ public abstract class OptimizerBase<T, TInput, TOutput> : IOptimizer<T, TInput, 
     public virtual void LoadModel(string filePath)
     {
         throw new NotImplementedException("LoadModel is not yet implemented for this optimizer type.");
+    }
+
+    /// <summary>
+    /// Generates a cache key for a solution and input data combination.
+    /// </summary>
+    private string GenerateCacheKey(IFullModel<T, TInput, TOutput> solution, OptimizationInputData<T, TInput, TOutput> inputData)
+    {
+        // Generate a hash code based on the solution's parameters and input data
+        unchecked
+        {
+            int hash = 17;
+            hash = hash * 23 + solution.GetHashCode();
+            hash = hash * 23 + inputData.GetHashCode();
+            return hash.ToString();
+        }
     }
 }

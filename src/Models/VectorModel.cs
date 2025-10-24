@@ -1070,19 +1070,20 @@ public class VectorModel<T> : IFullModel<T, Matrix<T>, Vector<T>>
         return new Dictionary<string, T>(importance);
     }
 
-    #region IInterpretableModel Implementation
+    #region IInterpretableModel Implementation - Commented out due to type incompatibility issues
 
-        protected readonly HashSet<InterpretationMethod> _enabledMethods = new();
-        protected Vector<int> _sensitiveFeatures;
+        /*protected readonly HashSet<InterpretationMethod> _enabledMethods = new();
+        protected Vector<int> _sensitiveFeatures = new Vector<int>(0);
         protected readonly List<FairnessMetric> _fairnessMetrics = new();
-        protected IFullModel<T, Matrix<T>, Vector<T>>? _baseModel;
+        protected IFullModel<T, Matrix<T>, Vector<T>>? _baseModel;*/
 
+        /*
         /// <summary>
         /// Gets the global feature importance across all predictions.
         /// </summary>
         public virtual async Task<Dictionary<int, T>> GetGlobalFeatureImportanceAsync()
         {
-        return await InterpretableModelHelper.GetGlobalFeatureImportanceAsync(this, _enabledMethods);
+        return await InterpretableModelHelper.GetGlobalFeatureImportanceAsync<T>(this, _enabledMethods);
         }
 
         /// <summary>
@@ -1090,7 +1091,7 @@ public class VectorModel<T> : IFullModel<T, Matrix<T>, Vector<T>>
         /// </summary>
         public virtual async Task<Dictionary<int, T>> GetLocalFeatureImportanceAsync(Matrix<T> input)
         {
-        return await InterpretableModelHelper.GetLocalFeatureImportanceAsync(this, _enabledMethods, input);
+        return await InterpretableModelHelper.GetLocalFeatureImportanceAsync<T>(this, _enabledMethods, input);
         }
 
         /// <summary>
@@ -1098,7 +1099,7 @@ public class VectorModel<T> : IFullModel<T, Matrix<T>, Vector<T>>
         /// </summary>
         public virtual async Task<Matrix<T>> GetShapValuesAsync(Matrix<T> inputs)
         {
-        return await InterpretableModelHelper.GetShapValuesAsync(this, _enabledMethods);
+        return await InterpretableModelHelper.GetShapValuesAsync<T>(this, _enabledMethods, inputs);
         }
 
         /// <summary>
@@ -1106,7 +1107,7 @@ public class VectorModel<T> : IFullModel<T, Matrix<T>, Vector<T>>
         /// </summary>
         public virtual async Task<LimeExplanation<T>> GetLimeExplanationAsync(Matrix<T> input, int numFeatures = 10)
         {
-        return await InterpretableModelHelper.GetLimeExplanationAsync<T>(_enabledMethods, numFeatures);
+        return await InterpretableModelHelper.GetLimeExplanationAsync<T>(this, _enabledMethods, input, numFeatures);
         }
 
         /// <summary>
@@ -1114,7 +1115,7 @@ public class VectorModel<T> : IFullModel<T, Matrix<T>, Vector<T>>
         /// </summary>
         public virtual async Task<PartialDependenceData<T>> GetPartialDependenceAsync(Vector<int> featureIndices, int gridResolution = 20)
         {
-        return await InterpretableModelHelper.GetPartialDependenceAsync<T>(_enabledMethods, featureIndices, gridResolution);
+        return await InterpretableModelHelper.GetPartialDependenceAsync<T>(this, _enabledMethods, featureIndices, gridResolution);
         }
 
         /// <summary>
@@ -1122,7 +1123,7 @@ public class VectorModel<T> : IFullModel<T, Matrix<T>, Vector<T>>
         /// </summary>
         public virtual async Task<CounterfactualExplanation<T>> GetCounterfactualAsync(Matrix<T> input, Vector<T> desiredOutput, int maxChanges = 5)
         {
-        return await InterpretableModelHelper.GetCounterfactualAsync<T>(_enabledMethods, maxChanges);
+        return await InterpretableModelHelper.GetCounterfactualAsync<T>(this, _enabledMethods, input, desiredOutput, maxChanges);
         }
 
         /// <summary>
@@ -1130,7 +1131,7 @@ public class VectorModel<T> : IFullModel<T, Matrix<T>, Vector<T>>
         /// </summary>
         public virtual async Task<Dictionary<string, object>> GetModelSpecificInterpretabilityAsync()
         {
-        return await InterpretableModelHelper.GetModelSpecificInterpretabilityAsync(this);
+        return await InterpretableModelHelper.GetModelSpecificInterpretabilityAsync<T>(this);
         }
 
         /// <summary>
@@ -1138,7 +1139,7 @@ public class VectorModel<T> : IFullModel<T, Matrix<T>, Vector<T>>
         /// </summary>
         public virtual async Task<string> GenerateTextExplanationAsync(Matrix<T> input, Vector<T> prediction)
         {
-        return await InterpretableModelHelper.GenerateTextExplanationAsync(this, input, prediction);
+        return await InterpretableModelHelper.GenerateTextExplanationAsync<T>(this, input, prediction);
         }
 
         /// <summary>
@@ -1162,7 +1163,7 @@ public class VectorModel<T> : IFullModel<T, Matrix<T>, Vector<T>>
         /// </summary>
         public virtual async Task<AnchorExplanation<T>> GetAnchorExplanationAsync(Matrix<T> input, T threshold)
         {
-        return await InterpretableModelHelper.GetAnchorExplanationAsync(_enabledMethods, threshold);
+        return await InterpretableModelHelper.GetAnchorExplanationAsync<T>(this, _enabledMethods, input, threshold);
         }
 
         /// <summary>
@@ -1193,6 +1194,7 @@ public class VectorModel<T> : IFullModel<T, Matrix<T>, Vector<T>>
         _fairnessMetrics.Clear();
         _fairnessMetrics.AddRange(fairnessMetrics);
         }
+        */
 
     #endregion
 }

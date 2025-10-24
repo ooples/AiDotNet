@@ -132,6 +132,7 @@ public class ExpressionTree<T, TInput, TOutput> : IFullModel<T, TInput, TOutput>
     /// accessing a shared Random instance or multiple instances created with the same seed.
     /// </remarks>
     private static readonly ThreadLocal<Random> _random = new ThreadLocal<Random>(() => new Random());
+    private static Random Random => _random.Value ?? new Random();
 
     /// <summary>
     /// Creates a new expression tree node with the specified properties.
@@ -329,21 +330,21 @@ public class ExpressionTree<T, TInput, TOutput> : IFullModel<T, TInput, TOutput>
     {
         ExpressionTree<T, TInput, TOutput> mutatedTree = (ExpressionTree<T, TInput, TOutput>)Copy();
 
-        if (_random.Value.NextDouble() < mutationRate)
+        if (Random.NextDouble() < mutationRate)
         {
-            switch (_random.Value.Next(3))
+            switch (Random.Next(3))
             {
                 case 0: // Change node type
-                    mutatedTree.Type = (ExpressionNodeType)_random.Value.Next(Enum.GetValues(typeof(ExpressionNodeType)).Length);
+                    mutatedTree.Type = (ExpressionNodeType)Random.Next(Enum.GetValues(typeof(ExpressionNodeType)).Length);
                     break;
                 case 1: // Change value (for Constant or Variable nodes)
                     if (mutatedTree.Type == ExpressionNodeType.Constant)
                     {
-                        mutatedTree.Value = _numOps.FromDouble(_random.Value.NextDouble() * 10 - 5); // Random value between -5 and 5
+                        mutatedTree.Value = _numOps.FromDouble(Random.NextDouble() * 10 - 5); // Random value between -5 and 5
                     }
                     else if (mutatedTree.Type == ExpressionNodeType.Variable)
                     {
-                        mutatedTree.Value = _numOps.FromDouble(_random.Value.Next(10)); // Assume max 10 variables
+                        mutatedTree.Value = _numOps.FromDouble(Random.Next(10)); // Assume max 10 variables
                     }
                     break;
                 case 2: // Regenerate subtree
@@ -387,7 +388,7 @@ public class ExpressionTree<T, TInput, TOutput> : IFullModel<T, TInput, TOutput>
 
         ExpressionTree<T, TInput, TOutput> offspring = (ExpressionTree<T, TInput, TOutput>)Copy();
 
-        if (_random.Value.NextDouble() < crossoverRate)
+        if (Random.NextDouble() < crossoverRate)
         {
             // Select a random subtree from the other parent
             ExpressionTree<T, TInput, TOutput> selectedSubtree = SelectRandomSubtree(otherTree);
@@ -428,20 +429,20 @@ public class ExpressionTree<T, TInput, TOutput> : IFullModel<T, TInput, TOutput>
     /// </remarks>
     private ExpressionTree<T, TInput, TOutput> GenerateRandomTree(int maxDepth)
     {
-        if (maxDepth == 0 || _random.Value.NextDouble() < 0.3) // 30% chance of leaf node
+        if (maxDepth == 0 || Random.NextDouble() < 0.3) // 30% chance of leaf node
         {
-            if (_random.Value.NextDouble() < 0.5)
+            if (Random.NextDouble() < 0.5)
             {
-                return new ExpressionTree<T, TInput, TOutput>(ExpressionNodeType.Constant, _numOps.FromDouble(_random.Value.NextDouble() * 10 - 5));
+                return new ExpressionTree<T, TInput, TOutput>(ExpressionNodeType.Constant, _numOps.FromDouble(Random.NextDouble() * 10 - 5));
             }
             else
             {
-                return new ExpressionTree<T, TInput, TOutput>(ExpressionNodeType.Variable, _numOps.FromDouble(_random.Value.Next(10)));
+                return new ExpressionTree<T, TInput, TOutput>(ExpressionNodeType.Variable, _numOps.FromDouble(Random.Next(10)));
             }
         }
         else
         {
-            ExpressionNodeType operationType = (ExpressionNodeType)_random.Value.Next(2, 6); // Add, Subtract, Multiply, or Divide
+            ExpressionNodeType operationType = (ExpressionNodeType)Random.Next(2, 6); // Add, Subtract, Multiply, or Divide
             return new ExpressionTree<T, TInput, TOutput>(
                 operationType,
                 default,
@@ -466,13 +467,13 @@ public class ExpressionTree<T, TInput, TOutput> : IFullModel<T, TInput, TOutput>
         {
             return tree;
         }
-        else if (_random.Value.NextDouble() < 0.3) // 30% chance of selecting current node
+        else if (Random.NextDouble() < 0.3) // 30% chance of selecting current node
         {
             return tree;
         }
         else
         {
-            if (tree.Left != null && (tree.Right == null || _random.Value.NextDouble() < 0.5))
+            if (tree.Left != null && (tree.Right == null || Random.NextDouble() < 0.5))
             {
                 return SelectRandomSubtree(tree.Left);
             }
@@ -494,7 +495,7 @@ public class ExpressionTree<T, TInput, TOutput> : IFullModel<T, TInput, TOutput>
     /// </remarks>
     private void ReplaceRandomSubtree(ExpressionTree<T, TInput, TOutput> tree, ExpressionTree<T, TInput, TOutput> replacement)
     {
-        if (_random.Value.NextDouble() < 0.3) // 30% chance of replacing current node
+        if (Random.NextDouble() < 0.3) // 30% chance of replacing current node
         {
             tree.Type = replacement.Type;
             tree.Value = replacement.Value;
@@ -503,7 +504,7 @@ public class ExpressionTree<T, TInput, TOutput> : IFullModel<T, TInput, TOutput>
         }
         else
         {
-            if (tree.Left != null && (tree.Right == null || _random.Value.NextDouble() < 0.5))
+            if (tree.Left != null && (tree.Right == null || Random.NextDouble() < 0.5))
             {
                 ReplaceRandomSubtree(tree.Left, replacement);
             }
