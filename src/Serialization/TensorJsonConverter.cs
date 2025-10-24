@@ -106,8 +106,7 @@ namespace AiDotNet.Serialization
             var arrayType = elementType.MakeArrayType();
             var dataArray = dataToken.ToObject(arrayType);
 
-            // Create tensor constructor: Tensor<T>(T[] data, int[] shape)
-            // First, try the constructor with IEnumerable<T> and params int[]
+            // First, try the constructor with IEnumerable<T> and int[] (note: constructors declared with 'params int[]' are represented as 'int[]' at runtime)
             var enumerableType = typeof(System.Collections.Generic.IEnumerable<>).MakeGenericType(elementType);
             var tensorConstructor = objectType.GetConstructor(new[] { enumerableType, typeof(int[]) });
 
