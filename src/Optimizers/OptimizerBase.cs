@@ -115,24 +115,24 @@ public abstract class OptimizerBase<T, TInput, TOutput> : IOptimizer<T, TInput, 
     /// This property provides access to the model that the optimizer is working with.
     /// It implements the IOptimizer interface property to expose the protected Model field.
     /// </para>
-    /// <para><b>For Beginners:</b> This property lets external code see which model 
+    /// <para><b>For Beginners:</b> This property lets external code see which model
     /// the optimizer is currently working with, without being able to change it.
     /// It's like a window that lets you look at the model but not touch it.
     /// </para>
     /// </remarks>
-    public IFullModel<T, TInput, TOutput> Model => _model;
+    public IFullModel<T, TInput, TOutput>? Model => _model;
 
     /// <summary>
     /// The model that this optimizer is configured to optimize.
     /// </summary>
-    private IFullModel<T, TInput, TOutput> _model = default!;
+    private IFullModel<T, TInput, TOutput>? _model;
 
     /// <summary>
     /// Initializes a new instance of the OptimizerBase class.
     /// </summary>
-    /// <param name="model">The model to be optimized.</param>
+    /// <param name="model">The model to be optimized (can be null if set later).</param>
     /// <param name="options">The optimization algorithm options.</param>
-    protected OptimizerBase(IFullModel<T, TInput, TOutput> model,
+    protected OptimizerBase(IFullModel<T, TInput, TOutput>? model,
         OptimizationAlgorithmOptions<T, TInput, TOutput> options)
     {
         _model = model;
@@ -562,7 +562,7 @@ public abstract class OptimizerBase<T, TInput, TOutput> : IOptimizer<T, TInput, 
     protected virtual IFullModel<T, TInput, TOutput> CreateSolution(TInput xTrain)
     {
         // Create a deep copy of the model to avoid modifying the original
-        var solution = Model.DeepCopy();
+        var solution = Model!.DeepCopy();
 
         // Return the deep copy - subclasses can override to add custom solution creation logic
         return solution;
@@ -1226,7 +1226,7 @@ public abstract class OptimizerBase<T, TInput, TOutput> : IOptimizer<T, TInput, 
 
             // For Matrix input: compute min and max of each column (feature)
             int features = matrix.Columns;
-            int paramCount = _model.ParameterCount;
+            int paramCount = _model!.ParameterCount;
 
             lowerBounds = new Vector<T>(paramCount);
             upperBounds = new Vector<T>(paramCount);
@@ -1297,7 +1297,7 @@ public abstract class OptimizerBase<T, TInput, TOutput> : IOptimizer<T, TInput, 
             }
 
             // Bounds should match parameter count, not input dimensionality
-            int paramCount = _model.ParameterCount;
+            int paramCount = _model!.ParameterCount;
             lowerBounds = new Vector<T>(paramCount);
             upperBounds = new Vector<T>(paramCount);
             for (int i = 0; i < paramCount; i++)
@@ -1309,7 +1309,7 @@ public abstract class OptimizerBase<T, TInput, TOutput> : IOptimizer<T, TInput, 
         else
         {
             // Fallback: create reasonable default bounds based on parameter count
-            int paramCount = _model.ParameterCount;
+            int paramCount = _model!.ParameterCount;
             lowerBounds = new Vector<T>(paramCount);
             upperBounds = new Vector<T>(paramCount);
 

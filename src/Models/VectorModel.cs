@@ -1123,7 +1123,7 @@ public class VectorModel<T> : IFullModel<T, Matrix<T>, Vector<T>>, IInterpretabl
         // Return placeholder LIME explanation
         var explanation = new LimeExplanation<T>
         {
-            LocalWeights = new Dictionary<int, T>()
+            FeatureImportance = new Dictionary<int, T>()
         };
         return Task.FromResult(explanation);
         }
@@ -1136,8 +1136,8 @@ public class VectorModel<T> : IFullModel<T, Matrix<T>, Vector<T>>, IInterpretabl
         // Return placeholder partial dependence data
         var data = new PartialDependenceData<T>
         {
-            FeatureValues = new List<Vector<T>>(),
-            PredictedValues = new List<Vector<T>>()
+            GridValues = new Dictionary<int, Vector<T>>(),
+            PartialDependenceValues = new Matrix<T>(0, 0)
         };
         return Task.FromResult(data);
         }
@@ -1152,7 +1152,7 @@ public class VectorModel<T> : IFullModel<T, Matrix<T>, Vector<T>>, IInterpretabl
         {
             OriginalInput = input,
             CounterfactualInput = input,
-            ChangedFeatures = new List<int>()
+            FeatureChanges = new Dictionary<int, T>()
         };
         return Task.FromResult(explanation);
         }
@@ -1197,9 +1197,10 @@ public class VectorModel<T> : IFullModel<T, Matrix<T>, Vector<T>>, IInterpretabl
         var metrics = new FairnessMetrics<T>(
             demographicParity: numOps.Zero,
             equalOpportunity: numOps.Zero,
-            predictiveEquality: numOps.Zero,
+            equalizedOdds: numOps.Zero,
+            predictiveParity: numOps.Zero,
             disparateImpact: numOps.One,
-            calibration: numOps.Zero);
+            statisticalParityDifference: numOps.Zero);
         return Task.FromResult(metrics);
         }
 

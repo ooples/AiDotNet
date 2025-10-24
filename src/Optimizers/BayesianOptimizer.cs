@@ -53,12 +53,12 @@ public class BayesianOptimizer<T, TInput, TOutput> : OptimizerBase<T, TInput, TO
     public BayesianOptimizer(
         BayesianOptimizerOptions<T, TInput, TOutput>? options = null,
         IGaussianProcess<T>? gaussianProcess = null)
-        : base(options ?? new())
+        : base(null, options ?? new())
     {
         _options = options ?? new BayesianOptimizerOptions<T, TInput, TOutput>();
         _sampledPoints = Matrix<T>.Empty();
         _sampledValues = Vector<T>.Empty();
-        _gaussianProcess = gaussianProcess ?? new StandardGaussianProcess<T>(_options.KernelFunction);
+        _gaussianProcess = gaussianProcess ?? new StandardGaussianProcess<T>(_options.Kernel);
 
         InitializeAdaptiveParameters();
     }
@@ -269,7 +269,7 @@ public class BayesianOptimizer<T, TInput, TOutput> : OptimizerBase<T, TInput, TO
         if (options is BayesianOptimizerOptions<T, TInput, TOutput> bayesianOptions)
         {
             _options = bayesianOptions;
-            _gaussianProcess.UpdateKernel(_options.KernelFunction);
+            _gaussianProcess.UpdateKernel(_options.Kernel);
         }
         else
         {
@@ -375,7 +375,7 @@ public class BayesianOptimizer<T, TInput, TOutput> : OptimizerBase<T, TInput, TO
                 _sampledValues[i] = NumOps.FromDouble(reader.ReadDouble());
             }
 
-            _gaussianProcess = new StandardGaussianProcess<T>(_options.KernelFunction);
+            _gaussianProcess = new StandardGaussianProcess<T>(_options.Kernel);
         }
     }
 }

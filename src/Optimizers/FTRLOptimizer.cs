@@ -61,7 +61,7 @@ public class FTRLOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, T
     /// <param name="options">The options for configuring the FTRL algorithm.</param>
     public FTRLOptimizer(
         FTRLOptimizerOptions<T, TInput, TOutput>? options = null)
-        : base(options ?? new())
+        : base(null, options ?? new())
     {
         _options = options ?? new FTRLOptimizerOptions<T, TInput, TOutput>();
 

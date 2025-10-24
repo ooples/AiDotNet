@@ -71,7 +71,7 @@ public class CMAESOptimizer<T, TInput, TOutput> : OptimizerBase<T, TInput, TOutp
     /// </remarks>
     public CMAESOptimizer(
         CMAESOptimizerOptions<T, TInput, TOutput>? options = null)
-        : base(options ?? new())
+        : base(null, options ?? new())
     {
         _options = options ?? new CMAESOptimizerOptions<T, TInput, TOutput>();
         _population = Matrix<T>.Empty();
