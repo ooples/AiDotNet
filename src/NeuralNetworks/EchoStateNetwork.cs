@@ -1,4 +1,4 @@
-﻿namespace AiDotNet.NeuralNetworks;
+namespace AiDotNet.NeuralNetworks;
 
 /// <summary>
 /// Represents an Echo State Network (ESN), a type of recurrent neural network with a sparsely connected hidden layer called a reservoir.
@@ -1203,9 +1203,9 @@ public class EchoStateNetwork<T> : NeuralNetworkBase<T>
     /// <remarks>
     /// <para>
     /// This method finalizes the training of the Echo State Network by computing the optimal
-    /// output weights using ridge regression. It solves the equation (X^T X + λI)^(-1) X^T Y,
+    /// output weights using ridge regression. It solves the equation (X^T X + ?I)^(-1) X^T Y,
     /// where X is the matrix of collected reservoir states, Y is the matrix of target outputs,
-    /// and λ is the regularization parameter.
+    /// and ? is the regularization parameter.
     /// </para>
     /// <para><b>For Beginners:</b> This completes the training by solving for the best output weights.
     /// 
@@ -1247,24 +1247,24 @@ public class EchoStateNetwork<T> : NeuralNetworkBase<T>
             }
         }
             
-        // Perform ridge regression: (X^T X + λI)^(-1) X^T Y
+        // Perform ridge regression: (X^T X + ?I)^(-1) X^T Y
         // Step 1: Compute X^T X
         Matrix<T> XtX = X.Transpose().Multiply(X);
             
-        // Step 2: Add regularization (X^T X + λI)
+        // Step 2: Add regularization (X^T X + ?I)
         Matrix<T> regularized = XtX.Clone();
         for (int i = 0; i < _reservoirSize; i++)
         {
             regularized[i, i] = NumOps.Add(regularized[i, i], _regularization);
         }
             
-        // Step 3: Compute (X^T X + λI)^(-1)
+        // Step 3: Compute (X^T X + ?I)^(-1)
         Matrix<T> inverse = ComputeInverse(regularized);
             
         // Step 4: Compute X^T Y
         Matrix<T> XtY = X.Transpose().Multiply(Y);
             
-        // Step 5: Compute (X^T X + λI)^(-1) X^T Y
+        // Step 5: Compute (X^T X + ?I)^(-1) X^T Y
         Matrix<T> weights = inverse.Multiply(XtY);
             
         // Update output weights
@@ -1426,9 +1426,9 @@ public class EchoStateNetwork<T> : NeuralNetworkBase<T>
     /// and for saving/loading models for later use.
     /// </para>
     /// </remarks>
-    public override ModelMetaData<T> GetModelMetaData()
+    public override ModelMetadata<T> GetModelMetadata()
     {
-        return new ModelMetaData<T>
+        return new ModelMetadata<T>
         {
             ModelType = ModelType.EchoStateNetwork,
             AdditionalInfo = new Dictionary<string, object>

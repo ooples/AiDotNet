@@ -1,4 +1,4 @@
-ï»¿namespace AiDotNet.NumericOperations;
+namespace AiDotNet.NumericOperations;
 /// <summary>
 /// Provides mathematical operations for complex numbers.
 /// </summary>
@@ -13,7 +13,7 @@
 ///
 /// Complex numbers have two parts:
 /// - A real part (like regular numbers)
-/// - An imaginary part (multiplied by i, where iÂ² = -1)
+/// - An imaginary part (multiplied by i, where i² = -1)
 ///
 /// For example, 3 + 4i is a complex number where:
 /// - 3 is the real part
@@ -134,9 +134,9 @@ public class ComplexOperations<T> : INumericOperations<Complex<T>>
     /// - It follows a specific formula: (a + bi)(c + di) = (ac - bd) + (ad + bc)i
     /// 
     /// For example:
-    /// - (3 + 2i) Ã— (1 + 4i) = (3Ã—1 - 2Ã—4) + (3Ã—4 + 2Ã—1)i = -5 + 14i
+    /// - (3 + 2i) × (1 + 4i) = (3×1 - 2×4) + (3×4 + 2×1)i = -5 + 14i
     /// 
-    /// This is because iÂ² = -1, which makes complex multiplication different from
+    /// This is because i² = -1, which makes complex multiplication different from
     /// regular multiplication.
     /// </para>
     /// </remarks>
@@ -161,12 +161,12 @@ public class ComplexOperations<T> : INumericOperations<Complex<T>>
     /// 2. This makes the denominator a real number
     /// 3. Then divide each part of the numerator by this real number
     /// 
-    /// For example, to calculate (3 + 2i) Ã· (1 + i):
+    /// For example, to calculate (3 + 2i) ÷ (1 + i):
     /// 1. Multiply top and bottom by (1 - i), the conjugate of (1 + i)
-    /// 2. (3 + 2i)(1 - i) Ã· (1 + i)(1 - i)
-    /// 3. (3 - 3i + 2i - 2iÂ²) Ã· (1Â² - iÂ²)
-    /// 4. (3 - 3i + 2i + 2) Ã· (1 + 1)
-    /// 5. (5 - i) Ã· 2
+    /// 2. (3 + 2i)(1 - i) ÷ (1 + i)(1 - i)
+    /// 3. (3 - 3i + 2i - 2i²) ÷ (1² - i²)
+    /// 4. (3 - 3i + 2i + 2) ÷ (1 + 1)
+    /// 5. (5 - i) ÷ 2
     /// 6. 2.5 - 0.5i
     /// 
     /// Complex division is one of the more challenging operations with complex numbers.
@@ -263,8 +263,8 @@ public class ComplexOperations<T> : INumericOperations<Complex<T>>
     /// 
     /// For example, the square root of -4 (which is 0 - 4i in complex form):
     /// - Has a magnitude of 4 and an angle of -90 degrees
-    /// - The square root has magnitude âˆš4 = 2 and angle -90/2 = -45 degrees
-    /// - Converting back gives 2 Ã— (cos(-45Â°) + i Ã— sin(-45Â°)) = âˆš2 - âˆš2i
+    /// - The square root has magnitude v4 = 2 and angle -90/2 = -45 degrees
+    /// - Converting back gives 2 × (cos(-45°) + i × sin(-45°)) = v2 - v2i
     /// 
     /// This is one of the key advantages of complex numbers - they allow us to take
     /// square roots of negative numbers.
@@ -320,11 +320,11 @@ public class ComplexOperations<T> : INumericOperations<Complex<T>>
     /// Since complex numbers have two components, comparing them directly isn't straightforward.
     /// Instead, we compare their magnitudes (distances from zero).
     /// 
-    /// The magnitude of a complex number a + bi is âˆš(aÂ² + bÂ²).
+    /// The magnitude of a complex number a + bi is v(a² + b²).
     /// 
     /// For example:
-    /// - The magnitude of 3 + 4i is âˆš(3Â² + 4Â²) = âˆš25 = 5
-    /// - The magnitude of 1 + 2i is âˆš(1Â² + 2Â²) = âˆš5 â‰ˆ 2.24
+    /// - The magnitude of 3 + 4i is v(3² + 4²) = v25 = 5
+    /// - The magnitude of 1 + 2i is v(1² + 2²) = v5 ˜ 2.24
     /// - So 3 + 4i is greater than 1 + 2i in terms of magnitude
     /// 
     /// This is similar to comparing the lengths of vectors.
@@ -348,8 +348,8 @@ public class ComplexOperations<T> : INumericOperations<Complex<T>>
     /// Like with GreaterThan, this compares the magnitudes (distances from zero) of the complex numbers.
     /// 
     /// For example:
-    /// - 1 + i has magnitude âˆš2 â‰ˆ 1.41
-    /// - 2 + 2i has magnitude âˆš8 â‰ˆ 2.83
+    /// - 1 + i has magnitude v2 ˜ 1.41
+    /// - 2 + 2i has magnitude v8 ˜ 2.83
     /// - So 1 + i is less than 2 + 2i
     /// 
     /// This comparison ignores the direction and only considers the size of the complex numbers.
@@ -369,10 +369,10 @@ public class ComplexOperations<T> : INumericOperations<Complex<T>>
     /// </para>
     /// <para><b>For Beginners:</b> This method calculates the size of a complex number.
     /// 
-    /// The absolute value (or magnitude) of a complex number a + bi is âˆš(aÂ² + bÂ²).
+    /// The absolute value (or magnitude) of a complex number a + bi is v(a² + b²).
     /// 
     /// For example:
-    /// - The absolute value of 3 + 4i is âˆš(3Â² + 4Â²) = âˆš25 = 5
+    /// - The absolute value of 3 + 4i is v(3² + 4²) = v25 = 5
     /// - So Abs(3 + 4i) returns the complex number 5 + 0i
     /// 
     /// The magnitude represents the distance from the origin to the complex number
@@ -388,17 +388,17 @@ public class ComplexOperations<T> : INumericOperations<Complex<T>>
     /// <returns>The square of the complex number.</returns>
     /// <remarks>
     /// <para>
-    /// This method computes the square of a complex number using the formula (a + bi)Â² = (aÂ² - bÂ²) + 2abi.
+    /// This method computes the square of a complex number using the formula (a + bi)² = (a² - b²) + 2abi.
     /// It calculates the real and imaginary parts separately and constructs a new complex number.
     /// </para>
     /// <para><b>For Beginners:</b> This method multiplies a complex number by itself.
     /// 
     /// When squaring a complex number (a + bi):
-    /// - The real part of the result is aÂ² - bÂ²
+    /// - The real part of the result is a² - b²
     /// - The imaginary part is 2ab
     /// 
     /// For example:
-    /// - (3 + 2i)Â² = (3Â² - 2Â²) + 2Ã—3Ã—2i = (9 - 4) + 12i = 5 + 12i
+    /// - (3 + 2i)² = (3² - 2²) + 2×3×2i = (9 - 4) + 12i = 5 + 12i
     /// 
     /// This formula comes from applying the complex multiplication rule: (a + bi)(a + bi)
     /// </para>
@@ -426,14 +426,14 @@ public class ComplexOperations<T> : INumericOperations<Complex<T>>
     /// </para>
     /// <para><b>For Beginners:</b> This method calculates e raised to a complex power.
     /// 
-    /// The constant e (â‰ˆ2.718) is an important mathematical constant.
+    /// The constant e (˜2.718) is an important mathematical constant.
     /// Calculating e raised to a complex power follows Euler's formula:
     /// 
-    /// e^(a + bi) = e^a Ã— (cos(b) + i Ã— sin(b))
+    /// e^(a + bi) = e^a × (cos(b) + i × sin(b))
     /// 
     /// For example:
-    /// - e^(0 + Ï€i) = e^0 Ã— (cos(Ï€) + i Ã— sin(Ï€)) = 1 Ã— (-1 + 0i) = -1
-    /// - This shows the famous equation: e^(Ï€i) = -1
+    /// - e^(0 + pi) = e^0 × (cos(p) + i × sin(p)) = 1 × (-1 + 0i) = -1
+    /// - This shows the famous equation: e^(pi) = -1
     /// 
     /// This function is fundamental in many areas of mathematics and engineering.
     /// </para>
@@ -488,7 +488,7 @@ public class ComplexOperations<T> : INumericOperations<Complex<T>>
     /// </para>
     /// <para><b>For Beginners:</b> This method raises a complex number to a complex power.
     /// 
-    /// For real numbers, 2Â³ means 2Ã—2Ã—2. For complex numbers, it's more complicated.
+    /// For real numbers, 2³ means 2×2×2. For complex numbers, it's more complicated.
     /// 
     /// To calculate a complex number raised to a complex power:
     /// 1. Take the natural logarithm (ln) of the base
@@ -496,7 +496,7 @@ public class ComplexOperations<T> : INumericOperations<Complex<T>>
     /// 3. Raise e to that product
     /// 
     /// For example:
-    /// - To calculate (2 + i)^(3 + 2i), we compute e^((3 + 2i) Ã— ln(2 + i))
+    /// - To calculate (2 + i)^(3 + 2i), we compute e^((3 + 2i) × ln(2 + i))
     /// 
     /// A special case: if both base and exponent are zero, the result is 1.
     /// 
@@ -528,11 +528,11 @@ public class ComplexOperations<T> : INumericOperations<Complex<T>>
     /// 
     /// For example:
     /// - The natural logarithm of 1 + i has:
-    ///   - Real part = ln(âˆš2) â‰ˆ 0.347
-    ///   - Imaginary part = Ï€/4 â‰ˆ 0.785
-    ///   - So ln(1 + i) â‰ˆ 0.347 + 0.785i
+    ///   - Real part = ln(v2) ˜ 0.347
+    ///   - Imaginary part = p/4 ˜ 0.785
+    ///   - So ln(1 + i) ˜ 0.347 + 0.785i
     /// 
-    /// One interesting result: ln(-1) = Ï€i
+    /// One interesting result: ln(-1) = pi
     /// 
     /// This function is the inverse of the Exp function.
     /// </para>
@@ -790,7 +790,7 @@ public class ComplexOperations<T> : INumericOperations<Complex<T>>
     /// 
     /// For example:
     /// - 3 + 4i has magnitude 5, so it converts to 5
-    /// - 1 + 1i has magnitude âˆš2 â‰ˆ 1.414, which rounds to 1
+    /// - 1 + 1i has magnitude v2 ˜ 1.414, which rounds to 1
     /// 
     /// This conversion loses all information about direction, keeping only the size.
     /// </para>

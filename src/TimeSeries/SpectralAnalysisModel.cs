@@ -1,4 +1,4 @@
-﻿namespace AiDotNet.TimeSeries;
+namespace AiDotNet.TimeSeries;
 
 /// <summary>
 /// Implements spectral analysis for time series data, which transforms time domain signals into the frequency domain.
@@ -477,13 +477,13 @@ public class SpectralAnalysisModel<T> : TimeSeriesModelBase<T>
         T timeIndex = input[0];
         T amplitude = NumOps.Sqrt(maxPower);
         
-        // Calculate sin(2π * frequency * timeIndex)
+        // Calculate sin(2p * frequency * timeIndex)
         T angle = NumOps.Multiply(
             NumOps.Multiply(NumOps.FromDouble(2 * Math.PI), dominantFreq),
             timeIndex
         );
         
-        // Convert angle to a value between 0 and 2π
+        // Convert angle to a value between 0 and 2p
         while (NumOps.GreaterThan(angle, NumOps.FromDouble(2 * Math.PI)))
         {
             angle = NumOps.Subtract(angle, NumOps.FromDouble(2 * Math.PI));
@@ -498,14 +498,14 @@ public class SpectralAnalysisModel<T> : TimeSeriesModelBase<T>
         T sinValue;
         if (NumOps.LessThan(angle, NumOps.FromDouble(Math.PI)))
         {
-            // Use sin(x) ≈ x - x³/6 for small x
+            // Use sin(x) � x - x�/6 for small x
             if (NumOps.LessThan(angle, NumOps.FromDouble(Math.PI / 2)))
             {
                 T xSquared = NumOps.Multiply(angle, angle);
                 T xCubed = NumOps.Multiply(xSquared, angle);
                 sinValue = NumOps.Subtract(angle, NumOps.Divide(xCubed, NumOps.FromDouble(6)));
             }
-            // For x near π/2, use sin(x) ≈ 1 - (x - π/2)²/2
+            // For x near p/2, use sin(x) � 1 - (x - p/2)�/2
             else
             {
                 T diff = NumOps.Subtract(angle, NumOps.FromDouble(Math.PI / 2));
@@ -515,10 +515,10 @@ public class SpectralAnalysisModel<T> : TimeSeriesModelBase<T>
         }
         else
         {
-            // For π to 2π, use sin(x) = -sin(x - π)
+            // For p to 2p, use sin(x) = -sin(x - p)
             T reducedAngle = NumOps.Subtract(angle, NumOps.FromDouble(Math.PI));
             
-            // Calculate sin for reduced angle between 0 and π
+            // Calculate sin for reduced angle between 0 and p
             T reducedSin;
             if (NumOps.LessThan(reducedAngle, NumOps.FromDouble(Math.PI / 2)))
             {
@@ -557,10 +557,10 @@ public class SpectralAnalysisModel<T> : TimeSeriesModelBase<T>
     /// or sharing your findings with others.
     /// </para>
     /// </remarks>
-    public override ModelMetaData<T> GetModelMetaData()
+    public override ModelMetadata<T> GetModelMetadata()
     {
         // Create a new metadata object
-        var metadata = new ModelMetaData<T>
+        var metadata = new ModelMetadata<T>
         {
             ModelType = ModelType.SpectralAnalysisModel,
             AdditionalInfo = new Dictionary<string, object>()

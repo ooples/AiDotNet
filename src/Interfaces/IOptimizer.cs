@@ -1,4 +1,4 @@
-﻿namespace AiDotNet.Interfaces;
+namespace AiDotNet.Interfaces;
 
 /// <summary>
 /// Defines the contract for optimization algorithms used in machine learning models.
@@ -77,7 +77,7 @@ public interface IOptimizer<T, TInput, TOutput> : IModelSerializer
     /// parameters like learning rate, maximum iterations, and convergence criteria.
     /// 
     /// <b>For Beginners:</b> This provides the "settings" or "rules" that the optimizer follows.
-    /// Just like a recipe has instructions (bake at 350°F for 30 minutes), an optimizer
+    /// Just like a recipe has instructions (bake at 350�F for 30 minutes), an optimizer
     /// has settings (learn at rate 0.01, stop after 1000 tries).
     /// 
     /// Common optimization options include:

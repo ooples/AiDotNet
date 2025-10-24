@@ -1,4 +1,4 @@
-Ôªønamespace AiDotNet.TimeSeries;
+namespace AiDotNet.TimeSeries;
 
 /// <summary>
 /// Implements a Vector Autoregression (VAR) model for multivariate time series forecasting.
@@ -341,12 +341,12 @@ public class VectorAutoRegressionModel<T> : TimeSeriesModelBase<T>
     /// This method finds the best coefficients for a linear regression model using
     /// the Ordinary Least Squares (OLS) approach.
     /// 
-    /// It solves the equation: Œ≤ = (X'X)‚Åª¬πX'y, where:
+    /// It solves the equation: ﬂ = (X'X)?πX'y, where:
     /// - X is the input matrix (lagged data in this case)
     /// - y is the target vector (current values of a variable)
-    /// - Œ≤ is the vector of coefficients we're solving for
+    /// - ﬂ is the vector of coefficients we're solving for
     /// - X' is the transpose of X
-    /// - (X'X)‚Åª¬π is the inverse of X'X
+    /// - (X'X)?π is the inverse of X'X
     /// 
     /// The result is a set of coefficients that minimize the sum of squared errors
     /// between the model's predictions and the actual values.
@@ -915,7 +915,7 @@ public class VectorAutoRegressionModel<T> : TimeSeriesModelBase<T>
         int p = _varOptions.Lag;
         int kp = k * p;
     
-        // Create matrix of size (k*p √ó k*p)
+        // Create matrix of size (k*p ◊ k*p)
         Matrix<T> companion = new Matrix<T>(kp, kp);
     
         // Fill in the coefficient blocks
@@ -1115,9 +1115,9 @@ public class VectorAutoRegressionModel<T> : TimeSeriesModelBase<T>
     /// models. It provides a complete snapshot of the model's structure and parameters.
     /// </para>
     /// </remarks>
-    public override ModelMetaData<T> GetModelMetaData()
+    public override ModelMetadata<T> GetModelMetadata()
     {
-        var metadata = new ModelMetaData<T>
+        var metadata = new ModelMetadata<T>
         {
             ModelType = ModelType.VARModel,
             AdditionalInfo = new Dictionary<string, object>

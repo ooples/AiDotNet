@@ -1,4 +1,4 @@
-﻿namespace AiDotNet.Regression;
+namespace AiDotNet.Regression;
 
 /// <summary>
 /// Implements Kernel Ridge Regression, a powerful nonlinear regression technique that combines
@@ -146,7 +146,7 @@ public class KernelRidgeRegression<T> : NonLinearRegressionBase<T>
         // Apply regularization to the Gram matrix
         Matrix<T> regularizedGramMatrix = Regularization.Regularize(_gramMatrix);
 
-        // Solve (K + λI + R)α = y, where R is the regularization term
+        // Solve (K + ?I + R)a = y, where R is the regularization term
         _dualCoefficients = MatrixSolutionHelper.SolveLinearSystem(regularizedGramMatrix, y, Options.DecompositionType);
 
         // Apply regularization to the dual coefficients
@@ -223,9 +223,9 @@ public class KernelRidgeRegression<T> : NonLinearRegressionBase<T>
     /// ```
     /// </para>
     /// </remarks>
-    public override ModelMetaData<T> GetModelMetaData()
+    public override ModelMetadata<T> GetModelMetadata()
     {
-        var metadata = base.GetModelMetaData();
+        var metadata = base.GetModelMetadata();
         metadata.AdditionalInfo["LambdaKRR"] = Options.LambdaKRR;
         metadata.AdditionalInfo["RegularizationType"] = Regularization.GetType().Name;
 

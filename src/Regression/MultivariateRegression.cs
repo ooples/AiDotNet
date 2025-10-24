@@ -1,4 +1,4 @@
-ï»¿namespace AiDotNet.Regression;
+namespace AiDotNet.Regression;
 
 /// <summary>
 /// Represents a multivariate linear regression model that predicts a target value based on multiple input features.
@@ -18,7 +18,7 @@
 /// - The model combines all these factors to make a prediction
 /// 
 /// For example, the formula might be:
-/// Miles per gallon = 35 - (0.005 Ã— Car Weight) - (2 Ã— Engine Size) + (3 Ã— Aerodynamic Rating)
+/// Miles per gallon = 35 - (0.005 × Car Weight) - (2 × Engine Size) + (3 × Aerodynamic Rating)
 /// 
 /// The model learns the best values for these coefficients from your training data to make accurate predictions.
 /// </para>

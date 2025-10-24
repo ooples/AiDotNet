@@ -1,4 +1,4 @@
-ï»¿namespace AiDotNet.NumericOperations;
+namespace AiDotNet.NumericOperations;
 /// <summary>
 /// Provides mathematical operations for the decimal data type.
 /// </summary>
@@ -307,9 +307,9 @@ public class DecimalOperations : INumericOperations<decimal>
     /// <para><b>For Beginners:</b> This method multiplies a number by itself.
     /// 
     /// For example:
-    /// - Square of 4.0m is 16.0m (4.0 Ã— 4.0)
-    /// - Square of 0.5m is 0.25m (0.5 Ã— 0.5)
-    /// - Square of -3.0m is 9.0m (-3.0 Ã— -3.0)
+    /// - Square of 4.0m is 16.0m (4.0 × 4.0)
+    /// - Square of 0.5m is 0.25m (0.5 × 0.5)
+    /// - Square of -3.0m is 9.0m (-3.0 × -3.0)
     /// 
     /// Squaring always produces a non-negative result (unless the number is NaN,
     /// which is not possible with decimals).
@@ -328,11 +328,11 @@ public class DecimalOperations : INumericOperations<decimal>
     /// performing the operation, and then converting the result back to a decimal.
     /// Some precision may be lost in this conversion process.
     /// </para>
-    /// <para><b>For Beginners:</b> This method calculates the mathematical constant e (â‰ˆ2.718) raised to a power.
+    /// <para><b>For Beginners:</b> This method calculates the mathematical constant e (˜2.718) raised to a power.
     /// 
     /// For example:
-    /// - e^1 â‰ˆ 2.718m
-    /// - e^2 â‰ˆ 7.389m
+    /// - e^1 ˜ 2.718m
+    /// - e^2 ˜ 7.389m
     /// - e^0 = 1.0m exactly
     /// 
     /// The exponential function is used in many fields including finance (compound interest),
@@ -381,8 +381,8 @@ public class DecimalOperations : INumericOperations<decimal>
     /// <para><b>For Beginners:</b> This method raises one number to the power of another.
     /// 
     /// For example:
-    /// - 2.0m raised to power 3.0m is 8.0m (2^3 = 2Ã—2Ã—2 = 8)
-    /// - 10.0m raised to power 2.0m is 100.0m (10^2 = 10Ã—10 = 100)
+    /// - 2.0m raised to power 3.0m is 8.0m (2^3 = 2×2×2 = 8)
+    /// - 10.0m raised to power 2.0m is 100.0m (10^2 = 10×10 = 100)
     /// - Any number raised to power 0.0m is 1.0m
     /// - Any number raised to power 1.0m is that number itself
     /// 
@@ -410,8 +410,8 @@ public class DecimalOperations : INumericOperations<decimal>
     /// 
     /// For example:
     /// - Log of 1.0m is 0.0m (e^0 = 1)
-    /// - Log of 2.718m is approximately 1.0m (e^1 â‰ˆ 2.718)
-    /// - Log of 7.389m is approximately 2.0m (e^2 â‰ˆ 7.389)
+    /// - Log of 2.718m is approximately 1.0m (e^1 ˜ 2.718)
+    /// - Log of 7.389m is approximately 2.0m (e^2 ˜ 7.389)
     /// 
     /// Important notes:
     /// - Log of a negative number or zero will cause an error
@@ -518,7 +518,7 @@ public class DecimalOperations : INumericOperations<decimal>
     /// <summary>
     /// Gets the minimum value that can be represented by a decimal.
     /// </summary>
-    /// <value>The minimum value of a decimal, which is approximately -7.9 Ã— 10^28.</value>
+    /// <value>The minimum value of a decimal, which is approximately -7.9 × 10^28.</value>
     /// <remarks>
     /// <para>
     /// This property returns the minimum value that can be represented by a decimal,
@@ -526,7 +526,7 @@ public class DecimalOperations : INumericOperations<decimal>
     /// </para>
     /// <para><b>For Beginners:</b> This property gives you the smallest possible decimal value.
     /// 
-    /// For decimals, the minimum value is approximately -7.9 Ã— 10^28
+    /// For decimals, the minimum value is approximately -7.9 × 10^28
     /// (or -79,228,162,514,264,337,593,543,950,335 written out).
     /// 
     /// This is useful when you need to work with the full range of decimal values
@@ -541,7 +541,7 @@ public class DecimalOperations : INumericOperations<decimal>
     /// <summary>
     /// Gets the maximum value that can be represented by a decimal.
     /// </summary>
-    /// <value>The maximum value of a decimal, which is approximately 7.9 Ã— 10^28.</value>
+    /// <value>The maximum value of a decimal, which is approximately 7.9 × 10^28.</value>
     /// <remarks>
     /// <para>
     /// This property returns the maximum value that can be represented by a decimal,
@@ -549,7 +549,7 @@ public class DecimalOperations : INumericOperations<decimal>
     /// </para>
     /// <para><b>For Beginners:</b> This property gives you the largest possible decimal value.
     /// 
-    /// For decimals, the maximum value is approximately 7.9 Ã— 10^28
+    /// For decimals, the maximum value is approximately 7.9 × 10^28
     /// (or 79,228,162,514,264,337,593,543,950,335 written out).
     /// 
     /// This is useful when you need to work with the full range of decimal values

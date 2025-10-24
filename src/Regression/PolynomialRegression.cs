@@ -1,4 +1,4 @@
-ï»¿namespace AiDotNet.Regression;
+namespace AiDotNet.Regression;
 
 /// <summary>
 /// Implements polynomial regression, which extends linear regression by fitting a polynomial equation to the data.
@@ -6,7 +6,7 @@
 /// <typeparam name="T">The numeric type used for calculations (e.g., float, double).</typeparam>
 /// <remarks>
 /// Polynomial regression is useful when the relationship between variables is not linear.
-/// It works by creating new features that are powers of the original features (x, xÂ², xÂ³, etc.),
+/// It works by creating new features that are powers of the original features (x, x², x³, etc.),
 /// then applying linear regression techniques to these expanded features.
 /// 
 /// <b>For Beginners:</b> While linear regression fits a straight line to your data,
@@ -49,7 +49,7 @@ public class PolynomialRegression<T> : RegressionBase<T>
     /// </param>
     /// <remarks>
     /// This method:
-    /// 1. Transforms the original features into polynomial features (x, xÂ², xÂ³, etc.)
+    /// 1. Transforms the original features into polynomial features (x, x², x³, etc.)
     /// 2. Adds a constant column for the intercept if specified in the options
     /// 3. Solves the least squares equation to find the optimal coefficients
     /// 
@@ -87,7 +87,7 @@ public class PolynomialRegression<T> : RegressionBase<T>
     /// <param name="x">The original input feature matrix.</param>
     /// <returns>A new matrix with polynomial features up to the specified degree.</returns>
     /// <remarks>
-    /// This method transforms each feature x into multiple features: x, xÂ², xÂ³, etc.,
+    /// This method transforms each feature x into multiple features: x, x², x³, etc.,
     /// up to the degree specified in the options.
     /// </remarks>
     private Matrix<T> CreatePolynomialFeatures(Matrix<T> x)

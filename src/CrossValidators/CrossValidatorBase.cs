@@ -138,7 +138,7 @@ public abstract class CrossValidatorBase<T> : ICrossValidator<T>
             evaluationTimer.Stop();
             var evaluationTime = evaluationTimer.Elapsed;
 
-            var featureImportance = model.GetModelMetaData().FeatureImportance;
+            var featureImportance = model.GetModelMetadata().FeatureImportance;
 
             var foldResult = new FoldResult<T>(
                 foldIndex,

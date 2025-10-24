@@ -1,4 +1,4 @@
-ï»¿namespace AiDotNet.WindowFunctions;
+namespace AiDotNet.WindowFunctions;
 
 /// <summary>
 /// Implements the Kaiser window function for signal processing applications.
@@ -7,9 +7,9 @@
 /// <para>
 /// The Kaiser window is a flexible window function based on the modified Bessel function of the first kind.
 /// It is defined by the equation:
-/// w(n) = Iâ‚€(Î²âˆš(1-(2n/(N-1))Â²))/Iâ‚€(Î²)
-/// where n is the sample index, N is the window size, Iâ‚€ is the modified Bessel function of the first kind
-/// of order zero, and Î² (beta) is a parameter that controls the trade-off between the main lobe width
+/// w(n) = I0(ßv(1-(2n/(N-1))²))/I0(ß)
+/// where n is the sample index, N is the window size, I0 is the modified Bessel function of the first kind
+/// of order zero, and ß (beta) is a parameter that controls the trade-off between the main lobe width
 /// and side lobe amplitude.
 /// </para>
 /// <para><b>For Beginners:</b> A window function is like a special filter that helps analyze signals more accurately.
@@ -59,9 +59,9 @@ public class KaiserWindow<T> : IWindowFunction<T>
     /// - Higher values (7-10): Better for amplitude accuracy (measuring how strong each frequency is)
     /// 
     /// A common way to choose beta is based on the amount of side lobe suppression needed:
-    /// - Î² = 2.0: provides about -46 dB side lobe suppression
-    /// - Î² = 4.0: provides about -75 dB side lobe suppression
-    /// - Î² = 6.0: provides about -90 dB side lobe suppression
+    /// - ß = 2.0: provides about -46 dB side lobe suppression
+    /// - ß = 4.0: provides about -75 dB side lobe suppression
+    /// - ß = 6.0: provides about -90 dB side lobe suppression
     /// 
     /// The default value of 5.0 works well for many applications, offering a good balance.
     /// </para>

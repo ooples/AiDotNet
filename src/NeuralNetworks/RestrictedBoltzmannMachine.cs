@@ -891,7 +891,7 @@ public class RestrictedBoltzmannMachine<T> : NeuralNetworkBase<T>
     /// and understanding the structure of your model at a glance.
     /// </para>
     /// </remarks>
-    public override ModelMetaData<T> GetModelMetaData()
+    public override ModelMetadata<T> GetModelMetadata()
     {
         // Count total parameters
         int totalParams = (VisibleSize * HiddenSize) + VisibleSize + HiddenSize;
@@ -901,7 +901,7 @@ public class RestrictedBoltzmannMachine<T> : NeuralNetworkBase<T>
             ? _vectorActivation.GetType().Name 
             : (_scalarActivation != null ? _scalarActivation.GetType().Name : "None");
         
-        return new ModelMetaData<T>
+        return new ModelMetadata<T>
         {
             ModelType = ModelType.RestrictedBoltzmannMachine,
             AdditionalInfo = new Dictionary<string, object>

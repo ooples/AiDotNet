@@ -1057,9 +1057,9 @@ public class STLDecomposition<T> : TimeSeriesModelBase<T>
     /// Think of it like getting a detailed report card for your decomposition analysis.
     /// </para>
     /// </remarks>
-    public override ModelMetaData<T> GetModelMetaData()
+    public override ModelMetadata<T> GetModelMetadata()
     {
-        var metadata = new ModelMetaData<T>
+        var metadata = new ModelMetadata<T>
         {
             ModelType = ModelType.STLDecomposition,
             AdditionalInfo = new Dictionary<string, object>

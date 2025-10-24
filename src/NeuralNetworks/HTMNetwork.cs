@@ -640,9 +640,9 @@ public class HTMNetwork<T> : NeuralNetworkBase<T>
     /// and keeping track of different network configurations.
     /// </para>
     /// </remarks>
-    public override ModelMetaData<T> GetModelMetaData()
+    public override ModelMetadata<T> GetModelMetadata()
     {
-        return new ModelMetaData<T>
+        return new ModelMetadata<T>
         {
             ModelType = ModelType.HTMNetwork,
             AdditionalInfo = new Dictionary<string, object>
