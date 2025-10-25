@@ -78,10 +78,8 @@ public class TransferRandomForest<T> : TransferLearningBase<T, Matrix<T>, Vector
         Vector<T> targetLabels)
     {
         throw new InvalidOperationException(
-            "Cross-domain transfer requires source domain data for proper feature mapping and domain adaptation. " +
-            "The protected TransferCrossDomain method cannot access source data due to API limitations. " +
-            "Please use the public Transfer(sourceModel, sourceData, targetData, targetLabels) method instead, " +
-            "or pre-train the FeatureMapper and DomainAdapter with source data before calling this method.");
+            "Cross-domain transfer cannot be performed directly through this protected method due to the need for source domain data. " +
+            "Please use the public 'Transfer(sourceModel, sourceData, targetData, targetLabels)' method which accepts both source and target domain data for feature mapping and transfer.");
     }
 
     /// <summary>
