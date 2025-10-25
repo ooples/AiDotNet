@@ -1261,13 +1261,31 @@ public class ExpressionTree<T, TInput, TOutput> : IFullModel<T, TInput, TOutput>
         }
     }
 
+    /// <summary>
+    /// Saves the expression tree model to a file.
+    /// </summary>
+    /// <param name="filePath">The path where the model should be saved.</param>
+    /// <remarks>
+    /// <b>For Beginners:</b> This saves your mathematical formula to a file so you can load it later
+    /// without having to recreate it. The file contains the tree structure, all node types, and values.
+    /// </remarks>
     public virtual void SaveModel(string filePath)
     {
-        throw new NotImplementedException("SaveModel is not yet implemented for this model type.");
+        byte[] serializedData = Serialize();
+        File.WriteAllBytes(filePath, serializedData);
     }
 
+    /// <summary>
+    /// Loads an expression tree model from a file.
+    /// </summary>
+    /// <param name="filePath">The path to the file containing the saved model.</param>
+    /// <remarks>
+    /// <b>For Beginners:</b> This loads a previously saved formula from a file, allowing you to
+    /// reuse it without recreating it. The loaded formula can immediately be used for predictions.
+    /// </remarks>
     public virtual void LoadModel(string filePath)
     {
-        throw new NotImplementedException("LoadModel is not yet implemented for this model type.");
+        byte[] serializedData = File.ReadAllBytes(filePath);
+        Deserialize(serializedData);
     }
 }

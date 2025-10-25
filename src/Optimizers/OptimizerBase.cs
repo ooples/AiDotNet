@@ -1331,13 +1331,49 @@ public abstract class OptimizerBase<T, TInput, TOutput> : IOptimizer<T, TInput, 
         return randomModel;
     }
 
+    /// <summary>
+    /// Saves the optimizer state to a file.
+    /// </summary>
+    /// <param name="filePath">The path where the optimizer should be saved.</param>
+    /// <remarks>
+    /// <para>
+    /// This method saves the complete state of the optimizer, including all configuration options
+    /// and any optimizer-specific data, to a file.
+    /// </para>
+    /// <para><b>For Beginners:</b> This saves your optimizer's current settings and state to a file.
+    ///
+    /// Think of it like saving your progress:
+    /// - It captures all the optimizer's settings and current state
+    /// - This can be loaded later to resume optimization or reuse the same settings
+    /// - It's useful for checkpointing long-running optimizations
+    /// </para>
+    /// </remarks>
     public virtual void SaveModel(string filePath)
     {
-        throw new NotImplementedException("SaveModel is not yet implemented for this optimizer type.");
+        byte[] serializedData = Serialize();
+        File.WriteAllBytes(filePath, serializedData);
     }
 
+    /// <summary>
+    /// Loads the optimizer state from a file.
+    /// </summary>
+    /// <param name="filePath">The path to the file containing the saved optimizer.</param>
+    /// <remarks>
+    /// <para>
+    /// This method loads the complete state of the optimizer from a file, including all configuration
+    /// options and any optimizer-specific data.
+    /// </para>
+    /// <para><b>For Beginners:</b> This loads a previously saved optimizer from a file.
+    ///
+    /// It's like loading a saved game:
+    /// - It restores all the optimizer's settings and state
+    /// - You can continue optimization from where you left off
+    /// - You can reuse optimizer configurations that worked well previously
+    /// </para>
+    /// </remarks>
     public virtual void LoadModel(string filePath)
     {
-        throw new NotImplementedException("LoadModel is not yet implemented for this optimizer type.");
+        byte[] serializedData = File.ReadAllBytes(filePath);
+        Deserialize(serializedData);
     }
 }
