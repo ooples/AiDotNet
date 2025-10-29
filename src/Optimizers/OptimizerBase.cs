@@ -1105,9 +1105,9 @@ public abstract class OptimizerBase<T, TInput, TOutput> : IOptimizer<T, TInput, 
     public virtual void Step()
     {
         throw new NotImplementedException(
-            "Step() method is not implemented for this optimizer type. " +
-            "This optimizer may be a non-gradient-based optimizer that uses the Optimize() method instead, " +
-            "or the derived class needs to implement the Step() method.");
+            $"The 'Step()' method is not implemented for optimizer type '{GetType().Name}'. " +
+            "For gradient-based optimizers, this method must be overridden by the derived class. " +
+            "For non-gradient-based optimizers, consider using the 'Optimize()' method instead.");
     }
 
     /// <summary>
@@ -1118,9 +1118,9 @@ public abstract class OptimizerBase<T, TInput, TOutput> : IOptimizer<T, TInput, 
     public virtual Dictionary<string, Vector<T>> CalculateUpdate(Dictionary<string, Vector<T>> gradients)
     {
         throw new NotImplementedException(
-            "CalculateUpdate() method is not implemented for this optimizer type. " +
-            "This optimizer may be a non-gradient-based optimizer that uses the Optimize() method instead, " +
-            "or the derived class needs to implement the CalculateUpdate() method.");
+            $"The 'CalculateUpdate()' method is not implemented for optimizer type '{GetType().Name}'. " +
+            "For gradient-based optimizers, this method must be overridden by the derived class. " +
+            "For non-gradient-based optimizers, consider using the 'Optimize()' method instead.");
     }
 
     /// <summary>
