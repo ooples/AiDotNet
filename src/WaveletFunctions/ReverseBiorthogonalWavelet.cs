@@ -771,7 +771,7 @@ public class ReverseBiorthogonalWavelet<T> : IWaveletFunction<T>
             WaveletType.ReverseBior48 => GetReverseBior48Coefficients(),
             WaveletType.ReverseBior55 => GetReverseBior55Coefficients(),
             WaveletType.ReverseBior68 => GetReverseBior68Coefficients(),
-            _ => throw new NotImplementedException($"Wavelet type {waveletType} is not implemented."),
+            _ => throw new ArgumentOutOfRangeException(nameof(waveletType), $"Wavelet type {waveletType} is not supported for Reverse Biorthogonal wavelets."),
         };
     }
 
