@@ -931,9 +931,178 @@ public class VectorModel<T> : IFullModel<T, Matrix<T>, Vector<T>>
         /// <summary>
         /// Gets partial dependence data for specified features.
         /// </summary>
+        /// <summary>
+        /// Gets partial dependence data for specified features.
+        /// </summary>
         public virtual async Task<PartialDependenceData<T>> GetPartialDependenceAsync(Vector<int> featureIndices, int gridResolution = 20)
         {
-        return await InterpretableModelHelper.GetPartialDependenceAsync<T>(_enabledMethods, featureIndices, gridResolution);
+            await Task.CompletedTask; // Satisfy async method signature
+
+            if (featureIndices == null)
+            {
+                throw new ArgumentNullException(nameof(featureIndices));
+            }
+
+            if (featureIndices.Length == 0)
+            {
+                throw new ArgumentException("Feature indices cannot be empty.", nameof(featureIndices));
+            }
+
+            if (gridResolution <= 0)
+            {
+                throw new ArgumentException("Grid resolution must be greater than zero.", nameof(gridResolution));
+            }
+
+            // Validate feature indices
+            for (int i = 0; i < featureIndices.Length; i++)
+            {
+                if (featureIndices[i] < 0 || featureIndices[i] >= FeatureCount)
+                {
+                    throw new ArgumentOutOfRangeException(nameof(featureIndices),
+                        $"Feature index {featureIndices[i]} is out of range. Must be between 0 and {FeatureCount - 1}.");
+                }
+            }
+
+            // For a linear model (VectorModel), partial dependence is simply the coefficient
+            // times the grid values for each feature, since the model is additive.
+            // PD(x_j) = coefficient_j * x_j (for a linear model with no intercept)
+
+            var gridValues = new Dictionary<int, Vector<T>>();
+            var pdpMatrix = new List<Vector<T>>();
+
+            // For VectorModel, we compute partial dependence for one feature at a time
+            // since the model is linear and additive
+            if (featureIndices.Length == 1)
+            {
+                int featureIdx = featureIndices[0];
+
+                // Generate grid values for the feature
+                // Using a range from -1 to 1 as a default since we don't have training data
+                T minVal = _numOps.FromDouble(-1.0);
+                T maxVal = _numOps.FromDouble(1.0);
+
+                Vector<T> gridVals = new Vector<T>(gridResolution);
+                for (int i = 0; i < gridResolution; i++)
+                {
+                    T ratio = _numOps.FromDouble((double)i / (gridResolution - 1));
+                    T range = _numOps.Subtract(maxVal, minVal);
+                    gridVals[i] = _numOps.Add(minVal, _numOps.Multiply(range, ratio));
+                }
+
+                gridValues[featureIdx] = gridVals;
+
+                // For a linear model, partial dependence is simply coefficient * feature_value
+                Vector<T> pdValues = new Vector<T>(gridResolution);
+                for (int i = 0; i < gridResolution; i++)
+                {
+                    pdValues[i] = _numOps.Multiply(Coefficients[featureIdx], gridVals[i]);
+                }
+
+                pdpMatrix.Add(pdValues);
+            }
+            else
+            {
+                // For multiple features, compute the interaction effect
+                // For a linear model without interaction terms, this is just the sum
+                // of individual feature effects
+
+                // Generate grid for each feature
+                var grids = new List<Vector<T>>();
+                foreach (int featureIdx in featureIndices)
+                {
+                    T minVal = _numOps.FromDouble(-1.0);
+                    T maxVal = _numOps.FromDouble(1.0);
+
+                    Vector<T> gridVals = new Vector<T>(gridResolution);
+                    for (int i = 0; i < gridResolution; i++)
+                    {
+                        T ratio = _numOps.FromDouble((double)i / (gridResolution - 1));
+                        T range = _numOps.Subtract(maxVal, minVal);
+                        gridVals[i] = _numOps.Add(minVal, _numOps.Multiply(range, ratio));
+                    }
+
+                    gridValues[featureIdx] = gridVals;
+                    grids.Add(gridVals);
+                }
+
+                // Compute partial dependence for each combination
+                // For a 2D case with gridResolution=20, we'd have 20x20=400 points
+                int totalPoints = 1;
+                for (int i = 0; i < featureIndices.Length; i++)
+                {
+                    totalPoints *= gridResolution;
+                }
+
+                // Generate all combinations and compute PD values
+                Vector<T> pdValues = new Vector<T>(totalPoints);
+                int pointIdx = 0;
+
+                // Generate combinations recursively
+                var currentPoint = new T[featureIndices.Length];
+                ComputePDCombinations(featureIndices, grids, 0, currentPoint, pdValues, ref pointIdx);
+
+                pdpMatrix.Add(pdValues);
+            }
+
+            // Create the result matrix
+            Matrix<T> pdMatrix;
+            if (pdpMatrix.Count == 1)
+            {
+                // Single row for 1D or single vector for multi-feature
+                pdMatrix = new Matrix<T>(1, pdpMatrix[0].Length);
+                for (int j = 0; j < pdpMatrix[0].Length; j++)
+                {
+                    pdMatrix[0, j] = pdpMatrix[0][j];
+                }
+            }
+            else
+            {
+                pdMatrix = new Matrix<T>(pdpMatrix.Count, pdpMatrix[0].Length);
+                for (int i = 0; i < pdpMatrix.Count; i++)
+                {
+                    for (int j = 0; j < pdpMatrix[i].Length; j++)
+                    {
+                        pdMatrix[i, j] = pdpMatrix[i][j];
+                    }
+                }
+            }
+
+            return new PartialDependenceData<T>
+            {
+                FeatureIndices = featureIndices,
+                GridValues = gridValues,
+                PartialDependenceValues = pdMatrix,
+                GridResolution = gridResolution,
+                IceCurves = new List<Matrix<T>>()
+            };
+        }
+
+        /// <summary>
+        /// Helper method to recursively compute partial dependence combinations.
+        /// </summary>
+        private void ComputePDCombinations(Vector<int> featureIndices, List<Vector<T>> grids,
+            int depth, T[] currentPoint, Vector<T> pdValues, ref int pointIdx)
+        {
+            if (depth == featureIndices.Length)
+            {
+                // Compute PD value for this combination
+                T pdValue = _numOps.Zero;
+                for (int i = 0; i < featureIndices.Length; i++)
+                {
+                    int featureIdx = featureIndices[i];
+                    pdValue = _numOps.Add(pdValue, _numOps.Multiply(Coefficients[featureIdx], currentPoint[i]));
+                }
+                pdValues[pointIdx++] = pdValue;
+                return;
+            }
+
+            // Recurse through grid values for this feature
+            Vector<T> currentGrid = grids[depth];
+            for (int i = 0; i < currentGrid.Length; i++)
+            {
+                currentPoint[depth] = currentGrid[i];
+                ComputePDCombinations(featureIndices, grids, depth + 1, currentPoint, pdValues, ref pointIdx);
+            }
         }
 
         /// <summary>
