@@ -90,6 +90,11 @@ public class PatchEmbeddingLayer<T> : LayerBase<T>
     private Vector<T>? _projectionBiasGradient;
 
     /// <summary>
+    /// Cached pre-activation tensor from forward pass for use in activation derivative calculation.
+    /// </summary>
+    private Tensor<T>? _lastPreActivation;
+
+    /// <summary>
     /// Indicates whether this layer supports training.
     /// </summary>
     public override bool SupportsTraining => true;
@@ -229,7 +234,7 @@ public class PatchEmbeddingLayer<T> : LayerBase<T>
             }
         }
 
-        var embeddings = new Tensor<T>([batchSize, _numPatches, _embeddingDim]);
+        var preActivation = new Tensor<T>([batchSize, _numPatches, _embeddingDim]);
         for (int b = 0; b < batchSize; b++)
         {
             for (int p = 0; p < _numPatches; p++)
@@ -241,12 +246,13 @@ public class PatchEmbeddingLayer<T> : LayerBase<T>
                     {
                         sum = NumOps.Add(sum, NumOps.Multiply(patches[b, p, d], _projectionWeights[d, e]));
                     }
-                    embeddings[b, p, e] = sum;
+                    preActivation[b, p, e] = sum;
                 }
             }
         }
 
-        return ApplyActivation(embeddings);
+        _lastPreActivation = preActivation;
+        return ApplyActivation(preActivation);
     }
 
     /// <summary>
@@ -268,12 +274,12 @@ public class PatchEmbeddingLayer<T> : LayerBase<T>
     /// </remarks>
     public override Tensor<T> Backward(Tensor<T> outputGradient)
     {
-        if (_lastInput == null)
+        if (_lastInput == null || _lastPreActivation == null)
         {
             throw new InvalidOperationException("Forward pass must be called before backward pass.");
         }
 
-        var activationGradient = ApplyActivationDerivative(_lastInput, outputGradient);
+        var activationGradient = ApplyActivationDerivative(_lastPreActivation, outputGradient);
 
         int batchSize = _lastInput.Shape[0];
         int patchDim = _channels * _patchSize * _patchSize;
@@ -480,6 +486,7 @@ public class PatchEmbeddingLayer<T> : LayerBase<T>
     public override void ResetState()
     {
         _lastInput = null;
+        _lastPreActivation = null;
         _projectionWeightsGradient = null;
         _projectionBiasGradient = null;
     }

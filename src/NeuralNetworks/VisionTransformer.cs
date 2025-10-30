@@ -475,6 +475,22 @@ public class VisionTransformer<T> : NeuralNetworkBase<T>
         int numHeads = reader.ReadInt32();
         int mlpDim = reader.ReadInt32();
 
+        if (imageHeight != _imageHeight || imageWidth != _imageWidth ||
+            channels != _channels || patchSize != _patchSize ||
+            numClasses != _numClasses || hiddenDim != _hiddenDim ||
+            numLayers != _numLayers || numHeads != _numHeads ||
+            mlpDim != _mlpDim)
+        {
+            throw new InvalidOperationException(
+                $"Serialized model configuration does not match current instance. " +
+                $"Expected: {_imageHeight}x{_imageWidth}x{_channels}, patch={_patchSize}, " +
+                $"classes={_numClasses}, hidden={_hiddenDim}, layers={_numLayers}, " +
+                $"heads={_numHeads}, mlp={_mlpDim}. " +
+                $"Got: {imageHeight}x{imageWidth}x{channels}, patch={patchSize}, " +
+                $"classes={numClasses}, hidden={hiddenDim}, layers={numLayers}, " +
+                $"heads={numHeads}, mlp={mlpDim}.");
+        }
+
         for (int i = 0; i < _clsToken.Length; i++)
         {
             _clsToken[i] = NumOps.FromDouble(reader.ReadDouble());
