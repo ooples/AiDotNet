@@ -1,4 +1,4 @@
-﻿namespace AiDotNet.WaveletFunctions;
+namespace AiDotNet.WaveletFunctions;
 
 /// <summary>
 /// Represents a Shannon wavelet function implementation for signal processing and frequency analysis.
@@ -82,7 +82,7 @@ public class ShannonWavelet<T> : IWaveletFunction<T>
     /// <remarks>
     /// <para>
     /// This method computes the value of the Shannon wavelet function at the given input point.
-    /// The Shannon wavelet is defined as sinc(x) * cos(x/2), where sinc(x) = sin(x)/x for x ≠ 0
+    /// The Shannon wavelet is defined as sinc(x) * cos(x/2), where sinc(x) = sin(x)/x for x ? 0
     /// and sinc(0) = 1. This function has perfect frequency localization but poor time localization.
     /// </para>
     /// <para><b>For Beginners:</b> This method calculates the height of the Shannon wavelet at a specific point.

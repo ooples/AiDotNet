@@ -1,4 +1,4 @@
-﻿namespace AiDotNet.Genetics;
+namespace AiDotNet.Genetics;
 
 public class NSGAII<T, TInput, TOutput> :
     StandardGeneticAlgorithm<T, TInput, TOutput>
@@ -346,7 +346,7 @@ public class NSGAII<T, TInput, TOutput> :
         var model = IndividualToModel(individual);
 
         // Store objective values in the model's metadata for quick access
-        var metadata = model.GetModelMetaData();
+        var metadata = model.GetModelMetadata();
 
         if (metadata.AdditionalInfo.TryGetValue($"Objective_{objectiveIndex}", out object? objValue))
         {
@@ -385,7 +385,7 @@ public class NSGAII<T, TInput, TOutput> :
             FitnessCalculator = tempCalculator;
 
             // Store the objective value in the model's metadata
-            var metadata = model.GetModelMetaData();
+            var metadata = model.GetModelMetadata();
             metadata.AdditionalInfo[$"Objective_{i}"] = Convert.ToDouble(fitness);
         }
 
@@ -393,7 +393,7 @@ public class NSGAII<T, TInput, TOutput> :
         individual.SetFitness(GetObjectiveFitness(individual, 0));
     }
 
-    public override ModelMetaData<T> GetMetaData()
+    public override ModelMetadata<T> GetMetaData()
     {
         var metadata = base.GetMetaData();
         metadata.ModelType = ModelType.GeneticAlgorithmRegression;

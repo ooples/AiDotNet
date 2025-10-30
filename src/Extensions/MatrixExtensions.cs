@@ -1,4 +1,4 @@
-Ôªønamespace AiDotNet.Extensions;
+namespace AiDotNet.Extensions;
 
 /// <summary>
 /// Provides extension methods for matrix operations, making it easier to work with matrices in AI applications.
@@ -750,7 +750,7 @@ public static class MatrixExtensions
     /// <remarks>
     /// <para>
     /// <b>For Beginners:</b> A square matrix is simply a matrix with the same number of rows and columns.
-    /// For example, a 3√ó3 matrix is square, while a 2√ó3 matrix is not.
+    /// For example, a 3◊3 matrix is square, while a 2◊3 matrix is not.
     /// </para>
     /// </remarks>
     public static bool IsSquareMatrix<T>(this Matrix<T> matrix)
@@ -767,7 +767,7 @@ public static class MatrixExtensions
     /// <remarks>
     /// <para>
     /// <b>For Beginners:</b> A rectangular matrix has a different number of rows and columns.
-    /// For example, a 2√ó3 matrix (2 rows, 3 columns) is rectangular.
+    /// For example, a 2◊3 matrix (2 rows, 3 columns) is rectangular.
     /// </para>
     /// </remarks>
     public static bool IsRectangularMatrix<T>(this Matrix<T> matrix)
@@ -1485,7 +1485,7 @@ public static class MatrixExtensions
     /// <remarks>
     /// <para>
     /// <b>For Beginners:</b> An idempotent matrix is a matrix that, when multiplied by itself,
-    /// gives the same matrix: A¬≤ = A.
+    /// gives the same matrix: A≤ = A.
     /// 
     /// This property is important in:
     /// - Projection matrices in linear algebra
@@ -1525,7 +1525,7 @@ public static class MatrixExtensions
     /// <para>
     /// <b>For Beginners:</b> A stochastic matrix (also called a probability matrix or Markov matrix)
     /// has two key properties:
-    /// 1. All elements are non-negative (‚â• 0)
+    /// 1. All elements are non-negative (= 0)
     /// 2. The sum of each row equals 1
     /// 
     /// These matrices are used to represent transition probabilities in Markov chains, where:
@@ -1762,10 +1762,10 @@ public static class MatrixExtensions
     /// 1. The first column can contain any values
     /// 2. Each subsequent column is formed by raising the corresponding element in the first column to a power
     /// 
-    /// For example, if the first column is [x‚ÇÅ, x‚ÇÇ, x‚ÇÉ], the Vandermonde matrix would be:
-    /// [x‚ÇÅ‚Å∞, x‚ÇÅ¬π, x‚ÇÅ¬≤, ...]
-    /// [x‚ÇÇ‚Å∞, x‚ÇÇ¬π, x‚ÇÇ¬≤, ...]
-    /// [x‚ÇÉ‚Å∞, x‚ÇÉ¬π, x‚ÇÉ¬≤, ...]
+    /// For example, if the first column is [x1, x2, x3], the Vandermonde matrix would be:
+    /// [x1∞, x1π, x1≤, ...]
+    /// [x2∞, x2π, x2≤, ...]
+    /// [x3∞, x3π, x3≤, ...]
     /// 
     /// These matrices are important in polynomial interpolation and solving systems of linear equations.
     /// </para>
@@ -1801,7 +1801,7 @@ public static class MatrixExtensions
     /// <returns>True if the matrix is a Cauchy matrix; otherwise, false.</returns>
     /// <remarks>
     /// <para>
-    /// <b>For Beginners:</b> A Cauchy matrix is formed from two sequences of numbers (x‚ÇÅ, x‚ÇÇ, ...) and (y‚ÇÅ, y‚ÇÇ, ...).
+    /// <b>For Beginners:</b> A Cauchy matrix is formed from two sequences of numbers (x1, x2, ...) and (y1, y2, ...).
     /// Each element at position [i,j] equals 1/(x_i - y_j).
     /// 
     /// For this implementation:
@@ -2298,7 +2298,7 @@ public static class MatrixExtensions
     /// <remarks>
     /// <para>
     /// <b>For Beginners:</b> An involutory matrix is a matrix that, when multiplied by itself, gives the identity matrix.
-    /// In other words, it's its own inverse (A¬≤ = I). These matrices are useful in various applications including cryptography
+    /// In other words, it's its own inverse (A≤ = I). These matrices are useful in various applications including cryptography
     /// and computer graphics.
     /// </para>
     /// </remarks>
@@ -2353,7 +2353,7 @@ public static class MatrixExtensions
     /// <b>For Beginners:</b> A positive semi-definite matrix is a symmetric matrix where all eigenvalues are non-negative.
     /// These matrices are important in machine learning, statistics, and optimization problems. They represent covariance 
     /// matrices, kernel matrices in kernel methods, and Hessian matrices in certain optimization problems. A key property 
-    /// is that for any vector x, x^T*A*x ‚â• 0, which means these matrices preserve or increase vector lengths in certain directions.
+    /// is that for any vector x, x^T*A*x = 0, which means these matrices preserve or increase vector lengths in certain directions.
     /// </para>
     /// </remarks>
     public static bool IsPositiveSemiDefiniteMatrix<T>(this Matrix<T> matrix)
@@ -2704,7 +2704,7 @@ public static class MatrixExtensions
     /// <remarks>
     /// <para>
     /// <b>For Beginners:</b> Matrix inversion is like finding the reciprocal of a number. For example, the reciprocal of 2 is 1/2.
-    /// Similarly, the inverse of a matrix A is another matrix that, when multiplied with A, gives the identity matrix (similar to how 2 √ó 1/2 = 1).
+    /// Similarly, the inverse of a matrix A is another matrix that, when multiplied with A, gives the identity matrix (similar to how 2 ◊ 1/2 = 1).
     /// The Gaussian-Jordan elimination is a step-by-step process to find this inverse by transforming the original matrix into the identity matrix.
     /// </para>
     /// </remarks>
@@ -3895,8 +3895,8 @@ public static class MatrixExtensions
     /// <remarks>
     /// <para>
     /// <b>For Beginners:</b> The Kronecker product is a special way of combining two matrices that results
-    /// in a much larger matrix. If matrix A is m√ón and matrix B is p√óq, their Kronecker product will be
-    /// a matrix of size (m√óp)√ó(n√óq).
+    /// in a much larger matrix. If matrix A is m◊n and matrix B is p◊q, their Kronecker product will be
+    /// a matrix of size (m◊p)◊(n◊q).
     /// </para>
     /// <para>
     /// Think of it as replacing each element of matrix A with a scaled copy of matrix B, where the scaling
@@ -3944,7 +3944,7 @@ public static class MatrixExtensions
     /// and puts them into a vector (a one-dimensional array), reading from left to right, top to bottom.
     /// </para>
     /// <para>
-    /// For example, if you have a 2√ó3 matrix:
+    /// For example, if you have a 2◊3 matrix:
     /// [1, 2, 3]
     /// [4, 5, 6]
     /// The flattened vector would be: [1, 2, 3, 4, 5, 6]
@@ -3987,11 +3987,11 @@ public static class MatrixExtensions
     /// all the same values. It's like rearranging the same set of numbers into a different grid pattern.
     /// </para>
     /// <para>
-    /// For example, if you have a 2√ó3 matrix (2 rows, 3 columns):
+    /// For example, if you have a 2◊3 matrix (2 rows, 3 columns):
     /// [1, 2, 3]
     /// [4, 5, 6]
     /// 
-    /// You could reshape it to a 3√ó2 matrix (3 rows, 2 columns):
+    /// You could reshape it to a 3◊2 matrix (3 rows, 2 columns):
     /// [1, 2]
     /// [3, 4]
     /// [5, 6]

@@ -66,7 +66,7 @@ public class BeveridgeNelsonDecomposition<T> : TimeSeriesDecompositionBase<T>
                 DecomposeMultivariate();
                 break;
             default:
-                throw new NotImplementedException($"Beveridge-Nelson decomposition algorithm {_algorithm} is not implemented.");
+                throw new ArgumentOutOfRangeException(nameof(_algorithm), _algorithm, $"Beveridge-Nelson decomposition algorithm {_algorithm} is not supported.");
         }
     }
 

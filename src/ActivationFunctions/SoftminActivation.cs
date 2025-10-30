@@ -1,4 +1,4 @@
-﻿namespace AiDotNet.ActivationFunctions;
+namespace AiDotNet.ActivationFunctions;
 
 /// <summary>
 /// Implements the Softmin activation function, which is the opposite of Softmax and highlights the smallest values in a vector.
@@ -79,7 +79,7 @@ public class SoftminActivation<T> : ActivationFunctionBase<T>
     /// <para>
     /// The Jacobian matrix for Softmin has a structure similar to Softmax:
     /// - For diagonal elements (i=j): J[i,i] = softmin(x_i) * (1 - softmin(x_i))
-    /// - For off-diagonal elements (i≠j): J[i,j] = -softmin(x_i) * softmin(x_j)
+    /// - For off-diagonal elements (i?j): J[i,j] = -softmin(x_i) * softmin(x_j)
     /// </para>
     /// <para>
     /// <b>For Beginners:</b> The derivative of Softmin shows how the output probabilities change when you slightly

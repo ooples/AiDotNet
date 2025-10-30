@@ -31,7 +31,7 @@ namespace AiDotNet.Tests.UnitTests.AutoML
 
             // Act
             var parameters = supernet.GetParameters();
-            var metadata = supernet.GetModelMetaData();
+            var metadata = supernet.GetModelMetadata();
             var clone = supernet.Clone();
 
             // Assert

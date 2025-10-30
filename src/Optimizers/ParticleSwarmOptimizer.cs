@@ -1,3 +1,5 @@
+using Newtonsoft.Json;
+
 namespace AiDotNet.Optimizers;
 
 /// <summary>
@@ -157,11 +159,11 @@ public class ParticleSwarmOptimizer<T, TInput, TOutput> : OptimizerBase<T, TInpu
                 var stepData = EvaluateSolution(swarm[i], inputData);
                 
                 // Update personal best if better
-                if (_fitnessCalculator.IsBetterFitness(stepData.FitnessScore, personalBests[i].FitnessScore))
+                if (FitnessCalculator.IsBetterFitness(stepData.FitnessScore, personalBests[i].FitnessScore))
                 {
                     personalBests[i] = stepData;
                 }
-                
+
                 // Update current iteration's best solution
                 if (currentIterationBest.Solution == null ||
                     FitnessCalculator.IsBetterFitness(stepData.FitnessScore, currentIterationBest.FitnessScore))
@@ -170,7 +172,7 @@ public class ParticleSwarmOptimizer<T, TInput, TOutput> : OptimizerBase<T, TInpu
                 }
 
                 // Update global best
-                if (_fitnessCalculator.IsBetterFitness(stepData.FitnessScore, globalBest.FitnessScore))
+                if (FitnessCalculator.IsBetterFitness(stepData.FitnessScore, globalBest.FitnessScore))
                 {
                     globalBest = stepData;
                 }

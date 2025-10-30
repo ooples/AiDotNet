@@ -1,39 +1,39 @@
-﻿namespace AiDotNet.RadialBasisFunctions;
+namespace AiDotNet.RadialBasisFunctions;
 
 /// <summary>
-/// Implements a Matérn Radial Basis Function (RBF) that provides a flexible family of kernels.
+/// Implements a Mat�rn Radial Basis Function (RBF) that provides a flexible family of kernels.
 /// </summary>
 /// <typeparam name="T">The numeric type used for calculations, typically float or double.</typeparam>
 /// <remarks>
 /// <para>
-/// This class implements the Matérn family of radial basis functions, which are defined using modified Bessel functions
-/// and provide a flexible set of kernels with varying degrees of smoothness. The Matérn RBF is defined as:
-/// φ(r) = [2^(1-ν)/Γ(ν)] × (√(2ν)r/l)^ν × K_ν(√(2ν)r/l)
-/// where r is the radial distance, ν (nu) is a smoothness parameter, l is the length scale parameter,
-/// Γ is the Gamma function, and K_ν is the modified Bessel function of the second kind of order ν.
+/// This class implements the Mat�rn family of radial basis functions, which are defined using modified Bessel functions
+/// and provide a flexible set of kernels with varying degrees of smoothness. The Mat�rn RBF is defined as:
+/// f(r) = [2^(1-?)/G(?)] � (v(2?)r/l)^? � K_?(v(2?)r/l)
+/// where r is the radial distance, ? (nu) is a smoothness parameter, l is the length scale parameter,
+/// G is the Gamma function, and K_? is the modified Bessel function of the second kind of order ?.
 /// </para>
 /// <para>
-/// The Matérn function is commonly used in spatial statistics, machine learning, and geostatistics.
-/// It generalizes many other RBFs; for example, when ν → ∞, it becomes the Gaussian RBF, and
-/// when ν = 0.5, it becomes the exponential RBF. Special half-integer values of ν (0.5, 1.5, 2.5)
+/// The Mat�rn function is commonly used in spatial statistics, machine learning, and geostatistics.
+/// It generalizes many other RBFs; for example, when ? ? 8, it becomes the Gaussian RBF, and
+/// when ? = 0.5, it becomes the exponential RBF. Special half-integer values of ? (0.5, 1.5, 2.5)
 /// result in simpler forms that can be computed without Bessel functions.
 /// </para>
 /// <para><b>For Beginners:</b> A Radial Basis Function (RBF) is a special type of mathematical function
 /// that depends only on the distance from a center point.
 /// 
-/// The Matérn RBF is like a "Swiss Army knife" of radial basis functions - it provides a whole family
-/// of different shapes by adjusting a parameter called nu (ν). This makes it very flexible for
+/// The Mat�rn RBF is like a "Swiss Army knife" of radial basis functions - it provides a whole family
+/// of different shapes by adjusting a parameter called nu (?). This makes it very flexible for
 /// different types of data.
 /// 
 /// This RBF has two main parameters:
-/// - nu (ν): Controls the smoothness of the function. Common values are 0.5, 1.5, and 2.5
+/// - nu (?): Controls the smoothness of the function. Common values are 0.5, 1.5, and 2.5
 /// - lengthScale (l): Controls how quickly the function decreases with distance
 /// 
 /// When nu = 0.5, the function decreases rapidly (exponentially) with distance.
 /// When nu = 1.5, the function is smoother and decreases more gradually.
 /// As nu increases, the function becomes even smoother, approaching a bell curve shape.
 /// 
-/// The Matérn RBF is popular in machine learning and statistics because you can adjust its
+/// The Mat�rn RBF is popular in machine learning and statistics because you can adjust its
 /// smoothness to match the characteristics of your data.
 /// </para>
 /// </remarks>
@@ -61,12 +61,12 @@ public class MaternRBF<T> : IRadialBasisFunction<T>
     /// <param name="lengthScale">The length scale parameter, defaults to 1.0.</param>
     /// <remarks>
     /// <para>
-    /// The constructor initializes the Matérn Radial Basis Function with specified nu and length scale parameters.
+    /// The constructor initializes the Mat�rn Radial Basis Function with specified nu and length scale parameters.
     /// The nu parameter controls the smoothness of the function, with higher values giving smoother functions.
     /// Common values for nu are 0.5, 1.5, and 2.5. The length scale parameter controls how quickly the 
     /// function decreases with distance.
     /// </para>
-    /// <para><b>For Beginners:</b> This creates a new Matérn RBF with specific smoothness and width settings.
+    /// <para><b>For Beginners:</b> This creates a new Mat�rn RBF with specific smoothness and width settings.
     /// 
     /// The two parameters you can adjust are:
     /// - nu: Controls how smooth the function is. Smaller values (like 0.5) make it less smooth, while
@@ -91,18 +91,18 @@ public class MaternRBF<T> : IRadialBasisFunction<T>
     }
 
     /// <summary>
-    /// Computes the value of the Matérn Radial Basis Function for a given radius.
+    /// Computes the value of the Mat�rn Radial Basis Function for a given radius.
     /// </summary>
     /// <param name="r">The radius or distance from the center point.</param>
     /// <returns>The computed function value.</returns>
     /// <remarks>
     /// <para>
-    /// This method calculates the value of the Matérn RBF for a given radius r. The formula used is
-    /// φ(r) = [2^(1-ν)/Γ(ν)] × (√(2ν)r/l)^ν × K_ν(√(2ν)r/l), where Γ is the Gamma function
-    /// and K_ν is the modified Bessel function of the second kind of order ν.
+    /// This method calculates the value of the Mat�rn RBF for a given radius r. The formula used is
+    /// f(r) = [2^(1-?)/G(?)] � (v(2?)r/l)^? � K_?(v(2?)r/l), where G is the Gamma function
+    /// and K_? is the modified Bessel function of the second kind of order ?.
     /// For r = 0, the function returns 1 to avoid numerical issues.
     /// </para>
-    /// <para><b>For Beginners:</b> This method computes the "height" or "value" of the Matérn function
+    /// <para><b>For Beginners:</b> This method computes the "height" or "value" of the Mat�rn function
     /// at a specific distance (r) from the center.
     /// 
     /// The calculation involves several steps including specialized mathematical functions like
@@ -136,15 +136,15 @@ public class MaternRBF<T> : IRadialBasisFunction<T>
     }
 
     /// <summary>
-    /// Computes the derivative of the Matérn RBF with respect to the radius.
+    /// Computes the derivative of the Mat�rn RBF with respect to the radius.
     /// </summary>
     /// <param name="r">The radius or distance from the center point.</param>
     /// <returns>The derivative value of the function with respect to r.</returns>
     /// <remarks>
     /// <para>
-    /// This method calculates the derivative of the Matérn RBF with respect to the radius r.
-    /// The derivative has different formulations depending on the value of ν. Special cases are
-    /// implemented for ν = 0.5 and ν = 1.5, which have simpler forms. For other values of ν,
+    /// This method calculates the derivative of the Mat�rn RBF with respect to the radius r.
+    /// The derivative has different formulations depending on the value of ?. Special cases are
+    /// implemented for ? = 0.5 and ? = 1.5, which have simpler forms. For other values of ?,
     /// the derivative is computed using the general formula involving Bessel functions.
     /// At r = 0, the derivative is 0 due to symmetry.
     /// </para>
@@ -152,7 +152,7 @@ public class MaternRBF<T> : IRadialBasisFunction<T>
     /// as you move away from the center point.
     /// 
     /// The derivative tells you the "slope" or "rate of change" of the function at a specific distance.
-    /// For the Matérn RBF:
+    /// For the Mat�rn RBF:
     /// - At the center point (r = 0), the derivative is zero (flat)
     /// - As you move away from the center, the function starts to decrease, so the derivative becomes negative
     /// - The exact behavior of the derivative depends on the nu parameter
@@ -177,16 +177,16 @@ public class MaternRBF<T> : IRadialBasisFunction<T>
         T scaledR = _numOps.Divide(r, _lengthScale);
         double sqrt2nu = Math.Sqrt(2 * _nu);
         T sqrtTerm = _numOps.FromDouble(sqrt2nu);
-        T x = _numOps.Multiply(sqrtTerm, scaledR); // √(2ν)r/l
+        T x = _numOps.Multiply(sqrtTerm, scaledR); // v(2?)r/l
 
         // Common terms from the original function
         T term1 = _numOps.Power(_numOps.FromDouble(2), _numOps.FromDouble(1 - _nu));
         T term2 = _numOps.FromDouble(1 / MathHelper.Gamma(_nu));
         
-        // For special case ν = 0.5, the derivative has a simpler form
+        // For special case ? = 0.5, the derivative has a simpler form
         if (Math.Abs(_nu - 0.5) < 1e-10)
         {
-            // For ν = 0.5, K_0.5(x) = √(π/2x) * e^(-x)
+            // For ? = 0.5, K_0.5(x) = v(p/2x) * e^(-x)
             // The derivative simplifies considerably
             T expTerm = _numOps.Exp(_numOps.Negate(x));
             return _numOps.Multiply(
@@ -195,10 +195,10 @@ public class MaternRBF<T> : IRadialBasisFunction<T>
             );
         }
         
-        // For special case ν = 1.5, the derivative also has a simpler form
+        // For special case ? = 1.5, the derivative also has a simpler form
         if (Math.Abs(_nu - 1.5) < 1e-10)
         {
-            // For ν = 1.5, we can use a simplified formula
+            // For ? = 1.5, we can use a simplified formula
             T expTerm = _numOps.Exp(_numOps.Negate(x));
             T factor = _numOps.Multiply(
                 _numOps.FromDouble(sqrt2nu / Convert.ToDouble(_lengthScale)),
@@ -211,13 +211,13 @@ public class MaternRBF<T> : IRadialBasisFunction<T>
         }
         
         // For general case, we need to use the recurrence relation for Bessel functions
-        // d/dr[K_ν(x)] = -K_(ν-1)(x) - (ν/x)K_ν(x) where x = √(2ν)r/l
+        // d/dr[K_?(x)] = -K_(?-1)(x) - (?/x)K_?(x) where x = v(2?)r/l
         
         double xDouble = Convert.ToDouble(x);
         double besselKnu = MathHelper.BesselK(_nu, xDouble);
         double besselKnuMinus1 = MathHelper.BesselK(_nu - 1, xDouble);
         
-        // Calculate d/dx[K_ν(x)]
+        // Calculate d/dx[K_?(x)]
         T dBesselK = _numOps.Add(
             _numOps.Negate(_numOps.FromDouble(besselKnuMinus1)),
             _numOps.Multiply(
@@ -226,10 +226,10 @@ public class MaternRBF<T> : IRadialBasisFunction<T>
             )
         );
         
-        // Calculate d/dr[x] = √(2ν)/l
+        // Calculate d/dr[x] = v(2?)/l
         T dxdr = _numOps.Divide(sqrtTerm, _lengthScale);
         
-        // Calculate d/dr[x^ν] = ν*x^(ν-1) * d/dr[x]
+        // Calculate d/dr[x^?] = ?*x^(?-1) * d/dr[x]
         T dxPowerNu = _numOps.Multiply(
             _numOps.Multiply(
                 _numOps.FromDouble(_nu),
@@ -238,7 +238,7 @@ public class MaternRBF<T> : IRadialBasisFunction<T>
             dxdr
         );
         
-        // Apply product rule: d/dr[x^ν * K_ν(x)] = x^ν * d/dr[K_ν(x)] + K_ν(x) * d/dr[x^ν]
+        // Apply product rule: d/dr[x^? * K_?(x)] = x^? * d/dr[K_?(x)] + K_?(x) * d/dr[x^?]
         T term3 = _numOps.Power(x, _numOps.FromDouble(_nu));
         T term4 = _numOps.FromDouble(besselKnu);
         
@@ -252,15 +252,15 @@ public class MaternRBF<T> : IRadialBasisFunction<T>
     }
 
     /// <summary>
-    /// Computes the derivative of the Matérn RBF with respect to the length scale parameter.
+    /// Computes the derivative of the Mat�rn RBF with respect to the length scale parameter.
     /// </summary>
     /// <param name="r">The radius or distance from the center point.</param>
     /// <returns>The derivative value of the function with respect to the length scale.</returns>
     /// <remarks>
     /// <para>
-    /// This method calculates the derivative of the Matérn RBF with respect to the length scale parameter.
-    /// The derivative has different formulations depending on the value of ν. Special cases are
-    /// implemented for ν = 0.5 and ν = 1.5, which have simpler forms. For other values of ν,
+    /// This method calculates the derivative of the Mat�rn RBF with respect to the length scale parameter.
+    /// The derivative has different formulations depending on the value of ?. Special cases are
+    /// implemented for ? = 0.5 and ? = 1.5, which have simpler forms. For other values of ?,
     /// the derivative is computed using the general formula involving Bessel functions.
     /// At r = 0, the derivative is 0.
     /// </para>
@@ -268,7 +268,7 @@ public class MaternRBF<T> : IRadialBasisFunction<T>
     /// if you were to adjust the length scale parameter.
     /// 
     /// This is particularly important in machine learning applications:
-    /// - When training a model with Matérn RBFs, we often need to adjust the length scale to fit the data better
+    /// - When training a model with Mat�rn RBFs, we often need to adjust the length scale to fit the data better
     /// - This derivative tells us exactly how changing the length scale affects the output of the function
     /// - With this information, learning algorithms can automatically find the optimal value of length scale
     /// 
@@ -292,7 +292,7 @@ public class MaternRBF<T> : IRadialBasisFunction<T>
         T scaledR = _numOps.Divide(r, _lengthScale);
         double sqrt2nu = Math.Sqrt(2 * _nu);
         T sqrtTerm = _numOps.FromDouble(sqrt2nu);
-        T x = _numOps.Multiply(sqrtTerm, scaledR); // √(2ν)r/l
+        T x = _numOps.Multiply(sqrtTerm, scaledR); // v(2?)r/l
 
         // Common terms from the original function
         T term1 = _numOps.Power(_numOps.FromDouble(2), _numOps.FromDouble(1 - _nu));
@@ -303,21 +303,21 @@ public class MaternRBF<T> : IRadialBasisFunction<T>
         double besselKnu = MathHelper.BesselK(_nu, xDouble);
         T term4 = _numOps.FromDouble(besselKnu);
         
-        // The width derivative involves d/dl[x] = -√(2ν)r/l²
+        // The width derivative involves d/dl[x] = -v(2?)r/l�
         T dxdl = _numOps.Negate(_numOps.Divide(x, _lengthScale));
         
-        // For special case ν = 0.5, the width derivative has a simpler form
+        // For special case ? = 0.5, the width derivative has a simpler form
         if (Math.Abs(_nu - 0.5) < 1e-10)
         {
-            // For ν = 0.5, we can use a simplified formula
+            // For ? = 0.5, we can use a simplified formula
             T expTerm = _numOps.Exp(_numOps.Negate(x));
             return _numOps.Multiply(x, _numOps.Multiply(dxdl, expTerm));
         }
         
-        // For special case ν = 1.5, the width derivative also has a simpler form
+        // For special case ? = 1.5, the width derivative also has a simpler form
         if (Math.Abs(_nu - 1.5) < 1e-10)
         {
-            // For ν = 1.5, we can use a simplified formula
+            // For ? = 1.5, we can use a simplified formula
             T expTerm = _numOps.Exp(_numOps.Negate(x));
             T factor = _numOps.Multiply(
                 x,
@@ -333,7 +333,7 @@ public class MaternRBF<T> : IRadialBasisFunction<T>
         // For general case, we need to use the recurrence relation for Bessel functions
         double besselKnuMinus1 = MathHelper.BesselK(_nu - 1, xDouble);
         
-        // Calculate d/dx[K_ν(x)]
+        // Calculate d/dx[K_?(x)]
         T dBesselK = _numOps.Add(
             _numOps.Negate(_numOps.FromDouble(besselKnuMinus1)),
             _numOps.Multiply(
@@ -342,7 +342,7 @@ public class MaternRBF<T> : IRadialBasisFunction<T>
             )
         );
         
-        // Calculate d/dl[x^ν] = ν*x^(ν-1) * d/dl[x]
+        // Calculate d/dl[x^?] = ?*x^(?-1) * d/dl[x]
         T dxPowerNu = _numOps.Multiply(
             _numOps.Multiply(
                 _numOps.FromDouble(_nu),
@@ -351,7 +351,7 @@ public class MaternRBF<T> : IRadialBasisFunction<T>
             dxdl
         );
         
-        // Apply product rule: d/dl[x^ν * K_ν(x)] = x^ν * d/dl[K_ν(x)] + K_ν(x) * d/dl[x^ν]
+        // Apply product rule: d/dl[x^? * K_?(x)] = x^? * d/dl[K_?(x)] + K_?(x) * d/dl[x^?]
         T productRule = _numOps.Add(
             _numOps.Multiply(term3, _numOps.Multiply(dBesselK, dxdl)),
             _numOps.Multiply(term4, dxPowerNu)

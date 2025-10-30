@@ -1,4 +1,4 @@
-﻿namespace AiDotNet.Helpers;
+namespace AiDotNet.Helpers;
 
 /// <summary>
 /// Provides helper methods for creating and manipulating vectors used in AI and machine learning operations.

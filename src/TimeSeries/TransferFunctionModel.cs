@@ -97,7 +97,7 @@ public class TransferFunctionModel<T> : TimeSeriesModelBase<T>
     public TransferFunctionModel(TransferFunctionOptions<T, Matrix<T>, Vector<T>>? options = null) : base(options ?? new())
     {
         _tfOptions = options ?? new TransferFunctionOptions<T, Matrix<T>, Vector<T>>();
-        _optimizer = _tfOptions.Optimizer ?? new LBFGSOptimizer<T, Matrix<T>, Vector<T>>();
+        _optimizer = _tfOptions.Optimizer ?? new LBFGSOptimizer<T, Matrix<T>, Vector<T>>(this);
         _y = Vector<T>.Empty();
         _arParameters = Vector<T>.Empty();
         _maParameters = Vector<T>.Empty();
@@ -402,7 +402,7 @@ public class TransferFunctionModel<T> : TimeSeriesModelBase<T>
     ///   - Lower is better
     ///   - In the same units as the original data
     /// 
-    /// - R² (R-squared): The proportion of variance explained by the model
+    /// - Rï¿½ (R-squared): The proportion of variance explained by the model
     ///   - Ranges from 0 to 1 (higher is better)
     ///   - 0.7 means the model explains 70% of the variation in the data
     /// 
@@ -631,9 +631,9 @@ public class TransferFunctionModel<T> : TimeSeriesModelBase<T>
     /// - Sharing model information with others
     /// </para>
     /// </remarks>
-    public override ModelMetaData<T> GetModelMetaData()
+    public override ModelMetadata<T> GetModelMetadata()
     {
-        var metadata = new ModelMetaData<T>
+        var metadata = new ModelMetadata<T>
         {
             ModelType = ModelType.TransferFunctionModel,
             AdditionalInfo = new Dictionary<string, object>

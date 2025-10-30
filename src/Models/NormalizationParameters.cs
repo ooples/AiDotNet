@@ -1,4 +1,4 @@
-﻿namespace AiDotNet.Models;
+namespace AiDotNet.Models;
 
 /// <summary>
 /// Represents the parameters used for normalizing a single feature or target variable in a machine learning model.

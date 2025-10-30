@@ -1,4 +1,4 @@
-ï»¿global using AiDotNet.Extensions;
+global using AiDotNet.Extensions;
 
 namespace AiDotNet.Regression;
 
@@ -214,8 +214,8 @@ public class WeightedRegression<T> : RegressionBase<T>
     /// 
     /// Feature expansion adds new columns to your data:
     /// - Original features: x
-    /// - If order = 2: Adds xÂ²
-    /// - If order = 3: Adds xÂ² and xÂ³
+    /// - If order = 2: Adds x²
+    /// - If order = 3: Adds x² and x³
     /// - And so on...
     /// 
     /// For example, if your original data has one feature (height) and order = 2:

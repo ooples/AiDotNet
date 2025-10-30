@@ -493,10 +493,10 @@ public class ARMAModel<T> : TimeSeriesModelBase<T>
     /// all the important information about how it works and was configured.
     /// </para>
     /// </remarks>
-    public override ModelMetaData<T> GetModelMetaData()
+    public override ModelMetadata<T> GetModelMetadata()
     {
         var armaOptions = (ARMAOptions<T>)Options;
-        var metadata = new ModelMetaData<T>
+        var metadata = new ModelMetadata<T>
         {
             ModelType = ModelType.ARMAModel,
             AdditionalInfo = new Dictionary<string, object>

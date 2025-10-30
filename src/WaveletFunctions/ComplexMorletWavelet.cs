@@ -1,4 +1,4 @@
-﻿namespace AiDotNet.WaveletFunctions;
+namespace AiDotNet.WaveletFunctions;
 
 /// <summary>
 /// Implements a Complex Morlet wavelet, which is a complex exponential modulated by a Gaussian window,
@@ -64,13 +64,13 @@ public class ComplexMorletWavelet<T> : IWaveletFunction<Complex<T>>
     /// <b>For Beginners:</b>
     /// The two parameters control different aspects of the wavelet:
     /// 
-    /// 1. Omega (ω): The central frequency of the wavelet
+    /// 1. Omega (?): The central frequency of the wavelet
     ///    - Higher values look for higher-frequency oscillations in your data
     ///    - Lower values look for lower-frequency oscillations
     ///    - Think of this as tuning which "musical note" you're looking for
     ///    - Default value of 5.0 is a good general-purpose setting
     /// 
-    /// 2. Sigma (σ): The bandwidth parameter
+    /// 2. Sigma (s): The bandwidth parameter
     ///    - Controls the width of the Gaussian window
     ///    - Affects the trade-off between time and frequency precision
     ///    - Smaller values: Better time localization, poorer frequency resolution
@@ -78,12 +78,12 @@ public class ComplexMorletWavelet<T> : IWaveletFunction<Complex<T>>
     ///    - Default value of 1.0 provides a balanced trade-off
     /// 
     /// The relationship between these parameters determines the wavelet's properties:
-    /// - The product ω·σ should be > 5 to ensure admissibility (a mathematical requirement)
-    /// - The default values (ω=5, σ=1) satisfy this condition
+    /// - The product ?�s should be > 5 to ensure admissibility (a mathematical requirement)
+    /// - The default values (?=5, s=1) satisfy this condition
     /// 
     /// You might adjust these parameters when:
-    /// - Looking for specific frequency components (adjust ω)
-    /// - Needing better time precision or frequency precision (adjust σ)
+    /// - Looking for specific frequency components (adjust ?)
+    /// - Needing better time precision or frequency precision (adjust s)
     /// </para>
     /// </remarks>
     public ComplexMorletWavelet(double omega = 5.0, double sigma = 1.0)
@@ -104,19 +104,19 @@ public class ComplexMorletWavelet<T> : IWaveletFunction<Complex<T>>
     /// This method gives you the actual value of the Complex Morlet wavelet at a specific point.
     /// 
     /// The Complex Morlet wavelet is defined as:
-    /// ψ(t) = (e^(iωt) · e^(-t²/(2σ²)))
+    /// ?(t) = (e^(i?t) � e^(-t�/(2s�)))
     /// 
     /// Which can be broken down into:
-    /// - e^(iωt) = cos(ωt) + i·sin(ωt): The complex exponential (oscillating part)
-    /// - e^(-t²/(2σ²)): The Gaussian envelope (bell-shaped curve)
+    /// - e^(i?t) = cos(?t) + i�sin(?t): The complex exponential (oscillating part)
+    /// - e^(-t�/(2s�)): The Gaussian envelope (bell-shaped curve)
     /// 
     /// For a complex input z = x + iy, this function:
     /// 1. Calculates the Gaussian envelope based on the distance from the origin
     /// 2. Multiplies it by the cosine (for the real part) and sine (for the imaginary part)
     /// 3. Returns the resulting complex number
     /// 
-    /// The result is a localized wave packet that oscillates at frequency ω within
-    /// a Gaussian envelope of width controlled by σ.
+    /// The result is a localized wave packet that oscillates at frequency ? within
+    /// a Gaussian envelope of width controlled by s.
     /// 
     /// You might use this method to visualize the wavelet or to directly apply the wavelet
     /// to a signal at specific points.
@@ -194,7 +194,7 @@ public class ComplexMorletWavelet<T> : IWaveletFunction<Complex<T>>
     /// 
     /// For Complex Morlet wavelets, these coefficients are derived from a sinc function:
     /// 
-    /// sinc(x) = sin(πx)/(πx)
+    /// sinc(x) = sin(px)/(px)
     /// 
     /// The sinc function is the ideal low-pass filter in signal processing theory.
     /// It lets through all frequencies below a cutoff point and blocks all frequencies above it.
@@ -248,15 +248,15 @@ public class ComplexMorletWavelet<T> : IWaveletFunction<Complex<T>>
     /// For Complex Morlet wavelets, these coefficients are a discretized version of the
     /// Complex Morlet wavelet function:
     /// 
-    /// ψ(t) = e^(iωt) · e^(-t²/(2σ²))
+    /// ?(t) = e^(i?t) � e^(-t�/(2s�))
     /// 
     /// This method:
     /// 1. Creates a discretized Complex Morlet wavelet of specified length
-    /// 2. The real part is the Gaussian-modulated cosine: e^(-t²/(2σ²)) · cos(ωt)
-    /// 3. The imaginary part is the Gaussian-modulated sine: e^(-t²/(2σ²)) · sin(ωt)
+    /// 2. The real part is the Gaussian-modulated cosine: e^(-t�/(2s�)) � cos(?t)
+    /// 3. The imaginary part is the Gaussian-modulated sine: e^(-t�/(2s�)) � sin(?t)
     /// 4. Normalizes the coefficients to ensure energy preservation
     /// 
-    /// The resulting filter is sensitive to oscillations at frequency ω, making it
+    /// The resulting filter is sensitive to oscillations at frequency ?, making it
     /// ideal for detecting specific frequency components in the signal.
     /// 
     /// The complex nature of the filter allows it to capture both amplitude and phase

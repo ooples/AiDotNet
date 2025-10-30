@@ -1,4 +1,4 @@
-﻿namespace AiDotNet.WindowFunctions;
+namespace AiDotNet.WindowFunctions;
 
 /// <summary>
 /// Implements the Lanczos window function for signal processing applications.
@@ -7,7 +7,7 @@
 /// <para>
 /// The Lanczos window is based on the Lanczos kernel (sinc function) and is defined by the equation:
 /// w(n) = sinc(2n/(N-1) - 1)
-/// where n is the sample index, N is the window size, and sinc(x) = sin(πx)/(πx) for x ≠ 0 and sinc(0) = 1.
+/// where n is the sample index, N is the window size, and sinc(x) = sin(px)/(px) for x ? 0 and sinc(0) = 1.
 /// The Lanczos window provides good frequency resolution while reducing side lobe amplitude.
 /// </para>
 /// <para><b>For Beginners:</b> A window function is like a special filter that helps analyze signals more accurately.
@@ -64,7 +64,7 @@ public class LanczosWindow<T> : IWindowFunction<T>
     /// <para><b>For Beginners:</b> This method creates the actual window values based on the size you specify.
     /// 
     /// For each position in the window:
-    /// - The method calculates a value using the sinc function (sin(πx)/(πx))
+    /// - The method calculates a value using the sinc function (sin(px)/(px))
     /// - The values form a curve with a main lobe in the middle and smaller oscillations on the sides
     /// - These specific mathematical properties make it ideal for certain signal processing tasks
     /// 

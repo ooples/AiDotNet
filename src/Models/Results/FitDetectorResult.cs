@@ -1,4 +1,4 @@
-﻿namespace AiDotNet.Models.Results;
+namespace AiDotNet.Models.Results;
 
 /// <summary>
 /// Represents the result of a model fit detection analysis, which evaluates how well a model fits the data

@@ -1,4 +1,4 @@
-﻿namespace AiDotNet.LinearAlgebra;
+namespace AiDotNet.LinearAlgebra;
 
 /// <summary>
 /// Represents a node in a conditional inference tree, which is a type of decision tree

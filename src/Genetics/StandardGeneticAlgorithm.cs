@@ -1,4 +1,4 @@
-ï»¿namespace AiDotNet.Genetics;
+namespace AiDotNet.Genetics;
 
 public class StandardGeneticAlgorithm<T, TInput, TOutput> :
     GeneticBase<T, TInput, TOutput>
@@ -124,7 +124,7 @@ public class StandardGeneticAlgorithm<T, TInput, TOutput> :
                         if (i < selectedCase.Length)
                         {
                             // Add small perturbation to the case parameters
-                            double perturbation = (Random.NextDouble() * 0.2 - 0.1); // Â±10% variation
+                            double perturbation = (Random.NextDouble() * 0.2 - 0.1); // ±10% variation
                             parameters[i] = NumOps.Add(
                                 selectedCase[i],
                                 NumOps.FromDouble(perturbation * Convert.ToDouble(selectedCase[i]))
@@ -247,7 +247,7 @@ public class StandardGeneticAlgorithm<T, TInput, TOutput> :
                     parameters[i] = NumOps.FromDouble(value);
 
                     // Add small random noise to prevent exact duplication at grid points
-                    double noise = (Random.NextDouble() * 0.02) - 0.01; // Â±1% noise
+                    double noise = (Random.NextDouble() * 0.02) - 0.01; // ±1% noise
                     parameters[i] = NumOps.Add(parameters[i], NumOps.FromDouble(noise));
                 }
                 break;
@@ -293,7 +293,7 @@ public class StandardGeneticAlgorithm<T, TInput, TOutput> :
     private int EstimateInputDimension(IFullModel<T, TInput, TOutput> model)
     {
         // Try to estimate input dimension from model's metadata or type information
-        var metadata = model.GetModelMetaData();
+        var metadata = model.GetModelMetadata();
         var parameters = model.GetParameters();
 
         if (metadata.AdditionalInfo.TryGetValue("InputFeatures", out object? inputFeaturesObj))
@@ -326,7 +326,7 @@ public class StandardGeneticAlgorithm<T, TInput, TOutput> :
     private int EstimateOutputDimension(IFullModel<T, TInput, TOutput> model)
     {
         // Try to estimate output dimension from model's metadata
-        var metadata = model.GetModelMetaData();
+        var metadata = model.GetModelMetadata();
 
         if (metadata.AdditionalInfo.TryGetValue("OutputFeatures", out object? outputFeaturesObj))
         {
@@ -364,9 +364,9 @@ public class StandardGeneticAlgorithm<T, TInput, TOutput> :
         return IndividualGenesConvertToModel(genes);
     }
 
-    public override ModelMetaData<T> GetMetaData()
+    public override ModelMetadata<T> GetMetaData()
     {
-        return new ModelMetaData<T>
+        return new ModelMetadata<T>
         {
             ModelType = ModelType.GeneticAlgorithmRegression,
             Description = "Model evolved using a standard genetic algorithm",
