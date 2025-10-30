@@ -151,7 +151,6 @@ public class PatchEmbeddingLayer<T> : LayerBase<T>
         _projectionWeights = new Matrix<T>(patchDim, _embeddingDim);
         _projectionBias = new Vector<T>(_embeddingDim);
 
-        SetOutputShape([_numPatches, _embeddingDim]);
         InitializeParameters();
     }
 

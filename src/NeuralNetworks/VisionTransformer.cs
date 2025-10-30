@@ -157,7 +157,7 @@ public class VisionTransformer<T> : NeuralNetworkBase<T>
 
         _clsToken = new Vector<T>(hiddenDim);
         _positionalEmbeddings = new Matrix<T>(_numPatches + 1, hiddenDim);
-        _classificationHead = new DenseLayer<T>(hiddenDim, numClasses, new SoftmaxActivation<T>());
+        _classificationHead = new DenseLayer<T>(hiddenDim, numClasses, (IVectorActivationFunction<T>)new SoftmaxActivation<T>());
 
         InitializeLayers();
     }
@@ -337,9 +337,9 @@ public class VisionTransformer<T> : NeuralNetworkBase<T>
 
         var prediction = ForwardWithMemory(input);
 
-        LastLoss = LossFunction.CalculateLoss(prediction, expectedOutput);
+        LastLoss = LossFunction.CalculateLoss(prediction.ToVector(), expectedOutput.ToVector());
 
-        var lossGradient = LossFunction.CalculateGradient(prediction, expectedOutput);
+        var lossGradient = LossFunction.CalculateDerivative(prediction.ToVector(), expectedOutput.ToVector());
 
         Backpropagate(lossGradient);
     }
@@ -405,11 +405,14 @@ public class VisionTransformer<T> : NeuralNetworkBase<T>
     /// </remarks>
     public override ModelMetadata<T> GetModelMetadata()
     {
-        return new ModelMetadata<T>(
-            modelType: "VisionTransformer",
-            parameterCount: ParameterCount,
-            taskType: Architecture.TaskType,
-            features: new Dictionary<string, object>
+        var metadata = new ModelMetadata<T>
+        {
+            Name = "VisionTransformer",
+            ModelType = ModelType.Classification,
+            FeatureCount = _imageHeight * _imageWidth * _channels,
+            Complexity = ParameterCount,
+            Description = $"Vision Transformer with {_numLayers} layers, {_numHeads} attention heads, and {_numPatches} patches",
+            AdditionalInfo = new Dictionary<string, object>
             {
                 { "ImageHeight", _imageHeight },
                 { "ImageWidth", _imageWidth },
@@ -421,7 +424,9 @@ public class VisionTransformer<T> : NeuralNetworkBase<T>
                 { "NumHeads", _numHeads },
                 { "MlpDim", _mlpDim },
                 { "NumPatches", _numPatches }
-            });
+            }
+        };
+        return metadata;
     }
 
     /// <summary>
