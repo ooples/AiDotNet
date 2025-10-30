@@ -341,7 +341,7 @@ public class VisionTransformer<T> : NeuralNetworkBase<T>
 
         var lossGradient = LossFunction.CalculateDerivative(prediction.ToVector(), expectedOutput.ToVector());
 
-        Backpropagate(lossGradient);
+        Backpropagate(Tensor<T>.FromVector(lossGradient));
     }
 
     /// <summary>
@@ -408,7 +408,7 @@ public class VisionTransformer<T> : NeuralNetworkBase<T>
         var metadata = new ModelMetadata<T>
         {
             Name = "VisionTransformer",
-            ModelType = ModelType.Classification,
+            ModelType = ModelType.Transformer,
             FeatureCount = _imageHeight * _imageWidth * _channels,
             Complexity = ParameterCount,
             Description = $"Vision Transformer with {_numLayers} layers, {_numHeads} attention heads, and {_numPatches} patches",

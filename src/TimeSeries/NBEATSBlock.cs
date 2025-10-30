@@ -184,7 +184,7 @@ public class NBEATSBlock<T>
         weight = new Matrix<T>(_thetaSizeBackcast, _hiddenLayerSize);
         for (int i = 0; i < weight.Rows; i++)
         {
-            for (int j = 0; j < weight.Cols; j++)
+            for (int j = 0; j < weight.Columns; j++)
             {
                 weight[i, j] = _numOps.FromDouble(random.NextDouble() * stddev * 2 - stddev);
             }
@@ -197,7 +197,7 @@ public class NBEATSBlock<T>
         weight = new Matrix<T>(_thetaSizeForecast, _hiddenLayerSize);
         for (int i = 0; i < weight.Rows; i++)
         {
-            for (int j = 0; j < weight.Cols; j++)
+            for (int j = 0; j < weight.Columns; j++)
             {
                 weight[i, j] = _numOps.FromDouble(random.NextDouble() * stddev * 2 - stddev);
             }
@@ -244,7 +244,7 @@ public class NBEATSBlock<T>
             for (int i = 0; i < _fcWeights[layer].Rows; i++)
             {
                 T sum = _fcBiases[layer][i];
-                for (int j = 0; j < _fcWeights[layer].Cols; j++)
+                for (int j = 0; j < _fcWeights[layer].Columns; j++)
                 {
                     sum = _numOps.Add(sum, _numOps.Multiply(_fcWeights[layer][i, j], x[j]));
                 }
@@ -265,7 +265,7 @@ public class NBEATSBlock<T>
         for (int i = 0; i < _fcWeights[backcastLayerIdx].Rows; i++)
         {
             T sum = _fcBiases[backcastLayerIdx][i];
-            for (int j = 0; j < _fcWeights[backcastLayerIdx].Cols; j++)
+            for (int j = 0; j < _fcWeights[backcastLayerIdx].Columns; j++)
             {
                 sum = _numOps.Add(sum, _numOps.Multiply(_fcWeights[backcastLayerIdx][i, j], x[j]));
             }
@@ -278,7 +278,7 @@ public class NBEATSBlock<T>
         for (int i = 0; i < _fcWeights[forecastLayerIdx].Rows; i++)
         {
             T sum = _fcBiases[forecastLayerIdx][i];
-            for (int j = 0; j < _fcWeights[forecastLayerIdx].Cols; j++)
+            for (int j = 0; j < _fcWeights[forecastLayerIdx].Columns; j++)
             {
                 sum = _numOps.Add(sum, _numOps.Multiply(_fcWeights[forecastLayerIdx][i, j], x[j]));
             }
@@ -379,7 +379,7 @@ public class NBEATSBlock<T>
         {
             for (int i = 0; i < weight.Rows; i++)
             {
-                for (int j = 0; j < weight.Cols; j++)
+                for (int j = 0; j < weight.Columns; j++)
                 {
                     parameters.Add(weight[i, j]);
                 }
@@ -422,7 +422,7 @@ public class NBEATSBlock<T>
         {
             for (int i = 0; i < weight.Rows; i++)
             {
-                for (int j = 0; j < weight.Cols; j++)
+                for (int j = 0; j < weight.Columns; j++)
                 {
                     weight[i, j] = parameters[idx++];
                 }

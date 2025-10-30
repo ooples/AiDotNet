@@ -437,7 +437,7 @@ public class NBEATSModel<T> : TimeSeriesModelBase<T>
         var metadata = new ModelMetadata<T>
         {
             Name = "N-BEATS",
-            ModelType = ModelType.TimeSeries,
+            ModelType = ModelType.TimeSeriesRegression,
             Description = "Neural Basis Expansion Analysis for Interpretable Time Series Forecasting",
             Complexity = ParameterCount,
             FeatureCount = _options.LookbackWindow,
