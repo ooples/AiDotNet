@@ -1,4 +1,4 @@
-﻿namespace AiDotNet.Interfaces;
+namespace AiDotNet.Interfaces;
 
 /// <summary>
 /// Defines an interface for detecting how well a machine learning model fits the data.

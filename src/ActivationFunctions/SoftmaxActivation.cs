@@ -1,4 +1,4 @@
-﻿namespace AiDotNet.ActivationFunctions;
+namespace AiDotNet.ActivationFunctions;
 
 /// <summary>
 /// Implements the Softmax activation function, which converts a vector of real numbers into a probability distribution.
@@ -61,7 +61,7 @@ public class SoftmaxActivation<T> : ActivationFunctionBase<T>
     /// <para>
     /// The Jacobian matrix for Softmax has a special structure:
     /// - For diagonal elements (i=j): J[i,i] = softmax(x_i) * (1 - softmax(x_i))
-    /// - For off-diagonal elements (i≠j): J[i,j] = -softmax(x_i) * softmax(x_j)
+    /// - For off-diagonal elements (i?j): J[i,j] = -softmax(x_i) * softmax(x_j)
     /// </para>
     /// <para>
     /// <b>For Beginners:</b> The derivative of Softmax is more complex than other activation functions because

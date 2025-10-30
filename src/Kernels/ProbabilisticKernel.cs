@@ -1,4 +1,4 @@
-ï»¿namespace AiDotNet.Kernels;
+namespace AiDotNet.Kernels;
 
 /// <summary>
 /// Implements the Probabilistic kernel for measuring similarity between data points.
@@ -22,12 +22,12 @@
 /// </para>
 /// <para>
 /// The formula for the Probabilistic kernel is:
-/// k(x, y) = (xÂ·y / âˆš(||x||Â²Â·||y||Â²)) Â· exp(-||x||Â² - ||y||Â²)Â²/(2ÏƒÂ²))
+/// k(x, y) = (x·y / v(||x||²·||y||²)) · exp(-||x||² - ||y||²)²/(2s²))
 /// where:
 /// - x and y are the two data points being compared
-/// - xÂ·y is the dot product (a measure of how aligned the vectors are)
+/// - x·y is the dot product (a measure of how aligned the vectors are)
 /// - ||x|| and ||y|| are the magnitudes (lengths) of the vectors
-/// - Ïƒ (sigma) is a parameter that controls sensitivity to magnitude differences
+/// - s (sigma) is a parameter that controls sensitivity to magnitude differences
 /// </para>
 /// <para>
 /// Common uses include:
@@ -42,7 +42,7 @@ public class ProbabilisticKernel<T> : IKernelFunction<T>
     /// The sigma parameter that controls sensitivity to differences in vector magnitudes.
     /// </summary>
     /// <remarks>
-    /// <b>For Beginners:</b> Sigma (Ïƒ) determines how much the kernel cares about differences in the "size" of your data points.
+    /// <b>For Beginners:</b> Sigma (s) determines how much the kernel cares about differences in the "size" of your data points.
     /// 
     /// Think of it like this:
     /// - Small sigma values (e.g., 0.1): Very sensitive to differences in magnitude

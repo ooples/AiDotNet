@@ -1,3 +1,5 @@
+using Newtonsoft.Json;
+
 namespace AiDotNet.TimeSeries;
 
 /// <summary>
@@ -706,11 +708,11 @@ public class ARIMAXModel<T> : TimeSeriesModelBase<T>
     /// transferring the model's knowledge to other systems.
     /// </para>
     /// </remarks>
-    public override ModelMetaData<T> GetModelMetaData()
+    public override ModelMetadata<T> GetModelMetadata()
     {
         var arimaxOptions = (ARIMAXModelOptions<T>)Options;
     
-        var metadata = new ModelMetaData<T>
+        var metadata = new ModelMetadata<T>
         {
             ModelType = ModelType.ARIMAXModel,
             AdditionalInfo = new Dictionary<string, object>

@@ -1,4 +1,4 @@
-﻿namespace AiDotNet.Genetics;
+namespace AiDotNet.Genetics;
 
 /// <summary>
 /// Represents a gene that corresponds to a parameter in a machine learning model.

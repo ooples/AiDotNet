@@ -1,4 +1,4 @@
-﻿namespace AiDotNet.Interfaces;
+namespace AiDotNet.Interfaces;
 
 /// <summary>
 /// Defines an interface for data preprocessing operations commonly used in machine learning workflows.

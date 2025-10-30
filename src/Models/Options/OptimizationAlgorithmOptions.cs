@@ -1,4 +1,6 @@
-﻿namespace AiDotNet.Models.Options;
+using AiDotNet.Enums;
+
+namespace AiDotNet.Models.Options;
 
 /// <summary>
 /// Configuration options for optimization algorithms used in machine learning models.
@@ -252,6 +254,146 @@ public class OptimizationAlgorithmOptions<T, TInput, TOutput> : ModelOptions
     /// it's close enough to the best answer and stops searching.</para>
     /// </remarks>
     public double Tolerance { get; set; } = 1e-6;
+
+    /// <summary>
+    /// Gets or sets the optimization mode (feature selection, parameter tuning, or both).
+    /// </summary>
+    /// <value>The optimization mode, defaulting to Both.</value>
+    /// <remarks>
+    /// <para>
+    /// OptimizationMode determines what aspects of the model the optimizer will modify.
+    /// FeatureSelectionOnly only selects which features to use, ParametersOnly only adjusts model parameters,
+    /// and Both allows the optimizer to do both.
+    /// </para>
+    /// <para><b>For Beginners:</b> This controls what the optimizer is allowed to change. It can choose
+    /// which features (input variables) to use, adjust the model's internal settings, or do both. The default
+    /// is 'Both', which gives the optimizer maximum flexibility to improve your model.</para>
+    /// </remarks>
+    public OptimizationMode OptimizationMode { get; set; } = OptimizationMode.Both;
+
+    private double _parameterAdjustmentScale = 0.1;
+
+    /// <summary>
+    /// Gets or sets the scale factor for parameter adjustments during optimization.
+    /// </summary>
+    /// <value>The parameter adjustment scale, defaulting to 0.1. Values are automatically clamped to [0.0, 1.0] and invalid values (NaN/Infinity) are rejected.</value>
+    /// <remarks>
+    /// <para>
+    /// ParameterAdjustmentScale controls how much model parameters are changed during each perturbation.
+    /// Larger values result in bigger parameter changes, which can speed up exploration but may overshoot
+    /// optimal values. Smaller values make smaller changes, leading to more precise but slower optimization.
+    /// </para>
+    /// <para><b>For Beginners:</b> This controls how big the changes are when the optimizer adjusts your model's
+    /// parameters. A value of 0.1 means parameters change by about 10%. Increase this if optimization is too slow,
+    /// decrease it if the optimizer seems to be overshooting good solutions.</para>
+    /// <para><b>Validation:</b> The value is automatically clamped between 0.0 and 1.0. Invalid values (NaN, Infinity)
+    /// will throw an ArgumentException.</para>
+    /// </remarks>
+    public double ParameterAdjustmentScale
+    {
+        get => _parameterAdjustmentScale;
+        set
+        {
+            if (double.IsNaN(value) || double.IsInfinity(value))
+            {
+                throw new ArgumentException("ParameterAdjustmentScale must be a finite number.", nameof(value));
+            }
+            _parameterAdjustmentScale = Math.Max(0.0, Math.Min(1.0, value));
+        }
+    }
+
+    private double _signFlipProbability = 0.1;
+
+    /// <summary>
+    /// Gets or sets the probability of flipping the sign of a parameter during perturbation.
+    /// </summary>
+    /// <value>The sign flip probability, defaulting to 0.1 (10% chance). Values are automatically clamped to [0.0, 1.0] and invalid values (NaN/Infinity) are rejected.</value>
+    /// <remarks>
+    /// <para>
+    /// SignFlipProbability determines how often parameter signs are randomly flipped during optimization.
+    /// This helps the optimizer explore different regions of the solution space by allowing parameters to
+    /// change direction. Value must be between 0 and 1.
+    /// </para>
+    /// <para><b>For Beginners:</b> Sometimes the optimizer tries flipping a parameter from positive to negative
+    /// (or vice versa) to see if that improves the model. This setting controls how often that happens.
+    /// A value of 0.1 means there's a 10% chance of flipping each time.</para>
+    /// <para><b>Validation:</b> The value is automatically clamped between 0.0 and 1.0. Invalid values (NaN, Infinity)
+    /// will throw an ArgumentException.</para>
+    /// </remarks>
+    public double SignFlipProbability
+    {
+        get => _signFlipProbability;
+        set
+        {
+            if (double.IsNaN(value) || double.IsInfinity(value))
+            {
+                throw new ArgumentException("SignFlipProbability must be a finite number.", nameof(value));
+            }
+            _signFlipProbability = Math.Max(0.0, Math.Min(1.0, value));
+        }
+    }
+
+    private double _featureSelectionProbability = 0.5;
+
+    /// <summary>
+    /// Gets or sets the probability of selecting a feature during feature selection mode.
+    /// </summary>
+    /// <value>The feature selection probability, defaulting to 0.5 (50% chance). Values are automatically clamped to [0.0, 1.0] and invalid values (NaN/Infinity) are rejected.</value>
+    /// <remarks>
+    /// <para>
+    /// FeatureSelectionProbability controls how likely each feature is to be included when the optimizer
+    /// is performing feature selection. Higher values mean more features will typically be selected, while
+    /// lower values result in sparser feature sets. Value must be between 0 and 1.
+    /// </para>
+    /// <para><b>For Beginners:</b> When the optimizer is choosing which features (input variables) to use,
+    /// this setting controls how likely each one is to be included. A value of 0.5 means each feature has
+    /// a 50/50 chance of being selected. Increase this to use more features, decrease it to use fewer.</para>
+    /// <para><b>Validation:</b> The value is automatically clamped between 0.0 and 1.0. Invalid values (NaN, Infinity)
+    /// will throw an ArgumentException.</para>
+    /// </remarks>
+    public double FeatureSelectionProbability
+    {
+        get => _featureSelectionProbability;
+        set
+        {
+            if (double.IsNaN(value) || double.IsInfinity(value))
+            {
+                throw new ArgumentException("FeatureSelectionProbability must be a finite number.", nameof(value));
+            }
+            _featureSelectionProbability = Math.Max(0.0, Math.Min(1.0, value));
+        }
+    }
+
+    private double _parameterAdjustmentProbability = 0.3;
+
+    /// <summary>
+    /// Gets or sets the probability of adjusting a parameter during parameter tuning mode.
+    /// </summary>
+    /// <value>The parameter adjustment probability, defaulting to 0.3 (30% chance). Values are automatically clamped to [0.0, 1.0] and invalid values (NaN/Infinity) are rejected.</value>
+    /// <remarks>
+    /// <para>
+    /// ParameterAdjustmentProbability determines how likely each parameter is to be modified during
+    /// parameter tuning. Lower values result in more conservative updates (fewer parameters changed),
+    /// while higher values make more aggressive updates. Value must be between 0 and 1.
+    /// </para>
+    /// <para><b>For Beginners:</b> When the optimizer is adjusting model parameters, this controls how many
+    /// of them get changed at once. A value of 0.3 means each parameter has a 30% chance of being adjusted.
+    /// Lower values make smaller, more careful changes; higher values make bigger, bolder changes.</para>
+    /// <para><b>Validation:</b> The value is automatically clamped between 0.0 and 1.0. Invalid values (NaN, Infinity)
+    /// will throw an ArgumentException.</para>
+    /// </remarks>
+    public double ParameterAdjustmentProbability
+    {
+        get => _parameterAdjustmentProbability;
+        set
+        {
+            if (double.IsNaN(value) || double.IsInfinity(value))
+            {
+                throw new ArgumentException("ParameterAdjustmentProbability must be a finite number.", nameof(value));
+            }
+            _parameterAdjustmentProbability = Math.Max(0.0, Math.Min(1.0, value));
+        }
+    }
 
     /// <summary>
     /// Gets or sets the options for prediction statistics calculation.

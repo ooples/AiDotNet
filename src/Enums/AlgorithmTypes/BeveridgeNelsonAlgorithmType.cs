@@ -1,4 +1,4 @@
-﻿namespace AiDotNet.Enums.AlgorithmTypes;
+namespace AiDotNet.Enums.AlgorithmTypes;
 
 /// <summary>
 /// Represents different algorithm types for Beveridge-Nelson decomposition of time series data.

@@ -187,28 +187,6 @@ error CS0535: 'MyClass' does not implement interface member 'IFullModel.SaveMode
 - net6.0
 - net462 (minimum framework - all code must be compatible)
 
-## File Management - NEVER Create Build Output Files
-
-**ABSOLUTE PROHIBITION**: NEVER create build output text files in the repository
-
-- ❌ **NEVER CREATE**: `build_output.txt`, `build_output2.txt`, `build_output3.txt`, or similar files
-- ❌ **NEVER CREATE**: Any `.txt` files containing build logs, test results, or command output
-- ❌ **NEVER CREATE**: Temporary analysis files, investigation notes, or debugging logs
-
-**Reason**: These files clutter the repository, get accidentally committed, cause merge conflicts, and distract from actual code. Build output should be reviewed in the terminal, not saved to files.
-
-**What TO DO instead**:
-- ✅ View build output directly in terminal
-- ✅ Use `dotnet build 2>&1 | grep "error"` to filter errors
-- ✅ Use `dotnet build 2>&1 | less` to paginate output
-- ✅ Copy relevant error messages directly into PRs/issues if needed
-
-**If you need to analyze build output**:
-- ✅ Run build command and analyze output in real-time
-- ✅ Use grep/filter commands to extract relevant information
-- ✅ Present findings directly in conversation or PR descriptions
-- ❌ DO NOT save output to files
-
 ## Testing Changes
 
 Always verify compatibility across all target frameworks:

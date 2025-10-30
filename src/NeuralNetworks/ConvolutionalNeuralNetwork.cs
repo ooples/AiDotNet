@@ -75,7 +75,7 @@ public class ConvolutionalNeuralNetwork<T> : NeuralNetworkBase<T>
     {
         ArchitectureValidator.ValidateInputType(architecture, InputType.ThreeDimensional, nameof(ConvolutionalNeuralNetwork<T>));
 
-        _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>();
+        _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
         _lossFunction = lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(architecture.TaskType);
 
         InitializeLayers();
@@ -356,9 +356,9 @@ public class ConvolutionalNeuralNetwork<T> : NeuralNetworkBase<T>
     /// the network is set up.
     /// </para>
     /// </remarks>
-    public override ModelMetaData<T> GetModelMetaData()
+    public override ModelMetadata<T> GetModelMetadata()
     {
-        return new ModelMetaData<T>
+        return new ModelMetadata<T>
         {
             ModelType = ModelType.ConvolutionalNeuralNetwork,
             AdditionalInfo = new Dictionary<string, object>

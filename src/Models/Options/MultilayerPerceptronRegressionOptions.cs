@@ -1,4 +1,4 @@
-﻿namespace AiDotNet.Models.Options;
+namespace AiDotNet.Models.Options;
 
 using AiDotNet.ActivationFunctions;
 using AiDotNet.LossFunctions;
@@ -386,9 +386,9 @@ public class MultilayerPerceptronOptions<T, TInput, TOutput> : NonLinearRegressi
     /// - Categorical Cross-Entropy: For multi-class classification problems
     /// 
     /// The loss function should match your problem type and output activation function. For example:
-    /// - Regression → MSE + Linear output activation
-    /// - Binary classification → Binary Cross-Entropy + Sigmoid output activation
-    /// - Multi-class classification → Categorical Cross-Entropy + Softmax output activation
+    /// - Regression ? MSE + Linear output activation
+    /// - Binary classification ? Binary Cross-Entropy + Sigmoid output activation
+    /// - Multi-class classification ? Categorical Cross-Entropy + Softmax output activation
     /// </para>
     /// </remarks>
     public ILossFunction<T>? LossFunction { get; set; } = new MeanSquaredErrorLoss<T>();
@@ -430,11 +430,30 @@ public class MultilayerPerceptronOptions<T, TInput, TOutput> : NonLinearRegressi
     /// models behave during training.
     /// </para>
     /// </remarks>
-    public IOptimizer<T, TInput, TOutput> Optimizer { get; set; } = new AdamOptimizer<T, TInput, TOutput>(new AdamOptimizerOptions<T, TInput, TOutput>
+    private IOptimizer<T, TInput, TOutput>? _optimizer;
+
+    public IOptimizer<T, TInput, TOutput> Optimizer
     {
-        LearningRate = 0.001,
-        Beta1 = 0.9,
-        Beta2 = 0.999,
-        Epsilon = 1e-8
-    });
+        get
+        {
+            if (_optimizer == null)
+            {
+                var defaultModel = ModelHelper<T, TInput, TOutput>.CreateDefaultModel();
+                _optimizer = new AdamOptimizer<T, TInput, TOutput>(
+                    defaultModel,
+                    new AdamOptimizerOptions<T, TInput, TOutput>
+                    {
+                        LearningRate = 0.001,
+                        Beta1 = 0.9,
+                        Beta2 = 0.999,
+                        Epsilon = 1e-8
+                    });
+            }
+            return _optimizer;
+        }
+        set
+        {
+            _optimizer = value;
+        }
+    }
 }

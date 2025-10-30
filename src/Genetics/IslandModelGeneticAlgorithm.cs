@@ -1,4 +1,4 @@
-﻿namespace AiDotNet.Genetics;
+namespace AiDotNet.Genetics;
 
 public class IslandModelGeneticAlgorithm<T, TInput, TOutput> :
     StandardGeneticAlgorithm<T, TInput, TOutput>
@@ -229,7 +229,7 @@ public class IslandModelGeneticAlgorithm<T, TInput, TOutput> :
         InitializeIslands();
     }
 
-    public override ModelMetaData<T> GetMetaData()
+    public override ModelMetadata<T> GetMetaData()
     {
         var metadata = base.GetMetaData();
         metadata.ModelType = ModelType.GeneticAlgorithmRegression;

@@ -1,4 +1,4 @@
-﻿namespace AiDotNet.WindowFunctions;
+namespace AiDotNet.WindowFunctions;
 
 /// <summary>
 /// Implements the Bartlett-Hann window function for signal processing applications.
@@ -7,7 +7,7 @@
 /// <para>
 /// The Bartlett-Hann window function is a combination of the Bartlett and Hann windows, designed to 
 /// provide better frequency resolution and reduced spectral leakage compared to either window used alone. 
-/// It is defined by the equation: w(n) = 0.62 - 0.48|n/(N-1) - 0.5| - 0.38cos(2π(n/(N-1) - 0.5))
+/// It is defined by the equation: w(n) = 0.62 - 0.48|n/(N-1) - 0.5| - 0.38cos(2p(n/(N-1) - 0.5))
 /// where n is the sample index and N is the window size.
 /// </para>
 /// <para><b>For Beginners:</b> A window function is like a special filter that smooths out the edges of a signal.
@@ -84,7 +84,7 @@ public class BartlettHannWindow<T> : IWindowFunction<T>
     /// <remarks>
     /// <para>
     /// This method implements the Bartlett-Hann window function formula:
-    /// w(n) = 0.62 - 0.48|n/(N-1) - 0.5| - 0.38cos(2π(n/(N-1) - 0.5))
+    /// w(n) = 0.62 - 0.48|n/(N-1) - 0.5| - 0.38cos(2p(n/(N-1) - 0.5))
     /// It calculates the window function value for each point from 0 to windowSize-1.
     /// </para>
     /// <para><b>For Beginners:</b> This creates the actual window values based on the size you need.

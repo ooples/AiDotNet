@@ -158,9 +158,9 @@ public class ModelIndividual<T, TInput, TOutput, TGene> :
     /// Gets the metadata for the model.
     /// </summary>
     /// <returns>The model metadata.</returns>
-    public ModelMetaData<T> GetMetaData()
+    public ModelMetadata<T> GetMetaData()
     {
-        return _innerModel.GetModelMetaData();
+        return _innerModel.GetModelMetadata();
     }
 
     /// <summary>
@@ -219,9 +219,9 @@ public class ModelIndividual<T, TInput, TOutput, TGene> :
         _innerModel.Train(input, expectedOutput);
     }
 
-    public ModelMetaData<T> GetModelMetaData()
+    public ModelMetadata<T> GetModelMetadata()
     {
-        return _innerModel.GetModelMetaData();
+        return _innerModel.GetModelMetadata();
     }
 
     public IEnumerable<int> GetActiveFeatureIndices()

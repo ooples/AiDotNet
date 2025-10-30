@@ -1,4 +1,4 @@
-ï»¿namespace AiDotNet.Extensions;
+namespace AiDotNet.Extensions;
 
 /// <summary>
 /// Provides extension methods for vector operations commonly used in AI and machine learning applications.
@@ -46,7 +46,7 @@ public static class VectorExtensions
     /// <remarks>
     /// <para>
     /// <b>For Beginners:</b> The norm is the "length" of a vector. For a 2D vector [x, y], 
-    /// it's calculated as âˆš(xÂ² + yÂ²), which is the same as the Pythagorean theorem. 
+    /// it's calculated as v(x² + y²), which is the same as the Pythagorean theorem. 
     /// For vectors with more dimensions, it's the square root of the sum of all squared elements.
     /// </para>
     /// </remarks>
@@ -293,7 +293,7 @@ public static class VectorExtensions
     /// <remarks>
     /// <para>
     /// <b>For Beginners:</b> The dot product multiplies corresponding elements of two vectors and then adds all the results.
-    /// For example, the dot product of [1, 2, 3] and [4, 5, 6] is (1Ã—4) + (2Ã—5) + (3Ã—6) = 4 + 10 + 18 = 32.
+    /// For example, the dot product of [1, 2, 3] and [4, 5, 6] is (1×4) + (2×5) + (3×6) = 4 + 10 + 18 = 32.
     /// This is fundamental in machine learning for calculating similarities between vectors, projections, and in neural network operations.
     /// </para>
     /// </remarks>
@@ -380,8 +380,8 @@ public static class VectorExtensions
     /// and implementing linear transformations.
     /// </para>
     /// <para>
-    /// For example, multiplying a vector [1, 2, 3] by a 3Ã—2 matrix [[1, 4], [2, 5], [3, 6]] 
-    /// results in a vector [1Ã—1 + 2Ã—2 + 3Ã—3, 1Ã—4 + 2Ã—5 + 3Ã—6] = [14, 32].
+    /// For example, multiplying a vector [1, 2, 3] by a 3×2 matrix [[1, 4], [2, 5], [3, 6]] 
+    /// results in a vector [1×1 + 2×2 + 3×3, 1×4 + 2×5 + 3×6] = [14, 32].
     /// </para>
     /// </remarks>
     public static Vector<T> Multiply<T>(this Vector<T> vector, Matrix<T> matrix)
@@ -449,7 +449,7 @@ public static class VectorExtensions
     /// <para>
     /// <b>For Beginners:</b> The outer product creates a matrix by multiplying each element of the first vector
     /// with each element of the second vector. If you have a vector [a,b,c] and another vector [x,y],
-    /// the result is a 3Ã—2 matrix:
+    /// the result is a 3×2 matrix:
     /// [a*x, a*y]
     /// [b*x, b*y]
     /// [c*x, c*y]
@@ -481,7 +481,7 @@ public static class VectorExtensions
     /// <remarks>
     /// <para>
     /// <b>For Beginners:</b> The magnitude is the "length" of a vector, calculated using the Pythagorean theorem.
-    /// For a vector [a,b,c], the magnitude is âˆš(aÂ² + bÂ² + cÂ²). This is useful for normalizing vectors
+    /// For a vector [a,b,c], the magnitude is v(a² + b² + c²). This is useful for normalizing vectors
     /// or measuring distances in machine learning algorithms.
     /// </para>
     /// </remarks>
@@ -1181,7 +1181,7 @@ public static class VectorExtensions
     /// [4, 5, 6]
     /// </para>
     /// <para>
-    /// The total number of elements must stay the same (rows Ã— columns = vector length).
+    /// The total number of elements must stay the same (rows × columns = vector length).
     /// </para>
     /// </remarks>
     public static Matrix<T> Reshape<T>(this Vector<T> vector, int rows, int columns)
@@ -1357,7 +1357,7 @@ public static class VectorExtensions
     /// </para>
     /// <para>
     /// For example, in 2D space, the Euclidean distance between points (1,2) and (4,6) would be:
-    /// âˆš[(4-1)Â² + (6-2)Â²] = âˆš[9 + 16] = âˆš25 = 5
+    /// v[(4-1)² + (6-2)²] = v[9 + 16] = v25 = 5
     /// </para>
     /// <para>
     /// This concept extends to any number of dimensions. In machine learning, Euclidean distance
