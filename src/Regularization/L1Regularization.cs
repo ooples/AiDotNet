@@ -1,4 +1,4 @@
-﻿namespace AiDotNet.Regularization;
+namespace AiDotNet.Regularization;
 
 /// <summary>
 /// Implements L1 regularization (also known as Lasso), a technique that adds a penalty equal to the

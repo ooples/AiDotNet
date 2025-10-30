@@ -1,4 +1,4 @@
-ï»¿namespace AiDotNet.LinearAlgebra;
+namespace AiDotNet.LinearAlgebra;
 
 /// <summary>
 /// Represents a mathematical matrix of elements of type T, providing various matrix operations.
@@ -85,7 +85,7 @@ public class Matrix<T> : MatrixBase<T>, IEnumerable<T>
     /// for the main diagonal (top-left to bottom-right), which contains 1s. It's similar to the number 1 in 
     /// multiplication - multiplying any matrix by an identity matrix gives you the original matrix.</para>
     /// </remarks>
-    public static Matrix<T> CreateIdentityMatrix<T2>(int size)
+    public static Matrix<T> CreateIdentityMatrix(int size)
     {
         if (size <= 1)
         {
@@ -108,7 +108,7 @@ public class Matrix<T> : MatrixBase<T>, IEnumerable<T>
     /// <returns>A Vector containing the values from the specified column.</returns>
     /// <remarks>
     /// <para><b>For Beginners:</b> This extracts a single column from the matrix as a vector.
-    /// For example, in a 3Ã—3 matrix, getting column 1 would give you the middle column as a vector.</para>
+    /// For example, in a 3×3 matrix, getting column 1 would give you the middle column as a vector.</para>
     /// </remarks>
     public new Vector<T> GetColumn(int col)
     {
@@ -1054,7 +1054,7 @@ public class Matrix<T> : MatrixBase<T>, IEnumerable<T>
     /// <exception cref="ArgumentNullException">Thrown when either vector is null.</exception>
     /// <remarks>
     /// <para><b>For Beginners:</b> The outer product is a way to multiply two vectors to create a matrix.
-    /// If vector a has length m and vector b has length n, the result will be an mÃ—n matrix.
+    /// If vector a has length m and vector b has length n, the result will be an m×n matrix.
     /// Each element (i,j) in the resulting matrix is calculated by multiplying the i-th element of vector a
     /// by the j-th element of vector b. This operation is useful in many machine learning algorithms.</para>
     /// </remarks>

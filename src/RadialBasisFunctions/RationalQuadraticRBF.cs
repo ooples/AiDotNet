@@ -1,13 +1,13 @@
-ï»¿namespace AiDotNet.RadialBasisFunctions;
+namespace AiDotNet.RadialBasisFunctions;
 
 /// <summary>
-/// Implements a Rational Quadratic Radial Basis Function (RBF) of the form 1 - rÂ²/(rÂ² + ÎµÂ²).
+/// Implements a Rational Quadratic Radial Basis Function (RBF) of the form 1 - r²/(r² + e²).
 /// </summary>
 /// <typeparam name="T">The numeric type used for calculations, typically float or double.</typeparam>
 /// <remarks>
 /// <para>
 /// This class provides an implementation of a Radial Basis Function (RBF) that uses a rational quadratic form
-/// of Ï†(r) = 1 - rÂ²/(rÂ² + ÎµÂ²), where r is the radial distance and Îµ (epsilon) is a shape parameter
+/// of f(r) = 1 - r²/(r² + e²), where r is the radial distance and e (epsilon) is a shape parameter
 /// controlling the width of the function. The rational quadratic RBF is infinitely differentiable and
 /// decreases from 1 at r = 0 to 0 as r approaches infinity. It has a smoother and more gradual decay
 /// compared to the Gaussian RBF, which can be beneficial in certain applications.
@@ -25,7 +25,7 @@
 /// zero but never quite reaching it. Compared to the Gaussian RBF, it decreases more slowly as you
 /// move away from the center, giving it "fatter tails."
 /// 
-/// This RBF has a parameter called epsilon (Îµ) that controls the width of the hill:
+/// This RBF has a parameter called epsilon (e) that controls the width of the hill:
 /// - A larger epsilon value creates a wider hill that decreases more gradually with distance
 /// - A smaller epsilon value creates a narrower hill that drops off more quickly
 /// 
@@ -76,22 +76,22 @@ public class RationalQuadraticRBF<T> : IRadialBasisFunction<T>
     /// Computes the value of the Rational Quadratic Radial Basis Function for a given radius.
     /// </summary>
     /// <param name="r">The radius or distance from the center point.</param>
-    /// <returns>The computed function value 1 - rÂ²/(rÂ² + ÎµÂ²).</returns>
+    /// <returns>The computed function value 1 - r²/(r² + e²).</returns>
     /// <remarks>
     /// <para>
     /// This method calculates the value of the Rational Quadratic RBF for a given radius r. The formula used is
-    /// 1 - rÂ²/(rÂ² + ÎµÂ²), which decreases with distance. The function equals 1 at r = 0 and approaches 0
+    /// 1 - r²/(r² + e²), which decreases with distance. The function equals 1 at r = 0 and approaches 0
     /// as r approaches infinity.
     /// </para>
     /// <para><b>For Beginners:</b> This method computes the "height" or "value" of the Rational Quadratic function
     /// at a specific distance (r) from the center.
     /// 
     /// The calculation involves:
-    /// 1. Squaring the distance (rÂ² = r * r)
-    /// 2. Squaring the epsilon parameter (ÎµÂ² = Îµ * Îµ)
-    /// 3. Adding these squared values (rÂ² + ÎµÂ²)
-    /// 4. Dividing rÂ² by this sum (rÂ²/(rÂ² + ÎµÂ²))
-    /// 5. Subtracting this fraction from 1 (1 - rÂ²/(rÂ² + ÎµÂ²))
+    /// 1. Squaring the distance (r² = r * r)
+    /// 2. Squaring the epsilon parameter (e² = e * e)
+    /// 3. Adding these squared values (r² + e²)
+    /// 4. Dividing r² by this sum (r²/(r² + e²))
+    /// 5. Subtracting this fraction from 1 (1 - r²/(r² + e²))
     /// 
     /// The result is a single number representing the function's value at the given distance.
     /// This value is always between 0 and 1:
@@ -117,7 +117,7 @@ public class RationalQuadraticRBF<T> : IRadialBasisFunction<T>
     /// <remarks>
     /// <para>
     /// This method calculates the derivative of the Rational Quadratic RBF with respect to the radius r.
-    /// The formula for the derivative is -2rÎµÂ²/(rÂ² + ÎµÂ²)Â², which is always negative for positive r and Îµ,
+    /// The formula for the derivative is -2re²/(r² + e²)², which is always negative for positive r and e,
     /// indicating that the function always decreases with distance.
     /// </para>
     /// <para><b>For Beginners:</b> This method computes how fast the function's value changes
@@ -136,30 +136,30 @@ public class RationalQuadraticRBF<T> : IRadialBasisFunction<T>
     /// </remarks>
     public T ComputeDerivative(T r)
     {
-        // Derivative with respect to r: -2rÎµÂ²/(rÂ² + ÎµÂ²)Â²
+        // Derivative with respect to r: -2re²/(r² + e²)²
         
-        // Calculate rÂ²
+        // Calculate r²
         T rSquared = _numOps.Multiply(r, r);
         
-        // Calculate ÎµÂ²
+        // Calculate e²
         T epsilonSquared = _numOps.Multiply(_epsilon, _epsilon);
         
-        // Calculate rÂ² + ÎµÂ²
+        // Calculate r² + e²
         T denominator = _numOps.Add(rSquared, epsilonSquared);
         
-        // Calculate (rÂ² + ÎµÂ²)Â²
+        // Calculate (r² + e²)²
         T denominatorSquared = _numOps.Multiply(denominator, denominator);
         
-        // Calculate 2rÎµÂ²
+        // Calculate 2re²
         T twoREpsilonSquared = _numOps.Multiply(
             _numOps.Multiply(_numOps.FromDouble(2.0), r),
             epsilonSquared
         );
         
-        // Calculate -2rÎµÂ²
+        // Calculate -2re²
         T negativeTwoREpsilonSquared = _numOps.Negate(twoREpsilonSquared);
         
-        // Return -2rÎµÂ²/(rÂ² + ÎµÂ²)Â²
+        // Return -2re²/(r² + e²)²
         return _numOps.Divide(negativeTwoREpsilonSquared, denominatorSquared);
     }
     
@@ -171,7 +171,7 @@ public class RationalQuadraticRBF<T> : IRadialBasisFunction<T>
     /// <remarks>
     /// <para>
     /// This method calculates the derivative of the Rational Quadratic RBF with respect to the shape parameter epsilon.
-    /// The formula for this derivative is 2ÎµrÂ²/(rÂ² + ÎµÂ²)Â². The sign of this derivative is positive for positive Îµ and r,
+    /// The formula for this derivative is 2er²/(r² + e²)². The sign of this derivative is positive for positive e and r,
     /// indicating that increasing epsilon increases the function value at any non-zero radius.
     /// </para>
     /// <para><b>For Beginners:</b> This method calculates how the function's value would change
@@ -190,27 +190,27 @@ public class RationalQuadraticRBF<T> : IRadialBasisFunction<T>
     /// </remarks>
     public T ComputeWidthDerivative(T r)
     {
-        // Derivative with respect to Îµ: 2ÎµrÂ²/(rÂ² + ÎµÂ²)Â²
+        // Derivative with respect to e: 2er²/(r² + e²)²
         
-        // Calculate rÂ²
+        // Calculate r²
         T rSquared = _numOps.Multiply(r, r);
         
-        // Calculate ÎµÂ²
+        // Calculate e²
         T epsilonSquared = _numOps.Multiply(_epsilon, _epsilon);
         
-        // Calculate rÂ² + ÎµÂ²
+        // Calculate r² + e²
         T denominator = _numOps.Add(rSquared, epsilonSquared);
         
-        // Calculate (rÂ² + ÎµÂ²)Â²
+        // Calculate (r² + e²)²
         T denominatorSquared = _numOps.Multiply(denominator, denominator);
         
-        // Calculate 2ÎµrÂ²
+        // Calculate 2er²
         T twoEpsilonRSquared = _numOps.Multiply(
             _numOps.Multiply(_numOps.FromDouble(2.0), _epsilon),
             rSquared
         );
         
-        // Return 2ÎµrÂ²/(rÂ² + ÎµÂ²)Â²
+        // Return 2er²/(r² + e²)²
         return _numOps.Divide(twoEpsilonRSquared, denominatorSquared);
     }
 }

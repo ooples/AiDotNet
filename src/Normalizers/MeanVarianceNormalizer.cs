@@ -1,4 +1,4 @@
-ï»¿namespace AiDotNet.Normalizers;
+namespace AiDotNet.Normalizers;
 
 /// <summary>
 /// Normalizes data by standardizing it to have zero mean and unit variance.
@@ -339,7 +339,7 @@ public class MeanVarianceNormalizer<T, TInput, TOutput> : NormalizerBase<T, TInp
     /// - The output's standard deviation was 5 (meaning it was divided by 5 during normalization)
     /// - The model learned a coefficient of 0.3 for this feature on normalized data
     /// 
-    /// The denormalized coefficient would be 0.3 Ã— (5 Ã· 15) = 0.1
+    /// The denormalized coefficient would be 0.3 × (5 ÷ 15) = 0.1
     /// 
     /// This ensures that predictions made using original data will be properly scaled.
     /// </para>

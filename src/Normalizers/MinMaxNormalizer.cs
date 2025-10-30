@@ -1,4 +1,4 @@
-﻿namespace AiDotNet.Normalizers;
+namespace AiDotNet.Normalizers;
 
 /// <summary>
 /// Normalizes the data by

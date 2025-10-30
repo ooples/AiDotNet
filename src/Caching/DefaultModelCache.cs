@@ -75,11 +75,11 @@ public class DefaultModelCache<T, TInput, TOutput> : IModelCache<T, TInput, TOut
     /// <remarks>
     /// <para>
     /// <b>For Beginners:</b> This method saves information about a training step so it can be used later.
-    /// 
+    ///
     /// During model training, each step produces valuable information about how the model is changing
     /// and improving. This method stores that information with a unique label (the key) so you can
     /// retrieve it later.
-    /// 
+    ///
     /// If data with the same key already exists in the cache, it will be replaced with the new data.
     /// This is useful for updating the cache with the latest information as training progresses.
     /// </para>
@@ -87,5 +87,54 @@ public class DefaultModelCache<T, TInput, TOutput> : IModelCache<T, TInput, TOut
     public void CacheStepData(string key, OptimizationStepData<T, TInput, TOutput> stepData)
     {
         _cache[key] = stepData;
+    }
+
+    /// <summary>
+    /// Generates a deterministic cache key based on the solution model and input data using SHA-256 hashing.
+    /// </summary>
+    /// <param name="solution">The model solution to generate a key for.</param>
+    /// <param name="inputData">The input data to include in the key generation.</param>
+    /// <returns>A deterministic hex-encoded SHA-256 hash string for caching.</returns>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> This method creates a deterministic identifier based on the model and its inputs.
+    /// </para>
+    /// <para>
+    /// Think of it like creating a fingerprint for a specific combination of model parameters and input data
+    /// that stays the same forever, even if you restart the program. The same combination will always produce
+    /// the same key, which allows the system to:
+    /// - Save results with this key
+    /// - Look up previously saved results using this key
+    /// - Avoid recalculating results that have already been computed
+    /// - Keep caches valid across application restarts
+    /// </para>
+    /// <para>
+    /// The key is generated using SHA-256 cryptographic hashing for determinism:
+    /// 1. Model parameters are serialized in a stable format with culture-invariant number formatting
+    /// 2. Input data structure (shapes/dimensions) is described in a stable string format
+    /// 3. SHA-256 hash is computed over the UTF-8 bytes of the serialized data
+    /// 4. The hash is returned as a lowercase hexadecimal string
+    /// </para>
+    /// <para>
+    /// This ensures that different combinations get different keys, while identical combinations always get
+    /// the same key, even across process restarts.
+    /// </para>
+    /// </remarks>
+    public string GenerateCacheKey(IFullModel<T, TInput, TOutput> solution, OptimizationInputData<T, TInput, TOutput> inputData)
+    {
+        if (solution == null) throw new ArgumentNullException(nameof(solution));
+        if (inputData == null) throw new ArgumentNullException(nameof(inputData));
+
+        // Get solution parameters
+        Vector<T> parameters = solution.GetParameters();
+
+        // Create stable descriptor of input data structure
+        string inputDataDescriptor = DeterministicCacheKeyGenerator.CreateInputDataDescriptor<T, TInput, TOutput>(
+            inputData.XTrain, inputData.YTrain,
+            inputData.XValidation, inputData.YValidation,
+            inputData.XTest, inputData.YTest);
+
+        // Generate deterministic SHA-256 based key
+        return DeterministicCacheKeyGenerator.GenerateKey<T>(parameters, inputDataDescriptor);
     }
 }

@@ -674,8 +674,8 @@ public class DifferentiableNeuralComputer<T> : NeuralNetworkBase<T>
         parameterGradients = ClipGradient(parameterGradients);
         
         // Create optimizer (here we use a simple gradient descent optimizer)
-        var optimizer = new GradientDescentOptimizer<T, Tensor<T>, Tensor<T>>();
-        
+        var optimizer = new GradientDescentOptimizer<T, Tensor<T>, Tensor<T>>(this);
+
         // Get current parameters
         Vector<T> currentParameters = GetParameters();
         
@@ -1612,9 +1612,9 @@ public class DifferentiableNeuralComputer<T> : NeuralNetworkBase<T>
     /// and for saving/loading models for later use.
     /// </para>
     /// </remarks>
-    public override ModelMetaData<T> GetModelMetaData()
+    public override ModelMetadata<T> GetModelMetadata()
     {
-        return new ModelMetaData<T>
+        return new ModelMetadata<T>
         {
             ModelType = ModelType.DifferentiableNeuralComputer,
             AdditionalInfo = new Dictionary<string, object>

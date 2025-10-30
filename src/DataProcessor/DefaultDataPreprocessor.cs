@@ -1,4 +1,4 @@
-﻿namespace AiDotNet.DataProcessor;
+namespace AiDotNet.DataProcessor;
 
 /// <summary>
 /// Default implementation of a data preprocessor that prepares data for machine learning algorithms.

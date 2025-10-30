@@ -1,3 +1,5 @@
+using Newtonsoft.Json;
+
 namespace AiDotNet.Optimizers;
 
 /// <summary>
@@ -49,10 +51,12 @@ public class NadamOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, 
     /// and deciding how it will adapt during its journey.
     /// </para>
     /// </remarks>
+    /// <param name="model">The model to optimize.</param>
     /// <param name="options">The Nadam-specific optimization options.</param>
     public NadamOptimizer(
+        IFullModel<T, TInput, TOutput> model,
         NadamOptimizerOptions<T, TInput, TOutput>? options = null)
-        : base(options ?? new())
+        : base(model, options ?? new())
     {
         _options = options ?? new NadamOptimizerOptions<T, TInput, TOutput>();
 

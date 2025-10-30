@@ -1,4 +1,4 @@
-﻿namespace AiDotNet.DecompositionMethods.MatrixDecomposition;
+namespace AiDotNet.DecompositionMethods.MatrixDecomposition;
 
 /// <summary>
 /// Performs LDL decomposition on a symmetric matrix, factoring it into a lower triangular matrix L
@@ -232,8 +232,8 @@ public class LdlDecomposition<T> : IMatrixDecomposition<T>
     /// </summary>
     /// <returns>The inverse of the original matrix A.</returns>
     /// <remarks>
-    /// <b>For Beginners:</b> The inverse of a matrix A is another matrix A⁻¹ such that when multiplied 
-    /// together, they give the identity matrix (A × A⁻¹ = I).
+    /// <b>For Beginners:</b> The inverse of a matrix A is another matrix A?� such that when multiplied 
+    /// together, they give the identity matrix (A � A?� = I).
     /// 
     /// This method computes the inverse by:
     /// 1. Creating a set of unit vectors (vectors with a single 1 and the rest 0s)

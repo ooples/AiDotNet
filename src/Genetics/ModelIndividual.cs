@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.IO;
 
 namespace AiDotNet.Genetics;
 
@@ -157,9 +158,9 @@ public class ModelIndividual<T, TInput, TOutput, TGene> :
     /// Gets the metadata for the model.
     /// </summary>
     /// <returns>The model metadata.</returns>
-    public ModelMetaData<T> GetMetaData()
+    public ModelMetadata<T> GetMetaData()
     {
-        return _innerModel.GetModelMetaData();
+        return _innerModel.GetModelMetadata();
     }
 
     /// <summary>
@@ -218,9 +219,9 @@ public class ModelIndividual<T, TInput, TOutput, TGene> :
         _innerModel.Train(input, expectedOutput);
     }
 
-    public ModelMetaData<T> GetModelMetaData()
+    public ModelMetadata<T> GetModelMetadata()
     {
-        return _innerModel.GetModelMetaData();
+        return _innerModel.GetModelMetadata();
     }
 
     public IEnumerable<int> GetActiveFeatureIndices()
@@ -296,12 +297,9 @@ public class ModelIndividual<T, TInput, TOutput, TGene> :
         if (string.IsNullOrWhiteSpace(filePath))
             throw new ArgumentException("File path must not be null or empty.", nameof(filePath));
 
-        if (_innerModel == null)
-            throw new InvalidOperationException("Inner model is not initialized.");
-
         try
         {
-            var data = _innerModel.Serialize();
+            var data = Serialize();
             var directory = Path.GetDirectoryName(filePath);
             if (!string.IsNullOrEmpty(directory) && !Directory.Exists(directory))
                 Directory.CreateDirectory(directory);
@@ -317,13 +315,10 @@ public class ModelIndividual<T, TInput, TOutput, TGene> :
         if (string.IsNullOrWhiteSpace(filePath))
             throw new ArgumentException("File path must not be null or empty.", nameof(filePath));
 
-        if (_innerModel == null)
-            _innerModel = _modelFactory(_genes);
-
         try
         {
             var data = File.ReadAllBytes(filePath);
-            _innerModel.Deserialize(data);
+            Deserialize(data);
         }
         catch (FileNotFoundException ex) { throw new FileNotFoundException($"The specified model file does not exist: {filePath}", filePath, ex); }
         catch (IOException ex) { throw new InvalidOperationException($"File I/O error while loading model from '{filePath}': {ex.Message}", ex); }

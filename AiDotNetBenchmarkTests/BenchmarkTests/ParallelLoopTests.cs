@@ -1,4 +1,4 @@
-﻿using BenchmarkDotNet.Attributes;
+using BenchmarkDotNet.Attributes;
 using BenchmarkDotNet.Jobs;
 
 namespace AiDotNetBenchmarkTests.BenchmarkTests;
@@ -15,6 +15,11 @@ public class ParallelLoopTests
 
     private double[] Array { get; set; }
     private double Factor { get; set; }
+
+    public ParallelLoopTests()
+    {
+        Array = System.Array.Empty<double>();
+    }
 
     [GlobalSetup]
     public void Setup()

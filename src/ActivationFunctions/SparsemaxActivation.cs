@@ -1,4 +1,4 @@
-﻿namespace AiDotNet.ActivationFunctions;
+namespace AiDotNet.ActivationFunctions;
 
 /// <summary>
 /// Implements the Sparsemax activation function, which is an alternative to Softmax that can produce sparse probability distributions.
@@ -117,7 +117,7 @@ public class SparsemaxActivation<T> : ActivationFunctionBase<T>
     /// - For outputs that are zero, the derivatives are also zero (these outputs don't respond to small input changes)
     /// - For non-zero outputs, the derivatives form a specific pattern:
     ///   - When i=j (diagonal elements): the derivative is 1
-    ///   - When i≠j: the derivative is negative and depends on the output values
+    ///   - When i?j: the derivative is negative and depends on the output values
     /// 
     /// During neural network training, this matrix helps determine how to adjust the weights based on errors.
     /// The sparsity of Sparsemax can make training more efficient because many derivatives will be zero.

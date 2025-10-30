@@ -1,4 +1,4 @@
-﻿namespace AiDotNet.Interpolation;
+namespace AiDotNet.Interpolation;
 
 /// <summary>
 /// Implements the Whittaker-Shannon interpolation method, also known as sinc interpolation.
@@ -118,7 +118,7 @@ public class WhittakerShannonInterpolation<T> : IInterpolation<T>
     /// with a peak at x=0 and diminishing oscillations as you move away from the center.
     /// </para>
     /// <para>
-    /// Mathematically, it's defined as sin(πx)/(πx) for x≠0 and 1 for x=0.
+    /// Mathematically, it's defined as sin(px)/(px) for x?0 and 1 for x=0.
     /// </para>
     /// <para>
     /// This function is fundamental to signal processing because it represents the ideal way to

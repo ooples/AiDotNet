@@ -296,7 +296,7 @@ public class NEAT<T> : NeuralNetworkBase<T>
     /// - Assigns random weights to these connections
     /// 
     /// For example, if you have 3 inputs and 2 outputs:
-    /// - You'll have 6 connections (3 inputs × 2 outputs)
+    /// - You'll have 6 connections (3 inputs ï¿½ 2 outputs)
     /// - Each connection gets a random weight between -1 and 1
     /// - Each connection gets a unique innovation number for tracking
     /// 
@@ -608,7 +608,7 @@ public class NEAT<T> : NeuralNetworkBase<T>
     /// </remarks>
     public override void UpdateParameters(Vector<T> parameters)
     {
-        // NEAT doesn't use this method for parameter updates
+        throw new InvalidOperationException("NEAT (NeuroEvolution of Augmenting Topologies) does not support direct parameter updates via this method. Use the EvolvePopulation method to evolve the network through genetic algorithms instead of gradient-based updates.");
     }
 
     /// <summary>
@@ -1110,7 +1110,7 @@ public class NEAT<T> : NeuralNetworkBase<T>
     /// - Understanding the evolved solution
     /// </para>
     /// </remarks>
-    public override ModelMetaData<T> GetModelMetaData()
+    public override ModelMetadata<T> GetModelMetadata()
     {
         // Get the best genome
         var bestGenome = GetBestGenome();
@@ -1128,7 +1128,7 @@ public class NEAT<T> : NeuralNetworkBase<T>
         double avgNodes = nodeCounts.Average();
         int maxNodes = nodeCounts.Max();
     
-        return new ModelMetaData<T>
+        return new ModelMetadata<T>
         {
             ModelType = ModelType.NEAT,
             AdditionalInfo = new Dictionary<string, object>

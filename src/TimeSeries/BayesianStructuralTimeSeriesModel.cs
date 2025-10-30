@@ -1313,10 +1313,10 @@ public class BayesianStructuralTimeSeriesModel<T> : TimeSeriesModelBase<T>
     /// - Understanding which components are most important in your forecasts
     /// </para>
     /// </remarks>
-    public override ModelMetaData<T> GetModelMetaData()
+    public override ModelMetadata<T> GetModelMetadata()
     {
         var bstsOptions = (BayesianStructuralTimeSeriesOptions<T>)Options;
-        var metadata = new ModelMetaData<T>
+        var metadata = new ModelMetadata<T>
         {
             ModelType = ModelType.BayesianStructuralTimeSeriesModel,
             AdditionalInfo = new Dictionary<string, object>

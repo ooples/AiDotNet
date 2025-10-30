@@ -446,7 +446,7 @@ public class LiquidStateMachine<T> : NeuralNetworkBase<T>
         parameterGradients = ClipGradient(parameterGradients);
 
         // Create optimizer
-        var optimizer = new GradientDescentOptimizer<T, Tensor<T>, Tensor<T>>();
+        var optimizer = new GradientDescentOptimizer<T, Tensor<T>, Tensor<T>>(this);
 
         // Get current parameters
         Vector<T> currentParameters = GetParameters();
@@ -480,9 +480,9 @@ public class LiquidStateMachine<T> : NeuralNetworkBase<T>
     /// especially when experimenting with multiple settings.
     /// </para>
     /// </remarks>
-    public override ModelMetaData<T> GetModelMetaData()
+    public override ModelMetadata<T> GetModelMetadata()
     {
-        return new ModelMetaData<T>
+        return new ModelMetadata<T>
         {
             ModelType = ModelType.LiquidStateMachine,
             AdditionalInfo = new Dictionary<string, object>

@@ -1,4 +1,4 @@
-﻿namespace AiDotNet.Interpolation;
+namespace AiDotNet.Interpolation;
 
 /// <summary>
 /// Implements Shepard's Method for interpolating scattered data points in 2D space.
@@ -106,7 +106,7 @@ public class ShepardsMethodInterpolation<T> : I2DInterpolation<T>
     /// 3. Otherwise, it calculates a weighted average of all data points, where closer points have more influence
     /// </para>
     /// <para>
-    /// The formula used is: z = Σ(z_i * w_i) / Σ(w_i), where w_i = 1/distance^power
+    /// The formula used is: z = S(z_i * w_i) / S(w_i), where w_i = 1/distance^power
     /// </para>
     /// <para>
     /// This creates a smooth surface that passes exactly through all your original data points.
@@ -145,7 +145,7 @@ public class ShepardsMethodInterpolation<T> : I2DInterpolation<T>
     /// <remarks>
     /// <para>
     /// <b>For Beginners:</b> This method calculates the straight-line distance between two points
-    /// using the Pythagorean theorem (a² + b² = c²).
+    /// using the Pythagorean theorem (a� + b� = c�).
     /// </para>
     /// <para>
     /// In Shepard's Method, this distance is used to determine how much influence each known

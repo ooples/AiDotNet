@@ -1,4 +1,6 @@
-﻿namespace AiDotNet.Optimizers;
+using Newtonsoft.Json;
+
+namespace AiDotNet.Optimizers;
 
 /// <summary>
 /// Implements a normal optimization algorithm with adaptive parameters.
@@ -35,9 +37,10 @@ public class NormalOptimizer<T, TInput, TOutput> : OptimizerBase<T, TInput, TOut
     /// and setting up rules for how you'll explore the mountain range.
     /// </para>
     /// </remarks>
+    /// <param name="model">The model to optimize.</param>
     /// <param name="options">The optimization options.</param>
-    public NormalOptimizer(GeneticAlgorithmOptimizerOptions<T, TInput, TOutput>? options = null)
-		: base(options ?? new())
+    public NormalOptimizer(IFullModel<T, TInput, TOutput> model, GeneticAlgorithmOptimizerOptions<T, TInput, TOutput>? options = null)
+		: base(model, options ?? new())
 	{
         _normalOptions = options ?? new();
 
@@ -71,7 +74,7 @@ public class NormalOptimizer<T, TInput, TOutput> : OptimizerBase<T, TInput, TOut
         var bestStepData = new OptimizationStepData<T, TInput, TOutput>
         {
             Solution = ModelHelper<T, TInput, TOutput>.CreateDefaultModel(),
-            FitnessScore = _fitnessCalculator.IsHigherScoreBetter ? NumOps.MinValue : NumOps.MaxValue
+            FitnessScore = FitnessCalculator.IsHigherScoreBetter ? NumOps.MinValue : NumOps.MaxValue
         };
         var previousStepData = new OptimizationStepData<T, TInput, TOutput>();
 
@@ -150,7 +153,7 @@ public class NormalOptimizer<T, TInput, TOutput> : OptimizerBase<T, TInput, TOut
     /// <param name="previousStepData">Data from the previous optimization step.</param>
     private void UpdateFeatureSelectionParameters(OptimizationStepData<T, TInput, TOutput> currentStepData, OptimizationStepData<T, TInput, TOutput> previousStepData)
     {
-        if (_fitnessCalculator.IsBetterFitness(currentStepData.FitnessScore, previousStepData.FitnessScore))
+        if (FitnessCalculator.IsBetterFitness(currentStepData.FitnessScore, previousStepData.FitnessScore))
         {
             Options.MinimumFeatures = Math.Max(1, Options.MinimumFeatures - 1);
             Options.MaximumFeatures = Math.Min(Options.MaximumFeatures + 1, _normalOptions.MaximumFeatures);
@@ -179,7 +182,7 @@ public class NormalOptimizer<T, TInput, TOutput> : OptimizerBase<T, TInput, TOut
     /// <param name="previousStepData">Data from the previous optimization step.</param>
     private void UpdateExplorationExploitationBalance(OptimizationStepData<T, TInput, TOutput> currentStepData, OptimizationStepData<T, TInput, TOutput> previousStepData)
     {
-        if (_fitnessCalculator.IsBetterFitness(currentStepData.FitnessScore, previousStepData.FitnessScore))
+        if (FitnessCalculator.IsBetterFitness(currentStepData.FitnessScore, previousStepData.FitnessScore))
         {
             Options.ExplorationRate *= 0.98; // Decrease exploration if improving
         }
@@ -207,7 +210,7 @@ public class NormalOptimizer<T, TInput, TOutput> : OptimizerBase<T, TInput, TOut
     /// <param name="previousStepData">Data from the previous optimization step.</param>
     private void UpdateMutationRate(OptimizationStepData<T, TInput, TOutput> currentStepData, OptimizationStepData<T, TInput, TOutput> previousStepData)
     {
-        if (_fitnessCalculator.IsBetterFitness(currentStepData.FitnessScore, previousStepData.FitnessScore))
+        if (FitnessCalculator.IsBetterFitness(currentStepData.FitnessScore, previousStepData.FitnessScore))
         {
             _normalOptions.MutationRate *= 0.95; // Decrease mutation rate if improving
         }
@@ -236,7 +239,7 @@ public class NormalOptimizer<T, TInput, TOutput> : OptimizerBase<T, TInput, TOut
     /// <param name="previousStepData">Data from the previous optimization step.</param>
     private void UpdatePopulationSize(OptimizationStepData<T, TInput, TOutput> currentStepData, OptimizationStepData<T, TInput, TOutput> previousStepData)
     {
-        if (_fitnessCalculator.IsBetterFitness(currentStepData.FitnessScore, previousStepData.FitnessScore))
+        if (FitnessCalculator.IsBetterFitness(currentStepData.FitnessScore, previousStepData.FitnessScore))
         {
             _normalOptions.PopulationSize = Math.Max(_normalOptions.MinPopulationSize, _normalOptions.PopulationSize - 1);
         }
@@ -263,7 +266,7 @@ public class NormalOptimizer<T, TInput, TOutput> : OptimizerBase<T, TInput, TOut
     /// <param name="previousStepData">Data from the previous optimization step.</param>
     private void UpdateCrossoverRate(OptimizationStepData<T, TInput, TOutput> currentStepData, OptimizationStepData<T, TInput, TOutput> previousStepData)
     {
-        if (_fitnessCalculator.IsBetterFitness(currentStepData.FitnessScore, previousStepData.FitnessScore))
+        if (FitnessCalculator.IsBetterFitness(currentStepData.FitnessScore, previousStepData.FitnessScore))
         {
             _normalOptions.CrossoverRate *= 1.02; // Increase crossover rate if improving
         }

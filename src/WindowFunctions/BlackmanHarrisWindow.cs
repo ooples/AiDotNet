@@ -1,4 +1,4 @@
-﻿namespace AiDotNet.WindowFunctions;
+namespace AiDotNet.WindowFunctions;
 
 /// <summary>
 /// Implements the Blackman-Harris window function for signal processing applications.
@@ -7,7 +7,7 @@
 /// <para>
 /// The Blackman-Harris window is an advanced window function that provides excellent frequency 
 /// resolution and spectral leakage suppression. It uses a weighted cosine series with four terms:
-/// w(n) = 0.35875 - 0.48829 * cos(2πn/(N-1)) + 0.14128 * cos(4πn/(N-1)) - 0.01168 * cos(6πn/(N-1))
+/// w(n) = 0.35875 - 0.48829 * cos(2pn/(N-1)) + 0.14128 * cos(4pn/(N-1)) - 0.01168 * cos(6pn/(N-1))
 /// where n is the sample index and N is the window size.
 /// </para>
 /// <para><b>For Beginners:</b> A window function is like a special filter shape applied to your data.
@@ -57,7 +57,7 @@ public class BlackmanHarrisWindow<T> : IWindowFunction<T>
     /// <remarks>
     /// <para>
     /// This method implements the Blackman-Harris window function formula:
-    /// w(n) = 0.35875 - 0.48829 * cos(2πn/(N-1)) + 0.14128 * cos(4πn/(N-1)) - 0.01168 * cos(6πn/(N-1))
+    /// w(n) = 0.35875 - 0.48829 * cos(2pn/(N-1)) + 0.14128 * cos(4pn/(N-1)) - 0.01168 * cos(6pn/(N-1))
     /// It calculates the window function value for each point from 0 to windowSize-1.
     /// </para>
     /// <para><b>For Beginners:</b> This method creates the actual window values based on the size you specify.

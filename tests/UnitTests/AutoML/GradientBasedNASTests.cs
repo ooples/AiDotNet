@@ -31,7 +31,7 @@ namespace AiDotNet.Tests.UnitTests.AutoML
 
             // Act
             var parameters = supernet.GetParameters();
-            var metadata = supernet.GetModelMetaData();
+            var metadata = supernet.GetModelMetadata();
             var clone = supernet.Clone();
 
             // Assert
@@ -50,8 +50,8 @@ namespace AiDotNet.Tests.UnitTests.AutoML
             var searchSpace = new SearchSpace<double>();
             var supernet = new SuperNet<double>(searchSpace, numNodes: 3);
             var input = new Tensor<double>(new[] { 1, 10 });
-            for (int i = 0; i < input.Length; i++)
-                input[i] = 1.0;
+            for (int i = 0; i < input.Shape[1]; i++)
+                input[0, i] = 1.0;
 
             // Act
             var output = supernet.Predict(input);

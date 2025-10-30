@@ -1,4 +1,4 @@
-ï»¿namespace AiDotNet.ActivationFunctions;
+namespace AiDotNet.ActivationFunctions;
 
 /// <summary>
 /// Implements the Scaled Hyperbolic Tangent (tanh) activation function for neural networks.
@@ -10,13 +10,13 @@
 /// hyperbolic tangent function. Like the standard tanh, it outputs values between -1 and 1, making
 /// it useful for neural networks where you want the output to be centered around zero.
 /// 
-/// The mathematical formula is: f(x) = (1 - e^(-Î²x)) / (1 + e^(-Î²x))
+/// The mathematical formula is: f(x) = (1 - e^(-ßx)) / (1 + e^(-ßx))
 /// 
-/// This is equivalent to the standard tanh function when Î² = 2, and has these key properties:
+/// This is equivalent to the standard tanh function when ß = 2, and has these key properties:
 /// - Outputs values between -1 and 1
 /// - Is symmetric around the origin (f(-x) = -f(x))
-/// - The parameter Î² (beta) controls the steepness of the curve
-/// - When Î² = 2, this is exactly equivalent to the standard tanh function
+/// - The parameter ß (beta) controls the steepness of the curve
+/// - When ß = 2, this is exactly equivalent to the standard tanh function
 /// 
 /// When to use it:
 /// - When you need outputs centered around zero
@@ -67,7 +67,7 @@ public class ScaledTanhActivation<T> : ActivationFunctionBase<T>
     /// <remarks>
     /// <para>
     /// <b>For Beginners:</b> This method transforms an input value using the formula:
-    /// f(x) = (1 - e^(-Î²x)) / (1 + e^(-Î²x))
+    /// f(x) = (1 - e^(-ßx)) / (1 + e^(-ßx))
     /// 
     /// No matter how large or small the input is, the output will always be between -1 and 1:
     /// - Large positive inputs produce values close to 1
@@ -75,12 +75,12 @@ public class ScaledTanhActivation<T> : ActivationFunctionBase<T>
     /// - An input of 0 produces an output of 0
     /// 
     /// This "squashing" property makes the Scaled Tanh useful for normalizing outputs.
-    /// When Î² = 2, this function is mathematically identical to the standard tanh function.
+    /// When ß = 2, this function is mathematically identical to the standard tanh function.
     /// </para>
     /// </remarks>
     public override T Activate(T input)
     {
-        // f(x) = (1 - exp(-Î²x)) / (1 + exp(-Î²x))
+        // f(x) = (1 - exp(-ßx)) / (1 + exp(-ßx))
         T negBetaX = NumOps.Negate(NumOps.Multiply(_beta, input));
         T expNegBetaX = NumOps.Exp(negBetaX);
         T numerator = NumOps.Subtract(NumOps.One, expNegBetaX);
@@ -100,7 +100,7 @@ public class ScaledTanhActivation<T> : ActivationFunctionBase<T>
     /// when its input changes slightly. This is used during neural network training to determine
     /// how to adjust weights.
     /// 
-    /// The derivative formula is: f'(x) = Î² * (1 - f(x)Â²)
+    /// The derivative formula is: f'(x) = ß * (1 - f(x)²)
     /// 
     /// Key properties of this derivative:
     /// - It's highest at x = 0 (where the function is steepest)
@@ -113,7 +113,7 @@ public class ScaledTanhActivation<T> : ActivationFunctionBase<T>
     /// </remarks>
     public override T Derivative(T input)
     {
-        // f'(x) = Î² * (1 - f(x)^2)
+        // f'(x) = ß * (1 - f(x)^2)
         T activationValue = Activate(input);
         T squaredActivation = NumOps.Multiply(activationValue, activationValue);
         T oneMinus = NumOps.Subtract(NumOps.One, squaredActivation);

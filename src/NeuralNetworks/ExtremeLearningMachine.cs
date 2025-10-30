@@ -1,4 +1,4 @@
-﻿namespace AiDotNet.NeuralNetworks;
+namespace AiDotNet.NeuralNetworks;
 
 /// <summary>
 /// Represents an Extreme Learning Machine (ELM), a type of feedforward neural network with a unique training approach.
@@ -144,7 +144,7 @@ public class ExtremeLearningMachine<T> : NeuralNetworkBase<T>
     /// </remarks>
     public override void UpdateParameters(Vector<T> parameters)
     {
-        // ELM doesn't update parameters in the traditional sense
+        throw new InvalidOperationException("Extreme Learning Machines do not support direct parameter updates via this method. Input-to-hidden weights are randomly initialized and remain fixed. Only output layer weights are computed analytically via the Train method.");
     }
 
     /// <summary>
@@ -225,8 +225,8 @@ public class ExtremeLearningMachine<T> : NeuralNetworkBase<T>
         }
 
         // STEP 2: Calculate the optimal output weights using pseudo-inverse
-        // We'll use the Moore-Penrose pseudoinverse: OutputWeights = (H⁺ × T)
-        // where H⁺ is the pseudoinverse of H (hidden activations) and T is the target output
+        // We'll use the Moore-Penrose pseudoinverse: OutputWeights = (H? � T)
+        // where H? is the pseudoinverse of H (hidden activations) and T is the target output
 
         // Convert hidden activations and expected output to matrices for the calculation
         Matrix<T> H = hiddenActivations.ConvertToMatrix();
@@ -257,7 +257,7 @@ public class ExtremeLearningMachine<T> : NeuralNetworkBase<T>
     /// This method calculates the Moore-Penrose pseudoinverse of a matrix, which is a generalization of the matrix inverse
     /// for non-square matrices. The pseudoinverse is used in the ELM training algorithm to analytically solve
     /// for the optimal output layer weights. For computational efficiency, this implementation uses the formula:
-    /// A⁺ = (A^T × A)^(-1) × A^T for full column rank matrices.
+    /// A? = (A^T � A)^(-1) � A^T for full column rank matrices.
     /// </para>
     /// <para><b>For Beginners:</b> This calculates a special type of matrix inverse used in ELM training.
     /// 
@@ -268,27 +268,27 @@ public class ExtremeLearningMachine<T> : NeuralNetworkBase<T>
     /// </remarks>
     private Matrix<T> CalculatePseudoInverse(Matrix<T> matrix)
     {
-        // Calculate the pseudoinverse using the formula: A⁺ = (A^T × A)^(-1) × A^T
+        // Calculate the pseudoinverse using the formula: A? = (A^T � A)^(-1) � A^T
         // This works well for matrices with full column rank, which is common in ELMs with
         // more data samples than hidden neurons
 
         // Step 1: Calculate A^T (transpose)
         Matrix<T> transposeA = matrix.Transpose();
         
-        // Step 2: Calculate A^T × A
+        // Step 2: Calculate A^T � A
         Matrix<T> aTa = transposeA.Multiply(matrix);
         
-        // Step 3: Calculate (A^T × A)^(-1)
+        // Step 3: Calculate (A^T � A)^(-1)
         Matrix<T> aTaInverse = aTa.Inverse();
         
-        // Step 4: Calculate (A^T × A)^(-1) × A^T
+        // Step 4: Calculate (A^T � A)^(-1) � A^T
         Matrix<T> pseudoInverse = aTaInverse.Multiply(transposeA);
         
         return pseudoInverse;
 
         // Note: In a production implementation, you might want to use singular value decomposition (SVD)
         // for better numerical stability, or use a regularized version like:
-        // A⁺ = (A^T × A + λI)^(-1) × A^T where λ is a small regularization parameter
+        // A? = (A^T � A + ?I)^(-1) � A^T where ? is a small regularization parameter
     }
 
     /// <summary>
@@ -349,9 +349,9 @@ public class ExtremeLearningMachine<T> : NeuralNetworkBase<T>
     /// of your neural network. This is useful for organizing and managing multiple models.
     /// </para>
     /// </remarks>
-    public override ModelMetaData<T> GetModelMetaData()
+    public override ModelMetadata<T> GetModelMetadata()
     {
-        return new ModelMetaData<T>
+        return new ModelMetadata<T>
         {
             ModelType = ModelType.ExtremeLearningMachine,
             AdditionalInfo = new Dictionary<string, object>
@@ -442,7 +442,7 @@ public class ExtremeLearningMachine<T> : NeuralNetworkBase<T>
     /// <para>
     /// This method implements a regularized version of the ELM training algorithm. It adds a regularization term
     /// to the pseudoinverse calculation, which helps prevent overfitting. The formula becomes:
-    /// OutputWeights = (H^T * H + λI)^(-1) * H^T * T, where λ is the regularization factor, I is the identity matrix,
+    /// OutputWeights = (H^T * H + ?I)^(-1) * H^T * T, where ? is the regularization factor, I is the identity matrix,
     /// H is the hidden layer activations, and T is the target output.
     /// </para>
     /// <para><b>For Beginners:</b> This is a more robust training method that helps prevent overfitting.
@@ -479,14 +479,14 @@ public class ExtremeLearningMachine<T> : NeuralNetworkBase<T>
         Matrix<T> H = hiddenActivations.ConvertToMatrix();
         Matrix<T> T = expectedOutput.ConvertToMatrix();
         
-        // Calculate regularized pseudoinverse: (H^T * H + λI)^(-1) * H^T
+        // Calculate regularized pseudoinverse: (H^T * H + ?I)^(-1) * H^T
         Matrix<T> transposeH = H.Transpose();
         Matrix<T> hTh = transposeH.Multiply(H);
         
         // Create identity matrix for regularization
         Matrix<T> identity = Matrix<T>.CreateIdentity(hTh.Rows);
         
-        // Apply regularization: hTh + λI
+        // Apply regularization: hTh + ?I
         T regFactor = NumOps.FromDouble(regularizationFactor);
         for (int i = 0; i < identity.Rows; i++)
         {

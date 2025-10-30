@@ -68,7 +68,7 @@ public class TransferRandomForest<T> : TransferLearningBase<T, Matrix<T>, Vector
     /// <remarks>
     /// NOTE: This implementation requires source domain data to properly train the feature mapper
     /// and domain adapter. The current API limitations prevent passing source data, so this method
-    /// will throw NotImplementedException. Users should provide source data through the feature
+    /// will throw InvalidOperationException. Users should provide source data through the feature
     /// mapper and domain adapter before calling transfer, or use the public Transfer() method
     /// that accepts source data.
     /// </remarks>
@@ -77,11 +77,9 @@ public class TransferRandomForest<T> : TransferLearningBase<T, Matrix<T>, Vector
         Matrix<T> targetData,
         Vector<T> targetLabels)
     {
-        throw new NotImplementedException(
-            "Cross-domain transfer requires source domain data for proper feature mapping and domain adaptation. " +
-            "The protected TransferCrossDomain method cannot access source data due to API limitations. " +
-            "Please use the public Transfer(sourceModel, sourceData, targetData, targetLabels) method instead, " +
-            "or pre-train the FeatureMapper and DomainAdapter with source data before calling this method.");
+        throw new InvalidOperationException(
+            "Cross-domain transfer cannot be performed directly through this protected method due to the need for source domain data. " +
+            "Please use the public 'Transfer(sourceModel, sourceData, targetData, targetLabels)' method which accepts both source and target domain data for feature mapping and transfer.");
     }
 
     /// <summary>
@@ -177,10 +175,12 @@ public class TransferRandomForest<T> : TransferLearningBase<T, Matrix<T>, Vector
 /// </summary>
 internal class MappedRandomForestModel<T> : IFullModel<T, Matrix<T>, Vector<T>>
 {
+    private const int WrapperMagic = 0x4D52464D; // 'MRFM'
     private readonly IFullModel<T, Matrix<T>, Vector<T>> _baseModel;
     private readonly IFeatureMapper<T> _mapper;
     private readonly int _targetFeatures;
     private readonly INumericOperations<T> _numOps;
+    private static System.Reflection.MethodInfo? _inverseMapMethod;
 
     public MappedRandomForestModel(
         IFullModel<T, Matrix<T>, Vector<T>> baseModel,
@@ -191,6 +191,8 @@ internal class MappedRandomForestModel<T> : IFullModel<T, Matrix<T>, Vector<T>>
         _mapper = mapper;
         _targetFeatures = targetFeatures;
         _numOps = AiDotNet.Helpers.MathHelper.GetNumericOperations<T>();
+        // Initialize inverse-map reflection method once per process if available
+        _inverseMapMethod ??= _mapper.GetType().GetMethod("InverseMapFeatureName", new[] { typeof(string) });
     }
 
     public void Train(Matrix<T> input, Vector<T> expectedOutput)
@@ -204,18 +206,29 @@ internal class MappedRandomForestModel<T> : IFullModel<T, Matrix<T>, Vector<T>>
         return _baseModel.Predict(input);
     }
 
-    public ModelMetaData<T> GetModelMetaData()
+    public ModelMetadata<T> GetModelMetadata()
     {
-        return _baseModel.GetModelMetaData();
+        return _baseModel.GetModelMetadata();
     }
 
     public byte[] Serialize()
     {
-        return _baseModel.Serialize();
+        using var ms = new MemoryStream();
+        using var writer = new BinaryWriter(ms);
+        var baseBytes = _baseModel.Serialize();
+        WriteWrapper(writer, baseBytes);
+        return ms.ToArray();
     }
 
     public void Deserialize(byte[] data)
     {
+        using var ms = new MemoryStream(data);
+        using var reader = new BinaryReader(ms);
+        if (TryReadWrapper(reader, out var baseBytes))
+        {
+            _baseModel.Deserialize(baseBytes);
+            return;
+        }
         _baseModel.Deserialize(data);
     }
 
@@ -264,21 +277,117 @@ internal class MappedRandomForestModel<T> : IFullModel<T, Matrix<T>, Vector<T>>
 
     public virtual void SaveModel(string filePath)
     {
-        throw new NotImplementedException("SaveModel is not yet implemented for this model type.");
+        // Persist wrapper metadata and base model bytes together
+        using var ms = new MemoryStream();
+        using (var writer = new BinaryWriter(ms))
+        {
+            var baseBytes = _baseModel.Serialize();
+            WriteWrapper(writer, baseBytes);
+        }
+        var data = ms.ToArray();
+        var directory = Path.GetDirectoryName(filePath);
+        if (!string.IsNullOrEmpty(directory) && !Directory.Exists(directory))
+        {
+            Directory.CreateDirectory(directory);
+        }
+        File.WriteAllBytes(filePath, data);
     }
 
     public virtual void LoadModel(string filePath)
     {
-        throw new NotImplementedException("LoadModel is not yet implemented for this model type.");
+        if (!File.Exists(filePath))
+        {
+            throw new FileNotFoundException($"The specified model file does not exist: {filePath}", filePath);
+        }
+        var data = File.ReadAllBytes(filePath);
+        using var ms = new MemoryStream(data);
+        using var reader = new BinaryReader(ms);
+        if (!TryReadWrapper(reader, out var baseBytes))
+        {
+            throw new InvalidOperationException("Failed to deserialize MappedRandomForestModel wrapper format. The file may be corrupted or in an incompatible format.");
+        }
+        // Intentionally overwrites _baseModel with deserialized state.
+        // The wrapper metadata (_mapper, _targetFeatures) is immutable and set at construction.
+        _baseModel.Deserialize(baseBytes);
     }
 
-    public virtual Dictionary<string, T> GetFeatureImportance()
+        public virtual Dictionary<string, T> GetFeatureImportance()
     {
-        throw new NotImplementedException("GetFeatureImportance is not yet implemented for this model type.");
+        var baseImportance = _baseModel.GetFeatureImportance();
+        var mappedImportance = new Dictionary<string, T>(baseImportance.Count);
+        var mapMethod = _inverseMapMethod;
+        foreach (var kvp in baseImportance)
+        {
+            var key = kvp.Key;
+            if (mapMethod != null)
+            {
+                try
+                {
+                    var mappedKey = mapMethod.Invoke(_mapper, new object[] { kvp.Key });
+                    if (mappedKey is string s)
+                    {
+                        key = s;
+                    }
+                }
+                catch
+                {
+                    // Failed to inverse map feature name; using original key as fallback
+                }
+            }
+        mappedImportance[key] = kvp.Value;
+        }
+        return mappedImportance;
+    }
+
+    private void WriteWrapper(BinaryWriter writer, byte[] baseBytes)
+    {
+        writer.Write(WrapperMagic);
+        writer.Write(_targetFeatures);
+        try
+        {
+            writer.Write(Convert.ToDouble(_mapper.GetMappingConfidence()));
+        }
+        catch
+        {
+            // Failed to write mapping confidence, fallback to 0.0
+            writer.Write(0.0);
+        }
+        writer.Write(baseBytes.Length);
+        writer.Write(baseBytes);
+        writer.Flush();
+    }
+
+    private bool TryReadWrapper(BinaryReader reader, out byte[] baseBytes)
+    {
+        try
+        {
+            var magic = reader.ReadInt32();
+            if (magic != WrapperMagic)
+            {
+                baseBytes = Array.Empty<byte>();
+                return false;
+            }
+            var target = reader.ReadInt32();
+            if (target != _targetFeatures)
+            {
+                throw new InvalidOperationException($"Deserialized target feature count ({target}) does not match current instance ({_targetFeatures}).");
+            }
+            var confidence = reader.ReadDouble(); // Read mapping confidence (currently unused; read to maintain stream compatibility, reserved for future validation/versioning)
+            var len = reader.ReadInt32();
+            baseBytes = reader.ReadBytes(len);
+            return true;
+        }
+        catch
+        {
+            // Failed to read wrapper format; fallback for backward compatibility with non-wrapped models
+            baseBytes = Array.Empty<byte>();
+            return false;
+        }
     }
 
     public virtual void SetActiveFeatureIndices(IEnumerable<int> featureIndices)
     {
-        throw new NotImplementedException("SetActiveFeatureIndices is not yet implemented for this model type.");
+        _baseModel.SetActiveFeatureIndices(featureIndices);
     }
 }
+

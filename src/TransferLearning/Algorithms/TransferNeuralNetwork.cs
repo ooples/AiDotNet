@@ -49,18 +49,16 @@ public class TransferNeuralNetwork<T> : TransferLearningBase<T, Matrix<T>, Vecto
     /// <remarks>
     /// NOTE: This implementation requires source domain data to properly train the feature mapper.
     /// The current API limitations prevent passing source data, so this method will throw
-    /// NotImplementedException. Users should use the public Transfer() method that accepts source data.
+    /// InvalidOperationException. Users should use the public Transfer() method that accepts source data.
     /// </remarks>
     protected override IFullModel<T, Matrix<T>, Vector<T>> TransferCrossDomain(
         IFullModel<T, Matrix<T>, Vector<T>> sourceModel,
         Matrix<T> targetData,
         Vector<T> targetLabels)
     {
-        throw new NotImplementedException(
-            "Cross-domain transfer requires source domain data for proper feature mapping. " +
-            "The protected TransferCrossDomain method cannot access source data due to API limitations. " +
-            "Please use the public Transfer(sourceModel, sourceData, targetData, targetLabels) method instead, " +
-            "or pre-train the FeatureMapper with source data before calling this method.");
+        throw new InvalidOperationException(
+            "Cross-domain transfer cannot be performed directly through this protected method due to the need for source domain data. " +
+            "Please use the public 'Transfer(sourceModel, sourceData, targetData, targetLabels)' method which accepts both source and target domain data for feature mapping and transfer.");
     }
 
     /// <summary>
@@ -108,9 +106,12 @@ public class TransferNeuralNetwork<T> : TransferLearningBase<T, Matrix<T>, Vecto
         Vector<T> softLabels = sourceModel.Predict(mappedTargetData);
 
         // Step 5: Combine soft labels with true labels
+        // trueWeight of 0.7 means combinedLabels = 0.7 * trueLabels + 0.3 * softLabels (favors true labels for more accurate target domain learning)
         Vector<T> combinedLabels = CombineLabels(softLabels, targetLabels, 0.7);
 
         // Step 6: Create and train a new model on the target domain
+        // Use original targetData (not mapped) since the model should learn in target feature space
+        // The mapping was only needed to get predictions from source model for knowledge distillation
         var targetModel = sourceModel.DeepCopy();
         targetModel.Train(targetData, combinedLabels);
 

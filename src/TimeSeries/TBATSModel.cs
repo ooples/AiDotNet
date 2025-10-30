@@ -1,3 +1,5 @@
+using Newtonsoft.Json;
+
 namespace AiDotNet.TimeSeries;
 
 /// <summary>
@@ -1163,9 +1165,9 @@ public class TBATSModel<T> : TimeSeriesModelBase<T>
     /// Think of it like getting a detailed report card for your model.
     /// </para>
     /// </remarks>
-    public override ModelMetaData<T> GetModelMetaData()
+    public override ModelMetadata<T> GetModelMetadata()
     {
-        var metadata = new ModelMetaData<T>
+        var metadata = new ModelMetadata<T>
         {
             ModelType = ModelType.TBATSModel,
             AdditionalInfo = new Dictionary<string, object>

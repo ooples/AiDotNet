@@ -1,4 +1,4 @@
-ï»¿namespace AiDotNet.Models.Options;
+namespace AiDotNet.Models.Options;
 
 /// <summary>
 /// Configuration options for regression models, which are statistical methods used to estimate 
@@ -19,7 +19,7 @@
 /// Think about predicting house prices:
 /// - You have information like square footage, number of bedrooms, and neighborhood
 /// - Regression helps you create a formula that uses these features to predict the price
-/// - The formula might look like: Price = (Square Footage Ã— Factor1) + (Bedrooms Ã— Factor2) + BaseValue
+/// - The formula might look like: Price = (Square Footage × Factor1) + (Bedrooms × Factor2) + BaseValue
 /// 
 /// What regression does:
 /// - It analyzes your existing data (houses with known prices)
@@ -95,8 +95,8 @@ public class RegressionOptions<T> : ModelOptions
     /// "starting value" or base amount.
     /// 
     /// Using our house price example:
-    /// - With UseIntercept = true (default): Price = (Square Footage Ã— Factor1) + (Bedrooms Ã— Factor2) + BaseValue
-    /// - With UseIntercept = false: Price = (Square Footage Ã— Factor1) + (Bedrooms Ã— Factor2)
+    /// - With UseIntercept = true (default): Price = (Square Footage × Factor1) + (Bedrooms × Factor2) + BaseValue
+    /// - With UseIntercept = false: Price = (Square Footage × Factor1) + (Bedrooms × Factor2)
     /// 
     /// The difference is that "BaseValue" (the intercept):
     /// - Represents the predicted price when all other factors are zero

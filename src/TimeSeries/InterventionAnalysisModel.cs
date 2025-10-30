@@ -223,7 +223,7 @@ public class InterventionAnalysisModel<T> : TimeSeriesModelBase<T>
     public InterventionAnalysisModel(InterventionAnalysisOptions<T, Matrix<T>, Vector<T>>? options = null) : base(options ?? new())
     {
         _iaOptions = options ?? new InterventionAnalysisOptions<T, Matrix<T>, Vector<T>>();
-        _optimizer = _iaOptions.Optimizer ?? new LBFGSOptimizer<T, Matrix<T>, Vector<T>>();
+        _optimizer = _iaOptions.Optimizer ?? new LBFGSOptimizer<T, Matrix<T>, Vector<T>>(this);
         _interventionEffects = [];
         _arParameters = Vector<T>.Empty();
         _maParameters = Vector<T>.Empty();
@@ -757,9 +757,9 @@ public class InterventionAnalysisModel<T> : TimeSeriesModelBase<T>
     /// - Understanding the relative importance of different interventions
     /// </para>
     /// </remarks>
-    public override ModelMetaData<T> GetModelMetaData()
+    public override ModelMetadata<T> GetModelMetadata()
     {
-        var metadata = new ModelMetaData<T>
+        var metadata = new ModelMetadata<T>
         {
             ModelType = ModelType.InterventionAnalysisModel,
             AdditionalInfo = new Dictionary<string, object>

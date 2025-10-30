@@ -63,5 +63,5 @@ public interface IPredictiveModel<T, TInput, TOutput> : IModelSerializer
     /// - Deciding if your model needs to be improved or retrained
     /// </remarks>
     /// <returns>A metadata object containing information about the model's performance and configuration.</returns>
-    ModelMetaData<T> GetModelMetadata();
+    ModelMetadata<T> GetModelMetadata();
 }

@@ -1,4 +1,4 @@
-﻿namespace AiDotNet.Factories;
+namespace AiDotNet.Factories;
 
 /// <summary>
 /// A factory class that creates data normalizers for preprocessing machine learning inputs.

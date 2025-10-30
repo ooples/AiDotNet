@@ -1,3 +1,5 @@
+using Newtonsoft.Json;
+
 namespace AiDotNet.Optimizers;
 
 /// <summary>
@@ -63,6 +65,7 @@ public class AdagradOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T
     /// <summary>
     /// Initializes a new instance of the AdagradOptimizer class.
     /// </summary>
+    /// <param name="model">The model to optimize.</param>
     /// <param name="options">The options for configuring the Adagrad optimizer.</param>
     /// <remarks>
     /// <para>
@@ -70,19 +73,20 @@ public class AdagradOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T
     /// If no options are provided, it uses default AdagradOptimizerOptions.
     /// </para>
     /// <para><b>For Beginners:</b> This is like setting up your learning assistant with specific instructions.
-    /// 
+    ///
     /// You can customize:
     /// - How the assistant learns (options)
     /// - How it measures its progress (predictionOptions, modelOptions)
     /// - How it evaluates its performance (modelEvaluator, fitDetector, fitnessCalculator)
     /// - How it remembers what it has learned (modelCache, gradientCache)
-    /// 
+    ///
     /// If you don't specify these, it will use default settings.
     /// </para>
     /// </remarks>
     public AdagradOptimizer(
+        IFullModel<T, TInput, TOutput> model,
         AdagradOptimizerOptions<T, TInput, TOutput>? options = null)
-        : base(options ?? new())
+        : base(model, options ?? new())
     {
         _options = options ?? new AdagradOptimizerOptions<T, TInput, TOutput>();
 

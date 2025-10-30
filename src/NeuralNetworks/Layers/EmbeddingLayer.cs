@@ -1,4 +1,4 @@
-﻿namespace AiDotNet.NeuralNetworks.Layers;
+namespace AiDotNet.NeuralNetworks.Layers;
 
 /// <summary>
 /// Represents an embedding layer that converts discrete token indices into dense vector representations.
@@ -48,7 +48,7 @@ public class EmbeddingLayer<T> : LayerBase<T>
     /// The embedding matrix works like this:
     /// - Each row corresponds to one token (word, character, etc.)
     /// - Each column is one dimension of the embedding space
-    /// - If you have 10,000 words and 300 dimensions, the matrix will be 10,000 × 300
+    /// - If you have 10,000 words and 300 dimensions, the matrix will be 10,000 � 300
     /// 
     /// For example, with a vocabulary of 5 words and 4 dimensions:
     /// ```
@@ -239,9 +239,9 @@ public class EmbeddingLayer<T> : LayerBase<T>
     /// 3. Copy that row (the embedding vector) to the output
     /// 
     /// For example, with an input sequence [5, 10, 3]:
-    /// - Look up row 5 in the embedding matrix → output row 1
-    /// - Look up row 10 in the embedding matrix → output row 2
-    /// - Look up row 3 in the embedding matrix → output row 3
+    /// - Look up row 5 in the embedding matrix ? output row 1
+    /// - Look up row 10 in the embedding matrix ? output row 2
+    /// - Look up row 3 in the embedding matrix ? output row 3
     /// 
     /// The result is a sequence of embedding vectors, one for each input token.
     /// This transforms your discrete tokens into continuous vectors that the neural

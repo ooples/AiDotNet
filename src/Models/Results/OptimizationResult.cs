@@ -1,4 +1,4 @@
-Ôªønamespace AiDotNet.Models.Results;
+namespace AiDotNet.Models.Results;
 
 /// <summary>
 /// Represents the comprehensive results of an optimization process for a symbolic model, including the best solution found,
@@ -58,7 +58,7 @@ public class OptimizationResult<T, TInput, TOutput>
     /// - May be human-readable (for symbolic models) or more complex (for neural networks)
     /// 
     /// For example:
-    /// - In symbolic regression, this might be an equation like: y = 3.2x‚ÇÅ¬≤ + 1.7x‚ÇÇ - 0.5
+    /// - In symbolic regression, this might be an equation like: y = 3.2x1≤ + 1.7x2 - 0.5
     /// - For a neural network, it would contain the optimized network structure and weights
     /// 
     /// This property is important because:
@@ -120,7 +120,7 @@ public class OptimizationResult<T, TInput, TOutput>
     /// - Higher values usually indicate better performance
     /// 
     /// Common fitness metrics include:
-    /// - R¬≤ (R-squared): Measures the proportion of variance explained (higher is better)
+    /// - R≤ (R-squared): Measures the proportion of variance explained (higher is better)
     /// - Negative MSE (Mean Squared Error): Measures prediction error (closer to zero is better)
     /// - Accuracy: For classification problems, the percentage of correct predictions
     /// 
@@ -458,6 +458,53 @@ public class OptimizationResult<T, TInput, TOutput>
     }
 
     /// <summary>
+    /// Creates a deep copy of this OptimizationResult instance.
+    /// </summary>
+    /// <returns>A new OptimizationResult with copied values.</returns>
+    public OptimizationResult<T, TInput, TOutput> DeepCopy()
+    {
+        return new OptimizationResult<T, TInput, TOutput>
+        {
+            BestSolution = BestSolution?.DeepCopy(),
+            BestIntercept = BestIntercept,
+            BestFitnessScore = BestFitnessScore,
+            Iterations = Iterations,
+            FitnessHistory = new Vector<T>(FitnessHistory.ToArray()),
+            SelectedFeatures = SelectedFeatures.Select(v => new Vector<T>(v.ToArray())).ToList(),
+            TrainingResult = TrainingResult,
+            ValidationResult = ValidationResult,
+            TestResult = TestResult,
+            FitDetectionResult = FitDetectionResult,
+            CoefficientLowerBounds = new Vector<T>(CoefficientLowerBounds.ToArray()),
+            CoefficientUpperBounds = new Vector<T>(CoefficientUpperBounds.ToArray())
+        };
+    }
+
+    /// <summary>
+    /// Creates a new OptimizationResult instance with the best solution updated to use the specified parameters.
+    /// </summary>
+    /// <param name="parameters">The parameters to apply to the best solution.</param>
+    /// <returns>A new OptimizationResult with the updated model.</returns>
+    public OptimizationResult<T, TInput, TOutput> WithParameters(Vector<T> parameters)
+    {
+        return new OptimizationResult<T, TInput, TOutput>
+        {
+            BestSolution = BestSolution?.WithParameters(parameters),
+            BestIntercept = BestIntercept,
+            BestFitnessScore = BestFitnessScore,
+            Iterations = Iterations,
+            FitnessHistory = FitnessHistory,
+            SelectedFeatures = SelectedFeatures,
+            TrainingResult = TrainingResult,
+            ValidationResult = ValidationResult,
+            TestResult = TestResult,
+            FitDetectionResult = FitDetectionResult,
+            CoefficientLowerBounds = CoefficientLowerBounds,
+            CoefficientUpperBounds = CoefficientUpperBounds
+        };
+    }
+
+    /// <summary>
     /// Represents detailed results and statistics for a specific dataset (training, validation, or test).
     /// </summary>
     /// <remarks>
@@ -606,8 +653,8 @@ public class OptimizationResult<T, TInput, TOutput>
         /// - Focus on the relationship between predictions and actual values
         /// 
         /// Common prediction metrics include:
-        /// - R¬≤ (R-squared): Proportion of variance explained by the model (0-1, higher is better)
-        /// - Adjusted R¬≤: R-squared adjusted for the number of predictors
+        /// - R≤ (R-squared): Proportion of variance explained by the model (0-1, higher is better)
+        /// - Adjusted R≤: R-squared adjusted for the number of predictors
         /// - Correlation: How strongly predictions and actual values are related
         /// 
         /// These metrics help you understand how well your model captures

@@ -1,4 +1,4 @@
-﻿namespace AiDotNet.NeuralNetworks;
+namespace AiDotNet.NeuralNetworks;
 
 /// <summary>
 /// Represents a Feed-Forward Neural Network (FFNN) for processing data in a forward path.
@@ -7,7 +7,7 @@
 /// <remarks>
 /// <para>
 /// A Feed-Forward Neural Network is the simplest type of artificial neural network, where connections
-/// between nodes do not form a cycle. Information moves in only one direction—forward—from the input
+/// between nodes do not form a cycle. Information moves in only one direction�forward�from the input
 /// nodes, through the hidden nodes (if any), and to the output nodes.
 /// </para>
 /// <para>
@@ -73,7 +73,7 @@ public class FeedForwardNeuralNetwork<T> : NeuralNetworkBase<T>
         ILossFunction<T>? lossFunction = null,
         double maxGradNorm = 1.0) : base(architecture, lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(architecture.TaskType), maxGradNorm)
     {
-        _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>();
+        _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
         
         // Select appropriate loss function based on task type if not provided
         _lossFunction = lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(architecture.TaskType);
@@ -292,9 +292,9 @@ public class FeedForwardNeuralNetwork<T> : NeuralNetworkBase<T>
     /// the network is set up. This can be useful for documentation or debugging purposes.
     /// </para>
     /// </remarks>
-    public override ModelMetaData<T> GetModelMetaData()
+    public override ModelMetadata<T> GetModelMetadata()
     {
-        return new ModelMetaData<T>
+        return new ModelMetadata<T>
         {
             ModelType = ModelType.FeedForwardNetwork,
             AdditionalInfo = new Dictionary<string, object>

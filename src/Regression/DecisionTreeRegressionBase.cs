@@ -265,7 +265,7 @@ public abstract class DecisionTreeRegressionBase<T> : ITreeBasedRegression<T>
     /// returning the specific metadata relevant to that implementation.
     /// </para>
     /// </remarks>
-    public abstract ModelMetaData<T> GetModelMetaData();
+    public abstract ModelMetadata<T> GetModelMetadata();
     
     /// <summary>
     /// Calculates the importance scores for all features used in the model.
