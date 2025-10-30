@@ -434,27 +434,33 @@ public class NBEATSModel<T> : TimeSeriesModelBase<T>
     /// <returns>A ModelMetadata object containing information about the model.</returns>
     public override ModelMetadata<T> GetModelMetadata()
     {
-        return new ModelMetadata<T>
+        var metadata = new ModelMetadata<T>
         {
-            ModelName = "N-BEATS",
-            ModelType = "Time Series Forecasting",
+            Name = "N-BEATS",
+            ModelType = ModelType.TimeSeries,
             Description = "Neural Basis Expansion Analysis for Interpretable Time Series Forecasting",
-            ParameterCount = ParameterCount,
-            InputDimension = _options.LookbackWindow,
-            OutputDimension = _options.ForecastHorizon,
-            TrainingMetrics = LastEvaluationMetrics,
-            Hyperparameters = new Dictionary<string, object>
+            Complexity = ParameterCount,
+            FeatureCount = _options.LookbackWindow,
+            AdditionalInfo = new Dictionary<string, object>
             {
-                { "NumStacks", _options.NumStacks },
-                { "NumBlocksPerStack", _options.NumBlocksPerStack },
-                { "PolynomialDegree", _options.PolynomialDegree },
-                { "LookbackWindow", _options.LookbackWindow },
-                { "ForecastHorizon", _options.ForecastHorizon },
-                { "HiddenLayerSize", _options.HiddenLayerSize },
-                { "NumHiddenLayers", _options.NumHiddenLayers },
-                { "UseInterpretableBasis", _options.UseInterpretableBasis }
+                { "InputDimension", _options.LookbackWindow },
+                { "OutputDimension", _options.ForecastHorizon },
+                { "TrainingMetrics", LastEvaluationMetrics ?? new Dictionary<string, T>() },
+                { "Hyperparameters", new Dictionary<string, object>
+                    {
+                        { "NumStacks", _options.NumStacks },
+                        { "NumBlocksPerStack", _options.NumBlocksPerStack },
+                        { "PolynomialDegree", _options.PolynomialDegree },
+                        { "LookbackWindow", _options.LookbackWindow },
+                        { "ForecastHorizon", _options.ForecastHorizon },
+                        { "HiddenLayerSize", _options.HiddenLayerSize },
+                        { "NumHiddenLayers", _options.NumHiddenLayers },
+                        { "UseInterpretableBasis", _options.UseInterpretableBasis }
+                    }
+                }
             }
         };
+        return metadata;
     }
 
     /// <summary>

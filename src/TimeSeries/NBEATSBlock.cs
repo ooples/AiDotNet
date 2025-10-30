@@ -58,7 +58,7 @@ public class NBEATSBlock<T>
             int count = 0;
             foreach (var weight in _fcWeights)
             {
-                count += weight.Rows * weight.Cols;
+                count += weight.Rows * weight.Columns;
             }
             foreach (var bias in _fcBiases)
             {
@@ -155,7 +155,7 @@ public class NBEATSBlock<T>
         var weight = new Matrix<T>(_hiddenLayerSize, inputSize);
         for (int i = 0; i < weight.Rows; i++)
         {
-            for (int j = 0; j < weight.Cols; j++)
+            for (int j = 0; j < weight.Columns; j++)
             {
                 weight[i, j] = _numOps.FromDouble(random.NextDouble() * stddev * 2 - stddev);
             }
@@ -170,7 +170,7 @@ public class NBEATSBlock<T>
             weight = new Matrix<T>(_hiddenLayerSize, _hiddenLayerSize);
             for (int i = 0; i < weight.Rows; i++)
             {
-                for (int j = 0; j < weight.Cols; j++)
+                for (int j = 0; j < weight.Columns; j++)
                 {
                     weight[i, j] = _numOps.FromDouble(random.NextDouble() * stddev * 2 - stddev);
                 }
