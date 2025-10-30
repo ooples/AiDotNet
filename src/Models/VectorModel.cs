@@ -37,7 +37,7 @@ namespace AiDotNet.Models;
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric type used for calculations, typically float or double.</typeparam>
-public class VectorModel<T> : IFullModel<T, Matrix<T>, Vector<T>> 
+public class VectorModel<T> : IFullModel<T, Matrix<T>, Vector<T>>, IInterpretableModel<T> 
 {
     /// <summary>
     /// Gets the vector of coefficients used by the model.
@@ -83,6 +83,11 @@ public class VectorModel<T> : IFullModel<T, Matrix<T>, Vector<T>>
     /// </para>
     /// </remarks>
     private static readonly INumericOperations<T> _numOps = MathHelper.GetNumericOperations<T>();
+
+    /// <summary>
+    /// Cached feature importance to avoid recreating on every GetModelMetadata() call.
+    /// </summary>
+    private Dictionary<string, T>? _cachedFeatureImportance;
 
     /// <summary>
     /// Initializes a new instance of the VectorModel class with the specified coefficients.
@@ -169,6 +174,25 @@ public class VectorModel<T> : IFullModel<T, Matrix<T>, Vector<T>>
     /// </para>
     /// </remarks>
     public int Complexity => Coefficients.Count(c => !_numOps.Equals(c, _numOps.Zero));
+
+    /// <summary>
+    /// Gets the number of trainable parameters in the model.
+    /// </summary>
+    /// <value>An integer representing the number of parameters.</value>
+    /// <remarks>
+    /// <para>
+    /// For a VectorModel, the number of parameters equals the number of coefficients,
+    /// as each coefficient is a trainable parameter.
+    /// </para>
+    /// <para><b>For Beginners:</b> This tells you how many weights the model has to learn.
+    ///
+    /// For a linear model:
+    /// - Each coefficient is a parameter that can be trained
+    /// - More parameters generally means more complexity
+    /// - The parameter count equals the number of features
+    /// </para>
+    /// </remarks>
+    public int ParameterCount => Coefficients.Length;
 
     /// <summary>
     /// Determines whether a specific feature is used by the model.
@@ -336,6 +360,9 @@ public class VectorModel<T> : IFullModel<T, Matrix<T>, Vector<T>>
             {
                 Coefficients[i] = newCoefficients[i];
             }
+
+            // Invalidate cached feature importance
+            _cachedFeatureImportance = null;
         }
         catch (Exception ex)
         {
@@ -437,6 +464,7 @@ public class VectorModel<T> : IFullModel<T, Matrix<T>, Vector<T>>
             FeatureCount = FeatureCount,
             Complexity = nonZeroCount,
             Description = $"Vector model with {FeatureCount} features ({nonZeroCount} active)",
+            FeatureImportance = GetFeatureImportance(),
             AdditionalInfo = new Dictionary<string, object>
             {
                 { "CoefficientNorm", norm! },
@@ -566,10 +594,118 @@ public class VectorModel<T> : IFullModel<T, Matrix<T>, Vector<T>>
             {
                 Coefficients[i] = _numOps.FromDouble(reader.ReadDouble());
             }
+
+            // Invalidate cached feature importance
+            _cachedFeatureImportance = null;
         }
         catch (Exception ex) when (!(ex is ArgumentNullException || ex is ArgumentException || ex is InvalidOperationException))
         {
             throw new ArgumentException("Failed to deserialize the model. The data may be corrupted or in an invalid format.", nameof(data), ex);
+        }
+    }
+
+    /// <summary>
+    /// Saves the model to a file.
+    /// </summary>
+    /// <param name="filePath">The path where the model will be saved.</param>
+    /// <exception cref="ArgumentNullException">Thrown when filePath is null.</exception>
+    /// <remarks>
+    /// <para>
+    /// This method saves the model to a file by serializing it to a byte array and writing it to disk.
+    /// The model can later be loaded using the LoadModel method.
+    /// </para>
+    /// <para><b>For Beginners:</b> This method saves the model to a file so you can use it later.
+    ///
+    /// To use this method:
+    /// - Provide a file path where the model should be saved
+    /// - The model will be serialized and written to disk
+    /// - You can load it later with LoadModel
+    ///
+    /// For example: model.SaveModel("my_model.bin");
+    /// </para>
+    /// </remarks>
+    public void SaveModel(string filePath)
+    {
+        if (filePath == null)
+        {
+            throw new ArgumentNullException(nameof(filePath));
+        }
+
+        try
+        {
+            File.WriteAllBytes(filePath, Serialize());
+        }
+        catch (UnauthorizedAccessException ex)
+        {
+            throw new InvalidOperationException($"Access denied when saving model to '{filePath}'. Check file permissions.", ex);
+        }
+        catch (DirectoryNotFoundException ex)
+        {
+            throw new InvalidOperationException($"Directory not found when saving model to '{filePath}'. Ensure the directory exists.", ex);
+        }
+        catch (IOException ex)
+        {
+            throw new InvalidOperationException($"IO error occurred while saving model to '{filePath}'. The file may be in use or the disk may be full.", ex);
+        }
+        catch (Exception ex) when (!(ex is ArgumentNullException || ex is InvalidOperationException))
+        {
+            throw new InvalidOperationException($"Unexpected error saving model to '{filePath}'.", ex);
+        }
+    }
+
+    /// <summary>
+    /// Loads a model from a file into the current instance.
+    /// </summary>
+    /// <param name="filePath">The path of the file containing the serialized model.</param>
+    /// <exception cref="ArgumentNullException">Thrown when filePath is null.</exception>
+    /// <exception cref="FileNotFoundException">Thrown when the file does not exist.</exception>
+    /// <remarks>
+    /// <para>
+    /// This method loads a model from a file by reading the byte array and deserializing it.
+    /// The model must have been saved using the SaveModel method.
+    /// </para>
+    /// <para><b>For Beginners:</b> This method loads a saved model from a file.
+    ///
+    /// To use this method:
+    /// - Provide the file path where the model was saved
+    /// - The model will be loaded and replace the current model's coefficients
+    /// - The file must have been created with SaveModel
+    ///
+    /// For example: model.LoadModel("my_model.bin");
+    /// </para>
+    /// </remarks>
+    public void LoadModel(string filePath)
+    {
+        if (filePath == null)
+        {
+            throw new ArgumentNullException(nameof(filePath));
+        }
+
+        if (!File.Exists(filePath))
+        {
+            throw new FileNotFoundException($"Model file not found: {filePath}", filePath);
+        }
+
+        try
+        {
+            byte[] data = File.ReadAllBytes(filePath);
+            Deserialize(data);
+        }
+        catch (UnauthorizedAccessException ex)
+        {
+            throw new InvalidOperationException($"Access denied when loading model from '{filePath}'. Check file permissions.", ex);
+        }
+        catch (IOException ex)
+        {
+            throw new InvalidOperationException($"IO error occurred while loading model from '{filePath}'. The file may be in use or corrupted.", ex);
+        }
+        catch (ArgumentException ex)
+        {
+            throw new InvalidOperationException($"Invalid model file format at '{filePath}'. The file may be corrupted or not a valid VectorModel.", ex);
+        }
+        catch (Exception ex) when (!(ex is ArgumentNullException || ex is FileNotFoundException || ex is InvalidOperationException))
+        {
+            throw new InvalidOperationException($"Unexpected error loading model from '{filePath}'.", ex);
         }
     }
 
@@ -716,6 +852,9 @@ public class VectorModel<T> : IFullModel<T, Matrix<T>, Vector<T>>
         {
             Coefficients[i] = parameters[i];
         }
+
+        // Invalidate cached feature importance
+        _cachedFeatureImportance = null;
     }
 
     /// <summary>
@@ -887,21 +1026,63 @@ public class VectorModel<T> : IFullModel<T, Matrix<T>, Vector<T>>
                 Coefficients[i] = _numOps.Zero;
             }
         }
+
+        // Invalidate cached feature importance
+        _cachedFeatureImportance = null;
+    }
+
+    /// <summary>
+    /// Gets the feature importance scores.
+    /// </summary>
+    /// <returns>A dictionary mapping feature names to importance scores.</returns>
+    /// <remarks>
+    /// <para>
+    /// This method returns the feature importance scores for the model. For a VectorModel,
+    /// the importance is based on the absolute value of each coefficient, as larger absolute
+    /// values have a greater impact on predictions.
+    /// </para>
+    /// <para><b>For Beginners:</b> This method shows which features matter most to the model.
+    ///
+    /// For a linear model:
+    /// - Features with larger coefficients (positive or negative) are more important
+    /// - The importance is the absolute value of each coefficient
+    /// - Features are named "Feature_0", "Feature_1", etc.
+    ///
+    /// This is useful for:
+    /// - Understanding which features drive predictions
+    /// - Feature selection (identifying which features to keep)
+    /// - Model interpretation and explanation
+    /// </para>
+    /// </remarks>
+    public Dictionary<string, T> GetFeatureImportance()
+    {
+        if (_cachedFeatureImportance != null)
+        {
+            return new Dictionary<string, T>(_cachedFeatureImportance);
+        }
+
+        var importance = new Dictionary<string, T>();
+        for (int i = 0; i < Coefficients.Length; i++)
+        {
+            importance.Add($"Feature_{i}", _numOps.Abs(Coefficients[i]));
+        }
+        _cachedFeatureImportance = importance;
+        return new Dictionary<string, T>(importance);
     }
 
     #region IInterpretableModel Implementation
 
         protected readonly HashSet<InterpretationMethod> _enabledMethods = new();
-        protected Vector<int> _sensitiveFeatures;
+        protected Vector<int>? _sensitiveFeatures;
         protected readonly List<FairnessMetric> _fairnessMetrics = new();
-        protected IFullModel<T, Matrix<T>, Vector<T>> _baseModel;
+        protected IFullModel<T, Matrix<T>, Vector<T>>? _baseModel;
 
         /// <summary>
         /// Gets the global feature importance across all predictions.
         /// </summary>
         public virtual async Task<Dictionary<int, T>> GetGlobalFeatureImportanceAsync()
         {
-        return await InterpretableModelHelper.GetGlobalFeatureImportanceAsync(this, _enabledMethods);
+        return await InterpretableModelHelper.GetGlobalFeatureImportanceAsync<T>(this, _enabledMethods);
         }
 
         /// <summary>
@@ -909,7 +1090,7 @@ public class VectorModel<T> : IFullModel<T, Matrix<T>, Vector<T>>
         /// </summary>
         public virtual async Task<Dictionary<int, T>> GetLocalFeatureImportanceAsync(Matrix<T> input)
         {
-        return await InterpretableModelHelper.GetLocalFeatureImportanceAsync(this, _enabledMethods, input);
+        return await InterpretableModelHelper.GetLocalFeatureImportanceAsync<T>(this, _enabledMethods, ConversionsHelper.ConvertToTensor<T>(input));
         }
 
         /// <summary>
@@ -917,7 +1098,7 @@ public class VectorModel<T> : IFullModel<T, Matrix<T>, Vector<T>>
         /// </summary>
         public virtual async Task<Matrix<T>> GetShapValuesAsync(Matrix<T> inputs)
         {
-        return await InterpretableModelHelper.GetShapValuesAsync(this, _enabledMethods);
+        return await InterpretableModelHelper.GetShapValuesAsync(this, _enabledMethods, ConversionsHelper.ConvertToTensor<T>(inputs));
         }
 
         /// <summary>
@@ -925,12 +1106,9 @@ public class VectorModel<T> : IFullModel<T, Matrix<T>, Vector<T>>
         /// </summary>
         public virtual async Task<LimeExplanation<T>> GetLimeExplanationAsync(Matrix<T> input, int numFeatures = 10)
         {
-        return await InterpretableModelHelper.GetLimeExplanationAsync<T>(_enabledMethods, numFeatures);
+        return await InterpretableModelHelper.GetLimeExplanationAsync<T>(this, _enabledMethods, ConversionsHelper.ConvertToTensor<T>(input), numFeatures);
         }
 
-        /// <summary>
-        /// Gets partial dependence data for specified features.
-        /// </summary>
         /// <summary>
         /// Gets partial dependence data for specified features.
         /// </summary>
@@ -1110,7 +1288,7 @@ public class VectorModel<T> : IFullModel<T, Matrix<T>, Vector<T>>
         /// </summary>
         public virtual async Task<CounterfactualExplanation<T>> GetCounterfactualAsync(Matrix<T> input, Vector<T> desiredOutput, int maxChanges = 5)
         {
-        return await InterpretableModelHelper.GetCounterfactualAsync<T>(_enabledMethods, maxChanges);
+        return await InterpretableModelHelper.GetCounterfactualAsync<T>(this, _enabledMethods, ConversionsHelper.ConvertToTensor<T>(input), ConversionsHelper.ConvertToTensor<T>(desiredOutput), maxChanges);
         }
 
         /// <summary>
@@ -1118,7 +1296,7 @@ public class VectorModel<T> : IFullModel<T, Matrix<T>, Vector<T>>
         /// </summary>
         public virtual async Task<Dictionary<string, object>> GetModelSpecificInterpretabilityAsync()
         {
-        return await InterpretableModelHelper.GetModelSpecificInterpretabilityAsync(this);
+        return await InterpretableModelHelper.GetModelSpecificInterpretabilityAsync<T>(this);
         }
 
         /// <summary>
@@ -1126,7 +1304,7 @@ public class VectorModel<T> : IFullModel<T, Matrix<T>, Vector<T>>
         /// </summary>
         public virtual async Task<string> GenerateTextExplanationAsync(Matrix<T> input, Vector<T> prediction)
         {
-        return await InterpretableModelHelper.GenerateTextExplanationAsync(this, input, prediction);
+        return await InterpretableModelHelper.GenerateTextExplanationAsync<T>(this, ConversionsHelper.ConvertToTensor<T>(input), ConversionsHelper.ConvertToTensor<T>(prediction));
         }
 
         /// <summary>
@@ -1150,7 +1328,73 @@ public class VectorModel<T> : IFullModel<T, Matrix<T>, Vector<T>>
         /// </summary>
         public virtual async Task<AnchorExplanation<T>> GetAnchorExplanationAsync(Matrix<T> input, T threshold)
         {
-        return await InterpretableModelHelper.GetAnchorExplanationAsync(_enabledMethods, threshold);
+        return await InterpretableModelHelper.GetAnchorExplanationAsync(this, _enabledMethods, ConversionsHelper.ConvertToTensor<T>(input), threshold);
+        }
+
+        // IInterpretableModel<T> interface implementations with Tensor<T> parameters
+
+        /// <summary>
+        /// Gets the local feature importance for a specific input (IInterpretableModel implementation).
+        /// </summary>
+        public virtual Task<Dictionary<int, T>> GetLocalFeatureImportanceAsync(Tensor<T> input)
+        {
+            return InterpretableModelHelper.GetLocalFeatureImportanceAsync<T>(this, _enabledMethods, input);
+        }
+
+        /// <summary>
+        /// Gets SHAP values for the given inputs (IInterpretableModel implementation).
+        /// </summary>
+        public virtual Task<Matrix<T>> GetShapValuesAsync(Tensor<T> inputs)
+        {
+            return InterpretableModelHelper.GetShapValuesAsync(this, _enabledMethods, inputs);
+        }
+
+        /// <summary>
+        /// Gets LIME explanation for a specific input (IInterpretableModel implementation).
+        /// </summary>
+        public virtual Task<LimeExplanation<T>> GetLimeExplanationAsync(Tensor<T> input, int numFeatures = 10)
+        {
+            return InterpretableModelHelper.GetLimeExplanationAsync<T>(this, _enabledMethods, input, numFeatures);
+        }
+
+        /// <summary>
+        /// Gets counterfactual explanation for a given input and desired output (IInterpretableModel implementation).
+        /// </summary>
+        public virtual Task<CounterfactualExplanation<T>> GetCounterfactualAsync(Tensor<T> input, Tensor<T> desiredOutput, int maxChanges = 5)
+        {
+            return InterpretableModelHelper.GetCounterfactualAsync<T>(this, _enabledMethods, input, desiredOutput, maxChanges);
+        }
+
+        /// <summary>
+        /// Generates a text explanation for a prediction (IInterpretableModel implementation).
+        /// </summary>
+        public virtual Task<string> GenerateTextExplanationAsync(Tensor<T> input, Tensor<T> prediction)
+        {
+            return InterpretableModelHelper.GenerateTextExplanationAsync<T>(this, input, prediction);
+        }
+
+        /// <summary>
+        /// Validates fairness metrics for the given inputs (IInterpretableModel implementation).
+        /// </summary>
+        public virtual Task<FairnessMetrics<T>> ValidateFairnessAsync(Tensor<T> inputs, int sensitiveFeatureIndex)
+        {
+            return InterpretableModelHelper.ValidateFairnessAsync<T>(_fairnessMetrics);
+        }
+
+        /// <summary>
+        /// Gets anchor explanation for a given input (IInterpretableModel implementation).
+        /// </summary>
+        public virtual Task<AnchorExplanation<T>> GetAnchorExplanationAsync(Tensor<T> input, T threshold)
+        {
+            return InterpretableModelHelper.GetAnchorExplanationAsync(this, _enabledMethods, input, threshold);
+        }
+
+        /// <summary>
+        /// Sets the base model for interpretability analysis (IInterpretableModel implementation).
+        /// </summary>
+        public virtual void SetBaseModel<TInput, TOutput>(IFullModel<T, TInput, TOutput> model)
+        {
+            _baseModel = model as IFullModel<T, Matrix<T>, Vector<T>> ?? throw new ArgumentException("Base model must be compatible with Matrix<T> input and Vector<T> output.", nameof(model));
         }
 
         /// <summary>
@@ -1177,60 +1421,10 @@ public class VectorModel<T> : IFullModel<T, Matrix<T>, Vector<T>>
         /// </summary>
         public virtual void ConfigureFairness(Vector<int> sensitiveFeatures, params FairnessMetric[] fairnessMetrics)
         {
-            _sensitiveFeatures = sensitiveFeatures ?? throw new ArgumentNullException(nameof(sensitiveFeatures));
-            _fairnessMetrics.Clear();
-            _fairnessMetrics.AddRange(fairnessMetrics);
+        _sensitiveFeatures = sensitiveFeatures ?? throw new ArgumentNullException(nameof(sensitiveFeatures));
+        _fairnessMetrics.Clear();
+        _fairnessMetrics.AddRange(fairnessMetrics);
         }
-
-    #endregion
-
-    #region IFullModel Required Members (Placeholder Implementations)
-
-    /// <summary>
-    /// Saves the model to the specified file path.
-    /// </summary>
-    /// <remarks>
-    /// TODO: Implement in future user story. Placeholder for IModelSerializer interface requirement.
-    /// </remarks>
-    public void SaveModel(string filePath)
-    {
-        throw new NotImplementedException("SaveModel is not yet implemented for VectorModel. This will be implemented in a future user story.");
-    }
-
-    /// <summary>
-    /// Loads a model from the specified file path.
-    /// </summary>
-    /// <remarks>
-    /// TODO: Implement in future user story. Placeholder for IModelSerializer interface requirement.
-    /// </remarks>
-    public void LoadModel(string filePath)
-    {
-        throw new NotImplementedException("LoadModel is not yet implemented for VectorModel. This will be implemented in a future user story.");
-    }
-
-    /// <summary>
-    /// Gets the total number of trainable parameters in the model.
-    /// </summary>
-    /// <remarks>
-    /// TODO: Implement in future user story. Placeholder for IParameterizable interface requirement.
-    /// For VectorModel, this should return the number of coefficients.
-    /// </remarks>
-    public int ParameterCount
-    {
-        get { throw new NotImplementedException("ParameterCount is not yet implemented for VectorModel. This will be implemented in a future user story."); }
-    }
-
-    /// <summary>
-    /// Gets the importance of each feature in the model.
-    /// </summary>
-    /// <remarks>
-    /// TODO: Implement in future user story. Placeholder for IFeatureImportance interface requirement.
-    /// For VectorModel, this should return the absolute values of coefficients as a dictionary.
-    /// </remarks>
-    public Dictionary<string, T> GetFeatureImportance()
-    {
-        throw new NotImplementedException("GetFeatureImportance is not yet implemented for VectorModel. This will be implemented in a future user story.");
-    }
 
     #endregion
 }
