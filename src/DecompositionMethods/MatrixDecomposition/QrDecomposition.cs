@@ -157,7 +157,7 @@ public class QrDecomposition<T> : IMatrixDecomposition<T>
     {
         int m = matrix.Rows;
         int n = matrix.Columns;
-        Matrix<T> Q = Matrix<T>.CreateIdentityMatrix<T>(m);
+        Matrix<T> Q = Matrix<T>.CreateIdentityMatrix(m);
         Matrix<T> R = matrix.Clone();
 
         for (int k = 0; k < n; k++)
@@ -175,10 +175,10 @@ public class QrDecomposition<T> : IMatrixDecomposition<T>
             if (!_numOps.Equals(normU, _numOps.Zero))
             {
                 u = u.Divide(normU);
-                Matrix<T> H = Matrix<T>.CreateIdentityMatrix<T>(m - k)
+                Matrix<T> H = Matrix<T>.CreateIdentityMatrix(m - k)
                     .Subtract(u.OuterProduct(u).Multiply(_numOps.FromDouble(2)));
 
-                Matrix<T> QkTranspose = Matrix<T>.CreateIdentityMatrix<T>(m);
+                Matrix<T> QkTranspose = Matrix<T>.CreateIdentityMatrix(m);
                 for (int i = k; i < m; i++)
                 {
                     for (int j = k; j < m; j++)
@@ -211,7 +211,7 @@ public class QrDecomposition<T> : IMatrixDecomposition<T>
     {
         int m = matrix.Rows;
         int n = matrix.Columns;
-        Matrix<T> Q = Matrix<T>.CreateIdentityMatrix<T>(m);
+        Matrix<T> Q = Matrix<T>.CreateIdentityMatrix(m);
         Matrix<T> R = matrix.Clone();
 
         for (int j = 0; j < n; j++)
@@ -226,7 +226,7 @@ public class QrDecomposition<T> : IMatrixDecomposition<T>
                     T c = _numOps.Divide(a, r);
                     T s = _numOps.Divide(b, r);
 
-                    Matrix<T> G = Matrix<T>.CreateIdentityMatrix<T>(m);
+                    Matrix<T> G = Matrix<T>.CreateIdentityMatrix(m);
                     G[i - 1, i - 1] = c;
                     G[i, i] = c;
                     G[i - 1, i] = s;
