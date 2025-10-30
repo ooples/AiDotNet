@@ -326,14 +326,18 @@ public class PredictionModelResult<T, TInput, TOutput> : IPredictiveModel<T, TIn
     }
 
     /// <summary>
-    /// Trains the model. Since PredictionModelResult represents a result, this method throws an exception.
+    /// Trains the underlying model using input data and expected output.
     /// </summary>
     /// <param name="input">Input training data.</param>
     /// <param name="expectedOutput">Expected output values.</param>
-    /// <exception cref="InvalidOperationException">Always thrown because PredictionModelResult cannot be trained directly.</exception>
+    /// <exception cref="InvalidOperationException">Thrown when the Model is not initialized.</exception>
     public void Train(TInput input, TOutput expectedOutput)
     {
-        throw new InvalidOperationException("PredictionModelResult cannot be trained directly. It represents the result of a prediction.");
+        if (Model == null)
+        {
+            throw new InvalidOperationException("Model is not initialized.");
+        }
+        Model.Train(input, expectedOutput);
     }
 
     /// <summary>
