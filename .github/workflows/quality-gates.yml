@@ -1,1 +1,86 @@
-name: Quality Gates (.NET)on:  pull_request:    branches: [ merge-dev2-to-master ]  push:    branches: [ merge-dev2-to-master ]concurrency:  group: ${{ github.workflow }}-${{ github.ref }}  cancel-in-progress: truejobs:  artifact-size:    name: Publish Size Analysis    runs-on: ubuntu-latest    timeout-minutes: 15    steps:      - name: Checkout code        uses: actions/checkout@v4        with:          fetch-depth: 0      - name: Setup .NET        uses: actions/setup-dotnet@v4        with:          dotnet-version: 8.0.x      - name: Publish library        run: |          if [ -f "src/AiDotNet.csproj" ]; then            dotnet publish src/AiDotNet.csproj -c Release -o publish              status=$?            failed_projects=""            shopt -s nullglob            for p in src/*.csproj; do              dotnet publish "$p" -c Release -o publish              status=$?              if [ $status -ne 0 ]; then                echo "Publish failed for $p"                failed_projects="$failed_projects $p"              fi            done            if [ -n "$failed_projects" ]; then              echo "Error: The following projects failed to publish:$failed_projects"              exit 1            fi          fi      - name: Analyze size vs baseline        id: size        run: |          CURRENT_SIZE=$(du -sb publish | cut -f1)          CURRENT_MB=$(echo "scale=2; $CURRENT_SIZE/1024/1024" | bc)          echo "current_size=$CURRENT_SIZE" >> $GITHUB_OUTPUT          echo "current_mb=$CURRENT_MB" >> $GITHUB_OUTPUT          echo "Current publish size: ${CURRENT_MB} MB"          BASELINE_FILE=".github/artifact-size-baseline.txt"          if [ ! -f "$BASELINE_FILE" ]; then            echo "$CURRENT_SIZE" > "$BASELINE_FILE"            echo "baseline_exists=false" >> $GITHUB_OUTPUT            echo "Created baseline (${CURRENT_MB} MB)"            exit 0          fi          BASELINE=$(cat "$BASELINE_FILE")          BASELINE_MB=$(echo "scale=2; $BASELINE/1024/1024" | bc)          CHANGE=$(echo "scale=2; (($CURRENT_SIZE - $BASELINE) * 100) / $BASELINE" | bc)          echo "baseline_exists=true" >> $GITHUB_OUTPUT          echo "baseline_mb=$BASELINE_MB" >> $GITHUB_OUTPUT          echo "percent_change=$CHANGE" >> $GITHUB_OUTPUT          echo "Size change: ${CHANGE}% (baseline ${BASELINE_MB} MB)"          if (( $(echo "$CHANGE > 5" | bc -l) )); then            echo "Error: publish size increased by ${CHANGE}% (> +5%)"            exit 1          fi      - name: Upload size report        if: always()        uses: actions/upload-artifact@v4        with:          name: publish-size-${{ github.sha }}          path: |            publish/            .github/artifact-size-baseline.txt          if-no-files-found: ignore          retention-days: 7
+name: Quality Gates (.NET)
+
+on:
+  pull_request:
+    branches: [ '**' ]
+  push:
+    branches: [ '**' ]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  artifact-size:
+    name: Publish Size Analysis
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 8.0.x
+
+      - name: Publish library
+        run: |
+          if [ -f "src/AiDotNet.csproj" ]; then
+            dotnet publish src/AiDotNet.csproj -c Release -o publish
+            status=$?
+            failed_projects=""
+            shopt -s nullglob
+            for p in src/*.csproj; do
+              dotnet publish "$p" -c Release -o publish
+              status=$?
+              if [ $status -ne 0 ]; then
+                echo "Publish failed for $p"
+                failed_projects="$failed_projects $p"
+              fi
+            done
+            if [ -n "$failed_projects" ]; then
+              echo "Error: The following projects failed to publish:$failed_projects"
+              exit 1
+            fi
+          fi
+
+      - name: Analyze size vs baseline
+        id: size
+        run: |
+          CURRENT_SIZE=$(du -sb publish | cut -f1)
+          CURRENT_MB=$(echo "scale=2; $CURRENT_SIZE/1024/1024" | bc)
+          echo "current_size=$CURRENT_SIZE" >> $GITHUB_OUTPUT
+          echo "current_mb=$CURRENT_MB" >> $GITHUB_OUTPUT
+          echo "Current publish size: ${CURRENT_MB} MB"
+          BASELINE_FILE=".github/artifact-size-baseline.txt"
+          if [ ! -f "$BASELINE_FILE" ]; then
+            echo "$CURRENT_SIZE" > "$BASELINE_FILE"
+            echo "baseline_exists=false" >> $GITHUB_OUTPUT
+            echo "Created baseline (${CURRENT_MB} MB)"
+            exit 0
+          fi
+          BASELINE=$(cat "$BASELINE_FILE")
+          BASELINE_MB=$(echo "scale=2; $BASELINE/1024/1024" | bc)
+          CHANGE=$(echo "scale=2; (($CURRENT_SIZE - $BASELINE) * 100) / $BASELINE" | bc)
+          echo "baseline_exists=true" >> $GITHUB_OUTPUT
+          echo "baseline_mb=$BASELINE_MB" >> $GITHUB_OUTPUT
+          echo "percent_change=$CHANGE" >> $GITHUB_OUTPUT
+          echo "Size change: ${CHANGE}% (baseline ${BASELINE_MB} MB)"
+          if (( $(echo "$CHANGE > 5" | bc -l) )); then
+            echo "Error: publish size increased by ${CHANGE}% (> +5%)"
+            exit 1
+          fi
+
+      - name: Upload size report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: publish-size-${{ github.sha }}
+          path: |
+            publish/
+            .github/artifact-size-baseline.txt
+          if-no-files-found: ignore
+          retention-days: 7

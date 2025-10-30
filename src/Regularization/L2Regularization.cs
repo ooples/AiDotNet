@@ -1,4 +1,4 @@
-﻿namespace AiDotNet.Regularization;
+namespace AiDotNet.Regularization;
 
 /// <summary>
 /// Implements L2 regularization (also known as Ridge), a technique that adds a penalty equal to the

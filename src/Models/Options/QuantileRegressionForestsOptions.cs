@@ -1,4 +1,4 @@
-﻿namespace AiDotNet.Models.Options;
+namespace AiDotNet.Models.Options;
 
 /// <summary>
 /// Configuration options for Quantile Regression Forests, an extension of Random Forests that enables
@@ -8,7 +8,7 @@
 /// <para>
 /// Quantile Regression Forests extend the Random Forest algorithm to provide full conditional distributions
 /// instead of just point estimates. While standard Random Forests estimate the conditional mean E(Y|X),
-/// Quantile Regression Forests can estimate any conditional quantile Q(α|X) for α ∈ (0,1), including
+/// Quantile Regression Forests can estimate any conditional quantile Q(a|X) for a ? (0,1), including
 /// medians and prediction intervals. This is achieved by keeping track of all target values in the leaf
 /// nodes of each tree, rather than just their averages. The algorithm provides a non-parametric way to
 /// estimate conditional distributions, making it particularly valuable for problems where uncertainty
@@ -20,11 +20,11 @@
 /// <para><b>For Beginners:</b> Quantile Regression Forests help predict not just a single value, but a range of possible values with their probabilities.
 /// 
 /// Think about weather forecasting:
-/// - A regular forecast might say "tomorrow's temperature will be 75°F"
+/// - A regular forecast might say "tomorrow's temperature will be 75�F"
 /// - But Quantile Regression Forests could tell you:
-///   - "There's a 10% chance it will be below 70°F"
-///   - "There's a 50% chance it will be below 75°F" (the median)
-///   - "There's a 90% chance it will be below 80°F"
+///   - "There's a 10% chance it will be below 70�F"
+///   - "There's a 50% chance it will be below 75�F" (the median)
+///   - "There's a 90% chance it will be below 80�F"
 /// 
 /// What this algorithm does:
 /// - It builds many decision trees, just like a regular Random Forest

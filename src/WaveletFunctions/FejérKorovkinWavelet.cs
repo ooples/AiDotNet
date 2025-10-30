@@ -1,11 +1,11 @@
 namespace AiDotNet.WaveletFunctions;
 
 /// <summary>
-/// Represents a Fejér-Korovkin wavelet function implementation for signal processing and analysis.
+/// Represents a FejÃ©r-Korovkin wavelet function implementation for signal processing and analysis.
 /// </summary>
 /// <remarks>
 /// <para>
-/// The Fejér-Korovkin wavelet is a mathematical function used in signal processing for decomposing
+/// The FejÃ©r-Korovkin wavelet is a mathematical function used in signal processing for decomposing
 /// signals into different frequency components. This implementation supports various orders of the
 /// wavelet and provides methods for calculating wavelet values and decomposing signals using the
 /// wavelet transform.
@@ -17,12 +17,12 @@ namespace AiDotNet.WaveletFunctions;
 /// - They're great for analyzing signals that change over time (like sound or sensor readings)
 /// - They can compress data while preserving important features
 /// 
-/// The Fejér-Korovkin wavelet is a specific type of wavelet with smooth properties that make it
+/// The FejÃ©r-Korovkin wavelet is a specific type of wavelet with smooth properties that make it
 /// useful for various applications in signal processing, image analysis, and data compression.
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric type used for calculations, typically float or double.</typeparam>
-public class FejérKorovkinWavelet<T> : IWaveletFunction<T>
+public class FejÃ©rKorovkinWavelet<T> : IWaveletFunction<T>
 {
     /// <summary>
     /// Provides mathematical operations for the generic type T.
@@ -48,7 +48,7 @@ public class FejérKorovkinWavelet<T> : IWaveletFunction<T>
     private readonly INumericOperations<T> _numOps;
 
     /// <summary>
-    /// The order of the Fejér-Korovkin wavelet.
+    /// The order of the FejÃ©r-Korovkin wavelet.
     /// </summary>
     /// <remarks>
     /// <para>
@@ -70,11 +70,11 @@ public class FejérKorovkinWavelet<T> : IWaveletFunction<T>
     private readonly int _order;
 
     /// <summary>
-    /// The Fejér-Korovkin wavelet coefficients.
+    /// The FejÃ©r-Korovkin wavelet coefficients.
     /// </summary>
     /// <remarks>
     /// <para>
-    /// This field stores the precomputed Fejér-Korovkin coefficients that define the specific
+    /// This field stores the precomputed FejÃ©r-Korovkin coefficients that define the specific
     /// characteristics of this wavelet. These coefficients are calculated during initialization
     /// based on the specified order and are used in the wavelet function calculations.
     /// </para>
@@ -86,7 +86,7 @@ public class FejérKorovkinWavelet<T> : IWaveletFunction<T>
     /// - Are used in all calculations involving this wavelet
     /// 
     /// This is like the DNA of the wavelet - these specific values are what make
-    /// a Fejér-Korovkin wavelet different from other types of wavelets.
+    /// a FejÃ©r-Korovkin wavelet different from other types of wavelets.
     /// </para>
     /// </remarks>
     private readonly Vector<T> _coefficients;
@@ -136,9 +136,9 @@ public class FejérKorovkinWavelet<T> : IWaveletFunction<T>
     private Vector<T> _waveletCoefficients;
 
     /// <summary>
-    /// Initializes a new instance of the <see cref="FejérKorovkinWavelet{T}"/> class with the specified order.
+    /// Initializes a new instance of the <see cref="FejÃ©rKorovkinWavelet{T}"/> class with the specified order.
     /// </summary>
-    /// <param name="order">The order of the Fejér-Korovkin wavelet. Must be an even number greater than or equal to 4. Defaults to 4.</param>
+    /// <param name="order">The order of the FejÃ©r-Korovkin wavelet. Must be an even number greater than or equal to 4. Defaults to 4.</param>
     /// <exception cref="ArgumentException">Thrown when the order is less than 4 or not an even number.</exception>
     /// <remarks>
     /// <para>
@@ -156,11 +156,11 @@ public class FejérKorovkinWavelet<T> : IWaveletFunction<T>
     /// if you need more precise analysis of your data.
     /// </para>
     /// </remarks>
-    public FejérKorovkinWavelet(int order = 4)
+    public FejÃ©rKorovkinWavelet(int order = 4)
     {
         _numOps = MathHelper.GetNumericOperations<T>();
         _order = order;
-        _coefficients = GetFejérKorovkinCoefficients(_order);
+        _coefficients = GetFejÃ©rKorovkinCoefficients(_order);
         _scalingCoefficients = new Vector<T>(_order);
         _waveletCoefficients = new Vector<T>(_order);
         InitializeCoefficients();
@@ -174,7 +174,7 @@ public class FejérKorovkinWavelet<T> : IWaveletFunction<T>
     /// <remarks>
     /// <para>
     /// This method computes the value of the wavelet function at the given input point by applying
-    /// the Fejér-Korovkin coefficients to the scaling function. The result represents how much the
+    /// the FejÃ©r-Korovkin coefficients to the scaling function. The result represents how much the
     /// signal at that point contributes to the frequency band represented by this wavelet.
     /// </para>
     /// <para><b>For Beginners:</b> This method measures how strongly a specific point in your data
@@ -339,20 +339,20 @@ public class FejérKorovkinWavelet<T> : IWaveletFunction<T>
     }
 
     /// <summary>
-    /// Calculates the Fejér-Korovkin coefficients for the specified order.
+    /// Calculates the FejÃ©r-Korovkin coefficients for the specified order.
     /// </summary>
-    /// <param name="order">The order of the Fejér-Korovkin wavelet.</param>
-    /// <returns>A vector containing the calculated Fejér-Korovkin coefficients.</returns>
+    /// <param name="order">The order of the FejÃ©r-Korovkin wavelet.</param>
+    /// <returns>A vector containing the calculated FejÃ©r-Korovkin coefficients.</returns>
     /// <exception cref="ArgumentException">Thrown when the order is less than 4 or not an even number.</exception>
     /// <remarks>
     /// <para>
-    /// This method computes the Fejér-Korovkin coefficients for the specified order using the
+    /// This method computes the FejÃ©r-Korovkin coefficients for the specified order using the
     /// mathematical definition of these wavelets. The coefficients are calculated using trigonometric
     /// functions and then normalized to ensure proper scaling.
     /// </para>
     /// <para><b>For Beginners:</b> This method calculates the special numbers that define this particular wavelet.
     /// 
-    /// The Fejér-Korovkin coefficients:
+    /// The FejÃ©r-Korovkin coefficients:
     /// - Are calculated using mathematical formulas based on trigonometric functions
     /// - Define the specific "shape" of this wavelet
     /// - Are normalized so they add up correctly (sum to 1)
@@ -361,7 +361,7 @@ public class FejérKorovkinWavelet<T> : IWaveletFunction<T>
     /// are what make this wavelet unique compared to other types of wavelets.
     /// </para>
     /// </remarks>
-    private Vector<T> GetFejérKorovkinCoefficients(int order)
+    private Vector<T> GetFejÃ©rKorovkinCoefficients(int order)
     {
         if (order < 4 || order % 2 != 0)
         {
@@ -411,7 +411,7 @@ public class FejérKorovkinWavelet<T> : IWaveletFunction<T>
     /// - Scaling coefficients capture the "smooth" parts of your data
     /// - Wavelet coefficients capture the "detailed" parts
     /// 
-    /// This setup happens automatically when you create a new FejérKorovkinWavelet object.
+    /// This setup happens automatically when you create a new FejÃ©rKorovkinWavelet object.
     /// </para>
     /// </remarks>
     private void InitializeCoefficients()

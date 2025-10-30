@@ -1,4 +1,4 @@
-ï»¿namespace AiDotNet.Enums;
+namespace AiDotNet.Enums;
 
 /// <summary>
 /// Specifies different methods for breaking down (decomposing) matrices into simpler components.
@@ -10,7 +10,7 @@
 /// (grids of numbers) into simpler components to solve problems more efficiently.
 /// 
 /// Think of it as:
-/// - Breaking down a complex number like 15 into its factors 3 Ã— 5
+/// - Breaking down a complex number like 15 into its factors 3 × 5
 /// - Disassembling a complicated machine into its basic parts
 /// - Converting a difficult problem into several easier ones
 /// 
@@ -140,7 +140,7 @@ public enum MatrixDecompositionType
     /// <remarks>
     /// <para>
     /// <b>For Beginners:</b> SVD is one of the most powerful matrix decompositions that breaks any matrix into 
-    /// three components: U (rotation/reflection), Î£ (scaling), and V* (another rotation/reflection).
+    /// three components: U (rotation/reflection), S (scaling), and V* (another rotation/reflection).
     /// 
     /// Think of it as:
     /// - Revealing the underlying structure and important directions in your data
@@ -353,7 +353,7 @@ public enum MatrixDecompositionType
     Bidiagonal,
     
     /// <summary>
-    /// Decomposes a symmetric matrix into the product UÂ·DÂ·Uáµ€, where U is upper triangular with 1s on the diagonal and D is diagonal.
+    /// Decomposes a symmetric matrix into the product U·D·U?, where U is upper triangular with 1s on the diagonal and D is diagonal.
     /// </summary>
     /// <remarks>
     /// <para>
@@ -377,7 +377,7 @@ public enum MatrixDecompositionType
     Udu,
     
     /// <summary>
-    /// Decomposes a symmetric matrix into the product LÂ·DÂ·Láµ€, where L is lower triangular with 1s on the diagonal and D is diagonal.
+    /// Decomposes a symmetric matrix into the product L·D·L?, where L is lower triangular with 1s on the diagonal and D is diagonal.
     /// </summary>
     /// <remarks>
     /// <para>

@@ -1,4 +1,4 @@
-ï»¿namespace AiDotNet.ActivationFunctions;
+namespace AiDotNet.ActivationFunctions;
 
 /// <summary>
 /// Implements the SoftSign activation function, which is a smooth alternative to the tanh function.
@@ -58,10 +58,10 @@ public class SoftSignActivation<T> : ActivationFunctionBase<T>
     /// 3. Divide the original input by this sum
     /// 
     /// For example:
-    /// - If input is 2, the output is 2/(1+2) = 2/3 â‰ˆ 0.67
-    /// - If input is -2, the output is -2/(1+2) = -2/3 â‰ˆ -0.67
-    /// - If input is 10, the output is 10/(1+10) = 10/11 â‰ˆ 0.91
-    /// - If input is -10, the output is -10/(1+10) = -10/11 â‰ˆ -0.91
+    /// - If input is 2, the output is 2/(1+2) = 2/3 ˜ 0.67
+    /// - If input is -2, the output is -2/(1+2) = -2/3 ˜ -0.67
+    /// - If input is 10, the output is 10/(1+10) = 10/11 ˜ 0.91
+    /// - If input is -10, the output is -10/(1+10) = -10/11 ˜ -0.91
     /// 
     /// Notice that even with large inputs like 10 or -10, the outputs stay between -1 and 1.
     /// </para>

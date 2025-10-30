@@ -1,3 +1,5 @@
+using Newtonsoft.Json;
+
 namespace AiDotNet.Optimizers;
 
 /// <summary>
@@ -49,8 +51,9 @@ public class StochasticGradientDescentOptimizer<T, TInput, TOutput> : GradientBa
     /// </para>
     /// </remarks>
     public StochasticGradientDescentOptimizer(
+        IFullModel<T, TInput, TOutput> model,
         StochasticGradientDescentOptimizerOptions<T, TInput, TOutput>? options = null)
-        : base(options ?? new())
+        : base(model, options ?? new())
     {
         _options = options ?? new();
     }

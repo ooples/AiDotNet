@@ -1,4 +1,4 @@
-﻿namespace AiDotNet.FeatureSelectors;
+namespace AiDotNet.FeatureSelectors;
 
 /// <summary>
 /// A feature selector that passes through all features without any selection.

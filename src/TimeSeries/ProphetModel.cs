@@ -431,7 +431,7 @@ public class ProphetModel<T, TInput, TOutput> : TimeSeriesModelBase<T>
         initialParameters[p + 1] = NumOps.FromDouble(_prophetOptions.InitialChangepointValue);
 
         // Use the user-defined optimizer if provided, otherwise use LFGSOptimizer as default
-        var optimizer = _prophetOptions.Optimizer ?? new LBFGSOptimizer<T, Matrix<T>, Vector<T>>();
+        var optimizer = _prophetOptions.Optimizer ?? new LBFGSOptimizer<T, Matrix<T>, Vector<T>>(this);
 
         // Prepare the optimization input data
         var inputData = new OptimizationInputData<T, Matrix<T>, Vector<T>>()
@@ -1013,9 +1013,9 @@ public class ProphetModel<T, TInput, TOutput> : TimeSeriesModelBase<T>
     /// - Saving the model's configuration for future reference
     /// </para>
     /// </remarks>
-    public override ModelMetaData<T> GetModelMetaData()
+    public override ModelMetadata<T> GetModelMetadata()
     {
-        var metadata = new ModelMetaData<T>
+        var metadata = new ModelMetadata<T>
         {
             ModelType = ModelType.ProphetModel,
             AdditionalInfo = []

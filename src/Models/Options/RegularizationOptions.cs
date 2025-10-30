@@ -1,4 +1,4 @@
-﻿namespace AiDotNet.Models;
+namespace AiDotNet.Models;
 
 /// <summary>
 /// Configuration options for regularization techniques used to prevent overfitting in machine learning models.

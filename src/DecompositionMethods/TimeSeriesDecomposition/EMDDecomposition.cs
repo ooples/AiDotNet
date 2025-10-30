@@ -68,7 +68,7 @@ public class EMDDecomposition<T> : TimeSeriesDecompositionBase<T>
                 DecomposeMultivariate();
                 break;
             default:
-                throw new NotImplementedException($"EMD decomposition algorithm {_algorithm} is not implemented.");
+                throw new NotSupportedException($"EMD decomposition algorithm {_algorithm} is not supported.");
         }
     }
 

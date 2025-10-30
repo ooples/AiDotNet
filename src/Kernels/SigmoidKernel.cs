@@ -1,4 +1,4 @@
-﻿namespace AiDotNet.Kernels;
+namespace AiDotNet.Kernels;
 
 /// <summary>
 /// Implements the Sigmoid kernel for measuring similarity between data points.
@@ -22,11 +22,11 @@
 /// </para>
 /// <para>
 /// The formula for the Sigmoid kernel is:
-/// k(x, y) = tanh(α(x·y) + c)
+/// k(x, y) = tanh(a(x�y) + c)
 /// where:
 /// - x and y are the two data points being compared
-/// - x·y is the dot product between them
-/// - α (alpha) controls the steepness of the S-curve
+/// - x�y is the dot product between them
+/// - a (alpha) controls the steepness of the S-curve
 /// - c is a parameter that shifts the curve horizontally
 /// - tanh is the hyperbolic tangent function (an S-shaped curve)
 /// </para>

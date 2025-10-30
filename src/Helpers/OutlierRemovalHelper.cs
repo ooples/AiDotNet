@@ -1,4 +1,4 @@
-﻿namespace AiDotNet.Helpers;
+namespace AiDotNet.Helpers;
 
 /// <summary>
 /// Provides helper methods for outlier removal algorithms.

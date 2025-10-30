@@ -1,4 +1,5 @@
 global using AiDotNet.Genetics;
+using Newtonsoft.Json;
 
 namespace AiDotNet.Optimizers;
 
@@ -56,7 +57,7 @@ public class GeneticAlgorithmOptimizer<T, TInput, TOutput> : OptimizerBase<T, TI
     /// <param name="model">The model to be optimized.</param>
     /// <param name="options">The options for configuring the genetic algorithm.</param>
     public GeneticAlgorithmOptimizer(
-        IFullModel<T, TInput, TOutput> model,
+        IFullModel<T, TInput, TOutput>? model,
         GeneticAlgorithmOptimizerOptions<T, TInput, TOutput>? options = null,
         GeneticBase<T, TInput, TOutput>? geneticAlgorithm = null,
         IFitnessCalculator<T, TInput, TOutput>? fitnessCalculator = null,

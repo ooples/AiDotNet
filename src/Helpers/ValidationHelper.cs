@@ -1,4 +1,4 @@
-﻿namespace AiDotNet.Helpers;
+namespace AiDotNet.Helpers;
 
 /// <summary>
 /// Provides validation methods for AI model inputs and parameters.

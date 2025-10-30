@@ -277,7 +277,7 @@ public static class ConversionsHelper
     /// <exception cref="ArgumentException">Thrown when the vector length doesn't match the product of the shape dimensions.</exception>
     /// <remarks>
     /// <para><b>For Beginners:</b> This method transforms a one-dimensional vector into a multi-dimensional tensor.</para>
-    /// 
+    ///
     /// <para>Imagine taking a long string of beads (the vector) and arranging them into a specific
     /// three-dimensional shape. The number of beads stays the same, but they're now organized in a
     /// structured multi-dimensional form.</para>
@@ -298,5 +298,37 @@ public static class ConversionsHelper
         // Use Tensor.FromVector and then reshape
         Tensor<T> tensor = Tensor<T>.FromVector(vector);
         return tensor.Reshape(shape);
+    }
+
+    /// <summary>
+    /// Converts a Matrix or Vector to a Tensor.
+    /// </summary>
+    /// <typeparam name="T">The numeric type used for calculations (e.g., double, float).</typeparam>
+    /// <param name="input">The input data to convert (Matrix&lt;T&gt; or Vector&lt;T&gt;).</param>
+    /// <returns>A Tensor&lt;T&gt; representation of the input data.</returns>
+    /// <exception cref="InvalidOperationException">Thrown when the input cannot be converted to a Tensor&lt;T&gt;.</exception>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> This method takes data in matrix or vector format and converts it to a tensor format.
+    /// A tensor is a multi-dimensional array that can represent matrices (2D), vectors (1D), or higher dimensions.</para>
+    ///
+    /// <para>If your data is a matrix, it creates a 2D tensor. If it's a vector, it creates a 1D tensor.
+    /// If it's already a tensor, it simply returns it.</para>
+    /// </remarks>
+    public static Tensor<T> ConvertToTensor<T>(object input)
+    {
+        if (input is Tensor<T> tensor)
+        {
+            return tensor;
+        }
+        else if (input is Matrix<T> matrix)
+        {
+            return Tensor<T>.FromMatrix(matrix);
+        }
+        else if (input is Vector<T> vector)
+        {
+            return Tensor<T>.FromVector(vector);
+        }
+
+        throw new InvalidOperationException($"Cannot convert {input.GetType().Name} to Tensor<{typeof(T).Name}>. Expected Matrix<T>, Vector<T>, or Tensor<T>.");
     }
 }

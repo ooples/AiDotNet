@@ -1,13 +1,13 @@
-﻿namespace AiDotNet.RadialBasisFunctions;
+namespace AiDotNet.RadialBasisFunctions;
 
 /// <summary>
-/// Implements an Inverse Quadratic Radial Basis Function (RBF) of the form 1/(1 + (εr)²).
+/// Implements an Inverse Quadratic Radial Basis Function (RBF) of the form 1/(1 + (er)�).
 /// </summary>
 /// <typeparam name="T">The numeric type used for calculations, typically float or double.</typeparam>
 /// <remarks>
 /// <para>
 /// This class provides an implementation of a Radial Basis Function (RBF) that uses an inverse quadratic form
-/// of φ(r) = 1/(1 + (εr)²), where r is the radial distance and ε (epsilon) is a shape parameter
+/// of f(r) = 1/(1 + (er)�), where r is the radial distance and e (epsilon) is a shape parameter
 /// controlling the width of the function. The inverse quadratic RBF is infinitely differentiable and
 /// decreases more slowly than the Gaussian RBF but faster than the inverse multiquadric RBF as distance increases.
 /// It has properties that make it useful for scattered data interpolation and solving differential equations.
@@ -19,7 +19,7 @@
 /// At the center point (r = 0), it has its maximum value of 1, and as you move away from the center,
 /// the function value gradually decreases toward zero, but never quite reaches it.
 /// 
-/// This RBF has a parameter called epsilon (ε) that controls the shape and width of the function:
+/// This RBF has a parameter called epsilon (e) that controls the shape and width of the function:
 /// - A larger epsilon value creates a narrower bell curve that drops off quickly with distance
 /// - A smaller epsilon value creates a wider bell curve that extends further
 /// 
@@ -74,21 +74,21 @@ public class InverseQuadraticRBF<T> : IRadialBasisFunction<T>
     /// Computes the value of the Inverse Quadratic Radial Basis Function for a given radius.
     /// </summary>
     /// <param name="r">The radius or distance from the center point.</param>
-    /// <returns>The computed function value 1/(1 + (εr)²).</returns>
+    /// <returns>The computed function value 1/(1 + (er)�).</returns>
     /// <remarks>
     /// <para>
     /// This method calculates the value of the Inverse Quadratic RBF for a given radius r. The formula used is
-    /// 1/(1 + (εr)²), which decreases with distance. The function equals 1 at r = 0 and approaches 0
+    /// 1/(1 + (er)�), which decreases with distance. The function equals 1 at r = 0 and approaches 0
     /// as r approaches infinity.
     /// </para>
     /// <para><b>For Beginners:</b> This method computes the "height" or "value" of the Inverse Quadratic function
     /// at a specific distance (r) from the center.
     /// 
     /// The calculation involves:
-    /// 1. Multiplying the distance (r) by the epsilon parameter (εr)
-    /// 2. Squaring this product ((εr)²)
-    /// 3. Adding 1 to this squared value (1 + (εr)²)
-    /// 4. Dividing 1 by this sum (1/(1 + (εr)²))
+    /// 1. Multiplying the distance (r) by the epsilon parameter (er)
+    /// 2. Squaring this product ((er)�)
+    /// 3. Adding 1 to this squared value (1 + (er)�)
+    /// 4. Dividing 1 by this sum (1/(1 + (er)�))
     /// 
     /// The result is a single number representing the function's value at the given distance.
     /// This value is always between 0 and 1:
@@ -111,7 +111,7 @@ public class InverseQuadraticRBF<T> : IRadialBasisFunction<T>
     /// <remarks>
     /// <para>
     /// This method calculates the derivative of the Inverse Quadratic RBF with respect to the radius r.
-    /// The formula for the derivative is -2ε²r/(1 + (εr)²)², which is always negative for positive r and ε,
+    /// The formula for the derivative is -2e�r/(1 + (er)�)�, which is always negative for positive r and e,
     /// indicating that the function always decreases with distance.
     /// </para>
     /// <para><b>For Beginners:</b> This method computes how fast the function's value changes
@@ -130,33 +130,33 @@ public class InverseQuadraticRBF<T> : IRadialBasisFunction<T>
     /// </remarks>
     public T ComputeDerivative(T r)
     {
-        // Derivative with respect to r: -2ε²r/(1 + (εr)²)²
+        // Derivative with respect to r: -2e�r/(1 + (er)�)�
         
-        // Calculate εr
+        // Calculate er
         T epsilonR = _numOps.Multiply(_epsilon, r);
         
-        // Calculate (εr)²
+        // Calculate (er)�
         T epsilonRSquared = _numOps.Multiply(epsilonR, epsilonR);
         
-        // Calculate 1 + (εr)²
+        // Calculate 1 + (er)�
         T denominator = _numOps.Add(_numOps.One, epsilonRSquared);
         
-        // Calculate (1 + (εr)²)²
+        // Calculate (1 + (er)�)�
         T denominatorSquared = _numOps.Multiply(denominator, denominator);
         
-        // Calculate ε²
+        // Calculate e�
         T epsilonSquared = _numOps.Multiply(_epsilon, _epsilon);
         
-        // Calculate 2ε²r
+        // Calculate 2e�r
         T twoEpsilonSquaredR = _numOps.Multiply(
             _numOps.Multiply(_numOps.FromDouble(2.0), epsilonSquared),
             r
         );
         
-        // Calculate -2ε²r
+        // Calculate -2e�r
         T negativeTwoEpsilonSquaredR = _numOps.Negate(twoEpsilonSquaredR);
         
-        // Return -2ε²r/(1 + (εr)²)²
+        // Return -2e�r/(1 + (er)�)�
         return _numOps.Divide(negativeTwoEpsilonSquaredR, denominatorSquared);
     }
     
@@ -168,7 +168,7 @@ public class InverseQuadraticRBF<T> : IRadialBasisFunction<T>
     /// <remarks>
     /// <para>
     /// This method calculates the derivative of the Inverse Quadratic RBF with respect to the shape parameter epsilon.
-    /// The formula for this derivative is -2εr²/(1 + (εr)²)². The sign of this derivative depends on ε and r:
+    /// The formula for this derivative is -2er�/(1 + (er)�)�. The sign of this derivative depends on e and r:
     /// it is negative for positive values, indicating that increasing epsilon decreases the function value
     /// at any non-zero radius.
     /// </para>
@@ -188,33 +188,33 @@ public class InverseQuadraticRBF<T> : IRadialBasisFunction<T>
     /// </remarks>
     public T ComputeWidthDerivative(T r)
     {
-        // Derivative with respect to ε: -2εr²/(1 + (εr)²)²
+        // Derivative with respect to e: -2er�/(1 + (er)�)�
         
-        // Calculate εr
+        // Calculate er
         T epsilonR = _numOps.Multiply(_epsilon, r);
         
-        // Calculate (εr)²
+        // Calculate (er)�
         T epsilonRSquared = _numOps.Multiply(epsilonR, epsilonR);
         
-        // Calculate 1 + (εr)²
+        // Calculate 1 + (er)�
         T denominator = _numOps.Add(_numOps.One, epsilonRSquared);
         
-        // Calculate (1 + (εr)²)²
+        // Calculate (1 + (er)�)�
         T denominatorSquared = _numOps.Multiply(denominator, denominator);
         
-        // Calculate r²
+        // Calculate r�
         T rSquared = _numOps.Multiply(r, r);
         
-        // Calculate 2εr²
+        // Calculate 2er�
         T twoEpsilonRSquared = _numOps.Multiply(
             _numOps.Multiply(_numOps.FromDouble(2.0), _epsilon),
             rSquared
         );
         
-        // Calculate -2εr²
+        // Calculate -2er�
         T negativeTwoEpsilonRSquared = _numOps.Negate(twoEpsilonRSquared);
         
-        // Return -2εr²/(1 + (εr)²)²
+        // Return -2er�/(1 + (er)�)�
         return _numOps.Divide(negativeTwoEpsilonRSquared, denominatorSquared);
     }
 }

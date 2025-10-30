@@ -1,3 +1,5 @@
+using Newtonsoft.Json;
+
 namespace AiDotNet.Optimizers;
 
 /// <summary>
@@ -50,8 +52,9 @@ public class AMSGradOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T
     /// </para>
     /// </remarks>
     public AMSGradOptimizer(
+        IFullModel<T, TInput, TOutput> model,
         AMSGradOptimizerOptions<T, TInput, TOutput>? options = null)
-        : base(options ?? new())
+        : base(model, options ?? new())
     {
         _options = options ?? new AMSGradOptimizerOptions<T, TInput, TOutput>();
 

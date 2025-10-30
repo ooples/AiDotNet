@@ -1,4 +1,4 @@
-﻿namespace AiDotNet.LossFunctions;
+namespace AiDotNet.LossFunctions;
 
 /// <summary>
 /// Implements the Cosine Similarity Loss between two vectors.
@@ -9,11 +9,11 @@
 /// <b>For Beginners:</b> Cosine Similarity measures how similar two vectors are in terms of their orientation,
 /// regardless of their magnitude (size).
 /// 
-/// The formula for cosine similarity is: cos(θ) = (A·B)/(||A||·||B||)
+/// The formula for cosine similarity is: cos(?) = (A�B)/(||A||�||B||)
 /// Where:
-/// - A·B is the dot product of vectors A and B
+/// - A�B is the dot product of vectors A and B
 /// - ||A|| and ||B|| are the magnitudes (lengths) of vectors A and B
-/// - θ is the angle between vectors A and B
+/// - ? is the angle between vectors A and B
 /// 
 /// The loss is calculated as 1 - cosine similarity, so:
 /// - A value of 0 means the vectors are perfectly aligned (very similar)
@@ -109,7 +109,7 @@ public class CosineSimilarityLoss<T> : LossFunctionBase<T>
         Vector<T> derivative = new Vector<T>(predicted.Length);
         for (int i = 0; i < predicted.Length; i++)
         {
-            // ∂(cos similarity)/∂p_i = (a_i*||p||^2 - p_i*(p·a)) / (||p||^3 * ||a||)
+            // ?(cos similarity)/?p_i = (a_i*||p||^2 - p_i*(p�a)) / (||p||^3 * ||a||)
             T numerator = NumOps.Subtract(
                 NumOps.Multiply(actual[i], normPredicted),
                 NumOps.Multiply(predicted[i], dotProduct)

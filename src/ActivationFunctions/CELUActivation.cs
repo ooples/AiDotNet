@@ -1,4 +1,4 @@
-﻿namespace AiDotNet.ActivationFunctions;
+namespace AiDotNet.ActivationFunctions;
 
 /// <summary>
 /// Implements the Continuously Differentiable Exponential Linear Unit (CELU) activation function for neural networks.
@@ -12,9 +12,9 @@
 /// 
 /// Key benefits of CELU:
 /// - For positive inputs, it behaves exactly like ReLU (returns the input value)
-/// - For negative inputs, it returns a negative value that smoothly approaches -α
+/// - For negative inputs, it returns a negative value that smoothly approaches -a
 /// - This smooth transition helps prevent "dead neurons" during training
-/// - The α parameter controls how quickly the function approaches its negative limit
+/// - The a parameter controls how quickly the function approaches its negative limit
 /// 
 /// CELU is particularly useful in deep neural networks where maintaining gradient flow
 /// through all neurons is important for effective learning.
@@ -63,11 +63,11 @@ public class CELUActivation<T> : ActivationFunctionBase<T>
     /// <remarks>
     /// <para>
     /// <b>For Beginners:</b> This method transforms an input value using the formula:
-    /// f(x) = max(0, x) + min(0, α * (exp(x/α) - 1))
+    /// f(x) = max(0, x) + min(0, a * (exp(x/a) - 1))
     /// 
     /// In simpler terms:
-    /// - For positive inputs (x ≥ 0): the output is just x (like ReLU)
-    /// - For negative inputs (x &lt; 0): the output follows a smooth curve that approaches -α
+    /// - For positive inputs (x = 0): the output is just x (like ReLU)
+    /// - For negative inputs (x &lt; 0): the output follows a smooth curve that approaches -a
     /// 
     /// This combination gives CELU the benefits of ReLU for positive values while avoiding
     /// the "dead neuron" problem for negative values.
@@ -75,7 +75,7 @@ public class CELUActivation<T> : ActivationFunctionBase<T>
     /// </remarks>
     public override T Activate(T input)
     {
-        // CELU: max(0, x) + min(0, α * (exp(x/α) - 1))
+        // CELU: max(0, x) + min(0, a * (exp(x/a) - 1))
         T expTerm = NumOps.Subtract(NumOps.Exp(NumOps.Divide(input, _alpha)), NumOps.One);
         T negativepart = NumOps.Multiply(_alpha, expTerm);
         
@@ -97,8 +97,8 @@ public class CELUActivation<T> : ActivationFunctionBase<T>
     /// how to adjust weights.
     /// 
     /// The derivative of CELU has these properties:
-    /// - For positive inputs (x ≥ 0): the derivative is 1 (constant slope)
-    /// - For negative inputs (x &lt; 0): the derivative is exp(x/α) (gradually decreasing)
+    /// - For positive inputs (x = 0): the derivative is 1 (constant slope)
+    /// - For negative inputs (x &lt; 0): the derivative is exp(x/a) (gradually decreasing)
     /// 
     /// Unlike ReLU, the derivative is never exactly zero, which helps prevent neurons from
     /// becoming completely inactive ("dead") during training.
@@ -108,7 +108,7 @@ public class CELUActivation<T> : ActivationFunctionBase<T>
     {
         // Derivative of CELU:
         // 1 if x >= 0
-        // exp(x/α) if x < 0
+        // exp(x/a) if x < 0
         if (NumOps.GreaterThanOrEquals(input, NumOps.Zero))
         {
             return NumOps.One;

@@ -1,4 +1,4 @@
-﻿namespace AiDotNet.Models;
+namespace AiDotNet.Models;
 
 /// <summary>
 /// Configuration options for the ROC Curve Fit Detector, which evaluates classification model quality
@@ -57,7 +57,7 @@ public class ROCCurveFitDetectorOptions
     /// <para><b>For Beginners:</b> This setting defines what AUC value is needed for your model to be considered "good."
     /// 
     /// The default value of 0.8 means:
-    /// - Models with AUC ≥ 0.8 are considered to have good performance
+    /// - Models with AUC = 0.8 are considered to have good performance
     /// - This is a commonly used threshold in many fields
     /// - It indicates the model is correct about 80% of the time (roughly speaking)
     /// 

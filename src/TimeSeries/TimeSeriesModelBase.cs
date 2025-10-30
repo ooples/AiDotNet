@@ -795,7 +795,7 @@ public abstract class TimeSeriesModelBase<T> : ITimeSeriesModel<T>
     /// It's like a complete summary of everything important about the model.
     /// </para>
     /// </remarks>
-    public abstract ModelMetaData<T> GetModelMetaData();
+    public abstract ModelMetadata<T> GetModelMetadata();
 
     /// <summary>
     /// Gets the trainable parameters of the model as a vector.

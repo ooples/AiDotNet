@@ -1,4 +1,4 @@
-﻿namespace AiDotNet.Kernels;
+namespace AiDotNet.Kernels;
 
 /// <summary>
 /// Implements the Additive Chi-Squared kernel function for measuring similarity between data points.
@@ -11,7 +11,7 @@
 /// and other applications where data is represented as frequency distributions.
 /// </para>
 /// <para>
-/// The kernel is defined as K(x,y) = -log(1 + Σ[(x_i - y_i)²/(x_i + y_i)]) for all dimensions i.
+/// The kernel is defined as K(x,y) = -log(1 + S[(x_i - y_i)�/(x_i + y_i)]) for all dimensions i.
 /// </para>
 /// <para>
 /// <b>For Beginners:</b> A kernel function is a way to measure how similar two data points are to each other.

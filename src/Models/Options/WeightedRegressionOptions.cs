@@ -1,4 +1,4 @@
-ï»¿namespace AiDotNet.Models.Options;
+namespace AiDotNet.Models.Options;
 
 /// <summary>
 /// Configuration options for weighted regression models, which assign different importance to different observations.
@@ -47,7 +47,7 @@ public class WeightedRegressionOptions<T> : RegressionOptions<T>
     /// <para>
     /// This property specifies the order of the regression model, which determines the highest power of the 
     /// independent variable included in the model. For example, an order of 1 corresponds to a linear regression 
-    /// (y = a + bx), an order of 2 corresponds to a quadratic regression (y = a + bx + cxÂ²), and so on. A higher 
+    /// (y = a + bx), an order of 2 corresponds to a quadratic regression (y = a + bx + cx²), and so on. A higher 
     /// order allows the model to capture more complex nonlinear relationships but increases the risk of overfitting. 
     /// The default value of 1 provides a simple linear model suitable for many applications. The optimal order 
     /// depends on the underlying relationship between the variables and can be determined using techniques such as 
@@ -66,8 +66,8 @@ public class WeightedRegressionOptions<T> : RegressionOptions<T>
     /// 
     /// Common values and their equations:
     /// - 1: Linear (y = a + bx)
-    /// - 2: Quadratic (y = a + bx + cxÂ²)
-    /// - 3: Cubic (y = a + bx + cxÂ² + dxÂ³)
+    /// - 2: Quadratic (y = a + bx + cx²)
+    /// - 3: Cubic (y = a + bx + cx² + dx³)
     /// 
     /// When to adjust this value:
     /// - Increase it when the relationship between variables is clearly nonlinear
