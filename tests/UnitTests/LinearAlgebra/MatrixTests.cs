@@ -257,7 +257,7 @@ namespace AiDotNetTests.UnitTests.LinearAlgebra
         public void CreateIdentityMatrix_ReturnsCorrectIdentity()
         {
             // Act
-            var identity = Matrix<double>.CreateIdentityMatrix<double>(3);
+            var identity = Matrix<double>.CreateIdentityMatrix(3);
 
             // Assert
             Assert.Equal(3, identity.Rows);
@@ -277,14 +277,14 @@ namespace AiDotNetTests.UnitTests.LinearAlgebra
         public void CreateIdentityMatrix_SizeOne_ThrowsArgumentException()
         {
             // Act & Assert
-            Assert.Throws<ArgumentException>(() => Matrix<double>.CreateIdentityMatrix<double>(1));
+            Assert.Throws<ArgumentException>(() => Matrix<double>.CreateIdentityMatrix(1));
         }
 
         [Fact]
         public void CreateIdentityMatrix_SizeZero_ThrowsArgumentException()
         {
             // Act & Assert
-            Assert.Throws<ArgumentException>(() => Matrix<double>.CreateIdentityMatrix<double>(0));
+            Assert.Throws<ArgumentException>(() => Matrix<double>.CreateIdentityMatrix(0));
         }
 
         [Fact]

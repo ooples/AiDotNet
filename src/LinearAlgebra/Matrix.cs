@@ -85,7 +85,7 @@ public class Matrix<T> : MatrixBase<T>, IEnumerable<T>
     /// for the main diagonal (top-left to bottom-right), which contains 1s. It's similar to the number 1 in 
     /// multiplication - multiplying any matrix by an identity matrix gives you the original matrix.</para>
     /// </remarks>
-    public static Matrix<T> CreateIdentityMatrix<T2>(int size)
+    public static Matrix<T> CreateIdentityMatrix(int size)
     {
         if (size <= 1)
         {

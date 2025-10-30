@@ -415,9 +415,9 @@ public class SvdDecomposition<T> : IMatrixDecomposition<T>
         int l = Math.Min(m, n);
 
         Matrix<T> A = matrix.Clone();
-        Matrix<T> U = Matrix<T>.CreateIdentityMatrix<T>(m);
+        Matrix<T> U = Matrix<T>.CreateIdentityMatrix(m);
         Vector<T> S = new(l);
-        Matrix<T> VT = Matrix<T>.CreateIdentityMatrix<T>(n);
+        Matrix<T> VT = Matrix<T>.CreateIdentityMatrix(n);
 
         const int maxIterations = 100;
         int iteration = 0;
