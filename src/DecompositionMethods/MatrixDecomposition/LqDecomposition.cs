@@ -33,7 +33,7 @@ public class LqDecomposition<T> : IMatrixDecomposition<T>
     /// </summary>
     /// <remarks>
     /// <b>For Beginners:</b> An orthogonal matrix has columns that are perpendicular to each other
-    /// and have unit length. This means Q^T × Q = I (the identity matrix).
+    /// and have unit length. This means Q^T ï¿½ Q = I (the identity matrix).
     /// </remarks>
     public Matrix<T> Q { get; private set; }
 
@@ -69,7 +69,7 @@ public class LqDecomposition<T> : IMatrixDecomposition<T>
     /// It uses the LQ decomposition to solve this in two steps:
     /// 
     /// 1. Forward substitution: Solve Ly = b for y
-    /// 2. Multiply by Q^T: x = Q^T × y
+    /// 2. Multiply by Q^T: x = Q^T ï¿½ y
     /// 
     /// This approach is more efficient than directly inverting the matrix A.
     /// </remarks>
@@ -157,7 +157,7 @@ public class LqDecomposition<T> : IMatrixDecomposition<T>
                 uTu[i, i] = _numOps.Subtract(uTu[i, i], _numOps.One);
             }
 
-            var P = Matrix<T>.CreateIdentityMatrix<T>(m);
+            var P = Matrix<T>.CreateIdentityMatrix(m);
             for (int i = k; i < m; i++)
             {
                 for (int j = k; j < m; j++)
@@ -342,8 +342,8 @@ public class LqDecomposition<T> : IMatrixDecomposition<T>
     /// </summary>
     /// <returns>The inverse of the original matrix A.</returns>
     /// <remarks>
-    /// <b>For Beginners:</b> The inverse of a matrix A is another matrix A?¹ such that when multiplied 
-    /// together, they give the identity matrix (A × A?¹ = I).
+    /// <b>For Beginners:</b> The inverse of a matrix A is another matrix A?ï¿½ such that when multiplied 
+    /// together, they give the identity matrix (A ï¿½ A?ï¿½ = I).
     /// 
     /// This method uses a helper function that efficiently computes the inverse using
     /// the LQ decomposition we've already calculated.
