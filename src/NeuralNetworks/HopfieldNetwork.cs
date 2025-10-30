@@ -314,8 +314,30 @@ public class HopfieldNetwork<T> : NeuralNetworkBase<T>
     /// </remarks>
     public override void UpdateParameters(Vector<T> parameters)
     {
-        // Hopfield networks typically don't use gradient-based updates
-        throw new InvalidOperationException("Hopfield networks do not support gradient-based parameter updates. Use the Train(List<Vector<T>> patterns) method instead.");
+        int expectedLength = _size * _size;
+
+        if (parameters.Length != expectedLength)
+        {
+            throw new ArgumentException($"Parameter vector length mismatch. Expected {expectedLength} parameters but got {parameters.Length}.", nameof(parameters));
+        }
+
+        int paramIndex = 0;
+
+        for (int i = 0; i < _size; i++)
+        {
+            for (int j = 0; j < _size; j++)
+            {
+                if (i == j)
+                {
+                    _weights[i, j] = NumOps.Zero;
+                    paramIndex++;
+                }
+                else
+                {
+                    _weights[i, j] = parameters[paramIndex++];
+                }
+            }
+        }
     }
 
     /// <summary>

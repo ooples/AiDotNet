@@ -1043,7 +1043,28 @@ public class EchoStateNetwork<T> : NeuralNetworkBase<T>
     /// </remarks>
     public override void UpdateParameters(Vector<T> parameters)
     {
-        // ESN doesn't update parameters in the traditional sense
+        int outputWeightCount = _reservoirSize * _outputSize;
+        int expectedLength = outputWeightCount + _outputSize;
+
+        if (parameters.Length != expectedLength)
+        {
+            throw new ArgumentException($"Parameter vector length mismatch. Expected {expectedLength} parameters but got {parameters.Length}.", nameof(parameters));
+        }
+
+        int paramIndex = 0;
+
+        for (int i = 0; i < _reservoirSize; i++)
+        {
+            for (int j = 0; j < _outputSize; j++)
+            {
+                _outputWeights[i, j] = parameters[paramIndex++];
+            }
+        }
+
+        for (int i = 0; i < _outputSize; i++)
+        {
+            _outputBias[i] = parameters[paramIndex++];
+        }
     }
 
     /// <summary>
