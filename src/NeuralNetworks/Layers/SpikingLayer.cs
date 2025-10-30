@@ -1,4 +1,4 @@
-namespace AiDotNet.NeuralNetworks.Layers;
+﻿namespace AiDotNet.NeuralNetworks.Layers;
 
 /// <summary>
 /// Represents a layer of spiking neurons that model the biological dynamics of neural activity.

@@ -1,4 +1,4 @@
-namespace AiDotNet.NeuralNetworks;
+﻿namespace AiDotNet.NeuralNetworks;
 
 /// <summary>
 /// Represents a Feed-Forward Neural Network (FFNN) for processing data in a forward path.
