@@ -4,6 +4,9 @@ using System.IO;
 using System.Linq;
 using Xunit;
 using AiDotNet.Genetics;
+using AiDotNet.Interfaces;
+using AiDotNet.LinearAlgebra;
+using AiDotNet.Models;
 
 namespace AiDotNet.Tests.UnitTests.Genetics
 {
@@ -55,6 +58,22 @@ namespace AiDotNet.Tests.UnitTests.Genetics
             public Vector<double> GetParameters()
             {
                 return _parameters;
+            }
+
+            public void SetParameters(Vector<double> parameters)
+            {
+                if (parameters == null)
+                    throw new ArgumentNullException(nameof(parameters));
+                _parameters = new Vector<double>(parameters.Length);
+                for (int i = 0; i < parameters.Length; i++)
+                {
+                    _parameters[i] = parameters[i];
+                }
+            }
+
+            public int ParameterCount
+            {
+                get { return _parameters.Length; }
             }
 
             public IFullModel<double, double[], double[]> WithParameters(Vector<double> parameters)
