@@ -1,4 +1,5 @@
-namespace AiDotNet.WaveletFunctions;
+namespace AiDotNet.WaveletFunctions
+{
 
 /// <summary>
 /// Represents a Reverse Biorthogonal wavelet function implementation for signal processing and analysis.
@@ -732,7 +733,7 @@ public class ReverseBiorthogonalWavelet<T> : IWaveletFunction<T>
     /// </summary>
     /// <param name="waveletType">The type of Reverse Biorthogonal wavelet.</param>
     /// <returns>A tuple containing the decomposition and reconstruction filter coefficients.</returns>
-    /// <exception cref="NotImplementedException">Thrown when the specified wavelet type is not implemented.</exception>
+    /// <exception cref="ArgumentOutOfRangeException">Thrown when the specified wavelet type is not supported.</exception>
     /// <remarks>
     /// <para>
     /// This method returns the filter coefficients for the specified Reverse Biorthogonal wavelet type.
@@ -771,7 +772,7 @@ public class ReverseBiorthogonalWavelet<T> : IWaveletFunction<T>
             WaveletType.ReverseBior48 => GetReverseBior48Coefficients(),
             WaveletType.ReverseBior55 => GetReverseBior55Coefficients(),
             WaveletType.ReverseBior68 => GetReverseBior68Coefficients(),
-            _ => throw new NotImplementedException($"Wavelet type {waveletType} is not implemented."),
+            _ => throw new ArgumentOutOfRangeException(nameof(waveletType), $"Wavelet type {waveletType} is not supported for Reverse Biorthogonal wavelets."),
         };
     }
 
@@ -1946,5 +1947,6 @@ public class ReverseBiorthogonalWavelet<T> : IWaveletFunction<T>
         reconstructionHighPass[17] = _numOps.FromDouble(0.0001490583487665);
 
         return (decompositionLowPass, decompositionHighPass, reconstructionLowPass, reconstructionHighPass);
+    }
     }
 }
