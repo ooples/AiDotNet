@@ -1043,7 +1043,7 @@ public class EchoStateNetwork<T> : NeuralNetworkBase<T>
     /// </remarks>
     public override void UpdateParameters(Vector<T> parameters)
     {
-        // ESN doesn't update parameters in the traditional sense
+        throw new InvalidOperationException("Echo State Networks do not support direct parameter updates via this method. Only output layer weights are trained via the Train method. The reservoir (internal weights) remain fixed after initialization.");
     }
 
     /// <summary>
