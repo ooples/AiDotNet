@@ -154,17 +154,9 @@ public class LoRAAdapter<T> : LayerBase<T>
         // Backward through LoRA layer
         Tensor<T> loraInputGrad = _loraLayer.Backward(outputGradient);
 
-        // Backward through base layer (if not frozen)
-        Tensor<T> baseInputGrad;
-        if (_freezeBaseLayer)
-        {
-            // If frozen, still need to compute input gradients but don't update base layer parameters
-            baseInputGrad = _baseLayer.Backward(outputGradient);
-        }
-        else
-        {
-            baseInputGrad = _baseLayer.Backward(outputGradient);
-        }
+        // Backward through base layer
+        // Note: Input gradients are always computed; base parameter updates are skipped in UpdateParameters if frozen
+        Tensor<T> baseInputGrad = _baseLayer.Backward(outputGradient);
 
         // Sum input gradients
         Tensor<T> inputGrad = new Tensor<T>(loraInputGrad.Shape);
