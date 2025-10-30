@@ -22,7 +22,7 @@ env:
 jobs:
   publish:
     name: Build and Publish Package
-    runs-on: self-hosted
+    runs-on: ubuntu-latest
     permissions:
       contents: write
       packages: write
