@@ -1,0 +1,308 @@
+using AiDotNet.Interpretability;
+using AiDotNet.Interfaces;
+using AiDotNet.LinearAlgebra;
+using AiDotNet.Models;
+using System;
+using System.Threading.Tasks;
+using Xunit;
+
+namespace AiDotNetTests.UnitTests.Interpretability
+{
+    /// <summary>
+    /// Unit tests for the FairnessEvaluator class.
+    /// </summary>
+    public class FairnessEvaluatorTests
+    {
+        [Fact]
+        public async Task EvaluateFairnessAsync_WithNullModel_ThrowsArgumentNullException()
+        {
+            // Arrange
+            var evaluator = new FairnessEvaluator<double>();
+            Matrix<double> inputs = new Matrix<double>(4, 2);
+
+            // Act & Assert
+            await Assert.ThrowsAsync<ArgumentNullException>(() =>
+                evaluator.EvaluateFairnessAsync(null, inputs, 0));
+        }
+
+        [Fact]
+        public async Task EvaluateFairnessAsync_WithNullInputs_ThrowsArgumentNullException()
+        {
+            // Arrange
+            var evaluator = new FairnessEvaluator<double>();
+            var model = new VectorModel<double>(new Vector<double>(new double[] { 1, 0 }));
+
+            // Act & Assert
+            await Assert.ThrowsAsync<ArgumentNullException>(() =>
+                evaluator.EvaluateFairnessAsync(model, null, 0));
+        }
+
+        [Fact]
+        public async Task EvaluateFairnessAsync_WithInvalidSensitiveFeatureIndex_ThrowsArgumentOutOfRangeException()
+        {
+            // Arrange
+            var evaluator = new FairnessEvaluator<double>();
+            var model = new VectorModel<double>(new Vector<double>(new double[] { 1, 0 }));
+            Matrix<double> inputs = new Matrix<double>(4, 2);
+
+            // Act & Assert
+            await Assert.ThrowsAsync<ArgumentOutOfRangeException>(() =>
+                evaluator.EvaluateFairnessAsync(model, inputs, 5));
+        }
+
+        [Fact]
+        public async Task EvaluateFairnessAsync_WithBalancedPredictions_ReturnsZeroMetrics()
+        {
+            // Arrange
+            var evaluator = new FairnessEvaluator<double>();
+
+            // Create a simple model that predicts based on first feature
+            var model = new VectorModel<double>(new Vector<double>(new double[] { 1, 0 }));
+
+            // Create balanced inputs where both groups get 50% positive predictions
+            // Sensitive feature is in column 1
+            Matrix<double> inputs = new Matrix<double>(8, 2);
+            // Group 0 (sensitive=0): features that will predict 0.5 (half positive, half negative)
+            inputs[0, 0] = 0.4; inputs[0, 1] = 0; // predict 0.4
+            inputs[1, 0] = 0.4; inputs[1, 1] = 0; // predict 0.4
+            inputs[2, 0] = 0.6; inputs[2, 1] = 0; // predict 0.6
+            inputs[3, 0] = 0.6; inputs[3, 1] = 0; // predict 0.6
+            // Group 1 (sensitive=1): same distribution
+            inputs[4, 0] = 0.4; inputs[4, 1] = 1; // predict 0.4
+            inputs[5, 0] = 0.4; inputs[5, 1] = 1; // predict 0.4
+            inputs[6, 0] = 0.6; inputs[6, 1] = 1; // predict 0.6
+            inputs[7, 0] = 0.6; inputs[7, 1] = 1; // predict 0.6
+
+            // Act
+            var result = await evaluator.EvaluateFairnessAsync(model, inputs, 1);
+
+            // Assert
+            Assert.NotNull(result);
+            Assert.Equal(1, result.SensitiveFeatureIndex);
+            Assert.Equal(0.0, result.DemographicParity, 2);
+            Assert.Equal(1.0, result.DisparateImpact, 2);
+            Assert.Equal(0.0, result.StatisticalParityDifference, 2);
+        }
+
+        [Fact]
+        public async Task EvaluateFairnessAsync_WithUnbalancedPredictions_DetectsBias()
+        {
+            // Arrange
+            var evaluator = new FairnessEvaluator<double>();
+
+            // Create a model that predicts based on first feature
+            var model = new VectorModel<double>(new Vector<double>(new double[] { 1, 0 }));
+
+            // Create unbalanced inputs where groups get different prediction rates
+            Matrix<double> inputs = new Matrix<double>(8, 2);
+            // Group 0 (sensitive=0): all high values (100% positive predictions)
+            inputs[0, 0] = 1.0; inputs[0, 1] = 0;
+            inputs[1, 0] = 1.0; inputs[1, 1] = 0;
+            inputs[2, 0] = 1.0; inputs[2, 1] = 0;
+            inputs[3, 0] = 1.0; inputs[3, 1] = 0;
+            // Group 1 (sensitive=1): all low values (0% positive predictions)
+            inputs[4, 0] = 0.0; inputs[4, 1] = 1;
+            inputs[5, 0] = 0.0; inputs[5, 1] = 1;
+            inputs[6, 0] = 0.0; inputs[6, 1] = 1;
+            inputs[7, 0] = 0.0; inputs[7, 1] = 1;
+
+            // Act
+            var result = await evaluator.EvaluateFairnessAsync(model, inputs, 1);
+
+            // Assert
+            Assert.NotNull(result);
+            Assert.True(result.DemographicParity > 0.9); // Large difference
+            Assert.True(result.DisparateImpact < 0.1); // Very low ratio
+            Assert.True(result.StatisticalParityDifference > 0.9); // Large difference
+        }
+
+        [Fact]
+        public async Task EvaluateFairnessAsync_WithActualLabels_ComputesAllMetrics()
+        {
+            // Arrange
+            var evaluator = new FairnessEvaluator<double>();
+            var model = new VectorModel<double>(new Vector<double>(new double[] { 1, 0 }));
+
+            Matrix<double> inputs = new Matrix<double>(8, 2);
+            // Set up predictions
+            inputs[0, 0] = 0.6; inputs[0, 1] = 0; // predict 1
+            inputs[1, 0] = 0.6; inputs[1, 1] = 0; // predict 1
+            inputs[2, 0] = 0.4; inputs[2, 1] = 0; // predict 0
+            inputs[3, 0] = 0.4; inputs[3, 1] = 0; // predict 0
+            inputs[4, 0] = 0.6; inputs[4, 1] = 1; // predict 1
+            inputs[5, 0] = 0.4; inputs[5, 1] = 1; // predict 0
+            inputs[6, 0] = 0.4; inputs[6, 1] = 1; // predict 0
+            inputs[7, 0] = 0.4; inputs[7, 1] = 1; // predict 0
+
+            Vector<double> actualLabels = new Vector<double>(new double[] { 1, 1, 1, 0, 1, 1, 0, 0 });
+
+            // Act
+            var result = await evaluator.EvaluateFairnessAsync(model, inputs, 1, actualLabels);
+
+            // Assert
+            Assert.NotNull(result);
+            Assert.NotEqual(0.0, result.EqualOpportunity); // Should have some value
+            Assert.NotEqual(0.0, result.EqualizedOdds); // Should have some value
+            Assert.NotEqual(0.0, result.PredictiveParity); // Should have some value
+        }
+
+        [Fact]
+        public async Task EvaluateFairnessAsync_WithSingleGroup_ReturnsZeroMetrics()
+        {
+            // Arrange
+            var evaluator = new FairnessEvaluator<double>();
+            var model = new VectorModel<double>(new Vector<double>(new double[] { 1, 0 }));
+
+            Matrix<double> inputs = new Matrix<double>(4, 2);
+            // All rows have same sensitive feature value
+            for (int i = 0; i < 4; i++)
+            {
+                inputs[i, 0] = 0.5;
+                inputs[i, 1] = 0; // All same group
+            }
+
+            // Act
+            var result = await evaluator.EvaluateFairnessAsync(model, inputs, 1);
+
+            // Assert
+            Assert.NotNull(result);
+            Assert.Equal(0.0, result.DemographicParity);
+            Assert.Equal(1.0, result.DisparateImpact); // Should be 1.0 (no disparity)
+            Assert.Equal(0.0, result.StatisticalParityDifference);
+        }
+
+        [Fact]
+        public async Task EvaluateFairnessAsync_AdditionalMetrics_ContainGroupStatistics()
+        {
+            // Arrange
+            var evaluator = new FairnessEvaluator<double>();
+            var model = new VectorModel<double>(new Vector<double>(new double[] { 1, 0 }));
+
+            Matrix<double> inputs = new Matrix<double>(6, 2);
+            inputs[0, 0] = 0.6; inputs[0, 1] = 0;
+            inputs[1, 0] = 0.6; inputs[1, 1] = 0;
+            inputs[2, 0] = 0.4; inputs[2, 1] = 0;
+            inputs[3, 0] = 0.6; inputs[3, 1] = 1;
+            inputs[4, 0] = 0.4; inputs[4, 1] = 1;
+            inputs[5, 0] = 0.4; inputs[5, 1] = 1;
+
+            // Act
+            var result = await evaluator.EvaluateFairnessAsync(model, inputs, 1);
+
+            // Assert
+            Assert.NotNull(result.AdditionalMetrics);
+            Assert.True(result.AdditionalMetrics.ContainsKey("Group_0_PositiveRate"));
+            Assert.True(result.AdditionalMetrics.ContainsKey("Group_1_PositiveRate"));
+            Assert.True(result.AdditionalMetrics.ContainsKey("Group_0_Size"));
+            Assert.True(result.AdditionalMetrics.ContainsKey("Group_1_Size"));
+        }
+
+        [Fact]
+        public async Task EvaluateFairnessAsync_WithThreeGroups_HandlesMultipleGroups()
+        {
+            // Arrange
+            var evaluator = new FairnessEvaluator<double>();
+            var model = new VectorModel<double>(new Vector<double>(new double[] { 1, 0 }));
+
+            Matrix<double> inputs = new Matrix<double>(9, 2);
+            // Group 0
+            inputs[0, 0] = 0.6; inputs[0, 1] = 0;
+            inputs[1, 0] = 0.6; inputs[1, 1] = 0;
+            inputs[2, 0] = 0.4; inputs[2, 1] = 0;
+            // Group 1
+            inputs[3, 0] = 0.6; inputs[3, 1] = 1;
+            inputs[4, 0] = 0.6; inputs[4, 1] = 1;
+            inputs[5, 0] = 0.6; inputs[5, 1] = 1;
+            // Group 2
+            inputs[6, 0] = 0.4; inputs[6, 1] = 2;
+            inputs[7, 0] = 0.4; inputs[7, 1] = 2;
+            inputs[8, 0] = 0.4; inputs[8, 1] = 2;
+
+            // Act
+            var result = await evaluator.EvaluateFairnessAsync(model, inputs, 1);
+
+            // Assert
+            Assert.NotNull(result);
+            Assert.True(result.AdditionalMetrics.ContainsKey("Group_0_Size"));
+            Assert.True(result.AdditionalMetrics.ContainsKey("Group_1_Size"));
+            Assert.True(result.AdditionalMetrics.ContainsKey("Group_2_Size"));
+        }
+
+        [Fact]
+        public async Task EvaluateFairnessAsync_WithFloatType_WorksCorrectly()
+        {
+            // Arrange
+            var evaluator = new FairnessEvaluator<float>();
+            var model = new VectorModel<float>(new Vector<float>(new float[] { 1f, 0f }));
+
+            Matrix<float> inputs = new Matrix<float>(4, 2);
+            inputs[0, 0] = 0.6f; inputs[0, 1] = 0f;
+            inputs[1, 0] = 0.6f; inputs[1, 1] = 0f;
+            inputs[2, 0] = 0.6f; inputs[2, 1] = 1f;
+            inputs[3, 0] = 0.6f; inputs[3, 1] = 1f;
+
+            // Act
+            var result = await evaluator.EvaluateFairnessAsync(model, inputs, 1);
+
+            // Assert
+            Assert.NotNull(result);
+            Assert.Equal(0.0f, result.DemographicParity, 2);
+            Assert.Equal(1.0f, result.DisparateImpact, 2);
+        }
+
+        [Fact]
+        public async Task EvaluateFairnessAsync_ComputesDemographicParity_Correctly()
+        {
+            // Arrange
+            var evaluator = new FairnessEvaluator<double>();
+            var model = new VectorModel<double>(new Vector<double>(new double[] { 1, 0 }));
+
+            // Group 0: 75% positive (3 out of 4)
+            // Group 1: 25% positive (1 out of 4)
+            // Demographic Parity = 75% - 25% = 50%
+            Matrix<double> inputs = new Matrix<double>(8, 2);
+            inputs[0, 0] = 0.6; inputs[0, 1] = 0;
+            inputs[1, 0] = 0.6; inputs[1, 1] = 0;
+            inputs[2, 0] = 0.6; inputs[2, 1] = 0;
+            inputs[3, 0] = 0.4; inputs[3, 1] = 0;
+            inputs[4, 0] = 0.6; inputs[4, 1] = 1;
+            inputs[5, 0] = 0.4; inputs[5, 1] = 1;
+            inputs[6, 0] = 0.4; inputs[6, 1] = 1;
+            inputs[7, 0] = 0.4; inputs[7, 1] = 1;
+
+            // Act
+            var result = await evaluator.EvaluateFairnessAsync(model, inputs, 1);
+
+            // Assert
+            Assert.Equal(0.5, result.DemographicParity, 2);
+            Assert.Equal(0.5, result.StatisticalParityDifference, 2);
+        }
+
+        [Fact]
+        public async Task EvaluateFairnessAsync_ComputesDisparateImpact_Correctly()
+        {
+            // Arrange
+            var evaluator = new FairnessEvaluator<double>();
+            var model = new VectorModel<double>(new Vector<double>(new double[] { 1, 0 }));
+
+            // Group 0: 50% positive (2 out of 4)
+            // Group 1: 100% positive (4 out of 4)
+            // Disparate Impact = 50% / 100% = 0.5
+            Matrix<double> inputs = new Matrix<double>(8, 2);
+            inputs[0, 0] = 0.6; inputs[0, 1] = 0;
+            inputs[1, 0] = 0.6; inputs[1, 1] = 0;
+            inputs[2, 0] = 0.4; inputs[2, 1] = 0;
+            inputs[3, 0] = 0.4; inputs[3, 1] = 0;
+            inputs[4, 0] = 0.6; inputs[4, 1] = 1;
+            inputs[5, 0] = 0.6; inputs[5, 1] = 1;
+            inputs[6, 0] = 0.6; inputs[6, 1] = 1;
+            inputs[7, 0] = 0.6; inputs[7, 1] = 1;
+
+            // Act
+            var result = await evaluator.EvaluateFairnessAsync(model, inputs, 1);
+
+            // Assert
+            Assert.Equal(0.5, result.DisparateImpact, 2);
+        }
+    }
+}
