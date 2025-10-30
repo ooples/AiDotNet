@@ -1,4 +1,4 @@
-﻿namespace AiDotNet.ActivationFunctions;
+namespace AiDotNet.ActivationFunctions;
 
 /// <summary>
 /// Implements the Inverse Square Root Unit (ISRU) activation function for neural networks.
@@ -16,9 +16,9 @@
 /// different mathematical properties. It approaches +1 for large positive inputs and -1 for large negative inputs,
 /// but never quite reaches these values.
 /// 
-/// The α (alpha) parameter controls how quickly the function "saturates" (flattens out):
-/// - Smaller α values make the function change more gradually
-/// - Larger α values make the function change more abruptly
+/// The a (alpha) parameter controls how quickly the function "saturates" (flattens out):
+/// - Smaller a values make the function change more gradually
+/// - Larger a values make the function change more abruptly
 /// 
 /// ISRU is useful in neural networks where you want bounded outputs but need to avoid the vanishing 
 /// gradient problem that affects some other activation functions.
@@ -71,23 +71,23 @@ public class ISRUActivation<T> : ActivationFunctionBase<T>
     /// <para>
     /// <b>For Beginners:</b> This method transforms an input value using the formula:
     /// 
-    /// f(x) = x / sqrt(1 + α·x²)
+    /// f(x) = x / sqrt(1 + a�x�)
     /// 
     /// This creates a smooth curve that:
-    /// - For small inputs, behaves almost like the identity function (output ≈ input)
+    /// - For small inputs, behaves almost like the identity function (output � input)
     /// - For large positive inputs, approaches but never exceeds +1
     /// - For large negative inputs, approaches but never exceeds -1
     /// 
-    /// For example, with the default α = 1:
-    /// - Input of 0 → Output of 0
-    /// - Input of 1 → Output of about 0.707
-    /// - Input of 10 → Output of about 0.995
-    /// - Input of -5 → Output of about -0.981
+    /// For example, with the default a = 1:
+    /// - Input of 0 ? Output of 0
+    /// - Input of 1 ? Output of about 0.707
+    /// - Input of 10 ? Output of about 0.995
+    /// - Input of -5 ? Output of about -0.981
     /// </para>
     /// </remarks>
     public override T Activate(T input)
     {
-        // f(x) = x / sqrt(1 + αx^2)
+        // f(x) = x / sqrt(1 + ax^2)
         T squaredInput = NumOps.Multiply(input, input);
         T alphaSquaredInput = NumOps.Multiply(_alpha, squaredInput);
         T denominator = NumOps.Sqrt(NumOps.Add(NumOps.One, alphaSquaredInput));
@@ -107,7 +107,7 @@ public class ISRUActivation<T> : ActivationFunctionBase<T>
     /// 
     /// For the ISRU function, the derivative is calculated using:
     /// 
-    /// f'(x) = (1 + α·x²)^(-3/2)
+    /// f'(x) = (1 + a�x�)^(-3/2)
     /// 
     /// Key properties of this derivative:
     /// - It's always positive (meaning the function always increases as input increases)
@@ -120,7 +120,7 @@ public class ISRUActivation<T> : ActivationFunctionBase<T>
     /// </remarks>
     public override T Derivative(T input)
     {
-        // f'(x) = (1 + αx^2)^(-3/2)
+        // f'(x) = (1 + ax^2)^(-3/2)
         T squaredInput = NumOps.Multiply(input, input);
         T alphaSquaredInput = NumOps.Multiply(_alpha, squaredInput);
         T baseValue = NumOps.Add(NumOps.One, alphaSquaredInput);

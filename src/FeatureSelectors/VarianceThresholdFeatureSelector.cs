@@ -1,4 +1,4 @@
-﻿namespace AiDotNet.FeatureSelectors;
+namespace AiDotNet.FeatureSelectors;
 
 /// <summary>
 /// A feature selector that removes features with variance below a specified threshold.

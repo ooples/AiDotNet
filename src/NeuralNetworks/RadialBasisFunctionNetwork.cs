@@ -407,9 +407,9 @@ public class RadialBasisFunctionNetwork<T> : NeuralNetworkBase<T>
     /// Think of it like a spec sheet for a car, listing all its important features and capabilities.
     /// </para>
     /// </remarks>
-    public override ModelMetaData<T> GetModelMetaData()
+    public override ModelMetadata<T> GetModelMetadata()
     {
-        var metadata = new ModelMetaData<T>
+        var metadata = new ModelMetadata<T>
         {
             ModelType = ModelType.NeuralNetworkRegression,
             FeatureCount = _inputSize,

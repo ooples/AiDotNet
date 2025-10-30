@@ -1,4 +1,4 @@
-﻿namespace AiDotNet.OutlierRemoval;
+namespace AiDotNet.OutlierRemoval;
 
 /// <summary>
 /// Implements outlier detection and removal based on the Z-Score method.

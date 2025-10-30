@@ -1,4 +1,4 @@
-﻿namespace AiDotNet.WindowFunctions;
+namespace AiDotNet.WindowFunctions;
 
 /// <summary>
 /// Implements the Cosine window function (sometimes called Sine window) for signal processing applications.
@@ -6,7 +6,7 @@
 /// <remarks>
 /// <para>
 /// The Cosine window function is a simple yet effective window defined by the sine function:
-/// w(n) = sin(πn/(N-1))
+/// w(n) = sin(pn/(N-1))
 /// where n is the sample index and N is the window size.
 /// Despite its name, this window actually uses the sine function mathematically, but it's called
 /// the Cosine window due to historical convention in signal processing.
@@ -59,7 +59,7 @@ public class CosineWindow<T> : IWindowFunction<T>
     /// <remarks>
     /// <para>
     /// This method implements the Cosine window function formula:
-    /// w(n) = sin(πn/(N-1))
+    /// w(n) = sin(pn/(N-1))
     /// It calculates the window function value for each point from 0 to windowSize-1.
     /// </para>
     /// <para><b>For Beginners:</b> This method creates the actual window values based on the size you specify.

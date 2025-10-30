@@ -301,16 +301,6 @@ public class DifferentiableNeuralComputer<T> : NeuralNetworkBase<T>
     private ILossFunction<T> _lossFunction;
 
     /// <summary>
-    /// Optimizer instance that persists across training steps to maintain internal state.
-    /// </summary>
-    private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer;
-
-    /// <summary>
-    /// Tracks the parameter count of the optimizer to detect when model architecture changes require reinitialization.
-    /// </summary>
-    private int _optimizerParamCount = -1;
-
-    /// <summary>
     /// Initializes a new instance of the <see cref="DifferentiableNeuralComputer{T}"/> class with the specified parameters.
     /// </summary>
     /// <param name="architecture">The neural network architecture configuration.</param>
@@ -682,19 +672,15 @@ public class DifferentiableNeuralComputer<T> : NeuralNetworkBase<T>
         
         // Apply gradient clipping to prevent exploding gradients
         parameterGradients = ClipGradient(parameterGradients);
-
-        // (Re)initialize optimizer when missing or when parameter shape changed
-        if (_optimizer == null || _optimizerParamCount != ParameterCount)
-        {
-            _optimizer = new GradientDescentOptimizer<T, Tensor<T>, Tensor<T>>(this);
-            _optimizerParamCount = ParameterCount;
-        }
+        
+        // Create optimizer (here we use a simple gradient descent optimizer)
+        var optimizer = new GradientDescentOptimizer<T, Tensor<T>, Tensor<T>>(this);
 
         // Get current parameters
         Vector<T> currentParameters = GetParameters();
-
+        
         // Update parameters using the optimizer
-        Vector<T> updatedParameters = _optimizer.UpdateParameters(currentParameters, parameterGradients);
+        Vector<T> updatedParameters = optimizer.UpdateParameters(currentParameters, parameterGradients);
         
         // Apply updated parameters
         UpdateParameters(updatedParameters);
@@ -1626,9 +1612,9 @@ public class DifferentiableNeuralComputer<T> : NeuralNetworkBase<T>
     /// and for saving/loading models for later use.
     /// </para>
     /// </remarks>
-    public override ModelMetaData<T> GetModelMetaData()
+    public override ModelMetadata<T> GetModelMetadata()
     {
-        return new ModelMetaData<T>
+        return new ModelMetadata<T>
         {
             ModelType = ModelType.DifferentiableNeuralComputer,
             AdditionalInfo = new Dictionary<string, object>

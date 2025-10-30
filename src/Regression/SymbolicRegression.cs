@@ -1,4 +1,4 @@
-﻿namespace AiDotNet.Regression;
+namespace AiDotNet.Regression;
 
 /// <summary>
 /// Implements symbolic regression, which discovers mathematical expressions that best describe the relationship
@@ -22,14 +22,14 @@
 /// 
 /// Think of it like this:
 /// - Instead of you telling the computer what equation to use (like y = mx + b)
-/// - The computer tries thousands of different formulas (like y = x², y = sin(x), etc.)
+/// - The computer tries thousands of different formulas (like y = x�, y = sin(x), etc.)
 /// - It tests each formula to see how well it predicts your data
 /// - It combines good formulas to make even better ones
 /// - Eventually, it finds a formula that best explains your data
 /// 
 /// For example, when modeling how a plant grows, instead of assuming it follows a linear or
 /// exponential pattern, symbolic regression might discover it follows a pattern like
-/// "growth = sunlight² × water / (1 + temperature)".
+/// "growth = sunlight� � water / (1 + temperature)".
 /// </para>
 /// </remarks>
 public class SymbolicRegression<T> : NonLinearRegressionBase<T>
@@ -323,13 +323,16 @@ public class SymbolicRegression<T> : NonLinearRegressionBase<T>
         : base(options, regularization)
     {
         _options = options ?? new SymbolicRegressionOptions();
-        _optimizer = new GeneticAlgorithmOptimizer<T, Matrix<T>, Vector<T>>(new GeneticAlgorithmOptimizerOptions<T, Matrix<T>, Vector<T>>
-        {
-            PopulationSize = _options.PopulationSize,
-            MaxGenerations = _options.MaxGenerations,
-            MutationRate = _options.MutationRate,
-            CrossoverRate = _options.CrossoverRate
-        });
+        var dummyModel = new VectorModel<T>(Vector<T>.Empty());
+        _optimizer = new GeneticAlgorithmOptimizer<T, Matrix<T>, Vector<T>>(
+            dummyModel,
+            new GeneticAlgorithmOptimizerOptions<T, Matrix<T>, Vector<T>>
+            {
+                PopulationSize = _options.PopulationSize,
+                MaxGenerations = _options.MaxGenerations,
+                MutationRate = _options.MutationRate,
+                CrossoverRate = _options.CrossoverRate
+            });
         _fitnessCalculator = fitnessCalculator ?? new RSquaredFitnessCalculator<T, Matrix<T>, Vector<T>>();
         _normalizer = normalizer ?? new NoNormalizer<T, Matrix<T>, Vector<T>>();
         _featureSelector = featureSelector ?? new NoFeatureSelector<T, Matrix<T>>();

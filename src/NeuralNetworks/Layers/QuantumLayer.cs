@@ -1,4 +1,4 @@
-﻿namespace AiDotNet.NeuralNetworks.Layers;
+namespace AiDotNet.NeuralNetworks.Layers;
 
 /// <summary>
 /// Represents a neural network layer that uses quantum computing principles for processing inputs.
@@ -83,7 +83,7 @@ public class QuantumLayer<T> : LayerBase<T>
     /// computational resources. The layer starts with random settings that will be
     /// refined during training.
     /// 
-    /// For example, a layer with 3 qubits can process 8 (2³) different states simultaneously,
+    /// For example, a layer with 3 qubits can process 8 (2�) different states simultaneously,
     /// which is what gives quantum computing its potential power.
     /// </para>
     /// </remarks>
@@ -294,7 +294,7 @@ public class QuantumLayer<T> : LayerBase<T>
     /// When updating parameters:
     /// 1. The rotation angles are adjusted based on their gradients
     /// 2. The learning rate controls how big each update step is
-    /// 3. Angles are kept within a valid range (0 to 2π)
+    /// 3. Angles are kept within a valid range (0 to 2p)
     /// 4. The quantum circuit is updated with the new angles
     /// 
     /// This is how the quantum layer "learns" from data over time. Smaller learning rates
@@ -309,7 +309,7 @@ public class QuantumLayer<T> : LayerBase<T>
             // Update rotation angles using gradient descent
             _rotationAngles[i] = NumOps.Subtract(_rotationAngles[i], NumOps.Multiply(learningRate, _angleGradients[i]));
 
-            // Ensure angles stay within [0, 2π]
+            // Ensure angles stay within [0, 2p]
             _rotationAngles[i] = MathHelper.Modulo(
                 NumOps.Add(_rotationAngles[i], NumOps.FromDouble(2 * Math.PI)), 
                 NumOps.FromDouble(2 * Math.PI));

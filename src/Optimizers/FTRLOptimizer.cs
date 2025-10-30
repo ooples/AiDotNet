@@ -1,3 +1,5 @@
+using Newtonsoft.Json;
+
 namespace AiDotNet.Optimizers;
 
 /// <summary>
@@ -56,10 +58,12 @@ public class FTRLOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, T
     /// You can customize various aspects of how it works, or use default settings if you're unsure.
     /// </para>
     /// </remarks>
+    /// <param name="model">The model to optimize.</param>
     /// <param name="options">The options for configuring the FTRL algorithm.</param>
     public FTRLOptimizer(
+        IFullModel<T, TInput, TOutput> model,
         FTRLOptimizerOptions<T, TInput, TOutput>? options = null)
-        : base(options ?? new())
+        : base(model, options ?? new())
     {
         _options = options ?? new FTRLOptimizerOptions<T, TInput, TOutput>();
 

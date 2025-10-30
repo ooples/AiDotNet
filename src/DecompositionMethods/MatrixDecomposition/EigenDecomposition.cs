@@ -1,4 +1,4 @@
-﻿namespace AiDotNet.DecompositionMethods.MatrixDecomposition;
+namespace AiDotNet.DecompositionMethods.MatrixDecomposition;
 
 /// <summary>
 /// Performs eigenvalue decomposition of a matrix, breaking it down into its eigenvalues and eigenvectors.
@@ -229,7 +229,7 @@ public class EigenDecomposition<T> : IMatrixDecomposition<T>
     /// It works by transforming the problem into the eigenvector basis, where the system
     /// becomes diagonal and easy to solve, then transforming back to the original basis.
     /// 
-    /// The solution is computed as: x = V * D⁻¹ * V^T * b
+    /// The solution is computed as: x = V * D?� * V^T * b
     /// where V is the matrix of eigenvectors, D is a diagonal matrix of eigenvalues,
     /// and V^T is the transpose of V.
     /// </remarks>
@@ -246,7 +246,7 @@ public class EigenDecomposition<T> : IMatrixDecomposition<T>
     /// </summary>
     /// <remarks>
     /// This method uses the eigenvalue decomposition to compute the inverse of the matrix.
-    /// The inverse is calculated as: A⁻¹ = V * D⁻¹ * V^T
+    /// The inverse is calculated as: A?� = V * D?� * V^T
     /// where V is the matrix of eigenvectors, D is a diagonal matrix of eigenvalues,
     /// and V^T is the transpose of V.
     /// 

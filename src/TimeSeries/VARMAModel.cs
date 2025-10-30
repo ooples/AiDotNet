@@ -1,4 +1,4 @@
-Ôªønamespace AiDotNet.TimeSeries;
+namespace AiDotNet.TimeSeries;
 
 /// <summary>
 /// Implements a Vector Autoregressive Moving Average (VARMA) model for multivariate time series forecasting.
@@ -279,12 +279,12 @@ public class VARMAModel<T> : VectorAutoRegressionModel<T>
     /// This method finds the best coefficients for a linear regression model using
     /// the Ordinary Least Squares (OLS) approach.
     /// 
-    /// It solves the equation: Œ≤ = (X'X)‚Åª¬πX'y, where:
+    /// It solves the equation: ﬂ = (X'X)?πX'y, where:
     /// - X is the input matrix (lagged residuals in this case)
     /// - y is the target vector (current residuals)
-    /// - Œ≤ is the vector of coefficients we're solving for
+    /// - ﬂ is the vector of coefficients we're solving for
     /// - X' is the transpose of X
-    /// - (X'X)‚Åª¬π is the inverse of X'X
+    /// - (X'X)?π is the inverse of X'X
     /// 
     /// The result is a set of coefficients that minimize the sum of squared errors
     /// between the model's predictions and the actual values.

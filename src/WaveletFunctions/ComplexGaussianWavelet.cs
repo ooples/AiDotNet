@@ -1,4 +1,4 @@
-Ôªønamespace AiDotNet.WaveletFunctions;
+namespace AiDotNet.WaveletFunctions;
 
 /// <summary>
 /// Implements a Complex Gaussian wavelet, which is based on the derivative of a Gaussian function
@@ -92,11 +92,11 @@ public class ComplexGaussianWavelet<T> : IWaveletFunction<Complex<T>>
     /// This method gives you the actual value of the Complex Gaussian wavelet at a specific point.
     /// 
     /// The Complex Gaussian wavelet is constructed as:
-    /// œà(x) = C * H_n(x) * e^(-x¬≤)
+    /// ?(x) = C * H_n(x) * e^(-x≤)
     /// 
     /// Where:
     /// - H_n(x) is the Hermite polynomial of order n
-    /// - e^(-x¬≤) is the Gaussian function
+    /// - e^(-x≤) is the Gaussian function
     /// - C is a normalization constant
     /// 
     /// For complex input z = x + iy, we evaluate this function at the real part x,
@@ -181,7 +181,7 @@ public class ComplexGaussianWavelet<T> : IWaveletFunction<Complex<T>>
     /// 
     /// For Complex Gaussian wavelets, these coefficients are derived from a Gaussian function:
     /// 
-    /// g(x) = e^(-x¬≤/2)
+    /// g(x) = e^(-x≤/2)
     /// 
     /// The method:
     /// 1. Determines an appropriate length for the filter based on the desired accuracy
@@ -284,7 +284,7 @@ public class ComplexGaussianWavelet<T> : IWaveletFunction<Complex<T>>
     /// This helper method calculates the value of a Gaussian function (bell curve) at a specific point.
     /// 
     /// The Gaussian function is defined as:
-    /// g(x) = e^(-x¬≤/2)
+    /// g(x) = e^(-x≤/2)
     /// 
     /// This function has several important properties:
     /// - It's symmetric around x=0 (bell-shaped)
@@ -314,10 +314,10 @@ public class ComplexGaussianWavelet<T> : IWaveletFunction<Complex<T>>
     /// For Complex Gaussian wavelets, these coefficients combine a Gaussian envelope
     /// with sine and cosine functions to create a complex-valued filter:
     /// 
-    /// œà(x) = e^(-x¬≤/2) * (cos(x) + i*sin(x))
+    /// ?(x) = e^(-x≤/2) * (cos(x) + i*sin(x))
     /// 
     /// Where:
-    /// - e^(-x¬≤/2) is the Gaussian envelope
+    /// - e^(-x≤/2) is the Gaussian envelope
     /// - cos(x) becomes the real part of the coefficient
     /// - sin(x) becomes the imaginary part of the coefficient
     /// - i is the imaginary unit
@@ -459,15 +459,15 @@ public class ComplexGaussianWavelet<T> : IWaveletFunction<Complex<T>>
     /// in probability, physics, and wavelet theory.
     /// 
     /// The first few Hermite polynomials are:
-    /// - H‚ÇÄ(x) = 1
-    /// - H‚ÇÅ(x) = 2x
-    /// - H‚ÇÇ(x) = 4x¬≤ - 2
-    /// - H‚ÇÉ(x) = 8x¬≥ - 12x
+    /// - H0(x) = 1
+    /// - H1(x) = 2x
+    /// - H2(x) = 4x≤ - 2
+    /// - H3(x) = 8x≥ - 12x
     /// 
     /// This method calculates these polynomials using a recurrence relation:
-    /// H_{n+1}(x) = 2x¬∑H_n(x) - 2n¬∑H_{n-1}(x)
+    /// H_{n+1}(x) = 2x∑H_n(x) - 2n∑H_{n-1}(x)
     /// 
-    /// Starting with the known values for H‚ÇÄ and H‚ÇÅ, it iteratively builds up to the
+    /// Starting with the known values for H0 and H1, it iteratively builds up to the
     /// desired order n.
     /// 
     /// In the context of Complex Gaussian wavelets, Hermite polynomials add oscillations

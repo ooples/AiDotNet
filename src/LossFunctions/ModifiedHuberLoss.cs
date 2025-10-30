@@ -1,4 +1,4 @@
-﻿namespace AiDotNet.LossFunctions;
+namespace AiDotNet.LossFunctions;
 
 /// <summary>
 /// Implements the Modified Huber Loss function, a smoother version of the hinge loss.
@@ -10,7 +10,7 @@
 /// It combines quadratic behavior near zero with linear behavior for large negative values.
 /// 
 /// The formula is:
-/// - For z ≥ -1: max(0, 1 - z)²
+/// - For z = -1: max(0, 1 - z)�
 /// - For z &lt; -1: -4 * z
 /// 
 /// Where z = y * f(x), with y being the true label and f(x) the prediction.
@@ -47,7 +47,7 @@ public class ModifiedHuberLoss<T> : LossFunctionBase<T>
             
             if (NumOps.GreaterThanOrEquals(z, NumOps.FromDouble(-1)))
             {
-                // For z ≥ -1: max(0, 1 - z)²
+                // For z = -1: max(0, 1 - z)�
                 T margin = NumOps.Subtract(NumOps.One, z);
                 T hingeLoss = MathHelper.Max(NumOps.Zero, margin);
                 loss = NumOps.Add(loss, NumOps.Power(hingeLoss, NumOps.FromDouble(2)));
@@ -82,7 +82,7 @@ public class ModifiedHuberLoss<T> : LossFunctionBase<T>
             {
                 if (NumOps.LessThan(z, NumOps.One))
                 {
-                    // For -1 ≤ z < 1: -2 * y * (1 - z)
+                    // For -1 = z < 1: -2 * y * (1 - z)
                     derivative[i] = NumOps.Multiply(
                         NumOps.Multiply(NumOps.FromDouble(-2), actual[i]),
                         NumOps.Subtract(NumOps.One, z)
@@ -90,7 +90,7 @@ public class ModifiedHuberLoss<T> : LossFunctionBase<T>
                 }
                 else
                 {
-                    // For z ≥ 1: 0
+                    // For z = 1: 0
                     derivative[i] = NumOps.Zero;
                 }
             }

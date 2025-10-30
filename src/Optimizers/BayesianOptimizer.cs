@@ -1,4 +1,5 @@
 global using AiDotNet.GaussianProcesses;
+using Newtonsoft.Json;
 
 namespace AiDotNet.Optimizers;
 
@@ -41,6 +42,7 @@ public class BayesianOptimizer<T, TInput, TOutput> : OptimizerBase<T, TInput, TO
     /// <summary>
     /// Initializes a new instance of the BayesianOptimizer class.
     /// </summary>
+    /// <param name="model">The model to optimize.</param>
     /// <param name="options">The options for configuring the Bayesian Optimization algorithm.</param>
     /// <param name="gaussianProcess"> The Gaussian Process model to use for approximating the objective function.</param>
     /// <remarks>
@@ -50,9 +52,10 @@ public class BayesianOptimizer<T, TInput, TOutput> : OptimizerBase<T, TInput, TO
     /// </para>
     /// </remarks>
     public BayesianOptimizer(
+        IFullModel<T, TInput, TOutput> model,
         BayesianOptimizerOptions<T, TInput, TOutput>? options = null,
         IGaussianProcess<T>? gaussianProcess = null)
-        : base(options ?? new())
+        : base(model, options ?? new())
     {
         _options = options ?? new BayesianOptimizerOptions<T, TInput, TOutput>();
         _sampledPoints = Matrix<T>.Empty();
@@ -272,7 +275,7 @@ public class BayesianOptimizer<T, TInput, TOutput> : OptimizerBase<T, TInput, TO
         }
         else
         {
-            throw new ArgumentException("Invalid options type. Expected BayesianOptimizerOptions.");
+            throw new ArgumentException("Invalid options type. Expected BayesianOptimizerOptions.", nameof(options));
         }
     }
 

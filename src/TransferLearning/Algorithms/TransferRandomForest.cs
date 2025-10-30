@@ -78,10 +78,8 @@ public class TransferRandomForest<T> : TransferLearningBase<T, Matrix<T>, Vector
         Vector<T> targetLabels)
     {
         throw new InvalidOperationException(
-            "Cross-domain transfer requires source domain data for proper feature mapping and domain adaptation. " +
-            "The protected TransferCrossDomain method cannot access source data due to API limitations. " +
-            "Please use the public Transfer(sourceModel, sourceData, targetData, targetLabels) method instead, " +
-            "or pre-train the FeatureMapper and DomainAdapter with source data before calling this method.");
+            "Cross-domain transfer cannot be performed directly through this protected method due to the need for source domain data. " +
+            "Please use the public 'Transfer(sourceModel, sourceData, targetData, targetLabels)' method which accepts both source and target domain data for feature mapping and transfer.");
     }
 
     /// <summary>
@@ -208,9 +206,9 @@ internal class MappedRandomForestModel<T> : IFullModel<T, Matrix<T>, Vector<T>>
         return _baseModel.Predict(input);
     }
 
-    public ModelMetaData<T> GetModelMetaData()
+    public ModelMetadata<T> GetModelMetadata()
     {
-        return _baseModel.GetModelMetaData();
+        return _baseModel.GetModelMetadata();
     }
 
     public byte[] Serialize()
@@ -331,7 +329,7 @@ internal class MappedRandomForestModel<T> : IFullModel<T, Matrix<T>, Vector<T>>
                         key = s;
                     }
                 }
-                catch (Exception)
+                catch
                 {
                     // Failed to inverse map feature name; using original key as fallback
                 }
@@ -349,7 +347,7 @@ internal class MappedRandomForestModel<T> : IFullModel<T, Matrix<T>, Vector<T>>
         {
             writer.Write(Convert.ToDouble(_mapper.GetMappingConfidence()));
         }
-        catch (Exception ex)
+        catch
         {
             // Failed to write mapping confidence, fallback to 0.0
             writer.Write(0.0);
@@ -379,7 +377,7 @@ internal class MappedRandomForestModel<T> : IFullModel<T, Matrix<T>, Vector<T>>
             baseBytes = reader.ReadBytes(len);
             return true;
         }
-        catch (Exception ex)
+        catch
         {
             // Failed to read wrapper format; fallback for backward compatibility with non-wrapped models
             baseBytes = Array.Empty<byte>();

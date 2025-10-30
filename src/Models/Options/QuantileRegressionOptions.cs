@@ -1,4 +1,4 @@
-﻿namespace AiDotNet.Models.Options;
+namespace AiDotNet.Models.Options;
 
 /// <summary>
 /// Configuration options for Quantile Regression, a technique that enables prediction of specific
@@ -8,8 +8,8 @@
 /// <para>
 /// Quantile Regression extends traditional regression methods by estimating conditional quantiles
 /// of the response variable. While standard regression estimates the conditional mean E(Y|X),
-/// Quantile Regression can estimate any conditional quantile Q(α|X) for α ∈ (0,1), including
-/// medians (α = 0.5) and other percentiles. This technique provides a more comprehensive view of the
+/// Quantile Regression can estimate any conditional quantile Q(a|X) for a ? (0,1), including
+/// medians (a = 0.5) and other percentiles. This technique provides a more comprehensive view of the
 /// relationship between variables, allowing for the analysis of the full conditional distribution.
 /// It is particularly valuable when the conditional distribution is non-Gaussian, skewed, or when
 /// outliers are present. Quantile Regression is also robust to heteroscedasticity (non-constant variance)

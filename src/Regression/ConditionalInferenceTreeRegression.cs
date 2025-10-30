@@ -1,4 +1,4 @@
-﻿namespace AiDotNet.Regression;
+namespace AiDotNet.Regression;
 
 /// <summary>
 /// Represents a conditional inference tree regression model that builds decision trees based on statistical tests.
@@ -13,7 +13,7 @@
 /// <para><b>For Beginners:</b> This class creates a special type of decision tree for predicting numerical values.
 /// 
 /// Think of a decision tree like a flowchart of yes/no questions that helps you make predictions:
-/// - The tree starts with a question (like "Is temperature > 70°F?")
+/// - The tree starts with a question (like "Is temperature > 70�F?")
 /// - Based on the answer, it follows different branches
 /// - It continues asking questions until it reaches a final prediction
 /// 
@@ -215,7 +215,7 @@ public class ConditionalInferenceTreeRegression<T> : AsyncDecisionTreeRegression
     /// <para><b>For Beginners:</b> This method divides data into two groups based on a question.
     /// 
     /// For example, if the feature is "Temperature" and the threshold is 70:
-    /// - The question is: "Is Temperature ≤ 70?"
+    /// - The question is: "Is Temperature = 70?"
     /// - The left group contains all data points where the answer is "Yes"
     /// - The right group contains all data points where the answer is "No"
     /// 
@@ -305,7 +305,7 @@ public class ConditionalInferenceTreeRegression<T> : AsyncDecisionTreeRegression
     /// For example, if our feature is "Temperature":
     /// - We gather all unique temperature values in the data
     /// - We sort them from smallest to largest
-    /// - We try splitting between each pair of values (e.g., "Is Temperature ≤ 68?", "Is Temperature ≤ 72?")
+    /// - We try splitting between each pair of values (e.g., "Is Temperature = 68?", "Is Temperature = 72?")
     /// - For each potential split, we calculate how well it separates the data
     /// - We pick the split that creates the most statistically significant separation
     /// - If no split is significant enough, we decide this feature isn't useful
@@ -403,7 +403,7 @@ public class ConditionalInferenceTreeRegression<T> : AsyncDecisionTreeRegression
     /// 
     /// To make a prediction:
     /// - It starts at the top of the decision tree (the root)
-    /// - At each node, it checks a feature value against a threshold (e.g., "Is Temperature ≤ 70?")
+    /// - At each node, it checks a feature value against a threshold (e.g., "Is Temperature = 70?")
     /// - Based on the answer, it follows either the left branch (Yes) or right branch (No)
     /// - It continues until it reaches a leaf node, which contains the final prediction
     /// - It returns this prediction as the answer
@@ -528,9 +528,9 @@ public class ConditionalInferenceTreeRegression<T> : AsyncDecisionTreeRegression
     /// - Generating reports about the model's performance
     /// </para>
     /// </remarks>
-    public override ModelMetaData<T> GetModelMetaData()
+    public override ModelMetadata<T> GetModelMetadata()
     {
-        var metadata = new ModelMetaData<T>
+        var metadata = new ModelMetadata<T>
         {
             ModelType = ModelType.ConditionalInferenceTree,
             AdditionalInfo = new Dictionary<string, object>

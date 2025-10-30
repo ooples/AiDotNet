@@ -1,4 +1,4 @@
-﻿namespace AiDotNet.Kernels;
+namespace AiDotNet.Kernels;
 
 /// <summary>
 /// Implements the Locally Periodic kernel for measuring similarity between data points with periodic patterns.
@@ -61,7 +61,7 @@ public class LocallyPeriodicKernel<T> : IKernelFunction<T>
     /// - If you're analyzing yearly sales data, the period might be 12 months
     /// - If you're analyzing sound waves, the period would be the wavelength of the sound
     /// 
-    /// The default value is 2π (approximately 6.28), which is the standard period for trigonometric functions.
+    /// The default value is 2p (approximately 6.28), which is the standard period for trigonometric functions.
     /// You'll typically want to set this to match the natural cycle length in your data.
     /// </remarks>
     private readonly T _period;
@@ -89,7 +89,7 @@ public class LocallyPeriodicKernel<T> : IKernelFunction<T>
     /// Initializes a new instance of the Locally Periodic kernel with optional parameters.
     /// </summary>
     /// <param name="lengthScale">Controls how quickly similarity decays over multiple cycles. Default is 1.0.</param>
-    /// <param name="period">Defines the length of one complete cycle. Default is 2π (approximately 6.28).</param>
+    /// <param name="period">Defines the length of one complete cycle. Default is 2p (approximately 6.28).</param>
     /// <param name="amplitude">Controls the overall strength of the pattern. Default is 1.0.</param>
     /// <remarks>
     /// <para>
@@ -99,7 +99,7 @@ public class LocallyPeriodicKernel<T> : IKernelFunction<T>
     /// <para>
     /// If you don't specify values, the defaults are:
     /// - lengthScale = 1.0: A standard value for how quickly similarity decays over distance
-    /// - period = 2π (approximately 6.28): The standard period for trigonometric functions
+    /// - period = 2p (approximately 6.28): The standard period for trigonometric functions
     /// - amplitude = 1.0: A standard strength for the pattern
     /// </para>
     /// <para>
