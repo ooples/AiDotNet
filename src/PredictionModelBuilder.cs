@@ -1,4 +1,4 @@
-﻿global using AiDotNet.FeatureSelectors;
+global using AiDotNet.FeatureSelectors;
 global using AiDotNet.FitnessCalculators;
 global using AiDotNet.Regularization;
 global using AiDotNet.Optimizers;
@@ -220,7 +220,7 @@ public class PredictionModelBuilder<T, TInput, TOutput> : IPredictionModelBuilde
 
         // Use defaults for these interfaces if they aren't set
         var normalizer = _normalizer ?? new NoNormalizer<T, TInput, TOutput>();
-        var optimizer = _optimizer ?? new NormalOptimizer<T, TInput, TOutput>();
+        var optimizer = _optimizer ?? new NormalOptimizer<T, TInput, TOutput>(_model);
         var featureSelector = _featureSelector ?? new NoFeatureSelector<T, TInput>();
         var outlierRemoval = _outlierRemoval ?? new NoOutlierRemoval<T, TInput, TOutput>();
         var dataPreprocessor = _dataPreprocessor ?? new DefaultDataPreprocessor<T, TInput, TOutput>(normalizer, featureSelector, outlierRemoval);
@@ -234,7 +234,7 @@ public class PredictionModelBuilder<T, TInput, TOutput> : IPredictionModelBuilde
         // Optimize the model
         var optimizationResult = optimizer.Optimize(OptimizerHelper<T, TInput, TOutput>.CreateOptimizationInputData(XTrain, yTrain, XVal, yVal, XTest, yTest));
 
-        return new PredictionModelResult<T, TInput, TOutput>(_model, optimizationResult, normInfo);
+        return new PredictionModelResult<T, TInput, TOutput>(optimizationResult, normInfo);
     }
 
     /// <summary>

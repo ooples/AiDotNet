@@ -1,4 +1,4 @@
-﻿namespace AiDotNet.WindowFunctions;
+namespace AiDotNet.WindowFunctions;
 
 /// <summary>
 /// Implements the Blackman window function for signal processing applications.
@@ -7,7 +7,7 @@
 /// <para>
 /// The Blackman window is a commonly used window function that provides good frequency resolution 
 /// and reduced spectral leakage. It uses a weighted cosine series with three terms:
-/// w(n) = 0.42 - 0.5 * cos(2πn/(N-1)) + 0.08 * cos(4πn/(N-1))
+/// w(n) = 0.42 - 0.5 * cos(2pn/(N-1)) + 0.08 * cos(4pn/(N-1))
 /// where n is the sample index and N is the window size.
 /// </para>
 /// <para><b>For Beginners:</b> A window function is a mathematical tool that helps analyze signals more accurately.
@@ -57,7 +57,7 @@ public class BlackmanWindow<T> : IWindowFunction<T>
     /// <remarks>
     /// <para>
     /// This method implements the Blackman window function formula:
-    /// w(n) = 0.42 - 0.5 * cos(2πn/(N-1)) + 0.08 * cos(4πn/(N-1))
+    /// w(n) = 0.42 - 0.5 * cos(2pn/(N-1)) + 0.08 * cos(4pn/(N-1))
     /// It calculates the window function value for each point from 0 to windowSize-1.
     /// </para>
     /// <para><b>For Beginners:</b> This method creates the actual window values based on the size you specify.

@@ -1,4 +1,4 @@
-﻿namespace AiDotNet.Models;
+namespace AiDotNet.Models;
 
 /// <summary>
 /// Represents information about a single iteration in an optimization process, including fitness and overfitting detection results.

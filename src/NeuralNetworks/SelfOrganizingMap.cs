@@ -1,4 +1,4 @@
-ï»¿namespace AiDotNet.NeuralNetworks;
+namespace AiDotNet.NeuralNetworks;
 
 /// <summary>
 /// Represents a Self-Organizing Map, which is an unsupervised neural network that produces a low-dimensional representation of input data.
@@ -141,7 +141,7 @@ public class SelfOrganizingMap<T> : NeuralNetworkBase<T>
     /// When creating a new SOM:
     /// - The architecture tells us how many input dimensions we have (how many attributes each data point has)
     /// - The architecture also suggests how many total positions we want on our map
-    /// - The constructor tries to make the map as square as possible (e.g., 10Ã—10 rather than 5Ã—20)
+    /// - The constructor tries to make the map as square as possible (e.g., 10×10 rather than 5×20)
     /// - It may adjust the total map size slightly to make a perfect square if needed
     /// 
     /// Once the dimensions are set, it creates weight values for each position on the map.
@@ -331,7 +331,7 @@ public class SelfOrganizingMap<T> : NeuralNetworkBase<T>
     /// For example, if comparing two books with attributes for page count and publication year:
     /// - Book 1: 300 pages, published in 2010
     /// - Book 2: 400 pages, published in 2020
-    /// - The calculation would be: âˆš[(300-400)Â² + (2010-2020)Â²] = âˆš(10,100 + 100) = âˆš10,200 â‰ˆ 101
+    /// - The calculation would be: v[(300-400)² + (2010-2020)²] = v(10,100 + 100) = v10,200 ˜ 101
     /// 
     /// A smaller distance means the data points are more similar.
     /// </para>
@@ -538,7 +538,7 @@ public class SelfOrganizingMap<T> : NeuralNetworkBase<T>
     /// - Changes are proportional to learning rate and influence
     /// - The BMU moves more than distant positions
     /// 
-    /// The formula (learningRate Ã— influence Ã— (input - weight)) moves each weight
+    /// The formula (learningRate × influence × (input - weight)) moves each weight
     /// some fraction of the way toward matching the corresponding input value.
     /// </para>
     /// </remarks>
@@ -694,9 +694,9 @@ public class SelfOrganizingMap<T> : NeuralNetworkBase<T>
     /// This information is useful for keeping track of the model's configuration and training progress.
     /// </para>
     /// </remarks>
-    public override ModelMetaData<T> GetModelMetaData()
+    public override ModelMetadata<T> GetModelMetadata()
     {
-        return new ModelMetaData<T>
+        return new ModelMetadata<T>
         {
             ModelType = ModelType.SelfOrganizingMap,
             AdditionalInfo = new Dictionary<string, object>

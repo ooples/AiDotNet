@@ -1,4 +1,4 @@
-ï»¿namespace AiDotNet.Interfaces;
+namespace AiDotNet.Interfaces;
 
 /// <summary>
 /// Defines an interface for Gaussian Process regression, a powerful probabilistic machine learning technique.
@@ -77,8 +77,8 @@ public interface IGaussianProcess<T>
     /// - Make better decisions when the prediction is uncertain
     /// 
     /// For example, if predicting house prices:
-    /// - "This house costs $300,000 Â± $5,000" (low variance, high confidence)
-    /// - "This house costs $300,000 Â± $50,000" (high variance, low confidence)
+    /// - "This house costs $300,000 ± $5,000" (low variance, high confidence)
+    /// - "This house costs $300,000 ± $50,000" (high variance, low confidence)
     /// </remarks>
     (T mean, T variance) Predict(Vector<T> x);
 

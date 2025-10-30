@@ -1,4 +1,4 @@
-ï»¿namespace AiDotNet.NeuralNetworks.Layers;
+namespace AiDotNet.NeuralNetworks.Layers;
 
 /// <summary>
 /// Represents a layer that performs quantum measurement operations on complex-valued input tensors.
@@ -84,8 +84,8 @@ public class MeasurementLayer<T> : LayerBase<T>
     /// - size: The number of possible states in your quantum system
     /// 
     /// For example:
-    /// - For a single qubit (quantum bit), size = 2 (states |0âŸ© and |1âŸ©)
-    /// - For two qubits, size = 4 (states |00âŸ©, |01âŸ©, |10âŸ©, and |11âŸ©)
+    /// - For a single qubit (quantum bit), size = 2 (states |0? and |1?)
+    /// - For two qubits, size = 4 (states |00?, |01?, |10?, and |11?)
     /// - For n qubits, size = 2^n (all possible combinations)
     /// 
     /// Both the input (quantum amplitudes) and output (classical probabilities) will have this same size.
@@ -104,13 +104,13 @@ public class MeasurementLayer<T> : LayerBase<T>
     /// <para>
     /// This method implements the forward pass of the measurement layer. It calculates the probability
     /// distribution from a quantum state vector by taking the squared magnitude of each complex amplitude
-    /// (|z|Â² = realÂ² + imagÂ²) and normalizing the results to ensure they sum to 1.0.
+    /// (|z|² = real² + imag²) and normalizing the results to ensure they sum to 1.0.
     /// </para>
     /// <para><b>For Beginners:</b> This method converts quantum amplitudes into classical probabilities.
     /// 
     /// During the forward pass:
     /// - The layer receives complex-valued quantum amplitudes
-    /// - For each amplitude, it calculates |z|Â² = realÂ² + imagÂ² (the squared magnitude)
+    /// - For each amplitude, it calculates |z|² = real² + imag² (the squared magnitude)
     /// - It normalizes these values so they sum to 1.0 (making them valid probabilities)
     /// - It returns these probabilities as a real-valued tensor
     /// 
@@ -135,7 +135,7 @@ public class MeasurementLayer<T> : LayerBase<T>
             // Get the complex value from the input tensor
             var complexValue = Tensor<T>.GetComplex(input, i);
         
-            // Calculate |z|Â² = realÂ² + imagÂ²
+            // Calculate |z|² = real² + imag²
             var realSquared = NumOps.Multiply(complexValue.Real, complexValue.Real);
             var imagSquared = NumOps.Multiply(complexValue.Imaginary, complexValue.Imaginary);
             probabilities[i] = NumOps.Add(realSquared, imagSquared);

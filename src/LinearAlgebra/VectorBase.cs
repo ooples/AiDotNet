@@ -1,4 +1,4 @@
-ï»¿namespace AiDotNet.LinearAlgebra;
+namespace AiDotNet.LinearAlgebra;
 
 /// <summary>
 /// An abstract base class that represents a mathematical vector with elements of type T.
@@ -319,7 +319,7 @@ public abstract class VectorBase<T>
     /// <remarks>
     /// <para><b>For Beginners:</b> The L2 norm is the "length" or "magnitude" of a vector in a mathematical sense.
     /// It's calculated by taking the square root of the sum of squares of all elements.
-    /// For example, the L2 norm of [3,4] is âˆš(3Â²+4Â²) = âˆš(9+16) = âˆš25 = 5.
+    /// For example, the L2 norm of [3,4] is v(3²+4²) = v(9+16) = v25 = 5.
     /// This is commonly used in machine learning to measure the "size" of vectors or the distance between points.</para>
     /// </remarks>
     public virtual T L2Norm()
@@ -367,7 +367,7 @@ public abstract class VectorBase<T>
     /// <para><b>For Beginners:</b> Similar to the other Transform method, but this one also gives you
     /// the position (index) of each element as you transform it. This is useful when the transformation
     /// depends on where the element is located in the vector. For example, you might want to multiply
-    /// each element by its position: [1,2,3] would become [1Ã—0, 2Ã—1, 3Ã—2] = [0,2,6].</para>
+    /// each element by its position: [1,2,3] would become [1×0, 2×1, 3×2] = [0,2,6].</para>
     /// </remarks>
     public virtual VectorBase<TResult> Transform<TResult>(Func<T, int, TResult> function)
     {

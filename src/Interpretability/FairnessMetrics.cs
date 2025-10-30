@@ -1,4 +1,3 @@
-using System;
 using System.Collections.Generic;
 
 namespace AiDotNet.Interpretability
@@ -48,14 +47,6 @@ namespace AiDotNet.Interpretability
         /// Gets or sets the sensitive feature index used for fairness evaluation.
         /// </summary>
         public int SensitiveFeatureIndex { get; set; }
-
-        /// <summary>
-        /// Initializes a new instance of the FairnessMetrics class.
-        /// </summary>
-        public FairnessMetrics()
-        {
-            AdditionalMetrics = new Dictionary<string, T>();
-        }
 
         /// <summary>
         /// Initializes a new instance of the FairnessMetrics class with all metric values.

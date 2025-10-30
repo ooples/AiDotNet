@@ -1,4 +1,4 @@
-ï»¿namespace AiDotNet.Statistics;
+namespace AiDotNet.Statistics;
 
 /// <summary>
 /// Computes and stores the quartiles (Q1, Q2, Q3) of a numeric dataset.
@@ -21,7 +21,7 @@
 /// Quartiles help you understand:
 /// - Where the "middle half" of your data lies (between Q1 and Q3)
 /// - If your data is skewed (if the distance from Q1 to Q2 is different from Q2 to Q3)
-/// - What values might be considered outliers (typically those below Q1-1.5Ã—IQR or above Q3+1.5Ã—IQR)
+/// - What values might be considered outliers (typically those below Q1-1.5×IQR or above Q3+1.5×IQR)
 /// 
 /// For example, if test scores have Q1=70, Q2=80, and Q3=90, you know half the scores are between 70 and 90,
 /// and the median score is 80.
@@ -160,9 +160,9 @@ public class Quartile<T>
     /// 
     /// For example, if you provide [85, 60, 95, 70, 80, 75, 90], it will:
     /// 1. Sort them to [60, 70, 75, 80, 85, 90, 95]
-    /// 2. Calculate Q1 â‰ˆ 70 (25th percentile)
+    /// 2. Calculate Q1 ˜ 70 (25th percentile)
     /// 3. Calculate Q2 = 80 (50th percentile)
-    /// 4. Calculate Q3 â‰ˆ 90 (75th percentile)
+    /// 4. Calculate Q3 ˜ 90 (75th percentile)
     /// </para>
     /// </remarks>
     public Quartile(Vector<T> data)

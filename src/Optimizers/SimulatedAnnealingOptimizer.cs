@@ -1,3 +1,5 @@
+using Newtonsoft.Json;
+
 /// <summary>
 /// Implements the Simulated Annealing optimization algorithm, a probabilistic technique for finding global optima.
 /// </summary>

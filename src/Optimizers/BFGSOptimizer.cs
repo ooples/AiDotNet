@@ -1,7 +1,9 @@
+using Newtonsoft.Json;
+
 namespace AiDotNet.Optimizers;
 
 /// <summary>
-/// Implements the Broyden–Fletcher–Goldfarb–Shanno (BFGS) optimization algorithm.
+/// Implements the Broydenï¿½Fletcherï¿½Goldfarbï¿½Shanno (BFGS) optimization algorithm.
 /// </summary>
 /// <typeparam name="T">The numeric type used for calculations (e.g., float, double).</typeparam>
 /// <remarks>
@@ -44,6 +46,7 @@ public class BFGSOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, T
     /// <summary>
     /// Initializes a new instance of the BFGSOptimizer class.
     /// </summary>
+    /// <param name="model">The model to optimize.</param>
     /// <param name="options">The options for configuring the BFGS algorithm.</param>
     /// <param name="predictionOptions">Options for prediction statistics.</param>
     /// <param name="modelOptions">Options for model statistics.</param>
@@ -58,8 +61,9 @@ public class BFGSOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, T
     /// </para>
     /// </remarks>
     public BFGSOptimizer(
+        IFullModel<T, TInput, TOutput> model,
         BFGSOptimizerOptions<T, TInput, TOutput>? options = null)
-        : base(options ?? new())
+        : base(model, options ?? new())
     {
         _options = options ?? new BFGSOptimizerOptions<T, TInput, TOutput>();
         InitializeAdaptiveParameters();

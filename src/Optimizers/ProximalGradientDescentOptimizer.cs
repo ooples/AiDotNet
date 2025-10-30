@@ -1,3 +1,5 @@
+using Newtonsoft.Json;
+
 /// <summary>
 /// Implements a Proximal Gradient Descent optimization algorithm which combines gradient descent with regularization.
 /// </summary>
@@ -92,6 +94,7 @@ public class ProximalGradientDescentOptimizer<T, TInput, TOutput> : GradientBase
     /// <summary>
     /// Initializes a new instance of the <see cref="ProximalGradientDescentOptimizer{T}"/> class with the specified options and components.
     /// </summary>
+    /// <param name="model">The model to optimize.</param>
     /// <param name="options">The proximal gradient descent optimization options, or null to use default options.</param>
     /// <remarks>
     /// <para>
@@ -100,19 +103,20 @@ public class ProximalGradientDescentOptimizer<T, TInput, TOutput> : GradientBase
     /// regularization strategy, and adaptive parameters.
     /// </para>
     /// <para><b>For Beginners:</b> This is the starting point for creating a new optimizer.
-    /// 
+    ///
     /// Think of it like setting up equipment for a mountain hike:
     /// - You can provide custom settings (options) or use the default ones
     /// - You can provide specialized tools (evaluators, calculators) or use the basic ones
     /// - You can specify how to enforce boundaries (regularization) or use no boundaries
     /// - It gets everything ready so you can start the optimization process
-    /// 
+    ///
     /// The options control things like how fast to move, when to stop, and how to adapt during the journey.
     /// </para>
     /// </remarks>
     public ProximalGradientDescentOptimizer(
+        IFullModel<T, TInput, TOutput> model,
         ProximalGradientDescentOptimizerOptions<T, TInput, TOutput>? options = null)
-        : base(options ?? new())
+        : base(model, options ?? new())
     {
         _options = options ?? new ProximalGradientDescentOptimizerOptions<T, TInput, TOutput>();
         _regularization = _options.Regularization ?? new NoRegularization<T, TInput, TOutput>();

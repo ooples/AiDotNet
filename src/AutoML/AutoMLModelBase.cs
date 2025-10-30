@@ -225,9 +225,9 @@ namespace AiDotNet.AutoML
         /// <summary>
         /// Gets model metadata
         /// </summary>
-        public virtual ModelMetaData<T> GetModelMetaData()
+        public virtual ModelMetadata<T> GetModelMetadata()
         {
-            var metadata = new ModelMetaData<T>
+            var metadata = new ModelMetadata<T>
             {
                 Name = "AutoML",
                 Description = $"AutoML with {_candidateModels.Count} candidate models",

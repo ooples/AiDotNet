@@ -1,4 +1,4 @@
-﻿namespace AiDotNet.Normalizers;
+namespace AiDotNet.Normalizers;
 
 /// <summary>
 /// Represents a normalizer that uses data binning to transform values into discrete ranges.
@@ -107,7 +107,7 @@ public class BinningNormalizer<T, TInput, TOutput> : NormalizerBase<T, TInput, T
     /// 2. Then, it creates 10 bins (shelves) that will each contain roughly the same number of items
     /// 3. For each value in your original data:
     ///    - It figures out which bin the value belongs in
-    ///    - It assigns a normalized value based on the bin number (bin 0 → 0.0, bin 9 → 1.0)
+    ///    - It assigns a normalized value based on the bin number (bin 0 ? 0.0, bin 9 ? 1.0)
     /// 
     /// The method returns:
     /// - Your transformed data with each value replaced by its normalized bin value

@@ -1,4 +1,4 @@
-﻿namespace AiDotNet.Models;
+namespace AiDotNet.Models;
 
 /// <summary>
 /// Configuration options for the Residual Bootstrap Fit Detector, which uses bootstrap resampling

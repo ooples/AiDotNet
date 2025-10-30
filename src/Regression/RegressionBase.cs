@@ -1,4 +1,5 @@
 global using AiDotNet.Factories;
+using Newtonsoft.Json;
 
 namespace AiDotNet.Regression;
 
@@ -181,9 +182,9 @@ public abstract class RegressionBase<T> : IRegression<T>
     /// comparing different models.
     /// </para>
     /// </remarks>
-    public virtual ModelMetaData<T> GetModelMetaData()
+    public virtual ModelMetadata<T> GetModelMetadata()
     {
-        return new ModelMetaData<T>
+        return new ModelMetadata<T>
         {
             ModelType = GetModelType(),
             FeatureCount = Coefficients.Length,
@@ -261,7 +262,7 @@ public abstract class RegressionBase<T> : IRegression<T>
             { "RegularizationOptions", Regularization.GetOptions() }
         };
 
-        var modelMetadata = GetModelMetaData();
+        var modelMetadata = GetModelMetadata();
         modelMetadata.ModelData = Encoding.UTF8.GetBytes(JsonConvert.SerializeObject(modelData));
 
         return Encoding.UTF8.GetBytes(JsonConvert.SerializeObject(modelMetadata));
@@ -287,7 +288,7 @@ public abstract class RegressionBase<T> : IRegression<T>
     public virtual void Deserialize(byte[] modelData)
     {
         var jsonString = Encoding.UTF8.GetString(modelData);
-        var modelMetadata = JsonConvert.DeserializeObject<ModelMetaData<T>>(jsonString);
+        var modelMetadata = JsonConvert.DeserializeObject<ModelMetadata<T>>(jsonString);
 
         if (modelMetadata == null || modelMetadata.ModelData == null)
         {
@@ -734,13 +735,59 @@ public abstract class RegressionBase<T> : IRegression<T>
         get { return ExpectedParameterCount; }
     }
 
+    /// <summary>
+    /// Saves the regression model to a file.
+    /// </summary>
+    /// <param name="filePath">The path where the model should be saved.</param>
+    /// <remarks>
+    /// <para>
+    /// This method saves the complete state of the regression model, including coefficients, intercept,
+    /// and all configuration options, to a file.
+    /// </para>
+    /// <para><b>For Beginners:</b> This saves your trained model to a file so you can use it later.
+    ///
+    /// Think of it like saving a recipe:
+    /// - It captures all the model's learned parameters (coefficients and intercept)
+    /// - It saves the configuration settings used to train the model
+    /// - You can load it later to make predictions without retraining
+    ///
+    /// This is useful for:
+    /// - Deploying models to production
+    /// - Sharing models with others
+    /// - Avoiding the need to retrain on the same data
+    /// </para>
+    /// </remarks>
     public virtual void SaveModel(string filePath)
     {
-        throw new NotImplementedException("SaveModel is not yet implemented for this model type.");
+        byte[] serializedData = Serialize();
+        File.WriteAllBytes(filePath, serializedData);
     }
 
+    /// <summary>
+    /// Loads a regression model from a file.
+    /// </summary>
+    /// <param name="filePath">The path to the file containing the saved model.</param>
+    /// <remarks>
+    /// <para>
+    /// This method loads the complete state of the regression model from a file, including coefficients,
+    /// intercept, and all configuration options.
+    /// </para>
+    /// <para><b>For Beginners:</b> This loads a previously trained model from a file.
+    ///
+    /// It's like loading a saved recipe:
+    /// - It restores all the model's learned parameters
+    /// - It restores the configuration settings
+    /// - The model is immediately ready to make predictions
+    ///
+    /// This allows you to:
+    /// - Reuse models without retraining
+    /// - Share models with others
+    /// - Deploy models to production environments
+    /// </para>
+    /// </remarks>
     public virtual void LoadModel(string filePath)
     {
-        throw new NotImplementedException("LoadModel is not yet implemented for this model type.");
+        byte[] serializedData = File.ReadAllBytes(filePath);
+        Deserialize(serializedData);
     }
 }
