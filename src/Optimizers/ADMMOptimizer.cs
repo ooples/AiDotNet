@@ -1,3 +1,5 @@
+using Newtonsoft.Json;
+
 namespace AiDotNet.Optimizers;
 
 /// <summary>
@@ -50,8 +52,9 @@ public class ADMMOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, T
     /// </para>
     /// </remarks>
     public ADMMOptimizer(
+        IFullModel<T, TInput, TOutput> model,
         ADMMOptimizerOptions<T, TInput, TOutput>? options = null)
-        : base(options ?? new())
+        : base(model, options ?? new())
     {
         _options = options ?? new ADMMOptimizerOptions<T, TInput, TOutput>();
         _regularization = _options.Regularization;

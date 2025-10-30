@@ -739,7 +739,7 @@ public class DeepBeliefNetwork<T> : NeuralNetworkBase<T>
     /// - Reproducing your model setup later
     /// </para>
     /// </remarks>
-    public override ModelMetaData<T> GetModelMetaData()
+    public override ModelMetadata<T> GetModelMetadata()
     {
         var layerSizes = new List<int>();
         
@@ -755,7 +755,7 @@ public class DeepBeliefNetwork<T> : NeuralNetworkBase<T>
             layerSizes.Add(_rbmLayers[_rbmLayers.Count - 1].GetOutputShape()[0]);
         }
         
-        return new ModelMetaData<T>
+        return new ModelMetadata<T>
         {
             ModelType = ModelType.DeepBeliefNetwork,
             AdditionalInfo = new Dictionary<string, object>

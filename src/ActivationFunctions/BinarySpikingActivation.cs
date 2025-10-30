@@ -1,4 +1,4 @@
-﻿namespace AiDotNet.ActivationFunctions;
+namespace AiDotNet.ActivationFunctions;
 
 /// <summary>
 /// Implements the Binary Spiking activation function for neural networks, particularly for spiking neural networks.
@@ -14,8 +14,8 @@
 /// - After firing, neurons typically have a "refractory period" before they can fire again
 /// 
 /// This activation creates the discrete, all-or-nothing behavior of biological neurons:
-/// - Input below threshold → Output = 0 (neuron remains silent)
-/// - Input at or above threshold → Output = 1 (neuron fires a spike)
+/// - Input below threshold ? Output = 0 (neuron remains silent)
+/// - Input at or above threshold ? Output = 1 (neuron fires a spike)
 /// 
 /// Common uses include:
 /// - Spiking Neural Networks (SNNs)
@@ -104,7 +104,7 @@ public class BinarySpikingActivation<T> : ActivationFunctionBase<T>
     /// <b>For Beginners:</b> This method determines whether a single neuron should fire based on its input.
     /// 
     /// The simple rule is:
-    /// - If input ≥ threshold: Output = 1 (neuron fires)
+    /// - If input = threshold: Output = 1 (neuron fires)
     /// - If input < threshold: Output = 0 (neuron stays silent)
     /// 
     /// This binary (on/off) behavior is what gives spiking neurons their distinctive property
@@ -126,7 +126,7 @@ public class BinarySpikingActivation<T> : ActivationFunctionBase<T>
     /// <b>For Beginners:</b> This method processes multiple neurons at once, determining which ones should fire.
     /// 
     /// For each neuron in the input:
-    /// - If its value ≥ threshold: Output = 1 (neuron fires)
+    /// - If its value = threshold: Output = 1 (neuron fires)
     /// - If its value < threshold: Output = 0 (neuron stays silent)
     /// 
     /// The result is a binary pattern of active and inactive neurons, similar to how
@@ -222,7 +222,7 @@ public class BinarySpikingActivation<T> : ActivationFunctionBase<T>
     /// <b>For Beginners:</b> This method handles multi-dimensional data structures like 2D or 3D arrays.
     /// 
     /// It applies the same binary threshold rule to every element in the tensor:
-    /// - If element ≥ threshold: Output = 1 (neuron fires)
+    /// - If element = threshold: Output = 1 (neuron fires)
     /// - If element < threshold: Output = 0 (neuron stays silent)
     /// 
     /// This is useful for processing structured data like images or time sequences in

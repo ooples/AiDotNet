@@ -1,3 +1,5 @@
+using Newtonsoft.Json;
+
 /// <summary>
 /// Implements Powell's method, a derivative-free optimization algorithm for finding local minima or maxima.
 /// </summary>
@@ -111,8 +113,9 @@ public class PowellOptimizer<T, TInput, TOutput> : OptimizerBase<T, TInput, TOut
     /// </para>
     /// </remarks>
     public PowellOptimizer(
+        IFullModel<T, TInput, TOutput> model,
         PowellOptimizerOptions<T, TInput, TOutput>? options = null)
-        : base(options ?? new())
+        : base(model, options ?? new())
     {
         _options = options ?? new PowellOptimizerOptions<T, TInput, TOutput>();
         _adaptiveStepSize = NumOps.Zero;

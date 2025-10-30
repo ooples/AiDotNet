@@ -1,4 +1,4 @@
-﻿namespace AiDotNet.FitnessCalculators;
+namespace AiDotNet.FitnessCalculators;
 
 /// <summary>
 /// A fitness calculator that uses the Adjusted R-Squared metric to evaluate model performance.

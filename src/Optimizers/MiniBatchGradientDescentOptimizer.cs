@@ -1,3 +1,5 @@
+using Newtonsoft.Json;
+
 namespace AiDotNet.Optimizers;
 
 /// <summary>
@@ -42,9 +44,11 @@ public class MiniBatchGradientDescentOptimizer<T, TInput, TOutput> : GradientBas
     /// deciding on your strategy (options) and packing your tools (dependencies) that you'll use along the way.
     /// </para>
     /// </remarks>
+    /// <param name="model">The model to optimize.</param>
     public MiniBatchGradientDescentOptimizer(
+        IFullModel<T, TInput, TOutput> model,
         MiniBatchGradientDescentOptions<T, TInput, TOutput>? options = null)
-        : base(options ?? new())
+        : base(model, options ?? new())
     {
         _options = options ?? new MiniBatchGradientDescentOptions<T, TInput, TOutput>();
 

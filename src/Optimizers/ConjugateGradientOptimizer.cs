@@ -1,3 +1,5 @@
+using Newtonsoft.Json;
+
 namespace AiDotNet.Optimizers;
 
 /// <summary>
@@ -40,6 +42,7 @@ public class ConjugateGradientOptimizer<T, TInput, TOutput> : GradientBasedOptim
     /// <summary>
     /// Initializes a new instance of the ConjugateGradientOptimizer class.
     /// </summary>
+    /// <param name="model">The model to optimize.</param>
     /// <param name="options">The options for configuring the Conjugate Gradient algorithm.</param>
     /// <param name="predictionOptions">Options for prediction statistics.</param>
     /// <param name="modelOptions">Options for model statistics.</param>
@@ -54,8 +57,9 @@ public class ConjugateGradientOptimizer<T, TInput, TOutput> : GradientBasedOptim
     /// </para>
     /// </remarks>
     public ConjugateGradientOptimizer(
+        IFullModel<T, TInput, TOutput> model,
         ConjugateGradientOptimizerOptions<T, TInput, TOutput>? options = null)
-        : base(options ?? new())
+        : base(model, options ?? new())
     {
         _options = options ?? new ConjugateGradientOptimizerOptions<T, TInput, TOutput>();
         _previousGradient = Vector<T>.Empty();

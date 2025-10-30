@@ -1,4 +1,4 @@
-ï»¿global using System.Collections;
+global using System.Collections;
 
 namespace AiDotNet.LinearAlgebra;
 
@@ -293,7 +293,7 @@ public class Vector<T> : VectorBase<T>, IEnumerable<T>
     /// <returns>The Euclidean norm of the vector.</returns>
     /// <remarks>
     /// <para><b>For Beginners:</b> The norm is the "length" of a vector in multi-dimensional space.
-    /// For a 2D vector [x,y], the norm is âˆš(xÂ² + yÂ²), which is the same as the Pythagorean theorem.
+    /// For a 2D vector [x,y], the norm is v(x² + y²), which is the same as the Pythagorean theorem.
     /// For higher dimensions, it's the square root of the sum of all squared components.</para>
     /// </remarks>
     public T Norm()
@@ -535,9 +535,9 @@ public class Vector<T> : VectorBase<T>, IEnumerable<T>
     /// <remarks>
     /// <para><b>For Beginners:</b> The outer product creates a matrix by multiplying each element of the first vector
     /// with every element of the second vector. For example, if you have vectors [1,2] and [3,4,5], 
-    /// the result will be a 2Ã—3 matrix:
-    /// [1Ã—3, 1Ã—4, 1Ã—5]
-    /// [2Ã—3, 2Ã—4, 2Ã—5]
+    /// the result will be a 2×3 matrix:
+    /// [1×3, 1×4, 1×5]
+    /// [2×3, 2×4, 2×5]
     /// which equals:
     /// [3, 4, 5]
     /// [6, 8, 10]</para>
@@ -698,7 +698,7 @@ public class Vector<T> : VectorBase<T>, IEnumerable<T>
     /// <remarks>
     /// <para><b>For Beginners:</b> Normalizing a vector means changing its length to 1 while keeping its direction.
     /// This is useful in many algorithms where only the direction matters, not the magnitude.
-    /// For example, normalizing [3,4] gives [0.6,0.8] because 0.6Â² + 0.8Â² = 1.</para>
+    /// For example, normalizing [3,4] gives [0.6,0.8] because 0.6² + 0.8² = 1.</para>
     /// </remarks>
     public Vector<T> Normalize()
     {
@@ -733,7 +733,7 @@ public class Vector<T> : VectorBase<T>, IEnumerable<T>
     }
 
     /// <summary>
-    /// Converts this vector into a 1Ã—n matrix (a row vector).
+    /// Converts this vector into a 1×n matrix (a row vector).
     /// </summary>
     /// <returns>A matrix with 1 row and n columns, where n is the length of this vector.</returns>
     /// <remarks>

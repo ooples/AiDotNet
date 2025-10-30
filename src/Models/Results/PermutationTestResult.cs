@@ -1,4 +1,4 @@
-﻿namespace AiDotNet.Models.Results;
+namespace AiDotNet.Models.Results;
 
 /// <summary>
 /// Represents the results of a permutation test, which is a non-parametric statistical significance test that determines
@@ -77,7 +77,7 @@ public class PermutationTestResult<T>
     /// extreme as, or more extreme than, the one observed in the original data, assuming the null hypothesis is true. The 
     /// null hypothesis typically states that there is no real difference between the groups, and any observed difference is 
     /// due to random chance. The p-value is calculated as the proportion of permutations that resulted in a difference as 
-    /// extreme as, or more extreme than, the observed difference. A small p-value (typically ≤ 0.05) suggests that the 
+    /// extreme as, or more extreme than, the observed difference. A small p-value (typically = 0.05) suggests that the 
     /// observed difference is unlikely to have occurred by chance alone, leading to the rejection of the null hypothesis.
     /// </para>
     /// <para><b>For Beginners:</b> This value tells you how likely your results could occur by random chance.
@@ -88,8 +88,8 @@ public class PermutationTestResult<T>
     /// - Is calculated as the proportion of permutations that produced a difference as extreme as yours
     /// 
     /// Common interpretation:
-    /// - p ≤ 0.05: Results are statistically significant (commonly used threshold)
-    /// - p ≤ 0.01: Results are highly significant
+    /// - p = 0.05: Results are statistically significant (commonly used threshold)
+    /// - p = 0.01: Results are highly significant
     /// - p > 0.05: Results are not statistically significant
     /// 
     /// For example, a p-value of 0.03 means that only 3% of random permutations produced

@@ -1,4 +1,4 @@
-﻿namespace AiDotNet.Genetics;
+namespace AiDotNet.Genetics;
 
 /// <summary>
 /// Represents an individual encoded with binary genes, suitable for classic GA problems.

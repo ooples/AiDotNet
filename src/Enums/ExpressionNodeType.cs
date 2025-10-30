@@ -1,4 +1,4 @@
-﻿namespace AiDotNet.Enums;
+namespace AiDotNet.Enums;
 
 /// <summary>
 /// Defines the different types of nodes that can exist in a computational graph.

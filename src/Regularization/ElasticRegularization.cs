@@ -1,4 +1,4 @@
-﻿namespace AiDotNet.Regularization;
+namespace AiDotNet.Regularization;
 
 /// <summary>
 /// Implements Elastic Net regularization, a hybrid approach that combines L1 (Lasso) and L2 (Ridge) regularization techniques.

@@ -1,13 +1,13 @@
-﻿namespace AiDotNet.RadialBasisFunctions;
+namespace AiDotNet.RadialBasisFunctions;
 
 /// <summary>
-/// Implements an Inverse Multiquadric Radial Basis Function (RBF) of the form 1/√(r² + ε²).
+/// Implements an Inverse Multiquadric Radial Basis Function (RBF) of the form 1/v(r� + e�).
 /// </summary>
 /// <typeparam name="T">The numeric type used for calculations, typically float or double.</typeparam>
 /// <remarks>
 /// <para>
 /// This class provides an implementation of a Radial Basis Function (RBF) that uses an inverse multiquadric form
-/// of φ(r) = 1/√(r² + ε²), where r is the radial distance and ε (epsilon) is a shape parameter
+/// of f(r) = 1/v(r� + e�), where r is the radial distance and e (epsilon) is a shape parameter
 /// controlling the width of the function. The inverse multiquadric RBF is infinitely differentiable and
 /// decreases more slowly than the Gaussian RBF as distance increases. It is often used in interpolation
 /// problems and has good numerical properties for solving partial differential equations.
@@ -16,10 +16,10 @@
 /// that depends only on the distance from a center point.
 /// 
 /// The Inverse Multiquadric RBF looks like an upside-down cone that flattens out at larger distances.
-/// At the center point (r = 0), it has its highest value of 1/ε, and as you move away from the center,
+/// At the center point (r = 0), it has its highest value of 1/e, and as you move away from the center,
 /// the function value gradually decreases toward zero, but never quite reaches it.
 /// 
-/// This RBF has a parameter called epsilon (ε) that controls the shape and width of the function:
+/// This RBF has a parameter called epsilon (e) that controls the shape and width of the function:
 /// - A larger epsilon value creates a narrower peak with a faster initial drop-off
 /// - A smaller epsilon value creates a broader peak with a more gradual initial drop-off
 /// 
@@ -57,7 +57,7 @@ public class InverseMultiquadricRBF<T> : IRadialBasisFunction<T>
     /// - Smaller epsilon values (like 0.1) create a wide, gradual curve that extends further
     /// 
     /// The epsilon parameter also determines the maximum value of the function at the center:
-    /// - The value at the center (r = 0) is always 1/ε
+    /// - The value at the center (r = 0) is always 1/e
     /// - So with epsilon = 1.0, the center value is 1.0
     /// - With epsilon = 0.5, the center value would be 2.0
     /// 
@@ -74,26 +74,26 @@ public class InverseMultiquadricRBF<T> : IRadialBasisFunction<T>
     /// Computes the value of the Inverse Multiquadric Radial Basis Function for a given radius.
     /// </summary>
     /// <param name="r">The radius or distance from the center point.</param>
-    /// <returns>The computed function value 1/√(r² + ε²).</returns>
+    /// <returns>The computed function value 1/v(r� + e�).</returns>
     /// <remarks>
     /// <para>
     /// This method calculates the value of the Inverse Multiquadric RBF for a given radius r. The formula used is
-    /// 1/√(r² + ε²), which decreases with distance. The function reaches its maximum value of 1/ε at r = 0
+    /// 1/v(r� + e�), which decreases with distance. The function reaches its maximum value of 1/e at r = 0
     /// and approaches 0 as r approaches infinity.
     /// </para>
     /// <para><b>For Beginners:</b> This method computes the "height" or "value" of the Inverse Multiquadric function
     /// at a specific distance (r) from the center.
     /// 
     /// The calculation involves:
-    /// 1. Squaring the distance (r² = r * r)
-    /// 2. Squaring the epsilon parameter (ε² = ε * ε)
-    /// 3. Adding these squared values together (r² + ε²)
+    /// 1. Squaring the distance (r� = r * r)
+    /// 2. Squaring the epsilon parameter (e� = e * e)
+    /// 3. Adding these squared values together (r� + e�)
     /// 4. Taking the square root of this sum
     /// 5. Dividing 1 by this square root
     /// 
     /// The result is a single number representing the function's value at the given distance.
     /// This value is always positive and decreases as the distance increases:
-    /// - At the center (r = 0), the value is at its maximum of 1/ε
+    /// - At the center (r = 0), the value is at its maximum of 1/e
     /// - As you move away from the center, the value gets smaller, approaching 0 but never quite reaching it
     /// </para>
     /// </remarks>
@@ -113,7 +113,7 @@ public class InverseMultiquadricRBF<T> : IRadialBasisFunction<T>
     /// <remarks>
     /// <para>
     /// This method calculates the derivative of the Inverse Multiquadric RBF with respect to the radius r.
-    /// The formula for the derivative is -r/(r² + ε²)^(3/2), which is negative for positive r,
+    /// The formula for the derivative is -r/(r� + e�)^(3/2), which is negative for positive r,
     /// indicating that the function always decreases with distance.
     /// </para>
     /// <para><b>For Beginners:</b> This method computes how fast the function's value changes
@@ -131,25 +131,25 @@ public class InverseMultiquadricRBF<T> : IRadialBasisFunction<T>
     /// </remarks>
     public T ComputeDerivative(T r)
     {
-        // Derivative with respect to r: -r/(r² + ε²)^(3/2)
+        // Derivative with respect to r: -r/(r� + e�)^(3/2)
         
-        // Calculate r²
+        // Calculate r�
         T rSquared = _numOps.Multiply(r, r);
         
-        // Calculate ε²
+        // Calculate e�
         T epsilonSquared = _numOps.Multiply(_epsilon, _epsilon);
         
-        // Calculate r² + ε²
+        // Calculate r� + e�
         T sum = _numOps.Add(rSquared, epsilonSquared);
         
-        // Calculate (r² + ε²)^(3/2)
+        // Calculate (r� + e�)^(3/2)
         T sumSqrt = _numOps.Sqrt(sum);
         T sumPow3_2 = _numOps.Multiply(sum, sumSqrt);
         
         // Calculate -r
         T negativeR = _numOps.Negate(r);
         
-        // Return -r/(r² + ε²)^(3/2)
+        // Return -r/(r� + e�)^(3/2)
         return _numOps.Divide(negativeR, sumPow3_2);
     }
     
@@ -161,7 +161,7 @@ public class InverseMultiquadricRBF<T> : IRadialBasisFunction<T>
     /// <remarks>
     /// <para>
     /// This method calculates the derivative of the Inverse Multiquadric RBF with respect to the shape parameter epsilon.
-    /// The formula for this derivative is -ε/(r² + ε²)^(3/2). The sign of this derivative is always negative,
+    /// The formula for this derivative is -e/(r� + e�)^(3/2). The sign of this derivative is always negative,
     /// indicating that increasing epsilon decreases the function value at any radius.
     /// </para>
     /// <para><b>For Beginners:</b> This method calculates how the function's value would change
@@ -178,25 +178,25 @@ public class InverseMultiquadricRBF<T> : IRadialBasisFunction<T>
     /// </remarks>
     public T ComputeWidthDerivative(T r)
     {
-        // Derivative with respect to ε: -ε/(r² + ε²)^(3/2)
+        // Derivative with respect to e: -e/(r� + e�)^(3/2)
         
-        // Calculate r²
+        // Calculate r�
         T rSquared = _numOps.Multiply(r, r);
         
-        // Calculate ε²
+        // Calculate e�
         T epsilonSquared = _numOps.Multiply(_epsilon, _epsilon);
         
-        // Calculate r² + ε²
+        // Calculate r� + e�
         T sum = _numOps.Add(rSquared, epsilonSquared);
         
-        // Calculate (r² + ε²)^(3/2)
+        // Calculate (r� + e�)^(3/2)
         T sumSqrt = _numOps.Sqrt(sum);
         T sumPow3_2 = _numOps.Multiply(sum, sumSqrt);
         
-        // Calculate -ε
+        // Calculate -e
         T negativeEpsilon = _numOps.Negate(_epsilon);
         
-        // Return -ε/(r² + ε²)^(3/2)
+        // Return -e/(r� + e�)^(3/2)
         return _numOps.Divide(negativeEpsilon, sumPow3_2);
     }
 }

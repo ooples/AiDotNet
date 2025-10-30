@@ -1,4 +1,4 @@
-﻿namespace AiDotNet.DecompositionMethods.MatrixDecomposition;
+namespace AiDotNet.DecompositionMethods.MatrixDecomposition;
 
 /// <summary>
 /// Implements the Gram-Schmidt orthogonalization process to decompose a matrix into an orthogonal matrix Q and an upper triangular matrix R.
@@ -211,9 +211,9 @@ public class GramSchmidtDecomposition<T> : IMatrixDecomposition<T>
     /// 2. Moving upward, substituting known values to solve for each variable
     /// 
     /// For example, in a 3x3 system:
-    /// - First solve for x₃ from the last equation
-    /// - Then solve for x₂ using the known value of x₃
-    /// - Finally solve for x₁ using the known values of x₂ and x₃
+    /// - First solve for x3 from the last equation
+    /// - Then solve for x2 using the known value of x3
+    /// - Finally solve for x1 using the known values of x2 and x3
     /// </remarks>
     private Vector<T> BackSubstitution(Matrix<T> R, Vector<T> y)
     {

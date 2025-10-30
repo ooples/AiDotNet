@@ -1,4 +1,4 @@
-﻿namespace AiDotNet.DecompositionMethods.MatrixDecomposition;
+namespace AiDotNet.DecompositionMethods.MatrixDecomposition;
 
 /// <summary>
 /// Implements Singular Value Decomposition (SVD) for matrices.

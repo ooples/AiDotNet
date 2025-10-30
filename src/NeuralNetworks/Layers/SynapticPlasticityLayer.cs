@@ -1,4 +1,4 @@
-﻿namespace AiDotNet.NeuralNetworks.Layers;
+namespace AiDotNet.NeuralNetworks.Layers;
 
 /// <summary>
 /// Represents a synaptic plasticity layer that models biological learning mechanisms through spike-timing-dependent plasticity.
@@ -462,7 +462,7 @@ public class SynapticPlasticityLayer<T> : LayerBase<T>
     ///    - Existing traces decay slightly (like memories fading)
     ///    - New spikes are recorded, setting traces to 1.0 for active neurons
     /// 
-    /// 2. For each connection between neurons (i → j):
+    /// 2. For each connection between neurons (i ? j):
     ///    
     ///    a) If neuron i fired and neuron j was recently active (pre before post):
     ///       - Strengthen the connection (long-term potentiation)

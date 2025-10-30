@@ -1,4 +1,4 @@
-﻿namespace AiDotNet.WaveletFunctions;
+namespace AiDotNet.WaveletFunctions;
 
 /// <summary>
 /// Represents a Haar wavelet function implementation for signal processing and analysis.
@@ -124,7 +124,7 @@ public class HaarWavelet<T> : IWaveletFunction<T>
     /// - The method takes every pair of adjacent values in your data
     /// - For each pair, it calculates their average (for the approximation)
     /// - For each pair, it also calculates their difference (for the detail)
-    /// - These values are scaled by a factor (1/√2) to preserve energy
+    /// - These values are scaled by a factor (1/v2) to preserve energy
     /// 
     /// The approximation tells you about the overall trend of your data (like a blurry version),
     /// while the detail captures the sharp changes and edges (like the fine details).
@@ -151,22 +151,22 @@ public class HaarWavelet<T> : IWaveletFunction<T>
     /// <summary>
     /// Gets the scaling coefficients used in the Haar wavelet transform.
     /// </summary>
-    /// <returns>A vector containing the scaling coefficients [1/√2, 1/√2].</returns>
+    /// <returns>A vector containing the scaling coefficients [1/v2, 1/v2].</returns>
     /// <remarks>
     /// <para>
     /// This method returns the scaling coefficients used in the Haar wavelet transform, which are
-    /// [1/√2, 1/√2]. These coefficients are used to calculate the approximation (low-frequency)
-    /// components of the signal during decomposition. The factor 1/√2 ensures energy conservation
+    /// [1/v2, 1/v2]. These coefficients are used to calculate the approximation (low-frequency)
+    /// components of the signal during decomposition. The factor 1/v2 ensures energy conservation
     /// during the transform.
     /// </para>
     /// <para><b>For Beginners:</b> This method gives you the values used to calculate averages in the transform.
     /// 
     /// The scaling coefficients for the Haar wavelet:
-    /// - Are simply [1/√2, 1/√2]
+    /// - Are simply [1/v2, 1/v2]
     /// - Act like a simple averaging filter (both values are the same)
     /// - Are used to create the "approximation" part when decomposing a signal
     /// 
-    /// The factor 1/√2 (approximately 0.7071) is important for mathematical reasons:
+    /// The factor 1/v2 (approximately 0.7071) is important for mathematical reasons:
     /// it ensures that the energy of the signal is preserved during transformation,
     /// which makes the transform reversible and maintains correct signal properties.
     /// </para>
@@ -183,24 +183,24 @@ public class HaarWavelet<T> : IWaveletFunction<T>
     /// <summary>
     /// Gets the wavelet coefficients used in the Haar wavelet transform.
     /// </summary>
-    /// <returns>A vector containing the wavelet coefficients [1/√2, -1/√2].</returns>
+    /// <returns>A vector containing the wavelet coefficients [1/v2, -1/v2].</returns>
     /// <remarks>
     /// <para>
     /// This method returns the wavelet coefficients used in the Haar wavelet transform, which are
-    /// [1/√2, -1/√2]. These coefficients are used to calculate the detail (high-frequency)
-    /// components of the signal during decomposition. The factor 1/√2 ensures energy conservation
+    /// [1/v2, -1/v2]. These coefficients are used to calculate the detail (high-frequency)
+    /// components of the signal during decomposition. The factor 1/v2 ensures energy conservation
     /// during the transform, and the opposite signs detect differences between adjacent values.
     /// </para>
     /// <para><b>For Beginners:</b> This method gives you the values used to calculate differences in the transform.
     /// 
     /// The wavelet coefficients for the Haar wavelet:
-    /// - Are simply [1/√2, -1/√2]
+    /// - Are simply [1/v2, -1/v2]
     /// - Act like a difference detector (one positive, one negative)
     /// - Are used to create the "detail" part when decomposing a signal
     /// 
     /// The opposite signs mean this filter finds differences between adjacent values,
     /// which is why it's so good at detecting edges and sudden changes in your data.
-    /// The factor 1/√2 (approximately 0.7071) ensures mathematical consistency 
+    /// The factor 1/v2 (approximately 0.7071) ensures mathematical consistency 
     /// with the scaling coefficients.
     /// </para>
     /// </remarks>
