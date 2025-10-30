@@ -2,7 +2,7 @@ name: Copilot Review Gate
 
 on:
   pull_request:
-    branches: [ merge-dev2-to-master ]
+    branches: [ '**' ]
 
 permissions:
   pull-requests: read
