@@ -39,7 +39,7 @@ namespace AiDotNet.Models.Results;
 /// </remarks>
 /// <typeparam name="T">The numeric type used for calculations, typically float or double.</typeparam>
 [Serializable]
-public class PredictionModelResult<T, TInput, TOutput> : IPredictiveModel<T, TInput, TOutput>
+public class PredictionModelResult<T, TInput, TOutput> : IPredictiveModel<T, TInput, TOutput>, IFullModel<T, TInput, TOutput>
 {
     /// <summary>
     /// Gets or sets the underlying model used for making predictions.
@@ -169,28 +169,43 @@ public class PredictionModelResult<T, TInput, TOutput> : IPredictiveModel<T, TIn
     /// <param name="normalizationInfo">The normalization information used to preprocess input data and postprocess predictions.</param>
     /// <remarks>
     /// <para>
-    /// This constructor creates a new PredictionModelResult instance with the specified model, optimization results, and 
-    /// normalization information. It also initializes the ModelMetadata property by calling the GetModelMetadata method on 
-    /// the provided model. This constructor is typically used when a new model has been trained and needs to be packaged 
+    /// This constructor creates a new PredictionModelResult instance with the specified model, optimization results, and
+    /// normalization information. It also initializes the ModelMetadata property by calling the GetModelMetadata method on
+    /// the provided model. This constructor is typically used when a new model has been trained and needs to be packaged
     /// with all the necessary information for making predictions and for later serialization.
     /// </para>
     /// <para><b>For Beginners:</b> This constructor creates a new prediction model result with all the necessary components.
-    /// 
+    ///
     /// When creating a new PredictionModelResult:
     /// - You provide the trained model that will make predictions
     /// - You provide the optimization results that describe how the model was created
     /// - You provide the normalization information needed to process data
     /// - The constructor automatically extracts metadata from the model
-    /// 
+    ///
     /// This constructor is typically used when:
     /// - You've just finished training a model
     /// - You want to package it with all the information needed to use it
     /// - You plan to save it for later use or deploy it in an application
-    /// 
+    ///
     /// For example, after training a house price prediction model, you would use this constructor
     /// to create a complete package that can be saved and used for making predictions.
     /// </para>
     /// </remarks>
+    public PredictionModelResult(IFullModel<T, TInput, TOutput> model,
+        OptimizationResult<T, TInput, TOutput> optimizationResult,
+        NormalizationInfo<T, TInput, TOutput> normalizationInfo)
+    {
+        Model = model;
+        OptimizationResult = optimizationResult;
+        NormalizationInfo = normalizationInfo;
+        ModelMetaData = model?.GetModelMetadata() ?? new();
+    }
+
+    /// <summary>
+    /// Initializes a new instance of the PredictionModelResult class with optimization results and normalization information.
+    /// </summary>
+    /// <param name="optimizationResult">The results of the optimization process that created the model.</param>
+    /// <param name="normalizationInfo">The normalization information used to preprocess input data and postprocess predictions.</param>
     public PredictionModelResult(OptimizationResult<T, TInput, TOutput> optimizationResult,
         NormalizationInfo<T, TInput, TOutput> normalizationInfo)
     {
@@ -308,6 +323,175 @@ public class PredictionModelResult<T, TInput, TOutput> : IPredictiveModel<T, TIn
         var normalizedPredictions = Model.Predict(normalizedNewData);
 
         return NormalizationInfo.Normalizer.Denormalize(normalizedPredictions, NormalizationInfo.YParams);
+    }
+
+    /// <summary>
+    /// Trains the model. Since PredictionModelResult represents a result, this method throws an exception.
+    /// </summary>
+    /// <param name="input">Input training data.</param>
+    /// <param name="expectedOutput">Expected output values.</param>
+    /// <exception cref="InvalidOperationException">Always thrown because PredictionModelResult cannot be trained directly.</exception>
+    public void Train(TInput input, TOutput expectedOutput)
+    {
+        throw new InvalidOperationException("PredictionModelResult cannot be trained directly. It represents the result of a prediction.");
+    }
+
+    /// <summary>
+    /// Gets the parameters of the underlying model.
+    /// </summary>
+    /// <returns>A vector containing the model parameters.</returns>
+    /// <exception cref="InvalidOperationException">Thrown when the Model is not initialized.</exception>
+    public Vector<T> GetParameters()
+    {
+        if (Model == null)
+        {
+            throw new InvalidOperationException("Model is not initialized.");
+        }
+
+        return Model.GetParameters();
+    }
+
+    /// <summary>
+    /// Sets the parameters of the underlying model.
+    /// </summary>
+    /// <param name="parameters">The parameter vector to set.</param>
+    /// <exception cref="InvalidOperationException">Thrown when the Model is not initialized.</exception>
+    public void SetParameters(Vector<T> parameters)
+    {
+        if (Model == null)
+        {
+            throw new InvalidOperationException("Model is not initialized.");
+        }
+
+        Model.SetParameters(parameters);
+    }
+
+    /// <summary>
+    /// Gets the number of parameters in the underlying model.
+    /// </summary>
+    public int ParameterCount
+    {
+        get
+        {
+            if (Model == null)
+            {
+                return 0;
+            }
+
+            return Model.ParameterCount;
+        }
+    }
+
+    /// <summary>
+    /// Creates a new instance with the specified parameters.
+    /// </summary>
+    /// <param name="parameters">The parameter vector to use.</param>
+    /// <returns>A new PredictionModelResult with updated parameters.</returns>
+    /// <exception cref="InvalidOperationException">Thrown when the Model is not initialized.</exception>
+    public IFullModel<T, TInput, TOutput> WithParameters(Vector<T> parameters)
+    {
+        if (Model == null)
+        {
+            throw new InvalidOperationException("Model is not initialized.");
+        }
+
+        var newModel = Model.WithParameters(parameters);
+        return new PredictionModelResult<T, TInput, TOutput>(newModel, OptimizationResult, NormalizationInfo);
+    }
+
+    /// <summary>
+    /// Gets the indices of features that are actively used by the underlying model.
+    /// </summary>
+    /// <returns>An enumerable of active feature indices.</returns>
+    /// <exception cref="InvalidOperationException">Thrown when the Model is not initialized.</exception>
+    public IEnumerable<int> GetActiveFeatureIndices()
+    {
+        if (Model == null)
+        {
+            throw new InvalidOperationException("Model is not initialized.");
+        }
+
+        return Model.GetActiveFeatureIndices();
+    }
+
+    /// <summary>
+    /// Sets the active feature indices for the underlying model.
+    /// </summary>
+    /// <param name="featureIndices">The feature indices to set as active.</param>
+    /// <exception cref="InvalidOperationException">Thrown when the Model is not initialized.</exception>
+    public void SetActiveFeatureIndices(IEnumerable<int> featureIndices)
+    {
+        if (Model == null)
+        {
+            throw new InvalidOperationException("Model is not initialized.");
+        }
+
+        Model.SetActiveFeatureIndices(featureIndices);
+    }
+
+    /// <summary>
+    /// Checks if a specific feature is used by the underlying model.
+    /// </summary>
+    /// <param name="featureIndex">The index of the feature to check.</param>
+    /// <returns>True if the feature is used, false otherwise.</returns>
+    /// <exception cref="InvalidOperationException">Thrown when the Model is not initialized.</exception>
+    public bool IsFeatureUsed(int featureIndex)
+    {
+        if (Model == null)
+        {
+            throw new InvalidOperationException("Model is not initialized.");
+        }
+
+        return Model.IsFeatureUsed(featureIndex);
+    }
+
+    /// <summary>
+    /// Gets the feature importance scores from the underlying model.
+    /// </summary>
+    /// <returns>A dictionary mapping feature names to importance scores.</returns>
+    /// <exception cref="InvalidOperationException">Thrown when the Model is not initialized.</exception>
+    public Dictionary<string, T> GetFeatureImportance()
+    {
+        if (Model == null)
+        {
+            throw new InvalidOperationException("Model is not initialized.");
+        }
+
+        return Model.GetFeatureImportance();
+    }
+
+    /// <summary>
+    /// Creates a deep copy of this PredictionModelResult.
+    /// </summary>
+    /// <returns>A new PredictionModelResult instance that is a deep copy of this one.</returns>
+    public IFullModel<T, TInput, TOutput> DeepCopy()
+    {
+        var clonedModel = Model?.DeepCopy();
+        var clonedOptimizationResult = OptimizationResult.DeepCopy();
+        var clonedNormalizationInfo = NormalizationInfo.DeepCopy();
+
+        if (clonedModel == null)
+        {
+            throw new InvalidOperationException("Cannot deep copy PredictionModelResult with null Model.");
+        }
+
+        return new PredictionModelResult<T, TInput, TOutput>(clonedModel, clonedOptimizationResult, clonedNormalizationInfo);
+    }
+
+    /// <summary>
+    /// Creates a shallow copy of this PredictionModelResult.
+    /// </summary>
+    /// <returns>A new PredictionModelResult instance that is a shallow copy of this one.</returns>
+    public IFullModel<T, TInput, TOutput> Clone()
+    {
+        var clonedModel = Model?.Clone();
+
+        if (clonedModel == null)
+        {
+            throw new InvalidOperationException("Cannot clone PredictionModelResult with null Model.");
+        }
+
+        return new PredictionModelResult<T, TInput, TOutput>(clonedModel, OptimizationResult, NormalizationInfo);
     }
 
     /// <summary>
