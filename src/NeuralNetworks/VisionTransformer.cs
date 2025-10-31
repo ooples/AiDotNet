@@ -526,6 +526,52 @@ public class VisionTransformer<T> : NeuralNetworkBase<T>
     }
 
     /// <summary>
+    /// Gets all model parameters in a single vector.
+    /// </summary>
+    /// <returns>A vector containing CLS token, positional embeddings, and all layer parameters in sequence.</returns>
+    /// <remarks>
+    /// <para>
+    /// This method returns parameters in the exact order expected by UpdateParameters:
+    /// 1. CLS token vector
+    /// 2. Positional embeddings (flattened row-major)
+    /// 3. Parameters from each transformer layer in sequence
+    /// </para>
+    /// </remarks>
+    public override Vector<T> GetParameters()
+    {
+        int totalCount = ParameterCount;
+        var parameters = new Vector<T>(totalCount);
+        int currentIndex = 0;
+
+        // Pack CLS token
+        for (int i = 0; i < _clsToken.Length; i++)
+        {
+            parameters[currentIndex++] = _clsToken[i];
+        }
+
+        // Pack positional embeddings (row-major)
+        for (int i = 0; i < _positionalEmbeddings.Rows; i++)
+        {
+            for (int j = 0; j < _positionalEmbeddings.Columns; j++)
+            {
+                parameters[currentIndex++] = _positionalEmbeddings[i, j];
+            }
+        }
+
+        // Pack layer parameters
+        foreach (var layer in Layers)
+        {
+            var layerParams = layer.GetParameters();
+            for (int i = 0; i < layerParams.Length; i++)
+            {
+                parameters[currentIndex++] = layerParams[i];
+            }
+        }
+
+        return parameters;
+    }
+
+    /// <summary>
     /// Gets the total number of parameters in the model.
     /// </summary>
     public override int ParameterCount
