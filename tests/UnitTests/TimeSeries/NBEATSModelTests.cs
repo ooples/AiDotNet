@@ -1,5 +1,7 @@
+using AiDotNet.LinearAlgebra;
 using AiDotNet.Models.Options;
 using AiDotNet.TimeSeries;
+using Xunit;
 
 namespace AiDotNetTests.UnitTests.TimeSeries;
 
