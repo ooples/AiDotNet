@@ -1,4 +1,4 @@
-namespace AiDotNet.Regression;
+﻿namespace AiDotNet.Regression;
 
 /// <summary>
 /// Implements symbolic regression, which discovers mathematical expressions that best describe the relationship

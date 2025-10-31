@@ -1,4 +1,4 @@
-namespace AiDotNet.TimeSeries;
+﻿namespace AiDotNet.TimeSeries;
 
 /// <summary>
 /// Implements a Transfer Function Model for time series analysis, which combines ARIMA modeling with

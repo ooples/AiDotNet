@@ -1,4 +1,4 @@
-namespace AiDotNet.TimeSeries;
+﻿namespace AiDotNet.TimeSeries;
 
 /// <summary>
 /// Implements Seasonal-Trend decomposition using LOESS (STL) for time series analysis.
