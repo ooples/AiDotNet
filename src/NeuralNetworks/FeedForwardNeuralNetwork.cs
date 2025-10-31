@@ -1,4 +1,4 @@
-namespace AiDotNet.NeuralNetworks;
+﻿namespace AiDotNet.NeuralNetworks;
 
 /// <summary>
 /// Represents a Feed-Forward Neural Network (FFNN) for processing data in a forward path.
@@ -7,7 +7,7 @@ namespace AiDotNet.NeuralNetworks;
 /// <remarks>
 /// <para>
 /// A Feed-Forward Neural Network is the simplest type of artificial neural network, where connections
-/// between nodes do not form a cycle. Information moves in only one direction�forward�from the input
+/// between nodes do not form a cycle. Information moves in only one direction -- forward -- from the input
 /// nodes, through the hidden nodes (if any), and to the output nodes.
 /// </para>
 /// <para>

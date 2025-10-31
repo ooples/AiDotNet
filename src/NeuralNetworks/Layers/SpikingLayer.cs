@@ -1,4 +1,4 @@
-namespace AiDotNet.NeuralNetworks.Layers;
+﻿namespace AiDotNet.NeuralNetworks.Layers;
 
 /// <summary>
 /// Represents a layer of spiking neurons that model the biological dynamics of neural activity.
@@ -1039,9 +1039,9 @@ public class SpikingLayer<T> : LayerBase<T>
         double ENa = 50.0;   // Sodium reversal potential (mV)
         double EK = -77.0;   // Potassium reversal potential (mV)
         double EL = -54.387; // Leak reversal potential (mV)
-        double gNa = 120.0;  // Maximum sodium conductance (mS/cm�)
-        double gK = 36.0;    // Maximum potassium conductance (mS/cm�)
-        double gL = 0.3;     // Leak conductance (mS/cm�)
+        double gNa = 120.0;  // Maximum sodium conductance (mS/cm²)
+        double gK = 36.0;    // Maximum potassium conductance (mS/cm²)
+        double gL = 0.3;     // Leak conductance (mS/cm²)
         double dt = 0.01;    // Time step (ms)
     
         for (int i = 0; i < _membranePotential.Length; i++)
