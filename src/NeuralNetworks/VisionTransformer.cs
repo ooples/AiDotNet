@@ -143,6 +143,36 @@ public class VisionTransformer<T> : NeuralNetworkBase<T>
         ILossFunction<T>? lossFunction = null)
         : base(architecture, lossFunction ?? new CategoricalCrossEntropyLoss<T>())
     {
+        // Validate all parameters are positive
+        if (imageHeight <= 0)
+            throw new ArgumentOutOfRangeException(nameof(imageHeight), imageHeight, "Image height must be greater than 0.");
+        if (imageWidth <= 0)
+            throw new ArgumentOutOfRangeException(nameof(imageWidth), imageWidth, "Image width must be greater than 0.");
+        if (channels <= 0)
+            throw new ArgumentOutOfRangeException(nameof(channels), channels, "Number of channels must be greater than 0.");
+        if (patchSize <= 0)
+            throw new ArgumentOutOfRangeException(nameof(patchSize), patchSize, "Patch size must be greater than 0.");
+        if (numClasses <= 0)
+            throw new ArgumentOutOfRangeException(nameof(numClasses), numClasses, "Number of classes must be greater than 0.");
+        if (hiddenDim <= 0)
+            throw new ArgumentOutOfRangeException(nameof(hiddenDim), hiddenDim, "Hidden dimension must be greater than 0.");
+        if (numLayers <= 0)
+            throw new ArgumentOutOfRangeException(nameof(numLayers), numLayers, "Number of layers must be greater than 0.");
+        if (numHeads <= 0)
+            throw new ArgumentOutOfRangeException(nameof(numHeads), numHeads, "Number of heads must be greater than 0.");
+        if (mlpDim <= 0)
+            throw new ArgumentOutOfRangeException(nameof(mlpDim), mlpDim, "MLP dimension must be greater than 0.");
+
+        // Validate image dimensions are divisible by patch size (prevents silent truncation)
+        if (imageHeight % patchSize != 0)
+            throw new ArgumentException($"Image height ({imageHeight}) must be divisible by patch size ({patchSize}).", nameof(imageHeight));
+        if (imageWidth % patchSize != 0)
+            throw new ArgumentException($"Image width ({imageWidth}) must be divisible by patch size ({patchSize}).", nameof(imageWidth));
+
+        // Validate multi-head attention requirement
+        if (hiddenDim % numHeads != 0)
+            throw new ArgumentException($"Hidden dimension ({hiddenDim}) must be divisible by number of heads ({numHeads}) for multi-head attention.", nameof(hiddenDim));
+
         _imageHeight = imageHeight;
         _imageWidth = imageWidth;
         _channels = channels;
@@ -240,6 +270,21 @@ public class VisionTransformer<T> : NeuralNetworkBase<T>
     /// </remarks>
     public override Tensor<T> Predict(Tensor<T> input)
     {
+        if (input.Shape.Length != 4)
+        {
+            throw new ArgumentException(
+                $"Input must be a 4D tensor with shape [batch, channels, height, width], but got rank {input.Shape.Length}.",
+                nameof(input));
+        }
+
+        if (input.Shape[1] != _channels || input.Shape[2] != _imageHeight || input.Shape[3] != _imageWidth)
+        {
+            throw new ArgumentException(
+                $"Input shape {string.Join("x", input.Shape)} does not match expected " +
+                $"[batch, {_channels}, {_imageHeight}, {_imageWidth}].",
+                nameof(input));
+        }
+
         int batchSize = input.Shape[0];
 
         var patchEmbeddings = Layers[0].Forward(input);
