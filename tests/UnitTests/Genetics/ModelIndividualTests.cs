@@ -3,7 +3,11 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using Xunit;
+using AiDotNet.Enums;
 using AiDotNet.Genetics;
+using AiDotNet.Interfaces;
+using AiDotNet.LinearAlgebra;
+using AiDotNet.Models;
 
 namespace AiDotNet.Tests.UnitTests.Genetics
 {
@@ -43,18 +47,36 @@ namespace AiDotNet.Tests.UnitTests.Genetics
 
             public ModelMetadata<double> GetModelMetadata()
             {
-                return new ModelMetadata<double>
+                var metadata = new ModelMetadata<double>
                 {
-                    ModelType = "MockModel",
-                    InputDimension = 3,
-                    OutputDimension = 1,
-                    TrainingMetrics = new Dictionary<string, double> { { "loss", 0.5 } }
+                    Name = "MockModel",
+                    ModelType = Enums.ModelType.None,
+                    FeatureCount = 3,
+                    Complexity = 1
                 };
+                metadata.AdditionalInfo["loss"] = 0.5;
+                return metadata;
             }
 
             public Vector<double> GetParameters()
             {
                 return _parameters;
+            }
+
+            public void SetParameters(Vector<double> parameters)
+            {
+                if (parameters == null)
+                    throw new ArgumentNullException(nameof(parameters));
+                _parameters = new Vector<double>(parameters.Length);
+                for (int i = 0; i < parameters.Length; i++)
+                {
+                    _parameters[i] = parameters[i];
+                }
+            }
+
+            public int ParameterCount
+            {
+                get { return _parameters.Length; }
             }
 
             public IFullModel<double, double[], double[]> WithParameters(Vector<double> parameters)
@@ -225,9 +247,10 @@ namespace AiDotNet.Tests.UnitTests.Genetics
 
             // Assert
             Assert.NotNull(metadata);
-            Assert.Equal("MockModel", metadata.ModelType);
-            Assert.Equal(3, metadata.InputDimension);
-            Assert.Equal(1, metadata.OutputDimension);
+            Assert.Equal("MockModel", metadata.Name);
+            Assert.Equal(ModelType.None, metadata.ModelType);
+            Assert.Equal(3, metadata.FeatureCount);
+            Assert.Equal(1, metadata.Complexity);
         }
 
         [Fact]

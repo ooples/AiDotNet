@@ -100,6 +100,113 @@ When updating interfaces, maintain generic `TInput` and `TOutput` parameters to 
 throw new ArgumentException($"Expected {ExpectedParameterCount} parameters, but got {parameters.Length}", nameof(parameters));
 ```
 
+### 6. UTF-8 Encoding and Character Corruption Prevention
+
+**CRITICAL**: Encoding issues have been a serious recurring problem in this project. Follow these rules strictly:
+
+#### File Encoding Standards
+
+**✅ ALWAYS:**
+- Save all C# source files as **UTF-8 without BOM** (Byte Order Mark)
+- Use proper Unicode characters for mathematical symbols
+- Verify file encoding before committing
+
+**❌ NEVER:**
+- Use UTF-8 with BOM (causes build issues and appears as `﻿` in some editors)
+- Copy-paste from Word documents or web pages without checking encoding
+- Use Windows-1252 or other legacy encodings
+- Leave corrupted placeholder characters (�) in code
+
+#### Mathematical Symbols - Use Correct Unicode
+
+**Common mathematical symbols that get corrupted:**
+
+| Symbol | Unicode | HTML | ASCII Fallback | Common Corruption |
+|--------|---------|------|----------------|-------------------|
+| Multiplication | × | `&times;` | * | � |
+| Superscript ² | ² | `&sup2;` | ^2 | � |
+| Em-dash | — | `&mdash;` | -- | � |
+| Degree | ° | `&deg;` | deg | � |
+| Plus-minus | ± | `&plusmn;` | +/- | � |
+
+**Examples:**
+
+```csharp
+// ❌ WRONG - Corrupted characters
+/// price = 50,000 � bedrooms + 100 � square_feet
+/// Maximum conductance (mS/cm�)
+/// Information moves in one direction�forward�from input
+
+// ✅ CORRECT - Proper Unicode
+/// price = 50,000 × bedrooms + 100 × square_feet
+/// Maximum conductance (mS/cm²)
+/// Information moves in one direction -- forward -- from input
+
+// ✅ ACCEPTABLE - ASCII fallback if Unicode causes issues
+/// price = 50,000 * bedrooms + 100 * square_feet
+/// Maximum conductance (mS/cm^2)
+/// Information moves in one direction -- forward -- from input
+```
+
+#### Pre-Commit Checks for Encoding
+
+**Before committing, verify:**
+
+1. **Check for BOM markers:**
+   ```bash
+   # Search for files with BOM
+   grep -rlI $'^\xEF\xBB\xBF' src/
+   ```
+
+2. **Check for corrupted characters:**
+   ```bash
+   # Search for replacement character
+   grep -rn "�" src/
+   ```
+
+3. **Verify file encoding:**
+   - Visual Studio: File → Advanced Save Options → UTF-8 without BOM
+   - VS Code: Bottom-right status bar → UTF-8
+   - Command line: `file --mime-encoding filename.cs`
+
+#### Common Corruption Sources
+
+1. **Copy-paste from documentation**:
+   - Always review pasted content for encoding issues
+   - Use "Paste as Plain Text" when possible
+
+2. **AI-generated content**:
+   - AI sometimes generates Unicode that doesn't render properly
+   - Always verify mathematical symbols after AI assistance
+
+3. **Cross-platform development**:
+   - Windows, Mac, and Linux handle encoding differently
+   - Use `.editorconfig` to enforce UTF-8
+
+4. **Git operations**:
+   - Configure Git to not modify line endings for .cs files
+   - Use `.gitattributes` to specify text handling
+
+#### EditorConfig Settings (Already in project)
+
+The project's `.editorconfig` should include:
+
+```ini
+[*.cs]
+charset = utf-8
+insert_final_newline = true
+end_of_line = lf
+```
+
+#### Incident History
+
+**2025-10-30**: Multiple PRs had encoding issues:
+- PR #242: Documentation had � instead of *, ², --
+- PR #252: ExtremeLearningMachine, NEAT, RestrictedBoltzmannMachine had �
+- Impact: Build failures, incorrect documentation, CodeRabbit reviews blocked merging
+
+**Prevention**: This section added to CLAUDE.md to prevent recurrence.
+
 ## Critical Files - NEVER DELETE OR EMPTY
 
 **ABSOLUTE PROHIBITION**: The following base class files are critical to the project and protected by pre-commit hooks:
