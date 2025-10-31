@@ -296,7 +296,7 @@ public class NEAT<T> : NeuralNetworkBase<T>
     /// - Assigns random weights to these connections
     /// 
     /// For example, if you have 3 inputs and 2 outputs:
-    /// - You'll have 6 connections (3 inputs � 2 outputs)
+    /// - You'll have 6 connections (3 inputs × 2 outputs)
     /// - Each connection gets a random weight between -1 and 1
     /// - Each connection gets a unique innovation number for tracking
     /// 

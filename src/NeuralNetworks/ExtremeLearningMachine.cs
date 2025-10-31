@@ -231,8 +231,8 @@ public class ExtremeLearningMachine<T> : NeuralNetworkBase<T>
         }
 
         // STEP 2: Calculate the optimal output weights using pseudo-inverse
-        // We'll use the Moore-Penrose pseudoinverse: OutputWeights = (H? � T)
-        // where H? is the pseudoinverse of H (hidden activations) and T is the target output
+        // We'll use the Moore-Penrose pseudoinverse: OutputWeights = (H+ × T)
+        // where H+ is the pseudoinverse of H (hidden activations) and T is the target output
 
         // Convert hidden activations and expected output to matrices for the calculation
         Matrix<T> H = hiddenActivations.ConvertToMatrix();
@@ -263,7 +263,7 @@ public class ExtremeLearningMachine<T> : NeuralNetworkBase<T>
     /// This method calculates the Moore-Penrose pseudoinverse of a matrix, which is a generalization of the matrix inverse
     /// for non-square matrices. The pseudoinverse is used in the ELM training algorithm to analytically solve
     /// for the optimal output layer weights. For computational efficiency, this implementation uses the formula:
-    /// A? = (A^T � A)^(-1) � A^T for full column rank matrices.
+    /// A+ = (A^T × A)^(-1) × A^T for full column rank matrices.
     /// </para>
     /// <para><b>For Beginners:</b> This calculates a special type of matrix inverse used in ELM training.
     /// 
@@ -274,27 +274,27 @@ public class ExtremeLearningMachine<T> : NeuralNetworkBase<T>
     /// </remarks>
     private Matrix<T> CalculatePseudoInverse(Matrix<T> matrix)
     {
-        // Calculate the pseudoinverse using the formula: A? = (A^T � A)^(-1) � A^T
+        // Calculate the pseudoinverse using the formula: A+ = (A^T × A)^(-1) × A^T
         // This works well for matrices with full column rank, which is common in ELMs with
         // more data samples than hidden neurons
 
         // Step 1: Calculate A^T (transpose)
         Matrix<T> transposeA = matrix.Transpose();
-        
-        // Step 2: Calculate A^T � A
+
+        // Step 2: Calculate A^T × A
         Matrix<T> aTa = transposeA.Multiply(matrix);
-        
-        // Step 3: Calculate (A^T � A)^(-1)
+
+        // Step 3: Calculate (A^T × A)^(-1)
         Matrix<T> aTaInverse = aTa.Inverse();
-        
-        // Step 4: Calculate (A^T � A)^(-1) � A^T
+
+        // Step 4: Calculate (A^T × A)^(-1) × A^T
         Matrix<T> pseudoInverse = aTaInverse.Multiply(transposeA);
-        
+
         return pseudoInverse;
 
         // Note: In a production implementation, you might want to use singular value decomposition (SVD)
         // for better numerical stability, or use a regularized version like:
-        // A? = (A^T � A + ?I)^(-1) � A^T where ? is a small regularization parameter
+        // A+ = (A^T × A + λI)^(-1) × A^T where λ is a small regularization parameter
     }
 
     /// <summary>

@@ -200,7 +200,7 @@ public class HopfieldNetwork<T> : NeuralNetworkBase<T>
     /// better recall. This process is different from training in most neural networks because:
     /// - It happens in one pass, not through repeated iterations
     /// - It doesn't use backpropagation or gradients
-    /// - It has limited capacity (can only store approximately 0.14 � network size patterns reliably)
+    /// - It has limited capacity (can only store approximately 0.14 * network size patterns reliably)
     /// </para>
     /// </remarks>
     public void Train(List<Vector<T>> patterns)
