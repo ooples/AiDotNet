@@ -609,20 +609,22 @@ public class NEAT<T> : NeuralNetworkBase<T>
     public override void UpdateParameters(Vector<T> parameters)
     {
         var bestGenome = GetBestGenome();
+        // Ensure deterministic order for parameter mapping
+        var connections = bestGenome.Connections.OrderBy(c => c.Innovation).ToList();
 
-        if (bestGenome.Connections.Count == 0)
+        if (connections.Count == 0)
         {
             throw new InvalidOperationException("Best genome has no connections to update.");
         }
 
-        if (parameters.Length != bestGenome.Connections.Count)
+        if (parameters.Length != connections.Count)
         {
-            throw new ArgumentException($"Parameter vector length mismatch. Expected {bestGenome.Connections.Count} parameters but got {parameters.Length}.", nameof(parameters));
+            throw new ArgumentException($"Parameter vector length mismatch. Expected {connections.Count} parameters but got {parameters.Length}.", nameof(parameters));
         }
 
-        for (int i = 0; i < bestGenome.Connections.Count; i++)
+        for (int i = 0; i < connections.Count; i++)
         {
-            bestGenome.Connections[i].Weight = parameters[i];
+            connections[i].Weight = parameters[i];
         }
     }
 

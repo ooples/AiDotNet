@@ -314,7 +314,8 @@ public class HopfieldNetwork<T> : NeuralNetworkBase<T>
     /// </remarks>
     public override void UpdateParameters(Vector<T> parameters)
     {
-        int expectedLength = _size * _size;
+        // Number of off-diagonal entries in a symmetric NxN matrix
+        int expectedLength = (_size * (_size - 1)) / 2;
 
         if (parameters.Length != expectedLength)
         {
@@ -322,20 +323,15 @@ public class HopfieldNetwork<T> : NeuralNetworkBase<T>
         }
 
         int paramIndex = 0;
-
+        // Fill upper triangle and mirror to lower triangle; keep diagonal zero
         for (int i = 0; i < _size; i++)
         {
-            for (int j = 0; j < _size; j++)
+            _weights[i, i] = NumOps.Zero;
+            for (int j = i + 1; j < _size; j++)
             {
-                if (i == j)
-                {
-                    _weights[i, j] = NumOps.Zero;
-                    paramIndex++;
-                }
-                else
-                {
-                    _weights[i, j] = parameters[paramIndex++];
-                }
+                var w = parameters[paramIndex++];
+                _weights[i, j] = w;
+                _weights[j, i] = w;
             }
         }
     }
