@@ -29,12 +29,12 @@ jobs:
       - name: Publish library
         run: |
           if [ -f "src/AiDotNet.csproj" ]; then
-            dotnet publish src/AiDotNet.csproj -c Release -o publish
+            dotnet publish src/AiDotNet.csproj -c Release -f net8.0 -o publish
             status=$?
             failed_projects=""
             shopt -s nullglob
             for p in src/*.csproj; do
-              dotnet publish "$p" -c Release -o publish
+              dotnet publish "$p" -c Release -f net8.0 -o publish
               status=$?
               if [ $status -ne 0 ]; then
                 echo "Publish failed for $p"
