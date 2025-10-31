@@ -1,6 +1,7 @@
 using System;
 using AiDotNet.Enums;
 using AiDotNet.LinearAlgebra;
+using AiDotNet.Models;
 using AiDotNet.Regularization;
 using Xunit;
 
