@@ -79,9 +79,11 @@ public class LoRAAdapter<T> : LayerBase<T>
     /// </para>
     /// </remarks>
     public LoRAAdapter(ILayer<T> baseLayer, int rank, double alpha = -1, bool freezeBaseLayer = true)
-        : base(baseLayer.GetInputShape(), baseLayer.GetOutputShape())
+        : base(
+            (baseLayer ?? throw new ArgumentNullException(nameof(baseLayer))).GetInputShape(),
+            (baseLayer ?? throw new ArgumentNullException(nameof(baseLayer))).GetOutputShape())
     {
-        _baseLayer = baseLayer ?? throw new ArgumentNullException(nameof(baseLayer));
+        _baseLayer = baseLayer;
         _freezeBaseLayer = freezeBaseLayer;
 
         // Validate base layer has single-dimensional input/output

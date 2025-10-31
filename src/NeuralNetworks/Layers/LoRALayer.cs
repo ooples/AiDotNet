@@ -302,11 +302,15 @@ public class LoRALayer<T> : LayerBase<T>
         int inputSize = _lastInput.Shape.Length > 1 ? _lastInput.Shape[1] : _lastInput.Length;
 
         // Apply activation gradient if needed
+        // Ensure activation is identity or not set (non-identity activations require pre-activation storage)
+        if (ScalarActivation != null && !(ScalarActivation is IdentityActivation<T>))
+        {
+            throw new NotSupportedException("Non-identity activation functions are not yet fully supported in LoRALayer. " +
+                "Full support requires storing pre-activation values during the forward pass.");
+        }
+
         if (ScalarActivation != null)
         {
-            // Need to get the pre-activation output for derivative calculation
-            // For now, we'll pass the gradient through without modification
-            // A full implementation would require storing pre-activation values
             outputGradient = ApplyActivationDerivative(_lastInput, outputGradient);
         }
         int outputSize = _loraB.Columns;
