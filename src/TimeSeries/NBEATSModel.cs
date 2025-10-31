@@ -467,9 +467,12 @@ public class NBEATSModel<T> : TimeSeriesModelBase<T>
     /// Creates a new instance of the N-BEATS model.
     /// </summary>
     /// <returns>A new N-BEATS model instance with the same configuration.</returns>
+    /// <remarks>
+    /// Creates a deep copy of the model options to ensure the cloned model has an independent options instance.
+    /// </remarks>
     protected override IFullModel<T, Matrix<T>, Vector<T>> CreateInstance()
     {
-        return new NBEATSModel<T>(_options);
+        return new NBEATSModel<T>(new NBEATSModelOptions<T>(_options));
     }
 
     /// <summary>

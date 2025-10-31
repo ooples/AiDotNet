@@ -1,3 +1,5 @@
+using System;
+
 namespace AiDotNet.Models.Options;
 
 /// <summary>
@@ -27,6 +29,36 @@ namespace AiDotNet.Models.Options;
 /// </remarks>
 public class NBEATSModelOptions<T> : TimeSeriesRegressionOptions<T>
 {
+    /// <summary>
+    /// Initializes a new instance of the <see cref="NBEATSModelOptions{T}"/> class.
+    /// </summary>
+    public NBEATSModelOptions()
+    {
+    }
+
+    /// <summary>
+    /// Initializes a new instance of the <see cref="NBEATSModelOptions{T}"/> class by copying from another instance.
+    /// </summary>
+    /// <param name="other">The options instance to copy from.</param>
+    public NBEATSModelOptions(NBEATSModelOptions<T> other)
+    {
+        if (other == null)
+            throw new ArgumentNullException(nameof(other));
+
+        NumStacks = other.NumStacks;
+        NumBlocksPerStack = other.NumBlocksPerStack;
+        PolynomialDegree = other.PolynomialDegree;
+        LookbackWindow = other.LookbackWindow;
+        ForecastHorizon = other.ForecastHorizon;
+        HiddenLayerSize = other.HiddenLayerSize;
+        NumHiddenLayers = other.NumHiddenLayers;
+        LearningRate = other.LearningRate;
+        Epochs = other.Epochs;
+        BatchSize = other.BatchSize;
+        ShareWeightsInStack = other.ShareWeightsInStack;
+        UseInterpretableBasis = other.UseInterpretableBasis;
+    }
+
     /// <summary>
     /// Gets or sets the number of stacks in the N-BEATS architecture.
     /// </summary>
