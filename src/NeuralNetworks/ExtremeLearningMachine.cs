@@ -72,7 +72,7 @@ public class ExtremeLearningMachine<T> : NeuralNetworkBase<T>
     /// where each team member will be randomly assigned what to look for.
     /// </para>
     /// </remarks>
-    public ExtremeLearningMachine(NeuralNetworkArchitecture<T> architecture, int hiddenLayerSize, ILossFunction<T>? lossFunction = null) 
+    public ExtremeLearningMachine(NeuralNetworkArchitecture<T> architecture, int hiddenLayerSize, ILossFunction<T>? lossFunction = null)
         : base(architecture, lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(architecture.TaskType))
     {
         _hiddenLayerSize = hiddenLayerSize;
@@ -225,8 +225,8 @@ public class ExtremeLearningMachine<T> : NeuralNetworkBase<T>
         }
 
         // STEP 2: Calculate the optimal output weights using pseudo-inverse
-        // We'll use the Moore-Penrose pseudoinverse: OutputWeights = (H? × T)
-        // where H? is the pseudoinverse of H (hidden activations) and T is the target output
+        // We'll use the Moore-Penrose pseudoinverse: OutputWeights = (H+ × T)
+        // where H+ is the pseudoinverse of H (hidden activations) and T is the target output
 
         // Convert hidden activations and expected output to matrices for the calculation
         Matrix<T> H = hiddenActivations.ConvertToMatrix();
@@ -257,7 +257,7 @@ public class ExtremeLearningMachine<T> : NeuralNetworkBase<T>
     /// This method calculates the Moore-Penrose pseudoinverse of a matrix, which is a generalization of the matrix inverse
     /// for non-square matrices. The pseudoinverse is used in the ELM training algorithm to analytically solve
     /// for the optimal output layer weights. For computational efficiency, this implementation uses the formula:
-    /// A? = (A^T × A)^(-1) × A^T for full column rank matrices.
+    /// A+ = (A^T × A)^(-1) × A^T for full column rank matrices.
     /// </para>
     /// <para><b>For Beginners:</b> This calculates a special type of matrix inverse used in ELM training.
     /// 
@@ -268,7 +268,7 @@ public class ExtremeLearningMachine<T> : NeuralNetworkBase<T>
     /// </remarks>
     private Matrix<T> CalculatePseudoInverse(Matrix<T> matrix)
     {
-        // Calculate the pseudoinverse using the formula: A? = (A^T × A)^(-1) × A^T
+        // Calculate the pseudoinverse using the formula: A+ = (A^T × A)^(-1) × A^T
         // This works well for matrices with full column rank, which is common in ELMs with
         // more data samples than hidden neurons
 
@@ -288,7 +288,7 @@ public class ExtremeLearningMachine<T> : NeuralNetworkBase<T>
 
         // Note: In a production implementation, you might want to use singular value decomposition (SVD)
         // for better numerical stability, or use a regularized version like:
-        // A? = (A^T × A + ?I)^(-1) × A^T where ? is a small regularization parameter
+        // A+ = (A^T × A + λI)^(-1) × A^T where λ is a small regularization parameter
     }
 
     /// <summary>
@@ -442,7 +442,7 @@ public class ExtremeLearningMachine<T> : NeuralNetworkBase<T>
     /// <para>
     /// This method implements a regularized version of the ELM training algorithm. It adds a regularization term
     /// to the pseudoinverse calculation, which helps prevent overfitting. The formula becomes:
-    /// OutputWeights = (H^T * H + ?I)^(-1) * H^T * T, where ? is the regularization factor, I is the identity matrix,
+    /// OutputWeights = (H^T * H + λI)^(-1) * H^T * T, where λ is the regularization factor, I is the identity matrix,
     /// H is the hidden layer activations, and T is the target output.
     /// </para>
     /// <para><b>For Beginners:</b> This is a more robust training method that helps prevent overfitting.
@@ -479,14 +479,14 @@ public class ExtremeLearningMachine<T> : NeuralNetworkBase<T>
         Matrix<T> H = hiddenActivations.ConvertToMatrix();
         Matrix<T> T = expectedOutput.ConvertToMatrix();
         
-        // Calculate regularized pseudoinverse: (H^T * H + ?I)^(-1) * H^T
+        // Calculate regularized pseudoinverse: (H^T * H + λI)^(-1) * H^T
         Matrix<T> transposeH = H.Transpose();
         Matrix<T> hTh = transposeH.Multiply(H);
         
         // Create identity matrix for regularization
         Matrix<T> identity = Matrix<T>.CreateIdentity(hTh.Rows);
         
-        // Apply regularization: hTh + ?I
+        // Apply regularization: hTh + λI
         T regFactor = NumOps.FromDouble(regularizationFactor);
         for (int i = 0; i < identity.Rows; i++)
         {
