@@ -1,4 +1,4 @@
-namespace AiDotNet.NeuralNetworks;
+﻿namespace AiDotNet.NeuralNetworks;
 
 /// <summary>
 /// Represents a Hopfield Network, a recurrent neural network designed for pattern storage and retrieval.
@@ -200,7 +200,7 @@ public class HopfieldNetwork<T> : NeuralNetworkBase<T>
     /// better recall. This process is different from training in most neural networks because:
     /// - It happens in one pass, not through repeated iterations
     /// - It doesn't use backpropagation or gradients
-    /// - It has limited capacity (can only store approximately 0.14 � network size patterns reliably)
+    /// - It has limited capacity (can only store approximately 0.14 * network size patterns reliably)
     /// </para>
     /// </remarks>
     public void Train(List<Vector<T>> patterns)
@@ -314,8 +314,26 @@ public class HopfieldNetwork<T> : NeuralNetworkBase<T>
     /// </remarks>
     public override void UpdateParameters(Vector<T> parameters)
     {
-        // Hopfield networks typically don't use gradient-based updates
-        throw new InvalidOperationException("Hopfield networks do not support gradient-based parameter updates. Use the Train(List<Vector<T>> patterns) method instead.");
+        // Number of off-diagonal entries in a symmetric NxN matrix
+        int expectedLength = (_size * (_size - 1)) / 2;
+
+        if (parameters.Length != expectedLength)
+        {
+            throw new ArgumentException($"Parameter vector length mismatch. Expected {expectedLength} parameters but got {parameters.Length}.", nameof(parameters));
+        }
+
+        int paramIndex = 0;
+        // Fill upper triangle and mirror to lower triangle; keep diagonal zero
+        for (int i = 0; i < _size; i++)
+        {
+            _weights[i, i] = NumOps.Zero;
+            for (int j = i + 1; j < _size; j++)
+            {
+                var w = parameters[paramIndex++];
+                _weights[i, j] = w;
+                _weights[j, i] = w;
+            }
+        }
     }
 
     /// <summary>

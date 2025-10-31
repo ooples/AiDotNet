@@ -1,4 +1,4 @@
-using System.Threading.Tasks;
+﻿using System.Threading.Tasks;
 using AiDotNet.Interpretability;
 using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
@@ -30,8 +30,8 @@ namespace AiDotNet.Models;
 /// - It supports genetic algorithm operations for optimization
 /// 
 /// For example, if predicting house prices, the model might learn that:
-/// price = 50,000 � bedrooms + 100 � square_feet + 20,000 � bathrooms
-/// 
+/// price = 50,000 * bedrooms + 100 * square_feet + 20,000 * bathrooms
+///
 /// This is one of the simplest and most interpretable machine learning models,
 /// making it a good starting point for many problems.
 /// </para>
