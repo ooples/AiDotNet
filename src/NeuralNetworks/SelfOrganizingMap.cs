@@ -141,7 +141,7 @@ public class SelfOrganizingMap<T> : NeuralNetworkBase<T>
     /// When creating a new SOM:
     /// - The architecture tells us how many input dimensions we have (how many attributes each data point has)
     /// - The architecture also suggests how many total positions we want on our map
-    /// - The constructor tries to make the map as square as possible (e.g., 10×10 rather than 5×20)
+    /// - The constructor tries to make the map as square as possible (e.g., 10ï¿½10 rather than 5ï¿½20)
     /// - It may adjust the total map size slightly to make a perfect square if needed
     /// 
     /// Once the dimensions are set, it creates weight values for each position on the map.
@@ -331,7 +331,7 @@ public class SelfOrganizingMap<T> : NeuralNetworkBase<T>
     /// For example, if comparing two books with attributes for page count and publication year:
     /// - Book 1: 300 pages, published in 2010
     /// - Book 2: 400 pages, published in 2020
-    /// - The calculation would be: v[(300-400)² + (2010-2020)²] = v(10,100 + 100) = v10,200 ˜ 101
+    /// - The calculation would be: v[(300-400)ï¿½ + (2010-2020)ï¿½] = v(10,100 + 100) = v10,200 ï¿½ 101
     /// 
     /// A smaller distance means the data points are more similar.
     /// </para>
@@ -538,7 +538,7 @@ public class SelfOrganizingMap<T> : NeuralNetworkBase<T>
     /// - Changes are proportional to learning rate and influence
     /// - The BMU moves more than distant positions
     /// 
-    /// The formula (learningRate × influence × (input - weight)) moves each weight
+    /// The formula (learningRate ï¿½ influence ï¿½ (input - weight)) moves each weight
     /// some fraction of the way toward matching the corresponding input value.
     /// </para>
     /// </remarks>
@@ -576,8 +576,22 @@ public class SelfOrganizingMap<T> : NeuralNetworkBase<T>
     /// </remarks>
     public override void UpdateParameters(Vector<T> parameters)
     {
-        // This method is not typically used in SOMs
-        throw new InvalidOperationException("UpdateParameters is not implemented for Self-Organizing Maps. SOMs use competitive learning and update weights through the Train method instead.");
+        int expectedLength = (_mapWidth * _mapHeight) * _inputDimension;
+
+        if (parameters.Length != expectedLength)
+        {
+            throw new ArgumentException($"Parameter vector length mismatch. Expected {expectedLength} parameters but got {parameters.Length}.", nameof(parameters));
+        }
+
+        int paramIndex = 0;
+
+        for (int i = 0; i < _mapWidth * _mapHeight; i++)
+        {
+            for (int j = 0; j < _inputDimension; j++)
+            {
+                _weights[i, j] = parameters[paramIndex++];
+            }
+        }
     }
 
     /// <summary>
