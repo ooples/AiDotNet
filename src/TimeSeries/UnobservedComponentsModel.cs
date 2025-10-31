@@ -1,4 +1,4 @@
-namespace AiDotNet.TimeSeries;
+﻿namespace AiDotNet.TimeSeries;
 
 /// <summary>
 /// Implements an Unobserved Components Model (UCM) for time series decomposition and forecasting.

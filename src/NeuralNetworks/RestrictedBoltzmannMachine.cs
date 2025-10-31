@@ -450,33 +450,7 @@ public class RestrictedBoltzmannMachine<T> : NeuralNetworkBase<T>
     /// </remarks>
     public override void UpdateParameters(Vector<T> parameters)
     {
-        int weightCount = HiddenSize * VisibleSize;
-        int expectedLength = weightCount + VisibleSize + HiddenSize;
-
-        if (parameters.Length != expectedLength)
-        {
-            throw new ArgumentException($"Parameter vector length mismatch. Expected {expectedLength} parameters but got {parameters.Length}.", nameof(parameters));
-        }
-
-        int paramIndex = 0;
-
-        for (int i = 0; i < HiddenSize; i++)
-        {
-            for (int j = 0; j < VisibleSize; j++)
-            {
-                _weights[i, j] = parameters[paramIndex++];
-            }
-        }
-
-        for (int i = 0; i < VisibleSize; i++)
-        {
-            _visibleBiases[i] = parameters[paramIndex++];
-        }
-
-        for (int i = 0; i < HiddenSize; i++)
-        {
-            _hiddenBiases[i] = parameters[paramIndex++];
-        }
+        throw new InvalidOperationException("Restricted Boltzmann Machines do not support direct parameter updates via this method. Use the Train method which updates parameters through Contrastive Divergence or other energy-based learning algorithms.");
     }
 
     /// <summary>

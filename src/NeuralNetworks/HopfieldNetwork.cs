@@ -1,4 +1,4 @@
-namespace AiDotNet.NeuralNetworks;
+﻿namespace AiDotNet.NeuralNetworks;
 
 /// <summary>
 /// Represents a Hopfield Network, a recurrent neural network designed for pattern storage and retrieval.

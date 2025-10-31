@@ -608,24 +608,7 @@ public class NEAT<T> : NeuralNetworkBase<T>
     /// </remarks>
     public override void UpdateParameters(Vector<T> parameters)
     {
-        var bestGenome = GetBestGenome();
-        // Ensure deterministic order for parameter mapping
-        var connections = bestGenome.Connections.OrderBy(c => c.Innovation).ToList();
-
-        if (connections.Count == 0)
-        {
-            throw new InvalidOperationException("Best genome has no connections to update.");
-        }
-
-        if (parameters.Length != connections.Count)
-        {
-            throw new ArgumentException($"Parameter vector length mismatch. Expected {connections.Count} parameters but got {parameters.Length}.", nameof(parameters));
-        }
-
-        for (int i = 0; i < connections.Count; i++)
-        {
-            connections[i].Weight = parameters[i];
-        }
+        throw new InvalidOperationException("NEAT (NeuroEvolution of Augmenting Topologies) does not support direct parameter updates via this method. Use the EvolvePopulation method to evolve the network through genetic algorithms instead of gradient-based updates.");
     }
 
     /// <summary>
