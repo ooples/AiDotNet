@@ -3,7 +3,6 @@ using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
 using AiDotNet.Models;
 using System;
-using System.Threading.Tasks;
 using Xunit;
 
 namespace AiDotNetTests.UnitTests.Interpretability
@@ -14,31 +13,31 @@ namespace AiDotNetTests.UnitTests.Interpretability
     public class FairnessEvaluatorTests
     {
         [Fact]
-        public async Task EvaluateFairnessAsync_WithNullModel_ThrowsArgumentNullException()
+        public void EvaluateFairness_WithNullModel_ThrowsArgumentNullException()
         {
             // Arrange
             var evaluator = new FairnessEvaluator<double>();
             Matrix<double> inputs = new Matrix<double>(4, 2);
 
             // Act & Assert
-            await Assert.ThrowsAsync<ArgumentNullException>(() =>
-                evaluator.EvaluateFairnessAsync(null, inputs, 0));
+            Assert.Throws<ArgumentNullException>(() =>
+                evaluator.EvaluateFairness(null, inputs, 0));
         }
 
         [Fact]
-        public async Task EvaluateFairnessAsync_WithNullInputs_ThrowsArgumentNullException()
+        public void EvaluateFairness_WithNullInputs_ThrowsArgumentNullException()
         {
             // Arrange
             var evaluator = new FairnessEvaluator<double>();
             var model = new VectorModel<double>(new Vector<double>(new double[] { 1, 0 }));
 
             // Act & Assert
-            await Assert.ThrowsAsync<ArgumentNullException>(() =>
-                evaluator.EvaluateFairnessAsync(model, null, 0));
+            Assert.Throws<ArgumentNullException>(() =>
+                evaluator.EvaluateFairness(model, null, 0));
         }
 
         [Fact]
-        public async Task EvaluateFairnessAsync_WithInvalidSensitiveFeatureIndex_ThrowsArgumentOutOfRangeException()
+        public void EvaluateFairness_WithInvalidSensitiveFeatureIndex_ThrowsArgumentOutOfRangeException()
         {
             // Arrange
             var evaluator = new FairnessEvaluator<double>();
@@ -46,12 +45,12 @@ namespace AiDotNetTests.UnitTests.Interpretability
             Matrix<double> inputs = new Matrix<double>(4, 2);
 
             // Act & Assert
-            await Assert.ThrowsAsync<ArgumentOutOfRangeException>(() =>
-                evaluator.EvaluateFairnessAsync(model, inputs, 5));
+            Assert.Throws<ArgumentOutOfRangeException>(() =>
+                evaluator.EvaluateFairness(model, inputs, 5));
         }
 
         [Fact]
-        public async Task EvaluateFairnessAsync_WithBalancedPredictions_ReturnsZeroMetrics()
+        public void EvaluateFairness_WithBalancedPredictions_ReturnsZeroMetrics()
         {
             // Arrange
             var evaluator = new FairnessEvaluator<double>();
@@ -74,7 +73,7 @@ namespace AiDotNetTests.UnitTests.Interpretability
             inputs[7, 0] = 0.6; inputs[7, 1] = 1; // predict 0.6
 
             // Act
-            var result = await evaluator.EvaluateFairnessAsync(model, inputs, 1);
+            var result = evaluator.EvaluateFairness(model, inputs, 1);
 
             // Assert
             Assert.NotNull(result);
@@ -85,7 +84,7 @@ namespace AiDotNetTests.UnitTests.Interpretability
         }
 
         [Fact]
-        public async Task EvaluateFairnessAsync_WithUnbalancedPredictions_DetectsBias()
+        public void EvaluateFairness_WithUnbalancedPredictions_DetectsBias()
         {
             // Arrange
             var evaluator = new FairnessEvaluator<double>();
@@ -107,7 +106,7 @@ namespace AiDotNetTests.UnitTests.Interpretability
             inputs[7, 0] = 0.0; inputs[7, 1] = 1;
 
             // Act
-            var result = await evaluator.EvaluateFairnessAsync(model, inputs, 1);
+            var result = evaluator.EvaluateFairness(model, inputs, 1);
 
             // Assert
             Assert.NotNull(result);
@@ -117,7 +116,7 @@ namespace AiDotNetTests.UnitTests.Interpretability
         }
 
         [Fact]
-        public async Task EvaluateFairnessAsync_WithActualLabels_ComputesAllMetrics()
+        public void EvaluateFairness_WithActualLabels_ComputesAllMetrics()
         {
             // Arrange
             var evaluator = new FairnessEvaluator<double>();
@@ -137,7 +136,7 @@ namespace AiDotNetTests.UnitTests.Interpretability
             Vector<double> actualLabels = new Vector<double>(new double[] { 1, 1, 1, 0, 1, 1, 0, 0 });
 
             // Act
-            var result = await evaluator.EvaluateFairnessAsync(model, inputs, 1, actualLabels);
+            var result = evaluator.EvaluateFairness(model, inputs, 1, actualLabels);
 
             // Assert
             Assert.NotNull(result);
@@ -147,7 +146,7 @@ namespace AiDotNetTests.UnitTests.Interpretability
         }
 
         [Fact]
-        public async Task EvaluateFairnessAsync_WithSingleGroup_ReturnsZeroMetrics()
+        public void EvaluateFairness_WithSingleGroup_ReturnsZeroMetrics()
         {
             // Arrange
             var evaluator = new FairnessEvaluator<double>();
@@ -162,7 +161,7 @@ namespace AiDotNetTests.UnitTests.Interpretability
             }
 
             // Act
-            var result = await evaluator.EvaluateFairnessAsync(model, inputs, 1);
+            var result = evaluator.EvaluateFairness(model, inputs, 1);
 
             // Assert
             Assert.NotNull(result);
@@ -172,7 +171,7 @@ namespace AiDotNetTests.UnitTests.Interpretability
         }
 
         [Fact]
-        public async Task EvaluateFairnessAsync_AdditionalMetrics_ContainGroupStatistics()
+        public void EvaluateFairness_AdditionalMetrics_ContainGroupStatistics()
         {
             // Arrange
             var evaluator = new FairnessEvaluator<double>();
@@ -187,7 +186,7 @@ namespace AiDotNetTests.UnitTests.Interpretability
             inputs[5, 0] = 0.4; inputs[5, 1] = 1;
 
             // Act
-            var result = await evaluator.EvaluateFairnessAsync(model, inputs, 1);
+            var result = evaluator.EvaluateFairness(model, inputs, 1);
 
             // Assert
             Assert.NotNull(result.AdditionalMetrics);
@@ -198,7 +197,7 @@ namespace AiDotNetTests.UnitTests.Interpretability
         }
 
         [Fact]
-        public async Task EvaluateFairnessAsync_WithThreeGroups_HandlesMultipleGroups()
+        public void EvaluateFairness_WithThreeGroups_HandlesMultipleGroups()
         {
             // Arrange
             var evaluator = new FairnessEvaluator<double>();
@@ -219,7 +218,7 @@ namespace AiDotNetTests.UnitTests.Interpretability
             inputs[8, 0] = 0.4; inputs[8, 1] = 2;
 
             // Act
-            var result = await evaluator.EvaluateFairnessAsync(model, inputs, 1);
+            var result = evaluator.EvaluateFairness(model, inputs, 1);
 
             // Assert
             Assert.NotNull(result);
@@ -229,7 +228,7 @@ namespace AiDotNetTests.UnitTests.Interpretability
         }
 
         [Fact]
-        public async Task EvaluateFairnessAsync_WithFloatType_WorksCorrectly()
+        public void EvaluateFairness_WithFloatType_WorksCorrectly()
         {
             // Arrange
             var evaluator = new FairnessEvaluator<float>();
@@ -242,7 +241,7 @@ namespace AiDotNetTests.UnitTests.Interpretability
             inputs[3, 0] = 0.6f; inputs[3, 1] = 1f;
 
             // Act
-            var result = await evaluator.EvaluateFairnessAsync(model, inputs, 1);
+            var result = evaluator.EvaluateFairness(model, inputs, 1);
 
             // Assert
             Assert.NotNull(result);
@@ -251,7 +250,7 @@ namespace AiDotNetTests.UnitTests.Interpretability
         }
 
         [Fact]
-        public async Task EvaluateFairnessAsync_ComputesDemographicParity_Correctly()
+        public void EvaluateFairness_ComputesDemographicParity_Correctly()
         {
             // Arrange
             var evaluator = new FairnessEvaluator<double>();
@@ -271,7 +270,7 @@ namespace AiDotNetTests.UnitTests.Interpretability
             inputs[7, 0] = 0.4; inputs[7, 1] = 1;
 
             // Act
-            var result = await evaluator.EvaluateFairnessAsync(model, inputs, 1);
+            var result = evaluator.EvaluateFairness(model, inputs, 1);
 
             // Assert
             Assert.Equal(0.5, result.DemographicParity, 2);
@@ -279,7 +278,7 @@ namespace AiDotNetTests.UnitTests.Interpretability
         }
 
         [Fact]
-        public async Task EvaluateFairnessAsync_ComputesDisparateImpact_Correctly()
+        public void EvaluateFairness_ComputesDisparateImpact_Correctly()
         {
             // Arrange
             var evaluator = new FairnessEvaluator<double>();
@@ -299,7 +298,7 @@ namespace AiDotNetTests.UnitTests.Interpretability
             inputs[7, 0] = 0.6; inputs[7, 1] = 1;
 
             // Act
-            var result = await evaluator.EvaluateFairnessAsync(model, inputs, 1);
+            var result = evaluator.EvaluateFairness(model, inputs, 1);
 
             // Assert
             Assert.Equal(0.5, result.DisparateImpact, 2);

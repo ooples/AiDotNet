@@ -1,65 +1,33 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
-using System.Threading.Tasks;
-using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
 
 namespace AiDotNet.Interpretability
 {
     /// <summary>
-    /// Provides methods for evaluating fairness metrics of machine learning models.
+    /// Provides comprehensive fairness evaluation including all major fairness metrics.
     /// </summary>
     /// <typeparam name="T">The numeric type for calculations.</typeparam>
-    public class FairnessEvaluator<T>
+    public class FairnessEvaluator<T> : FairnessEvaluatorBase<T>
     {
-        private readonly INumericOperations<T> _numOps;
-
         /// <summary>
         /// Initializes a new instance of the FairnessEvaluator class.
         /// </summary>
-        public FairnessEvaluator()
+        public FairnessEvaluator() : base(isHigherFairnessBetter: false)
         {
-            _numOps = MathHelper.GetNumericOperations<T>();
         }
 
         /// <summary>
-        /// Evaluates fairness metrics for a model on the given dataset.
+        /// Implements comprehensive fairness evaluation logic.
         /// </summary>
-        /// <param name="model">The model to evaluate.</param>
-        /// <param name="inputs">The input data.</param>
-        /// <param name="sensitiveFeatureIndex">The index of the sensitive feature in the input data.</param>
-        /// <param name="actualLabels">The actual labels (optional, required for some metrics).</param>
-        /// <returns>A FairnessMetrics object containing computed metrics.</returns>
-        /// <exception cref="ArgumentNullException">Thrown when model or inputs is null.</exception>
-        /// <exception cref="ArgumentOutOfRangeException">Thrown when sensitiveFeatureIndex is invalid.</exception>
-        public async Task<FairnessMetrics<T>> EvaluateFairnessAsync(
+        protected override FairnessMetrics<T> GetFairnessMetrics(
             IFullModel<T, Matrix<T>, Vector<T>> model,
             Matrix<T> inputs,
             int sensitiveFeatureIndex,
-            Vector<T>? actualLabels = null)
+            Vector<T>? actualLabels)
         {
-            if (model == null)
-            {
-                throw new ArgumentNullException(nameof(model));
-            }
-
-            if (inputs == null)
-            {
-                throw new ArgumentNullException(nameof(inputs));
-            }
-
-            if (sensitiveFeatureIndex < 0 || sensitiveFeatureIndex >= inputs.Columns)
-            {
-                throw new ArgumentOutOfRangeException(nameof(sensitiveFeatureIndex),
-                    $"Sensitive feature index must be between 0 and {inputs.Columns - 1}.");
-            }
-
-            if (actualLabels != null && actualLabels.Length != inputs.Rows)
-            {
-                throw new ArgumentException($"Actual labels length ({actualLabels.Length}) must match input rows ({inputs.Rows}).", nameof(actualLabels));
-            }
 
             // Get predictions from the model
             Vector<T> predictions = model.Predict(inputs);
@@ -68,7 +36,7 @@ namespace AiDotNet.Interpretability
             Vector<T> sensitiveFeature = inputs.GetColumn(sensitiveFeatureIndex);
 
             // Identify unique groups
-            var groups = GetUniqueGroups(sensitiveFeature);
+            var groups = InterpretabilityMetricsHelper<T>.GetUniqueGroups(sensitiveFeature);
 
             if (groups.Count < 2)
             {
@@ -110,19 +78,19 @@ namespace AiDotNet.Interpretability
             // Add per-group metrics to additional metrics
             foreach (var group in groups)
             {
-                var stats = groupStats[group];
-                fairnessMetrics.AdditionalMetrics[$"Group_{group}_PositiveRate"] = stats.PositiveRate;
-                fairnessMetrics.AdditionalMetrics[$"Group_{group}_Size"] = _numOps.FromDouble(stats.Size);
+                string groupKey = group?.ToString() ?? "unknown";
+                var stats = groupStats[groupKey];
+                fairnessMetrics.AdditionalMetrics[$"Group_{groupKey}_PositiveRate"] = stats.PositiveRate;
+                fairnessMetrics.AdditionalMetrics[$"Group_{groupKey}_Size"] = _numOps.FromDouble(stats.Size);
 
                 if (actualLabels != null)
                 {
-                    fairnessMetrics.AdditionalMetrics[$"Group_{group}_TPR"] = stats.TruePositiveRate;
-                    fairnessMetrics.AdditionalMetrics[$"Group_{group}_FPR"] = stats.FalsePositiveRate;
-                    fairnessMetrics.AdditionalMetrics[$"Group_{group}_Precision"] = stats.Precision;
+                    fairnessMetrics.AdditionalMetrics[$"Group_{groupKey}_TPR"] = stats.TruePositiveRate;
+                    fairnessMetrics.AdditionalMetrics[$"Group_{groupKey}_FPR"] = stats.FalsePositiveRate;
+                    fairnessMetrics.AdditionalMetrics[$"Group_{groupKey}_Precision"] = stats.Precision;
                 }
             }
 
-            await Task.CompletedTask; // Satisfy async signature
             return fairnessMetrics;
         }
 
@@ -139,23 +107,23 @@ namespace AiDotNet.Interpretability
 
             foreach (var group in groups)
             {
-                var groupIndices = GetGroupIndices(sensitiveFeature, group);
-                var groupPredictions = GetSubset(predictions, groupIndices);
-                string groupKey = _numOps.ToDouble(group).ToString();
+                var groupIndices = InterpretabilityMetricsHelper<T>.GetGroupIndices(sensitiveFeature, group);
+                var groupPredictions = InterpretabilityMetricsHelper<T>.GetSubset(predictions, groupIndices);
+                string groupKey = group?.ToString() ?? "unknown";
 
                 var stats = new GroupStatistics<T>
                 {
                     GroupValue = group,
                     Size = groupIndices.Count,
-                    PositiveRate = ComputePositiveRate(groupPredictions)
+                    PositiveRate = InterpretabilityMetricsHelper<T>.ComputePositiveRate(groupPredictions)
                 };
 
                 if (actualLabels != null)
                 {
-                    var groupActualLabels = GetSubset(actualLabels, groupIndices);
-                    stats.TruePositiveRate = ComputeTruePositiveRate(groupPredictions, groupActualLabels);
-                    stats.FalsePositiveRate = ComputeFalsePositiveRate(groupPredictions, groupActualLabels);
-                    stats.Precision = ComputePrecision(groupPredictions, groupActualLabels);
+                    var groupActualLabels = InterpretabilityMetricsHelper<T>.GetSubset(actualLabels, groupIndices);
+                    stats.TruePositiveRate = InterpretabilityMetricsHelper<T>.ComputeTruePositiveRate(groupPredictions, groupActualLabels);
+                    stats.FalsePositiveRate = InterpretabilityMetricsHelper<T>.ComputeFalsePositiveRate(groupPredictions, groupActualLabels);
+                    stats.Precision = InterpretabilityMetricsHelper<T>.ComputePrecision(groupPredictions, groupActualLabels);
                 }
 
                 groupStats[groupKey] = stats;
@@ -170,8 +138,8 @@ namespace AiDotNet.Interpretability
         private T ComputeDemographicParity(Dictionary<string, GroupStatistics<T>> groupStats)
         {
             var rates = groupStats.Values.Select(s => s.PositiveRate).ToList();
-            var maxRate = rates.Max(r => _numOps.ToDouble(r));
-            var minRate = rates.Min(r => _numOps.ToDouble(r));
+            var maxRate = rates.Max(r => Convert.ToDouble(r));
+            var minRate = rates.Min(r => Convert.ToDouble(r));
             return _numOps.FromDouble(maxRate - minRate);
         }
 
@@ -181,8 +149,8 @@ namespace AiDotNet.Interpretability
         private T ComputeEqualOpportunity(Dictionary<string, GroupStatistics<T>> groupStats)
         {
             var tprs = groupStats.Values.Select(s => s.TruePositiveRate).ToList();
-            var maxTPR = tprs.Max(r => _numOps.ToDouble(r));
-            var minTPR = tprs.Min(r => _numOps.ToDouble(r));
+            var maxTPR = tprs.Max(r => Convert.ToDouble(r));
+            var minTPR = tprs.Min(r => Convert.ToDouble(r));
             return _numOps.FromDouble(maxTPR - minTPR);
         }
 
@@ -194,12 +162,12 @@ namespace AiDotNet.Interpretability
             var tprs = groupStats.Values.Select(s => s.TruePositiveRate).ToList();
             var fprs = groupStats.Values.Select(s => s.FalsePositiveRate).ToList();
 
-            var maxTPR = tprs.Max(r => _numOps.ToDouble(r));
-            var minTPR = tprs.Min(r => _numOps.ToDouble(r));
+            var maxTPR = tprs.Max(r => Convert.ToDouble(r));
+            var minTPR = tprs.Min(r => Convert.ToDouble(r));
             var tprDiff = maxTPR - minTPR;
 
-            var maxFPR = fprs.Max(r => _numOps.ToDouble(r));
-            var minFPR = fprs.Min(r => _numOps.ToDouble(r));
+            var maxFPR = fprs.Max(r => Convert.ToDouble(r));
+            var minFPR = fprs.Min(r => Convert.ToDouble(r));
             var fprDiff = maxFPR - minFPR;
 
             return _numOps.FromDouble(Math.Max(tprDiff, fprDiff));
@@ -211,8 +179,8 @@ namespace AiDotNet.Interpretability
         private T ComputePredictiveParity(Dictionary<string, GroupStatistics<T>> groupStats)
         {
             var precisions = groupStats.Values.Select(s => s.Precision).ToList();
-            var maxPrecision = precisions.Max(r => _numOps.ToDouble(r));
-            var minPrecision = precisions.Min(r => _numOps.ToDouble(r));
+            var maxPrecision = precisions.Max(r => Convert.ToDouble(r));
+            var minPrecision = precisions.Min(r => Convert.ToDouble(r));
             return _numOps.FromDouble(maxPrecision - minPrecision);
         }
 
@@ -222,8 +190,8 @@ namespace AiDotNet.Interpretability
         private T ComputeDisparateImpact(Dictionary<string, GroupStatistics<T>> groupStats)
         {
             var rates = groupStats.Values.Select(s => s.PositiveRate).ToList();
-            var maxRate = rates.Max(r => _numOps.ToDouble(r));
-            var minRate = rates.Min(r => _numOps.ToDouble(r));
+            var maxRate = rates.Max(r => Convert.ToDouble(r));
+            var minRate = rates.Min(r => Convert.ToDouble(r));
 
             if (maxRate == 0)
             {
@@ -239,166 +207,9 @@ namespace AiDotNet.Interpretability
         private T ComputeStatisticalParityDifference(Dictionary<string, GroupStatistics<T>> groupStats)
         {
             var rates = groupStats.Values.Select(s => s.PositiveRate).ToList();
-            var maxRate = rates.Max(r => _numOps.ToDouble(r));
-            var minRate = rates.Min(r => _numOps.ToDouble(r));
+            var maxRate = rates.Max(r => Convert.ToDouble(r));
+            var minRate = rates.Min(r => Convert.ToDouble(r));
             return _numOps.FromDouble(maxRate - minRate);
-        }
-
-        /// <summary>
-        /// Gets unique groups from the sensitive feature vector.
-        /// </summary>
-        private List<T> GetUniqueGroups(Vector<T> sensitiveFeature)
-        {
-            var groups = new HashSet<T>();
-            for (int i = 0; i < sensitiveFeature.Length; i++)
-            {
-                groups.Add(sensitiveFeature[i]);
-            }
-            return groups.ToList();
-        }
-
-        /// <summary>
-        /// Gets indices where the sensitive feature equals the specified group value.
-        /// </summary>
-        private List<int> GetGroupIndices(Vector<T> sensitiveFeature, T groupValue)
-        {
-            var indices = new List<int>();
-            for (int i = 0; i < sensitiveFeature.Length; i++)
-            {
-                if (_numOps.Equals(sensitiveFeature[i], groupValue))
-                {
-                    indices.Add(i);
-                }
-            }
-            return indices;
-        }
-
-        /// <summary>
-        /// Gets a subset of a vector based on the specified indices.
-        /// </summary>
-        private Vector<T> GetSubset(Vector<T> vector, List<int> indices)
-        {
-            var subset = new Vector<T>(indices.Count);
-            for (int i = 0; i < indices.Count; i++)
-            {
-                subset[i] = vector[indices[i]];
-            }
-            return subset;
-        }
-
-        /// <summary>
-        /// Computes the positive prediction rate.
-        /// </summary>
-        private T ComputePositiveRate(Vector<T> predictions)
-        {
-            if (predictions.Length == 0)
-            {
-                return _numOps.Zero;
-            }
-
-            T positiveCount = _numOps.Zero;
-            for (int i = 0; i < predictions.Length; i++)
-            {
-                if (_numOps.ToDouble(predictions[i]) > 0.5)
-                {
-                    positiveCount = _numOps.Add(positiveCount, _numOps.One);
-                }
-            }
-
-            return _numOps.Divide(positiveCount, _numOps.FromDouble(predictions.Length));
-        }
-
-        /// <summary>
-        /// Computes the True Positive Rate.
-        /// </summary>
-        private T ComputeTruePositiveRate(Vector<T> predictions, Vector<T> actualLabels)
-        {
-            T truePositives = _numOps.Zero;
-            T actualPositives = _numOps.Zero;
-
-            for (int i = 0; i < predictions.Length; i++)
-            {
-                bool predicted = _numOps.ToDouble(predictions[i]) > 0.5;
-                bool actual = _numOps.ToDouble(actualLabels[i]) > 0.5;
-
-                if (actual)
-                {
-                    actualPositives = _numOps.Add(actualPositives, _numOps.One);
-                    if (predicted)
-                    {
-                        truePositives = _numOps.Add(truePositives, _numOps.One);
-                    }
-                }
-            }
-
-            if (_numOps.Equals(actualPositives, _numOps.Zero))
-            {
-                return _numOps.Zero;
-            }
-
-            return _numOps.Divide(truePositives, actualPositives);
-        }
-
-        /// <summary>
-        /// Computes the False Positive Rate.
-        /// </summary>
-        private T ComputeFalsePositiveRate(Vector<T> predictions, Vector<T> actualLabels)
-        {
-            T falsePositives = _numOps.Zero;
-            T actualNegatives = _numOps.Zero;
-
-            for (int i = 0; i < predictions.Length; i++)
-            {
-                bool predicted = _numOps.ToDouble(predictions[i]) > 0.5;
-                bool actual = _numOps.ToDouble(actualLabels[i]) > 0.5;
-
-                if (!actual)
-                {
-                    actualNegatives = _numOps.Add(actualNegatives, _numOps.One);
-                    if (predicted)
-                    {
-                        falsePositives = _numOps.Add(falsePositives, _numOps.One);
-                    }
-                }
-            }
-
-            if (_numOps.Equals(actualNegatives, _numOps.Zero))
-            {
-                return _numOps.Zero;
-            }
-
-            return _numOps.Divide(falsePositives, actualNegatives);
-        }
-
-        /// <summary>
-        /// Computes the Precision.
-        /// </summary>
-        private T ComputePrecision(Vector<T> predictions, Vector<T> actualLabels)
-        {
-            T truePositives = _numOps.Zero;
-            T predictedPositives = _numOps.Zero;
-
-            for (int i = 0; i < predictions.Length; i++)
-            {
-                bool predicted = _numOps.ToDouble(predictions[i]) > 0.5;
-                bool actual = _numOps.ToDouble(actualLabels[i]) > 0.5;
-
-                if (predicted)
-                {
-                    predictedPositives = _numOps.Add(predictedPositives, _numOps.One);
-                    if (actual)
-                    {
-                        truePositives = _numOps.Add(truePositives, _numOps.One);
-                    }
-                }
-            }
-
-            if (_numOps.Equals(predictedPositives, _numOps.Zero))
-            {
-                return _numOps.Zero;
-            }
-
-            return _numOps.Divide(truePositives, predictedPositives);
         }
     }
 
@@ -443,8 +254,13 @@ namespace AiDotNet.Interpretability
         /// </summary>
         public GroupStatistics()
         {
-            GroupValue = default(T);
+            var numOps = MathHelper.GetNumericOperations<T>();
+            GroupValue = default(T)!;
             Size = 0;
+            PositiveRate = numOps.Zero;
+            TruePositiveRate = numOps.Zero;
+            FalsePositiveRate = numOps.Zero;
+            Precision = numOps.Zero;
         }
     }
 }
