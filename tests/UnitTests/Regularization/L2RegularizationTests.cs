@@ -15,9 +15,9 @@ namespace AiDotNetTests.UnitTests.Regularization
             var regularization = new L2Regularization<double, Vector<double>, Vector<double>>();
 
             // Assert
-            Assert.Equal(RegularizationType.L2, regularization.Options.Type);
-            Assert.Equal(0.01, regularization.Options.Strength);
-            Assert.Equal(0.0, regularization.Options.L1Ratio);
+            Assert.Equal(RegularizationType.L2, regularization.GetOptions().Type);
+            Assert.Equal(0.01, regularization.GetOptions().Strength);
+            Assert.Equal(0.0, regularization.GetOptions().L1Ratio);
         }
 
         [Fact]
@@ -35,7 +35,7 @@ namespace AiDotNetTests.UnitTests.Regularization
             var regularization = new L2Regularization<double, Vector<double>, Vector<double>>(options);
 
             // Assert
-            Assert.Equal(0.05, regularization.Options.Strength);
+            Assert.Equal(0.05, regularization.GetOptions().Strength);
         }
 
         [Fact]
