@@ -1,5 +1,7 @@
 global using Newtonsoft.Json;
 global using Formatting = Newtonsoft.Json.Formatting;
+using AiDotNet.Interfaces;
+using AiDotNet.Interpretability;
 using AiDotNet.Serialization;
 
 namespace AiDotNet.Models.Results;
@@ -162,6 +164,18 @@ public class PredictionModelResult<T, TInput, TOutput> : IPredictiveModel<T, TIn
     public ModelMetadata<T> ModelMetaData { get; private set; } = new();
 
     /// <summary>
+    /// Gets or sets the bias detector used for ethical AI evaluation.
+    /// </summary>
+    /// <value>An implementation of IBiasDetector&lt;T&gt; for detecting bias in model predictions, or null if not configured.</value>
+    public IBiasDetector<T>? BiasDetector { get; private set; }
+
+    /// <summary>
+    /// Gets or sets the fairness evaluator used for ethical AI evaluation.
+    /// </summary>
+    /// <value>An implementation of IFairnessEvaluator&lt;T&gt; for evaluating fairness metrics, or null if not configured.</value>
+    public IFairnessEvaluator<T>? FairnessEvaluator { get; private set; }
+
+    /// <summary>
     /// Initializes a new instance of the PredictionModelResult class with the specified model, optimization results, and normalization information.
     /// </summary>
     /// <param name="model">The underlying model used for making predictions.</param>
@@ -192,12 +206,16 @@ public class PredictionModelResult<T, TInput, TOutput> : IPredictiveModel<T, TIn
     /// </para>
     /// </remarks>
     public PredictionModelResult(OptimizationResult<T, TInput, TOutput> optimizationResult,
-        NormalizationInfo<T, TInput, TOutput> normalizationInfo)
+        NormalizationInfo<T, TInput, TOutput> normalizationInfo,
+        IBiasDetector<T>? biasDetector = null,
+        IFairnessEvaluator<T>? fairnessEvaluator = null)
     {
         Model = optimizationResult.BestSolution;
         OptimizationResult = optimizationResult;
         NormalizationInfo = normalizationInfo;
         ModelMetaData = Model?.GetModelMetadata() ?? new();
+        BiasDetector = biasDetector;
+        FairnessEvaluator = fairnessEvaluator;
     }
 
     /// <summary>
@@ -406,6 +424,8 @@ public class PredictionModelResult<T, TInput, TOutput> : IPredictiveModel<T, TIn
                 OptimizationResult = deserializedObject.OptimizationResult;
                 NormalizationInfo = deserializedObject.NormalizationInfo;
                 ModelMetaData = deserializedObject.ModelMetaData;
+                BiasDetector = deserializedObject.BiasDetector;
+                FairnessEvaluator = deserializedObject.FairnessEvaluator;
             }
             else
             {

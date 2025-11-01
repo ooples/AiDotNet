@@ -368,3 +368,5 @@ FodyWeavers.xsd
 # Claude Code worktrees (local development only)
 .worktrees/
 worktrees/
+# Project-specific Claude Code configuration
+CLAUDE.md
