@@ -66,20 +66,79 @@ public class TransferRandomForest<T> : TransferLearningBase<T, Matrix<T>, Vector
     /// Transfers a Random Forest model to a target domain with a different feature space.
     /// </summary>
     /// <remarks>
-    /// NOTE: This implementation requires source domain data to properly train the feature mapper
-    /// and domain adapter. The current API limitations prevent passing source data, so this method
-    /// will throw InvalidOperationException. Users should provide source data through the feature
-    /// mapper and domain adapter before calling transfer, or use the public Transfer() method
-    /// that accepts source data.
+    /// <para>
+    /// This method performs cross-domain transfer when source and target domains have different
+    /// feature spaces. It requires a pre-trained feature mapper to be set via SetFeatureMapper().
+    /// </para>
+    /// <para>
+    /// <b>Limitations:</b> Without access to source domain data, this method cannot:
+    /// 1. Train the feature mapper (must be pre-trained)
+    /// 2. Train the domain adapter (must be pre-trained if used)
+    /// 3. Perform optimal knowledge distillation (uses model predictions on mapped data)
+    /// 4. Validate feature space compatibility
+    /// </para>
+    /// <para>
+    /// <b>Recommendation:</b> For best results, use the public Transfer() method that accepts
+    /// both source and target domain data, which enables proper feature mapper and domain adapter
+    /// training along with effective knowledge distillation.
+    /// </para>
     /// </remarks>
+    /// <exception cref="InvalidOperationException">
+    /// Thrown when FeatureMapper is null, not trained, or DomainAdapter requires training.
+    /// </exception>
     protected override IFullModel<T, Matrix<T>, Vector<T>> TransferCrossDomain(
         IFullModel<T, Matrix<T>, Vector<T>> sourceModel,
         Matrix<T> targetData,
         Vector<T> targetLabels)
     {
-        throw new InvalidOperationException(
-            "Cross-domain transfer cannot be performed directly through this protected method due to the need for source domain data. " +
-            "Please use the public 'Transfer(sourceModel, sourceData, targetData, targetLabels)' method which accepts both source and target domain data for feature mapping and transfer.");
+        // Validate that feature mapper is available and trained
+        if (FeatureMapper == null)
+        {
+            throw new InvalidOperationException(
+                "Cross-domain transfer requires a feature mapper. Use SetFeatureMapper() before transfer. " +
+                "Alternatively, use the public Transfer() method with source data for automatic feature mapping.");
+        }
+
+        if (!FeatureMapper.IsTrained)
+        {
+            throw new InvalidOperationException(
+                "Feature mapper must be trained before cross-domain transfer. " +
+                "Either train the mapper using FeatureMapper.Train(sourceData, targetData) or " +
+                "use the public Transfer() method with source data for automatic training.");
+        }
+
+        // Validate domain adapter if present
+        if (DomainAdapter != null && DomainAdapter.RequiresTraining)
+        {
+            throw new InvalidOperationException(
+                "Domain adapter requires training but source data is not available in this method. " +
+                "Either train the adapter beforehand or use the public Transfer() method with source data.");
+        }
+
+        // Get source model's feature dimension
+        int sourceFeatures = sourceModel.GetActiveFeatureIndices().Count();
+
+        // Map target features to source feature space
+        Matrix<T> mappedTargetData = FeatureMapper.MapToSource(targetData, sourceFeatures);
+
+        // Apply domain adaptation if available and trained
+        if (DomainAdapter != null)
+        {
+            mappedTargetData = DomainAdapter.AdaptSource(mappedTargetData, targetData);
+        }
+
+        // Use source model for predictions on mapped data (knowledge distillation)
+        Vector<T> pseudoLabels = sourceModel.Predict(mappedTargetData);
+
+        // Combine pseudo-labels with true labels (70% weight on true labels)
+        var combinedLabels = CombineLabels(pseudoLabels, targetLabels, 0.7);
+
+        // Train new model on target domain with combined labels
+        var targetModel = new RandomForestRegression<T>(_options, _regularization);
+        targetModel.Train(targetData, combinedLabels);
+
+        // Return the trained model directly (no wrapper needed since model operates in target feature space)
+        return targetModel;
     }
 
     /// <summary>
