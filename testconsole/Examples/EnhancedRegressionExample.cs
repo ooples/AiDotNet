@@ -176,11 +176,11 @@ public class EnhancedRegressionExample
             Console.WriteLine($"\nBest model based on R² score: {bestModelName}");
 
             // 8. Analyze feature importance (for the best model)
-            if (bestModel is IPredictiveModel<double, Matrix<double>, Vector<double>> predictiveModel)
+            if (bestModel.Model != null)
             {
-                if (predictiveModel.GetType().GetProperty("Coefficients") != null)
+                if (bestModel.Model.GetType().GetProperty("Coefficients") != null)
                 {
-                    var coefficients = predictiveModel.GetType().GetProperty("Coefficients")?.GetValue(predictiveModel);
+                    var coefficients = bestModel.Model.GetType().GetProperty("Coefficients")?.GetValue(bestModel.Model);
 
                     if (coefficients is Vector<double> coefVector)
                     {

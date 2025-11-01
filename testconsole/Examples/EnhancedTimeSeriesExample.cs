@@ -1,6 +1,7 @@
 ﻿using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
 using AiDotNet.Models.Options;
+using AiDotNet.Models.Results;
 using AiDotNet.Optimizers;
 using AiDotNet.TimeSeries;
 using AiDotNet.Normalizers;
@@ -380,7 +381,7 @@ public class EnhancedTimeSeriesExample
     }
 
     // Helper method to train a Prophet-like model
-    private IPredictiveModel<double, Matrix<double>, Vector<double>> TrainProphetModel(
+    private PredictionModelResult<double, Matrix<double>, Vector<double>> TrainProphetModel(
         Matrix<double> features, Vector<double> target)
     {
         var modelBuilder = new PredictionModelBuilder<double, Matrix<double>, Vector<double>>();
@@ -410,7 +411,7 @@ public class EnhancedTimeSeriesExample
     }
 
     // Helper method to train an ARIMA model
-    private IPredictiveModel<double, Matrix<double>, Vector<double>> TrainArimaModel(
+    private PredictionModelResult<double, Matrix<double>, Vector<double>> TrainArimaModel(
         Matrix<double> features, Vector<double> target)
     {
         var modelBuilder = new PredictionModelBuilder<double, Matrix<double>, Vector<double>>();
@@ -440,7 +441,7 @@ public class EnhancedTimeSeriesExample
     }
 
     // Helper method to train an Exponential Smoothing model
-    private IPredictiveModel<double, Matrix<double>, Vector<double>> TrainExponentialSmoothingModel(
+    private PredictionModelResult<double, Matrix<double>, Vector<double>> TrainExponentialSmoothingModel(
         Matrix<double> features, Vector<double> target)
     {
         var modelBuilder = new PredictionModelBuilder<double, Matrix<double>, Vector<double>>();
@@ -472,7 +473,7 @@ public class EnhancedTimeSeriesExample
 
     // Helper method to evaluate a model
     private (double rmse, double mape, double mae) EvaluateModel(
-        IPredictiveModel<double, Matrix<double>, Vector<double>> model,
+        PredictionModelResult<double, Matrix<double>, Vector<double>> model,
         Matrix<double> features,
         Vector<double> targets)
     {
