@@ -424,6 +424,8 @@ public class PredictionModelResult<T, TInput, TOutput> : IPredictiveModel<T, TIn
                 OptimizationResult = deserializedObject.OptimizationResult;
                 NormalizationInfo = deserializedObject.NormalizationInfo;
                 ModelMetaData = deserializedObject.ModelMetaData;
+                BiasDetector = deserializedObject.BiasDetector;
+                FairnessEvaluator = deserializedObject.FairnessEvaluator;
             }
             else
             {
