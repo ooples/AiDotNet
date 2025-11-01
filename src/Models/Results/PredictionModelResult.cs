@@ -424,7 +424,19 @@ public class PredictionModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
         }
 
         var newModel = Model.WithParameters(parameters);
-        return new PredictionModelResult<T, TInput, TOutput>(newModel, OptimizationResult, NormalizationInfo);
+
+        // Deep-copy OptimizationResult and update its BestSolution to reference newModel
+        // This ensures metadata consistency - BestSolution should always point to the current model
+        var updatedOptimizationResult = OptimizationResult.DeepCopy();
+        updatedOptimizationResult.BestSolution = newModel;
+
+        // Create new result with updated optimization result
+        // Use constructor that preserves BiasDetector and FairnessEvaluator
+        return new PredictionModelResult<T, TInput, TOutput>(
+            updatedOptimizationResult,
+            NormalizationInfo,
+            BiasDetector,
+            FairnessEvaluator);
     }
 
     /// <summary>
@@ -496,32 +508,44 @@ public class PredictionModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
     /// <returns>A new PredictionModelResult instance that is a deep copy of this one.</returns>
     public IFullModel<T, TInput, TOutput> DeepCopy()
     {
-        var clonedModel = Model?.DeepCopy();
-        var clonedOptimizationResult = OptimizationResult.DeepCopy();
-        var clonedNormalizationInfo = NormalizationInfo.DeepCopy();
-
-        if (clonedModel == null)
+        if (Model == null)
         {
             throw new InvalidOperationException("Cannot deep copy PredictionModelResult with null Model.");
         }
 
-        return new PredictionModelResult<T, TInput, TOutput>(clonedModel, clonedOptimizationResult, clonedNormalizationInfo);
+        var clonedModel = Model.DeepCopy();
+        var clonedOptimizationResult = OptimizationResult.DeepCopy();
+
+        // Update OptimizationResult.BestSolution to reference the cloned model
+        // This ensures metadata consistency across the deep copy
+        clonedOptimizationResult.BestSolution = clonedModel;
+
+        var clonedNormalizationInfo = NormalizationInfo.DeepCopy();
+
+        // Use constructor that preserves BiasDetector and FairnessEvaluator
+        return new PredictionModelResult<T, TInput, TOutput>(
+            clonedOptimizationResult,
+            clonedNormalizationInfo,
+            BiasDetector,
+            FairnessEvaluator);
     }
 
     /// <summary>
     /// Creates a shallow copy of this PredictionModelResult.
     /// </summary>
     /// <returns>A new PredictionModelResult instance that is a shallow copy of this one.</returns>
+    /// <remarks>
+    /// This method delegates to WithParameters to ensure consistency in how OptimizationResult is handled.
+    /// The cloned instance will have a new model with the same parameters and updated OptimizationResult metadata.
+    /// </remarks>
     public IFullModel<T, TInput, TOutput> Clone()
     {
-        var clonedModel = Model?.Clone();
-
-        if (clonedModel == null)
+        if (Model == null)
         {
             throw new InvalidOperationException("Cannot clone PredictionModelResult with null Model.");
         }
 
-        return new PredictionModelResult<T, TInput, TOutput>(clonedModel, OptimizationResult, NormalizationInfo);
+        return WithParameters(Model.GetParameters());
     }
 
     /// <summary>
