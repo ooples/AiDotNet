@@ -13,12 +13,19 @@ namespace AiDotNet.Interpretability
     /// <typeparam name="T">The numeric type for calculations.</typeparam>
     public class EqualOpportunityBiasDetector<T> : BiasDetectorBase<T>
     {
+        private readonly double _threshold;
+
         /// <summary>
         /// Initializes a new instance of the EqualOpportunityBiasDetector class.
         /// </summary>
-        public EqualOpportunityBiasDetector() : base(isLowerBiasBetter: true)
+        /// <param name="threshold">The threshold for detecting bias (default is 0.1, representing 10% difference threshold).</param>
+        public EqualOpportunityBiasDetector(double threshold = 0.1) : base(isLowerBiasBetter: true)
         {
-            // For equal opportunity difference, lower is better (0 means perfect equality)
+            if (threshold <= 0 || threshold > 1)
+            {
+                throw new ArgumentOutOfRangeException(nameof(threshold), "Threshold must be between 0 and 1.");
+            }
+            _threshold = threshold;
         }
 
         /// <summary>
@@ -84,13 +91,14 @@ namespace AiDotNet.Interpretability
 
             result.EqualOpportunityDifference = _numOps.Subtract(maxTPR, minTPR);
 
-            // Check for bias using 10% threshold
+            // Check for bias using configured threshold
+            // Note: eoValue is always non-negative since it's max - min, so Math.Abs is unnecessary
             double eoValue = Convert.ToDouble(result.EqualOpportunityDifference);
-            result.HasBias = Math.Abs(eoValue) > 0.1;
+            result.HasBias = eoValue > _threshold;
 
             if (result.HasBias)
             {
-                result.Message = $"Bias detected: Equal opportunity difference = {eoValue:F3} (exceeds 0.1 threshold)";
+                result.Message = $"Bias detected: Equal opportunity difference = {eoValue:F3} (exceeds {_threshold} threshold)";
             }
             else
             {
