@@ -503,4 +503,44 @@ public class CMAESOptimizer<T, TInput, TOutput> : OptimizerBase<T, TInput, TOutp
         _ps = SerializationHelper<T>.DeserializeVector(reader);
         _sigma = SerializationHelper<T>.ReadValue(reader);
     }
+
+    /// <summary>
+    /// Performs a single optimization step.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// This optimizer is not gradient-based and uses the Optimize() method instead.
+    /// This method is not applicable for this optimizer.
+    /// </para>
+    /// </remarks>
+    /// <exception cref="NotSupportedException">
+    /// Always thrown as this is a non-gradient-based optimizer.
+    /// </exception>
+    public override void Step()
+    {
+        throw new NotSupportedException(
+            "Step() method is not applicable for this optimizer. " +
+            "This optimizer is non-gradient-based and uses the Optimize() method instead.");
+    }
+
+    /// <summary>
+    /// Calculates the parameter update based on the provided gradients.
+    /// </summary>
+    /// <param name="gradients">The gradients used to compute the parameter updates.</param>
+    /// <returns>The calculated parameter updates.</returns>
+    /// <remarks>
+    /// <para>
+    /// This optimizer is not gradient-based and does not use gradients.
+    /// This method is not applicable for this optimizer.
+    /// </para>
+    /// </remarks>
+    /// <exception cref="NotSupportedException">
+    /// Always thrown as this is a non-gradient-based optimizer.
+    /// </exception>
+    public override Dictionary<string, Vector<T>> CalculateUpdate(Dictionary<string, Vector<T>> gradients)
+    {
+        throw new NotSupportedException(
+            "CalculateUpdate() method is not applicable for this optimizer. " +
+            "This optimizer is non-gradient-based and does not use gradients.");
+    }
 }

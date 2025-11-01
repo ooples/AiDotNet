@@ -1085,26 +1085,14 @@ public abstract class OptimizerBase<T, TInput, TOutput> : IOptimizer<T, TInput, 
     /// a little bit better.
     /// </para>
     /// </remarks>
-    public virtual void Step()
-    {
-        throw new NotImplementedException(
-            "Step() method is not implemented for this optimizer type. " +
-            "This optimizer may be a non-gradient-based optimizer that uses the Optimize() method instead, " +
-            "or the derived class needs to implement the Step() method.");
-    }
+    public abstract void Step();
 
     /// <summary>
     /// Calculates the parameter update based on the provided gradients.
     /// </summary>
     /// <param name="gradients">The gradients used to compute the parameter updates.</param>
     /// <returns>The calculated parameter updates as a dictionary mapping parameter names to their update vectors.</returns>
-    public virtual Dictionary<string, Vector<T>> CalculateUpdate(Dictionary<string, Vector<T>> gradients)
-    {
-        throw new NotImplementedException(
-            "CalculateUpdate() method is not implemented for this optimizer type. " +
-            "This optimizer may be a non-gradient-based optimizer that uses the Optimize() method instead, " +
-            "or the derived class needs to implement the CalculateUpdate() method.");
-    }
+    public abstract Dictionary<string, Vector<T>> CalculateUpdate(Dictionary<string, Vector<T>> gradients);
 
     /// <summary>
     /// Gets the current options for this optimizer.

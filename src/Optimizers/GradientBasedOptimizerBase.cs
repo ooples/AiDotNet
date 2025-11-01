@@ -469,4 +469,44 @@ public abstract class GradientBasedOptimizerBase<T, TInput, TOutput> : Optimizer
             GradientOptions = gradientOptions;
         }
     }
+
+    /// <summary>
+    /// Performs a single optimization step, updating the model parameters based on gradients.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// This method performs one iteration of parameter updates for gradient-based optimization.
+    /// Derived classes should override this method to implement their specific parameter update logic.
+    /// </para>
+    /// <para><b>For Beginners:</b> This is like taking one small step toward a better model.
+    /// Derived classes implement more sophisticated algorithms like Adam, RMSProp, etc.
+    /// </para>
+    /// </remarks>
+    public override void Step()
+    {
+        throw new NotImplementedException(
+            "Step() method must be implemented by the derived gradient-based optimizer class.");
+    }
+
+    /// <summary>
+    /// Calculates the parameter update based on the provided gradients.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// This method calculates how to update the model parameters based on the computed gradients.
+    /// Derived classes should override this method to implement their specific update calculation
+    /// (e.g., Adam, RMSProp, SGD with momentum, etc.).
+    /// </para>
+    /// <para><b>For Beginners:</b> This method determines how much to adjust each parameter
+    /// based on the gradients. Different optimization algorithms have different strategies
+    /// for making these adjustments.
+    /// </para>
+    /// </remarks>
+    /// <param name="gradients">The gradients used to compute the parameter updates.</param>
+    /// <returns>The calculated parameter updates as a dictionary mapping parameter names to their update vectors.</returns>
+    public override Dictionary<string, Vector<T>> CalculateUpdate(Dictionary<string, Vector<T>> gradients)
+    {
+        throw new NotImplementedException(
+            "CalculateUpdate() method must be implemented by the derived gradient-based optimizer class.");
+    }
 }
