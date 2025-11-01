@@ -16,7 +16,7 @@ namespace AiDotNetTests.UnitTests.Interpretability
         public void EvaluateFairness_WithNullModel_ThrowsArgumentNullException()
         {
             // Arrange
-            var evaluator = new FairnessEvaluator<double>();
+            var evaluator = new ComprehensiveFairnessEvaluator<double>();
             Matrix<double> inputs = new Matrix<double>(4, 2);
 
             // Act & Assert
@@ -28,7 +28,7 @@ namespace AiDotNetTests.UnitTests.Interpretability
         public void EvaluateFairness_WithNullInputs_ThrowsArgumentNullException()
         {
             // Arrange
-            var evaluator = new FairnessEvaluator<double>();
+            var evaluator = new ComprehensiveFairnessEvaluator<double>();
             var model = new VectorModel<double>(new Vector<double>(new double[] { 1, 0 }));
 
             // Act & Assert
@@ -40,7 +40,7 @@ namespace AiDotNetTests.UnitTests.Interpretability
         public void EvaluateFairness_WithInvalidSensitiveFeatureIndex_ThrowsArgumentOutOfRangeException()
         {
             // Arrange
-            var evaluator = new FairnessEvaluator<double>();
+            var evaluator = new ComprehensiveFairnessEvaluator<double>();
             var model = new VectorModel<double>(new Vector<double>(new double[] { 1, 0 }));
             Matrix<double> inputs = new Matrix<double>(4, 2);
 
@@ -53,7 +53,7 @@ namespace AiDotNetTests.UnitTests.Interpretability
         public void EvaluateFairness_WithBalancedPredictions_ReturnsZeroMetrics()
         {
             // Arrange
-            var evaluator = new FairnessEvaluator<double>();
+            var evaluator = new ComprehensiveFairnessEvaluator<double>();
 
             // Create a simple model that predicts based on first feature
             var model = new VectorModel<double>(new Vector<double>(new double[] { 1, 0 }));
@@ -87,7 +87,7 @@ namespace AiDotNetTests.UnitTests.Interpretability
         public void EvaluateFairness_WithUnbalancedPredictions_DetectsBias()
         {
             // Arrange
-            var evaluator = new FairnessEvaluator<double>();
+            var evaluator = new ComprehensiveFairnessEvaluator<double>();
 
             // Create a model that predicts based on first feature
             var model = new VectorModel<double>(new Vector<double>(new double[] { 1, 0 }));
@@ -119,7 +119,7 @@ namespace AiDotNetTests.UnitTests.Interpretability
         public void EvaluateFairness_WithActualLabels_ComputesAllMetrics()
         {
             // Arrange
-            var evaluator = new FairnessEvaluator<double>();
+            var evaluator = new ComprehensiveFairnessEvaluator<double>();
             var model = new VectorModel<double>(new Vector<double>(new double[] { 1, 0 }));
 
             Matrix<double> inputs = new Matrix<double>(8, 2);
@@ -149,7 +149,7 @@ namespace AiDotNetTests.UnitTests.Interpretability
         public void EvaluateFairness_WithSingleGroup_ReturnsZeroMetrics()
         {
             // Arrange
-            var evaluator = new FairnessEvaluator<double>();
+            var evaluator = new ComprehensiveFairnessEvaluator<double>();
             var model = new VectorModel<double>(new Vector<double>(new double[] { 1, 0 }));
 
             Matrix<double> inputs = new Matrix<double>(4, 2);
@@ -174,7 +174,7 @@ namespace AiDotNetTests.UnitTests.Interpretability
         public void EvaluateFairness_AdditionalMetrics_ContainGroupStatistics()
         {
             // Arrange
-            var evaluator = new FairnessEvaluator<double>();
+            var evaluator = new ComprehensiveFairnessEvaluator<double>();
             var model = new VectorModel<double>(new Vector<double>(new double[] { 1, 0 }));
 
             Matrix<double> inputs = new Matrix<double>(6, 2);
@@ -200,7 +200,7 @@ namespace AiDotNetTests.UnitTests.Interpretability
         public void EvaluateFairness_WithThreeGroups_HandlesMultipleGroups()
         {
             // Arrange
-            var evaluator = new FairnessEvaluator<double>();
+            var evaluator = new ComprehensiveFairnessEvaluator<double>();
             var model = new VectorModel<double>(new Vector<double>(new double[] { 1, 0 }));
 
             Matrix<double> inputs = new Matrix<double>(9, 2);
@@ -231,7 +231,7 @@ namespace AiDotNetTests.UnitTests.Interpretability
         public void EvaluateFairness_WithFloatType_WorksCorrectly()
         {
             // Arrange
-            var evaluator = new FairnessEvaluator<float>();
+            var evaluator = new ComprehensiveFairnessEvaluator<float>();
             var model = new VectorModel<float>(new Vector<float>(new float[] { 1f, 0f }));
 
             Matrix<float> inputs = new Matrix<float>(4, 2);
@@ -253,7 +253,7 @@ namespace AiDotNetTests.UnitTests.Interpretability
         public void EvaluateFairness_ComputesDemographicParity_Correctly()
         {
             // Arrange
-            var evaluator = new FairnessEvaluator<double>();
+            var evaluator = new ComprehensiveFairnessEvaluator<double>();
             var model = new VectorModel<double>(new Vector<double>(new double[] { 1, 0 }));
 
             // Group 0: 75% positive (3 out of 4)
@@ -281,7 +281,7 @@ namespace AiDotNetTests.UnitTests.Interpretability
         public void EvaluateFairness_ComputesDisparateImpact_Correctly()
         {
             // Arrange
-            var evaluator = new FairnessEvaluator<double>();
+            var evaluator = new ComprehensiveFairnessEvaluator<double>();
             var model = new VectorModel<double>(new Vector<double>(new double[] { 1, 0 }));
 
             // Group 0: 50% positive (2 out of 4)
