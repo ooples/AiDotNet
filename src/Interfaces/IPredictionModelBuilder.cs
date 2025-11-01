@@ -1,3 +1,5 @@
+using AiDotNet.Models.Results;
+
 namespace AiDotNet.Interfaces;
 
 /// <summary>
@@ -200,7 +202,7 @@ public interface IPredictionModelBuilder<T, TInput, TOutput>
     /// <param name="x">The input features matrix, where each row is a data point and each column is a feature.</param>
     /// <param name="y">The target values vector that the model will learn to predict.</param>
     /// <returns>A trained predictive model ready to make predictions.</returns>
-    IPredictiveModel<T, TInput, TOutput> Build(TInput x, TOutput y);
+    PredictionModelResult<T, TInput, TOutput> Build(TInput x, TOutput y);
 
     /// <summary>
     /// Uses a trained model to make predictions on new data.
@@ -216,7 +218,7 @@ public interface IPredictionModelBuilder<T, TInput, TOutput>
     /// <param name="newData">The new input data to make predictions for.</param>
     /// <param name="model">The trained model to use for making predictions.</param>
     /// <returns>A vector of predicted values.</returns>
-    TOutput Predict(TInput newData, IPredictiveModel<T, TInput, TOutput> model);
+    TOutput Predict(TInput newData, PredictionModelResult<T, TInput, TOutput> model);
 
     /// <summary>
     /// Saves a trained model to a file.
@@ -230,7 +232,7 @@ public interface IPredictionModelBuilder<T, TInput, TOutput>
     /// </remarks>
     /// <param name="model">The trained model to save.</param>
     /// <param name="filePath">The file path where the model should be saved.</param>
-    void SaveModel(IPredictiveModel<T, TInput, TOutput> model, string filePath);
+    void SaveModel(PredictionModelResult<T, TInput, TOutput> model, string filePath);
 
     /// <summary>
     /// Loads a previously saved model from a file.
@@ -244,7 +246,7 @@ public interface IPredictionModelBuilder<T, TInput, TOutput>
     /// </remarks>
     /// <param name="filePath">The file path where the model is stored.</param>
     /// <returns>The loaded predictive model.</returns>
-    IPredictiveModel<T, TInput, TOutput> LoadModel(string filePath);
+    PredictionModelResult<T, TInput, TOutput> LoadModel(string filePath);
 
     /// <summary>
     /// Converts a trained model into a byte array for storage or transmission.
@@ -266,7 +268,7 @@ public interface IPredictionModelBuilder<T, TInput, TOutput>
     /// </remarks>
     /// <param name="model">The trained model to serialize.</param>
     /// <returns>A byte array containing the serialized model data.</returns>
-    byte[] SerializeModel(IPredictiveModel<T, TInput, TOutput> model);
+    byte[] SerializeModel(PredictionModelResult<T, TInput, TOutput> model);
 
     /// <summary>
     /// Reconstructs a model from a previously serialized byte array.
@@ -286,7 +288,7 @@ public interface IPredictionModelBuilder<T, TInput, TOutput>
     /// </remarks>
     /// <param name="modelData">The byte array containing the serialized model data.</param>
     /// <returns>The reconstructed predictive model.</returns>
-    IPredictiveModel<T, TInput, TOutput> DeserializeModel(byte[] modelData);
+    PredictionModelResult<T, TInput, TOutput> DeserializeModel(byte[] modelData);
 
     /// <summary>
     /// Configures the bias detector component for ethical AI evaluation.

@@ -99,19 +99,19 @@ public class RegressionExample
             Console.WriteLine($"Predicted price using loaded model: ${predictedPrice2[0]:N0}");
 
             // Print model coefficients if available
-            if (model is IPredictiveModel<double, Matrix<double>, Vector<double>> predictiveModel)
+            if (model.Model != null)
             {
                 Console.WriteLine("\nModel Details:");
 
-                if (predictiveModel.GetType().GetProperty("Coefficients") != null)
+                if (model.Model.GetType().GetProperty("Coefficients") != null)
                 {
-                    var coefficients = predictiveModel.GetType().GetProperty("Coefficients")?.GetValue(predictiveModel);
+                    var coefficients = model.Model.GetType().GetProperty("Coefficients")?.GetValue(model.Model);
                     Console.WriteLine($"Coefficients: {coefficients}");
                 }
 
-                if (predictiveModel.GetType().GetProperty("Intercept") != null)
+                if (model.Model.GetType().GetProperty("Intercept") != null)
                 {
-                    var intercept = predictiveModel.GetType().GetProperty("Intercept")?.GetValue(predictiveModel);
+                    var intercept = model.Model.GetType().GetProperty("Intercept")?.GetValue(model.Model);
                     Console.WriteLine($"Intercept: {intercept}");
                 }
             }

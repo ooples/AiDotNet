@@ -100,7 +100,7 @@ public class TimeSeriesExample
             }
 
             // Visualize components if available
-            if (model is ProphetModel<double, Matrix<double>, Vector<double>> prophetModel)
+            if (model.Model is ProphetModel<double, Matrix<double>, Vector<double>> prophetModel)
             {
                 Console.WriteLine("\nModel Components Analysis available in ProphetModel");
                 Console.WriteLine("(Implementation would show trend, seasonality components)");
