@@ -205,7 +205,7 @@ public class PredictionModelBuilder<T, TInput, TOutput> : IPredictionModelBuilde
     /// The input matrix 'x' contains your features (like house size, number of bedrooms, etc. if predicting house prices),
     /// and the vector 'y' contains the known answers (actual house prices) for those examples.
     /// </remarks>
-    public IPredictiveModel<T, TInput, TOutput> Build(TInput x, TOutput y)
+    public PredictionModelResult<T, TInput, TOutput> Build(TInput x, TOutput y)
     {
         var convertedX = ConversionsHelper.ConvertToMatrix<T, TInput>(x);
         var convertedY = ConversionsHelper.ConvertToVector<T, TOutput>(y);
@@ -253,7 +253,7 @@ public class PredictionModelBuilder<T, TInput, TOutput> : IPredictionModelBuilde
     /// 
     /// The input matrix should have the same number of columns (features) as the data you used to train the model.
     /// </remarks>
-    public TOutput Predict(TInput newData, IPredictiveModel<T, TInput, TOutput> modelResult)
+    public TOutput Predict(TInput newData, PredictionModelResult<T, TInput, TOutput> modelResult)
     {
         return modelResult.Predict(newData);
     }
@@ -271,7 +271,7 @@ public class PredictionModelBuilder<T, TInput, TOutput> : IPredictionModelBuilde
     /// Think of it like saving a document in a word processor - you can close the program and come back later
     /// to continue where you left off.
     /// </remarks>
-    public void SaveModel(IPredictiveModel<T, TInput, TOutput> modelResult, string filePath)
+    public void SaveModel(PredictionModelResult<T, TInput, TOutput> modelResult, string filePath)
     {
         File.WriteAllBytes(filePath, SerializeModel(modelResult));
     }
@@ -288,7 +288,7 @@ public class PredictionModelBuilder<T, TInput, TOutput> : IPredictionModelBuilde
     /// This is useful when you want to use your model in different applications or at different times
     /// without the time and computational cost of retraining.
     /// </remarks>
-    public IPredictiveModel<T, TInput, TOutput> LoadModel(string filePath)
+    public PredictionModelResult<T, TInput, TOutput> LoadModel(string filePath)
     {
         byte[] modelData = File.ReadAllBytes(filePath);
         return DeserializeModel(modelData);
@@ -306,7 +306,7 @@ public class PredictionModelBuilder<T, TInput, TOutput> : IPredictionModelBuilde
     /// You might use this directly if you want to store the model in a database or send it over a network,
     /// rather than saving it to a file.
     /// </remarks>
-    public byte[] SerializeModel(IPredictiveModel<T, TInput, TOutput> modelResult)
+    public byte[] SerializeModel(PredictionModelResult<T, TInput, TOutput> modelResult)
     {
         return modelResult.Serialize();
     }
@@ -323,7 +323,7 @@ public class PredictionModelBuilder<T, TInput, TOutput> : IPredictionModelBuilde
     /// 
     /// You might use this directly if you retrieved a serialized model from a database or received it over a network.
     /// </remarks>
-    public IPredictiveModel<T, TInput, TOutput> DeserializeModel(byte[] modelData)
+    public PredictionModelResult<T, TInput, TOutput> DeserializeModel(byte[] modelData)
     {
         var result = new PredictionModelResult<T, TInput, TOutput>();
         result.Deserialize(modelData);

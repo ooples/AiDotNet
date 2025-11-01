@@ -41,7 +41,7 @@ namespace AiDotNet.Models.Results;
 /// </remarks>
 /// <typeparam name="T">The numeric type used for calculations, typically float or double.</typeparam>
 [Serializable]
-public class PredictionModelResult<T, TInput, TOutput> : IPredictiveModel<T, TInput, TOutput>, IFullModel<T, TInput, TOutput>
+public class PredictionModelResult<T, TInput, TOutput> : IFullModel<T, TInput, TOutput>
 {
     /// <summary>
     /// Gets or sets the underlying model used for making predictions.
@@ -344,18 +344,22 @@ public class PredictionModelResult<T, TInput, TOutput> : IPredictiveModel<T, TIn
     }
 
     /// <summary>
-    /// Trains the underlying model using input data and expected output.
+    /// Training is not supported on PredictionModelResult. Use PredictionModelBuilder to create and train new models.
     /// </summary>
-    /// <param name="input">Input training data.</param>
-    /// <param name="expectedOutput">Expected output values.</param>
-    /// <exception cref="InvalidOperationException">Thrown when the Model is not initialized.</exception>
+    /// <param name="input">Input training data (not used).</param>
+    /// <param name="expectedOutput">Expected output values (not used).</param>
+    /// <exception cref="InvalidOperationException">Always thrown - PredictionModelResult represents an already-trained model and cannot be retrained.</exception>
+    /// <remarks>
+    /// PredictionModelResult is a snapshot of a trained model with its optimization results and metadata.
+    /// Retraining would invalidate the OptimizationResult and metadata.
+    /// To train a new model or retrain with different data, use PredictionModelBuilder.Build() instead.
+    /// </remarks>
     public void Train(TInput input, TOutput expectedOutput)
     {
-        if (Model == null)
-        {
-            throw new InvalidOperationException("Model is not initialized.");
-        }
-        Model.Train(input, expectedOutput);
+        throw new InvalidOperationException(
+            "PredictionModelResult represents an already-trained model and cannot be retrained. " +
+            "The OptimizationResult and metadata reflect the original training process. " +
+            "To train a new model, use PredictionModelBuilder.Build() instead.");
     }
 
     /// <summary>
@@ -374,18 +378,20 @@ public class PredictionModelResult<T, TInput, TOutput> : IPredictiveModel<T, TIn
     }
 
     /// <summary>
-    /// Sets the parameters of the underlying model.
+    /// Setting parameters is not supported on PredictionModelResult.
     /// </summary>
-    /// <param name="parameters">The parameter vector to set.</param>
-    /// <exception cref="InvalidOperationException">Thrown when the Model is not initialized.</exception>
+    /// <param name="parameters">The parameter vector (not used).</param>
+    /// <exception cref="InvalidOperationException">Always thrown - PredictionModelResult parameters cannot be modified.</exception>
+    /// <remarks>
+    /// Modifying parameters would invalidate the OptimizationResult which reflects the optimized parameter values.
+    /// To create a model with different parameters, use PredictionModelBuilder with custom initial parameters.
+    /// </remarks>
     public void SetParameters(Vector<T> parameters)
     {
-        if (Model == null)
-        {
-            throw new InvalidOperationException("Model is not initialized.");
-        }
-
-        Model.SetParameters(parameters);
+        throw new InvalidOperationException(
+            "PredictionModelResult parameters cannot be modified. " +
+            "The current parameters reflect the optimized solution from the training process. " +
+            "To create a model with different parameters, use PredictionModelBuilder.");
     }
 
     /// <summary>
@@ -437,18 +443,20 @@ public class PredictionModelResult<T, TInput, TOutput> : IPredictiveModel<T, TIn
     }
 
     /// <summary>
-    /// Sets the active feature indices for the underlying model.
+    /// Setting active feature indices is not supported on PredictionModelResult.
     /// </summary>
-    /// <param name="featureIndices">The feature indices to set as active.</param>
-    /// <exception cref="InvalidOperationException">Thrown when the Model is not initialized.</exception>
+    /// <param name="featureIndices">The feature indices (not used).</param>
+    /// <exception cref="InvalidOperationException">Always thrown - PredictionModelResult feature configuration cannot be modified.</exception>
+    /// <remarks>
+    /// Changing active features would invalidate the trained model and optimization results.
+    /// To train a model with different features, use PredictionModelBuilder with the desired feature configuration.
+    /// </remarks>
     public void SetActiveFeatureIndices(IEnumerable<int> featureIndices)
     {
-        if (Model == null)
-        {
-            throw new InvalidOperationException("Model is not initialized.");
-        }
-
-        Model.SetActiveFeatureIndices(featureIndices);
+        throw new InvalidOperationException(
+            "PredictionModelResult active features cannot be modified. " +
+            "The model was trained with a specific feature set. " +
+            "To use different features, train a new model using PredictionModelBuilder.");
     }
 
     /// <summary>
