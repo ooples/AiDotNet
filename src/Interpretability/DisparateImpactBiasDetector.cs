@@ -13,12 +13,19 @@ namespace AiDotNet.Interpretability
     /// <typeparam name="T">The numeric type for calculations.</typeparam>
     public class DisparateImpactBiasDetector<T> : BiasDetectorBase<T>
     {
+        private readonly double _threshold;
+
         /// <summary>
         /// Initializes a new instance of the DisparateImpactBiasDetector class.
         /// </summary>
-        public DisparateImpactBiasDetector() : base(isLowerBiasBetter: false)
+        /// <param name="threshold">The threshold for detecting bias (default is 0.8, representing the 80% rule from fair lending guidelines).</param>
+        public DisparateImpactBiasDetector(double threshold = 0.8) : base(isLowerBiasBetter: false)
         {
-            // For disparate impact ratio, higher is better (closer to 1.0 means less bias)
+            if (threshold <= 0 || threshold > 1)
+            {
+                throw new ArgumentOutOfRangeException(nameof(threshold), "Threshold must be between 0 and 1.");
+            }
+            _threshold = threshold;
         }
 
         /// <summary>
@@ -68,19 +75,22 @@ namespace AiDotNet.Interpretability
             if (_numOps.Equals(maxRate, _numOps.Zero))
             {
                 result.DisparateImpactRatio = _numOps.One;
+                result.Message = "All groups have zero positive predictions. Disparate impact ratio set to 1.0.";
+                result.HasBias = false;
+                return result;
             }
             else
             {
                 result.DisparateImpactRatio = _numOps.Divide(minRate, maxRate);
             }
 
-            // Check for bias using 80% rule
+            // Check for bias using configured threshold
             double disparateImpactValue = Convert.ToDouble(result.DisparateImpactRatio);
-            result.HasBias = disparateImpactValue < 0.8;
+            result.HasBias = disparateImpactValue < _threshold;
 
             if (result.HasBias)
             {
-                result.Message = $"Bias detected: Disparate impact ratio = {disparateImpactValue:F3} (below 0.8 threshold)";
+                result.Message = $"Bias detected: Disparate impact ratio = {disparateImpactValue:F3} (below {_threshold} threshold)";
             }
             else
             {
