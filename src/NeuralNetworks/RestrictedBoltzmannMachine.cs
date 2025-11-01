@@ -108,11 +108,11 @@ public class RestrictedBoltzmannMachine<T> : NeuralNetworkBase<T>
     /// It should match the number of features in the input data (e.g., the number of pixels in an image).
     /// </para>
     /// <para><b>For Beginners:</b> This is how many input values the RBM can accept.
-    /// 
+    ///
     /// For example:
-    /// - If processing 28�28 pixel images, VisibleSize would be 784 (28�28)
+    /// - If processing 28×28 pixel images, VisibleSize would be 784 (28×28)
     /// - If processing customer data with 15 attributes, VisibleSize would be 15
-    /// 
+    ///
     /// Think of it as the number of "sensors" the network has to observe the input data.
     /// </para>
     /// </remarks>
