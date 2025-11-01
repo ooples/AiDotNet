@@ -116,5 +116,32 @@ public enum LayerType
     /// - You need a fully connected layer
     /// </para>
     /// </remarks>
-    Dense
+    Dense,
+
+    /// <summary>
+    /// A layer implementing Low-Rank Adaptation for parameter-efficient fine-tuning.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> LoRA (Low-Rank Adaptation) layers enable efficient fine-tuning of neural networks
+    /// by learning small adaptations instead of updating all weights.
+    ///
+    /// Think of it as:
+    /// - Adding "correction notes" to an existing layer instead of rewriting it entirely
+    /// - Using a few master controls to adjust many parameters at once
+    /// - Learning what changes are needed rather than learning everything from scratch
+    ///
+    /// How it works:
+    /// - Decomposes weight updates into two small matrices (A and B)
+    /// - Dramatically reduces trainable parameters (often by 98% or more)
+    /// - Can be merged back into the original weights after training
+    ///
+    /// LoRA layers are especially useful for:
+    /// - Fine-tuning large pre-trained models with limited resources
+    /// - Adapting models to multiple tasks efficiently
+    /// - Reducing memory requirements during training
+    /// - Faster experimentation with model adaptations
+    /// </para>
+    /// </remarks>
+    LoRA
 }
