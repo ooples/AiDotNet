@@ -137,8 +137,8 @@ public class TransferRandomForest<T> : TransferLearningBase<T, Matrix<T>, Vector
         var targetModel = new RandomForestRegression<T>(_options, _regularization);
         targetModel.Train(targetData, combinedLabels);
 
-        // Wrap the model to handle feature mapping at prediction time
-        return new MappedRandomForestModel<T>(targetModel, FeatureMapper, sourceFeatures);
+        // Return the trained model directly (no wrapper needed since model operates in target feature space)
+        return targetModel;
     }
 
     /// <summary>
