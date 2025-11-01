@@ -36,6 +36,8 @@ public class PredictionModelBuilder<T, TInput, TOutput> : IPredictionModelBuilde
     private IOptimizer<T, TInput, TOutput>? _optimizer;
     private IDataPreprocessor<T, TInput, TOutput>? _dataPreprocessor;
     private IOutlierRemoval<T, TInput, TOutput>? _outlierRemoval;
+    private IBiasDetector<T>? _biasDetector;
+    private IFairnessEvaluator<T>? _fairnessEvaluator;
 
     /// <summary>
     /// Configures which features (input variables) should be used in the model.
@@ -203,7 +205,7 @@ public class PredictionModelBuilder<T, TInput, TOutput> : IPredictionModelBuilde
     /// The input matrix 'x' contains your features (like house size, number of bedrooms, etc. if predicting house prices),
     /// and the vector 'y' contains the known answers (actual house prices) for those examples.
     /// </remarks>
-    public IPredictiveModel<T, TInput, TOutput> Build(TInput x, TOutput y)
+    public PredictionModelResult<T, TInput, TOutput> Build(TInput x, TOutput y)
     {
         var convertedX = ConversionsHelper.ConvertToMatrix<T, TInput>(x);
         var convertedY = ConversionsHelper.ConvertToVector<T, TOutput>(y);
@@ -234,7 +236,7 @@ public class PredictionModelBuilder<T, TInput, TOutput> : IPredictionModelBuilde
         // Optimize the model
         var optimizationResult = optimizer.Optimize(OptimizerHelper<T, TInput, TOutput>.CreateOptimizationInputData(XTrain, yTrain, XVal, yVal, XTest, yTest));
 
-        return new PredictionModelResult<T, TInput, TOutput>(optimizationResult, normInfo);
+        return new PredictionModelResult<T, TInput, TOutput>(optimizationResult, normInfo, _biasDetector, _fairnessEvaluator);
     }
 
     /// <summary>
@@ -251,7 +253,7 @@ public class PredictionModelBuilder<T, TInput, TOutput> : IPredictionModelBuilde
     /// 
     /// The input matrix should have the same number of columns (features) as the data you used to train the model.
     /// </remarks>
-    public TOutput Predict(TInput newData, IPredictiveModel<T, TInput, TOutput> modelResult)
+    public TOutput Predict(TInput newData, PredictionModelResult<T, TInput, TOutput> modelResult)
     {
         return modelResult.Predict(newData);
     }
@@ -269,7 +271,7 @@ public class PredictionModelBuilder<T, TInput, TOutput> : IPredictionModelBuilde
     /// Think of it like saving a document in a word processor - you can close the program and come back later
     /// to continue where you left off.
     /// </remarks>
-    public void SaveModel(IPredictiveModel<T, TInput, TOutput> modelResult, string filePath)
+    public void SaveModel(PredictionModelResult<T, TInput, TOutput> modelResult, string filePath)
     {
         File.WriteAllBytes(filePath, SerializeModel(modelResult));
     }
@@ -286,7 +288,7 @@ public class PredictionModelBuilder<T, TInput, TOutput> : IPredictionModelBuilde
     /// This is useful when you want to use your model in different applications or at different times
     /// without the time and computational cost of retraining.
     /// </remarks>
-    public IPredictiveModel<T, TInput, TOutput> LoadModel(string filePath)
+    public PredictionModelResult<T, TInput, TOutput> LoadModel(string filePath)
     {
         byte[] modelData = File.ReadAllBytes(filePath);
         return DeserializeModel(modelData);
@@ -304,7 +306,7 @@ public class PredictionModelBuilder<T, TInput, TOutput> : IPredictionModelBuilde
     /// You might use this directly if you want to store the model in a database or send it over a network,
     /// rather than saving it to a file.
     /// </remarks>
-    public byte[] SerializeModel(IPredictiveModel<T, TInput, TOutput> modelResult)
+    public byte[] SerializeModel(PredictionModelResult<T, TInput, TOutput> modelResult)
     {
         return modelResult.Serialize();
     }
@@ -321,11 +323,45 @@ public class PredictionModelBuilder<T, TInput, TOutput> : IPredictionModelBuilde
     /// 
     /// You might use this directly if you retrieved a serialized model from a database or received it over a network.
     /// </remarks>
-    public IPredictiveModel<T, TInput, TOutput> DeserializeModel(byte[] modelData)
+    public PredictionModelResult<T, TInput, TOutput> DeserializeModel(byte[] modelData)
     {
         var result = new PredictionModelResult<T, TInput, TOutput>();
         result.Deserialize(modelData);
 
         return result;
+    }
+
+    /// <summary>
+    /// Configures the bias detector component for ethical AI evaluation.
+    /// </summary>
+    /// <param name="detector">The bias detector implementation to use.</param>
+    /// <returns>This builder instance for method chaining.</returns>
+    /// <remarks>
+    /// <b>For Beginners:</b> Bias detection helps ensure your model treats different groups fairly.
+    /// You can choose from different bias detection strategies like Disparate Impact (80% rule),
+    /// Demographic Parity, or Equal Opportunity. This component will be used to evaluate your
+    /// trained model's fairness across demographic groups.
+    /// </remarks>
+    public IPredictionModelBuilder<T, TInput, TOutput> ConfigureBiasDetector(IBiasDetector<T> detector)
+    {
+        _biasDetector = detector;
+        return this;
+    }
+
+    /// <summary>
+    /// Configures the fairness evaluator component for ethical AI evaluation.
+    /// </summary>
+    /// <param name="evaluator">The fairness evaluator implementation to use.</param>
+    /// <returns>This builder instance for method chaining.</returns>
+    /// <remarks>
+    /// <b>For Beginners:</b> Fairness evaluation measures how equitably your model performs.
+    /// You can choose evaluators that compute different sets of fairness metrics, from basic
+    /// (just key metrics) to comprehensive (all fairness measures). This helps ensure your
+    /// AI system is not only accurate but also ethical.
+    /// </remarks>
+    public IPredictionModelBuilder<T, TInput, TOutput> ConfigureFairnessEvaluator(IFairnessEvaluator<T> evaluator)
+    {
+        _fairnessEvaluator = evaluator;
+        return this;
     }
 }

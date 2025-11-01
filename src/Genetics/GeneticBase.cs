@@ -125,28 +125,15 @@ public abstract class GeneticBase<T, TInput, TOutput> :
                 return offspring;
             }
 
-            // Clone with null checks
+            // Clone with null checks - simplified fallback logic
             var child1 = parent1.Clone() as ModelIndividual<T, TInput, TOutput, ModelParameterGene<T>>;
             var child2 = parent2.Clone() as ModelIndividual<T, TInput, TOutput, ModelParameterGene<T>>;
 
-            // Check if either clone operation failed
+            // If cloning failed for either, return the successfully cloned individuals or originals as fallback
             if (child1 == null || child2 == null)
             {
-                // If cloning failed, add the original parents if possible
-                if (child1 != null)
-                    offspring.Add(child1);
-                if (child2 != null)
-                    offspring.Add(child2);
-
-                // If we couldn't add anything, add clones of the parents with null checks
-                if (offspring.Count == 0)
-                {
-                    if (parent1.Clone() is ModelIndividual<T, TInput, TOutput, ModelParameterGene<T>> clone1)
-                        offspring.Add(clone1);
-                    if (parent2.Clone() is ModelIndividual<T, TInput, TOutput, ModelParameterGene<T>> clone2)
-                        offspring.Add(clone2);
-                }
-
+                offspring.Add(child1 ?? parent1);
+                offspring.Add(child2 ?? parent2);
                 return offspring;
             }
 
@@ -207,24 +194,11 @@ public abstract class GeneticBase<T, TInput, TOutput> :
             var child1 = parent1.Clone() as ModelIndividual<T, TInput, TOutput, ModelParameterGene<T>>;
             var child2 = parent2.Clone() as ModelIndividual<T, TInput, TOutput, ModelParameterGene<T>>;
 
-            // Check if either clone operation failed
+            // If cloning failed for either, return the successfully cloned individuals or originals as fallback
             if (child1 == null || child2 == null)
             {
-                // If cloning failed, add the original parents if possible
-                if (child1 != null)
-                    offspring.Add(child1);
-                if (child2 != null)
-                    offspring.Add(child2);
-
-                // If we couldn't add anything, add clones of the parents with null checks
-                if (offspring.Count == 0)
-                {
-                    if (parent1.Clone() is ModelIndividual<T, TInput, TOutput, ModelParameterGene<T>> clone1)
-                        offspring.Add(clone1);
-                    if (parent2.Clone() is ModelIndividual<T, TInput, TOutput, ModelParameterGene<T>> clone2)
-                        offspring.Add(clone2);
-                }
-
+                offspring.Add(child1 ?? parent1);
+                offspring.Add(child2 ?? parent2);
                 return offspring;
             }
 

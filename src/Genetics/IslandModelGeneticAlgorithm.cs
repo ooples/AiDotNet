@@ -190,12 +190,14 @@ public class IslandModelGeneticAlgorithm<T, TInput, TOutput> :
             int migrantCount = Math.Max(1, (int)(_islands[sourceIsland].Count * _migrationRate));
 
             // Select migrants from source (best individuals)
+            // Clone and filter out any failed clones
             var migrants = _islands[sourceIsland]
                 .OrderByDescending(ind => FitnessCalculator.IsHigherScoreBetter ?
                     ind.GetFitness() : InvertFitness(ind.GetFitness()))
                 .Take(migrantCount)
                 .Select(ind => ind.Clone() as ModelIndividual<T, TInput, TOutput, ModelParameterGene<T>>)
                 .Where(ind => ind != null)
+                .Cast<ModelIndividual<T, TInput, TOutput, ModelParameterGene<T>>>()
                 .ToList();
 
             // Replace worst individuals in destination
@@ -207,7 +209,7 @@ public class IslandModelGeneticAlgorithm<T, TInput, TOutput> :
                 .ToList();
 
             // Add migrants to destination
-            destination.AddRange(migrants!);
+            destination.AddRange(migrants);
 
             // Update destination island
             _islands[destIsland] = destination;
