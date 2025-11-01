@@ -287,4 +287,37 @@ public interface IPredictionModelBuilder<T, TInput, TOutput>
     /// <param name="modelData">The byte array containing the serialized model data.</param>
     /// <returns>The reconstructed predictive model.</returns>
     IPredictiveModel<T, TInput, TOutput> DeserializeModel(byte[] modelData);
+
+    /// <summary>
+    /// Configures the bias detector component for ethical AI evaluation.
+    /// </summary>
+    /// <remarks>
+    /// A bias detector analyzes model predictions to identify potential bias across different
+    /// demographic groups defined by sensitive features.
+    ///
+    /// <b>For Beginners:</b> Bias detection helps ensure your model treats different groups fairly.
+    /// For example, if your model predicts loan approvals, bias detection checks whether it
+    /// unfairly favors or discriminates against certain demographic groups (like age, gender, or race).
+    /// This is crucial for ethical AI and regulatory compliance.
+    /// </remarks>
+    /// <param name="detector">The bias detector implementation to use.</param>
+    /// <returns>The builder instance for method chaining.</returns>
+    IPredictionModelBuilder<T, TInput, TOutput> ConfigureBiasDetector(IBiasDetector<T> detector);
+
+    /// <summary>
+    /// Configures the fairness evaluator component for ethical AI evaluation.
+    /// </summary>
+    /// <remarks>
+    /// A fairness evaluator computes multiple fairness metrics to assess how equitably
+    /// a model performs across different demographic groups.
+    ///
+    /// <b>For Beginners:</b> Fairness evaluation goes beyond basic accuracy to measure whether
+    /// your model is fair to all groups. It calculates metrics like demographic parity (do all
+    /// groups get positive outcomes at similar rates?) and equal opportunity (do qualified individuals
+    /// from all groups have equal chances?). This helps you build AI systems that are not only
+    /// accurate but also ethical and compliant with regulations.
+    /// </remarks>
+    /// <param name="evaluator">The fairness evaluator implementation to use.</param>
+    /// <returns>The builder instance for method chaining.</returns>
+    IPredictionModelBuilder<T, TInput, TOutput> ConfigureFairnessEvaluator(IFairnessEvaluator<T> evaluator);
 }

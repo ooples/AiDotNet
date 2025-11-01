@@ -36,6 +36,8 @@ public class PredictionModelBuilder<T, TInput, TOutput> : IPredictionModelBuilde
     private IOptimizer<T, TInput, TOutput>? _optimizer;
     private IDataPreprocessor<T, TInput, TOutput>? _dataPreprocessor;
     private IOutlierRemoval<T, TInput, TOutput>? _outlierRemoval;
+    private IBiasDetector<T>? _biasDetector;
+    private IFairnessEvaluator<T>? _fairnessEvaluator;
 
     /// <summary>
     /// Configures which features (input variables) should be used in the model.
@@ -234,7 +236,7 @@ public class PredictionModelBuilder<T, TInput, TOutput> : IPredictionModelBuilde
         // Optimize the model
         var optimizationResult = optimizer.Optimize(OptimizerHelper<T, TInput, TOutput>.CreateOptimizationInputData(XTrain, yTrain, XVal, yVal, XTest, yTest));
 
-        return new PredictionModelResult<T, TInput, TOutput>(optimizationResult, normInfo);
+        return new PredictionModelResult<T, TInput, TOutput>(optimizationResult, normInfo, _biasDetector, _fairnessEvaluator);
     }
 
     /// <summary>
@@ -327,5 +329,39 @@ public class PredictionModelBuilder<T, TInput, TOutput> : IPredictionModelBuilde
         result.Deserialize(modelData);
 
         return result;
+    }
+
+    /// <summary>
+    /// Configures the bias detector component for ethical AI evaluation.
+    /// </summary>
+    /// <param name="detector">The bias detector implementation to use.</param>
+    /// <returns>This builder instance for method chaining.</returns>
+    /// <remarks>
+    /// <b>For Beginners:</b> Bias detection helps ensure your model treats different groups fairly.
+    /// You can choose from different bias detection strategies like Disparate Impact (80% rule),
+    /// Demographic Parity, or Equal Opportunity. This component will be used to evaluate your
+    /// trained model's fairness across demographic groups.
+    /// </remarks>
+    public IPredictionModelBuilder<T, TInput, TOutput> ConfigureBiasDetector(IBiasDetector<T> detector)
+    {
+        _biasDetector = detector;
+        return this;
+    }
+
+    /// <summary>
+    /// Configures the fairness evaluator component for ethical AI evaluation.
+    /// </summary>
+    /// <param name="evaluator">The fairness evaluator implementation to use.</param>
+    /// <returns>This builder instance for method chaining.</returns>
+    /// <remarks>
+    /// <b>For Beginners:</b> Fairness evaluation measures how equitably your model performs.
+    /// You can choose evaluators that compute different sets of fairness metrics, from basic
+    /// (just key metrics) to comprehensive (all fairness measures). This helps ensure your
+    /// AI system is not only accurate but also ethical.
+    /// </remarks>
+    public IPredictionModelBuilder<T, TInput, TOutput> ConfigureFairnessEvaluator(IFairnessEvaluator<T> evaluator)
+    {
+        _fairnessEvaluator = evaluator;
+        return this;
     }
 }
