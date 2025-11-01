@@ -36,6 +36,11 @@ namespace AiDotNet.Interpretability
             Vector<T> sensitiveFeature,
             Vector<T>? actualLabels)
         {
+            if (predictions.Length != sensitiveFeature.Length)
+            {
+                throw new ArgumentException("Predictions and sensitive feature vectors must have the same length.", nameof(predictions));
+            }
+
             var result = new BiasDetectionResult<T>();
 
             // Identify unique groups
