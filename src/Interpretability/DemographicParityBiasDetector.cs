@@ -13,12 +13,19 @@ namespace AiDotNet.Interpretability
     /// <typeparam name="T">The numeric type for calculations.</typeparam>
     public class DemographicParityBiasDetector<T> : BiasDetectorBase<T>
     {
+        private readonly double _threshold;
+
         /// <summary>
         /// Initializes a new instance of the DemographicParityBiasDetector class.
         /// </summary>
-        public DemographicParityBiasDetector() : base(isLowerBiasBetter: true)
+        /// <param name="threshold">The threshold for detecting bias (default is 0.1, representing 10% difference threshold).</param>
+        public DemographicParityBiasDetector(double threshold = 0.1) : base(isLowerBiasBetter: true)
         {
-            // For statistical parity difference, lower is better (0 means perfect parity)
+            if (threshold <= 0 || threshold > 1)
+            {
+                throw new ArgumentOutOfRangeException(nameof(threshold), "Threshold must be between 0 and 1.");
+            }
+            _threshold = threshold;
         }
 
         /// <summary>
@@ -66,13 +73,13 @@ namespace AiDotNet.Interpretability
 
             result.StatisticalParityDifference = _numOps.Subtract(maxRate, minRate);
 
-            // Check for bias using 10% threshold
+            // Check for bias using configured threshold
             double statisticalParityValue = Convert.ToDouble(result.StatisticalParityDifference);
-            result.HasBias = Math.Abs(statisticalParityValue) > 0.1;
+            result.HasBias = Math.Abs(statisticalParityValue) > _threshold;
 
             if (result.HasBias)
             {
-                result.Message = $"Bias detected: Statistical parity difference = {statisticalParityValue:F3} (exceeds 0.1 threshold)";
+                result.Message = $"Bias detected: Statistical parity difference = {statisticalParityValue:F3} (exceeds {_threshold} threshold)";
             }
             else
             {
