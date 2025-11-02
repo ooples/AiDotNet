@@ -1096,11 +1096,23 @@ public class DVoRAAdapter<T> : LoRAAdapterBase<T>
             mergedParams[i] = baseParams[i];
         }
 
-        // Create new dense layer with merged parameters
-        // Note: Activation function is not preserved as DenseLayer/FullyConnectedLayer
-        // do not expose ActivationFunction publicly. Users should apply activation separately.
-        DenseLayer<T> mergedLayer = new DenseLayer<T>(inputSize, outputSize, (IActivationFunction<T>?)null);
-        mergedLayer.SetParameters(mergedParams);
+        // Clone base layer to preserve activation function, then update parameters
+        ILayer<T> mergedLayer;
+        if (denseBase != null)
+        {
+            mergedLayer = denseBase.Clone();
+            mergedLayer.SetParameters(mergedParams);
+        }
+        else if (fcBase != null)
+        {
+            mergedLayer = fcBase.Clone();
+            mergedLayer.SetParameters(mergedParams);
+        }
+        else
+        {
+            // Fallback: should never reach here due to earlier check
+            throw new InvalidOperationException("Base layer must be DenseLayer or FullyConnectedLayer");
+        }
 
         return mergedLayer;
     }
