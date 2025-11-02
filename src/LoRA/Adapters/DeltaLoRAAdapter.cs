@@ -493,6 +493,57 @@ public class DeltaLoRAAdapter<T> : LoRAAdapterBase<T>
     }
 
     /// <summary>
+    /// Gets all parameter gradients including base layer, LoRA layer, and delta weight gradients.
+    /// </summary>
+    /// <returns>Vector containing all gradients.</returns>
+    /// <remarks>
+    /// <para>
+    /// Gradient packing order matches GetParameters:
+    /// [base layer gradients (if not frozen)], [LoRA gradients], [delta weight gradients].
+    /// </para>
+    /// <para><b>For Beginners:</b> This packs all the gradients computed during backpropagation
+    /// so optimizers can update all parameters consistently. Without this override, optimizers
+    /// would miss the delta weight gradients, causing them to never update correctly.
+    /// </para>
+    /// </remarks>
+    public override Vector<T> GetParameterGradients()
+    {
+        Vector<T> baseGrads = base.GetParameterGradients(); // Base layer + LoRA layer gradients
+        Vector<T> allGrads = new Vector<T>(ParameterCount);
+
+        int idx = 0;
+
+        // Copy base and LoRA gradients
+        for (int i = 0; i < baseGrads.Length; i++)
+        {
+            allGrads[idx++] = baseGrads[i];
+        }
+
+        // Pack delta weight gradients
+        if (_deltaGradients != null)
+        {
+            for (int i = 0; i < _deltaGradients.Rows; i++)
+            {
+                for (int j = 0; j < _deltaGradients.Columns; j++)
+                {
+                    allGrads[idx++] = _deltaGradients[i, j];
+                }
+            }
+        }
+        else
+        {
+            // If no gradients computed yet, fill with zeros
+            int deltaCount = _deltaWeights.Rows * _deltaWeights.Columns;
+            for (int i = 0; i < deltaCount; i++)
+            {
+                allGrads[idx++] = NumOps.Zero;
+            }
+        }
+
+        return allGrads;
+    }
+
+    /// <summary>
     /// Merges the LoRA adaptation and delta weights into the base layer.
     /// </summary>
     /// <returns>A new layer with LoRA and delta weights merged into the base layer's weights.</returns>
