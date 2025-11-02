@@ -506,7 +506,9 @@ public class LongLoRAAdapter<T> : LoRAAdapterBase<T>
                 // Write back with shift for this batch
                 for (int i = 0; i < groupSize; i++)
                 {
-                    int seqIdx = groupStart + ((i + shiftAmount) % groupSize);
+                    // Use actual group size for modulo to handle partial last groups correctly
+                    int actualGroupSize = Math.Min(groupSize, sequenceLength - groupStart);
+                    int seqIdx = groupStart + ((i + shiftAmount) % actualGroupSize);
                     if (seqIdx < sequenceLength)
                     {
                         tensor[b * sequenceLength + seqIdx] = buffer[i];
@@ -540,7 +542,9 @@ public class LongLoRAAdapter<T> : LoRAAdapterBase<T>
                     // Write back with shift for this batch and feature
                     for (int i = 0; i < groupSize; i++)
                     {
-                        int seqIdx = groupStart + ((i + shiftAmount) % groupSize);
+                        // Use actual group size for modulo to handle partial last groups correctly
+                        int actualGroupSize = Math.Min(groupSize, sequenceLength - groupStart);
+                        int seqIdx = groupStart + ((i + shiftAmount) % actualGroupSize);
                         if (seqIdx < sequenceLength)
                         {
                             tensor[b * sequenceLength * featureDim + seqIdx * featureDim + f] = buffer[i];
