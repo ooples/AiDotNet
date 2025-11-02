@@ -324,16 +324,15 @@ public class QLoRAAdapter<T> : LoRAAdapterBase<T>
 
             // Compute scale and zero point
             T range = NumOps.Subtract(maxVal, minVal);
-            T scale;
-            if (NumOps.Equals(range, NumOps.Zero))
+
+            // Guard against zero or near-zero range (constant/nearly-constant blocks)
+            // This happens with bias-only columns or pruned weights
+            if (!NumOps.GreaterThan(range, NumOps.FromDouble(1e-12)))
             {
-                // Guard against zero range (all values in block are identical)
-                scale = NumOps.FromDouble(1e-8);
+                range = NumOps.FromDouble(1e-12);
             }
-            else
-            {
-                scale = NumOps.Divide(range, NumOps.FromDouble(15.0)); // 4-bit has 16 levels (0-15)
-            }
+
+            T scale = NumOps.Divide(range, NumOps.FromDouble(15.0)); // 4-bit has 16 levels (0-15)
             T zeroPoint = minVal;
 
             _quantizationScales[blockIdx] = scale;
