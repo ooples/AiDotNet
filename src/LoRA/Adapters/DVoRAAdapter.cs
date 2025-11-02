@@ -603,8 +603,25 @@ public class DVoRAAdapter<T> : LoRAAdapterBase<T>
         // Recompose weights: W' = m * d_norm - DoRA component
         Matrix<T> finalWeights = RecomposeWeights(_lastNormalizedDirection);
 
-        // Compute output: y = input @ W'^T
+        // Compute output: y = input @ W'^T + bias
         Matrix<T> outputMatrix = inputMatrix.Multiply(finalWeights.Transpose());
+
+        // Extract biases from base layer parameters
+        Vector<T> biases = new Vector<T>(outputSize);
+        for (int i = 0; i < outputSize; i++)
+        {
+            int biasIdx = weightCount + i;
+            biases[i] = biasIdx < baseParams.Length ? baseParams[biasIdx] : NumOps.Zero;
+        }
+
+        // Add bias to each row of output
+        for (int i = 0; i < batchSize; i++)
+        {
+            for (int j = 0; j < outputSize; j++)
+            {
+                outputMatrix[i, j] = NumOps.Add(outputMatrix[i, j], biases[j]);
+            }
+        }
 
         // Convert back to tensor
         Vector<T> outputData = new Vector<T>(batchSize * outputSize);
