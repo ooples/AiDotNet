@@ -44,9 +44,9 @@ namespace AiDotNet.LoRA.Adapters;
 ///
 /// Example: A 100×100 weight matrix with rank=8
 /// - Standard LoRA: 8×100 + 100×8 = 1,600 parameters
-/// - LoHa: 8×(100 + 100) = 1,600 parameters (each rank has input_size + output_size parameters)
+/// - LoHa: 2 × 8 × 100 × 100 = 160,000 parameters (each rank has 2 full-sized matrices)
 ///
-/// LoHa uses similar parameter count to LoRA but with different structure (Hadamard products).
+/// LoHa uses MORE parameters than LoRA but models element-wise weight interactions via Hadamard products.
 /// </para>
 /// </remarks>
 public class LoHaAdapter<T> : LoRAAdapterBase<T>
