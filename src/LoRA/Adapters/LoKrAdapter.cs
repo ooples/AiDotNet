@@ -105,6 +105,11 @@ public class LoKrAdapter<T> : LoRAAdapterBase<T>
     {
         get
         {
+            if (_matrixA == null || _matrixB == null)
+            {
+                return base.ParameterCount;
+            }
+
             int lokrParams = (_matrixA.Rows * _matrixA.Columns) + (_matrixB.Rows * _matrixB.Columns);
             return _freezeBaseLayer ? lokrParams : (_baseLayer.ParameterCount + lokrParams);
         }
