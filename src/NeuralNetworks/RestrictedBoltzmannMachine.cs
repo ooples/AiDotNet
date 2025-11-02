@@ -448,6 +448,43 @@ public class RestrictedBoltzmannMachine<T> : NeuralNetworkBase<T>
     /// Instead of using this method, you should use the Train method to train an RBM.
     /// </para>
     /// </remarks>
+    public override Vector<T> GetParameters()
+    {
+        int weightCount = HiddenSize * VisibleSize;
+        int totalLength = weightCount + VisibleSize + HiddenSize;
+        var parameters = new Vector<T>(totalLength);
+
+        int paramIndex = 0;
+
+        // Extract weights (HiddenSize × VisibleSize)
+        for (int i = 0; i < HiddenSize; i++)
+        {
+            for (int j = 0; j < VisibleSize; j++)
+            {
+                parameters[paramIndex++] = _weights[i, j];
+            }
+        }
+
+        // Extract visible biases
+        for (int i = 0; i < VisibleSize; i++)
+        {
+            parameters[paramIndex++] = _visibleBiases[i];
+        }
+
+        // Extract hidden biases
+        for (int i = 0; i < HiddenSize; i++)
+        {
+            parameters[paramIndex++] = _hiddenBiases[i];
+        }
+
+        return parameters;
+    }
+
+    public override void SetParameters(Vector<T> parameters)
+    {
+        UpdateParameters(parameters);
+    }
+
     public override void UpdateParameters(Vector<T> parameters)
     {
         int weightCount = HiddenSize * VisibleSize;

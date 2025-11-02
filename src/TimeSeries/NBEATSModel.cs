@@ -250,11 +250,8 @@ public class NBEATSModel<T> : TimeSeriesModelBase<T>
             // Average loss for this epoch
             T avgLoss = _numOps.Divide(totalLoss, _numOps.FromDouble(numSamples));
 
-            // Print progress every 10 epochs
-            if (epoch % 10 == 0)
-            {
-                Console.WriteLine($"Epoch {epoch}/{_options.Epochs}, Loss: {avgLoss}");
-            }
+            // TODO: Add progress callback/event for training progress
+            // Libraries should not write directly to console
         }
 
         // Store the final parameters
