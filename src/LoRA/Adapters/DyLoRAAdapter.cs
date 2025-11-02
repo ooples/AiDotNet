@@ -288,8 +288,10 @@ public class DyLoRAAdapter<T> : LoRAAdapterBase<T>
         // Forward through base layer
         Tensor<T> baseOutput = _baseLayer.Forward(input);
 
-        // Forward through LoRA layer with restricted rank
-        Tensor<T> loraOutput = ForwardWithRank(input, activeRank);
+        // CRITICAL: Prime _loraLayer caches by calling Forward, then mask to activeRank
+        // This ensures _loraLayer.Backward will have fresh cached inputs for gradient computation
+        Tensor<T> fullLoraOutput = _loraLayer.Forward(input);
+        Tensor<T> loraOutput = MaskOutputToRank(fullLoraOutput, activeRank);
 
         // Sum the outputs
         Tensor<T> result = new Tensor<T>(baseOutput.Shape);
@@ -299,6 +301,36 @@ public class DyLoRAAdapter<T> : LoRAAdapterBase<T>
         }
 
         return result;
+    }
+
+    /// <summary>
+    /// Masks the full LoRA output to only include contributions from the first 'rank' components.
+    /// </summary>
+    /// <param name="fullOutput">The full LoRA output from all maxRank components.</param>
+    /// <param name="rank">Number of components to use (nested dropout rank).</param>
+    /// <returns>Masked LoRA output tensor using only first 'rank' components.</returns>
+    /// <remarks>
+    /// <para>
+    /// This recomputes the LoRA output using only the first 'rank' columns of A and rows of B.
+    /// By calling _loraLayer.Forward first (in Forward method), we ensure _loraLayer has fresh
+    /// cached inputs for gradient computation, then we mask the output to match the nested dropout rank.
+    /// </para>
+    /// </remarks>
+    private Tensor<T> MaskOutputToRank(Tensor<T> fullOutput, int rank)
+    {
+        // If using full rank, return as-is
+        if (rank == _maxRank)
+        {
+            return fullOutput;
+        }
+
+        // Recompute with rank restriction using ForwardWithRank logic
+        // (We must recompute rather than mask, since LoRA output is input*A*B, not linearly separable by rank)
+        if (_cachedInput == null)
+        {
+            throw new InvalidOperationException("MaskOutputToRank called without cached input");
+        }
+        return ForwardWithRank(_cachedInput, rank);
     }
 
     /// <summary>
