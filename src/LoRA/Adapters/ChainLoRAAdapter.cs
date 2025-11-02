@@ -338,10 +338,16 @@ public class ChainLoRAAdapter<T> : LoRAAdapterBase<T>
                     count += _baseLayer.ParameterCount;
                 }
 
-                // Add LoRA layer parameters if it exists
-                if (_loraLayer != null)
+                // Add unmerged adapter parameters from chain
+                if (_adapterChain != null && _mergedStatus != null)
                 {
-                    count += _loraLayer.ParameterCount;
+                    for (int i = 0; i < _chainLength; i++)
+                    {
+                        if (!_mergedStatus[i])
+                        {
+                            count += _adapterChain[i].ParameterCount;
+                        }
+                    }
                 }
 
                 return count;
