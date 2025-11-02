@@ -121,6 +121,22 @@ public class DeltaLoRAAdapter<T> : LoRAAdapterBase<T>
     public double MomentumFactor => _momentumFactor;
 
     /// <summary>
+    /// Gets the total number of trainable parameters including delta weights.
+    /// </summary>
+    /// <remarks>
+    /// Includes base layer (if not frozen), LoRA layer, and delta weights matrix parameters.
+    /// </remarks>
+    public override int ParameterCount
+    {
+        get
+        {
+            int baseCount = base.ParameterCount; // Base layer + LoRA layer
+            int deltaCount = _deltaWeights.Rows * _deltaWeights.Columns;
+            return baseCount + deltaCount;
+        }
+    }
+
+    /// <summary>
     /// Initializes a new Delta-LoRA adapter wrapping an existing layer.
     /// </summary>
     /// <param name="baseLayer">The layer to adapt with Delta-LoRA.</param>
@@ -406,6 +422,74 @@ public class DeltaLoRAAdapter<T> : LoRAAdapterBase<T>
             }
         }
         return copy;
+    }
+
+    /// <summary>
+    /// Gets the current parameters including base layer, LoRA layer, and delta weights.
+    /// </summary>
+    /// <returns>Vector containing all parameters (base + LoRA + delta weights flattened).</returns>
+    /// <remarks>
+    /// Parameters are packed in order: [base layer params (if not frozen)], [LoRA params], [delta weights].
+    /// </remarks>
+    public override Vector<T> GetParameters()
+    {
+        Vector<T> baseParams = base.GetParameters(); // Base layer + LoRA layer
+        Vector<T> allParams = new Vector<T>(ParameterCount);
+
+        int idx = 0;
+
+        // Copy base and LoRA parameters
+        for (int i = 0; i < baseParams.Length; i++)
+        {
+            allParams[idx++] = baseParams[i];
+        }
+
+        // Pack delta weights
+        for (int i = 0; i < _deltaWeights.Rows; i++)
+        {
+            for (int j = 0; j < _deltaWeights.Columns; j++)
+            {
+                allParams[idx++] = _deltaWeights[i, j];
+            }
+        }
+
+        return allParams;
+    }
+
+    /// <summary>
+    /// Sets the layer parameters including base layer, LoRA layer, and delta weights.
+    /// </summary>
+    /// <param name="parameters">Vector containing all parameters.</param>
+    /// <exception cref="ArgumentException">Thrown when parameter count doesn't match expected count.</exception>
+    /// <remarks>
+    /// Parameters must be packed in order: [base layer params (if not frozen)], [LoRA params], [delta weights].
+    /// </remarks>
+    public override void SetParameters(Vector<T> parameters)
+    {
+        if (parameters.Length != ParameterCount)
+        {
+            throw new ArgumentException($"Expected {ParameterCount} parameters, got {parameters.Length}", nameof(parameters));
+        }
+
+        int baseLoraCount = base.ParameterCount;
+
+        // Extract base and LoRA parameters
+        Vector<T> baseLoraParams = new Vector<T>(baseLoraCount);
+        for (int i = 0; i < baseLoraCount; i++)
+        {
+            baseLoraParams[i] = parameters[i];
+        }
+        base.SetParameters(baseLoraParams);
+
+        // Extract delta weights
+        int idx = baseLoraCount;
+        for (int i = 0; i < _deltaWeights.Rows; i++)
+        {
+            for (int j = 0; j < _deltaWeights.Columns; j++)
+            {
+                _deltaWeights[i, j] = parameters[idx++];
+            }
+        }
     }
 
     /// <summary>

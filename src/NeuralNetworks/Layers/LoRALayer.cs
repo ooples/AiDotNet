@@ -114,6 +114,11 @@ public class LoRALayer<T> : LayerBase<T>
     private Tensor<T>? _lastInput;
 
     /// <summary>
+    /// Stored pre-activation output from the forward pass, needed for activation derivative computation.
+    /// </summary>
+    private Tensor<T>? _lastPreActivation;
+
+    /// <summary>
     /// Gets the total number of trainable parameters (elements in A and B matrices).
     /// </summary>
     public override int ParameterCount => (_loraA.Rows * _loraA.Columns) + (_loraB.Rows * _loraB.Columns);
@@ -260,6 +265,9 @@ public class LoRALayer<T> : LayerBase<T>
 
         Tensor<T> result = new Tensor<T>(new[] { batchSize, _loraB.Columns }, outputData);
 
+        // Store pre-activation for gradient computation
+        _lastPreActivation = result.Clone();
+
         // Apply activation if specified
         if (ScalarActivation != null)
         {
@@ -300,20 +308,13 @@ public class LoRALayer<T> : LayerBase<T>
         // Get dimensions
         int batchSize = _lastInput.Shape[0];
         int inputSize = _lastInput.Shape.Length > 1 ? _lastInput.Shape[1] : _lastInput.Length;
-
-        // Apply activation gradient if needed
-        // Ensure activation is identity or not set (non-identity activations require pre-activation storage)
-        if (ScalarActivation != null && !(ScalarActivation is IdentityActivation<T>))
-        {
-            throw new NotSupportedException("Non-identity activation functions are not yet fully supported in LoRALayer. " +
-                "Full support requires storing pre-activation values during the forward pass.");
-        }
-
-        if (ScalarActivation != null)
-        {
-            outputGradient = ApplyActivationDerivative(_lastInput, outputGradient);
-        }
         int outputSize = _loraB.Columns;
+
+        // Apply activation gradient if needed using pre-activation values
+        if (ScalarActivation != null && _lastPreActivation != null)
+        {
+            outputGradient = ApplyActivationDerivative(_lastPreActivation, outputGradient);
+        }
 
         // Convert tensors to matrices
         Matrix<T> inputMatrix = new Matrix<T>(batchSize, inputSize);
@@ -569,6 +570,7 @@ public class LoRALayer<T> : LayerBase<T>
     public override void ResetState()
     {
         _lastInput = null;
+        _lastPreActivation = null;
         _loraAGradient = null;
         _loraBGradient = null;
     }
