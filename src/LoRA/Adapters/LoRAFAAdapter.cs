@@ -78,16 +78,16 @@ public class LoRAFAAdapter<T> : LoRAAdapterBase<T>
     {
         get
         {
-            // Only count matrix B parameters (matrix A is frozen)
-            int matrixBParams = _loraLayer.Rank * GetOutputShape()[0];
-
-            // Add base layer parameters if not frozen
+            // CRITICAL: Return full LoRA parameter count (A + B) to match base class invariants
+            // Even though matrix A is frozen, it must be included in the parameter buffer
+            // to avoid IndexOutOfRangeException in base class private helpers
+            // The freeze logic is handled in UpdateParameters, not in buffer sizing
             if (!_freezeBaseLayer)
             {
-                return _baseLayer.ParameterCount + matrixBParams;
+                return _baseLayer.ParameterCount + _loraLayer.ParameterCount;
             }
 
-            return matrixBParams;
+            return _loraLayer.ParameterCount;
         }
     }
 
@@ -282,8 +282,10 @@ public class LoRAFAAdapter<T> : LoRAAdapterBase<T>
     /// </summary>
     /// <remarks>
     /// <para>
-    /// For LoRA-FA, this only includes matrix B parameters (and base layer parameters if not frozen).
-    /// Matrix A is frozen and not included in the trainable parameter vector.
+    /// CRITICAL: For LoRA-FA, this packs BOTH matrix A and B to match ParameterCount.
+    /// Even though matrix A is frozen, it must be included in the parameter buffer
+    /// to maintain base-class invariants and prevent buffer overruns.
+    /// The freeze logic is in UpdateParameters, not in buffer packing.
     /// </para>
     /// </remarks>
     private void UpdateParametersFromLayers()
@@ -300,14 +302,10 @@ public class LoRAFAAdapter<T> : LoRAAdapterBase<T>
             }
         }
 
-        // Pack only matrix B parameters (skip matrix A since it's frozen)
+        // Pack ALL LoRA parameters (both matrix A and B)
+        // Matrix A is frozen but must be in the buffer for base class compatibility
         Vector<T> loraParams = _loraLayer.GetParameters();
-        int inputSize = GetInputShape()[0];
-        int rank = _loraLayer.Rank;
-        int matrixAParamCount = inputSize * rank;
-
-        // Skip matrix A, only copy matrix B
-        for (int i = matrixAParamCount; i < loraParams.Length; i++)
+        for (int i = 0; i < loraParams.Length; i++)
         {
             Parameters[idx++] = loraParams[i];
         }
