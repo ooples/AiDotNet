@@ -105,6 +105,11 @@ public class HRAAdapter<T> : LoRAAdapterBase<T>
     private Dictionary<(int row, int col), T>? _sparseGradients;
 
     /// <summary>
+    /// Cached input from forward pass for computing sparse gradients in backward pass.
+    /// </summary>
+    private Tensor<T>? _cachedInput;
+
+    /// <summary>
     /// Maximum number of sparse full-rank parameters to allocate.
     /// </summary>
     /// <remarks>
@@ -295,6 +300,9 @@ public class HRAAdapter<T> : LoRAAdapterBase<T>
     /// </remarks>
     public override Tensor<T> Forward(Tensor<T> input)
     {
+        // Cache input for computing sparse gradients in backward pass
+        _cachedInput = input;
+
         // 1. Forward through base layer
         Tensor<T> baseOutput = _baseLayer.Forward(input);
 
@@ -459,6 +467,12 @@ public class HRAAdapter<T> : LoRAAdapterBase<T>
             return new Tensor<T>(new[] { batchSize, inputSize }, zeroData);
         }
 
+        // Validate cached input is available
+        if (_cachedInput == null)
+        {
+            throw new InvalidOperationException("Forward must be called before Backward");
+        }
+
         // Convert gradient to matrix
         Matrix<T> gradMatrix = new Matrix<T>(batchSize, outputSize);
         for (int i = 0; i < batchSize; i++)
@@ -466,6 +480,16 @@ public class HRAAdapter<T> : LoRAAdapterBase<T>
             for (int j = 0; j < outputSize; j++)
             {
                 gradMatrix[i, j] = outputGradient[i * outputSize + j];
+            }
+        }
+
+        // Convert cached input to matrix
+        Matrix<T> inputMatrix = new Matrix<T>(batchSize, inputSize);
+        for (int i = 0; i < batchSize; i++)
+        {
+            for (int j = 0; j < inputSize; j++)
+            {
+                inputMatrix[i, j] = _cachedInput[i * inputSize + j];
             }
         }
 
@@ -486,10 +510,12 @@ public class HRAAdapter<T> : LoRAAdapterBase<T>
                 T grad = NumOps.Multiply(weight, gradMatrix[b, row]);
                 inputGradMatrix[b, col] = NumOps.Add(inputGradMatrix[b, col], grad);
 
-                // Parameter gradient: dL/dWeight[row, col] += input[b, col] * dL/dOutput[b, row]
-                // Note: We need input from forward pass, stored in base layer
-                // For simplicity, accumulate gradient magnitude for importance
-                paramGrad = NumOps.Add(paramGrad, NumOps.Abs(gradMatrix[b, row]));
+                // Parameter gradient: dL/dWeight[row, col] = Σ_batch (input[b, col] * dL/dOutput[b, row])
+                // This is the correct gradient formula for linear layers (outer product of input and output error)
+                T inputVal = inputMatrix[b, col];
+                T outputGrad = gradMatrix[b, row];
+                T gradContribution = NumOps.Multiply(inputVal, outputGrad);
+                paramGrad = NumOps.Add(paramGrad, gradContribution);
             }
 
             _sparseGradients[kvp.Key] = NumOps.Multiply(paramGrad, _sparseScaling);
