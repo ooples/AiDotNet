@@ -345,7 +345,7 @@ namespace AiDotNetTests.UnitTests.NeuralNetworks
             // Assert
             Assert.Equal(layer.ParameterCount, gradients.Length);
             // At least some gradients should be non-zero
-            Assert.True(gradients.Any(g => Math.Abs(g) > 1e-10));
+            Assert.Contains(gradients, g => Math.Abs(g) > 1e-10);
         }
 
         [Fact]
