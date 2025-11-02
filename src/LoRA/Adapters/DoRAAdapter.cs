@@ -86,6 +86,11 @@ public class DoRAAdapter<T> : LoRAAdapterBase<T>
     private Matrix<T>? _lastNormalizedDirection;
 
     /// <summary>
+    /// Cached input matrix from forward pass (used for computing magnitude gradients in backward).
+    /// </summary>
+    private Matrix<T>? _lastInputMatrix;
+
+    /// <summary>
     /// Gets the total number of trainable parameters.
     /// </summary>
     /// <remarks>
@@ -366,25 +371,11 @@ public class DoRAAdapter<T> : LoRAAdapterBase<T>
         // Compute base direction (W / ||W||)
         Matrix<T> baseDirection = NormalizeRows(baseWeights);
 
-        // Get LoRA contribution (this is already scaled by alpha/rank)
-        Tensor<T> loraOutput = _loraLayer.Forward(input);
-
-        // Convert LoRA output to matrix form (batch_size x output_size)
-        int batchSize = input.Shape[0];
-        Matrix<T> loraMatrix = new Matrix<T>(batchSize, outputSize);
-        for (int i = 0; i < batchSize; i++)
-        {
-            for (int j = 0; j < outputSize; j++)
-            {
-                loraMatrix[i, j] = loraOutput[i * outputSize + j];
-            }
-        }
-
-        // For DoRA, we need to add LoRA to the direction component, not the output
-        // This requires reconstructing how LoRA affects the weight matrix
-        // LoRA computes: input @ A @ B, which is equivalent to input @ (A @ B)^T
-        // We need (A @ B)^T to add to the direction
+        // Get LoRA weight contribution as matrix (B × A)
+        // We don't call _loraLayer.Forward() here since we only need the weight delta, not the output
         Matrix<T> loraWeightDelta = _loraLayer.MergeWeights(); // This gives us [outputSize, inputSize]
+
+        int batchSize = input.Shape[0];
 
         // Add LoRA delta to base direction: d' = d + delta
         Matrix<T> adaptedDirection = new Matrix<T>(outputSize, inputSize);
@@ -403,18 +394,18 @@ public class DoRAAdapter<T> : LoRAAdapterBase<T>
         Matrix<T> finalWeights = RecomposeWeights(_lastNormalizedDirection);
 
         // Compute output: y = input @ W'^T
-        // Convert input to matrix
-        Matrix<T> inputMatrix = new Matrix<T>(batchSize, inputSize);
+        // Convert input to matrix and cache for backward pass
+        _lastInputMatrix = new Matrix<T>(batchSize, inputSize);
         for (int i = 0; i < batchSize; i++)
         {
             for (int j = 0; j < inputSize; j++)
             {
-                inputMatrix[i, j] = input[i * inputSize + j];
+                _lastInputMatrix[i, j] = input[i * inputSize + j];
             }
         }
 
         // Matrix multiply: [batchSize, inputSize] @ [inputSize, outputSize]
-        Matrix<T> outputMatrix = inputMatrix.Multiply(finalWeights.Transpose());
+        Matrix<T> outputMatrix = _lastInputMatrix.Multiply(finalWeights.Transpose());
 
         // Convert back to tensor
         Vector<T> outputData = new Vector<T>(batchSize * outputSize);
@@ -484,18 +475,32 @@ public class DoRAAdapter<T> : LoRAAdapterBase<T>
         }
 
         // Compute magnitude gradients
-        // dL/dm_i = sum over batch of (outputGrad_i * normalizedDirection_i)
+        // The correct gradient is: dL/dm_i = sum_batch(dL/dout_i * (normalized_direction_i · input_batch))
+        // Since output = input @ (m * normalized_direction)^T = input @ (normalized_direction^T * diag(m))
+        // For each output neuron i: output_batch_i = (normalized_direction_i · input_batch) * m_i
+        // Therefore: dL/dm_i = sum_batch(dL/dout_batch_i * (normalized_direction_i · input_batch))
+        if (_lastInputMatrix == null)
+        {
+            throw new InvalidOperationException("Forward pass must be called before backward pass");
+        }
+
         _magnitudeGradient = new Vector<T>(_magnitude.Length);
         for (int i = 0; i < outputSize; i++)
         {
             T gradSum = NumOps.Zero;
             for (int b = 0; b < batchSize; b++)
             {
-                T grad = gradMatrix[b, i];
-                // Gradient contribution from this output
-                // Each output is computed as: output_i = m_i * (normalized_direction_i · input)
-                // We need the input, but we can approximate the magnitude gradient
-                gradSum = NumOps.Add(gradSum, grad);
+                // Compute (normalized_direction_i · input_batch)
+                T dot = NumOps.Zero;
+                for (int j = 0; j < inputSize; j++)
+                {
+                    T term = NumOps.Multiply(_lastNormalizedDirection[i, j], _lastInputMatrix[b, j]);
+                    dot = NumOps.Add(dot, term);
+                }
+
+                // dL/dm_i contribution from this batch element
+                T gradContribution = NumOps.Multiply(gradMatrix[b, i], dot);
+                gradSum = NumOps.Add(gradSum, gradContribution);
             }
             _magnitudeGradient[i] = gradSum;
         }
@@ -762,6 +767,7 @@ public class DoRAAdapter<T> : LoRAAdapterBase<T>
         _baseLayer.ResetState();
         _loraLayer.ResetState();
         _lastNormalizedDirection = null;
+        _lastInputMatrix = null;
         _magnitudeGradient = null;
     }
 }
