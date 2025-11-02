@@ -162,18 +162,22 @@ public class DVoRAAdapter<T> : LoRAAdapterBase<T>
     /// Gets the total number of trainable parameters.
     /// </summary>
     /// <remarks>
-    /// DVoRA parameters = magnitude (outputSize) + d_scale (outputSize) + b_scale (rank).
+    /// DVoRA parameters = base (if unfrozen) + LoRA layer + magnitude (outputSize) + d_scale (outputSize) + b_scale (rank).
     /// This is only slightly more than VeRA (adds magnitude vector) but much fewer than DoRA (no full LoRA matrices).
+    /// Handles pre-initialization state by using fallback values when fields are null.
     /// </remarks>
     public override int ParameterCount
     {
         get
         {
-            // No null checks - these vectors are always initialized in constructor
-            // If they're null, it's a programming error that should fail fast
-            int dvoraParams = _magnitude.Length + _scalingVectorD.Length + _scalingVectorB.Length;
-            int baseCount = (_baseLayer != null && !_freezeBaseLayer) ? _baseLayer.ParameterCount : 0;
-            return baseCount + dvoraParams;
+            // Guard against pre-initialization state when base class constructor calls this property
+            int baseCount = _freezeBaseLayer ? 0 : _baseLayer.ParameterCount;
+            int loraCount = _loraLayer?.ParameterCount ?? 0;
+            int outputSize = GetOutputShape()[0];
+            int magnitudeCount = _magnitude?.Length ?? outputSize;
+            int scalingDCount = _scalingVectorD?.Length ?? outputSize;
+            int scalingBCount = _scalingVectorB?.Length ?? Rank;
+            return baseCount + loraCount + magnitudeCount + scalingDCount + scalingBCount;
         }
     }
 
