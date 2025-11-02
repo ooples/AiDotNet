@@ -142,9 +142,10 @@ public class TiedLoRAAdapter<T> : LoRAAdapterBase<T>
         get
         {
             // Guard against being called during base class construction before initialization
-            if (!_isInitialized && _baseLayer == null)
+            if (!_isInitialized)
             {
-                return 1; // Return minimum safe value during construction
+                // During construction, delegate to base which computes full parameter count
+                return base.ParameterCount;
             }
 
             // Only the layer scaling factor is unique to this layer
@@ -250,11 +251,14 @@ public class TiedLoRAAdapter<T> : LoRAAdapterBase<T>
         _layerScaling = NumOps.One;
         _layerScalingGradient = NumOps.Zero;
 
-        // Update parameter vector
-        UpdateParametersFromScaling();
-
-        // Mark as initialized
+        // Mark as initialized so ParameterCount returns the reduced count
         _isInitialized = true;
+
+        // Reallocate Parameters to the reduced size (just scaling factor + base if not frozen)
+        Parameters = new Vector<T>(ParameterCount);
+
+        // Update parameter vector with the scaling factor
+        UpdateParametersFromScaling();
     }
 
     /// <summary>
