@@ -1,4 +1,4 @@
-using AiDotNet.NeuralNetworks.Layers;
+using AiDotNet.LoRA;
 
 namespace AiDotNet.Interfaces;
 

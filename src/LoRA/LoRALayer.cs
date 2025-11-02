@@ -1,4 +1,4 @@
-namespace AiDotNet.NeuralNetworks.Layers;
+namespace AiDotNet.LoRA;
 
 /// <summary>
 /// Implements Low-Rank Adaptation (LoRA) layer for parameter-efficient fine-tuning of neural networks.

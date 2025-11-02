@@ -1,5 +1,6 @@
 using AiDotNet.Enums;
 using AiDotNet.LinearAlgebra;
+using AiDotNet.LoRA;
 using AiDotNet.NeuralNetworks.Layers;
 using Xunit;
 
