@@ -842,4 +842,85 @@ public class HRAAdapter<T> : LoRAAdapterBase<T>
     {
         return new Dictionary<(int row, int col), T>(_sparseFullRankUpdates);
     }
+
+    /// <summary>
+    /// Gets all parameters including base, LoRA, and sparse full-rank parameters.
+    /// </summary>
+    /// <returns>Vector containing all trainable parameters.</returns>
+    public override Vector<T> GetParameters()
+    {
+        Vector<T> allParams = new Vector<T>(ParameterCount);
+        int idx = 0;
+
+        // Pack base layer parameters (if not frozen)
+        if (!_freezeBaseLayer)
+        {
+            Vector<T> baseParams = _baseLayer.GetParameters();
+            for (int i = 0; i < baseParams.Length; i++)
+            {
+                allParams[idx++] = baseParams[i];
+            }
+        }
+
+        // Pack LoRA layer parameters
+        Vector<T> loraParams = _loraLayer.GetParameters();
+        for (int i = 0; i < loraParams.Length; i++)
+        {
+            allParams[idx++] = loraParams[i];
+        }
+
+        // Pack sparse full-rank parameters
+        foreach (var kvp in _sparseFullRankUpdates)
+        {
+            allParams[idx++] = kvp.Value;
+        }
+
+        return allParams;
+    }
+
+    /// <summary>
+    /// Sets all parameters including base, LoRA, and sparse full-rank parameters.
+    /// </summary>
+    /// <param name="parameters">Vector containing all parameters to set.</param>
+    public override void SetParameters(Vector<T> parameters)
+    {
+        if (parameters.Length != ParameterCount)
+        {
+            throw new ArgumentException($"Expected {ParameterCount} parameters, got {parameters.Length}", nameof(parameters));
+        }
+
+        int idx = 0;
+
+        // Unpack base layer parameters (if not frozen)
+        if (!_freezeBaseLayer)
+        {
+            int baseParamCount = _baseLayer.ParameterCount;
+            Vector<T> baseParams = new Vector<T>(baseParamCount);
+            for (int i = 0; i < baseParamCount; i++)
+            {
+                baseParams[i] = parameters[idx++];
+            }
+            _baseLayer.SetParameters(baseParams);
+        }
+
+        // Unpack LoRA layer parameters
+        int loraParamCount = _loraLayer.ParameterCount;
+        Vector<T> loraParams = new Vector<T>(loraParamCount);
+        for (int i = 0; i < loraParamCount; i++)
+        {
+            loraParams[i] = parameters[idx++];
+        }
+        _loraLayer.SetParameters(loraParams);
+
+        // Unpack sparse full-rank parameters
+        // Restore the same keys that exist in the dictionary
+        var keys = new List<(int row, int col)>(_sparseFullRankUpdates.Keys);
+        foreach (var key in keys)
+        {
+            _sparseFullRankUpdates[key] = parameters[idx++];
+        }
+
+        // Update the unified Parameters vector
+        Parameters = parameters.Clone();
+    }
 }
