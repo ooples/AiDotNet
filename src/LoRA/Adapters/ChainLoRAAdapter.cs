@@ -560,11 +560,8 @@ public class ChainLoRAAdapter<T> : LoRAAdapterBase<T>
             // Note: Biases remain unchanged (indices weightCount to end)
         }
 
-        // Create a new dense layer with merged parameters
-        DenseLayer<T> mergedLayer = new DenseLayer<T>(inputSize, outputSize, (IActivationFunction<T>?)null);
-        mergedLayer.SetParameters(mergedParams);
-
-        return mergedLayer;
+        // Use helper method to clone base layer and preserve activation function
+        return CreateMergedLayerWithClone(mergedParams);
     }
 
     /// <summary>

@@ -655,11 +655,8 @@ public class XLoRAAdapter<T> : LoRAAdapterBase<T>
             }
         }
 
-        // Create a new dense layer with merged parameters
-        DenseLayer<T> mergedLayer = new DenseLayer<T>(inputSize, outputSize, (IActivationFunction<T>?)null);
-        mergedLayer.SetParameters(mergedParams);
-
-        return mergedLayer;
+        // Use helper method to clone base layer and preserve activation function
+        return CreateMergedLayerWithClone(mergedParams);
     }
 
     /// <summary>
