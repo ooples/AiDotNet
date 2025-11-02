@@ -305,6 +305,38 @@ public class ChainLoRAAdapter<T> : LoRAAdapterBase<T>
     }
 
     /// <summary>
+    /// Gets the total number of parameters in the chain (base layer + all unmerged adapters).
+    /// </summary>
+    /// <remarks>
+    /// This count includes parameters from the base layer (if not frozen) plus all unmerged adapters in the chain.
+    /// Merged adapters don't contribute to the parameter count since they've been absorbed into the base weights.
+    /// </remarks>
+    public override int ParameterCount
+    {
+        get
+        {
+            int count = 0;
+
+            // Add base layer parameters if not frozen
+            if (!_freezeBaseLayer)
+            {
+                count += _baseLayer.ParameterCount;
+            }
+
+            // Add unmerged adapter parameters
+            for (int i = 0; i < _chainLength; i++)
+            {
+                if (!_mergedStatus[i])
+                {
+                    count += _adapterChain[i].ParameterCount;
+                }
+            }
+
+            return count;
+        }
+    }
+
+    /// <summary>
     /// Gets the number of adapters that are still trainable (not merged).
     /// </summary>
     /// <returns>Count of unmerged adapters.</returns>
@@ -385,16 +417,15 @@ public class ChainLoRAAdapter<T> : LoRAAdapterBase<T>
             }
         }
 
-        // Backward through base layer if not frozen
-        if (!_freezeBaseLayer)
-        {
-            Tensor<T> baseInputGrad = _baseLayer.Backward(outputGradient);
+        // ALWAYS backward through base layer to get input gradients
+        // Even when frozen, we need the base layer's Jacobian to propagate gradients to input
+        // Freezing only prevents parameter updates, not gradient computation
+        Tensor<T> baseInputGrad = _baseLayer.Backward(outputGradient);
 
-            // Accumulate base layer gradients
-            for (int j = 0; j < inputGrad.Length; j++)
-            {
-                inputGrad[j] = NumOps.Add(inputGrad[j], baseInputGrad[j]);
-            }
+        // Accumulate base layer gradients
+        for (int j = 0; j < inputGrad.Length; j++)
+        {
+            inputGrad[j] = NumOps.Add(inputGrad[j], baseInputGrad[j]);
         }
 
         // Update parameter gradients

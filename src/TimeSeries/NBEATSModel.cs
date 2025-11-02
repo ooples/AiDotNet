@@ -203,59 +203,18 @@ public class NBEATSModel<T> : TimeSeriesModelBase<T>
     /// </remarks>
     protected override void TrainCore(Matrix<T> x, Vector<T> y)
     {
-        // For simplicity, we'll implement a basic training loop
-        // A full implementation would use more sophisticated optimization
-
-        int numSamples = x.Rows;
-
-        // Simple gradient descent training for demonstration
-        for (int epoch = 0; epoch < _options.Epochs; epoch++)
-        {
-            T totalLoss = _numOps.Zero;
-
-            // Process each sample
-            for (int sampleIdx = 0; sampleIdx < numSamples; sampleIdx++)
-            {
-                Vector<T> input = x.GetRow(sampleIdx);
-
-                // Forward pass through all blocks
-                Vector<T> residual = input.Clone();
-                Vector<T> aggregatedForecast = new Vector<T>(_options.ForecastHorizon);
-
-                for (int blockIdx = 0; blockIdx < _blocks.Count; blockIdx++)
-                {
-                    var (backcast, forecast) = _blocks[blockIdx].Forward(residual);
-
-                    // Update residual for next block
-                    for (int i = 0; i < residual.Length; i++)
-                    {
-                        residual[i] = _numOps.Subtract(residual[i], backcast[i]);
-                    }
-
-                    // Accumulate forecast
-                    for (int i = 0; i < aggregatedForecast.Length; i++)
-                    {
-                        aggregatedForecast[i] = _numOps.Add(aggregatedForecast[i], forecast[i]);
-                    }
-                }
-
-                // Calculate loss (simplified - just the first forecast step for now)
-                T target = y[sampleIdx];
-                T prediction = aggregatedForecast[0];
-                T error = _numOps.Subtract(prediction, target);
-                T loss = _numOps.Multiply(error, error);
-                totalLoss = _numOps.Add(totalLoss, loss);
-            }
-
-            // Average loss for this epoch
-            T avgLoss = _numOps.Divide(totalLoss, _numOps.FromDouble(numSamples));
-
-            // TODO: Add progress callback/event for training progress
-            // Libraries should not write directly to console
-        }
-
-        // Store the final parameters
-        ModelParameters = GetParameters();
+        throw new NotImplementedException(
+            "N-BEATS training requires backpropagation through the hierarchical block architecture, which is not yet implemented.\n\n" +
+            "Required implementation:\n" +
+            "1. NBEATSBlock.Backward() method for gradient computation through FC layers and basis expansion\n" +
+            "2. Gradient computation through polynomial/Fourier basis functions\n" +
+            "3. Parameter updates using learning rate and optimizer (Adam/SGD)\n" +
+            "4. Proper gradient flow through residual connections between blocks\n" +
+            "5. Backpropagation through the hierarchical stack structure\n\n" +
+            "The current code only computes forward passes and loss but never updates parameters, " +
+            "meaning the model would not learn from training data.\n\n" +
+            "TODO: Implement full N-BEATS backpropagation following the paper's training procedure, " +
+            "or integrate with a gradient-free optimizer for parameter optimization.");
     }
 
     /// <summary>

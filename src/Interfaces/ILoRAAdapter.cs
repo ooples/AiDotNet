@@ -1,3 +1,5 @@
+using AiDotNet.NeuralNetworks.Layers;
+
 namespace AiDotNet.Interfaces;
 
 /// <summary>

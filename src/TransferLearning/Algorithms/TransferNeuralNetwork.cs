@@ -46,6 +46,11 @@ public class TransferNeuralNetwork<T> : TransferLearningBase<T, Matrix<T>, Vecto
     /// <summary>
     /// Transfers a Neural Network model to a target domain with a different feature space.
     /// </summary>
+    /// <returns>
+    /// A model trained in the mapped source feature space. <b>IMPORTANT:</b> When using the returned model
+    /// for predictions, input data must first be mapped to the source feature space using the same
+    /// FeatureMapper: <c>mappedData = FeatureMapper.MapToSource(newData, sourceFeatures)</c>
+    /// </returns>
     /// <remarks>
     /// <para>
     /// This method performs cross-domain transfer when source and target domains have different
@@ -56,6 +61,10 @@ public class TransferNeuralNetwork<T> : TransferLearningBase<T, Matrix<T>, Vecto
     /// 1. Train the feature mapper (must be pre-trained)
     /// 2. Perform optimal knowledge distillation (uses model predictions on mapped data)
     /// 3. Validate feature space compatibility
+    /// </para>
+    /// <para>
+    /// <b>CRITICAL:</b> The returned model operates in the source feature space, not the target feature space.
+    /// All predictions must be made on data mapped to the source space via FeatureMapper.MapToSource().
     /// </para>
     /// <para>
     /// <b>Recommendation:</b> For best results, use the public Transfer() method that accepts
@@ -101,10 +110,11 @@ public class TransferNeuralNetwork<T> : TransferLearningBase<T, Matrix<T>, Vecto
         // trueWeight of 0.7 means combinedLabels = 0.7 * trueLabels + 0.3 * softLabels
         Vector<T> combinedLabels = CombineLabels(softLabels, targetLabels, 0.7);
 
-        // Create and train a new model on the target domain
-        // Use original targetData (not mapped) since the model should learn in target feature space
+        // Create and train a new model on the mapped target domain
+        // CRITICAL: Must train on mappedTargetData (not targetData) to match source model's input dimensions
+        // The sourceModel was trained with sourceFeatures dimensions, so the copied model expects the same
         var targetModel = sourceModel.DeepCopy();
-        targetModel.Train(targetData, combinedLabels);
+        targetModel.Train(mappedTargetData, combinedLabels);
 
         return targetModel;
     }
