@@ -230,14 +230,12 @@ public class AdaLoRAAdapter<T> : LoRAAdapterBase<T>
         // Forward through base layer
         Tensor<T> baseOutput = _baseLayer.Forward(input);
 
-        // Forward through LoRA layer (it will use all components, but we'll mask based on importance)
+        // Forward through LoRA layer with pruned components
+        // The LoRA layer matrices have been pruned by PruneRank() - zeroing out low-importance components
+        // So this Forward call only uses the top _currentRank components (others contribute zero)
         Tensor<T> loraOutput = _loraLayer.Forward(input);
 
-        // If current rank < max rank, we need to mask the output
-        // This is implicitly handled by the pruned matrices in the LoRA layer
-        // For simplicity, we use the LoRA output as-is (pruning happens in UpdateParameters)
-
-        // Sum the outputs
+        // Sum the outputs (pruning is already applied via zeroed matrix elements)
         Tensor<T> result = new Tensor<T>(baseOutput.Shape);
         for (int i = 0; i < baseOutput.Length; i++)
         {
