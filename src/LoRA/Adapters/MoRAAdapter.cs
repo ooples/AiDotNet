@@ -200,6 +200,10 @@ public class MoRAAdapter<T> : LoRAAdapterBase<T>
 
         _compressionMatrix = GenerateOrthogonalMatrix(dimension, _squareRank);
         _decompressionMatrix = _compressionMatrix.Transpose();
+
+        // CRITICAL: Reallocate Parameters and ParameterGradients now that _squareRank is set
+        // The base constructor allocated them when _squareRank was 0, creating zero-length buffers
+        RebuildParameterSnapshot();
     }
 
     private void InitializeMatrixM()
@@ -214,6 +218,42 @@ public class MoRAAdapter<T> : LoRAAdapterBase<T>
                 double u2 = Random.NextDouble();
                 double randStdNormal = Math.Sqrt(-2.0 * Math.Log(u1)) * Math.Sin(2.0 * Math.PI * u2);
                 _matrixM[i, j] = NumOps.Multiply(NumOps.FromDouble(randStdNormal), stddev);
+            }
+        }
+    }
+
+    /// <summary>
+    /// Reallocates and repopulates the Parameters and ParameterGradients vectors.
+    /// </summary>
+    /// <remarks>
+    /// Called after _squareRank and _matrixM are initialized to fix the zero-length
+    /// buffers allocated by the base constructor when _squareRank was still 0.
+    /// This ensures ParameterCount matches the actual Parameters buffer length.
+    /// </remarks>
+    private void RebuildParameterSnapshot()
+    {
+        int paramCount = ParameterCount;
+        Parameters = new Vector<T>(paramCount);
+        ParameterGradients = new Vector<T>(paramCount);
+
+        int idx = 0;
+
+        // Pack base layer parameters if not frozen
+        if (!_freezeBaseLayer)
+        {
+            Vector<T> baseParams = _baseLayer.GetParameters();
+            for (int i = 0; i < baseParams.Length; i++)
+            {
+                Parameters[idx++] = baseParams[i];
+            }
+        }
+
+        // Pack _matrixM parameters (flattened row-major)
+        for (int i = 0; i < _matrixM.Rows; i++)
+        {
+            for (int j = 0; j < _matrixM.Columns; j++)
+            {
+                Parameters[idx++] = _matrixM[i, j];
             }
         }
     }
