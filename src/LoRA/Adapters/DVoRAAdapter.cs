@@ -495,6 +495,11 @@ public class DVoRAAdapter<T> : LoRAAdapterBase<T>
     {
         _lastInput = input.Clone();
 
+        if (!_freezeBaseLayer)
+        {
+            _baseLayer.Forward(input);
+        }
+
         // Get base layer parameters and extract weights
         Vector<T> baseParams = _baseLayer.GetParameters();
         int inputSize = GetInputShape()[0];
