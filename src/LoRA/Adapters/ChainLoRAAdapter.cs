@@ -120,6 +120,16 @@ public class ChainLoRAAdapter<T> : LoRAAdapterBase<T>
     private readonly int _chainLength;
 
     /// <summary>
+    /// Cached parameter count reflecting current chain state.
+    /// </summary>
+    /// <remarks>
+    /// This field is updated whenever adapters are merged/unmerged to avoid
+    /// recomputing the count on every access and to provide a stable value
+    /// during base class construction before the chain is fully initialized.
+    /// </remarks>
+    private int _currentParameterCount;
+
+    /// <summary>
     /// Gets the total number of adapters in the chain.
     /// </summary>
     /// <remarks>
@@ -310,29 +320,35 @@ public class ChainLoRAAdapter<T> : LoRAAdapterBase<T>
     /// <remarks>
     /// This count includes parameters from the base layer (if not frozen) plus all unmerged adapters in the chain.
     /// Merged adapters don't contribute to the parameter count since they've been absorbed into the base weights.
+    /// Returns the cached _currentParameterCount once the chain is initialized, or computes it on-the-fly
+    /// during construction to handle base class initialization.
     /// </remarks>
     public override int ParameterCount
     {
         get
         {
-            int count = 0;
-
-            // Add base layer parameters if not frozen
-            if (!_freezeBaseLayer)
+            // If chain is not yet initialized (during base construction), compute on-the-fly
+            if (_adapterChain == null || _currentParameterCount == 0)
             {
-                count += _baseLayer.ParameterCount;
-            }
+                int count = 0;
 
-            // Add unmerged adapter parameters
-            for (int i = 0; i < _chainLength; i++)
-            {
-                if (!_mergedStatus[i])
+                // Add base layer parameters if not frozen and baseLayer exists
+                if (_baseLayer != null && !_freezeBaseLayer)
                 {
-                    count += _adapterChain[i].ParameterCount;
+                    count += _baseLayer.ParameterCount;
                 }
+
+                // Add LoRA layer parameters if it exists
+                if (_loraLayer != null)
+                {
+                    count += _loraLayer.ParameterCount;
+                }
+
+                return count;
             }
 
-            return count;
+            // Otherwise return cached value
+            return _currentParameterCount;
         }
     }
 
@@ -556,6 +572,10 @@ public class ChainLoRAAdapter<T> : LoRAAdapterBase<T>
             }
         }
 
+        // Update cached parameter count
+        _currentParameterCount = count;
+
+        // Reallocate parameter vectors with new size
         Parameters = new Vector<T>(count);
         ParameterGradients = new Vector<T>(count);
     }

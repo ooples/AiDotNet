@@ -94,6 +94,15 @@ public class RoSAAdapter<T> : LoRAAdapterBase<T>
     private Matrix<T>? _sparseGradients;
 
     /// <summary>
+    /// Cached input matrix from forward pass, needed for computing sparse weight gradients.
+    /// </summary>
+    /// <remarks>
+    /// Stores the input activations in matrix form [batchSize, inputSize] to enable proper
+    /// gradient computation: dL/dW_sparse[i,j] = sum_batch(gradMatrix[b,i] * input[b,j]) / batchSize.
+    /// </remarks>
+    private Matrix<T>? _cachedInputMatrix;
+
+    /// <summary>
     /// Threshold for magnitude-based pruning of sparse weights.
     /// Weights with magnitude below this threshold are set to zero.
     /// </summary>
@@ -153,9 +162,9 @@ public class RoSAAdapter<T> : LoRAAdapterBase<T>
     {
         get
         {
-            int baseCount = _freezeBaseLayer ? 0 : _baseLayer.ParameterCount;
-            int loraCount = _loraLayer.ParameterCount;
-            int sparseCount = _sparseWeights.Rows * _sparseWeights.Columns;
+            int baseCount = (_baseLayer != null && !_freezeBaseLayer) ? _baseLayer.ParameterCount : 0;
+            int loraCount = _loraLayer != null ? _loraLayer.ParameterCount : 0;
+            int sparseCount = _sparseWeights != null ? (_sparseWeights.Rows * _sparseWeights.Columns) : 0;
             return baseCount + loraCount + sparseCount;
         }
     }
@@ -426,6 +435,9 @@ public class RoSAAdapter<T> : LoRAAdapterBase<T>
             }
         }
 
+        // Cache input matrix for gradient computation in backward pass
+        _cachedInputMatrix = inputMatrix.Clone();
+
         // Multiply by sparse weights: [batchSize, inputSize] @ [inputSize, outputSize]
         Matrix<T> sparseOutputMatrix = inputMatrix.Multiply(_sparseWeights.Transpose());
 
@@ -503,12 +515,16 @@ public class RoSAAdapter<T> : LoRAAdapterBase<T>
             }
         }
 
-        // Get input from base layer (we'll need to store this in a more complete implementation)
-        // For now, we'll compute sparse weight gradients from the output gradient
-        // In practice, you'd cache the input from forward pass
+        // Compute sparse weight gradients using cached input from forward pass
+        // Formula: dL/dW_sparse[i,j] = sum_over_batch(gradMatrix[b,i] * input[b,j]) / batchSize
+        if (_cachedInputMatrix == null)
+        {
+            throw new InvalidOperationException("Forward pass must be called before backward pass");
+        }
+
         _sparseGradients = new Matrix<T>(outputSize, inputSize);
 
-        // Simplified gradient computation (assumes gradients are averaged across batch)
+        // Proper gradient computation with input activation
         for (int i = 0; i < outputSize; i++)
         {
             for (int j = 0; j < inputSize; j++)
@@ -516,7 +532,9 @@ public class RoSAAdapter<T> : LoRAAdapterBase<T>
                 T gradSum = NumOps.Zero;
                 for (int b = 0; b < batchSize; b++)
                 {
-                    gradSum = NumOps.Add(gradSum, gradMatrix[b, i]);
+                    // Multiply output gradient by input activation
+                    T term = NumOps.Multiply(gradMatrix[b, i], _cachedInputMatrix[b, j]);
+                    gradSum = NumOps.Add(gradSum, term);
                 }
                 // Average over batch
                 _sparseGradients[i, j] = NumOps.Divide(gradSum, NumOps.FromDouble(batchSize));
@@ -546,6 +564,40 @@ public class RoSAAdapter<T> : LoRAAdapterBase<T>
             T sum = NumOps.Add(loraInputGrad[i], baseInputGrad[i]);
             sum = NumOps.Add(sum, sparseInputGrad[i]);
             inputGrad[i] = sum;
+        }
+
+        // 6. Pack parameter gradients for optimizer
+        // Order: [base_grads (if not frozen) | lora_grads | sparse_grads]
+        ParameterGradients = new Vector<T>(ParameterCount);
+        int gradIdx = 0;
+
+        // Pack base layer gradients (if not frozen)
+        if (!_freezeBaseLayer)
+        {
+            Vector<T> baseGrads = _baseLayer.GetParameterGradients();
+            for (int i = 0; i < baseGrads.Length; i++)
+            {
+                ParameterGradients[gradIdx++] = baseGrads[i];
+            }
+        }
+
+        // Pack LoRA gradients
+        Vector<T> loraGrads = _loraLayer.GetParameterGradients();
+        for (int i = 0; i < loraGrads.Length; i++)
+        {
+            ParameterGradients[gradIdx++] = loraGrads[i];
+        }
+
+        // Pack sparse weight gradients
+        if (_sparseGradients != null)
+        {
+            for (int i = 0; i < _sparseGradients.Rows; i++)
+            {
+                for (int j = 0; j < _sparseGradients.Columns; j++)
+                {
+                    ParameterGradients[gradIdx++] = _sparseGradients[i, j];
+                }
+            }
         }
 
         return inputGrad;
@@ -801,6 +853,7 @@ public class RoSAAdapter<T> : LoRAAdapterBase<T>
         _baseLayer.ResetState();
         _loraLayer.ResetState();
         _sparseGradients = null;
+        _cachedInputMatrix = null;
     }
 }
 

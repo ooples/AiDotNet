@@ -377,7 +377,14 @@ public class SLoRAAdapter<T> : LoRAAdapterBase<T>
         // Evict if cache is full
         while (_loadedAdapters.Count >= _maxLoadedAdapters)
         {
-            EvictLRUAdapter();
+            if (!EvictLRUAdapter())
+            {
+                // All loaded adapters are pinned (have active references)
+                throw new InvalidOperationException(
+                    $"Cannot load adapter '{adapterId}': cache is full ({_loadedAdapters.Count}/{_maxLoadedAdapters}) " +
+                    "and all loaded adapters are currently in use (pinned with active references). " +
+                    "Consider increasing maxLoadedAdapters or releasing adapter references.");
+            }
         }
 
         // Load adapter into cache
@@ -389,6 +396,7 @@ public class SLoRAAdapter<T> : LoRAAdapterBase<T>
     /// <summary>
     /// Evicts the least recently used adapter from the loaded cache.
     /// </summary>
+    /// <returns>True if an adapter was evicted, false if no adapter could be evicted.</returns>
     /// <remarks>
     /// <para>
     /// This implements S-LoRA's LRU eviction policy for memory management.
@@ -418,11 +426,11 @@ public class SLoRAAdapter<T> : LoRAAdapterBase<T>
     /// System automatically adapts to workload patterns!
     /// </para>
     /// </remarks>
-    private void EvictLRUAdapter()
+    private bool EvictLRUAdapter()
     {
         if (_loadedAdapters.Count == 0)
         {
-            return;
+            return false;
         }
 
         // Find LRU adapter that's not actively in use
@@ -444,12 +452,16 @@ public class SLoRAAdapter<T> : LoRAAdapterBase<T>
             }
         }
 
-        // Evict the LRU adapter
+        // Evict the LRU adapter if found
         if (lruEntry != null)
         {
             lruEntry.IsLoaded = false;
             _loadedAdapters.Remove(lruEntry.Id);
+            return true;
         }
+
+        // No adapter could be evicted (all are pinned with active references)
+        return false;
     }
 
     /// <summary>

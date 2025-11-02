@@ -404,8 +404,63 @@ public class AdaLoRAAdapter<T> : LoRAAdapterBase<T>
         // Only prune if we would actually reduce rank
         if (componentsToKeep < _currentRank)
         {
-            // The actual pruning is implicit - we just update currentRank
-            // The importance scores already reflect which components are important
+            // Determine which rank indices to keep (top components by importance)
+            var keepIndices = new HashSet<int>();
+            for (int i = 0; i < componentsToKeep; i++)
+            {
+                keepIndices.Add(importanceList[i].index);
+            }
+
+            // Zero out pruned components in LoRA matrices
+            // Get matrices A and B from LoRA layer
+            Matrix<T> matrixA = _loraLayer.GetMatrixA();
+            Matrix<T> matrixB = _loraLayer.GetMatrixB();
+
+            // Zero columns of A and rows of B for pruned rank components
+            for (int r = 0; r < _maxRank; r++)
+            {
+                if (!keepIndices.Contains(r))
+                {
+                    // Zero column r of matrix A [inputSize, rank]
+                    for (int i = 0; i < matrixA.Rows; i++)
+                    {
+                        matrixA[i, r] = NumOps.Zero;
+                    }
+
+                    // Zero row r of matrix B [rank, outputSize]
+                    for (int j = 0; j < matrixB.Columns; j++)
+                    {
+                        matrixB[r, j] = NumOps.Zero;
+                    }
+                }
+            }
+
+            // Update LoRA layer parameters with zeroed matrices
+            // Note: LoRALayer.SetParameters expects flattened A then B
+            Vector<T> loraParams = new Vector<T>(_loraLayer.ParameterCount);
+            int idx = 0;
+
+            // Pack matrix A
+            for (int i = 0; i < matrixA.Rows; i++)
+            {
+                for (int j = 0; j < matrixA.Columns; j++)
+                {
+                    loraParams[idx++] = matrixA[i, j];
+                }
+            }
+
+            // Pack matrix B
+            for (int i = 0; i < matrixB.Rows; i++)
+            {
+                for (int j = 0; j < matrixB.Columns; j++)
+                {
+                    loraParams[idx++] = matrixB[i, j];
+                }
+            }
+
+            _loraLayer.SetParameters(loraParams);
+
+            // Update current rank
             _currentRank = componentsToKeep;
 
             // Reorder importance scores to keep only the top components

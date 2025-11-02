@@ -98,9 +98,9 @@ public class DoRAAdapter<T> : LoRAAdapterBase<T>
     {
         get
         {
-            int baseCount = _freezeBaseLayer ? 0 : _baseLayer.ParameterCount;
-            int loraCount = _loraLayer.ParameterCount;
-            int magnitudeCount = _magnitude.Length;
+            int baseCount = (_baseLayer != null && !_freezeBaseLayer) ? _baseLayer.ParameterCount : 0;
+            int loraCount = _loraLayer != null ? _loraLayer.ParameterCount : 0;
+            int magnitudeCount = _magnitude != null ? _magnitude.Length : 0;
             return baseCount + loraCount + magnitudeCount;
         }
     }
