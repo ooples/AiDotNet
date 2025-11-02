@@ -1,3 +1,4 @@
+using System;
 using AiDotNet.Interfaces;
 using AiDotNet.LoRA.Adapters;
 using AiDotNet.NeuralNetworks.Layers;
@@ -5,14 +6,24 @@ using AiDotNet.NeuralNetworks.Layers;
 namespace AiDotNet.LoRA;
 
 /// <summary>
-/// Default LoRA configuration that applies LoRA to Dense and FullyConnected layers.
+/// Default LoRA configuration that applies LoRA to all layers with trainable weight matrices.
 /// </summary>
 /// <typeparam name="T">The numeric type used for calculations, typically float or double.</typeparam>
 /// <remarks>
 /// <para>
-/// This configuration implements a simple strategy: wrap all DenseLayer and FullyConnectedLayer
-/// instances with StandardLoRAAdapter (the generic LoRA implementation), and leave all other layer
-/// types unchanged. This is the most common use case for LoRA in neural networks.
+/// This configuration implements an intelligent strategy: wrap all layers that have trainable
+/// weight matrices with StandardLoRAAdapter, and leave utility layers (activation, pooling, etc.)
+/// unchanged. This maximizes the benefits of LoRA across all applicable layer types.
+/// </para>
+/// <para>
+/// <b>Supported Layer Types (30+ layer types):</b>
+/// - Dense/Linear layers (Dense, FullyConnected, FeedForward)
+/// - Convolutional layers (all Conv variants including depthwise, separable, dilated, etc.)
+/// - Recurrent layers (LSTM, GRU, ConvLSTM, Bidirectional)
+/// - Attention layers (Attention, MultiHeadAttention, SelfAttention)
+/// - Transformer layers (Encoder, Decoder)
+/// - Embedding layers (Embedding, PatchEmbedding)
+/// - Specialized layers (Highway, GatedLinearUnit, SqueezeAndExcitation, Capsule, CRF, etc.)
 /// </para>
 /// <para>
 /// <b>Available LoRA Variants:</b> AiDotNet includes 32 cutting-edge LoRA variants for different use cases:
@@ -49,8 +60,8 @@ namespace AiDotNet.LoRA;
 /// - LoRETTAAdapter: Tensor-train decomposition
 /// - NOLAAdapter: Random basis (20x compression)
 ///
-/// To use a specific variant, create a custom ILoRAConfiguration implementation or
-/// directly instantiate the desired adapter type.
+/// To use a specific variant, pass a factory function to the constructor.
+/// Example: new DefaultLoRAConfiguration&lt;double&gt;(rank: 8, adapterFactory: (layer, r, a, f) =&gt; new QLoRAAdapter&lt;double&gt;(layer, r, a, f))
 /// </para>
 /// <para><b>For Beginners:</b> This is a ready-to-use LoRA configuration for most common scenarios.
 ///
@@ -81,6 +92,8 @@ namespace AiDotNet.LoRA;
 /// </remarks>
 public class DefaultLoRAConfiguration<T> : ILoRAConfiguration<T>
 {
+    private readonly Type _adapterType;
+
     /// <summary>
     /// Gets the rank of the low-rank decomposition to use for adapted layers.
     /// </summary>
@@ -130,6 +143,7 @@ public class DefaultLoRAConfiguration<T> : ILoRAConfiguration<T>
     /// <param name="rank">The rank of the low-rank decomposition (must be positive).</param>
     /// <param name="alpha">The scaling factor for LoRA contributions (defaults to rank if negative).</param>
     /// <param name="freezeBaseLayer">Whether to freeze base layers during training (default: true).</param>
+    /// <param name="loraAdapter">Optional LoRA adapter to use. Defaults to StandardLoRAAdapter if null.</param>
     /// <exception cref="ArgumentException">Thrown when rank is not positive.</exception>
     /// <remarks>
     /// <para><b>For Beginners:</b> This creates a configuration that will be applied to your model's layers.
@@ -141,21 +155,28 @@ public class DefaultLoRAConfiguration<T> : ILoRAConfiguration<T>
     ///
     /// Example configurations:
     /// ```csharp
-    /// // Efficient configuration for limited resources
-    /// var efficient = new DefaultLoRAConfiguration&lt;double&gt;(rank: 4, alpha: 4, freezeBaseLayer: true);
+    /// // Standard LoRA (default)
+    /// var standard = new DefaultLoRAConfiguration&lt;double&gt;(rank: 8, alpha: 8);
     ///
-    /// // Balanced configuration (most common)
-    /// var balanced = new DefaultLoRAConfiguration&lt;double&gt;(rank: 8, alpha: 8, freezeBaseLayer: true);
+    /// // QLoRA for 4-bit quantization (75% memory reduction)
+    /// var qloraAdapter = new QLoRAAdapter&lt;double&gt;(null, 8, 8, true);
+    /// var qlora = new DefaultLoRAConfiguration&lt;double&gt;(rank: 8, alpha: 8, loraAdapter: qloraAdapter);
     ///
-    /// // Higher capacity configuration
-    /// var highCapacity = new DefaultLoRAConfiguration&lt;double&gt;(rank: 16, alpha: 16, freezeBaseLayer: true);
+    /// // DoRA for improved weight decomposition (+3.7% accuracy on LLaMA-7B)
+    /// var doraAdapter = new DoRAAdapter&lt;double&gt;(null, 8, 8, true);
+    /// var dora = new DefaultLoRAConfiguration&lt;double&gt;(rank: 8, alpha: 8, loraAdapter: doraAdapter);
     ///
-    /// // Full fine-tuning with LoRA structure (not frozen)
-    /// var fullFineTune = new DefaultLoRAConfiguration&lt;double&gt;(rank: 8, alpha: 8, freezeBaseLayer: false);
+    /// // VeRA for extreme parameter efficiency (10x fewer parameters)
+    /// var veraAdapter = new VeRAAdapter&lt;double&gt;(null, 8, 8, true);
+    /// var vera = new DefaultLoRAConfiguration&lt;double&gt;(rank: 8, alpha: 8, loraAdapter: veraAdapter);
     /// ```
     /// </para>
     /// </remarks>
-    public DefaultLoRAConfiguration(int rank, double alpha = -1, bool freezeBaseLayer = true)
+    public DefaultLoRAConfiguration(
+        int rank,
+        double alpha = -1,
+        bool freezeBaseLayer = true,
+        ILoRAAdapter<T>? loraAdapter = null)
     {
         if (rank <= 0)
         {
@@ -165,32 +186,46 @@ public class DefaultLoRAConfiguration<T> : ILoRAConfiguration<T>
         Rank = rank;
         Alpha = alpha;
         FreezeBaseLayer = freezeBaseLayer;
+        _adapterType = loraAdapter?.GetType() ?? typeof(StandardLoRAAdapter<T>);
     }
 
     /// <summary>
-    /// Applies LoRA adaptation to a layer if it's a Dense or FullyConnected layer.
+    /// Applies LoRA adaptation to layers with trainable weight matrices.
     /// </summary>
     /// <param name="layer">The layer to potentially adapt with LoRA.</param>
     /// <returns>
-    /// A StandardLoRAAdapter wrapping the layer if it's a DenseLayer or FullyConnectedLayer,
+    /// A StandardLoRAAdapter wrapping the layer if it has trainable weights,
     /// otherwise returns the original layer unchanged.
     /// </returns>
     /// <remarks>
     /// <para>
     /// This method examines the layer type and wraps it with StandardLoRAAdapter if it's
-    /// a Dense or FullyConnected layer. All other layer types pass through unchanged.
+    /// a layer type that benefits from LoRA adaptation (has trainable weight matrices).
+    /// </para>
+    /// <para><b>Supported Layer Types:</b>
+    /// - <b>Dense/Linear:</b> DenseLayer, FullyConnectedLayer, FeedForwardLayer
+    /// - <b>Convolutional:</b> ConvolutionalLayer, DeconvolutionalLayer, DepthwiseSeparableConvolutionalLayer,
+    ///   DilatedConvolutionalLayer, SeparableConvolutionalLayer, SubpixelConvolutionalLayer, GraphConvolutionalLayer
+    /// - <b>Recurrent:</b> LSTMLayer, GRULayer, RecurrentLayer, ConvLSTMLayer, BidirectionalLayer
+    /// - <b>Attention:</b> AttentionLayer, MultiHeadAttentionLayer, SelfAttentionLayer
+    /// - <b>Transformer:</b> TransformerEncoderLayer, TransformerDecoderLayer
+    /// - <b>Embedding:</b> EmbeddingLayer, PatchEmbeddingLayer
+    /// - <b>Specialized:</b> LocallyConnectedLayer, HighwayLayer, GatedLinearUnitLayer, SqueezeAndExcitationLayer
+    /// - <b>Advanced:</b> CapsuleLayer, PrimaryCapsuleLayer, DigitCapsuleLayer, ConditionalRandomFieldLayer
+    ///
+    /// <b>Excluded Layer Types</b> (no trainable weights or not suitable):
+    /// - Activation, Pooling, Dropout, Flatten, Reshape, Normalization, etc.
     /// </para>
     /// <para><b>For Beginners:</b> This method decides whether to add LoRA to each layer.
     ///
     /// Decision logic:
-    /// - If the layer is DenseLayer → Wrap it with StandardLoRAAdapter
-    /// - If the layer is FullyConnectedLayer → Wrap it with StandardLoRAAdapter
-    /// - If the layer is anything else → Return it unchanged
+    /// - If the layer has trainable weight matrices → Wrap it with StandardLoRAAdapter
+    /// - If the layer is just doing math operations (activation, pooling, etc.) → Return unchanged
     ///
-    /// This selective approach means:
-    /// - You get parameter-efficient fine-tuning where it matters most (dense layers)
-    /// - Other layers (like convolutions or activations) work normally
-    /// - The model structure remains compatible with existing code
+    /// This intelligent approach means:
+    /// - LoRA is applied to all layers that can benefit from it
+    /// - Works with Dense, Convolutional, Recurrent, Attention, and Transformer layers
+    /// - Utility layers (pooling, dropout, etc.) pass through unchanged
     ///
     /// Example:
     /// ```csharp
@@ -198,11 +233,19 @@ public class DefaultLoRAConfiguration<T> : ILoRAConfiguration<T>
     ///
     /// // Dense layer gets adapted
     /// var denseLayer = new DenseLayer&lt;double&gt;(100, 50);
-    /// var adaptedDense = config.ApplyLoRA(denseLayer); // Returns StandardLoRAAdapter
+    /// var adapted1 = config.ApplyLoRA(denseLayer); // Returns StandardLoRAAdapter
     ///
-    /// // Convolutional layer passes through unchanged
-    /// var convLayer = new Conv2DLayer&lt;double&gt;(...);
-    /// var unchanged = config.ApplyLoRA(convLayer); // Returns original convLayer
+    /// // Convolutional layer gets adapted
+    /// var convLayer = new ConvolutionalLayer&lt;double&gt;(...);
+    /// var adapted2 = config.ApplyLoRA(convLayer); // Returns StandardLoRAAdapter
+    ///
+    /// // Attention layer gets adapted
+    /// var attnLayer = new MultiHeadAttentionLayer&lt;double&gt;(...);
+    /// var adapted3 = config.ApplyLoRA(attnLayer); // Returns StandardLoRAAdapter
+    ///
+    /// // Pooling layer passes through (no weights to adapt)
+    /// var poolLayer = new MaxPoolingLayer&lt;double&gt;(...);
+    /// var unchanged = config.ApplyLoRA(poolLayer); // Returns original poolLayer
     /// ```
     /// </para>
     /// </remarks>
@@ -213,14 +256,80 @@ public class DefaultLoRAConfiguration<T> : ILoRAConfiguration<T>
             throw new ArgumentNullException(nameof(layer));
         }
 
-        // Check if this is a Dense or FullyConnected layer
-        if (layer is DenseLayer<T> || layer is FullyConnectedLayer<T>)
+        // Check if this is a layer type that benefits from LoRA adaptation
+        // (layers with trainable weight matrices)
+
+        // Dense/Linear layers
+        if (layer is DenseLayer<T> || layer is FullyConnectedLayer<T> || layer is FeedForwardLayer<T>)
         {
-            // Wrap with StandardLoRAAdapter (the generic LoRA implementation)
-            return new StandardLoRAAdapter<T>(layer, Rank, Alpha, FreezeBaseLayer);
+            return CreateAdapter(layer);
         }
 
-        // Return other layer types unchanged
+        // Convolutional layers
+        if (layer is ConvolutionalLayer<T> || layer is DeconvolutionalLayer<T> ||
+            layer is DepthwiseSeparableConvolutionalLayer<T> || layer is DilatedConvolutionalLayer<T> ||
+            layer is SeparableConvolutionalLayer<T> || layer is SubpixelConvolutionalLayer<T>)
+        {
+            return CreateAdapter(layer);
+        }
+
+        // Recurrent layers (LSTM, GRU, etc.)
+        if (layer is LSTMLayer<T> || layer is GRULayer<T> || layer is RecurrentLayer<T> ||
+            layer is ConvLSTMLayer<T> || layer is BidirectionalLayer<T>)
+        {
+            return CreateAdapter(layer);
+        }
+
+        // Attention layers
+        if (layer is AttentionLayer<T> || layer is MultiHeadAttentionLayer<T> || layer is SelfAttentionLayer<T>)
+        {
+            return CreateAdapter(layer);
+        }
+
+        // Transformer layers
+        if (layer is TransformerEncoderLayer<T> || layer is TransformerDecoderLayer<T>)
+        {
+            return CreateAdapter(layer);
+        }
+
+        // Embedding layers
+        if (layer is EmbeddingLayer<T> || layer is PatchEmbeddingLayer<T>)
+        {
+            return CreateAdapter(layer);
+        }
+
+        // Specialized layers with trainable weights
+        if (layer is LocallyConnectedLayer<T> || layer is HighwayLayer<T> ||
+            layer is GatedLinearUnitLayer<T> || layer is SqueezeAndExcitationLayer<T> ||
+            layer is GraphConvolutionalLayer<T>)
+        {
+            return CreateAdapter(layer);
+        }
+
+        // Capsule layers
+        if (layer is CapsuleLayer<T> || layer is PrimaryCapsuleLayer<T> || layer is DigitCapsuleLayer<T>)
+        {
+            return CreateAdapter(layer);
+        }
+
+        // CRF and other advanced layers
+        if (layer is ConditionalRandomFieldLayer<T>)
+        {
+            return CreateAdapter(layer);
+        }
+
+        // Return layers without trainable weights unchanged
+        // (Activation, Pooling, Dropout, Flatten, Reshape, Normalization, etc.)
         return layer;
+    }
+
+    /// <summary>
+    /// Creates an instance of the configured LoRA adapter for the given layer.
+    /// </summary>
+    /// <param name="layer">The layer to wrap with a LoRA adapter.</param>
+    /// <returns>A new LoRA adapter wrapping the given layer.</returns>
+    private ILayer<T> CreateAdapter(ILayer<T> layer)
+    {
+        return (ILayer<T>)Activator.CreateInstance(_adapterType, layer, Rank, Alpha, FreezeBaseLayer)!;
     }
 }
