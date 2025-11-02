@@ -410,11 +410,11 @@ public class QALoRAAdapter<T> : LoRAAdapterBase<T>
         // Calculate number of groups
         int numGroups = (numParams + _groupSize - 1) / _groupSize; // Ceiling division
 
-        // Use signed quantization for symmetric range around zero
+        // Use signed quantization for asymmetric range (one more negative value)
         // For n-bit signed: range is -2^(n-1) to 2^(n-1)-1
         // e.g., 4-bit signed: -8 to 7, 8-bit signed: -128 to 127
         double maxQuantizedValue = Math.Pow(2.0, _quantizationBits - 1) - 1.0;
-        double minQuantizedValue = -maxQuantizedValue;
+        double minQuantizedValue = -Math.Pow(2.0, _quantizationBits - 1);
 
         // Process each group
         for (int g = 0; g < numGroups; g++)
