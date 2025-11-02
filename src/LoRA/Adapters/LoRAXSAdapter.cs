@@ -233,10 +233,28 @@ public class LoRAXSAdapter<T> : LoRAAdapterBase<T>
     /// Gets the total number of trainable parameters (only r² for the R matrix).
     /// </summary>
     /// <remarks>
-    /// LoRA-XS parameter count is rank² (r²), independent of the layer dimensions.
-    /// This is dramatically smaller than standard LoRA's 2 * rank * dimension.
+    /// <para>
+    /// CRITICAL: Returns full base LoRA layer parameter count to match base constructor expectations.
+    /// Even though only the R matrix (rank²) is trainable in LoRA-XS, the base constructor
+    /// allocates Parameters buffer based on this count and packs the underlying LoRA layer.
+    /// </para>
+    /// <para>
+    /// The actual trainable count (rank²) is much smaller, but ParameterCount must match
+    /// the buffer size allocated by the base constructor to prevent IndexOutOfRangeException.
+    /// </para>
     /// </remarks>
-    public override int ParameterCount => Rank * Rank;
+    public override int ParameterCount
+    {
+        get
+        {
+            int baseParams = (!_freezeBaseLayer && _baseLayer != null) ? _baseLayer.ParameterCount : 0;
+            // Compute underlying LoRA layer size: inputSize * rank + rank * outputSize
+            int inputSize = GetInputShape()[0];
+            int outputSize = GetOutputShape()[0];
+            int loraParams = inputSize * Rank + Rank * outputSize;
+            return baseParams + loraParams;
+        }
+    }
 
     /// <summary>
     /// Initializes a new LoRA-XS adapter wrapping an existing layer.
