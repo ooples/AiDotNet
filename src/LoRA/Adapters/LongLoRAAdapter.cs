@@ -486,68 +486,85 @@ public class LongLoRAAdapter<T> : LoRAAdapterBase<T>
         else if (shape.Length == 2)
         {
             // 2D tensor [batchSize, sequenceLength]: shift along sequence axis for each batch
+            // featureDim = 1 (each position is a scalar token)
             int batchSize = shape[0];
             int sequenceLength = shape[1];
+            int featureDim = 1;
 
-            T[] buffer = new T[groupSize];
+            T[] buffer = new T[groupSize * featureDim];
+            int actualGroupSize = Math.Min(groupSize, sequenceLength - groupStart);
 
+            // Process per batch to avoid cross-batch mixing
             for (int b = 0; b < batchSize; b++)
             {
-                // Copy group to buffer for this batch
-                for (int i = 0; i < groupSize; i++)
+                int batchOffset = b * sequenceLength;
+
+                // Copy token blocks (scalars) to buffer
+                for (int tokenIdx = 0; tokenIdx < actualGroupSize; tokenIdx++)
                 {
-                    int seqIdx = groupStart + i;
+                    int seqIdx = groupStart + tokenIdx;
                     if (seqIdx < sequenceLength)
                     {
-                        buffer[i] = tensor[b * sequenceLength + seqIdx];
+                        buffer[tokenIdx] = tensor[batchOffset + seqIdx];
                     }
                 }
 
-                // Write back with shift for this batch
-                for (int i = 0; i < groupSize; i++)
+                // Write back shifted token blocks
+                for (int tokenIdx = 0; tokenIdx < actualGroupSize; tokenIdx++)
                 {
-                    // Use actual group size for modulo to handle partial last groups correctly
-                    int actualGroupSize = Math.Min(groupSize, sequenceLength - groupStart);
-                    int seqIdx = groupStart + ((i + shiftAmount) % actualGroupSize);
+                    int newTokenIdx = (tokenIdx + shiftAmount) % actualGroupSize;
+                    int seqIdx = groupStart + newTokenIdx;
                     if (seqIdx < sequenceLength)
                     {
-                        tensor[b * sequenceLength + seqIdx] = buffer[i];
+                        tensor[batchOffset + seqIdx] = buffer[tokenIdx];
                     }
                 }
             }
         }
         else if (shape.Length == 3)
         {
-            // 3D tensor [batchSize, sequenceLength, featureDim]: shift along sequence axis
+            // 3D tensor [batchSize, sequenceLength, featureDim]: shift whole tokens (not scalars)
             int batchSize = shape[0];
             int sequenceLength = shape[1];
             int featureDim = shape[2];
 
-            T[] buffer = new T[groupSize];
+            // CRITICAL: Allocate buffer for whole tokens (groupSize tokens * featureDim per token)
+            // This ensures we shift entire feature vectors together, not individual scalars
+            T[] buffer = new T[groupSize * featureDim];
+            int actualGroupSize = Math.Min(groupSize, sequenceLength - groupStart);
 
+            // Process per batch to avoid cross-batch mixing
             for (int b = 0; b < batchSize; b++)
             {
-                for (int f = 0; f < featureDim; f++)
+                int batchOffset = b * sequenceLength * featureDim;
+
+                // Copy whole token blocks into buffer
+                for (int tokenIdx = 0; tokenIdx < actualGroupSize; tokenIdx++)
                 {
-                    // Copy group to buffer for this batch and feature
-                    for (int i = 0; i < groupSize; i++)
+                    int seqIdx = groupStart + tokenIdx;
+                    if (seqIdx < sequenceLength)
                     {
-                        int seqIdx = groupStart + i;
-                        if (seqIdx < sequenceLength)
+                        int tokenOffset = seqIdx * featureDim;
+                        // Copy entire feature vector (token) at once
+                        for (int f = 0; f < featureDim; f++)
                         {
-                            buffer[i] = tensor[b * sequenceLength * featureDim + seqIdx * featureDim + f];
+                            buffer[tokenIdx * featureDim + f] = tensor[batchOffset + tokenOffset + f];
                         }
                     }
+                }
 
-                    // Write back with shift for this batch and feature
-                    for (int i = 0; i < groupSize; i++)
+                // Write back shifted token blocks
+                for (int tokenIdx = 0; tokenIdx < actualGroupSize; tokenIdx++)
+                {
+                    int newTokenIdx = (tokenIdx + shiftAmount) % actualGroupSize;
+                    int seqIdx = groupStart + newTokenIdx;
+                    if (seqIdx < sequenceLength)
                     {
-                        // Use actual group size for modulo to handle partial last groups correctly
-                        int actualGroupSize = Math.Min(groupSize, sequenceLength - groupStart);
-                        int seqIdx = groupStart + ((i + shiftAmount) % actualGroupSize);
-                        if (seqIdx < sequenceLength)
+                        int tokenOffset = seqIdx * featureDim;
+                        // Write entire feature vector (token) at once
+                        for (int f = 0; f < featureDim; f++)
                         {
-                            tensor[b * sequenceLength * featureDim + seqIdx * featureDim + f] = buffer[i];
+                            tensor[batchOffset + tokenOffset + f] = buffer[tokenIdx * featureDim + f];
                         }
                     }
                 }
