@@ -777,11 +777,8 @@ public class VeRAAdapter<T> : LoRAAdapterBase<T>
             mergedParams[i] = baseParams[i];
         }
 
-        // Create merged layer (always return DenseLayer for consistency)
-        DenseLayer<T> mergedLayer = new DenseLayer<T>(inputSize, outputSize, (IActivationFunction<T>?)null);
-        mergedLayer.SetParameters(mergedParams);
-
-        return mergedLayer;
+        // Use helper method to clone base layer and preserve activation function
+        return CreateMergedLayerWithClone(mergedParams);
     }
 
     /// <summary>

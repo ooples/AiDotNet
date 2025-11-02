@@ -135,14 +135,7 @@ public class StandardLoRAAdapter<T> : LoRAAdapterBase<T>
             mergedParams[i] = baseParams[i];
         }
 
-        // Create a new dense layer with merged parameters
-        // NOTE: Cannot preserve activation function from base layer due to C# access restrictions:
-        // - LayerBase.ScalarActivation is protected and cannot be accessed from another instance (CS1540)
-        // - No public API to retrieve the activation function from ILayer<T>
-        // This is a known limitation - merged layer uses null activation (identity)
-        DenseLayer<T> mergedLayer = new DenseLayer<T>(inputSize, outputSize, (IActivationFunction<T>?)null);
-        mergedLayer.SetParameters(mergedParams);
-
-        return mergedLayer;
+        // Use helper method to clone base layer and preserve activation function
+        return CreateMergedLayerWithClone(mergedParams);
     }
 }
