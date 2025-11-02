@@ -319,56 +319,6 @@ public class LoHaAdapter<T> : LoRAAdapterBase<T>
         return new Tensor<T>(new[] { batchSize, outputSize }, deltaData);
     }
 
-    /// <summary>
-    /// Computes element-wise Hadamard product between a batch matrix and a weight matrix.
-    /// </summary>
-    /// <param name="batchMatrix">Matrix of shape [batchSize, size].</param>
-    /// <param name="weightMatrix">Matrix of shape [inputSize, outputSize] (broadcasted across batch).</param>
-    /// <returns>Hadamard product result of same shape as batchMatrix.</returns>
-    /// <remarks>
-    /// <para>
-    /// For LoHa, the Hadamard product is applied between the intermediate activations
-    /// (batchSize × outputSize) and the B matrix (inputSize × outputSize).
-    ///
-    /// Since the intermediate is [batch, output] and B is [input, output], we take the
-    /// element-wise product along the output dimension.
-    /// </para>
-    /// <para><b>For Beginners:</b> The Hadamard product is just element-wise multiplication.
-    /// For each position (i, j), multiply the corresponding elements: result[i,j] = a[i,j] * b[i,j]
-    ///
-    /// This is different from matrix multiplication, which sums over a dimension.
-    /// Hadamard product keeps dimensions the same and multiplies element-by-element.
-    /// </para>
-    /// </remarks>
-    private Matrix<T> HadamardProduct(Matrix<T> batchMatrix, Matrix<T> weightMatrix)
-    {
-        int batchSize = batchMatrix.Rows;
-        int outputSize = batchMatrix.Columns;
-
-        // For LoHa: batchMatrix is [batch, output], weightMatrix is [input, output]
-        // We broadcast weightMatrix across batch dimension and multiply element-wise along output
-        Matrix<T> result = new Matrix<T>(batchSize, outputSize);
-
-        for (int b = 0; b < batchSize; b++)
-        {
-            for (int o = 0; o < outputSize; o++)
-            {
-                // Since intermediate is already projected to output space,
-                // we multiply element-wise with the first row of B
-                // (This is a simplification; full LoHa may have different broadcasting)
-                T sum = NumOps.Zero;
-                for (int i = 0; i < weightMatrix.Rows; i++)
-                {
-                    sum = NumOps.Add(sum, weightMatrix[i, o]);
-                }
-                // Average across input dimension
-                T avg = NumOps.Divide(sum, NumOps.FromDouble(weightMatrix.Rows));
-                result[b, o] = NumOps.Multiply(batchMatrix[b, o], avg);
-            }
-        }
-
-        return result;
-    }
 
     /// <summary>
     /// Performs the backward pass through both layers, computing gradients for LoHa matrices.
@@ -482,8 +432,10 @@ public class LoHaAdapter<T> : LoRAAdapterBase<T>
                 }
             }
 
-            // Gradient for B[r]: dL/dB[r] = intermediate^T * gradOutput (with Hadamard consideration)
-            // For element-wise operations: dL/dB = dL/doutput ⊙ intermediate
+            // Gradient for B[r]: Chain rule for Hadamard product in weight space
+            // dL/dB[r][i,o] = sum_batch(dL/dy[b,o] * dy/dB[r][i,o])
+            // where dy[b,o]/dB[r][i,o] = input[b,i] * A[r][i,o]
+            // Therefore: dL/dB[r][i,o] = sum_batch(gradOutput[b,o] * input[b,i] * A[r][i,o])
             for (int i = 0; i < inputSize; i++)
             {
                 for (int o = 0; o < outputSize; o++)
@@ -491,15 +443,21 @@ public class LoHaAdapter<T> : LoRAAdapterBase<T>
                     T gradSum = NumOps.Zero;
                     for (int b = 0; b < batchSize; b++)
                     {
-                        // Compute contribution from this batch
-                        T contribution = NumOps.Multiply(gradMatrix[b, o], intermediate[b, o]);
+                        T inputVal = inputMatrix[b, i];
+                        T aVal = _matricesA[r][i, o];
+                        T outputGrad = gradMatrix[b, o];
+                        // dL/dB = gradOutput * input * A (all element-wise for this specific element)
+                        T contribution = NumOps.Multiply(NumOps.Multiply(outputGrad, inputVal), aVal);
                         gradSum = NumOps.Add(gradSum, contribution);
                     }
                     _matricesBGradient[r][i, o] = NumOps.Multiply(gradSum, _scaling);
                 }
             }
 
-            // Gradient for A[r]: dL/dA[r] = input^T * (gradOutput ⊙ B[r])
+            // Gradient for A[r]: Chain rule for Hadamard product in weight space
+            // dL/dA[r][i,o] = sum_batch(dL/dy[b,o] * dy/dA[r][i,o])
+            // where dy[b,o]/dA[r][i,o] = input[b,i] * B[r][i,o]
+            // Therefore: dL/dA[r][i,o] = sum_batch(gradOutput[b,o] * input[b,i] * B[r][i,o])
             for (int i = 0; i < inputSize; i++)
             {
                 for (int o = 0; o < outputSize; o++)
@@ -507,9 +465,11 @@ public class LoHaAdapter<T> : LoRAAdapterBase<T>
                     T gradSum = NumOps.Zero;
                     for (int b = 0; b < batchSize; b++)
                     {
-                        // Element-wise gradient with B
-                        T hadamardGrad = HadamardGradient(gradMatrix[b, o], _matricesB[r], o);
-                        T contribution = NumOps.Multiply(inputMatrix[b, i], hadamardGrad);
+                        T inputVal = inputMatrix[b, i];
+                        T bVal = _matricesB[r][i, o];
+                        T outputGrad = gradMatrix[b, o];
+                        // dL/dA = gradOutput * input * B (all element-wise for this specific element)
+                        T contribution = NumOps.Multiply(NumOps.Multiply(outputGrad, inputVal), bVal);
                         gradSum = NumOps.Add(gradSum, contribution);
                     }
                     _matricesAGradient[r][i, o] = NumOps.Multiply(gradSum, _scaling);
@@ -517,7 +477,9 @@ public class LoHaAdapter<T> : LoRAAdapterBase<T>
             }
 
             // Input gradient contribution from this rank
-            // dL/dinput = (gradOutput ⊙ B[r]) * A[r]^T
+            // dL/dinput[b,i] = sum_o(dL/dy[b,o] * dy/dinput[b,i])
+            // where dy[b,o]/dinput[b,i] = sum_r(A[r][i,o] * B[r][i,o]) = ΔW[i,o]
+            // Therefore: dL/dinput[b,i] = sum_o(gradOutput[b,o] * ΔW[i,o])
             for (int b = 0; b < batchSize; b++)
             {
                 for (int i = 0; i < inputSize; i++)
@@ -525,8 +487,9 @@ public class LoHaAdapter<T> : LoRAAdapterBase<T>
                     T gradSum = NumOps.Zero;
                     for (int o = 0; o < outputSize; o++)
                     {
-                        T hadamardGrad = HadamardGradient(gradMatrix[b, o], _matricesB[r], o);
-                        T contribution = NumOps.Multiply(hadamardGrad, _matricesA[r][i, o]);
+                        // For this specific rank r, contribution is gradOutput * (A[r] ⊙ B[r])
+                        T hadamardProduct = NumOps.Multiply(_matricesA[r][i, o], _matricesB[r][i, o]);
+                        T contribution = NumOps.Multiply(gradMatrix[b, o], hadamardProduct);
                         gradSum = NumOps.Add(gradSum, contribution);
                     }
                     T scaled = NumOps.Multiply(gradSum, _scaling);
@@ -549,34 +512,6 @@ public class LoHaAdapter<T> : LoRAAdapterBase<T>
         return new Tensor<T>(new[] { batchSize, inputSize }, inputGradData);
     }
 
-    /// <summary>
-    /// Computes the gradient for Hadamard product operation.
-    /// </summary>
-    /// <param name="outputGrad">Output gradient scalar.</param>
-    /// <param name="weightMatrix">Weight matrix B[r].</param>
-    /// <param name="outputIdx">Output dimension index.</param>
-    /// <returns>Gradient contribution from Hadamard product.</returns>
-    /// <remarks>
-    /// <para>
-    /// For Hadamard product f ⊙ g, the gradient is: d/df (f ⊙ g) = g
-    /// This method computes the gradient contribution from the weight matrix.
-    /// </para>
-    /// <para><b>For Beginners:</b> When you have element-wise multiplication z = x * y,
-    /// the gradient dL/dx = dL/dz * y. This method computes that for the Hadamard product.
-    /// </para>
-    /// </remarks>
-    private T HadamardGradient(T outputGrad, Matrix<T> weightMatrix, int outputIdx)
-    {
-        // For element-wise product, gradient is: dL/dinput = dL/doutput * weight
-        // Average the weight across input dimension
-        T sum = NumOps.Zero;
-        for (int i = 0; i < weightMatrix.Rows; i++)
-        {
-            sum = NumOps.Add(sum, weightMatrix[i, outputIdx]);
-        }
-        T avg = NumOps.Divide(sum, NumOps.FromDouble(weightMatrix.Rows));
-        return NumOps.Multiply(outputGrad, avg);
-    }
 
     /// <summary>
     /// Updates parameters using the specified learning rate.
