@@ -164,7 +164,11 @@ public class RoSAAdapter<T> : LoRAAdapterBase<T>
         {
             int baseCount = (_baseLayer != null && !_freezeBaseLayer) ? _baseLayer.ParameterCount : 0;
             int loraCount = _loraLayer != null ? _loraLayer.ParameterCount : 0;
-            int sparseCount = _sparseWeights != null ? (_sparseWeights.Rows * _sparseWeights.Columns) : 0;
+            // CRITICAL: Compute sparse count from layer dimensions when _sparseWeights is null
+            // Returning 0 causes base constructor to allocate too-small buffer
+            int sparseCount = _sparseWeights != null
+                ? (_sparseWeights.Rows * _sparseWeights.Columns)
+                : (GetOutputShape()[0] * GetInputShape()[0]);
             return baseCount + loraCount + sparseCount;
         }
     }
