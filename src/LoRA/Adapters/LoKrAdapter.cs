@@ -99,9 +99,16 @@ public class LoKrAdapter<T> : LoRAAdapterBase<T>
     private readonly (int p, int q) _dimsB;
 
     /// <summary>
-    /// Gets the total number of trainable parameters (elements in A and B matrices).
+    /// Gets the total number of trainable parameters (elements in A and B matrices, plus base layer if not frozen).
     /// </summary>
-    public override int ParameterCount => (_matrixA.Rows * _matrixA.Columns) + (_matrixB.Rows * _matrixB.Columns);
+    public override int ParameterCount
+    {
+        get
+        {
+            int lokrParams = (_matrixA.Rows * _matrixA.Columns) + (_matrixB.Rows * _matrixB.Columns);
+            return _freezeBaseLayer ? lokrParams : (_baseLayer.ParameterCount + lokrParams);
+        }
+    }
 
     /// <summary>
     /// Initializes a new LoKr adapter wrapping an existing layer.
@@ -657,7 +664,30 @@ public class LoKrAdapter<T> : LoRAAdapterBase<T>
     /// <returns>Vector containing parameters (LoKr only if base is frozen, otherwise both).</returns>
     public override Vector<T> GetParameters()
     {
-        return Parameters.Clone();
+        if (_freezeBaseLayer)
+        {
+            return Parameters.Clone();
+        }
+        else
+        {
+            // Include base layer parameters
+            Vector<T> allParams = new Vector<T>(ParameterCount);
+            Vector<T> baseParams = _baseLayer.GetParameters();
+
+            // Copy base parameters
+            for (int i = 0; i < baseParams.Length; i++)
+            {
+                allParams[i] = baseParams[i];
+            }
+
+            // Copy LoKr parameters
+            for (int i = 0; i < Parameters.Length; i++)
+            {
+                allParams[baseParams.Length + i] = Parameters[i];
+            }
+
+            return allParams;
+        }
     }
 
     /// <summary>
@@ -671,8 +701,31 @@ public class LoKrAdapter<T> : LoRAAdapterBase<T>
             throw new ArgumentException($"Expected {ParameterCount} parameters, got {parameters.Length}", nameof(parameters));
         }
 
-        Parameters = parameters.Clone();
-        UpdateMatricesFromParameters();
+        if (_freezeBaseLayer)
+        {
+            Parameters = parameters.Clone();
+            UpdateMatricesFromParameters();
+        }
+        else
+        {
+            // Extract base layer parameters
+            int baseCount = _baseLayer.ParameterCount;
+            Vector<T> baseParams = new Vector<T>(baseCount);
+            for (int i = 0; i < baseCount; i++)
+            {
+                baseParams[i] = parameters[i];
+            }
+            _baseLayer.SetParameters(baseParams);
+
+            // Extract LoKr parameters
+            Vector<T> lokrParams = new Vector<T>(Parameters.Length);
+            for (int i = 0; i < lokrParams.Length; i++)
+            {
+                lokrParams[i] = parameters[baseCount + i];
+            }
+            Parameters = lokrParams;
+            UpdateMatricesFromParameters();
+        }
     }
 
     /// <summary>
