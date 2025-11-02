@@ -823,7 +823,6 @@ public class LoHaAdapter<T> : LoRAAdapterBase<T>
     public override void ResetState()
     {
         _baseLayer.ResetState();
-        _loraLayer.ResetState();
         _lastInput = null;
         _lastBaseOutput = null;
         _matricesAGradient = null;
