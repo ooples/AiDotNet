@@ -289,8 +289,14 @@ public class LoRADropAdapter<T> : LoRAAdapterBase<T>
         }
         else
         {
-            // Inference mode: no dropout, no scaling
-            // All components are active, so use full LoRA output as-is
+            // Inference mode: scale by (1 - dropout_rate) to match training expectation
+            // During training, active components are scaled by 1/(1-dropout_rate)
+            // During inference, all components are active, so scale by (1-dropout_rate)
+            T keepProb = NumOps.FromDouble(1.0 - _dropoutRate);
+            for (int i = 0; i < loraOutput.Length; i++)
+            {
+                loraOutput[i] = NumOps.Multiply(loraOutput[i], keepProb);
+            }
         }
 
         // Sum the outputs
@@ -355,11 +361,12 @@ public class LoRADropAdapter<T> : LoRAAdapterBase<T>
         }
         else
         {
-            // Inference mode: no dropout, no gradient scaling
-            // Pass gradients through as-is
+            // Inference mode: scale gradients by (1 - dropout_rate) to match forward pass scaling
+            // This ensures gradient flow is consistent with the forward pass behavior
+            T keepProb = NumOps.FromDouble(1.0 - _dropoutRate);
             for (int i = 0; i < outputGradient.Length; i++)
             {
-                loraGradient[i] = outputGradient[i];
+                loraGradient[i] = NumOps.Multiply(outputGradient[i], keepProb);
             }
         }
 
