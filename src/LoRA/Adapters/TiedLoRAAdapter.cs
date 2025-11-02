@@ -126,6 +126,11 @@ public class TiedLoRAAdapter<T> : LoRAAdapterBase<T>
     private Matrix<T>? _lastIntermediate;
 
     /// <summary>
+    /// Flag indicating whether this adapter instance has completed initialization.
+    /// </summary>
+    private bool _isInitialized;
+
+    /// <summary>
     /// Gets the total number of trainable parameters.
     /// </summary>
     /// <remarks>
@@ -136,9 +141,16 @@ public class TiedLoRAAdapter<T> : LoRAAdapterBase<T>
     {
         get
         {
+            // Guard against being called during base class construction before initialization
+            if (!_isInitialized && _baseLayer == null)
+            {
+                return 1; // Return minimum safe value during construction
+            }
+
             // Only the layer scaling factor is unique to this layer
             int tiedLoraParams = 1; // Single scaling factor
-            return _freezeBaseLayer ? tiedLoraParams : (_baseLayer.ParameterCount + tiedLoraParams);
+            int baseParams = (_baseLayer != null && !_freezeBaseLayer) ? _baseLayer.ParameterCount : 0;
+            return baseParams + tiedLoraParams;
         }
     }
 
@@ -240,6 +252,9 @@ public class TiedLoRAAdapter<T> : LoRAAdapterBase<T>
 
         // Update parameter vector
         UpdateParametersFromScaling();
+
+        // Mark as initialized
+        _isInitialized = true;
     }
 
     /// <summary>

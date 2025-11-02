@@ -505,6 +505,7 @@ public class ChainLoRAAdapter<T> : LoRAAdapterBase<T>
     /// Merges all adapters in the chain into the original base layer.
     /// </summary>
     /// <returns>A new layer with all LoRA adaptations merged into the base weights.</returns>
+    /// <exception cref="InvalidOperationException">Thrown when the base layer type is not DenseLayer or FullyConnectedLayer.</exception>
     /// <remarks>
     /// <para>
     /// This creates a single layer that includes all the sequential adaptations from the chain.
@@ -516,26 +517,48 @@ public class ChainLoRAAdapter<T> : LoRAAdapterBase<T>
     /// The result is a regular layer (no LoRA overhead) that performs as well as the full chain.
     /// Perfect for deployment when you want maximum speed with all the learned adaptations.
     /// </para>
-    /// <para><b>Implementation Note:</b>
-    /// This is a simplified implementation that returns the base layer. In a full implementation,
-    /// you would merge all adapter weights into a cloned base layer. The merging strategy depends
-    /// on the specific layer type (Dense, Convolutional, etc.).
-    /// </para>
     /// </remarks>
     public override ILayer<T> MergeToOriginalLayer()
     {
-        // Note: This is a simplified implementation that returns the base layer.
-        // In a production implementation, you would:
-        // 1. Clone the base layer
-        // 2. For each adapter in the chain, compute the low-rank update (B × A)
-        // 3. Scale by (alpha / rank)
-        // 4. Add to the cloned layer's weights
-        // 5. Return the merged layer
-        //
-        // The exact merging process depends on the base layer type and is typically
-        // implemented by derived classes that specialize for specific layer types.
+        // Support both DenseLayer and FullyConnectedLayer
+        DenseLayer<T>? denseBase = _baseLayer as DenseLayer<T>;
+        FullyConnectedLayer<T>? fcBase = _baseLayer as FullyConnectedLayer<T>;
 
-        return _baseLayer;
+        if (denseBase == null && fcBase == null)
+        {
+            throw new InvalidOperationException("ChainLoRAAdapter merging only supports DenseLayer or FullyConnectedLayer base layers");
+        }
+
+        // Get base layer parameters
+        Vector<T> baseParams = _baseLayer.GetParameters();
+        int inputSize = GetInputShape()[0];
+        int outputSize = GetOutputShape()[0];
+        int weightCount = inputSize * outputSize;
+
+        // Create merged parameters starting with base layer weights and biases
+        Vector<T> mergedParams = baseParams.Clone();
+
+        // Merge each adapter in the chain sequentially
+        foreach (var adapter in _adapterChain)
+        {
+            // Get the merged weights from this adapter (B × A, already scaled by alpha/rank)
+            Matrix<T> adapterWeights = adapter.MergeWeights();
+
+            // Add this adapter's contribution to the merged weights
+            for (int i = 0; i < weightCount; i++)
+            {
+                int row = i / inputSize;
+                int col = i % inputSize;
+                mergedParams[i] = NumOps.Add(mergedParams[i], adapterWeights[row, col]);
+            }
+            // Note: Biases remain unchanged (indices weightCount to end)
+        }
+
+        // Create a new dense layer with merged parameters
+        DenseLayer<T> mergedLayer = new DenseLayer<T>(inputSize, outputSize, (IActivationFunction<T>?)null);
+        mergedLayer.SetParameters(mergedParams);
+
+        return mergedLayer;
     }
 
     /// <summary>

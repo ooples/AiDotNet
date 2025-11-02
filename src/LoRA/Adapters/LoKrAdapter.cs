@@ -281,29 +281,67 @@ public class LoKrAdapter<T> : LoRAAdapterBase<T>
         // Forward through base layer
         Tensor<T> baseOutput = _baseLayer.Forward(input);
 
-        // Compute Kronecker product delta = A ⊗ B
-        Matrix<T> kronDelta = KroneckerProduct(_matrixA, _matrixB);
-
-        // Apply to input: delta * input
+        // Use vec-trick to avoid materializing full Kronecker product
+        // For (B ⊗ A) vec(X) = vec(A * X * B^T)
         int batchSize = input.Shape[0];
         int inputSize = input.Shape.Length > 1 ? input.Shape[1] : input.Length;
-        int outputSize = kronDelta.Rows;
 
-        // Convert input to matrix [batchSize, inputSize]
-        Matrix<T> inputMatrix = new Matrix<T>(batchSize, inputSize);
-        for (int i = 0; i < batchSize; i++)
+        // Dimensions: A is [p, q], B is [m, n]
+        // Kronecker product (B ⊗ A) would be [(m*p), (n*q)]
+        int p = _matrixA.Rows;
+        int q = _matrixA.Columns;
+        int m = _matrixB.Rows;
+        int n = _matrixB.Columns;
+
+        // inputSize should equal n*q, outputSize should equal m*p
+        if (inputSize != n * q)
         {
-            for (int j = 0; j < inputSize; j++)
-            {
-                inputMatrix[i, j] = input[i * inputSize + j];
-            }
+            throw new InvalidOperationException($"Input size {inputSize} doesn't match expected {n * q} for Kronecker dimensions");
         }
 
-        // Compute: input * kronDelta^T (because kronDelta is outputSize × inputSize)
-        Matrix<T> deltaOutput = inputMatrix.Multiply(kronDelta.Transpose());
+        int outputSize = m * p;
 
-        // Apply scaling
-        deltaOutput = deltaOutput.Multiply(_scaling);
+        // Process each batch item
+        Matrix<T> deltaOutput = new Matrix<T>(batchSize, outputSize);
+        for (int b = 0; b < batchSize; b++)
+        {
+            // Reshape input vector to matrix X [n, q]
+            Matrix<T> X = new Matrix<T>(n, q);
+            for (int i = 0; i < n; i++)
+            {
+                for (int j = 0; j < q; j++)
+                {
+                    X[i, j] = input[b * inputSize + i * q + j];
+                }
+            }
+
+            // Compute Y = A * X * B^T using vec-trick: (B ⊗ A) vec(X) = vec(Y)
+            Matrix<T> temp = _matrixA.Multiply(X);  // [p, q] * [q, n] -> [p, n] (wait, dimensions wrong)
+            // Actually: A is [p, q], X is [n, q] - need to think about this more carefully
+            // For vec-trick: Y = A^T * X * B where Y is [m, p]
+            // Let me use the correct formulation
+
+            // Correct vec-trick: (B ⊗ A) vec(X) = vec(A * reshape(x, [q, n]) * B^T)
+            Matrix<T> X_reshaped = new Matrix<T>(q, n);
+            for (int i = 0; i < q; i++)
+            {
+                for (int j = 0; j < n; j++)
+                {
+                    X_reshaped[i, j] = input[b * inputSize + j * q + i];
+                }
+            }
+
+            Matrix<T> Y = _matrixA.Multiply(X_reshaped).Multiply(_matrixB.Transpose());
+
+            // Vectorize Y [p, m] to output
+            for (int i = 0; i < p; i++)
+            {
+                for (int j = 0; j < m; j++)
+                {
+                    deltaOutput[b, i * m + j] = NumOps.Multiply(Y[i, j], _scaling);
+                }
+            }
+        }
 
         // Convert LoKr output to tensor and add to base output
         Tensor<T> result = new Tensor<T>(baseOutput.Shape);

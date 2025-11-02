@@ -179,9 +179,9 @@ public class HRAAdapter<T> : LoRAAdapterBase<T>
     {
         get
         {
-            int loraParams = _loraLayer.ParameterCount;
-            int sparseParams = _sparseFullRankUpdates.Count;
-            int baseParams = _freezeBaseLayer ? 0 : _baseLayer.ParameterCount;
+            int loraParams = _loraLayer != null ? _loraLayer.ParameterCount : 0;
+            int sparseParams = _sparseFullRankUpdates != null ? _sparseFullRankUpdates.Count : 0;
+            int baseParams = (_baseLayer != null && !_freezeBaseLayer) ? _baseLayer.ParameterCount : 0;
             return baseParams + loraParams + sparseParams;
         }
     }

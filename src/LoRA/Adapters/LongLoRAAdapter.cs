@@ -430,17 +430,20 @@ public class LongLoRAAdapter<T> : LoRAAdapterBase<T>
     /// Shifts elements within a group by the specified amount.
     /// </summary>
     /// <param name="tensor">Tensor to modify.</param>
-    /// <param name="groupStart">Start index of the group.</param>
-    /// <param name="groupEnd">End index of the group (exclusive).</param>
+    /// <param name="groupStart">Start index of the group along sequence dimension.</param>
+    /// <param name="groupEnd">End index of the group (exclusive) along sequence dimension.</param>
     /// <param name="shiftAmount">Amount to shift (positive for right, negative for left).</param>
     /// <remarks>
     /// <para>
-    /// Performs a circular shift within the specified range. Elements that shift
-    /// past the end wrap around to the beginning.
+    /// Performs a circular shift within the specified range along the sequence dimension.
+    /// For a tensor of shape [batchSize, sequenceLength, featureDim], this shifts
+    /// positions [groupStart:groupEnd] along axis 1 for all batch elements and all features.
+    /// Elements that shift past the end wrap around to the beginning.
     /// </para>
     /// <para><b>For Beginners:</b> This is like rotating a portion of an array.
     /// If you shift [1,2,3,4,5] by 2 positions, you get [4,5,1,2,3].
     /// The "circular" part means elements wrap around instead of falling off the end.
+    /// For multi-dimensional tensors, we apply this shift to every batch and every feature.
     /// </para>
     /// </remarks>
     private void ShiftGroup(Tensor<T> tensor, int groupStart, int groupEnd, int shiftAmount)
@@ -463,20 +466,137 @@ public class LongLoRAAdapter<T> : LoRAAdapterBase<T>
             return;
         }
 
-        // Create temporary buffer for the group
-        T[] buffer = new T[groupSize];
+        // Determine tensor dimensions
+        int[] shape = tensor.Shape;
 
-        // Copy group to buffer
-        for (int i = 0; i < groupSize; i++)
+        if (shape.Length == 1)
         {
-            buffer[i] = tensor[groupStart + i];
+            // 1D tensor: simple shift
+            T[] buffer = new T[groupSize];
+            for (int i = 0; i < groupSize; i++)
+            {
+                buffer[i] = tensor[groupStart + i];
+            }
+            for (int i = 0; i < groupSize; i++)
+            {
+                int newPos = (i + shiftAmount) % groupSize;
+                tensor[groupStart + newPos] = buffer[i];
+            }
         }
-
-        // Write back with shift
-        for (int i = 0; i < groupSize; i++)
+        else if (shape.Length == 2)
         {
-            int newPos = (i + shiftAmount) % groupSize;
-            tensor[groupStart + newPos] = buffer[i];
+            // 2D tensor [batchSize, sequenceLength]: shift along sequence axis for each batch
+            int batchSize = shape[0];
+            int sequenceLength = shape[1];
+
+            T[] buffer = new T[groupSize];
+
+            for (int b = 0; b < batchSize; b++)
+            {
+                // Copy group to buffer for this batch
+                for (int i = 0; i < groupSize; i++)
+                {
+                    int seqIdx = groupStart + i;
+                    if (seqIdx < sequenceLength)
+                    {
+                        buffer[i] = tensor[b * sequenceLength + seqIdx];
+                    }
+                }
+
+                // Write back with shift for this batch
+                for (int i = 0; i < groupSize; i++)
+                {
+                    int seqIdx = groupStart + ((i + shiftAmount) % groupSize);
+                    if (seqIdx < sequenceLength)
+                    {
+                        tensor[b * sequenceLength + seqIdx] = buffer[i];
+                    }
+                }
+            }
+        }
+        else if (shape.Length == 3)
+        {
+            // 3D tensor [batchSize, sequenceLength, featureDim]: shift along sequence axis
+            int batchSize = shape[0];
+            int sequenceLength = shape[1];
+            int featureDim = shape[2];
+
+            T[] buffer = new T[groupSize];
+
+            for (int b = 0; b < batchSize; b++)
+            {
+                for (int f = 0; f < featureDim; f++)
+                {
+                    // Copy group to buffer for this batch and feature
+                    for (int i = 0; i < groupSize; i++)
+                    {
+                        int seqIdx = groupStart + i;
+                        if (seqIdx < sequenceLength)
+                        {
+                            buffer[i] = tensor[b * sequenceLength * featureDim + seqIdx * featureDim + f];
+                        }
+                    }
+
+                    // Write back with shift for this batch and feature
+                    for (int i = 0; i < groupSize; i++)
+                    {
+                        int seqIdx = groupStart + ((i + shiftAmount) % groupSize);
+                        if (seqIdx < sequenceLength)
+                        {
+                            tensor[b * sequenceLength * featureDim + seqIdx * featureDim + f] = buffer[i];
+                        }
+                    }
+                }
+            }
+        }
+        else
+        {
+            // For higher-dimensional tensors, shift along second dimension (sequence axis)
+            // Flatten other dimensions and treat as batch×feature
+            int sequenceLength = shape[1];
+            int batchStride = 1;
+            for (int i = 0; i < shape.Length; i++)
+            {
+                batchStride *= shape[i];
+            }
+            batchStride /= sequenceLength;
+
+            T[] buffer = new T[groupSize];
+
+            for (int idx = 0; idx < batchStride; idx++)
+            {
+                // Calculate base offset for this batch/feature combination
+                int batchIdx = idx / (shape.Length > 2 ? shape[2] : 1);
+                int featureIdx = idx % (shape.Length > 2 ? shape[2] : 1);
+
+                // Copy group to buffer
+                for (int i = 0; i < groupSize; i++)
+                {
+                    int seqIdx = groupStart + i;
+                    if (seqIdx < sequenceLength)
+                    {
+                        int tensorIdx = batchIdx * sequenceLength * (shape.Length > 2 ? shape[2] : 1) + seqIdx * (shape.Length > 2 ? shape[2] : 1) + featureIdx;
+                        if (tensorIdx < tensor.Length)
+                        {
+                            buffer[i] = tensor[tensorIdx];
+                        }
+                    }
+                }
+
+                // Write back with shift
+                for (int i = 0; i < groupSize; i++)
+                {
+                    int seqIdx = groupStart + ((i + shiftAmount) % groupSize);
+                    if (seqIdx < sequenceLength)
+                    {
+                        int tensorIdx = batchIdx * sequenceLength * (shape.Length > 2 ? shape[2] : 1) + seqIdx * (shape.Length > 2 ? shape[2] : 1) + featureIdx;
+                        if (tensorIdx < tensor.Length)
+                        {
+                            tensor[tensorIdx] = buffer[i];
+                        }
+                    }
+                }
+            }
         }
     }
 

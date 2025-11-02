@@ -169,8 +169,12 @@ public class DVoRAAdapter<T> : LoRAAdapterBase<T>
     {
         get
         {
-            int dvoraParams = _magnitude.Length + _scalingVectorD.Length + _scalingVectorB.Length;
-            return _freezeBaseLayer ? dvoraParams : (_baseLayer.ParameterCount + dvoraParams);
+            int magnitudeCount = _magnitude != null ? _magnitude.Length : 0;
+            int dScaleCount = _scalingVectorD != null ? _scalingVectorD.Length : 0;
+            int bScaleCount = _scalingVectorB != null ? _scalingVectorB.Length : 0;
+            int dvoraParams = magnitudeCount + dScaleCount + bScaleCount;
+            int baseCount = (_baseLayer != null && !_freezeBaseLayer) ? _baseLayer.ParameterCount : 0;
+            return baseCount + dvoraParams;
         }
     }
 
@@ -1094,6 +1098,8 @@ public class DVoRAAdapter<T> : LoRAAdapterBase<T>
         }
 
         // Create new dense layer with merged parameters
+        // Note: Activation function is not preserved as DenseLayer/FullyConnectedLayer
+        // do not expose ActivationFunction publicly. Users should apply activation separately.
         DenseLayer<T> mergedLayer = new DenseLayer<T>(inputSize, outputSize, (IActivationFunction<T>?)null);
         mergedLayer.SetParameters(mergedParams);
 

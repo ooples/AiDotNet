@@ -44,9 +44,9 @@ namespace AiDotNet.LoRA.Adapters;
 ///
 /// Example: A 100×100 weight matrix with rank=8
 /// - Standard LoRA: 8×100 + 100×8 = 1,600 parameters
-/// - LoHa: 8×(100×100) + 8×(100×100) = 160,000 parameters
+/// - LoHa: 8×(100 + 100) = 1,600 parameters (each rank has input_size + output_size parameters)
 ///
-/// Despite more parameters, LoHa is still far more efficient than full fine-tuning (10,000 params).
+/// LoHa uses similar parameter count to LoRA but with different structure (Hadamard products).
 /// </para>
 /// </remarks>
 public class LoHaAdapter<T> : LoRAAdapterBase<T>
@@ -257,45 +257,42 @@ public class LoHaAdapter<T> : LoRAAdapterBase<T>
             }
         }
 
-        // Accumulate Hadamard product results across all ranks
+        // First compute ΔW = Σ_r (A[r] ⊙ B[r]) in weight space
+        Matrix<T> deltaWeights = new Matrix<T>(inputSize, outputSize);
+        for (int i = 0; i < inputSize; i++)
+        {
+            for (int o = 0; o < outputSize; o++)
+            {
+                deltaWeights[i, o] = NumOps.Zero;
+            }
+        }
+
+        // Sum over rank: ΔW += A[r] ⊙ B[r] for each r
+        for (int r = 0; r < Rank; r++)
+        {
+            // Hadamard product: A[r] ⊙ B[r] (element-wise multiplication)
+            for (int i = 0; i < inputSize; i++)
+            {
+                for (int o = 0; o < outputSize; o++)
+                {
+                    T hadamard = NumOps.Multiply(_matricesA[r][i, o], _matricesB[r][i, o]);
+                    deltaWeights[i, o] = NumOps.Add(deltaWeights[i, o], hadamard);
+                }
+            }
+        }
+
+        // Now apply ΔW to input: output = input × ΔW
         Matrix<T> deltaMatrix = new Matrix<T>(batchSize, outputSize);
         for (int b = 0; b < batchSize; b++)
         {
             for (int o = 0; o < outputSize; o++)
             {
-                deltaMatrix[b, o] = NumOps.Zero;
-            }
-        }
-
-        // Sum over rank: delta += (input * A[r]) ⊙ B[r] for each r
-        for (int r = 0; r < Rank; r++)
-        {
-            // Compute input * A[r] for each batch and output dimension
-            Matrix<T> intermediate = new Matrix<T>(batchSize, outputSize);
-            for (int b = 0; b < batchSize; b++)
-            {
-                for (int o = 0; o < outputSize; o++)
+                T sum = NumOps.Zero;
+                for (int i = 0; i < inputSize; i++)
                 {
-                    T sum = NumOps.Zero;
-                    for (int i = 0; i < inputSize; i++)
-                    {
-                        // (input * A[r])[b, o] = sum over i of input[b, i] * A[r][i, o]
-                        sum = NumOps.Add(sum, NumOps.Multiply(inputMatrix[b, i], _matricesA[r][i, o]));
-                    }
-                    intermediate[b, o] = sum;
+                    sum = NumOps.Add(sum, NumOps.Multiply(inputMatrix[b, i], deltaWeights[i, o]));
                 }
-            }
-
-            // Apply Hadamard product with B[r]: result ⊙= B[r]
-            Matrix<T> hadamardResult = HadamardProduct(intermediate, _matricesB[r]);
-
-            // Accumulate into delta
-            for (int b = 0; b < batchSize; b++)
-            {
-                for (int o = 0; o < outputSize; o++)
-                {
-                    deltaMatrix[b, o] = NumOps.Add(deltaMatrix[b, o], hadamardResult[b, o]);
-                }
+                deltaMatrix[b, o] = sum;
             }
         }
 
@@ -894,7 +891,6 @@ public class LoHaAdapter<T> : LoRAAdapterBase<T>
     public override void ResetState()
     {
         _baseLayer.ResetState();
-        _loraLayer.ResetState();
         _lastInput = null;
         _lastBaseOutput = null;
         _matricesAGradient = null;

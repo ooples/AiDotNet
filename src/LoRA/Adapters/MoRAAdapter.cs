@@ -409,13 +409,26 @@ public class MoRAAdapter<T> : LoRAAdapterBase<T>
     {
         get
         {
-            int moraParams = _squareRank * _squareRank;
-            return _freezeBaseLayer ? moraParams : (_baseLayer.ParameterCount + moraParams);
+            // Guard against zero _squareRank during base class construction
+            int squareRank = _squareRank;
+            if (squareRank == 0 && _baseLayer != null)
+            {
+                // Compute the same way the constructor does
+                int inputSize = GetInputShape()[0];
+                int dimension = inputSize;
+                squareRank = (int)Math.Sqrt(2.0 * dimension * Rank);
+                squareRank = Math.Max(1, Math.Min(squareRank, dimension));
+            }
+
+            int moraParams = squareRank * squareRank;
+            int baseParams = (_baseLayer != null && !_freezeBaseLayer) ? _baseLayer.ParameterCount : 0;
+            return baseParams + moraParams;
         }
     }
 
     public override ILayer<T> MergeToOriginalLayer()
     {
+        // Compute full MoRA adaptation: R_d * M * R_c^T
         Matrix<T> temp = _matrixM.Multiply(_compressionMatrix.Transpose());
         Matrix<T> fullAdaptation = _decompressionMatrix.Multiply(temp);
 
@@ -425,11 +438,37 @@ public class MoRAAdapter<T> : LoRAAdapterBase<T>
         int inputSize = GetInputShape()[0];
         int outputSize = GetOutputShape()[0];
 
-        IActivationFunction<T> identityActivation = new IdentityActivation<T>();
-        DenseLayer<T> merged = new DenseLayer<T>(inputSize, outputSize, identityActivation);
+        // Get the original base layer weights
+        DenseLayer<T>? denseBase = _baseLayer as DenseLayer<T>;
+        FullyConnectedLayer<T>? fcBase = _baseLayer as FullyConnectedLayer<T>;
 
+        if (denseBase == null && fcBase == null)
+        {
+            throw new InvalidOperationException("MoRAAdapter merging only supports DenseLayer or FullyConnectedLayer");
+        }
+
+        // Get base layer parameters (weights + biases)
+        Vector<T> baseParams = _baseLayer.GetParameters();
+        int weightCount = inputSize * outputSize;
+
+        // Create merged parameters starting with base layer parameters
+        Vector<T> mergedParams = baseParams.Clone();
+
+        // Transpose fullAdaptation to get [outputSize, inputSize]
         Matrix<T> adaptationWeights = fullAdaptation.Transpose();
-        merged.SetWeights(adaptationWeights);
+
+        // Add MoRA adaptation to the weight portion: W_merged = W_base + α * ΔW
+        for (int i = 0; i < weightCount; i++)
+        {
+            int row = i / inputSize;
+            int col = i % inputSize;
+            mergedParams[i] = NumOps.Add(mergedParams[i], adaptationWeights[row, col]);
+        }
+        // Note: Biases remain unchanged (indices weightCount to end)
+
+        // Create new layer with merged parameters
+        DenseLayer<T> merged = new DenseLayer<T>(inputSize, outputSize, (IActivationFunction<T>?)null);
+        merged.SetParameters(mergedParams);
 
         return merged;
     }

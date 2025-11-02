@@ -85,9 +85,16 @@ public class GLoRAAdapter<T> : LoRAAdapterBase<T>
     /// If the base layer is frozen, this returns the sum of weight and activation LoRA parameters.
     /// Otherwise, it includes base layer parameters as well.
     /// </remarks>
-    public override int ParameterCount => _freezeBaseLayer
-        ? (_loraLayer.ParameterCount + _activationAdaptation.ParameterCount)
-        : (_baseLayer.ParameterCount + _loraLayer.ParameterCount + _activationAdaptation.ParameterCount);
+    public override int ParameterCount
+    {
+        get
+        {
+            int baseCount = (_baseLayer != null && !_freezeBaseLayer) ? _baseLayer.ParameterCount : 0;
+            int loraCount = _loraLayer != null ? _loraLayer.ParameterCount : 0;
+            int activationCount = _activationAdaptation != null ? _activationAdaptation.ParameterCount : 0;
+            return baseCount + loraCount + activationCount;
+        }
+    }
 
     /// <summary>
     /// Initializes a new GLoRA adapter with the specified parameters.

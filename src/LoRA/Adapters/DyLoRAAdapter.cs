@@ -104,6 +104,21 @@ public class DyLoRAAdapter<T> : LoRAAdapterBase<T>
     private bool _isTraining;
 
     /// <summary>
+    /// Cached input from the last forward pass for gradient computation.
+    /// </summary>
+    private Tensor<T>? _cachedInput;
+
+    /// <summary>
+    /// Cached active rank from the last forward pass for gradient computation.
+    /// </summary>
+    private int _cachedActiveRank;
+
+    /// <summary>
+    /// Cached LoRA parameter gradients computed in backward pass.
+    /// </summary>
+    private Vector<T>? _cachedLoRAGradients;
+
+    /// <summary>
     /// Gets the maximum rank of the DyLoRA adapter.
     /// </summary>
     public int MaxRank => _maxRank;
@@ -266,6 +281,10 @@ public class DyLoRAAdapter<T> : LoRAAdapterBase<T>
             ? _activeRanks[_random.Next(_activeRanks.Length)]  // Random rank during training
             : _currentDeploymentRank;                          // Fixed rank during inference
 
+        // Cache input and active rank for backward pass
+        _cachedInput = input.Clone();
+        _cachedActiveRank = activeRank;
+
         // Forward through base layer
         Tensor<T> baseOutput = _baseLayer.Forward(input);
 
@@ -381,9 +400,204 @@ public class DyLoRAAdapter<T> : LoRAAdapterBase<T>
     /// </remarks>
     public override Tensor<T> Backward(Tensor<T> outputGradient)
     {
-        // The base LoRA backward pass handles gradient computation
-        // Nested dropout is automatically handled by the forward pass restriction
-        return base.Backward(outputGradient);
+        if (_cachedInput == null)
+        {
+            throw new InvalidOperationException("Backward called without a preceding Forward call");
+        }
+
+        // Backward through base layer
+        Tensor<T> baseInputGrad = _baseLayer.Backward(outputGradient);
+
+        // Backward through LoRA with restricted rank
+        Tensor<T> loraInputGrad = BackwardWithRank(outputGradient, _cachedInput, _cachedActiveRank);
+
+        // Sum input gradients
+        Tensor<T> inputGrad = new Tensor<T>(baseInputGrad.Shape);
+        for (int i = 0; i < baseInputGrad.Length; i++)
+        {
+            inputGrad[i] = NumOps.Add(baseInputGrad[i], loraInputGrad[i]);
+        }
+
+        // Update parameter gradients from base and LoRA layers
+        UpdateParameterGradientsFromLayers();
+
+        return inputGrad;
+    }
+
+    /// <summary>
+    /// Performs backward pass through LoRA layer using only the first 'rank' components.
+    /// </summary>
+    /// <param name="outputGradient">Gradient flowing back from next layer.</param>
+    /// <param name="input">Input from forward pass.</param>
+    /// <param name="rank">Number of components that were used in forward pass.</param>
+    /// <returns>Input gradient tensor.</returns>
+    private Tensor<T> BackwardWithRank(Tensor<T> outputGradient, Tensor<T> input, int rank)
+    {
+        // Get matrices A and B from the LoRA layer
+        Matrix<T> fullA = _loraLayer.GetMatrixA();
+        Matrix<T> fullB = _loraLayer.GetMatrixB();
+
+        int inputSize = fullA.Rows;
+        int outputSize = fullB.Columns;
+
+        // Extract submatrices using only the first 'rank' components
+        Matrix<T> subA = new Matrix<T>(inputSize, rank);
+        for (int i = 0; i < inputSize; i++)
+        {
+            for (int j = 0; j < rank; j++)
+            {
+                subA[i, j] = fullA[i, j];
+            }
+        }
+
+        Matrix<T> subB = new Matrix<T>(rank, outputSize);
+        for (int i = 0; i < rank; i++)
+        {
+            for (int j = 0; j < outputSize; j++)
+            {
+                subB[i, j] = fullB[i, j];
+            }
+        }
+
+        // Convert tensors to matrices
+        int batchSize = outputGradient.Shape[0];
+        Matrix<T> gradMatrix = new Matrix<T>(batchSize, outputSize);
+        for (int b = 0; b < batchSize; b++)
+        {
+            for (int j = 0; j < outputSize; j++)
+            {
+                gradMatrix[b, j] = outputGradient[b, j];
+            }
+        }
+
+        Matrix<T> inputMatrix = new Matrix<T>(batchSize, inputSize);
+        for (int b = 0; b < batchSize; b++)
+        {
+            for (int j = 0; j < inputSize; j++)
+            {
+                inputMatrix[b, j] = input[b, j];
+            }
+        }
+
+        // Compute gradients for submatrices
+        // dL/dB = (gradMatrix^T @ inputMatrix @ subA^T) with scaling
+        // dL/dA = (inputMatrix^T @ gradMatrix @ subB^T) with scaling
+        Matrix<T> gradB = gradMatrix.Transpose().Multiply(inputMatrix).Multiply(subA.Transpose());
+        Matrix<T> gradA = inputMatrix.Transpose().Multiply(gradMatrix).Multiply(subB.Transpose());
+
+        // Scale by alpha/rank as per LoRA
+        double alphaDouble = Convert.ToDouble(_loraLayer.Alpha);
+        double scale = alphaDouble / rank;
+        T scaleT = NumOps.FromDouble(scale);
+        for (int i = 0; i < gradB.Rows; i++)
+        {
+            for (int j = 0; j < gradB.Columns; j++)
+            {
+                gradB[i, j] = NumOps.Multiply(gradB[i, j], scaleT);
+            }
+        }
+        for (int i = 0; i < gradA.Rows; i++)
+        {
+            for (int j = 0; j < gradA.Columns; j++)
+            {
+                gradA[i, j] = NumOps.Multiply(gradA[i, j], scaleT);
+            }
+        }
+
+        // Update full gradient matrices (only the active rank components)
+        Matrix<T> fullGradA = new Matrix<T>(inputSize, _maxRank);
+        Matrix<T> fullGradB = new Matrix<T>(_maxRank, outputSize);
+
+        for (int i = 0; i < inputSize; i++)
+        {
+            for (int j = 0; j < rank; j++)
+            {
+                fullGradA[i, j] = gradA[i, j];
+            }
+        }
+        for (int i = 0; i < rank; i++)
+        {
+            for (int j = 0; j < outputSize; j++)
+            {
+                fullGradB[i, j] = gradB[i, j];
+            }
+        }
+
+        // Pack gradients into LoRA layer's parameter gradients
+        // Store them in cache to be used by UpdateParameterGradientsFromLayers
+        Vector<T> loraParamGrads = new Vector<T>(_loraLayer.ParameterCount);
+        int idx = 0;
+        for (int i = 0; i < fullGradA.Rows; i++)
+        {
+            for (int j = 0; j < fullGradA.Columns; j++)
+            {
+                loraParamGrads[idx++] = fullGradA[i, j];
+            }
+        }
+        for (int i = 0; i < fullGradB.Rows; i++)
+        {
+            for (int j = 0; j < fullGradB.Columns; j++)
+            {
+                loraParamGrads[idx++] = fullGradB[i, j];
+            }
+        }
+        // Cache the LoRA gradients for later use in UpdateParameterGradientsFromLayers
+        _cachedLoRAGradients = loraParamGrads;
+
+        // Compute input gradient: dL/dInput = gradMatrix @ (subB @ subA)^T
+        Matrix<T> combinedWeight = subB.Multiply(subA.Transpose());
+        double alphaDoubleForInput = Convert.ToDouble(_loraLayer.Alpha);
+        double alphaScaleDouble = alphaDoubleForInput / rank;
+        T alphaScaleT = NumOps.FromDouble(alphaScaleDouble);
+        for (int i = 0; i < combinedWeight.Rows; i++)
+        {
+            for (int j = 0; j < combinedWeight.Columns; j++)
+            {
+                combinedWeight[i, j] = NumOps.Multiply(combinedWeight[i, j], alphaScaleT);
+            }
+        }
+
+        Matrix<T> inputGradMatrix = gradMatrix.Multiply(combinedWeight);
+
+        // Convert back to tensor
+        Vector<T> inputGradVector = new Vector<T>(batchSize * inputSize);
+        for (int b = 0; b < batchSize; b++)
+        {
+            for (int j = 0; j < inputSize; j++)
+            {
+                inputGradVector[b * inputSize + j] = inputGradMatrix[b, j];
+            }
+        }
+
+        return new Tensor<T>(new[] { batchSize, inputSize }, inputGradVector);
+    }
+
+    /// <summary>
+    /// Updates the parameter gradients vector from the layer gradients.
+    /// </summary>
+    private void UpdateParameterGradientsFromLayers()
+    {
+        ParameterGradients = new Vector<T>(ParameterCount);
+        int idx = 0;
+
+        // Base layer gradients (if not frozen)
+        if (!_freezeBaseLayer)
+        {
+            Vector<T> baseGrads = _baseLayer.GetParameterGradients();
+            for (int i = 0; i < baseGrads.Length; i++)
+            {
+                ParameterGradients[idx++] = baseGrads[i];
+            }
+        }
+
+        // LoRA layer gradients - use cached gradients computed in BackwardWithRank
+        if (_cachedLoRAGradients != null)
+        {
+            for (int i = 0; i < _cachedLoRAGradients.Length; i++)
+            {
+                ParameterGradients[idx++] = _cachedLoRAGradients[i];
+            }
+        }
     }
 
     /// <summary>

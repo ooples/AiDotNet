@@ -485,6 +485,7 @@ public class AdaLoRAAdapter<T> : LoRAAdapterBase<T>
     /// <para>
     /// This is the opposite of pruning - it adds new components when the model needs more capacity.
     /// New components are initialized with low importance and will need to prove their worth.
+    /// The corresponding matrix elements are reinitialized with small random values so they can learn.
     /// </para>
     /// <para><b>For Beginners:</b> Sometimes the model realizes it needs more capacity.
     /// This method adds new components, giving the model more flexibility to learn.
@@ -504,12 +505,60 @@ public class AdaLoRAAdapter<T> : LoRAAdapterBase<T>
 
         if (newRank > _currentRank)
         {
+            int oldRank = _currentRank;
+
             // Initialize new components with low importance
             T lowImportance = NumOps.FromDouble(0.01);
-            for (int i = _currentRank; i < newRank; i++)
+            for (int i = oldRank; i < newRank; i++)
             {
                 _importanceScores[i] = lowImportance;
             }
+
+            // Reinitialize the expanded components in LoRA matrices
+            // Get matrices A and B from LoRA layer
+            Matrix<T> matrixA = _loraLayer.GetMatrixA();
+            Matrix<T> matrixB = _loraLayer.GetMatrixB();
+
+            // Reinitialize columns of A and rows of B for expanded rank components
+            // Use small random values like in original initialization
+            for (int r = oldRank; r < newRank; r++)
+            {
+                // Reinitialize column r of matrix A [inputSize, rank] with small random values
+                for (int i = 0; i < matrixA.Rows; i++)
+                {
+                    matrixA[i, r] = NumOps.FromDouble((Random.NextDouble() - 0.5) * 0.02);
+                }
+
+                // Reinitialize row r of matrix B [rank, outputSize] with small random values
+                for (int j = 0; j < matrixB.Columns; j++)
+                {
+                    matrixB[r, j] = NumOps.FromDouble((Random.NextDouble() - 0.5) * 0.02);
+                }
+            }
+
+            // Update LoRA layer parameters with reinitialized matrices
+            Vector<T> loraParams = new Vector<T>(_loraLayer.ParameterCount);
+            int idx = 0;
+
+            // Pack matrix A
+            for (int i = 0; i < matrixA.Rows; i++)
+            {
+                for (int j = 0; j < matrixA.Columns; j++)
+                {
+                    loraParams[idx++] = matrixA[i, j];
+                }
+            }
+
+            // Pack matrix B
+            for (int i = 0; i < matrixB.Rows; i++)
+            {
+                for (int j = 0; j < matrixB.Columns; j++)
+                {
+                    loraParams[idx++] = matrixB[i, j];
+                }
+            }
+
+            _loraLayer.SetParameters(loraParams);
 
             _currentRank = newRank;
         }

@@ -170,12 +170,14 @@ public class FloraAdapter<T> : LoRAAdapterBase<T>
         }
 
         Matrix<T> transferMatrix = ComputeTransferMatrix(oldA, newA);
-        Matrix<T> newMomentum = MultiplyMatrices(_compressedMomentum!, transferMatrix);
+        // Correct order: transferMatrix * momentum (project momentum into new parameter space)
+        Matrix<T> newMomentum = MultiplyMatrices(transferMatrix, _compressedMomentum!);
         _compressedMomentum = newMomentum;
 
         if (_useAdaptiveLearningRate && _compressedSecondMoment != null)
         {
-            Matrix<T> newSecondMoment = MultiplyMatrices(_compressedSecondMoment, transferMatrix);
+            // Same for second moment
+            Matrix<T> newSecondMoment = MultiplyMatrices(transferMatrix, _compressedSecondMoment);
             _compressedSecondMoment = newSecondMoment;
         }
 

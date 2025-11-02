@@ -111,10 +111,16 @@ public class MultiLoRAAdapter<T> : LoRAAdapterBase<T>
     {
         get
         {
-            int totalParams = _freezeBaseLayer ? 0 : _baseLayer.ParameterCount;
-            foreach (var adapter in _taskAdapters.Values)
+            int totalParams = (_baseLayer != null && !_freezeBaseLayer) ? _baseLayer.ParameterCount : 0;
+            if (_taskAdapters != null)
             {
-                totalParams += adapter.ParameterCount;
+                foreach (var adapter in _taskAdapters.Values)
+                {
+                    if (adapter != null)
+                    {
+                        totalParams += adapter.ParameterCount;
+                    }
+                }
             }
             return totalParams;
         }

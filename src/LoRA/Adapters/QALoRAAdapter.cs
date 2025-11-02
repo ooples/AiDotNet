@@ -410,8 +410,11 @@ public class QALoRAAdapter<T> : LoRAAdapterBase<T>
         // Calculate number of groups
         int numGroups = (numParams + _groupSize - 1) / _groupSize; // Ceiling division
 
-        // Maximum value for quantization (e.g., 15 for 4-bit, 255 for 8-bit)
-        double maxQuantizedValue = Math.Pow(2.0, _quantizationBits) - 1.0;
+        // Use signed quantization for symmetric range around zero
+        // For n-bit signed: range is -2^(n-1) to 2^(n-1)-1
+        // e.g., 4-bit signed: -8 to 7, 8-bit signed: -128 to 127
+        double maxQuantizedValue = Math.Pow(2.0, _quantizationBits - 1) - 1.0;
+        double minQuantizedValue = -maxQuantizedValue;
 
         // Process each group
         for (int g = 0; g < numGroups; g++)
@@ -449,10 +452,8 @@ public class QALoRAAdapter<T> : LoRAAdapterBase<T>
                 double normalizedDouble = Convert.ToDouble(normalized);
                 double quantizedDouble = Math.Round(normalizedDouble);
 
-                // Clamp to valid range [0, maxQuantizedValue] for unsigned
-                // Or [-maxQuantizedValue/2, maxQuantizedValue/2] for signed
-                // Using unsigned for simplicity (common in QLoRA)
-                quantizedDouble = Math.Max(0.0, Math.Min(maxQuantizedValue, quantizedDouble));
+                // Clamp to valid signed range [-maxQuantizedValue, maxQuantizedValue]
+                quantizedDouble = Math.Max(minQuantizedValue, Math.Min(maxQuantizedValue, quantizedDouble));
 
                 // Dequantize: param = int_value * scale
                 T dequantized = NumOps.Multiply(NumOps.FromDouble(quantizedDouble), scale);

@@ -586,6 +586,14 @@ public class LoftQAdapter<T> : LoRAAdapterBase<T>
     /// </summary>
     private byte QuantizeINT4(T value, T scale, T zeroPoint)
     {
+        // Guard against zero or near-zero scale to avoid division by zero
+        double scaleDouble = Convert.ToDouble(scale);
+        if (Math.Abs(scaleDouble) < 1e-8)
+        {
+            // If range is zero, all values in block are same - map to middle of quantization range
+            return 7;
+        }
+
         T normalized = NumOps.Divide(NumOps.Subtract(value, zeroPoint), scale);
         double scaledValue = Convert.ToDouble(normalized);
         int quantized = (int)Math.Round(scaledValue);
