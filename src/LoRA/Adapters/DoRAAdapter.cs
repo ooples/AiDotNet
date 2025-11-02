@@ -1,6 +1,6 @@
 using AiDotNet.Interfaces;
 
-namespace AiDotNet.NeuralNetworks.Layers;
+namespace AiDotNet.LoRA.Adapters;
 
 /// <summary>
 /// DoRA (Weight-Decomposed Low-Rank Adaptation) adapter for parameter-efficient fine-tuning with improved stability.

@@ -1,7 +1,7 @@
 using AiDotNet.Interfaces;
 using System;
 
-namespace AiDotNet.NeuralNetworks.Layers;
+namespace AiDotNet.LoRA.Adapters;
 
 /// <summary>
 /// Implements Flora (Low-Rank Adapters Are Secretly Gradient Compressors) adapter for memory-efficient fine-tuning.

@@ -2,7 +2,7 @@ using AiDotNet.Interfaces;
 using System.Collections.Generic;
 using System.Linq;
 
-namespace AiDotNet.NeuralNetworks.Layers;
+namespace AiDotNet.LoRA.Adapters;
 
 /// <summary>
 /// S-LoRA adapter for scalable serving of thousands of concurrent LoRA adapters.

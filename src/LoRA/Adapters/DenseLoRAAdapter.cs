@@ -1,7 +1,6 @@
 using AiDotNet.Interfaces;
-using AiDotNet.LoRA.Adapters;
 
-namespace AiDotNet.NeuralNetworks.Layers;
+namespace AiDotNet.LoRA.Adapters;
 
 /// <summary>
 /// LoRA adapter specifically for Dense and FullyConnected layers with 1D input/output shapes.

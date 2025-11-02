@@ -1,6 +1,6 @@
 using AiDotNet.Interfaces;
 
-namespace AiDotNet.NeuralNetworks.Layers;
+namespace AiDotNet.LoRA.Adapters;
 
 /// <summary>
 /// Standard LoRA implementation (original LoRA algorithm).

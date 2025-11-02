@@ -1,6 +1,6 @@
 using AiDotNet.Interfaces;
 
-namespace AiDotNet.NeuralNetworks.Layers;
+namespace AiDotNet.LoRA.Adapters;
 
 /// <summary>
 /// LongLoRA adapter that efficiently extends LoRA to handle longer context lengths using shifted sparse attention.

@@ -1,7 +1,7 @@
 using AiDotNet.Interfaces;
 using System.Collections.Generic;
 
-namespace AiDotNet.NeuralNetworks.Layers;
+namespace AiDotNet.LoRA.Adapters;
 
 /// <summary>
 /// Vector Bank LoRA (VB-LoRA) adapter that uses shared parameter banks for efficient multi-client deployment.

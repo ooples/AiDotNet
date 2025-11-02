@@ -1,6 +1,6 @@
 using AiDotNet.Interfaces;
 
-namespace AiDotNet.NeuralNetworks.Layers;
+namespace AiDotNet.LoRA.Adapters;
 
 /// <summary>
 /// X-LoRA (Mixture of LoRA Experts) adapter that uses multiple LoRA experts with learned routing.

@@ -1,6 +1,6 @@
 using AiDotNet.Interfaces;
 
-namespace AiDotNet.NeuralNetworks.Layers;
+namespace AiDotNet.LoRA.Adapters;
 
 /// <summary>
 /// QLoRA (Quantized LoRA) adapter for parameter-efficient fine-tuning with 4-bit quantized base weights.

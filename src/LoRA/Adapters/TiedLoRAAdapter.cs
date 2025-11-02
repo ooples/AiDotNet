@@ -1,7 +1,7 @@
 using AiDotNet.Interfaces;
 using AiDotNet.Helpers;
 
-namespace AiDotNet.NeuralNetworks.Layers;
+namespace AiDotNet.LoRA.Adapters;
 
 /// <summary>
 /// Tied-LoRA adapter - LoRA with weight tying for extreme parameter efficiency across deep networks.

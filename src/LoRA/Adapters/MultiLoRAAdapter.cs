@@ -1,6 +1,6 @@
 using AiDotNet.Interfaces;
 
-namespace AiDotNet.NeuralNetworks.Layers;
+namespace AiDotNet.LoRA.Adapters;
 
 /// <summary>
 /// Multi-task LoRA adapter that manages multiple task-specific LoRA layers for complex multi-task learning scenarios.
