@@ -169,10 +169,9 @@ public class DVoRAAdapter<T> : LoRAAdapterBase<T>
     {
         get
         {
-            int magnitudeCount = _magnitude != null ? _magnitude.Length : 0;
-            int dScaleCount = _scalingVectorD != null ? _scalingVectorD.Length : 0;
-            int bScaleCount = _scalingVectorB != null ? _scalingVectorB.Length : 0;
-            int dvoraParams = magnitudeCount + dScaleCount + bScaleCount;
+            // No null checks - these vectors are always initialized in constructor
+            // If they're null, it's a programming error that should fail fast
+            int dvoraParams = _magnitude.Length + _scalingVectorD.Length + _scalingVectorB.Length;
             int baseCount = (_baseLayer != null && !_freezeBaseLayer) ? _baseLayer.ParameterCount : 0;
             return baseCount + dvoraParams;
         }
