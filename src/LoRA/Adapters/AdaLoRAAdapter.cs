@@ -45,6 +45,11 @@ namespace AiDotNet.LoRA.Adapters;
 public class AdaLoRAAdapter<T> : LoRAAdapterBase<T>
 {
     /// <summary>
+    /// Static random number generator for thread-safe initialization.
+    /// </summary>
+    private static readonly Random _rng = new Random();
+
+    /// <summary>
     /// Maximum possible rank for this adapter.
     /// </summary>
     /// <remarks>
@@ -526,13 +531,13 @@ public class AdaLoRAAdapter<T> : LoRAAdapterBase<T>
                 // Reinitialize column r of matrix A [inputSize, rank] with small random values
                 for (int i = 0; i < matrixA.Rows; i++)
                 {
-                    matrixA[i, r] = NumOps.FromDouble((Random.NextDouble() - 0.5) * 0.02);
+                    matrixA[i, r] = NumOps.FromDouble((_rng.NextDouble() - 0.5) * 0.02);
                 }
 
                 // Reinitialize row r of matrix B [rank, outputSize] with small random values
                 for (int j = 0; j < matrixB.Columns; j++)
                 {
-                    matrixB[r, j] = NumOps.FromDouble((Random.NextDouble() - 0.5) * 0.02);
+                    matrixB[r, j] = NumOps.FromDouble((_rng.NextDouble() - 0.5) * 0.02);
                 }
             }
 

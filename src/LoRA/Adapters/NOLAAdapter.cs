@@ -211,9 +211,20 @@ public class NOLAAdapter<T> : LoRAAdapterBase<T>
     /// For NOLA, this is just 2 * numBasis (coefficients for A and B), plus base layer parameters if not frozen.
     /// This is dramatically smaller than standard LoRA's (inputSize * rank) + (rank * outputSize).
     /// </remarks>
-    public override int ParameterCount => _freezeBaseLayer
-        ? (2 * _numBasis)
-        : (_baseLayer.ParameterCount + 2 * _numBasis);
+    public override int ParameterCount
+    {
+        get
+        {
+            // Guard against being called during base class construction before _numBasis is set
+            if (_numBasis == 0 && _baseLayer != null)
+            {
+                return _freezeBaseLayer ? 0 : _baseLayer.ParameterCount;
+            }
+
+            int baseCount = (_baseLayer != null && !_freezeBaseLayer) ? _baseLayer.ParameterCount : 0;
+            return baseCount + (2 * _numBasis);
+        }
+    }
 
     /// <summary>
     /// Generates a random basis matrix with the specified dimensions using the fixed seed.
