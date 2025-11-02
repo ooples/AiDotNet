@@ -15,7 +15,7 @@ namespace AiDotNetTests.UnitTests.NeuralNetworks
             var baseLayer = new DenseLayer<double>(10, 5, (IActivationFunction<double>?)null);
 
             // Act
-            var adapter = new LoRAAdapter<double>(baseLayer, rank: 3);
+            var adapter = new DenseLoRAAdapter<double>(baseLayer, rank: 3);
 
             // Assert
             Assert.NotNull(adapter);
@@ -29,7 +29,7 @@ namespace AiDotNetTests.UnitTests.NeuralNetworks
         public void Constructor_WithNullBaseLayer_ThrowsArgumentNullException()
         {
             // Act & Assert
-            Assert.Throws<ArgumentNullException>(() => new LoRAAdapter<double>(null!, rank: 3));
+            Assert.Throws<ArgumentNullException>(() => new DenseLoRAAdapter<double>(null!, rank: 3));
         }
 
         [Fact]
@@ -37,7 +37,7 @@ namespace AiDotNetTests.UnitTests.NeuralNetworks
         {
             // Arrange
             var baseLayer = new DenseLayer<double>(10, 5, (IActivationFunction<double>?)null);
-            var adapter = new LoRAAdapter<double>(baseLayer, rank: 3, freezeBaseLayer: true);
+            var adapter = new DenseLoRAAdapter<double>(baseLayer, rank: 3, freezeBaseLayer: true);
 
             // Act
             var paramCount = adapter.ParameterCount;
@@ -52,7 +52,7 @@ namespace AiDotNetTests.UnitTests.NeuralNetworks
         {
             // Arrange
             var baseLayer = new DenseLayer<double>(10, 5, (IActivationFunction<double>?)null);
-            var adapter = new LoRAAdapter<double>(baseLayer, rank: 3, freezeBaseLayer: false);
+            var adapter = new DenseLoRAAdapter<double>(baseLayer, rank: 3, freezeBaseLayer: false);
 
             // Act
             var paramCount = adapter.ParameterCount;
@@ -67,7 +67,7 @@ namespace AiDotNetTests.UnitTests.NeuralNetworks
         {
             // Arrange
             var baseLayer = new DenseLayer<double>(10, 5, (IActivationFunction<double>?)null);
-            var adapter = new LoRAAdapter<double>(baseLayer, rank: 3);
+            var adapter = new DenseLoRAAdapter<double>(baseLayer, rank: 3);
             var input = new Tensor<double>(new[] { 2, 10 });
 
             // Act
@@ -83,7 +83,7 @@ namespace AiDotNetTests.UnitTests.NeuralNetworks
         {
             // Arrange
             var baseLayer = new DenseLayer<double>(10, 5, (IActivationFunction<double>?)null);
-            var adapter = new LoRAAdapter<double>(baseLayer, rank: 3);
+            var adapter = new DenseLoRAAdapter<double>(baseLayer, rank: 3);
 
             // Create input
             var input = new Tensor<double>(new[] { 1, 10 });
@@ -107,7 +107,7 @@ namespace AiDotNetTests.UnitTests.NeuralNetworks
         {
             // Arrange
             var baseLayer = new DenseLayer<double>(10, 5, (IActivationFunction<double>?)null);
-            var adapter = new LoRAAdapter<double>(baseLayer, rank: 3, freezeBaseLayer: true);
+            var adapter = new DenseLoRAAdapter<double>(baseLayer, rank: 3, freezeBaseLayer: true);
 
             var input = new Tensor<double>(new[] { 1, 10 });
             adapter.Forward(input);
@@ -135,7 +135,7 @@ namespace AiDotNetTests.UnitTests.NeuralNetworks
         {
             // Arrange
             var baseLayer = new DenseLayer<double>(10, 5, (IActivationFunction<double>?)null);
-            var adapter = new LoRAAdapter<double>(baseLayer, rank: 3, freezeBaseLayer: false);
+            var adapter = new DenseLoRAAdapter<double>(baseLayer, rank: 3, freezeBaseLayer: false);
 
             var input = new Tensor<double>(new[] { 1, 10 });
             adapter.Forward(input);
@@ -155,7 +155,7 @@ namespace AiDotNetTests.UnitTests.NeuralNetworks
         {
             // Arrange
             var baseLayer = new DenseLayer<double>(10, 5, (IActivationFunction<double>?)null);
-            var adapter = new LoRAAdapter<double>(baseLayer, rank: 3, freezeBaseLayer: true);
+            var adapter = new DenseLoRAAdapter<double>(baseLayer, rank: 3, freezeBaseLayer: true);
 
             var input = new Tensor<double>(new[] { 1, 10 });
             adapter.Forward(input);
@@ -187,7 +187,7 @@ namespace AiDotNetTests.UnitTests.NeuralNetworks
         {
             // Arrange
             var baseLayer = new DenseLayer<double>(10, 5, (IActivationFunction<double>?)null);
-            var adapter = new LoRAAdapter<double>(baseLayer, rank: 3, freezeBaseLayer: true);
+            var adapter = new DenseLoRAAdapter<double>(baseLayer, rank: 3, freezeBaseLayer: true);
 
             // Act
             var parameters = adapter.GetParameters();
@@ -201,7 +201,7 @@ namespace AiDotNetTests.UnitTests.NeuralNetworks
         {
             // Arrange
             var baseLayer = new DenseLayer<double>(10, 5, (IActivationFunction<double>?)null);
-            var adapter = new LoRAAdapter<double>(baseLayer, rank: 3, freezeBaseLayer: true);
+            var adapter = new DenseLoRAAdapter<double>(baseLayer, rank: 3, freezeBaseLayer: true);
 
             var newParams = new Vector<double>(45);
             for (int i = 0; i < 45; i++)
@@ -225,7 +225,7 @@ namespace AiDotNetTests.UnitTests.NeuralNetworks
         {
             // Arrange
             var baseLayer = new DenseLayer<double>(10, 5, (IActivationFunction<double>?)null);
-            var adapter = new LoRAAdapter<double>(baseLayer, rank: 3, freezeBaseLayer: true);
+            var adapter = new DenseLoRAAdapter<double>(baseLayer, rank: 3, freezeBaseLayer: true);
 
             var wrongParams = new Vector<double>(100);
 
@@ -238,10 +238,10 @@ namespace AiDotNetTests.UnitTests.NeuralNetworks
         {
             // Arrange
             var baseLayer = new DenseLayer<double>(10, 5, (IActivationFunction<double>?)null);
-            var adapter = new LoRAAdapter<double>(baseLayer, rank: 3);
+            var adapter = new DenseLoRAAdapter<double>(baseLayer, rank: 3);
 
             // Act
-            var mergedLayer = adapter.MergeToSingleLayer();
+            var mergedLayer = adapter.MergeToOriginalLayer();
 
             // Assert
             Assert.NotNull(mergedLayer);
@@ -255,7 +255,7 @@ namespace AiDotNetTests.UnitTests.NeuralNetworks
         {
             // Arrange
             var baseLayer = new DenseLayer<double>(10, 5, (IActivationFunction<double>?)null);
-            var adapter = new LoRAAdapter<double>(baseLayer, rank: 3);
+            var adapter = new DenseLoRAAdapter<double>(baseLayer, rank: 3);
 
             // Train the adapter a bit
             var input = new Tensor<double>(new[] { 1, 10 });
@@ -281,7 +281,7 @@ namespace AiDotNetTests.UnitTests.NeuralNetworks
             var adapterOutput = adapter.Forward(input);
 
             // Act - Merge and get output from merged layer
-            var mergedLayer = adapter.MergeToSingleLayer();
+            var mergedLayer = adapter.MergeToOriginalLayer();
             var mergedOutput = mergedLayer.Forward(input);
 
             // Assert - Outputs should be very close
@@ -296,7 +296,7 @@ namespace AiDotNetTests.UnitTests.NeuralNetworks
         {
             // Arrange
             var baseLayer = new DenseLayer<double>(10, 5, (IActivationFunction<double>?)null);
-            var adapter = new LoRAAdapter<double>(baseLayer, rank: 3);
+            var adapter = new DenseLoRAAdapter<double>(baseLayer, rank: 3);
 
             // Act
             var retrievedBase = adapter.BaseLayer;
@@ -310,7 +310,7 @@ namespace AiDotNetTests.UnitTests.NeuralNetworks
         {
             // Arrange
             var baseLayer = new DenseLayer<double>(10, 5, (IActivationFunction<double>?)null);
-            var adapter = new LoRAAdapter<double>(baseLayer, rank: 3);
+            var adapter = new DenseLoRAAdapter<double>(baseLayer, rank: 3);
 
             // Act
             var loraLayer = adapter.LoRALayer;
@@ -325,8 +325,8 @@ namespace AiDotNetTests.UnitTests.NeuralNetworks
         public void IsBaseLayerFrozen_Property_ReflectsConstructorParameter()
         {
             // Arrange & Act
-            var adapter1 = new LoRAAdapter<double>(new DenseLayer<double>(10, 5, (IActivationFunction<double>?)null), rank: 3, freezeBaseLayer: true);
-            var adapter2 = new LoRAAdapter<double>(new DenseLayer<double>(10, 5, (IActivationFunction<double>?)null), rank: 3, freezeBaseLayer: false);
+            var adapter1 = new DenseLoRAAdapter<double>(new DenseLayer<double>(10, 5, (IActivationFunction<double>?)null), rank: 3, freezeBaseLayer: true);
+            var adapter2 = new DenseLoRAAdapter<double>(new DenseLayer<double>(10, 5, (IActivationFunction<double>?)null), rank: 3, freezeBaseLayer: false);
 
             // Assert
             Assert.True(adapter1.IsBaseLayerFrozen);
@@ -337,7 +337,7 @@ namespace AiDotNetTests.UnitTests.NeuralNetworks
         public void Alpha_Property_ReturnsCorrectValue()
         {
             // Arrange & Act
-            var adapter = new LoRAAdapter<double>(new DenseLayer<double>(10, 5, (IActivationFunction<double>?)null), rank: 3, alpha: 16);
+            var adapter = new DenseLoRAAdapter<double>(new DenseLayer<double>(10, 5, (IActivationFunction<double>?)null), rank: 3, alpha: 16);
 
             // Assert
             Assert.Equal(16.0, adapter.Alpha);
@@ -348,7 +348,7 @@ namespace AiDotNetTests.UnitTests.NeuralNetworks
         {
             // Arrange
             var baseLayer = new DenseLayer<double>(10, 5, (IActivationFunction<double>?)null);
-            var adapter = new LoRAAdapter<double>(baseLayer, rank: 3);
+            var adapter = new DenseLoRAAdapter<double>(baseLayer, rank: 3);
 
             // Act & Assert
             Assert.True(adapter.SupportsTraining);
@@ -364,7 +364,7 @@ namespace AiDotNetTests.UnitTests.NeuralNetworks
             var baseLayer = new DenseLayer<double>(inputSize, outputSize, (IActivationFunction<double>?)null);
 
             // Act
-            var adapter = new LoRAAdapter<double>(baseLayer, rank, freezeBaseLayer: freeze);
+            var adapter = new DenseLoRAAdapter<double>(baseLayer, rank, freezeBaseLayer: freeze);
 
             // Assert
             Assert.NotNull(adapter);
@@ -379,7 +379,7 @@ namespace AiDotNetTests.UnitTests.NeuralNetworks
         {
             // Arrange
             var baseLayer = new DenseLayer<float>(10, 5, (IActivationFunction<float>?)null);
-            var adapter = new LoRAAdapter<float>(baseLayer, rank: 3);
+            var adapter = new DenseLoRAAdapter<float>(baseLayer, rank: 3);
             var input = new Tensor<float>(new[] { 1, 10 });
 
             // Act

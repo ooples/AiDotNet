@@ -322,4 +322,33 @@ public interface IPredictionModelBuilder<T, TInput, TOutput>
     /// <param name="evaluator">The fairness evaluator implementation to use.</param>
     /// <returns>The builder instance for method chaining.</returns>
     IPredictionModelBuilder<T, TInput, TOutput> ConfigureFairnessEvaluator(IFairnessEvaluator<T> evaluator);
+
+    /// <summary>
+    /// Configures LoRA (Low-Rank Adaptation) for parameter-efficient fine-tuning.
+    /// </summary>
+    /// <remarks>
+    /// LoRA enables efficient fine-tuning of neural networks by learning low-rank decompositions
+    /// of weight updates instead of modifying all weights directly. This dramatically reduces
+    /// the number of trainable parameters while maintaining model performance.
+    ///
+    /// <b>For Beginners:</b> LoRA is a technique that lets you adapt large pre-trained models
+    /// with 100x fewer parameters than traditional fine-tuning. Instead of updating all weights,
+    /// LoRA adds small "correction layers" that learn what adjustments are needed.
+    ///
+    /// Think of it like:
+    /// - The original model has the base knowledge (optionally frozen)
+    /// - LoRA layers learn small corrections for your specific task
+    /// - The final output combines both: original + correction
+    ///
+    /// This is especially useful when:
+    /// - You want to fine-tune a large model with limited memory
+    /// - You need to create multiple task-specific versions of the same model
+    /// - You want to adapt pre-trained models without retraining everything
+    ///
+    /// The configuration determines which layers get LoRA adaptations, what rank to use,
+    /// and whether to freeze the base layers during training.
+    /// </remarks>
+    /// <param name="loraConfiguration">The LoRA configuration implementation to use.</param>
+    /// <returns>The builder instance for method chaining.</returns>
+    IPredictionModelBuilder<T, TInput, TOutput> ConfigureLoRA(ILoRAConfiguration<T> loraConfiguration);
 }

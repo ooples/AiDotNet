@@ -1,46 +1,105 @@
+using AiDotNet.Interfaces;
+
 namespace AiDotNet.NeuralNetworks.Layers;
 
 /// <summary>
-/// Wraps an existing layer with LoRA functionality, allowing parameter-efficient fine-tuning.
+/// Abstract base class for LoRA (Low-Rank Adaptation) adapters that wrap existing layers.
 /// </summary>
 /// <typeparam name="T">The numeric type used for calculations, typically float or double.</typeparam>
 /// <remarks>
 /// <para>
-/// The LoRAAdapter wraps an existing layer (called the base layer) and adds a LoRA layer in parallel.
-/// During forward pass, both the base layer and LoRA layer process the input, and their outputs are
-/// summed. The base layer's parameters can be frozen while only the LoRA parameters are trained.
+/// This base class provides common functionality for all LoRA adapter implementations.
+/// It manages the base layer, LoRA layer, and parameter synchronization, while allowing
+/// derived classes to implement layer-type-specific logic such as merging and validation.
 /// </para>
-/// <para><b>For Beginners:</b> This adapter lets you add LoRA to an existing layer without modifying it.
-/// Think of it like adding a "correction layer" that learns what adjustments are needed:
+/// <para><b>For Beginners:</b> This is the foundation for all LoRA adapters in the library.
 ///
-/// - The base layer keeps its original weights (optionally frozen)
-/// - The LoRA layer learns a small correction
-/// - The final output is: original_output + lora_correction
+/// A LoRA adapter wraps an existing layer (like a dense or convolutional layer) and adds
+/// a small "correction layer" that learns what adjustments are needed. This base class:
+/// - Manages both the original layer and the LoRA correction layer
+/// - Handles parameter synchronization between them
+/// - Provides common forward/backward pass logic (original + correction)
+/// - Lets specialized adapters handle layer-specific details
 ///
-/// This is incredibly useful for fine-tuning pre-trained models:
-/// 1. Load a pre-trained model
-/// 2. Wrap its layers with LoRAAdapter
-/// 3. Freeze the base layers
-/// 4. Train only the small LoRA corrections
-/// 5. Achieve similar results with 100x fewer trainable parameters!
+/// This design allows you to create LoRA adapters for any layer type by:
+/// 1. Inheriting from this base class
+/// 2. Implementing layer-specific validation
+/// 3. Implementing how to merge the LoRA weights back into the original layer
+///
+/// The result is parameter-efficient fine-tuning that works across different layer architectures!
 /// </para>
 /// </remarks>
-public class LoRAAdapter<T> : LayerBase<T>
+public abstract class LoRAAdapterBase<T> : LayerBase<T>, ILoRAAdapter<T>
 {
     /// <summary>
     /// The base layer being adapted.
     /// </summary>
-    private readonly ILayer<T> _baseLayer;
+    protected readonly ILayer<T> _baseLayer;
 
     /// <summary>
     /// The LoRA layer that provides the adaptation.
     /// </summary>
-    private readonly LoRALayer<T> _loraLayer;
+    protected readonly LoRALayer<T> _loraLayer;
 
     /// <summary>
     /// Whether the base layer's parameters are frozen (not trainable).
     /// </summary>
-    private readonly bool _freezeBaseLayer;
+    protected readonly bool _freezeBaseLayer;
+
+    /// <summary>
+    /// Gets the base layer being adapted with LoRA.
+    /// </summary>
+    /// <remarks>
+    /// This is the original layer that's being enhanced with LoRA adaptations.
+    /// It may be frozen (non-trainable) during fine-tuning for maximum efficiency.
+    /// </remarks>
+    public ILayer<T> BaseLayer => _baseLayer;
+
+    /// <summary>
+    /// Gets the LoRA layer providing the low-rank adaptation.
+    /// </summary>
+    /// <remarks>
+    /// This layer implements the low-rank decomposition (A and B matrices)
+    /// that provides the adaptation to the base layer's behavior.
+    /// </remarks>
+    public LoRALayer<T> LoRALayer => _loraLayer;
+
+    /// <summary>
+    /// Gets whether the base layer's parameters are frozen during training.
+    /// </summary>
+    /// <remarks>
+    /// When true, only the LoRA parameters are trained, dramatically reducing
+    /// memory requirements and training time. This is the typical use case for LoRA.
+    /// </remarks>
+    public bool IsBaseLayerFrozen => _freezeBaseLayer;
+
+    /// <summary>
+    /// Gets the rank of the low-rank decomposition.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// The rank determines how many parameters the LoRA adaptation uses.
+    /// Lower rank = fewer parameters = more efficient but less flexible.
+    /// </para>
+    /// <para>
+    /// Typical values:
+    /// - rank=1-4: Very efficient, minimal parameters
+    /// - rank=8: Good balance (default for many applications)
+    /// - rank=16-32: More flexibility, more parameters
+    /// - rank=64+: Diminishing returns, approaching full fine-tuning
+    /// </para>
+    /// </remarks>
+    public int Rank => _loraLayer.Rank;
+
+    /// <summary>
+    /// Gets the scaling factor (alpha) for the LoRA adaptation.
+    /// </summary>
+    /// <remarks>
+    /// Alpha controls how strongly the LoRA adaptation affects the output.
+    /// The actual LoRA contribution is scaled by alpha/rank.
+    /// Common practice: alpha = rank (scaling factor of 1.0)
+    /// </remarks>
+    public double Alpha => Convert.ToDouble(_loraLayer.Alpha);
 
     /// <summary>
     /// Gets the total number of trainable parameters.
@@ -49,7 +108,9 @@ public class LoRAAdapter<T> : LayerBase<T>
     /// If the base layer is frozen, this returns only the LoRA parameter count.
     /// Otherwise, it returns the sum of base and LoRA parameters.
     /// </remarks>
-    public override int ParameterCount => _freezeBaseLayer ? _loraLayer.ParameterCount : (_baseLayer.ParameterCount + _loraLayer.ParameterCount);
+    public override int ParameterCount => _freezeBaseLayer
+        ? _loraLayer.ParameterCount
+        : (_baseLayer.ParameterCount + _loraLayer.ParameterCount);
 
     /// <summary>
     /// Gets whether this adapter supports training.
@@ -57,16 +118,15 @@ public class LoRAAdapter<T> : LayerBase<T>
     public override bool SupportsTraining => true;
 
     /// <summary>
-    /// Initializes a new LoRA adapter wrapping an existing layer.
+    /// Initializes a new LoRA adapter base with the specified parameters.
     /// </summary>
     /// <param name="baseLayer">The layer to adapt with LoRA.</param>
     /// <param name="rank">The rank of the LoRA decomposition.</param>
     /// <param name="alpha">The LoRA scaling factor (defaults to rank if negative).</param>
     /// <param name="freezeBaseLayer">Whether to freeze the base layer's parameters during training.</param>
     /// <exception cref="ArgumentNullException">Thrown when baseLayer is null.</exception>
-    /// <exception cref="ArgumentException">Thrown when the base layer doesn't have compatible dimensions.</exception>
     /// <remarks>
-    /// <para><b>For Beginners:</b> This creates an adapter that adds LoRA to an existing layer.
+    /// <para><b>For Beginners:</b> This creates the foundation for a LoRA adapter.
     ///
     /// Parameters:
     /// - baseLayer: The layer you want to make more efficient to fine-tune
@@ -74,11 +134,10 @@ public class LoRAAdapter<T> : LayerBase<T>
     /// - alpha: How strong the LoRA adaptation is
     /// - freezeBaseLayer: Whether to lock the original layer's weights (usually true for efficiency)
     ///
-    /// Example: If you have a dense layer with 1000x1000 weights, wrapping it with rank=8 LoRA
-    /// (frozen) reduces trainable parameters from 1,000,000 to just 16,000!
+    /// Derived classes will call this constructor and then add their own layer-specific logic.
     /// </para>
     /// </remarks>
-    public LoRAAdapter(ILayer<T> baseLayer, int rank, double alpha = -1, bool freezeBaseLayer = true)
+    protected LoRAAdapterBase(ILayer<T> baseLayer, int rank, double alpha = -1, bool freezeBaseLayer = true)
         : base(
             (baseLayer ?? throw new ArgumentNullException(nameof(baseLayer))).GetInputShape(),
             (baseLayer ?? throw new ArgumentNullException(nameof(baseLayer))).GetOutputShape())
@@ -86,21 +145,40 @@ public class LoRAAdapter<T> : LayerBase<T>
         _baseLayer = baseLayer;
         _freezeBaseLayer = freezeBaseLayer;
 
-        // Validate base layer has single-dimensional input/output
-        if (baseLayer.GetInputShape().Length != 1 || baseLayer.GetOutputShape().Length != 1)
-        {
-            throw new ArgumentException("LoRAAdapter currently only supports layers with 1D input/output shapes");
-        }
-
-        int inputSize = baseLayer.GetInputShape()[0];
-        int outputSize = baseLayer.GetOutputShape()[0];
-
-        // Create the LoRA layer
-        _loraLayer = new LoRALayer<T>(inputSize, outputSize, rank, alpha);
+        // Create the LoRA layer - derived classes may override this via CreateLoRALayer
+        _loraLayer = CreateLoRALayer(rank, alpha);
 
         // Initialize parameters
         Parameters = new Vector<T>(ParameterCount);
         UpdateParametersFromLayers();
+    }
+
+    /// <summary>
+    /// Creates the LoRA layer for this adapter.
+    /// </summary>
+    /// <param name="rank">The rank of the LoRA decomposition.</param>
+    /// <param name="alpha">The LoRA scaling factor.</param>
+    /// <returns>A LoRA layer configured for this adapter.</returns>
+    /// <remarks>
+    /// <para>
+    /// This method can be overridden by derived classes to customize LoRA layer creation.
+    /// By default, it creates a standard LoRA layer with the adapter's input and output dimensions.
+    /// </para>
+    /// <para><b>For Beginners:</b> This creates the "correction layer" that learns adaptations.
+    ///
+    /// Different adapter types might need different LoRA layer configurations:
+    /// - Dense layers: Standard 1D LoRA
+    /// - Convolutional layers: LoRA with spatial dimensions
+    /// - Attention layers: LoRA for query/key/value projections
+    ///
+    /// This method lets each adapter type create the right kind of LoRA layer.
+    /// </para>
+    /// </remarks>
+    protected virtual LoRALayer<T> CreateLoRALayer(int rank, double alpha)
+    {
+        int inputSize = GetInputShape()[0];
+        int outputSize = GetOutputShape()[0];
+        return new LoRALayer<T>(inputSize, outputSize, rank, alpha);
     }
 
     /// <summary>
@@ -209,7 +287,7 @@ public class LoRAAdapter<T> : LayerBase<T>
     {
         if (parameters.Length != ParameterCount)
         {
-            throw new ArgumentException($"Expected {ParameterCount} parameters, got {parameters.Length}");
+            throw new ArgumentException($"Expected {ParameterCount} parameters, got {parameters.Length}", nameof(parameters));
         }
 
         Parameters = parameters.Clone();
@@ -219,6 +297,15 @@ public class LoRAAdapter<T> : LayerBase<T>
     /// <summary>
     /// Updates the parameter vector from the current layer states.
     /// </summary>
+    /// <remarks>
+    /// <para>
+    /// This method synchronizes the parameter vector with the current state of the base
+    /// and LoRA layers. If the base layer is frozen, only LoRA parameters are included.
+    /// </para>
+    /// <para><b>For Beginners:</b> This copies the current values from both layers into one big list.
+    /// Think of it like collecting all the knobs and dials into a single organized array.
+    /// </para>
+    /// </remarks>
     private void UpdateParametersFromLayers()
     {
         int idx = 0;
@@ -244,6 +331,15 @@ public class LoRAAdapter<T> : LayerBase<T>
     /// <summary>
     /// Updates the layers from the parameter vector.
     /// </summary>
+    /// <remarks>
+    /// <para>
+    /// This method distributes the values from the parameter vector back to the base
+    /// and LoRA layers. If the base layer is frozen, only LoRA parameters are updated.
+    /// </para>
+    /// <para><b>For Beginners:</b> This does the opposite of UpdateParametersFromLayers.
+    /// It takes values from the big list and puts them back into the individual layers.
+    /// </para>
+    /// </remarks>
     private void UpdateLayersFromParameters()
     {
         int idx = 0;
@@ -273,6 +369,15 @@ public class LoRAAdapter<T> : LayerBase<T>
     /// <summary>
     /// Updates the parameter gradients vector from the layer gradients.
     /// </summary>
+    /// <remarks>
+    /// <para>
+    /// This method collects gradients from both layers into a single vector.
+    /// If the base layer is frozen, only LoRA gradients are included.
+    /// </para>
+    /// <para><b>For Beginners:</b> After backpropagation, this collects all the "improvement directions"
+    /// from both layers into one organized list for the optimizer to use.
+    /// </para>
+    /// </remarks>
     private void UpdateParameterGradientsFromLayers()
     {
         ParameterGradients = new Vector<T>(ParameterCount);
@@ -300,11 +405,11 @@ public class LoRAAdapter<T> : LayerBase<T>
     /// Merges the LoRA adaptation into the base layer and returns the merged layer.
     /// </summary>
     /// <returns>A new layer with LoRA weights merged into the base layer's weights.</returns>
-    /// <exception cref="InvalidOperationException">Thrown when the base layer type doesn't support merging.</exception>
     /// <remarks>
     /// <para>
-    /// This is only supported for DenseLayer base layers currently. The LoRA weights are computed
-    /// and added directly to the base layer's weight matrix.
+    /// This method must be implemented by derived classes to handle layer-type-specific
+    /// merging logic. Each type of adapter (Dense, Convolutional, etc.) needs to know
+    /// how to combine its LoRA weights with the base layer's weights.
     /// </para>
     /// <para><b>For Beginners:</b> This "bakes in" your LoRA adaptation to create a regular layer.
     /// After training with LoRA, you can merge the adaptation into the original weights for:
@@ -312,77 +417,10 @@ public class LoRAAdapter<T> : LayerBase<T>
     /// - Simpler deployment (single layer instead of two)
     /// - Compatibility with systems that don't support LoRA
     ///
-    /// Think of it like merging tracked changes in a document - you go from "original + changes"
-    /// to a single updated version.
+    /// Each layer type implements this differently because they have different internal structures.
     /// </para>
     /// </remarks>
-    public ILayer<T> MergeToSingleLayer()
-    {
-        if (_baseLayer is not DenseLayer<T> denseBase)
-        {
-            throw new InvalidOperationException("Merging is currently only supported for DenseLayer base layers");
-        }
-
-        // Get the LoRA weight contribution
-        Matrix<T> loraWeights = _loraLayer.MergeWeights();
-
-        // Clone the base layer and get its current parameters
-        Vector<T> baseParams = denseBase.GetParameters();
-
-        // The DenseLayer stores parameters as [weights..., biases...]
-        // We need to add the LoRA weights to the base weights
-        int inputSize = GetInputShape()[0];
-        int outputSize = GetOutputShape()[0];
-        int weightCount = inputSize * outputSize;
-
-        // Create new parameters with merged weights
-        Vector<T> mergedParams = new Vector<T>(baseParams.Length);
-
-        // Merge weights
-        for (int i = 0; i < weightCount; i++)
-        {
-            int row = i / inputSize;
-            int col = i % inputSize;
-            mergedParams[i] = NumOps.Add(baseParams[i], loraWeights[row, col]);
-        }
-
-        // Copy biases unchanged
-        for (int i = weightCount; i < baseParams.Length; i++)
-        {
-            mergedParams[i] = baseParams[i];
-        }
-
-        // Create a new dense layer with merged parameters
-        DenseLayer<T> mergedLayer = new DenseLayer<T>(inputSize, outputSize, (IActivationFunction<T>?)null);
-        mergedLayer.SetParameters(mergedParams);
-
-        return mergedLayer;
-    }
-
-    /// <summary>
-    /// Gets the underlying base layer.
-    /// </summary>
-    public ILayer<T> BaseLayer => _baseLayer;
-
-    /// <summary>
-    /// Gets the LoRA layer.
-    /// </summary>
-    public LoRALayer<T> LoRALayer => _loraLayer;
-
-    /// <summary>
-    /// Gets whether the base layer is frozen.
-    /// </summary>
-    public bool IsBaseLayerFrozen => _freezeBaseLayer;
-
-    /// <summary>
-    /// Gets the rank of the LoRA adaptation.
-    /// </summary>
-    public int Rank => _loraLayer.Rank;
-
-    /// <summary>
-    /// Gets the LoRA alpha scaling factor.
-    /// </summary>
-    public T Alpha => _loraLayer.Alpha;
+    public abstract ILayer<T> MergeToOriginalLayer();
 
     /// <summary>
     /// Resets the internal state of both the base layer and LoRA layer.
