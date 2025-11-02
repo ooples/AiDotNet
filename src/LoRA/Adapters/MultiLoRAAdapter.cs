@@ -607,18 +607,16 @@ public class MultiLoRAAdapter<T> : LoRAAdapterBase<T>
             }
         }
 
-        // Current task's gradients
+        // All task adapters' gradients (in same order as GetParameters/SetParameters)
         LoRALayer<T> currentAdapter = _taskAdapters[_currentTask];
-        Vector<T> loraGrads = currentAdapter.GetParameterGradients();
-        for (int i = 0; i < loraGrads.Length; i++)
+        foreach (var adapter in _taskAdapters.Values)
         {
-            ParameterGradients[idx++] = loraGrads[i];
-        }
+            Vector<T>? grads = adapter == currentAdapter ? adapter.GetParameterGradients() : null;
 
-        // Other tasks have zero gradients (they weren't updated)
-        while (idx < ParameterCount)
-        {
-            ParameterGradients[idx++] = NumOps.Zero;
+            for (int i = 0; i < adapter.ParameterCount; i++)
+            {
+                ParameterGradients[idx++] = grads != null ? grads[i] : NumOps.Zero;
+            }
         }
     }
 
