@@ -541,7 +541,21 @@ public class LoftQAdapter<T> : LoRAAdapterBase<T>
 
             // Compute scale and zero point
             T range = NumOps.Subtract(maxVal, minVal);
-            T scale = NumOps.Divide(range, NumOps.FromDouble(15.0));
+
+            // Guard against zero range (constant weights in block)
+            // When minVal == maxVal, all values are identical, so we use a sentinel scale
+            T scale;
+            if (NumOps.LessThan(NumOps.Abs(range), NumOps.FromDouble(1e-8)))
+            {
+                // All weights in this block are the same value
+                // Use scale=1 as sentinel to avoid division by zero during dequantization
+                scale = NumOps.One;
+            }
+            else
+            {
+                scale = NumOps.Divide(range, NumOps.FromDouble(15.0));
+            }
+
             T zeroPoint = minVal;
 
             _quantizationScales[blockIdx] = scale;
