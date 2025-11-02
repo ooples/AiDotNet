@@ -23,10 +23,10 @@ namespace AiDotNet.LoRA.Adapters;
 /// <para><b>How PiSSA Works:</b>
 /// 1. Perform SVD on pretrained weights: W = U Σ V^T
 /// 2. Initialize adapter matrices from top-r components:
-///    - A = V_r^T (top-r right singular vectors)
-///    - B = U_r Σ_r (top-r left singular vectors scaled by singular values)
-/// 3. Freeze residual matrix: W_residual = W - B*A
-/// 4. During training: output = W_residual * input + B*A*input
+///    - A = V_r (top-r right singular vectors, dimensions: inputSize × rank)
+///    - B = Σ_r * U_r^T (top-r left singular vectors scaled by singular values, dimensions: rank × outputSize)
+/// 3. Freeze residual matrix: W_residual = W - (A*B)^T
+/// 4. During training: output = W_residual * input + LoRA(input)
 /// 5. Only B and A are updated; W_residual stays frozen
 /// </para>
 /// <para><b>Performance Benefits:</b>
@@ -209,27 +209,26 @@ public class PiSSAAdapter<T> : LoRAAdapterBase<T>
         // Extract top-r singular values and vectors
         int r = Rank;
 
-        // Create A matrix from top-r right singular vectors: A = V_r^T
-        // V^T has dimensions (inputSize x inputSize), we take first r rows
+        // Create A matrix from top-r right singular vectors: A = V_r
+        // V^T has dimensions (inputSize x inputSize), we take first r rows and transpose to get V_r
         Matrix<T> matrixA = new Matrix<T>(inputSize, r);
         for (int i = 0; i < inputSize; i++)
         {
             for (int j = 0; j < r; j++)
             {
-                matrixA[i, j] = svd.Vt[j, i]; // Transpose: V_r^T
+                matrixA[i, j] = svd.Vt[j, i]; // Result: V_r (dimensions: inputSize × rank)
             }
         }
 
-        // Create B matrix from top-r left singular vectors scaled by singular values: B = U_r Σ_r
-        // U has dimensions (outputSize x outputSize), we take first r columns
-        // Σ is diagonal, so we scale each column of U_r by the corresponding singular value
+        // Create B matrix from top-r left singular vectors scaled by singular values: B = Σ_r * U_r^T
+        // U has dimensions (outputSize x outputSize), we take first r columns, scale, and transpose
         Matrix<T> matrixB = new Matrix<T>(r, outputSize);
         for (int i = 0; i < r; i++)
         {
             T singularValue = svd.S[i];
             for (int j = 0; j < outputSize; j++)
             {
-                matrixB[i, j] = NumOps.Multiply(svd.U[j, i], singularValue);
+                matrixB[i, j] = NumOps.Multiply(svd.U[j, i], singularValue); // Result: Σ_r * U_r^T (dimensions: rank × outputSize)
             }
         }
 
