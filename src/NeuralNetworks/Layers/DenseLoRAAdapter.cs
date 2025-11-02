@@ -136,7 +136,9 @@ public class DenseLoRAAdapter<T> : LoRAAdapterBase<T>
 
         // Create a new dense layer with merged parameters
         // Always return DenseLayer for consistency
-        DenseLayer<T> mergedLayer = new DenseLayer<T>(inputSize, outputSize, (IActivationFunction<T>?)null);
+        // CRITICAL: Preserve activation function from original layer
+        var activation = denseBase?.ActivationFunction ?? fcBase?.ActivationFunction;
+        DenseLayer<T> mergedLayer = new DenseLayer<T>(inputSize, outputSize, activation);
         mergedLayer.SetParameters(mergedParams);
 
         return mergedLayer;
