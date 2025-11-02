@@ -423,6 +423,47 @@ public abstract class LoRAAdapterBase<T> : LayerBase<T>, ILoRAAdapter<T>
     public abstract ILayer<T> MergeToOriginalLayer();
 
     /// <summary>
+    /// Helper method to create a merged layer by cloning the base layer and updating its parameters.
+    /// </summary>
+    /// <param name="mergedParams">The merged parameters to set on the cloned layer.</param>
+    /// <returns>A cloned layer with merged parameters and preserved activation function.</returns>
+    /// <exception cref="InvalidOperationException">Thrown when base layer is not DenseLayer or FullyConnectedLayer.</exception>
+    /// <remarks>
+    /// <para>
+    /// This helper method preserves the activation function and other settings from the base layer
+    /// by using Clone() instead of creating a new layer. This ensures the merged layer behaves
+    /// identically to the original adapted layer.
+    /// </para>
+    /// <para><b>For Beginners:</b> This is a utility method that derived classes can use to create
+    /// a properly merged layer without duplicating the Clone() pattern everywhere.
+    /// </para>
+    /// </remarks>
+    protected ILayer<T> CreateMergedLayerWithClone(Vector<T> mergedParams)
+    {
+        DenseLayer<T>? denseBase = _baseLayer as DenseLayer<T>;
+        FullyConnectedLayer<T>? fcBase = _baseLayer as FullyConnectedLayer<T>;
+
+        if (denseBase != null)
+        {
+            ILayer<T> merged = denseBase.Clone();
+            merged.SetParameters(mergedParams);
+            return merged;
+        }
+        else if (fcBase != null)
+        {
+            ILayer<T> merged = fcBase.Clone();
+            merged.SetParameters(mergedParams);
+            return merged;
+        }
+        else
+        {
+            throw new InvalidOperationException(
+                $"Base layer type {_baseLayer.GetType().Name} is not supported for merging. " +
+                "Only DenseLayer and FullyConnectedLayer are currently supported.");
+        }
+    }
+
+    /// <summary>
     /// Resets the internal state of both the base layer and LoRA layer.
     /// </summary>
     /// <remarks>

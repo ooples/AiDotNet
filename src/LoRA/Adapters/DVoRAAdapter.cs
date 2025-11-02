@@ -1096,25 +1096,8 @@ public class DVoRAAdapter<T> : LoRAAdapterBase<T>
             mergedParams[i] = baseParams[i];
         }
 
-        // Clone base layer to preserve activation function, then update parameters
-        ILayer<T> mergedLayer;
-        if (denseBase != null)
-        {
-            mergedLayer = denseBase.Clone();
-            mergedLayer.SetParameters(mergedParams);
-        }
-        else if (fcBase != null)
-        {
-            mergedLayer = fcBase.Clone();
-            mergedLayer.SetParameters(mergedParams);
-        }
-        else
-        {
-            // Fallback: should never reach here due to earlier check
-            throw new InvalidOperationException("Base layer must be DenseLayer or FullyConnectedLayer");
-        }
-
-        return mergedLayer;
+        // Use helper method to clone base layer and preserve activation function
+        return CreateMergedLayerWithClone(mergedParams);
     }
 
     /// <summary>

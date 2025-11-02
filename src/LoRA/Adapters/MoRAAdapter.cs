@@ -466,25 +466,8 @@ public class MoRAAdapter<T> : LoRAAdapterBase<T>
         }
         // Note: Biases remain unchanged (indices weightCount to end)
 
-        // Clone base layer to preserve activation function, then update parameters
-        ILayer<T> merged;
-        if (denseBase != null)
-        {
-            merged = denseBase.Clone();
-            merged.SetParameters(mergedParams);
-        }
-        else if (fcBase != null)
-        {
-            merged = fcBase.Clone();
-            merged.SetParameters(mergedParams);
-        }
-        else
-        {
-            // Fallback: should never reach here due to earlier check
-            throw new InvalidOperationException("Base layer must be DenseLayer or FullyConnectedLayer");
-        }
-
-        return merged;
+        // Use helper method to clone base layer and preserve activation function
+        return CreateMergedLayerWithClone(mergedParams);
     }
 
     public override void ResetState()
