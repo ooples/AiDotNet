@@ -152,29 +152,32 @@ public abstract class RerankerBase<T> : IReranker<T>
     /// </remarks>
     protected IList<Document<T>> NormalizeScores(IList<Document<T>> documents)
     {
-        var docsWithScores = documents.Where(d => d.RelevanceScore.HasValue).ToList();
+        var docsWithScores = documents.Where(d => d.HasRelevanceScore).ToList();
         if (docsWithScores.Count == 0)
             return documents;
 
-        var scores = docsWithScores.Select(d => d.RelevanceScore!.Value).ToList();
+        var scores = docsWithScores.Select(d => d.RelevanceScore).ToList();
         var minScore = scores.Min();
         var maxScore = scores.Max();
-        var range = maxScore - minScore;
+        var range = NumOps.Subtract(maxScore, minScore);
 
-        const double epsilon = 1e-8;
-        if (Math.Abs(range) < epsilon)
+        var epsilon = NumOps.FromDouble(1e-8);
+        if (NumOps.LessThan(NumOps.Abs(range), epsilon))
         {
             // All scores are the same, set them all to 1.0
+            var one = NumOps.One;
             foreach (var doc in docsWithScores)
             {
-                doc.RelevanceScore = 1.0;
+                doc.RelevanceScore = one;
+                doc.HasRelevanceScore = true;
             }
         }
         else
         {
             foreach (var doc in docsWithScores)
             {
-                doc.RelevanceScore = (doc.RelevanceScore!.Value - minScore) / range;
+                doc.RelevanceScore = NumOps.Divide(NumOps.Subtract(doc.RelevanceScore, minScore), range);
+                doc.HasRelevanceScore = true;
             }
         }
 
