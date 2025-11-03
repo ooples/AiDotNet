@@ -78,34 +78,8 @@ public class VectorDocument<T> where T : struct
     /// </summary>
     /// <param name="document">The document containing content and metadata.</param>
     /// <param name="embedding">The vector embedding of the document.</param>
-    public VectorDocument(Document document, Vector<T> embedding)
-    {
-        Document = document ?? throw new ArgumentNullException(nameof(document));
-        Embedding = embedding ?? throw new ArgumentNullException(nameof(embedding));
-    }
-
-    /// <summary>
-    /// Initializes a new instance of the VectorDocument class with document properties and embedding.
-    /// </summary>
-    /// <param name="id">The unique identifier for the document.</param>
-    /// <param name="content">The text content of the document.</param>
-    /// <param name="embedding">The vector embedding of the document.</param>
-    public VectorDocument(string id, string content, Vector<T> embedding)
-    {
-        Document = new Document(id, content);
-        Embedding = embedding ?? throw new ArgumentNullException(nameof(embedding));
-    }
-
-    /// <summary>
-    /// Initializes a new instance of the VectorDocument class with document properties, metadata, and embedding.
-    /// </summary>
-    /// <param name="id">The unique identifier for the document.</param>
-    /// <param name="content">The text content of the document.</param>
-    /// <param name="metadata">Metadata associated with the document.</param>
-    /// <param name="embedding">The vector embedding of the document.</param>
-    public VectorDocument(string id, string content, Dictionary<string, object> metadata, Vector<T> embedding)
-    {
-        Document = new Document(id, content, metadata);
-        Embedding = embedding ?? throw new ArgumentNullException(nameof(embedding));
-    }
-}
+        public VectorDocument(Document document, Vector<T> embedding)
+        {
+            Document = document ?? throw new ArgumentNullException(nameof(document));
+            Embedding = embedding ?? throw new ArgumentNullException(nameof(embedding));
+        }}

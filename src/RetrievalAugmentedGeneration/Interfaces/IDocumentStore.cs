@@ -73,13 +73,12 @@ public interface IDocumentStore<T> where T : struct
     /// The fingerprint lets the system quickly find similar books later.
     /// </para>
     /// </remarks>
-    void Add(Document document, Vector<T> embedding);
+    void Add(VectorDocument<T> vectorDocument);
 
     /// <summary>
     /// Adds multiple vectorized documents to the store in a batch operation.
     /// </summary>
-    /// <param name="documents">The documents to add.</param>
-    /// <param name="embeddings">The matrix of embeddings where each row corresponds to a document.</param>
+    /// <param name="vectorDocuments">The documents to add.</param>
     /// <remarks>
     /// <para>
     /// Batch addition is more efficient than adding documents individually. The embeddings matrix
@@ -94,7 +93,7 @@ public interface IDocumentStore<T> where T : struct
     /// - Much more efficient for large collections
     /// </para>
     /// </remarks>
-    void AddBatch(IEnumerable<Document> documents, Matrix<T> embeddings);
+    void AddBatch(IEnumerable<VectorDocument<T>> vectorDocuments);
 
     /// <summary>
     /// Retrieves the top-k most similar documents to a given query vector.

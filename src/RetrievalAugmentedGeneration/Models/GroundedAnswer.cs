@@ -75,7 +75,7 @@ public class GroundedAnswer
     /// - Document 3: "Oxygen Production in Plants" (research paper)
     /// </para>
     /// </remarks>
-    public IEnumerable<Document> SourceDocuments { get; set; } = Array.Empty<Document>();
+    public IReadOnlyList<Document> SourceDocuments { get; set; } = Enumerable.Empty<Document>().ToList().AsReadOnly();
 
     /// <summary>
     /// Gets or sets the extracted citations mapping citation markers to source documents.
@@ -97,7 +97,7 @@ public class GroundedAnswer
     /// - You can then read that specific source
     /// </para>
     /// </remarks>
-    public IEnumerable<string> Citations { get; set; } = Array.Empty<string>();
+    public IReadOnlyList<string> Citations { get; set; } = Enumerable.Empty<string>().ToList().AsReadOnly();
 
     /// <summary>
     /// Gets or sets the confidence score indicating the model's certainty in the answer.
@@ -156,7 +156,7 @@ public class GroundedAnswer
     /// </summary>
     /// <param name="answer">The generated answer text.</param>
     /// <param name="sourceDocuments">The source documents used to generate the answer.</param>
-    public GroundedAnswer(string answer, IEnumerable<Document> sourceDocuments)
+    public GroundedAnswer(string answer, IReadOnlyList<Document> sourceDocuments)
     {
         Answer = answer ?? throw new ArgumentNullException(nameof(answer));
         SourceDocuments = sourceDocuments ?? throw new ArgumentNullException(nameof(sourceDocuments));
@@ -170,13 +170,13 @@ public class GroundedAnswer
     /// <param name="sourceDocuments">The source documents used to generate the answer.</param>
     /// <param name="citations">The extracted citations.</param>
     /// <param name="confidenceScore">The confidence score.</param>
-    public GroundedAnswer(string query, string answer, IEnumerable<Document> sourceDocuments, 
-        IEnumerable<string> citations, double confidenceScore)
+    public GroundedAnswer(string query, string answer, IReadOnlyList<Document> sourceDocuments, 
+        IReadOnlyList<string> citations, double confidenceScore)
     {
         Query = query ?? throw new ArgumentNullException(nameof(query));
         Answer = answer ?? throw new ArgumentNullException(nameof(answer));
         SourceDocuments = sourceDocuments ?? throw new ArgumentNullException(nameof(sourceDocuments));
-        Citations = citations ?? Array.Empty<string>();
+        Citations = citations ?? Enumerable.Empty<string>().ToList().AsReadOnly();
         ConfidenceScore = confidenceScore;
     }
 }
