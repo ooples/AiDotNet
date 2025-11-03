@@ -90,11 +90,19 @@ public class RAGEvaluator
                 var score = metric.Evaluate(answer, groundTruth);
                 metricScores[metric.Name] = score;
             }
-            catch (Exception ex)
+            catch (ArgumentNullException ex) when (ex.ParamName == "groundTruth")
             {
-                // Log error and continue with other metrics
-                metricScores[metric.Name] = 0.0;
-                Console.WriteLine($"Warning: Metric '{metric.Name}' failed: {ex.Message}");
+                throw new ArgumentException(
+                    $"Metric '{metric.Name}' requires ground truth data. Please provide ground truth for evaluation.",
+                    nameof(groundTruth),
+                    ex);
+            }
+            catch (InvalidOperationException ex) when (ex.Message.Contains("ground truth"))
+            {
+                throw new ArgumentException(
+                    $"Metric '{metric.Name}' requires ground truth data. Please provide ground truth for evaluation.",
+                    nameof(groundTruth),
+                    ex);
             }
         }
 

@@ -198,7 +198,7 @@ public abstract class ChunkingStrategyBase : IChunkingStrategy
         string text, 
         char[]? sentenceEndings = null)
     {
-        sentenceEndings ??= new[] { '.', '!', '?' };
+        var endings = sentenceEndings ?? new[] { '.', '!', '?' };
         
         var chunks = new List<(string, int, int)>();
         var currentChunk = new System.Text.StringBuilder();
@@ -212,7 +212,7 @@ public abstract class ChunkingStrategyBase : IChunkingStrategy
 
             // Check if we're at a sentence boundary
             var isSentenceEnd = position < text.Length && 
-                               sentenceEndings.Contains(text[position - 1]) &&
+                               endings.Contains(text[position - 1]) &&
                                char.IsWhiteSpace(text[position]);
 
             // Create chunk if we hit sentence end and chunk is large enough, or if chunk is at max size

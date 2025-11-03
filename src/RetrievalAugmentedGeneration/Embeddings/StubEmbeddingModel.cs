@@ -89,7 +89,7 @@ public class StubEmbeddingModel<T> : EmbeddingModelBase<T> where T : struct
             do
             {
                 u1 = random.NextDouble();
-            } while (u1 <= double.Epsilon);
+            } while (Math.Abs(u1) < double.Epsilon);
 
             var u2 = random.NextDouble();
             var normalValue = Math.Sqrt(-2.0 * Math.Log(u1)) * Math.Cos(2.0 * Math.PI * u2);

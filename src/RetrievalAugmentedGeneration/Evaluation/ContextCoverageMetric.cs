@@ -126,9 +126,9 @@ public class ContextCoverageMetric : RAGMetricBase
         var allWords = new HashSet<string>();
         var totalWords = 0;
 
-        foreach (var doc in docs)
+        var docWordsList = docs.Select(doc => GetWords(doc.Content)).ToList();
+        foreach (var docWords in docWordsList)
         {
-            var docWords = GetWords(doc.Content);
             allWords.UnionWith(docWords);
             totalWords += docWords.Count;
         }

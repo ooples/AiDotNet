@@ -1,3 +1,4 @@
+using System.Linq;
 using AiDotNet.Helpers;
 using AiDotNet.LinearAlgebra;
 using AiDotNet.RetrievalAugmentedGeneration.Interfaces;

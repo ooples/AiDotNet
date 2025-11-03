@@ -78,8 +78,8 @@ public class InMemoryDocumentStore<T> : DocumentStoreBase<T> where T : struct
     /// <param name="vectorDocument">The validated vector document to add.</param>
     protected override void AddCore(VectorDocument<T> vectorDocument)
     {
-        // Set vector dimension on first add
-        if (_vectorDimension == 0)
+        // Set vector dimension on first add (when store is empty)
+        if (_documents.Count == 0)
         {
             _vectorDimension = vectorDocument.Embedding.Length;
         }
@@ -124,12 +124,11 @@ public class InMemoryDocumentStore<T> : DocumentStoreBase<T> where T : struct
         // Calculate similarity scores for all documents
         var scoredDocuments = new List<(Document Document, double Score)>();
 
-        foreach (var vectorDoc in _documents.Values)
-        {
-            // Apply metadata filters
-            if (!MatchesFilters(vectorDoc.Document, metadataFilters))
-                continue;
+        var matchingDocuments = _documents.Values
+            .Where(vectorDoc => MatchesFilters(vectorDoc.Document, metadataFilters));
 
+        foreach (var vectorDoc in matchingDocuments)
+        {
             // Calculate cosine similarity using StatisticsHelper
             var similarity = StatisticsHelper<T>.CosineSimilarity(queryVector, vectorDoc.Embedding);
             scoredDocuments.Add((vectorDoc.Document, Convert.ToDouble(similarity)));
@@ -166,7 +165,12 @@ public class InMemoryDocumentStore<T> : DocumentStoreBase<T> where T : struct
     /// <returns>True if removed; false if not found.</returns>
     protected override bool RemoveCore(string documentId)
     {
-        return _documents.Remove(documentId);
+        var removed = _documents.Remove(documentId);
+        if (removed && _documents.Count == 0)
+        {
+            _vectorDimension = 0;
+        }
+        return removed;
     }
 
     /// <summary>
