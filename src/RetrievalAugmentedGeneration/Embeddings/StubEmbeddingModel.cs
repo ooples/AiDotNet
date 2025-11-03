@@ -32,7 +32,7 @@ namespace AiDotNet.RetrievalAugmentedGeneration.Embeddings;
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric data type used for vector calculations (typically float or double).</typeparam>
-public class StubEmbeddingModel<T> : EmbeddingModelBase<T> where T : struct
+public class StubEmbeddingModel<T> : EmbeddingModelBase<T>
 {
     private readonly int _embeddingDimension;
     private readonly int _maxTokens;

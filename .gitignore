@@ -370,3 +370,9 @@ FodyWeavers.xsd
 worktrees/
 # Project-specific Claude Code configuration
 CLAUDE.md
+
+# PR comment analysis and tracking files
+pr-comments.json
+rag-analysis-instructions.txt
+*-comments.json
+*-analysis-instructions.txt
