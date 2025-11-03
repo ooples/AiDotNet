@@ -23,7 +23,7 @@ namespace AiDotNet.RetrievalAugmentedGeneration.Evaluation;
 /// their specific scoring logic.
 /// </para>
 /// </remarks>
-public abstract class RAGMetricBase : IRAGMetric
+public abstract class RAGMetricBase<T> : IRAGMetric<T>
 {
     /// <summary>
     /// Gets the name of this metric.
@@ -41,7 +41,7 @@ public abstract class RAGMetricBase : IRAGMetric
     /// <param name="answer">The grounded answer to evaluate.</param>
     /// <param name="groundTruth">The expected/correct answer (null for reference-free metrics).</param>
     /// <returns>A score between 0 and 1, where 1 is perfect.</returns>
-    public double Evaluate(GroundedAnswer answer, string? groundTruth = null)
+    public double Evaluate(GroundedAnswer<T> answer, string? groundTruth = null)
     {
         ValidateAnswer(answer);
         
@@ -63,7 +63,7 @@ public abstract class RAGMetricBase : IRAGMetric
     /// <param name="answer">The validated grounded answer.</param>
     /// <param name="groundTruth">The ground truth (if required).</param>
     /// <returns>A score (will be clamped to 0-1 range).</returns>
-    protected abstract double EvaluateCore(GroundedAnswer answer, string? groundTruth);
+    protected abstract double EvaluateCore(GroundedAnswer<T> answer, string? groundTruth);
 
     /// <summary>
     /// Validates the grounded answer.

@@ -37,7 +37,7 @@ namespace AiDotNet.RetrievalAugmentedGeneration.Evaluation;
 /// similarity with embeddings or BERTScore for better accuracy.
 /// </para>
 /// </remarks>
-public class AnswerSimilarityMetric : RAGMetricBase
+public class AnswerSimilarityMetric<T> : RAGMetricBase<T>
 {
     /// <summary>
     /// Gets the name of this metric.
@@ -61,7 +61,7 @@ public class AnswerSimilarityMetric : RAGMetricBase
     /// <param name="answer">The grounded answer to evaluate.</param>
     /// <param name="groundTruth">The reference/correct answer.</param>
     /// <returns>Similarity score (0-1).</returns>
-    protected override double EvaluateCore(GroundedAnswer answer, string? groundTruth)
+    protected override double EvaluateCore(GroundedAnswer<T> answer, string? groundTruth)
     {
         // Ground truth is guaranteed to be non-null by base class validation
         return JaccardSimilarity(answer.Answer, groundTruth!);
