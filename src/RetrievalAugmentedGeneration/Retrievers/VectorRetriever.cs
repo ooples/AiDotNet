@@ -32,7 +32,7 @@ namespace AiDotNet.RetrievalAugmentedGeneration.Retrievers;
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric data type used for vector calculations (typically float or double).</typeparam>
-public class VectorRetriever<T> : RetrieverBase where T : struct
+public class VectorRetriever<T> : RetrieverBase
 {
     private readonly IDocumentStore<T> _documentStore;
     private readonly IEmbeddingModel<T> _embeddingModel;

@@ -27,7 +27,7 @@ namespace AiDotNet.RetrievalAugmentedGeneration.Interfaces;
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric data type used for vector calculations (typically float or double).</typeparam>
-public interface IDocumentStore<T> where T : struct
+public interface IDocumentStore<T>
 {
     /// <summary>
     /// Gets the number of documents currently stored in the document store.
