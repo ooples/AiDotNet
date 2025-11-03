@@ -219,10 +219,10 @@ public abstract class ChunkingStrategyBase : IChunkingStrategy
             if ((isSentenceEnd && currentChunk.Length >= _chunkSize / 2) || 
                 currentChunk.Length >= _chunkSize)
             {
-                var chunk = currentChunk.ToString().Trim();
-                if (!string.IsNullOrEmpty(chunk))
+                var chunkText = currentChunk.ToString();
+                if (!string.IsNullOrWhiteSpace(chunkText))
                 {
-                    chunks.Add((chunk, chunkStart, chunkStart + currentChunk.Length));
+                    chunks.Add((chunkText, chunkStart, chunkStart + chunkText.Length));
                 }
 
                 // Start new chunk with overlap
@@ -242,10 +242,10 @@ public abstract class ChunkingStrategyBase : IChunkingStrategy
         // Add final chunk if there's content
         if (currentChunk.Length > 0)
         {
-            var chunk = currentChunk.ToString().Trim();
-            if (!string.IsNullOrEmpty(chunk))
+            var chunkText = currentChunk.ToString();
+            if (!string.IsNullOrWhiteSpace(chunkText))
             {
-                chunks.Add((chunk, chunkStart, chunkStart + currentChunk.Length));
+                chunks.Add((chunkText, chunkStart, chunkStart + chunkText.Length));
             }
         }
 

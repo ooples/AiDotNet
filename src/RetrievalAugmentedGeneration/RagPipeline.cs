@@ -119,10 +119,11 @@ public class RagPipeline
         if (string.IsNullOrWhiteSpace(query))
             throw new ArgumentException("Query cannot be null or empty", nameof(query));
 
-        // Step 1: Retrieve documents
+        // Step 1: Retrieve documents (honor metadata filters in both branches)
+        var filters = metadataFilters ?? new Dictionary<string, object>();
         var retrievedDocs = topK.HasValue
-            ? _retriever.Retrieve(query, topK.Value, metadataFilters ?? new Dictionary<string, object>())
-            : _retriever.Retrieve(query);
+            ? _retriever.Retrieve(query, topK.Value, filters)
+            : _retriever.Retrieve(query, filters);
 
         var retrievedList = retrievedDocs.ToList();
 

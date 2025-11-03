@@ -126,7 +126,7 @@ public class StubGenerator : IGenerator
             citations.Add($"[{citationNum}] Document ID: {doc.Id}");
         }
 
-        // Calculate confidence based on retrieval scores
+        // Calculate confidence based on retrieval scores (normalized to [0,1])
         var avgScore = contextList
             .Where(d => d.RelevanceScore.HasValue)
             .Select(d => d.RelevanceScore!.Value)
@@ -139,7 +139,7 @@ public class StubGenerator : IGenerator
             Answer = answerBuilder.ToString().Trim(),
             SourceDocuments = contextList,
             Citations = citations,
-            ConfidenceScore = avgScore
+            ConfidenceScore = Math.Clamp(avgScore, 0.0, 1.0)
         };
     }
 }
