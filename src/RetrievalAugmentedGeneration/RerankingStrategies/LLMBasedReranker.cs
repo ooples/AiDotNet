@@ -22,11 +22,11 @@ namespace AiDotNet.RetrievalAugmentedGeneration.RerankingStrategies
         /// <param name="numericOperations">The numeric operations for type T.</param>
         /// <param name="llmEndpoint">The LLM API endpoint.</param>
         /// <param name="apiKey">The API key for the LLM service.</param>
-        public LLMBasedReranker(INumericOperations<T> numericOperations, string llmEndpoint = null, string apiKey = null) : base(numericOperations)
+        public LLMBasedReranker(INumericOperations<T> numericOperations, string? llmEndpoint = null, string? apiKey = null) : base(numericOperations)
         {
             _numOps = numericOperations ?? throw new ArgumentNullException(nameof(numericOperations));
-            _llmEndpoint = llmEndpoint;
-            _apiKey = apiKey;
+            _llmEndpoint = llmEndpoint ?? string.Empty;
+            _apiKey = apiKey ?? string.Empty;
         }
 
         /// <summary>
