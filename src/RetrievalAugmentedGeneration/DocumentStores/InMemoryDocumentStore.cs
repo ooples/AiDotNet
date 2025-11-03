@@ -141,6 +141,7 @@ public class InMemoryDocumentStore<T> : DocumentStoreBase<T>
             .Select(x =>
             {
                 x.Document.RelevanceScore = x.Score;
+                x.Document.HasRelevanceScore = true;
                 return x.Document;
             })
             .ToList();
