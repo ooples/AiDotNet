@@ -1,3 +1,5 @@
+using AiDotNet.Interfaces;
+
 namespace AiDotNet.RetrievalAugmentedGeneration.Models;
 
 /// <summary>
@@ -111,12 +113,15 @@ public class Document<T>
     /// </summary>
     public bool HasRelevanceScore { get; set; }
 
+    private readonly INumericOperations<T> _numOps;
+
     /// <summary>
     /// Initializes a new instance of the Document class.
     /// </summary>
     public Document()
     {
-        RelevanceScore = default(T)!;
+        _numOps = NumericOperationsFactory.Create<T>();
+        RelevanceScore = _numOps.Zero;
     }
 
     /// <summary>
@@ -124,11 +129,10 @@ public class Document<T>
     /// </summary>
     /// <param name="id">The unique identifier for the document.</param>
     /// <param name="content">The text content of the document.</param>
-    public Document(string id, string content)
+    public Document(string id, string content) : this()
     {
         Id = id;
         Content = content;
-        RelevanceScore = default(T)!;
     }
 
     /// <summary>
@@ -137,11 +141,8 @@ public class Document<T>
     /// <param name="id">The unique identifier for the document.</param>
     /// <param name="content">The text content of the document.</param>
     /// <param name="metadata">Metadata associated with the document.</param>
-    public Document(string id, string content, Dictionary<string, object> metadata)
+    public Document(string id, string content, Dictionary<string, object> metadata) : this(id, content)
     {
-        Id = id;
-        Content = content;
         Metadata = metadata;
-        RelevanceScore = default(T)!;
     }
 }
