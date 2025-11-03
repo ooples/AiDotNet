@@ -901,7 +901,12 @@ public class DVoRAAdapter<T> : LoRAAdapterBase<T>
             }
         }
 
-        // Note: LoRA parameters are NOT packed - DVoRA doesn't train the LoRA layer
+        // Pack LoRA parameters (required for base class compatibility)
+        Vector<T> loraParams = _loraLayer.GetParameters();
+        for (int i = 0; i < loraParams.Length; i++)
+        {
+            Parameters[idx++] = loraParams[i];
+        }
 
         // Pack magnitude parameters
         for (int i = 0; i < _magnitude.Length; i++)
@@ -941,7 +946,14 @@ public class DVoRAAdapter<T> : LoRAAdapterBase<T>
             _baseLayer.SetParameters(baseParams);
         }
 
-        // Note: LoRA parameters are NOT unpacked - DVoRA doesn't train the LoRA layer
+        // Unpack LoRA parameters (required for base class compatibility)
+        int loraParamCount = _loraLayer.ParameterCount;
+        Vector<T> loraParams = new Vector<T>(loraParamCount);
+        for (int i = 0; i < loraParamCount; i++)
+        {
+            loraParams[i] = Parameters[idx++];
+        }
+        _loraLayer.SetParameters(loraParams);
 
         // Unpack magnitude parameters
         for (int i = 0; i < _magnitude.Length; i++)
