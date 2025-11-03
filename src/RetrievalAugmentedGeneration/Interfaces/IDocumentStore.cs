@@ -120,7 +120,7 @@ public interface IDocumentStore<T>
     /// topK = 5 means "give me the 5 best matches"
     /// </para>
     /// </remarks>
-    IEnumerable<Document> GetSimilar(Vector<T> queryVector, int topK);
+    IEnumerable<Document<T>> GetSimilar(Vector<T> queryVector, int topK);
 
     /// <summary>
     /// Retrieves similar documents with additional metadata filtering.

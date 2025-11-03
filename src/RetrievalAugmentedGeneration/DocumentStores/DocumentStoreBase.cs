@@ -74,7 +74,7 @@ public abstract class DocumentStoreBase<T> : IDocumentStore<T>
     /// <param name="queryVector">The vector to search for similar documents.</param>
     /// <param name="topK">The number of most similar documents to return.</param>
     /// <returns>An enumerable of documents ordered by similarity (most similar first), with relevance scores populated.</returns>
-    public IEnumerable<Document> GetSimilar(Vector<T> queryVector, int topK)
+    public IEnumerable<Document<T>> GetSimilar(Vector<T> queryVector, int topK)
     {
         return GetSimilarWithFilters(queryVector, topK, new Dictionary<string, object>());
     }
@@ -86,7 +86,7 @@ public abstract class DocumentStoreBase<T> : IDocumentStore<T>
     /// <param name="topK">The number of most similar documents to return.</param>
     /// <param name="metadataFilters">Metadata filters to apply before similarity search.</param>
     /// <returns>An enumerable of filtered documents ordered by similarity, with relevance scores populated.</returns>
-    public IEnumerable<Document> GetSimilarWithFilters(Vector<T> queryVector, int topK, Dictionary<string, object> metadataFilters)
+    public IEnumerable<Document<T>> GetSimilarWithFilters(Vector<T> queryVector, int topK, Dictionary<string, object> metadataFilters)
     {
         ValidateQueryVector(queryVector);
         ValidateTopK(topK);
@@ -100,7 +100,7 @@ public abstract class DocumentStoreBase<T> : IDocumentStore<T>
     /// </summary>
     /// <param name="documentId">The unique identifier of the document to retrieve.</param>
     /// <returns>The document if found; otherwise, null.</returns>
-    public Document? GetById(string documentId)
+    public Document<T>? GetById(string documentId)
     {
         ValidateDocumentId(documentId);
         return GetByIdCore(documentId);
@@ -189,7 +189,7 @@ public abstract class DocumentStoreBase<T> : IDocumentStore<T>
     /// - Jaccard similarity: Use StatisticsHelper&lt;T&gt;.JaccardSimilarity(vector1, vector2)
     /// </para>
     /// </remarks>
-    protected abstract IEnumerable<Document> GetSimilarCore(Vector<T> queryVector, int topK, Dictionary<string, object> metadataFilters);
+    protected abstract IEnumerable<Document<T>> GetSimilarCore(Vector<T> queryVector, int topK, Dictionary<string, object> metadataFilters);
 
     /// <summary>
     /// Core logic for retrieving a document by ID.
@@ -201,7 +201,7 @@ public abstract class DocumentStoreBase<T> : IDocumentStore<T>
     /// Simple dictionary lookup for in-memory stores, database query for persistent stores.
     /// </para>
     /// </remarks>
-    protected abstract Document? GetByIdCore(string documentId);
+    protected abstract Document<T>? GetByIdCore(string documentId);
 
     /// <summary>
     /// Core logic for removing a document by ID.
@@ -309,7 +309,7 @@ public abstract class DocumentStoreBase<T> : IDocumentStore<T>
     /// Matches if: doc.Metadata["category"] == "science" AND doc.Metadata["year"] >= 2020
     /// </para>
     /// </remarks>
-    protected bool MatchesFilters(Document document, Dictionary<string, object> filters)
+    protected bool MatchesFilters(Document<T> document, Dictionary<string, object> filters)
     {
         if (filters.Count == 0)
             return true;

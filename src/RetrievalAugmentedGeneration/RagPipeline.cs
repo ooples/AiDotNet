@@ -62,7 +62,7 @@ public class RagPipeline<T>
     /// <summary>
     /// Gets the generator used by this pipeline.
     /// </summary>
-    public IGenerator Generator => _generator;
+    public IGenerator<T> Generator => _generator;
 
     /// <summary>
     /// Initializes a new instance of the RagPipeline class.
@@ -70,7 +70,7 @@ public class RagPipeline<T>
     /// <param name="retriever">The retriever for finding relevant documents.</param>
     /// <param name="reranker">The reranker for improving document ranking.</param>
     /// <param name="generator">The generator for producing grounded answers.</param>
-    public RagPipeline(IRetriever<T> retriever, IReranker<T> reranker, IGenerator generator)
+    public RagPipeline(IRetriever<T> retriever, IReranker<T> reranker, IGenerator<T> generator)
     {
         _retriever = retriever ?? throw new ArgumentNullException(nameof(retriever));
         _reranker = reranker ?? throw new ArgumentNullException(nameof(reranker));
