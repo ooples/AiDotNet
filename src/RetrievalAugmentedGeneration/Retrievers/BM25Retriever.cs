@@ -74,7 +74,7 @@ namespace AiDotNet.RetrievalAugmentedGeneration.Retrievers
                     return doc;
                 })
                 .Where(d => d != null)
-                .ToList();
+                .Cast<Document<T>>();
 
             return results;
         }

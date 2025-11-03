@@ -120,7 +120,7 @@ public class Document<T>
     /// </summary>
     public Document()
     {
-        _numOps = NumericOperationsFactory.Create<T>();
+        _numOps = MathHelper.GetNumericOperations<T>();
         RelevanceScore = _numOps.Zero;
     }
 

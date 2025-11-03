@@ -55,7 +55,7 @@ namespace AiDotNet.RetrievalAugmentedGeneration.EmbeddingModels
             {
                 magnitude = NumOps.Add(magnitude, NumOps.Multiply(vector[i], vector[i]));
             }
-            magnitude = NumOps.FromDouble(Math.Sqrt(NumOps.ToDouble(magnitude)));
+            magnitude = NumOps.FromDouble(Math.Sqrt(Convert.ToDouble(magnitude)));
 
             if (NumOps.GreaterThan(magnitude, NumOps.Zero))
             {

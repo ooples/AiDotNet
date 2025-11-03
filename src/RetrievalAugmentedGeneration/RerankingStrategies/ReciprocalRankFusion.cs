@@ -57,7 +57,7 @@ namespace AiDotNet.RetrievalAugmentedGeneration.RerankingStrategies
             }
 
             var reranked = documents
-                .OrderByDescending(d => _numOps.ToDouble(scores.ContainsKey(d.Id) ? scores[d.Id] : _numOps.Zero))
+                .OrderByDescending(d => _Convert.ToDouble(scores.ContainsKey(d.Id) ? scores[d.Id] : _numOps.Zero))
                 .Take(topK)
                 .ToList();
 
@@ -107,7 +107,7 @@ namespace AiDotNet.RetrievalAugmentedGeneration.RerankingStrategies
             }
 
             var reranked = allDocs.Values
-                .OrderByDescending(d => _numOps.ToDouble(scores[d.Id]))
+                .OrderByDescending(d => _Convert.ToDouble(scores[d.Id]))
                 .Take(topK)
                 .ToList();
 
