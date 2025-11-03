@@ -69,7 +69,7 @@ public abstract class RAGMetricBase<T> : IRAGMetric<T>
     /// Validates the grounded answer.
     /// </summary>
     /// <param name="answer">The answer to validate.</param>
-    protected virtual void ValidateAnswer(GroundedAnswer answer)
+    protected virtual void ValidateAnswer(GroundedAnswer<T> answer)
     {
         if (answer == null)
             throw new ArgumentNullException(nameof(answer));

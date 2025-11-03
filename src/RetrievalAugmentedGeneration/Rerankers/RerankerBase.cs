@@ -143,7 +143,7 @@ public abstract class RerankerBase<T> : IReranker<T>
     /// - Makes scores consistent with other retrievers/rerankers
     /// </para>
     /// </remarks>
-    protected IList<Document> NormalizeScores(IList<Document> documents)
+    protected IList<Document<T>> NormalizeScores(IList<Document<T>> documents)
     {
         var docsWithScores = documents.Where(d => d.RelevanceScore.HasValue).ToList();
         if (docsWithScores.Count == 0)
