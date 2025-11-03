@@ -1,121 +1,124 @@
-using System;
+using AiDotNet.Helpers;
+using AiDotNet.LinearAlgebra;
+using AiDotNet.RetrievalAugmentedGeneration.Interfaces;
 using AiDotNet.RetrievalAugmentedGeneration.Models;
+using System;
 using System.Collections.Generic;
 using System.Linq;
-using AiDotNet.Helpers;
 
 namespace AiDotNet.RetrievalAugmentedGeneration.DocumentStores
 {
     /// <summary>
-    /// Hybrid document store combining dense and sparse retrieval strategies.
+    /// Hybrid document store combining vector and keyword search strategies.
     /// </summary>
     /// <typeparam name="T">The numeric type for vector operations.</typeparam>
     public class HybridDocumentStore<T> : DocumentStoreBase<T>
     {
-        private readonly IDocumentStore<T> _denseStore;
-        private readonly IDocumentStore<T> _sparseStore;
-        private readonly INumericOperations<T> _numOps;
-        private readonly T _denseWeight;
-        private readonly T _sparseWeight;
+        private readonly IDocumentStore<T> _vectorStore;
+        private readonly IDocumentStore<T> _keywordStore;
+        private readonly T _vectorWeight;
+        private readonly T _keywordWeight;
 
-        /// <summary>
-        /// Initializes a new instance of the <see cref="HybridDocumentStore{T}"/> class.
-        /// </summary>
-        /// <param name="numericOperations">The numeric operations for type T.</param>
-        /// <param name="denseStore">The dense retrieval document store.</param>
-        /// <param name="sparseStore">The sparse retrieval document store.</param>
-        /// <param name="denseWeight">The weight for dense retrieval scores.</param>
-        /// <param name="sparseWeight">The weight for sparse retrieval scores.</param>
+        public override int DocumentCount => _vectorStore.DocumentCount;
+        public override int VectorDimension => _vectorStore.VectorDimension;
+
         public HybridDocumentStore(
-            INumericOperations<T> numericOperations,
-            IDocumentStore<T> denseStore,
-            IDocumentStore<T> sparseStore,
-            T denseWeight,
-            T sparseWeight) : base(numericOperations)
+            IDocumentStore<T> vectorStore,
+            IDocumentStore<T> keywordStore,
+            T vectorWeight,
+            T keywordWeight)
         {
-            _numOps = numericOperations ?? throw new ArgumentNullException(nameof(numericOperations));
-            _denseStore = denseStore ?? throw new ArgumentNullException(nameof(denseStore));
-            _sparseStore = sparseStore ?? throw new ArgumentNullException(nameof(sparseStore));
-            _denseWeight = denseWeight;
-            _sparseWeight = sparseWeight;
+            if (vectorStore == null)
+                throw new ArgumentNullException(nameof(vectorStore));
+            if (keywordStore == null)
+                throw new ArgumentNullException(nameof(keywordStore));
+
+            _vectorStore = vectorStore;
+            _keywordStore = keywordStore;
+            _vectorWeight = vectorWeight;
+            _keywordWeight = keywordWeight;
         }
 
-        /// <summary>
-        /// Adds a document with its embedding to both stores.
-        /// </summary>
-        /// <param name="document">The document to add.</param>
-        /// <param name="embedding">The embedding vector for the document.</param>
-        public override void AddDocument(Document<T> document, Vector<T> embedding)
+        protected override void AddCore(VectorDocument<T> vectorDocument)
         {
-            if (document == null) throw new ArgumentNullException(nameof(document));
-            if (embedding == null) throw new ArgumentNullException(nameof(embedding));
-
-            _denseStore.AddDocument(document, embedding);
-            _sparseStore.AddDocument(document, embedding);
+            _vectorStore.Add(vectorDocument);
+            _keywordStore.Add(vectorDocument);
         }
 
-        /// <summary>
-        /// Searches using both dense and sparse methods and combines the results.
-        /// </summary>
-        /// <param name="queryEmbedding">The query embedding vector.</param>
-        /// <param name="topK">The number of top results to return.</param>
-        /// <returns>A list of the most similar documents with combined scores.</returns>
-        public override List<Document<T>> Search(Vector<T> queryEmbedding, int topK)
+        protected override void AddBatchCore(IList<VectorDocument<T>> vectorDocuments)
         {
-            if (queryEmbedding == null) throw new ArgumentNullException(nameof(queryEmbedding));
-            if (topK <= 0) throw new ArgumentOutOfRangeException(nameof(topK), "TopK must be greater than 0");
+            _vectorStore.AddBatch(vectorDocuments);
+            _keywordStore.AddBatch(vectorDocuments);
+        }
 
-            var denseResults = _denseStore.Search(queryEmbedding, topK * 2);
-            var sparseResults = _sparseStore.Search(queryEmbedding, topK * 2);
+        protected override IEnumerable<Document<T>> GetSimilarCore(Vector<T> queryVector, int topK, Dictionary<string, object> metadataFilters)
+        {
+            var vectorResults = _vectorStore.GetSimilarWithFilters(queryVector, topK * 2, metadataFilters);
+            var keywordResults = _keywordStore.GetSimilarWithFilters(queryVector, topK * 2, metadataFilters);
 
-            var scoreMap = new Dictionary<string, T>();
+            var combinedScores = new Dictionary<string, T>();
 
-            foreach (var doc in denseResults)
+            foreach (var doc in vectorResults)
             {
-                if (!scoreMap.ContainsKey(doc.Id))
+                if (doc.HasRelevanceScore)
                 {
-                    scoreMap[doc.Id] = _numOps.Zero;
+                    var score = NumOps.Multiply(_vectorWeight, doc.RelevanceScore);
+                    combinedScores[doc.Id] = score;
                 }
-                scoreMap[doc.Id] = _numOps.Add(scoreMap[doc.Id], _numOps.Multiply(doc.RelevanceScore, _denseWeight));
             }
 
-            foreach (var doc in sparseResults)
+            foreach (var doc in keywordResults)
             {
-                if (!scoreMap.ContainsKey(doc.Id))
+                if (doc.HasRelevanceScore)
                 {
-                    scoreMap[doc.Id] = _numOps.Zero;
+                    var keywordScore = NumOps.Multiply(_keywordWeight, doc.RelevanceScore);
+                    if (combinedScores.ContainsKey(doc.Id))
+                    {
+                        combinedScores[doc.Id] = NumOps.Add(combinedScores[doc.Id], keywordScore);
+                    }
+                    else
+                    {
+                        combinedScores[doc.Id] = keywordScore;
+                    }
                 }
-                scoreMap[doc.Id] = _numOps.Add(scoreMap[doc.Id], _numOps.Multiply(doc.RelevanceScore, _sparseWeight));
             }
 
-            var allDocs = denseResults.Concat(sparseResults)
+            var allDocuments = vectorResults.Concat(keywordResults)
                 .GroupBy(d => d.Id)
                 .Select(g => g.First())
                 .ToList();
 
-            foreach (var doc in allDocs)
-            {
-                if (scoreMap.ContainsKey(doc.Id))
+            var results = allDocuments
+                .Where(doc => combinedScores.ContainsKey(doc.Id))
+                .OrderByDescending(doc => combinedScores[doc.Id])
+                .Take(topK)
+                .Select(doc =>
                 {
-                    doc.RelevanceScore = scoreMap[doc.Id];
-                }
-            }
+                    doc.RelevanceScore = combinedScores[doc.Id];
+                    doc.HasRelevanceScore = true;
+                    return doc;
+                })
+                .ToList();
 
-            return allDocs.OrderByDescending(d => _numOps.ToDouble(d.RelevanceScore)).Take(topK).ToList();
+            return results;
         }
 
-        /// <summary>
-        /// Clears all documents from both stores.
-        /// </summary>
+        protected override Document<T>? GetByIdCore(string documentId)
+        {
+            return _vectorStore.GetById(documentId);
+        }
+
+        protected override bool RemoveCore(string documentId)
+        {
+            var removed1 = _vectorStore.Remove(documentId);
+            var removed2 = _keywordStore.Remove(documentId);
+            return removed1 || removed2;
+        }
+
         public override void Clear()
         {
-            _denseStore.Clear();
-            _sparseStore.Clear();
+            _vectorStore.Clear();
+            _keywordStore.Clear();
         }
-
-        /// <summary>
-        /// Gets the maximum count from both stores.
-        /// </summary>
-        public override int Count => Math.Max(_denseStore.Count, _sparseStore.Count);
     }
 }

@@ -1,78 +1,119 @@
-using System;
+using AiDotNet.Helpers;
+using AiDotNet.LinearAlgebra;
 using AiDotNet.RetrievalAugmentedGeneration.Models;
+using System;
 using System.Collections.Generic;
 using System.Linq;
-using AiDotNet.Helpers;
 
 namespace AiDotNet.RetrievalAugmentedGeneration.DocumentStores
 {
     /// <summary>
-    /// FAISS-based document store for efficient similarity search using vector embeddings.
+    /// FAISS-inspired document store with indexed vectors for efficient similarity search.
     /// </summary>
     /// <typeparam name="T">The numeric type for vector operations.</typeparam>
     public class FAISSDocumentStore<T> : DocumentStoreBase<T>
     {
-        private readonly List<(Document<T> doc, Vector<T> embedding)> _documents = new List<(Document<T>, Vector<T>)>();
-        private readonly INumericOperations<T> _numOps;
+        private readonly Dictionary<string, VectorDocument<T>> _documents;
+        private readonly Dictionary<int, Vector<T>> _indexedVectors;
+        private int _vectorDimension;
+        private int _currentIndex;
 
-        /// <summary>
-        /// Initializes a new instance of the <see cref="FAISSDocumentStore{T}"/> class.
-        /// </summary>
-        /// <param name="numericOperations">The numeric operations for type T.</param>
-        public FAISSDocumentStore(INumericOperations<T> numericOperations) : base(numericOperations)
+        public override int DocumentCount => _documents.Count;
+        public override int VectorDimension => _vectorDimension;
+
+        public FAISSDocumentStore(int initialCapacity = 1000)
         {
-            _numOps = numericOperations ?? throw new ArgumentNullException(nameof(numericOperations));
+            if (initialCapacity <= 0)
+                throw new ArgumentException("Initial capacity must be greater than zero", nameof(initialCapacity));
+
+            _documents = new Dictionary<string, VectorDocument<T>>(initialCapacity);
+            _indexedVectors = new Dictionary<int, Vector<T>>(initialCapacity);
+            _vectorDimension = 0;
+            _currentIndex = 0;
         }
 
-        /// <summary>
-        /// Adds a document with its embedding to the store.
-        /// </summary>
-        /// <param name="document">The document to add.</param>
-        /// <param name="embedding">The embedding vector for the document.</param>
-        public override void AddDocument(Document<T> document, Vector<T> embedding)
+        protected override void AddCore(VectorDocument<T> vectorDocument)
         {
-            if (document == null) throw new ArgumentNullException(nameof(document));
-            if (embedding == null) throw new ArgumentNullException(nameof(embedding));
-
-            _documents.Add((document, embedding));
-        }
-
-        /// <summary>
-        /// Searches for documents similar to the query embedding.
-        /// </summary>
-        /// <param name="queryEmbedding">The query embedding vector.</param>
-        /// <param name="topK">The number of top results to return.</param>
-        /// <returns>A list of the most similar documents.</returns>
-        public override List<Document<T>> Search(Vector<T> queryEmbedding, int topK)
-        {
-            if (queryEmbedding == null) throw new ArgumentNullException(nameof(queryEmbedding));
-            if (topK <= 0) throw new ArgumentOutOfRangeException(nameof(topK), "TopK must be greater than 0");
-
-            var similarities = _documents.Select(d => new
+            if (_documents.Count == 0)
             {
-                Document = d.doc,
-                Similarity = StatisticsHelper.CosineSimilarity(_numOps, queryEmbedding, d.embedding)
-            }).OrderByDescending(x => _numOps.ToDouble(x.Similarity)).Take(topK);
-
-            foreach (var result in similarities)
-            {
-                result.Document.RelevanceScore = result.Similarity;
+                _vectorDimension = vectorDocument.Embedding.Length;
             }
 
-            return similarities.Select(x => x.Document).ToList();
+            var index = _currentIndex++;
+            _documents[vectorDocument.Document.Id] = vectorDocument;
+            _indexedVectors[index] = vectorDocument.Embedding;
         }
 
-        /// <summary>
-        /// Clears all documents from the store.
-        /// </summary>
+        protected override void AddBatchCore(IList<VectorDocument<T>> vectorDocuments)
+        {
+            if (_vectorDimension == 0 && vectorDocuments.Count > 0)
+            {
+                _vectorDimension = vectorDocuments[0].Embedding.Length;
+            }
+
+            foreach (var vectorDocument in vectorDocuments)
+            {
+                if (vectorDocument.Embedding.Length != _vectorDimension)
+                    throw new ArgumentException(
+                        $"Vector dimension mismatch in batch. Expected {_vectorDimension}, got {vectorDocument.Embedding.Length}",
+                        nameof(vectorDocuments));
+
+                var index = _currentIndex++;
+                _documents[vectorDocument.Document.Id] = vectorDocument;
+                _indexedVectors[index] = vectorDocument.Embedding;
+            }
+        }
+
+        protected override IEnumerable<Document<T>> GetSimilarCore(Vector<T> queryVector, int topK, Dictionary<string, object> metadataFilters)
+        {
+            var scoredDocuments = new List<(Document<T> Document, T Score)>();
+
+            var matchingDocuments = _documents.Values
+                .Where(vectorDoc => MatchesFilters(vectorDoc.Document, metadataFilters));
+
+            foreach (var vectorDoc in matchingDocuments)
+            {
+                var similarity = StatisticsHelper<T>.CosineSimilarity(queryVector, vectorDoc.Embedding);
+                scoredDocuments.Add((vectorDoc.Document, similarity));
+            }
+
+            var results = scoredDocuments
+                .OrderByDescending(x => x.Score)
+                .Take(topK)
+                .Select(x =>
+                {
+                    x.Document.RelevanceScore = x.Score;
+                    x.Document.HasRelevanceScore = true;
+                    return x.Document;
+                })
+                .ToList();
+
+            return results;
+        }
+
+        protected override Document<T>? GetByIdCore(string documentId)
+        {
+            return _documents.TryGetValue(documentId, out var vectorDoc) ? vectorDoc.Document : null;
+        }
+
+        protected override bool RemoveCore(string documentId)
+        {
+            var removed = _documents.Remove(documentId);
+            if (removed && _documents.Count == 0)
+            {
+                _vectorDimension = 0;
+                _currentIndex = 0;
+                _indexedVectors.Clear();
+            }
+            return removed;
+        }
+
         public override void Clear()
         {
             _documents.Clear();
+            _indexedVectors.Clear();
+            _vectorDimension = 0;
+            _currentIndex = 0;
         }
-
-        /// <summary>
-        /// Gets the number of documents in the store.
-        /// </summary>
-        public override int Count => _documents.Count;
     }
 }
