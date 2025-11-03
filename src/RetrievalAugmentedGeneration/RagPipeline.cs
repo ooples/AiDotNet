@@ -47,7 +47,7 @@ public class RagPipeline<T>
 {
     private readonly IRetriever<T> _retriever;
     private readonly IReranker<T> _reranker;
-    private readonly IGenerator _generator;
+    private readonly IGenerator<T> _generator;
 
     /// <summary>
     /// Gets the retriever used by this pipeline.
@@ -111,7 +111,7 @@ public class RagPipeline<T>
     /// - metadataFilters: Optional filters like {"year": 2024, "category": "science"}
     /// </para>
     /// </remarks>
-    public GroundedAnswer Generate(
+    public GroundedAnswer<T> Generate(
         string query,
         int? topK = null,
         int? topKAfterRerank = null,
@@ -130,7 +130,7 @@ public class RagPipeline<T>
         if (retrievedList.Count == 0)
         {
             // No documents found, return empty answer
-            return new GroundedAnswer
+            return new GroundedAnswer<T>
             {
                 Query = query,
                 Answer = "I couldn't find any relevant information to answer this question.",
@@ -170,7 +170,7 @@ public class RagPipeline<T>
     /// components (retriever, reranker, generator) support async.
     /// </para>
     /// </remarks>
-    public Task<GroundedAnswer> GenerateAsync(
+    public Task<GroundedAnswer<T>> GenerateAsync(
         string query,
         int? topK = null,
         int? topKAfterRerank = null,
