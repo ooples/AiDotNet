@@ -36,7 +36,7 @@ namespace AiDotNet.RetrievalAugmentedGeneration.Evaluation;
 /// </remarks>
 public class RAGEvaluator<T>
 {
-    private readonly IReadOnlyList<IRAGMetric> _metrics;
+    private readonly IReadOnlyList<IRAGMetric<T>> _metrics;
 
     /// <summary>
     /// Gets the metrics used by this evaluator.
@@ -63,10 +63,10 @@ public class RAGEvaluator<T>
     /// </summary>
     public RAGEvaluator()
     {
-        _metrics = new List<IRAGMetric>
+        _metrics = new List<IRAGMetric<T>>
         {
-            new FaithfulnessMetric(),
-            new ContextCoverageMetric()
+            new FaithfulnessMetric<T>(),
+            new ContextCoverageMetric<T>()
         };
     }
 
@@ -76,7 +76,7 @@ public class RAGEvaluator<T>
     /// <param name="answer">The grounded answer to evaluate.</param>
     /// <param name="groundTruth">The reference answer (optional, required by some metrics).</param>
     /// <returns>Evaluation results with scores for each metric.</returns>
-    public EvaluationResult Evaluate(GroundedAnswer answer, string? groundTruth = null)
+    public EvaluationResult Evaluate(GroundedAnswer<T> answer, string? groundTruth = null)
     {
         if (answer == null)
             throw new ArgumentNullException(nameof(answer));
@@ -126,7 +126,7 @@ public class RAGEvaluator<T>
     /// <param name="groundTruths">Corresponding ground truth answers (must match answer count if provided).</param>
     /// <returns>Collection of evaluation results.</returns>
     public IEnumerable<EvaluationResult> EvaluateBatch(
-        IEnumerable<GroundedAnswer> answers,
+        IEnumerable<GroundedAnswer<T>> answers,
         IEnumerable<string>? groundTruths = null)
     {
         if (answers == null)

@@ -90,7 +90,7 @@ public class ContextCoverageMetric<T> : RAGMetricBase<T>
     /// <summary>
     /// Evaluates coverage when ground truth is available.
     /// </summary>
-    private double EvaluateWithGroundTruth(GroundedAnswer answer, string groundTruth)
+    private double EvaluateWithGroundTruth(GroundedAnswer<T> answer, string groundTruth)
     {
         // Extract key terms from ground truth
         var groundTruthWords = GetWords(groundTruth);
@@ -111,7 +111,7 @@ public class ContextCoverageMetric<T> : RAGMetricBase<T>
     /// <summary>
     /// Evaluates coverage without ground truth using heuristics.
     /// </summary>
-    private double EvaluateWithoutGroundTruth(GroundedAnswer answer)
+    private double EvaluateWithoutGroundTruth(GroundedAnswer<T> answer)
     {
         var docs = answer.SourceDocuments.ToList();
 
