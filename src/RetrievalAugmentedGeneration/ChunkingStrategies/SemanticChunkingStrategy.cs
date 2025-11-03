@@ -13,7 +13,6 @@ namespace AiDotNet.RetrievalAugmentedGeneration.ChunkingStrategies
     {
         private readonly INumericOperations<T> _numOps;
         private readonly T _similarityThreshold;
-        private readonly int _maxChunkSize;
 
         /// <summary>
         /// Initializes a new instance of the <see cref="SemanticChunkingStrategy{T}"/> class.
@@ -24,32 +23,35 @@ namespace AiDotNet.RetrievalAugmentedGeneration.ChunkingStrategies
         public SemanticChunkingStrategy(
             INumericOperations<T> numericOperations,
             T similarityThreshold,
-            int maxChunkSize = 1000)
+            int maxChunkSize = 1000,
+            int chunkOverlap = 200)
+            : base(maxChunkSize, chunkOverlap)
         {
             _numOps = numericOperations ?? throw new ArgumentNullException(nameof(numericOperations));
             _similarityThreshold = similarityThreshold;
-            _maxChunkSize = maxChunkSize > 0 ? maxChunkSize : throw new ArgumentOutOfRangeException(nameof(maxChunkSize));
         }
 
         /// <summary>
         /// Chunks text based on semantic similarity between sentences.
         /// </summary>
         /// <param name="text">The text to chunk.</param>
-        /// <returns>A list of semantically coherent chunks.</returns>
-        public override List<string> ChunkText(string text)
+        /// <returns>A collection of semantically coherent chunks with positions.</returns>
+        protected override IEnumerable<(string Chunk, int StartPosition, int EndPosition)> ChunkCore(string text)
         {
-            if (string.IsNullOrEmpty(text)) throw new ArgumentNullException(nameof(text));
-
             var sentences = SplitIntoSentences(text);
-            var chunks = new List<string>();
             var currentChunk = new List<string>();
             var currentSize = 0;
+            var position = 0;
 
             foreach (var sentence in sentences)
             {
-                if (currentSize + sentence.Length > _maxChunkSize && currentChunk.Count > 0)
+                if (currentSize + sentence.Length > ChunkSize && currentChunk.Count > 0)
                 {
-                    chunks.Add(string.Join(" ", currentChunk));
+                    var chunkText = string.Join(" ", currentChunk);
+                    var endPos = position + chunkText.Length;
+                    yield return (chunkText, position, endPos);
+                    
+                    position = endPos - ChunkOverlap;
                     currentChunk.Clear();
                     currentSize = 0;
                 }
@@ -60,10 +62,9 @@ namespace AiDotNet.RetrievalAugmentedGeneration.ChunkingStrategies
 
             if (currentChunk.Count > 0)
             {
-                chunks.Add(string.Join(" ", currentChunk));
+                var chunkText = string.Join(" ", currentChunk);
+                yield return (chunkText, position, position + chunkText.Length);
             }
-
-            return chunks;
         }
 
         private List<string> SplitIntoSentences(string text)

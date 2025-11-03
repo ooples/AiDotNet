@@ -9,38 +9,40 @@ namespace AiDotNet.RetrievalAugmentedGeneration.ChunkingStrategies
     /// </summary>
     public class MarkdownTextSplitter : ChunkingStrategyBase
     {
-        private readonly int _chunkSize;
-        private readonly int _chunkOverlap;
-
         /// <summary>
         /// Initializes a new instance of the <see cref="MarkdownTextSplitter"/> class.
         /// </summary>
         /// <param name="chunkSize">The maximum size of each chunk.</param>
         /// <param name="chunkOverlap">The overlap between consecutive chunks.</param>
         public MarkdownTextSplitter(int chunkSize = 1000, int chunkOverlap = 200)
+            : base(chunkSize, chunkOverlap)
         {
-            _chunkSize = chunkSize > 0 ? chunkSize : throw new ArgumentOutOfRangeException(nameof(chunkSize));
-            _chunkOverlap = chunkOverlap >= 0 ? chunkOverlap : throw new ArgumentOutOfRangeException(nameof(chunkOverlap));
         }
 
         /// <summary>
         /// Chunks markdown text while preserving structure.
         /// </summary>
         /// <param name="text">The markdown text to chunk.</param>
-        /// <returns>A list of markdown chunks.</returns>
-        public override List<string> ChunkText(string text)
+        /// <returns>A collection of markdown chunks with positions.</returns>
+        protected override IEnumerable<(string Chunk, int StartPosition, int EndPosition)> ChunkCore(string text)
         {
-            if (string.IsNullOrEmpty(text)) throw new ArgumentNullException(nameof(text));
-
             var separators = new[] { "\n## ", "\n### ", "\n#### ", "\n\n", "\n", ". ", " " };
-            return SplitTextRecursive(text, separators);
+            var chunks = SplitTextRecursive(text, separators);
+            
+            var position = 0;
+            foreach (var chunk in chunks)
+            {
+                var endPos = position + chunk.Length;
+                yield return (chunk, position, endPos);
+                position = endPos - ChunkOverlap;
+            }
         }
 
         private List<string> SplitTextRecursive(string text, string[] separators)
         {
             var chunks = new List<string>();
 
-            if (text.Length <= _chunkSize)
+            if (text.Length <= ChunkSize)
             {
                 chunks.Add(text);
                 return chunks;
@@ -53,12 +55,12 @@ namespace AiDotNet.RetrievalAugmentedGeneration.ChunkingStrategies
 
                 foreach (var split in splits)
                 {
-                    if (currentChunk.Length + split.Length + separator.Length > _chunkSize)
+                    if (currentChunk.Length + split.Length + separator.Length > ChunkSize)
                     {
                         if (currentChunk.Length > 0)
                         {
                             chunks.Add(currentChunk.ToString());
-                            var overlap = Math.Min(_chunkOverlap, currentChunk.Length);
+                            var overlap = Math.Min(ChunkOverlap, currentChunk.Length);
                             currentChunk = new StringBuilder(currentChunk.ToString(currentChunk.Length - overlap, overlap));
                         }
                     }

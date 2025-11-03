@@ -26,8 +26,8 @@ namespace AiDotNet.RetrievalAugmentedGeneration.ContextCompression
         public DocumentSummarizer(
             INumericOperations<T> numericOperations,
             int maxSummaryLength = 500,
-            string llmEndpoint = null,
-            string apiKey = null)
+            string llmEndpoint = "",
+            string apiKey = "")
         {
             _numOps = numericOperations ?? throw new ArgumentNullException(nameof(numericOperations));
             _maxSummaryLength = maxSummaryLength > 0

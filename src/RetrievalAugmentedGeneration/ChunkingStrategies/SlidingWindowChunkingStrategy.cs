@@ -8,7 +8,6 @@ namespace AiDotNet.RetrievalAugmentedGeneration.ChunkingStrategies
     /// </summary>
     public class SlidingWindowChunkingStrategy : ChunkingStrategyBase
     {
-        private readonly int _windowSize;
         private readonly int _stride;
 
         /// <summary>
@@ -17,8 +16,8 @@ namespace AiDotNet.RetrievalAugmentedGeneration.ChunkingStrategies
         /// <param name="windowSize">The size of the sliding window.</param>
         /// <param name="stride">The stride (step size) of the window.</param>
         public SlidingWindowChunkingStrategy(int windowSize = 1000, int stride = 500)
+            : base(windowSize, windowSize - stride)
         {
-            _windowSize = windowSize > 0 ? windowSize : throw new ArgumentOutOfRangeException(nameof(windowSize));
             _stride = stride > 0 ? stride : throw new ArgumentOutOfRangeException(nameof(stride));
         }
 
@@ -26,25 +25,20 @@ namespace AiDotNet.RetrievalAugmentedGeneration.ChunkingStrategies
         /// Chunks text using a sliding window approach.
         /// </summary>
         /// <param name="text">The text to chunk.</param>
-        /// <returns>A list of overlapping text chunks.</returns>
-        public override List<string> ChunkText(string text)
+        /// <returns>A collection of overlapping text chunks with positions.</returns>
+        protected override IEnumerable<(string Chunk, int StartPosition, int EndPosition)> ChunkCore(string text)
         {
-            if (string.IsNullOrEmpty(text)) throw new ArgumentNullException(nameof(text));
-
-            var chunks = new List<string>();
-
             for (int i = 0; i < text.Length; i += _stride)
             {
-                var length = Math.Min(_windowSize, text.Length - i);
-                chunks.Add(text.Substring(i, length));
+                var length = Math.Min(ChunkSize, text.Length - i);
+                var chunk = text.Substring(i, length);
+                yield return (chunk, i, i + length);
 
                 if (i + length >= text.Length)
                 {
                     break;
                 }
             }
-
-            return chunks;
         }
     }
 }

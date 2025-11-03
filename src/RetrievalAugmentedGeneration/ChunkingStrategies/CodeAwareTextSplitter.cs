@@ -9,8 +9,6 @@ namespace AiDotNet.RetrievalAugmentedGeneration.ChunkingStrategies
     /// </summary>
     public class CodeAwareTextSplitter : ChunkingStrategyBase
     {
-        private readonly int _chunkSize;
-        private readonly int _chunkOverlap;
         private readonly string _language;
 
         /// <summary>
@@ -20,9 +18,8 @@ namespace AiDotNet.RetrievalAugmentedGeneration.ChunkingStrategies
         /// <param name="chunkOverlap">The overlap between consecutive chunks.</param>
         /// <param name="language">The programming language (e.g., "csharp", "python", "javascript").</param>
         public CodeAwareTextSplitter(int chunkSize = 1000, int chunkOverlap = 200, string language = "csharp")
+            : base(chunkSize, chunkOverlap)
         {
-            _chunkSize = chunkSize > 0 ? chunkSize : throw new ArgumentOutOfRangeException(nameof(chunkSize));
-            _chunkOverlap = chunkOverlap >= 0 ? chunkOverlap : throw new ArgumentOutOfRangeException(nameof(chunkOverlap));
             _language = language ?? throw new ArgumentNullException(nameof(language));
         }
 
@@ -30,13 +27,19 @@ namespace AiDotNet.RetrievalAugmentedGeneration.ChunkingStrategies
         /// Chunks code while preserving code structure.
         /// </summary>
         /// <param name="text">The code text to chunk.</param>
-        /// <returns>A list of code chunks.</returns>
-        public override List<string> ChunkText(string text)
+        /// <returns>A collection of code chunks with positions.</returns>
+        protected override IEnumerable<(string Chunk, int StartPosition, int EndPosition)> ChunkCore(string text)
         {
-            if (string.IsNullOrEmpty(text)) throw new ArgumentNullException(nameof(text));
-
             var separators = GetLanguageSeparators(_language);
-            return SplitTextRecursive(text, separators);
+            var chunks = SplitTextRecursive(text, separators);
+            
+            var position = 0;
+            foreach (var chunk in chunks)
+            {
+                var endPos = position + chunk.Length;
+                yield return (chunk, position, endPos);
+                position = endPos - ChunkOverlap;
+            }
         }
 
         private string[] GetLanguageSeparators(string language)
@@ -60,7 +63,7 @@ namespace AiDotNet.RetrievalAugmentedGeneration.ChunkingStrategies
         {
             var chunks = new List<string>();
 
-            if (text.Length <= _chunkSize)
+            if (text.Length <= ChunkSize)
             {
                 chunks.Add(text);
                 return chunks;
@@ -73,12 +76,12 @@ namespace AiDotNet.RetrievalAugmentedGeneration.ChunkingStrategies
 
                 foreach (var split in splits)
                 {
-                    if (currentChunk.Length + split.Length + separator.Length > _chunkSize)
+                    if (currentChunk.Length + split.Length + separator.Length > ChunkSize)
                     {
                         if (currentChunk.Length > 0)
                         {
                             chunks.Add(currentChunk.ToString());
-                            var overlap = Math.Min(_chunkOverlap, currentChunk.Length);
+                            var overlap = Math.Min(ChunkOverlap, currentChunk.Length);
                             currentChunk = new StringBuilder(currentChunk.ToString(currentChunk.Length - overlap, overlap));
                         }
                     }

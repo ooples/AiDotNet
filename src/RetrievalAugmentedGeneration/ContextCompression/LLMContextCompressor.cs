@@ -26,8 +26,8 @@ namespace AiDotNet.RetrievalAugmentedGeneration.ContextCompression
         public LLMContextCompressor(
             INumericOperations<T> numericOperations,
             double compressionRatio = 0.5,
-            string llmEndpoint = null,
-            string apiKey = null)
+            string llmEndpoint = "",
+            string apiKey = "")
         {
             _numOps = numericOperations ?? throw new ArgumentNullException(nameof(numericOperations));
             _compressionRatio = compressionRatio >= 0 && compressionRatio <= 1
