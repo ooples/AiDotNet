@@ -72,12 +72,17 @@ public class DiversityReranker<T> : RerankerBase<T>
     private readonly T _lambda;
 
     /// <summary>
+    /// Gets a value indicating whether this reranker modifies relevance scores.
+    /// </summary>
+    public override bool ModifiesScores => true;
+
+    /// <summary>
     /// Initializes a new instance of the DiversityReranker class.
     /// </summary>
     /// <param name="numOps">Numeric operations for type T.</param>
     /// <param name="lambda">Trade-off parameter between relevance and diversity (0 to 1). Default: 0.5.
     /// Higher values favor relevance, lower values favor diversity.</param>
-    public DiversityReranker(INumericOperations<T> numOps, T? lambda = default) : base(numOps)
+    public DiversityReranker(INumericOperations<T> numOps, T? lambda = default) : base()
     {
         var lambdaValue = lambda ?? NumOps.FromDouble(0.5);
         
@@ -93,9 +98,10 @@ public class DiversityReranker<T> : RerankerBase<T>
     /// <summary>
     /// Core reranking logic that maximizes diversity while maintaining relevance.
     /// </summary>
+    /// <param name="query">The validated query text.</param>
     /// <param name="documents">The validated list of documents to rerank.</param>
     /// <returns>Documents reranked to balance relevance and diversity.</returns>
-    protected override IEnumerable<Document<T>> RerankCore(IEnumerable<Document<T>> documents)
+    protected override IEnumerable<Document<T>> RerankCore(string query, IList<Document<T>> documents)
     {
         var docList = documents.ToList();
         if (docList.Count <= 1)
