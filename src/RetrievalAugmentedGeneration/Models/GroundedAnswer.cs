@@ -3,6 +3,7 @@ namespace AiDotNet.RetrievalAugmentedGeneration.Models;
 /// <summary>
 /// Represents a generated answer with citations and source attribution for transparency and verification.
 /// </summary>
+/// <typeparam name="T">The numeric data type used for relevance scoring.</typeparam>
 /// <remarks>
 /// <para>
 /// A GroundedAnswer contains the AI-generated response along with references to the source documents
@@ -32,7 +33,7 @@ namespace AiDotNet.RetrievalAugmentedGeneration.Models;
 /// ConfidenceScore: 0.95 (95% confident this answer is accurate)
 /// </para>
 /// </remarks>
-public class GroundedAnswer
+public class GroundedAnswer<T>
 {
     /// <summary>
     /// Gets or sets the generated answer text.

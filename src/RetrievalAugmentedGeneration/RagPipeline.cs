@@ -6,6 +6,7 @@ namespace AiDotNet.RetrievalAugmentedGeneration;
 /// <summary>
 /// Orchestrates the complete retrieval-augmented generation pipeline.
 /// </summary>
+/// <typeparam name="T">The numeric data type used for relevance scoring.</typeparam>
 /// <remarks>
 /// <para>
 /// The RAG pipeline coordinates the entire process of retrieval-augmented generation:
@@ -42,21 +43,21 @@ namespace AiDotNet.RetrievalAugmentedGeneration;
 /// This is the complete RAG system in one convenient class!
 /// </para>
 /// </remarks>
-public class RagPipeline
+public class RagPipeline<T>
 {
-    private readonly IRetriever _retriever;
-    private readonly IReranker _reranker;
+    private readonly IRetriever<T> _retriever;
+    private readonly IReranker<T> _reranker;
     private readonly IGenerator _generator;
 
     /// <summary>
     /// Gets the retriever used by this pipeline.
     /// </summary>
-    public IRetriever Retriever => _retriever;
+    public IRetriever<T> Retriever => _retriever;
 
     /// <summary>
     /// Gets the reranker used by this pipeline.
     /// </summary>
-    public IReranker Reranker => _reranker;
+    public IReranker<T> Reranker => _reranker;
 
     /// <summary>
     /// Gets the generator used by this pipeline.
@@ -69,7 +70,7 @@ public class RagPipeline
     /// <param name="retriever">The retriever for finding relevant documents.</param>
     /// <param name="reranker">The reranker for improving document ranking.</param>
     /// <param name="generator">The generator for producing grounded answers.</param>
-    public RagPipeline(IRetriever retriever, IReranker reranker, IGenerator generator)
+    public RagPipeline(IRetriever<T> retriever, IReranker<T> reranker, IGenerator generator)
     {
         _retriever = retriever ?? throw new ArgumentNullException(nameof(retriever));
         _reranker = reranker ?? throw new ArgumentNullException(nameof(reranker));
@@ -133,7 +134,7 @@ public class RagPipeline
             {
                 Query = query,
                 Answer = "I couldn't find any relevant information to answer this question.",
-                SourceDocuments = new List<Document>(),
+                SourceDocuments = new List<Document<T>>(),
                 Citations = new List<string>(),
                 ConfidenceScore = 0.0
             };
@@ -196,7 +197,7 @@ public class RagPipeline
     /// - Need documents for analysis or debugging
     /// </para>
     /// </remarks>
-    public IEnumerable<Document> RetrieveDocuments(
+    public IEnumerable<Document<T>> RetrieveDocuments(
         string query,
         int? topK = null,
         bool applyReranking = true,
