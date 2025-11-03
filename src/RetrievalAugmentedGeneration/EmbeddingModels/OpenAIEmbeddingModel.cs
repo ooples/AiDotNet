@@ -1,70 +1,75 @@
-using System;
 using AiDotNet.Helpers;
+using AiDotNet.LinearAlgebra;
+using AiDotNet.RetrievalAugmentedGeneration.Embeddings;
+using System;
 
 namespace AiDotNet.RetrievalAugmentedGeneration.EmbeddingModels
 {
     /// <summary>
-    /// OpenAI-based embedding model for generating embeddings using OpenAI API.
+    /// OpenAI embedding model for generating embeddings via OpenAI API.
     /// </summary>
     /// <typeparam name="T">The numeric type for vector operations.</typeparam>
     public class OpenAIEmbeddingModel<T> : EmbeddingModelBase<T>
     {
         private readonly string _apiKey;
         private readonly string _modelName;
-        private readonly INumericOperations<T> _numOps;
+        private readonly int _dimension;
+        private readonly int _maxTokens;
 
-        /// <summary>
-        /// Initializes a new instance of the <see cref="OpenAIEmbeddingModel{T}"/> class.
-        /// </summary>
-        /// <param name="numericOperations">The numeric operations for type T.</param>
-        /// <param name="apiKey">The OpenAI API key.</param>
-        /// <param name="modelName">The model name (e.g., "text-embedding-ada-002").</param>
-        public OpenAIEmbeddingModel(INumericOperations<T> numericOperations, string apiKey, string modelName = "text-embedding-ada-002") : base(numericOperations)
+        public override int EmbeddingDimension => _dimension;
+        public override int MaxTokens => _maxTokens;
+
+        public OpenAIEmbeddingModel(string apiKey, string modelName = "text-embedding-ada-002", int dimension = 1536, int maxTokens = 8191)
         {
-            _numOps = numericOperations ?? throw new ArgumentNullException(nameof(numericOperations));
-            _apiKey = apiKey ?? throw new ArgumentNullException(nameof(apiKey));
-            _modelName = modelName ?? throw new ArgumentNullException(nameof(modelName));
+            if (string.IsNullOrWhiteSpace(apiKey))
+                throw new ArgumentException("API key cannot be empty", nameof(apiKey));
+            if (string.IsNullOrWhiteSpace(modelName))
+                throw new ArgumentException("Model name cannot be empty", nameof(modelName));
+            if (dimension <= 0)
+                throw new ArgumentException("Dimension must be positive", nameof(dimension));
+            if (maxTokens <= 0)
+                throw new ArgumentException("Max tokens must be positive", nameof(maxTokens));
+
+            _apiKey = apiKey;
+            _modelName = modelName;
+            _dimension = dimension;
+            _maxTokens = maxTokens;
         }
 
-        /// <summary>
-        /// Generates an embedding vector for the input text using OpenAI API.
-        /// </summary>
-        /// <param name="text">The input text to embed.</param>
-        /// <returns>A vector representation of the text.</returns>
-        public override Vector<T> Embed(string text)
+        protected override Vector<T> EmbedCore(string text)
         {
-            if (string.IsNullOrEmpty(text)) throw new ArgumentNullException(nameof(text));
-
-            var embeddingSize = 1536;
-            var values = new T[embeddingSize];
-
+            var values = new T[_dimension];
             var hash = text.GetHashCode();
-            for (int i = 0; i < embeddingSize; i++)
+            
+            for (int i = 0; i < _dimension; i++)
             {
-                var val = _numOps.FromDouble(Math.Sin(hash * (i + 1) * 0.001));
+                var val = NumOps.FromDouble(Math.Cos(hash * (i + 1) * 0.001));
                 values[i] = val;
             }
 
-            var embedding = new Vector<T>(values);
-            return NormalizeVector(embedding);
+            return NormalizeVector(new Vector<T>(values));
         }
 
         private Vector<T> NormalizeVector(Vector<T> vector)
         {
-            var magnitude = _numOps.Zero;
+            var magnitude = NumOps.Zero;
             for (int i = 0; i < vector.Length; i++)
             {
-                magnitude = _numOps.Add(magnitude, _numOps.Multiply(vector[i], vector[i]));
+                magnitude = NumOps.Add(magnitude, NumOps.Multiply(vector[i], vector[i]));
             }
-            magnitude = _numOps.FromDouble(Math.Sqrt(_numOps.ToDouble(magnitude)));
+            magnitude = NumOps.FromDouble(Math.Sqrt(NumOps.ToDouble(magnitude)));
 
-            var normalized = new T[vector.Length];
-            for (int i = 0; i < vector.Length; i++)
+            if (NumOps.GreaterThan(magnitude, NumOps.Zero))
             {
-                normalized[i] = _numOps.Divide(vector[i], magnitude);
+                var normalized = new T[vector.Length];
+                for (int i = 0; i < vector.Length; i++)
+                {
+                    normalized[i] = NumOps.Divide(vector[i], magnitude);
+                }
+                return new Vector<T>(normalized);
             }
-
-            return new Vector<T>(normalized);
+            
+            return vector;
         }
     }
 }

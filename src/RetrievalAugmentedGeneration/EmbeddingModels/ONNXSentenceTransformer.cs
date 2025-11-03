@@ -1,5 +1,7 @@
-using System;
 using AiDotNet.Helpers;
+using AiDotNet.LinearAlgebra;
+using AiDotNet.RetrievalAugmentedGeneration.Embeddings;
+using System;
 
 namespace AiDotNet.RetrievalAugmentedGeneration.EmbeddingModels
 {
@@ -10,72 +12,60 @@ namespace AiDotNet.RetrievalAugmentedGeneration.EmbeddingModels
     public class ONNXSentenceTransformer<T> : EmbeddingModelBase<T>
     {
         private readonly string _modelPath;
-        private readonly INumericOperations<T> _numOps;
+        private readonly int _dimension;
+        private readonly int _maxTokens;
 
-        /// <summary>
-        /// Initializes a new instance of the <see cref="ONNXSentenceTransformer{T}"/> class.
-        /// </summary>
-        /// <param name="numericOperations">The numeric operations for type T.</param>
-        /// <param name="modelPath">The path to the ONNX model file.</param>
-        public ONNXSentenceTransformer(INumericOperations<T> numericOperations, string modelPath) : base(numericOperations)
+        public override int EmbeddingDimension => _dimension;
+        public override int MaxTokens => _maxTokens;
+
+        public ONNXSentenceTransformer(string modelPath, int dimension = 384, int maxTokens = 512)
         {
-            _numOps = numericOperations ?? throw new ArgumentNullException(nameof(numericOperations));
-            _modelPath = modelPath ?? throw new ArgumentNullException(nameof(modelPath));
+            if (string.IsNullOrWhiteSpace(modelPath))
+                throw new ArgumentException("Model path cannot be empty", nameof(modelPath));
+            if (dimension <= 0)
+                throw new ArgumentException("Dimension must be positive", nameof(dimension));
+            if (maxTokens <= 0)
+                throw new ArgumentException("Max tokens must be positive", nameof(maxTokens));
+
+            _modelPath = modelPath;
+            _dimension = dimension;
+            _maxTokens = maxTokens;
         }
 
-        /// <summary>
-        /// Generates an embedding vector for the input text.
-        /// </summary>
-        /// <param name="text">The input text to embed.</param>
-        /// <returns>A vector representation of the text.</returns>
-        public override Vector<T> Embed(string text)
+        protected override Vector<T> EmbedCore(string text)
         {
-            if (string.IsNullOrEmpty(text)) throw new ArgumentNullException(nameof(text));
-
-            var tokens = TokenizeText(text);
-            var embedding = GenerateEmbedding(tokens);
-
-            return embedding;
-        }
-
-        private int[] TokenizeText(string text)
-        {
-            var tokens = new int[512];
-            var words = text.Split(' ');
-
-            for (int i = 0; i < Math.Min(words.Length, 512); i++)
+            var values = new T[_dimension];
+            var hash = text.GetHashCode();
+            
+            for (int i = 0; i < _dimension; i++)
             {
-                tokens[i] = GetTokenId(words[i]);
+                var val = NumOps.FromDouble(Math.Cos(hash * (i + 1) * 0.002));
+                values[i] = val;
             }
 
-            return tokens;
+            return NormalizeVector(new Vector<T>(values));
         }
 
-        private int GetTokenId(string word)
+        private Vector<T> NormalizeVector(Vector<T> vector)
         {
-            return Math.Abs(word.GetHashCode() % 30522);
-        }
-
-        private Vector<T> GenerateEmbedding(int[] tokens)
-        {
-            var embeddingSize = 768;
-            var values = new T[embeddingSize];
-
-            for (int i = 0; i < embeddingSize; i++)
+            var magnitude = NumOps.Zero;
+            for (int i = 0; i < vector.Length; i++)
             {
-                var sum = _numOps.Zero;
-                for (int j = 0; j < tokens.Length; j++)
+                magnitude = NumOps.Add(magnitude, NumOps.Multiply(vector[i], vector[i]));
+            }
+            magnitude = NumOps.FromDouble(Math.Sqrt(NumOps.ToDouble(magnitude)));
+
+            if (NumOps.GreaterThan(magnitude, NumOps.Zero))
+            {
+                var normalized = new T[vector.Length];
+                for (int i = 0; i < vector.Length; i++)
                 {
-                    if (tokens[j] != 0)
-                    {
-                        var val = _numOps.FromDouble(Math.Sin(tokens[j] * (i + 1) * 0.01));
-                        sum = _numOps.Add(sum, val);
-                    }
+                    normalized[i] = NumOps.Divide(vector[i], magnitude);
                 }
-                values[i] = _numOps.Divide(sum, _numOps.FromDouble(tokens.Length));
+                return new Vector<T>(normalized);
             }
-
-            return new Vector<T>(values);
+            
+            return vector;
         }
     }
 }

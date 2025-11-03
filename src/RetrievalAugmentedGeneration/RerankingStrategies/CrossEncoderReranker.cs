@@ -20,10 +20,10 @@ namespace AiDotNet.RetrievalAugmentedGeneration.RerankingStrategies
         /// </summary>
         /// <param name="numericOperations">The numeric operations for type T.</param>
         /// <param name="modelPath">The path to the cross-encoder model.</param>
-        public CrossEncoderReranker(INumericOperations<T> numericOperations, string modelPath = null) : base(numericOperations)
+        public CrossEncoderReranker(INumericOperations<T> numericOperations, string? modelPath = null) : base(numericOperations)
         {
             _numOps = numericOperations ?? throw new ArgumentNullException(nameof(numericOperations));
-            _modelPath = modelPath;
+            _modelPath = modelPath ?? string.Empty;
         }
 
         /// <summary>

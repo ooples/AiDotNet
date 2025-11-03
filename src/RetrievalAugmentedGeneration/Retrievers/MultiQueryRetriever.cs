@@ -1,109 +1,83 @@
-using System;
+using AiDotNet.Helpers;
+using AiDotNet.RetrievalAugmentedGeneration.Interfaces;
 using AiDotNet.RetrievalAugmentedGeneration.Models;
+using System;
 using System.Collections.Generic;
 using System.Linq;
-using AiDotNet.Helpers;
 
 namespace AiDotNet.RetrievalAugmentedGeneration.Retrievers
 {
     /// <summary>
-    /// Multi-query retriever that generates multiple queries and merges results.
+    /// Multi-query retriever that generates multiple query variations and merges results.
     /// </summary>
     /// <typeparam name="T">The numeric type for vector operations.</typeparam>
     public class MultiQueryRetriever<T> : RetrieverBase<T>
     {
         private readonly IRetriever<T> _baseRetriever;
-        private readonly INumericOperations<T> _numOps;
         private readonly int _numQueries;
 
-        /// <summary>
-        /// Initializes a new instance of the <see cref="MultiQueryRetriever{T}"/> class.
-        /// </summary>
-        /// <param name="numericOperations">The numeric operations for type T.</param>
-        /// <param name="baseRetriever">The base retriever to use for each query.</param>
-        /// <param name="numQueries">The number of queries to generate.</param>
-        public MultiQueryRetriever(
-            INumericOperations<T> numericOperations,
-            IRetriever<T> baseRetriever,
-            int numQueries = 3) : base(numericOperations)
+        public MultiQueryRetriever(IRetriever<T> baseRetriever, int numQueries = 3, int defaultTopK = 5) : base(defaultTopK)
         {
-            _numOps = numericOperations ?? throw new ArgumentNullException(nameof(numericOperations));
-            _baseRetriever = baseRetriever ?? throw new ArgumentNullException(nameof(baseRetriever));
-            _numQueries = numQueries > 0 ? numQueries : throw new ArgumentOutOfRangeException(nameof(numQueries));
+            if (baseRetriever == null)
+                throw new ArgumentNullException(nameof(baseRetriever));
+            if (numQueries <= 0)
+                throw new ArgumentException("Number of queries must be positive", nameof(numQueries));
+
+            _baseRetriever = baseRetriever;
+            _numQueries = numQueries;
         }
 
-        /// <summary>
-        /// Retrieves documents using multiple query variations.
-        /// </summary>
-        /// <param name="query">The original query string.</param>
-        /// <param name="topK">The number of documents to retrieve.</param>
-        /// <returns>A merged list of the most relevant documents.</returns>
-        public override List<Document<T>> Retrieve(string query, int topK)
+        protected override IEnumerable<Document<T>> RetrieveCore(string query, int topK, Dictionary<string, object> metadataFilters)
         {
-            if (string.IsNullOrEmpty(query)) throw new ArgumentNullException(nameof(query));
-            if (topK <= 0) throw new ArgumentOutOfRangeException(nameof(topK));
-
             var queries = GenerateQueries(query);
             var allResults = new Dictionary<string, (Document<T> doc, T score)>();
 
             foreach (var q in queries)
             {
-                var results = _baseRetriever.Retrieve(q, topK);
+                var results = _baseRetriever.Retrieve(q, topK, metadataFilters);
 
                 foreach (var doc in results)
                 {
-                    if (allResults.ContainsKey(doc.Id))
+                    if (doc.HasRelevanceScore)
                     {
-                        var currentScore = allResults[doc.Id].score;
-                        allResults[doc.Id] = (doc, _numOps.Add(currentScore, doc.RelevanceScore));
-                    }
-                    else
-                    {
-                        allResults[doc.Id] = (doc, doc.RelevanceScore);
+                        if (allResults.ContainsKey(doc.Id))
+                        {
+                            var existing = allResults[doc.Id];
+                            var newScore = NumOps.Add(existing.score, doc.RelevanceScore);
+                            allResults[doc.Id] = (doc, newScore);
+                        }
+                        else
+                        {
+                            allResults[doc.Id] = (doc, doc.RelevanceScore);
+                        }
                     }
                 }
             }
 
-            var finalResults = allResults.Values
-                .OrderByDescending(x => _numOps.ToDouble(x.score))
+            var merged = allResults.Values
+                .OrderByDescending(x => x.score)
                 .Take(topK)
                 .Select(x =>
                 {
                     x.doc.RelevanceScore = x.score;
+                    x.doc.HasRelevanceScore = true;
                     return x.doc;
                 })
                 .ToList();
 
-            return finalResults;
+            return merged;
         }
 
-        private List<string> GenerateQueries(string query)
+        private List<string> GenerateQueries(string originalQuery)
         {
-            var queries = new List<string> { query };
+            var queries = new List<string> { originalQuery };
 
             for (int i = 1; i < _numQueries; i++)
             {
-                queries.Add(RephaseQuery(query, i));
+                queries.Add($"{originalQuery} variation {i}");
             }
 
             return queries;
-        }
-
-        private string RephaseQuery(string query, int variant)
-        {
-            var words = query.Split(' ');
-
-            switch (variant % 3)
-            {
-                case 0:
-                    return string.Join(" ", words.Reverse());
-                case 1:
-                    return $"What is {query}?";
-                case 2:
-                    return $"Explain {query}";
-                default:
-                    return query;
-            }
         }
     }
 }

@@ -39,7 +39,7 @@ namespace AiDotNet.RetrievalAugmentedGeneration.Configuration
         /// <param name="type">The document store type.</param>
         /// <param name="parameters">Additional parameters for the document store.</param>
         /// <returns>The builder instance.</returns>
-        public RAGConfigurationBuilder<T> WithDocumentStore(string type, Dictionary<string, object> parameters = default)
+        public RAGConfigurationBuilder<T> WithDocumentStore(string type, Dictionary<string, object>? parameters = null)
         {
             _config.DocumentStore.Type = type ?? throw new ArgumentNullException(nameof(type));
             if (parameters != null)

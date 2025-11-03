@@ -21,7 +21,7 @@ namespace AiDotNet.RetrievalAugmentedGeneration.ChunkingStrategies
         public RecursiveCharacterTextSplitter(
             int chunkSize = 1000,
             int chunkOverlap = 200,
-            string[] separators = default)
+            string[]? separators = null)
             : base(chunkSize, chunkOverlap)
         {
             _separators = separators ?? new[] { "\n\n", "\n", ". ", " ", "" };

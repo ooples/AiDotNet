@@ -18,10 +18,10 @@ namespace AiDotNet.RetrievalAugmentedGeneration.QueryExpansion
         /// <param name="llmEndpoint">The LLM API endpoint.</param>
         /// <param name="apiKey">The API key for the LLM service.</param>
         /// <param name="numExpansions">The number of query expansions to generate.</param>
-        public LLMQueryExpansion(string llmEndpoint = null, string apiKey = null, int numExpansions = 3)
+        public LLMQueryExpansion(string? llmEndpoint = null, string? apiKey = null, int numExpansions = 3)
         {
-            _llmEndpoint = llmEndpoint;
-            _apiKey = apiKey;
+            _llmEndpoint = llmEndpoint ?? string.Empty;
+            _apiKey = apiKey ?? string.Empty;
             _numExpansions = numExpansions > 0 ? numExpansions : throw new ArgumentOutOfRangeException(nameof(numExpansions));
         }
 
