@@ -170,14 +170,21 @@ public class DVoRAAdapter<T> : LoRAAdapterBase<T>
     {
         get
         {
-            // Guard against pre-initialization state when base class constructor calls this property
-            // Note: DVoRA does not use the LoRA layer for training, so loraCount is excluded
+            // Guard against pre-initialization state when base class constructor calls this property.
             int baseCount = _freezeBaseLayer ? 0 : _baseLayer.ParameterCount;
+            int inputSize = GetInputShape()[0];
             int outputSize = GetOutputShape()[0];
+
+            // We must include the LoRA slice size for base class compatibility, even though DVoRA doesn't train it.
+            // The base constructor allocates parameter vectors based on this count, and packing/unpacking
+            // methods expect the LoRA slice to be present, causing an IndexOutOfRange exception if omitted.
+            int loraCount = _loraLayer?.ParameterCount ?? (inputSize * Rank + outputSize * Rank);
+
             int magnitudeCount = _magnitude?.Length ?? outputSize;
             int scalingDCount = _scalingVectorD?.Length ?? outputSize;
             int scalingBCount = _scalingVectorB?.Length ?? Rank;
-            return baseCount + magnitudeCount + scalingDCount + scalingBCount;
+
+            return baseCount + loraCount + magnitudeCount + scalingDCount + scalingBCount;
         }
     }
 
@@ -294,6 +301,19 @@ public class DVoRAAdapter<T> : LoRAAdapterBase<T>
     {
         lock (_initLock)
         {
+            if (inputSize <= 0)
+            {
+                throw new ArgumentOutOfRangeException(nameof(inputSize), "Input size must be greater than zero.");
+            }
+            if (outputSize <= 0)
+            {
+                throw new ArgumentOutOfRangeException(nameof(outputSize), "Output size must be greater than zero.");
+            }
+            if (rank <= 0)
+            {
+                throw new ArgumentOutOfRangeException(nameof(rank), "Rank must be greater than zero.");
+            }
+
             Random rng = seed.HasValue ? new Random(seed.Value) : new Random();
             var ops = MathHelper.GetNumericOperations<T>();
 
@@ -706,9 +726,30 @@ public class DVoRAAdapter<T> : LoRAAdapterBase<T>
         for (int i = 0; i < outputSize; i++)
         {
             T gradSum = NumOps.Zero;
+            // Get the normalized direction vector for the current output unit
+            Vector<T> normalizedDirectionRow = _lastNormalizedDirection.GetRow(i);
+
             for (int b = 0; b < batchSize; b++)
             {
-                gradSum = NumOps.Add(gradSum, gradMatrix[b, i]);
+                // Extract the input activation row for the current batch
+                Vector<T> inputActivationRow = new Vector<T>(inputSize);
+                for (int k = 0; k < inputSize; k++)
+                {
+                    inputActivationRow[k] = _lastInput[b * inputSize + k];
+                }
+
+                // Compute scalar projection: proj = Dot(_lastNormalizedDirection[i], inputActivationRow[b])
+                T proj = NumOps.Zero;
+                for (int k = 0; k < inputSize; k++)
+                {
+                    proj = NumOps.Add(proj, NumOps.Multiply(normalizedDirectionRow[k], inputActivationRow[k]));
+                }
+
+                // Compute gradient contribution: gradContribution = NumOps.Mul(gradMatrix[b,i], proj)
+                T gradContribution = NumOps.Multiply(gradMatrix[b, i], proj);
+
+                // Accumulate gradContribution into _magnitudeGradient[i]
+                gradSum = NumOps.Add(gradSum, gradContribution);
             }
             _magnitudeGradient[i] = gradSum;
         }

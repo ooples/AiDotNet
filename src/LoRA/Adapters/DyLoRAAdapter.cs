@@ -631,6 +631,38 @@ public class DyLoRAAdapter<T> : LoRAAdapterBase<T>
     }
 
     /// <summary>
+    /// Updates parameters for the base layer and the LoRA layer using cached gradients.
+    /// </summary>
+    /// <param name="learningRate">The learning rate for parameter updates.</param>
+    public override void UpdateParameters(T learningRate)
+    {
+        // Update base layer if not frozen
+        if (!_freezeBaseLayer)
+        {
+            _baseLayer.UpdateParameters(learningRate);
+        }
+
+        // Manually update LoRA layer's parameters using cached gradients,
+        // as the base UpdateParameters would use the LoRA layer's empty internal gradients.
+        if (_cachedLoRAGradients != null)
+        {
+            if (_cachedLoRAGradients.Length == _loraLayer.ParameterCount)
+            {
+                Vector<T> loraParams = _loraLayer.GetParameters();
+                for (int i = 0; i < loraParams.Length; i++)
+                {
+                    T update = NumOps.Multiply(_cachedLoRAGradients[i], learningRate);
+                    loraParams[i] = NumOps.Subtract(loraParams[i], update);
+                }
+                _loraLayer.SetParameters(loraParams);
+            }
+            
+            // Clear the cache after use.
+            _cachedLoRAGradients = null;
+        }
+    }
+
+    /// <summary>
     /// Trains the adapter with nested dropout across all active ranks.
     /// </summary>
     /// <param name="inputs">Training input tensors.</param>
