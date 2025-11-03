@@ -1,3 +1,4 @@
+using AiDotNet.Helpers;
 using AiDotNet.LinearAlgebra;
 using AiDotNet.RetrievalAugmentedGeneration.Interfaces;
 using AiDotNet.RetrievalAugmentedGeneration.Models;
@@ -182,9 +183,9 @@ public abstract class DocumentStoreBase<T> : IDocumentStore<T> where T : struct
     /// - Order results by similarity (highest first)
     /// 
     /// Common similarity metrics:
-    /// - Cosine similarity: Use CosineSimilarity() helper
-    /// - Euclidean distance: Lower distance = higher similarity
-    /// - Dot product: Higher = more similar (for normalized vectors)
+    /// - Cosine similarity: Use StatisticsHelper&lt;T&gt;.CosineSimilarity(vector1, vector2)
+    /// - Euclidean distance: Use StatisticsHelper&lt;T&gt;.EuclideanDistance(vector1, vector2)
+    /// - Jaccard similarity: Use StatisticsHelper&lt;T&gt;.JaccardSimilarity(vector1, vector2)
     /// </para>
     /// </remarks>
     protected abstract IEnumerable<Document> GetSimilarCore(Vector<T> queryVector, int topK, Dictionary<string, object> metadataFilters);
@@ -283,55 +284,7 @@ public abstract class DocumentStoreBase<T> : IDocumentStore<T> where T : struct
             throw new ArgumentNullException(nameof(metadataFilters));
     }
 
-    /// <summary>
-    /// Calculates cosine similarity between two vectors.
-    /// </summary>
-    /// <param name="vector1">The first vector.</param>
-    /// <param name="vector2">The second vector.</param>
-    /// <returns>Cosine similarity score between 0 and 1.</returns>
-    /// <remarks>
-    /// <para>
-    /// Cosine similarity measures the cosine of the angle between two vectors.
-    /// A value of 1 indicates identical direction (perfect match), 0 indicates orthogonality
-    /// (no similarity), and -1 indicates opposite direction.
-    /// </para>
-    /// <para><b>For Implementers:</b> Use this for similarity scoring in GetSimilarCore.
-    /// 
-    /// Cosine similarity is ideal for:
-    /// - Text embeddings (semantic similarity)
-    /// - Normalized vectors
-    /// - When magnitude doesn't matter, only direction
-    /// 
-    /// Formula: (A · B) / (||A|| * ||B||)
-    /// </para>
-    /// </remarks>
-    protected double CosineSimilarity(Vector<T> vector1, Vector<T> vector2)
-    {
-        if (vector1.Length != vector2.Length)
-            throw new ArgumentException("Vectors must have the same dimension");
 
-        double dotProduct = 0;
-        double magnitude1 = 0;
-        double magnitude2 = 0;
-
-        for (int i = 0; i < vector1.Length; i++)
-        {
-            var v1 = Convert.ToDouble(vector1[i]);
-            var v2 = Convert.ToDouble(vector2[i]);
-            
-            dotProduct += v1 * v2;
-            magnitude1 += v1 * v1;
-            magnitude2 += v2 * v2;
-        }
-
-        magnitude1 = Math.Sqrt(magnitude1);
-        magnitude2 = Math.Sqrt(magnitude2);
-
-        if (magnitude1 == 0 || magnitude2 == 0)
-            return 0;
-
-        return dotProduct / (magnitude1 * magnitude2);
-    }
 
     /// <summary>
     /// Checks if a document matches the specified metadata filters.

@@ -1,3 +1,4 @@
+using AiDotNet.Helpers;
 using AiDotNet.LinearAlgebra;
 using AiDotNet.RetrievalAugmentedGeneration.Models;
 
@@ -124,9 +125,9 @@ public class InMemoryDocumentStore<T> : DocumentStoreBase<T> where T : struct
             if (!MatchesFilters(vectorDoc.Document, metadataFilters))
                 continue;
 
-            // Calculate cosine similarity
-            var similarity = CosineSimilarity(queryVector, vectorDoc.Embedding);
-            scoredDocuments.Add((vectorDoc.Document, similarity));
+            // Calculate cosine similarity using StatisticsHelper
+            var similarity = StatisticsHelper<T>.CosineSimilarity(queryVector, vectorDoc.Embedding);
+            scoredDocuments.Add((vectorDoc.Document, Convert.ToDouble(similarity)));
         }
 
         // Sort by similarity (descending) and take top K

@@ -153,7 +153,8 @@ public abstract class RerankerBase : IReranker
         var maxScore = scores.Max();
         var range = maxScore - minScore;
 
-        if (range == 0)
+        const double epsilon = 1e-8;
+        if (Math.Abs(range) < epsilon)
         {
             // All scores are the same, set them all to 1.0
             foreach (var doc in docsWithScores)
