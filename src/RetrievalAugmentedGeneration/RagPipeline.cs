@@ -123,7 +123,7 @@ public class RagPipeline
         var filters = metadataFilters ?? new Dictionary<string, object>();
         var retrievedDocs = topK.HasValue
             ? _retriever.Retrieve(query, topK.Value, filters)
-            : _retriever.Retrieve(query, filters);
+            : _retriever.Retrieve(query, _retriever.DefaultTopK, filters);
 
         var retrievedList = retrievedDocs.ToList();
 
