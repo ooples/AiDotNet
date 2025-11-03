@@ -44,7 +44,7 @@ namespace AiDotNet.RetrievalAugmentedGeneration.Evaluation;
 /// - Helps tune retrieval parameters (topK, similarity threshold)
 /// </para>
 /// </remarks>
-public class ContextCoverageMetric : RAGMetricBase
+public class ContextCoverageMetric<T> : RAGMetricBase<T>
 {
     /// <summary>
     /// Gets the name of this metric.
@@ -72,7 +72,7 @@ public class ContextCoverageMetric : RAGMetricBase
     /// <param name="answer">The grounded answer to evaluate.</param>
     /// <param name="groundTruth">The reference answer (optional).</param>
     /// <returns>Coverage score (0-1).</returns>
-    protected override double EvaluateCore(GroundedAnswer answer, string? groundTruth)
+    protected override double EvaluateCore(GroundedAnswer<T> answer, string? groundTruth)
     {
         if (!answer.SourceDocuments.Any())
             return 0.0;  // No sources = no coverage

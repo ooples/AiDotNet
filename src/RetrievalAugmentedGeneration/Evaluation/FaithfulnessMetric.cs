@@ -32,7 +32,7 @@ namespace AiDotNet.RetrievalAugmentedGeneration.Evaluation;
 /// techniques like NLI (Natural Language Inference) models.
 /// </para>
 /// </remarks>
-public class FaithfulnessMetric : RAGMetricBase
+public class FaithfulnessMetric<T> : RAGMetricBase<T>
 {
     /// <summary>
     /// Gets the name of this metric.
@@ -56,7 +56,7 @@ public class FaithfulnessMetric : RAGMetricBase
     /// <param name="answer">The grounded answer to evaluate.</param>
     /// <param name="groundTruth">Not used for this metric.</param>
     /// <returns>Faithfulness score (0-1).</returns>
-    protected override double EvaluateCore(GroundedAnswer answer, string? groundTruth)
+    protected override double EvaluateCore(GroundedAnswer<T> answer, string? groundTruth)
     {
         if (!answer.SourceDocuments.Any())
             return 0.0;  // No sources = can't be faithful

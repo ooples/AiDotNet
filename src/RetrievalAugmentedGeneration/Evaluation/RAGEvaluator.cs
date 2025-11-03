@@ -34,20 +34,20 @@ namespace AiDotNet.RetrievalAugmentedGeneration.Evaluation;
 /// - Make data-driven optimization decisions
 /// </para>
 /// </remarks>
-public class RAGEvaluator
+public class RAGEvaluator<T>
 {
     private readonly IReadOnlyList<IRAGMetric> _metrics;
 
     /// <summary>
     /// Gets the metrics used by this evaluator.
     /// </summary>
-    public IReadOnlyList<IRAGMetric> Metrics => _metrics;
+    public IReadOnlyList<IRAGMetric<T>> Metrics => _metrics;
 
     /// <summary>
     /// Initializes a new instance of the RAGEvaluator class with specified metrics.
     /// </summary>
     /// <param name="metrics">The metrics to use for evaluation.</param>
-    public RAGEvaluator(IEnumerable<IRAGMetric> metrics)
+    public RAGEvaluator(IEnumerable<IRAGMetric<T>> metrics)
     {
         if (metrics == null)
             throw new ArgumentNullException(nameof(metrics));

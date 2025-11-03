@@ -5,6 +5,7 @@ namespace AiDotNet.RetrievalAugmentedGeneration.Evaluation;
 /// <summary>
 /// Defines the contract for RAG evaluation metrics.
 /// </summary>
+/// <typeparam name="T">The numeric data type used for relevance scoring.</typeparam>
 /// <remarks>
 /// <para>
 /// A RAG metric evaluates the quality of retrieval-augmented generation systems
@@ -30,7 +31,7 @@ namespace AiDotNet.RetrievalAugmentedGeneration.Evaluation;
 /// - Identify weak points in your system
 /// </para>
 /// </remarks>
-public interface IRAGMetric
+public interface IRAGMetric<T>
 {
     /// <summary>
     /// Gets the name of this metric.
@@ -48,5 +49,5 @@ public interface IRAGMetric
     /// <param name="answer">The grounded answer to evaluate.</param>
     /// <param name="groundTruth">The expected/correct answer (null for reference-free metrics).</param>
     /// <returns>A score between 0 and 1, where 1 is perfect.</returns>
-    double Evaluate(GroundedAnswer answer, string? groundTruth = null);
+    double Evaluate(GroundedAnswer<T> answer, string? groundTruth = null);
 }
