@@ -117,8 +117,8 @@ public class ContextCoverageMetric<T> : RAGMetricBase<T>
 
         // Heuristic 1: Average relevance score (if available)
         var avgRelevance = docs
-            .Where(d => d.RelevanceScore.HasValue)
-            .Select(d => d.RelevanceScore!.Value)
+            .Where(d => d.HasRelevanceScore)
+            .Select(d => Convert.ToDouble(d.RelevanceScore))
             .DefaultIfEmpty(0.5)
             .Average();
 

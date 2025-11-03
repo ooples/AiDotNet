@@ -157,8 +157,15 @@ public abstract class RerankerBase<T> : IReranker<T>
             return documents;
 
         var scores = docsWithScores.Select(d => d.RelevanceScore).ToList();
+        if (scores.Count == 0)
+            return documents;
+
         var minScore = scores.Min();
         var maxScore = scores.Max();
+        
+        if (minScore == null || maxScore == null)
+            return documents;
+            
         var range = NumOps.Subtract(maxScore, minScore);
 
         var epsilon = NumOps.FromDouble(1e-8);

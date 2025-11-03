@@ -1,4 +1,6 @@
 using System.Text.RegularExpressions;
+using AiDotNet.Helpers;
+using AiDotNet.Interfaces;
 using AiDotNet.RetrievalAugmentedGeneration.Interfaces;
 using AiDotNet.RetrievalAugmentedGeneration.Models;
 
@@ -36,6 +38,7 @@ namespace AiDotNet.RetrievalAugmentedGeneration.Generators;
 /// </remarks>
 public class StubGenerator<T> : IGenerator<T>
 {
+    private static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();
     private readonly int _maxContextTokens;
     private readonly int _maxGenerationTokens;
 
@@ -129,8 +132,8 @@ public class StubGenerator<T> : IGenerator<T>
 
         // Calculate confidence based on retrieval scores (normalized to [0,1])
         var avgScore = contextList
-            .Where(d => d.RelevanceScore.HasValue)
-            .Select(d => d.RelevanceScore!.Value)
+            .Where(d => d.HasRelevanceScore)
+            .Select(d => Convert.ToDouble(d.RelevanceScore))
             .DefaultIfEmpty(0.5)
             .Average();
 

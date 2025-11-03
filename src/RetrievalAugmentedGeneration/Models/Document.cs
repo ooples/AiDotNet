@@ -116,6 +116,7 @@ public class Document<T>
     /// </summary>
     public Document()
     {
+        RelevanceScore = default(T)!;
     }
 
     /// <summary>
@@ -127,6 +128,7 @@ public class Document<T>
     {
         Id = id;
         Content = content;
+        RelevanceScore = default(T)!;
     }
 
     /// <summary>
@@ -140,5 +142,6 @@ public class Document<T>
         Id = id;
         Content = content;
         Metadata = metadata;
+        RelevanceScore = default(T)!;
     }
 }
