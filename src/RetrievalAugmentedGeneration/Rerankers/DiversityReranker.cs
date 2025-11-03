@@ -87,7 +87,7 @@ public class DiversityReranker<T> : RerankerBase<T>
         var lambdaValue = lambda ?? NumOps.FromDouble(0.5);
         
         // Validate lambda is in [0, 1]
-        if (NumOps.Compare(lambdaValue, NumOps.Zero) < 0 || NumOps.Compare(lambdaValue, NumOps.One) > 0)
+        if (NumOps.LessThan(lambdaValue, NumOps.Zero) || NumOps.GreaterThan(lambdaValue, NumOps.One))
         {
             throw new ArgumentException("Lambda must be between 0 and 1.", nameof(lambda));
         }
@@ -131,7 +131,7 @@ public class DiversityReranker<T> : RerankerBase<T>
                 foreach (var selectedDoc in rerankedDocs)
                 {
                     var similarity = CalculateTextSimilarity(doc.Content, selectedDoc.Content);
-                    if (NumOps.Compare(similarity, maxSimilarity) > 0)
+                    if (NumOps.GreaterThan(similarity, maxSimilarity))
                     {
                         maxSimilarity = similarity;
                     }
@@ -143,7 +143,7 @@ public class DiversityReranker<T> : RerankerBase<T>
                 var diversityPenalty = NumOps.Multiply(oneMinusLambda, maxSimilarity);
                 var score = NumOps.Subtract(relevancePart, diversityPenalty);
 
-                if (bestDoc == null || NumOps.Compare(score, bestScore) > 0)
+                if (bestDoc == null || NumOps.GreaterThan(score, bestScore))
                 {
                     bestDoc = doc;
                     bestScore = score;

@@ -124,9 +124,9 @@ public abstract class GeneratorBase<T> : IGenerator<T>
 
         return new GroundedAnswer<T>
         {
-            GeneratedText = generatedText,
-            SourceDocuments = contextList,
-            Citations = citations
+            Answer = generatedText,
+            SourceDocuments = contextList.AsReadOnly(),
+            Citations = citations.Values.Select(d => d.Id).ToList().AsReadOnly()
         };
     }
 

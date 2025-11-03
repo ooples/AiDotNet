@@ -224,6 +224,6 @@ public class MaximalMarginalRelevanceReranker<T> : RerankerBase<T>
         if (a.Length != b.Length)
             throw new ArgumentException("Vectors must have the same length");
 
-        return StatisticsHelper<T>.CalculateCosineSimilarity(a, b);
+        return StatisticsHelper<T>.CosineSimilarity(a, b);
     }
 }

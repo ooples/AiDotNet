@@ -109,7 +109,7 @@ public class HybridRetriever<T> : RetrieverBase<T>
             var diff = _numOps.Abs(_numOps.Subtract(weightSum, one));
             var epsilon = _numOps.FromDouble(1e-6);
             
-            if (_numOps.Compare(diff, epsilon) > 0)
+            if (_numOps.GreaterThan(diff, epsilon))
             {
                 throw new ArgumentException("Dense and sparse weights must sum to 1.0 for WeightedLinear strategy.");
             }
@@ -327,7 +327,7 @@ public class HybridRetriever<T> : RetrieverBase<T>
         var range = _numOps.Subtract(maxScore, minScore);
 
         // If all scores are the same, return uniform scores
-        if (_numOps.Compare(range, _numOps.Zero) == 0)
+        if (_numOps.Equals(range, _numOps.Zero))
         {
             foreach (var doc in documents)
             {
