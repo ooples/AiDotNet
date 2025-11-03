@@ -133,7 +133,7 @@ public class DiversityReranker<T> : RerankerBase<T>
 
                 // Calculate diversity-aware score: lambda * relevance - (1 - lambda) * max_similarity
                 var relevancePart = NumOps.Multiply(_lambda, doc.RelevanceScore);
-                var oneMinus Lambda = NumOps.Subtract(NumOps.One, _lambda);
+                var oneMinusLambda = NumOps.Subtract(NumOps.One, _lambda);
                 var diversityPenalty = NumOps.Multiply(oneMinusLambda, maxSimilarity);
                 var score = NumOps.Subtract(relevancePart, diversityPenalty);
 
