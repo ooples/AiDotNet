@@ -171,7 +171,7 @@ public class DyLoRAAdapter<T> : LoRAAdapterBase<T>
     /// - freezeBaseLayer: Whether to lock the original layer (usually true)
     ///
     /// Example:
-    /// new DyLoRAAdapter(denseLayer, maxRank: 16, activeRanks: [2, 4, 8, 16])
+    /// new DyLoRAAdapter(denseLayer, maxRank: 16, activeRanks: new[] { 2, 4, 8, 16 })
     /// This trains a single adapter that can deploy with ranks 2, 4, 8, or 16.
     /// </para>
     /// </remarks>
@@ -244,7 +244,7 @@ public class DyLoRAAdapter<T> : LoRAAdapterBase<T>
         {
             throw new ArgumentException(
                 $"Deployment rank {rank} is not in ActiveRanks [{string.Join(", ", _activeRanks)}]. " +
-                $"Only trained ranks can be used for deployment.",
+                "Only trained ranks can be used for deployment.",
                 nameof(rank));
         }
 

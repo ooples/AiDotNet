@@ -205,7 +205,7 @@ public class DVoRAAdapter<T> : LoRAAdapterBase<T>
     /// <para><b>For Beginners:</b> This creates a DVoRA adapter for a layer. Unlike standard LoRA,
     /// you must initialize the shared random matrices first by calling:
     ///
-    /// DVoRAAdapter&lt;T&gt;.InitializeSharedMatrices(inputSize, outputSize, rank);
+    /// DVoRAAdapter<T>.InitializeSharedMatrices(inputSize, outputSize, rank);
     ///
     /// This needs to be done once before creating any DVoRA adapters.
     ///
@@ -288,11 +288,11 @@ public class DVoRAAdapter<T> : LoRAAdapterBase<T>
     /// <para><b>For Beginners:</b> Call this once at the start before creating any DVoRA layers:
     ///
     /// // Initialize shared random matrices (do this once)
-    /// DVoRAAdapter&lt;double&gt;.InitializeSharedMatrices(inputSize: 784, outputSize: 128, rank: 8);
+    /// DVoRAAdapter<double>.InitializeSharedMatrices(inputSize: 784, outputSize: 128, rank: 8);
     ///
     /// // Now create DVoRA adapters (they will use the shared matrices)
-    /// var adapter1 = new DVoRAAdapter&lt;double&gt;(layer1, rank: 8);
-    /// var adapter2 = new DVoRAAdapter&lt;double&gt;(layer2, rank: 8);
+    /// var adapter1 = new DVoRAAdapter<double>(layer1, rank: 8);
+    /// var adapter2 = new DVoRAAdapter<double>(layer2, rank: 8);
     ///
     /// All adapters share the same random A and B matrices, saving memory!
     /// </para>
