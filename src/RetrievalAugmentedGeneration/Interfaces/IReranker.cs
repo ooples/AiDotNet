@@ -58,7 +58,7 @@ public interface IReranker<T>
     /// not just a good match like it might have been before reranking.
     /// </para>
     /// </remarks>
-    IEnumerable<Document> Rerank(string query, IEnumerable<Document> documents);
+    IEnumerable<Document<T>> Rerank(string query, IEnumerable<Document<T>> documents);
 
     /// <summary>
     /// Reranks documents and returns only the top-k highest scoring results.
@@ -84,7 +84,7 @@ public interface IReranker<T>
     /// the very best ones after careful analysis.
     /// </para>
     /// </remarks>
-    IEnumerable<Document> Rerank(string query, IEnumerable<Document> documents, int topK);
+    IEnumerable<Document<T>> Rerank(string query, IEnumerable<Document<T>> documents, int topK);
 
     /// <summary>
     /// Gets a value indicating whether this reranker modifies relevance scores.

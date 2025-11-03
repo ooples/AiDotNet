@@ -34,10 +34,11 @@ namespace AiDotNet.RetrievalAugmentedGeneration.Interfaces;
 /// - Citations [1], [2], [3] point to the source documents
 /// </para>
 /// </remarks>
+/// <typeparam name="T">The numeric data type used for relevance scoring.</typeparam>
 /// <typeparam name="TInput">The input data type for the model.</typeparam>
 /// <typeparam name="TOutput">The output data type for the model.</typeparam>
 /// <typeparam name="TMetadata">The metadata type for model information.</typeparam>
-public interface IGenerator
+public interface IGenerator<T>
 {
     /// <summary>
     /// Generates a text response based on a prompt.
