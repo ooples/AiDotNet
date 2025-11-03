@@ -171,7 +171,7 @@ public class DyLoRAAdapter<T> : LoRAAdapterBase<T>
     /// - freezeBaseLayer: Whether to lock the original layer (usually true)
     ///
     /// Example:
-    /// new DyLoRAAdapter(denseLayer, maxRank: 16, activeRanks: [2, 4, 8, 16])
+    /// new DyLoRAAdapter(denseLayer, maxRank: 16, activeRanks: new[] { 2, 4, 8, 16 })
     /// This trains a single adapter that can deploy with ranks 2, 4, 8, or 16.
     /// </para>
     /// </remarks>
@@ -244,7 +244,7 @@ public class DyLoRAAdapter<T> : LoRAAdapterBase<T>
         {
             throw new ArgumentException(
                 $"Deployment rank {rank} is not in ActiveRanks [{string.Join(", ", _activeRanks)}]. " +
-                $"Only trained ranks can be used for deployment.",
+                "Only trained ranks can be used for deployment.",
                 nameof(rank));
         }
 
@@ -627,6 +627,38 @@ public class DyLoRAAdapter<T> : LoRAAdapterBase<T>
             {
                 ParameterGradients[idx++] = _cachedLoRAGradients[i];
             }
+        }
+    }
+
+    /// <summary>
+    /// Updates parameters for the base layer and the LoRA layer using cached gradients.
+    /// </summary>
+    /// <param name="learningRate">The learning rate for parameter updates.</param>
+    public override void UpdateParameters(T learningRate)
+    {
+        // Update base layer if not frozen
+        if (!_freezeBaseLayer)
+        {
+            _baseLayer.UpdateParameters(learningRate);
+        }
+
+        // Manually update LoRA layer's parameters using cached gradients,
+        // as the base UpdateParameters would use the LoRA layer's empty internal gradients.
+        if (_cachedLoRAGradients != null)
+        {
+            if (_cachedLoRAGradients.Length == _loraLayer.ParameterCount)
+            {
+                Vector<T> loraParams = _loraLayer.GetParameters();
+                for (int i = 0; i < loraParams.Length; i++)
+                {
+                    T update = NumOps.Multiply(_cachedLoRAGradients[i], learningRate);
+                    loraParams[i] = NumOps.Subtract(loraParams[i], update);
+                }
+                _loraLayer.SetParameters(loraParams);
+            }
+            
+            // Clear the cache after use.
+            _cachedLoRAGradients = null;
         }
     }
 
