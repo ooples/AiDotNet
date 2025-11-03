@@ -1,0 +1,148 @@
+using System.Text.RegularExpressions;
+using AiDotNet.RetrievalAugmentedGeneration.Interfaces;
+using AiDotNet.RetrievalAugmentedGeneration.Models;
+
+namespace AiDotNet.RetrievalAugmentedGeneration.Generators;
+
+/// <summary>
+/// A simple stub generator for testing and development that creates template-based answers.
+/// </summary>
+/// <remarks>
+/// <para>
+/// This implementation creates simple grounded answers by concatenating context documents
+/// with basic citation markers. It's designed for testing the RAG pipeline structure before
+/// real generation models are integrated. The generator uses a template-based approach to
+/// create answers that include numbered citations to source documents.
+/// </para>
+/// <para><b>For Beginners:</b> This is a simple placeholder until real LLM generators are ready.
+/// 
+/// Think of it like an auto-reply email:
+/// - It doesn't actually understand the question
+/// - It just formats the retrieved documents into an answer
+/// - Adds citation numbers [1], [2], [3]
+/// - Good enough for testing the RAG pipeline
+/// - Replace with a real LLM (GPT, Claude, etc.) for production
+/// 
+/// For example:
+/// - Question: "What is photosynthesis?"
+/// - Retrieved docs: 3 biology documents
+/// - Generated answer: "Based on the provided context: [Document 1 content] [1].
+///   [Document 2 content] [2]. [Document 3 content] [3]."
+/// 
+/// Not intelligent, but proves the pipeline works!
+/// This enables development on Issue #284 without waiting for transformer integration.
+/// </para>
+/// </remarks>
+public class StubGenerator : IGenerator
+{
+    private readonly int _maxContextTokens;
+    private readonly int _maxGenerationTokens;
+
+    /// <summary>
+    /// Gets the maximum number of tokens this generator can process in a single request.
+    /// </summary>
+    public int MaxContextTokens => _maxContextTokens;
+
+    /// <summary>
+    /// Gets the maximum number of tokens this generator can generate in a response.
+    /// </summary>
+    public int MaxGenerationTokens => _maxGenerationTokens;
+
+    /// <summary>
+    /// Initializes a new instance of the StubGenerator class.
+    /// </summary>
+    /// <param name="maxContextTokens">The maximum context tokens (default: 2048).</param>
+    /// <param name="maxGenerationTokens">The maximum generation tokens (default: 500).</param>
+    public StubGenerator(int maxContextTokens = 2048, int maxGenerationTokens = 500)
+    {
+        if (maxContextTokens <= 0)
+            throw new ArgumentException("MaxContextTokens must be greater than zero", nameof(maxContextTokens));
+        
+        if (maxGenerationTokens <= 0)
+            throw new ArgumentException("MaxGenerationTokens must be greater than zero", nameof(maxGenerationTokens));
+
+        _maxContextTokens = maxContextTokens;
+        _maxGenerationTokens = maxGenerationTokens;
+    }
+
+    /// <summary>
+    /// Generates a text response based on a prompt.
+    /// </summary>
+    /// <param name="prompt">The input prompt or question.</param>
+    /// <returns>The generated text response.</returns>
+    public string Generate(string prompt)
+    {
+        if (string.IsNullOrWhiteSpace(prompt))
+            throw new ArgumentException("Prompt cannot be null or empty", nameof(prompt));
+
+        return $"Generated response to: {prompt}";
+    }
+
+    /// <summary>
+    /// Generates a grounded answer using provided context documents.
+    /// </summary>
+    /// <param name="query">The user's original query or question.</param>
+    /// <param name="context">The retrieved documents providing context for the answer.</param>
+    /// <returns>A grounded answer with the generated text, source documents, and extracted citations.</returns>
+    public GroundedAnswer GenerateGrounded(string query, IEnumerable<Document> context)
+    {
+        if (string.IsNullOrWhiteSpace(query))
+            throw new ArgumentException("Query cannot be null or empty", nameof(query));
+
+        var contextList = context?.ToList() ?? new List<Document>();
+        
+        if (contextList.Count == 0)
+        {
+            return new GroundedAnswer
+            {
+                Query = query,
+                Answer = "I don't have enough information to answer this question.",
+                SourceDocuments = new List<Document>(),
+                Citations = new List<string>(),
+                ConfidenceScore = 0.0
+            };
+        }
+
+        // Build answer with citations
+        var answerBuilder = new System.Text.StringBuilder();
+        answerBuilder.AppendLine($"Based on the provided context regarding '{query}':");
+        answerBuilder.AppendLine();
+
+        var citations = new List<string>();
+        for (int i = 0; i < contextList.Count; i++)
+        {
+            var doc = contextList[i];
+            var citationNum = i + 1;
+            
+            // Add a snippet of the document with citation
+            var snippet = doc.Content.Length > 200 
+                ? doc.Content.Substring(0, 200) + "..." 
+                : doc.Content;
+            
+            answerBuilder.AppendLine($"{snippet} [{citationNum}]");
+            answerBuilder.AppendLine();
+
+            // Create citation reference
+            citations.Add($"[{citationNum}] Document ID: {doc.Id}");
+        }
+
+        // Calculate confidence based on retrieval scores (normalized to [0,1])
+        var avgScore = contextList
+            .Where(d => d.RelevanceScore.HasValue)
+            .Select(d => d.RelevanceScore!.Value)
+            .DefaultIfEmpty(0.5)
+            .Average();
+
+        // Clamp confidence score to [0,1] range (compatible with older .NET versions)
+        var confidenceScore = Math.Min(1.0, Math.Max(0.0, avgScore));
+
+        return new GroundedAnswer
+        {
+            Query = query,
+            Answer = answerBuilder.ToString().Trim(),
+            SourceDocuments = contextList,
+            Citations = citations,
+            ConfidenceScore = confidenceScore
+        };
+    }
+}
