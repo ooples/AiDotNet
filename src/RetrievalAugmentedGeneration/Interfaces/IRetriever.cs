@@ -5,6 +5,7 @@ namespace AiDotNet.RetrievalAugmentedGeneration.Interfaces;
 /// <summary>
 /// Defines the contract for retrieving relevant documents based on a query.
 /// </summary>
+/// <typeparam name="T">The numeric data type used for relevance scoring.</typeparam>
 /// <remarks>
 /// <para>
 /// A retriever finds the most relevant documents for a given query using various
@@ -23,7 +24,7 @@ namespace AiDotNet.RetrievalAugmentedGeneration.Interfaces;
 /// the answer, even if they don't use the exact same words you used.
 /// </para>
 /// </remarks>
-public interface IRetriever
+public interface IRetriever<T>
 {
     /// <summary>
     /// Gets the default number of documents to retrieve.
@@ -57,7 +58,7 @@ public interface IRetriever
     /// The results are sorted so the best match comes first, second-best second, and so on.
     /// </para>
     /// </remarks>
-    IEnumerable<Document> Retrieve(string query);
+    IEnumerable<Document<T>> Retrieve(string query);
 
     /// <summary>
     /// Retrieves relevant documents with a custom number of results.
@@ -81,7 +82,7 @@ public interface IRetriever
     /// Use more results (10-20) when you want comprehensive information.
     /// </para>
     /// </remarks>
-    IEnumerable<Document> Retrieve(string query, int topK);
+    IEnumerable<Document<T>> Retrieve(string query, int topK);
 
     /// <summary>
     /// Retrieves relevant documents with metadata filtering.
@@ -106,5 +107,5 @@ public interface IRetriever
     /// Think of it like searching in a specific section of a library rather than the whole building.
     /// </para>
     /// </remarks>
-    IEnumerable<Document> Retrieve(string query, int topK, Dictionary<string, object> metadataFilters);
+    IEnumerable<Document<T>> Retrieve(string query, int topK, Dictionary<string, object> metadataFilters);
 }

@@ -3,6 +3,7 @@ namespace AiDotNet.RetrievalAugmentedGeneration.Models;
 /// <summary>
 /// Represents a document with content, metadata, and optional relevance scoring.
 /// </summary>
+/// <typeparam name="T">The numeric data type used for relevance scoring.</typeparam>
 /// <remarks>
 /// <para>
 /// A document is the fundamental unit of information in a retrieval-augmented generation system.
@@ -21,7 +22,7 @@ namespace AiDotNet.RetrievalAugmentedGeneration.Models;
 /// science get high relevance scores, while documents about sports get low scores.
 /// </para>
 /// </remarks>
-public class Document
+public class Document<T>
 {
     /// <summary>
     /// Gets or sets the unique identifier for this document.
@@ -103,7 +104,7 @@ public class Document
     /// Documents with higher scores are more likely to contain the answer to your question.
     /// </para>
     /// </remarks>
-    public double? RelevanceScore { get; set; }
+    public T? RelevanceScore { get; set; }
 
     /// <summary>
     /// Initializes a new instance of the Document class.
