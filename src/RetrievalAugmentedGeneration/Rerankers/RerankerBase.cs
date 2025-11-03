@@ -6,6 +6,7 @@ namespace AiDotNet.RetrievalAugmentedGeneration.Rerankers;
 /// <summary>
 /// Provides a base implementation for document rerankers with common functionality.
 /// </summary>
+/// <typeparam name="T">The numeric data type used for relevance scoring.</typeparam>
 /// <remarks>
 /// <para>
 /// This abstract class implements the IReranker interface and provides common functionality
@@ -20,7 +21,7 @@ namespace AiDotNet.RetrievalAugmentedGeneration.Rerankers;
 /// - This ensures all rerankers work consistently
 /// </para>
 /// </remarks>
-public abstract class RerankerBase : IReranker
+public abstract class RerankerBase<T> : IReranker<T>
 {
     /// <summary>
     /// Gets a value indicating whether this reranker modifies relevance scores.
@@ -33,7 +34,7 @@ public abstract class RerankerBase : IReranker
     /// <param name="query">The query text used to assess relevance.</param>
     /// <param name="documents">The documents to rerank.</param>
     /// <returns>The documents reordered by relevance, with updated relevance scores.</returns>
-    public IEnumerable<Document> Rerank(string query, IEnumerable<Document> documents)
+    public IEnumerable<Document<T>> Rerank(string query, IEnumerable<Document<T>> documents)
     {
         ValidateQuery(query);
         ValidateDocuments(documents);
@@ -52,7 +53,7 @@ public abstract class RerankerBase : IReranker
     /// <param name="documents">The documents to rerank.</param>
     /// <param name="topK">The number of top-ranked documents to return.</param>
     /// <returns>The top-k documents ordered by relevance, with updated relevance scores.</returns>
-    public IEnumerable<Document> Rerank(string query, IEnumerable<Document> documents, int topK)
+    public IEnumerable<Document<T>> Rerank(string query, IEnumerable<Document<T>> documents, int topK)
     {
         ValidateTopK(topK);
         
@@ -79,7 +80,7 @@ public abstract class RerankerBase : IReranker
     /// Make sure to update each document's RelevanceScore property!
     /// </para>
     /// </remarks>
-    protected abstract IEnumerable<Document> RerankCore(string query, IList<Document> documents);
+    protected abstract IEnumerable<Document<T>> RerankCore(string query, IList<Document<T>> documents);
 
     /// <summary>
     /// Validates the query string.
@@ -104,7 +105,7 @@ public abstract class RerankerBase : IReranker
     /// For example, checking that documents have content or required metadata.
     /// </para>
     /// </remarks>
-    protected virtual void ValidateDocuments(IEnumerable<Document> documents)
+    protected virtual void ValidateDocuments(IEnumerable<Document<T>> documents)
     {
         if (documents == null)
             throw new ArgumentNullException(nameof(documents));
