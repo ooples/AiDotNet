@@ -81,18 +81,18 @@ namespace AiDotNet.LoRA.Adapters;
 /// // Train first adapter on Task A
 /// chain.SetActiveAdapterIndex(0);
 /// TrainModel(chain, taskAData);
-/// chain.MergeActiveAdapter(); // Consolidate Task A knowledge
+/// chain.FreezeActiveAdapter(); // Freeze Task A adapter
 ///
 /// // Train second adapter on Task B
 /// chain.SetActiveAdapterIndex(1);
 /// TrainModel(chain, taskBData);
-/// chain.MergeActiveAdapter(); // Consolidate Task B knowledge
+/// chain.FreezeActiveAdapter(); // Freeze Task B adapter
 ///
 /// // Train third adapter on Task C
 /// chain.SetActiveAdapterIndex(2);
 /// TrainModel(chain, taskCData);
 ///
-/// // Deploy: all adaptations are now part of the model
+/// // Deploy: merge all adapters into base layer for optimized inference
 /// ILayer&lt;double&gt; finalLayer = chain.MergeToOriginalLayer();
 /// </code>
 /// </para>
@@ -157,14 +157,14 @@ public class ChainLoRAAdapter<T> : LoRAAdapterBase<T>
     public IReadOnlyList<LoRALayer<T>> AdapterChain => _adapterChain.AsReadOnly();
 
     /// <summary>
-    /// Gets the merged status of each adapter in the chain.
+    /// Gets the frozen status of each adapter in the chain.
     /// </summary>
     /// <remarks>
-    /// True indicates that an adapter has been merged into the base layer and should
-    /// no longer contribute trainable parameters. Merged adapters still contribute
-    /// to the forward pass until the entire chain is collapsed.
+    /// True indicates that an adapter has been frozen and should no longer contribute
+    /// trainable parameters. Frozen adapters still contribute to forward/backward passes
+    /// until the entire chain is merged via MergeToOriginalLayer().
     /// </remarks>
-    public IReadOnlyList<bool> MergedStatus => _mergedStatus.AsReadOnly();
+    public IReadOnlyList<bool> FrozenStatus => _mergedStatus.AsReadOnly();
 
     /// <summary>
     /// Initializes a new Chain-of-LoRA adapter with the specified configuration.
@@ -255,24 +255,28 @@ public class ChainLoRAAdapter<T> : LoRAAdapterBase<T>
     }
 
     /// <summary>
-    /// Merges the currently active adapter into the base layer representation.
+    /// Freezes the currently active adapter to prevent further training.
     /// </summary>
     /// <remarks>
     /// <para>
-    /// This "ties a knot" in the chain by marking the active adapter as merged and frozen.
-    /// The adapter's weights are conceptually incorporated into the model, allowing the
-    /// next adapter in the chain to build upon this consolidated knowledge.
+    /// This "ties a knot" in the chain by marking the active adapter as frozen.
+    /// The adapter continues to contribute to forward passes but will no longer receive
+    /// gradient updates, allowing the next adapter in the chain to build upon this
+    /// consolidated knowledge.
     /// </para>
     /// <para>
-    /// Note: The actual weight merging into a single layer happens when MergeToOriginalLayer()
-    /// is called. This method only marks the adapter as merged for training purposes.
+    /// IMPORTANT: This method does NOT merge weights into the base layer. All adapters
+    /// (frozen or not) remain active during forward/backward passes. True weight merging
+    /// only occurs when MergeToOriginalLayer() is called at the end of training.
     /// </para>
     /// <para><b>For Beginners:</b>
     /// After training an adapter stage, call this to "lock it in" before moving to the
-    /// next stage. It's like saving your progress before starting the next level.
+    /// next stage. The adapter's learned knowledge is preserved and it stops training,
+    /// but it still contributes to the model's output. Think of it like finishing one
+    /// chapter before starting the next - the previous chapter's knowledge remains active.
     /// </para>
     /// </remarks>
-    public void MergeActiveAdapter()
+    public void FreezeActiveAdapter()
     {
         if (_activeAdapterIndex < 0 || _activeAdapterIndex >= _chainLength)
         {
@@ -284,17 +288,17 @@ public class ChainLoRAAdapter<T> : LoRAAdapterBase<T>
     }
 
     /// <summary>
-    /// Unmerges a previously merged adapter, making it trainable again.
+    /// Unfreezes a previously frozen adapter, making it trainable again.
     /// </summary>
-    /// <param name="index">The index of the adapter to unmerge.</param>
+    /// <param name="index">The index of the adapter to unfreeze.</param>
     /// <exception cref="ArgumentOutOfRangeException">Thrown when index is out of range.</exception>
     /// <remarks>
     /// <para>
-    /// This allows re-training a previously merged adapter if needed for iterative refinement.
+    /// This allows re-training a previously frozen adapter if needed for iterative refinement.
     /// Useful for scenarios where you want to go back and adjust an earlier stage.
     /// </para>
     /// </remarks>
-    public void UnmergeAdapter(int index)
+    public void UnfreezeAdapter(int index)
     {
         if (index < 0 || index >= _chainLength)
         {
@@ -306,20 +310,20 @@ public class ChainLoRAAdapter<T> : LoRAAdapterBase<T>
     }
 
     /// <summary>
-    /// Gets the number of adapters that have been merged.
+    /// Gets the number of adapters that have been frozen.
     /// </summary>
-    /// <returns>Count of merged adapters.</returns>
-    public int GetMergedCount()
+    /// <returns>Count of frozen adapters.</returns>
+    public int GetFrozenCount()
     {
-        return _mergedStatus.Count(merged => merged);
+        return _mergedStatus.Count(frozen => frozen);
     }
 
     /// <summary>
-    /// Gets the total number of parameters in the chain (base layer + all unmerged adapters).
+    /// Gets the total number of parameters in the chain (base layer + all unfrozen adapters).
     /// </summary>
     /// <remarks>
-    /// This count includes parameters from the base layer (if not frozen) plus all unmerged adapters in the chain.
-    /// Merged adapters don't contribute to the parameter count since they've been absorbed into the base weights.
+    /// This count includes parameters from the base layer (if not frozen) plus all unfrozen adapters in the chain.
+    /// Frozen adapters don't contribute to the parameter count since they no longer receive gradient updates.
     /// Returns the cached _currentParameterCount once the chain is initialized, or computes it on-the-fly
     /// during construction to handle base class initialization.
     /// </remarks>
@@ -359,12 +363,12 @@ public class ChainLoRAAdapter<T> : LoRAAdapterBase<T>
     }
 
     /// <summary>
-    /// Gets the number of adapters that are still trainable (not merged).
+    /// Gets the number of adapters that are still trainable (not frozen).
     /// </summary>
-    /// <returns>Count of unmerged adapters.</returns>
+    /// <returns>Count of unfrozen adapters.</returns>
     public int GetTrainableAdapterCount()
     {
-        return _mergedStatus.Count(merged => !merged);
+        return _mergedStatus.Count(frozen => !frozen);
     }
 
     /// <summary>
@@ -378,13 +382,17 @@ public class ChainLoRAAdapter<T> : LoRAAdapterBase<T>
     /// output = base_layer(input) + adapter_0(input) + adapter_1(input) + ... + adapter_n(input)
     /// </para>
     /// <para>
-    /// All adapters contribute to the output, regardless of merge status. Merged adapters
-    /// are conceptually part of the model but still computed separately until final merging.
+    /// IMPORTANT: All adapters contribute to the output, regardless of frozen status.
+    /// Frozen adapters continue to be computed in every forward pass. They are only
+    /// "frozen" in the sense that they don't receive gradient updates during training.
+    /// True inference optimization (eliminating frozen adapter computation) only occurs
+    /// after calling MergeToOriginalLayer().
     /// </para>
     /// <para><b>For Beginners:</b>
     /// During inference or training, the input goes through the base layer and ALL adapters
-    /// in the chain. Their outputs are added together to get the final result. This is how
-    /// all the sequential adaptations combine to produce the improved output.
+    /// in the chain (both frozen and unfrozen). Their outputs are added together to get the
+    /// final result. Freezing an adapter stops it from training, but it still contributes
+    /// to every prediction.
     /// </para>
     /// </remarks>
     public override Tensor<T> Forward(Tensor<T> input)
@@ -414,12 +422,12 @@ public class ChainLoRAAdapter<T> : LoRAAdapterBase<T>
     /// <returns>Gradient to pass to the previous layer.</returns>
     /// <remarks>
     /// <para>
-    /// Gradients flow through all adapters and the base layer. Only unmerged adapters
+    /// Gradients flow through all adapters and the base layer. Only unfrozen adapters
     /// and the base layer (if not frozen) receive parameter updates.
     /// </para>
     /// <para><b>For Beginners:</b>
     /// During learning, this figures out how to improve each adapter. Only the active,
-    /// unmerged adapter gets updated - the others are frozen to preserve their knowledge.
+    /// unfrozen adapter gets updated - the frozen ones preserve their learned knowledge.
     /// </para>
     /// </remarks>
     public override Tensor<T> Backward(Tensor<T> outputGradient)
@@ -461,7 +469,7 @@ public class ChainLoRAAdapter<T> : LoRAAdapterBase<T>
     /// </summary>
     /// <param name="learningRate">The learning rate for parameter updates.</param>
     /// <remarks>
-    /// Only the active unmerged adapter receives updates. Merged adapters and the base layer
+    /// Only the active unfrozen adapter receives updates. Frozen adapters and the base layer
     /// (if frozen) do not receive parameter updates.
     /// </remarks>
     public override void UpdateParameters(T learningRate)
@@ -472,7 +480,7 @@ public class ChainLoRAAdapter<T> : LoRAAdapterBase<T>
             _baseLayer.UpdateParameters(learningRate);
         }
 
-        // Update only the active unmerged adapter
+        // Update only the active unfrozen adapter
         if (_activeAdapterIndex >= 0 && _activeAdapterIndex < _chainLength && !_mergedStatus[_activeAdapterIndex])
         {
             _adapterChain[_activeAdapterIndex].UpdateParameters(learningRate);
@@ -485,7 +493,7 @@ public class ChainLoRAAdapter<T> : LoRAAdapterBase<T>
     /// <summary>
     /// Gets the current parameters as a vector.
     /// </summary>
-    /// <returns>Vector containing parameters from base layer (if not frozen) and all unmerged adapters.</returns>
+    /// <returns>Vector containing parameters from base layer (if not frozen) and all unfrozen adapters.</returns>
     public override Vector<T> GetParameters()
     {
         return Parameters.Clone();
@@ -577,7 +585,7 @@ public class ChainLoRAAdapter<T> : LoRAAdapterBase<T>
     }
 
     /// <summary>
-    /// Updates the parameter count based on current merge status.
+    /// Updates the parameter count based on current frozen status.
     /// </summary>
     private void UpdateParameterCount()
     {
@@ -589,7 +597,7 @@ public class ChainLoRAAdapter<T> : LoRAAdapterBase<T>
             count += _baseLayer.ParameterCount;
         }
 
-        // Add unmerged adapter parameters
+        // Add unfrozen adapter parameters
         for (int i = 0; i < _chainLength; i++)
         {
             if (!_mergedStatus[i])
@@ -623,7 +631,7 @@ public class ChainLoRAAdapter<T> : LoRAAdapterBase<T>
             }
         }
 
-        // Pack unmerged adapter parameters
+        // Pack unfrozen adapter parameters
         for (int i = 0; i < _chainLength; i++)
         {
             if (!_mergedStatus[i])
@@ -656,7 +664,7 @@ public class ChainLoRAAdapter<T> : LoRAAdapterBase<T>
             _baseLayer.SetParameters(baseParams);
         }
 
-        // Unpack unmerged adapter parameters
+        // Unpack unfrozen adapter parameters
         for (int i = 0; i < _chainLength; i++)
         {
             if (!_mergedStatus[i])
@@ -690,7 +698,7 @@ public class ChainLoRAAdapter<T> : LoRAAdapterBase<T>
             }
         }
 
-        // Pack unmerged adapter gradients
+        // Pack unfrozen adapter gradients
         for (int i = 0; i < _chainLength; i++)
         {
             if (!_mergedStatus[i])
