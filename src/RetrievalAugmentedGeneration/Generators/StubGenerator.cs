@@ -133,13 +133,16 @@ public class StubGenerator : IGenerator
             .DefaultIfEmpty(0.5)
             .Average();
 
+        // Clamp confidence score to [0,1] range (compatible with older .NET versions)
+        var confidenceScore = Math.Min(1.0, Math.Max(0.0, avgScore));
+
         return new GroundedAnswer
         {
             Query = query,
             Answer = answerBuilder.ToString().Trim(),
             SourceDocuments = contextList,
             Citations = citations,
-            ConfidenceScore = Math.Clamp(avgScore, 0.0, 1.0)
+            ConfidenceScore = confidenceScore
         };
     }
 }
