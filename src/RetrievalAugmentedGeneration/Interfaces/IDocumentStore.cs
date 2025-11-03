@@ -149,7 +149,7 @@ public interface IDocumentStore<T>
     /// Then similarity search runs only on documents that pass these filters.
     /// </para>
     /// </remarks>
-    IEnumerable<Document> GetSimilarWithFilters(Vector<T> queryVector, int topK, Dictionary<string, object> metadataFilters);
+    IEnumerable<Document<T>> GetSimilarWithFilters(Vector<T> queryVector, int topK, Dictionary<string, object> metadataFilters);
 
     /// <summary>
     /// Retrieves a document by its unique identifier.
@@ -162,7 +162,7 @@ public interface IDocumentStore<T>
     /// Like asking the librarian: "Give me the book with catalog number ABC123"
     /// </para>
     /// </remarks>
-    Document? GetById(string documentId);
+    Document<T>? GetById(string documentId);
 
     /// <summary>
     /// Removes a document from the store by its identifier.
