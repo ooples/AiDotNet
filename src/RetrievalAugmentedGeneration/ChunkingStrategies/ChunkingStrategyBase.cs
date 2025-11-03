@@ -228,7 +228,11 @@ public abstract class ChunkingStrategyBase : IChunkingStrategy
                 // Start new chunk with overlap
                 if (position < text.Length)
                 {
-                    var overlapStart = Math.Max(0, currentChunk.Length - _chunkOverlap);
+                    // Ensure overlap doesn't cause next chunk to exceed chunkSize
+                    // Use the larger of (length - overlap) and (length - chunkSize/2) to prevent oversized chunks
+                    var overlapStart = Math.Max(currentChunk.Length - _chunkOverlap,
+                                                currentChunk.Length - _chunkSize / 2);
+                    overlapStart = Math.Max(0, overlapStart);
                     currentChunk = new System.Text.StringBuilder(currentChunk.ToString().Substring(overlapStart));
                     chunkStart = chunkStart + overlapStart;
                 }
