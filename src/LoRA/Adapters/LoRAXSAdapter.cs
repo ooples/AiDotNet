@@ -239,8 +239,8 @@ public class LoRAXSAdapter<T> : LoRAAdapterBase<T>
     /// allocates Parameters buffer based on this count and packs the underlying LoRA layer.
     /// </para>
     /// <para>
-    /// The actual trainable count (rank²) is much smaller, but ParameterCount must match
-    /// the buffer size allocated by the base constructor to prevent IndexOutOfRangeException.
+    /// LoRA-XS only trains the rank×rank R matrix, so ParameterCount returns rank².
+    /// The frozen U, Σ, and V matrices are not trainable parameters.
     /// </para>
     /// </remarks>
     public override int ParameterCount
@@ -248,11 +248,9 @@ public class LoRAXSAdapter<T> : LoRAAdapterBase<T>
         get
         {
             int baseParams = (!_freezeBaseLayer && _baseLayer != null) ? _baseLayer.ParameterCount : 0;
-            // Compute underlying LoRA layer size: inputSize * rank + rank * outputSize
-            int inputSize = GetInputShape()[0];
-            int outputSize = GetOutputShape()[0];
-            int loraParams = inputSize * Rank + Rank * outputSize;
-            return baseParams + loraParams;
+            // Only the R matrix is trainable: rank × rank elements
+            int rMatrixParams = Rank * Rank;
+            return baseParams + rMatrixParams;
         }
     }
 
