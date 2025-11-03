@@ -96,7 +96,7 @@ public interface IGenerator<T>
     /// a specific source document - it's not made up!
     /// </para>
     /// </remarks>
-    GroundedAnswer GenerateGrounded(string query, IEnumerable<Document> context);
+    GroundedAnswer<T> GenerateGrounded(string query, IEnumerable<Document<T>> context);
 
     /// <summary>
     /// Gets the maximum number of tokens this generator can process in a single request.
