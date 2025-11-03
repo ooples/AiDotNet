@@ -171,13 +171,13 @@ public class DVoRAAdapter<T> : LoRAAdapterBase<T>
         get
         {
             // Guard against pre-initialization state when base class constructor calls this property
+            // Note: DVoRA does not use the LoRA layer for training, so loraCount is excluded
             int baseCount = _freezeBaseLayer ? 0 : _baseLayer.ParameterCount;
-            int loraCount = _loraLayer?.ParameterCount ?? 0;
             int outputSize = GetOutputShape()[0];
             int magnitudeCount = _magnitude?.Length ?? outputSize;
             int scalingDCount = _scalingVectorD?.Length ?? outputSize;
             int scalingBCount = _scalingVectorB?.Length ?? Rank;
-            return baseCount + loraCount + magnitudeCount + scalingDCount + scalingBCount;
+            return baseCount + magnitudeCount + scalingDCount + scalingBCount;
         }
     }
 
@@ -893,12 +893,7 @@ public class DVoRAAdapter<T> : LoRAAdapterBase<T>
             }
         }
 
-        // Pack LoRA parameters
-        Vector<T> loraParams = _loraLayer.GetParameters();
-        for (int i = 0; i < loraParams.Length; i++)
-        {
-            Parameters[idx++] = loraParams[i];
-        }
+        // Note: LoRA parameters are NOT packed - DVoRA doesn't train the LoRA layer
 
         // Pack magnitude parameters
         for (int i = 0; i < _magnitude.Length; i++)
@@ -938,14 +933,7 @@ public class DVoRAAdapter<T> : LoRAAdapterBase<T>
             _baseLayer.SetParameters(baseParams);
         }
 
-        // Unpack LoRA parameters
-        int loraParamCount = _loraLayer.ParameterCount;
-        Vector<T> loraParams = new Vector<T>(loraParamCount);
-        for (int i = 0; i < loraParamCount; i++)
-        {
-            loraParams[i] = Parameters[idx++];
-        }
-        _loraLayer.SetParameters(loraParams);
+        // Note: LoRA parameters are NOT unpacked - DVoRA doesn't train the LoRA layer
 
         // Unpack magnitude parameters
         for (int i = 0; i < _magnitude.Length; i++)
