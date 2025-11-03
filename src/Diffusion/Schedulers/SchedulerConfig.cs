@@ -2,37 +2,24 @@ using System;
 
 namespace AiDotNet.Diffusion.Schedulers
 {
-    public enum BetaSchedule
-    {
-        Linear,
-        // Cosine and others can be added later
-    }
-
-    public enum PredictionType
-    {
-        Epsilon,
-        // Sample or VPrediction can be added later
-    }
-
-    public sealed class SchedulerConfig
+    public sealed class SchedulerConfig<T>
     {
         public int TrainTimesteps { get; }
-        public double BetaStart { get; }
-        public double BetaEnd { get; }
+        public T BetaStart { get; }
+        public T BetaEnd { get; }
         public BetaSchedule BetaSchedule { get; }
         public bool ClipSample { get; }
         public PredictionType PredictionType { get; }
 
         public SchedulerConfig(
-            int trainTimesteps = 1000,
-            double betaStart = 0.0001,
-            double betaEnd = 0.02,
+            int trainTimesteps,
+            T betaStart,
+            T betaEnd,
             BetaSchedule betaSchedule = BetaSchedule.Linear,
             bool clipSample = false,
             PredictionType predictionType = PredictionType.Epsilon)
         {
             if (trainTimesteps <= 1) throw new ArgumentOutOfRangeException("trainTimesteps");
-            if (betaStart <= 0 || betaEnd <= 0 || betaEnd <= betaStart) throw new ArgumentOutOfRangeException("beta range invalid");
 
             TrainTimesteps = trainTimesteps;
             BetaStart = betaStart;
@@ -43,4 +30,3 @@ namespace AiDotNet.Diffusion.Schedulers
         }
     }
 }
-
