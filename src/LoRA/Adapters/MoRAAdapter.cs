@@ -328,10 +328,30 @@ public class MoRAAdapter<T> : LoRAAdapterBase<T>
         return orthogonal;
     }
 
+    /// <summary>
+    /// Creates a minimal placeholder LoRA layer to satisfy base class requirements.
+    /// </summary>
+    /// <remarks>
+    /// <para><b>IMPORTANT:</b> MoRA does NOT use the standard LoRA layer architecture.
+    /// This method creates a minimal LoRALayer with rank=1 only to satisfy the LoRAAdapterBase
+    /// contract, but it is never used in MoRA's Forward, Backward, or UpdateParameters methods.
+    /// </para>
+    /// <para>
+    /// MoRA uses its own square matrix M combined with compression/decompression matrices instead
+    /// of the standard A/B low-rank decomposition. The actual MoRA logic is implemented directly
+    /// in the overridden methods using _matrixM, _compressionMatrix, and _decompressionMatrix.
+    /// </para>
+    /// <para>
+    /// This design choice maintains compatibility with LoRAAdapterBase while avoiding the overhead
+    /// of a full-rank unused LoRA layer. Future refactoring could make the LoRA layer optional
+    /// in LoRAAdapterBase or have MoRAAdapter extend LayerBase directly.
+    /// </para>
+    /// </remarks>
     protected override LoRALayer<T> CreateLoRALayer(int rank, double alpha)
     {
         int inputSize = GetInputShape()[0];
         int outputSize = GetOutputShape()[0];
+        // Minimal rank=1 to minimize memory overhead of unused layer
         return new LoRALayer<T>(inputSize, outputSize, 1, alpha);
     }
 
