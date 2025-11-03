@@ -6,6 +6,7 @@ global using AiDotNet.Normalizers;
 global using AiDotNet.OutlierRemoval;
 global using AiDotNet.DataProcessor;
 global using AiDotNet.FitDetectors;
+global using AiDotNet.MetaLearning;
 
 namespace AiDotNet;
 
@@ -39,6 +40,7 @@ public class PredictionModelBuilder<T, TInput, TOutput> : IPredictionModelBuilde
     private IBiasDetector<T>? _biasDetector;
     private IFairnessEvaluator<T>? _fairnessEvaluator;
     private ILoRAConfiguration<T>? _loraConfiguration;
+    private IMetaLearningStrategy<T, TInput, TOutput>? _metaLearning;
 
     /// <summary>
     /// Configures which features (input variables) should be used in the model.
@@ -235,7 +237,12 @@ public class PredictionModelBuilder<T, TInput, TOutput> : IPredictionModelBuilde
         var (XTrain, yTrain, XVal, yVal, XTest, yTest) = dataPreprocessor.SplitData(preprocessedX, preprocessedY);
 
         // Optimize the model
-        var optimizationResult = optimizer.Optimize(OptimizerHelper<T, TInput, TOutput>.CreateOptimizationInputData(XTrain, yTrain, XVal, yVal, XTest, yTest));
+        var inputData = OptimizerHelper<T, TInput, TOutput>.CreateOptimizationInputData(XTrain, yTrain, XVal, yVal, XTest, yTest);
+        if (_metaLearning != null && _model != null)
+        {
+            inputData = _metaLearning.Prepare(inputData, _model, optimizer);
+        }
+        var optimizationResult = optimizer.Optimize(inputData);
 
         return new PredictionModelResult<T, TInput, TOutput>(optimizationResult, normInfo, _biasDetector, _fairnessEvaluator);
     }
@@ -380,6 +387,15 @@ public class PredictionModelBuilder<T, TInput, TOutput> : IPredictionModelBuilde
     public IPredictionModelBuilder<T, TInput, TOutput> ConfigureLoRA(ILoRAConfiguration<T> loraConfiguration)
     {
         _loraConfiguration = loraConfiguration;
+        return this;
+    }
+
+    /// <summary>
+    /// Configures a meta-learning strategy (e.g., SEAL) to be used during training and optionally at inference.
+    /// </summary>
+    public IPredictionModelBuilder<T, TInput, TOutput> ConfigureMetaLearning(IMetaLearningStrategy<T, TInput, TOutput> strategy)
+    {
+        _metaLearning = strategy;
         return this;
     }
 }

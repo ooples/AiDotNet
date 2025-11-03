@@ -1,4 +1,5 @@
 using AiDotNet.Models.Results;
+using AiDotNet.MetaLearning;
 
 namespace AiDotNet.Interfaces;
 
@@ -18,8 +19,8 @@ namespace AiDotNet.Interfaces;
 /// - Create different variations of models without writing repetitive code
 /// </remarks>
 /// <typeparam name="T">The numeric data type used for calculations (e.g., float, double).</typeparam>
-public interface IPredictionModelBuilder<T, TInput, TOutput>
-{
+    public interface IPredictionModelBuilder<T, TInput, TOutput>
+    {
     /// <summary>
     /// Configures the feature selector component for the model.
     /// </summary>
@@ -350,5 +351,10 @@ public interface IPredictionModelBuilder<T, TInput, TOutput>
     /// </remarks>
     /// <param name="loraConfiguration">The LoRA configuration implementation to use.</param>
     /// <returns>The builder instance for method chaining.</returns>
-    IPredictionModelBuilder<T, TInput, TOutput> ConfigureLoRA(ILoRAConfiguration<T> loraConfiguration);
-}
+        IPredictionModelBuilder<T, TInput, TOutput> ConfigureLoRA(ILoRAConfiguration<T> loraConfiguration);
+
+        /// <summary>
+        /// Configures a meta-learning strategy (e.g., SEAL) that can orchestrate episodic training and optionally inference-time adaptation.
+        /// </summary>
+        IPredictionModelBuilder<T, TInput, TOutput> ConfigureMetaLearning(IMetaLearningStrategy<T, TInput, TOutput> strategy);
+    }
