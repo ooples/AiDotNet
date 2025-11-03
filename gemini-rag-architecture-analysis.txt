@@ -1,3 +1,0 @@
-Loaded cached credentials.
-Error when talking to Gemini API Full report available at: C:\Users\cheat\AppData\Local\Temp\gemini-client-error-Turn.run-sendMessageStream-2025-11-03T16-48-51-251Z.json
-
