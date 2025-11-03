@@ -554,24 +554,26 @@ public class SelfOrganizingMap<T> : NeuralNetworkBase<T>
     }
 
     /// <summary>
-    /// Updates the parameters of the SOM. This method is not typically used in SOMs and throws a NotImplementedException.
+    /// Updates the parameters of the SOM from a flat parameter vector.
     /// </summary>
     /// <param name="parameters">The vector of parameter updates to apply.</param>
-    /// <exception cref="NotImplementedException">Always thrown as this method is not implemented for SOMs.</exception>
+    /// <exception cref="ArgumentException">Thrown when the parameter vector length doesn't match the expected number of weights.</exception>
     /// <remarks>
     /// <para>
-    /// SOMs typically use specialized training algorithms rather than the generic parameter update approach
-    /// used by other neural networks. This method throws a NotImplementedException to indicate that SOMs
-    /// should be trained using the Train method instead.
+    /// This method updates the SOM's weight matrix from a flat parameter vector. The parameter vector must have
+    /// a length equal to (mapWidth × mapHeight) × inputDimension. While SOMs typically use specialized training
+    /// algorithms (see the Train method), this method allows for direct parameter updates, which can be useful
+    /// for optimization algorithms or parameter transfer scenarios.
     /// </para>
-    /// <para><b>For Beginners:</b> This method is not used in SOMs because they train differently.
-    /// 
-    /// While standard neural networks use backpropagation to update parameters:
+    /// <para><b>For Beginners:</b> This method allows direct parameter updates when needed.
+    ///
+    /// While SOMs typically use competitive learning:
     /// - SOMs use a competitive learning approach
     /// - They update based on neighborhood and distance
     /// - They directly adjust weights based on similarity to input
-    /// 
-    /// Instead of using this method, you should use the Train method to train a SOM.
+    ///
+    /// However, this method allows direct parameter updates for certain optimization
+    /// algorithms or parameter transfer scenarios. For typical SOM training, use the Train method instead.
     /// </para>
     /// </remarks>
     public override void UpdateParameters(Vector<T> parameters)

@@ -108,11 +108,11 @@ public class RestrictedBoltzmannMachine<T> : NeuralNetworkBase<T>
     /// It should match the number of features in the input data (e.g., the number of pixels in an image).
     /// </para>
     /// <para><b>For Beginners:</b> This is how many input values the RBM can accept.
-    /// 
+    ///
     /// For example:
     /// - If processing 28×28 pixel images, VisibleSize would be 784 (28×28)
     /// - If processing customer data with 15 attributes, VisibleSize would be 15
-    /// 
+    ///
     /// Think of it as the number of "sensors" the network has to observe the input data.
     /// </para>
     /// </remarks>
@@ -448,9 +448,72 @@ public class RestrictedBoltzmannMachine<T> : NeuralNetworkBase<T>
     /// Instead of using this method, you should use the Train method to train an RBM.
     /// </para>
     /// </remarks>
+    public override Vector<T> GetParameters()
+    {
+        int weightCount = HiddenSize * VisibleSize;
+        int totalLength = weightCount + VisibleSize + HiddenSize;
+        var parameters = new Vector<T>(totalLength);
+
+        int paramIndex = 0;
+
+        // Extract weights (HiddenSize × VisibleSize)
+        for (int i = 0; i < HiddenSize; i++)
+        {
+            for (int j = 0; j < VisibleSize; j++)
+            {
+                parameters[paramIndex++] = _weights[i, j];
+            }
+        }
+
+        // Extract visible biases
+        for (int i = 0; i < VisibleSize; i++)
+        {
+            parameters[paramIndex++] = _visibleBiases[i];
+        }
+
+        // Extract hidden biases
+        for (int i = 0; i < HiddenSize; i++)
+        {
+            parameters[paramIndex++] = _hiddenBiases[i];
+        }
+
+        return parameters;
+    }
+
+    public override void SetParameters(Vector<T> parameters)
+    {
+        UpdateParameters(parameters);
+    }
+
     public override void UpdateParameters(Vector<T> parameters)
     {
-        throw new InvalidOperationException("Restricted Boltzmann Machines do not support direct parameter updates via this method. Use the Train method which updates parameters through Contrastive Divergence or other energy-based learning algorithms.");
+        int weightCount = HiddenSize * VisibleSize;
+        int expectedLength = weightCount + VisibleSize + HiddenSize;
+
+        if (parameters.Length != expectedLength)
+        {
+            throw new ArgumentException($"Parameter vector length mismatch. Expected {expectedLength} parameters but got {parameters.Length}.", nameof(parameters));
+        }
+
+        int paramIndex = 0;
+
+        for (int i = 0; i < HiddenSize; i++)
+        {
+            for (int j = 0; j < VisibleSize; j++)
+            {
+                _weights[i, j] = parameters[paramIndex++];
+            }
+        }
+
+        for (int i = 0; i < VisibleSize; i++)
+        {
+            _visibleBiases[i] = parameters[paramIndex++];
+        }
+
+        for (int i = 0; i < HiddenSize; i++)
+        {
+            _hiddenBiases[i] = parameters[paramIndex++];
+        }
     }
 
     /// <summary>

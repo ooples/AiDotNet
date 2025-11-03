@@ -46,19 +46,77 @@ public class TransferNeuralNetwork<T> : TransferLearningBase<T, Matrix<T>, Vecto
     /// <summary>
     /// Transfers a Neural Network model to a target domain with a different feature space.
     /// </summary>
+    /// <returns>
+    /// A model trained in the mapped source feature space. <b>IMPORTANT:</b> When using the returned model
+    /// for predictions, input data must first be mapped to the source feature space using the same
+    /// FeatureMapper: <c>mappedData = FeatureMapper.MapToSource(newData, sourceFeatures)</c>
+    /// </returns>
     /// <remarks>
-    /// NOTE: This implementation requires source domain data to properly train the feature mapper.
-    /// The current API limitations prevent passing source data, so this method will throw
-    /// InvalidOperationException. Users should use the public Transfer() method that accepts source data.
+    /// <para>
+    /// This method performs cross-domain transfer when source and target domains have different
+    /// feature spaces. It requires a pre-trained feature mapper to be set via SetFeatureMapper().
+    /// </para>
+    /// <para>
+    /// <b>Limitations:</b> Without access to source domain data, this method cannot:
+    /// 1. Train the feature mapper (must be pre-trained)
+    /// 2. Perform optimal knowledge distillation (uses model predictions on mapped data)
+    /// 3. Validate feature space compatibility
+    /// </para>
+    /// <para>
+    /// <b>CRITICAL:</b> The returned model operates in the source feature space, not the target feature space.
+    /// All predictions must be made on data mapped to the source space via FeatureMapper.MapToSource().
+    /// </para>
+    /// <para>
+    /// <b>Recommendation:</b> For best results, use the public Transfer() method that accepts
+    /// both source and target domain data, which enables proper feature mapper training and
+    /// knowledge distillation.
+    /// </para>
     /// </remarks>
+    /// <exception cref="InvalidOperationException">
+    /// Thrown when FeatureMapper is null or not trained.
+    /// </exception>
     protected override IFullModel<T, Matrix<T>, Vector<T>> TransferCrossDomain(
         IFullModel<T, Matrix<T>, Vector<T>> sourceModel,
         Matrix<T> targetData,
         Vector<T> targetLabels)
     {
-        throw new InvalidOperationException(
-            "Cross-domain transfer cannot be performed directly through this protected method due to the need for source domain data. " +
-            "Please use the public 'Transfer(sourceModel, sourceData, targetData, targetLabels)' method which accepts both source and target domain data for feature mapping and transfer.");
+        // Validate that feature mapper is available and trained
+        if (FeatureMapper == null)
+        {
+            throw new InvalidOperationException(
+                "Cross-domain transfer requires a feature mapper. Use SetFeatureMapper() before transfer. " +
+                "Alternatively, use the public Transfer() method with source data for automatic feature mapping.");
+        }
+
+        if (!FeatureMapper.IsTrained)
+        {
+            throw new InvalidOperationException(
+                "Feature mapper must be trained before cross-domain transfer. " +
+                "Either train the mapper using FeatureMapper.Train(sourceData, targetData) or " +
+                "use the public Transfer() method with source data for automatic training.");
+        }
+
+        // Get source model's feature dimension
+        int sourceFeatures = sourceModel.GetActiveFeatureIndices().Count();
+
+        // Map target data to source feature space
+        Matrix<T> mappedTargetData = FeatureMapper.MapToSource(targetData, sourceFeatures);
+
+        // Use source model to generate soft labels on mapped data
+        // This provides knowledge distillation without requiring source domain data
+        Vector<T> softLabels = sourceModel.Predict(mappedTargetData);
+
+        // Combine soft labels with true labels
+        // trueWeight of 0.7 means combinedLabels = 0.7 * trueLabels + 0.3 * softLabels
+        Vector<T> combinedLabels = CombineLabels(softLabels, targetLabels, 0.7);
+
+        // Create and train a new model on the mapped target domain
+        // CRITICAL: Must train on mappedTargetData (not targetData) to match source model's input dimensions
+        // The sourceModel was trained with sourceFeatures dimensions, so the copied model expects the same
+        var targetModel = sourceModel.DeepCopy();
+        targetModel.Train(mappedTargetData, combinedLabels);
+
+        return targetModel;
     }
 
     /// <summary>

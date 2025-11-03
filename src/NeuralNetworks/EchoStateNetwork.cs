@@ -1018,32 +1018,57 @@ public class EchoStateNetwork<T> : NeuralNetworkBase<T>
     }
 
     /// <summary>
-    /// Updates the parameters of all layers in the Echo State Network.
+    /// Updates the output layer parameters (weights and biases) of the Echo State Network.
     /// </summary>
-    /// <param name="parameters">A vector containing the parameters to update all layers with.</param>
-    /// <exception cref="NotImplementedException">
-    /// Always thrown because ESN does not support traditional parameter updates.
-    /// </exception>
+    /// <param name="parameters">A vector containing the output weights and biases to update.</param>
+    /// <exception cref="ArgumentException">Thrown when parameter vector length doesn't match expected size.</exception>
     /// <remarks>
     /// <para>
-    /// This method is not implemented for Echo State Networks because they do not use traditional parameter updates.
-    /// In an ESN, only the output layer weights are trained, and this is done using ridge regression rather than
-    /// gradient-based optimization. The reservoir weights remain fixed after initialization.
+    /// This method updates the ESN's output layer parameters from a flat parameter vector. The parameter vector
+    /// must have a length equal to (reservoirSize × outputSize) + outputSize. Note that this only updates the
+    /// output layer - the reservoir weights remain fixed. While ESNs typically train using ridge regression
+    /// (see the Train method), this method allows for direct parameter updates for external optimization.
     /// </para>
-    /// <para><b>For Beginners:</b> This method always throws an error because ESNs don't train like regular neural networks.
-    /// 
+    /// <para><b>For Beginners:</b> This method updates the output layer weights directly.
+    ///
     /// Echo State Networks are different from standard neural networks:
-    /// - They don't use backpropagation or gradient descent
     /// - Their reservoir weights stay fixed (unchangeable) after initialization
-    /// - Only the output layer weights are trained, using ridge regression
-    /// 
-    /// If you try to update parameters like in a regular neural network,
-    /// you'll get an error because this isn't how ESNs work.
+    /// - Only the output layer weights are trainable
+    /// - They typically use ridge regression for training (not gradient descent)
+    ///
+    /// This method allows you to:
+    /// - Directly set the output layer weights and biases
+    /// - Integrate with external optimization algorithms
+    /// - Transfer parameters from other sources
+    ///
+    /// <b>Note:</b> The reservoir weights are NOT affected by this method and remain fixed.
+    /// For typical ESN training, use the Train method with ridge regression instead.
     /// </para>
     /// </remarks>
     public override void UpdateParameters(Vector<T> parameters)
     {
-        throw new InvalidOperationException("Echo State Networks do not support direct parameter updates via this method. Only output layer weights are trained via the Train method. The reservoir (internal weights) remain fixed after initialization.");
+        int outputWeightCount = _reservoirSize * _outputSize;
+        int expectedLength = outputWeightCount + _outputSize;
+
+        if (parameters.Length != expectedLength)
+        {
+            throw new ArgumentException($"Parameter vector length mismatch. Expected {expectedLength} parameters but got {parameters.Length}.", nameof(parameters));
+        }
+
+        int paramIndex = 0;
+
+        for (int i = 0; i < _reservoirSize; i++)
+        {
+            for (int j = 0; j < _outputSize; j++)
+            {
+                _outputWeights[i, j] = parameters[paramIndex++];
+            }
+        }
+
+        for (int i = 0; i < _outputSize; i++)
+        {
+            _outputBias[i] = parameters[paramIndex++];
+        }
     }
 
     /// <summary>

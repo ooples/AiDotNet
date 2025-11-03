@@ -1,5 +1,7 @@
 global using Newtonsoft.Json;
 global using Formatting = Newtonsoft.Json.Formatting;
+using AiDotNet.Interfaces;
+using AiDotNet.Interpretability;
 using AiDotNet.Serialization;
 
 namespace AiDotNet.Models.Results;
@@ -39,7 +41,7 @@ namespace AiDotNet.Models.Results;
 /// </remarks>
 /// <typeparam name="T">The numeric type used for calculations, typically float or double.</typeparam>
 [Serializable]
-public class PredictionModelResult<T, TInput, TOutput> : IPredictiveModel<T, TInput, TOutput>
+public class PredictionModelResult<T, TInput, TOutput> : IFullModel<T, TInput, TOutput>
 {
     /// <summary>
     /// Gets or sets the underlying model used for making predictions.
@@ -162,6 +164,18 @@ public class PredictionModelResult<T, TInput, TOutput> : IPredictiveModel<T, TIn
     public ModelMetadata<T> ModelMetaData { get; private set; } = new();
 
     /// <summary>
+    /// Gets or sets the bias detector used for ethical AI evaluation.
+    /// </summary>
+    /// <value>An implementation of IBiasDetector&lt;T&gt; for detecting bias in model predictions, or null if not configured.</value>
+    public IBiasDetector<T>? BiasDetector { get; private set; }
+
+    /// <summary>
+    /// Gets or sets the fairness evaluator used for ethical AI evaluation.
+    /// </summary>
+    /// <value>An implementation of IFairnessEvaluator&lt;T&gt; for evaluating fairness metrics, or null if not configured.</value>
+    public IFairnessEvaluator<T>? FairnessEvaluator { get; private set; }
+
+    /// <summary>
     /// Initializes a new instance of the PredictionModelResult class with the specified model, optimization results, and normalization information.
     /// </summary>
     /// <param name="model">The underlying model used for making predictions.</param>
@@ -169,35 +183,54 @@ public class PredictionModelResult<T, TInput, TOutput> : IPredictiveModel<T, TIn
     /// <param name="normalizationInfo">The normalization information used to preprocess input data and postprocess predictions.</param>
     /// <remarks>
     /// <para>
-    /// This constructor creates a new PredictionModelResult instance with the specified model, optimization results, and 
-    /// normalization information. It also initializes the ModelMetadata property by calling the GetModelMetadata method on 
-    /// the provided model. This constructor is typically used when a new model has been trained and needs to be packaged 
+    /// This constructor creates a new PredictionModelResult instance with the specified model, optimization results, and
+    /// normalization information. It also initializes the ModelMetadata property by calling the GetModelMetadata method on
+    /// the provided model. This constructor is typically used when a new model has been trained and needs to be packaged
     /// with all the necessary information for making predictions and for later serialization.
     /// </para>
     /// <para><b>For Beginners:</b> This constructor creates a new prediction model result with all the necessary components.
-    /// 
+    ///
     /// When creating a new PredictionModelResult:
     /// - You provide the trained model that will make predictions
     /// - You provide the optimization results that describe how the model was created
     /// - You provide the normalization information needed to process data
     /// - The constructor automatically extracts metadata from the model
-    /// 
+    ///
     /// This constructor is typically used when:
     /// - You've just finished training a model
     /// - You want to package it with all the information needed to use it
     /// - You plan to save it for later use or deploy it in an application
-    /// 
+    ///
     /// For example, after training a house price prediction model, you would use this constructor
     /// to create a complete package that can be saved and used for making predictions.
     /// </para>
     /// </remarks>
-    public PredictionModelResult(OptimizationResult<T, TInput, TOutput> optimizationResult,
+    public PredictionModelResult(IFullModel<T, TInput, TOutput> model,
+        OptimizationResult<T, TInput, TOutput> optimizationResult,
         NormalizationInfo<T, TInput, TOutput> normalizationInfo)
+    {
+        Model = model;
+        OptimizationResult = optimizationResult;
+        NormalizationInfo = normalizationInfo;
+        ModelMetaData = model?.GetModelMetadata() ?? new();
+    }
+
+    /// <summary>
+    /// Initializes a new instance of the PredictionModelResult class with optimization results and normalization information.
+    /// </summary>
+    /// <param name="optimizationResult">The results of the optimization process that created the model.</param>
+    /// <param name="normalizationInfo">The normalization information used to preprocess input data and postprocess predictions.</param>
+    public PredictionModelResult(OptimizationResult<T, TInput, TOutput> optimizationResult,
+        NormalizationInfo<T, TInput, TOutput> normalizationInfo,
+        IBiasDetector<T>? biasDetector = null,
+        IFairnessEvaluator<T>? fairnessEvaluator = null)
     {
         Model = optimizationResult.BestSolution;
         OptimizationResult = optimizationResult;
         NormalizationInfo = normalizationInfo;
         ModelMetaData = Model?.GetModelMetadata() ?? new();
+        BiasDetector = biasDetector;
+        FairnessEvaluator = fairnessEvaluator;
     }
 
     /// <summary>
@@ -311,6 +344,211 @@ public class PredictionModelResult<T, TInput, TOutput> : IPredictiveModel<T, TIn
     }
 
     /// <summary>
+    /// Training is not supported on PredictionModelResult. Use PredictionModelBuilder to create and train new models.
+    /// </summary>
+    /// <param name="input">Input training data (not used).</param>
+    /// <param name="expectedOutput">Expected output values (not used).</param>
+    /// <exception cref="InvalidOperationException">Always thrown - PredictionModelResult represents an already-trained model and cannot be retrained.</exception>
+    /// <remarks>
+    /// PredictionModelResult is a snapshot of a trained model with its optimization results and metadata.
+    /// Retraining would invalidate the OptimizationResult and metadata.
+    /// To train a new model or retrain with different data, use PredictionModelBuilder.Build() instead.
+    /// </remarks>
+    public void Train(TInput input, TOutput expectedOutput)
+    {
+        throw new InvalidOperationException(
+            "PredictionModelResult represents an already-trained model and cannot be retrained. " +
+            "The OptimizationResult and metadata reflect the original training process. " +
+            "To train a new model, use PredictionModelBuilder.Build() instead.");
+    }
+
+    /// <summary>
+    /// Gets the parameters of the underlying model.
+    /// </summary>
+    /// <returns>A vector containing the model parameters.</returns>
+    /// <exception cref="InvalidOperationException">Thrown when the Model is not initialized.</exception>
+    public Vector<T> GetParameters()
+    {
+        if (Model == null)
+        {
+            throw new InvalidOperationException("Model is not initialized.");
+        }
+
+        return Model.GetParameters();
+    }
+
+    /// <summary>
+    /// Setting parameters is not supported on PredictionModelResult.
+    /// </summary>
+    /// <param name="parameters">The parameter vector (not used).</param>
+    /// <exception cref="InvalidOperationException">Always thrown - PredictionModelResult parameters cannot be modified.</exception>
+    /// <remarks>
+    /// Modifying parameters would invalidate the OptimizationResult which reflects the optimized parameter values.
+    /// To create a model with different parameters, use PredictionModelBuilder with custom initial parameters.
+    /// </remarks>
+    public void SetParameters(Vector<T> parameters)
+    {
+        throw new InvalidOperationException(
+            "PredictionModelResult parameters cannot be modified. " +
+            "The current parameters reflect the optimized solution from the training process. " +
+            "To create a model with different parameters, use PredictionModelBuilder.");
+    }
+
+    /// <summary>
+    /// Gets the number of parameters in the underlying model.
+    /// </summary>
+    public int ParameterCount
+    {
+        get
+        {
+            if (Model == null)
+            {
+                return 0;
+            }
+
+            return Model.ParameterCount;
+        }
+    }
+
+    /// <summary>
+    /// Creates a new instance with the specified parameters.
+    /// </summary>
+    /// <param name="parameters">The parameter vector to use.</param>
+    /// <returns>A new PredictionModelResult with updated parameters.</returns>
+    /// <exception cref="InvalidOperationException">Thrown when the Model is not initialized.</exception>
+    public IFullModel<T, TInput, TOutput> WithParameters(Vector<T> parameters)
+    {
+        if (Model == null)
+        {
+            throw new InvalidOperationException("Model is not initialized.");
+        }
+
+        var newModel = Model.WithParameters(parameters);
+
+        // Deep-copy OptimizationResult and update its BestSolution to reference newModel
+        // This ensures metadata consistency - BestSolution should always point to the current model
+        var updatedOptimizationResult = OptimizationResult.DeepCopy();
+        updatedOptimizationResult.BestSolution = newModel;
+
+        // Create new result with updated optimization result
+        // Use constructor that preserves BiasDetector and FairnessEvaluator
+        return new PredictionModelResult<T, TInput, TOutput>(
+            updatedOptimizationResult,
+            NormalizationInfo,
+            BiasDetector,
+            FairnessEvaluator);
+    }
+
+    /// <summary>
+    /// Gets the indices of features that are actively used by the underlying model.
+    /// </summary>
+    /// <returns>An enumerable of active feature indices.</returns>
+    /// <exception cref="InvalidOperationException">Thrown when the Model is not initialized.</exception>
+    public IEnumerable<int> GetActiveFeatureIndices()
+    {
+        if (Model == null)
+        {
+            throw new InvalidOperationException("Model is not initialized.");
+        }
+
+        return Model.GetActiveFeatureIndices();
+    }
+
+    /// <summary>
+    /// Setting active feature indices is not supported on PredictionModelResult.
+    /// </summary>
+    /// <param name="featureIndices">The feature indices (not used).</param>
+    /// <exception cref="InvalidOperationException">Always thrown - PredictionModelResult feature configuration cannot be modified.</exception>
+    /// <remarks>
+    /// Changing active features would invalidate the trained model and optimization results.
+    /// To train a model with different features, use PredictionModelBuilder with the desired feature configuration.
+    /// </remarks>
+    public void SetActiveFeatureIndices(IEnumerable<int> featureIndices)
+    {
+        throw new InvalidOperationException(
+            "PredictionModelResult active features cannot be modified. " +
+            "The model was trained with a specific feature set. " +
+            "To use different features, train a new model using PredictionModelBuilder.");
+    }
+
+    /// <summary>
+    /// Checks if a specific feature is used by the underlying model.
+    /// </summary>
+    /// <param name="featureIndex">The index of the feature to check.</param>
+    /// <returns>True if the feature is used, false otherwise.</returns>
+    /// <exception cref="InvalidOperationException">Thrown when the Model is not initialized.</exception>
+    public bool IsFeatureUsed(int featureIndex)
+    {
+        if (Model == null)
+        {
+            throw new InvalidOperationException("Model is not initialized.");
+        }
+
+        return Model.IsFeatureUsed(featureIndex);
+    }
+
+    /// <summary>
+    /// Gets the feature importance scores from the underlying model.
+    /// </summary>
+    /// <returns>A dictionary mapping feature names to importance scores.</returns>
+    /// <exception cref="InvalidOperationException">Thrown when the Model is not initialized.</exception>
+    public Dictionary<string, T> GetFeatureImportance()
+    {
+        if (Model == null)
+        {
+            throw new InvalidOperationException("Model is not initialized.");
+        }
+
+        return Model.GetFeatureImportance();
+    }
+
+    /// <summary>
+    /// Creates a deep copy of this PredictionModelResult.
+    /// </summary>
+    /// <returns>A new PredictionModelResult instance that is a deep copy of this one.</returns>
+    public IFullModel<T, TInput, TOutput> DeepCopy()
+    {
+        if (Model == null)
+        {
+            throw new InvalidOperationException("Cannot deep copy PredictionModelResult with null Model.");
+        }
+
+        var clonedModel = Model.DeepCopy();
+        var clonedOptimizationResult = OptimizationResult.DeepCopy();
+
+        // Update OptimizationResult.BestSolution to reference the cloned model
+        // This ensures metadata consistency across the deep copy
+        clonedOptimizationResult.BestSolution = clonedModel;
+
+        var clonedNormalizationInfo = NormalizationInfo.DeepCopy();
+
+        // Use constructor that preserves BiasDetector and FairnessEvaluator
+        return new PredictionModelResult<T, TInput, TOutput>(
+            clonedOptimizationResult,
+            clonedNormalizationInfo,
+            BiasDetector,
+            FairnessEvaluator);
+    }
+
+    /// <summary>
+    /// Creates a shallow copy of this PredictionModelResult.
+    /// </summary>
+    /// <returns>A new PredictionModelResult instance that is a shallow copy of this one.</returns>
+    /// <remarks>
+    /// This method delegates to WithParameters to ensure consistency in how OptimizationResult is handled.
+    /// The cloned instance will have a new model with the same parameters and updated OptimizationResult metadata.
+    /// </remarks>
+    public IFullModel<T, TInput, TOutput> Clone()
+    {
+        if (Model == null)
+        {
+            throw new InvalidOperationException("Cannot clone PredictionModelResult with null Model.");
+        }
+
+        return WithParameters(Model.GetParameters());
+    }
+
+    /// <summary>
     /// Serializes the model to a byte array.
     /// </summary>
     /// <returns>A byte array containing the serialized model.</returns>
@@ -406,6 +644,8 @@ public class PredictionModelResult<T, TInput, TOutput> : IPredictiveModel<T, TIn
                 OptimizationResult = deserializedObject.OptimizationResult;
                 NormalizationInfo = deserializedObject.NormalizationInfo;
                 ModelMetaData = deserializedObject.ModelMetaData;
+                BiasDetector = deserializedObject.BiasDetector;
+                FairnessEvaluator = deserializedObject.FairnessEvaluator;
             }
             else
             {
