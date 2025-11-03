@@ -1,7 +1,7 @@
 using AiDotNet.RetrievalAugmentedGeneration.Interfaces;
 using AiDotNet.RetrievalAugmentedGeneration.Models;
 
-namespace AiDotNet.RetrievalAugmentedGeneration.Base;
+namespace AiDotNet.RetrievalAugmentedGeneration.Retrievers;
 
 /// <summary>
 /// Provides a base implementation for document retrievers with common functionality.

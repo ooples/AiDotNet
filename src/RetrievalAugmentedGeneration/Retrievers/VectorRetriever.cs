@@ -1,4 +1,3 @@
-using AiDotNet.RetrievalAugmentedGeneration.Base;
 using AiDotNet.RetrievalAugmentedGeneration.Interfaces;
 using AiDotNet.RetrievalAugmentedGeneration.Models;
 

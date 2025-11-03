@@ -1,5 +1,4 @@
 using AiDotNet.LinearAlgebra;
-using AiDotNet.RetrievalAugmentedGeneration.Base;
 using AiDotNet.RetrievalAugmentedGeneration.Models;
 
 namespace AiDotNet.RetrievalAugmentedGeneration.DocumentStores;

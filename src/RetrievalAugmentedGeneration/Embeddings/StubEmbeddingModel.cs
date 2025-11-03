@@ -1,7 +1,6 @@
 using System.Security.Cryptography;
 using System.Text;
 using AiDotNet.LinearAlgebra;
-using AiDotNet.RetrievalAugmentedGeneration.Base;
 
 namespace AiDotNet.RetrievalAugmentedGeneration.Embeddings;
 

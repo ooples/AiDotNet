@@ -1,7 +1,7 @@
 using AiDotNet.LinearAlgebra;
 using AiDotNet.RetrievalAugmentedGeneration.Interfaces;
 
-namespace AiDotNet.RetrievalAugmentedGeneration.Base;
+namespace AiDotNet.RetrievalAugmentedGeneration.Embeddings;
 
 /// <summary>
 /// Provides a base implementation for embedding models with common functionality.

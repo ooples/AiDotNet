@@ -2,7 +2,7 @@ using AiDotNet.LinearAlgebra;
 using AiDotNet.RetrievalAugmentedGeneration.Interfaces;
 using AiDotNet.RetrievalAugmentedGeneration.Models;
 
-namespace AiDotNet.RetrievalAugmentedGeneration.Base;
+namespace AiDotNet.RetrievalAugmentedGeneration.DocumentStores;
 
 /// <summary>
 /// Provides a base implementation for document stores with common functionality.

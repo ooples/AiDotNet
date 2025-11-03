@@ -1,6 +1,6 @@
 using AiDotNet.RetrievalAugmentedGeneration.Interfaces;
 
-namespace AiDotNet.RetrievalAugmentedGeneration.Base;
+namespace AiDotNet.RetrievalAugmentedGeneration.ChunkingStrategies;
 
 /// <summary>
 /// Provides a base implementation for text chunking strategies with common functionality.
