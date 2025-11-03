@@ -517,10 +517,9 @@ public class DyLoRAAdapter<T> : LoRAAdapterBase<T>
         Matrix<T> gradB = gradMatrix.Transpose().Multiply(inputMatrix).Multiply(subA.Transpose());
         Matrix<T> gradA = inputMatrix.Transpose().Multiply(gradMatrix).Multiply(subB.Transpose());
 
-        // Scale by alpha/rank as per LoRA
-        double alphaDouble = Convert.ToDouble(_loraLayer.Alpha);
-        double scale = alphaDouble / rank;
-        T scaleT = NumOps.FromDouble(scale);
+        // Scale by _loraLayer.Scaling (alpha/maxRank) to match forward pass
+        // CRITICAL: Use same scaling as ForwardWithRank (line 394) for correct gradients
+        T scaleT = _loraLayer.Scaling;
         for (int i = 0; i < gradB.Rows; i++)
         {
             for (int j = 0; j < gradB.Columns; j++)
@@ -578,9 +577,8 @@ public class DyLoRAAdapter<T> : LoRAAdapterBase<T>
 
         // Compute input gradient: dL/dInput = gradMatrix @ (subB @ subA)^T
         Matrix<T> combinedWeight = subB.Multiply(subA.Transpose());
-        double alphaDoubleForInput = Convert.ToDouble(_loraLayer.Alpha);
-        double alphaScaleDouble = alphaDoubleForInput / rank;
-        T alphaScaleT = NumOps.FromDouble(alphaScaleDouble);
+        // Use same scaling as ForwardWithRank (line 394) for correct gradients
+        T alphaScaleT = _loraLayer.Scaling;
         for (int i = 0; i < combinedWeight.Rows; i++)
         {
             for (int j = 0; j < combinedWeight.Columns; j++)
