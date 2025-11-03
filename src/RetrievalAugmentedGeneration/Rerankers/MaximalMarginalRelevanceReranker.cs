@@ -216,7 +216,7 @@ public class MaximalMarginalRelevanceReranker<T> : RerankerBase<T>
     /// <summary>
     /// Calculates cosine similarity between two vectors.
     /// </summary>
-    private double CalculateCosine Similarity(Vector<T> a, Vector<T> b)
+    private double CalculateCosineSimilarity(Vector<T> a, Vector<T> b)
     {
         if (a == null || b == null)
             throw new ArgumentNullException("Vectors cannot be null");
