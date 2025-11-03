@@ -1,3 +1,5 @@
+using AiDotNet.Helpers;
+using AiDotNet.LinearAlgebra;
 using AiDotNet.RetrievalAugmentedGeneration.Interfaces;
 using AiDotNet.RetrievalAugmentedGeneration.Models;
 
@@ -148,6 +150,9 @@ public class RAGEvaluator
     /// <returns>Aggregated statistics.</returns>
     public AggregateStats GetAggregateStats(IEnumerable<EvaluationResult> results)
     {
+        if (results == null)
+            throw new ArgumentNullException(nameof(results));
+
         var resultList = results.ToList();
         if (resultList.Count == 0)
             throw new ArgumentException("Results collection cannot be empty", nameof(results));
@@ -164,9 +169,9 @@ public class RAGEvaluator
 
             if (scores.Any())
             {
-                var mean = scores.Average();
-                var variance = scores.Select(s => Math.Pow(s - mean, 2)).Average();
-                var stdDev = Math.Sqrt(variance);
+                var scoresVector = new Vector<double>(scores.ToArray());
+                var mean = Convert.ToDouble(StatisticsHelper<double>.CalculateMean(scoresVector));
+                var stdDev = Convert.ToDouble(StatisticsHelper<double>.CalculateStandardDeviation(scoresVector, StatisticsHelper<double>.CalculateMean(scoresVector)));
                 var min = scores.Min();
                 var max = scores.Max();
 
