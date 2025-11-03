@@ -6,6 +6,7 @@ namespace AiDotNet.RetrievalAugmentedGeneration.Retrievers;
 /// <summary>
 /// Provides a base implementation for document retrievers with common functionality.
 /// </summary>
+/// <typeparam name="T">The numeric data type used for relevance scoring.</typeparam>
 /// <remarks>
 /// <para>
 /// This abstract class implements the IRetriever interface and provides common functionality
@@ -20,7 +21,7 @@ namespace AiDotNet.RetrievalAugmentedGeneration.Retrievers;
 /// - This ensures all retrievers work consistently
 /// </para>
 /// </remarks>
-public abstract class RetrieverBase : IRetriever
+public abstract class RetrieverBase<T> : IRetriever<T>
 {
     private readonly int _defaultTopK;
 
@@ -46,7 +47,7 @@ public abstract class RetrieverBase : IRetriever
     /// </summary>
     /// <param name="query">The query text.</param>
     /// <returns>A collection of relevant documents ordered by relevance (most relevant first).</returns>
-    public IEnumerable<Document> Retrieve(string query)
+    public IEnumerable<Document<T>> Retrieve(string query)
     {
         return Retrieve(query, _defaultTopK);
     }
@@ -57,7 +58,7 @@ public abstract class RetrieverBase : IRetriever
     /// <param name="query">The query text.</param>
     /// <param name="topK">The number of documents to retrieve.</param>
     /// <returns>A collection of relevant documents ordered by relevance (most relevant first).</returns>
-    public IEnumerable<Document> Retrieve(string query, int topK)
+    public IEnumerable<Document<T>> Retrieve(string query, int topK)
     {
         return Retrieve(query, topK, new Dictionary<string, object>());
     }
@@ -69,7 +70,7 @@ public abstract class RetrieverBase : IRetriever
     /// <param name="topK">The number of documents to retrieve.</param>
     /// <param name="metadataFilters">Metadata filters to apply before retrieval.</param>
     /// <returns>A collection of filtered, relevant documents ordered by relevance.</returns>
-    public IEnumerable<Document> Retrieve(string query, int topK, Dictionary<string, object> metadataFilters)
+    public IEnumerable<Document<T>> Retrieve(string query, int topK, Dictionary<string, object> metadataFilters)
     {
         ValidateQuery(query);
         ValidateTopK(topK);
@@ -99,7 +100,7 @@ public abstract class RetrieverBase : IRetriever
     /// Just focus on: Finding and scoring the most relevant documents for the query.
     /// </para>
     /// </remarks>
-    protected abstract IEnumerable<Document> RetrieveCore(string query, int topK, Dictionary<string, object> metadataFilters);
+    protected abstract IEnumerable<Document<T>> RetrieveCore(string query, int topK, Dictionary<string, object> metadataFilters);
 
     /// <summary>
     /// Validates the query string.
@@ -167,7 +168,7 @@ public abstract class RetrieverBase : IRetriever
     /// - Metadata enrichment (add computed fields)
     /// </para>
     /// </remarks>
-    protected virtual IEnumerable<Document> PostProcessResults(IEnumerable<Document> results, int topK)
+    protected virtual IEnumerable<Document<T>> PostProcessResults(IEnumerable<Document<T>> results, int topK)
     {
         return results.Take(topK).ToList();
     }

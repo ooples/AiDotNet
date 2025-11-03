@@ -32,7 +32,7 @@ namespace AiDotNet.RetrievalAugmentedGeneration.Retrievers;
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric data type used for vector calculations (typically float or double).</typeparam>
-public class VectorRetriever<T> : RetrieverBase
+public class VectorRetriever<T> : RetrieverBase<T>
 {
     private readonly IDocumentStore<T> _documentStore;
     private readonly IEmbeddingModel<T> _embeddingModel;
@@ -59,7 +59,7 @@ public class VectorRetriever<T> : RetrieverBase
     /// <param name="topK">The validated number of documents to retrieve.</param>
     /// <param name="metadataFilters">The validated metadata filters.</param>
     /// <returns>A collection of relevant documents ordered by relevance.</returns>
-    protected override IEnumerable<Document> RetrieveCore(string query, int topK, Dictionary<string, object> metadataFilters)
+    protected override IEnumerable<Document<T>> RetrieveCore(string query, int topK, Dictionary<string, object> metadataFilters)
     {
         // 1. Embed the query
         var queryVector = _embeddingModel.Embed(query);
