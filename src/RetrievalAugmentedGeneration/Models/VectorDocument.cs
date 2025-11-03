@@ -78,8 +78,9 @@ public class VectorDocument<T> where T : struct
     /// </summary>
     /// <param name="document">The document containing content and metadata.</param>
     /// <param name="embedding">The vector embedding of the document.</param>
-        public VectorDocument(Document document, Vector<T> embedding)
-        {
-            Document = document ?? throw new ArgumentNullException(nameof(document));
-            Embedding = embedding ?? throw new ArgumentNullException(nameof(embedding));
-        }}
+    public VectorDocument(Document document, Vector<T> embedding)
+    {
+        Document = document ?? throw new ArgumentNullException(nameof(document));
+        Embedding = embedding ?? throw new ArgumentNullException(nameof(embedding));
+    }
+}
