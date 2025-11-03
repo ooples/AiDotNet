@@ -1,5 +1,6 @@
 using System;
 using AiDotNet.Helpers;
+using AiDotNet.RetrievalAugmentedGeneration.Embeddings;
 
 namespace AiDotNet.RetrievalAugmentedGeneration.EmbeddingModels
 {
@@ -11,7 +12,6 @@ namespace AiDotNet.RetrievalAugmentedGeneration.EmbeddingModels
     {
         private readonly string _modelName;
         private readonly string _apiKey;
-        private readonly INumericOperations<T> _numOps;
 
         /// <summary>
         /// Initializes a new instance of the <see cref="HuggingFaceEmbeddingModel{T}"/> class.
@@ -19,9 +19,9 @@ namespace AiDotNet.RetrievalAugmentedGeneration.EmbeddingModels
         /// <param name="numericOperations">The numeric operations for type T.</param>
         /// <param name="modelName">The HuggingFace model name.</param>
         /// <param name="apiKey">The HuggingFace API key (optional for public models).</param>
-        public HuggingFaceEmbeddingModel(INumericOperations<T> numericOperations, string modelName, string apiKey = null) : base(numericOperations)
+        public HuggingFaceEmbeddingModel(INumericOperations<T> numericOperations, string modelName, string apiKey = "")
+            : base(numericOperations)
         {
-            _numOps = numericOperations ?? throw new ArgumentNullException(nameof(numericOperations));
             _modelName = modelName ?? throw new ArgumentNullException(nameof(modelName));
             _apiKey = apiKey;
         }

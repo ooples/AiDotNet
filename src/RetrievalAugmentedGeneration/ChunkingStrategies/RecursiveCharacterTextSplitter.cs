@@ -1,16 +1,12 @@
-using System;
-using System.Collections.Generic;
-using System.Text;
+using AiDotNet.RetrievalAugmentedGeneration.Interfaces;
 
 namespace AiDotNet.RetrievalAugmentedGeneration.ChunkingStrategies
 {
     /// <summary>
     /// Recursive character-based text splitting that preserves semantic meaning.
     /// </summary>
-    public class RecursiveCharacterTextSplitter : IChunkingStrategy
+    public class RecursiveCharacterTextSplitter : ChunkingStrategyBase
     {
-        private readonly int _chunkSize;
-        private readonly int _chunkOverlap;
         private readonly string[] _separators;
 
         /// <summary>
@@ -23,9 +19,8 @@ namespace AiDotNet.RetrievalAugmentedGeneration.ChunkingStrategies
             int chunkSize = 1000,
             int chunkOverlap = 200,
             string[] separators = null)
+            : base(chunkSize, chunkOverlap)
         {
-            _chunkSize = chunkSize > 0 ? chunkSize : throw new ArgumentOutOfRangeException(nameof(chunkSize));
-            _chunkOverlap = chunkOverlap >= 0 ? chunkOverlap : throw new ArgumentOutOfRangeException(nameof(chunkOverlap));
             _separators = separators ?? new[] { "\n\n", "\n", ". ", " ", "" };
         }
 
@@ -33,19 +28,25 @@ namespace AiDotNet.RetrievalAugmentedGeneration.ChunkingStrategies
         /// Splits the input text into chunks recursively.
         /// </summary>
         /// <param name="text">The text to split.</param>
-        /// <returns>A list of text chunks.</returns>
-        public List<string> ChunkText(string text)
+        /// <returns>A collection of text chunks with positions.</returns>
+        protected override IEnumerable<(string Chunk, int StartPosition, int EndPosition)> ChunkCore(string text)
         {
-            if (string.IsNullOrEmpty(text)) throw new ArgumentNullException(nameof(text));
-
-            return SplitTextRecursive(text, _separators);
+            var chunks = SplitTextRecursive(text, _separators);
+            
+            var position = 0;
+            foreach (var chunk in chunks)
+            {
+                var endPos = position + chunk.Length;
+                yield return (chunk, position, endPos);
+                position = endPos - ChunkOverlap;
+            }
         }
 
         private List<string> SplitTextRecursive(string text, string[] separators)
         {
             var chunks = new List<string>();
 
-            if (text.Length <= _chunkSize)
+            if (text.Length <= ChunkSize)
             {
                 chunks.Add(text);
                 return chunks;
@@ -55,9 +56,9 @@ namespace AiDotNet.RetrievalAugmentedGeneration.ChunkingStrategies
             {
                 if (string.IsNullOrEmpty(separator))
                 {
-                    for (int i = 0; i < text.Length; i += _chunkSize - _chunkOverlap)
+                    for (int i = 0; i < text.Length; i += ChunkSize - ChunkOverlap)
                     {
-                        var length = Math.Min(_chunkSize, text.Length - i);
+                        var length = Math.Min(ChunkSize, text.Length - i);
                         chunks.Add(text.Substring(i, length));
                     }
                     return chunks;
@@ -68,12 +69,12 @@ namespace AiDotNet.RetrievalAugmentedGeneration.ChunkingStrategies
 
                 foreach (var split in splits)
                 {
-                    if (currentChunk.Length + split.Length + separator.Length > _chunkSize)
+                    if (currentChunk.Length + split.Length + separator.Length > ChunkSize)
                     {
                         if (currentChunk.Length > 0)
                         {
                             chunks.Add(currentChunk.ToString());
-                            var overlap = Math.Min(_chunkOverlap, currentChunk.Length);
+                            var overlap = Math.Min(ChunkOverlap, currentChunk.Length);
                             currentChunk = new StringBuilder(currentChunk.ToString(currentChunk.Length - overlap, overlap));
                         }
                     }
