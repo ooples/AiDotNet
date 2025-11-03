@@ -1,4 +1,7 @@
 using AiDotNet.RetrievalAugmentedGeneration.Interfaces;
+using System;
+using System.Collections.Generic;
+using System.Text;
 
 namespace AiDotNet.RetrievalAugmentedGeneration.ChunkingStrategies
 {
@@ -18,7 +21,7 @@ namespace AiDotNet.RetrievalAugmentedGeneration.ChunkingStrategies
         public RecursiveCharacterTextSplitter(
             int chunkSize = 1000,
             int chunkOverlap = 200,
-            string[] separators = null)
+            string[] separators = default)
             : base(chunkSize, chunkOverlap)
         {
             _separators = separators ?? new[] { "\n\n", "\n", ". ", " ", "" };

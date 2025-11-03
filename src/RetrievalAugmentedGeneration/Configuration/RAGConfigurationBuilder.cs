@@ -39,7 +39,7 @@ namespace AiDotNet.RetrievalAugmentedGeneration.Configuration
         /// <param name="type">The document store type.</param>
         /// <param name="parameters">Additional parameters for the document store.</param>
         /// <returns>The builder instance.</returns>
-        public RAGConfigurationBuilder<T> WithDocumentStore(string type, Dictionary<string, object> parameters = null)
+        public RAGConfigurationBuilder<T> WithDocumentStore(string type, Dictionary<string, object> parameters = default)
         {
             _config.DocumentStore.Type = type ?? throw new ArgumentNullException(nameof(type));
             if (parameters != null)
@@ -72,7 +72,7 @@ namespace AiDotNet.RetrievalAugmentedGeneration.Configuration
         /// <param name="apiKey">The API key (if required).</param>
         /// <param name="embeddingDimension">The embedding dimension.</param>
         /// <returns>The builder instance.</returns>
-        public RAGConfigurationBuilder<T> WithEmbedding(string modelType, string modelPath = null, string apiKey = null, int embeddingDimension = 768)
+        public RAGConfigurationBuilder<T> WithEmbedding(string modelType, string modelPath = "", string apiKey = "", int embeddingDimension = 768)
         {
             _config.Embedding.ModelType = modelType ?? throw new ArgumentNullException(nameof(modelType));
             _config.Embedding.ModelPath = modelPath;
