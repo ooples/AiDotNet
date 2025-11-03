@@ -482,15 +482,19 @@ public class MultiLoRAAdapter<T> : LoRAAdapterBase<T>
         }
 
         // All task adapters' parameters
-        foreach (var adapter in _taskAdapters.Values)
+        // Guard against null _taskAdapters during construction or early calls
+        if (_taskAdapters != null)
         {
-            int taskParamCount = adapter.ParameterCount;
-            Vector<T> taskParams = new Vector<T>(taskParamCount);
-            for (int i = 0; i < taskParamCount; i++)
+            foreach (var adapter in _taskAdapters.Values)
             {
-                taskParams[i] = parameters[idx++];
+                int taskParamCount = adapter.ParameterCount;
+                Vector<T> taskParams = new Vector<T>(taskParamCount);
+                for (int i = 0; i < taskParamCount; i++)
+                {
+                    taskParams[i] = parameters[idx++];
+                }
+                adapter.SetParameters(taskParams);
             }
-            adapter.SetParameters(taskParams);
         }
 
         Parameters = parameters.Clone();
