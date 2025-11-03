@@ -171,7 +171,7 @@ public class RAGEvaluator
             {
                 var scoresVector = new Vector<double>(scores.ToArray());
                 var mean = Convert.ToDouble(StatisticsHelper<double>.CalculateMean(scoresVector));
-                var stdDev = Convert.ToDouble(StatisticsHelper<double>.CalculateStandardDeviation(scoresVector, StatisticsHelper<double>.CalculateMean(scoresVector)));
+                var stdDev = Convert.ToDouble(StatisticsHelper<double>.CalculateStandardDeviation(scoresVector));
                 var min = scores.Min();
                 var max = scores.Max();
 
