@@ -738,7 +738,7 @@ public class LoftQAdapter<T> : LoRAAdapterBase<T>
     /// <summary>
     /// Updates the parameter vector from both layers.
     /// </summary>
-    private void UpdateParametersFromLayers()
+    protected override void UpdateParametersFromLayers()
     {
         int idx = 0;
 

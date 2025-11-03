@@ -288,7 +288,7 @@ public class LoRAFAAdapter<T> : LoRAAdapterBase<T>
     /// The freeze logic is in UpdateParameters, not in buffer packing.
     /// </para>
     /// </remarks>
-    private void UpdateParametersFromLayers()
+    protected override void UpdateParametersFromLayers()
     {
         int idx = 0;
 

@@ -470,7 +470,7 @@ public class XLoRAAdapter<T> : LoRAAdapterBase<T>
     /// <summary>
     /// Updates the parameter vector from the current layer states.
     /// </summary>
-    private void UpdateParametersFromLayers()
+    protected override void UpdateParametersFromLayers()
     {
         int idx = 0;
 

@@ -295,40 +295,6 @@ public abstract class LoRAAdapterBase<T> : LayerBase<T>, ILoRAAdapter<T>
     }
 
     /// <summary>
-    /// Updates the parameter vector from the current layer states.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// This method synchronizes the parameter vector with the current state of the base
-    /// and LoRA layers. If the base layer is frozen, only LoRA parameters are included.
-    /// </para>
-    /// <para><b>For Beginners:</b> This copies the current values from both layers into one big list.
-    /// Think of it like collecting all the knobs and dials into a single organized array.
-    /// </para>
-    /// </remarks>
-    private void UpdateParametersFromLayers()
-    {
-        int idx = 0;
-
-        // If base layer is not frozen, pack its parameters first
-        if (!_freezeBaseLayer)
-        {
-            Vector<T> baseParams = _baseLayer.GetParameters();
-            for (int i = 0; i < baseParams.Length; i++)
-            {
-                Parameters[idx++] = baseParams[i];
-            }
-        }
-
-        // Pack LoRA parameters
-        Vector<T> loraParams = _loraLayer.GetParameters();
-        for (int i = 0; i < loraParams.Length; i++)
-        {
-            Parameters[idx++] = loraParams[i];
-        }
-    }
-
-    /// <summary>
     /// Updates the layers from the parameter vector.
     /// </summary>
     /// <remarks>
@@ -536,7 +502,7 @@ public abstract class LoRAAdapterBase<T> : LayerBase<T>, ILoRAAdapter<T>
     /// with its component layers. Called after parameter updates.
     /// </para>
     /// </remarks>
-    protected void UpdateParametersFromLayers()
+    protected virtual void UpdateParametersFromLayers()
     {
         int idx = 0;
 
