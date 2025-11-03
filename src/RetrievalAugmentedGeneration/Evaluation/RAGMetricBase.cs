@@ -1,3 +1,5 @@
+using AiDotNet.Helpers;
+using AiDotNet.Interfaces;
 using AiDotNet.RetrievalAugmentedGeneration.Interfaces;
 using AiDotNet.RetrievalAugmentedGeneration.Models;
 
@@ -25,6 +27,11 @@ namespace AiDotNet.RetrievalAugmentedGeneration.Evaluation;
 /// </remarks>
 public abstract class RAGMetricBase<T> : IRAGMetric<T>
 {
+    /// <summary>
+    /// Provides mathematical operations for the numeric type T.
+    /// </summary>
+    protected static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();
+
     /// <summary>
     /// Gets the name of this metric.
     /// </summary>

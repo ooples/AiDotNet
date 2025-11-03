@@ -1,5 +1,6 @@
 using System.Linq;
 using AiDotNet.Helpers;
+using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
 using AiDotNet.RetrievalAugmentedGeneration.Interfaces;
 using AiDotNet.RetrievalAugmentedGeneration.Models;
@@ -27,6 +28,11 @@ namespace AiDotNet.RetrievalAugmentedGeneration.DocumentStores;
 /// <typeparam name="T">The numeric data type used for vector calculations (typically float or double).</typeparam>
 public abstract class DocumentStoreBase<T> : IDocumentStore<T>
 {
+    /// <summary>
+    /// Provides mathematical operations for the numeric type T.
+    /// </summary>
+    protected static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();
+
     /// <summary>
     /// Gets the number of documents currently stored in the document store.
     /// </summary>
