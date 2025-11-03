@@ -100,9 +100,14 @@ public class InMemoryDocumentStore<T> : DocumentStoreBase<T> where T : struct
             _vectorDimension = vectorDocuments[0].Embedding.Length;
         }
 
-        // Add all documents
+        // Add all documents with dimension validation
         foreach (var vectorDocument in vectorDocuments)
         {
+            if (vectorDocument.Embedding.Length != _vectorDimension)
+                throw new ArgumentException(
+                    $"Vector dimension mismatch in batch. Expected {_vectorDimension}, got {vectorDocument.Embedding.Length} for document {vectorDocument.Document.Id}",
+                    nameof(vectorDocuments));
+
             _documents[vectorDocument.Document.Id] = vectorDocument;
         }
     }

@@ -84,7 +84,13 @@ public class StubEmbeddingModel<T> : EmbeddingModelBase<T> where T : struct
         for (int i = 0; i < _embeddingDimension; i++)
         {
             // Box-Muller transform for normal distribution
-            var u1 = random.NextDouble();
+            // Protect against Log(0) which would produce NaN/Infinity
+            double u1;
+            do
+            {
+                u1 = random.NextDouble();
+            } while (u1 <= double.Epsilon);
+
             var u2 = random.NextDouble();
             var normalValue = Math.Sqrt(-2.0 * Math.Log(u1)) * Math.Cos(2.0 * Math.PI * u2);
             
@@ -112,7 +118,8 @@ public class StubEmbeddingModel<T> : EmbeddingModelBase<T> where T : struct
         }
         magnitude = Math.Sqrt(magnitude);
 
-        if (magnitude == 0)
+        const double epsilon = 1e-8;
+        if (Math.Abs(magnitude) < epsilon)
             return vector;
 
         var normalized = new T[vector.Length];
