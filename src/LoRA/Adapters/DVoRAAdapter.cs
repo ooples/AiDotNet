@@ -576,22 +576,30 @@ public class DVoRAAdapter<T> : LoRAAdapterBase<T>
         // Apply alpha/rank scaling
         T scaling = NumOps.Divide(NumOps.FromDouble(Alpha), NumOps.FromDouble(Rank));
 
-        // For direction update, we need the VeRA contribution as a weight delta, not an output
-        // Average over batch to get per-weight contribution
+        // Compute VeRA weight delta directly from matrices: delta = d .* (B * A_scaled)^T
+        // This is deterministic and independent of the input batch
+
+        // First compute A_scaled = A * diag(b)
+        Matrix<T> aScaled = new Matrix<T>(inputSize, rank);
+        for (int i = 0; i < inputSize; i++)
+        {
+            for (int j = 0; j < rank; j++)
+            {
+                aScaled[i, j] = NumOps.Multiply(_sharedMatrixA![i, j], _scalingVectorB[j]);
+            }
+        }
+
+        // Compute intermediate = A_scaled * B → [inputSize, outputSize]
+        Matrix<T> intermediate = aScaled.Multiply(_sharedMatrixB!);
+
+        // Apply d scaling and transpose to get weight delta [outputSize, inputSize]
         Matrix<T> veraWeightDelta = new Matrix<T>(outputSize, inputSize);
         for (int i = 0; i < outputSize; i++)
         {
             for (int j = 0; j < inputSize; j++)
             {
-                T sum = NumOps.Zero;
-                for (int b = 0; b < batchSize; b++)
-                {
-                    // Approximate weight gradient contribution
-                    T contrib = NumOps.Multiply(veraContribution[b, i], inputMatrix[b, j]);
-                    sum = NumOps.Add(sum, contrib);
-                }
                 veraWeightDelta[i, j] = NumOps.Multiply(
-                    NumOps.Divide(sum, NumOps.FromDouble(batchSize)),
+                    NumOps.Multiply(intermediate[j, i], _scalingVectorD[i]),
                     scaling);
             }
         }
