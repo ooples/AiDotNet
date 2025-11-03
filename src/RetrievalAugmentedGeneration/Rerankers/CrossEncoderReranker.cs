@@ -57,6 +57,11 @@ public class CrossEncoderReranker<T> : RerankerBase<T>
     private readonly int _maxPairsToScore;
 
     /// <summary>
+    /// Gets a value indicating whether this reranker modifies relevance scores.
+    /// </summary>
+    public override bool ModifiesScores => true;
+
+    /// <summary>
     /// Initializes a new instance of the CrossEncoderReranker class.
     /// </summary>
     /// <param name="scoreFunction">A function that takes (query, documentContent) and returns a relevance score.</param>
@@ -122,7 +127,7 @@ public class CrossEncoderReranker<T> : RerankerBase<T>
     /// - Typical flow: Retrieve 100 → Rerank top 20
     /// </para>
     /// </remarks>
-    protected override IEnumerable<Document<T>> RerankCore(string query, IEnumerable<Document<T>> documents)
+    protected override IEnumerable<Document<T>> RerankCore(string query, IList<Document<T>> documents)
     {
         var docList = documents.Take(_maxPairsToScore).ToList();
         

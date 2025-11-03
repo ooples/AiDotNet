@@ -69,6 +69,11 @@ public class MaximalMarginalRelevanceReranker<T> : RerankerBase<T>
     private readonly Func<Document<T>, Vector<T>> _getEmbedding;
 
     /// <summary>
+    /// Gets a value indicating whether this reranker modifies relevance scores.
+    /// </summary>
+    public override bool ModifiesScores => true;
+
+    /// <summary>
     /// Initializes a new instance of the MaximalMarginalRelevanceReranker class.
     /// </summary>
     /// <param name="getEmbedding">Function to get document embeddings for similarity calculation.</param>
@@ -118,7 +123,7 @@ public class MaximalMarginalRelevanceReranker<T> : RerankerBase<T>
     /// <summary>
     /// Reranks documents using Maximal Marginal Relevance.
     /// </summary>
-    protected override IEnumerable<Document<T>> RerankCore(string query, IEnumerable<Document<T>> documents)
+    protected override IEnumerable<Document<T>> RerankCore(string query, IList<Document<T>> documents)
     {
         var docList = documents.ToList();
         
