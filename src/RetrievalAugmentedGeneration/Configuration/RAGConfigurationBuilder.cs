@@ -23,13 +23,13 @@ namespace AiDotNet.RetrievalAugmentedGeneration.Configuration
             _config = new RAGConfiguration<T>
             {
                 NumericOperations = numericOperations,
-                DocumentStore = new RAGConfiguration<T>.DocumentStoreConfig(),
-                Chunking = new RAGConfiguration<T>.ChunkingConfig(),
-                Embedding = new RAGConfiguration<T>.EmbeddingConfig(),
-                Retrieval = new RAGConfiguration<T>.RetrievalConfig(),
-                Reranking = new RAGConfiguration<T>.RerankingConfig(),
-                QueryExpansion = new RAGConfiguration<T>.QueryExpansionConfig(),
-                ContextCompression = new RAGConfiguration<T>.ContextCompressionConfig()
+                DocumentStore = new DocumentStoreConfig(),
+                Chunking = new ChunkingConfig(),
+                Embedding = new EmbeddingConfig(),
+                Retrieval = new RetrievalConfig(),
+                Reranking = new RerankingConfig(),
+                QueryExpansion = new QueryExpansionConfig(),
+                ContextCompression = new ContextCompressionConfig()
             };
         }
 

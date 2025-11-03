@@ -1,3 +1,4 @@
+using AiDotNet.Helpers;
 using AiDotNet.LinearAlgebra;
 using AiDotNet.RetrievalAugmentedGeneration.Interfaces;
 
@@ -23,6 +24,11 @@ namespace AiDotNet.RetrievalAugmentedGeneration.Embeddings;
 /// <typeparam name="T">The numeric data type used for vector calculations (typically float or double).</typeparam>
 public abstract class EmbeddingModelBase<T> : IEmbeddingModel<T>
 {
+    /// <summary>
+    /// Gets the numeric operations for type T.
+    /// </summary>
+    protected readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();
+
     /// <summary>
     /// Gets the dimensionality of the embedding vectors produced by this model.
     /// </summary>
