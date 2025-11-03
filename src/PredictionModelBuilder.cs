@@ -38,6 +38,7 @@ public class PredictionModelBuilder<T, TInput, TOutput> : IPredictionModelBuilde
     private IOutlierRemoval<T, TInput, TOutput>? _outlierRemoval;
     private IBiasDetector<T>? _biasDetector;
     private IFairnessEvaluator<T>? _fairnessEvaluator;
+    private ILoRAConfiguration<T>? _loraConfiguration;
 
     /// <summary>
     /// Configures which features (input variables) should be used in the model.
@@ -362,6 +363,23 @@ public class PredictionModelBuilder<T, TInput, TOutput> : IPredictionModelBuilde
     public IPredictionModelBuilder<T, TInput, TOutput> ConfigureFairnessEvaluator(IFairnessEvaluator<T> evaluator)
     {
         _fairnessEvaluator = evaluator;
+        return this;
+    }
+
+    /// <summary>
+    /// Configures LoRA (Low-Rank Adaptation) for parameter-efficient fine-tuning.
+    /// </summary>
+    /// <param name="loraConfiguration">The LoRA configuration implementation to use.</param>
+    /// <returns>This builder instance for method chaining.</returns>
+    /// <remarks>
+    /// <b>For Beginners:</b> LoRA enables parameter-efficient fine-tuning by adding small "correction layers"
+    /// to your neural network. This lets you adapt large pre-trained models with 100x fewer parameters,
+    /// making fine-tuning much faster and more memory-efficient. The configuration determines which layers
+    /// get LoRA adaptations and how they behave (rank, scaling, freezing).
+    /// </remarks>
+    public IPredictionModelBuilder<T, TInput, TOutput> ConfigureLoRA(ILoRAConfiguration<T> loraConfiguration)
+    {
+        _loraConfiguration = loraConfiguration;
         return this;
     }
 }

@@ -580,30 +580,31 @@ public class NEAT<T> : NeuralNetworkBase<T>
     }
 
     /// <summary>
-    /// Not implemented for NEAT, as it evolves parameters through natural selection rather than direct updates.
+    /// Updates the connection weights of the best genome using the provided parameter vector.
     /// </summary>
     /// <param name="parameters">A vector containing parameters to update.</param>
-    /// <exception cref="NotImplementedException">Always thrown, as this method is not applicable to NEAT.</exception>
+    /// <exception cref="InvalidOperationException">Thrown when the best genome has no connections.</exception>
+    /// <exception cref="ArgumentException">Thrown when parameter vector length doesn't match connection count.</exception>
     /// <remarks>
     /// <para>
-    /// This method is not implemented for NEAT because NEAT evolves network parameters through the evolutionary
-    /// process rather than through direct parameter updates. Instead of using gradient-based optimization or
-    /// similar techniques, NEAT relies on selection, crossover, and mutation to improve parameters over generations.
+    /// This method allows direct parameter updates to the best genome's connection weights, enabling
+    /// integration with external optimization or parameter management systems. Note that this bypasses
+    /// NEAT's evolutionary mechanisms and should be used carefully.
     /// </para>
-    /// <para><b>For Beginners:</b> This method is not used in NEAT because parameters are evolved, not directly updated.
-    /// 
-    /// In traditional neural networks:
-    /// - Parameters (weights) are directly updated based on gradients
-    /// - You can set exact values for each parameter
-    /// 
-    /// In NEAT:
+    /// <para><b>For Beginners:</b> This method allows direct weight updates when needed.
+    ///
+    /// In traditional NEAT:
     /// - Parameters evolve through natural selection
     /// - Better-performing networks reproduce more often
     /// - Parameters change through crossover and mutation
-    /// 
-    /// Since NEAT uses evolution instead of direct parameter updates,
-    /// this method throws an exception if called. You should use
-    /// the EvolvePopulation method instead to improve the networks.
+    ///
+    /// However, this method allows you to:
+    /// - Directly set connection weights on the best genome
+    /// - Integrate with external optimization algorithms
+    /// - Transfer parameters from other sources
+    ///
+    /// <b>Important:</b> Changes may be lost if the modified genome doesn't survive selection
+    /// in subsequent evolution cycles. For typical NEAT training, use the EvolvePopulation method instead.
     /// </para>
     /// </remarks>
     public override void UpdateParameters(Vector<T> parameters)

@@ -203,62 +203,119 @@ public class NBEATSModel<T> : TimeSeriesModelBase<T>
     /// </remarks>
     protected override void TrainCore(Matrix<T> x, Vector<T> y)
     {
-        // For simplicity, we'll implement a basic training loop
-        // A full implementation would use more sophisticated optimization
-
         int numSamples = x.Rows;
+        T learningRate = NumOps.FromDouble(_options.LearningRate);
 
-        // Simple gradient descent training for demonstration
+        // Training loop with epochs
         for (int epoch = 0; epoch < _options.Epochs; epoch++)
         {
-            T totalLoss = _numOps.Zero;
+            T epochLoss = NumOps.Zero;
 
-            // Process each sample
-            for (int sampleIdx = 0; sampleIdx < numSamples; sampleIdx++)
+            // Process in mini-batches
+            for (int batchStart = 0; batchStart < numSamples; batchStart += _options.BatchSize)
             {
-                Vector<T> input = x.GetRow(sampleIdx);
+                int batchEnd = Math.Min(batchStart + _options.BatchSize, numSamples);
+                int batchSize = batchEnd - batchStart;
 
-                // Forward pass through all blocks
-                Vector<T> residual = input.Clone();
-                Vector<T> aggregatedForecast = new Vector<T>(_options.ForecastHorizon);
+                // Compute gradients for each block using numerical differentiation
+                List<Vector<T>> blockGradients = new List<Vector<T>>();
 
                 for (int blockIdx = 0; blockIdx < _blocks.Count; blockIdx++)
                 {
-                    var (backcast, forecast) = _blocks[blockIdx].Forward(residual);
+                    Vector<T> currentParams = _blocks[blockIdx].GetParameters();
+                    Vector<T> gradient = new Vector<T>(currentParams.Length);
 
-                    // Update residual for next block
-                    for (int i = 0; i < residual.Length; i++)
+                    // Numerical gradient computation (finite differences)
+                    T epsilon = NumOps.FromDouble(1e-7);
+
+                    for (int paramIdx = 0; paramIdx < currentParams.Length; paramIdx++)
                     {
-                        residual[i] = _numOps.Subtract(residual[i], backcast[i]);
+                        // Save original value
+                        T originalValue = currentParams[paramIdx];
+
+                        // Compute loss with parameter + epsilon
+                        currentParams[paramIdx] = NumOps.Add(originalValue, epsilon);
+                        _blocks[blockIdx].SetParameters(currentParams);
+                        T lossPlus = ComputeBatchLoss(x, y, batchStart, batchEnd);
+
+                        // Compute loss with parameter - epsilon
+                        currentParams[paramIdx] = NumOps.Subtract(originalValue, epsilon);
+                        _blocks[blockIdx].SetParameters(currentParams);
+                        T lossMinus = ComputeBatchLoss(x, y, batchStart, batchEnd);
+
+                        // Restore original value
+                        currentParams[paramIdx] = originalValue;
+                        _blocks[blockIdx].SetParameters(currentParams);
+
+                        // Compute gradient: (f(x+h) - f(x-h)) / (2h)
+                        T gradValue = NumOps.Divide(
+                            NumOps.Subtract(lossPlus, lossMinus),
+                            NumOps.Multiply(NumOps.FromDouble(2.0), epsilon)
+                        );
+                        gradient[paramIdx] = gradValue;
                     }
 
-                    // Accumulate forecast
-                    for (int i = 0; i < aggregatedForecast.Length; i++)
-                    {
-                        aggregatedForecast[i] = _numOps.Add(aggregatedForecast[i], forecast[i]);
-                    }
+                    blockGradients.Add(gradient);
                 }
 
-                // Calculate loss (simplified - just the first forecast step for now)
-                T target = y[sampleIdx];
-                T prediction = aggregatedForecast[0];
-                T error = _numOps.Subtract(prediction, target);
-                T loss = _numOps.Multiply(error, error);
-                totalLoss = _numOps.Add(totalLoss, loss);
+                // Update parameters using computed gradients
+                for (int blockIdx = 0; blockIdx < _blocks.Count; blockIdx++)
+                {
+                    Vector<T> currentParams = _blocks[blockIdx].GetParameters();
+                    Vector<T> gradient = blockGradients[blockIdx];
+
+                    for (int paramIdx = 0; paramIdx < currentParams.Length; paramIdx++)
+                    {
+                        // Gradient descent: param = param - learningRate * gradient
+                        T update = NumOps.Multiply(learningRate, gradient[paramIdx]);
+                        currentParams[paramIdx] = NumOps.Subtract(currentParams[paramIdx], update);
+                    }
+
+                    _blocks[blockIdx].SetParameters(currentParams);
+                }
+
+                // Accumulate batch loss for monitoring
+                epochLoss = NumOps.Add(epochLoss, ComputeBatchLoss(x, y, batchStart, batchEnd));
             }
 
-            // Average loss for this epoch
-            T avgLoss = _numOps.Divide(totalLoss, _numOps.FromDouble(numSamples));
+            // Optional: Could log epoch loss here for debugging
+            // epochLoss now contains the total loss for this epoch
+        }
+    }
 
-            // Print progress every 10 epochs
-            if (epoch % 10 == 0)
+    /// <summary>
+    /// Computes the mean squared error loss for a batch of samples.
+    /// </summary>
+    /// <param name="x">Input features matrix.</param>
+    /// <param name="y">Target values vector.</param>
+    /// <param name="batchStart">Starting index of the batch (inclusive).</param>
+    /// <param name="batchEnd">Ending index of the batch (exclusive).</param>
+    /// <returns>The mean squared error for the batch.</returns>
+    private T ComputeBatchLoss(Matrix<T> x, Vector<T> y, int batchStart, int batchEnd)
+    {
+        T totalLoss = NumOps.Zero;
+        int batchSize = batchEnd - batchStart;
+
+        for (int sampleIdx = batchStart; sampleIdx < batchEnd; sampleIdx++)
+        {
+            // Extract input vector for this sample
+            Vector<T> input = new Vector<T>(_options.LookbackWindow);
+            for (int j = 0; j < _options.LookbackWindow; j++)
             {
-                Console.WriteLine($"Epoch {epoch}/{_options.Epochs}, Loss: {avgLoss}");
+                input[j] = x[sampleIdx, j];
             }
+
+            // Get prediction
+            T prediction = PredictSingle(input);
+
+            // Compute squared error
+            T error = NumOps.Subtract(prediction, y[sampleIdx]);
+            T squaredError = NumOps.Multiply(error, error);
+            totalLoss = NumOps.Add(totalLoss, squaredError);
         }
 
-        // Store the final parameters
-        ModelParameters = GetParameters();
+        // Return mean squared error
+        return NumOps.Divide(totalLoss, NumOps.FromDouble(batchSize));
     }
 
     /// <summary>
