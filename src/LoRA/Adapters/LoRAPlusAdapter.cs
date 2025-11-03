@@ -313,76 +313,7 @@ public class LoRAPlusAdapter<T> : LoRAAdapterBase<T>
     /// </remarks>
     public override ILayer<T> MergeToOriginalLayer()
     {
-        // LoRA+ merging is identical to standard LoRA
-        // For Dense layers, delegate to DenseLoRAAdapter logic
-        DenseLayer<T>? denseBase = _baseLayer as DenseLayer<T>;
-        FullyConnectedLayer<T>? fcBase = _baseLayer as FullyConnectedLayer<T>;
-
-        if (denseBase == null && fcBase == null)
-        {
-            throw new InvalidOperationException("LoRAPlusAdapter currently only supports DenseLayer or FullyConnectedLayer base layers");
-        }
-
-        // Get the LoRA weight contribution
-        Matrix<T> loraWeights = _loraLayer.MergeWeights();
-
-        // Get base layer parameters
-        Vector<T> baseParams = _baseLayer.GetParameters();
-
-        // Calculate dimensions
-        int inputSize = GetInputShape()[0];
-        int outputSize = GetOutputShape()[0];
-        int weightCount = inputSize * outputSize;
-
-        // Create new parameters with merged weights
-        Vector<T> mergedParams = new Vector<T>(baseParams.Length);
-
-        // Merge weights
-        for (int i = 0; i < weightCount; i++)
-        {
-            int row = i / inputSize;
-            int col = i % inputSize;
-            mergedParams[i] = NumOps.Add(baseParams[i], loraWeights[row, col]);
-        }
-
-        // Copy biases unchanged
-        for (int i = weightCount; i < baseParams.Length; i++)
-        {
-            mergedParams[i] = baseParams[i];
-        }
-
-        // Use helper method to clone base layer and preserve activation function
-        return CreateMergedLayerWithClone(mergedParams);
-    }
-
-    /// <summary>
-    /// Updates the parameter vector from the current layer states.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// This private helper method synchronizes the adapter's parameter vector with the current state
-    /// of the base and LoRA layers after updates.
-    /// </para>
-    /// </remarks>
-    private void UpdateParametersFromLayers()
-    {
-        int idx = 0;
-
-        // If base layer is not frozen, pack its parameters first
-        if (!_freezeBaseLayer)
-        {
-            Vector<T> baseParams = _baseLayer.GetParameters();
-            for (int i = 0; i < baseParams.Length; i++)
-            {
-                Parameters[idx++] = baseParams[i];
-            }
-        }
-
-        // Pack LoRA parameters
-        Vector<T> loraParams = _loraLayer.GetParameters();
-        for (int i = 0; i < loraParams.Length; i++)
-        {
-            Parameters[idx++] = loraParams[i];
-        }
+        // LoRA+ merging is identical to standard LoRA - use base class helper
+        return MergeToDenseOrFullyConnected();
     }
 }

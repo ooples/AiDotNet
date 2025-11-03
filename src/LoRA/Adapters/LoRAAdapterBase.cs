@@ -464,6 +464,99 @@ public abstract class LoRAAdapterBase<T> : LayerBase<T>, ILoRAAdapter<T>
     }
 
     /// <summary>
+    /// Merges LoRA weights into the base layer for DenseLayer or FullyConnectedLayer.
+    /// </summary>
+    /// <returns>A new layer with merged weights.</returns>
+    /// <exception cref="InvalidOperationException">Thrown when base layer is not DenseLayer or FullyConnectedLayer.</exception>
+    /// <remarks>
+    /// <para>
+    /// This helper method implements the standard LoRA merge logic for Dense and FullyConnected layers:
+    /// 1. Get LoRA weight contribution from low-rank matrices
+    /// 2. Add to base layer weights element-wise
+    /// 3. Preserve biases unchanged
+    /// 4. Create new layer with merged parameters
+    /// </para>
+    /// <para><b>For Beginners:</b> This combines the base weights with the LoRA adaptation,
+    /// creating a single layer that doesn't need the adapter anymore. Useful for deployment!
+    /// </para>
+    /// </remarks>
+    protected ILayer<T> MergeToDenseOrFullyConnected()
+    {
+        DenseLayer<T>? denseBase = _baseLayer as DenseLayer<T>;
+        FullyConnectedLayer<T>? fcBase = _baseLayer as FullyConnectedLayer<T>;
+
+        if (denseBase == null && fcBase == null)
+        {
+            throw new InvalidOperationException(
+                $"{GetType().Name} merging only supports DenseLayer or FullyConnectedLayer base layers");
+        }
+
+        // Get the LoRA weight contribution
+        Matrix<T> loraWeights = _loraLayer.MergeWeights();
+
+        // Get base layer parameters
+        Vector<T> baseParams = _baseLayer.GetParameters();
+
+        // Calculate dimensions
+        int inputSize = GetInputShape()[0];
+        int outputSize = GetOutputShape()[0];
+        int weightCount = inputSize * outputSize;
+
+        // Create new parameters with merged weights
+        Vector<T> mergedParams = new Vector<T>(baseParams.Length);
+
+        // Merge weights
+        for (int i = 0; i < weightCount; i++)
+        {
+            int row = i / inputSize;
+            int col = i % inputSize;
+            mergedParams[i] = NumOps.Add(baseParams[i], loraWeights[row, col]);
+        }
+
+        // Copy biases unchanged
+        for (int i = weightCount; i < baseParams.Length; i++)
+        {
+            mergedParams[i] = baseParams[i];
+        }
+
+        // Use helper to clone base layer and preserve activation function
+        return CreateMergedLayerWithClone(mergedParams);
+    }
+
+    /// <summary>
+    /// Updates the parameter vector from the current base and LoRA layer states.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// This helper method synchronizes the adapter's parameter vector with the current state
+    /// of the base and LoRA layers after updates. It packs parameters in the standard order:
+    /// base layer parameters (if not frozen) followed by LoRA parameters.
+    /// </para>
+    /// <para><b>For Beginners:</b> This ensures the adapter's parameter vector stays in sync
+    /// with its component layers. Called after parameter updates.
+    /// </para>
+    /// </remarks>
+    protected void UpdateParametersFromLayers()
+    {
+        int idx = 0;
+
+        if (!_freezeBaseLayer)
+        {
+            Vector<T> baseParams = _baseLayer.GetParameters();
+            for (int i = 0; i < baseParams.Length; i++)
+            {
+                Parameters[idx++] = baseParams[i];
+            }
+        }
+
+        Vector<T> loraParams = _loraLayer.GetParameters();
+        for (int i = 0; i < loraParams.Length; i++)
+        {
+            Parameters[idx++] = loraParams[i];
+        }
+    }
+
+    /// <summary>
     /// Resets the internal state of both the base layer and LoRA layer.
     /// </summary>
     /// <remarks>
