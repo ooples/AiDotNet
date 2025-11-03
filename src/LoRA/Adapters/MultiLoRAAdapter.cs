@@ -594,6 +594,13 @@ public class MultiLoRAAdapter<T> : LoRAAdapterBase<T>
     /// </summary>
     private void UpdateParameterGradientsFromLayers()
     {
+        // Guard against incomplete initialization
+        if (_taskAdapters == null)
+        {
+            ParameterGradients = new Vector<T>(ParameterCount);
+            return;
+        }
+
         ParameterGradients = new Vector<T>(ParameterCount);
         int idx = 0;
 
@@ -608,10 +615,18 @@ public class MultiLoRAAdapter<T> : LoRAAdapterBase<T>
         }
 
         // All task adapters' gradients (in same order as GetParameters/SetParameters)
-        LoRALayer<T> currentAdapter = _taskAdapters[_currentTask];
+        // Guard against invalid current task
+        LoRALayer<T>? currentAdapter = null;
+        if (_currentTask != null && _taskAdapters.ContainsKey(_currentTask))
+        {
+            currentAdapter = _taskAdapters[_currentTask];
+        }
+
         foreach (var adapter in _taskAdapters.Values)
         {
-            Vector<T>? grads = adapter == currentAdapter ? adapter.GetParameterGradients() : null;
+            Vector<T>? grads = (adapter == currentAdapter && currentAdapter != null)
+                ? adapter.GetParameterGradients()
+                : null;
 
             for (int i = 0; i < adapter.ParameterCount; i++)
             {
