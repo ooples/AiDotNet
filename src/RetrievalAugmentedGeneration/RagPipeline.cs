@@ -121,9 +121,8 @@ public class RagPipeline
 
         // Step 1: Retrieve documents (honor metadata filters in both branches)
         var filters = metadataFilters ?? new Dictionary<string, object>();
-        var retrievedDocs = topK.HasValue
-            ? _retriever.Retrieve(query, topK.Value, filters)
-            : _retriever.Retrieve(query, _retriever.DefaultTopK, filters);
+        var effectiveTopK = topK ?? _retriever.DefaultTopK;
+        var retrievedDocs = _retriever.Retrieve(query, effectiveTopK, filters);
 
         var retrievedList = retrievedDocs.ToList();
 
@@ -206,9 +205,9 @@ public class RagPipeline
         if (string.IsNullOrWhiteSpace(query))
             throw new ArgumentException("Query cannot be null or empty", nameof(query));
 
-        var docs = topK.HasValue
-            ? _retriever.Retrieve(query, topK.Value, metadataFilters ?? new Dictionary<string, object>())
-            : _retriever.Retrieve(query);
+        var filters = metadataFilters ?? new Dictionary<string, object>();
+        var effectiveTopK = topK ?? _retriever.DefaultTopK;
+        var docs = _retriever.Retrieve(query, effectiveTopK, filters);
 
         if (applyReranking)
         {
