@@ -216,7 +216,7 @@ public class MaximalMarginalRelevanceReranker<T> : RerankerBase<T>
     /// <summary>
     /// Calculates cosine similarity between two vectors.
     /// </summary>
-    private double CalculateCosineSimilarity(Vector<T> a, Vector<T> b)
+    private double CalculateCosine Similarity(Vector<T> a, Vector<T> b)
     {
         if (a == null || b == null)
             throw new ArgumentNullException("Vectors cannot be null");
@@ -224,6 +224,7 @@ public class MaximalMarginalRelevanceReranker<T> : RerankerBase<T>
         if (a.Length != b.Length)
             throw new ArgumentException("Vectors must have the same length");
 
-        return StatisticsHelper<T>.CosineSimilarity(a, b);
+        var similarityT = StatisticsHelper<T>.CosineSimilarity(a, b);
+        return Convert.ToDouble(similarityT);
     }
 }
