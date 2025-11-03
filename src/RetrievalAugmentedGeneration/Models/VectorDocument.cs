@@ -30,7 +30,7 @@ namespace AiDotNet.RetrievalAugmentedGeneration.Models;
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric data type used for the vector embedding (typically float or double).</typeparam>
-public class VectorDocument<T> where T : struct
+public class VectorDocument<T>
 {
     /// <summary>
     /// Gets or sets the document containing the text content and metadata.

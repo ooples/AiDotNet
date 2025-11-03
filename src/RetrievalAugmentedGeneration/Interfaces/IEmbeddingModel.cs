@@ -24,7 +24,7 @@ namespace AiDotNet.RetrievalAugmentedGeneration.Interfaces;
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric data type used for vector calculations (typically float or double).</typeparam>
-public interface IEmbeddingModel<T> where T : struct
+public interface IEmbeddingModel<T>
 {
     /// <summary>
     /// Gets the dimensionality of the embedding vectors produced by this model.

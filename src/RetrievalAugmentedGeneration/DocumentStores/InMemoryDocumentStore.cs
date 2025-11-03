@@ -35,7 +35,7 @@ namespace AiDotNet.RetrievalAugmentedGeneration.DocumentStores;
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric data type used for vector calculations (typically float or double).</typeparam>
-public class InMemoryDocumentStore<T> : DocumentStoreBase<T> where T : struct
+public class InMemoryDocumentStore<T> : DocumentStoreBase<T>
 {
     private readonly Dictionary<string, VectorDocument<T>> _documents;
     private int _vectorDimension;
