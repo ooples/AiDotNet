@@ -631,9 +631,14 @@ public class MultiLoRAAdapter<T> : LoRAAdapterBase<T>
     public override void ResetState()
     {
         _baseLayer.ResetState();
-        foreach (var adapter in _taskAdapters.Values)
+
+        // Defensive null guard for task adapters
+        if (_taskAdapters != null)
         {
-            adapter.ResetState();
+            foreach (var adapter in _taskAdapters.Values)
+            {
+                adapter.ResetState();
+            }
         }
     }
 }
