@@ -444,12 +444,16 @@ public class MultiLoRAAdapter<T> : LoRAAdapterBase<T>
         }
 
         // All task adapters' parameters
-        foreach (var adapter in _taskAdapters.Values)
+        // Guard against null _taskAdapters during base constructor calls
+        if (_taskAdapters != null)
         {
-            Vector<T> taskParams = adapter.GetParameters();
-            for (int i = 0; i < taskParams.Length; i++)
+            foreach (var adapter in _taskAdapters.Values)
             {
-                parameters[idx++] = taskParams[i];
+                Vector<T> taskParams = adapter.GetParameters();
+                for (int i = 0; i < taskParams.Length; i++)
+                {
+                    parameters[idx++] = taskParams[i];
+                }
             }
         }
 
