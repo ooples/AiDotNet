@@ -90,8 +90,8 @@ public class Document<T>
     /// <para>
     /// The relevance score indicates how well this document matches a query.
     /// Higher scores indicate stronger relevance. The score scale and interpretation
-    /// depend on the retrieval or reranking algorithm used. This value is null for
-    /// documents that haven't been scored.
+    /// depend on the retrieval or reranking algorithm used. Use HasRelevanceScore to check
+    /// if a score has been assigned before accessing this value.
     /// </para>
     /// <para><b>For Beginners:</b> This is like a match percentage showing how relevant this document is.
     /// 
@@ -99,12 +99,17 @@ public class Document<T>
     /// - Score 0.95: Almost perfect match, highly relevant
     /// - Score 0.50: Somewhat relevant
     /// - Score 0.10: Barely relevant
-    /// - null: Not scored yet
+    /// - Check HasRelevanceScore first to see if scored
     /// 
     /// Documents with higher scores are more likely to contain the answer to your question.
     /// </para>
     /// </remarks>
-    public T? RelevanceScore { get; set; }
+    public T RelevanceScore { get; set; }
+
+    /// <summary>
+    /// Gets or sets whether this document has a relevance score assigned.
+    /// </summary>
+    public bool HasRelevanceScore { get; set; }
 
     /// <summary>
     /// Initializes a new instance of the Document class.
