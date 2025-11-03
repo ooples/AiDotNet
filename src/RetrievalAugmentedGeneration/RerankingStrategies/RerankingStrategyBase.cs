@@ -1,4 +1,5 @@
 using System;
+using AiDotNet.RetrievalAugmentedGeneration.Models;
 using System.Collections.Generic;
 using AiDotNet.Helpers;
 
