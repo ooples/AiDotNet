@@ -37,7 +37,7 @@ namespace AiDotNet.RetrievalAugmentedGeneration.Interfaces;
 /// <typeparam name="TInput">The input data type for the model.</typeparam>
 /// <typeparam name="TOutput">The output data type for the model.</typeparam>
 /// <typeparam name="TMetadata">The metadata type for model information.</typeparam>
-public interface IGenerator<TInput, TOutput, TMetadata> : IModel<TInput, TOutput, TMetadata>
+public interface IGenerator
 {
     /// <summary>
     /// Generates a text response based on a prompt.
