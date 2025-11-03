@@ -247,10 +247,12 @@ public class LoRAXSAdapter<T> : LoRAAdapterBase<T>
     {
         get
         {
-            int baseParams = (!_freezeBaseLayer && _baseLayer != null) ? _baseLayer.ParameterCount : 0;
-            // Only the R matrix is trainable: rank × rank elements
-            int rMatrixParams = Rank * Rank;
-            return baseParams + rMatrixParams;
+            // The base class expects the full parameter count, including the LoRA layer,
+            // for its internal buffer allocations and parameter management.
+            // LoRA-XS only trains the R matrix, but we must satisfy the base class's expectations.
+            int baseLayerParams = (!_freezeBaseLayer && _baseLayer != null) ? _baseLayer.ParameterCount : 0;
+            int loraLayerParams = _loraLayer?.ParameterCount ?? (GetInputShape()[0] * Rank + GetOutputShape()[0] * Rank);
+            return baseLayerParams + loraLayerParams;
         }
     }
 
