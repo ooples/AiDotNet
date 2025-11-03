@@ -5,6 +5,7 @@ namespace AiDotNet.RetrievalAugmentedGeneration.Interfaces;
 /// <summary>
 /// Defines the contract for reranking retrieved documents to improve relevance ordering.
 /// </summary>
+/// <typeparam name="T">The numeric data type used for relevance scoring.</typeparam>
 /// <remarks>
 /// <para>
 /// A reranker refines the ordering of initially retrieved documents using more sophisticated
@@ -31,7 +32,7 @@ namespace AiDotNet.RetrievalAugmentedGeneration.Interfaces;
 /// more sophisticated analysis, ensuring the best results appear first.
 /// </para>
 /// </remarks>
-public interface IReranker
+public interface IReranker<T>
 {
     /// <summary>
     /// Reranks a collection of documents based on their relevance to a query.
