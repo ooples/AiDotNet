@@ -196,7 +196,11 @@ public class HybridRetriever<T> : RetrieverBase<T>
 
         // Sort by fused score and return
         return documentScores
-            .OrderByDescending(kvp => kvp.Value, Comparer<T>.Create((a, b) => _numOps.Compare(a, b)))
+            .OrderByDescending(kvp => kvp.Value, Comparer<T>.Create((a, b) => {
+                if (_numOps.GreaterThan(a, b)) return 1;
+                if (_numOps.LessThan(a, b)) return -1;
+                return 0;
+            }))
             .Select(kvp =>
             {
                 var doc = allDocs[kvp.Key];
@@ -245,7 +249,11 @@ public class HybridRetriever<T> : RetrieverBase<T>
 
         // Sort and return
         return documentScores
-            .OrderByDescending(kvp => kvp.Value, Comparer<T>.Create((a, b) => _numOps.Compare(a, b)))
+            .OrderByDescending(kvp => kvp.Value, Comparer<T>.Create((a, b) => {
+                if (_numOps.GreaterThan(a, b)) return 1;
+                if (_numOps.LessThan(a, b)) return -1;
+                return 0;
+            }))
             .Select(kvp =>
             {
                 var doc = allDocs[kvp.Key];
@@ -278,7 +286,7 @@ public class HybridRetriever<T> : RetrieverBase<T>
             if (documentScores.ContainsKey(doc.Id))
             {
                 var currentScore = documentScores[doc.Id];
-                if (_numOps.Compare(doc.RelevanceScore, currentScore) > 0)
+                if (_numOps.GreaterThan(doc.RelevanceScore, currentScore))
                 {
                     documentScores[doc.Id] = doc.RelevanceScore;
                 }
@@ -294,7 +302,11 @@ public class HybridRetriever<T> : RetrieverBase<T>
 
         // Sort and return
         return documentScores
-            .OrderByDescending(kvp => kvp.Value, Comparer<T>.Create((a, b) => _numOps.Compare(a, b)))
+            .OrderByDescending(kvp => kvp.Value, Comparer<T>.Create((a, b) => {
+                if (_numOps.GreaterThan(a, b)) return 1;
+                if (_numOps.LessThan(a, b)) return -1;
+                return 0;
+            }))
             .Select(kvp =>
             {
                 var doc = allDocs[kvp.Key];

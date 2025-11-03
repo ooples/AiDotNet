@@ -114,7 +114,11 @@ public class DiversityReranker<T> : RerankerBase<T>
 
         // Start with the most relevant document
         var firstDoc = remainingDocs.OrderByDescending(d => d.RelevanceScore, 
-            Comparer<T>.Create((a, b) => NumOps.Compare(a, b))).First();
+            Comparer<T>.Create((a, b) => {
+                if (NumOps.GreaterThan(a, b)) return 1;
+                if (NumOps.LessThan(a, b)) return -1;
+                return 0;
+            })).First();
         rerankedDocs.Add(firstDoc);
         remainingDocs.Remove(firstDoc);
 
