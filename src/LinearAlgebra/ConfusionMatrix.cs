@@ -43,8 +43,18 @@ namespace AiDotNet.LinearAlgebra;
 public class ConfusionMatrix<T> : MatrixBase<T>
 {
     /// <summary>
-    /// Gets the number of classes in the confusion matrix.
+    /// Gets the number of classes represented in the confusion matrix.
     /// </summary>
+    /// <remarks>
+    /// <para>
+    /// For multi-class classification, this property returns the dimension <c>N</c> of the NxN confusion matrix,
+    /// where each class is represented by a row and a column.
+    /// </para>
+    /// <para>
+    /// <b>For Beginners:</b> This tells you how many categories your model is trying to predict.
+    /// For example, if you are classifying images of digits (0-9), <c>ClassCount</c> will be 10.
+    /// </para>
+    /// </remarks>
     public int ClassCount => Rows;
     /// <summary>
     /// Gets the number of true positive predictions (correctly predicted positive cases).
