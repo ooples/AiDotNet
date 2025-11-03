@@ -163,7 +163,7 @@ public abstract class ChunkingStrategyBase : IChunkingStrategy
             position += _chunkSize - _chunkOverlap;
 
             // If next position would go past the end and we've already captured the last chunk, stop
-            if (position >= textLength && chunks.Count > 0 && chunks[^1].Item3 == textLength)
+            if (position >= textLength && chunks.Count > 0 && chunks[chunks.Count - 1].Item3 == textLength)
                 break;
         }
 
@@ -196,7 +196,7 @@ public abstract class ChunkingStrategyBase : IChunkingStrategy
     /// </remarks>
     protected IEnumerable<(string Chunk, int StartPosition, int EndPosition)> SplitOnSentences(
         string text, 
-        char[] sentenceEndings = null)
+        char[]? sentenceEndings = null)
     {
         sentenceEndings ??= new[] { '.', '!', '?' };
         

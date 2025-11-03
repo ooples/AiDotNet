@@ -63,10 +63,7 @@ public class AnswerSimilarityMetric : RAGMetricBase
     /// <returns>Similarity score (0-1).</returns>
     protected override double EvaluateCore(GroundedAnswer answer, string? groundTruth)
     {
-        if (string.IsNullOrWhiteSpace(groundTruth))
-            return 0.0;
-
-        // Use Jaccard similarity for word overlap
-        return JaccardSimilarity(answer.Answer, groundTruth);
+        // Ground truth is guaranteed to be non-null by base class validation
+        return JaccardSimilarity(answer.Answer, groundTruth!);
     }
 }

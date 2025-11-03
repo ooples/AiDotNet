@@ -79,7 +79,7 @@ public class ContextCoverageMetric : RAGMetricBase
         // If ground truth is provided, check if sources contain ground truth information
         if (!string.IsNullOrWhiteSpace(groundTruth))
         {
-            return EvaluateWithGroundTruth(answer, groundTruth);
+            return EvaluateWithGroundTruth(answer, groundTruth!);
         }
 
         // Without ground truth, use heuristics based on relevance scores

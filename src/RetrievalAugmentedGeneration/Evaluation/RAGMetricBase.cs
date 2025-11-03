@@ -115,9 +115,9 @@ public abstract class RAGMetricBase : IRAGMetric
         if (string.IsNullOrWhiteSpace(text))
             return new HashSet<string>();
 
-        return text.ToLowerInvariant()
-            .Split(new[] { ' ', '\t', '\n', '\r', '.', ',', ';', ':', '!', '?' },
-                   StringSplitOptions.RemoveEmptyEntries)
-            .ToHashSet();
+        return new HashSet<string>(
+            text.ToLowerInvariant()
+                .Split(new[] { ' ', '\t', '\n', '\r', '.', ',', ';', ':', '!', '?' },
+                       StringSplitOptions.RemoveEmptyEntries));
     }
 }

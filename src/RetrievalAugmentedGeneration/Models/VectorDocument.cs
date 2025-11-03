@@ -64,7 +64,7 @@ public class VectorDocument<T> where T : struct
     /// - "cat" and "democracy" would be far apart (different meaning)
     /// </para>
     /// </remarks>
-    public Vector<T> Embedding { get; set; } = Vector<T>.Empty;
+    public Vector<T> Embedding { get; set; } = Vector<T>.Empty();
 
     /// <summary>
     /// Initializes a new instance of the VectorDocument class.
