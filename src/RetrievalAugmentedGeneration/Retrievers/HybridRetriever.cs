@@ -336,6 +336,12 @@ public class HybridRetriever<T> : RetrieverBase<T>
 
         var minScore = docsWithScores.Min(d => d.RelevanceScore);
         var maxScore = docsWithScores.Max(d => d.RelevanceScore);
+        
+        if (minScore == null || maxScore == null)
+        {
+            return documents;
+        }
+        
         var range = _numOps.Subtract(maxScore, minScore);
 
         // If all scores are the same, return uniform scores

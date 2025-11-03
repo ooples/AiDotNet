@@ -195,15 +195,15 @@ public class DiversityReranker<T> : RerankerBase<T>
         }
 
         // Tokenize and create word sets
-        var words1 = text1.ToLowerInvariant()
-            .Split(new[] { ' ', '\t', '\n', '\r', '.', ',', ';', ':', '!', '?' }, 
-                StringSplitOptions.RemoveEmptyEntries)
-            .ToHashSet();
+        var words1 = new HashSet<string>(
+            text1.ToLowerInvariant()
+                .Split(new[] { ' ', '\t', '\n', '\r', '.', ',', ';', ':', '!', '?' }, 
+                    StringSplitOptions.RemoveEmptyEntries));
 
-        var words2 = text2.ToLowerInvariant()
-            .Split(new[] { ' ', '\t', '\n', '\r', '.', ',', ';', ':', '!', '?' }, 
-                StringSplitOptions.RemoveEmptyEntries)
-            .ToHashSet();
+        var words2 = new HashSet<string>(
+            text2.ToLowerInvariant()
+                .Split(new[] { ' ', '\t', '\n', '\r', '.', ',', ';', ':', '!', '?' }, 
+                    StringSplitOptions.RemoveEmptyEntries));
 
         // Calculate Jaccard similarity: |intersection| / |union|
         var intersection = words1.Intersect(words2).Count();
