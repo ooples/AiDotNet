@@ -47,12 +47,14 @@
 	</ItemGroup>
 
 	<ItemGroup>
-	  <Folder Include="Caching\" />
-	  <Folder Include="GaussianProcesses\" />
-	  <Folder Include="Exceptions\" />
-	  <Folder Include="Validation\" />
-	  <Folder Include="WindowFunctions\" />
-	  <Folder Include="WaveletFunctions\" />
+		<Folder Include="Caching\" />
+		<Folder Include="GaussianProcesses\" />
+		<Folder Include="Exceptions\" />
+		<Folder Include="Validation\" />
+		<Folder Include="WindowFunctions\" />
+		<Folder Include="WaveletFunctions\" />
+		<Folder Include="Models\Generative\Diffusion\" />
+		<Folder Include="MetaLearning\" />
 	</ItemGroup>
 
 </Project>
