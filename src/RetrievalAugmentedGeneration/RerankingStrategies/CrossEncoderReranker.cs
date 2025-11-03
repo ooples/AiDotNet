@@ -48,7 +48,7 @@ namespace AiDotNet.RetrievalAugmentedGeneration.RerankingStrategies
             }
 
             var reranked = scoredDocs
-                .OrderByDescending(x => _Convert.ToDouble(x.score))
+                .OrderByDescending(x => Convert.ToDouble(x.score))
                 .Take(topK)
                 .Select(x =>
                 {
