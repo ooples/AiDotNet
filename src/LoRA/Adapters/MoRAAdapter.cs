@@ -463,6 +463,72 @@ public class MoRAAdapter<T> : LoRAAdapterBase<T>
         {
             _baseLayer.UpdateParameters(learningRate);
         }
+
+        // Rebuild Parameters buffer to reflect updated _matrixM and _baseLayer
+        RebuildParameterSnapshot();
+    }
+
+    /// <summary>
+    /// Gets the current parameter values (base layer + MoRA matrix M).
+    /// </summary>
+    /// <returns>A cloned vector containing all parameters.</returns>
+    /// <remarks>
+    /// <para>
+    /// Since MoRA does not use the standard LoRA layer architecture, this method overrides
+    /// the base implementation to pack parameters from the base layer (if not frozen) and
+    /// the square matrix M directly.
+    /// </para>
+    /// </remarks>
+    public override Vector<T> GetParameters()
+    {
+        return Parameters.Clone();
+    }
+
+    /// <summary>
+    /// Sets the parameter values (base layer + MoRA matrix M).
+    /// </summary>
+    /// <param name="parameters">Parameter vector to set.</param>
+    /// <exception cref="ArgumentException">Thrown if parameter count doesn't match ParameterCount.</exception>
+    /// <remarks>
+    /// <para>
+    /// This method unpacks the parameter vector into the base layer (if not frozen) and
+    /// the square matrix M. The parameter layout is:
+    /// - Base layer parameters (if !_freezeBaseLayer): [0 .. baseLayerParamCount)
+    /// - Matrix M parameters (row-major): [baseLayerParamCount .. ParameterCount)
+    /// </para>
+    /// </remarks>
+    public override void SetParameters(Vector<T> parameters)
+    {
+        if (parameters.Length != ParameterCount)
+        {
+            throw new ArgumentException($"Expected {ParameterCount} parameters, but got {parameters.Length}", nameof(parameters));
+        }
+
+        // Clone into Parameters buffer
+        Parameters = parameters.Clone();
+
+        int idx = 0;
+
+        // Unpack base layer parameters if not frozen
+        if (!_freezeBaseLayer)
+        {
+            int baseParamCount = _baseLayer.ParameterCount;
+            Vector<T> baseParams = new Vector<T>(baseParamCount);
+            for (int i = 0; i < baseParamCount; i++)
+            {
+                baseParams[i] = parameters[idx++];
+            }
+            _baseLayer.SetParameters(baseParams);
+        }
+
+        // Unpack matrix M parameters (row-major order)
+        for (int i = 0; i < _matrixM.Rows; i++)
+        {
+            for (int j = 0; j < _matrixM.Columns; j++)
+            {
+                _matrixM[i, j] = parameters[idx++];
+            }
+        }
     }
 
     public override int ParameterCount
