@@ -7,6 +7,7 @@ namespace AiDotNet.RetrievalAugmentedGeneration.Generators;
 /// <summary>
 /// A simple stub generator for testing and development that creates template-based answers.
 /// </summary>
+/// <typeparam name="T">The numeric data type used for relevance scoring.</typeparam>
 /// <remarks>
 /// <para>
 /// This implementation creates simple grounded answers by concatenating context documents
@@ -33,7 +34,7 @@ namespace AiDotNet.RetrievalAugmentedGeneration.Generators;
 /// This enables development on Issue #284 without waiting for transformer integration.
 /// </para>
 /// </remarks>
-public class StubGenerator : IGenerator
+public class StubGenerator<T> : IGenerator<T>
 {
     private readonly int _maxContextTokens;
     private readonly int _maxGenerationTokens;
@@ -84,20 +85,20 @@ public class StubGenerator : IGenerator
     /// <param name="query">The user's original query or question.</param>
     /// <param name="context">The retrieved documents providing context for the answer.</param>
     /// <returns>A grounded answer with the generated text, source documents, and extracted citations.</returns>
-    public GroundedAnswer GenerateGrounded(string query, IEnumerable<Document> context)
+    public GroundedAnswer<T> GenerateGrounded(string query, IEnumerable<Document<T>> context)
     {
         if (string.IsNullOrWhiteSpace(query))
             throw new ArgumentException("Query cannot be null or empty", nameof(query));
 
-        var contextList = context?.ToList() ?? new List<Document>();
+        var contextList = context?.ToList() ?? new List<Document<T>>();
         
         if (contextList.Count == 0)
         {
-            return new GroundedAnswer
+            return new GroundedAnswer<T>
             {
                 Query = query,
                 Answer = "I don't have enough information to answer this question.",
-                SourceDocuments = new List<Document>(),
+                SourceDocuments = new List<Document<T>>(),
                 Citations = new List<string>(),
                 ConfidenceScore = 0.0
             };
@@ -136,7 +137,7 @@ public class StubGenerator : IGenerator
         // Clamp confidence score to [0,1] range (compatible with older .NET versions)
         var confidenceScore = Math.Min(1.0, Math.Max(0.0, avgScore));
 
-        return new GroundedAnswer
+        return new GroundedAnswer<T>
         {
             Query = query,
             Answer = answerBuilder.ToString().Trim(),

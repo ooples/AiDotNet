@@ -119,10 +119,10 @@ public class InMemoryDocumentStore<T> : DocumentStoreBase<T>
     /// <param name="topK">The validated number of documents to return.</param>
     /// <param name="metadataFilters">The validated metadata filters.</param>
     /// <returns>Top-k similar documents ordered by similarity score.</returns>
-    protected override IEnumerable<Document> GetSimilarCore(Vector<T> queryVector, int topK, Dictionary<string, object> metadataFilters)
+    protected override IEnumerable<Document<T>> GetSimilarCore(Vector<T> queryVector, int topK, Dictionary<string, object> metadataFilters)
     {
         // Calculate similarity scores for all documents
-        var scoredDocuments = new List<(Document Document, double Score)>();
+        var scoredDocuments = new List<(Document<T> Document, T Score)>();
 
         var matchingDocuments = _documents.Values
             .Where(vectorDoc => MatchesFilters(vectorDoc.Document, metadataFilters));
@@ -131,7 +131,7 @@ public class InMemoryDocumentStore<T> : DocumentStoreBase<T>
         {
             // Calculate cosine similarity using StatisticsHelper
             var similarity = StatisticsHelper<T>.CosineSimilarity(queryVector, vectorDoc.Embedding);
-            scoredDocuments.Add((vectorDoc.Document, Convert.ToDouble(similarity)));
+            scoredDocuments.Add((vectorDoc.Document, similarity));
         }
 
         // Sort by similarity (descending) and take top K
@@ -153,7 +153,7 @@ public class InMemoryDocumentStore<T> : DocumentStoreBase<T>
     /// </summary>
     /// <param name="documentId">The validated document ID.</param>
     /// <returns>The document if found; otherwise, null.</returns>
-    protected override Document? GetByIdCore(string documentId)
+    protected override Document<T>? GetByIdCore(string documentId)
     {
         return _documents.TryGetValue(documentId, out var vectorDoc) ? vectorDoc.Document : null;
     }
@@ -188,7 +188,7 @@ public class InMemoryDocumentStore<T> : DocumentStoreBase<T>
     /// Warning: Don't use this for large collections - it returns everything!
     /// </para>
     /// </remarks>
-    public IEnumerable<Document> GetAllDocuments()
+    public IEnumerable<Document<T>> GetAllDocuments()
     {
         return _documents.Values.Select(vd => vd.Document).ToList();
     }
