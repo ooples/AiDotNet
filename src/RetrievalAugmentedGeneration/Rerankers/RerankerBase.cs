@@ -1,3 +1,5 @@
+using AiDotNet.Helpers;
+using AiDotNet.Interfaces;
 using AiDotNet.RetrievalAugmentedGeneration.Interfaces;
 using AiDotNet.RetrievalAugmentedGeneration.Models;
 
@@ -23,6 +25,11 @@ namespace AiDotNet.RetrievalAugmentedGeneration.Rerankers;
 /// </remarks>
 public abstract class RerankerBase<T> : IReranker<T>
 {
+    /// <summary>
+    /// Provides mathematical operations for the numeric type T.
+    /// </summary>
+    protected static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();
+
     /// <summary>
     /// Gets a value indicating whether this reranker modifies relevance scores.
     /// </summary>
