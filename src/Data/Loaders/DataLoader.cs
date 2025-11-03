@@ -2,10 +2,11 @@ using System;
 using System.Collections;
 using System.Collections.Generic;
 using AiDotNet.Data.Datasets;
+using AiDotNet.LinearAlgebra;
 
 namespace AiDotNet.Data.Loaders
 {
-    public sealed class DataLoader<T> : IEnumerable<IList<T>>
+    public sealed class DataLoader<T> : IEnumerable<Vector<T>>
     {
         private readonly IDataset<T> _dataset;
         private readonly int _batchSize;
@@ -21,7 +22,7 @@ namespace AiDotNet.Data.Loaders
             _seed = seed;
         }
 
-        public IEnumerator<IList<T>> GetEnumerator()
+        public IEnumerator<Vector<T>> GetEnumerator()
         {
             int n = _dataset.Count;
             var indices = new int[n];
@@ -42,16 +43,15 @@ namespace AiDotNet.Data.Loaders
             for (int i = 0; i < n; i += _batchSize)
             {
                 int size = Math.Min(_batchSize, n - i);
-                var batch = new List<T>(capacity: size);
+                var arr = new T[size];
                 for (int k = 0; k < size; k++)
                 {
-                    batch.Add(_dataset.GetItem(indices[i + k]));
+                    arr[k] = _dataset.GetItem(indices[i + k]);
                 }
-                yield return batch;
+                yield return new Vector<T>(arr);
             }
         }
 
         IEnumerator IEnumerable.GetEnumerator() => GetEnumerator();
     }
 }
-

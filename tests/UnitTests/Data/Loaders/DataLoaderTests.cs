@@ -1,9 +1,9 @@
 using System;
-using System.Collections.Generic;
 using System.Linq;
 using Xunit;
 using AiDotNet.Data.Datasets;
 using AiDotNet.Data.Loaders;
+using AiDotNet.LinearAlgebra;
 
 namespace UnitTests.Data.Loaders
 {
@@ -17,9 +17,9 @@ namespace UnitTests.Data.Loaders
             var loader = new DataLoader<int>(ds, batchSize: 4, shuffle: false);
             var batches = loader.ToList();
             Assert.Equal(3, batches.Count);
-            Assert.Equal(new[] {0,1,2,3}, batches[0]);
-            Assert.Equal(new[] {4,5,6,7}, batches[1]);
-            Assert.Equal(new[] {8,9}, batches[2]);
+            Assert.True(batches[0].SequenceEqual(new Vector<int>(new[]{0,1,2,3})));
+            Assert.True(batches[1].SequenceEqual(new Vector<int>(new[]{4,5,6,7})));
+            Assert.True(batches[2].SequenceEqual(new Vector<int>(new[]{8,9})));
         }
 
         [Fact]
@@ -49,4 +49,3 @@ namespace UnitTests.Data.Loaders
         }
     }
 }
-

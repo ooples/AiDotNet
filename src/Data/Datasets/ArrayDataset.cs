@@ -1,14 +1,16 @@
 using System;
 
+using AiDotNet.LinearAlgebra;
+
 namespace AiDotNet.Data.Datasets
 {
     public sealed class ArrayDataset<T> : IDataset<T>
     {
-        private readonly T[] _data;
+        private readonly Vector<T> _data;
 
         public ArrayDataset(T[] data)
         {
-            _data = data ?? throw new ArgumentNullException("data");
+            _data = new Vector<T>(data ?? throw new ArgumentNullException("data"));
         }
 
         public int Count => _data.Length;
@@ -20,4 +22,3 @@ namespace AiDotNet.Data.Datasets
         }
     }
 }
-
