@@ -40,14 +40,21 @@ namespace AiDotNet.RetrievalAugmentedGeneration.ChunkingStrategies
 
         private List<string> SplitTextRecursive(string text, string[] separators)
         {
-            var chunks = new List<string>();`n`nif (text.Length <= ChunkSize)
+            var chunks = new List<string>();
+
+if (text.Length <= ChunkSize)
             {
                 chunks.Add(text);
                 return chunks;
             }
-`n`n            var currentChunk = new StringBuilder();`n            `n            foreach (var separator in separators)
+
+
+            var currentChunk = new StringBuilder();
+            
+            foreach (var separator in separators)
             {
-                var splits = text.Split(new[] { separator }, StringSplitOptions.None);`n                currentChunk.Clear();
+                var splits = text.Split(new[] { separator }, StringSplitOptions.None);
+                currentChunk.Clear();
 
                 foreach (var split in splits)
                 {
