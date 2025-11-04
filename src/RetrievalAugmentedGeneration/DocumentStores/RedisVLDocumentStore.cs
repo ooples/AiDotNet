@@ -1,3 +1,4 @@
+#if NETCOREAPP || NETSTANDARD2_1_OR_GREATER
 using AiDotNet.LinearAlgebra;
 using AiDotNet.RetrievalAugmentedGeneration.Models;
 using System;
@@ -141,3 +142,5 @@ namespace AiDotNet.RetrievalAugmentedGeneration.DocumentStores
         }
     }
 }
+
+#endif

@@ -1,3 +1,4 @@
+#if NETCOREAPP || NETSTANDARD2_1_OR_GREATER
 using AiDotNet.LinearAlgebra;
 using System;
 using System.Net.Http;
@@ -70,3 +71,5 @@ namespace AiDotNet.RetrievalAugmentedGeneration.EmbeddingModels
         }
     }
 }
+
+#endif

@@ -1,4 +1,6 @@
 using AiDotNet.Interfaces;
+using AiDotNet.RetrievalAugmentedGeneration.Interfaces;
+using AiDotNet.RetrievalAugmentedGeneration.Retrievers;
 using AiDotNet.RetrievalAugmentedGeneration.Models;
 using System.Collections.Generic;
 using System.Linq;
@@ -73,3 +75,4 @@ namespace AiDotNet.RetrievalAugmentedGeneration.AdvancedPatterns
         }
     }
 }
+
