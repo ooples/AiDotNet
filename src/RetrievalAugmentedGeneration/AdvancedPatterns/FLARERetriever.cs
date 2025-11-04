@@ -7,28 +7,25 @@ using System.Linq;
 
 namespace AiDotNet.RetrievalAugmentedGeneration.AdvancedPatterns
 {
-    public class FLARERetriever<T> : RetrieverBase<T> where T : struct
+    public class FLARERetriever<T> : RetrieverBase<T>
     {
         private readonly IRetriever<T> _baseRetriever;
         private readonly int _activeRetrievalSteps;
-        
-        protected override INumericOperations<T> NumOps { get; }
 
         public FLARERetriever(IRetriever<T> baseRetriever, int activeRetrievalSteps = 3)
         {
             _baseRetriever = baseRetriever ?? throw new System.ArgumentNullException(nameof(baseRetriever));
             _activeRetrievalSteps = activeRetrievalSteps > 0 ? activeRetrievalSteps : throw new System.ArgumentOutOfRangeException(nameof(activeRetrievalSteps));
-            NumOps = NumericOperationsFactory.GetOperations<T>();
         }
 
-        protected override List<Document<T>> RetrieveCore(string query, int topK)
+        protected override IEnumerable<Document<T>> RetrieveCore(string query, int topK, Dictionary<string, object> metadataFilters)
         {
             var allResults = new List<Document<T>>();
             var currentQuery = query;
 
             for (int step = 0; step < _activeRetrievalSteps; step++)
             {
-                var stepResults = _baseRetriever.Retrieve(currentQuery, topK);
+                var stepResults = _baseRetriever.Retrieve(currentQuery, topK, metadataFilters).ToList();
                 
                 foreach (var doc in stepResults)
                 {
@@ -40,12 +37,12 @@ namespace AiDotNet.RetrievalAugmentedGeneration.AdvancedPatterns
 
                 if (stepResults.Count > 0)
                 {
-                    var topDoc = stepResults.OrderByDescending(d => NumOps.ToDouble(d.RelevanceScore)).First();
+                    var topDoc = stepResults.OrderByDescending(d => Convert.ToDouble(d.RelevanceScore)).First();
                     currentQuery = $"{query} {topDoc.Content.Substring(0, System.Math.Min(200, topDoc.Content.Length))}";
                 }
             }
 
-            return allResults.OrderByDescending(d => NumOps.ToDouble(d.RelevanceScore)).Take(topK).ToList();
+            return allResults.OrderByDescending(d => Convert.ToDouble(d.RelevanceScore)).Take(topK).ToList();
         }
     }
 }

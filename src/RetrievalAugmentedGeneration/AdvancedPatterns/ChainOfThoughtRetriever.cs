@@ -7,28 +7,25 @@ using System.Linq;
 
 namespace AiDotNet.RetrievalAugmentedGeneration.AdvancedPatterns
 {
-    public class ChainOfThoughtRetriever<T> : RetrieverBase<T> where T : struct
+    public class ChainOfThoughtRetriever<T> : RetrieverBase<T>
     {
         private readonly IRetriever<T> _baseRetriever;
         private readonly int _reasoningSteps;
-        
-        protected override INumericOperations<T> NumOps { get; }
 
         public ChainOfThoughtRetriever(IRetriever<T> baseRetriever, int reasoningSteps = 3)
         {
             _baseRetriever = baseRetriever ?? throw new System.ArgumentNullException(nameof(baseRetriever));
             _reasoningSteps = reasoningSteps > 0 ? reasoningSteps : throw new System.ArgumentOutOfRangeException(nameof(reasoningSteps));
-            NumOps = NumericOperationsFactory.GetOperations<T>();
         }
 
-        protected override List<Document<T>> RetrieveCore(string query, int topK)
+        protected override IEnumerable<Document<T>> RetrieveCore(string query, int topK, Dictionary<string, object> metadataFilters)
         {
             var results = new List<Document<T>>();
             var currentQuery = query;
 
             for (int step = 0; step < _reasoningSteps; step++)
             {
-                var stepResults = _baseRetriever.Retrieve(currentQuery, topK);
+                var stepResults = _baseRetriever.Retrieve(currentQuery, topK, metadataFilters).ToList();
                 
                 foreach (var doc in stepResults)
                 {
@@ -44,7 +41,7 @@ namespace AiDotNet.RetrievalAugmentedGeneration.AdvancedPatterns
                 }
             }
 
-            return results.OrderByDescending(d => NumOps.ToDouble(d.RelevanceScore)).Take(topK).ToList();
+            return results.OrderByDescending(d => Convert.ToDouble(d.RelevanceScore)).Take(topK).ToList();
         }
     }
 }
