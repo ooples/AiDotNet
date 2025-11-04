@@ -135,7 +135,8 @@ namespace AiDotNet.RetrievalAugmentedGeneration.ContextCompression
             {
                 currentSentence += text[i];
 
-                if (sentenceEndings.Any(ending => currentSentence.EndsWith(ending)))
+                var matchedEnding = sentenceEndings.FirstOrDefault(ending => currentSentence.EndsWith(ending));
+                if (matchedEnding != null)
                 {
                     sentences.Add(currentSentence.Trim());
                     currentSentence = string.Empty;
