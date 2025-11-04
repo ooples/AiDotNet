@@ -102,8 +102,8 @@ namespace AiDotNet.RetrievalAugmentedGeneration.Retrievers
                 
                 foreach (var term in terms)
                 {
-                    if (termCounts.ContainsKey(term))
-                        termCounts[term]++;
+                    if (termCounts.TryGetValue(term, out var count))
+                        termCounts[term] = count + 1;
                     else
                         termCounts[term] = 1;
                 }
@@ -112,8 +112,8 @@ namespace AiDotNet.RetrievalAugmentedGeneration.Retrievers
 
                 foreach (var term in termCounts.Keys)
                 {
-                    if (termDocFreq.ContainsKey(term))
-                        termDocFreq[term]++;
+                    if (termDocFreq.TryGetValue(term, out var docCount))
+                        termDocFreq[term] = docCount + 1;
                     else
                         termDocFreq[term] = 1;
                 }

@@ -85,11 +85,10 @@ namespace AiDotNet.RetrievalAugmentedGeneration.Retrievers
 
         private T CalculateBM25Term(string docId, string term)
         {
-            if (!_termFrequencies.ContainsKey(docId) || !_termFrequencies[docId].ContainsKey(term))
+            if (!_termFrequencies.TryGetValue(docId, out var termFreqs) || !termFreqs.TryGetValue(term, out var tf))
                 return NumOps.Zero;
 
-            var tf = _termFrequencies[docId][term];
-            var docLength = _documentLengths.ContainsKey(docId) ? _documentLengths[docId] : NumOps.Zero;
+            var docLength = _documentLengths.TryGetValue(docId, out var length) ? length : NumOps.Zero;
 
             var idf = CalculateIDF(term);
 
@@ -141,8 +140,8 @@ namespace AiDotNet.RetrievalAugmentedGeneration.Retrievers
                 
                 foreach (var term in terms)
                 {
-                    if (termCounts.ContainsKey(term))
-                        termCounts[term] = NumOps.Add(termCounts[term], NumOps.One);
+                    if (termCounts.TryGetValue(term, out var count))
+                        termCounts[term] = NumOps.Add(count, NumOps.One);
                     else
                         termCounts[term] = NumOps.One;
 
