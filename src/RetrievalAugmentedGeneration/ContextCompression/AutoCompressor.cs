@@ -12,7 +12,7 @@ namespace AiDotNet.RetrievalAugmentedGeneration.ContextCompression;
 /// and position in the document. This is a production implementation that doesn't require
 /// external ML models.
 /// </remarks>
-public class AutoCompressor<T>
+public class AutoCompressor<T> : ContextCompressorBase<T>
 {
     private readonly int _maxOutputLength;
     private readonly double _compressionRatio;
@@ -37,14 +37,11 @@ public class AutoCompressor<T>
     /// <summary>
     /// Compresses documents using rule-based sentence extraction.
     /// </summary>
-    public IEnumerable<Document<T>> Compress(string query, IEnumerable<Document<T>> documents)
+    protected override List<Document<T>> CompressCore(
+        List<Document<T>> documents,
+        string query,
+        Dictionary<string, object>? options = null)
     {
-        if (string.IsNullOrWhiteSpace(query))
-            throw new ArgumentException("Query cannot be null or whitespace", nameof(query));
-
-        if (documents == null)
-            throw new ArgumentNullException(nameof(documents));
-
         var queryTokens = new HashSet<string>(query.ToLowerInvariant().Split(new[] { ' ', '\t', '\n', '\r' }, StringSplitOptions.RemoveEmptyEntries));
         var compressedDocs = new List<Document<T>>();
 

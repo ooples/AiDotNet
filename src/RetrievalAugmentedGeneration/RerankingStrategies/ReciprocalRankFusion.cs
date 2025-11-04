@@ -54,7 +54,7 @@ namespace AiDotNet.RetrievalAugmentedGeneration.RerankingStrategies
             }
 
             var reranked = documents
-                .OrderByDescending(d => Convert.ToDouble(scores.ContainsKey(d.Id) ? scores[d.Id] : NumOps.Zero))
+                .OrderByDescending(d => scores.TryGetValue(d.Id, out var score) ? Convert.ToDouble(score) : 0.0)
                 .ToList();
 
             foreach (var doc in reranked)

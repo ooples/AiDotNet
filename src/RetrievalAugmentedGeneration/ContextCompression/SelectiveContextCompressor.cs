@@ -1,4 +1,4 @@
-using AiDotNet.NumericOperations;
+using AiDotNet.Helpers;
 using AiDotNet.RetrievalAugmentedGeneration.Models;
 using System;
 using System.Collections.Generic;
@@ -14,9 +14,8 @@ namespace AiDotNet.RetrievalAugmentedGeneration.ContextCompression;
 /// Analyzes retrieved documents and selectively extracts only the sentences most relevant
 /// to the query, reducing context length while preserving important information.
 /// </remarks>
-public class SelectiveContextCompressor<T>
+public class SelectiveContextCompressor<T> : ContextCompressorBase<T>
 {
-    private readonly INumericOperations<T> _numericOperations;
     private readonly int _maxSentences;
     private readonly T _relevanceThreshold;
 
@@ -34,20 +33,16 @@ public class SelectiveContextCompressor<T>
             
         _maxSentences = maxSentences;
         _relevanceThreshold = relevanceThreshold;
-        _numericOperations = NumericOperationsFactory.GetOperations<T>();
     }
 
     /// <summary>
     /// Compresses documents by selecting relevant sentences.
     /// </summary>
-    public IEnumerable<Document<T>> Compress(string query, IEnumerable<Document<T>> documents)
+    protected override List<Document<T>> CompressCore(
+        List<Document<T>> documents,
+        string query,
+        Dictionary<string, object>? options = null)
     {
-        if (string.IsNullOrWhiteSpace(query))
-            throw new ArgumentException("Query cannot be null or whitespace", nameof(query));
-
-        if (documents == null)
-            throw new ArgumentNullException(nameof(documents));
-
         var compressed = new List<Document<T>>();
 
         foreach (var doc in documents)
@@ -58,8 +53,8 @@ public class SelectiveContextCompressor<T>
             foreach (var sentence in sentences)
             {
                 var score = CalculateRelevance(query, sentence);
-                if (_numericOperations.GreaterThan(score, _relevanceThreshold) || 
-                    _numericOperations.Equals(score, _relevanceThreshold))
+                if (NumOps.GreaterThan(score, _relevanceThreshold) || 
+                    NumOps.Equals(score, _relevanceThreshold))
                 {
                     scoredSentences.Add((sentence, score));
                 }
@@ -72,10 +67,8 @@ public class SelectiveContextCompressor<T>
 
             if (selectedSentences.Any())
             {
-                compressed.Add(new Document<T>
+                compressed.Add(new Document<T>(doc.Id, string.Join(" ", selectedSentences))
                 {
-                    Id = doc.Id,
-                    Content = string.Join(" ", selectedSentences),
                     Metadata = doc.Metadata,
                     RelevanceScore = doc.RelevanceScore,
                     HasRelevanceScore = doc.HasRelevanceScore
@@ -105,6 +98,6 @@ public class SelectiveContextCompressor<T>
         var overlap = queryWords.Intersect(sentenceWords).Count();
         var score = overlap > 0 ? (double)overlap / queryWords.Length : 0.0;
         
-        return _numericOperations.FromDouble(score);
+        return NumOps.FromDouble(score);
     }
 }

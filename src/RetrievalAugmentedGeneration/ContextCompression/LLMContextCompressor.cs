@@ -10,9 +10,8 @@ namespace AiDotNet.RetrievalAugmentedGeneration.ContextCompression
     /// LLM-based context compression to reduce token usage while preserving key information.
     /// </summary>
     /// <typeparam name="T">The numeric type for vector operations.</typeparam>
-    public class LLMContextCompressor<T>
+    public class LLMContextCompressor<T> : ContextCompressorBase<T>
     {
-        private readonly INumericOperations<T> _numOps;
         private readonly string _llmEndpoint;
         private readonly string _apiKey;
         private readonly double _compressionRatio;
@@ -30,12 +29,39 @@ namespace AiDotNet.RetrievalAugmentedGeneration.ContextCompression
             string llmEndpoint = "",
             string apiKey = "")
         {
-            _numOps = numericOperations ?? throw new ArgumentNullException(nameof(numericOperations));
+            if (numericOperations == null)
+                throw new ArgumentNullException(nameof(numericOperations));
+                
             _compressionRatio = compressionRatio >= 0 && compressionRatio <= 1
                 ? compressionRatio
                 : throw new ArgumentOutOfRangeException(nameof(compressionRatio), "Compression ratio must be between 0 and 1");
             _llmEndpoint = llmEndpoint;
             _apiKey = apiKey;
+        }
+
+        /// <summary>
+        /// Compresses documents while preserving relevance to the query.
+        /// </summary>
+        protected override List<Document<T>> CompressCore(
+            List<Document<T>> documents,
+            string query,
+            Dictionary<string, object>? options = null)
+        {
+            var compressed = new List<Document<T>>();
+
+            foreach (var doc in documents)
+            {
+                var compressedContent = CompressText(query, doc.Content);
+                var compressedDoc = new Document<T>(doc.Id, compressedContent)
+                {
+                    Metadata = doc.Metadata,
+                    RelevanceScore = doc.RelevanceScore,
+                    HasRelevanceScore = doc.HasRelevanceScore
+                };
+                compressed.Add(compressedDoc);
+            }
+
+            return compressed;
         }
 
         /// <summary>

@@ -10,9 +10,8 @@ namespace AiDotNet.RetrievalAugmentedGeneration.ContextCompression
     /// Document summarizer for creating concise summaries of retrieved content.
     /// </summary>
     /// <typeparam name="T">The numeric type for vector operations.</typeparam>
-    public class DocumentSummarizer<T>
+    public class DocumentSummarizer<T> : ContextCompressorBase<T>
     {
-        private readonly INumericOperations<T> _numOps;
         private readonly int _maxSummaryLength;
         private readonly string _llmEndpoint;
         private readonly string _apiKey;
@@ -30,12 +29,39 @@ namespace AiDotNet.RetrievalAugmentedGeneration.ContextCompression
             string llmEndpoint = "",
             string apiKey = "")
         {
-            _numOps = numericOperations ?? throw new ArgumentNullException(nameof(numericOperations));
+            if (numericOperations == null)
+                throw new ArgumentNullException(nameof(numericOperations));
+                
             _maxSummaryLength = maxSummaryLength > 0
                 ? maxSummaryLength
                 : throw new ArgumentOutOfRangeException(nameof(maxSummaryLength));
             _llmEndpoint = llmEndpoint;
             _apiKey = apiKey;
+        }
+
+        /// <summary>
+        /// Compresses documents by summarizing their content.
+        /// </summary>
+        protected override List<Document<T>> CompressCore(
+            List<Document<T>> documents,
+            string query,
+            Dictionary<string, object>? options = null)
+        {
+            var summarized = new List<Document<T>>();
+
+            foreach (var doc in documents)
+            {
+                var summary = SummarizeText(doc.Content);
+                var summarizedDoc = new Document<T>(doc.Id, summary)
+                {
+                    Metadata = doc.Metadata,
+                    RelevanceScore = doc.RelevanceScore,
+                    HasRelevanceScore = doc.HasRelevanceScore
+                };
+                summarized.Add(summarizedDoc);
+            }
+
+            return summarized;
         }
 
         /// <summary>
@@ -52,12 +78,11 @@ namespace AiDotNet.RetrievalAugmentedGeneration.ContextCompression
             foreach (var doc in documents)
             {
                 var summary = SummarizeText(doc.Content);
-                var summarizedDoc = new Document<T>
+                var summarizedDoc = new Document<T>(doc.Id, summary)
                 {
-                    Id = doc.Id,
-                    Content = summary,
                     Metadata = doc.Metadata,
-                    RelevanceScore = doc.RelevanceScore
+                    RelevanceScore = doc.RelevanceScore,
+                    HasRelevanceScore = doc.HasRelevanceScore
                 };
                 summarized.Add(summarizedDoc);
             }
