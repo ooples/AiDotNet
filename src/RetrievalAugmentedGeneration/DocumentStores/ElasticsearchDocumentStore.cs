@@ -19,6 +19,8 @@ public class ElasticsearchDocumentStore<T> : DocumentStoreBase<T>
     private readonly string _indexName;
     private readonly string _apiKey;
 
+    private readonly int _vectorDimension;
+
     /// <summary>
     /// Initializes a new instance of the <see cref="ElasticsearchDocumentStore{T}"/> class.
     /// </summary>
@@ -26,58 +28,63 @@ public class ElasticsearchDocumentStore<T> : DocumentStoreBase<T>
     /// <param name="indexName">The name of the index to use.</param>
     /// <param name="apiKey">The API key for authentication.</param>
     /// <param name="vectorDimension">The dimensionality of document vectors.</param>
-    /// <param name="numericOperations">The numeric operations provider.</param>
     public ElasticsearchDocumentStore(
         string endpoint,
         string indexName,
         string apiKey,
-        int vectorDimension,
-        INumericOperations<T> numericOperations)
-        : base(vectorDimension, numericOperations)
+        int vectorDimension)
     {
         _endpoint = endpoint ?? throw new ArgumentNullException(nameof(endpoint));
         _indexName = indexName ?? throw new ArgumentNullException(nameof(indexName));
         _apiKey = apiKey ?? throw new ArgumentNullException(nameof(apiKey));
+        _vectorDimension = vectorDimension;
     }
 
-    /// <summary>
-    /// Adds a document to the Elasticsearch index.
-    /// </summary>
-    public override void AddDocument(Document<T> document)
-    {
-        if (document == null)
-            throw new ArgumentNullException(nameof(document));
+    /// <inheritdoc />
+    public override int DocumentCount => 0; // TODO: Implement via Elasticsearch count API
 
+    /// <inheritdoc />
+    public override int VectorDimension => _vectorDimension;
+
+    /// <inheritdoc />
+    protected override void AddCore(VectorDocument<T> vectorDocument)
+    {
         // TODO: Implement Elasticsearch indexing via REST API
         throw new NotImplementedException("Elasticsearch integration requires HTTP client implementation");
     }
 
-    /// <summary>
-    /// Retrieves documents similar to the query vector using k-NN search.
-    /// </summary>
-    public override IEnumerable<Document<T>> GetSimilar(Vector<T> queryVector, int topK)
+    /// <inheritdoc />
+    protected override void AddBatchCore(IList<VectorDocument<T>> vectorDocuments)
     {
-        if (queryVector == null)
-            throw new ArgumentNullException(nameof(queryVector));
+        // TODO: Implement Elasticsearch bulk indexing via REST API
+        throw new NotImplementedException("Elasticsearch integration requires HTTP client implementation");
+    }
 
-        if (topK <= 0)
-            throw new ArgumentOutOfRangeException(nameof(topK), "topK must be positive");
-
+    /// <inheritdoc />
+    protected override IEnumerable<Document<T>> GetSimilarCore(Vector<T> queryVector, int topK, Dictionary<string, object> metadataFilters)
+    {
         // TODO: Implement Elasticsearch k-NN search via REST API
         throw new NotImplementedException("Elasticsearch integration requires HTTP client implementation");
     }
 
-    /// <summary>
-    /// Gets all documents from the index.
-    /// </summary>
-    public override IEnumerable<Document<T>> GetAllDocuments()
+    /// <inheritdoc />
+    protected override Document<T>? GetByIdCore(string documentId)
     {
-        // TODO: Implement Elasticsearch scroll API for retrieving all documents
+        // TODO: Implement Elasticsearch document retrieval via REST API
         throw new NotImplementedException("Elasticsearch integration requires HTTP client implementation");
     }
 
-    /// <summary>
-    /// Gets the total number of documents in the index.
-    /// </summary>
-    public override int DocumentCount => 0; // TODO: Implement via Elasticsearch count API
+    /// <inheritdoc />
+    protected override bool RemoveCore(string documentId)
+    {
+        // TODO: Implement Elasticsearch document deletion via REST API
+        throw new NotImplementedException("Elasticsearch integration requires HTTP client implementation");
+    }
+
+    /// <inheritdoc />
+    public override void Clear()
+    {
+        // TODO: Implement Elasticsearch index clearing via REST API
+        throw new NotImplementedException("Elasticsearch integration requires HTTP client implementation");
+    }
 }

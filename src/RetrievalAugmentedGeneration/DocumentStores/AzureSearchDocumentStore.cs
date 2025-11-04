@@ -106,3 +106,4 @@ public class AzureSearchDocumentStore<T> : DocumentStoreBase<T>
         return false;
     }
 }
+

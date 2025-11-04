@@ -27,9 +27,8 @@ public class RedisVLDocumentStore<T> : DocumentStoreBase<T>
     public RedisVLDocumentStore(
         string connectionString,
         string indexName,
-        int vectorDimension,
-        INumericOperations<T> numericOperations)
-        : base(vectorDimension, numericOperations)
+        int vectorDimension)
+        
     {
         _connectionString = connectionString ?? throw new ArgumentNullException(nameof(connectionString));
         _indexName = indexName ?? throw new ArgumentNullException(nameof(indexName));
@@ -38,7 +37,7 @@ public class RedisVLDocumentStore<T> : DocumentStoreBase<T>
     /// <summary>
     /// Adds a document to the Redis index.
     /// </summary>
-    public override void AddDocument(Document<T> document)
+    protected override void AddCore(VectorDocument<T> vectorDocument)
     {
         if (document == null)
             throw new ArgumentNullException(nameof(document));
@@ -50,7 +49,7 @@ public class RedisVLDocumentStore<T> : DocumentStoreBase<T>
     /// <summary>
     /// Retrieves documents similar to the query vector.
     /// </summary>
-    public override IEnumerable<Document<T>> GetSimilar(Vector<T> queryVector, int topK)
+    protected override IEnumerable<Document<T>> GetSimilarCore(Vector<T> queryVector, int topK, Dictionary<string, object> metadataFilters)
     {
         if (queryVector == null)
             throw new ArgumentNullException(nameof(queryVector));
@@ -65,7 +64,7 @@ public class RedisVLDocumentStore<T> : DocumentStoreBase<T>
     /// <summary>
     /// Gets all documents from the index.
     /// </summary>
-    public override IEnumerable<Document<T>> GetAllDocuments()
+    protected override IEnumerable<Document<T>> GetAllCore()
     {
         // TODO: Implement Redis scan operation
         throw new NotImplementedException("Redis integration requires StackExchange.Redis implementation");
@@ -76,3 +75,4 @@ public class RedisVLDocumentStore<T> : DocumentStoreBase<T>
     /// </summary>
     public override int DocumentCount => 0; // TODO: Implement via Redis
 }
+

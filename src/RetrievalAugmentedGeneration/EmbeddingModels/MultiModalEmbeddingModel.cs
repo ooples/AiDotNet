@@ -17,32 +17,33 @@ public class MultiModalEmbeddingModel<T> : EmbeddingModelBase<T>
     private readonly string _modelPath;
     private readonly bool _normalizeEmbeddings;
 
+    private readonly int _dimension;
+
     /// <summary>
     /// Initializes a new instance of the <see cref="MultiModalEmbeddingModel{T}"/> class.
     /// </summary>
     /// <param name="modelPath">Path to the multi-modal model (e.g., CLIP).</param>
     /// <param name="normalizeEmbeddings">Whether to normalize embeddings to unit length.</param>
     /// <param name="dimension">The embedding dimension.</param>
-    /// <param name="numericOperations">The numeric operations provider.</param>
     public MultiModalEmbeddingModel(
         string modelPath,
         bool normalizeEmbeddings,
-        int dimension,
-        INumericOperations<T> numericOperations)
-        : base(dimension, numericOperations)
+        int dimension)
     {
         _modelPath = modelPath ?? throw new ArgumentNullException(nameof(modelPath));
         _normalizeEmbeddings = normalizeEmbeddings;
+        _dimension = dimension;
     }
 
-    /// <summary>
-    /// Generates text embeddings.
-    /// </summary>
-    public override Vector<T> Embed(string text)
-    {
-        if (string.IsNullOrWhiteSpace(text))
-            throw new ArgumentException("Text cannot be null or whitespace", nameof(text));
+    /// <inheritdoc />
+    public override int EmbeddingDimension => _dimension;
 
+    /// <inheritdoc />
+    public override int MaxTokens => 512;
+
+    /// <inheritdoc />
+    protected override Vector<T> EmbedCore(string text)
+    {
         // TODO: Implement text embedding with CLIP or similar
         throw new NotImplementedException("Multi-modal embedding requires CLIP/ONNX model integration");
     }
@@ -64,17 +65,7 @@ public class MultiModalEmbeddingModel<T> : EmbeddingModelBase<T>
         throw new NotImplementedException("Multi-modal embedding requires CLIP/ONNX model integration");
     }
 
-    /// <summary>
-    /// Batch embedding generation for text.
-    /// </summary>
-    public override IEnumerable<Vector<T>> EmbedBatch(IEnumerable<string> texts)
-    {
-        if (texts == null)
-            throw new ArgumentNullException(nameof(texts));
 
-        // TODO: Implement batch text embedding
-        throw new NotImplementedException("Multi-modal embedding requires CLIP/ONNX model integration");
-    }
 
     /// <summary>
     /// Batch embedding generation for images.

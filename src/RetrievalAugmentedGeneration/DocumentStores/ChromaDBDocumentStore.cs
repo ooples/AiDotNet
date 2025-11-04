@@ -82,3 +82,4 @@ public class ChromaDBDocumentStore<T> : DocumentStoreBase<T>
         throw new NotImplementedException("ChromaDB integration requires HTTP client implementation");
     }
 }
+

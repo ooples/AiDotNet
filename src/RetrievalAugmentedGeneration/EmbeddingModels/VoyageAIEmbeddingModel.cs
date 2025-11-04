@@ -18,6 +18,8 @@ public class VoyageAIEmbeddingModel<T> : EmbeddingModelBase<T>
     private readonly string _model;
     private readonly string _inputType;
 
+    private readonly int _dimension;
+
     /// <summary>
     /// Initializes a new instance of the <see cref="VoyageAIEmbeddingModel{T}"/> class.
     /// </summary>
@@ -25,41 +27,30 @@ public class VoyageAIEmbeddingModel<T> : EmbeddingModelBase<T>
     /// <param name="model">The model name (e.g., "voyage-02").</param>
     /// <param name="inputType">The input type ("document" or "query").</param>
     /// <param name="dimension">The embedding dimension.</param>
-    /// <param name="numericOperations">The numeric operations provider.</param>
     public VoyageAIEmbeddingModel(
         string apiKey,
         string model,
         string inputType,
-        int dimension,
-        INumericOperations<T> numericOperations)
-        : base(dimension, numericOperations)
+        int dimension)
     {
         _apiKey = apiKey ?? throw new ArgumentNullException(nameof(apiKey));
         _model = model ?? throw new ArgumentNullException(nameof(model));
         _inputType = inputType ?? throw new ArgumentNullException(nameof(inputType));
+        _dimension = dimension;
     }
 
-    /// <summary>
-    /// Generates embeddings using Voyage AI API.
-    /// </summary>
-    public override Vector<T> Embed(string text)
-    {
-        if (string.IsNullOrWhiteSpace(text))
-            throw new ArgumentException("Text cannot be null or whitespace", nameof(text));
+    /// <inheritdoc />
+    public override int EmbeddingDimension => _dimension;
 
+    /// <inheritdoc />
+    public override int MaxTokens => 16000;
+
+    /// <inheritdoc />
+    protected override Vector<T> EmbedCore(string text)
+    {
         // TODO: Implement Voyage AI API call
         throw new NotImplementedException("Voyage AI integration requires HTTP client implementation");
     }
 
-    /// <summary>
-    /// Batch embedding generation.
-    /// </summary>
-    public override IEnumerable<Vector<T>> EmbedBatch(IEnumerable<string> texts)
-    {
-        if (texts == null)
-            throw new ArgumentNullException(nameof(texts));
 
-        // TODO: Implement Voyage AI batch API call
-        throw new NotImplementedException("Voyage AI integration requires HTTP client implementation");
-    }
 }
