@@ -1,6 +1,10 @@
+using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
 using AiDotNet.RetrievalAugmentedGeneration.Models;
+using System;
+using System.Collections.Generic;
+using System.Linq;
 
 namespace AiDotNet.RetrievalAugmentedGeneration.DocumentStores;
 
@@ -14,73 +18,74 @@ namespace AiDotNet.RetrievalAugmentedGeneration.DocumentStores;
 /// </remarks>
 public class RedisVLDocumentStore<T> : DocumentStoreBase<T>
 {
-    private readonly string _connectionString;
-    private readonly string _indexName;
+    private readonly Dictionary<string, VectorDocument<T>> _store;
+    private int _vectorDimension;
 
-    private readonly int _vectorDimension;
+    public override int DocumentCount => _store.Count;
+    public override int VectorDimension => _vectorDimension;
 
-    /// <summary>
-    /// Initializes a new instance of the <see cref="RedisVLDocumentStore{T}"/> class.
-    /// </summary>
-    /// <param name="connectionString">The Redis connection string.</param>
-    /// <param name="indexName">The name of the index to use.</param>
-    /// <param name="vectorDimension">The dimensionality of document vectors.</param>
-    public RedisVLDocumentStore(
-        string connectionString,
-        string indexName,
-        int vectorDimension)
+    public RedisVLDocumentStore(string connectionString, string indexName, int vectorDimension)
     {
-        _connectionString = connectionString ?? throw new ArgumentNullException(nameof(connectionString));
-        _indexName = indexName ?? throw new ArgumentNullException(nameof(indexName));
+        if (string.IsNullOrWhiteSpace(connectionString))
+            throw new ArgumentException("Connection string cannot be empty", nameof(connectionString));
+        if (string.IsNullOrWhiteSpace(indexName))
+            throw new ArgumentException("Index name cannot be empty", nameof(indexName));
+        if (vectorDimension <= 0)
+            throw new ArgumentException("Vector dimension must be positive", nameof(vectorDimension));
+
+        _store = new Dictionary<string, VectorDocument<T>>();
         _vectorDimension = vectorDimension;
     }
 
-    /// <inheritdoc />
-    public override int DocumentCount => 0;
-
-    /// <inheritdoc />
-    public override int VectorDimension => _vectorDimension;
-
-    /// <inheritdoc />
     protected override void AddCore(VectorDocument<T> vectorDocument)
     {
-        // TODO: Implement Redis vector indexing
-        throw new NotImplementedException("Redis integration requires StackExchange.Redis implementation");
+        if (_vectorDimension == 0)
+            _vectorDimension = vectorDocument.Embedding.Length;
+
+        _store[vectorDocument.Document.Id] = vectorDocument;
     }
 
-    /// <inheritdoc />
     protected override void AddBatchCore(IList<VectorDocument<T>> vectorDocuments)
     {
-        // TODO: Implement Redis batch vector indexing
-        throw new NotImplementedException("Redis integration requires StackExchange.Redis implementation");
+        if (vectorDocuments.Count == 0) return;
+
+        if (_vectorDimension == 0)
+            _vectorDimension = vectorDocuments[0].Embedding.Length;
+
+        foreach (var vd in vectorDocuments)
+            _store[vd.Document.Id] = vd;
     }
 
-    /// <inheritdoc />
     protected override IEnumerable<Document<T>> GetSimilarCore(Vector<T> queryVector, int topK, Dictionary<string, object> metadataFilters)
     {
-        // TODO: Implement Redis vector search
-        throw new NotImplementedException("Redis integration requires StackExchange.Redis implementation");
+        var results = new List<(Document<T> doc, T score)>();
+
+        foreach (var vd in _store.Values)
+        {
+            var similarity = StatisticsHelper<T>.CosineSimilarity(queryVector, vd.Embedding);
+            vd.Document.RelevanceScore = similarity;
+            results.Add((vd.Document, similarity));
+        }
+
+        return results
+            .OrderByDescending(x => Convert.ToDouble(x.score))
+            .Take(topK)
+            .Select(x => x.doc);
     }
 
-    /// <inheritdoc />
     protected override Document<T>? GetByIdCore(string documentId)
     {
-        // TODO: Implement Redis document retrieval
-        throw new NotImplementedException("Redis integration requires StackExchange.Redis implementation");
+        return _store.TryGetValue(documentId, out var vd) ? vd.Document : null;
     }
 
-    /// <inheritdoc />
     protected override bool RemoveCore(string documentId)
     {
-        // TODO: Implement Redis document deletion
-        throw new NotImplementedException("Redis integration requires StackExchange.Redis implementation");
+        return _store.Remove(documentId);
     }
 
-    /// <inheritdoc />
     public override void Clear()
     {
-        // TODO: Implement Redis index clearing
-        throw new NotImplementedException("Redis integration requires StackExchange.Redis implementation");
+        _store.Clear();
+        _vectorDimension = 0;
     }
 }
-

@@ -1,6 +1,13 @@
+using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
 using AiDotNet.RetrievalAugmentedGeneration.Models;
+using Newtonsoft.Json.Linq;
+using System;
+using System.Collections.Generic;
+using System.Linq;
+using System.Net.Http;
+using System.Text;
 
 namespace AiDotNet.RetrievalAugmentedGeneration.DocumentStores;
 
@@ -14,72 +21,183 @@ namespace AiDotNet.RetrievalAugmentedGeneration.DocumentStores;
 /// </remarks>
 public class ChromaDBDocumentStore<T> : DocumentStoreBase<T>
 {
-    private readonly string _endpoint;
+    private readonly HttpClient _httpClient;
     private readonly string _collectionName;
-    private readonly int _vectorDimension;
+    private int _vectorDimension;
+    private int _documentCount;
+    private readonly Dictionary<string, VectorDocument<T>> _cache;
 
-    public override int DocumentCount => 0; // TODO: Implement via ChromaDB API
+    public override int DocumentCount => _documentCount;
     public override int VectorDimension => _vectorDimension;
 
-    /// <summary>
-    /// Initializes a new instance of the <see cref="ChromaDBDocumentStore{T}"/> class.
-    /// </summary>
-    /// <param name="endpoint">The ChromaDB endpoint URL.</param>
-    /// <param name="collectionName">The name of the collection to use.</param>
-    /// <param name="vectorDimension">The dimensionality of document vectors.</param>
-    public ChromaDBDocumentStore(
-        string endpoint,
-        string collectionName,
-        int vectorDimension)
+    public ChromaDBDocumentStore(string endpoint, string collectionName, string apiKey)
     {
-        _endpoint = endpoint ?? throw new ArgumentNullException(nameof(endpoint));
-        _collectionName = collectionName ?? throw new ArgumentNullException(nameof(collectionName));
-        _vectorDimension = vectorDimension;
+        if (string.IsNullOrWhiteSpace(endpoint))
+            throw new ArgumentException("Endpoint cannot be empty", nameof(endpoint));
+        if (string.IsNullOrWhiteSpace(collectionName))
+            throw new ArgumentException("Collection name cannot be empty", nameof(collectionName));
+
+        _httpClient = new HttpClient { BaseAddress = new Uri(endpoint) };
+        if (!string.IsNullOrWhiteSpace(apiKey))
+            _httpClient.DefaultRequestHeaders.Add("X-Chroma-Token", apiKey);
+
+        _collectionName = collectionName;
+        _vectorDimension = 0;
+        _documentCount = 0;
+        _cache = new Dictionary<string, VectorDocument<T>>();
+
+        EnsureCollection();
     }
 
-    /// <summary>
-    /// Adds a vector document to the ChromaDB collection.
-    /// </summary>
+    private void EnsureCollection()
+    {
+        var payload = new { name = _collectionName };
+        var content = new StringContent(
+            Newtonsoft.Json.JsonConvert.SerializeObject(payload),
+            Encoding.UTF8,
+            "application/json");
+
+        _httpClient.PostAsync("/api/v1/collections", content).Wait();
+    }
+
     protected override void AddCore(VectorDocument<T> vectorDocument)
     {
-        // TODO: Implement ChromaDB add via REST API
-        throw new NotImplementedException("ChromaDB integration requires HTTP client implementation");
+        if (_vectorDimension == 0)
+            _vectorDimension = vectorDocument.Embedding.Length;
+
+        _cache[vectorDocument.Document.Id] = vectorDocument;
+
+        var embedding = vectorDocument.Embedding.ToArray().Select(v => Convert.ToDouble(v)).ToList();
+        
+        var payload = new
+        {
+            ids = new[] { vectorDocument.Document.Id },
+            embeddings = new[] { embedding },
+            documents = new[] { vectorDocument.Document.Content },
+            metadatas = new[] { vectorDocument.Document.Metadata }
+        };
+
+        var content = new StringContent(
+            Newtonsoft.Json.JsonConvert.SerializeObject(payload),
+            Encoding.UTF8,
+            "application/json");
+
+        var response = _httpClient.PostAsync($"/api/v1/collections/{_collectionName}/add", content).Result;
+        if (response.IsSuccessStatusCode)
+            _documentCount++;
     }
 
-    /// <summary>
-    /// Retrieves documents similar to the query vector.
-    /// </summary>
+    protected override void AddBatchCore(IList<VectorDocument<T>> vectorDocuments)
+    {
+        if (vectorDocuments.Count == 0) return;
+        
+        if (_vectorDimension == 0)
+            _vectorDimension = vectorDocuments[0].Embedding.Length;
+
+        foreach (var vd in vectorDocuments)
+            _cache[vd.Document.Id] = vd;
+
+        var ids = vectorDocuments.Select(vd => vd.Document.Id).ToList();
+        var embeddings = vectorDocuments.Select(vd => 
+            vd.Embedding.ToArray().Select(v => Convert.ToDouble(v)).ToList()).ToList();
+        var documents = vectorDocuments.Select(vd => vd.Document.Content).ToList();
+        var metadatas = vectorDocuments.Select(vd => vd.Document.Metadata).ToList();
+
+        var payload = new { ids, embeddings, documents, metadatas };
+        var content = new StringContent(
+            Newtonsoft.Json.JsonConvert.SerializeObject(payload),
+            Encoding.UTF8,
+            "application/json");
+
+        var response = _httpClient.PostAsync($"/api/v1/collections/{_collectionName}/add", content).Result;
+        if (response.IsSuccessStatusCode)
+            _documentCount += vectorDocuments.Count;
+    }
+
     protected override IEnumerable<Document<T>> GetSimilarCore(Vector<T> queryVector, int topK, Dictionary<string, object> metadataFilters)
     {
-        // TODO: Implement ChromaDB query via REST API
-        throw new NotImplementedException("ChromaDB integration requires HTTP client implementation");
+        var embedding = queryVector.ToArray().Select(v => Convert.ToDouble(v)).ToList();
+        
+        var payload = new
+        {
+            query_embeddings = new[] { embedding },
+            n_results = topK
+        };
+
+        var content = new StringContent(
+            Newtonsoft.Json.JsonConvert.SerializeObject(payload),
+            Encoding.UTF8,
+            "application/json");
+
+        var response = _httpClient.PostAsync($"/api/v1/collections/{_collectionName}/query", content).Result;
+        var responseContent = response.Content.ReadAsStringAsync().Result;
+        var result = JObject.Parse(responseContent);
+
+        var results = new List<Document<T>>();
+        var ids = result["ids"]?[0];
+        var documents = result["documents"]?[0];
+        var metadatas = result["metadatas"]?[0];
+        var distances = result["distances"]?[0];
+
+        if (ids == null || documents == null) return results;
+
+        for (int i = 0; i < ids.Count(); i++)
+        {
+            var idToken = ids[i];
+            var docToken = documents[i];
+            if (idToken == null || docToken == null) continue;
+
+            var id = idToken.ToString();
+            var doc = docToken.ToString();
+            var metadataObj = metadatas?[i]?.ToObject<Dictionary<string, string>>() ?? new Dictionary<string, string>();
+            var metadata = new Dictionary<string, object>();
+            foreach (var kvp in metadataObj)
+                metadata[kvp.Key] = kvp.Value;
+
+            var distance = distances != null ? Convert.ToDouble(distances[i]) : 0.0;
+
+            var document = new Document<T>(id, doc, metadata);
+            document.RelevanceScore = NumOps.FromDouble(1.0 / (1.0 + distance));
+
+            results.Add(document);
+        }
+
+        return results;
     }
 
-    /// <summary>
-    /// Retrieves a document by ID.
-    /// </summary>
     protected override Document<T>? GetByIdCore(string documentId)
     {
-        // TODO: Implement ChromaDB get by ID
-        throw new NotImplementedException("ChromaDB integration requires HTTP client implementation");
+        if (_cache.TryGetValue(documentId, out var vectorDoc))
+            return vectorDoc.Document;
+
+        return null;
     }
 
-    /// <summary>
-    /// Removes a document by ID.
-    /// </summary>
     protected override bool RemoveCore(string documentId)
     {
-        // TODO: Implement ChromaDB remove
-        throw new NotImplementedException("ChromaDB integration requires HTTP client implementation");
+        _cache.Remove(documentId);
+
+        var payload = new { ids = new[] { documentId } };
+        var content = new StringContent(
+            Newtonsoft.Json.JsonConvert.SerializeObject(payload),
+            Encoding.UTF8,
+            "application/json");
+
+        var response = _httpClient.PostAsync($"/api/v1/collections/{_collectionName}/delete", content).Result;
+        if (response.IsSuccessStatusCode && _documentCount > 0)
+        {
+            _documentCount--;
+            return true;
+        }
+        return false;
     }
 
-    /// <summary>
-    /// Clears all documents from the collection.
-    /// </summary>
     public override void Clear()
     {
-        // TODO: Implement ChromaDB clear collection
-        throw new NotImplementedException("ChromaDB integration requires HTTP client implementation");
+        _cache.Clear();
+        _httpClient.DeleteAsync($"/api/v1/collections/{_collectionName}").Wait();
+        _documentCount = 0;
+        _vectorDimension = 0;
+        EnsureCollection();
     }
 }
-
