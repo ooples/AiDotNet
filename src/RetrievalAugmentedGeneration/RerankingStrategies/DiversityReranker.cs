@@ -23,37 +23,25 @@ public class DiversityReranker<T> : RerankerBase<T>
     /// </summary>
     /// <param name="diversityWeight">Weight for diversity component (0-1).</param>
     /// <param name="relevanceWeight">Weight for relevance component (0-1).</param>
-    /// <param name="numericOperations">The numeric operations provider.</param>
     public DiversityReranker(
         T diversityWeight,
-        T relevanceWeight,
-        INumericOperations<T> numericOperations)
-        : base(numericOperations)
+        T relevanceWeight)
     {
         _diversityWeight = diversityWeight;
         _relevanceWeight = relevanceWeight;
     }
 
-    /// <summary>
-    /// Reranks documents balancing relevance and diversity.
-    /// </summary>
-    public override IEnumerable<Document<T>> Rerank(string query, IEnumerable<Document<T>> documents, int topK)
+    /// <inheritdoc />
+    public override bool ModifiesScores => true;
+
+    /// <inheritdoc />
+    protected override IEnumerable<Document<T>> RerankCore(string query, IList<Document<T>> documents)
     {
-        if (string.IsNullOrWhiteSpace(query))
-            throw new ArgumentException("Query cannot be null or whitespace", nameof(query));
-
-        if (documents == null)
-            throw new ArgumentNullException(nameof(documents));
-
-        if (topK <= 0)
-            throw new ArgumentOutOfRangeException(nameof(topK), "topK must be positive");
-
-        var docList = documents.ToList();
-        if (docList.Count == 0)
+        if (documents.Count == 0)
             return Enumerable.Empty<Document<T>>();
 
         var selected = new List<Document<T>>();
-        var remaining = new List<Document<T>>(docList);
+        var remaining = new List<Document<T>>(documents);
 
         // Select first document by relevance
         var first = remaining.OrderByDescending(d => d.HasRelevanceScore ? d.RelevanceScore : NumOps.Zero).First();
@@ -61,7 +49,7 @@ public class DiversityReranker<T> : RerankerBase<T>
         remaining.Remove(first);
 
         // Iteratively select documents balancing relevance and diversity
-        while (selected.Count < topK && remaining.Count > 0)
+        while (remaining.Count > 0)
         {
             var bestDoc = remaining[0];
             var bestScore = NumOps.FromDouble(double.NegativeInfinity);

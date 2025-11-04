@@ -18,18 +18,15 @@ public class SubQueryExpansion : QueryExpansionBase
     private readonly int _maxSubQueries;
 
     /// <summary>
-    /// Initializes a new instance of the <see cref="SubQueryExpansion{T}"/> class.
+    /// Initializes a new instance of the <see cref="SubQueryExpansion"/> class.
     /// </summary>
     /// <param name="llmEndpoint">The LLM API endpoint.</param>
     /// <param name="llmApiKey">The API key for the LLM service.</param>
     /// <param name="maxSubQueries">Maximum number of sub-queries to generate.</param>
-    /// <param name="numericOperations">The numeric operations provider.</param>
     public SubQueryExpansion(
         string llmEndpoint,
         string llmApiKey,
-        int maxSubQueries,
-        INumericOperations<T> numericOperations)
-        : base(numericOperations)
+        int maxSubQueries)
     {
         _llmEndpoint = llmEndpoint ?? throw new ArgumentNullException(nameof(llmEndpoint));
         _llmApiKey = llmApiKey ?? throw new ArgumentNullException(nameof(llmApiKey));
@@ -40,10 +37,8 @@ public class SubQueryExpansion : QueryExpansionBase
         _maxSubQueries = maxSubQueries;
     }
 
-    /// <summary>
-    /// Decomposes the query into sub-queries.
-    /// </summary>
-    public override IEnumerable<string> ExpandQuery(string query)
+    /// <inheritdoc />
+    public override List<string> ExpandQuery(string query)
     {
         if (string.IsNullOrWhiteSpace(query))
             throw new ArgumentException("Query cannot be null or whitespace", nameof(query));

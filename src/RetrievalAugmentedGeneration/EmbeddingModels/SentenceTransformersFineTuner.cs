@@ -19,6 +19,8 @@ public class SentenceTransformersFineTuner<T> : EmbeddingModelBase<T>
     private readonly int _epochs;
     private readonly T _learningRate;
 
+    private readonly int _dimension;
+
     /// <summary>
     /// Initializes a new instance of the <see cref="SentenceTransformersFineTuner{T}"/> class.
     /// </summary>
@@ -27,15 +29,12 @@ public class SentenceTransformersFineTuner<T> : EmbeddingModelBase<T>
     /// <param name="epochs">Number of training epochs.</param>
     /// <param name="learningRate">Learning rate for fine-tuning.</param>
     /// <param name="dimension">The embedding dimension.</param>
-    /// <param name="numericOperations">The numeric operations provider.</param>
     public SentenceTransformersFineTuner(
         string baseModelPath,
         string outputModelPath,
         int epochs,
         T learningRate,
-        int dimension,
-        INumericOperations<T> numericOperations)
-        : base(dimension, numericOperations)
+        int dimension)
     {
         _baseModelPath = baseModelPath ?? throw new ArgumentNullException(nameof(baseModelPath));
         _outputModelPath = outputModelPath ?? throw new ArgumentNullException(nameof(outputModelPath));
@@ -45,7 +44,14 @@ public class SentenceTransformersFineTuner<T> : EmbeddingModelBase<T>
             
         _epochs = epochs;
         _learningRate = learningRate;
+        _dimension = dimension;
     }
+
+    /// <inheritdoc />
+    public override int EmbeddingDimension => _dimension;
+
+    /// <inheritdoc />
+    public override int MaxTokens => 512;
 
     /// <summary>
     /// Fine-tunes the model on provided training data.
@@ -64,27 +70,12 @@ public class SentenceTransformersFineTuner<T> : EmbeddingModelBase<T>
         throw new NotImplementedException("Fine-tuning requires ML framework integration");
     }
 
-    /// <summary>
-    /// Generates embeddings using the fine-tuned model.
-    /// </summary>
-    public override Vector<T> Embed(string text)
+    /// <inheritdoc />
+    protected override Vector<T> EmbedCore(string text)
     {
-        if (string.IsNullOrWhiteSpace(text))
-            throw new ArgumentException("Text cannot be null or whitespace", nameof(text));
-
         // TODO: Implement embedding with fine-tuned model
         throw new NotImplementedException("Fine-tuned model embedding requires model loading implementation");
     }
 
-    /// <summary>
-    /// Batch embedding generation.
-    /// </summary>
-    public override IEnumerable<Vector<T>> EmbedBatch(IEnumerable<string> texts)
-    {
-        if (texts == null)
-            throw new ArgumentNullException(nameof(texts));
 
-        // TODO: Implement batch embedding
-        throw new NotImplementedException("Fine-tuned model embedding requires model loading implementation");
-    }
 }
