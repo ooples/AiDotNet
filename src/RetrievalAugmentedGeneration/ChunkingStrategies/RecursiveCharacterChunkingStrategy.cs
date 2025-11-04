@@ -60,8 +60,6 @@ namespace AiDotNet.RetrievalAugmentedGeneration.ChunkingStrategies;
 /// </remarks>
 public class RecursiveCharacterChunkingStrategy : ChunkingStrategyBase
 {
-    private readonly int _chunkSize;
-    private readonly int _chunkOverlap;
     private readonly string[] _separators;
 
     /// <summary>
@@ -74,24 +72,8 @@ public class RecursiveCharacterChunkingStrategy : ChunkingStrategyBase
         int chunkSize = 1000,
         int chunkOverlap = 200,
         string[]? separators = null)
+        : base(chunkSize, chunkOverlap)
     {
-        if (chunkSize <= 0)
-        {
-            throw new ArgumentException("Chunk size must be positive.", nameof(chunkSize));
-        }
-
-        if (chunkOverlap < 0)
-        {
-            throw new ArgumentException("Chunk overlap cannot be negative.", nameof(chunkOverlap));
-        }
-
-        if (chunkOverlap >= chunkSize)
-        {
-            throw new ArgumentException("Chunk overlap must be less than chunk size.", nameof(chunkOverlap));
-        }
-
-        _chunkSize = chunkSize;
-        _chunkOverlap = chunkOverlap;
         _separators = separators ?? new[] { "\n\n", "\n", ". ", " ", "" };
     }
 
@@ -127,7 +109,7 @@ public class RecursiveCharacterChunkingStrategy : ChunkingStrategyBase
         var finalChunks = new List<string>();
 
         // Base case: if text is small enough, return it as a single chunk
-        if (text.Length <= _chunkSize)
+        if (text.Length <= ChunkSize)
         {
             if (!string.IsNullOrWhiteSpace(text))
             {
@@ -150,7 +132,7 @@ public class RecursiveCharacterChunkingStrategy : ChunkingStrategyBase
         foreach (var split in splits)
         {
             // If this split would make the chunk too large
-            if (currentChunk.Length + split.Length + separator.Length > _chunkSize)
+            if (currentChunk.Length + split.Length + separator.Length > ChunkSize)
             {
                 // If we have accumulated content, save it
                 if (currentChunk.Length > 0)
@@ -159,31 +141,31 @@ public class RecursiveCharacterChunkingStrategy : ChunkingStrategyBase
                     currentChunk.Clear();
 
                     // Add overlap from the end of the last chunk
-                    if (finalChunks.Count > 0 && _chunkOverlap > 0)
+                    if (finalChunks.Count > 0 && ChunkOverlap > 0)
                     {
                         var lastChunk = finalChunks[finalChunks.Count - 1];
-                        var overlapStart = Math.Max(0, lastChunk.Length - _chunkOverlap);
+                        var overlapStart = Math.Max(0, lastChunk.Length - ChunkOverlap);
                         var overlap = lastChunk.Substring(overlapStart);
                         currentChunk.Append(overlap);
                     }
                 }
 
                 // If the split itself is too large, recursively split it with next separator
-                if (split.Length > _chunkSize)
+                if (split.Length > ChunkSize)
                 {
                     var subChunks = SplitTextRecursively(split, nextSeparators);
                     foreach (var subChunk in subChunks)
                     {
-                        if (currentChunk.Length + subChunk.Length > _chunkSize && currentChunk.Length > 0)
+                        if (currentChunk.Length + subChunk.Length > ChunkSize && currentChunk.Length > 0)
                         {
                             finalChunks.Add(currentChunk.ToString().Trim());
                             currentChunk.Clear();
 
                             // Add overlap
-                            if (finalChunks.Count > 0 && _chunkOverlap > 0)
+                            if (finalChunks.Count > 0 && ChunkOverlap > 0)
                             {
                                 var lastChunk = finalChunks[finalChunks.Count - 1];
-                                var overlapStart = Math.Max(0, lastChunk.Length - _chunkOverlap);
+                                var overlapStart = Math.Max(0, lastChunk.Length - ChunkOverlap);
                                 var overlap = lastChunk.Substring(overlapStart);
                                 currentChunk.Append(overlap);
                             }

@@ -52,12 +52,8 @@ public class SentenceChunkingStrategy : ChunkingStrategyBase
     /// <param name="maxChunkSize">Maximum allowed chunk size in characters (default: 1000).</param>
     /// <param name="overlapSentences">Number of sentences to overlap between chunks (default: 1).</param>
     public SentenceChunkingStrategy(int targetChunkSize = 500, int maxChunkSize = 1000, int overlapSentences = 1)
+        : base(maxChunkSize, 0)
     {
-        if (targetChunkSize <= 0)
-        {
-            throw new ArgumentException("Target chunk size must be positive.", nameof(targetChunkSize));
-        }
-
         if (maxChunkSize < targetChunkSize)
         {
             throw new ArgumentException("Maximum chunk size must be greater than or equal to target chunk size.", nameof(maxChunkSize));
