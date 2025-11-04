@@ -20,7 +20,7 @@ namespace AiDotNet.RetrievalAugmentedGeneration.Retrievers
         private readonly Dictionary<string, T> _documentLengths;
         private readonly Dictionary<string, int> _documentFrequencies;
         private int _totalDocuments;
-        private T _avgDocLength;
+        private T _avgDocLength { get; set; }
 
         public BM25Retriever(IDocumentStore<T> documentStore, int defaultTopK = 5, double k1 = 1.5, double b = 0.75) 
             : base(defaultTopK)

@@ -1,6 +1,10 @@
 using AiDotNet.Helpers;
 using AiDotNet.LinearAlgebra;
 using AiDotNet.RetrievalAugmentedGeneration.Models;
+using System.Net.Http;
+using System.Net.Http.Headers;
+using System.Text;
+using System.Text.Json;
 
 namespace AiDotNet.RetrievalAugmentedGeneration.DocumentStores;
 
@@ -18,6 +22,8 @@ public class AzureSearchDocumentStore<T> : DocumentStoreBase<T>
     private readonly string _indexName;
     private readonly string _apiKey;
     private readonly int _vectorDimension;
+    private readonly HttpClient _httpClient;
+    private readonly string _baseUrl;
     private int _documentCount;
 
     /// <summary>
@@ -27,11 +33,13 @@ public class AzureSearchDocumentStore<T> : DocumentStoreBase<T>
     /// <param name="indexName">The name of the index to use.</param>
     /// <param name="apiKey">The admin API key for authentication.</param>
     /// <param name="vectorDimension">The dimensionality of document vectors.</param>
+    /// <param name="httpClient">Optional HTTP client for testing. If null, creates a new one.</param>
     public AzureSearchDocumentStore(
         string serviceName,
         string indexName,
         string apiKey,
-        int vectorDimension)
+        int vectorDimension,
+        HttpClient? httpClient = null)
     {
         _serviceName = serviceName ?? throw new ArgumentNullException(nameof(serviceName));
         _indexName = indexName ?? throw new ArgumentNullException(nameof(indexName));
@@ -41,7 +49,37 @@ public class AzureSearchDocumentStore<T> : DocumentStoreBase<T>
             throw new ArgumentException("Vector dimension must be positive", nameof(vectorDimension));
         
         _vectorDimension = vectorDimension;
-        _documentCount = 0;
+        _httpClient = httpClient ?? new HttpClient();
+        _baseUrl = $"https://{_serviceName}.search.windows.net";
+        
+        ConfigureHttpClient();
+        InitializeDocumentCount();
+    }
+
+    private void ConfigureHttpClient()
+    {
+        _httpClient.DefaultRequestHeaders.Clear();
+        _httpClient.DefaultRequestHeaders.Add("api-key", _apiKey);
+        _httpClient.DefaultRequestHeaders.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
+    }
+
+    private void InitializeDocumentCount()
+    {
+        try
+        {
+            var url = $"{_baseUrl}/indexes/{_indexName}/docs/$count?api-version=2023-11-01";
+            var response = _httpClient.GetAsync(url).Result;
+            
+            if (response.IsSuccessStatusCode)
+            {
+                var countStr = response.Content.ReadAsStringAsync().Result;
+                _documentCount = int.Parse(countStr);
+            }
+        }
+        catch
+        {
+            _documentCount = 0;
+        }
     }
 
     /// <summary>
@@ -59,8 +97,65 @@ public class AzureSearchDocumentStore<T> : DocumentStoreBase<T>
     /// </summary>
     public override void Clear()
     {
-        // TODO: Implement Azure Search index clearing via REST API
-        _documentCount = 0;
+        try
+        {
+            // Delete all documents using Azure Search batch delete
+            var url = $"{_baseUrl}/indexes/{_indexName}/docs/index?api-version=2023-11-01";
+            
+            // Get all document IDs first
+            var searchUrl = $"{_baseUrl}/indexes/{_indexName}/docs/search?api-version=2023-11-01";
+            var searchPayload = new
+            {
+                search = "*",
+                select = "id",
+                top = 1000
+            };
+            
+            var searchContent = new StringContent(
+                JsonSerializer.Serialize(searchPayload),
+                Encoding.UTF8,
+                "application/json");
+            
+            var searchResponse = _httpClient.PostAsync(searchUrl, searchContent).Result;
+            
+            if (searchResponse.IsSuccessStatusCode)
+            {
+                var resultJson = searchResponse.Content.ReadAsStringAsync().Result;
+                var result = JsonSerializer.Deserialize<JsonElement>(resultJson);
+                
+                if (result.TryGetProperty("value", out var docs))
+                {
+                    var deleteActions = new List<object>();
+                    foreach (var doc in docs.EnumerateArray())
+                    {
+                        if (doc.TryGetProperty("id", out var id))
+                        {
+                            deleteActions.Add(new
+                            {
+                                __delete = new { id = id.GetString() }
+                            });
+                        }
+                    }
+                    
+                    if (deleteActions.Count > 0)
+                    {
+                        var deletePayload = new { value = deleteActions };
+                        var deleteContent = new StringContent(
+                            JsonSerializer.Serialize(deletePayload),
+                            Encoding.UTF8,
+                            "application/json");
+                        
+                        _httpClient.PostAsync(url, deleteContent).Wait();
+                    }
+                }
+            }
+            
+            _documentCount = 0;
+        }
+        catch (Exception ex)
+        {
+            throw new InvalidOperationException("Failed to clear Azure Search index", ex);
+        }
     }
 
     /// <summary>
@@ -68,9 +163,44 @@ public class AzureSearchDocumentStore<T> : DocumentStoreBase<T>
     /// </summary>
     protected override void AddCore(VectorDocument<T> vectorDocument)
     {
-        // TODO: Implement Azure Search indexing via REST API
-        // This would send HTTP POST request to Azure Search index endpoint
-        _documentCount++;
+        try
+        {
+            var url = $"{_baseUrl}/indexes/{_indexName}/docs/index?api-version=2023-11-01";
+            
+            var vectorArray = vectorDocument.Vector.ToArray();
+            var vectorDoubles = new double[vectorArray.Length];
+            for (int i = 0; i < vectorArray.Length; i++)
+            {
+                vectorDoubles[i] = NumOps.ToDouble(vectorArray[i]);
+            }
+            
+            var document = new
+            {
+                id = vectorDocument.Id,
+                content = vectorDocument.Content,
+                vector = vectorDoubles,
+                metadata = vectorDocument.Metadata
+            };
+            
+            var payload = new
+            {
+                value = new[] { new { __upload = document } }
+            };
+            
+            var content = new StringContent(
+                JsonSerializer.Serialize(payload),
+                Encoding.UTF8,
+                "application/json");
+            
+            var response = _httpClient.PostAsync(url, content).Result;
+            response.EnsureSuccessStatusCode();
+            
+            _documentCount++;
+        }
+        catch (Exception ex)
+        {
+            throw new InvalidOperationException($"Failed to add document to Azure Search: {ex.Message}", ex);
+        }
     }
 
     /// <summary>
@@ -78,9 +208,81 @@ public class AzureSearchDocumentStore<T> : DocumentStoreBase<T>
     /// </summary>
     protected override IEnumerable<Document<T>> GetSimilarCore(Vector<T> queryVector, int topK, Dictionary<string, object> metadataFilters)
     {
-        // TODO: Implement Azure Search vector search via REST API
-        // This would send HTTP POST request to Azure Search search endpoint with vector query
-        return Enumerable.Empty<Document<T>>();
+        try
+        {
+            var url = $"{_baseUrl}/indexes/{_indexName}/docs/search?api-version=2023-11-01";
+            
+            var vectorArray = queryVector.ToArray();
+            var vectorDoubles = new double[vectorArray.Length];
+            for (int i = 0; i < vectorArray.Length; i++)
+            {
+                vectorDoubles[i] = NumOps.ToDouble(vectorArray[i]);
+            }
+            
+            var searchPayload = new
+            {
+                vectorQueries = new[]
+                {
+                    new
+                    {
+                        kind = "vector",
+                        vector = vectorDoubles,
+                        fields = "vector",
+                        k = topK
+                    }
+                },
+                select = "id,content,metadata",
+                top = topK
+            };
+            
+            var content = new StringContent(
+                JsonSerializer.Serialize(searchPayload),
+                Encoding.UTF8,
+                "application/json");
+            
+            var response = _httpClient.PostAsync(url, content).Result;
+            response.EnsureSuccessStatusCode();
+            
+            var resultJson = response.Content.ReadAsStringAsync().Result;
+            var result = JsonSerializer.Deserialize<JsonElement>(resultJson);
+            
+            var documents = new List<Document<T>>();
+            
+            if (result.TryGetProperty("value", out var docs))
+            {
+                foreach (var doc in docs.EnumerateArray())
+                {
+                    var id = doc.GetProperty("id").GetString() ?? string.Empty;
+                    var content = doc.GetProperty("content").GetString() ?? string.Empty;
+                    
+                    var metadata = new Dictionary<string, object>();
+                    if (doc.TryGetProperty("metadata", out var metaElement))
+                    {
+                        foreach (var prop in metaElement.EnumerateObject())
+                        {
+                            metadata[prop.Name] = prop.Value.ToString() ?? string.Empty;
+                        }
+                    }
+                    
+                    var document = new Document<T>(id, content, metadata);
+                    
+                    if (doc.TryGetProperty("@search.score", out var scoreElement))
+                    {
+                        var score = NumOps.FromDouble(scoreElement.GetDouble());
+                        document.RelevanceScore = score;
+                        document.HasRelevanceScore = true;
+                    }
+                    
+                    documents.Add(document);
+                }
+            }
+            
+            return documents;
+        }
+        catch (Exception ex)
+        {
+            throw new InvalidOperationException($"Failed to search Azure Search index: {ex.Message}", ex);
+        }
     }
 
     /// <summary>
@@ -88,8 +290,34 @@ public class AzureSearchDocumentStore<T> : DocumentStoreBase<T>
     /// </summary>
     protected override Document<T>? GetByIdCore(string documentId)
     {
-        // TODO: Implement Azure Search document retrieval by ID via REST API
-        return null;
+        try
+        {
+            var url = $"{_baseUrl}/indexes/{_indexName}/docs('{documentId}')?api-version=2023-11-01";
+            var response = _httpClient.GetAsync(url).Result;
+            
+            if (!response.IsSuccessStatusCode)
+                return null;
+            
+            var resultJson = response.Content.ReadAsStringAsync().Result;
+            var doc = JsonSerializer.Deserialize<JsonElement>(resultJson);
+            
+            var content = doc.GetProperty("content").GetString() ?? string.Empty;
+            
+            var metadata = new Dictionary<string, object>();
+            if (doc.TryGetProperty("metadata", out var metaElement))
+            {
+                foreach (var prop in metaElement.EnumerateObject())
+                {
+                    metadata[prop.Name] = prop.Value.ToString() ?? string.Empty;
+                }
+            }
+            
+            return new Document<T>(documentId, content, metadata);
+        }
+        catch
+        {
+            return null;
+        }
     }
 
     /// <summary>
@@ -97,13 +325,33 @@ public class AzureSearchDocumentStore<T> : DocumentStoreBase<T>
     /// </summary>
     protected override bool RemoveCore(string documentId)
     {
-        // TODO: Implement Azure Search document deletion via REST API
-        if (_documentCount > 0)
+        try
         {
-            _documentCount--;
-            return true;
+            var url = $"{_baseUrl}/indexes/{_indexName}/docs/index?api-version=2023-11-01";
+            
+            var payload = new
+            {
+                value = new[] { new { __delete = new { id = documentId } } }
+            };
+            
+            var content = new StringContent(
+                JsonSerializer.Serialize(payload),
+                Encoding.UTF8,
+                "application/json");
+            
+            var response = _httpClient.PostAsync(url, content).Result;
+            
+            if (response.IsSuccessStatusCode && _documentCount > 0)
+            {
+                _documentCount--;
+                return true;
+            }
+            
+            return false;
         }
-        return false;
+        catch
+        {
+            return false;
+        }
     }
 }
-
