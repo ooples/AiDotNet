@@ -70,10 +70,11 @@ public class MultiModalTextSplitter : ChunkingStrategyBase
 
                 currentChunk.Add(line);
 
-                if (_preserveImageContext)
+                if (_preserveImageContext && _contextWindowSize > 0)
                 {
-                    // Include context after image
-                    var contextEnd = Math.Min(lines.Length, i + (_contextWindowSize / 50));
+                    // Include context after image (minimum 1 line if context window is set)
+                    var linesToInclude = Math.Max(1, _contextWindowSize / 50);
+                    var contextEnd = Math.Min(lines.Length, i + linesToInclude);
                     for (var j = i + 1; j < contextEnd; j++)
                     {
                         currentChunk.Add(lines[j]);

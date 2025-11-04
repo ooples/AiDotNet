@@ -1,6 +1,8 @@
-using AiDotNet.Interfaces;
+using AiDotNet.NumericOperations;
 using AiDotNet.RetrievalAugmentedGeneration.Models;
 using AiDotNet.RetrievalAugmentedGeneration.Retrievers;
+using System;
+using System.Collections.Generic;
 
 namespace AiDotNet.RetrievalAugmentedGeneration.AdvancedPatterns;
 
@@ -14,7 +16,6 @@ namespace AiDotNet.RetrievalAugmentedGeneration.AdvancedPatterns;
 /// </remarks>
 public class ChainOfThoughtRetriever<T>
 {
-    private readonly INumericOperations<T> _numericOperations;
     private readonly string _llmEndpoint;
     private readonly string _llmApiKey;
     private readonly RetrieverBase<T> _baseRetriever;
@@ -25,17 +26,14 @@ public class ChainOfThoughtRetriever<T>
     /// <param name="llmEndpoint">The LLM API endpoint.</param>
     /// <param name="llmApiKey">The API key for the LLM service.</param>
     /// <param name="baseRetriever">The underlying retriever to use.</param>
-    /// <param name="numericOperations">The numeric operations provider.</param>
     public ChainOfThoughtRetriever(
         string llmEndpoint,
         string llmApiKey,
-        RetrieverBase<T> baseRetriever,
-        INumericOperations<T> numericOperations)
+        RetrieverBase<T> baseRetriever)
     {
         _llmEndpoint = llmEndpoint ?? throw new ArgumentNullException(nameof(llmEndpoint));
         _llmApiKey = llmApiKey ?? throw new ArgumentNullException(nameof(llmApiKey));
         _baseRetriever = baseRetriever ?? throw new ArgumentNullException(nameof(baseRetriever));
-        _numericOperations = numericOperations ?? throw new ArgumentNullException(nameof(numericOperations));
     }
 
     /// <summary>

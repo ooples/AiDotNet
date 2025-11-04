@@ -1,5 +1,8 @@
-using AiDotNet.Interfaces;
+using AiDotNet.NumericOperations;
 using AiDotNet.RetrievalAugmentedGeneration.Models;
+using System;
+using System.Collections.Generic;
+using System.Linq;
 
 namespace AiDotNet.RetrievalAugmentedGeneration.ContextCompression;
 
@@ -22,18 +25,16 @@ public class SelectiveContextCompressor<T>
     /// </summary>
     /// <param name="maxSentences">Maximum number of sentences to keep.</param>
     /// <param name="relevanceThreshold">Minimum relevance score to keep a sentence.</param>
-    /// <param name="numericOperations">The numeric operations provider.</param>
     public SelectiveContextCompressor(
         int maxSentences,
-        T relevanceThreshold,
-        INumericOperations<T> numericOperations)
+        T relevanceThreshold)
     {
         if (maxSentences <= 0)
             throw new ArgumentOutOfRangeException(nameof(maxSentences), "Max sentences must be positive");
             
         _maxSentences = maxSentences;
         _relevanceThreshold = relevanceThreshold;
-        _numericOperations = numericOperations ?? throw new ArgumentNullException(nameof(numericOperations));
+        _numericOperations = NumericOperationsFactory.GetOperations<T>();
     }
 
     /// <summary>
@@ -65,7 +66,7 @@ public class SelectiveContextCompressor<T>
             }
 
             var selectedSentences = scoredSentences
-                .OrderByDescending(s => s.score)
+                .OrderByDescending(s => Convert.ToDouble(s.score))
                 .Take(_maxSentences)
                 .Select(s => s.sentence);
 
