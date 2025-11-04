@@ -2,7 +2,6 @@ using System;
 using AiDotNet.RetrievalAugmentedGeneration.Models;
 using System.Collections.Generic;
 using System.Linq;
-using AiDotNet.Helpers;
 
 namespace AiDotNet.RetrievalAugmentedGeneration.RerankingStrategies
 {
@@ -12,19 +11,16 @@ namespace AiDotNet.RetrievalAugmentedGeneration.RerankingStrategies
     /// <typeparam name="T">The numeric type for vector operations.</typeparam>
     public class LLMBasedReranker<T> : RerankingStrategyBase<T>
     {
-        private readonly INumericOperations<T> _numOps;
         private readonly string _llmEndpoint;
         private readonly string _apiKey;
 
         /// <summary>
         /// Initializes a new instance of the <see cref="LLMBasedReranker{T}"/> class.
         /// </summary>
-        /// <param name="numericOperations">The numeric operations for type T.</param>
         /// <param name="llmEndpoint">The LLM API endpoint.</param>
         /// <param name="apiKey">The API key for the LLM service.</param>
-        public LLMBasedReranker(INumericOperations<T> numericOperations, string? llmEndpoint = null, string? apiKey = null) : base(numericOperations)
+        public LLMBasedReranker(string? llmEndpoint = null, string? apiKey = null)
         {
-            _numOps = numericOperations ?? throw new ArgumentNullException(nameof(numericOperations));
             _llmEndpoint = llmEndpoint ?? string.Empty;
             _apiKey = apiKey ?? string.Empty;
         }
@@ -82,7 +78,7 @@ namespace AiDotNet.RetrievalAugmentedGeneration.RerankingStrategies
             var totalScore = (exactMatches * 0.4 + proximityScore * 0.3 + semanticScore * 0.3);
             totalScore = Math.Min(1.0, totalScore / queryWords.Count);
 
-            return _numOps.FromDouble(totalScore);
+            return NumOps.FromDouble(totalScore);
         }
 
         private double ComputeProximityScore(List<string> queryWords, string document)

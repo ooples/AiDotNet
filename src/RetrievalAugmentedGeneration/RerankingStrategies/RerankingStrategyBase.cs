@@ -2,6 +2,7 @@ using System;
 using AiDotNet.RetrievalAugmentedGeneration.Models;
 using System.Collections.Generic;
 using AiDotNet.Helpers;
+using AiDotNet.Interfaces;
 
 namespace AiDotNet.RetrievalAugmentedGeneration.RerankingStrategies
 {
@@ -11,16 +12,10 @@ namespace AiDotNet.RetrievalAugmentedGeneration.RerankingStrategies
     /// <typeparam name="T">The numeric type for vector operations.</typeparam>
     public abstract class RerankingStrategyBase<T>
     {
-        protected readonly INumericOperations<T> NumOps;
-
         /// <summary>
-        /// Initializes a new instance of the <see cref="RerankingStrategyBase{T}"/> class.
+        /// Provides mathematical operations for the numeric type T.
         /// </summary>
-        /// <param name="numericOperations">The numeric operations for type T.</param>
-        protected RerankingStrategyBase(INumericOperations<T> numericOperations)
-        {
-            NumOps = numericOperations ?? throw new ArgumentNullException(nameof(numericOperations));
-        }
+        protected static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();
 
         /// <summary>
         /// Reranks a list of documents based on their relevance to the query.

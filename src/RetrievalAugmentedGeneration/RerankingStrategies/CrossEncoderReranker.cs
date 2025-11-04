@@ -2,7 +2,6 @@ using System;
 using AiDotNet.RetrievalAugmentedGeneration.Models;
 using System.Collections.Generic;
 using System.Linq;
-using AiDotNet.Helpers;
 
 namespace AiDotNet.RetrievalAugmentedGeneration.RerankingStrategies
 {
@@ -12,17 +11,14 @@ namespace AiDotNet.RetrievalAugmentedGeneration.RerankingStrategies
     /// <typeparam name="T">The numeric type for vector operations.</typeparam>
     public class CrossEncoderReranker<T> : RerankingStrategyBase<T>
     {
-        private readonly INumericOperations<T> _numOps;
         private readonly string _modelPath;
 
         /// <summary>
         /// Initializes a new instance of the <see cref="CrossEncoderReranker{T}"/> class.
         /// </summary>
-        /// <param name="numericOperations">The numeric operations for type T.</param>
         /// <param name="modelPath">The path to the cross-encoder model.</param>
-        public CrossEncoderReranker(INumericOperations<T> numericOperations, string? modelPath = null) : base(numericOperations)
+        public CrossEncoderReranker(string? modelPath = null)
         {
-            _numOps = numericOperations ?? throw new ArgumentNullException(nameof(numericOperations));
             _modelPath = modelPath ?? string.Empty;
         }
 
@@ -74,7 +70,7 @@ namespace AiDotNet.RetrievalAugmentedGeneration.RerankingStrategies
             var lengthPenalty = 1.0 - Math.Abs(query.Length - document.Length) / (double)Math.Max(query.Length, document.Length);
             score *= lengthPenalty;
 
-            return _numOps.FromDouble(score);
+            return NumOps.FromDouble(score);
         }
 
         private List<string> Tokenize(string text)

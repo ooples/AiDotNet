@@ -1,0 +1,60 @@
+using AiDotNet.Interfaces;
+using AiDotNet.RetrievalAugmentedGeneration.QueryExpansion;
+
+namespace AiDotNet.RetrievalAugmentedGeneration.QueryExpansion;
+
+/// <summary>
+/// Learned sparse encoder expansion using models like SPLADE.
+/// </summary>
+/// <typeparam name="T">The numeric data type used for calculations.</typeparam>
+/// <remarks>
+/// Uses a learned sparse model (e.g., SPLADE) to expand queries with relevant terms
+/// weighted by their importance, combining benefits of sparse and dense retrieval.
+/// </remarks>
+public class LearnedSparseEncoderExpansion : QueryExpansionBase
+{
+    private readonly string _modelPath;
+    private readonly int _maxExpansionTerms;
+    private readonly T _minTermWeight;
+
+    /// <summary>
+    /// Initializes a new instance of the <see cref="LearnedSparseEncoderExpansion{T}"/> class.
+    /// </summary>
+    /// <param name="modelPath">Path to the SPLADE or similar model.</param>
+    /// <param name="maxExpansionTerms">Maximum number of expansion terms to add.</param>
+    /// <param name="minTermWeight">Minimum weight threshold for including a term.</param>
+    /// <param name="numericOperations">The numeric operations provider.</param>
+    public LearnedSparseEncoderExpansion(
+        string modelPath,
+        int maxExpansionTerms,
+        T minTermWeight,
+        INumericOperations<T> numericOperations)
+        : base(numericOperations)
+    {
+        _modelPath = modelPath ?? throw new ArgumentNullException(nameof(modelPath));
+        
+        if (maxExpansionTerms <= 0)
+            throw new ArgumentOutOfRangeException(nameof(maxExpansionTerms), "Max expansion terms must be positive");
+            
+        _maxExpansionTerms = maxExpansionTerms;
+        _minTermWeight = minTermWeight;
+    }
+
+    /// <summary>
+    /// Expands the query using learned sparse encoding.
+    /// </summary>
+    public override IEnumerable<string> ExpandQuery(string query)
+    {
+        if (string.IsNullOrWhiteSpace(query))
+            throw new ArgumentException("Query cannot be null or whitespace", nameof(query));
+
+        // TODO: Implement learned sparse expansion
+        // 1. Load SPLADE or similar model
+        // 2. Encode query to get term weights
+        // 3. Select top terms above threshold
+        // 4. Create expanded query with weighted terms
+        // 5. Return original + expanded versions
+        throw new NotImplementedException("Learned sparse encoder expansion requires SPLADE/ONNX model integration");
+    }
+}
+
