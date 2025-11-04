@@ -1,4 +1,5 @@
 using AiDotNet.Interfaces;
+using AiDotNet.RetrievalAugmentedGeneration.Models;
 
 namespace AiDotNet.RetrievalAugmentedGeneration.Models;
 
@@ -155,3 +156,4 @@ public class Document<T>
         Metadata = metadata;
     }
 }
+
