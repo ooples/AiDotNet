@@ -47,7 +47,7 @@ namespace AiDotNet.RetrievalAugmentedGeneration.EmbeddingModels
                 values[i] = val;
             }
 
-            return NormalizeVector(new Vector<T>(values));
+            return new Vector<T>(values).Normalize();
         }
 
         private int GetDeterministicHash(string text)
@@ -64,28 +64,6 @@ namespace AiDotNet.RetrievalAugmentedGeneration.EmbeddingModels
                 }
                 return hash;
             }
-        }
-
-        private Vector<T> NormalizeVector(Vector<T> vector)
-        {
-            var magnitude = NumOps.Zero;
-            for (int i = 0; i < vector.Length; i++)
-            {
-                magnitude = NumOps.Add(magnitude, NumOps.Multiply(vector[i], vector[i]));
-            }
-            magnitude = NumOps.FromDouble(Math.Sqrt(Convert.ToDouble(magnitude)));
-
-            if (NumOps.GreaterThan(magnitude, NumOps.Zero))
-            {
-                var normalized = new T[vector.Length];
-                for (int i = 0; i < vector.Length; i++)
-                {
-                    normalized[i] = NumOps.Divide(vector[i], magnitude);
-                }
-                return new Vector<T>(normalized);
-            }
-            
-            return vector;
         }
     }
 }
