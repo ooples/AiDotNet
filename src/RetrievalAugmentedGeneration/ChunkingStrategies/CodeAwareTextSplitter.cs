@@ -69,10 +69,12 @@ namespace AiDotNet.RetrievalAugmentedGeneration.ChunkingStrategies
                 return chunks;
             }
 
+            var currentChunk = new StringBuilder();
+            
             foreach (var separator in separators)
             {
                 var splits = text.Split(new[] { separator }, StringSplitOptions.None);
-                var currentChunk = new StringBuilder();
+                currentChunk.Clear();
 
                 foreach (var split in splits)
                 {
