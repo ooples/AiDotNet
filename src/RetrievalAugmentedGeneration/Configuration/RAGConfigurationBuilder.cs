@@ -1,5 +1,3 @@
-using System;
-using System.Collections.Generic;
 using AiDotNet.Helpers;
 
 namespace AiDotNet.RetrievalAugmentedGeneration.Configuration
@@ -15,22 +13,9 @@ namespace AiDotNet.RetrievalAugmentedGeneration.Configuration
         /// <summary>
         /// Initializes a new instance of the <see cref="RAGConfigurationBuilder{T}"/> class.
         /// </summary>
-        /// <param name="numericOperations">The numeric operations for type T.</param>
-        public RAGConfigurationBuilder(INumericOperations<T> numericOperations)
+        public RAGConfigurationBuilder()
         {
-            if (numericOperations == null) throw new ArgumentNullException(nameof(numericOperations));
-
-            _config = new RAGConfiguration<T>
-            {
-                NumericOperations = numericOperations,
-                DocumentStore = new DocumentStoreConfig(),
-                Chunking = new ChunkingConfig(),
-                Embedding = new EmbeddingConfig(),
-                Retrieval = new RetrievalConfig(),
-                Reranking = new RerankingConfig(),
-                QueryExpansion = new QueryExpansionConfig(),
-                ContextCompression = new ContextCompressionConfig()
-            };
+            _config = new RAGConfiguration<T>();
         }
 
         /// <summary>
@@ -41,7 +26,10 @@ namespace AiDotNet.RetrievalAugmentedGeneration.Configuration
         /// <returns>The builder instance.</returns>
         public RAGConfigurationBuilder<T> WithDocumentStore(string type, Dictionary<string, object>? parameters = null)
         {
-            _config.DocumentStore.Type = type ?? throw new ArgumentNullException(nameof(type));
+            if (string.IsNullOrWhiteSpace(type))
+                throw new ArgumentException("Document store type cannot be null or empty", nameof(type));
+
+            _config.DocumentStore.Type = type;
             if (parameters != null)
             {
                 _config.DocumentStore.Parameters = parameters;
@@ -58,9 +46,16 @@ namespace AiDotNet.RetrievalAugmentedGeneration.Configuration
         /// <returns>The builder instance.</returns>
         public RAGConfigurationBuilder<T> WithChunking(string strategy, int chunkSize = 1000, int chunkOverlap = 200)
         {
-            _config.Chunking.Strategy = strategy ?? throw new ArgumentNullException(nameof(strategy));
-            _config.Chunking.ChunkSize = chunkSize > 0 ? chunkSize : throw new ArgumentOutOfRangeException(nameof(chunkSize));
-            _config.Chunking.ChunkOverlap = chunkOverlap >= 0 ? chunkOverlap : throw new ArgumentOutOfRangeException(nameof(chunkOverlap));
+            if (string.IsNullOrWhiteSpace(strategy))
+                throw new ArgumentException("Chunking strategy cannot be null or empty", nameof(strategy));
+            if (chunkSize <= 0)
+                throw new ArgumentOutOfRangeException(nameof(chunkSize), "Chunk size must be greater than zero");
+            if (chunkOverlap < 0)
+                throw new ArgumentOutOfRangeException(nameof(chunkOverlap), "Chunk overlap cannot be negative");
+
+            _config.Chunking.Strategy = strategy;
+            _config.Chunking.ChunkSize = chunkSize;
+            _config.Chunking.ChunkOverlap = chunkOverlap;
             return this;
         }
 
@@ -74,10 +69,15 @@ namespace AiDotNet.RetrievalAugmentedGeneration.Configuration
         /// <returns>The builder instance.</returns>
         public RAGConfigurationBuilder<T> WithEmbedding(string modelType, string modelPath = "", string apiKey = "", int embeddingDimension = 768)
         {
-            _config.Embedding.ModelType = modelType ?? throw new ArgumentNullException(nameof(modelType));
+            if (string.IsNullOrWhiteSpace(modelType))
+                throw new ArgumentException("Model type cannot be null or empty", nameof(modelType));
+            if (embeddingDimension <= 0)
+                throw new ArgumentOutOfRangeException(nameof(embeddingDimension), "Embedding dimension must be greater than zero");
+
+            _config.Embedding.ModelType = modelType;
             _config.Embedding.ModelPath = modelPath;
             _config.Embedding.ApiKey = apiKey;
-            _config.Embedding.EmbeddingDimension = embeddingDimension > 0 ? embeddingDimension : throw new ArgumentOutOfRangeException(nameof(embeddingDimension));
+            _config.Embedding.EmbeddingDimension = embeddingDimension;
             return this;
         }
 
@@ -89,8 +89,13 @@ namespace AiDotNet.RetrievalAugmentedGeneration.Configuration
         /// <returns>The builder instance.</returns>
         public RAGConfigurationBuilder<T> WithRetrieval(string strategy, int topK = 10)
         {
-            _config.Retrieval.Strategy = strategy ?? throw new ArgumentNullException(nameof(strategy));
-            _config.Retrieval.TopK = topK > 0 ? topK : throw new ArgumentOutOfRangeException(nameof(topK));
+            if (string.IsNullOrWhiteSpace(strategy))
+                throw new ArgumentException("Retrieval strategy cannot be null or empty", nameof(strategy));
+            if (topK <= 0)
+                throw new ArgumentOutOfRangeException(nameof(topK), "TopK must be greater than zero");
+
+            _config.Retrieval.Strategy = strategy;
+            _config.Retrieval.TopK = topK;
             return this;
         }
 
@@ -102,9 +107,14 @@ namespace AiDotNet.RetrievalAugmentedGeneration.Configuration
         /// <returns>The builder instance.</returns>
         public RAGConfigurationBuilder<T> WithReranking(string strategy, int topK = 5)
         {
+            if (string.IsNullOrWhiteSpace(strategy))
+                throw new ArgumentException("Reranking strategy cannot be null or empty", nameof(strategy));
+            if (topK <= 0)
+                throw new ArgumentOutOfRangeException(nameof(topK), "TopK must be greater than zero");
+
             _config.Reranking.Enabled = true;
-            _config.Reranking.Strategy = strategy ?? throw new ArgumentNullException(nameof(strategy));
-            _config.Reranking.TopK = topK > 0 ? topK : throw new ArgumentOutOfRangeException(nameof(topK));
+            _config.Reranking.Strategy = strategy;
+            _config.Reranking.TopK = topK;
             return this;
         }
 
@@ -116,9 +126,14 @@ namespace AiDotNet.RetrievalAugmentedGeneration.Configuration
         /// <returns>The builder instance.</returns>
         public RAGConfigurationBuilder<T> WithQueryExpansion(string strategy, int numExpansions = 3)
         {
+            if (string.IsNullOrWhiteSpace(strategy))
+                throw new ArgumentException("Query expansion strategy cannot be null or empty", nameof(strategy));
+            if (numExpansions <= 0)
+                throw new ArgumentOutOfRangeException(nameof(numExpansions), "Number of expansions must be greater than zero");
+
             _config.QueryExpansion.Enabled = true;
-            _config.QueryExpansion.Strategy = strategy ?? throw new ArgumentNullException(nameof(strategy));
-            _config.QueryExpansion.NumExpansions = numExpansions > 0 ? numExpansions : throw new ArgumentOutOfRangeException(nameof(numExpansions));
+            _config.QueryExpansion.Strategy = strategy;
+            _config.QueryExpansion.NumExpansions = numExpansions;
             return this;
         }
 
@@ -131,12 +146,17 @@ namespace AiDotNet.RetrievalAugmentedGeneration.Configuration
         /// <returns>The builder instance.</returns>
         public RAGConfigurationBuilder<T> WithContextCompression(string strategy, double compressionRatio = 0.5, int maxLength = 500)
         {
+            if (string.IsNullOrWhiteSpace(strategy))
+                throw new ArgumentException("Compression strategy cannot be null or empty", nameof(strategy));
+            if (compressionRatio < 0 || compressionRatio > 1)
+                throw new ArgumentOutOfRangeException(nameof(compressionRatio), "Compression ratio must be between 0 and 1");
+            if (maxLength <= 0)
+                throw new ArgumentOutOfRangeException(nameof(maxLength), "Max length must be greater than zero");
+
             _config.ContextCompression.Enabled = true;
-            _config.ContextCompression.Strategy = strategy ?? throw new ArgumentNullException(nameof(strategy));
-            _config.ContextCompression.CompressionRatio = compressionRatio >= 0 && compressionRatio <= 1
-                ? compressionRatio
-                : throw new ArgumentOutOfRangeException(nameof(compressionRatio));
-            _config.ContextCompression.MaxLength = maxLength > 0 ? maxLength : throw new ArgumentOutOfRangeException(nameof(maxLength));
+            _config.ContextCompression.Strategy = strategy;
+            _config.ContextCompression.CompressionRatio = compressionRatio;
+            _config.ContextCompression.MaxLength = maxLength;
             return this;
         }
 
