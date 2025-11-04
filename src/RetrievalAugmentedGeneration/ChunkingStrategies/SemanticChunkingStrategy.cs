@@ -8,24 +8,18 @@ namespace AiDotNet.RetrievalAugmentedGeneration.ChunkingStrategies
     /// <summary>
     /// Semantic-based text chunking that uses embeddings to group related content.
     /// </summary>
-    /// <typeparam name="T">The numeric type for vector operations.</typeparam>
     public class SemanticChunkingStrategy : ChunkingStrategyBase
     {
-        private readonly INumericOperations<T> _numOps;
-
         /// <summary>
-        /// Initializes a new instance of the <see cref="SemanticChunkingStrategy{T}"/> class.
+        /// Initializes a new instance of the <see cref="SemanticChunkingStrategy"/> class.
         /// </summary>
-        /// <param name="numericOperations">The numeric operations for type T.</param>
         /// <param name="maxChunkSize">The maximum chunk size in characters.</param>
         /// <param name="chunkOverlap">The chunk overlap in characters.</param>
         public SemanticChunkingStrategy(
-            INumericOperations<T> numericOperations,
             int maxChunkSize = 1000,
             int chunkOverlap = 200)
             : base(maxChunkSize, chunkOverlap)
         {
-            _numOps = numericOperations ?? throw new ArgumentNullException(nameof(numericOperations));
         }
 
         /// <summary>

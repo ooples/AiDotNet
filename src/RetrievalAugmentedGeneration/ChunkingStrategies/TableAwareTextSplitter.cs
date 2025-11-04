@@ -1,12 +1,12 @@
-using AiDotNet.Interfaces;
-using AiDotNet.RetrievalAugmentedGeneration.Models;
+using System;
+using System.Collections.Generic;
+using System.Linq;
 
 namespace AiDotNet.RetrievalAugmentedGeneration.ChunkingStrategies;
 
 /// <summary>
 /// Specialized splitter that correctly parses and chunks tabular data from documents.
 /// </summary>
-/// <typeparam name="T">The numeric data type used for calculations.</typeparam>
 /// <remarks>
 /// Handles various table formats (Markdown, CSV, HTML tables) and ensures table integrity
 /// by keeping related rows together and preserving column headers.
@@ -17,16 +17,18 @@ public class TableAwareTextSplitter : ChunkingStrategyBase
     private readonly bool _includeHeadersInEachChunk;
 
     /// <summary>
-    /// Initializes a new instance of the <see cref="TableAwareTextSplitter{T}"/> class.
+    /// Initializes a new instance of the <see cref="TableAwareTextSplitter"/> class.
     /// </summary>
+    /// <param name="chunkSize">The maximum size of each chunk.</param>
+    /// <param name="chunkOverlap">The overlap between consecutive chunks.</param>
     /// <param name="maxRowsPerChunk">Maximum number of table rows per chunk.</param>
     /// <param name="includeHeadersInEachChunk">Whether to include table headers in each chunk.</param>
-    /// <param name="numericOperations">The numeric operations provider.</param>
     public TableAwareTextSplitter(
-        int maxRowsPerChunk,
-        bool includeHeadersInEachChunk,
-        INumericOperations<T> numericOperations)
-        : base(numericOperations)
+        int chunkSize = 2000,
+        int chunkOverlap = 200,
+        int maxRowsPerChunk = 50,
+        bool includeHeadersInEachChunk = true)
+        : base(chunkSize, chunkOverlap)
     {
         if (maxRowsPerChunk <= 0)
             throw new ArgumentOutOfRangeException(nameof(maxRowsPerChunk), "Max rows per chunk must be positive");
@@ -38,36 +40,27 @@ public class TableAwareTextSplitter : ChunkingStrategyBase
     /// <summary>
     /// Splits text while preserving table structure.
     /// </summary>
-    public override IEnumerable<Document<T>> Chunk(string text)
+    protected override IEnumerable<(string Chunk, int StartPosition, int EndPosition)> ChunkCore(string text)
     {
-        if (string.IsNullOrWhiteSpace(text))
-            return Enumerable.Empty<Document<T>>();
-
-        var chunks = new List<Document<T>>();
+        var chunks = new List<(string Chunk, int StartPosition, int EndPosition)>();
         var lines = text.Split(new[] { "\r\n", "\r", "\n" }, StringSplitOptions.None);
         
+        var position = 0;
         var i = 0;
         while (i < lines.Length)
         {
             // Check if current position is start of a table
             if (IsTableStart(lines, i))
             {
-                var tableChunks = ProcessTable(lines, ref i);
+                var tableChunks = ProcessTable(lines, ref i, ref position);
                 chunks.AddRange(tableChunks);
             }
             else
             {
-                // Regular text line
-                chunks.Add(new Document<T>
-                {
-                    Id = Guid.NewGuid().ToString(),
-                    Content = lines[i],
-                    Metadata = new Dictionary<string, object>
-                    {
-                        ["type"] = "text",
-                        ["chunkIndex"] = chunks.Count
-                    }
-                });
+                // Regular text line - add as single chunk
+                var lineLength = lines[i].Length + Environment.NewLine.Length;
+                chunks.Add((lines[i], position, position + lines[i].Length));
+                position += lineLength;
                 i++;
             }
         }
@@ -97,10 +90,10 @@ public class TableAwareTextSplitter : ChunkingStrategyBase
         return false;
     }
 
-    private List<Document<T>> ProcessTable(string[] lines, ref int index)
+    private List<(string Chunk, int StartPosition, int EndPosition)> ProcessTable(string[] lines, ref int index, ref int position)
     {
-        var chunks = new List<Document<T>>();
-        var tableStart = index;
+        var chunks = new List<(string Chunk, int StartPosition, int EndPosition)>();
+        var startPosition = position;
         var headerRows = new List<string>();
         var dataRows = new List<string>();
 
@@ -115,6 +108,8 @@ public class TableAwareTextSplitter : ChunkingStrategyBase
             {
                 dataRows.Add(lines[index]);
             }
+            
+            position += lines[index].Length + Environment.NewLine.Length;
             index++;
 
             // Create chunk when we hit max rows
@@ -127,43 +122,32 @@ public class TableAwareTextSplitter : ChunkingStrategyBase
                 }
                 chunkContent.AddRange(dataRows);
 
-                chunks.Add(new Document<T>
-                {
-                    Id = Guid.NewGuid().ToString(),
-                    Content = string.Join(Environment.NewLine, chunkContent),
-                    Metadata = new Dictionary<string, object>
-                    {
-                        ["type"] = "table",
-                        ["chunkIndex"] = chunks.Count,
-                        ["tableStart"] = tableStart
-                    }
-                });
+                var chunkText = string.Join(Environment.NewLine, chunkContent);
+                var chunkStart = startPosition;
+                var chunkEnd = position;
+                
+                chunks.Add((chunkText, chunkStart, chunkEnd));
 
                 dataRows.Clear();
+                startPosition = position;
             }
         }
 
         // Add remaining rows
-        if (dataRows.Count > 0)
+        if (dataRows.Count > 0 || headerRows.Count > 0)
         {
             var chunkContent = new List<string>();
-            if (_includeHeadersInEachChunk)
+            if (_includeHeadersInEachChunk && headerRows.Count > 0)
             {
                 chunkContent.AddRange(headerRows);
             }
             chunkContent.AddRange(dataRows);
 
-            chunks.Add(new Document<T>
+            if (chunkContent.Count > 0)
             {
-                Id = Guid.NewGuid().ToString(),
-                Content = string.Join(Environment.NewLine, chunkContent),
-                Metadata = new Dictionary<string, object>
-                {
-                    ["type"] = "table",
-                    ["chunkIndex"] = chunks.Count,
-                    ["tableStart"] = tableStart
-                }
-            });
+                var chunkText = string.Join(Environment.NewLine, chunkContent);
+                chunks.Add((chunkText, startPosition, position));
+            }
         }
 
         return chunks;
