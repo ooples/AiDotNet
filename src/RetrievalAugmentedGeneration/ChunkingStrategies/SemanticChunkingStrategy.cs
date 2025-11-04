@@ -62,23 +62,23 @@ namespace AiDotNet.RetrievalAugmentedGeneration.ChunkingStrategies
         {
             var sentences = new List<string>();
             var sentenceEndings = new[] { ". ", "! ", "? ", ".\n", "!\n", "?\n" };
-            var currentSentence = string.Empty;
+            var currentSentence = new System.Text.StringBuilder();
 
             for (int i = 0; i < text.Length; i++)
             {
-                currentSentence += text[i];
+                currentSentence.Append(text[i]);
 
-                var matchedEnding = sentenceEndings.FirstOrDefault(ending => currentSentence.EndsWith(ending));
+                var matchedEnding = sentenceEndings.FirstOrDefault(ending => currentSentence.ToString().EndsWith(ending));
                 if (matchedEnding != null)
                 {
-                    sentences.Add(currentSentence.Trim());
-                    currentSentence = string.Empty;
+                    sentences.Add(currentSentence.ToString().Trim());
+                    currentSentence.Clear();
                 }
             }
 
-            if (!string.IsNullOrWhiteSpace(currentSentence))
+            if (currentSentence.Length > 0 && !string.IsNullOrWhiteSpace(currentSentence.ToString()))
             {
-                sentences.Add(currentSentence.Trim());
+                sentences.Add(currentSentence.ToString().Trim());
             }
 
             return sentences;
