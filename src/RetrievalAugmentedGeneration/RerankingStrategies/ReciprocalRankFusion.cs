@@ -2,7 +2,6 @@ using System;
 using AiDotNet.RetrievalAugmentedGeneration.Models;
 using System.Collections.Generic;
 using System.Linq;
-using AiDotNet.Helpers;
 
 namespace AiDotNet.RetrievalAugmentedGeneration.RerankingStrategies
 {
@@ -12,17 +11,14 @@ namespace AiDotNet.RetrievalAugmentedGeneration.RerankingStrategies
     /// <typeparam name="T">The numeric type for vector operations.</typeparam>
     public class ReciprocalRankFusion<T> : RerankingStrategyBase<T>
     {
-        private readonly INumericOperations<T> _numOps;
         private readonly int _k;
 
         /// <summary>
         /// Initializes a new instance of the <see cref="ReciprocalRankFusion{T}"/> class.
         /// </summary>
-        /// <param name="numericOperations">The numeric operations for type T.</param>
         /// <param name="k">The constant k for reciprocal rank formula (default: 60).</param>
-        public ReciprocalRankFusion(INumericOperations<T> numericOperations, int k = 60) : base(numericOperations)
+        public ReciprocalRankFusion(int k = 60)
         {
-            _numOps = numericOperations ?? throw new ArgumentNullException(nameof(numericOperations));
             _k = k > 0 ? k : throw new ArgumentOutOfRangeException(nameof(k));
         }
 
@@ -44,11 +40,11 @@ namespace AiDotNet.RetrievalAugmentedGeneration.RerankingStrategies
             for (int rank = 0; rank < documents.Count; rank++)
             {
                 var doc = documents[rank];
-                var rrfScore = _numOps.FromDouble(1.0 / (_k + rank + 1));
+                var rrfScore = NumOps.FromDouble(1.0 / (_k + rank + 1));
 
                 if (scores.ContainsKey(doc.Id))
                 {
-                    scores[doc.Id] = _numOps.Add(scores[doc.Id], rrfScore);
+                    scores[doc.Id] = NumOps.Add(scores[doc.Id], rrfScore);
                 }
                 else
                 {
@@ -57,7 +53,7 @@ namespace AiDotNet.RetrievalAugmentedGeneration.RerankingStrategies
             }
 
             var reranked = documents
-                .OrderByDescending(d => Convert.ToDouble(scores.ContainsKey(d.Id) ? scores[d.Id] : _numOps.Zero))
+                .OrderByDescending(d => Convert.ToDouble(scores.ContainsKey(d.Id) ? scores[d.Id] : NumOps.Zero))
                 .Take(topK)
                 .ToList();
 
@@ -93,11 +89,11 @@ namespace AiDotNet.RetrievalAugmentedGeneration.RerankingStrategies
                 for (int rank = 0; rank < rankingList.Count; rank++)
                 {
                     var doc = rankingList[rank];
-                    var rrfScore = _numOps.FromDouble(1.0 / (_k + rank + 1));
+                    var rrfScore = NumOps.FromDouble(1.0 / (_k + rank + 1));
 
                     if (scores.ContainsKey(doc.Id))
                     {
-                        scores[doc.Id] = _numOps.Add(scores[doc.Id], rrfScore);
+                        scores[doc.Id] = NumOps.Add(scores[doc.Id], rrfScore);
                     }
                     else
                     {
