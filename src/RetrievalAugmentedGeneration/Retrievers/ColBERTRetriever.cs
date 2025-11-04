@@ -22,6 +22,8 @@ public class ColBERTRetriever<T> : RetrieverBase<T>
     private readonly int _maxDocLength;
     private readonly int _maxQueryLength;
 
+    private readonly IDocumentStore<T> _documentStore;
+
     /// <summary>
     /// Initializes a new instance of the <see cref="ColBERTRetriever{T}"/> class.
     /// </summary>
@@ -29,15 +31,13 @@ public class ColBERTRetriever<T> : RetrieverBase<T>
     /// <param name="modelPath">Path to the ColBERT model.</param>
     /// <param name="maxDocLength">Maximum document length in tokens.</param>
     /// <param name="maxQueryLength">Maximum query length in tokens.</param>
-    /// <param name="numericOperations">The numeric operations provider.</param>
     public ColBERTRetriever(
         IDocumentStore<T> documentStore,
         string modelPath,
         int maxDocLength,
-        int maxQueryLength,
-        INumericOperations<T> numericOperations)
-        : base(documentStore, numericOperations)
+        int maxQueryLength)
     {
+        _documentStore = documentStore ?? throw new ArgumentNullException(nameof(documentStore));
         _modelPath = modelPath ?? throw new ArgumentNullException(nameof(modelPath));
         
         if (maxDocLength <= 0)

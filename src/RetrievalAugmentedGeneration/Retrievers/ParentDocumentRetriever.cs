@@ -28,15 +28,14 @@ public class ParentDocumentRetriever<T> : RetrieverBase<T>
     /// <param name="chunkSize">Size of chunks for matching.</param>
     /// <param name="parentSize">Size of parent documents to return.</param>
     /// <param name="includeNeighboringChunks">Whether to include neighboring chunks.</param>
-    /// <param name="numericOperations">The numeric operations provider.</param>
     public ParentDocumentRetriever(
         IDocumentStore<T> documentStore,
         int chunkSize,
         int parentSize,
-        bool includeNeighboringChunks,
-        INumericOperations<T> numericOperations)
-        : base(documentStore, numericOperations)
+        bool includeNeighboringChunks)
     {
+        _documentStore = documentStore ?? throw new ArgumentNullException(nameof(documentStore));
+        
         if (chunkSize <= 0)
             throw new ArgumentOutOfRangeException(nameof(chunkSize), "Chunk size must be positive");
             

@@ -63,7 +63,7 @@ public class DiversityReranker<T> : RerankerBase<T>
                 var minSimilarity = NumOps.One;
                 foreach (var selectedDoc in selected)
                 {
-                    var similarity = StatisticsHelper.JaccardSimilarity(doc.Content, selectedDoc.Content);
+                    var similarity = StatisticsHelper<double>.JaccardSimilarity(doc.Content, selectedDoc.Content);
                     var simT = NumOps.FromDouble(similarity);
                     if (NumOps.LessThan(simT, minSimilarity))
                     {

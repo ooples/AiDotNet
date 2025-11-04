@@ -21,6 +21,8 @@ public class GraphRetriever<T> : RetrieverBase<T>
     private readonly string _graphQueryLanguage;
     private readonly int _maxHops;
 
+    private readonly IDocumentStore<T> _documentStore;
+
     /// <summary>
     /// Initializes a new instance of the <see cref="GraphRetriever{T}"/> class.
     /// </summary>
@@ -28,15 +30,13 @@ public class GraphRetriever<T> : RetrieverBase<T>
     /// <param name="graphEndpoint">The knowledge graph endpoint.</param>
     /// <param name="graphQueryLanguage">The query language (e.g., "SPARQL", "Cypher").</param>
     /// <param name="maxHops">Maximum number of hops for graph traversal.</param>
-    /// <param name="numericOperations">The numeric operations provider.</param>
     public GraphRetriever(
         IDocumentStore<T> documentStore,
         string graphEndpoint,
         string graphQueryLanguage,
-        int maxHops,
-        INumericOperations<T> numericOperations)
-        : base(documentStore, numericOperations)
+        int maxHops)
     {
+        _documentStore = documentStore ?? throw new ArgumentNullException(nameof(documentStore));
         _graphEndpoint = graphEndpoint ?? throw new ArgumentNullException(nameof(graphEndpoint));
         _graphQueryLanguage = graphQueryLanguage ?? throw new ArgumentNullException(nameof(graphQueryLanguage));
         

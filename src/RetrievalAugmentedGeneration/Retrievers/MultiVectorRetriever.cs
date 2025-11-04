@@ -21,20 +21,21 @@ public class MultiVectorRetriever<T> : RetrieverBase<T>
     private readonly int _vectorsPerDocument;
     private readonly string _aggregationMethod;
 
+    private readonly IDocumentStore<T> _documentStore;
+
     /// <summary>
     /// Initializes a new instance of the <see cref="MultiVectorRetriever{T}"/> class.
     /// </summary>
     /// <param name="documentStore">The document store to retrieve from.</param>
     /// <param name="vectorsPerDocument">Number of vectors per document.</param>
     /// <param name="aggregationMethod">Method for aggregating scores ("max", "mean", "weighted").</param>
-    /// <param name="numericOperations">The numeric operations provider.</param>
     public MultiVectorRetriever(
         IDocumentStore<T> documentStore,
         int vectorsPerDocument,
-        string aggregationMethod,
-        INumericOperations<T> numericOperations)
-        : base(documentStore, numericOperations)
+        string aggregationMethod)
     {
+        _documentStore = documentStore ?? throw new ArgumentNullException(nameof(documentStore));
+        
         if (vectorsPerDocument <= 0)
             throw new ArgumentOutOfRangeException(nameof(vectorsPerDocument), "Vectors per document must be positive");
             
