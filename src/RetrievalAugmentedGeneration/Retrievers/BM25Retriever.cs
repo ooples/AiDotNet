@@ -118,7 +118,7 @@ namespace AiDotNet.RetrievalAugmentedGeneration.Retrievers
             var denominator = NumOps.FromDouble(df + 0.5);
             var ratio = NumOps.Divide(numerator, denominator);
             
-            return StatisticsHelper<T>.Log(ratio, NumOps);
+            return NumOps.FromDouble(Math.Log(Convert.ToDouble(ratio)));
         }
 
         private void BuildCorpusStatistics(List<Document<T>> documents)
