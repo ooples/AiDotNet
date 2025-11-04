@@ -17,7 +17,7 @@ namespace AiDotNet.RetrievalAugmentedGeneration.Retrievers;
 public class GraphRetriever<T> : RetrieverBase<T>
 {
     private readonly string _graphEndpoint;
-    private readonly string _graphQuery Language;
+    private readonly string _graphQueryLanguage;
     private readonly int _maxHops;
 
     /// <summary>
