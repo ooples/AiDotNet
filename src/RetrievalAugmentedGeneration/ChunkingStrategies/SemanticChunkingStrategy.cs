@@ -9,7 +9,7 @@ namespace AiDotNet.RetrievalAugmentedGeneration.ChunkingStrategies
     /// Semantic-based text chunking that uses embeddings to group related content.
     /// </summary>
     /// <typeparam name="T">The numeric type for vector operations.</typeparam>
-    public class SemanticChunkingStrategy<T> : ChunkingStrategyBase
+    public class SemanticChunkingStrategy : ChunkingStrategyBase
     {
         private readonly INumericOperations<T> _numOps;
 
@@ -94,3 +94,4 @@ namespace AiDotNet.RetrievalAugmentedGeneration.ChunkingStrategies
         }
     }
 }
+

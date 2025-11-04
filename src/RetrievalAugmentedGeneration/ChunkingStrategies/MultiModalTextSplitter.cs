@@ -11,7 +11,7 @@ namespace AiDotNet.RetrievalAugmentedGeneration.ChunkingStrategies;
 /// Creates chunks that keep text and related images together, preserving the relationship
 /// between visual and textual content for better context preservation.
 /// </remarks>
-public class MultiModalTextSplitter<T> : ChunkingStrategyBase<T>
+public class MultiModalTextSplitter : ChunkingStrategyBase
 {
     private readonly int _maxChunkSize;
     private readonly bool _preserveImageContext;
@@ -192,3 +192,4 @@ public class MultiModalTextSplitter<T> : ChunkingStrategyBase<T>
         return line;
     }
 }
+

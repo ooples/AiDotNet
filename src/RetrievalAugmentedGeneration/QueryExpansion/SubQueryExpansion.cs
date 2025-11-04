@@ -11,7 +11,7 @@ namespace AiDotNet.RetrievalAugmentedGeneration.QueryExpansion;
 /// Breaks down complex multi-part queries into individual sub-queries that are
 /// easier to retrieve for, then combines the results.
 /// </remarks>
-public class SubQueryExpansion<T> : QueryExpansionBase<T>
+public class SubQueryExpansion : QueryExpansionBase
 {
     private readonly string _llmEndpoint;
     private readonly string _llmApiKey;
@@ -56,3 +56,4 @@ public class SubQueryExpansion<T> : QueryExpansionBase<T>
         throw new NotImplementedException("Sub-query expansion requires LLM integration");
     }
 }
+

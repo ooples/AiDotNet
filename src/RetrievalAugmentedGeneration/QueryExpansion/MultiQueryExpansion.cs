@@ -11,7 +11,7 @@ namespace AiDotNet.RetrievalAugmentedGeneration.QueryExpansion;
 /// Creates multiple versions of the input query from different angles or perspectives,
 /// then retrieves documents for each variation and merges the results.
 /// </remarks>
-public class MultiQueryExpansion<T> : QueryExpansionBase<T>
+public class MultiQueryExpansion : QueryExpansionBase
 {
     private readonly string _llmEndpoint;
     private readonly string _llmApiKey;
@@ -55,3 +55,4 @@ public class MultiQueryExpansion<T> : QueryExpansionBase<T>
         throw new NotImplementedException("Multi-query expansion requires LLM integration");
     }
 }
+

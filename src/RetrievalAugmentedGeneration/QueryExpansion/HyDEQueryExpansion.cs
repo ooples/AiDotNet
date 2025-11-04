@@ -11,7 +11,7 @@ namespace AiDotNet.RetrievalAugmentedGeneration.QueryExpansion
     /// Hypothetical Document Embeddings (HyDE) query expansion strategy.
     /// </summary>
     /// <typeparam name="T">The numeric type for vector operations.</typeparam>
-    public class HyDEQueryExpansion<T> : QueryExpansionBase
+    public class HyDEQueryExpansion : QueryExpansionBase
     {
         private readonly INumericOperations<T> _numOps;
         private readonly IEmbeddingModel<T> _embeddingModel;
@@ -88,3 +88,4 @@ namespace AiDotNet.RetrievalAugmentedGeneration.QueryExpansion
         }
     }
 }
+

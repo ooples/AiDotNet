@@ -11,7 +11,7 @@ namespace AiDotNet.RetrievalAugmentedGeneration.ChunkingStrategies;
 /// Handles various table formats (Markdown, CSV, HTML tables) and ensures table integrity
 /// by keeping related rows together and preserving column headers.
 /// </remarks>
-public class TableAwareTextSplitter<T> : ChunkingStrategyBase<T>
+public class TableAwareTextSplitter : ChunkingStrategyBase
 {
     private readonly int _maxRowsPerChunk;
     private readonly bool _includeHeadersInEachChunk;
@@ -177,3 +177,4 @@ public class TableAwareTextSplitter<T> : ChunkingStrategyBase<T>
                trimmed.StartsWith("<tr", StringComparison.OrdinalIgnoreCase);
     }
 }
+

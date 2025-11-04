@@ -11,7 +11,7 @@ namespace AiDotNet.RetrievalAugmentedGeneration.ChunkingStrategies;
 /// Ideal for Markdown and HTML documents where headers provide natural semantic boundaries.
 /// Preserves document structure and hierarchy.
 /// </remarks>
-public class HeaderBasedTextSplitter<T> : ChunkingStrategyBase<T>
+public class HeaderBasedTextSplitter : ChunkingStrategyBase
 {
     private readonly int _maxChunkSize;
     private readonly bool _combineSmallChunks;
@@ -144,3 +144,4 @@ public class HeaderBasedTextSplitter<T> : ChunkingStrategyBase<T>
         return false;
     }
 }
+

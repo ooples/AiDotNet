@@ -11,7 +11,7 @@ namespace AiDotNet.RetrievalAugmentedGeneration.QueryExpansion;
 /// Uses a learned sparse model (e.g., SPLADE) to expand queries with relevant terms
 /// weighted by their importance, combining benefits of sparse and dense retrieval.
 /// </remarks>
-public class LearnedSparseEncoderExpansion<T> : QueryExpansionBase<T>
+public class LearnedSparseEncoderExpansion : QueryExpansionBase
 {
     private readonly string _modelPath;
     private readonly int _maxExpansionTerms;
@@ -57,3 +57,4 @@ public class LearnedSparseEncoderExpansion<T> : QueryExpansionBase<T>
         throw new NotImplementedException("Learned sparse encoder expansion requires SPLADE/ONNX model integration");
     }
 }
+
