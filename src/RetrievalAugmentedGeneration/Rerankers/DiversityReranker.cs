@@ -125,7 +125,7 @@ public class DiversityReranker<T> : RerankerBase<T>
         while (remainingDocs.Count > 0)
         {
             Document<T>? bestDoc = null;
-            T? bestScore = null;
+            var bestScore = NumOps.FromDouble(double.MinValue);
 
             foreach (var doc in remainingDocs)
             {

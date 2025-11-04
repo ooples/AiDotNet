@@ -118,7 +118,7 @@ namespace AiDotNet.RetrievalAugmentedGeneration.Retrievers
             var denominator = NumOps.FromDouble(df + 0.5);
             var ratio = NumOps.Divide(numerator, denominator);
             
-            return StatisticsHelper.Log(ratio, NumOps);
+            return StatisticsHelper<T>.Log(ratio, NumOps);
         }
 
         private void BuildCorpusStatistics(List<Document<T>> documents)
@@ -166,7 +166,7 @@ namespace AiDotNet.RetrievalAugmentedGeneration.Retrievers
 
             _avgDocLength = NumOps.Divide(totalLength, NumOps.FromDouble(_totalDocuments));
             
-            if (NumOps.Compare(_avgDocLength, NumOps.Zero) <= 0)
+            if (!NumOps.GreaterThan(_avgDocLength, NumOps.Zero))
                 _avgDocLength = NumOps.One;
         }
 

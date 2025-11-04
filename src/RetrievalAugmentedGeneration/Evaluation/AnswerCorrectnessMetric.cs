@@ -37,7 +37,7 @@ public class AnswerCorrectnessMetric<T> : RAGMetricBase<T>
             return NumOps.Zero;
 
         var words1 = GetWords(answer.Answer);
-        var words2 = GetWords(groundTruth);
+        var words2 = GetWords(groundTruth!);
 
         var intersection = words1.Intersect(words2).Count();
         var union = words1.Union(words2).Count();

@@ -88,7 +88,7 @@ public class RAGEvaluator<T>
             try
             {
                 var score = metric.Evaluate(answer, groundTruth);
-                metricScores[metric.Name] = score;
+                metricScores[metric.Name] = Convert.ToDouble(score);
             }
             catch (ArgumentNullException ex) when (ex.ParamName == "groundTruth")
             {

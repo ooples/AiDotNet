@@ -57,7 +57,8 @@ public class SelectiveContextCompressor<T>
             foreach (var sentence in sentences)
             {
                 var score = CalculateRelevance(query, sentence);
-                if (_numericOperations.GreaterThanOrEqual(score, _relevanceThreshold))
+                if (_numericOperations.GreaterThan(score, _relevanceThreshold) || 
+                    _numericOperations.Equals(score, _relevanceThreshold))
                 {
                     scoredSentences.Add((sentence, score));
                 }
