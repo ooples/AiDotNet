@@ -33,7 +33,7 @@ namespace AiDotNet.RAG.QueryExpansion
 
         private string GenerateParaphrase(string query, int variation)
         {
-            var words = query.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+            var words = query.Split(new[] { ' ' }, StringSplitOptions.RemoveEmptyEntries);
             
             var synonyms = new Dictionary<string, string[]>
             {
@@ -59,7 +59,7 @@ namespace AiDotNet.RAG.QueryExpansion
 
         private string ExpandWithSynonyms(string query)
         {
-            var words = query.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+            var words = query.Split(new[] { ' ' }, StringSplitOptions.RemoveEmptyEntries);
             var expanded = new List<string>(words);
             
             var commonSynonyms = new Dictionary<string, string[]>

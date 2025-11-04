@@ -55,7 +55,7 @@ namespace AiDotNet.RAG.ContextCompression
 
         private string SummarizeDocument(string content, string query)
         {
-            var sentences = content.Split('.', StringSplitOptions.RemoveEmptyEntries);
+            var sentences = content.Split(new[] { '.' }, StringSplitOptions.RemoveEmptyEntries);
             var relevantSentences = sentences
                 .Where(s => ContainsQueryTerms(s, query))
                 .Take(_maxTokens / 20)
@@ -68,7 +68,7 @@ namespace AiDotNet.RAG.ContextCompression
 
         private bool ContainsQueryTerms(string sentence, string query)
         {
-            var queryTerms = query.ToLower().Split(' ', StringSplitOptions.RemoveEmptyEntries);
+            var queryTerms = query.ToLower().Split(new[] { ' ' }, StringSplitOptions.RemoveEmptyEntries);
             var sentenceLower = sentence.ToLower();
             
             return queryTerms.Any(term => sentenceLower.Contains(term));

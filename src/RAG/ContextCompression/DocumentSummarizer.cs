@@ -44,7 +44,7 @@ namespace AiDotNet.RAG.ContextCompression
 
         private string ExtractiveSummarize(string content, string query)
         {
-            var sentences = content.Split('.', StringSplitOptions.RemoveEmptyEntries)
+            var sentences = content.Split(new[] { '.' }, StringSplitOptions.RemoveEmptyEntries)
                 .Select(s => s.Trim())
                 .Where(s => !string.IsNullOrWhiteSpace(s))
                 .ToList();
@@ -54,7 +54,7 @@ namespace AiDotNet.RAG.ContextCompression
                 return content;
             }
 
-            var queryTerms = query.ToLower().Split(' ', StringSplitOptions.RemoveEmptyEntries);
+            var queryTerms = query.ToLower().Split(new[] { ' ' }, StringSplitOptions.RemoveEmptyEntries);
             var scoredSentences = sentences.Select(s => new
             {
                 Sentence = s,
@@ -70,7 +70,7 @@ namespace AiDotNet.RAG.ContextCompression
 
         private string SimpleAbstractiveSummarize(string content)
         {
-            var sentences = content.Split('.', StringSplitOptions.RemoveEmptyEntries)
+            var sentences = content.Split(new[] { '.' }, StringSplitOptions.RemoveEmptyEntries)
                 .Select(s => s.Trim())
                 .Where(s => !string.IsNullOrWhiteSpace(s))
                 .Take(_maxSentences)

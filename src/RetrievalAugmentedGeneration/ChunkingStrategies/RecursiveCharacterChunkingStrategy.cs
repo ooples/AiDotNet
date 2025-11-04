@@ -120,7 +120,7 @@ public class RecursiveCharacterChunkingStrategy : ChunkingStrategyBase
 
         // Get the current separator
         var separator = separators[0];
-        var nextSeparators = separators.Length > 1 ? separators[1..] : new[] { "" };
+        var nextSeparators = separators.Length > 1 ? separators.Skip(1).ToArray() : new[] { "" };
 
         // Split by the current separator
         var splits = !string.IsNullOrEmpty(separator)

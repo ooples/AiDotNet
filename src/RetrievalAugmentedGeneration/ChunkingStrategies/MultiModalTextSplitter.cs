@@ -125,7 +125,7 @@ public class MultiModalTextSplitter : ChunkingStrategyBase
             return true;
 
         // HTML image: <img src="...">
-        if (trimmed.Contains("<img", StringComparison.OrdinalIgnoreCase))
+        if (trimmed.IndexOf("<img", StringComparison.OrdinalIgnoreCase) >= 0)
             return true;
 
         return false;
