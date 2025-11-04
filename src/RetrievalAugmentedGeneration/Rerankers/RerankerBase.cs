@@ -2,6 +2,7 @@ using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.RetrievalAugmentedGeneration.Interfaces;
 using AiDotNet.RetrievalAugmentedGeneration.Models;
+using System.Collections.Generic;
 
 namespace AiDotNet.RetrievalAugmentedGeneration.Rerankers;
 
@@ -160,13 +161,25 @@ public abstract class RerankerBase<T> : IReranker<T>
         if (scores.Count == 0)
             return documents;
 
-        var minScore = scores.Min();
-        var maxScore = scores.Max();
-            
-        var range = NumOps.Subtract(maxScore, minScore);
+        var minScore = scores[0];
+        var maxScore = scores[0];
+        for (var i = 1; i < scores.Count; i++)
+        {
+            var score = scores[i];
+            if (NumOps.LessThan(score, minScore))
+            {
+                minScore = score;
+            }
+            if (NumOps.GreaterThan(score, maxScore))
+            {
+                maxScore = score;
+            }
+        }
 
+        var range = NumOps.Subtract(maxScore, minScore);
         var epsilon = NumOps.FromDouble(1e-8);
-        if (NumOps.LessThan(NumOps.Abs(range), epsilon))
+        var isZeroRange = EqualityComparer<T>.Default.Equals(range, NumOps.Zero);
+        if (isZeroRange || NumOps.LessThan(NumOps.Abs(range), epsilon))
         {
             // All scores are the same, set them all to 1.0
             var one = NumOps.One;
