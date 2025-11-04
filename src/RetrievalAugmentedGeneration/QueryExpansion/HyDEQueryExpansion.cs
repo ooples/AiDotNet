@@ -1,30 +1,19 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
-using AiDotNet.Helpers;
-using AiDotNet.LinearAlgebra;
-using AiDotNet.RetrievalAugmentedGeneration.Interfaces;
 
 namespace AiDotNet.RetrievalAugmentedGeneration.QueryExpansion
 {
     /// <summary>
     /// Hypothetical Document Embeddings (HyDE) query expansion strategy.
     /// </summary>
-    /// <typeparam name="T">The numeric type for vector operations.</typeparam>
     public class HyDEQueryExpansion : QueryExpansionBase
     {
-        private readonly INumericOperations<T> _numOps;
-        private readonly IEmbeddingModel<T> _embeddingModel;
-
         /// <summary>
-        /// Initializes a new instance of the <see cref="HyDEQueryExpansion{T}"/> class.
+        /// Initializes a new instance of the <see cref="HyDEQueryExpansion"/> class.
         /// </summary>
-        /// <param name="numericOperations">The numeric operations for type T.</param>
-        /// <param name="embeddingModel">The embedding model for generating hypothetical documents.</param>
-        public HyDEQueryExpansion(INumericOperations<T> numericOperations, IEmbeddingModel<T> embeddingModel)
+        public HyDEQueryExpansion()
         {
-            _numOps = numericOperations ?? throw new ArgumentNullException(nameof(numericOperations));
-            _embeddingModel = embeddingModel ?? throw new ArgumentNullException(nameof(embeddingModel));
         }
 
         /// <summary>
@@ -47,19 +36,6 @@ namespace AiDotNet.RetrievalAugmentedGeneration.QueryExpansion
             expansions.Add(hypoDoc3);
 
             return expansions;
-        }
-
-        /// <summary>
-        /// Generates a hypothetical document embedding for the query.
-        /// </summary>
-        /// <param name="query">The query to expand.</param>
-        /// <returns>An embedding representing the hypothetical document.</returns>
-        public Vector<T> GenerateHypotheticalEmbedding(string query)
-        {
-            if (string.IsNullOrEmpty(query)) throw new ArgumentNullException(nameof(query));
-
-            var hypotheticalDoc = GenerateHypotheticalDocument(query, "comprehensive answer");
-            return _embeddingModel.Embed(hypotheticalDoc);
         }
 
         private string GenerateHypotheticalDocument(string query, string style)
