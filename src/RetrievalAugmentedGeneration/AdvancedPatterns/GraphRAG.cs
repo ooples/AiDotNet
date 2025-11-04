@@ -1,75 +1,60 @@
 using AiDotNet.Interfaces;
-using AiDotNet.RetrievalAugmentedGeneration.Interfaces;
-using AiDotNet.RetrievalAugmentedGeneration.Retrievers;
 using AiDotNet.RetrievalAugmentedGeneration.Models;
-using System.Collections.Generic;
-using System.Linq;
+using AiDotNet.RetrievalAugmentedGeneration.Retrievers;
 
-namespace AiDotNet.RetrievalAugmentedGeneration.AdvancedPatterns
+namespace AiDotNet.RetrievalAugmentedGeneration.AdvancedPatterns;
+
+/// <summary>
+/// Graph-based RAG pattern leveraging knowledge graphs for retrieval and reasoning.
+/// </summary>
+/// <typeparam name="T">The numeric data type used for calculations.</typeparam>
+/// <remarks>
+/// Combines knowledge graph traversal with traditional RAG to enable structured
+/// reasoning over entities and relationships.
+/// </remarks>
+public class GraphRAG<T>
 {
-    public class GraphRAG<T> : RetrieverBase<T>
+    private readonly INumericOperations<T> _numericOperations;
+    private readonly string _graphEndpoint;
+    private readonly string _graphQueryLanguage;
+    private readonly RetrieverBase<T> _vectorRetriever;
+
+    /// <summary>
+    /// Initializes a new instance of the <see cref="GraphRAG{T}"/> class.
+    /// </summary>
+    /// <param name="graphEndpoint">The knowledge graph endpoint.</param>
+    /// <param name="graphQueryLanguage">The query language (SPARQL, Cypher, etc.).</param>
+    /// <param name="vectorRetriever">Vector retriever for unstructured data.</param>
+    /// <param name="numericOperations">The numeric operations provider.</param>
+    public GraphRAG(
+        string graphEndpoint,
+        string graphQueryLanguage,
+        RetrieverBase<T> vectorRetriever,
+        INumericOperations<T> numericOperations)
     {
-        private readonly IRetriever<T> _baseRetriever;
-        private readonly Dictionary<string, List<string>> _documentGraph;
-        private readonly int _traversalDepth;
+        _graphEndpoint = graphEndpoint ?? throw new ArgumentNullException(nameof(graphEndpoint));
+        _graphQueryLanguage = graphQueryLanguage ?? throw new ArgumentNullException(nameof(graphQueryLanguage));
+        _vectorRetriever = vectorRetriever ?? throw new ArgumentNullException(nameof(vectorRetriever));
+        _numericOperations = numericOperations ?? throw new ArgumentNullException(nameof(numericOperations));
+    }
 
-        public GraphRAG(IRetriever<T> baseRetriever, int traversalDepth = 2)
-        {
-            _baseRetriever = baseRetriever ?? throw new System.ArgumentNullException(nameof(baseRetriever));
-            _documentGraph = new Dictionary<string, List<string>>();
-            _traversalDepth = traversalDepth > 0 ? traversalDepth : throw new System.ArgumentOutOfRangeException(nameof(traversalDepth));
-        }
+    /// <summary>
+    /// Retrieves using graph traversal and vector similarity.
+    /// </summary>
+    public IEnumerable<Document<T>> Retrieve(string query, int topK)
+    {
+        if (string.IsNullOrWhiteSpace(query))
+            throw new ArgumentException("Query cannot be null or whitespace", nameof(query));
 
-        public void AddEdge(string sourceDocId, string targetDocId)
-        {
-            if (!_documentGraph.ContainsKey(sourceDocId))
-            {
-                _documentGraph[sourceDocId] = new List<string>();
-            }
-            
-            if (!_documentGraph[sourceDocId].Contains(targetDocId))
-            {
-                _documentGraph[sourceDocId].Add(targetDocId);
-            }
-        }
+        if (topK <= 0)
+            throw new ArgumentOutOfRangeException(nameof(topK), "topK must be positive");
 
-        protected override IEnumerable<Document<T>> RetrieveCore(string query, int topK, Dictionary<string, object> metadataFilters)
-        {
-            var initialResults = _baseRetriever.Retrieve(query, topK, metadataFilters).ToList();
-            var expandedResults = new Dictionary<string, Document<T>>();
-
-            foreach (var doc in initialResults)
-            {
-                expandedResults[doc.Id] = doc;
-                TraverseGraph(doc.Id, _traversalDepth, expandedResults, metadataFilters);
-            }
-
-            return expandedResults.Values
-                .OrderByDescending(d => Convert.ToDouble(d.RelevanceScore))
-                .Take(topK)
-                .ToList();
-        }
-
-        private void TraverseGraph(string docId, int depth, Dictionary<string, Document<T>> results, Dictionary<string, object> metadataFilters)
-        {
-            if (depth <= 0 || !_documentGraph.ContainsKey(docId))
-            {
-                return;
-            }
-
-            foreach (var neighborId in _documentGraph[docId])
-            {
-                if (!results.ContainsKey(neighborId))
-                {
-                    var neighborDocs = _baseRetriever.Retrieve(neighborId, 1, metadataFilters).ToList();
-                    if (neighborDocs.Count > 0)
-                    {
-                        results[neighborId] = neighborDocs[0];
-                        TraverseGraph(neighborId, depth - 1, results, metadataFilters);
-                    }
-                }
-            }
-        }
+        // TODO: Implement Graph RAG
+        // 1. Extract entities from query
+        // 2. Traverse knowledge graph to find related entities and facts
+        // 3. Use vector retriever for unstructured text
+        // 4. Combine graph data with vector results
+        // 5. Return enriched context
+        throw new NotImplementedException("Graph RAG requires knowledge graph integration");
     }
 }
-

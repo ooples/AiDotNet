@@ -1,70 +1,75 @@
+using AiDotNet.Helpers;
+using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
+using AiDotNet.RetrievalAugmentedGeneration.DocumentStores;
 using AiDotNet.RetrievalAugmentedGeneration.Models;
-using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Threading.Tasks;
 
-namespace AiDotNet.RetrievalAugmentedGeneration.Retrievers
+namespace AiDotNet.RetrievalAugmentedGeneration.Retrievers;
+
+/// <summary>
+/// Parent document retriever that retrieves small chunks but returns larger parent documents.
+/// </summary>
+/// <typeparam name="T">The numeric data type used for calculations.</typeparam>
+/// <remarks>
+/// Retrieves smaller chunks for better matching precision but returns the larger parent
+/// documents that contain those chunks for more complete context in the final answer.
+/// </remarks>
+public class ParentDocumentRetriever<T> : RetrieverBase<T>
 {
+    private readonly int _chunkSize;
+    private readonly int _parentSize;
+    private readonly bool _includeNeighboringChunks;
+
     /// <summary>
-    /// Parent document retriever that retrieves full documents from chunk matches
+    /// Initializes a new instance of the <see cref="ParentDocumentRetriever{T}"/> class.
     /// </summary>
-    /// <typeparam name="T">The numeric type for vector operations</typeparam>
-    public class ParentDocumentRetriever<T> : RetrieverBase<T> where T : struct, IComparable, IComparable<T>, IConvertible, IEquatable<T>, IFormattable
+    /// <param name="documentStore">The document store to retrieve from.</param>
+    /// <param name="chunkSize">Size of chunks for matching.</param>
+    /// <param name="parentSize">Size of parent documents to return.</param>
+    /// <param name="includeNeighboringChunks">Whether to include neighboring chunks.</param>
+    /// <param name="numericOperations">The numeric operations provider.</param>
+    public ParentDocumentRetriever(
+        IDocumentStore<T> documentStore,
+        int chunkSize,
+        int parentSize,
+        bool includeNeighboringChunks,
+        INumericOperations<T> numericOperations)
+        : base(documentStore, numericOperations)
     {
-        private readonly IEmbeddingModel<T> _embeddingModel;
-        private readonly IDocumentStore<T> _chunkStore;
-        private readonly IDocumentStore<T> _parentStore;
-
-        public ParentDocumentRetriever(
-            IEmbeddingModel<T> embeddingModel,
-            IDocumentStore<T> chunkStore,
-            IDocumentStore<T> parentStore)
-        {
-            _embeddingModel = embeddingModel ?? throw new ArgumentNullException(nameof(embeddingModel));
-            _chunkStore = chunkStore ?? throw new ArgumentNullException(nameof(chunkStore));
-            _parentStore = parentStore ?? throw new ArgumentNullException(nameof(parentStore));
-        }
-
-        protected override async Task<List<Document<T>>> RetrieveCoreAsync(string query, int topK = 5)
-        {
-            var queryEmbedding = await _embeddingModel.GenerateEmbeddingAsync(query);
+        if (chunkSize <= 0)
+            throw new ArgumentOutOfRangeException(nameof(chunkSize), "Chunk size must be positive");
             
-            var relevantChunks = await _chunkStore.SearchAsync(queryEmbedding, topK * 2);
+        if (parentSize <= 0)
+            throw new ArgumentOutOfRangeException(nameof(parentSize), "Parent size must be positive");
+            
+        if (parentSize < chunkSize)
+            throw new ArgumentException("Parent size must be greater than or equal to chunk size");
+            
+        _chunkSize = chunkSize;
+        _parentSize = parentSize;
+        _includeNeighboringChunks = includeNeighboringChunks;
+    }
 
-            var parentIds = new HashSet<string>();
-            foreach (var chunk in relevantChunks)
-            {
-                if (chunk.Metadata.TryGetValue("parent_id", out var parentId))
-                {
-                    parentIds.Add(parentId);
-                }
-            }
+    /// <summary>
+    /// Retrieves parent documents based on chunk matching.
+    /// </summary>
+    protected override IEnumerable<Document<T>> RetrieveCore(
+        string query,
+        int topK,
+        Dictionary<string, object> metadataFilters)
+    {
+        if (string.IsNullOrWhiteSpace(query))
+            throw new ArgumentException("Query cannot be null or whitespace", nameof(query));
 
-            var parentDocuments = new List<Document<T>>();
-            foreach (var parentId in parentIds.Take(topK))
-            {
-                var parent = await _parentStore.GetDocumentAsync(parentId);
-                if (parent != null)
-                {
-                    parentDocuments.Add(parent);
-                }
-            }
+        if (topK <= 0)
+            throw new ArgumentOutOfRangeException(nameof(topK), "topK must be positive");
 
-            var scoredParents = new List<(Document<T> doc, T score)>();
-            foreach (var parent in parentDocuments)
-            {
-                var score = StatisticsHelper.CosineSimilarity(queryEmbedding, parent.Embedding, NumOps);
-                scoredParents.Add((parent, score));
-            }
-
-            return scoredParents
-                .OrderByDescending(x => x.score)
-                .Take(topK)
-                .Select(x => x.doc)
-                .ToList();
-        }
+        // TODO: Implement parent document retrieval
+        // 1. Split documents into small chunks
+        // 2. Retrieve most similar chunks to query
+        // 3. For each matched chunk, fetch parent document
+        // 4. Optionally include neighboring chunks for context
+        // 5. Return top-K unique parent documents
+        throw new NotImplementedException("Parent document retrieval requires implementation");
     }
 }
-

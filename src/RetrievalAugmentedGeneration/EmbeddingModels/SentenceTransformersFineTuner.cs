@@ -1,99 +1,90 @@
+using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
-using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Threading.Tasks;
+using AiDotNet.RetrievalAugmentedGeneration.Embeddings;
 
-namespace AiDotNet.RetrievalAugmentedGeneration.EmbeddingModels
+namespace AiDotNet.RetrievalAugmentedGeneration.EmbeddingModels;
+
+/// <summary>
+/// Fine-tuner for sentence transformer models on domain-specific data.
+/// </summary>
+/// <typeparam name="T">The numeric data type used for vector operations.</typeparam>
+/// <remarks>
+/// Enables fine-tuning of pre-trained sentence transformer models on custom datasets
+/// to improve embedding quality for specific domains or tasks.
+/// </remarks>
+public class SentenceTransformersFineTuner<T> : EmbeddingModelBase<T>
 {
+    private readonly string _baseModelPath;
+    private readonly string _outputModelPath;
+    private readonly int _epochs;
+    private readonly T _learningRate;
+
     /// <summary>
-    /// Fine-tuning wrapper for sentence transformer models
+    /// Initializes a new instance of the <see cref="SentenceTransformersFineTuner{T}"/> class.
     /// </summary>
-    /// <typeparam name="T">The numeric type for embeddings</typeparam>
-    public class SentenceTransformersFineTuner<T> : EmbeddingModelBase<T> where T : struct, IComparable, IComparable<T>, IConvertible, IEquatable<T>, IFormattable
+    /// <param name="baseModelPath">Path to the base model to fine-tune.</param>
+    /// <param name="outputModelPath">Path where fine-tuned model will be saved.</param>
+    /// <param name="epochs">Number of training epochs.</param>
+    /// <param name="learningRate">Learning rate for fine-tuning.</param>
+    /// <param name="dimension">The embedding dimension.</param>
+    /// <param name="numericOperations">The numeric operations provider.</param>
+    public SentenceTransformersFineTuner(
+        string baseModelPath,
+        string outputModelPath,
+        int epochs,
+        T learningRate,
+        int dimension,
+        INumericOperations<T> numericOperations)
+        : base(dimension, numericOperations)
     {
-        private readonly IEmbeddingModel<T> _baseModel;
-        private readonly Dictionary<string, Vector<T>> _finetuneCache;
-        private bool _isFineTuned;
-
-        public SentenceTransformersFineTuner(IEmbeddingModel<T> baseModel, INormalizer<T>? normalizer = null)
-            : base(normalizer)
-        {
-            _baseModel = baseModel ?? throw new ArgumentNullException(nameof(baseModel));
-            _finetuneCache = new Dictionary<string, Vector<T>>();
-            _isFineTuned = false;
-        }
-
-        protected override async Task<Vector<T>> GenerateEmbeddingCoreAsync(string text)
-        {
-            if (_finetuneCache.TryGetValue(text, out var cachedEmbedding))
-            {
-                return Normalizer?.Normalize(cachedEmbedding) ?? cachedEmbedding;
-            }
-
-            var embedding = await _baseModel.GenerateEmbeddingAsync(text);
+        _baseModelPath = baseModelPath ?? throw new ArgumentNullException(nameof(baseModelPath));
+        _outputModelPath = outputModelPath ?? throw new ArgumentNullException(nameof(outputModelPath));
+        
+        if (epochs <= 0)
+            throw new ArgumentOutOfRangeException(nameof(epochs), "Epochs must be positive");
             
-            if (_isFineTuned)
-            {
-                _finetuneCache[text] = embedding;
-            }
+        _epochs = epochs;
+        _learningRate = learningRate;
+    }
 
-            return Normalizer?.Normalize(embedding) ?? embedding;
-        }
+    /// <summary>
+    /// Fine-tunes the model on provided training data.
+    /// </summary>
+    /// <param name="trainingPairs">Training pairs of (anchor, positive, negative) texts.</param>
+    public void FineTune(IEnumerable<(string anchor, string positive, string negative)> trainingPairs)
+    {
+        if (trainingPairs == null)
+            throw new ArgumentNullException(nameof(trainingPairs));
 
-        public async Task FineTuneAsync(
-            List<(string positive, string negative)> contrastivePairs,
-            int epochs = 3,
-            T learningRate = default)
-        {
-            if (contrastivePairs == null || contrastivePairs.Count == 0)
-                throw new ArgumentException("Contrastive pairs cannot be null or empty", nameof(contrastivePairs));
+        // TODO: Implement model fine-tuning
+        // 1. Load base model
+        // 2. Create training dataset from pairs
+        // 3. Train using triplet loss or similar
+        // 4. Save fine-tuned model
+        throw new NotImplementedException("Fine-tuning requires ML framework integration");
+    }
 
-            if (NumOps.Equals(learningRate, NumOps.Zero))
-            {
-                learningRate = NumOps.FromDouble(0.001);
-            }
+    /// <summary>
+    /// Generates embeddings using the fine-tuned model.
+    /// </summary>
+    public override Vector<T> Embed(string text)
+    {
+        if (string.IsNullOrWhiteSpace(text))
+            throw new ArgumentException("Text cannot be null or whitespace", nameof(text));
 
-            for (int epoch = 0; epoch < epochs; epoch++)
-            {
-                foreach (var (positive, negative) in contrastivePairs)
-                {
-                    var positiveEmbedding = await _baseModel.GenerateEmbeddingAsync(positive);
-                    var negativeEmbedding = await _baseModel.GenerateEmbeddingAsync(negative);
+        // TODO: Implement embedding with fine-tuned model
+        throw new NotImplementedException("Fine-tuned model embedding requires model loading implementation");
+    }
 
-                    var adjustedPositive = AdjustEmbedding(positiveEmbedding, learningRate, isPositive: true);
-                    var adjustedNegative = AdjustEmbedding(negativeEmbedding, learningRate, isPositive: false);
+    /// <summary>
+    /// Batch embedding generation.
+    /// </summary>
+    public override IEnumerable<Vector<T>> EmbedBatch(IEnumerable<string> texts)
+    {
+        if (texts == null)
+            throw new ArgumentNullException(nameof(texts));
 
-                    _finetuneCache[positive] = adjustedPositive;
-                    _finetuneCache[negative] = adjustedNegative;
-                }
-            }
-
-            _isFineTuned = true;
-        }
-
-        private Vector<T> AdjustEmbedding(Vector<T> embedding, T learningRate, bool isPositive)
-        {
-            var adjustment = isPositive ? learningRate : NumOps.Negate(learningRate);
-            var adjustedValues = new T[embedding.Length];
-
-            for (int i = 0; i < embedding.Length; i++)
-            {
-                var delta = NumOps.Multiply(embedding[i], adjustment);
-                adjustedValues[i] = NumOps.Add(embedding[i], delta);
-            }
-
-            return new Vector<T>(adjustedValues, NumOps);
-        }
-
-        public void ClearFineTuneCache()
-        {
-            _finetuneCache.Clear();
-            _isFineTuned = false;
-        }
-
-        public int GetCacheSize() => _finetuneCache.Count;
-
-        public bool IsFineTuned => _isFineTuned;
+        // TODO: Implement batch embedding
+        throw new NotImplementedException("Fine-tuned model embedding requires model loading implementation");
     }
 }

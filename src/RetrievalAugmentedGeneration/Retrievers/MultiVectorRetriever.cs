@@ -1,78 +1,67 @@
+using AiDotNet.Helpers;
+using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
+using AiDotNet.RetrievalAugmentedGeneration.DocumentStores;
 using AiDotNet.RetrievalAugmentedGeneration.Models;
-using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Threading.Tasks;
 
-namespace AiDotNet.RetrievalAugmentedGeneration.Retrievers
+namespace AiDotNet.RetrievalAugmentedGeneration.Retrievers;
+
+/// <summary>
+/// Multi-vector retriever that assigns multiple vectors to each document.
+/// </summary>
+/// <typeparam name="T">The numeric data type used for calculations.</typeparam>
+/// <remarks>
+/// Instead of representing each document with a single vector, this retriever uses
+/// multiple vectors to capture different aspects of the document's content, enabling
+/// more nuanced similarity matching.
+/// </remarks>
+public class MultiVectorRetriever<T> : RetrieverBase<T>
 {
+    private readonly int _vectorsPerDocument;
+    private readonly string _aggregationMethod;
+
     /// <summary>
-    /// Multi-vector retriever that generates multiple embeddings per document
+    /// Initializes a new instance of the <see cref="MultiVectorRetriever{T}"/> class.
     /// </summary>
-    /// <typeparam name="T">The numeric type for vector operations</typeparam>
-    public class MultiVectorRetriever<T> : RetrieverBase<T> where T : struct, IComparable, IComparable<T>, IConvertible, IEquatable<T>, IFormattable
+    /// <param name="documentStore">The document store to retrieve from.</param>
+    /// <param name="vectorsPerDocument">Number of vectors per document.</param>
+    /// <param name="aggregationMethod">Method for aggregating scores ("max", "mean", "weighted").</param>
+    /// <param name="numericOperations">The numeric operations provider.</param>
+    public MultiVectorRetriever(
+        IDocumentStore<T> documentStore,
+        int vectorsPerDocument,
+        string aggregationMethod,
+        INumericOperations<T> numericOperations)
+        : base(documentStore, numericOperations)
     {
-        private readonly IEmbeddingModel<T> _embeddingModel;
-        private readonly IDocumentStore<T> _documentStore;
-        private readonly Dictionary<string, List<Vector<T>>> _documentVectors;
+        if (vectorsPerDocument <= 0)
+            throw new ArgumentOutOfRangeException(nameof(vectorsPerDocument), "Vectors per document must be positive");
+            
+        _vectorsPerDocument = vectorsPerDocument;
+        _aggregationMethod = aggregationMethod ?? throw new ArgumentNullException(nameof(aggregationMethod));
+    }
 
-        public MultiVectorRetriever(IEmbeddingModel<T> embeddingModel, IDocumentStore<T> documentStore)
-        {
-            _embeddingModel = embeddingModel ?? throw new ArgumentNullException(nameof(embeddingModel));
-            _documentStore = documentStore ?? throw new ArgumentNullException(nameof(documentStore));
-            _documentVectors = new Dictionary<string, List<Vector<T>>>();
-        }
+    /// <summary>
+    /// Retrieves documents using multi-vector matching.
+    /// </summary>
+    protected override IEnumerable<Document<T>> RetrieveCore(
+        string query,
+        int topK,
+        Dictionary<string, object> metadataFilters)
+    {
+        if (string.IsNullOrWhiteSpace(query))
+            throw new ArgumentException("Query cannot be null or whitespace", nameof(query));
 
-        public async Task IndexDocumentAsync(Document<T> document)
-        {
-            if (document == null)
-                throw new ArgumentNullException(nameof(document));
+        if (topK <= 0)
+            throw new ArgumentOutOfRangeException(nameof(topK), "topK must be positive");
 
-            var sentences = document.Content.Split(new[] { '.', '!', '?' }, StringSplitOptions.RemoveEmptyEntries);
-            var vectors = new List<Vector<T>>();
-
-            foreach (var sentence in sentences.Where(s => !string.IsNullOrWhiteSpace(s)))
-            {
-                var embedding = await _embeddingModel.GenerateEmbeddingAsync(sentence.Trim());
-                vectors.Add(embedding);
-            }
-
-            _documentVectors[document.Id] = vectors;
-            await _documentStore.AddDocumentAsync(document);
-        }
-
-        protected override async Task<List<Document<T>>> RetrieveCoreAsync(string query, int topK = 5)
-        {
-            var queryEmbedding = await _embeddingModel.GenerateEmbeddingAsync(query);
-            var scoredDocuments = new List<(Document<T> doc, T score)>();
-
-            foreach (var (docId, vectors) in _documentVectors)
-            {
-                var maxScore = NumOps.FromDouble(-1.0);
-
-                foreach (var vector in vectors)
-                {
-                    var score = StatisticsHelper.CosineSimilarity(queryEmbedding, vector, NumOps);
-                    if (NumOps.GreaterThan(score, maxScore))
-                    {
-                        maxScore = score;
-                    }
-                }
-
-                var document = await _documentStore.GetDocumentAsync(docId);
-                if (document != null)
-                {
-                    scoredDocuments.Add((document, maxScore));
-                }
-            }
-
-            return scoredDocuments
-                .OrderByDescending(x => x.score)
-                .Take(topK)
-                .Select(x => x.doc)
-                .ToList();
-        }
+        // TODO: Implement multi-vector retrieval
+        // 1. Generate query vector(s)
+        // 2. For each document:
+        //    a. Compute similarity between query and each document vector
+        //    b. Aggregate similarities using specified method (max/mean/weighted)
+        // 3. Rank documents by aggregated similarity
+        // 4. Return top-K documents
+        throw new NotImplementedException("Multi-vector retrieval requires implementation");
     }
 }
-

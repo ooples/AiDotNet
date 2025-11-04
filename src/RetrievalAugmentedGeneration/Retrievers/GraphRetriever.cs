@@ -1,108 +1,70 @@
+using AiDotNet.Helpers;
+using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
+using AiDotNet.RetrievalAugmentedGeneration.DocumentStores;
 using AiDotNet.RetrievalAugmentedGeneration.Models;
-using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Threading.Tasks;
 
-namespace AiDotNet.RetrievalAugmentedGeneration.Retrievers
+namespace AiDotNet.RetrievalAugmentedGeneration.Retrievers;
+
+/// <summary>
+/// Retriever for knowledge graph data structures.
+/// </summary>
+/// <typeparam name="T">The numeric data type used for calculations.</typeparam>
+/// <remarks>
+/// Retrieves relevant sub-graphs from a knowledge graph based on the query,
+/// enabling retrieval of structured relationship information.
+/// </remarks>
+public class GraphRetriever<T> : RetrieverBase<T>
 {
+    private readonly string _graphEndpoint;
+    private readonly string _graphQueryLanguage;
+    private readonly int _maxHops;
+
     /// <summary>
-    /// Graph-based retriever for traversing document relationships
+    /// Initializes a new instance of the <see cref="GraphRetriever{T}"/> class.
     /// </summary>
-    /// <typeparam name="T">The numeric type for vector operations</typeparam>
-    public class GraphRetriever<T> : RetrieverBase<T> where T : struct, IComparable, IComparable<T>, IConvertible, IEquatable<T>, IFormattable
+    /// <param name="documentStore">The document store to retrieve from.</param>
+    /// <param name="graphEndpoint">The knowledge graph endpoint.</param>
+    /// <param name="graphQueryLanguage">The query language (e.g., "SPARQL", "Cypher").</param>
+    /// <param name="maxHops">Maximum number of hops for graph traversal.</param>
+    /// <param name="numericOperations">The numeric operations provider.</param>
+    public GraphRetriever(
+        IDocumentStore<T> documentStore,
+        string graphEndpoint,
+        string graphQueryLanguage,
+        int maxHops,
+        INumericOperations<T> numericOperations)
+        : base(documentStore, numericOperations)
     {
-        private readonly IEmbeddingModel<T> _embeddingModel;
-        private readonly IDocumentStore<T> _documentStore;
-        private readonly Dictionary<string, List<string>> _graph;
-        private readonly int _maxDepth;
+        _graphEndpoint = graphEndpoint ?? throw new ArgumentNullException(nameof(graphEndpoint));
+        _graphQueryLanguage = graphQueryLanguage ?? throw new ArgumentNullException(nameof(graphQueryLanguage));
+        
+        if (maxHops <= 0)
+            throw new ArgumentOutOfRangeException(nameof(maxHops), "Max hops must be positive");
+            
+        _maxHops = maxHops;
+    }
 
-        public GraphRetriever(
-            IEmbeddingModel<T> embeddingModel,
-            IDocumentStore<T> documentStore,
-            int maxDepth = 2)
-        {
-            _embeddingModel = embeddingModel ?? throw new ArgumentNullException(nameof(embeddingModel));
-            _documentStore = documentStore ?? throw new ArgumentNullException(nameof(documentStore));
-            _graph = new Dictionary<string, List<string>>();
-            _maxDepth = maxDepth;
-        }
+    /// <summary>
+    /// Retrieves relevant sub-graphs based on the query.
+    /// </summary>
+    protected override IEnumerable<Document<T>> RetrieveCore(
+        string query,
+        int topK,
+        Dictionary<string, object> metadataFilters)
+    {
+        if (string.IsNullOrWhiteSpace(query))
+            throw new ArgumentException("Query cannot be null or whitespace", nameof(query));
 
-        public void AddEdge(string fromDocId, string toDocId)
-        {
-            if (!_graph.ContainsKey(fromDocId))
-            {
-                _graph[fromDocId] = new List<string>();
-            }
-            if (!_graph[fromDocId].Contains(toDocId))
-            {
-                _graph[fromDocId].Add(toDocId);
-            }
-        }
+        if (topK <= 0)
+            throw new ArgumentOutOfRangeException(nameof(topK), "topK must be positive");
 
-        protected override async Task<List<Document<T>>> RetrieveCoreAsync(string query, int topK = 5)
-        {
-            var queryEmbedding = await _embeddingModel.GenerateEmbeddingAsync(query);
-            var initialDocs = await _documentStore.SearchAsync(queryEmbedding, Math.Max(topK / 2, 1));
-
-            var visited = new HashSet<string>();
-            var results = new Dictionary<string, (Document<T> doc, T score)>();
-
-            foreach (var doc in initialDocs)
-            {
-                var score = StatisticsHelper.CosineSimilarity(
-                    queryEmbedding,
-                    doc.Embedding,
-                    NumOps);
-                results[doc.Id] = (doc, score);
-                visited.Add(doc.Id);
-            }
-
-            foreach (var initialDoc in initialDocs)
-            {
-                await TraverseGraph(initialDoc.Id, queryEmbedding, 0, visited, results);
-            }
-
-            return results.Values
-                .OrderByDescending(x => x.score)
-                .Take(topK)
-                .Select(x => x.doc)
-                .ToList();
-        }
-
-        private async Task TraverseGraph(
-            string docId,
-            Vector<T> queryEmbedding,
-            int depth,
-            HashSet<string> visited,
-            Dictionary<string, (Document<T> doc, T score)> results)
-        {
-            if (depth >= _maxDepth || !_graph.ContainsKey(docId))
-                return;
-
-            foreach (var neighborId in _graph[docId])
-            {
-                if (visited.Contains(neighborId))
-                    continue;
-
-                visited.Add(neighborId);
-                var neighbor = await _documentStore.GetDocumentAsync(neighborId);
-                
-                if (neighbor != null)
-                {
-                    var score = StatisticsHelper.CosineSimilarity(
-                        queryEmbedding,
-                        neighbor.Embedding,
-                        NumOps);
-
-                    var decayFactor = NumOps.FromDouble(Math.Pow(0.8, depth + 1));
-                    var decayedScore = NumOps.Multiply(score, decayFactor);
-
-                    results[neighborId] = (neighbor, decayedScore);
-                    await TraverseGraph(neighborId, queryEmbedding, depth + 1, visited, results);
-                }
-            }
-        }
+        // TODO: Implement graph retrieval
+        // 1. Parse query to extract entities and relationships
+        // 2. Find matching nodes in knowledge graph
+        // 3. Traverse graph up to maxHops to build sub-graph
+        // 4. Score sub-graphs by relevance
+        // 5. Return top-K sub-graphs as documents
+        throw new NotImplementedException("Graph retrieval requires knowledge graph integration");
     }
 }

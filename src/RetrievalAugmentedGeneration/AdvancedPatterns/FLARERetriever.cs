@@ -1,49 +1,64 @@
 using AiDotNet.Interfaces;
-using AiDotNet.RetrievalAugmentedGeneration.Interfaces;
-using AiDotNet.RetrievalAugmentedGeneration.Retrievers;
 using AiDotNet.RetrievalAugmentedGeneration.Models;
-using System.Collections.Generic;
-using System.Linq;
+using AiDotNet.RetrievalAugmentedGeneration.Retrievers;
 
-namespace AiDotNet.RetrievalAugmentedGeneration.AdvancedPatterns
+namespace AiDotNet.RetrievalAugmentedGeneration.AdvancedPatterns;
+
+/// <summary>
+/// FLARE (Forward-Looking Active REtrieval) pattern that actively decides when and what to retrieve.
+/// </summary>
+/// <typeparam name="T">The numeric data type used for calculations.</typeparam>
+/// <remarks>
+/// During generation, FLARE monitors the model's confidence and actively retrieves additional
+/// information when uncertainty is detected, enabling dynamic and adaptive retrieval.
+/// </remarks>
+public class FLARERetriever<T>
 {
-    public class FLARERetriever<T> : RetrieverBase<T>
+    private readonly INumericOperations<T> _numericOperations;
+    private readonly string _llmEndpoint;
+    private readonly string _llmApiKey;
+    private readonly RetrieverBase<T> _baseRetriever;
+    private readonly T _uncertaintyThreshold;
+
+    /// <summary>
+    /// Initializes a new instance of the <see cref="FLARERetriever{T}"/> class.
+    /// </summary>
+    /// <param name="llmEndpoint">The LLM API endpoint.</param>
+    /// <param name="llmApiKey">The API key for the LLM service.</param>
+    /// <param name="baseRetriever">The underlying retriever to use.</param>
+    /// <param name="uncertaintyThreshold">Threshold for triggering retrieval.</param>
+    /// <param name="numericOperations">The numeric operations provider.</param>
+    public FLARERetriever(
+        string llmEndpoint,
+        string llmApiKey,
+        RetrieverBase<T> baseRetriever,
+        T uncertaintyThreshold,
+        INumericOperations<T> numericOperations)
     {
-        private readonly IRetriever<T> _baseRetriever;
-        private readonly int _activeRetrievalSteps;
+        _llmEndpoint = llmEndpoint ?? throw new ArgumentNullException(nameof(llmEndpoint));
+        _llmApiKey = llmApiKey ?? throw new ArgumentNullException(nameof(llmApiKey));
+        _baseRetriever = baseRetriever ?? throw new ArgumentNullException(nameof(baseRetriever));
+        _uncertaintyThreshold = uncertaintyThreshold;
+        _numericOperations = numericOperations ?? throw new ArgumentNullException(nameof(numericOperations));
+    }
 
-        public FLARERetriever(IRetriever<T> baseRetriever, int activeRetrievalSteps = 3)
-        {
-            _baseRetriever = baseRetriever ?? throw new System.ArgumentNullException(nameof(baseRetriever));
-            _activeRetrievalSteps = activeRetrievalSteps > 0 ? activeRetrievalSteps : throw new System.ArgumentOutOfRangeException(nameof(activeRetrievalSteps));
-        }
+    /// <summary>
+    /// Generates answer with active retrieval based on uncertainty.
+    /// </summary>
+    public string GenerateWithActiveRetrieval(string query)
+    {
+        if (string.IsNullOrWhiteSpace(query))
+            throw new ArgumentException("Query cannot be null or whitespace", nameof(query));
 
-        protected override IEnumerable<Document<T>> RetrieveCore(string query, int topK, Dictionary<string, object> metadataFilters)
-        {
-            var allResults = new List<Document<T>>();
-            var currentQuery = query;
-
-            for (int step = 0; step < _activeRetrievalSteps; step++)
-            {
-                var stepResults = _baseRetriever.Retrieve(currentQuery, topK, metadataFilters).ToList();
-                
-                foreach (var doc in stepResults)
-                {
-                    if (!allResults.Any(d => d.Id == doc.Id))
-                    {
-                        allResults.Add(doc);
-                    }
-                }
-
-                if (stepResults.Count > 0)
-                {
-                    var topDoc = stepResults.OrderByDescending(d => Convert.ToDouble(d.RelevanceScore)).First();
-                    currentQuery = $"{query} {topDoc.Content.Substring(0, System.Math.Min(200, topDoc.Content.Length))}";
-                }
-            }
-
-            return allResults.OrderByDescending(d => Convert.ToDouble(d.RelevanceScore)).Take(topK).ToList();
-        }
+        // TODO: Implement FLARE
+        // 1. Start generating answer
+        // 2. Monitor token-level confidence
+        // 3. When confidence drops below threshold:
+        //    a. Identify what information is needed
+        //    b. Retrieve relevant documents
+        //    c. Continue generation with new context
+        // 4. Repeat until answer is complete
+        // 5. Return final answer
+        throw new NotImplementedException("FLARE requires LLM integration with confidence monitoring");
     }
 }
-

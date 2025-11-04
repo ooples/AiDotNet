@@ -1,75 +1,65 @@
-#if NETCOREAPP || NETSTANDARD2_1_OR_GREATER
+using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
-using System;
-using System.Net.Http;
-using System.Text;
-using System.Text.Json;
-using System.Threading.Tasks;
+using AiDotNet.RetrievalAugmentedGeneration.Embeddings;
 
-namespace AiDotNet.RetrievalAugmentedGeneration.EmbeddingModels
+namespace AiDotNet.RetrievalAugmentedGeneration.EmbeddingModels;
+
+/// <summary>
+/// Cohere embedding model integration for high-performance embeddings.
+/// </summary>
+/// <typeparam name="T">The numeric data type used for vector operations.</typeparam>
+/// <remarks>
+/// Cohere provides state-of-the-art embeddings with multiple model sizes optimized
+/// for different use cases (English, multilingual, search, classification).
+/// </remarks>
+public class CohereEmbeddingModel<T> : EmbeddingModelBase<T>
 {
+    private readonly string _apiKey;
+    private readonly string _model;
+    private readonly string _inputType;
+
     /// <summary>
-    /// Embedding model using Cohere's API for text embeddings
+    /// Initializes a new instance of the <see cref="CohereEmbeddingModel{T}"/> class.
     /// </summary>
-    /// <typeparam name="T">The numeric type for embeddings</typeparam>
-    public class CohereEmbeddingModel<T> : EmbeddingModelBase<T> where T : struct, IComparable, IComparable<T>, IConvertible, IEquatable<T>, IFormattable
+    /// <param name="apiKey">The Cohere API key.</param>
+    /// <param name="model">The model name (e.g., "embed-english-v3.0").</param>
+    /// <param name="inputType">The input type ("search_document" or "search_query").</param>
+    /// <param name="dimension">The embedding dimension.</param>
+    /// <param name="numericOperations">The numeric operations provider.</param>
+    public CohereEmbeddingModel(
+        string apiKey,
+        string model,
+        string inputType,
+        int dimension,
+        INumericOperations<T> numericOperations)
+        : base(dimension, numericOperations)
     {
-        private readonly string _apiKey;
-        private readonly string _model;
-        private readonly HttpClient _httpClient;
-        private const string ApiBaseUrl = "https://api.cohere.ai/v1";
+        _apiKey = apiKey ?? throw new ArgumentNullException(nameof(apiKey));
+        _model = model ?? throw new ArgumentNullException(nameof(model));
+        _inputType = inputType ?? throw new ArgumentNullException(nameof(inputType));
+    }
 
-        public CohereEmbeddingModel(string apiKey, string model = "embed-english-v3.0", INormalizer<T>? normalizer = null)
-            : base(normalizer)
-        {
-            if (string.IsNullOrEmpty(apiKey))
-                throw new ArgumentException("API key cannot be null or empty", nameof(apiKey));
+    /// <summary>
+    /// Generates embeddings using Cohere API.
+    /// </summary>
+    public override Vector<T> Embed(string text)
+    {
+        if (string.IsNullOrWhiteSpace(text))
+            throw new ArgumentException("Text cannot be null or whitespace", nameof(text));
 
-            _apiKey = apiKey;
-            _model = model;
-            _httpClient = new HttpClient();
-            _httpClient.DefaultRequestHeaders.Add("Authorization", $"Bearer {_apiKey}");
-        }
+        // TODO: Implement Cohere API call
+        throw new NotImplementedException("Cohere integration requires HTTP client implementation");
+    }
 
-        protected override async Task<Vector<T>> GenerateEmbeddingCoreAsync(string text)
-        {
-            var requestBody = new
-            {
-                texts = new[] { text },
-                model = _model,
-                input_type = "search_document"
-            };
+    /// <summary>
+    /// Batch embedding generation.
+    /// </summary>
+    public override IEnumerable<Vector<T>> EmbedBatch(IEnumerable<string> texts)
+    {
+        if (texts == null)
+            throw new ArgumentNullException(nameof(texts));
 
-            var json = JsonSerializer.Serialize(requestBody);
-            var content = new StringContent(json, Encoding.UTF8, "application/json");
-
-            var response = await _httpClient.PostAsync($"{ApiBaseUrl}/embed", content);
-            response.EnsureSuccessStatusCode();
-
-            var responseJson = await response.Content.ReadAsStringAsync();
-            var document = JsonDocument.Parse(responseJson);
-            
-            var embeddings = document.RootElement.GetProperty("embeddings")[0];
-            var values = new T[embeddings.GetArrayLength()];
-            
-            for (int i = 0; i < values.Length; i++)
-            {
-                values[i] = (T)Convert.ChangeType(embeddings[i].GetDouble(), typeof(T));
-            }
-
-            var vector = new Vector<T>(values, NumOps);
-            return Normalizer?.Normalize(vector) ?? vector;
-        }
-
-        protected override void Dispose(bool disposing)
-        {
-            if (disposing)
-            {
-                _httpClient?.Dispose();
-            }
-            base.Dispose(disposing);
-        }
+        // TODO: Implement Cohere batch API call
+        throw new NotImplementedException("Cohere integration requires HTTP client implementation");
     }
 }
-
-#endif

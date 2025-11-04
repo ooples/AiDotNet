@@ -1,31 +1,70 @@
-using AiDotNet.LinearAlgebra;
+using AiDotNet.RetrievalAugmentedGeneration.Interfaces;
 using AiDotNet.RetrievalAugmentedGeneration.Models;
-using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Threading.Tasks;
 
-namespace AiDotNet.RetrievalAugmentedGeneration.Retrievers
+namespace AiDotNet.RetrievalAugmentedGeneration.Retrievers;
+
+/// <summary>
+/// A dense vector-based retriever that uses embedding similarity for document retrieval.
+/// </summary>
+/// <remarks>
+/// <para>
+/// This retriever uses vector embeddings to find semantically similar documents. It embeds
+/// the query using an embedding model, then searches the document store for the most similar
+/// document vectors. This approach captures semantic meaning rather than just keyword matching.
+/// </para>
+/// <para><b>For Beginners:</b> This retriever finds documents by meaning, not just keywords.
+/// 
+/// Think of it like a smart librarian who understands what you're asking:
+/// - You ask: "How do cars work?"
+/// - Keyword search finds: Documents with exact words "cars" and "work"
+/// - Vector search finds: Documents about automobiles, engines, mechanics (similar meaning)
+/// 
+/// How it works:
+/// 1. Convert your question to a vector (list of numbers representing meaning)
+/// 2. Compare to vectors of all documents in the store
+/// 3. Find documents with closest vectors (most similar meaning)
+/// 4. Return the top matches
+/// 
+/// For example:
+/// - Query: "renewable energy"
+/// - Finds: Documents about solar, wind, hydroelectric (even if they don't say "renewable")
+/// - Misses: Documents about fossil fuels (different meaning)
+/// </para>
+/// </remarks>
+/// <typeparam name="T">The numeric data type used for vector calculations (typically float or double).</typeparam>
+public class VectorRetriever<T> : RetrieverBase<T>
 {
+    private readonly IDocumentStore<T> _documentStore;
+    private readonly IEmbeddingModel<T> _embeddingModel;
+
     /// <summary>
-    /// Dense vector-based retriever using embeddings
+    /// Initializes a new instance of the VectorRetriever class.
     /// </summary>
-    /// <typeparam name="T">The numeric type for vector operations</typeparam>
-    public class VectorRetriever<T> : RetrieverBase<T> where T : struct, IComparable, IComparable<T>, IConvertible, IEquatable<T>, IFormattable
+    /// <param name="documentStore">The document store to retrieve from.</param>
+    /// <param name="embeddingModel">The embedding model to use for query encoding.</param>
+    /// <param name="defaultTopK">The default number of documents to retrieve.</param>
+    public VectorRetriever(
+        IDocumentStore<T> documentStore,
+        IEmbeddingModel<T> embeddingModel,
+        int defaultTopK = 5) : base(defaultTopK)
     {
-        private readonly IEmbeddingModel<T> _embeddingModel;
-        private readonly IDocumentStore<T> _documentStore;
+        _documentStore = documentStore ?? throw new ArgumentNullException(nameof(documentStore));
+        _embeddingModel = embeddingModel ?? throw new ArgumentNullException(nameof(embeddingModel));
+    }
 
-        public VectorRetriever(IEmbeddingModel<T> embeddingModel, IDocumentStore<T> documentStore)
-        {
-            _embeddingModel = embeddingModel ?? throw new ArgumentNullException(nameof(embeddingModel));
-            _documentStore = documentStore ?? throw new ArgumentNullException(nameof(documentStore));
-        }
+    /// <summary>
+    /// Core retrieval logic using dense vector similarity.
+    /// </summary>
+    /// <param name="query">The validated query text.</param>
+    /// <param name="topK">The validated number of documents to retrieve.</param>
+    /// <param name="metadataFilters">The validated metadata filters.</param>
+    /// <returns>A collection of relevant documents ordered by relevance.</returns>
+    protected override IEnumerable<Document<T>> RetrieveCore(string query, int topK, Dictionary<string, object> metadataFilters)
+    {
+        // 1. Embed the query
+        var queryVector = _embeddingModel.Embed(query);
 
-        protected override async Task<List<Document<T>>> RetrieveCoreAsync(string query, int topK = 5)
-        {
-            var queryEmbedding = await _embeddingModel.GenerateEmbeddingAsync(query);
-            return await _documentStore.SearchAsync(queryEmbedding, topK);
-        }
+        // 2. Search document store for similar documents
+        return _documentStore.GetSimilarWithFilters(queryVector, topK, metadataFilters);
     }
 }

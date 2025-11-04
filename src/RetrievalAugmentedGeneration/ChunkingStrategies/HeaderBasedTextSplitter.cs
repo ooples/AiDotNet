@@ -1,163 +1,117 @@
-using AiDotNet.RetrievalAugmentedGeneration.Models;
-using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text.RegularExpressions;
+using AiDotNet.RetrievalAugmentedGeneration.Interfaces;
 
-namespace AiDotNet.RetrievalAugmentedGeneration.ChunkingStrategies
+namespace AiDotNet.RetrievalAugmentedGeneration.ChunkingStrategies;
+
+/// <summary>
+/// Splits structured documents based on header tags (H1, H2, H3, etc.).
+/// </summary>
+/// <remarks>
+/// Ideal for Markdown and HTML documents where headers provide natural semantic boundaries.
+/// Preserves document structure and hierarchy.
+/// </remarks>
+public class HeaderBasedTextSplitter : ChunkingStrategyBase
 {
+    private readonly bool _combineSmallChunks;
+    private readonly int _minChunkSize;
+
     /// <summary>
-    /// Chunking strategy that splits text based on header hierarchies
+    /// Initializes a new instance of the <see cref="HeaderBasedTextSplitter"/> class.
     /// </summary>
-    public class HeaderBasedTextSplitter : ChunkingStrategyBase
+    /// <param name="chunkSize">Maximum size of each chunk in characters.</param>
+    /// <param name="chunkOverlap">The number of characters that should overlap between consecutive chunks.</param>
+    /// <param name="minChunkSize">Minimum size for chunk combination.</param>
+    /// <param name="combineSmallChunks">Whether to combine small chunks.</param>
+    public HeaderBasedTextSplitter(
+        int chunkSize,
+        int chunkOverlap = 0,
+        int minChunkSize = 100,
+        bool combineSmallChunks = true)
+        : base(chunkSize, chunkOverlap)
     {
-        private readonly Dictionary<int, string> _headerPatterns;
-        private readonly int _chunkSize;
-        private readonly int _chunkOverlap;
+        if (minChunkSize < 0)
+            throw new ArgumentOutOfRangeException(nameof(minChunkSize), "Min chunk size cannot be negative");
+            
+        _minChunkSize = minChunkSize;
+        _combineSmallChunks = combineSmallChunks;
+    }
 
-        public HeaderBasedTextSplitter(int chunkSize = 1000, int chunkOverlap = 200)
+    /// <summary>
+    /// Core chunking logic that splits text based on header hierarchy.
+    /// </summary>
+    protected override IEnumerable<(string Chunk, int StartPosition, int EndPosition)> ChunkCore(string text)
+    {
+        var chunks = new List<(string, int, int)>();
+        var lines = text.Split(new[] { "\r\n", "\r", "\n" }, StringSplitOptions.None);
+        var currentChunk = new List<string>();
+        var chunkStart = 0;
+        var position = 0;
+
+        foreach (var line in lines)
         {
-            _chunkSize = chunkSize;
-            _chunkOverlap = chunkOverlap;
-            _headerPatterns = new Dictionary<int, string>
+            var lineLength = line.Length + Environment.NewLine.Length;
+
+            // Check if line is a header (Markdown ## or HTML <h>)
+            if (IsHeader(line))
             {
-                { 1, @"^#\s+(.+)$" },
-                { 2, @"^##\s+(.+)$" },
-                { 3, @"^###\s+(.+)$" },
-                { 4, @"^####\s+(.+)$" },
-                { 5, @"^#####\s+(.+)$" },
-                { 6, @"^######\s+(.+)$" }
-            };
-        }
-
-        protected override List<TextChunk> SplitCore(string text, Dictionary<string, string>? metadata = null)
-        {
-            if (string.IsNullOrWhiteSpace(text))
-                return new List<TextChunk>();
-
-            var lines = text.Split(new[] { '\r', '\n' }, StringSplitOptions.None);
-            var chunks = new List<TextChunk>();
-            var currentSection = new List<string>();
-            var currentHeaders = new Stack<(int level, string text)>();
-            var chunkIndex = 0;
-
-            foreach (var line in lines)
-            {
-                var headerMatch = false;
-                foreach (var (level, pattern) in _headerPatterns.OrderBy(x => x.Key))
+                // Save current chunk if not empty
+                if (currentChunk.Count > 0)
                 {
-                    var match = Regex.Match(line, pattern, RegexOptions.Multiline);
-                    if (match.Success)
+                    var content = string.Join(Environment.NewLine, currentChunk);
+                    if (content.Length >= _minChunkSize || !_combineSmallChunks)
                     {
-                        if (currentSection.Count > 0)
-                        {
-                            chunks.AddRange(CreateChunksFromSection(
-                                string.Join(Environment.NewLine, currentSection),
-                                currentHeaders,
-                                metadata,
-                                ref chunkIndex));
-                            currentSection.Clear();
-                        }
-
-                        while (currentHeaders.Count > 0 && currentHeaders.Peek().level >= level)
-                        {
-                            currentHeaders.Pop();
-                        }
-                        currentHeaders.Push((level, match.Groups[1].Value));
-                        headerMatch = true;
-                        break;
+                        chunks.Add((content, chunkStart, position));
                     }
+                    currentChunk.Clear();
                 }
 
-                currentSection.Add(line);
-            }
-
-            if (currentSection.Count > 0)
-            {
-                chunks.AddRange(CreateChunksFromSection(
-                    string.Join(Environment.NewLine, currentSection),
-                    currentHeaders,
-                    metadata,
-                    ref chunkIndex));
-            }
-
-            return chunks;
-        }
-
-        private List<TextChunk> CreateChunksFromSection(
-            string sectionText,
-            Stack<(int level, string text)> headers,
-            Dictionary<string, string>? metadata,
-            ref int chunkIndex)
-        {
-            var chunks = new List<TextChunk>();
-            var headerPath = string.Join(" > ", headers.Reverse().Select(h => h.text));
-
-            if (sectionText.Length <= _chunkSize)
-            {
-                var chunkMetadata = new Dictionary<string, string>(metadata ?? new Dictionary<string, string>())
-                {
-                    ["header_path"] = headerPath,
-                    ["chunk_index"] = chunkIndex.ToString()
-                };
-
-                chunks.Add(new TextChunk
-                {
-                    Text = sectionText,
-                    Metadata = chunkMetadata
-                });
-                chunkIndex++;
+                chunkStart = position;
+                currentChunk.Add(line);
             }
             else
             {
-                var words = sectionText.Split(new[] { ' ', '\t' }, StringSplitOptions.RemoveEmptyEntries);
-                var currentChunk = new List<string>();
-                var currentLength = 0;
+                currentChunk.Add(line);
 
-                foreach (var word in words)
+                // Split if chunk gets too large
+                var currentSize = string.Join(Environment.NewLine, currentChunk).Length;
+                if (currentSize >= ChunkSize)
                 {
-                    if (currentLength + word.Length + 1 > _chunkSize && currentChunk.Count > 0)
-                    {
-                        var chunkMetadata = new Dictionary<string, string>(metadata ?? new Dictionary<string, string>())
-                        {
-                            ["header_path"] = headerPath,
-                            ["chunk_index"] = chunkIndex.ToString()
-                        };
-
-                        chunks.Add(new TextChunk
-                        {
-                            Text = string.Join(" ", currentChunk),
-                            Metadata = chunkMetadata
-                        });
-                        chunkIndex++;
-
-                        var overlapWords = currentChunk.TakeLast((int)(_chunkOverlap / 5.0)).ToList();
-                        currentChunk = overlapWords;
-                        currentLength = overlapWords.Sum(w => w.Length + 1);
-                    }
-
-                    currentChunk.Add(word);
-                    currentLength += word.Length + 1;
-                }
-
-                if (currentChunk.Count > 0)
-                {
-                    var chunkMetadata = new Dictionary<string, string>(metadata ?? new Dictionary<string, string>())
-                    {
-                        ["header_path"] = headerPath,
-                        ["chunk_index"] = chunkIndex.ToString()
-                    };
-
-                    chunks.Add(new TextChunk
-                    {
-                        Text = string.Join(" ", currentChunk),
-                        Metadata = chunkMetadata
-                    });
-                    chunkIndex++;
+                    var content = string.Join(Environment.NewLine, currentChunk);
+                    chunks.Add((content, chunkStart, position + lineLength));
+                    currentChunk.Clear();
+                    chunkStart = position + lineLength;
                 }
             }
 
-            return chunks;
+            position += lineLength;
         }
+
+        // Add remaining content
+        if (currentChunk.Count > 0)
+        {
+            var content = string.Join(Environment.NewLine, currentChunk);
+            chunks.Add((content, chunkStart, position));
+        }
+
+        return chunks;
+    }
+
+    private bool IsHeader(string line)
+    {
+        if (string.IsNullOrWhiteSpace(line))
+            return false;
+
+        var trimmed = line.TrimStart();
+        
+        // Markdown headers (# ## ### etc.)
+        if (trimmed.StartsWith("#"))
+            return true;
+
+        // HTML headers (<h1> <h2> etc.)
+        if (trimmed.StartsWith("<h", StringComparison.OrdinalIgnoreCase) &&
+            trimmed.Length > 2 &&
+            char.IsDigit(trimmed[2]))
+            return true;
+
+        return false;
     }
 }

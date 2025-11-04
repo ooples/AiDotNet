@@ -1,73 +1,69 @@
-#if NETCOREAPP || NETSTANDARD2_1_OR_GREATER
+using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
-using System;
-using System.Net.Http;
-using System.Text;
-using System.Text.Json;
-using System.Threading.Tasks;
+using AiDotNet.RetrievalAugmentedGeneration.Embeddings;
 
-namespace AiDotNet.RetrievalAugmentedGeneration.EmbeddingModels
+namespace AiDotNet.RetrievalAugmentedGeneration.EmbeddingModels;
+
+/// <summary>
+/// Google PaLM embedding model integration.
+/// </summary>
+/// <typeparam name="T">The numeric data type used for vector operations.</typeparam>
+/// <remarks>
+/// Provides access to Google's PaLM (Pathways Language Model) embedding capabilities
+/// through the Google Cloud Vertex AI platform.
+/// </remarks>
+public class GooglePalmEmbeddingModel<T> : EmbeddingModelBase<T>
 {
+    private readonly string _projectId;
+    private readonly string _location;
+    private readonly string _model;
+    private readonly string _apiKey;
+
     /// <summary>
-    /// Embedding model using Google PaLM API for text embeddings
+    /// Initializes a new instance of the <see cref="GooglePalmEmbeddingModel{T}"/> class.
     /// </summary>
-    /// <typeparam name="T">The numeric type for embeddings</typeparam>
-    public class GooglePalmEmbeddingModel<T> : EmbeddingModelBase<T> where T : struct, IComparable, IComparable<T>, IConvertible, IEquatable<T>, IFormattable
+    /// <param name="projectId">The Google Cloud project ID.</param>
+    /// <param name="location">The Google Cloud location.</param>
+    /// <param name="model">The PaLM model name.</param>
+    /// <param name="apiKey">The API key for authentication.</param>
+    /// <param name="dimension">The embedding dimension.</param>
+    /// <param name="numericOperations">The numeric operations provider.</param>
+    public GooglePalmEmbeddingModel(
+        string projectId,
+        string location,
+        string model,
+        string apiKey,
+        int dimension,
+        INumericOperations<T> numericOperations)
+        : base(dimension, numericOperations)
     {
-        private readonly string _apiKey;
-        private readonly string _model;
-        private readonly HttpClient _httpClient;
-        private const string ApiBaseUrl = "https://generativelanguage.googleapis.com/v1beta";
+        _projectId = projectId ?? throw new ArgumentNullException(nameof(projectId));
+        _location = location ?? throw new ArgumentNullException(nameof(location));
+        _model = model ?? throw new ArgumentNullException(nameof(model));
+        _apiKey = apiKey ?? throw new ArgumentNullException(nameof(apiKey));
+    }
 
-        public GooglePalmEmbeddingModel(string apiKey, string model = "embedding-001", INormalizer<T>? normalizer = null)
-            : base(normalizer)
-        {
-            if (string.IsNullOrEmpty(apiKey))
-                throw new ArgumentException("API key cannot be null or empty", nameof(apiKey));
+    /// <summary>
+    /// Generates embeddings using Google PaLM API.
+    /// </summary>
+    public override Vector<T> Embed(string text)
+    {
+        if (string.IsNullOrWhiteSpace(text))
+            throw new ArgumentException("Text cannot be null or whitespace", nameof(text));
 
-            _apiKey = apiKey;
-            _model = model;
-            _httpClient = new HttpClient();
-        }
+        // TODO: Implement Google PaLM API call
+        throw new NotImplementedException("Google PaLM integration requires HTTP client implementation");
+    }
 
-        protected override async Task<Vector<T>> GenerateEmbeddingCoreAsync(string text)
-        {
-            var requestBody = new
-            {
-                model = $"models/{_model}",
-                content = new { parts = new[] { new { text } } }
-            };
+    /// <summary>
+    /// Batch embedding generation.
+    /// </summary>
+    public override IEnumerable<Vector<T>> EmbedBatch(IEnumerable<string> texts)
+    {
+        if (texts == null)
+            throw new ArgumentNullException(nameof(texts));
 
-            var json = JsonSerializer.Serialize(requestBody);
-            var content = new StringContent(json, Encoding.UTF8, "application/json");
-
-            var response = await _httpClient.PostAsync($"{ApiBaseUrl}/models/{_model}:embedContent?key={_apiKey}", content);
-            response.EnsureSuccessStatusCode();
-
-            var responseJson = await response.Content.ReadAsStringAsync();
-            var document = JsonDocument.Parse(responseJson);
-            
-            var embedding = document.RootElement.GetProperty("embedding").GetProperty("values");
-            var values = new T[embedding.GetArrayLength()];
-            
-            for (int i = 0; i < values.Length; i++)
-            {
-                values[i] = (T)Convert.ChangeType(embedding[i].GetDouble(), typeof(T));
-            }
-
-            var vector = new Vector<T>(values, NumOps);
-            return Normalizer?.Normalize(vector) ?? vector;
-        }
-
-        protected override void Dispose(bool disposing)
-        {
-            if (disposing)
-            {
-                _httpClient?.Dispose();
-            }
-            base.Dispose(disposing);
-        }
+        // TODO: Implement Google PaLM batch API call
+        throw new NotImplementedException("Google PaLM integration requires HTTP client implementation");
     }
 }
-
-#endif

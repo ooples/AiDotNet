@@ -1,86 +1,76 @@
+using AiDotNet.Helpers;
+using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
+using AiDotNet.RetrievalAugmentedGeneration.DocumentStores;
 using AiDotNet.RetrievalAugmentedGeneration.Models;
-using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Threading.Tasks;
 
-namespace AiDotNet.RetrievalAugmentedGeneration.Retrievers
+namespace AiDotNet.RetrievalAugmentedGeneration.Retrievers;
+
+/// <summary>
+/// ColBERT (Contextualized Late Interaction over BERT) retriever using token-level embeddings.
+/// </summary>
+/// <typeparam name="T">The numeric data type used for calculations.</typeparam>
+/// <remarks>
+/// ColBERT represents documents and queries as sets of token embeddings, enabling more precise
+/// matching through contextualized token-level interactions. This provides better retrieval
+/// quality than single-vector approaches while maintaining reasonable efficiency.
+/// </remarks>
+public class ColBERTRetriever<T> : RetrieverBase<T>
 {
+    private readonly string _modelPath;
+    private readonly int _maxDocLength;
+    private readonly int _maxQueryLength;
+
     /// <summary>
-    /// ColBERT-style late interaction retriever
+    /// Initializes a new instance of the <see cref="ColBERTRetriever{T}"/> class.
     /// </summary>
-    /// <typeparam name="T">The numeric type for vector operations</typeparam>
-    public class ColBERTRetriever<T> : RetrieverBase<T> where T : struct, IComparable, IComparable<T>, IConvertible, IEquatable<T>, IFormattable
+    /// <param name="documentStore">The document store to retrieve from.</param>
+    /// <param name="modelPath">Path to the ColBERT model.</param>
+    /// <param name="maxDocLength">Maximum document length in tokens.</param>
+    /// <param name="maxQueryLength">Maximum query length in tokens.</param>
+    /// <param name="numericOperations">The numeric operations provider.</param>
+    public ColBERTRetriever(
+        IDocumentStore<T> documentStore,
+        string modelPath,
+        int maxDocLength,
+        int maxQueryLength,
+        INumericOperations<T> numericOperations)
+        : base(documentStore, numericOperations)
     {
-        private readonly IEmbeddingModel<T> _embeddingModel;
-        private readonly IDocumentStore<T> _documentStore;
+        _modelPath = modelPath ?? throw new ArgumentNullException(nameof(modelPath));
+        
+        if (maxDocLength <= 0)
+            throw new ArgumentOutOfRangeException(nameof(maxDocLength), "Max document length must be positive");
+            
+        if (maxQueryLength <= 0)
+            throw new ArgumentOutOfRangeException(nameof(maxQueryLength), "Max query length must be positive");
+            
+        _maxDocLength = maxDocLength;
+        _maxQueryLength = maxQueryLength;
+    }
 
-        public ColBERTRetriever(IEmbeddingModel<T> embeddingModel, IDocumentStore<T> documentStore)
-        {
-            _embeddingModel = embeddingModel ?? throw new ArgumentNullException(nameof(embeddingModel));
-            _documentStore = documentStore ?? throw new ArgumentNullException(nameof(documentStore));
-        }
+    /// <summary>
+    /// Retrieves documents using token-level late interaction.
+    /// </summary>
+    protected override IEnumerable<Document<T>> RetrieveCore(
+        string query,
+        int topK,
+        Dictionary<string, object> metadataFilters)
+    {
+        if (string.IsNullOrWhiteSpace(query))
+            throw new ArgumentException("Query cannot be null or whitespace", nameof(query));
 
-        protected override async Task<List<Document<T>>> RetrieveCoreAsync(string query, int topK = 5)
-        {
-            var queryTokens = query.Split(new[] { ' ' }, StringSplitOptions.RemoveEmptyEntries);
-            var tokenEmbeddings = new List<Vector<T>>();
+        if (topK <= 0)
+            throw new ArgumentOutOfRangeException(nameof(topK), "topK must be positive");
 
-            foreach (var token in queryTokens)
-            {
-                var embedding = await _embeddingModel.GenerateEmbeddingAsync(token);
-                tokenEmbeddings.Add(embedding);
-            }
-
-            var queryEmbedding = await _embeddingModel.GenerateEmbeddingAsync(query);
-            var candidates = await _documentStore.SearchAsync(queryEmbedding, topK * 3);
-
-            var scoredDocuments = new List<(Document<T> doc, T score)>();
-
-            foreach (var doc in candidates)
-            {
-                var docTokens = doc.Content.Split(new[] { ' ' }, StringSplitOptions.RemoveEmptyEntries);
-                var docTokenEmbeddings = new List<Vector<T>>();
-
-                foreach (var token in docTokens.Take(100))
-                {
-                    var embedding = await _embeddingModel.GenerateEmbeddingAsync(token);
-                    docTokenEmbeddings.Add(embedding);
-                }
-
-                var score = ComputeMaxSim(tokenEmbeddings, docTokenEmbeddings);
-                scoredDocuments.Add((doc, score));
-            }
-
-            return scoredDocuments
-                .OrderByDescending(x => x.score)
-                .Take(topK)
-                .Select(x => x.doc)
-                .ToList();
-        }
-
-        private T ComputeMaxSim(List<Vector<T>> queryEmbeddings, List<Vector<T>> docEmbeddings)
-        {
-            var totalScore = NumOps.Zero;
-
-            foreach (var queryEmb in queryEmbeddings)
-            {
-                var maxSim = NumOps.FromDouble(-1.0);
-
-                foreach (var docEmb in docEmbeddings)
-                {
-                    var sim = StatisticsHelper.CosineSimilarity(queryEmb, docEmb, NumOps);
-                    if (NumOps.GreaterThan(sim, maxSim))
-                    {
-                        maxSim = sim;
-                    }
-                }
-
-                totalScore = NumOps.Add(totalScore, maxSim);
-            }
-
-            return NumOps.Divide(totalScore, NumOps.FromInt32(queryEmbeddings.Count));
-        }
+        // TODO: Implement ColBERT retrieval
+        // 1. Tokenize and embed query (multiple token embeddings)
+        // 2. For each document:
+        //    a. Get document token embeddings
+        //    b. Compute maximum similarity score (MaxSim) for each query token
+        //    c. Sum MaxSim scores across all query tokens
+        // 3. Rank documents by total score
+        // 4. Return top-K documents
+        throw new NotImplementedException("ColBERT retrieval requires model integration");
     }
 }

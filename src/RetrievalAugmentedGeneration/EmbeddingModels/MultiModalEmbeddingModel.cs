@@ -1,96 +1,92 @@
+using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
-using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Threading.Tasks;
+using AiDotNet.RetrievalAugmentedGeneration.Embeddings;
 
-namespace AiDotNet.RetrievalAugmentedGeneration.EmbeddingModels
+namespace AiDotNet.RetrievalAugmentedGeneration.EmbeddingModels;
+
+/// <summary>
+/// Multi-modal embedding model supporting both text and images (e.g., CLIP).
+/// </summary>
+/// <typeparam name="T">The numeric data type used for vector operations.</typeparam>
+/// <remarks>
+/// Enables creation of unified embeddings for text and images in the same vector space,
+/// allowing cross-modal similarity search and retrieval.
+/// </remarks>
+public class MultiModalEmbeddingModel<T> : EmbeddingModelBase<T>
 {
+    private readonly string _modelPath;
+    private readonly bool _normalizeEmbeddings;
+
     /// <summary>
-    /// Multi-modal embedding model that combines text and other modalities
+    /// Initializes a new instance of the <see cref="MultiModalEmbeddingModel{T}"/> class.
     /// </summary>
-    /// <typeparam name="T">The numeric type for embeddings</typeparam>
-    public class MultiModalEmbeddingModel<T> : EmbeddingModelBase<T> where T : struct, IComparable, IComparable<T>, IConvertible, IEquatable<T>, IFormattable
+    /// <param name="modelPath">Path to the multi-modal model (e.g., CLIP).</param>
+    /// <param name="normalizeEmbeddings">Whether to normalize embeddings to unit length.</param>
+    /// <param name="dimension">The embedding dimension.</param>
+    /// <param name="numericOperations">The numeric operations provider.</param>
+    public MultiModalEmbeddingModel(
+        string modelPath,
+        bool normalizeEmbeddings,
+        int dimension,
+        INumericOperations<T> numericOperations)
+        : base(dimension, numericOperations)
     {
-        private readonly IEmbeddingModel<T> _textEmbedder;
-        private readonly Dictionary<string, Func<object, Task<Vector<T>>>> _modalityEmbedders;
-        private readonly Func<List<Vector<T>>, Vector<T>> _fusionStrategy;
+        _modelPath = modelPath ?? throw new ArgumentNullException(nameof(modelPath));
+        _normalizeEmbeddings = normalizeEmbeddings;
+    }
 
-        public MultiModalEmbeddingModel(
-            IEmbeddingModel<T> textEmbedder,
-            Func<List<Vector<T>>, Vector<T>>? fusionStrategy = null,
-            INormalizer<T>? normalizer = null)
-            : base(normalizer)
-        {
-            _textEmbedder = textEmbedder ?? throw new ArgumentNullException(nameof(textEmbedder));
-            _modalityEmbedders = new Dictionary<string, Func<object, Task<Vector<T>>>>();
-            _fusionStrategy = fusionStrategy ?? DefaultFusion;
-        }
+    /// <summary>
+    /// Generates text embeddings.
+    /// </summary>
+    public override Vector<T> Embed(string text)
+    {
+        if (string.IsNullOrWhiteSpace(text))
+            throw new ArgumentException("Text cannot be null or whitespace", nameof(text));
 
-        public void RegisterModalityEmbedder(string modalityType, Func<object, Task<Vector<T>>> embedder)
-        {
-            if (string.IsNullOrEmpty(modalityType))
-                throw new ArgumentException("Modality type cannot be null or empty", nameof(modalityType));
-            if (embedder == null)
-                throw new ArgumentNullException(nameof(embedder));
+        // TODO: Implement text embedding with CLIP or similar
+        throw new NotImplementedException("Multi-modal embedding requires CLIP/ONNX model integration");
+    }
 
-            _modalityEmbedders[modalityType] = embedder;
-        }
+    /// <summary>
+    /// Generates image embeddings from file path.
+    /// </summary>
+    /// <param name="imagePath">Path to the image file.</param>
+    /// <returns>The embedding vector for the image.</returns>
+    public Vector<T> EmbedImage(string imagePath)
+    {
+        if (string.IsNullOrWhiteSpace(imagePath))
+            throw new ArgumentException("Image path cannot be null or whitespace", nameof(imagePath));
 
-        protected override async Task<Vector<T>> GenerateEmbeddingCoreAsync(string text)
-        {
-            var textEmbedding = await _textEmbedder.GenerateEmbeddingAsync(text);
-            var vector = Normalizer?.Normalize(textEmbedding) ?? textEmbedding;
-            return vector;
-        }
+        if (!File.Exists(imagePath))
+            throw new FileNotFoundException($"Image file not found: {imagePath}");
 
-        public async Task<Vector<T>> GenerateMultiModalEmbeddingAsync(Dictionary<string, object> modalityData)
-        {
-            if (modalityData == null || modalityData.Count == 0)
-                throw new ArgumentException("Modality data cannot be null or empty", nameof(modalityData));
+        // TODO: Implement image embedding with CLIP or similar
+        throw new NotImplementedException("Multi-modal embedding requires CLIP/ONNX model integration");
+    }
 
-            var embeddings = new List<Vector<T>>();
+    /// <summary>
+    /// Batch embedding generation for text.
+    /// </summary>
+    public override IEnumerable<Vector<T>> EmbedBatch(IEnumerable<string> texts)
+    {
+        if (texts == null)
+            throw new ArgumentNullException(nameof(texts));
 
-            foreach (var (modalityType, data) in modalityData)
-            {
-                if (_modalityEmbedders.TryGetValue(modalityType, out var embedder))
-                {
-                    var embedding = await embedder(data);
-                    embeddings.Add(embedding);
-                }
-                else if (modalityType == "text" && data is string textData)
-                {
-                    var embedding = await GenerateEmbeddingCoreAsync(textData);
-                    embeddings.Add(embedding);
-                }
-            }
+        // TODO: Implement batch text embedding
+        throw new NotImplementedException("Multi-modal embedding requires CLIP/ONNX model integration");
+    }
 
-            if (embeddings.Count == 0)
-                throw new InvalidOperationException("No embeddings were generated from the provided modalities");
+    /// <summary>
+    /// Batch embedding generation for images.
+    /// </summary>
+    /// <param name="imagePaths">Paths to image files.</param>
+    /// <returns>Embedding vectors for all images.</returns>
+    public IEnumerable<Vector<T>> EmbedImageBatch(IEnumerable<string> imagePaths)
+    {
+        if (imagePaths == null)
+            throw new ArgumentNullException(nameof(imagePaths));
 
-            var fusedEmbedding = _fusionStrategy(embeddings);
-            return Normalizer?.Normalize(fusedEmbedding) ?? fusedEmbedding;
-        }
-
-        private Vector<T> DefaultFusion(List<Vector<T>> embeddings)
-        {
-            if (embeddings.Count == 1)
-                return embeddings[0];
-
-            var dimension = embeddings[0].Length;
-            var result = new T[dimension];
-
-            for (int i = 0; i < dimension; i++)
-            {
-                var sum = NumOps.Zero;
-                foreach (var embedding in embeddings)
-                {
-                    sum = NumOps.Add(sum, embedding[i]);
-                }
-                result[i] = NumOps.Divide(sum, NumOps.FromInt32(embeddings.Count));
-            }
-
-            return new Vector<T>(result, NumOps);
-        }
+        // TODO: Implement batch image embedding
+        throw new NotImplementedException("Multi-modal embedding requires CLIP/ONNX model integration");
     }
 }

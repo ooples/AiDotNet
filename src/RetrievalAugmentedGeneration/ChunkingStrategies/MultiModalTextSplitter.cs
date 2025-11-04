@@ -1,86 +1,133 @@
-using AiDotNet.Interfaces;
-using System.Text.RegularExpressions;
+using AiDotNet.RetrievalAugmentedGeneration.Interfaces;
 
-namespace AiDotNet.RetrievalAugmentedGeneration.ChunkingStrategies
+namespace AiDotNet.RetrievalAugmentedGeneration.ChunkingStrategies;
+
+/// <summary>
+/// Multi-modal splitter for documents containing both text and images.
+/// </summary>
+/// <remarks>
+/// Creates chunks that keep text and related images together, preserving the relationship
+/// between visual and textual content for better context preservation.
+/// </remarks>
+public class MultiModalTextSplitter : ChunkingStrategyBase
 {
-    public class MultiModalTextSplitter : ChunkingStrategyBase
+    private readonly bool _preserveImageContext;
+    private readonly int _contextWindowSize;
+
+    /// <summary>
+    /// Initializes a new instance of the <see cref="MultiModalTextSplitter"/> class.
+    /// </summary>
+    /// <param name="chunkSize">Maximum size of text portion in each chunk.</param>
+    /// <param name="chunkOverlap">The number of characters that should overlap between consecutive chunks.</param>
+    /// <param name="contextWindowSize">Number of characters before/after image to include.</param>
+    /// <param name="preserveImageContext">Whether to keep surrounding text with images.</param>
+    public MultiModalTextSplitter(
+        int chunkSize,
+        int chunkOverlap = 0,
+        int contextWindowSize = 200,
+        bool preserveImageContext = true)
+        : base(chunkSize, chunkOverlap)
     {
-        private readonly int _chunkSize;
-        private readonly int _chunkOverlap;
-
-        public MultiModalTextSplitter(int chunkSize = 1000, int chunkOverlap = 200)
-        {
-            _chunkSize = chunkSize;
-            _chunkOverlap = chunkOverlap;
-        }
-
-        protected override List<string> ChunkCore(string text)
-        {
-            var chunks = new List<string>();
-
-            if (string.IsNullOrWhiteSpace(text))
-            {
-                return chunks;
-            }
-
-            // Extract code blocks
-            var codeBlockPattern = @"```[\s\S]*?```";
-            var codeBlocks = Regex.Matches(text, codeBlockPattern);
-            var codeBlockIndices = new List<Tuple<int, int>>();
-
-            foreach (Match match in codeBlocks)
-            {
-                codeBlockIndices.Add(Tuple.Create(match.Index, match.Index + match.Length));
-                chunks.Add(match.Value);
-            }
-
-            // Extract tables
-            var tablePattern = @"\|[^\n]+\|\n\|[-:\s|]+\|(?:\n\|[^\n]+\|)*";
-            var tables = Regex.Matches(text, tablePattern);
-
-            foreach (Match match in tables)
-            {
-                var index = match.Index;
-                var endIndex = match.Index + match.Length;
-                
-                // Check if this table is not inside a code block
-                var inCodeBlock = codeBlockIndices.Any(cb => index >= cb.Item1 && endIndex <= cb.Item2);
-                
-                if (!inCodeBlock)
-                {
-                    chunks.Add(match.Value);
-                }
-            }
-
-            // Process remaining text
-            var processedText = Regex.Replace(text, codeBlockPattern, "");
-            processedText = Regex.Replace(processedText, tablePattern, "");
-
-            var paragraphs = processedText.Split(new[] { "\n\n" }, StringSplitOptions.RemoveEmptyEntries);
+        if (contextWindowSize < 0)
+            throw new ArgumentOutOfRangeException(nameof(contextWindowSize), "Context window size cannot be negative");
             
-            var currentChunk = "";
-            foreach (var paragraph in paragraphs)
+        _contextWindowSize = contextWindowSize;
+        _preserveImageContext = preserveImageContext;
+    }
+
+    /// <summary>
+    /// Core chunking logic that splits text while preserving text-image relationships.
+    /// </summary>
+    protected override IEnumerable<(string Chunk, int StartPosition, int EndPosition)> ChunkCore(string text)
+    {
+        var chunks = new List<(string, int, int)>();
+        var lines = text.Split(new[] { "\r\n", "\r", "\n" }, StringSplitOptions.None);
+        
+        var currentChunk = new List<string>();
+        var chunkStart = 0;
+        var position = 0;
+
+        for (var i = 0; i < lines.Length; i++)
+        {
+            var line = lines[i];
+            var lineLength = line.Length + Environment.NewLine.Length;
+
+            // Detect image references (Markdown ![alt](url) or HTML <img>)
+            if (IsImageReference(line))
             {
-                if (currentChunk.Length + paragraph.Length <= _chunkSize)
+                if (_preserveImageContext)
                 {
-                    currentChunk += paragraph + "\n\n";
-                }
-                else
-                {
-                    if (!string.IsNullOrWhiteSpace(currentChunk))
+                    // Include context before image
+                    var contextStart = Math.Max(0, i - (_contextWindowSize / 50)); // Approximate lines
+                    for (var j = contextStart; j < i; j++)
                     {
-                        chunks.Add(currentChunk.Trim());
+                        if (!currentChunk.Contains(lines[j]))
+                        {
+                            currentChunk.Add(lines[j]);
+                        }
                     }
-                    currentChunk = paragraph + "\n\n";
+                }
+
+                currentChunk.Add(line);
+
+                if (_preserveImageContext)
+                {
+                    // Include context after image
+                    var contextEnd = Math.Min(lines.Length, i + (_contextWindowSize / 50));
+                    for (var j = i + 1; j < contextEnd; j++)
+                    {
+                        currentChunk.Add(lines[j]);
+                    }
+                    i = contextEnd - 1; // Skip ahead
+                }
+
+                // Create chunk with image
+                var content = string.Join(Environment.NewLine, currentChunk);
+                chunks.Add((content, chunkStart, position + lineLength));
+
+                currentChunk.Clear();
+                chunkStart = position + lineLength;
+            }
+            else
+            {
+                currentChunk.Add(line);
+
+                // Split if chunk gets too large
+                var currentSize = string.Join(Environment.NewLine, currentChunk).Length;
+                if (currentSize >= ChunkSize)
+                {
+                    var content = string.Join(Environment.NewLine, currentChunk);
+                    chunks.Add((content, chunkStart, position + lineLength));
+                    currentChunk.Clear();
+                    chunkStart = position + lineLength;
                 }
             }
 
-            if (!string.IsNullOrWhiteSpace(currentChunk))
-            {
-                chunks.Add(currentChunk.Trim());
-            }
-
-            return chunks;
+            position += lineLength;
         }
+
+        // Add remaining content
+        if (currentChunk.Count > 0)
+        {
+            var content = string.Join(Environment.NewLine, currentChunk);
+            chunks.Add((content, chunkStart, position));
+        }
+
+        return chunks;
+    }
+
+    private bool IsImageReference(string line)
+    {
+        var trimmed = line.Trim();
+        
+        // Markdown image: ![alt](url)
+        if (trimmed.Contains("![") && trimmed.Contains("]("))
+            return true;
+
+        // HTML image: <img src="...">
+        if (trimmed.Contains("<img", StringComparison.OrdinalIgnoreCase))
+            return true;
+
+        return false;
     }
 }

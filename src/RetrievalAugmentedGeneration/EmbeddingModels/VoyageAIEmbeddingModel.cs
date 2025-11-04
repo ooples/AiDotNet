@@ -1,74 +1,65 @@
-#if NETCOREAPP || NETSTANDARD2_1_OR_GREATER
+using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
-using System;
-using System.Net.Http;
-using System.Text;
-using System.Text.Json;
-using System.Threading.Tasks;
+using AiDotNet.RetrievalAugmentedGeneration.Embeddings;
 
-namespace AiDotNet.RetrievalAugmentedGeneration.EmbeddingModels
+namespace AiDotNet.RetrievalAugmentedGeneration.EmbeddingModels;
+
+/// <summary>
+/// Voyage AI embedding model integration for high-performance embeddings.
+/// </summary>
+/// <typeparam name="T">The numeric data type used for vector operations.</typeparam>
+/// <remarks>
+/// Voyage AI provides specialized embedding models optimized for retrieval tasks
+/// with industry-leading performance on benchmark datasets.
+/// </remarks>
+public class VoyageAIEmbeddingModel<T> : EmbeddingModelBase<T>
 {
+    private readonly string _apiKey;
+    private readonly string _model;
+    private readonly string _inputType;
+
     /// <summary>
-    /// Embedding model using Voyage AI's API for text embeddings
+    /// Initializes a new instance of the <see cref="VoyageAIEmbeddingModel{T}"/> class.
     /// </summary>
-    /// <typeparam name="T">The numeric type for embeddings</typeparam>
-    public class VoyageAIEmbeddingModel<T> : EmbeddingModelBase<T> where T : struct, IComparable, IComparable<T>, IConvertible, IEquatable<T>, IFormattable
+    /// <param name="apiKey">The Voyage AI API key.</param>
+    /// <param name="model">The model name (e.g., "voyage-02").</param>
+    /// <param name="inputType">The input type ("document" or "query").</param>
+    /// <param name="dimension">The embedding dimension.</param>
+    /// <param name="numericOperations">The numeric operations provider.</param>
+    public VoyageAIEmbeddingModel(
+        string apiKey,
+        string model,
+        string inputType,
+        int dimension,
+        INumericOperations<T> numericOperations)
+        : base(dimension, numericOperations)
     {
-        private readonly string _apiKey;
-        private readonly string _model;
-        private readonly HttpClient _httpClient;
-        private const string ApiBaseUrl = "https://api.voyageai.com/v1";
+        _apiKey = apiKey ?? throw new ArgumentNullException(nameof(apiKey));
+        _model = model ?? throw new ArgumentNullException(nameof(model));
+        _inputType = inputType ?? throw new ArgumentNullException(nameof(inputType));
+    }
 
-        public VoyageAIEmbeddingModel(string apiKey, string model = "voyage-2", INormalizer<T>? normalizer = null)
-            : base(normalizer)
-        {
-            if (string.IsNullOrEmpty(apiKey))
-                throw new ArgumentException("API key cannot be null or empty", nameof(apiKey));
+    /// <summary>
+    /// Generates embeddings using Voyage AI API.
+    /// </summary>
+    public override Vector<T> Embed(string text)
+    {
+        if (string.IsNullOrWhiteSpace(text))
+            throw new ArgumentException("Text cannot be null or whitespace", nameof(text));
 
-            _apiKey = apiKey;
-            _model = model;
-            _httpClient = new HttpClient();
-            _httpClient.DefaultRequestHeaders.Add("Authorization", $"Bearer {_apiKey}");
-        }
+        // TODO: Implement Voyage AI API call
+        throw new NotImplementedException("Voyage AI integration requires HTTP client implementation");
+    }
 
-        protected override async Task<Vector<T>> GenerateEmbeddingCoreAsync(string text)
-        {
-            var requestBody = new
-            {
-                input = new[] { text },
-                model = _model
-            };
+    /// <summary>
+    /// Batch embedding generation.
+    /// </summary>
+    public override IEnumerable<Vector<T>> EmbedBatch(IEnumerable<string> texts)
+    {
+        if (texts == null)
+            throw new ArgumentNullException(nameof(texts));
 
-            var json = JsonSerializer.Serialize(requestBody);
-            var content = new StringContent(json, Encoding.UTF8, "application/json");
-
-            var response = await _httpClient.PostAsync($"{ApiBaseUrl}/embeddings", content);
-            response.EnsureSuccessStatusCode();
-
-            var responseJson = await response.Content.ReadAsStringAsync();
-            var document = JsonDocument.Parse(responseJson);
-            
-            var embedding = document.RootElement.GetProperty("data")[0].GetProperty("embedding");
-            var values = new T[embedding.GetArrayLength()];
-            
-            for (int i = 0; i < values.Length; i++)
-            {
-                values[i] = (T)Convert.ChangeType(embedding[i].GetDouble(), typeof(T));
-            }
-
-            var vector = new Vector<T>(values, NumOps);
-            return Normalizer?.Normalize(vector) ?? vector;
-        }
-
-        protected override void Dispose(bool disposing)
-        {
-            if (disposing)
-            {
-                _httpClient?.Dispose();
-            }
-            base.Dispose(disposing);
-        }
+        // TODO: Implement Voyage AI batch API call
+        throw new NotImplementedException("Voyage AI integration requires HTTP client implementation");
     }
 }
-
-#endif
