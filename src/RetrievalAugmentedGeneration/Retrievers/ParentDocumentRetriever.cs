@@ -17,6 +17,7 @@ namespace AiDotNet.RetrievalAugmentedGeneration.Retrievers;
 /// </remarks>
 public class ParentDocumentRetriever<T> : RetrieverBase<T>
 {
+    private readonly IDocumentStore<T> _documentStore;
     private readonly int _chunkSize;
     private readonly int _parentSize;
     private readonly bool _includeNeighboringChunks;

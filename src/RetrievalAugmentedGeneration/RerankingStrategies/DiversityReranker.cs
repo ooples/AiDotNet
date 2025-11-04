@@ -59,11 +59,18 @@ public class DiversityReranker<T> : RerankerBase<T>
                 // Relevance score
                 var relevance = doc.HasRelevanceScore ? doc.RelevanceScore : NumOps.Zero;
 
-                // Diversity score (minimum similarity to selected documents)
+                // Diversity score (based on token overlap similarity)
                 var minSimilarity = NumOps.One;
                 foreach (var selectedDoc in selected)
                 {
-                    var similarity = StatisticsHelper<double>.JaccardSimilarity(doc.Content, selectedDoc.Content);
+                    // Simple token overlap-based similarity
+                    var tokens1 = doc.Content.Split(new[] { ' ', '\t', '\n', '\r' }, StringSplitOptions.RemoveEmptyEntries);
+                    var tokens2 = selectedDoc.Content.Split(new[] { ' ', '\t', '\n', '\r' }, StringSplitOptions.RemoveEmptyEntries);
+                    var set1 = new HashSet<string>(tokens1);
+                    var set2 = new HashSet<string>(tokens2);
+                    var intersection = set1.Intersect(set2).Count();
+                    var union = set1.Union(set2).Count();
+                    var similarity = union > 0 ? (double)intersection / union : 0.0;
                     var simT = NumOps.FromDouble(similarity);
                     if (NumOps.LessThan(simT, minSimilarity))
                     {
