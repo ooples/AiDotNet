@@ -44,28 +44,22 @@ namespace AiDotNet.RetrievalAugmentedGeneration.Retrievers
 
             var combinedScores = new Dictionary<string, T>();
 
-            foreach (var doc in denseResults)
+            foreach (var doc in denseResults.Where(d => d.HasRelevanceScore))
             {
-                if (doc.HasRelevanceScore)
-                {
-                    var score = NumOps.Multiply(_denseWeight, doc.RelevanceScore);
-                    combinedScores[doc.Id] = score;
-                }
+                var score = NumOps.Multiply(_denseWeight, doc.RelevanceScore);
+                combinedScores[doc.Id] = score;
             }
 
-            foreach (var doc in sparseResults)
+            foreach (var doc in sparseResults.Where(doc => doc.HasRelevanceScore))
             {
-                if (doc.HasRelevanceScore)
+                var sparseScore = NumOps.Multiply(_sparseWeight, doc.RelevanceScore);
+                if (combinedScores.TryGetValue(doc.Id, out var existingScore))
                 {
-                    var sparseScore = NumOps.Multiply(_sparseWeight, doc.RelevanceScore);
-                    if (combinedScores.ContainsKey(doc.Id))
-                    {
-                        combinedScores[doc.Id] = NumOps.Add(combinedScores[doc.Id], sparseScore);
-                    }
-                    else
-                    {
-                        combinedScores[doc.Id] = sparseScore;
-                    }
+                    combinedScores[doc.Id] = NumOps.Add(existingScore, sparseScore);
+                }
+                else
+                {
+                    combinedScores[doc.Id] = sparseScore;
                 }
             }
 

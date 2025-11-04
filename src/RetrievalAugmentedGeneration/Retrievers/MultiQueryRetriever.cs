@@ -36,20 +36,16 @@ namespace AiDotNet.RetrievalAugmentedGeneration.Retrievers
             {
                 var results = _baseRetriever.Retrieve(q, topK, metadataFilters);
 
-                foreach (var doc in results)
+                foreach (var doc in results.Where(d => d.HasRelevanceScore))
                 {
-                    if (doc.HasRelevanceScore)
+                    if (allResults.TryGetValue(doc.Id, out var existing))
                     {
-                        if (allResults.ContainsKey(doc.Id))
-                        {
-                            var existing = allResults[doc.Id];
-                            var newScore = NumOps.Add(existing.score, doc.RelevanceScore);
-                            allResults[doc.Id] = (doc, newScore);
-                        }
-                        else
-                        {
-                            allResults[doc.Id] = (doc, doc.RelevanceScore);
-                        }
+                        var newScore = NumOps.Add(existing.score, doc.RelevanceScore);
+                        allResults[doc.Id] = (doc, newScore);
+                    }
+                    else
+                    {
+                        allResults[doc.Id] = (doc, doc.RelevanceScore);
                     }
                 }
             }

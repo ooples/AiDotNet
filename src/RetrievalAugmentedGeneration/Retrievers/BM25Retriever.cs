@@ -51,11 +51,8 @@ namespace AiDotNet.RetrievalAugmentedGeneration.Retrievers
             var candidatesList = candidates.ToList();
             BuildCorpusStatistics(candidatesList);
 
-            foreach (var doc in candidatesList)
+            foreach (var doc in candidatesList.Where(d => MatchesFilters(d, metadataFilters)))
             {
-                if (!MatchesFilters(doc, metadataFilters))
-                    continue;
-
                 var score = NumOps.Zero;
                 
                 foreach (var term in queryTerms)

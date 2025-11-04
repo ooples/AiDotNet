@@ -118,14 +118,11 @@ namespace AiDotNet.RetrievalAugmentedGeneration.ContextCompression
             {
                 currentSentence += text[i];
 
-                foreach (var ending in sentenceEndings)
+                var matchedEnding = sentenceEndings.FirstOrDefault(ending => currentSentence.EndsWith(ending));
+                if (matchedEnding != null)
                 {
-                    if (currentSentence.EndsWith(ending))
-                    {
-                        sentences.Add(currentSentence.Trim());
-                        currentSentence = string.Empty;
-                        break;
-                    }
+                    sentences.Add(currentSentence.Trim());
+                    currentSentence = string.Empty;
                 }
             }
 

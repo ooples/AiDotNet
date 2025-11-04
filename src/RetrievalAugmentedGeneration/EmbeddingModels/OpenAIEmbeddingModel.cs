@@ -43,7 +43,7 @@ namespace AiDotNet.RetrievalAugmentedGeneration.EmbeddingModels
             
             for (int i = 0; i < _dimension; i++)
             {
-                var val = NumOps.FromDouble(Math.Cos(hash * (i + 1) * 0.001));
+                var val = NumOps.FromDouble(Math.Cos((double)hash * (i + 1) * 0.001));
                 values[i] = val;
             }
 

@@ -135,14 +135,10 @@ namespace AiDotNet.RetrievalAugmentedGeneration.ContextCompression
             {
                 currentSentence += text[i];
 
-                foreach (var ending in sentenceEndings)
+                if (sentenceEndings.Any(ending => currentSentence.EndsWith(ending)))
                 {
-                    if (currentSentence.EndsWith(ending))
-                    {
-                        sentences.Add(currentSentence.Trim());
-                        currentSentence = string.Empty;
-                        break;
-                    }
+                    sentences.Add(currentSentence.Trim());
+                    currentSentence = string.Empty;
                 }
             }
 

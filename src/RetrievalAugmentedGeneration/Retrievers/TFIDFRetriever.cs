@@ -40,22 +40,15 @@ namespace AiDotNet.RetrievalAugmentedGeneration.Retrievers
             var candidatesList = candidates.ToList();
             BuildTFIDFStatistics(candidatesList);
 
-            foreach (var doc in candidatesList)
+            foreach (var doc in candidatesList.Where(d => MatchesFilters(d, metadataFilters)))
             {
-                if (!MatchesFilters(doc, metadataFilters))
-                    continue;
-
                 var score = NumOps.Zero;
 
-                if (_tfidf.ContainsKey(doc.Id))
+                if (_tfidf.TryGetValue(doc.Id, out var docTfidf))
                 {
-                    var docTfidf = _tfidf[doc.Id];
-                    foreach (var term in queryTerms)
+                    foreach (var term in queryTerms.Where(t => docTfidf.ContainsKey(t)))
                     {
-                        if (docTfidf.ContainsKey(term))
-                        {
-                            score = NumOps.Add(score, docTfidf[term]);
-                        }
+                        score = NumOps.Add(score, docTfidf[term]);
                     }
                 }
 
