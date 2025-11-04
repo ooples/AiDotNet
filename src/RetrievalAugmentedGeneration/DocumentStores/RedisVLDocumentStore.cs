@@ -17,62 +17,70 @@ public class RedisVLDocumentStore<T> : DocumentStoreBase<T>
     private readonly string _connectionString;
     private readonly string _indexName;
 
+    private readonly int _vectorDimension;
+
     /// <summary>
     /// Initializes a new instance of the <see cref="RedisVLDocumentStore{T}"/> class.
     /// </summary>
     /// <param name="connectionString">The Redis connection string.</param>
     /// <param name="indexName">The name of the index to use.</param>
     /// <param name="vectorDimension">The dimensionality of document vectors.</param>
-    /// <param name="numericOperations">The numeric operations provider.</param>
     public RedisVLDocumentStore(
         string connectionString,
         string indexName,
         int vectorDimension)
-        
     {
         _connectionString = connectionString ?? throw new ArgumentNullException(nameof(connectionString));
         _indexName = indexName ?? throw new ArgumentNullException(nameof(indexName));
+        _vectorDimension = vectorDimension;
     }
 
-    /// <summary>
-    /// Adds a document to the Redis index.
-    /// </summary>
+    /// <inheritdoc />
+    public override int DocumentCount => 0;
+
+    /// <inheritdoc />
+    public override int VectorDimension => _vectorDimension;
+
+    /// <inheritdoc />
     protected override void AddCore(VectorDocument<T> vectorDocument)
     {
-        if (document == null)
-            throw new ArgumentNullException(nameof(document));
-
         // TODO: Implement Redis vector indexing
         throw new NotImplementedException("Redis integration requires StackExchange.Redis implementation");
     }
 
-    /// <summary>
-    /// Retrieves documents similar to the query vector.
-    /// </summary>
+    /// <inheritdoc />
+    protected override void AddBatchCore(IList<VectorDocument<T>> vectorDocuments)
+    {
+        // TODO: Implement Redis batch vector indexing
+        throw new NotImplementedException("Redis integration requires StackExchange.Redis implementation");
+    }
+
+    /// <inheritdoc />
     protected override IEnumerable<Document<T>> GetSimilarCore(Vector<T> queryVector, int topK, Dictionary<string, object> metadataFilters)
     {
-        if (queryVector == null)
-            throw new ArgumentNullException(nameof(queryVector));
-
-        if (topK <= 0)
-            throw new ArgumentOutOfRangeException(nameof(topK), "topK must be positive");
-
         // TODO: Implement Redis vector search
         throw new NotImplementedException("Redis integration requires StackExchange.Redis implementation");
     }
 
-    /// <summary>
-    /// Gets all documents from the index.
-    /// </summary>
-    protected override IEnumerable<Document<T>> GetAllCore()
+    /// <inheritdoc />
+    protected override Document<T>? GetByIdCore(string documentId)
     {
-        // TODO: Implement Redis scan operation
+        // TODO: Implement Redis document retrieval
         throw new NotImplementedException("Redis integration requires StackExchange.Redis implementation");
     }
 
-    /// <summary>
-    /// Gets the total number of documents in the index.
-    /// </summary>
-    public override int DocumentCount => 0; // TODO: Implement via Redis
+    /// <inheritdoc />
+    protected override bool RemoveCore(string documentId)
+    {
+        // TODO: Implement Redis document deletion
+        throw new NotImplementedException("Redis integration requires StackExchange.Redis implementation");
+    }
+
+    /// <inheritdoc />
+    public override void Clear()
+    {
+        // TODO: Implement Redis index clearing
+        throw new NotImplementedException("Redis integration requires StackExchange.Redis implementation");
+    }
 }
 
