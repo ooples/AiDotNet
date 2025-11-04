@@ -1,4 +1,8 @@
 using AiDotNet.Interfaces;
+using AiDotNet.RetrievalAugmentedGeneration.Models;
+using System;
+using System.Collections.Generic;
+using System.Linq;
 
 namespace AiDotNet.RAG.ContextCompression
 {
