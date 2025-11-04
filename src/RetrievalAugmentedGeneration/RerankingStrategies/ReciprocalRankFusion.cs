@@ -88,9 +88,9 @@ namespace AiDotNet.RetrievalAugmentedGeneration.RerankingStrategies
                     var doc = rankingList[rank];
                     var rrfScore = NumOps.FromDouble(1.0 / (_k + rank + 1));
 
-                    if (scores.ContainsKey(doc.Id))
+                    if (scores.TryGetValue(doc.Id, out var existingScore))
                     {
-                        scores[doc.Id] = NumOps.Add(scores[doc.Id], rrfScore);
+                        scores[doc.Id] = NumOps.Add(existingScore, rrfScore);
                     }
                     else
                     {
