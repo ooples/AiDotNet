@@ -9,10 +9,15 @@ namespace AiDotNet.RetrievalAugmentedGeneration.RerankingStrategies
     /// LLM-based reranking using language model relevance assessment.
     /// </summary>
     /// <typeparam name="T">The numeric type for vector operations.</typeparam>
-    public class LLMBasedReranker<T> : RerankingStrategyBase<T>
+    public class LLMBasedReranker<T> : Rerankers.RerankerBase<T>
     {
         private readonly string _llmEndpoint;
         private readonly string _apiKey;
+
+        /// <summary>
+        /// Gets a value indicating whether this reranker modifies relevance scores.
+        /// </summary>
+        public override bool ModifiesScores => true;
 
         /// <summary>
         /// Initializes a new instance of the <see cref="LLMBasedReranker{T}"/> class.
@@ -30,21 +35,16 @@ namespace AiDotNet.RetrievalAugmentedGeneration.RerankingStrategies
         /// </summary>
         /// <param name="query">The query string.</param>
         /// <param name="documents">The documents to rerank.</param>
-        /// <param name="topK">The number of top documents to return.</param>
         /// <returns>A reranked list of documents.</returns>
-        public override List<Document<T>> Rerank(string query, List<Document<T>> documents, int topK)
+        protected override IEnumerable<Document<T>> RerankCore(string query, IList<Document<T>> documents)
         {
-            if (string.IsNullOrEmpty(query)) throw new ArgumentNullException(nameof(query));
-            if (documents == null) throw new ArgumentNullException(nameof(documents));
-            if (topK <= 0) throw new ArgumentOutOfRangeException(nameof(topK));
-
-            var scoredDocs = new List<(Document<T> doc, T score)>();
-
             var queryTokens = Tokenize(query);
             if (queryTokens.Count == 0)
             {
-                return documents.Take(topK).ToList();
+                return documents;
             }
+
+            var scoredDocs = new List<(Document<T> doc, T score)>();
 
             foreach (var doc in documents)
             {
@@ -54,7 +54,6 @@ namespace AiDotNet.RetrievalAugmentedGeneration.RerankingStrategies
 
             var reranked = scoredDocs
                 .OrderByDescending(x => Convert.ToDouble(x.score))
-                .Take(topK)
                 .Select(x =>
                 {
                     x.doc.RelevanceScore = x.score;

@@ -19,16 +19,16 @@ public class CohereReranker<T> : RerankerBase<T>
     private readonly string _model;
 
     /// <summary>
+    /// Gets a value indicating whether this reranker modifies relevance scores.
+    /// </summary>
+    public override bool ModifiesScores => true;
+
+    /// <summary>
     /// Initializes a new instance of the <see cref="CohereReranker{T}"/> class.
     /// </summary>
     /// <param name="apiKey">The Cohere API key.</param>
     /// <param name="model">The reranking model name (e.g., "rerank-english-v2.0").</param>
-    /// <param name="numericOperations">The numeric operations provider.</param>
-    public CohereReranker(
-        string apiKey,
-        string model,
-        INumericOperations<T> numericOperations)
-        : base(numericOperations)
+    public CohereReranker(string apiKey, string model)
     {
         _apiKey = apiKey ?? throw new ArgumentNullException(nameof(apiKey));
         _model = model ?? throw new ArgumentNullException(nameof(model));
@@ -37,22 +37,13 @@ public class CohereReranker<T> : RerankerBase<T>
     /// <summary>
     /// Reranks documents using Cohere Rerank API.
     /// </summary>
-    public override IEnumerable<Document<T>> Rerank(string query, IEnumerable<Document<T>> documents, int topK)
+    protected override IEnumerable<Document<T>> RerankCore(string query, IList<Document<T>> documents)
     {
-        if (string.IsNullOrWhiteSpace(query))
-            throw new ArgumentException("Query cannot be null or whitespace", nameof(query));
-
-        if (documents == null)
-            throw new ArgumentNullException(nameof(documents));
-
-        if (topK <= 0)
-            throw new ArgumentOutOfRangeException(nameof(topK), "topK must be positive");
-
         // TODO: Implement Cohere Rerank API call
         // 1. Send query and documents to Cohere Rerank API
         // 2. Receive relevance scores
         // 3. Update document scores
-        // 4. Return top-K documents
+        // 4. Return reordered documents
         throw new NotImplementedException("Cohere Rerank integration requires HTTP client implementation");
     }
 }

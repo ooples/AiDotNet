@@ -16,11 +16,14 @@ namespace AiDotNet.RetrievalAugmentedGeneration.RerankingStrategies;
 public class LostInTheMiddleReranker<T> : RerankerBase<T>
 {
     /// <summary>
+    /// Gets a value indicating whether this reranker modifies relevance scores.
+    /// </summary>
+    public override bool ModifiesScores => false;
+
+    /// <summary>
     /// Initializes a new instance of the <see cref="LostInTheMiddleReranker{T}"/> class.
     /// </summary>
-    /// <param name="numericOperations">The numeric operations provider.</param>
-    public LostInTheMiddleReranker(INumericOperations<T> numericOperations)
-        : base(numericOperations)
+    public LostInTheMiddleReranker()
     {
     }
 
@@ -31,31 +34,21 @@ public class LostInTheMiddleReranker<T> : RerankerBase<T>
     /// Strategy: Place most relevant at start, 2nd most relevant at end, 3rd in middle,
     /// alternating to distribute important documents to positions LLMs pay attention to.
     /// </remarks>
-    public override IEnumerable<Document<T>> Rerank(string query, IEnumerable<Document<T>> documents, int topK)
+    protected override IEnumerable<Document<T>> RerankCore(string query, IList<Document<T>> documents)
     {
-        if (string.IsNullOrWhiteSpace(query))
-            throw new ArgumentException("Query cannot be null or whitespace", nameof(query));
+        if (documents.Count <= 2)
+            return documents;
 
-        if (documents == null)
-            throw new ArgumentNullException(nameof(documents));
-
-        if (topK <= 0)
-            throw new ArgumentOutOfRangeException(nameof(topK), "topK must be positive");
-
-        var docList = documents
+        var sorted = documents
             .OrderByDescending(d => d.HasRelevanceScore ? d.RelevanceScore : NumOps.Zero)
-            .Take(topK)
             .ToList();
 
-        if (docList.Count <= 2)
-            return docList;
-
-        var reordered = new List<Document<T>>(new Document<T>[docList.Count]);
+        var reordered = new List<Document<T>>(new Document<T>[sorted.Count]);
         var startIdx = 0;
-        var endIdx = docList.Count - 1;
+        var endIdx = sorted.Count - 1;
         var useStart = true;
 
-        foreach (var doc in docList)
+        foreach (var doc in sorted)
         {
             if (useStart)
             {

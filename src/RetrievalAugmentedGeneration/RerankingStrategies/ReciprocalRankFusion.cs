@@ -10,19 +10,21 @@ namespace AiDotNet.RetrievalAugmentedGeneration.RerankingStrategies
     /// Reciprocal Rank Fusion for combining multiple ranking lists.
     /// </summary>
     /// <typeparam name="T">The numeric type for vector operations.</typeparam>
-    public class ReciprocalRankFusion<T> : RerankingStrategyBase<T>
+    public class ReciprocalRankFusion<T> : Rerankers.RerankerBase<T>
     {
-        private readonly INumericOperations<T> _numOps;
         private readonly int _k;
+
+        /// <summary>
+        /// Gets a value indicating whether this reranker modifies relevance scores.
+        /// </summary>
+        public override bool ModifiesScores => true;
 
         /// <summary>
         /// Initializes a new instance of the <see cref="ReciprocalRankFusion{T}"/> class.
         /// </summary>
-        /// <param name="numericOperations">The numeric operations for type T.</param>
         /// <param name="k">The constant k for reciprocal rank formula (default: 60).</param>
-        public ReciprocalRankFusion(INumericOperations<T> numericOperations, int k = 60) : base(numericOperations)
+        public ReciprocalRankFusion(int k = 60)
         {
-            _numOps = numericOperations ?? throw new ArgumentNullException(nameof(numericOperations));
             _k = k > 0 ? k : throw new ArgumentOutOfRangeException(nameof(k));
         }
 
@@ -31,24 +33,19 @@ namespace AiDotNet.RetrievalAugmentedGeneration.RerankingStrategies
         /// </summary>
         /// <param name="query">The query string.</param>
         /// <param name="documents">The documents to rerank.</param>
-        /// <param name="topK">The number of top documents to return.</param>
         /// <returns>A reranked list of documents.</returns>
-        public override List<Document<T>> Rerank(string query, List<Document<T>> documents, int topK)
+        protected override IEnumerable<Document<T>> RerankCore(string query, IList<Document<T>> documents)
         {
-            if (string.IsNullOrEmpty(query)) throw new ArgumentNullException(nameof(query));
-            if (documents == null) throw new ArgumentNullException(nameof(documents));
-            if (topK <= 0) throw new ArgumentOutOfRangeException(nameof(topK));
-
             var scores = new Dictionary<string, T>();
 
             for (int rank = 0; rank < documents.Count; rank++)
             {
                 var doc = documents[rank];
-                var rrfScore = _numOps.FromDouble(1.0 / (_k + rank + 1));
+                var rrfScore = NumOps.FromDouble(1.0 / (_k + rank + 1));
 
                 if (scores.ContainsKey(doc.Id))
                 {
-                    scores[doc.Id] = _numOps.Add(scores[doc.Id], rrfScore);
+                    scores[doc.Id] = NumOps.Add(scores[doc.Id], rrfScore);
                 }
                 else
                 {
@@ -57,8 +54,7 @@ namespace AiDotNet.RetrievalAugmentedGeneration.RerankingStrategies
             }
 
             var reranked = documents
-                .OrderByDescending(d => Convert.ToDouble(scores.ContainsKey(d.Id) ? scores[d.Id] : _numOps.Zero))
-                .Take(topK)
+                .OrderByDescending(d => Convert.ToDouble(scores.ContainsKey(d.Id) ? scores[d.Id] : NumOps.Zero))
                 .ToList();
 
             foreach (var doc in reranked)
