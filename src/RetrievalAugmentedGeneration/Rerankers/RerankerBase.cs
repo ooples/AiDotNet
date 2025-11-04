@@ -162,9 +162,6 @@ public abstract class RerankerBase<T> : IReranker<T>
 
         var minScore = scores.Min();
         var maxScore = scores.Max();
-        
-        if (minScore == null || maxScore == null)
-            return documents;
             
         var range = NumOps.Subtract(maxScore, minScore);
 

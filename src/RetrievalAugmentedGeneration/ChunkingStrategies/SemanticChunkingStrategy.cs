@@ -12,23 +12,20 @@ namespace AiDotNet.RetrievalAugmentedGeneration.ChunkingStrategies
     public class SemanticChunkingStrategy<T> : ChunkingStrategyBase
     {
         private readonly INumericOperations<T> _numOps;
-        private readonly T _similarityThreshold;
 
         /// <summary>
         /// Initializes a new instance of the <see cref="SemanticChunkingStrategy{T}"/> class.
         /// </summary>
         /// <param name="numericOperations">The numeric operations for type T.</param>
-        /// <param name="similarityThreshold">The similarity threshold for grouping sentences.</param>
         /// <param name="maxChunkSize">The maximum chunk size in characters.</param>
+        /// <param name="chunkOverlap">The chunk overlap in characters.</param>
         public SemanticChunkingStrategy(
             INumericOperations<T> numericOperations,
-            T similarityThreshold,
             int maxChunkSize = 1000,
             int chunkOverlap = 200)
             : base(maxChunkSize, chunkOverlap)
         {
             _numOps = numericOperations ?? throw new ArgumentNullException(nameof(numericOperations));
-            _similarityThreshold = similarityThreshold;
         }
 
         /// <summary>

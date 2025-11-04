@@ -79,10 +79,9 @@ public class DiversityReranker<T> : RerankerBase<T>
     /// <summary>
     /// Initializes a new instance of the DiversityReranker class.
     /// </summary>
-    /// <param name="numOps">Numeric operations for type T.</param>
     /// <param name="lambda">Trade-off parameter between relevance and diversity (0 to 1). Default: 0.5.
     /// Higher values favor relevance, lower values favor diversity.</param>
-    public DiversityReranker(INumericOperations<T> numOps, T? lambda = default) : base()
+    public DiversityReranker(T? lambda = default) : base()
     {
         var lambdaValue = lambda ?? NumOps.FromDouble(0.5);
         

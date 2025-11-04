@@ -113,15 +113,12 @@ public class Document<T>
     /// </summary>
     public bool HasRelevanceScore { get; set; }
 
-    private readonly INumericOperations<T> _numOps;
-
     /// <summary>
     /// Initializes a new instance of the Document class.
     /// </summary>
     public Document()
     {
-        _numOps = MathHelper.GetNumericOperations<T>();
-        RelevanceScore = _numOps.Zero;
+        RelevanceScore = MathHelper.GetNumericOperations<T>().Zero;
     }
 
     /// <summary>

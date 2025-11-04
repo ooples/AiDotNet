@@ -37,7 +37,10 @@ namespace AiDotNet.RetrievalAugmentedGeneration.Retrievers
                 _documentStore.DocumentCount
             );
 
-            foreach (var doc in candidates)
+            var candidatesList = candidates.ToList();
+            BuildTFIDFStatistics(candidatesList);
+
+            foreach (var doc in candidatesList)
             {
                 if (!MatchesFilters(doc, metadataFilters))
                     continue;
@@ -86,6 +89,65 @@ namespace AiDotNet.RetrievalAugmentedGeneration.Retrievers
             return text.ToLowerInvariant()
                 .Split(new[] { ' ', '\t', '\n', '\r', ',', '.', '!', '?' }, StringSplitOptions.RemoveEmptyEntries)
                 .ToList();
+        }
+
+        private void BuildTFIDFStatistics(List<Document<T>> documents)
+        {
+            if (documents == null || documents.Count == 0)
+                return;
+
+            _tfidf.Clear();
+            _idf.Clear();
+
+            var termDocFreq = new Dictionary<string, int>();
+            var docTermFreq = new Dictionary<string, Dictionary<string, int>>();
+
+            foreach (var doc in documents)
+            {
+                var terms = Tokenize(doc.Content);
+                var termCounts = new Dictionary<string, int>();
+                
+                foreach (var term in terms)
+                {
+                    if (termCounts.ContainsKey(term))
+                        termCounts[term]++;
+                    else
+                        termCounts[term] = 1;
+                }
+
+                docTermFreq[doc.Id] = termCounts;
+
+                foreach (var term in termCounts.Keys)
+                {
+                    if (termDocFreq.ContainsKey(term))
+                        termDocFreq[term]++;
+                    else
+                        termDocFreq[term] = 1;
+                }
+            }
+
+            foreach (var term in termDocFreq.Keys)
+            {
+                var df = termDocFreq[term];
+                var idf = NumOps.FromDouble(Math.Log((double)documents.Count / (double)df));
+                _idf[term] = idf;
+            }
+
+            foreach (var doc in documents)
+            {
+                var termTfidf = new Dictionary<string, T>();
+                var termCounts = docTermFreq[doc.Id];
+                var maxFreq = termCounts.Values.Max();
+
+                foreach (var termCount in termCounts)
+                {
+                    var tf = NumOps.FromDouble((double)termCount.Value / (double)maxFreq);
+                    var tfidf = NumOps.Multiply(tf, _idf[termCount.Key]);
+                    termTfidf[termCount.Key] = tfidf;
+                }
+
+                _tfidf[doc.Id] = termTfidf;
+            }
         }
 
         private bool MatchesFilters(Document<T> document, Dictionary<string, object> filters)
