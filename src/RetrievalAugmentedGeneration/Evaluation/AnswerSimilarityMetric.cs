@@ -61,9 +61,17 @@ public class AnswerSimilarityMetric<T> : RAGMetricBase<T>
     /// <param name="answer">The grounded answer to evaluate.</param>
     /// <param name="groundTruth">The reference/correct answer.</param>
     /// <returns>Similarity score (0-1).</returns>
-    protected override double EvaluateCore(GroundedAnswer<T> answer, string? groundTruth)
+    protected override T EvaluateCore(GroundedAnswer<T> answer, string? groundTruth)
     {
-        // Ground truth is guaranteed to be non-null by base class validation
-        return JaccardSimilarity(answer.Answer, groundTruth!);
+        var words1 = GetWords(answer.Answer);
+        var words2 = GetWords(groundTruth!);
+
+        var intersection = words1.Intersect(words2).Count();
+        var union = words1.Union(words2).Count();
+
+        if (union == 0)
+            return NumOps.Zero;
+
+        return NumOps.Divide(NumOps.FromDouble(intersection), NumOps.FromDouble(union));
     }
 }

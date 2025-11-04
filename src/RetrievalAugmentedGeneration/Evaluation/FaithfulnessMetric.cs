@@ -56,24 +56,20 @@ public class FaithfulnessMetric<T> : RAGMetricBase<T>
     /// <param name="answer">The grounded answer to evaluate.</param>
     /// <param name="groundTruth">Not used for this metric.</param>
     /// <returns>Faithfulness score (0-1).</returns>
-    protected override double EvaluateCore(GroundedAnswer<T> answer, string? groundTruth)
+    protected override T EvaluateCore(GroundedAnswer<T> answer, string? groundTruth)
     {
         if (!answer.SourceDocuments.Any())
-            return 0.0;  // No sources = can't be faithful
+            return NumOps.Zero;
 
-        // Extract all words from the answer
         var answerWords = GetWords(answer.Answer);
         if (answerWords.Count == 0)
-            return 0.0;
+            return NumOps.Zero;
 
-        // Combine all source documents
         var sourceText = string.Join(" ", answer.SourceDocuments.Select(d => d.Content));
         var sourceWords = GetWords(sourceText);
 
-        // Calculate what percentage of answer words appear in sources
         var supportedWords = answerWords.Intersect(sourceWords).Count();
-        var faithfulnessScore = (double)supportedWords / answerWords.Count;
-
-        return faithfulnessScore;
+        
+        return NumOps.Divide(NumOps.FromDouble(supportedWords), NumOps.FromDouble(answerWords.Count));
     }
 }

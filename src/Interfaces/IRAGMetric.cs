@@ -49,5 +49,5 @@ public interface IRAGMetric<T>
     /// <param name="answer">The grounded answer to evaluate.</param>
     /// <param name="groundTruth">The expected/correct answer (null for reference-free metrics).</param>
     /// <returns>A score between 0 and 1, where 1 is perfect.</returns>
-    double Evaluate(GroundedAnswer<T> answer, string? groundTruth = null);
+    T Evaluate(GroundedAnswer<T> answer, string? groundTruth = null);
 }
