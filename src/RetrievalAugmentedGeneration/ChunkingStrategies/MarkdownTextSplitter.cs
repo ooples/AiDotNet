@@ -69,9 +69,8 @@ if (text.Length <= ChunkSize)
                     }
 
                     if (currentChunk.Length > 0)
-                    {
                         currentChunk.Append(separator);
-                    }
+                    
                     currentChunk.Append(split);
                 }
 

@@ -89,9 +89,8 @@ namespace AiDotNet.RetrievalAugmentedGeneration.ChunkingStrategies
                     }
 
                     if (currentChunk.Length > 0)
-                    {
                         currentChunk.Append(separator);
-                    }
+                    
                     currentChunk.Append(split);
                 }
 

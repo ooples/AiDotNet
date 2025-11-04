@@ -69,7 +69,7 @@ namespace AiDotNet.RetrievalAugmentedGeneration.Retrievers
                 .ToList();
 
             var results = allDocuments
-                .Where(doc => combinedScores.ContainsKey(doc.Id))
+                .Where(doc => combinedScores.TryGetValue(doc.Id, out _))
                 .OrderByDescending(doc => combinedScores[doc.Id])
                 .Take(topK)
                 .Select(doc =>
