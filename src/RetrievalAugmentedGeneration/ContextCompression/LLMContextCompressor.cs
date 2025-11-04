@@ -19,19 +19,14 @@ namespace AiDotNet.RetrievalAugmentedGeneration.ContextCompression
         /// <summary>
         /// Initializes a new instance of the <see cref="LLMContextCompressor{T}"/> class.
         /// </summary>
-        /// <param name="numericOperations">The numeric operations for type T.</param>
         /// <param name="compressionRatio">The target compression ratio (0.0 to 1.0).</param>
         /// <param name="llmEndpoint">The LLM API endpoint.</param>
         /// <param name="apiKey">The API key for the LLM service.</param>
         public LLMContextCompressor(
-            INumericOperations<T> numericOperations,
             double compressionRatio = 0.5,
             string llmEndpoint = "",
             string apiKey = "")
         {
-            if (numericOperations == null)
-                throw new ArgumentNullException(nameof(numericOperations));
-                
             _compressionRatio = compressionRatio >= 0 && compressionRatio <= 1
                 ? compressionRatio
                 : throw new ArgumentOutOfRangeException(nameof(compressionRatio), "Compression ratio must be between 0 and 1");
@@ -54,36 +49,6 @@ namespace AiDotNet.RetrievalAugmentedGeneration.ContextCompression
                 var compressedContent = CompressText(query, doc.Content);
                 var compressedDoc = new Document<T>(doc.Id, compressedContent)
                 {
-                    Metadata = doc.Metadata,
-                    RelevanceScore = doc.RelevanceScore,
-                    HasRelevanceScore = doc.HasRelevanceScore
-                };
-                compressed.Add(compressedDoc);
-            }
-
-            return compressed;
-        }
-
-        /// <summary>
-        /// Compresses a list of documents while preserving relevance to the query.
-        /// </summary>
-        /// <param name="query">The query context.</param>
-        /// <param name="documents">The documents to compress.</param>
-        /// <returns>A list of compressed documents.</returns>
-        public List<Document<T>> Compress(string query, List<Document<T>> documents)
-        {
-            if (string.IsNullOrEmpty(query)) throw new ArgumentNullException(nameof(query));
-            if (documents == null) throw new ArgumentNullException(nameof(documents));
-
-            var compressed = new List<Document<T>>();
-
-            foreach (var doc in documents)
-            {
-                var compressedContent = CompressText(query, doc.Content);
-                var compressedDoc = new Document<T>
-                {
-                    Id = doc.Id,
-                    Content = compressedContent,
                     Metadata = doc.Metadata,
                     RelevanceScore = doc.RelevanceScore,
                     HasRelevanceScore = doc.HasRelevanceScore
