@@ -189,7 +189,7 @@ public abstract class GeneratorBase<T> : IGenerator<T>
         var citationPattern = new System.Text.RegularExpressions.Regex(@"\[(\d+)\]");
         var matches = citationPattern.Matches(generatedText);
 
-        foreach (System.Text.RegularExpressions.Match match in matches)
+        foreach (System.Text.RegularExpressions.Match match in matches.Cast<System.Text.RegularExpressions.Match>())
         {
             if (int.TryParse(match.Groups[1].Value, out int citationIndex))
             {

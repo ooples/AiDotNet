@@ -57,13 +57,10 @@ namespace AiDotNet.RetrievalAugmentedGeneration.RerankingStrategies
                 .OrderByDescending(d => scores.TryGetValue(d.Id, out var score) ? Convert.ToDouble(score) : 0.0)
                 .ToList();
 
-            foreach (var doc in reranked)
+            foreach (var doc in reranked.Where(d => scores.ContainsKey(d.Id)))
             {
-                if (scores.ContainsKey(doc.Id))
-                {
-                    doc.RelevanceScore = scores[doc.Id];
-                    doc.HasRelevanceScore = true;
-                }
+                doc.RelevanceScore = scores[doc.Id];
+                doc.HasRelevanceScore = true;
             }
 
             return reranked;
