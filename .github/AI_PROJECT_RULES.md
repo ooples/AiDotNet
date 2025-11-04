@@ -7,15 +7,15 @@
    - NumOps.Zero for zero values
    - NumOps.One for one values
    - NumOps.FromDouble(value) to convert from double
-   
+
 2. **Always include INumericOperations in base classes**:
-   `csharp
-   protected static readonly INumericOperations&lt;T&gt; NumOps = MathHelper.GetNumericOperations&lt;T&gt;();
-   `
+   ```csharp
+   protected static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();
+   ```
 
 3. **Use generic types everywhere** - Avoid hardcoding double, float, int, etc.
 
-4. **Use custom data types** - Prefer Vector&lt;T&gt;, Matrix&lt;T&gt;, Tensor&lt;T&gt; over arrays and collections
+4. **Use custom data types** - Prefer Vector<T>, Matrix<T>, Tensor<T> over arrays and collections
 
 5. **NEVER use constraints like where T : struct** - Our architecture doesn't use these
 
@@ -53,7 +53,7 @@
 ## Code Organization
 
 1. **Folders match namespaces** - No "Base" folder, use proper namespace hierarchy
-2. **Examples go in separate test project** - C:\Users\cheat\source\repos\AiDotNet\testconsole\AiDotNetTestConsole.csproj
+2. **Examples go in separate test project** - `testconsole/AiDotNetTestConsole.csproj`
 3. **Use StatisticsHelper for common calculations** - Don't duplicate code
 4. **Integrate with existing architecture** - Must work with PredictionModelBuilder and pipeline builder
 

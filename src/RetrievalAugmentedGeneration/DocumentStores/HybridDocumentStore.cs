@@ -67,14 +67,9 @@ namespace AiDotNet.RetrievalAugmentedGeneration.DocumentStores
             foreach (var doc in keywordResults.Where(doc => doc.HasRelevanceScore))
             {
                 var keywordScore = NumOps.Multiply(_keywordWeight, doc.RelevanceScore);
-                if (combinedScores.TryGetValue(doc.Id, out var existingScore))
-                {
-                    combinedScores[doc.Id] = NumOps.Add(existingScore, keywordScore);
-                }
-                else
-                {
-                    combinedScores[doc.Id] = keywordScore;
-                }
+                combinedScores[doc.Id] = combinedScores.TryGetValue(doc.Id, out var existingScore)
+                    ? NumOps.Add(existingScore, keywordScore)
+                    : keywordScore;
             }
 
             var allDocuments = vectorResults.Concat(keywordResults)

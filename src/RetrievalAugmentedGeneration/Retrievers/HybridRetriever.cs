@@ -53,14 +53,9 @@ namespace AiDotNet.RetrievalAugmentedGeneration.Retrievers
             foreach (var doc in sparseResults.Where(doc => doc.HasRelevanceScore))
             {
                 var sparseScore = NumOps.Multiply(_sparseWeight, doc.RelevanceScore);
-                if (combinedScores.TryGetValue(doc.Id, out var existingScore))
-                {
-                    combinedScores[doc.Id] = NumOps.Add(existingScore, sparseScore);
-                }
-                else
-                {
-                    combinedScores[doc.Id] = sparseScore;
-                }
+                combinedScores[doc.Id] = combinedScores.TryGetValue(doc.Id, out var existingScore)
+                    ? NumOps.Add(existingScore, sparseScore)
+                    : sparseScore;
             }
 
             var allDocuments = denseResults.Concat(sparseResults)
