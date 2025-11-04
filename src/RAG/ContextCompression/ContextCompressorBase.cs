@@ -5,7 +5,6 @@ using System.Collections.Generic;
 namespace AiDotNet.RAG.ContextCompression
 {
     public abstract class ContextCompressorBase<T>
-        where T : struct, IComparable, IConvertible, IFormattable
     {
         public List<Document<T>> Compress(
             List<Document<T>> documents,

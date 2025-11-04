@@ -7,7 +7,6 @@ using System.Linq;
 namespace AiDotNet.RAG.ContextCompression
 {
     public class LLMContextCompressor<T> : ContextCompressorBase<T>
-        where T : struct, IComparable, IConvertible, IFormattable
     {
         private readonly string _model;
         private readonly int _maxTokens;

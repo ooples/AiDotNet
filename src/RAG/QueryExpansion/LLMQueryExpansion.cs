@@ -3,7 +3,6 @@ using AiDotNet.Interfaces;
 namespace AiDotNet.RAG.QueryExpansion
 {
     public class LLMQueryExpansion<T> : QueryExpansionBase<T>
-        where T : struct, IComparable, IConvertible, IFormattable
     {
         private readonly string _model;
         private readonly int _numVariations;

@@ -4,7 +4,6 @@ using System.Text;
 namespace AiDotNet.RAG.QueryExpansion
 {
     public class HyDEQueryExpansion<T> : QueryExpansionBase<T>
-        where T : struct, IComparable, IConvertible, IFormattable
     {
         private readonly string _model;
         private readonly int _numHypotheticalDocs;

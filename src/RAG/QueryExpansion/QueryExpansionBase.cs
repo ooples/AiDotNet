@@ -1,7 +1,6 @@
 namespace AiDotNet.RAG.QueryExpansion
 {
     public abstract class QueryExpansionBase<T>
-        where T : struct, IComparable, IConvertible, IFormattable
     {
         public List<string> Expand(string query, Dictionary<string, object>? options = null)
         {

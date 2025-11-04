@@ -7,7 +7,6 @@ using System.Linq;
 namespace AiDotNet.RAG.ContextCompression
 {
     public class DocumentSummarizer<T> : ContextCompressorBase<T>
-        where T : struct, IComparable, IConvertible, IFormattable
     {
         private readonly int _maxSentences;
         private readonly bool _extractive;
