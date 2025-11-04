@@ -45,17 +45,21 @@ public class AutoCompressor<T>
         if (documents == null)
             throw new ArgumentNullException(nameof(documents));
 
-        var queryTokens = query.ToLowerInvariant().Split(new[] { ' ', '\t', '\n', '\r' }, StringSplitOptions.RemoveEmptyEntries).ToHashSet();
+        var queryTokens = new HashSet<string>(query.ToLowerInvariant().Split(new[] { ' ', '\t', '\n', '\r' }, StringSplitOptions.RemoveEmptyEntries));
         var compressedDocs = new List<Document<T>>();
 
         foreach (var doc in documents)
         {
             var compressed = CompressDocument(doc.Content, queryTokens);
-            var compressedDoc = new Document<T>(compressed, doc.Metadata)
+            var compressedDoc = new Document<T>(doc.Id, compressed)
             {
                 RelevanceScore = doc.RelevanceScore,
                 HasRelevanceScore = doc.HasRelevanceScore
             };
+            foreach (var kvp in doc.Metadata)
+            {
+                compressedDoc.Metadata[kvp.Key] = kvp.Value;
+            }
             compressedDocs.Add(compressedDoc);
         }
 
