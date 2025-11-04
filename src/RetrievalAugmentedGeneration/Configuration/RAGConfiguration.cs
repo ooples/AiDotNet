@@ -42,10 +42,5 @@ namespace AiDotNet.RetrievalAugmentedGeneration.Configuration
         /// Gets or sets the context compression configuration.
         /// </summary>
         public ContextCompressionConfig ContextCompression { get; set; } = new ContextCompressionConfig();
-
-        /// <summary>
-        /// Gets or sets the numeric operations for type T.
-        /// </summary>
-        public INumericOperations<T> NumericOperations { get; set; } = null!;
     }
 }
