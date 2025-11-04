@@ -17,6 +17,10 @@ public class CohereEmbeddingModel<T> : EmbeddingModelBase<T>
     private readonly string _apiKey;
     private readonly string _model;
     private readonly string _inputType;
+    private readonly int _dimension;
+
+    public override int EmbeddingDimension => _dimension;
+    public override int MaxTokens => 512;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="CohereEmbeddingModel{T}"/> class.
@@ -25,41 +29,24 @@ public class CohereEmbeddingModel<T> : EmbeddingModelBase<T>
     /// <param name="model">The model name (e.g., "embed-english-v3.0").</param>
     /// <param name="inputType">The input type ("search_document" or "search_query").</param>
     /// <param name="dimension">The embedding dimension.</param>
-    /// <param name="numericOperations">The numeric operations provider.</param>
     public CohereEmbeddingModel(
         string apiKey,
         string model,
         string inputType,
-        int dimension,
-        INumericOperations<T> numericOperations)
-        : base(dimension, numericOperations)
+        int dimension = 1024)
     {
         _apiKey = apiKey ?? throw new ArgumentNullException(nameof(apiKey));
         _model = model ?? throw new ArgumentNullException(nameof(model));
         _inputType = inputType ?? throw new ArgumentNullException(nameof(inputType));
+        _dimension = dimension;
     }
 
     /// <summary>
     /// Generates embeddings using Cohere API.
     /// </summary>
-    public override Vector<T> Embed(string text)
+    protected override Vector<T> EmbedCore(string text)
     {
-        if (string.IsNullOrWhiteSpace(text))
-            throw new ArgumentException("Text cannot be null or whitespace", nameof(text));
-
         // TODO: Implement Cohere API call
-        throw new NotImplementedException("Cohere integration requires HTTP client implementation");
-    }
-
-    /// <summary>
-    /// Batch embedding generation.
-    /// </summary>
-    public override IEnumerable<Vector<T>> EmbedBatch(IEnumerable<string> texts)
-    {
-        if (texts == null)
-            throw new ArgumentNullException(nameof(texts));
-
-        // TODO: Implement Cohere batch API call
         throw new NotImplementedException("Cohere integration requires HTTP client implementation");
     }
 }
