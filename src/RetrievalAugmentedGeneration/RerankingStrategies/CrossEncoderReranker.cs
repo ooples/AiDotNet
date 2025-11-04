@@ -53,6 +53,7 @@ namespace AiDotNet.RetrievalAugmentedGeneration.RerankingStrategies
                 .Select(x =>
                 {
                     x.doc.RelevanceScore = x.score;
+                    x.doc.HasRelevanceScore = true;
                     return x.doc;
                 })
                 .ToList();

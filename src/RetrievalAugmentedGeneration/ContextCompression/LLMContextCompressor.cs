@@ -59,7 +59,8 @@ namespace AiDotNet.RetrievalAugmentedGeneration.ContextCompression
                     Id = doc.Id,
                     Content = compressedContent,
                     Metadata = doc.Metadata,
-                    RelevanceScore = doc.RelevanceScore
+                    RelevanceScore = doc.RelevanceScore,
+                    HasRelevanceScore = doc.HasRelevanceScore
                 };
                 compressed.Add(compressedDoc);
             }

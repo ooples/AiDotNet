@@ -39,7 +39,7 @@ namespace AiDotNet.RetrievalAugmentedGeneration.EmbeddingModels
         protected override Vector<T> EmbedCore(string text)
         {
             var values = new T[_dimension];
-            var hash = text.GetHashCode();
+            var hash = GetDeterministicHash(text);
             
             for (int i = 0; i < _dimension; i++)
             {
@@ -48,6 +48,22 @@ namespace AiDotNet.RetrievalAugmentedGeneration.EmbeddingModels
             }
 
             return NormalizeVector(new Vector<T>(values));
+        }
+
+        private int GetDeterministicHash(string text)
+        {
+            if (string.IsNullOrEmpty(text))
+                return 0;
+
+            unchecked
+            {
+                int hash = 23;
+                foreach (char c in text)
+                {
+                    hash = hash * 31 + c;
+                }
+                return hash;
+            }
         }
 
         private Vector<T> NormalizeVector(Vector<T> vector)

@@ -66,6 +66,7 @@ namespace AiDotNet.RetrievalAugmentedGeneration.RerankingStrategies
                 if (scores.ContainsKey(doc.Id))
                 {
                     doc.RelevanceScore = scores[doc.Id];
+                    doc.HasRelevanceScore = true;
                 }
             }
 

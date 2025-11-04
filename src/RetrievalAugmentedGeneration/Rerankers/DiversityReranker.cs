@@ -125,7 +125,7 @@ public class DiversityReranker<T> : RerankerBase<T>
         while (remainingDocs.Count > 0)
         {
             Document<T>? bestDoc = null;
-            var bestScore = NumOps.FromDouble(double.MinValue);
+            T? bestScore = null;
 
             foreach (var doc in remainingDocs)
             {
@@ -146,7 +146,7 @@ public class DiversityReranker<T> : RerankerBase<T>
                 var diversityPenalty = NumOps.Multiply(oneMinusLambda, maxSimilarity);
                 var score = NumOps.Subtract(relevancePart, diversityPenalty);
 
-                if (bestDoc == null || NumOps.GreaterThan(score, bestScore))
+                if (bestScore == null || NumOps.GreaterThan(score, bestScore))
                 {
                     bestDoc = doc;
                     bestScore = score;

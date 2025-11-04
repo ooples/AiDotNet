@@ -152,7 +152,7 @@ public class MaximalMarginalRelevanceReranker<T> : RerankerBase<T>
         while (unselected.Count > 0)
         {
             var bestIdx = -1;
-            var bestScore = NumOps.FromDouble(double.NegativeInfinity);
+            T? bestScore = null;
             
             foreach (var i in unselected)
             {
@@ -179,7 +179,7 @@ public class MaximalMarginalRelevanceReranker<T> : RerankerBase<T>
                     NumOps.Multiply(oneMinusLambda, maxSimilarity)
                 );
                 
-                if (NumOps.GreaterThan(mmrScore, bestScore))
+                if (bestScore == null || NumOps.GreaterThan(mmrScore, bestScore))
                 {
                     bestScore = mmrScore;
                     bestIdx = i;

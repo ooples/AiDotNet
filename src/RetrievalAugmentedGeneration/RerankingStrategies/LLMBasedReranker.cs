@@ -44,6 +44,12 @@ namespace AiDotNet.RetrievalAugmentedGeneration.RerankingStrategies
 
             var scoredDocs = new List<(Document<T> doc, T score)>();
 
+            var queryTokens = Tokenize(query);
+            if (queryTokens.Count == 0)
+            {
+                return documents.Take(topK).ToList();
+            }
+
             foreach (var doc in documents)
             {
                 var score = AssessRelevance(query, doc.Content);
@@ -56,6 +62,7 @@ namespace AiDotNet.RetrievalAugmentedGeneration.RerankingStrategies
                 .Select(x =>
                 {
                     x.doc.RelevanceScore = x.score;
+                    x.doc.HasRelevanceScore = true;
                     return x.doc;
                 })
                 .ToList();
