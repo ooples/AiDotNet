@@ -1,13 +1,7 @@
-using AiDotNet.RetrievalAugmentedGeneration.Models;
-using System;
-using System.Collections.Generic;
-using System.Linq;
+using AiDotNet.Interfaces;
 
 namespace AiDotNet.RetrievalAugmentedGeneration.ChunkingStrategies
 {
-    /// <summary>
-    /// Recursive character-based text splitting strategy with multiple separators
-    /// </summary>
     public class RecursiveCharacterChunkingStrategy : ChunkingStrategyBase
     {
         private readonly int _chunkSize;
@@ -21,132 +15,70 @@ namespace AiDotNet.RetrievalAugmentedGeneration.ChunkingStrategies
         {
             _chunkSize = chunkSize;
             _chunkOverlap = chunkOverlap;
-            _separators = separators ?? new[] { "\n\n", "\n", " ", "" };
+            _separators = separators ?? new[] { "\n\n", "\n", ". ", " ", "" };
         }
 
-        protected override List<TextChunk> SplitCore(string text, Dictionary<string, string>? metadata = null)
+        protected override List<string> ChunkCore(string text)
         {
-            if (string.IsNullOrWhiteSpace(text))
-                return new List<TextChunk>();
+            var chunks = new List<string>();
 
-            var chunks = new List<TextChunk>();
-            SplitTextRecursive(text, 0, chunks, metadata);
+            if (string.IsNullOrWhiteSpace(text))
+            {
+                return chunks;
+            }
+
+            var splits = RecursiveSplit(text, _separators, 0);
+            
+            // Merge small splits into chunks
+            var currentChunk = "";
+            foreach (var split in splits)
+            {
+                if (currentChunk.Length + split.Length <= _chunkSize)
+                {
+                    currentChunk += split;
+                }
+                else
+                {
+                    if (!string.IsNullOrWhiteSpace(currentChunk))
+                    {
+                        chunks.Add(currentChunk.Trim());
+                    }
+                    currentChunk = split;
+                }
+            }
+
+            if (!string.IsNullOrWhiteSpace(currentChunk))
+            {
+                chunks.Add(currentChunk.Trim());
+            }
+
             return chunks;
         }
 
-        private void SplitTextRecursive(
-            string text,
-            int separatorIndex,
-            List<TextChunk> chunks,
-            Dictionary<string, string>? metadata)
+        private List<string> RecursiveSplit(string text, string[] separators, int sepIndex)
         {
-            if (text.Length <= _chunkSize)
+            if (sepIndex >= separators.Length || text.Length <= _chunkSize)
             {
-                if (!string.IsNullOrWhiteSpace(text))
-                {
-                    var chunkMetadata = new Dictionary<string, string>(metadata ?? new Dictionary<string, string>())
-                    {
-                        ["chunk_index"] = chunks.Count.ToString()
-                    };
-
-                    chunks.Add(new TextChunk
-                    {
-                        Text = text,
-                        Metadata = chunkMetadata
-                    });
-                }
-                return;
+                return new List<string> { text };
             }
 
-            if (separatorIndex >= _separators.Length)
-            {
-                var chunkMetadata = new Dictionary<string, string>(metadata ?? new Dictionary<string, string>())
-                {
-                    ["chunk_index"] = chunks.Count.ToString(),
-                    ["truncated"] = "true"
-                };
-
-                chunks.Add(new TextChunk
-                {
-                    Text = text.Substring(0, Math.Min(_chunkSize, text.Length)),
-                    Metadata = chunkMetadata
-                });
-                return;
-            }
-
-            var separator = _separators[separatorIndex];
-            var splits = !string.IsNullOrEmpty(separator)
-                ? text.Split(new[] { separator }, StringSplitOptions.None)
-                : text.Select(c => c.ToString()).ToArray();
-
-            var currentChunk = new List<string>();
-            var currentLength = 0;
+            var separator = separators[sepIndex];
+            var splits = text.Split(new[] { separator }, StringSplitOptions.None);
+            var result = new List<string>();
 
             foreach (var split in splits)
             {
-                var splitLength = split.Length + (string.IsNullOrEmpty(separator) ? 0 : separator.Length);
-
-                if (currentLength + splitLength > _chunkSize && currentChunk.Count > 0)
+                if (split.Length > _chunkSize)
                 {
-                    var combinedText = string.Join(separator, currentChunk);
-                    
-                    if (combinedText.Length > _chunkSize)
-                    {
-                        SplitTextRecursive(combinedText, separatorIndex + 1, chunks, metadata);
-                    }
-                    else if (!string.IsNullOrWhiteSpace(combinedText))
-                    {
-                        var chunkMetadata = new Dictionary<string, string>(metadata ?? new Dictionary<string, string>())
-                        {
-                            ["chunk_index"] = chunks.Count.ToString()
-                        };
-
-                        chunks.Add(new TextChunk
-                        {
-                            Text = combinedText,
-                            Metadata = chunkMetadata
-                        });
-                    }
-
-                    var overlapText = string.Join(separator, currentChunk.TakeLast(2));
-                    if (overlapText.Length <= _chunkOverlap)
-                    {
-                        currentChunk = currentChunk.TakeLast(2).ToList();
-                        currentLength = overlapText.Length;
-                    }
-                    else
-                    {
-                        currentChunk.Clear();
-                        currentLength = 0;
-                    }
+                    result.AddRange(RecursiveSplit(split, separators, sepIndex + 1));
                 }
-
-                currentChunk.Add(split);
-                currentLength += splitLength;
-            }
-
-            if (currentChunk.Count > 0)
-            {
-                var combinedText = string.Join(separator, currentChunk);
-                
-                if (combinedText.Length > _chunkSize)
+                else if (!string.IsNullOrWhiteSpace(split))
                 {
-                    SplitTextRecursive(combinedText, separatorIndex + 1, chunks, metadata);
-                }
-                else if (!string.IsNullOrWhiteSpace(combinedText))
-                {
-                    var chunkMetadata = new Dictionary<string, string>(metadata ?? new Dictionary<string, string>())
-                    {
-                        ["chunk_index"] = chunks.Count.ToString()
-                    };
-
-                    chunks.Add(new TextChunk
-                    {
-                        Text = combinedText,
-                        Metadata = chunkMetadata
-                    });
+                    result.Add(split + separator);
                 }
             }
+
+            return result;
         }
     }
 }
