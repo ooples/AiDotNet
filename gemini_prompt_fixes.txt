@@ -1,0 +1,37 @@
+You are analyzing a C# AI library codebase. Review these 10 critical/major issues from code review and provide production-ready fixes:
+
+ISSUES TO FIX:
+
+1. **ElasticsearchDocumentStore.cs - CRITICAL**: Hardcoded vector dimension (1536) breaks other models. Make configurable.
+
+2. **ElasticsearchDocumentStore.cs - Major**: Metadata filters ignored in GetSimilarCore - always uses match_all.
+
+3. **ElasticsearchDocumentStore.cs - Major**: Metadata deserialized as Dictionary<string,string>, loses types, breaks comparisons.
+
+4. **AzureSearchDocumentStore.cs - Major**: Inverted index converts metadata to strings via ToString(), loses types.
+
+5. **ChromaDBDocumentStore.cs - Major**: Metadata deserialized as Dictionary<string,string>, loses types.
+
+6. **FAISSDocumentStore.cs - Major**: RemoveCore doesn't update FAISS index, causes memory leaks and sync issues.
+
+7. **PineconeDocumentStore.cs - Major**: Mutates cached documents with relevance scores instead of returning copies.
+
+8. **PostgresVectorDocumentStore.cs - Major**: Mutates cached documents with relevance scores.
+
+9. **SQLiteVSSDocumentStore.cs - Major**: Batch validation skipped when _vectorDimension provided in constructor.
+
+10. **SQLiteVSSDocumentStore.cs - Major**: Metadata filters ignored, HasRelevanceScore never set.
+
+CONTEXT:
+- All document stores inherit from DocumentStoreBase<T>
+- Metadata must preserve types: string, int, double, bool, DateTime
+- Cannot mutate cached documents - must return new instances
+- Must respect metadataFilters parameter
+- Must set HasRelevanceScore = true when returning scored results
+- Follow existing patterns in codebase
+- No null!, no default!, use NumOps for numeric operations
+
+Analyze each issue and provide complete C# code fixes with:
+1. Root cause
+2. Exact fix (full method if needed)
+3. Why this approach is production-ready

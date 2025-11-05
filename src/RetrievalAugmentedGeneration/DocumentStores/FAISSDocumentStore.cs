@@ -254,11 +254,25 @@ namespace AiDotNet.RetrievalAugmentedGeneration.DocumentStores
         protected override bool RemoveCore(string documentId)
         {
             var removed = _documents.Remove(documentId);
-            if (removed && _documents.Count == 0)
+            if (removed)
             {
-                _vectorDimension = 0;
-                _currentIndex = 0;
-                _indexedVectors.Clear();
+                if (_documents.Count == 0)
+                {
+                    _vectorDimension = 0;
+                    _currentIndex = 0;
+                    _indexedVectors.Clear();
+                }
+                else
+                {
+                    // Rebuild index from remaining documents to keep FAISS index in sync
+                    _indexedVectors.Clear();
+                    _currentIndex = 0;
+                    foreach (var kvp in _documents)
+                    {
+                        var index = _currentIndex++;
+                        _indexedVectors[index] = kvp.Value.Embedding;
+                    }
+                }
             }
             return removed;
         }

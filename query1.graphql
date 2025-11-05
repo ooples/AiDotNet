@@ -1,0 +1,25 @@
+query {
+  repository(owner: "ooples", name: "AiDotNet") {
+    pullRequest(number: 304) {
+      reviewThreads(first: 100) {
+        pageInfo {
+          hasNextPage
+          endCursor
+        }
+        totalCount
+        nodes {
+          isResolved
+          id
+          comments(first: 3) {
+            nodes {
+              path
+              body
+              startLine
+              line
+            }
+          }
+        }
+      }
+    }
+  }
+}

@@ -56,14 +56,11 @@ public class HeaderBasedTextSplitter : ChunkingStrategyBase
             // Check if line is a header (Markdown ## or HTML <h>)
             if (IsHeader(line))
             {
-                // Save current chunk if not empty
+                // Save current chunk if not empty (always preserve to prevent data loss)
                 if (currentChunk.Count > 0)
                 {
                     var content = string.Join(Environment.NewLine, currentChunk);
-                    if (content.Length >= _minChunkSize || !_combineSmallChunks)
-                    {
-                        chunks.Add((content, chunkStart, position));
-                    }
+                    chunks.Add((content, chunkStart, position));
                     currentChunk.Clear();
                 }
 

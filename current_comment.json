@@ -1,0 +1,69 @@
+{
+  "url": "https://api.github.com/repos/ooples/AiDotNet/pulls/comments/2494505770",
+  "pull_request_review_id": 3422055133,
+  "id": 2494505770,
+  "node_id": "PRRC_kwDOKSXUF86UryMq",
+  "diff_hunk": "@@ -0,0 +1,120 @@\n+using AiDotNet.RetrievalAugmentedGeneration.Interfaces;\n+\n+namespace AiDotNet.RetrievalAugmentedGeneration.ChunkingStrategies;\n+\n+/// <summary>\n+/// Splits structured documents based on header tags (H1, H2, H3, etc.).\n+/// </summary>\n+/// <remarks>\n+/// Ideal for Markdown and HTML documents where headers provide natural semantic boundaries.\n+/// Preserves document structure and hierarchy.\n+/// </remarks>\n+public class HeaderBasedTextSplitter : ChunkingStrategyBase\n+{\n+    private readonly bool _combineSmallChunks;\n+    private readonly int _minChunkSize;\n+\n+    /// <summary>\n+    /// Initializes a new instance of the <see cref=\"HeaderBasedTextSplitter\"/> class.\n+    /// </summary>\n+    /// <param name=\"chunkSize\">Maximum size of each chunk in characters.</param>\n+    /// <param name=\"chunkOverlap\">The number of characters that should overlap between consecutive chunks.</param>\n+    /// <param name=\"minChunkSize\">Minimum size for chunk combination.</param>\n+    /// <param name=\"combineSmallChunks\">Whether to combine small chunks.</param>\n+    public HeaderBasedTextSplitter(\n+        int chunkSize,\n+        int chunkOverlap = 0,\n+        int minChunkSize = 100,\n+        bool combineSmallChunks = true)\n+        : base(chunkSize, chunkOverlap)\n+    {\n+        if (minChunkSize < 0)\n+            throw new ArgumentOutOfRangeException(nameof(minChunkSize), \"Min chunk size cannot be negative\");\n+        \n+        if (minChunkSize > chunkSize)\n+            throw new ArgumentOutOfRangeException(nameof(minChunkSize), \"Min chunk size cannot exceed max chunk size\");\n+            \n+        _minChunkSize = minChunkSize;\n+        _combineSmallChunks = combineSmallChunks;\n+    }\n+\n+    /// <summary>\n+    /// Core chunking logic that splits text based on header hierarchy.\n+    /// </summary>\n+    protected override IEnumerable<(string Chunk, int StartPosition, int EndPosition)> ChunkCore(string text)\n+    {\n+        var chunks = new List<(string, int, int)>();\n+        var lines = text.Split(new[] { \"\\r\\n\", \"\\r\", \"\\n\" }, StringSplitOptions.None);\n+        var currentChunk = new List<string>();\n+        var chunkStart = 0;\n+        var position = 0;\n+\n+        foreach (var line in lines)\n+        {\n+            var lineLength = line.Length + Environment.NewLine.Length;\n+\n+            // Check if line is a header (Markdown ## or HTML <h>)\n+            if (IsHeader(line))\n+            {\n+                // Save current chunk if not empty\n+                if (currentChunk.Count > 0)\n+                {\n+                    var content = string.Join(Environment.NewLine, currentChunk);\n+                    if (content.Length >= _minChunkSize || !_combineSmallChunks)\n+                    {\n+                        chunks.Add((content, chunkStart, position));\n+                    }\n+                    currentChunk.Clear();\n+                }",
+  "path": "src/RetrievalAugmentedGeneration/ChunkingStrategies/HeaderBasedTextSplitter.cs",
+  "commit_id": "e972697ed5a758045091402fb3f80cadcdfa8829",
+  "original_commit_id": "a5001e00cd349253e278d6648bd7b3b7518aeea9",
+  "user": {
+    "login": "coderabbitai[bot]",
+    "id": 136622811,
+    "node_id": "BOT_kgDOCCSy2w",
+    "avatar_url": "https://avatars.githubusercontent.com/in/347564?v=4",
+    "gravatar_id": "",
+    "url": "https://api.github.com/users/coderabbitai%5Bbot%5D",
+    "html_url": "https://github.com/apps/coderabbitai",
+    "followers_url": "https://api.github.com/users/coderabbitai%5Bbot%5D/followers",
+    "following_url": "https://api.github.com/users/coderabbitai%5Bbot%5D/following{/other_user}",
+    "gists_url": "https://api.github.com/users/coderabbitai%5Bbot%5D/gists{/gist_id}",
+    "starred_url": "https://api.github.com/users/coderabbitai%5Bbot%5D/starred{/owner}{/repo}",
+    "subscriptions_url": "https://api.github.com/users/coderabbitai%5Bbot%5D/subscriptions",
+    "organizations_url": "https://api.github.com/users/coderabbitai%5Bbot%5D/orgs",
+    "repos_url": "https://api.github.com/users/coderabbitai%5Bbot%5D/repos",
+    "events_url": "https://api.github.com/users/coderabbitai%5Bbot%5D/events{/privacy}",
+    "received_events_url": "https://api.github.com/users/coderabbitai%5Bbot%5D/received_events",
+    "type": "Bot",
+    "user_view_type": "public",
+    "site_admin": false
+  },
+  "body": "_⚠️ Potential issue_ | _🔴 Critical_\n\n**Critical data loss: Small chunks are discarded when `combineSmallChunks` is true.**\n\nWhen a header is encountered and the current chunk is smaller than `_minChunkSize` with `_combineSmallChunks = true`, the chunk is neither saved nor combined—it is simply discarded. Line 67 clears `currentChunk` regardless of whether the chunk was saved (line 65), causing content loss.\n\nExample: Given `minChunkSize = 100` and `combineSmallChunks = true`:\n```markdown\n# Header A\nSmall content (50 chars)\n# Header B\nMore content\n```\nThe content under \"Header A\" will be completely lost because it's below the minimum size.\n\n\n\nThe intended behavior is unclear. Consider one of these fixes:\n\n**Option 1: Always preserve content (recommended for correctness):**\n\n```diff\n             // Save current chunk if not empty\n             if (currentChunk.Count > 0)\n             {\n                 var content = string.Join(Environment.NewLine, currentChunk);\n-                if (content.Length >= _minChunkSize || !_combineSmallChunks)\n-                {\n-                    chunks.Add((content, chunkStart, position));\n-                }\n+                // Always save to prevent data loss; mark small chunks in metadata if needed\n+                chunks.Add((content, chunkStart, position));\n                 currentChunk.Clear();\n             }\n```\n\n**Option 2: Combine small chunks with the following section:**\n\n```diff\n             // Save current chunk if not empty\n             if (currentChunk.Count > 0)\n             {\n                 var content = string.Join(Environment.NewLine, currentChunk);\n                 if (content.Length >= _minChunkSize || !_combineSmallChunks)\n                 {\n                     chunks.Add((content, chunkStart, position));\n+                    currentChunk.Clear();\n                 }\n-                currentChunk.Clear();\n+                // If not saved, keep content to combine with next section\n             }\n```\n\nNote: Option 2 would merge content across semantic boundaries (headers), which may not be desirable.\n\n<details>\n<summary>🤖 Prompt for AI Agents</summary>\n\n```\nIn\nsrc/RetrievalAugmentedGeneration/ChunkingStrategies/HeaderBasedTextSplitter.cs\naround lines 60-68, the current logic clears currentChunk whenever a header is\nencountered which causes small chunks to be discarded when _combineSmallChunks\nis true; change the branch so that small chunks are preserved: always add the\ncurrent chunk to chunks (i.e., call chunks.Add((content, chunkStart, position)))\nbefore clearing, regardless of whether content.Length >= _minChunkSize, or\nalternatively (if you prefer combining) avoid clearing the currentChunk when\n_combineSmallChunks is true so it will be merged with the next section;\nimplement the chosen behavior and ensure currentChunk.Clear() only runs after\nthe chunk has been preserved or explicitly merged.\n```\n\n</details>\n\n<!-- This is an auto-generated comment by CodeRabbit -->",
+  "created_at": "2025-11-05T13:29:52Z",
+  "updated_at": "2025-11-05T13:29:54Z",
+  "html_url": "https://github.com/ooples/AiDotNet/pull/304#discussion_r2494505770",
+  "pull_request_url": "https://api.github.com/repos/ooples/AiDotNet/pulls/304",
+  "_links": {
+    "self": {
+      "href": "https://api.github.com/repos/ooples/AiDotNet/pulls/comments/2494505770"
+    },
+    "html": {
+      "href": "https://github.com/ooples/AiDotNet/pull/304#discussion_r2494505770"
+    },
+    "pull_request": {
+      "href": "https://api.github.com/repos/ooples/AiDotNet/pulls/304"
+    }
+  },
+  "reactions": {
+    "url": "https://api.github.com/repos/ooples/AiDotNet/pulls/comments/2494505770/reactions",
+    "total_count": 0,
+    "+1": 0,
+    "-1": 0,
+    "laugh": 0,
+    "hooray": 0,
+    "confused": 0,
+    "heart": 0,
+    "rocket": 0,
+    "eyes": 0
+  },
+  "start_line": 60,
+  "original_start_line": 60,
+  "start_side": "RIGHT",
+  "line": 68,
+  "original_line": 68,
+  "side": "RIGHT",
+  "author_association": "CONTRIBUTOR",
+  "original_position": 68,
+  "position": 68,
+  "subject_type": "line"
+}

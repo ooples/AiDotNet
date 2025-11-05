@@ -140,7 +140,16 @@ public class SQLiteVSSDocumentStore<T> : DocumentStoreBase<T>
             _vectorDimension = vectorDocuments[0].Embedding.Length;
 
         foreach (var vd in vectorDocuments)
+        {
+            // Validate batch dimensions
+            if (vd.Embedding.Length != _vectorDimension)
+            {
+                throw new ArgumentException(
+                    $"Vector dimension mismatch in batch. Expected {_vectorDimension}, got {vd.Embedding.Length} for document {vd.Document.Id}",
+                    nameof(vectorDocuments));
+            }
             _store[vd.Document.Id] = vd;
+        }
     }
 
     /// <summary>
@@ -175,19 +184,56 @@ public class SQLiteVSSDocumentStore<T> : DocumentStoreBase<T>
     /// </remarks>
     protected override IEnumerable<Document<T>> GetSimilarCore(Vector<T> queryVector, int topK, Dictionary<string, object> metadataFilters)
     {
-        var results = new List<(Document<T> doc, T score)>();
+        var scoredDocuments = new List<(Document<T> doc, T score)>();
 
-        foreach (var vd in _store.Values)
+        // Apply metadata filters
+        var filteredDocuments = _store.Values
+            .Where(vectorDoc => MatchesFilters(vectorDoc.Document, metadataFilters));
+
+        foreach (var vd in filteredDocuments)
         {
             var similarity = StatisticsHelper<T>.CosineSimilarity(queryVector, vd.Embedding);
-            vd.Document.RelevanceScore = similarity;
-            results.Add((vd.Document, similarity));
+            scoredDocuments.Add((vd.Document, similarity));
         }
 
-        return results
+        return scoredDocuments
             .OrderByDescending(x => Convert.ToDouble(x.score))
             .Take(topK)
-            .Select(x => x.doc);
+            .Select(x =>
+            {
+                // Create a new Document instance to avoid mutating the cached one
+                var newDocument = new Document<T>(x.doc.Id, x.doc.Content, x.doc.Metadata)
+                {
+                    RelevanceScore = x.score,
+                    HasRelevanceScore = true
+                };
+                return newDocument;
+            })
+            .ToList();
+    }
+
+    private bool MatchesFilters(Document<T> document, Dictionary<string, object> metadataFilters)
+    {
+        if (metadataFilters == null || !metadataFilters.Any())
+        {
+            return true;
+        }
+
+        foreach (var filter in metadataFilters)
+        {
+            if (document.Metadata.TryGetValue(filter.Key, out var docValue))
+            {
+                if (!object.Equals(docValue, filter.Value))
+                {
+                    return false;
+                }
+            }
+            else
+            {
+                return false;
+            }
+        }
+        return true;
     }
 
     /// <summary>

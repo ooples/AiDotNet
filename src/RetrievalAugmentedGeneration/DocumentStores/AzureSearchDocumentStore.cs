@@ -202,19 +202,22 @@ namespace AiDotNet.RetrievalAugmentedGeneration.DocumentStores
             foreach (var kvp in document.Metadata)
             {
                 var fieldName = kvp.Key;
-                var fieldValue = kvp.Value?.ToString() ?? string.Empty;
+                var fieldValue = kvp.Value;
 
                 if (!_invertedIndex.ContainsKey(fieldName))
                 {
                     _invertedIndex[fieldName] = new Dictionary<string, HashSet<string>>();
                 }
 
-                if (!_invertedIndex[fieldName].ContainsKey(fieldValue))
+                // Preserve original value for comparisons, convert to string only for indexing
+                var indexKey = fieldValue?.ToString() ?? string.Empty;
+
+                if (!_invertedIndex[fieldName].ContainsKey(indexKey))
                 {
-                    _invertedIndex[fieldName][fieldValue] = new HashSet<string>();
+                    _invertedIndex[fieldName][indexKey] = new HashSet<string>();
                 }
 
-                _invertedIndex[fieldName][fieldValue].Add(document.Id);
+                _invertedIndex[fieldName][indexKey].Add(document.Id);
             }
         }
 
@@ -253,11 +256,11 @@ namespace AiDotNet.RetrievalAugmentedGeneration.DocumentStores
             foreach (var filter in metadataFilters)
             {
                 var fieldName = filter.Key;
-                var fieldValue = filter.Value?.ToString() ?? string.Empty;
+                var indexKey = filter.Value?.ToString() ?? string.Empty;
 
                 if (_invertedIndex.TryGetValue(fieldName, out var fieldIndex))
                 {
-                    if (fieldIndex.TryGetValue(fieldValue, out var docIds))
+                    if (fieldIndex.TryGetValue(indexKey, out var docIds))
                     {
                         if (candidateIds == null)
                         {

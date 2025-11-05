@@ -149,15 +149,15 @@ public class ChromaDBDocumentStore<T> : DocumentStoreBase<T>
 
             var id = idToken.ToString();
             var doc = docToken.ToString();
-            var metadataObj = metadatas?[i]?.ToObject<Dictionary<string, string>>() ?? new Dictionary<string, string>();
-            var metadata = new Dictionary<string, object>();
-            foreach (var kvp in metadataObj)
-                metadata[kvp.Key] = kvp.Value;
+            var metadataObj = metadatas?[i]?.ToObject<Dictionary<string, object>>() ?? new Dictionary<string, object>();
 
             var distance = distances != null ? Convert.ToDouble(distances[i]) : 0.0;
 
-            var document = new Document<T>(id, doc, metadata);
-            document.RelevanceScore = NumOps.FromDouble(1.0 / (1.0 + distance));
+            var document = new Document<T>(id, doc, metadataObj)
+            {
+                RelevanceScore = NumOps.FromDouble(1.0 / (1.0 + distance)),
+                HasRelevanceScore = true
+            };
 
             results.Add(document);
         }

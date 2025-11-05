@@ -196,9 +196,13 @@ namespace AiDotNet.RetrievalAugmentedGeneration.DocumentStores
                 .Take(topK)
                 .Select(x =>
                 {
-                    x.Document.RelevanceScore = x.Score;
-                    x.Document.HasRelevanceScore = true;
-                    return x.Document;
+                    // Create a new Document instance to avoid mutating the cached one
+                    var newDocument = new Document<T>(x.Document.Id, x.Document.Content, x.Document.Metadata)
+                    {
+                        RelevanceScore = x.Score,
+                        HasRelevanceScore = true
+                    };
+                    return newDocument;
                 })
                 .ToList();
 

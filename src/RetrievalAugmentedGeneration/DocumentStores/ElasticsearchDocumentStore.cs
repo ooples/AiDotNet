@@ -31,12 +31,14 @@ public class ElasticsearchDocumentStore<T> : DocumentStoreBase<T>
     public override int DocumentCount => _documentCount;
     public override int VectorDimension => _vectorDimension;
 
-    public ElasticsearchDocumentStore(string endpoint, string indexName, string apiKey, string username, string password)
+    public ElasticsearchDocumentStore(string endpoint, string indexName, string apiKey, string username, string password, int vectorDimension = 1536)
     {
         if (string.IsNullOrWhiteSpace(endpoint))
             throw new ArgumentException("Endpoint cannot be empty", nameof(endpoint));
         if (string.IsNullOrWhiteSpace(indexName))
             throw new ArgumentException("Index name cannot be empty", nameof(indexName));
+        if (vectorDimension <= 0)
+            throw new ArgumentOutOfRangeException(nameof(vectorDimension), "Vector dimension must be positive");
 
         _httpClient = new HttpClient { BaseAddress = new Uri(endpoint) };
         
@@ -49,7 +51,7 @@ public class ElasticsearchDocumentStore<T> : DocumentStoreBase<T>
         }
 
         _indexName = indexName.ToLowerInvariant();
-        _vectorDimension = 0;
+        _vectorDimension = vectorDimension;
         _documentCount = 0;
         _cache = new Dictionary<string, VectorDocument<T>>();
 
@@ -73,7 +75,7 @@ public class ElasticsearchDocumentStore<T> : DocumentStoreBase<T>
                 {
                     id = new { type = "keyword" },
                     content = new { type = "text" },
-                    embedding = new { type = "dense_vector", dims = 1536 },
+                    embedding = new { type = "dense_vector", dims = _vectorDimension },
                     metadata = new { type = "object", enabled = true }
                 }
             }
@@ -100,8 +102,8 @@ public class ElasticsearchDocumentStore<T> : DocumentStoreBase<T>
 
     protected override void AddCore(VectorDocument<T> vectorDocument)
     {
-        if (_vectorDimension == 0)
-            _vectorDimension = vectorDocument.Embedding.Length;
+        if (vectorDocument.Embedding.Length != _vectorDimension)
+            throw new ArgumentException($"Document embedding dimension ({vectorDocument.Embedding.Length}) does not match the store's configured dimension ({_vectorDimension}).");
 
         _cache[vectorDocument.Document.Id] = vectorDocument;
 
@@ -128,12 +130,13 @@ public class ElasticsearchDocumentStore<T> : DocumentStoreBase<T>
     protected override void AddBatchCore(IList<VectorDocument<T>> vectorDocuments)
     {
         if (vectorDocuments.Count == 0) return;
-        
-        if (_vectorDimension == 0)
-            _vectorDimension = vectorDocuments[0].Embedding.Length;
 
         foreach (var vd in vectorDocuments)
+        {
+            if (vd.Embedding.Length != _vectorDimension)
+                throw new ArgumentException($"Document embedding dimension ({vd.Embedding.Length}) does not match the store's configured dimension ({_vectorDimension}).");
             _cache[vd.Document.Id] = vd;
+        }
 
         var bulkBody = new StringBuilder();
         foreach (var vd in vectorDocuments)
@@ -162,6 +165,34 @@ public class ElasticsearchDocumentStore<T> : DocumentStoreBase<T>
     {
         var embedding = queryVector.ToArray().Select(v => Convert.ToDouble(v)).ToArray();
         
+        // Build the query with metadata filters
+        object queryClause;
+        if (metadataFilters != null && metadataFilters.Any())
+        {
+            var mustClauses = new List<object>();
+            foreach (var filter in metadataFilters)
+            {
+                mustClauses.Add(new
+                {
+                    term = new Dictionary<string, object>
+                    {
+                        [$"metadata.{filter.Key}"] = filter.Value
+                    }
+                });
+            }
+            queryClause = new
+            {
+                @bool = new
+                {
+                    must = mustClauses
+                }
+            };
+        }
+        else
+        {
+            queryClause = new { match_all = new { } };
+        }
+
         var query = new
         {
             size = topK,
@@ -169,7 +200,7 @@ public class ElasticsearchDocumentStore<T> : DocumentStoreBase<T>
             {
                 script_score = new
                 {
-                    query = new { match_all = new { } },
+                    query = queryClause,
                     script = new
                     {
                         source = "cosineSimilarity(params.query_vector, 'embedding') + 1.0",
@@ -199,15 +230,15 @@ public class ElasticsearchDocumentStore<T> : DocumentStoreBase<T>
 
             var id = source["id"]?.ToString() ?? string.Empty;
             var docContent = source["content"]?.ToString() ?? string.Empty;
-            var metadataObj = source["metadata"]?.ToObject<Dictionary<string, string>>() ?? new Dictionary<string, string>();
-            var metadata = new Dictionary<string, object>();
-            foreach (var kvp in metadataObj)
-                metadata[kvp.Key] = kvp.Value;
+            var metadataObj = source["metadata"]?.ToObject<Dictionary<string, object>>() ?? new Dictionary<string, object>();
 
             var score = Convert.ToDouble(hit["_score"]);
 
-            var document = new Document<T>(id, docContent, metadata);
-            document.RelevanceScore = NumOps.FromDouble(score);
+            var document = new Document<T>(id, docContent, metadataObj)
+            {
+                RelevanceScore = NumOps.FromDouble(score),
+                HasRelevanceScore = true
+            };
 
             results.Add(document);
         }
