@@ -225,13 +225,33 @@ public class AgenticChunker : ChunkingStrategyBase
             }
         }
 
-        // Add final chunk
+        // Add final chunk with size enforcement
         if (currentChunkEnd > currentChunkStart)
         {
-            var chunkText = text.Substring(currentChunkStart, currentChunkEnd - currentChunkStart).Trim();
-            if (!string.IsNullOrWhiteSpace(chunkText))
+            var finalChunkLength = currentChunkEnd - currentChunkStart;
+            
+            // If final chunk exceeds max size, split it recursively
+            if (finalChunkLength > _maxChunkSize * 1.2)
             {
-                chunks.Add((chunkText, currentChunkStart, currentChunkEnd));
+                var remainingStart = currentChunkStart;
+                while (remainingStart < currentChunkEnd)
+                {
+                    var chunkEnd = Math.Min(remainingStart + _maxChunkSize, currentChunkEnd);
+                    var chunkText = text.Substring(remainingStart, chunkEnd - remainingStart).Trim();
+                    if (!string.IsNullOrWhiteSpace(chunkText))
+                    {
+                        chunks.Add((chunkText, remainingStart, chunkEnd));
+                    }
+                    remainingStart = Math.Max(remainingStart, chunkEnd - ChunkOverlap);
+                }
+            }
+            else
+            {
+                var chunkText = text.Substring(currentChunkStart, finalChunkLength).Trim();
+                if (!string.IsNullOrWhiteSpace(chunkText))
+                {
+                    chunks.Add((chunkText, currentChunkStart, currentChunkEnd));
+                }
             }
         }
 
@@ -273,17 +293,17 @@ public class AgenticChunker : ChunkingStrategyBase
             "of", "with", "by", "from", "as", "is", "was", "are", "were", "be", "been"
         };
 
-        var words1 = segment1.Split(new[] { ' ', '\n', '\r', '\t', '.', ',', '!', '?' }, 
-            StringSplitOptions.RemoveEmptyEntries)
-            .Where(w => w.Length > 2 && !stopWords.Contains(w))
-            .Select(w => w.ToLowerInvariant())
-            .ToHashSet();
+        var words1 = new HashSet<string>(
+            segment1.Split(new[] { ' ', '\n', '\r', '\t', '.', ',', '!', '?' }, StringSplitOptions.RemoveEmptyEntries)
+                .Where(w => w.Length > 2 && !stopWords.Contains(w))
+                .Select(w => w.ToLowerInvariant()),
+            StringComparer.OrdinalIgnoreCase);
 
-        var words2 = segment2.Split(new[] { ' ', '\n', '\r', '\t', '.', ',', '!', '?' }, 
-            StringSplitOptions.RemoveEmptyEntries)
-            .Where(w => w.Length > 2 && !stopWords.Contains(w))
-            .Select(w => w.ToLowerInvariant())
-            .ToHashSet();
+        var words2 = new HashSet<string>(
+            segment2.Split(new[] { ' ', '\n', '\r', '\t', '.', ',', '!', '?' }, StringSplitOptions.RemoveEmptyEntries)
+                .Where(w => w.Length > 2 && !stopWords.Contains(w))
+                .Select(w => w.ToLowerInvariant()),
+            StringComparer.OrdinalIgnoreCase);
 
         if (words1.Count == 0 || words2.Count == 0)
             return 0.0;
@@ -307,15 +327,15 @@ public class AgenticChunker : ChunkingStrategyBase
         var transitionBonus = hasTransition ? 0.15 : 0.0;
 
         // Check for entity continuity (capitalized words that might be names/entities)
-        var entities1 = Regex.Matches(segment1, @"\b[A-Z][a-z]+(?:\s[A-Z][a-z]+)*\b")
-            .Cast<Match>()
-            .Select(m => m.Value)
-            .ToHashSet();
+        var entities1 = new HashSet<string>(
+            Regex.Matches(segment1, @"\b[A-Z][a-z]+(?:\s[A-Z][a-z]+)*\b")
+                .Cast<Match>()
+                .Select(m => m.Value));
             
-        var entities2 = Regex.Matches(segment2, @"\b[A-Z][a-z]+(?:\s[A-Z][a-z]+)*\b")
-            .Cast<Match>()
-            .Select(m => m.Value)
-            .ToHashSet();
+        var entities2 = new HashSet<string>(
+            Regex.Matches(segment2, @"\b[A-Z][a-z]+(?:\s[A-Z][a-z]+)*\b")
+                .Cast<Match>()
+                .Select(m => m.Value));
 
         var entityOverlap = entities1.Count > 0 && entities2.Count > 0
             ? (double)entities1.Intersect(entities2).Count() / Math.Max(entities1.Count, entities2.Count)
