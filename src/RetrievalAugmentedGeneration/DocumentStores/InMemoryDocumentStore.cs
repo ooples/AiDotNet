@@ -82,7 +82,6 @@ public class InMemoryDocumentStore<T> : DocumentStoreBase<T>
     /// </para>
     /// </remarks>
     public InMemoryDocumentStore(int vectorDimension, string? databasePath = null, string? tableName = null)
-    public InMemoryDocumentStore(int vectorDimension, string? databasePath = null, string? tableName = null)
     {
         if (vectorDimension <= 0)
             throw new ArgumentOutOfRangeException(nameof(vectorDimension), "Vector dimension must be positive");
