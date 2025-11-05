@@ -97,6 +97,23 @@ public class QueryRewritingProcessor<T> : QueryProcessorBase
         if (!needsContext || _conversationHistory.Count == 0)
             return query;
 
+        // Use LLM for contextual rewriting if available
+        if (_llmGenerator != null)
+        {
+            var historyContext = string.Join("\n", _conversationHistory.TakeLast(3).Select((q, i) => $"{i + 1}. {q}"));
+            var prompt = $@"Given the conversation history:
+{historyContext}
+
+Rewrite the following query to be self-contained by resolving any pronouns or contextual references:
+Query: {query}
+
+Rewritten query:";
+
+            var rewritten = _llmGenerator.Generate(prompt);
+            return string.IsNullOrWhiteSpace(rewritten) ? query : rewritten.Trim();
+        }
+
+        // Fallback to rule-based rewriting
         var lastContext = _conversationHistory[_conversationHistory.Count - 1];
         
         if (lowerQuery.StartsWith("what about") || lowerQuery.StartsWith("how about"))
@@ -104,8 +121,8 @@ public class QueryRewritingProcessor<T> : QueryProcessorBase
             var topic = ExtractTopic(lastContext);
             if (!string.IsNullOrEmpty(topic))
             {
-                return query.Replace("what about", $"what about {topic} and")
-                           .Replace("how about", $"how about {topic} and");
+                return query.Replace("what about", $"what about {topic} and", StringComparison.OrdinalIgnoreCase)
+                           .Replace("how about", $"how about {topic} and", StringComparison.OrdinalIgnoreCase);
             }
         }
 
