@@ -212,30 +212,6 @@ public class SQLiteVSSDocumentStore<T> : DocumentStoreBase<T>
             .ToList();
     }
 
-    private bool MatchesFilters(Document<T> document, Dictionary<string, object> metadataFilters)
-    {
-        if (metadataFilters == null || !metadataFilters.Any())
-        {
-            return true;
-        }
-
-        foreach (var filter in metadataFilters)
-        {
-            if (document.Metadata.TryGetValue(filter.Key, out var docValue))
-            {
-                if (!object.Equals(docValue, filter.Value))
-                {
-                    return false;
-                }
-            }
-            else
-            {
-                return false;
-            }
-        }
-        return true;
-    }
-
     /// <summary>
     /// Core logic for retrieving a document by its unique identifier.
     /// </summary>
