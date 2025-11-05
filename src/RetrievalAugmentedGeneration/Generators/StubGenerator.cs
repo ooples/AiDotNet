@@ -1,7 +1,7 @@
 using System.Text.RegularExpressions;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
-using AiDotNet.RetrievalAugmentedGeneration.Interfaces;
+using AiDotNet.Interfaces;
 using AiDotNet.RetrievalAugmentedGeneration.Models;
 
 namespace AiDotNet.RetrievalAugmentedGeneration.Generators;

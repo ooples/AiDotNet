@@ -1,5 +1,5 @@
 using AiDotNet.Helpers;
-using AiDotNet.RetrievalAugmentedGeneration.Interfaces;
+using AiDotNet.Interfaces;
 using AiDotNet.RetrievalAugmentedGeneration.Models;
 using System;
 using System.Collections.Generic;

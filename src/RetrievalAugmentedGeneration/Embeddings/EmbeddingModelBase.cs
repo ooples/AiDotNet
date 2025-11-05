@@ -1,6 +1,6 @@
 using AiDotNet.Helpers;
 using AiDotNet.LinearAlgebra;
-using AiDotNet.RetrievalAugmentedGeneration.Interfaces;
+using AiDotNet.Interfaces;
 
 namespace AiDotNet.RetrievalAugmentedGeneration.Embeddings;
 

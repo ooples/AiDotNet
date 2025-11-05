@@ -1,5 +1,5 @@
 using AiDotNet.Helpers;
-using AiDotNet.RetrievalAugmentedGeneration.Interfaces;
+using AiDotNet.Interfaces;
 using AiDotNet.RetrievalAugmentedGeneration.Models;
 using System;
 using System.Collections.Generic;
@@ -16,11 +16,6 @@ namespace AiDotNet.RetrievalAugmentedGeneration.Retrievers
         private readonly IDocumentStore<T> _documentStore;
         private readonly T _k1;
         private readonly T _b;
-        private readonly Dictionary<string, Dictionary<string, T>> _termFrequencies;
-        private readonly Dictionary<string, T> _documentLengths;
-        private readonly Dictionary<string, int> _documentFrequencies;
-        private int _totalDocuments;
-        private T _avgDocLength;
 
         public BM25Retriever(IDocumentStore<T> documentStore, int defaultTopK = 5, double k1 = 1.5, double b = 0.75) 
             : base(defaultTopK)
@@ -31,11 +26,6 @@ namespace AiDotNet.RetrievalAugmentedGeneration.Retrievers
             _documentStore = documentStore;
             _k1 = NumOps.FromDouble(k1);
             _b = NumOps.FromDouble(b);
-            _termFrequencies = new Dictionary<string, Dictionary<string, T>>();
-            _documentLengths = new Dictionary<string, T>();
-            _documentFrequencies = new Dictionary<string, int>();
-            _avgDocLength = NumOps.Zero;
-            _totalDocuments = 0;
         }
 
         protected override IEnumerable<Document<T>> RetrieveCore(string query, int topK, Dictionary<string, object> metadataFilters)
@@ -49,7 +39,7 @@ namespace AiDotNet.RetrievalAugmentedGeneration.Retrievers
             );
 
             var candidatesList = candidates.ToList();
-            BuildCorpusStatistics(candidatesList);
+            var corpusStats = BuildCorpusStatistics(candidatesList);
 
             foreach (var doc in candidatesList.Where(d => MatchesFilters(d, metadataFilters)))
             {
@@ -57,7 +47,7 @@ namespace AiDotNet.RetrievalAugmentedGeneration.Retrievers
                 
                 foreach (var term in queryTerms)
                 {
-                    var termScore = CalculateBM25Term(doc.Id, term);
+                    var termScore = CalculateBM25Term(doc.Id, term, corpusStats);
                     score = NumOps.Add(score, termScore);
                 }
 
@@ -83,53 +73,66 @@ namespace AiDotNet.RetrievalAugmentedGeneration.Retrievers
             return results;
         }
 
-        private T CalculateBM25Term(string docId, string term)
+        private T CalculateBM25Term(string docId, string term, CorpusStatistics corpusStats)
         {
-            if (!_termFrequencies.TryGetValue(docId, out var termFreqs) || !termFreqs.TryGetValue(term, out var tf))
+            if (!corpusStats.TermFrequencies.TryGetValue(docId, out var termFreqs) || !termFreqs.TryGetValue(term, out var tf))
                 return NumOps.Zero;
 
-            var docLength = _documentLengths.TryGetValue(docId, out var length) ? length : NumOps.Zero;
+            var docLength = corpusStats.DocumentLengths.TryGetValue(docId, out var length) ? length : NumOps.Zero;
 
-            var idf = CalculateIDF(term);
+            var idf = CalculateIDF(term, corpusStats);
 
             var numerator = NumOps.Multiply(tf, NumOps.Add(_k1, NumOps.One));
             var lengthNorm = NumOps.Add(
                 NumOps.Subtract(NumOps.One, _b),
-                NumOps.Multiply(_b, NumOps.Divide(docLength, _avgDocLength)));
+                NumOps.Multiply(_b, NumOps.Divide(docLength, corpusStats.AvgDocLength)));
             var denominator = NumOps.Add(tf, NumOps.Multiply(_k1, lengthNorm));
 
             return NumOps.Multiply(idf, NumOps.Divide(numerator, denominator));
         }
 
-        private T CalculateIDF(string term)
+        private T CalculateIDF(string term, CorpusStatistics corpusStats)
         {
-            if (!_documentFrequencies.ContainsKey(term) || _totalDocuments == 0)
+            if (!corpusStats.DocumentFrequencies.ContainsKey(term) || corpusStats.TotalDocuments == 0)
                 return NumOps.Zero;
 
-            var df = _documentFrequencies[term];
+            var df = corpusStats.DocumentFrequencies[term];
             if (df == 0)
                 return NumOps.Zero;
 
-            var numerator = NumOps.FromDouble(_totalDocuments - df + 0.5);
+            var numerator = NumOps.FromDouble(corpusStats.TotalDocuments - df + 0.5);
             var denominator = NumOps.FromDouble(df + 0.5);
             var ratio = NumOps.Divide(numerator, denominator);
             
             return NumOps.FromDouble(Math.Log(Convert.ToDouble(ratio)));
         }
 
-        private void BuildCorpusStatistics(List<Document<T>> documents)
+        private class CorpusStatistics
         {
+            public Dictionary<string, Dictionary<string, T>> TermFrequencies { get; set; } = null!;
+            public Dictionary<string, T> DocumentLengths { get; set; } = null!;
+            public Dictionary<string, int> DocumentFrequencies { get; set; } = null!;
+            public int TotalDocuments { get; set; }
+            public T AvgDocLength { get; set; } = default!;
+        }
+
+        private CorpusStatistics BuildCorpusStatistics(List<Document<T>> documents)
+        {
+            var stats = new CorpusStatistics
+            {
+                TermFrequencies = new Dictionary<string, Dictionary<string, T>>(),
+                DocumentLengths = new Dictionary<string, T>(),
+                DocumentFrequencies = new Dictionary<string, int>(),
+                TotalDocuments = 0,
+                AvgDocLength = NumOps.One
+            };
+
             if (documents == null || documents.Count == 0)
             {
-                _avgDocLength = NumOps.One;
-                _totalDocuments = 0;
-                return;
+                return stats;
             }
 
-            _termFrequencies.Clear();
-            _documentLengths.Clear();
-            _documentFrequencies.Clear();
-            _totalDocuments = documents.Count;
+            stats.TotalDocuments = documents.Count;
 
             var totalLength = NumOps.Zero;
 
@@ -145,25 +148,27 @@ namespace AiDotNet.RetrievalAugmentedGeneration.Retrievers
                     else
                         termCounts[term] = NumOps.One;
 
-                    if (!_documentFrequencies.ContainsKey(term))
-                        _documentFrequencies[term] = 0;
+                    if (!stats.DocumentFrequencies.ContainsKey(term))
+                        stats.DocumentFrequencies[term] = 0;
                 }
 
                 foreach (var term in termCounts.Keys.Distinct())
                 {
-                    _documentFrequencies[term]++;
+                    stats.DocumentFrequencies[term]++;
                 }
 
-                _termFrequencies[doc.Id] = termCounts;
+                stats.TermFrequencies[doc.Id] = termCounts;
                 var docLength = NumOps.FromDouble(terms.Count);
-                _documentLengths[doc.Id] = docLength;
+                stats.DocumentLengths[doc.Id] = docLength;
                 totalLength = NumOps.Add(totalLength, docLength);
             }
 
-            _avgDocLength = NumOps.Divide(totalLength, NumOps.FromDouble(_totalDocuments));
+            stats.AvgDocLength = NumOps.Divide(totalLength, NumOps.FromDouble(stats.TotalDocuments));
             
-            if (!NumOps.GreaterThan(_avgDocLength, NumOps.Zero))
-                _avgDocLength = NumOps.One;
+            if (!NumOps.GreaterThan(stats.AvgDocLength, NumOps.Zero))
+                stats.AvgDocLength = NumOps.One;
+                
+            return stats;
         }
 
         private List<string> Tokenize(string text)

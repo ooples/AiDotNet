@@ -1,4 +1,4 @@
-using AiDotNet.RetrievalAugmentedGeneration.Interfaces;
+using AiDotNet.Interfaces;
 using System;
 using System.Collections.Generic;
 using System.Text;

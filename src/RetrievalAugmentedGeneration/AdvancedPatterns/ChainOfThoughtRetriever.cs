@@ -1,6 +1,6 @@
 using AiDotNet.NumericOperations;
 using AiDotNet.RetrievalAugmentedGeneration.Generators;
-using AiDotNet.RetrievalAugmentedGeneration.Interfaces;
+using AiDotNet.Interfaces;
 using AiDotNet.RetrievalAugmentedGeneration.Models;
 using AiDotNet.RetrievalAugmentedGeneration.Retrievers;
 using System;

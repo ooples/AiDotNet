@@ -1,4 +1,4 @@
-global using AiDotNet.RetrievalAugmentedGeneration.Interfaces;
+global using AiDotNet.Interfaces;
 global using System.Text.RegularExpressions;
 
 namespace AiDotNet.RetrievalAugmentedGeneration.Retrievers;
