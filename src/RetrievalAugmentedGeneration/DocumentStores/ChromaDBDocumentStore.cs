@@ -72,8 +72,8 @@ public class ChromaDBDocumentStore<T> : DocumentStoreBase<T>
     {
         if (_vectorDimension == 0)
             _vectorDimension = vectorDocument.Embedding.Length;
-
-        _cache[vectorDocument.Document.Id] = vectorDocument;
+        else if (vectorDocument.Embedding.Length != _vectorDimension)
+            throw new ArgumentException($"Vector dimension mismatch. Expected {_vectorDimension}, got {vectorDocument.Embedding.Length}", nameof(vectorDocument));
 
         var embedding = vectorDocument.Embedding.ToArray().Select(v => Convert.ToDouble(v)).ToList();
         
@@ -92,6 +92,8 @@ public class ChromaDBDocumentStore<T> : DocumentStoreBase<T>
 
         using var response = _httpClient.PostAsync($"/api/v1/collections/{_collectionName}/add", content).GetAwaiter().GetResult();
         response.EnsureSuccessStatusCode();
+        
+        _cache[vectorDocument.Document.Id] = vectorDocument;
         _documentCount++;
     }
 
@@ -103,7 +105,10 @@ public class ChromaDBDocumentStore<T> : DocumentStoreBase<T>
             _vectorDimension = vectorDocuments[0].Embedding.Length;
 
         foreach (var vd in vectorDocuments)
-            _cache[vd.Document.Id] = vd;
+        {
+            if (vd.Embedding.Length != _vectorDimension)
+                throw new ArgumentException($"Vector dimension mismatch. Expected {_vectorDimension}, got {vd.Embedding.Length}");
+        }
 
         var ids = vectorDocuments.Select(vd => vd.Document.Id).ToList();
         var embeddings = vectorDocuments.Select(vd => 
@@ -119,6 +124,9 @@ public class ChromaDBDocumentStore<T> : DocumentStoreBase<T>
 
         using var response = _httpClient.PostAsync($"/api/v1/collections/{_collectionName}/add", content).GetAwaiter().GetResult();
         response.EnsureSuccessStatusCode();
+        
+        foreach (var vd in vectorDocuments)
+            _cache[vd.Document.Id] = vd;
         _documentCount += vectorDocuments.Count;
     }
 
@@ -203,8 +211,6 @@ public class ChromaDBDocumentStore<T> : DocumentStoreBase<T>
     /// </remarks>
     protected override bool RemoveCore(string documentId)
     {
-        _cache.Remove(documentId);
-
         var payload = new { ids = new[] { documentId } };
         using var content = new StringContent(
             Newtonsoft.Json.JsonConvert.SerializeObject(payload),
@@ -214,6 +220,7 @@ public class ChromaDBDocumentStore<T> : DocumentStoreBase<T>
         using var response = _httpClient.PostAsync($"/api/v1/collections/{_collectionName}/delete", content).GetAwaiter().GetResult();
         if (response.IsSuccessStatusCode && _documentCount > 0)
         {
+            _cache.Remove(documentId);
             _documentCount--;
             return true;
         }
@@ -287,11 +294,19 @@ public class ChromaDBDocumentStore<T> : DocumentStoreBase<T>
     /// </remarks>
     public override void Clear()
     {
-        _cache.Clear();
-        using var response = _httpClient.DeleteAsync($"/api/v1/collections/{_collectionName}").GetAwaiter().GetResult();
-        response.EnsureSuccessStatusCode();
-        _documentCount = 0;
-        _vectorDimension = 0;
-        EnsureCollection();
+        try
+        {
+            using var response = _httpClient.DeleteAsync($"/api/v1/collections/{_collectionName}").GetAwaiter().GetResult();
+            response.EnsureSuccessStatusCode();
+            
+            _cache.Clear();
+            _documentCount = 0;
+            _vectorDimension = 0;
+            EnsureCollection();
+        }
+        catch (HttpRequestException ex)
+        {
+            throw new InvalidOperationException("Failed to clear ChromaDB collection. Collection may not exist or network error occurred.", ex);
+        }
     }
 }
