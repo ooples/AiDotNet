@@ -109,23 +109,21 @@ namespace AiDotNet.RetrievalAugmentedGeneration.Retrievers
 
         private class CorpusStatistics
         {
-            public Dictionary<string, Dictionary<string, T>> TermFrequencies { get; set; } = null!;
-            public Dictionary<string, T> DocumentLengths { get; set; } = null!;
-            public Dictionary<string, int> DocumentFrequencies { get; set; } = null!;
+            public Dictionary<string, Dictionary<string, T>> TermFrequencies { get; set; } = new();
+            public Dictionary<string, T> DocumentLengths { get; set; } = new();
+            public Dictionary<string, int> DocumentFrequencies { get; set; } = new();
             public int TotalDocuments { get; set; }
-            public T AvgDocLength { get; set; } = default!;
+            public T AvgDocLength { get; set; }
+
+            public CorpusStatistics()
+            {
+                AvgDocLength = NumOps.One;
+            }
         }
 
         private CorpusStatistics BuildCorpusStatistics(List<Document<T>> documents)
         {
-            var stats = new CorpusStatistics
-            {
-                TermFrequencies = new Dictionary<string, Dictionary<string, T>>(),
-                DocumentLengths = new Dictionary<string, T>(),
-                DocumentFrequencies = new Dictionary<string, int>(),
-                TotalDocuments = 0,
-                AvgDocLength = NumOps.One
-            };
+            var stats = new CorpusStatistics();
 
             if (documents == null || documents.Count == 0)
             {
