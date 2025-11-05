@@ -138,6 +138,18 @@ public class ChainOfThoughtRetriever<T>
     /// </remarks>
     public IEnumerable<Document<T>> Retrieve(string query, int topK)
     {
+        return Retrieve(query, topK, new Dictionary<string, object>());
+    }
+
+    /// <summary>
+    /// Retrieves documents using chain-of-thought reasoning with metadata filtering.
+    /// </summary>
+    /// <param name="query">The query to retrieve documents for</param>
+    /// <param name="topK">Maximum number of documents to return</param>
+    /// <param name="metadataFilters">Metadata filters to apply during retrieval (e.g., tenant scoping, access control)</param>
+    /// <returns>Retrieved documents sorted by relevance</returns>
+    public IEnumerable<Document<T>> Retrieve(string query, int topK, Dictionary<string, object> metadataFilters)
+    {
         if (string.IsNullOrWhiteSpace(query))
             throw new ArgumentException("Query cannot be null or whitespace", nameof(query));
 
@@ -165,7 +177,7 @@ Provide numbered reasoning steps.";
 
         foreach (var subQuery in subQueries.Take(3)) // Limit to top 3 sub-queries
         {
-            var docs = _baseRetriever.Retrieve(subQuery, topK: 5); // Get 5 per sub-query
+            var docs = _baseRetriever.Retrieve(subQuery, topK: 5, metadataFilters); // Get 5 per sub-query with filters
             
             foreach (var doc in docs)
             {
