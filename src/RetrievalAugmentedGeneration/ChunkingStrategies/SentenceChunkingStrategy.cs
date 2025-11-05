@@ -43,6 +43,7 @@ public class SentenceChunkingStrategy : ChunkingStrategyBase
     private readonly int _targetChunkSize;
     private readonly int _maxChunkSize;
     private readonly int _overlapSentences;
+    private readonly int _separatorLength = 1; // Length of sentence separators (., !, ?)
     private static readonly char[] SentenceEnders = { '.', '!', '?' };
 
     /// <summary>

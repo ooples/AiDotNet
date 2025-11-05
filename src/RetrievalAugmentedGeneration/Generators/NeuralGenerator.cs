@@ -64,8 +64,10 @@ public class NeuralGenerator<T> : IGenerator<T>
     private readonly int _maxGenerationTokens;
     private readonly double _temperature;
     private readonly int _vocabularySize;
+    private readonly int _embeddingDimension;
     private readonly Dictionary<string, int> _wordToToken;
     private readonly Dictionary<int, string> _tokenToWord;
+    private readonly T[,] _embeddingMatrix;
 
     /// <summary>
     /// Gets the maximum number of tokens this generator can process in a single request.
@@ -82,12 +84,14 @@ public class NeuralGenerator<T> : IGenerator<T>
     /// </summary>
     /// <param name="network">The LSTM neural network for text generation.</param>
     /// <param name="vocabularySize">Size of the token vocabulary (default: 50000).</param>
+    /// <param name="embeddingDimension">Dimension of token embeddings (default: 256).</param>
     /// <param name="maxContextTokens">The maximum context tokens (default: 4096).</param>
     /// <param name="maxGenerationTokens">The maximum generation tokens (default: 1024).</param>
     /// <param name="temperature">Sampling temperature for generation (default: 0.7). Higher = more creative.</param>
     public NeuralGenerator(
         LSTMNeuralNetwork<T> network,
         int vocabularySize = 50000,
+        int embeddingDimension = 256,
         int maxContextTokens = 4096,
         int maxGenerationTokens = 1024,
         double temperature = 0.7)
@@ -96,6 +100,8 @@ public class NeuralGenerator<T> : IGenerator<T>
 
         if (vocabularySize <= 0)
             throw new ArgumentException("Vocabulary size must be positive", nameof(vocabularySize));
+        if (embeddingDimension <= 0)
+            throw new ArgumentException("Embedding dimension must be positive", nameof(embeddingDimension));
         if (maxContextTokens <= 0)
             throw new ArgumentException("MaxContextTokens must be greater than zero", nameof(maxContextTokens));
         if (maxGenerationTokens <= 0)
@@ -104,9 +110,19 @@ public class NeuralGenerator<T> : IGenerator<T>
             throw new ArgumentException("Temperature must be positive", nameof(temperature));
 
         _vocabularySize = vocabularySize;
+        _embeddingDimension = embeddingDimension;
         _maxContextTokens = maxContextTokens;
         _maxGenerationTokens = maxGenerationTokens;
         _temperature = temperature;
+
+        // Validate network input dimension matches embedding dimension
+        var networkInputShape = network.Architecture.GetInputShape();
+        if (networkInputShape.Length > 0 && networkInputShape[networkInputShape.Length - 1] != embeddingDimension)
+        {
+            throw new ArgumentException(
+                $"Network input dimension ({networkInputShape[networkInputShape.Length - 1]}) must match embedding dimension ({embeddingDimension})",
+                nameof(network));
+        }
 
         // Validate network output dimension matches vocabulary requirements
         var networkOutputShape = network.Architecture.GetOutputShape();
@@ -117,6 +133,20 @@ public class NeuralGenerator<T> : IGenerator<T>
                 throw new ArgumentException(
                     $"Network output dimension ({networkOutputDim}) must be >= vocabulary size ({vocabularySize})",
                     nameof(network));
+        }
+        
+        // Initialize embedding matrix with Xavier/Glorot initialization
+        _embeddingMatrix = new T[vocabularySize, embeddingDimension];
+        var random = new Random(42);
+        double initScale = Math.Sqrt(2.0 / (vocabularySize + embeddingDimension));
+        
+        for (int i = 0; i < vocabularySize; i++)
+        {
+            for (int j = 0; j < embeddingDimension; j++)
+            {
+                double value = (random.NextDouble() * 2.0 - 1.0) * initScale;
+                _embeddingMatrix[i, j] = NumOps.FromDouble(value);
+            }
         }
         
         // Initialize bidirectional vocabulary mapping
@@ -320,19 +350,25 @@ public class NeuralGenerator<T> : IGenerator<T>
         if (context.Count == 0)
             return random.Next(1, _vocabularySize); // Fallback for empty context
 
-        // Create input tensor from context tokens
-        // Shape: [batch_size=1, sequence_length, embedding_dim=1]
+        // Create input tensor from context tokens using embedding lookup
         var sequenceLength = context.Count;
-        var inputData = new T[sequenceLength];
+        var embeddingData = new T[sequenceLength * _embeddingDimension];
         
+        // Look up embeddings for each token
         for (int i = 0; i < sequenceLength; i++)
         {
-            // Normalize token IDs to [0, 1] range for network input
-            inputData[i] = NumOps.FromDouble((double)context[i] / _vocabularySize);
+            int tokenId = context[i];
+            if (tokenId < 0 || tokenId >= _vocabularySize)
+                tokenId = 1; // Use [UNK] token for out-of-vocabulary
+            
+            for (int j = 0; j < _embeddingDimension; j++)
+            {
+                embeddingData[i * _embeddingDimension + j] = _embeddingMatrix[tokenId, j];
+            }
         }
 
-        var inputVector = new Vector<T>(inputData);
-        var inputTensor = new Tensor<T>(new[] { 1, sequenceLength, 1 }, inputVector);
+        var inputVector = new Vector<T>(embeddingData);
+        var inputTensor = new Tensor<T>(new[] { 1, sequenceLength, _embeddingDimension }, inputVector);
 
         // Forward pass through LSTM network
         var outputTensor = _network.Predict(inputTensor);

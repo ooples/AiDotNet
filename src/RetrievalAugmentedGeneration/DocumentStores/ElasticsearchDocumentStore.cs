@@ -178,13 +178,16 @@ public class ElasticsearchDocumentStore<T> : DocumentStoreBase<T>
         {
             // Check which items succeeded
             var items = result["items"];
-            for (int i = 0; i < vectorDocuments.Count && i < items?.Count(); i++)
+            if (items != null)
             {
-                var item = items[i]["index"];
-                var status = item?["status"]?.Value<int>() ?? 500;
-                if (status >= 200 && status < 300)
+                for (int i = 0; i < vectorDocuments.Count && i < items.Count(); i++)
                 {
-                    _cache[vectorDocuments[i].Document.Id] = vectorDocuments[i];
+                    var item = items[i]?["index"];
+                    var status = item?["status"]?.Value<int>() ?? 500;
+                    if (status >= 200 && status < 300)
+                    {
+                        _cache[vectorDocuments[i].Document.Id] = vectorDocuments[i];
+                    }
                 }
             }
             var successCount = _cache.Count(kvp => vectorDocuments.Any(vd => vd.Document.Id == kvp.Key));

@@ -249,7 +249,7 @@ public class InMemoryDocumentStore<T> : DocumentStoreBase<T>
     /// </remarks>
     protected override bool RemoveCore(string documentId)
     {
-        return _store.Remove(documentId);
+        return _store.TryRemove(documentId, out _);
     }
 
     /// <summary>
