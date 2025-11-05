@@ -1,4 +1,5 @@
 using System.Linq;
+using System.Text.RegularExpressions;
 using AiDotNet.Interfaces;
 
 namespace AiDotNet.RetrievalAugmentedGeneration.QueryProcessors;
@@ -78,12 +79,13 @@ public class QueryRewritingProcessor<T> : QueryProcessorBase
     {
         var rewritten = query;
 
-        rewritten = rewritten.Replace(" r ", " are ");
-        rewritten = rewritten.Replace(" u ", " you ");
-        rewritten = rewritten.Replace("wht ", "what ");
-        rewritten = rewritten.Replace("hw ", "how ");
-        rewritten = rewritten.Replace(" w/ ", " with ");
-        rewritten = rewritten.Replace(" w/o ", " without ");
+        // Case-insensitive replacements for common text speak
+        rewritten = Regex.Replace(rewritten, @"\b r \b", " are ", RegexOptions.IgnoreCase);
+        rewritten = Regex.Replace(rewritten, @"\b u \b", " you ", RegexOptions.IgnoreCase);
+        rewritten = Regex.Replace(rewritten, @"\bwht\b", "what", RegexOptions.IgnoreCase);
+        rewritten = Regex.Replace(rewritten, @"\bhw\b", "how", RegexOptions.IgnoreCase);
+        rewritten = Regex.Replace(rewritten, @" w/ ", " with ", RegexOptions.IgnoreCase);
+        rewritten = Regex.Replace(rewritten, @" w/o ", " without ", RegexOptions.IgnoreCase);
 
         return rewritten.Trim();
     }
@@ -122,8 +124,9 @@ Rewritten query:";
             var topic = ExtractTopic(lastContext);
             if (!string.IsNullOrEmpty(topic))
             {
-                var result = System.Text.RegularExpressions.Regex.Replace(query, "what about", $"what about {topic} and", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
-                result = System.Text.RegularExpressions.Regex.Replace(result, "how about", $"how about {topic} and", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+                // Anchor pattern to match only at the start of the query
+                var result = System.Text.RegularExpressions.Regex.Replace(query, @"^what about\b", $"what about {topic} and", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+                result = System.Text.RegularExpressions.Regex.Replace(result, @"^how about\b", $"how about {topic} and", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
                 return result;
             }
         }
