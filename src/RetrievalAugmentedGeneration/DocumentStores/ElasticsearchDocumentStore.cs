@@ -336,39 +336,157 @@ public class ElasticsearchDocumentStore<T> : DocumentStoreBase<T>
     /// <returns>An enumerable of all documents without their vector embeddings.</returns>
     /// <remarks>
     /// <para>
-    /// Returns all documents from the cache (in-memory representation) of the Elasticsearch index.
-    /// In a real Elasticsearch deployment with large indices, use the scroll API for efficient
-    /// retrieval of all documents without loading everything into memory at once.
+    /// Uses the Elasticsearch scroll API to efficiently retrieve all documents from the index
+    /// in batches, avoiding memory issues with large result sets. The scroll API maintains a
+    /// search context and streams results in manageable batches.
     /// </para>
-    /// <para><b>For Beginners:</b> Gets every document from the Elasticsearch index.
-    /// 
-    /// Use cases:
-    /// - Export index contents for backup
-    /// - Migrate to a different index or cluster
-    /// - Bulk reindexing operations
-    /// - Debugging to see all indexed documents
-    /// 
-    /// Warning: For large indices (> 10K documents), this can use significant memory.
-    /// In production Elasticsearch, use the scroll API with pagination:
-    /// - POST /index/_search?scroll=1m with size parameter
-    /// - Iterate through scroll_id responses
-    /// - Clear scroll when done
-    /// 
+    /// <para><b>For Beginners:</b> Retrieves all documents using Elasticsearch's scroll API.
+    ///
+    /// The scroll API is the recommended way to retrieve large numbers of documents because:
+    /// - Processes results in batches (default: 1000 documents per batch)
+    /// - Maintains a search context between requests
+    /// - Much more memory-efficient than large "from/size" pagination
+    /// - Automatically expires after timeout (default: 1 minute)
+    ///
+    /// How it works:
+    /// 1. Initial scroll request creates search context, returns first batch
+    /// 2. Subsequent requests using scroll_id return next batches
+    /// 3. Continues until all documents retrieved
+    /// 4. Context automatically cleaned up after timeout
+    ///
     /// Example:
     /// <code>
-    /// // Get all documents
+    /// // Efficiently retrieve all documents
     /// var allDocs = store.GetAll().ToList();
-    /// Console.WriteLine($"Total documents in {_indexName}: {allDocs.Count}");
-    /// 
+    /// Console.WriteLine($"Total documents: {allDocs.Count}");
+    ///
     /// // Export to JSON
     /// var json = JsonConvert.SerializeObject(allDocs);
-    /// File.WriteAllText($"elasticsearch_{_indexName}_export.json", json);
+    /// File.WriteAllText("elasticsearch_export.json", json);
     /// </code>
     /// </para>
     /// </remarks>
     protected override IEnumerable<Document<T>> GetAllCore()
     {
-        return _cache.Values.Select(vd => vd.Document).ToList();
+        const string scrollTimeout = "1m";
+        const int batchSize = 1000;
+
+        // Initial scroll request
+        var searchRequest = new
+        {
+            size = batchSize,
+            query = new { match_all = new { } }
+        };
+
+        var searchResponse = _httpClient.PostAsync(
+            $"{_indexName}/_search?scroll={scrollTimeout}",
+            new StringContent(
+                Newtonsoft.Json.JsonConvert.SerializeObject(searchRequest),
+                Encoding.UTF8,
+                "application/json"
+            )
+        ).Result;
+
+        if (!searchResponse.IsSuccessStatusCode)
+        {
+            var error = searchResponse.Content.ReadAsStringAsync().Result;
+            throw new InvalidOperationException($"Elasticsearch scroll initialization failed: {error}");
+        }
+
+        var initialResult = JObject.Parse(searchResponse.Content.ReadAsStringAsync().Result);
+        var scrollId = initialResult["_scroll_id"]?.ToString();
+
+        if (string.IsNullOrEmpty(scrollId))
+            yield break;
+
+        // Process initial batch
+        var hits = initialResult["hits"]?["hits"] as JArray;
+        if (hits != null)
+        {
+            foreach (var hit in hits)
+            {
+                var doc = ParseElasticsearchHit(hit as JObject);
+                if (doc != null)
+                    yield return doc;
+            }
+        }
+
+        // Continue scrolling until no more results
+        while (true)
+        {
+            var scrollRequest = new { scroll = scrollTimeout, scroll_id = scrollId };
+
+            var scrollResponse = _httpClient.PostAsync(
+                "_search/scroll",
+                new StringContent(
+                    Newtonsoft.Json.JsonConvert.SerializeObject(scrollRequest),
+                    Encoding.UTF8,
+                    "application/json"
+                )
+            ).Result;
+
+            if (!scrollResponse.IsSuccessStatusCode)
+                break;
+
+            var scrollResult = JObject.Parse(scrollResponse.Content.ReadAsStringAsync().Result);
+            hits = scrollResult["hits"]?["hits"] as JArray;
+
+            if (hits == null || hits.Count == 0)
+                break;
+
+            foreach (var hit in hits)
+            {
+                var doc = ParseElasticsearchHit(hit as JObject);
+                if (doc != null)
+                    yield return doc;
+            }
+        }
+
+        // Clean up scroll context
+        try
+        {
+            var deleteScrollRequest = new { scroll_id = new[] { scrollId } };
+            _httpClient.DeleteAsync("_search/scroll")
+                .ContinueWith(t =>
+                {
+                    if (t.Result.IsSuccessStatusCode)
+                    {
+                        t.Result.Content = new StringContent(
+                            Newtonsoft.Json.JsonConvert.SerializeObject(deleteScrollRequest),
+                            Encoding.UTF8,
+                            "application/json"
+                        );
+                    }
+                });
+        }
+        catch
+        {
+            // Scroll context will expire automatically
+        }
+    }
+
+    private Document<T>? ParseElasticsearchHit(JObject? hit)
+    {
+        if (hit == null)
+            return null;
+
+        try
+        {
+            var id = hit["_id"]?.ToString();
+            var source = hit["_source"] as JObject;
+
+            if (string.IsNullOrEmpty(id) || source == null)
+                return null;
+
+            var content = source["content"]?.ToString() ?? string.Empty;
+            var metadata = source["metadata"]?.ToObject<Dictionary<string, object>>() ?? new Dictionary<string, object>();
+
+            return new Document<T>(id, content, metadata);
+        }
+        catch
+        {
+            return null;
+        }
     }
 
     /// <summary>
