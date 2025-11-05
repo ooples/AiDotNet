@@ -1,6 +1,6 @@
 using AiDotNet.RetrievalAugmentedGeneration.Models;
 
-namespace AiDotNet.RetrievalAugmentedGeneration.Evaluation;
+namespace AiDotNet.Interfaces;
 
 /// <summary>
 /// Defines the contract for RAG evaluation metrics.

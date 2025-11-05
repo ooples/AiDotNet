@@ -14,7 +14,7 @@ namespace AiDotNet.RetrievalAugmentedGeneration.ContextCompression;
 /// Analyzes retrieved documents and selectively extracts only the sentences most relevant
 /// to the query, reducing context length while preserving important information.
 /// </remarks>
-public class SelectiveContextCompressor<T> : ContextCompressorBase<T>
+public class SelectiveContextCompressor<T> : ContextCompressorBase<T> where T : IComparable<T>
 {
     private readonly int _maxSentences;
     private readonly T _relevanceThreshold;
@@ -61,7 +61,7 @@ public class SelectiveContextCompressor<T> : ContextCompressorBase<T>
             }
 
             var selectedSentences = scoredSentences
-                .OrderByDescending(s => Convert.ToDouble(s.score))
+                .OrderByDescending(s => s.score)
                 .Take(_maxSentences)
                 .Select(s => s.sentence);
 

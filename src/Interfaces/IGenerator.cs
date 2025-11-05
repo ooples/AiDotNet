@@ -1,7 +1,6 @@
-using AiDotNet.Interfaces;
 using AiDotNet.RetrievalAugmentedGeneration.Models;
 
-namespace AiDotNet.RetrievalAugmentedGeneration.Interfaces;
+namespace AiDotNet.Interfaces;
 
 /// <summary>
 /// Defines the contract for text generation models used in retrieval-augmented generation.

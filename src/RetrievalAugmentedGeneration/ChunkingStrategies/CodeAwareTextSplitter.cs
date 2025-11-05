@@ -86,17 +86,19 @@ namespace AiDotNet.RetrievalAugmentedGeneration.ChunkingStrategies
                             var overlap = Math.Min(ChunkOverlap, currentChunk.Length);
                             currentChunk = new StringBuilder(currentChunk.ToString(currentChunk.Length - overlap, overlap));
                         }
-                        
-                        // Handle splits larger than ChunkSize by breaking them down
-                        if (split.Length > ChunkSize)
+                    }
+                    
+                    // Handle splits larger than ChunkSize by breaking them down
+                    if (currentChunk.Length == 0 && split.Length > ChunkSize)
+                    {
+                        var step = Math.Max(ChunkSize - ChunkOverlap, 1);
+                        for (int i = 0; i < split.Length; i += step)
                         {
-                            for (int i = 0; i < split.Length; i += ChunkSize - ChunkOverlap)
-                            {
-                                var segmentLength = Math.Min(ChunkSize, split.Length - i);
-                                chunks.Add(split.Substring(i, segmentLength));
-                            }
-                            continue;
+                            var length = Math.Min(ChunkSize, split.Length - i);
+                            chunks.Add(split.Substring(i, length));
                         }
+                        currentChunk.Clear();
+                        continue;
                     }
 
                     if (currentChunk.Length > 0)

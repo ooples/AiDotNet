@@ -120,12 +120,23 @@ public class RecursiveCharacterChunkingStrategy : ChunkingStrategyBase
 
         // Get the current separator
         var separator = separators[0];
-        var nextSeparators = separators.Length > 1 ? separators.Skip(1).ToArray() : new[] { "" };
+        var nextSeparators = separators.Length > 1 ? separators.Skip(1).ToArray() : Array.Empty<string>();
 
         // Split by the current separator
-        var splits = !string.IsNullOrEmpty(separator)
-            ? text.Split(new[] { separator }, StringSplitOptions.None)
-            : new[] { text };
+        string[] splits;
+        if (!string.IsNullOrEmpty(separator))
+        {
+            splits = text.Split(new[] { separator }, StringSplitOptions.None);
+        }
+        else if (nextSeparators.Length == 0)
+        {
+            // Final fallback: split by character
+            splits = text.Select(c => c.ToString()).ToArray();
+        }
+        else
+        {
+            splits = new[] { text };
+        }
 
         var currentChunk = new System.Text.StringBuilder();
 

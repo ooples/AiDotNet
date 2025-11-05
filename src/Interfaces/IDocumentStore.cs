@@ -1,7 +1,7 @@
 using AiDotNet.LinearAlgebra;
 using AiDotNet.RetrievalAugmentedGeneration.Models;
 
-namespace AiDotNet.RetrievalAugmentedGeneration.Interfaces;
+namespace AiDotNet.Interfaces;
 
 /// <summary>
 /// Defines the contract for document stores that index and retrieve vectorized documents.

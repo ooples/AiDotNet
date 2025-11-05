@@ -1,4 +1,4 @@
-namespace AiDotNet.RetrievalAugmentedGeneration.Interfaces;
+namespace AiDotNet.Interfaces;
 
 /// <summary>
 /// Defines the contract for text chunking strategies that split documents into smaller segments.

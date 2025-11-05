@@ -30,6 +30,10 @@ public class MultiModalTextSplitter : ChunkingStrategyBase
     {
         if (contextWindowSize < 0)
             throw new ArgumentOutOfRangeException(nameof(contextWindowSize), "Context window size cannot be negative");
+        
+        // Ensure minimum context window to prevent division issues
+        if (contextWindowSize > 0 && contextWindowSize < 50)
+            throw new ArgumentOutOfRangeException(nameof(contextWindowSize), "Context window size must be at least 50 characters when enabled");
             
         _contextWindowSize = contextWindowSize;
         _preserveImageContext = preserveImageContext;

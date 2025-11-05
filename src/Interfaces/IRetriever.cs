@@ -1,6 +1,6 @@
 using AiDotNet.RetrievalAugmentedGeneration.Models;
 
-namespace AiDotNet.RetrievalAugmentedGeneration.Interfaces;
+namespace AiDotNet.Interfaces;
 
 /// <summary>
 /// Defines the contract for retrieving relevant documents based on a query.

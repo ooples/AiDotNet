@@ -1,6 +1,6 @@
 using AiDotNet.LinearAlgebra;
 
-namespace AiDotNet.RetrievalAugmentedGeneration.Interfaces;
+namespace AiDotNet.Interfaces;
 
 /// <summary>
 /// Defines the contract for embedding models that convert text into vector representations.

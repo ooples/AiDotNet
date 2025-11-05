@@ -14,8 +14,6 @@ namespace AiDotNet.RetrievalAugmentedGeneration.Retrievers
     public class TFIDFRetriever<T> : RetrieverBase<T>
     {
         private readonly IDocumentStore<T> _documentStore;
-        private readonly Dictionary<string, Dictionary<string, T>> _tfidf;
-        private readonly Dictionary<string, T> _idf;
 
         public TFIDFRetriever(IDocumentStore<T> documentStore, int defaultTopK = 5) : base(defaultTopK)
         {
@@ -23,8 +21,6 @@ namespace AiDotNet.RetrievalAugmentedGeneration.Retrievers
                 throw new ArgumentNullException(nameof(documentStore));
                 
             _documentStore = documentStore;
-            _tfidf = new Dictionary<string, Dictionary<string, T>>();
-            _idf = new Dictionary<string, T>();
         }
 
         protected override IEnumerable<Document<T>> RetrieveCore(string query, int topK, Dictionary<string, object> metadataFilters)
@@ -38,13 +34,13 @@ namespace AiDotNet.RetrievalAugmentedGeneration.Retrievers
             );
 
             var candidatesList = candidates.ToList();
-            BuildTFIDFStatistics(candidatesList);
+            var tfidf = BuildTFIDFStatistics(candidatesList);
 
             foreach (var doc in candidatesList.Where(d => MatchesFilters(d, metadataFilters)))
             {
                 var score = NumOps.Zero;
 
-                if (_tfidf.TryGetValue(doc.Id, out var docTfidf))
+                if (tfidf.TryGetValue(doc.Id, out var docTfidf))
                 {
                     foreach (var term in queryTerms.Where(t => docTfidf.ContainsKey(t)))
                     {
@@ -84,13 +80,10 @@ namespace AiDotNet.RetrievalAugmentedGeneration.Retrievers
                 .ToList();
         }
 
-        private void BuildTFIDFStatistics(List<Document<T>> documents)
+        private Dictionary<string, Dictionary<string, T>> BuildTFIDFStatistics(List<Document<T>> documents)
         {
             if (documents == null || documents.Count == 0)
-                return;
-
-            _tfidf.Clear();
-            _idf.Clear();
+                return new Dictionary<string, Dictionary<string, T>>();
 
             var termDocFreq = new Dictionary<string, int>();
             var docTermFreq = new Dictionary<string, Dictionary<string, int>>();
@@ -119,13 +112,14 @@ namespace AiDotNet.RetrievalAugmentedGeneration.Retrievers
                 }
             }
 
+            var idf = new Dictionary<string, T>();
             foreach (var term in termDocFreq.Keys)
             {
                 var df = termDocFreq[term];
-                var idf = NumOps.FromDouble(Math.Log((double)documents.Count / (double)df));
-                _idf[term] = idf;
+                idf[term] = NumOps.FromDouble(Math.Log((double)documents.Count / (double)df));
             }
 
+            var tfidf = new Dictionary<string, Dictionary<string, T>>();
             foreach (var doc in documents)
             {
                 var termTfidf = new Dictionary<string, T>();
@@ -133,7 +127,7 @@ namespace AiDotNet.RetrievalAugmentedGeneration.Retrievers
                 
                 if (termCounts.Count == 0)
                 {
-                    _tfidf[doc.Id] = termTfidf;
+                    tfidf[doc.Id] = termTfidf;
                     continue;
                 }
                 
@@ -142,12 +136,13 @@ namespace AiDotNet.RetrievalAugmentedGeneration.Retrievers
                 foreach (var termCount in termCounts)
                 {
                     var tf = NumOps.FromDouble((double)termCount.Value / (double)maxFreq);
-                    var tfidf = NumOps.Multiply(tf, _idf[termCount.Key]);
-                    termTfidf[termCount.Key] = tfidf;
+                    termTfidf[termCount.Key] = NumOps.Multiply(tf, idf[termCount.Key]);
                 }
 
-                _tfidf[doc.Id] = termTfidf;
+                tfidf[doc.Id] = termTfidf;
             }
+
+            return tfidf;
         }
 
         private bool MatchesFilters(Document<T> document, Dictionary<string, object> filters)

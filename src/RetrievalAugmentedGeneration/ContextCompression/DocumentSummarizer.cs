@@ -112,12 +112,22 @@ namespace AiDotNet.RetrievalAugmentedGeneration.ContextCompression
             {
                 if (summary.Length + sentence.Length > _maxSummaryLength)
                 {
+                    // If we haven't added anything yet and the first sentence is too long,
+                    // truncate it to fit
+                    if (summary.Length == 0 && sentence.Length > _maxSummaryLength)
+                    {
+                        return sentence.Substring(0, _maxSummaryLength).Trim() + "...";
+                    }
                     break;
                 }
                 summary.Append(sentence).Append(" ");
             }
 
-            return summary.ToString().Trim();
+            var result = summary.ToString().Trim();
+            // If result is empty (all sentences too long), return truncated first sentence
+            return string.IsNullOrEmpty(result) && importantSentences.Any()
+                ? importantSentences.First().Substring(0, Math.Min(importantSentences.First().Length, _maxSummaryLength)).Trim() + "..."
+                : result;
         }
 
         private List<string> ExtractImportantSentences(List<string> sentences)

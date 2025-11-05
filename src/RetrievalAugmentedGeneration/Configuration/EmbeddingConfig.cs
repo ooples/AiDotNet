@@ -20,6 +20,11 @@ namespace AiDotNet.RetrievalAugmentedGeneration.Configuration
         /// <summary>
         /// Gets or sets the API key for the embedding service.
         /// </summary>
+        /// <remarks>
+        /// <b>Security:</b> This value should be protected. Do not log, serialize to disk unencrypted, 
+        /// or include in error messages. Consider using secure configuration providers such as
+        /// environment variables, Azure Key Vault, or IOptions bound to a secrets provider.
+        /// </remarks>
         public string ApiKey { get; set; } = string.Empty;
 
         /// <summary>

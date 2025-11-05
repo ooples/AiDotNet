@@ -1,12 +1,19 @@
-# AiDotNet Copilot Instructions - CRITICAL RULES
+# AiDotNet Project Rules
 
-## Architecture Rules (DO NOT VIOLATE)
+## Code Architecture Rules
 
 ### 1. Generic Types and Numeric Operations
 - **ALWAYS** use generic types with `INumericOperations<T>` interface
 - **NEVER** hardcode `double`, `float`, or specific numeric types
-- Use `NumOps.FromDouble()`, `NumOps.Zero`, `NumOps.One` instead of literals or `default(T)`
-- **NEVER** request `INumericOperations<T>` in public constructors - this is handled internally
+- **NEVER** use `default(T)` - Instead use:
+  - `NumOps.Zero` for zero values
+  - `NumOps.One` for one values
+  - `NumOps.FromDouble(value)` to convert from double
+- **NEVER** request `INumericOperations<T>` in public constructors - handled internally
+- **Always include in base classes**:
+  ```csharp
+  protected static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();
+  ```
 - Use custom data types: `Vector<T>`, `Matrix<T>`, `Tensor<T>` instead of arrays/collections
 
 ### 2. Class Organization
@@ -29,7 +36,7 @@
 ### 5. Code Quality
 - Follow SOLID principles
 - Follow DRY principles
-- Use existing helpers (`StatisticsHelper`, etc.) - don't duplicate functionality
+- Use existing helpers (`StatisticsHelper`, `MathHelper`, etc.) - don't duplicate functionality
 - Proper null checks with exceptions, NOT nullable operators (`!`) for .NET Framework compatibility
 
 ### 6. Default Values
@@ -37,15 +44,21 @@
 - All collection properties: `= new List<T>();` or appropriate empty collection
 - **NEVER** leave properties without default values
 
+### 7. Documentation
+- **Follow existing documentation format exactly**
+- **Include XML documentation for all public members**
+- **Add beginner-friendly explanations in remarks**
+- Document parameters, return values, exceptions, and usage examples
+- Include performance characteristics and thread-safety considerations
+
 ## File Management Rules
 
 ### DO NOT Create Unless Explicitly Requested:
-- ❌ README.md files
-- ❌ Status reports (.md files)
-- ❌ Analysis documents
+- ❌ README.md files (STATUS.md, REPORT.md, AGENTS.md, etc.)
+- ❌ Status reports or analysis documents (.md files)
 - ❌ One-off scripts (.ps1, .py unless requested)
 - ❌ .json configuration files in repo root
-- ❌ Instructions files (.txt)
+- ❌ Instructions or temporary files (.txt)
 
 ### DO NOT Check In:
 - Temporary analysis files
@@ -53,12 +66,18 @@
 - Debug files
 - Reports or summaries
 
+### What TO Create:
+- Source code files (.cs)
+- Configuration files when needed for functionality
+- Documentation only when explicitly requested by name/path
+
 ## Git Workflow
 
 ### Branch Management
 - Create feature branches for new work: `feature/issue-XXX-description`
 - Commit early and often with descriptive messages
 - Create PR when work is complete
+- **DO NOT close PRs** - fix them properly instead
 - **NO** cleanup commits on unrelated branches
 - Cherry-pick orphaned commits to correct branches if needed
 
@@ -82,22 +101,33 @@
 
 ### When Working on Features:
 1. Use Google Gemini CLI for comprehensive codebase analysis (2M token context)
+   - **ALWAYS** use model `gemini-2.0-flash-thinking-exp-1219` for analysis
 2. Check existing implementations before duplicating
 3. Integrate with existing architecture
 4. Follow established patterns exactly
 5. Complete ALL work without stopping when given a complete plan
 
+## Null Handling
+
+- **NO nullable suppress operator (!)** unless absolutely necessary
+- Perform proper null checks
+- Throw exceptions for invalid states
+- Support older .NET Framework versions - don't use features that break compatibility
+
 ## Examples Project
+
 - Path: `C:\Users\cheat\source\repos\AiDotNet\testconsole\AiDotNetTestConsole.csproj`
 - Examples go here, NOT in main library
 
 ## Authentication
+
 - GitHub Token: Use configured MCP authentication
 - GraphQL API: Already authenticated through MCP server
 - Don't re-authenticate when already working
 
 ## Remember
-- Save these instructions and reference them EVERY time before making changes
+
+- Reference these rules EVERY time before making changes
 - If unsure, check existing code for patterns
 - Complete work without pausing when plan is clear
 - Don't create files unless explicitly requested

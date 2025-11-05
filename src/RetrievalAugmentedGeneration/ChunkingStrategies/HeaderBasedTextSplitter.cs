@@ -30,6 +30,9 @@ public class HeaderBasedTextSplitter : ChunkingStrategyBase
     {
         if (minChunkSize < 0)
             throw new ArgumentOutOfRangeException(nameof(minChunkSize), "Min chunk size cannot be negative");
+        
+        if (minChunkSize > chunkSize)
+            throw new ArgumentOutOfRangeException(nameof(minChunkSize), "Min chunk size cannot exceed max chunk size");
             
         _minChunkSize = minChunkSize;
         _combineSmallChunks = combineSmallChunks;
