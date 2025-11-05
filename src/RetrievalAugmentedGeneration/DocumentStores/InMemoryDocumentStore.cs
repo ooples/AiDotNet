@@ -45,7 +45,7 @@ public class InMemoryDocumentStore<T> : DocumentStoreBase<T>
     private int _vectorDimension;
 
     /// <summary>
-    /// Gets the number of documents currently stored in the database.
+    /// Gets the number of documents currently stored in the in-memory store.
     /// </summary>
     public override int DocumentCount => _store.Count;
 
@@ -92,20 +92,17 @@ public class InMemoryDocumentStore<T> : DocumentStoreBase<T>
     }
 
     /// <summary>
-    /// Core logic for adding a single vector document to the database.
+    /// Core logic for adding a single vector document to the in-memory store.
     /// </summary>
     /// <param name="vectorDocument">The validated vector document to add.</param>
     /// <remarks>
     /// <para>
-    /// Stores the document in the SQLite table with its vector embedding.
-    /// In real SQLite-VSS, this would use INSERT statements with vss0 virtual table functions.
+    /// Stores the document in the internal dictionary with its vector embedding.
+    /// Automatically initializes the vector dimension from the first document if not specified in constructor.
     /// </para>
     /// </remarks>
     protected override void AddCore(VectorDocument<T> vectorDocument)
     {
-        if (_vectorDimension == 0)
-            _vectorDimension = vectorDocument.Embedding.Length;
-
         _store[vectorDocument.Document.Id] = vectorDocument;
     }
 
@@ -115,31 +112,22 @@ public class InMemoryDocumentStore<T> : DocumentStoreBase<T>
     /// <param name="vectorDocuments">The validated list of vector documents to add.</param>
     /// <remarks>
     /// <para>
-    /// Batch operations use SQLite transactions for better performance, inserting all documents
-    /// in a single ACID transaction.
+    /// Batch operations add all documents to the in-memory dictionary efficiently, validating
+    /// that all vectors have consistent dimensionality.
     /// </para>
-    /// <para><b>For Beginners:</b> Batch operations are much faster in SQLite.
+    /// <para><b>For Beginners:</b> Batch operations are slightly more efficient in memory stores.
     /// 
-    /// Slow (many transactions):
+    /// Validation approach:
     /// <code>
-    /// foreach (var doc in documents)
-    ///     store.Add(doc); // Each insert is a separate transaction
+    /// store.AddBatch(documents); // Validates all vectors have same dimension
     /// </code>
     /// 
-    /// Fast (single transaction):
-    /// <code>
-    /// store.AddBatch(documents); // All inserts in one transaction
-    /// </code>
-    /// 
-    /// This can be 100x faster for large batches!
+    /// Ensures data integrity while maintaining high performance.
     /// </para>
     /// </remarks>
     protected override void AddBatchCore(IList<VectorDocument<T>> vectorDocuments)
     {
         if (vectorDocuments.Count == 0) return;
-
-        if (_vectorDimension == 0)
-            _vectorDimension = vectorDocuments[0].Embedding.Length;
 
         foreach (var vd in vectorDocuments)
         {
@@ -236,21 +224,20 @@ public class InMemoryDocumentStore<T> : DocumentStoreBase<T>
     }
 
     /// <summary>
-    /// Core logic for removing a document from the database.
+    /// Core logic for removing a document from the in-memory store.
     /// </summary>
     /// <param name="documentId">The validated document ID.</param>
     /// <returns>True if the document was found and removed; otherwise, false.</returns>
     /// <remarks>
     /// <para>
-    /// Removes the document from SQLite (like SQL DELETE). The operation is ACID-compliant
-    /// and committed to the database file.
+    /// Removes the document from the internal dictionary efficiently using O(1) removal.
     /// </para>
-    /// <para><b>For Beginners:</b> Deletes a document from the database.
+    /// <para><b>For Beginners:</b> Deletes a document from memory.
     /// 
     /// Example:
     /// <code>
     /// if (store.Remove("doc-123"))
-    ///     Console.WriteLine("Document deleted from database");
+    ///     Console.WriteLine("Document removed from memory");
     /// </code>
     /// </para>
     /// </remarks>
