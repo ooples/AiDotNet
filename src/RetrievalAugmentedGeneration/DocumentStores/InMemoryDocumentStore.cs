@@ -1,11 +1,12 @@
-using AiDotNet.Helpers;
-using AiDotNet.Interfaces;
-using AiDotNet.LinearAlgebra;
-using AiDotNet.RetrievalAugmentedGeneration.Models;
 using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Linq;
+using System.Threading;
+using AiDotNet.Helpers;
+using AiDotNet.Interfaces;
+using AiDotNet.LinearAlgebra;
+using AiDotNet.RetrievalAugmentedGeneration.Models;
 
 namespace AiDotNet.RetrievalAugmentedGeneration.DocumentStores;
 
@@ -43,6 +44,7 @@ namespace AiDotNet.RetrievalAugmentedGeneration.DocumentStores;
 public class InMemoryDocumentStore<T> : DocumentStoreBase<T>
 {
     private readonly ConcurrentDictionary<string, VectorDocument<T>> _store;
+    private readonly int _initialVectorDimension;
     private int _vectorDimension;
 
     /// <summary>
@@ -88,6 +90,7 @@ public class InMemoryDocumentStore<T> : DocumentStoreBase<T>
             throw new ArgumentOutOfRangeException(nameof(vectorDimension), "Vector dimension must be positive");
 
         _store = new ConcurrentDictionary<string, VectorDocument<T>>();
+        _initialVectorDimension = vectorDimension;
         _vectorDimension = vectorDimension;
     }
 
@@ -130,11 +133,19 @@ public class InMemoryDocumentStore<T> : DocumentStoreBase<T>
         if (vectorDocuments.Count == 0)
             return;
 
-        if (_vectorDimension == 0)
+        // Thread-safe dimension initialization on first batch  
+        if (Interlocked.CompareExchange(ref _vectorDimension, vectorDocuments[0].Embedding.Length, 0) != 0)
         {
-            _vectorDimension = vectorDocuments[0].Embedding.Length;
+            // Dimension was already set, validate consistency
+            if (_vectorDimension != vectorDocuments[0].Embedding.Length)
+            {
+                throw new ArgumentException(
+                    $"Vector dimension mismatch. Expected {_vectorDimension}, got {vectorDocuments[0].Embedding.Length}",
+                    nameof(vectorDocuments));
+            }
         }
 
+        // Validate all documents in batch
         foreach (var vd in vectorDocuments)
         {
             // Validate batch dimensions
@@ -324,6 +335,6 @@ public class InMemoryDocumentStore<T> : DocumentStoreBase<T>
     public override void Clear()
     {
         _store.Clear();
-        _vectorDimension = 0;
+        Interlocked.Exchange(ref _vectorDimension, _initialVectorDimension);
     }
 }

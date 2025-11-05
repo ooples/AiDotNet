@@ -46,7 +46,7 @@ public class ElasticsearchDocumentStore<T> : DocumentStoreBase<T>
             throw new ArgumentException("Either apiKey or both username and password must be provided for authentication");
 
         _httpClient = new HttpClient { BaseAddress = new Uri(endpoint) };
-        
+
         if (hasApiKey)
             _httpClient.DefaultRequestHeaders.Add("Authorization", $"ApiKey {apiKey}");
         else
@@ -68,7 +68,7 @@ public class ElasticsearchDocumentStore<T> : DocumentStoreBase<T>
         try
         {
             using var checkResponse = _httpClient.GetAsync($"/{_indexName}").GetAwaiter().GetResult();
-            if (checkResponse.IsSuccessStatusCode) 
+            if (checkResponse.IsSuccessStatusCode)
             {
                 UpdateDocumentCount();
                 return;
@@ -119,7 +119,7 @@ public class ElasticsearchDocumentStore<T> : DocumentStoreBase<T>
             throw new ArgumentException($"Document embedding dimension ({vectorDocument.Embedding.Length}) does not match the store's configured dimension ({_vectorDimension}).");
 
         var embedding = vectorDocument.Embedding.ToArray().Select(v => Convert.ToDouble(v)).ToArray();
-        
+
         var doc = new
         {
             id = vectorDocument.Document.Id,
@@ -135,7 +135,7 @@ public class ElasticsearchDocumentStore<T> : DocumentStoreBase<T>
 
         using var response = _httpClient.PutAsync($"/{_indexName}/_doc/{vectorDocument.Document.Id}", content).GetAwaiter().GetResult();
         response.EnsureSuccessStatusCode();
-        
+
         _cache[vectorDocument.Document.Id] = vectorDocument;
         _documentCount++;
     }
@@ -197,7 +197,7 @@ public class ElasticsearchDocumentStore<T> : DocumentStoreBase<T>
             _documentCount += addedCount;
             throw new InvalidOperationException($"Bulk operation had partial failures");
         }
-        
+
         int newDocCount = 0;
         foreach (var vd in vectorDocuments)
         {
@@ -212,7 +212,7 @@ public class ElasticsearchDocumentStore<T> : DocumentStoreBase<T>
     protected override IEnumerable<Document<T>> GetSimilarCore(Vector<T> queryVector, int topK, Dictionary<string, object> metadataFilters)
     {
         var embedding = queryVector.ToArray().Select(v => Convert.ToDouble(v)).ToArray();
-        
+
         // Build the query with metadata filters
         object queryClause;
         if (metadataFilters != null && metadataFilters.Any())
@@ -306,7 +306,7 @@ public class ElasticsearchDocumentStore<T> : DocumentStoreBase<T>
             return vectorDoc.Document;
 
         using var response = _httpClient.GetAsync($"/{_indexName}/_doc/{documentId}").GetAwaiter().GetResult();
-        
+
         if (response.StatusCode == System.Net.HttpStatusCode.NotFound)
             return null;
 
@@ -318,7 +318,7 @@ public class ElasticsearchDocumentStore<T> : DocumentStoreBase<T>
 
         var responseContent = response.Content.ReadAsStringAsync().GetAwaiter().GetResult();
         var result = JObject.Parse(responseContent);
-        
+
         if (result["found"]?.Value<bool>() != true)
             return null;
 
@@ -562,7 +562,7 @@ public class ElasticsearchDocumentStore<T> : DocumentStoreBase<T>
         {
             using var response = _httpClient.DeleteAsync($"/{_indexName}").GetAwaiter().GetResult();
             response.EnsureSuccessStatusCode();
-            
+
             _cache.Clear();
             _documentCount = 0;
             EnsureIndex();

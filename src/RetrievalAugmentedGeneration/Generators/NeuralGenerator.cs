@@ -141,12 +141,12 @@ public class NeuralGenerator<T> : IGenerator<T>
                     $"Network output dimension ({networkOutputDim}) must be >= vocabulary size ({vocabularySize})",
                     nameof(network));
         }
-        
+
         // Initialize embedding matrix with Xavier/Glorot initialization
         _embeddingMatrix = new T[vocabularySize, embeddingDimension];
         var random = new Random(42);
         double initScale = Math.Sqrt(2.0 / (vocabularySize + embeddingDimension));
-        
+
         for (int i = 0; i < vocabularySize; i++)
         {
             for (int j = 0; j < embeddingDimension; j++)
@@ -155,7 +155,7 @@ public class NeuralGenerator<T> : IGenerator<T>
                 _embeddingMatrix[i, j] = NumOps.FromDouble(value);
             }
         }
-        
+
         // Initialize bidirectional vocabulary mapping
         if (prebuiltVocabulary != null)
         {
@@ -172,13 +172,13 @@ public class NeuralGenerator<T> : IGenerator<T>
             // Initialize empty vocabulary with special tokens only
             _wordToToken = new Dictionary<string, int>();
             _tokenToWord = new Dictionary<int, string>();
-            
+
             // Reserve special tokens
             _tokenToWord[0] = "[PAD]";   // Padding
             _tokenToWord[1] = "[UNK]";   // Unknown
             _tokenToWord[2] = "[BOS]";   // Beginning of sequence
             _tokenToWord[3] = "[EOS]";   // End of sequence
-            
+
             _wordToToken["[PAD]"] = 0;
             _wordToToken["[UNK]"] = 1;
             _wordToToken["[BOS]"] = 2;
@@ -244,7 +244,7 @@ public class NeuralGenerator<T> : IGenerator<T>
         {
             var doc = contextList[i];
             var citationNum = i + 1;
-            
+
             // Handle null content gracefully
             var content = doc.Content ?? "(no content)";
             promptBuilder.AppendLine($"[{citationNum}] {TruncateText(content, 500)}");
@@ -292,11 +292,11 @@ public class NeuralGenerator<T> : IGenerator<T>
             StringSplitOptions.RemoveEmptyEntries);
 
         var tokens = new List<int>();
-        
+
         foreach (var word in words)
         {
             var normalizedWord = word.ToLowerInvariant();
-            
+
             int tokenId;
             lock (_vocabularyLock)
             {
@@ -307,7 +307,7 @@ public class NeuralGenerator<T> : IGenerator<T>
                     tokenId = 1;
                 }
             }
-            
+
             tokens.Add(tokenId);
         }
 
@@ -318,7 +318,7 @@ public class NeuralGenerator<T> : IGenerator<T>
     {
         // Production-ready detokenization using vocabulary mapping
         var words = new List<string>();
-        
+
         foreach (var tokenId in tokens)
         {
             if (_tokenToWord.TryGetValue(tokenId, out var word))
@@ -334,7 +334,7 @@ public class NeuralGenerator<T> : IGenerator<T>
                 words.Add("<unknown>");
             }
         }
-        
+
         return string.Join(" ", words);
     }
 
@@ -350,7 +350,7 @@ public class NeuralGenerator<T> : IGenerator<T>
         {
             // Take last N tokens as context window (prevent excessive memory use)
             var contextWindow = currentSequence.Skip(Math.Max(0, currentSequence.Count - 128)).ToList();
-            
+
             // Get next token using LSTM network
             var nextToken = PredictNextToken(contextWindow, random);
 
@@ -373,14 +373,14 @@ public class NeuralGenerator<T> : IGenerator<T>
         // Create input tensor from context tokens using embedding lookup
         var sequenceLength = context.Count;
         var embeddingData = new T[sequenceLength * _embeddingDimension];
-        
+
         // Look up embeddings for each token
         for (int i = 0; i < sequenceLength; i++)
         {
             int tokenId = context[i];
             if (tokenId < 0 || tokenId >= _vocabularySize)
                 tokenId = 1; // Use [UNK] token for out-of-vocabulary
-            
+
             for (int j = 0; j < _embeddingDimension; j++)
             {
                 embeddingData[i * _embeddingDimension + j] = _embeddingMatrix[tokenId, j];
@@ -398,11 +398,11 @@ public class NeuralGenerator<T> : IGenerator<T>
         // We want the last time step's output
         var outputVector = outputTensor.ToVector();
         var outputDim = outputTensor.Shape[outputTensor.Shape.Length - 1];
-        
+
         // Get the last time step's output
         var lastStepStart = outputVector.Length - outputDim;
         var logits = new T[Math.Min(outputDim, _vocabularySize)];
-        
+
         for (int i = 0; i < logits.Length; i++)
         {
             logits[i] = outputVector[lastStepStart + i];
@@ -420,7 +420,7 @@ public class NeuralGenerator<T> : IGenerator<T>
         // Apply temperature scaling: logits / temperature
         var scaledLogits = new double[logits.Length];
         var maxLogit = double.NegativeInfinity;
-        
+
         for (int i = 0; i < logits.Length; i++)
         {
             scaledLogits[i] = Convert.ToDouble(logits[i]) / temperature;
