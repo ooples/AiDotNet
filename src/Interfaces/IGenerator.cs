@@ -34,9 +34,6 @@ namespace AiDotNet.Interfaces;
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric data type used for relevance scoring.</typeparam>
-/// <typeparam name="TInput">The input data type for the model.</typeparam>
-/// <typeparam name="TOutput">The output data type for the model.</typeparam>
-/// <typeparam name="TMetadata">The metadata type for model information.</typeparam>
 public interface IGenerator<T>
 {
     /// <summary>
