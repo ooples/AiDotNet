@@ -239,6 +239,11 @@ public class NeuralGenerator<T> : IGenerator<T>
         var generatedAnswer = Generate(fullPrompt);
 
         // Calculate confidence based on retrieval scores
+        // NOTE: This confidence reflects retrieval quality, not generation certainty.
+        // For production systems, consider also tracking token probabilities during
+        // generation (e.g., average probability of sampled tokens) and combining
+        // both metrics for a more comprehensive confidence score.
+        // Current approach: Simple average of document relevance scores
         var avgScore = contextList
             .Where(d => d.HasRelevanceScore)
             .Select(d => Convert.ToDouble(d.RelevanceScore))
