@@ -241,7 +241,15 @@ public class PredictionModelBuilder<T, TInput, TOutput> : IPredictionModelBuilde
         // Optimize the model
         var optimizationResult = optimizer.Optimize(OptimizerHelper<T, TInput, TOutput>.CreateOptimizationInputData(XTrain, yTrain, XVal, yVal, XTest, yTest));
 
-        return new PredictionModelResult<T, TInput, TOutput>(optimizationResult, normInfo, _biasDetector, _fairnessEvaluator);
+        return new PredictionModelResult<T, TInput, TOutput>(
+            optimizationResult, 
+            normInfo, 
+            _biasDetector, 
+            _fairnessEvaluator,
+            _ragRetriever,
+            _ragReranker,
+            _ragGenerator,
+            _queryProcessors);
     }
 
     /// <summary>
@@ -388,143 +396,33 @@ public class PredictionModelBuilder<T, TInput, TOutput> : IPredictionModelBuilde
     }
 
     /// <summary>
-    /// Configures the retrieval-augmented generation (RAG) pipeline for the model.
+    /// Configures the retrieval-augmented generation (RAG) components for use during model inference.
     /// </summary>
-    /// <param name="retriever">The retriever for finding relevant documents.</param>
-    /// <param name="reranker">The reranker for improving document ranking quality.</param>
-    /// <param name="generator">The generator for producing grounded answers.</param>
+    /// <param name="retriever">Optional retriever for finding relevant documents. If not provided, RAG functionality won't be available.</param>
+    /// <param name="reranker">Optional reranker for improving document ranking quality. If not provided, a default reranker will be used if RAG is configured.</param>
+    /// <param name="generator">Optional generator for producing grounded answers. If not provided, a default generator will be used if RAG is configured.</param>
     /// <param name="queryProcessors">Optional query processors for improving search quality.</param>
     /// <returns>This builder instance for method chaining.</returns>
     /// <remarks>
     /// <b>For Beginners:</b> RAG combines retrieval and generation to create answers backed by real documents.
     /// Configure it with:
-    /// - A retriever (finds relevant documents from your collection)
-    /// - A reranker (improves the ordering of retrieved documents)
-    /// - A generator (creates answers based on the documents)
+    /// - A retriever (finds relevant documents from your collection) - required for RAG
+    /// - A reranker (improves the ordering of retrieved documents) - optional, defaults provided
+    /// - A generator (creates answers based on the documents) - optional, defaults provided
     /// - Optional query processors (improve search queries before retrieval)
+    /// 
+    /// RAG operations are performed during inference (after model training) via the PredictionModelResult.
     /// </remarks>
-    public IPredictionModelBuilder<T, TInput, TOutput> ConfigureRag(
-        IRetriever<T> retriever,
-        IReranker<T> reranker,
-        IGenerator<T> generator,
+    public IPredictionModelBuilder<T, TInput, TOutput> ConfigureRetrievalAugmentedGeneration(
+        IRetriever<T>? retriever = null,
+        IReranker<T>? reranker = null,
+        IGenerator<T>? generator = null,
         IEnumerable<AiDotNet.RetrievalAugmentedGeneration.Interfaces.IQueryProcessor>? queryProcessors = null)
     {
-        _ragRetriever = retriever ?? throw new ArgumentNullException(nameof(retriever));
-        _ragReranker = reranker ?? throw new ArgumentNullException(nameof(reranker));
-        _ragGenerator = generator ?? throw new ArgumentNullException(nameof(generator));
-        _queryProcessors = queryProcessors ?? Enumerable.Empty<AiDotNet.RetrievalAugmentedGeneration.Interfaces.IQueryProcessor>();
+        _ragRetriever = retriever;
+        _ragReranker = reranker;
+        _ragGenerator = generator;
+        _queryProcessors = queryProcessors;
         return this;
-    }
-
-    /// <summary>
-    /// Generates a grounded answer using the configured RAG pipeline.
-    /// </summary>
-    /// <param name="query">The question to answer.</param>
-    /// <param name="topK">Number of documents to retrieve (optional).</param>
-    /// <param name="topKAfterRerank">Number of documents after reranking (optional).</param>
-    /// <param name="metadataFilters">Optional filters for document selection.</param>
-    /// <returns>A grounded answer with source citations.</returns>
-    /// <remarks>
-    /// <b>For Beginners:</b> Use this to get AI-generated answers backed by your documents.
-    /// The system will search your document collection, find the most relevant sources,
-    /// and generate an answer with citations.
-    /// </remarks>
-    public AiDotNet.RetrievalAugmentedGeneration.Models.GroundedAnswer<T> GenerateAnswer(
-        string query,
-        int? topK = null,
-        int? topKAfterRerank = null,
-        Dictionary<string, object>? metadataFilters = null)
-    {
-        if (_ragRetriever == null || _ragReranker == null || _ragGenerator == null)
-        {
-            throw new InvalidOperationException("RAG pipeline not configured. Call ConfigureRag first.");
-        }
-
-        if (string.IsNullOrWhiteSpace(query))
-            throw new ArgumentException("Query cannot be null or empty", nameof(query));
-
-        var processedQuery = query;
-        if (_queryProcessors != null)
-        {
-            foreach (var processor in _queryProcessors)
-            {
-                processedQuery = processor.ProcessQuery(processedQuery);
-            }
-        }
-
-        var filters = metadataFilters ?? new Dictionary<string, object>();
-        var effectiveTopK = topK ?? _ragRetriever.DefaultTopK;
-        var retrievedDocs = _ragRetriever.Retrieve(processedQuery, effectiveTopK, filters);
-
-        var retrievedList = retrievedDocs.ToList();
-
-        if (retrievedList.Count == 0)
-        {
-            return new AiDotNet.RetrievalAugmentedGeneration.Models.GroundedAnswer<T>
-            {
-                Query = query,
-                Answer = "I couldn't find any relevant information to answer this question.",
-                SourceDocuments = new List<AiDotNet.RetrievalAugmentedGeneration.Models.Document<T>>(),
-                Citations = new List<string>(),
-                ConfidenceScore = 0.0
-            };
-        }
-
-        var rerankedDocs = _ragReranker.Rerank(processedQuery, retrievedList);
-        
-        if (topKAfterRerank.HasValue)
-        {
-            rerankedDocs = rerankedDocs.Take(topKAfterRerank.Value);
-        }
-
-        var contextDocs = rerankedDocs.ToList();
-        return _ragGenerator.GenerateGrounded(processedQuery, contextDocs);
-    }
-
-    /// <summary>
-    /// Retrieves relevant documents without generating an answer.
-    /// </summary>
-    /// <param name="query">The search query.</param>
-    /// <param name="topK">Number of documents to retrieve (optional).</param>
-    /// <param name="applyReranking">Whether to rerank results (default: true).</param>
-    /// <param name="metadataFilters">Optional filters for document selection.</param>
-    /// <returns>Retrieved and optionally reranked documents.</returns>
-    /// <remarks>
-    /// <b>For Beginners:</b> Use this to search your document collection without generating an answer.
-    /// Good for exploring what documents are available or debugging retrieval quality.
-    /// </remarks>
-    public IEnumerable<AiDotNet.RetrievalAugmentedGeneration.Models.Document<T>> RetrieveDocuments(
-        string query,
-        int? topK = null,
-        bool applyReranking = true,
-        Dictionary<string, object>? metadataFilters = null)
-    {
-        if (_ragRetriever == null || _ragReranker == null)
-        {
-            throw new InvalidOperationException("RAG pipeline not configured. Call ConfigureRag first.");
-        }
-
-        if (string.IsNullOrWhiteSpace(query))
-            throw new ArgumentException("Query cannot be null or empty", nameof(query));
-
-        var processedQuery = query;
-        if (_queryProcessors != null)
-        {
-            foreach (var processor in _queryProcessors)
-            {
-                processedQuery = processor.ProcessQuery(processedQuery);
-            }
-        }
-
-        var filters = metadataFilters ?? new Dictionary<string, object>();
-        var effectiveTopK = topK ?? _ragRetriever.DefaultTopK;
-        var docs = _ragRetriever.Retrieve(processedQuery, effectiveTopK, filters);
-
-        if (applyReranking)
-        {
-            docs = _ragReranker.Rerank(processedQuery, docs);
-        }
-
-        return docs.ToList();
     }
 }

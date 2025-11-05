@@ -353,7 +353,7 @@ public interface IPredictionModelBuilder<T, TInput, TOutput>
     IPredictionModelBuilder<T, TInput, TOutput> ConfigureLoRA(ILoRAConfiguration<T> loraConfiguration);
 
     /// <summary>
-    /// Configures the retrieval-augmented generation (RAG) pipeline for the model.
+    /// Configures the retrieval-augmented generation (RAG) components for use during model inference.
     /// </summary>
     /// <remarks>
     /// RAG enhances text generation by retrieving relevant documents from a knowledge base
@@ -367,55 +367,18 @@ public interface IPredictionModelBuilder<T, TInput, TOutput>
     /// 4. Cite its sources
     ///
     /// This makes answers more accurate, up-to-date, and traceable to source materials.
+    /// 
+    /// RAG operations (GenerateAnswer, RetrieveDocuments) are performed during inference via PredictionModelResult,
+    /// not during model building.
     /// </remarks>
-    /// <param name="retriever">The retriever for finding relevant documents.</param>
-    /// <param name="reranker">The reranker for improving document ranking quality.</param>
-    /// <param name="generator">The generator for producing grounded answers.</param>
+    /// <param name="retriever">Optional retriever for finding relevant documents. If not provided, RAG won't be available.</param>
+    /// <param name="reranker">Optional reranker for improving document ranking quality. Default provided if retriever is set.</param>
+    /// <param name="generator">Optional generator for producing grounded answers. Default provided if retriever is set.</param>
     /// <param name="queryProcessors">Optional query processors for improving search quality.</param>
     /// <returns>The builder instance for method chaining.</returns>
-    IPredictionModelBuilder<T, TInput, TOutput> ConfigureRag(
-        IRetriever<T> retriever,
-        IReranker<T> reranker,
-        IGenerator<T> generator,
+    IPredictionModelBuilder<T, TInput, TOutput> ConfigureRetrievalAugmentedGeneration(
+        IRetriever<T>? retriever = null,
+        IReranker<T>? reranker = null,
+        IGenerator<T>? generator = null,
         IEnumerable<AiDotNet.RetrievalAugmentedGeneration.Interfaces.IQueryProcessor>? queryProcessors = null);
-
-    /// <summary>
-    /// Generates a grounded answer using the configured RAG pipeline.
-    /// </summary>
-    /// <remarks>
-    /// This method uses the RAG pipeline to answer questions with source citations.
-    ///
-    /// <b>For Beginners:</b> Call this to get AI-generated answers backed by your documents.
-    /// The answer will include citations showing which documents were used as sources.
-    /// </remarks>
-    /// <param name="query">The question to answer.</param>
-    /// <param name="topK">Number of documents to retrieve (optional).</param>
-    /// <param name="topKAfterRerank">Number of documents after reranking (optional).</param>
-    /// <param name="metadataFilters">Optional filters for document selection.</param>
-    /// <returns>A grounded answer with source citations.</returns>
-    AiDotNet.RetrievalAugmentedGeneration.Models.GroundedAnswer<T> GenerateAnswer(
-        string query,
-        int? topK = null,
-        int? topKAfterRerank = null,
-        Dictionary<string, object>? metadataFilters = null);
-
-    /// <summary>
-    /// Retrieves relevant documents without generating an answer.
-    /// </summary>
-    /// <remarks>
-    /// This method only performs retrieval and reranking, useful for document search.
-    ///
-    /// <b>For Beginners:</b> Use this when you just want to find relevant documents
-    /// without generating an answer. Good for search or analysis tasks.
-    /// </remarks>
-    /// <param name="query">The search query.</param>
-    /// <param name="topK">Number of documents to retrieve (optional).</param>
-    /// <param name="applyReranking">Whether to rerank results (default: true).</param>
-    /// <param name="metadataFilters">Optional filters for document selection.</param>
-    /// <returns>Retrieved and optionally reranked documents.</returns>
-    IEnumerable<AiDotNet.RetrievalAugmentedGeneration.Models.Document<T>> RetrieveDocuments(
-        string query,
-        int? topK = null,
-        bool applyReranking = true,
-        Dictionary<string, object>? metadataFilters = null);
 }
