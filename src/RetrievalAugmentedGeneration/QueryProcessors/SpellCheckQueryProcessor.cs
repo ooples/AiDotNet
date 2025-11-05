@@ -23,7 +23,8 @@ namespace AiDotNet.RetrievalAugmentedGeneration.QueryProcessors;
 /// </remarks>
 public class SpellCheckQueryProcessor : QueryProcessorBase
 {
-    private readonly Dictionary<string, string> _corrections;
+    private readonly Dictionary<string, string> _misspellingToCorrect;
+    private readonly HashSet<string> _correctWords;
     private readonly int _maxEditDistance;
 
     /// <summary>
@@ -36,7 +37,16 @@ public class SpellCheckQueryProcessor : QueryProcessorBase
         int maxEditDistance = 2)
     {
         _maxEditDistance = maxEditDistance;
-        _corrections = customDictionary ?? GetDefaultDictionary();
+        _misspellingToCorrect = customDictionary ?? GetDefaultMisspellings();
+        
+        // Build set of correct words for efficient fuzzy matching
+        _correctWords = new HashSet<string>(_misspellingToCorrect.Values, StringComparer.OrdinalIgnoreCase);
+        
+        // Add all correct words to the set (from common technical vocabulary)
+        foreach (var word in GetCommonTechnicalWords())
+        {
+            _correctWords.Add(word);
+        }
     }
 
     protected override string ProcessQueryCore(string query)
@@ -55,18 +65,30 @@ public class SpellCheckQueryProcessor : QueryProcessorBase
                 continue;
             }
 
-            var lowerWord = word.ToLowerInvariant();
-            
-            // First try exact match
-            if (_corrections.TryGetValue(lowerWord, out var correction))
+            var cleanWord = Regex.Replace(word, @"[^\w]", "");
+            if (string.IsNullOrEmpty(cleanWord))
             {
-                correctedWords.Add(PreserveCase(word, correction));
+                correctedWords.Add(word);
+                continue;
             }
-            // Then try fuzzy match if enabled
-            else if (_maxEditDistance > 0)
+
+            var lowerWord = cleanWord.ToLowerInvariant();
+            
+            // First try exact misspelling match
+            if (_misspellingToCorrect.TryGetValue(lowerWord, out var correction))
+            {
+                correctedWords.Add(PreserveCase(cleanWord, correction));
+            }
+            // Check if word is already correct
+            else if (_correctWords.Contains(lowerWord))
+            {
+                correctedWords.Add(word);
+            }
+            // Then try fuzzy match against correct words if enabled
+            else if (_maxEditDistance > 0 && lowerWord.Length > 3)
             {
                 var fuzzyMatch = FindFuzzyMatch(lowerWord);
-                correctedWords.Add(fuzzyMatch != null ? PreserveCase(word, fuzzyMatch) : word);
+                correctedWords.Add(fuzzyMatch != null ? PreserveCase(cleanWord, fuzzyMatch) : word);
             }
             else
             {
@@ -82,13 +104,18 @@ public class SpellCheckQueryProcessor : QueryProcessorBase
         string? bestMatch = null;
         var minDistance = int.MaxValue;
 
-        foreach (var key in _corrections.Keys)
+        // Compare against correct words, not misspellings
+        foreach (var correctWord in _correctWords)
         {
-            var distance = LevenshteinDistance(word, key);
+            // Only compare words of similar length to avoid false matches
+            if (Math.Abs(correctWord.Length - word.Length) > _maxEditDistance)
+                continue;
+
+            var distance = LevenshteinDistance(word, correctWord);
             if (distance <= _maxEditDistance && distance < minDistance)
             {
                 minDistance = distance;
-                bestMatch = _corrections[key];
+                bestMatch = correctWord;
             }
         }
 
@@ -130,10 +157,11 @@ public class SpellCheckQueryProcessor : QueryProcessorBase
         return QueryProcessorHelpers.PreserveCase(original, corrected);
     }
 
-    private static Dictionary<string, string> GetDefaultDictionary()
+    private static Dictionary<string, string> GetDefaultMisspellings()
     {
         return new Dictionary<string, string>
         {
+            // Common AI/ML misspellings
             { "photsynthesis", "photosynthesis" },
             { "artifical", "artificial" },
             { "intelligance", "intelligence" },
@@ -148,7 +176,41 @@ public class SpellCheckQueryProcessor : QueryProcessorBase
             { "genration", "generation" },
             { "embeddin", "embedding" },
             { "similrity", "similarity" },
-            { "relevent", "relevant" }
+            { "relevent", "relevant" },
+            { "transformr", "transformer" },
+            { "atention", "attention" },
+            { "vecotr", "vector" },
+            { "tensro", "tensor" },
+            { "reranker", "reranker" },
+            { "chunkin", "chunking" },
+            { "semantc", "semantic" }
+        };
+    }
+
+    private static HashSet<string> GetCommonTechnicalWords()
+    {
+        return new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+        {
+            // AI/ML core terms
+            "artificial", "intelligence", "machine", "learning", "neural", "network",
+            "deep", "model", "algorithm", "optimization", "training", "inference",
+            "embedding", "vector", "tensor", "matrix", "gradient", "backpropagation",
+            
+            // RAG/Search terms
+            "retrieval", "augmented", "generation", "query", "document", "chunking",
+            "semantic", "similarity", "relevance", "ranking", "reranking", "scoring",
+            
+            // Transformer/LLM terms
+            "transformer", "attention", "encoder", "decoder", "tokenization", "token",
+            "vocabulary", "context", "prompt", "completion", "fine-tuning",
+            
+            // Data structures
+            "database", "index", "cache", "store", "repository", "collection",
+            "graph", "tree", "list", "array", "dictionary", "hashmap",
+            
+            // Common verbs/modifiers
+            "search", "find", "retrieve", "generate", "process", "analyze", "compute",
+            "fast", "efficient", "accurate", "robust", "scalable", "distributed"
         };
     }
 }
