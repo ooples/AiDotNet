@@ -124,14 +124,42 @@ public class GraphRAG<T>
     /// <param name="entity">The source entity.</param>
     /// <param name="relation">The relationship type.</param>
     /// <param name="target">The target entity.</param>
+    /// <exception cref="ArgumentException">Thrown when entity, relation, or target is null, empty, or whitespace.</exception>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> Creates a connection between two entities in the knowledge graph.
+    /// 
+    /// Example:
+    /// <code>
+    /// graphRAG.AddRelation("Einstein", "DISCOVERED", "Theory of Relativity");
+    /// graphRAG.AddRelation("Theory of Relativity", "PUBLISHED_IN", "1915");
+    /// </code>
+    /// 
+    /// This builds a graph structure that can be traversed during retrieval.
+    /// </para>
+    /// </remarks>
     public void AddRelation(string entity, string relation, string target)
     {
-        if (!_knowledgeGraph.ContainsKey(entity))
+        if (string.IsNullOrWhiteSpace(entity))
+            throw new ArgumentException("Entity cannot be null, empty, or whitespace", nameof(entity));
+        if (string.IsNullOrWhiteSpace(relation))
+            throw new ArgumentException("Relation cannot be null, empty, or whitespace", nameof(relation));
+        if (string.IsNullOrWhiteSpace(target))
+            throw new ArgumentException("Target cannot be null, empty, or whitespace", nameof(target));
+
+        var normalizedEntity = entity.Trim();
+        var normalizedRelation = relation.Trim().ToUpperInvariant();
+        var normalizedTarget = target.Trim();
+
+        if (!_knowledgeGraph.ContainsKey(normalizedEntity))
         {
-            _knowledgeGraph[entity] = new List<(string, string)>();
+            _knowledgeGraph[normalizedEntity] = new List<(string, string)>();
         }
         
-        _knowledgeGraph[entity].Add((relation, target));
+        // Avoid duplicate relations
+        if (!_knowledgeGraph[normalizedEntity].Any(r => r.relation == normalizedRelation && r.target == normalizedTarget))
+        {
+            _knowledgeGraph[normalizedEntity].Add((normalizedRelation, normalizedTarget));
+        }
     }
 
     /// <summary>
@@ -194,8 +222,9 @@ public class GraphRAG<T>
             }
         }
 
-        // Step 3: Use vector retriever for unstructured text
-        var vectorResults = _vectorRetriever.Retrieve(query, topK).ToList();
+        // Step 3: Use vector retriever for unstructured text (retrieve more than topK for better ranking after boost)
+        var retrievalCount = Math.Min(topK * 3, 100); // Retrieve 3x topK to account for boosting, capped at 100
+        var vectorResults = _vectorRetriever.Retrieve(query, retrievalCount).ToList();
 
         // Step 4: Enrich vector results with graph information
         var enrichedResults = new List<Document<T>>();
@@ -204,9 +233,12 @@ public class GraphRAG<T>
         {
             var enrichedContent = doc.Content;
             
-            // Check if document mentions any of our graph entities
+            // Check if document mentions any of our graph entities using word boundary matching
             var mentionedEntities = relatedEntities
-                .Where(entity => doc.Content.ToLower().Contains(entity.ToLower()))
+                .Where(entity => Regex.IsMatch(
+                    doc.Content, 
+                    @"\b" + Regex.Escape(entity) + @"\b", 
+                    RegexOptions.IgnoreCase))
                 .ToList();
 
             if (mentionedEntities.Count > 0)
@@ -262,17 +294,30 @@ public class GraphRAG<T>
         // Use LLM for more sophisticated extraction if needed
         if (entities.Count == 0)
         {
-            var extractionPrompt = $"Extract the main entities (people, places, concepts) from: '{text}'\nList them separated by commas.";
-            var llmResponse = _generator.Generate(extractionPrompt);
-            
-            // Parse comma-separated entities from LLM
-            var llmEntities = llmResponse
-                .Split(new[] { ',', '\n' }, StringSplitOptions.RemoveEmptyEntries)
-                .Select(e => e.Trim())
-                .Where(e => e.Length > 2 && !e.StartsWith("["))
-                .Take(10);
+            try
+            {
+                var extractionPrompt = $"Extract the main entities (people, places, concepts) from: '{text}'\nList them separated by commas.";
+                var llmResponse = _generator.Generate(extractionPrompt);
                 
-            entities.AddRange(llmEntities);
+                if (!string.IsNullOrWhiteSpace(llmResponse))
+                {
+                    // Parse comma-separated or newline-separated entities from LLM
+                    var llmEntities = llmResponse
+                        .Split(new[] { ',', '\n', ';' }, StringSplitOptions.RemoveEmptyEntries)
+                        .Select(e => e.Trim())
+                        .Where(e => e.Length > 2 && e.Length < 100) // Reasonable entity length
+                        .Where(e => !e.StartsWith("[") && !e.StartsWith("-")) // Filter out list markers
+                        .Where(e => !e.All(char.IsDigit)) // Filter out pure numbers
+                        .Take(10); // Limit to 10 entities to avoid noise
+                    
+                    entities.AddRange(llmEntities);
+                }
+            }
+            catch (Exception)
+            {
+                // If LLM fails, fall back to regex-only extraction
+                // This ensures graceful degradation
+            }
         }
 
         return entities.Distinct().ToList();
