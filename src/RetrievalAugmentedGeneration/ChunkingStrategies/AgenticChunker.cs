@@ -242,7 +242,9 @@ public class AgenticChunker : ChunkingStrategyBase
                     {
                         chunks.Add((chunkText, remainingStart, chunkEnd));
                     }
-                    remainingStart = Math.Max(remainingStart, chunkEnd - ChunkOverlap);
+                    // Ensure progress: move forward by at least 1 character if overlap would prevent it
+                    var nextStart = chunkEnd - ChunkOverlap;
+                    remainingStart = nextStart > remainingStart ? nextStart : remainingStart + 1;
                 }
             }
             else

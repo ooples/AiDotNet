@@ -69,13 +69,17 @@ public class HeaderBasedTextSplitter : ChunkingStrategyBase
                     currentChunk.Clear();
                 }
 
-                // Add overlap from previous chunk
+                chunkStart = position;
+                
+                // Add overlap from previous chunk (after setting chunkStart)
                 if (ChunkOverlap > 0 && previousChunkLines.Count > 0)
                 {
                     currentChunk.AddRange(previousChunkLines);
+                    // Adjust start to account for overlapped content
+                    var overlapLength = string.Join(Environment.NewLine, previousChunkLines).Length + Environment.NewLine.Length;
+                    chunkStart = Math.Max(0, position - overlapLength);
                 }
 
-                chunkStart = position;
                 currentChunk.Add(line);
             }
             else
@@ -93,13 +97,16 @@ public class HeaderBasedTextSplitter : ChunkingStrategyBase
                     previousChunkLines = GetOverlapLines(currentChunk);
                     currentChunk.Clear();
                     
-                    // Add overlap from previous chunk
+                    chunkStart = position + lineLength;
+                    
+                    // Add overlap from previous chunk (after setting chunkStart)
                     if (ChunkOverlap > 0 && previousChunkLines.Count > 0)
                     {
                         currentChunk.AddRange(previousChunkLines);
+                        // Adjust start to account for overlapped content
+                        var overlapLength = string.Join(Environment.NewLine, previousChunkLines).Length + Environment.NewLine.Length;
+                        chunkStart = Math.Max(0, (position + lineLength) - overlapLength);
                     }
-                    
-                    chunkStart = position + lineLength;
                 }
             }
 
