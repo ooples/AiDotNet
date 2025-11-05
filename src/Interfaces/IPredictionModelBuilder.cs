@@ -351,4 +351,71 @@ public interface IPredictionModelBuilder<T, TInput, TOutput>
     /// <param name="loraConfiguration">The LoRA configuration implementation to use.</param>
     /// <returns>The builder instance for method chaining.</returns>
     IPredictionModelBuilder<T, TInput, TOutput> ConfigureLoRA(ILoRAConfiguration<T> loraConfiguration);
+
+    /// <summary>
+    /// Configures the retrieval-augmented generation (RAG) pipeline for the model.
+    /// </summary>
+    /// <remarks>
+    /// RAG enhances text generation by retrieving relevant documents from a knowledge base
+    /// and using them as context for generating grounded, factual answers.
+    ///
+    /// <b>For Beginners:</b> RAG is like giving your AI access to a library before answering questions.
+    /// Instead of relying only on what it learned during training, it can:
+    /// 1. Search a document collection for relevant information
+    /// 2. Read the relevant documents
+    /// 3. Generate an answer based on those documents
+    /// 4. Cite its sources
+    ///
+    /// This makes answers more accurate, up-to-date, and traceable to source materials.
+    /// </remarks>
+    /// <param name="retriever">The retriever for finding relevant documents.</param>
+    /// <param name="reranker">The reranker for improving document ranking quality.</param>
+    /// <param name="generator">The generator for producing grounded answers.</param>
+    /// <param name="queryProcessors">Optional query processors for improving search quality.</param>
+    /// <returns>The builder instance for method chaining.</returns>
+    IPredictionModelBuilder<T, TInput, TOutput> ConfigureRag(
+        IRetriever<T> retriever,
+        IReranker<T> reranker,
+        IGenerator<T> generator,
+        IEnumerable<AiDotNet.RetrievalAugmentedGeneration.Interfaces.IQueryProcessor>? queryProcessors = null);
+
+    /// <summary>
+    /// Generates a grounded answer using the configured RAG pipeline.
+    /// </summary>
+    /// <remarks>
+    /// This method uses the RAG pipeline to answer questions with source citations.
+    ///
+    /// <b>For Beginners:</b> Call this to get AI-generated answers backed by your documents.
+    /// The answer will include citations showing which documents were used as sources.
+    /// </remarks>
+    /// <param name="query">The question to answer.</param>
+    /// <param name="topK">Number of documents to retrieve (optional).</param>
+    /// <param name="topKAfterRerank">Number of documents after reranking (optional).</param>
+    /// <param name="metadataFilters">Optional filters for document selection.</param>
+    /// <returns>A grounded answer with source citations.</returns>
+    AiDotNet.RetrievalAugmentedGeneration.Models.GroundedAnswer<T> GenerateAnswer(
+        string query,
+        int? topK = null,
+        int? topKAfterRerank = null,
+        Dictionary<string, object>? metadataFilters = null);
+
+    /// <summary>
+    /// Retrieves relevant documents without generating an answer.
+    /// </summary>
+    /// <remarks>
+    /// This method only performs retrieval and reranking, useful for document search.
+    ///
+    /// <b>For Beginners:</b> Use this when you just want to find relevant documents
+    /// without generating an answer. Good for search or analysis tasks.
+    /// </remarks>
+    /// <param name="query">The search query.</param>
+    /// <param name="topK">Number of documents to retrieve (optional).</param>
+    /// <param name="applyReranking">Whether to rerank results (default: true).</param>
+    /// <param name="metadataFilters">Optional filters for document selection.</param>
+    /// <returns>Retrieved and optionally reranked documents.</returns>
+    IEnumerable<AiDotNet.RetrievalAugmentedGeneration.Models.Document<T>> RetrieveDocuments(
+        string query,
+        int? topK = null,
+        bool applyReranking = true,
+        Dictionary<string, object>? metadataFilters = null);
 }

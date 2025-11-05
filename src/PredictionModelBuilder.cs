@@ -39,6 +39,10 @@ public class PredictionModelBuilder<T, TInput, TOutput> : IPredictionModelBuilde
     private IBiasDetector<T>? _biasDetector;
     private IFairnessEvaluator<T>? _fairnessEvaluator;
     private ILoRAConfiguration<T>? _loraConfiguration;
+    private IRetriever<T>? _ragRetriever;
+    private IReranker<T>? _ragReranker;
+    private IGenerator<T>? _ragGenerator;
+    private IEnumerable<AiDotNet.RetrievalAugmentedGeneration.Interfaces.IQueryProcessor>? _queryProcessors;
 
     /// <summary>
     /// Configures which features (input variables) should be used in the model.
@@ -381,5 +385,146 @@ public class PredictionModelBuilder<T, TInput, TOutput> : IPredictionModelBuilde
     {
         _loraConfiguration = loraConfiguration;
         return this;
+    }
+
+    /// <summary>
+    /// Configures the retrieval-augmented generation (RAG) pipeline for the model.
+    /// </summary>
+    /// <param name="retriever">The retriever for finding relevant documents.</param>
+    /// <param name="reranker">The reranker for improving document ranking quality.</param>
+    /// <param name="generator">The generator for producing grounded answers.</param>
+    /// <param name="queryProcessors">Optional query processors for improving search quality.</param>
+    /// <returns>This builder instance for method chaining.</returns>
+    /// <remarks>
+    /// <b>For Beginners:</b> RAG combines retrieval and generation to create answers backed by real documents.
+    /// Configure it with:
+    /// - A retriever (finds relevant documents from your collection)
+    /// - A reranker (improves the ordering of retrieved documents)
+    /// - A generator (creates answers based on the documents)
+    /// - Optional query processors (improve search queries before retrieval)
+    /// </remarks>
+    public IPredictionModelBuilder<T, TInput, TOutput> ConfigureRag(
+        IRetriever<T> retriever,
+        IReranker<T> reranker,
+        IGenerator<T> generator,
+        IEnumerable<AiDotNet.RetrievalAugmentedGeneration.Interfaces.IQueryProcessor>? queryProcessors = null)
+    {
+        _ragRetriever = retriever ?? throw new ArgumentNullException(nameof(retriever));
+        _ragReranker = reranker ?? throw new ArgumentNullException(nameof(reranker));
+        _ragGenerator = generator ?? throw new ArgumentNullException(nameof(generator));
+        _queryProcessors = queryProcessors ?? Enumerable.Empty<AiDotNet.RetrievalAugmentedGeneration.Interfaces.IQueryProcessor>();
+        return this;
+    }
+
+    /// <summary>
+    /// Generates a grounded answer using the configured RAG pipeline.
+    /// </summary>
+    /// <param name="query">The question to answer.</param>
+    /// <param name="topK">Number of documents to retrieve (optional).</param>
+    /// <param name="topKAfterRerank">Number of documents after reranking (optional).</param>
+    /// <param name="metadataFilters">Optional filters for document selection.</param>
+    /// <returns>A grounded answer with source citations.</returns>
+    /// <remarks>
+    /// <b>For Beginners:</b> Use this to get AI-generated answers backed by your documents.
+    /// The system will search your document collection, find the most relevant sources,
+    /// and generate an answer with citations.
+    /// </remarks>
+    public AiDotNet.RetrievalAugmentedGeneration.Models.GroundedAnswer<T> GenerateAnswer(
+        string query,
+        int? topK = null,
+        int? topKAfterRerank = null,
+        Dictionary<string, object>? metadataFilters = null)
+    {
+        if (_ragRetriever == null || _ragReranker == null || _ragGenerator == null)
+        {
+            throw new InvalidOperationException("RAG pipeline not configured. Call ConfigureRag first.");
+        }
+
+        if (string.IsNullOrWhiteSpace(query))
+            throw new ArgumentException("Query cannot be null or empty", nameof(query));
+
+        var processedQuery = query;
+        if (_queryProcessors != null)
+        {
+            foreach (var processor in _queryProcessors)
+            {
+                processedQuery = processor.ProcessQuery(processedQuery);
+            }
+        }
+
+        var filters = metadataFilters ?? new Dictionary<string, object>();
+        var effectiveTopK = topK ?? _ragRetriever.DefaultTopK;
+        var retrievedDocs = _ragRetriever.Retrieve(processedQuery, effectiveTopK, filters);
+
+        var retrievedList = retrievedDocs.ToList();
+
+        if (retrievedList.Count == 0)
+        {
+            return new AiDotNet.RetrievalAugmentedGeneration.Models.GroundedAnswer<T>
+            {
+                Query = query,
+                Answer = "I couldn't find any relevant information to answer this question.",
+                SourceDocuments = new List<AiDotNet.RetrievalAugmentedGeneration.Models.Document<T>>(),
+                Citations = new List<string>(),
+                ConfidenceScore = 0.0
+            };
+        }
+
+        var rerankedDocs = _ragReranker.Rerank(processedQuery, retrievedList);
+        
+        if (topKAfterRerank.HasValue)
+        {
+            rerankedDocs = rerankedDocs.Take(topKAfterRerank.Value);
+        }
+
+        var contextDocs = rerankedDocs.ToList();
+        return _ragGenerator.GenerateGrounded(processedQuery, contextDocs);
+    }
+
+    /// <summary>
+    /// Retrieves relevant documents without generating an answer.
+    /// </summary>
+    /// <param name="query">The search query.</param>
+    /// <param name="topK">Number of documents to retrieve (optional).</param>
+    /// <param name="applyReranking">Whether to rerank results (default: true).</param>
+    /// <param name="metadataFilters">Optional filters for document selection.</param>
+    /// <returns>Retrieved and optionally reranked documents.</returns>
+    /// <remarks>
+    /// <b>For Beginners:</b> Use this to search your document collection without generating an answer.
+    /// Good for exploring what documents are available or debugging retrieval quality.
+    /// </remarks>
+    public IEnumerable<AiDotNet.RetrievalAugmentedGeneration.Models.Document<T>> RetrieveDocuments(
+        string query,
+        int? topK = null,
+        bool applyReranking = true,
+        Dictionary<string, object>? metadataFilters = null)
+    {
+        if (_ragRetriever == null || _ragReranker == null)
+        {
+            throw new InvalidOperationException("RAG pipeline not configured. Call ConfigureRag first.");
+        }
+
+        if (string.IsNullOrWhiteSpace(query))
+            throw new ArgumentException("Query cannot be null or empty", nameof(query));
+
+        var processedQuery = query;
+        if (_queryProcessors != null)
+        {
+            foreach (var processor in _queryProcessors)
+            {
+                processedQuery = processor.ProcessQuery(processedQuery);
+            }
+        }
+
+        var filters = metadataFilters ?? new Dictionary<string, object>();
+        var effectiveTopK = topK ?? _ragRetriever.DefaultTopK;
+        var docs = _ragRetriever.Retrieve(processedQuery, effectiveTopK, filters);
+
+        if (applyReranking)
+        {
+            docs = _ragReranker.Rerank(processedQuery, docs);
+        }
+
+        return docs.ToList();
     }
 }
