@@ -113,37 +113,6 @@ public class AutoCompressor<T> : ContextCompressorBase<T>
 
     private List<string> SplitIntoSentences(string text)
     {
-        if (string.IsNullOrWhiteSpace(text))
-            return new List<string>();
-
-        var sentences = new List<string>();
-        var sentenceEnders = new[] { '.', '!', '?' };
-        var currentSentence = new StringBuilder();
-
-        foreach (var c in text)
-        {
-            currentSentence.Append(c);
-            
-            if (sentenceEnders.Contains(c))
-            {
-                var sentence = currentSentence.ToString().Trim();
-                if (!string.IsNullOrWhiteSpace(sentence) && sentence.Length > 10)
-                {
-                    sentences.Add(sentence);
-                }
-                currentSentence.Clear();
-            }
-        }
-
-        if (currentSentence.Length > 0)
-        {
-            var sentence = currentSentence.ToString().Trim();
-            if (!string.IsNullOrWhiteSpace(sentence) && sentence.Length > 10)
-            {
-                sentences.Add(sentence);
-            }
-        }
-
-        return sentences;
+        return Helpers.TextProcessingHelper.SplitIntoSentences(text);
     }
 }

@@ -81,12 +81,7 @@ public class SelectiveContextCompressor<T> : ContextCompressorBase<T> where T : 
 
     private List<string> SplitIntoSentences(string text)
     {
-        // Simple sentence splitting - in production would use NLP library
-        return text
-            .Split(new[] { ". ", "! ", "? " }, StringSplitOptions.RemoveEmptyEntries)
-            .Select(s => s.Trim())
-            .Where(s => !string.IsNullOrWhiteSpace(s))
-            .ToList();
+        return Helpers.TextProcessingHelper.SplitIntoSentences(text);
     }
 
     private T CalculateRelevance(string query, string sentence)

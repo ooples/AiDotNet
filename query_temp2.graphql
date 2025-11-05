@@ -1,0 +1,16 @@
+{
+  repository(owner: "ooples", name: "AiDotNet") {
+    pullRequest(number: 304) {
+      reviewThreads(first: 100, after: "Y3Vyc29yOnYyOpK0MjAyNS0xMS0wNFQwMDozNDowMVrOYGYN-Q==") {
+        pageInfo { hasNextPage endCursor }
+        nodes {
+          id
+          isResolved
+          comments(first: 1) {
+            nodes { id body path line createdAt }
+          }
+        }
+      }
+    }
+  }
+}

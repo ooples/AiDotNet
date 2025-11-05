@@ -170,49 +170,6 @@ public class SentenceChunkingStrategy : ChunkingStrategyBase
     /// <returns>A list of sentences.</returns>
     private List<string> SplitIntoSentences(string text)
     {
-        var sentences = new List<string>();
-        var currentSentence = new System.Text.StringBuilder();
-
-        for (int i = 0; i < text.Length; i++)
-        {
-            currentSentence.Append(text[i]);
-
-            // Check if this is a sentence ender
-            if (Array.IndexOf(SentenceEnders, text[i]) >= 0)
-            {
-                // Look ahead to see if there's whitespace (actual sentence end)
-                if (i + 1 < text.Length && char.IsWhiteSpace(text[i + 1]))
-                {
-                    var sentence = currentSentence.ToString().Trim();
-                    if (!string.IsNullOrWhiteSpace(sentence))
-                    {
-                        sentences.Add(sentence);
-                    }
-                    currentSentence.Clear();
-                }
-                // Also check for end of text
-                else if (i + 1 == text.Length)
-                {
-                    var sentence = currentSentence.ToString().Trim();
-                    if (!string.IsNullOrWhiteSpace(sentence))
-                    {
-                        sentences.Add(sentence);
-                    }
-                    currentSentence.Clear();
-                }
-            }
-        }
-
-        // Add any remaining text as a final sentence
-        if (currentSentence.Length > 0)
-        {
-            var sentence = currentSentence.ToString().Trim();
-            if (!string.IsNullOrWhiteSpace(sentence))
-            {
-                sentences.Add(sentence);
-            }
-        }
-
-        return sentences;
+        return Helpers.TextProcessingHelper.SplitIntoSentences(text);
     }
 }

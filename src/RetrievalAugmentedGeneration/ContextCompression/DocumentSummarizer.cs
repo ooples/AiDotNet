@@ -175,37 +175,12 @@ namespace AiDotNet.RetrievalAugmentedGeneration.ContextCompression
 
         private List<string> SplitIntoSentences(string text)
         {
-            var sentences = new List<string>();
-            var sentenceEndings = new[] { ". ", "! ", "? ", ".\n", "!\n", "?\n" };
-            var currentSentence = new System.Text.StringBuilder();
-
-            for (int i = 0; i < text.Length; i++)
-            {
-                currentSentence.Append(text[i]);
-
-                var matchedEnding = sentenceEndings.FirstOrDefault(ending => currentSentence.ToString().EndsWith(ending));
-                if (matchedEnding != null)
-                {
-                    sentences.Add(currentSentence.ToString().Trim());
-                    currentSentence.Clear();
-                }
-            }
-
-            if (currentSentence.Length > 0 && !string.IsNullOrWhiteSpace(currentSentence.ToString()))
-            {
-                sentences.Add(currentSentence.ToString().Trim());
-            }
-
-            return sentences;
+            return Helpers.TextProcessingHelper.SplitIntoSentences(text);
         }
 
         private List<string> Tokenize(string text)
         {
-            if (string.IsNullOrEmpty(text)) return new List<string>();
-
-            return text.ToLowerInvariant()
-                .Split(new[] { ' ', '\t', '\n', '\r', '.', ',', '!', '?' }, StringSplitOptions.RemoveEmptyEntries)
-                .ToList();
+            return Helpers.TextProcessingHelper.Tokenize(text);
         }
     }
 }

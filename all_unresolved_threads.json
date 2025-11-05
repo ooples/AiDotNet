@@ -140,6 +140,266 @@
     }
   },
   {
+    "id": "PRRT_kwDOKSXUF85gsJyK",
+    "isResolved": false,
+    "isOutdated": false,
+    "comments": {
+      "nodes": [
+        {
+          "id": "PRRC_kwDOKSXUF86UuPgi",
+          "body": "_ΓÜá∩╕Å Potential issue_ | _≡ƒƒí Minor_\n\n**Fix import ordering per pipeline failure.**\n\nThe pipeline reports a formatting issue with import ordering at line 1.\n\n\nEnsure using directives follow the project's style guidelines (typically: System namespaces first, then third-party, then project namespaces, all alphabetically sorted).\n\n<details>\n<summary>≡ƒº░ Tools</summary>\n\n<details>\n<summary>≡ƒ¬¢ GitHub Actions: Build</summary>\n\n[error] 1-1: Import/order formatting issue at line 1.\n\n</details>\n\n</details>\n\n<details>\n<summary>≡ƒñû Prompt for AI Agents</summary>\n\n```\nIn src/RetrievalAugmentedGeneration/DocumentStores/ChromaDBDocumentStore.cs\naround lines 1 to 11, the using directives are out of the project's expected\norder; reorder them so System namespaces come first (alphabetically), then\nthirdΓÇæparty namespaces (e.g., Newtonsoft.Json.Linq), then project namespaces\n(AiDotNet.*) alphabetically, and remove any extra blank lines so the block is\nconsistently sorted and formatted per the pipeline style rules.\n```\n\n</details>\n\n<!-- This is an auto-generated comment by CodeRabbit -->",
+          "path": "src/RetrievalAugmentedGeneration/DocumentStores/ChromaDBDocumentStore.cs",
+          "position": 11,
+          "originalPosition": 11,
+          "createdAt": "2025-11-05T15:51:44Z",
+          "author": {
+            "login": "coderabbitai"
+          }
+        }
+      ]
+    }
+  },
+  {
+    "id": "PRRT_kwDOKSXUF85gsJyO",
+    "isResolved": false,
+    "isOutdated": false,
+    "comments": {
+      "nodes": [
+        {
+          "id": "PRRC_kwDOKSXUF86UuPgo",
+          "body": "_ΓÜá∩╕Å Potential issue_ | _≡ƒƒá Major_\n\n**Address HttpClient lifetime and synchronous blocking issues.**\n\nMultiple issues with HTTP client management and async handling:\n\n1. **HttpClient socket exhaustion** (lines 40-42): Creating `HttpClient` instances per store can exhaust sockets. Use `IHttpClientFactory` (preferred) or a static `HttpClient`.\n2. **Synchronous blocking** (line 60): `.Wait()` on async operations can cause deadlocks in ASP.NET or UI contexts. Make constructor accept a factory/client or initialize async.\n3. **No disposal** (line 24): `HttpClient` is never disposed. Implement `IDisposable` or use `IHttpClientFactory`.\n4. **No error handling** (lines 52-61): If collection creation fails or already exists, no exception is caught or logged.\n\n\nConsider this pattern:\n\n```diff\n-    private readonly HttpClient _httpClient;\n+    private readonly IHttpClientFactory _httpClientFactory;\n+    private HttpClient HttpClient => _httpClientFactory.CreateClient();\n\n-    public ChromaDBDocumentStore(string endpoint, string collectionName, string apiKey)\n+    public ChromaDBDocumentStore(\n+        string endpoint, \n+        string collectionName, \n+        string apiKey,\n+        IHttpClientFactory httpClientFactory)\n     {\n         // ... validation ...\n-        _httpClient = new HttpClient { BaseAddress = new Uri(endpoint) };\n-        if (!string.IsNullOrWhiteSpace(apiKey))\n-            _httpClient.DefaultRequestHeaders.Add(\"X-Chroma-Token\", apiKey);\n+        _httpClientFactory = httpClientFactory ?? throw new ArgumentNullException(nameof(httpClientFactory));\n+        _endpoint = endpoint;\n+        _apiKey = apiKey;\n         \n-        EnsureCollection();\n+        // Note: Initialize collection asynchronously via separate InitializeAsync method\n+        // or accept an already-initialized client\n     }\n```\n\nAlternatively, if `IHttpClientFactory` is not available, use a static `HttpClient` and configure per-request headers.\n\n\n> Committable suggestion skipped: line range outside the PR's diff.\n\n<!-- This is an auto-generated comment by CodeRabbit -->",
+          "path": "src/RetrievalAugmentedGeneration/DocumentStores/ChromaDBDocumentStore.cs",
+          "position": 61,
+          "originalPosition": 61,
+          "createdAt": "2025-11-05T15:51:44Z",
+          "author": {
+            "login": "coderabbitai"
+          }
+        }
+      ]
+    }
+  },
+  {
+    "id": "PRRT_kwDOKSXUF85gsJyT",
+    "isResolved": false,
+    "isOutdated": false,
+    "comments": {
+      "nodes": [
+        {
+          "id": "PRRC_kwDOKSXUF86UuPgu",
+          "body": "_ΓÜá∩╕Å Potential issue_ | _≡ƒƒá Major_\n\n**Dispose HttpResponseMessage to prevent resource leaks.**\n\nThroughout the class (lines 60, 85, 112, 132, 205, 282), `HttpResponseMessage` instances returned by `PostAsync`/`DeleteAsync` are never disposed. This can exhaust connections in the HTTP connection pool.\n\n\nApply a `using` pattern for all responses:\n\n```diff\n-        var response = _httpClient.PostAsync($\"/api/v1/collections/{_collectionName}/add\", content).Result;\n-        if (response.IsSuccessStatusCode)\n-            _documentCount++;\n+        using var response = _httpClient.PostAsync($\"/api/v1/collections/{_collectionName}/add\", content).Result;\n+        response.EnsureSuccessStatusCode();\n+        _documentCount++;\n```\n\nApply this pattern to all HTTP calls in the class. Alternatively, if using async/await, wrap in `using`:\n\n```csharp\nusing var response = await _httpClient.PostAsync(...);\n```\n\n<details>\n<summary>≡ƒñû Prompt for AI Agents</summary>\n\n```\nIn src/RetrievalAugmentedGeneration/DocumentStores/ChromaDBDocumentStore.cs\naround lines 52ΓÇô286, every call that calls _httpClient.PostAsync(...) or\nDeleteAsync(...) currently uses .Wait()/.Result and never disposes the returned\nHttpResponseMessage, leaking connections; update each HTTP call to use a using\npattern to dispose the response (e.g., use using var response = await\n_httpClient.PostAsync(...); or if you must stay synchronous use using var\nresponse = _httpClient.PostAsync(...).GetAwaiter().GetResult();), remove the\nseparate .Wait()/.Result usages, and ensure success checks remain inside the\nusing scope so the response is properly disposed in all code paths.\n```\n\n</details>\n\n<!-- This is an auto-generated comment by CodeRabbit -->",
+          "path": "src/RetrievalAugmentedGeneration/DocumentStores/ChromaDBDocumentStore.cs",
+          "position": 286,
+          "originalPosition": 286,
+          "createdAt": "2025-11-05T15:51:44Z",
+          "author": {
+            "login": "coderabbitai"
+          }
+        }
+      ]
+    }
+  },
+  {
+    "id": "PRRT_kwDOKSXUF85gsJyW",
+    "isResolved": false,
+    "isOutdated": false,
+    "comments": {
+      "nodes": [
+        {
+          "id": "PRRC_kwDOKSXUF86UuPgx",
+          "body": "_ΓÜá∩╕Å Potential issue_ | _≡ƒƒá Major_\n\n**Validate embedding dimension and avoid synchronous blocking.**\n\nTwo issues:\n\n1. **Missing dimension validation** (lines 65-66): After the first document sets `_vectorDimension`, subsequent adds don't validate that `vectorDocument.Embedding.Length == _vectorDimension`. This allows mixed dimensions to slip through.\n2. **Synchronous blocking** (line 85): `.Result` can deadlock in sync contexts.\n\n\nApply this diff:\n\n```diff\n     protected override void AddCore(VectorDocument<T> vectorDocument)\n     {\n         if (_vectorDimension == 0)\n             _vectorDimension = vectorDocument.Embedding.Length;\n+        else if (vectorDocument.Embedding.Length != _vectorDimension)\n+            throw new ArgumentException(\n+                $\"Vector dimension mismatch. Expected {_vectorDimension}, got {vectorDocument.Embedding.Length}\",\n+                nameof(vectorDocument));\n\n         _cache[vectorDocument.Document.Id] = vectorDocument;\n         // ... rest of method\n```\n\nFor the async issue, consider converting all core methods to async variants if the base class supports it, or document that this implementation is blocking and unsuitable for high-concurrency scenarios.\n\n<!-- This is an auto-generated comment by CodeRabbit -->",
+          "path": "src/RetrievalAugmentedGeneration/DocumentStores/ChromaDBDocumentStore.cs",
+          "position": 88,
+          "originalPosition": 88,
+          "createdAt": "2025-11-05T15:51:44Z",
+          "author": {
+            "login": "coderabbitai"
+          }
+        }
+      ]
+    }
+  },
+  {
+    "id": "PRRT_kwDOKSXUF85gsJyZ",
+    "isResolved": false,
+    "isOutdated": false,
+    "comments": {
+      "nodes": [
+        {
+          "id": "PRRC_kwDOKSXUF86UuPg2",
+          "body": "_ΓÜá∩╕Å Potential issue_ | _≡ƒƒá Major_\n\n**Fix cache inconsistency on removal failure.**\n\nLine 197 removes the document from the cache before the ChromaDB API call. If the API request fails or returns an error, the cache is inconsistentΓÇödocument is gone from cache but still exists in ChromaDB.\n\n\nApply this diff:\n\n```diff\n     protected override bool RemoveCore(string documentId)\n     {\n-        _cache.Remove(documentId);\n\n         var payload = new { ids = new[] { documentId } };\n         // ... serialize and post ...\n\n         var response = _httpClient.PostAsync($\"/api/v1/collections/{_collectionName}/delete\", content).Result;\n         if (response.IsSuccessStatusCode && _documentCount > 0)\n         {\n+            _cache.Remove(documentId);\n             _documentCount--;\n             return true;\n         }\n         return false;\n     }\n```\n\nThis ensures cache is only updated after a successful ChromaDB deletion.\n\n<details>\n<summary>≡ƒñû Prompt for AI Agents</summary>\n\n```\nIn src/RetrievalAugmentedGeneration/DocumentStores/ChromaDBDocumentStore.cs\naround lines 195 to 212, the code removes the document from _cache before\ncalling the ChromaDB delete API which causes cache inconsistency if the API call\nfails; move the _cache.Remove(documentId) (and the _documentCount-- decrement)\nso they execute only after verifying response.IsSuccessStatusCode, i.e. call the\nAPI first, check success, then remove from cache and decrement _documentCount\nand return true; if the API fails return false and leave the cache untouched.\n```\n\n</details>\n\n<!-- This is an auto-generated comment by CodeRabbit -->",
+          "path": "src/RetrievalAugmentedGeneration/DocumentStores/ChromaDBDocumentStore.cs",
+          "position": 212,
+          "originalPosition": 212,
+          "createdAt": "2025-11-05T15:51:44Z",
+          "author": {
+            "login": "coderabbitai"
+          }
+        }
+      ]
+    }
+  },
+  {
+    "id": "PRRT_kwDOKSXUF85gsJyd",
+    "isResolved": false,
+    "isOutdated": false,
+    "comments": {
+      "nodes": [
+        {
+          "id": "PRRC_kwDOKSXUF86UuPg8",
+          "body": "_ΓÜá∩╕Å Potential issue_ | _≡ƒƒá Major_\n\n**Add error handling and avoid synchronous blocking.**\n\nTwo issues:\n\n1. **No error handling** (line 282): If `DeleteAsync` fails (collection doesn't exist, network error), the exception propagates but counters are already reset, leaving the store in an inconsistent state.\n2. **Synchronous blocking** (lines 282, 285): `.Wait()` can cause deadlocks.\n\n\nApply this diff to handle errors gracefully:\n\n```diff\n     public override void Clear()\n     {\n-        _cache.Clear();\n-        _httpClient.DeleteAsync($\"/api/v1/collections/{_collectionName}\").Wait();\n-        _documentCount = 0;\n-        _vectorDimension = 0;\n-        EnsureCollection();\n+        try\n+        {\n+            _httpClient.DeleteAsync($\"/api/v1/collections/{_collectionName}\").Wait();\n+        }\n+        catch (Exception ex)\n+        {\n+            // Log error or handle collection not existing\n+            // Optionally: ignore 404 if collection already deleted\n+        }\n+        \n+        _cache.Clear();\n+        _documentCount = 0;\n+        _vectorDimension = 0;\n+        EnsureCollection();\n     }\n```\n\nConsider making this async or document that blocking behavior is expected.\n\n<details>\n<summary>≡ƒñû Prompt for AI Agents</summary>\n\n```\nIn src/RetrievalAugmentedGeneration/DocumentStores/ChromaDBDocumentStore.cs\naround lines 279-286, the Clear method synchronously blocks on\n_httpClient.DeleteAsync and resets internal counters before the delete\ncompletes; change Clear to an async method (e.g., Task ClearAsync), await\n_httpClient.DeleteAsync(...).ConfigureAwait(false), and wrap the HTTP call in a\ntry/catch to handle HttpRequestException/TaskCanceledException/Exception: on\nsuccess reset _documentCount and _vectorDimension and call EnsureCollection, on\nfailure log the error and avoid leaving counters in an inconsistent state\n(either keep previous values or set a safe fallback), and rethrow or surface the\nerror as appropriate; if you cannot change the API to async, at minimum use\nGetAwaiter().GetResult() and catch exceptions rather than using .Wait(), and\ndocument the blocking behavior.\n```\n\n</details>\n\n<!-- This is an auto-generated comment by CodeRabbit -->",
+          "path": "src/RetrievalAugmentedGeneration/DocumentStores/ChromaDBDocumentStore.cs",
+          "position": 286,
+          "originalPosition": 286,
+          "createdAt": "2025-11-05T15:51:44Z",
+          "author": {
+            "login": "coderabbitai"
+          }
+        }
+      ]
+    }
+  },
+  {
+    "id": "PRRT_kwDOKSXUF85gsJyj",
+    "isResolved": false,
+    "isOutdated": false,
+    "comments": {
+      "nodes": [
+        {
+          "id": "PRRC_kwDOKSXUF86UuPhF",
+          "body": "_ΓÜá∩╕Å Potential issue_ | _≡ƒƒí Minor_\n\n**Fix the import formatting issue.**\n\nThe pipeline reports an import/order formatting issue. Please run the project's code formatter to resolve this.\n\n<details>\n<summary>≡ƒº░ Tools</summary>\n\n<details>\n<summary>≡ƒ¬¢ GitHub Actions: Build</summary>\n\n[error] 1-1: Import/order formatting issue at line 1.\n\n</details>\n\n</details>\n\n<details>\n<summary>≡ƒñû Prompt for AI Agents</summary>\n\n```\nIn src/RetrievalAugmentedGeneration/DocumentStores/ElasticsearchDocumentStore.cs\naround lines 1 to 11, the using/import statements are not formatted in the\nproject's expected order; run the repository's C# formatter (e.g., dotnet format\nor your configured IDE formatter) to sort and normalize the using directives\n(remove duplicates, sort alphabetically/group system first, then thirdΓÇæparty,\nthen project namespaces) and fix spacing so the import/order linter passes.\n```\n\n</details>\n\n<!-- This is an auto-generated comment by CodeRabbit -->",
+          "path": "src/RetrievalAugmentedGeneration/DocumentStores/ElasticsearchDocumentStore.cs",
+          "position": 11,
+          "originalPosition": 11,
+          "createdAt": "2025-11-05T15:51:44Z",
+          "author": {
+            "login": "coderabbitai"
+          }
+        }
+      ]
+    }
+  },
+  {
+    "id": "PRRT_kwDOKSXUF85gsJyp",
+    "isResolved": false,
+    "isOutdated": false,
+    "comments": {
+      "nodes": [
+        {
+          "id": "PRRC_kwDOKSXUF86UuPhO",
+          "body": "_ΓÜá∩╕Å Potential issue_ | _≡ƒƒá Major_\n\n**Validate that authentication credentials are provided.**\n\nThe constructor accepts both `apiKey` and `username`/`password` but doesn't ensure at least one authentication method is supplied. If all auth parameters are null or empty, the HTTP client will make unauthenticated requests that will likely fail.\n\n\n\nApply this diff to validate authentication:\n\n```diff\n     if (vectorDimension <= 0)\n         throw new ArgumentOutOfRangeException(nameof(vectorDimension), \"Vector dimension must be positive\");\n+    \n+    if (string.IsNullOrWhiteSpace(apiKey) && \n+        (string.IsNullOrWhiteSpace(username) || string.IsNullOrWhiteSpace(password)))\n+        throw new ArgumentException(\"Either apiKey or both username and password must be provided for authentication\");\n\n     _httpClient = new HttpClient { BaseAddress = new Uri(endpoint) };\n```\n\n<!-- suggestion_start -->\n\n<details>\n<summary>≡ƒô¥ Committable suggestion</summary>\n\n> ΓÇ╝∩╕Å **IMPORTANT**\n> Carefully review the code before committing. Ensure that it accurately replaces the highlighted code, contains no missing lines, and has no issues with indentation. Thoroughly test & benchmark the code to ensure it meets the requirements.\n\n```suggestion\n    public ElasticsearchDocumentStore(string endpoint, string indexName, string apiKey, string username, string password, int vectorDimension = 1536)\n    {\n        if (string.IsNullOrWhiteSpace(endpoint))\n            throw new ArgumentException(\"Endpoint cannot be empty\", nameof(endpoint));\n        if (string.IsNullOrWhiteSpace(indexName))\n            throw new ArgumentException(\"Index name cannot be empty\", nameof(indexName));\n        if (vectorDimension <= 0)\n            throw new ArgumentOutOfRangeException(nameof(vectorDimension), \"Vector dimension must be positive\");\n        \n        if (string.IsNullOrWhiteSpace(apiKey) && \n            (string.IsNullOrWhiteSpace(username) || string.IsNullOrWhiteSpace(password)))\n            throw new ArgumentException(\"Either apiKey or both username and password must be provided for authentication\");\n\n        _httpClient = new HttpClient { BaseAddress = new Uri(endpoint) };\n        \n        if (!string.IsNullOrWhiteSpace(apiKey))\n            _httpClient.DefaultRequestHeaders.Add(\"Authorization\", $\"ApiKey {apiKey}\");\n        else if (!string.IsNullOrWhiteSpace(username) && !string.IsNullOrWhiteSpace(password))\n        {\n            var auth = Convert.ToBase64String(Encoding.UTF8.GetBytes($\"{username}:{password}\"));\n            _httpClient.DefaultRequestHeaders.Add(\"Authorization\", $\"Basic {auth}\");\n        }\n\n        _indexName = indexName.ToLowerInvariant();\n        _vectorDimension = vectorDimension;\n        _documentCount = 0;\n        _cache = new Dictionary<string, VectorDocument<T>>();\n\n        EnsureIndex();\n    }\n```\n\n</details>\n\n<!-- suggestion_end -->\n\n<details>\n<summary>≡ƒñû Prompt for AI Agents</summary>\n\n```\nIn src/RetrievalAugmentedGeneration/DocumentStores/ElasticsearchDocumentStore.cs\naround lines 34 to 59, the constructor currently allows creating an\nunauthenticated HttpClient if both apiKey and username/password are missing; add\na precondition that at least one authentication method is supplied and throw an\nArgumentException (or similar) if neither apiKey nor both username and password\nare provided. Implement the check before creating the HttpClient (or before\nsetting Authorization headers), validating string.IsNullOrWhiteSpace(apiKey) AND\n(string.IsNullOrWhiteSpace(username) OR string.IsNullOrWhiteSpace(password)) and\nthrow with a clear message like \"Authentication required: provide apiKey or\nusername and password\".\n```\n\n</details>\n\n<!-- This is an auto-generated comment by CodeRabbit -->",
+          "path": "src/RetrievalAugmentedGeneration/DocumentStores/ElasticsearchDocumentStore.cs",
+          "position": 59,
+          "originalPosition": 59,
+          "createdAt": "2025-11-05T15:51:45Z",
+          "author": {
+            "login": "coderabbitai"
+          }
+        }
+      ]
+    }
+  },
+  {
+    "id": "PRRT_kwDOKSXUF85gsJys",
+    "isResolved": false,
+    "isOutdated": false,
+    "comments": {
+      "nodes": [
+        {
+          "id": "PRRC_kwDOKSXUF86UuPhU",
+          "body": "_ΓÜá∩╕Å Potential issue_ | _≡ƒƒá Major_\n\n**Add error handling and consider async alternatives.**\n\nThe method uses `.Result` to block on async HTTP operations, which can cause deadlocks in UI or ASP.NET contexts and is generally considered an anti-pattern. Additionally, there's no error handling if HTTP requests fail (network issues, auth failures, Elasticsearch errors).\n\n\n\nConsider these improvements:\n\n1. Add try-catch blocks around HTTP calls to handle failures gracefully\n2. Check response status codes and throw meaningful exceptions\n3. If keeping synchronous API, document the blocking behavior\n4. Consider providing an async variant (`EnsureIndexAsync()`) for better performance\n\nExample error handling:\n\n```csharp\nprivate void EnsureIndex()\n{\n    try\n    {\n        var checkResponse = _httpClient.GetAsync($\"/{_indexName}\").Result;\n        if (checkResponse.IsSuccessStatusCode) \n        {\n            UpdateDocumentCount();\n            return;\n        }\n        \n        if (!checkResponse.StatusCode == System.Net.HttpStatusCode.NotFound)\n        {\n            throw new InvalidOperationException(\n                $\"Failed to check index existence: {checkResponse.StatusCode}\");\n        }\n\n        // Create index...\n        var createResponse = _httpClient.PutAsync($\"/{_indexName}\", content).Result;\n        if (!createResponse.IsSuccessStatusCode)\n        {\n            var errorContent = createResponse.Content.ReadAsStringAsync().Result;\n            throw new InvalidOperationException(\n                $\"Failed to create index: {createResponse.StatusCode}, {errorContent}\");\n        }\n    }\n    catch (Exception ex) when (!(ex is InvalidOperationException))\n    {\n        throw new InvalidOperationException(\n            $\"Error ensuring Elasticsearch index '{_indexName}': {ex.Message}\", ex);\n    }\n}\n```\n\n<details>\n<summary>≡ƒñû Prompt for AI Agents</summary>\n\n```\nsrc/RetrievalAugmentedGeneration/DocumentStores/ElasticsearchDocumentStore.cs\nlines 61-90: the method blocks on async HTTP calls using .Result and lacks error\nhandling; replace blocking calls with proper async alternatives by implementing\nEnsureIndexAsync() that awaits GetAsync/PutAsync, add try-catch around the HTTP\ncalls to catch and rethrow meaningful InvalidOperationException (including\nresponse.StatusCode and response.Content when non-success), validate NotFound vs\nother statuses before attempting index creation, and if you must keep a\nsynchronous wrapper either document the blocking behavior or call the async\nmethod via Task.Run(...).GetAwaiter().GetResult() with explicit comment to\nreduce deadlock risk.\n```\n\n</details>\n\n<!-- This is an auto-generated comment by CodeRabbit -->",
+          "path": "src/RetrievalAugmentedGeneration/DocumentStores/ElasticsearchDocumentStore.cs",
+          "position": 90,
+          "originalPosition": 90,
+          "createdAt": "2025-11-05T15:51:45Z",
+          "author": {
+            "login": "coderabbitai"
+          }
+        }
+      ]
+    }
+  },
+  {
+    "id": "PRRT_kwDOKSXUF85gsJyz",
+    "isResolved": false,
+    "isOutdated": false,
+    "comments": {
+      "nodes": [
+        {
+          "id": "PRRC_kwDOKSXUF86UuPha",
+          "body": "_ΓÜá∩╕Å Potential issue_ | _≡ƒö┤ Critical_\n\n**Fix cache inconsistency and Clear() interaction bug.**\n\nTwo critical issues:\n\n1. **Clear() breaks subsequent adds**: The `Clear()` method sets `_vectorDimension = 0`, which causes this validation check to reject all documents after a clear operation. Since no document can have embedding length 0, the store becomes unusable after calling `Clear()`.\n\n2. **Cache/Elasticsearch inconsistency**: The document is added to `_cache` (line 108) before the HTTP call. If the PUT request fails, the document remains in the cache but isn't in Elasticsearch, causing `GetByIdCore` to return documents that aren't actually stored.\n\n\n\nApply this diff to fix both issues:\n\n```diff\n protected override void AddCore(VectorDocument<T> vectorDocument)\n {\n+    // Allow _vectorDimension to be set from first document if cleared\n+    if (_vectorDimension == 0)\n+        _vectorDimension = vectorDocument.Embedding.Length;\n+    \n     if (vectorDocument.Embedding.Length != _vectorDimension)\n         throw new ArgumentException($\"Document embedding dimension ({vectorDocument.Embedding.Length}) does not match the store's configured dimension ({_vectorDimension}).\");\n\n-    _cache[vectorDocument.Document.Id] = vectorDocument;\n-\n     var embedding = vectorDocument.Embedding.ToArray().Select(v => Convert.ToDouble(v)).ToArray();\n     \n     var doc = new\n     {\n         id = vectorDocument.Document.Id,\n         content = vectorDocument.Document.Content,\n         embedding,\n         metadata = vectorDocument.Document.Metadata\n     };\n\n     var content = new StringContent(\n         Newtonsoft.Json.JsonConvert.SerializeObject(doc),\n         Encoding.UTF8,\n         \"application/json\");\n\n     var response = _httpClient.PutAsync($\"/{_indexName}/_doc/{vectorDocument.Document.Id}\", content).Result;\n     if (response.IsSuccessStatusCode)\n+    {\n+        _cache[vectorDocument.Document.Id] = vectorDocument;\n         _documentCount++;\n+    }\n+    else\n+    {\n+        var errorContent = response.Content.ReadAsStringAsync().Result;\n+        throw new InvalidOperationException(\n+            $\"Failed to add document '{vectorDocument.Document.Id}': {response.StatusCode}, {errorContent}\");\n+    }\n }\n```\n\n<details>\n<summary>≡ƒñû Prompt for AI Agents</summary>\n\n```\nIn src/RetrievalAugmentedGeneration/DocumentStores/ElasticsearchDocumentStore.cs\naround lines 103 to 128, the code currently rejects all adds after Clear()\nbecause Clear() sets _vectorDimension = 0 and the validation unconditionally\ncompares embedding length to _vectorDimension, and it also writes to _cache\nbefore the HTTP PUT so failed requests leave stale cache entries. Change the\nvalidation to only enforce the dimension check when _vectorDimension is nonΓÇæzero\n(e.g., if (_vectorDimension != 0 && vectorDocument.Embedding.Length !=\n_vectorDimension) throw ...), and move the _cache update and _documentCount\nincrement to occur only after a successful HTTP response (i.e., perform the PUT,\ncheck response.IsSuccessStatusCode, then update _cache and _documentCount).\n```\n\n</details>\n\n<!-- This is an auto-generated comment by CodeRabbit -->",
+          "path": "src/RetrievalAugmentedGeneration/DocumentStores/ElasticsearchDocumentStore.cs",
+          "position": 128,
+          "originalPosition": 128,
+          "createdAt": "2025-11-05T15:51:45Z",
+          "author": {
+            "login": "coderabbitai"
+          }
+        }
+      ]
+    }
+  },
+  {
+    "id": "PRRT_kwDOKSXUF85gsJy1",
+    "isResolved": false,
+    "isOutdated": false,
+    "comments": {
+      "nodes": [
+        {
+          "id": "PRRC_kwDOKSXUF86UuPhf",
+          "body": "_ΓÜá∩╕Å Potential issue_ | _≡ƒö┤ Critical_\n\n**Fix cache inconsistency, Clear() interaction, and bulk error handling.**\n\nMultiple critical issues:\n\n1. **Clear() breaks subsequent adds**: Same issue as `AddCore` - if `_vectorDimension` is 0 after `Clear()`, validation fails for all documents.\n\n2. **Cache/Elasticsearch inconsistency**: Documents are added to cache (line 138) before the bulk operation. If the bulk request fails or has partial errors, cached documents won't match Elasticsearch.\n\n3. **Bulk response doesn't check for errors**: Elasticsearch bulk API returns 200 even with partial failures. The response contains an `errors` boolean and per-item status that must be checked.\n\n\n\nApply this diff:\n\n```diff\n protected override void AddBatchCore(IList<VectorDocument<T>> vectorDocuments)\n {\n     if (vectorDocuments.Count == 0) return;\n\n+    // Allow _vectorDimension to be set from first document if cleared\n+    if (_vectorDimension == 0)\n+        _vectorDimension = vectorDocuments[0].Embedding.Length;\n+\n     foreach (var vd in vectorDocuments)\n     {\n         if (vd.Embedding.Length != _vectorDimension)\n             throw new ArgumentException($\"Document embedding dimension ({vd.Embedding.Length}) does not match the store's configured dimension ({_vectorDimension}).\");\n-        _cache[vd.Document.Id] = vd;\n     }\n\n     var bulkBody = new StringBuilder();\n     foreach (var vd in vectorDocuments)\n     {\n         var indexAction = new { index = new { _index = _indexName, _id = vd.Document.Id } };\n         bulkBody.AppendLine(Newtonsoft.Json.JsonConvert.SerializeObject(indexAction));\n\n         var embedding = vd.Embedding.ToArray().Select(v => Convert.ToDouble(v)).ToArray();\n         var doc = new\n         {\n             id = vd.Document.Id,\n             content = vd.Document.Content,\n             embedding,\n             metadata = vd.Document.Metadata\n         };\n         bulkBody.AppendLine(Newtonsoft.Json.JsonConvert.SerializeObject(doc));\n     }\n\n     var content = new StringContent(bulkBody.ToString(), Encoding.UTF8, \"application/x-ndjson\");\n     var response = _httpClient.PostAsync($\"/{_indexName}/_bulk\", content).Result;\n     if (response.IsSuccessStatusCode)\n-        _documentCount += vectorDocuments.Count;\n+    {\n+        var responseContent = response.Content.ReadAsStringAsync().Result;\n+        var result = JObject.Parse(responseContent);\n+        \n+        if (result[\"errors\"]?.Value<bool>() == true)\n+        {\n+            // Partial failure - check which items succeeded\n+            var items = result[\"items\"];\n+            int successCount = 0;\n+            for (int i = 0; i < vectorDocuments.Count && i < items.Count(); i++)\n+            {\n+                var item = items[i][\"index\"];\n+                var status = item[\"status\"]?.Value<int>() ?? 500;\n+                if (status >= 200 && status < 300)\n+                {\n+                    _cache[vectorDocuments[i].Document.Id] = vectorDocuments[i];\n+                    successCount++;\n+                }\n+            }\n+            _documentCount += successCount;\n+            throw new InvalidOperationException(\n+                $\"Bulk operation had errors: {successCount}/{vectorDocuments.Count} documents added successfully\");\n+        }\n+        else\n+        {\n+            // All succeeded\n+            foreach (var vd in vectorDocuments)\n+                _cache[vd.Document.Id] = vd;\n+            _documentCount += vectorDocuments.Count;\n+        }\n+    }\n+    else\n+    {\n+        var errorContent = response.Content.ReadAsStringAsync().Result;\n+        throw new InvalidOperationException(\n+            $\"Bulk operation failed: {response.StatusCode}, {errorContent}\");\n+    }\n }\n```\n\n\n> Committable suggestion skipped: line range outside the PR's diff.\n\n<!-- This is an auto-generated comment by CodeRabbit -->",
+          "path": "src/RetrievalAugmentedGeneration/DocumentStores/ElasticsearchDocumentStore.cs",
+          "position": 162,
+          "originalPosition": 162,
+          "createdAt": "2025-11-05T15:51:45Z",
+          "author": {
+            "login": "coderabbitai"
+          }
+        }
+      ]
+    }
+  },
+  {
+    "id": "PRRT_kwDOKSXUF85gsJy5",
+    "isResolved": false,
+    "isOutdated": false,
+    "comments": {
+      "nodes": [
+        {
+          "id": "PRRC_kwDOKSXUF86UuPhi",
+          "body": "_ΓÜá∩╕Å Potential issue_ | _≡ƒƒá Major_\n\n**Document metadata filter limitations and add error handling.**\n\nThe metadata filter implementation uses `term` queries which have limitations:\n\n1. **Exact matches only**: Term queries won't work for text fields with analyzers - they require exact values. For text search, use `match` queries instead.\n2. **Numeric comparisons**: The current implementation only supports equality. Range queries (gt, gte, lt, lte) are not supported.\n3. **Error handling**: No handling for HTTP failures or malformed responses.\n\n\n\n\nConsider documenting these limitations in XML comments and adding error handling:\n\n```diff\n protected override IEnumerable<Document<T>> GetSimilarCore(Vector<T> queryVector, int topK, Dictionary<string, object> metadataFilters)\n {\n+    try\n+    {\n         var embedding = queryVector.ToArray().Select(v => Convert.ToDouble(v)).ToArray();\n         \n         // Build the query with metadata filters\n+        // Note: Filters use term queries for exact matches on keyword/numeric fields\n         object queryClause;\n         // ... rest of query building ...\n\n         var response = _httpClient.PostAsync($\"/{_indexName}/_search\", content).Result;\n+        \n+        if (!response.IsSuccessStatusCode)\n+        {\n+            var errorContent = response.Content.ReadAsStringAsync().Result;\n+            throw new InvalidOperationException(\n+                $\"Search failed: {response.StatusCode}, {errorContent}\");\n+        }\n+        \n         var responseContent = response.Content.ReadAsStringAsync().Result;\n         var result = JObject.Parse(responseContent);\n\n         // ... parse results ...\n         \n         return results;\n+    }\n+    catch (Exception ex) when (!(ex is InvalidOperationException || ex is ArgumentException))\n+    {\n+        throw new InvalidOperationException(\n+            $\"Error searching Elasticsearch: {ex.Message}\", ex);\n+    }\n }\n```\n\n<!-- This is an auto-generated comment by CodeRabbit -->",
+          "path": "src/RetrievalAugmentedGeneration/DocumentStores/ElasticsearchDocumentStore.cs",
+          "position": 247,
+          "originalPosition": 247,
+          "createdAt": "2025-11-05T15:51:45Z",
+          "author": {
+            "login": "coderabbitai"
+          }
+        }
+      ]
+    }
+  },
+  {
+    "id": "PRRT_kwDOKSXUF85gsJy6",
+    "isResolved": false,
+    "isOutdated": false,
+    "comments": {
+      "nodes": [
+        {
+          "id": "PRRC_kwDOKSXUF86UuPhn",
+          "body": "_ΓÜá∩╕Å Potential issue_ | _≡ƒƒá Major_\n\n**Query Elasticsearch instead of relying only on cache.**\n\nThe current implementation only checks the in-memory cache, which means:\n- Documents indexed directly in Elasticsearch won't be found\n- After application restart, no documents can be retrieved by ID until they're re-added\n- The cache can become stale if documents are modified externally\n\n\n\nConsider querying Elasticsearch directly:\n\n```diff\n protected override Document<T>? GetByIdCore(string documentId)\n {\n+    try\n+    {\n-        if (_cache.TryGetValue(documentId, out var vectorDoc))\n-            return vectorDoc.Document;\n+        var response = _httpClient.GetAsync($\"/{_indexName}/_doc/{documentId}\").Result;\n+        \n+        if (response.StatusCode == System.Net.HttpStatusCode.NotFound)\n+            return null;\n+            \n+        if (!response.IsSuccessStatusCode)\n+        {\n+            var errorContent = response.Content.ReadAsStringAsync().Result;\n+            throw new InvalidOperationException(\n+                $\"Failed to get document '{documentId}': {response.StatusCode}, {errorContent}\");\n+        }\n+        \n+        var responseContent = response.Content.ReadAsStringAsync().Result;\n+        var result = JObject.Parse(responseContent);\n+        var source = result[\"_source\"];\n+        \n+        if (source == null)\n+            return null;\n+        \n+        var id = source[\"id\"]?.ToString() ?? documentId;\n+        var content = source[\"content\"]?.ToString() ?? string.Empty;\n+        var metadata = source[\"metadata\"]?.ToObject<Dictionary<string, object>>() \n+            ?? new Dictionary<string, object>();\n+        \n+        return new Document<T>(id, content, metadata);\n+    }\n+    catch (Exception ex) when (!(ex is InvalidOperationException))\n+    {\n+        throw new InvalidOperationException(\n+            $\"Error retrieving document '{documentId}': {ex.Message}\", ex);\n+    }\n-    return null;\n }\n```\n\n<!-- This is an auto-generated comment by CodeRabbit -->",
+          "path": "src/RetrievalAugmentedGeneration/DocumentStores/ElasticsearchDocumentStore.cs",
+          "position": 255,
+          "originalPosition": 255,
+          "createdAt": "2025-11-05T15:51:45Z",
+          "author": {
+            "login": "coderabbitai"
+          }
+        }
+      ]
+    }
+  },
+  {
     "id": "PRRT_kwDOKSXUF85gsJzD",
     "isResolved": false,
     "isOutdated": false,
@@ -149,7 +409,7 @@
           "id": "PRRC_kwDOKSXUF86UuPhx",
           "body": "_ΓÜá∩╕Å Potential issue_ | _≡ƒƒá Major_\n\n**Fix cache inconsistency in RemoveCore.**\n\nThe document is removed from cache (line 283) before the DELETE request. If the HTTP call fails, the document is removed from the cache but remains in Elasticsearch, causing `GetByIdCore` to not find documents that still exist.\n\n\n\nApply this diff to ensure cache consistency:\n\n```diff\n protected override bool RemoveCore(string documentId)\n {\n-    _cache.Remove(documentId);\n-\n     var response = _httpClient.DeleteAsync($\"/{_indexName}/_doc/{documentId}\").Result;\n-    if (response.IsSuccessStatusCode && _documentCount > 0)\n+    \n+    if (response.StatusCode == System.Net.HttpStatusCode.NotFound)\n+    {\n+        _cache.Remove(documentId);\n+        return false;\n+    }\n+    \n+    if (response.IsSuccessStatusCode)\n     {\n+        _cache.Remove(documentId);\n-        _documentCount--;\n+        if (_documentCount > 0)\n+            _documentCount--;\n         return true;\n     }\n+    \n+    // HTTP error - don't remove from cache\n+    var errorContent = response.Content.ReadAsStringAsync().Result;\n+    throw new InvalidOperationException(\n+        $\"Failed to remove document '{documentId}': {response.StatusCode}, {errorContent}\");\n-    return false;\n }\n```\n\n<details>\n<summary>≡ƒñû Prompt for AI Agents</summary>\n\n```\nIn src/RetrievalAugmentedGeneration/DocumentStores/ElasticsearchDocumentStore.cs\naround lines 281 to 292, the code removes the document from the in-memory cache\nbefore issuing the HTTP DELETE, which can leave the cache inconsistent if the\nDELETE fails; change the flow so the DELETE is executed first and only on a\nsuccessful response decrement _documentCount and then remove the document from\n_cache and return true; on failure do not modify the cache or _documentCount and\nreturn false (also ensure any exceptions from the HTTP call are allowed to\npropagate or handled consistently with existing error handling).\n```\n\n</details>\n\n<!-- This is an auto-generated comment by CodeRabbit -->",
           "path": "src/RetrievalAugmentedGeneration/DocumentStores/ElasticsearchDocumentStore.cs",
-          "position": 331,
+          "position": 292,
           "originalPosition": 292,
           "createdAt": "2025-11-05T15:51:46Z",
           "author": {
@@ -169,7 +429,7 @@
           "id": "PRRC_kwDOKSXUF86UuPh4",
           "body": "_ΓÜá∩╕Å Potential issue_ | _≡ƒƒá Major_\n\n**Implement Elasticsearch scroll API as documented.**\n\nThe XML documentation mentions using the scroll API for efficient retrieval, but the implementation only returns cached documents. This means:\n- After app restart, GetAll() returns an empty collection even if Elasticsearch has documents\n- Documents indexed directly in Elasticsearch won't appear\n- The cache can become stale\n\n\n\nConsider implementing the scroll API as documented:\n\n```csharp\nprotected override IEnumerable<Document<T>> GetAllCore()\n{\n    var results = new List<Document<T>>();\n    \n    try\n    {\n        // Initial search with scroll\n        var query = new { size = 1000, query = new { match_all = new { } } };\n        var content = new StringContent(\n            Newtonsoft.Json.JsonConvert.SerializeObject(query),\n            Encoding.UTF8,\n            \"application/json\");\n        \n        var response = _httpClient.PostAsync($\"/{_indexName}/_search?scroll=1m\", content).Result;\n        if (!response.IsSuccessStatusCode)\n            throw new InvalidOperationException($\"Initial scroll failed: {response.StatusCode}\");\n        \n        var responseContent = response.Content.ReadAsStringAsync().Result;\n        var result = JObject.Parse(responseContent);\n        var scrollId = result[\"_scroll_id\"]?.ToString();\n        \n        while (true)\n        {\n            var hits = result[\"hits\"]?[\"hits\"];\n            if (hits == null || !hits.Any())\n                break;\n            \n            foreach (var hit in hits)\n            {\n                var source = hit[\"_source\"];\n                if (source != null)\n                {\n                    var id = source[\"id\"]?.ToString() ?? string.Empty;\n                    var docContent = source[\"content\"]?.ToString() ?? string.Empty;\n                    var metadata = source[\"metadata\"]?.ToObject<Dictionary<string, object>>() \n                        ?? new Dictionary<string, object>();\n                    results.Add(new Document<T>(id, docContent, metadata));\n                }\n            }\n            \n            // Continue scroll\n            var scrollQuery = new { scroll = \"1m\", scroll_id = scrollId };\n            var scrollContent = new StringContent(\n                Newtonsoft.Json.JsonConvert.SerializeObject(scrollQuery),\n                Encoding.UTF8,\n                \"application/json\");\n            response = _httpClient.PostAsync(\"/_search/scroll\", scrollContent).Result;\n            responseContent = response.Content.ReadAsStringAsync().Result;\n            result = JObject.Parse(responseContent);\n        }\n        \n        // Clear scroll\n        if (scrollId != null)\n            _httpClient.DeleteAsync($\"/_search/scroll/{scrollId}\").Wait();\n    }\n    catch (Exception ex)\n    {\n        throw new InvalidOperationException($\"Error retrieving all documents: {ex.Message}\", ex);\n    }\n    \n    return results;\n}\n```\n\n<!-- This is an auto-generated comment by CodeRabbit -->",
           "path": "src/RetrievalAugmentedGeneration/DocumentStores/ElasticsearchDocumentStore.cs",
-          "position": 372,
+          "position": 333,
           "originalPosition": 333,
           "createdAt": "2025-11-05T15:51:46Z",
           "author": {
@@ -189,7 +449,7 @@
           "id": "PRRC_kwDOKSXUF86UuPiA",
           "body": "_ΓÜá∩╕Å Potential issue_ | _≡ƒö┤ Critical_\n\n**Don't reset vector dimension in Clear().**\n\nResetting `_vectorDimension = 0` makes the store unusable after calling `Clear()` because subsequent `AddCore` and `AddBatchCore` calls will fail validation (no document can have embedding dimension 0).\n\n\n\nApply this diff to preserve the configured dimension:\n\n```diff\n public override void Clear()\n {\n     _cache.Clear();\n     _httpClient.DeleteAsync($\"/{_indexName}\").Wait();\n     _documentCount = 0;\n-    _vectorDimension = 0;\n     EnsureIndex();\n }\n```\n\nThis preserves the dimension configured at construction time, allowing the store to continue accepting documents after a clear operation.\n\n<!-- suggestion_start -->\n\n<details>\n<summary>≡ƒô¥ Committable suggestion</summary>\n\n> ΓÇ╝∩╕Å **IMPORTANT**\n> Carefully review the code before committing. Ensure that it accurately replaces the highlighted code, contains no missing lines, and has no issues with indentation. Thoroughly test & benchmark the code to ensure it meets the requirements.\n\n```suggestion\n    public override void Clear()\n    {\n        _cache.Clear();\n        _httpClient.DeleteAsync($\"/{_indexName}\").Wait();\n        _documentCount = 0;\n        EnsureIndex();\n    }\n```\n\n</details>\n\n<!-- suggestion_end -->\n\n<details>\n<summary>≡ƒñû Prompt for AI Agents</summary>\n\n```\nIn src/RetrievalAugmentedGeneration/DocumentStores/ElasticsearchDocumentStore.cs\naround lines 368 to 375, the Clear() method resets _vectorDimension to 0 which\nbreaks subsequent AddCore/AddBatchCore validation; remove the line that sets\n_vectorDimension = 0 so the configured embedding dimension is preserved, keep\nclearing the cache, deleting the index, resetting _documentCount, and calling\nEnsureIndex() so the store can continue accepting documents after Clear().\n```\n\n</details>\n\n<!-- This is an auto-generated comment by CodeRabbit -->",
           "path": "src/RetrievalAugmentedGeneration/DocumentStores/ElasticsearchDocumentStore.cs",
-          "position": 422,
+          "position": 375,
           "originalPosition": 375,
           "createdAt": "2025-11-05T15:51:46Z",
           "author": {
