@@ -250,11 +250,12 @@ Please provide a partial answer. If you need more information, indicate what is 
         var lengthScore = Math.Min(1.0, generatedText.Length / 500.0);
 
         // Check document relevance
-        var avgRelevance = retrievedDocs
+        var relevanceScores = retrievedDocs
             .Where(d => d.HasRelevanceScore)
-            .Select(d => Convert.ToDouble(d.RelevanceScore))
-            .DefaultIfEmpty(0.5)
-            .Average();
+            .Select(d => NumOps.ToDouble(d.RelevanceScore))
+            .ToList();
+        
+        var avgRelevance = relevanceScores.Any() ? relevanceScores.Average() : 0.5;
 
         return (lengthScore + avgRelevance) / 2.0;
     }
