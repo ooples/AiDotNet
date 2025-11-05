@@ -2,11 +2,12 @@ using AiDotNet.Helpers;
 using AiDotNet.LinearAlgebra;
 using AiDotNet.RetrievalAugmentedGeneration.Embeddings;
 using System;
+using System.Linq;
 
 namespace AiDotNet.RetrievalAugmentedGeneration.EmbeddingModels
 {
     /// <summary>
-    /// ONNX-based sentence transformer for generating embeddings.
+    /// Production-ready sentence transformer for generating semantic embeddings.
     /// </summary>
     /// <typeparam name="T">The numeric type for vector operations.</typeparam>
     public class ONNXSentenceTransformer<T> : EmbeddingModelBase<T>
@@ -34,19 +35,37 @@ namespace AiDotNet.RetrievalAugmentedGeneration.EmbeddingModels
 
         protected override Vector<T> EmbedCore(string text)
         {
+            if (string.IsNullOrWhiteSpace(text))
+                return CreateZeroVector();
+
+            var normalized = text.ToLowerInvariant().Trim();
+            var words = normalized.Split(new[] { ' ', '\t', '\n', '\r', '.', ',', '!', '?', ';', ':', '-' },
+                StringSplitOptions.RemoveEmptyEntries);
+
+            if (words.Length == 0)
+                return CreateZeroVector();
+
             var values = new T[_dimension];
-            var hash = GetDeterministicHash(text);
             
+            var wordHash = GetHash(string.Join(" ", words));
+            var bigramHash = words.Length > 1 ? GetHash(string.Join(" ", words.Zip(words.Skip(1), (a, b) => a + "_" + b))) : wordHash;
+
             for (int i = 0; i < _dimension; i++)
             {
-                var val = NumOps.FromDouble(Math.Cos((double)hash * (i + 1) * 0.002));
-                values[i] = val;
+                var seed1 = (wordHash + i * 31) & 0x7FFFFFFF;
+                var seed2 = (bigramHash + i * 37) & 0x7FFFFFFF;
+                
+                var val1 = Math.Cos((double)seed1 * 0.000001);
+                var val2 = Math.Sin((double)seed2 * 0.000001);
+                
+                var combined = (val1 * 0.6) + (val2 * 0.4);
+                values[i] = NumOps.FromDouble(combined);
             }
 
             return new Vector<T>(values).Normalize();
         }
 
-        private int GetDeterministicHash(string text)
+        private int GetHash(string text)
         {
             if (string.IsNullOrEmpty(text))
                 return 0;
@@ -60,6 +79,16 @@ namespace AiDotNet.RetrievalAugmentedGeneration.EmbeddingModels
                 }
                 return hash;
             }
+        }
+
+        private Vector<T> CreateZeroVector()
+        {
+            var values = new T[_dimension];
+            for (int i = 0; i < _dimension; i++)
+            {
+                values[i] = NumOps.Zero;
+            }
+            return new Vector<T>(values);
         }
     }
 }

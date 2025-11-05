@@ -1,0 +1,1221 @@
+## Pull Request Overview
+
+This PR adds comprehensive generic type support to the RAG (Retrieval-Augmented Generation) system, transforming the codebase from using fixed numeric types to supporting parameterized types (e.g., `float`, `double`) throughout the entire pipeline. The changes enable flexible numeric precision while maintaining consistent mathematical operations via `INumericOperations<T>`.
+
+Key changes:
+- Generic type parameters added to core models (`Document<T>`, `GroundedAnswer<T>`, `VectorDocument<T>`)
+- All interfaces and base classes updated to support type parameters (`IRetriever<T>`, `IReranker<T>`, `IGenerator<T>`, etc.)
+- New retrieval strategies added (BM25, TF-IDF, Dense, Hybrid, MultiQuery)
+- New reranking implementations (MMR, Diversity, CrossEncoder)
+- RAG configuration system introduced
+- Multiple document store implementations added (FAISS, Pinecone, Milvus, Weaviate, PostgresVector)
+
+### Reviewed Changes
+
+Copilot reviewed 68 out of 70 changed files in this pull request and generated 53 comments.
+
+<details>
+<summary>Show a summary per file</summary>
+
+| File | Description |
+| ---- | ----------- |
+| Document.cs | Added generic type parameter with `INumericOperations<T>` field and `HasRelevanceScore` flag |
+| GroundedAnswer.cs | Updated to support generic document types |
+| VectorDocument.cs | Updated to use `Document<T>` |
+| RetrieverBase.cs | Added generic type parameter and `NumOps` helper |
+| RerankerBase.cs | Added generic type parameter and updated score normalization |
+| RagPipeline.cs | Updated all interfaces to use generic types |
+| InMemoryDocumentStore.cs | Updated to return `Document<T>` with proper score handling |
+| Multiple new retrievers | BM25, TF-IDF, Dense, Hybrid, MultiQuery implementations |
+| Multiple new rerankers | MMR, Diversity, CrossEncoder, Identity implementations |
+| Configuration classes | New RAG configuration system with builder pattern |
+| Embedding models | OpenAI, HuggingFace, ONNX, LocalTransformer implementations |
+| Document stores | FAISS, Pinecone, Milvus, Weaviate, PostgresVector, Hybrid implementations |
+</details>
+
+
+
+
+
+
+---
+
+≡ƒÆí <a href="/ooples/AiDotNet/new/master/.github/instructions?filename=*.instructions.md" class="Link--inTextBlock" target="_blank" rel="noopener noreferrer">Add Copilot custom instructions</a> for smarter, more guided reviews. <a href="https://docs.github.com/en/copilot/customizing-copilot/adding-repository-custom-instructions-for-github-copilot" class="Link--inTextBlock" target="_blank" rel="noopener noreferrer">Learn how to get started</a>.
+**Actionable comments posted: 0**
+
+<details>
+<summary>≡ƒº╣ Nitpick comments (2)</summary><blockquote>
+
+<details>
+<summary>src/RetrievalAugmentedGeneration/Evaluation/AnswerCorrectnessMetric.cs (1)</summary><blockquote>
+
+`16-49`: **Drop unused LLM configuration until itΓÇÖs wired up.**
+
+`_llmEndpoint` and `_llmApiKey` are required ctor params yet nothing in `EvaluateCore` consumes them, so callers must hand over secrets just to satisfy the signature. Either implement the fact-checking path or remove these fields/parameters for now to avoid misleading usage.
+
+</blockquote></details>
+<details>
+<summary>src/RetrievalAugmentedGeneration/Evaluation/ContextRelevanceMetric.cs (1)</summary><blockquote>
+
+`19-45`: **Cache query tokens once per evaluation.**
+
+We call `GetWords(answer.Query)` inside the loop, duplicating the split/hash work for every document. Hoisting it to a local before the loop keeps behavior identical and avoids repeated allocations.  
+
+```diff
+-        foreach (var doc in answer.SourceDocuments)
+-        {
+-            var words1 = GetWords(answer.Query);
++        var queryWords = GetWords(answer.Query);
++        foreach (var doc in answer.SourceDocuments)
++        {
++            var words1 = queryWords;
+             var words2 = GetWords(doc.Content);
+```
+
+</blockquote></details>
+
+</blockquote></details>
+
+<details>
+<summary>≡ƒô£ Review details</summary>
+
+**Configuration used**: CodeRabbit UI
+
+**Review profile**: CHILL
+
+**Plan**: Pro
+
+<details>
+<summary>≡ƒôÑ Commits</summary>
+
+Reviewing files that changed from the base of the PR and between 4d459a5baaeed2f7174d07d29893c445365ef894 and 7fbd5910239204f8852637c980b53b76349cc626.
+
+</details>
+
+<details>
+<summary>≡ƒôÆ Files selected for processing (8)</summary>
+
+* `src/Interfaces/IRAGMetric.cs` (3 hunks)
+* `src/RetrievalAugmentedGeneration/Evaluation/AnswerCorrectnessMetric.cs` (1 hunks)
+* `src/RetrievalAugmentedGeneration/Evaluation/AnswerSimilarityMetric.cs` (2 hunks)
+* `src/RetrievalAugmentedGeneration/Evaluation/ContextCoverageMetric.cs` (2 hunks)
+* `src/RetrievalAugmentedGeneration/Evaluation/ContextRelevanceMetric.cs` (1 hunks)
+* `src/RetrievalAugmentedGeneration/Evaluation/FaithfulnessMetric.cs` (2 hunks)
+* `src/RetrievalAugmentedGeneration/Evaluation/NoiseRobustnessMetric.cs` (1 hunks)
+* `src/RetrievalAugmentedGeneration/Evaluation/RAGMetricBase.cs` (4 hunks)
+
+</details>
+
+<details>
+<summary>≡ƒÜº Files skipped from review as they are similar to previous changes (1)</summary>
+
+* src/RetrievalAugmentedGeneration/Evaluation/NoiseRobustnessMetric.cs
+
+</details>
+
+<details>
+<summary>≡ƒº░ Additional context used</summary>
+
+<details>
+<summary>≡ƒº¼ Code graph analysis (7)</summary>
+
+<details>
+<summary>src/RetrievalAugmentedGeneration/Evaluation/FaithfulnessMetric.cs (4)</summary><blockquote>
+
+<details>
+<summary>src/Interfaces/IRAGMetric.cs (1)</summary>
+
+* `T` (52-52)
+
+</details>
+<details>
+<summary>src/RetrievalAugmentedGeneration/Evaluation/AnswerCorrectnessMetric.cs (1)</summary>
+
+* `T` (34-49)
+
+</details>
+<details>
+<summary>src/RetrievalAugmentedGeneration/Evaluation/RAGMetricBase.cs (3)</summary>
+
+* `T` (51-60)
+* `T` (73-73)
+* `RAGMetricBase` (28-103)
+
+</details>
+<details>
+<summary>src/RetrievalAugmentedGeneration/Models/GroundedAnswer.cs (4)</summary>
+
+* `GroundedAnswer` (36-183)
+* `GroundedAnswer` (151-153)
+* `GroundedAnswer` (160-164)
+* `GroundedAnswer` (174-182)
+
+</details>
+
+</blockquote></details>
+<details>
+<summary>src/RetrievalAugmentedGeneration/Evaluation/RAGMetricBase.cs (4)</summary><blockquote>
+
+<details>
+<summary>src/Interfaces/IRAGMetric.cs (1)</summary>
+
+* `T` (52-52)
+
+</details>
+<details>
+<summary>src/RetrievalAugmentedGeneration/Evaluation/AnswerCorrectnessMetric.cs (1)</summary>
+
+* `T` (34-49)
+
+</details>
+<details>
+<summary>src/Helpers/MathHelper.cs (2)</summary>
+
+* `INumericOperations` (33-61)
+* `MathHelper` (16-987)
+
+</details>
+<details>
+<summary>src/RetrievalAugmentedGeneration/Models/GroundedAnswer.cs (4)</summary>
+
+* `GroundedAnswer` (36-183)
+* `GroundedAnswer` (151-153)
+* `GroundedAnswer` (160-164)
+* `GroundedAnswer` (174-182)
+
+</details>
+
+</blockquote></details>
+<details>
+<summary>src/RetrievalAugmentedGeneration/Evaluation/ContextCoverageMetric.cs (4)</summary><blockquote>
+
+<details>
+<summary>src/Interfaces/IRAGMetric.cs (1)</summary>
+
+* `T` (52-52)
+
+</details>
+<details>
+<summary>src/RetrievalAugmentedGeneration/Evaluation/ContextRelevanceMetric.cs (1)</summary>
+
+* `T` (19-46)
+
+</details>
+<details>
+<summary>src/RetrievalAugmentedGeneration/Evaluation/RAGMetricBase.cs (4)</summary>
+
+* `T` (51-60)
+* `T` (73-73)
+* `RAGMetricBase` (28-103)
+* `HashSet` (93-102)
+
+</details>
+<details>
+<summary>src/RetrievalAugmentedGeneration/Models/GroundedAnswer.cs (4)</summary>
+
+* `GroundedAnswer` (36-183)
+* `GroundedAnswer` (151-153)
+* `GroundedAnswer` (160-164)
+* `GroundedAnswer` (174-182)
+
+</details>
+
+</blockquote></details>
+<details>
+<summary>src/RetrievalAugmentedGeneration/Evaluation/ContextRelevanceMetric.cs (2)</summary><blockquote>
+
+<details>
+<summary>src/Interfaces/IRAGMetric.cs (1)</summary>
+
+* `T` (52-52)
+
+</details>
+<details>
+<summary>src/RetrievalAugmentedGeneration/Evaluation/RAGMetricBase.cs (3)</summary>
+
+* `T` (51-60)
+* `T` (73-73)
+* `RAGMetricBase` (28-103)
+
+</details>
+
+</blockquote></details>
+<details>
+<summary>src/RetrievalAugmentedGeneration/Evaluation/AnswerSimilarityMetric.cs (4)</summary><blockquote>
+
+<details>
+<summary>src/Interfaces/IRAGMetric.cs (1)</summary>
+
+* `T` (52-52)
+
+</details>
+<details>
+<summary>src/RetrievalAugmentedGeneration/Evaluation/AnswerCorrectnessMetric.cs (1)</summary>
+
+* `T` (34-49)
+
+</details>
+<details>
+<summary>src/RetrievalAugmentedGeneration/Evaluation/RAGMetricBase.cs (3)</summary>
+
+* `T` (51-60)
+* `T` (73-73)
+* `RAGMetricBase` (28-103)
+
+</details>
+<details>
+<summary>src/RetrievalAugmentedGeneration/Models/GroundedAnswer.cs (4)</summary>
+
+* `GroundedAnswer` (36-183)
+* `GroundedAnswer` (151-153)
+* `GroundedAnswer` (160-164)
+* `GroundedAnswer` (174-182)
+
+</details>
+
+</blockquote></details>
+<details>
+<summary>src/Interfaces/IRAGMetric.cs (7)</summary><blockquote>
+
+<details>
+<summary>src/RetrievalAugmentedGeneration/Evaluation/AnswerCorrectnessMetric.cs (1)</summary>
+
+* `T` (34-49)
+
+</details>
+<details>
+<summary>src/RetrievalAugmentedGeneration/Evaluation/ContextCoverageMetric.cs (3)</summary>
+
+* `T` (75-86)
+* `T` (91-103)
+* `T` (108-146)
+
+</details>
+<details>
+<summary>src/RetrievalAugmentedGeneration/Evaluation/ContextRelevanceMetric.cs (1)</summary>
+
+* `T` (19-46)
+
+</details>
+<details>
+<summary>src/RetrievalAugmentedGeneration/Evaluation/FaithfulnessMetric.cs (1)</summary>
+
+* `T` (59-74)
+
+</details>
+<details>
+<summary>src/RetrievalAugmentedGeneration/Evaluation/NoiseRobustnessMetric.cs (1)</summary>
+
+* `T` (30-33)
+
+</details>
+<details>
+<summary>src/RetrievalAugmentedGeneration/Evaluation/RAGMetricBase.cs (2)</summary>
+
+* `T` (51-60)
+* `T` (73-73)
+
+</details>
+<details>
+<summary>src/Interfaces/IGenerator.cs (1)</summary>
+
+* `GroundedAnswer` (99-99)
+
+</details>
+
+</blockquote></details>
+<details>
+<summary>src/RetrievalAugmentedGeneration/Evaluation/AnswerCorrectnessMetric.cs (3)</summary><blockquote>
+
+<details>
+<summary>src/Interfaces/IRAGMetric.cs (1)</summary>
+
+* `T` (52-52)
+
+</details>
+<details>
+<summary>src/RetrievalAugmentedGeneration/Evaluation/AnswerSimilarityMetric.cs (1)</summary>
+
+* `T` (64-76)
+
+</details>
+<details>
+<summary>src/RetrievalAugmentedGeneration/Evaluation/RAGMetricBase.cs (3)</summary>
+
+* `T` (51-60)
+* `T` (73-73)
+* `RAGMetricBase` (28-103)
+
+</details>
+
+</blockquote></details>
+
+</details>
+
+</details>
+
+<details>
+<summary>≡ƒöç Additional comments (11)</summary><blockquote>
+
+<details>
+<summary>src/Interfaces/IRAGMetric.cs (1)</summary><blockquote>
+
+`34-53`: **Generic interface update looks solid.**
+
+The shift to `IRAGMetric<T>` cleanly matches the generic metric base and preserves the expected contract.
+
+</blockquote></details>
+<details>
+<summary>src/RetrievalAugmentedGeneration/Evaluation/AnswerSimilarityMetric.cs (1)</summary><blockquote>
+
+`40-76`: **Nice generic port.**
+
+The Jaccard computation now flows through `NumOps` without regressionsΓÇölooks good.
+
+</blockquote></details>
+<details>
+<summary>src/RetrievalAugmentedGeneration/Evaluation/FaithfulnessMetric.cs (1)</summary><blockquote>
+
+`35-74`: **Faithfulness metric migration looks good.**
+
+Guards and the overlap ratio now cooperate with `NumOps`, so the generic conversion is clean.
+
+</blockquote></details>
+<details>
+<summary>src/RetrievalAugmentedGeneration/Evaluation/RAGMetricBase.cs (4)</summary><blockquote>
+
+`1-2`: **LGTM! Clean generic migration.**
+
+The addition of required imports and the generic class signature are correct. The `NumOps` field provides a consistent way for derived metrics to perform type-safe numeric operations across all supported numeric types.
+
+
+
+
+Also applies to: 28-33
+
+---
+
+`51-60`: **LGTM! Type-safe evaluation flow.**
+
+The `Evaluate` method correctly returns `T` and uses `MathHelper.Clamp` with generic bounds (`NumOps.Zero`, `NumOps.One`) to ensure scores remain in the valid [0,1] range.
+
+---
+
+`73-86`: **LGTM! Abstract method signatures correctly updated.**
+
+The abstract method signatures for `EvaluateCore` and `ValidateAnswer` properly accept `GroundedAnswer<T>` and return `T`, enabling derived metrics to implement type-safe evaluation logic.
+
+---
+
+`93-102`: **LGTM! Helper method preserved for word-based metrics.**
+
+The `GetWords` method continues to support token extraction for metrics that perform word-level overlap calculations (e.g., Jaccard similarity). This is correctly retained in the generic base class.
+
+</blockquote></details>
+<details>
+<summary>src/RetrievalAugmentedGeneration/Evaluation/ContextCoverageMetric.cs (4)</summary><blockquote>
+
+`47-47`: **LGTM! Generic class signature correct.**
+
+The class correctly inherits from `RAGMetricBase<T>`, enabling type-safe numeric operations for all supported numeric types.
+
+---
+
+`75-86`: **LGTM! Evaluation dispatch logic correct.**
+
+The method correctly returns `NumOps.Zero` for empty document sets and properly dispatches to ground-truth or heuristic evaluation paths based on availability.
+
+---
+
+`91-103`: **LGTM! Ground-truth coverage calculation is correct.**
+
+The word-overlap coverage ratio is correctly computed using `NumOps.Divide` with proper integer-to-T conversion via `FromDouble`. Division by zero is prevented by the early-return guard on line 94-95.
+
+---
+
+`108-146`: **LGTM! Heuristic coverage calculation is well-implemented.**
+
+The heuristic approach correctly:
+- Accumulates relevance scores using `NumOps` (lines 115-122)
+- Computes average relevance with division-by-zero protection (line 124)
+- Calculates diversity as unique-word ratio with zero-guard (lines 138-140)
+- Applies weighted combination (70% relevance + 30% diversity) using type-safe operations (lines 142-145)
+
+All numeric operations properly use `NumOps`, and edge cases are handled.
+
+</blockquote></details>
+
+</blockquote></details>
+
+</details>
+
+<!-- This is an auto-generated comment by CodeRabbit for review status -->
+**Actionable comments posted: 0**
+
+<details>
+<summary>ΓÖ╗∩╕Å Duplicate comments (1)</summary><blockquote>
+
+<details>
+<summary>src/RetrievalAugmentedGeneration/RerankingStrategies/ReciprocalRankFusion.cs (1)</summary><blockquote>
+
+`111-114`: **Still need to flag fused documents as scored.**
+
+`FuseRankings` writes `doc.RelevanceScore` but never flips `HasRelevanceScore`, so anything consuming the fused list still treats the entries as unscoredΓÇöexactly the issue we flagged earlier. Please set the flag when you assign the score.
+
+```diff
+             foreach (var doc in reranked)
+             {
+                 doc.RelevanceScore = scores[doc.Id];
++                doc.HasRelevanceScore = true;
+             }
+```
+
+</blockquote></details>
+
+</blockquote></details>
+
+<details>
+<summary>≡ƒº╣ Nitpick comments (2)</summary><blockquote>
+
+<details>
+<summary>src/RetrievalAugmentedGeneration/RerankingStrategies/LLMBasedReranker.cs (1)</summary><blockquote>
+
+`49-82`: **Reduce repeated tokenization to cut per-doc overhead.**
+
+`Tokenize(query)` (and even `Tokenize(document)`) runs multiple times per document through `AssessRelevance`, `ComputeSemanticSimilarity`, and `ComputeProximityScore`. That adds a lot of allocations and O(n┬▓) lookups under load. Cache the query tokens once in `Rerank`, pass them into the helpers, and thread the already tokenized document through the scoring pipeline to avoid the repeated work.
+
+</blockquote></details>
+<details>
+<summary>src/RetrievalAugmentedGeneration/RerankingStrategies/CrossEncoderReranker.cs (1)</summary><blockquote>
+
+`40-73`: **Cache the query tokens before the per-document loop.**
+
+Each invocation of `ComputeCrossEncoderScore` re-tokenizes the query, so ranking N documents costs O(N┬▓) allocations. Tokenize once in `Rerank`, pass the token list into `ComputeCrossEncoderScore`, and avoid the repeated splits to keep this strategy competitive with the others.
+
+</blockquote></details>
+
+</blockquote></details>
+
+<details>
+<summary>≡ƒô£ Review details</summary>
+
+**Configuration used**: CodeRabbit UI
+
+**Review profile**: CHILL
+
+**Plan**: Pro
+
+<details>
+<summary>≡ƒôÑ Commits</summary>
+
+Reviewing files that changed from the base of the PR and between 0990756bfaebc406430e06b89f59a191b1f29d3a and a13deec89ea146c47a5cb614497587d052d2a301.
+
+</details>
+
+<details>
+<summary>≡ƒôÆ Files selected for processing (4)</summary>
+
+* `src/RetrievalAugmentedGeneration/RerankingStrategies/CrossEncoderReranker.cs` (1 hunks)
+* `src/RetrievalAugmentedGeneration/RerankingStrategies/LLMBasedReranker.cs` (1 hunks)
+* `src/RetrievalAugmentedGeneration/RerankingStrategies/ReciprocalRankFusion.cs` (1 hunks)
+* `src/RetrievalAugmentedGeneration/RerankingStrategies/RerankingStrategyBase.cs` (1 hunks)
+
+</details>
+
+<details>
+<summary>≡ƒº░ Additional context used</summary>
+
+<details>
+<summary>≡ƒº¼ Code graph analysis (4)</summary>
+
+<details>
+<summary>src/RetrievalAugmentedGeneration/RerankingStrategies/CrossEncoderReranker.cs (2)</summary><blockquote>
+
+<details>
+<summary>src/RetrievalAugmentedGeneration/RerankingStrategies/RerankingStrategyBase.cs (2)</summary>
+
+* `RerankingStrategyBase` (13-28)
+* `List` (27-27)
+
+</details>
+<details>
+<summary>src/RetrievalAugmentedGeneration/Models/Document.cs (4)</summary>
+
+* `Document` (27-145)
+* `Document` (119-122)
+* `Document` (129-133)
+* `Document` (141-144)
+
+</details>
+
+</blockquote></details>
+<details>
+<summary>src/RetrievalAugmentedGeneration/RerankingStrategies/RerankingStrategyBase.cs (3)</summary><blockquote>
+
+<details>
+<summary>src/RetrievalAugmentedGeneration/RerankingStrategies/CrossEncoderReranker.cs (3)</summary>
+
+* `T` (60-74)
+* `List` (32-58)
+* `List` (76-83)
+
+</details>
+<details>
+<summary>src/RetrievalAugmentedGeneration/RerankingStrategies/LLMBasedReranker.cs (3)</summary>
+
+* `T` (69-82)
+* `List` (35-67)
+* `List` (118-125)
+
+</details>
+<details>
+<summary>src/Helpers/MathHelper.cs (2)</summary>
+
+* `INumericOperations` (33-61)
+* `MathHelper` (16-987)
+
+</details>
+
+</blockquote></details>
+<details>
+<summary>src/RetrievalAugmentedGeneration/RerankingStrategies/LLMBasedReranker.cs (3)</summary><blockquote>
+
+<details>
+<summary>src/RetrievalAugmentedGeneration/RerankingStrategies/CrossEncoderReranker.cs (3)</summary>
+
+* `T` (60-74)
+* `List` (32-58)
+* `List` (76-83)
+
+</details>
+<details>
+<summary>src/RetrievalAugmentedGeneration/RerankingStrategies/RerankingStrategyBase.cs (2)</summary>
+
+* `RerankingStrategyBase` (13-28)
+* `List` (27-27)
+
+</details>
+<details>
+<summary>src/RetrievalAugmentedGeneration/Models/Document.cs (4)</summary>
+
+* `Document` (27-145)
+* `Document` (119-122)
+* `Document` (129-133)
+* `Document` (141-144)
+
+</details>
+
+</blockquote></details>
+<details>
+<summary>src/RetrievalAugmentedGeneration/RerankingStrategies/ReciprocalRankFusion.cs (2)</summary><blockquote>
+
+<details>
+<summary>src/RetrievalAugmentedGeneration/RerankingStrategies/RerankingStrategyBase.cs (2)</summary>
+
+* `RerankingStrategyBase` (13-28)
+* `List` (27-27)
+
+</details>
+<details>
+<summary>src/RetrievalAugmentedGeneration/Models/Document.cs (4)</summary>
+
+* `Document` (27-145)
+* `Document` (119-122)
+* `Document` (129-133)
+* `Document` (141-144)
+
+</details>
+
+</blockquote></details>
+
+</details>
+
+</details>
+
+<details>
+<summary>ΓÅ░ Context from checks skipped due to timeout of 90000ms. You can increase the timeout in your CodeRabbit configuration to a maximum of 15 minutes (900000ms). (1)</summary>
+
+* GitHub Check: Build All Frameworks
+
+</details>
+
+</details>
+
+<!-- This is an auto-generated comment by CodeRabbit for review status -->
+All abstract methods from DocumentStoreBase have been implemented in AzureSearchDocumentStore. The class now properly overrides: DocumentCount, VectorDimension, Clear(), AddCore(), GetSimilarCore(), GetByIdCore(), and RemoveCore().
+**Actionable comments posted: 0**
+
+<details>
+<summary>ΓÖ╗∩╕Å Duplicate comments (13)</summary><blockquote>
+
+<details>
+<summary>src/RetrievalAugmentedGeneration/Retrievers/TFIDFRetriever.cs (2)</summary><blockquote>
+
+`35-38`: **Zero-vector workaround for corpus access.**
+
+This retriever uses the same fragile zero-vector pattern identified in BM25Retriever to retrieve all documents. As noted in previous reviews, both keyword-based retrievers need a dedicated `GetAllDocuments()` method in the `IDocumentStore<T>` interface instead of misusing the vector similarity API.
+
+---
+
+`129-143`: **Guard against empty term lists to prevent runtime exception.**
+
+When a document's content produces no tokens (e.g., empty content or only punctuation), `termCounts.Values.Max()` at line 133 throws `InvalidOperationException`, breaking retrieval. This issue was previously flagged but remains unresolved.
+
+
+Apply this diff to handle empty term counts:
+
+```diff
+             foreach (var doc in documents)
+             {
+                 var termTfidf = new Dictionary<string, T>();
+                 var termCounts = docTermFreq[doc.Id];
++                if (termCounts.Count == 0)
++                {
++                    _tfidf[doc.Id] = termTfidf;
++                    continue;
++                }
+                 var maxFreq = termCounts.Values.Max();
+ 
+                 foreach (var termCount in termCounts)
+                 {
+                     var tf = NumOps.FromDouble((double)termCount.Value / (double)maxFreq);
+                     var tfidf = NumOps.Multiply(tf, _idf[termCount.Key]);
+                     termTfidf[termCount.Key] = tfidf;
+                 }
+ 
+                 _tfidf[doc.Id] = termTfidf;
+             }
+```
+
+</blockquote></details>
+<details>
+<summary>src/RetrievalAugmentedGeneration/EmbeddingModels/HuggingFaceEmbeddingModel.cs (2)</summary><blockquote>
+
+`51-65`: **Consolidate duplicated hash method to base class.**
+
+`GetDeterministicHash` is duplicated identically across `HuggingFaceEmbeddingModel.cs`, `OpenAIEmbeddingModel.cs`, `LocalTransformerEmbedding.cs`, and `ONNXSentenceTransformer.cs`. Move it to `EmbeddingModelBase<T>` as a protected method to eliminate duplication and simplify maintenance.
+
+---
+
+`22-35`: **Unused API parameters create misleading contract.**
+
+The constructor accepts `modelName` and `apiKey`, strongly implying this class calls the HuggingFace API. However, `EmbedCore` generates synthetic hash-based embeddings and never uses these fields. This will break production deployments expecting real semantic embeddings.
+
+
+
+
+Either implement actual HuggingFace API calls or rename the class to reflect its synthetic nature (e.g., `SyntheticEmbeddingModel`) and remove the misleading parameters.
+
+</blockquote></details>
+<details>
+<summary>src/RetrievalAugmentedGeneration/EmbeddingModels/OpenAIEmbeddingModel.cs (2)</summary><blockquote>
+
+`22-37`: **Placeholder implementation creates production risk.**
+
+The constructor requires an `apiKey` and accepts `modelName`, strongly suggesting OpenAI API integration. However, `EmbedCore` never calls OpenAIΓÇöit returns synthetic cosine-based vectors. This will silently fail in production when developers expect real semantic embeddings.
+
+
+
+
+Either implement actual OpenAI API calls using the stored credentials, or rename to `SyntheticEmbeddingModel` and remove the misleading API parameters.
+
+---
+
+`53-67`: **Extract duplicated method to base class.**
+
+This method is duplicated identically in `HuggingFaceEmbeddingModel.cs`, `LocalTransformerEmbedding.cs`, and `ONNXSentenceTransformer.cs`. Move `GetDeterministicHash` to `EmbeddingModelBase<T>` as a protected method.
+
+</blockquote></details>
+<details>
+<summary>src/RetrievalAugmentedGeneration/EmbeddingModels/LocalTransformerEmbedding.cs (3)</summary><blockquote>
+
+`21-33`: **Unused modelPath creates misleading API.**
+
+The constructor validates and stores `modelPath`, implying this class loads a local transformer model. However, `EmbedCore` never uses `_modelPath`ΓÇöit generates synthetic hash-based embeddings. Developers will expect real model inference but receive placeholders.
+
+
+
+
+Either implement actual local transformer loading from `_modelPath` or remove the parameter and rename to reflect synthetic behavior.
+
+---
+
+`49-63`: **Eliminate duplicated helper method.**
+
+`GetDeterministicHash` is duplicated across all four embedding model files. Move it to `EmbeddingModelBase<T>` as a protected method.
+
+---
+
+`35-47`: **Potential integer overflow in embedding calculation.**
+
+Line 42 computes `(double)hash * (i + 1) * 0.003`. For large dimensions, the multiplication `hash * (i + 1)` can overflow `int` before casting to `double`, producing incorrect embeddings.
+
+
+
+Cast to double before multiplication:
+
+```diff
+ for (int i = 0; i < _dimension; i++)
+ {
+-    var val = NumOps.FromDouble(Math.Sin((double)hash * (i + 1) * 0.003));
++    var val = NumOps.FromDouble(Math.Sin((double)hash * (double)(i + 1) * 0.003));
+     values[i] = val;
+ }
+```
+
+</blockquote></details>
+<details>
+<summary>src/RetrievalAugmentedGeneration/EmbeddingModels/ONNXSentenceTransformer.cs (3)</summary><blockquote>
+
+`21-33`: **Unused modelPath parameter misleads users.**
+
+The constructor validates and stores `modelPath`, implying ONNX model loading. However, `EmbedCore` ignores `_modelPath` and generates synthetic hash-based embeddings. This breaks the expected contract and will cause silent failures in production.
+
+
+
+
+Either implement actual ONNX model loading from `_modelPath` or remove the parameter and document this as a synthetic placeholder.
+
+---
+
+`49-63`: **Move duplicated method to base class.**
+
+`GetDeterministicHash` is duplicated identically across `HuggingFaceEmbeddingModel.cs`, `OpenAIEmbeddingModel.cs`, `LocalTransformerEmbedding.cs`, and this file. Consolidate it in `EmbeddingModelBase<T>` as a protected method.
+
+---
+
+`35-47`: **Potential integer overflow in embedding calculation.**
+
+Line 42 computes `(double)hash * (i + 1) * 0.002`. When `dimension` is large, `hash * (i + 1)` can overflow `int` before the cast to `double`, corrupting higher-dimensional embeddings.
+
+
+
+Cast to double before multiplication:
+
+```diff
+ for (int i = 0; i < _dimension; i++)
+ {
+-    var val = NumOps.FromDouble(Math.Cos((double)hash * (i + 1) * 0.002));
++    var val = NumOps.FromDouble(Math.Cos((double)hash * (double)(i + 1) * 0.002));
+     values[i] = val;
+ }
+```
+
+</blockquote></details>
+<details>
+<summary>src/RetrievalAugmentedGeneration/RerankingStrategies/ReciprocalRankFusion.cs (1)</summary><blockquote>
+
+`108-111`: **Missing HasRelevanceScore flag assignment.**
+
+After assigning `RelevanceScore`, you must also set `doc.HasRelevanceScore = true`. This flag is used by downstream components to determine whether a document has been scored. Without it, these reranked documents may be incorrectly treated as unscored.
+
+
+
+Apply this diff to fix the issue:
+
+```diff
+         foreach (var doc in reranked)
+         {
+             doc.RelevanceScore = scores[doc.Id];
++            doc.HasRelevanceScore = true;
+         }
+```
+
+</blockquote></details>
+
+</blockquote></details>
+
+<details>
+<summary>≡ƒº╣ Nitpick comments (4)</summary><blockquote>
+
+<details>
+<summary>src/RetrievalAugmentedGeneration/Retrievers/TFIDFRetriever.cs (2)</summary><blockquote>
+
+`77-85`: **Extract duplicate tokenization logic to a shared helper.**
+
+The `Tokenize` method is duplicated verbatim in `BM25Retriever.cs` (lines 169-177). Consider extracting this to `RetrieverBase<T>` or a shared `TextProcessingHelper` to maintain a single implementation.
+
+---
+
+`146-161`: **Extract duplicate filter matching logic to a shared helper.**
+
+The `MatchesFilters` method is duplicated verbatim in `BM25Retriever.cs` (lines 179-194). Consider extracting this to `RetrieverBase<T>` as a protected helper method to eliminate duplication.
+
+</blockquote></details>
+<details>
+<summary>src/RetrievalAugmentedGeneration/Retrievers/BM25Retriever.cs (1)</summary><blockquote>
+
+`152-155`: **Remove redundant `Distinct()` call.**
+
+Dictionary keys are already unique, so `.Distinct()` on line 152 is unnecessary and adds overhead. The document frequency increment logic is correct without it.
+
+
+Apply this diff:
+
+```diff
+-                foreach (var term in termCounts.Keys.Distinct())
++                foreach (var term in termCounts.Keys)
+                 {
+                     _documentFrequencies[term]++;
+                 }
+```
+
+</blockquote></details>
+<details>
+<summary>src/RetrievalAugmentedGeneration/RerankingStrategies/ReciprocalRankFusion.cs (1)</summary><blockquote>
+
+`56-64`: **Remove redundant dictionary checks for cleaner code.**
+
+Since the loop at lines 41-54 adds every `doc.Id` to the `scores` dictionary, all documents are guaranteed to have entries by line 56. The `TryGetValue` check at line 57 and the `Where` filter at line 60 are redundant and add unnecessary overhead.
+
+
+
+Apply this diff to simplify the code:
+
+```diff
+         var reranked = documents
+-            .OrderByDescending(d => scores.TryGetValue(d.Id, out var score) ? Convert.ToDouble(score) : 0.0)
++            .OrderByDescending(d => Convert.ToDouble(scores[d.Id]))
+             .ToList();
+
+-        foreach (var doc in reranked.Where(d => scores.ContainsKey(d.Id)))
++        foreach (var doc in reranked)
+         {
+             doc.RelevanceScore = scores[doc.Id];
+             doc.HasRelevanceScore = true;
+         }
+```
+
+</blockquote></details>
+
+</blockquote></details>
+
+<details>
+<summary>≡ƒô£ Review details</summary>
+
+**Configuration used**: CodeRabbit UI
+
+**Review profile**: CHILL
+
+**Plan**: Pro
+
+<details>
+<summary>≡ƒôÑ Commits</summary>
+
+Reviewing files that changed from the base of the PR and between 351c3dea4d2ca16823303d522d76f76de8960678 and c0be21878ba289b4ea925eacff9c9a9164ad807a.
+
+</details>
+
+<details>
+<summary>≡ƒôÆ Files selected for processing (7)</summary>
+
+* `src/RetrievalAugmentedGeneration/EmbeddingModels/HuggingFaceEmbeddingModel.cs` (1 hunks)
+* `src/RetrievalAugmentedGeneration/EmbeddingModels/LocalTransformerEmbedding.cs` (1 hunks)
+* `src/RetrievalAugmentedGeneration/EmbeddingModels/ONNXSentenceTransformer.cs` (1 hunks)
+* `src/RetrievalAugmentedGeneration/EmbeddingModels/OpenAIEmbeddingModel.cs` (1 hunks)
+* `src/RetrievalAugmentedGeneration/RerankingStrategies/ReciprocalRankFusion.cs` (1 hunks)
+* `src/RetrievalAugmentedGeneration/Retrievers/BM25Retriever.cs` (1 hunks)
+* `src/RetrievalAugmentedGeneration/Retrievers/TFIDFRetriever.cs` (1 hunks)
+
+</details>
+
+<details>
+<summary>≡ƒº░ Additional context used</summary>
+
+<details>
+<summary>≡ƒº¼ Code graph analysis (7)</summary>
+
+<details>
+<summary>src/RetrievalAugmentedGeneration/EmbeddingModels/LocalTransformerEmbedding.cs (3)</summary><blockquote>
+
+<details>
+<summary>src/RetrievalAugmentedGeneration/Embeddings/EmbeddingModelBase.cs (1)</summary>
+
+* `EmbeddingModelBase` (25-175)
+
+</details>
+<details>
+<summary>src/RetrievalAugmentedGeneration/EmbeddingModels/HuggingFaceEmbeddingModel.cs (2)</summary>
+
+* `Vector` (37-49)
+* `GetDeterministicHash` (51-65)
+
+</details>
+<details>
+<summary>src/RetrievalAugmentedGeneration/EmbeddingModels/OpenAIEmbeddingModel.cs (2)</summary>
+
+* `Vector` (39-51)
+* `GetDeterministicHash` (53-67)
+
+</details>
+
+</blockquote></details>
+<details>
+<summary>src/RetrievalAugmentedGeneration/RerankingStrategies/ReciprocalRankFusion.cs (2)</summary><blockquote>
+
+<details>
+<summary>src/RetrievalAugmentedGeneration/Rerankers/RerankerBase.cs (2)</summary>
+
+* `RerankerBase` (27-203)
+* `IList` (154-202)
+
+</details>
+<details>
+<summary>src/RetrievalAugmentedGeneration/Models/Document.cs (4)</summary>
+
+* `Document` (28-158)
+* `Document` (132-135)
+* `Document` (142-146)
+* `Document` (154-157)
+
+</details>
+
+</blockquote></details>
+<details>
+<summary>src/RetrievalAugmentedGeneration/EmbeddingModels/ONNXSentenceTransformer.cs (2)</summary><blockquote>
+
+<details>
+<summary>src/RetrievalAugmentedGeneration/Embeddings/EmbeddingModelBase.cs (1)</summary>
+
+* `EmbeddingModelBase` (25-175)
+
+</details>
+<details>
+<summary>src/RetrievalAugmentedGeneration/EmbeddingModels/HuggingFaceEmbeddingModel.cs (2)</summary>
+
+* `Vector` (37-49)
+* `GetDeterministicHash` (51-65)
+
+</details>
+
+</blockquote></details>
+<details>
+<summary>src/RetrievalAugmentedGeneration/EmbeddingModels/OpenAIEmbeddingModel.cs (4)</summary><blockquote>
+
+<details>
+<summary>src/RetrievalAugmentedGeneration/Embeddings/EmbeddingModelBase.cs (3)</summary>
+
+* `EmbeddingModelBase` (25-175)
+* `Vector` (47-51)
+* `Vector` (96-96)
+
+</details>
+<details>
+<summary>src/RetrievalAugmentedGeneration/EmbeddingModels/HuggingFaceEmbeddingModel.cs (2)</summary>
+
+* `Vector` (37-49)
+* `GetDeterministicHash` (51-65)
+
+</details>
+<details>
+<summary>src/RetrievalAugmentedGeneration/EmbeddingModels/LocalTransformerEmbedding.cs (2)</summary>
+
+* `Vector` (35-47)
+* `GetDeterministicHash` (49-63)
+
+</details>
+<details>
+<summary>src/RetrievalAugmentedGeneration/EmbeddingModels/ONNXSentenceTransformer.cs (2)</summary>
+
+* `Vector` (35-47)
+* `GetDeterministicHash` (49-63)
+
+</details>
+
+</blockquote></details>
+<details>
+<summary>src/RetrievalAugmentedGeneration/EmbeddingModels/HuggingFaceEmbeddingModel.cs (4)</summary><blockquote>
+
+<details>
+<summary>src/RetrievalAugmentedGeneration/Embeddings/EmbeddingModelBase.cs (1)</summary>
+
+* `EmbeddingModelBase` (25-175)
+
+</details>
+<details>
+<summary>src/RetrievalAugmentedGeneration/EmbeddingModels/LocalTransformerEmbedding.cs (2)</summary>
+
+* `Vector` (35-47)
+* `GetDeterministicHash` (49-63)
+
+</details>
+<details>
+<summary>src/RetrievalAugmentedGeneration/EmbeddingModels/ONNXSentenceTransformer.cs (2)</summary>
+
+* `Vector` (35-47)
+* `GetDeterministicHash` (49-63)
+
+</details>
+<details>
+<summary>src/RetrievalAugmentedGeneration/EmbeddingModels/OpenAIEmbeddingModel.cs (2)</summary>
+
+* `Vector` (39-51)
+* `GetDeterministicHash` (53-67)
+
+</details>
+
+</blockquote></details>
+<details>
+<summary>src/RetrievalAugmentedGeneration/Retrievers/BM25Retriever.cs (2)</summary><blockquote>
+
+<details>
+<summary>src/RetrievalAugmentedGeneration/Retrievers/TFIDFRetriever.cs (3)</summary>
+
+* `IEnumerable` (30-75)
+* `MatchesFilters` (146-161)
+* `List` (77-85)
+
+</details>
+<details>
+<summary>src/RetrievalAugmentedGeneration/Models/Document.cs (4)</summary>
+
+* `Document` (28-158)
+* `Document` (132-135)
+* `Document` (142-146)
+* `Document` (154-157)
+
+</details>
+
+</blockquote></details>
+<details>
+<summary>src/RetrievalAugmentedGeneration/Retrievers/TFIDFRetriever.cs (2)</summary><blockquote>
+
+<details>
+<summary>src/RetrievalAugmentedGeneration/Retrievers/BM25Retriever.cs (5)</summary>
+
+* `T` (86-102)
+* `T` (104-118)
+* `IEnumerable` (41-84)
+* `MatchesFilters` (179-194)
+* `List` (169-177)
+
+</details>
+<details>
+<summary>src/RetrievalAugmentedGeneration/Models/Document.cs (4)</summary>
+
+* `Document` (28-158)
+* `Document` (132-135)
+* `Document` (142-146)
+* `Document` (154-157)
+
+</details>
+
+</blockquote></details>
+
+</details>
+
+</details>
+
+<details>
+<summary>≡ƒöç Additional comments (10)</summary><blockquote>
+
+<details>
+<summary>src/RetrievalAugmentedGeneration/Retrievers/TFIDFRetriever.cs (1)</summary><blockquote>
+
+`20-28`: **LGTM!**
+
+Constructor properly validates the document store and initializes all necessary data structures.
+
+</blockquote></details>
+<details>
+<summary>src/RetrievalAugmentedGeneration/Retrievers/BM25Retriever.cs (6)</summary><blockquote>
+
+`25-39`: **LGTM!**
+
+Constructor properly validates the document store, converts BM25 parameters to the generic numeric type, and initializes all necessary data structures.
+
+---
+
+`41-84`: **Retrieval logic is correct; architectural concern noted elsewhere.**
+
+The scoring and filtering logic is correctly implemented. The zero-vector workaround at lines 46-49 is an architectural issue already flagged in past reviews and applies to both BM25 and TF-IDF retrievers.
+
+---
+
+`86-102`: **LGTM!**
+
+The BM25 term scoring formula is correctly implemented with proper length normalization and IDF weighting. The guards for missing data prevent runtime exceptions.
+
+---
+
+`104-118`: **LGTM!**
+
+The smoothed IDF calculation follows the BM25 standard formula with appropriate guards against edge cases.
+
+---
+
+`169-177`: **Duplicate tokenization logic.**
+
+This method is identical to the one in `TFIDFRetriever.cs` and should be extracted to a shared location, as noted in the TFIDFRetriever review.
+
+---
+
+`179-194`: **Duplicate filter matching logic.**
+
+This method is identical to the one in `TFIDFRetriever.cs` and should be extracted to a shared location, as noted in the TFIDFRetriever review.
+
+</blockquote></details>
+<details>
+<summary>src/RetrievalAugmentedGeneration/EmbeddingModels/HuggingFaceEmbeddingModel.cs (1)</summary><blockquote>
+
+`37-49`: **Potential integer overflow in embedding calculation.**
+
+Line 44 computes `(double)hash * (i + 1) * 0.002`. When `dimension` is large (e.g., 10,000+), the multiplication `hash * (i + 1)` can overflow `int` before the cast to `double`, producing incorrect embeddings for higher-dimensional vectors.
+
+
+
+Apply this fix to cast before multiplication:
+
+```diff
+ for (int i = 0; i < _dimension; i++)
+ {
+-    var val = NumOps.FromDouble(Math.Cos((double)hash * (i + 1) * 0.002));
++    var val = NumOps.FromDouble(Math.Cos((double)hash * (double)(i + 1) * 0.002));
+     values[i] = val;
+ }
+```
+
+
+
+> Likely an incorrect or invalid review comment.
+
+</blockquote></details>
+<details>
+<summary>src/RetrievalAugmentedGeneration/EmbeddingModels/OpenAIEmbeddingModel.cs (1)</summary><blockquote>
+
+`39-51`: **Potential integer overflow in embedding calculation.**
+
+Line 46 computes `(double)hash * (i + 1) * 0.001`. For large dimensions, `hash * (i + 1)` can overflow `int` before the cast to `double`, corrupting embeddings in higher-dimensional vectors.
+
+
+
+Cast to double before multiplication:
+
+```diff
+ for (int i = 0; i < _dimension; i++)
+ {
+-    var val = NumOps.FromDouble(Math.Cos((double)hash * (i + 1) * 0.001));
++    var val = NumOps.FromDouble(Math.Cos((double)hash * (double)(i + 1) * 0.001));
+     values[i] = val;
+ }
+```
+
+
+
+> Likely an incorrect or invalid review comment.
+
+</blockquote></details>
+<details>
+<summary>src/RetrievalAugmentedGeneration/RerankingStrategies/ReciprocalRankFusion.cs (1)</summary><blockquote>
+
+`15-29`: **LGTM!**
+
+The constructor properly validates the RRF constant `k` and the `ModifiesScores` property correctly indicates that this reranker modifies scores.
+
+</blockquote></details>
+
+</blockquote></details>
+
+</details>
+
+<!-- This is an auto-generated comment by CodeRabbit for review status -->

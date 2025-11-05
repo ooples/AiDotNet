@@ -130,6 +130,13 @@ namespace AiDotNet.RetrievalAugmentedGeneration.Retrievers
             {
                 var termTfidf = new Dictionary<string, T>();
                 var termCounts = docTermFreq[doc.Id];
+                
+                if (termCounts.Count == 0)
+                {
+                    _tfidf[doc.Id] = termTfidf;
+                    continue;
+                }
+                
                 var maxFreq = termCounts.Values.Max();
 
                 foreach (var termCount in termCounts)
