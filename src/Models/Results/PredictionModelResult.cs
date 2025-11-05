@@ -886,14 +886,7 @@ public class PredictionModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
         if (string.IsNullOrWhiteSpace(query))
             throw new ArgumentException("Query cannot be null or empty", nameof(query));
 
-        var processedQuery = query;
-        if (QueryProcessors != null)
-        {
-            foreach (var processor in QueryProcessors)
-            {
-                processedQuery = processor.ProcessQuery(processedQuery);
-            }
-        }
+        var processedQuery = ProcessQueryWithProcessors(query);
 
         var filters = metadataFilters ?? new Dictionary<string, object>();
         var effectiveTopK = topK ?? RagRetriever.DefaultTopK;
@@ -954,14 +947,7 @@ public class PredictionModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
         if (string.IsNullOrWhiteSpace(query))
             throw new ArgumentException("Query cannot be null or empty", nameof(query));
 
-        var processedQuery = query;
-        if (QueryProcessors != null)
-        {
-            foreach (var processor in QueryProcessors)
-            {
-                processedQuery = processor.ProcessQuery(processedQuery);
-            }
-        }
+        var processedQuery = ProcessQueryWithProcessors(query);
 
         var filters = metadataFilters ?? new Dictionary<string, object>();
         var effectiveTopK = topK ?? RagRetriever.DefaultTopK;
@@ -973,5 +959,23 @@ public class PredictionModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
         }
 
         return docs.ToList();
+    }
+
+    /// <summary>
+    /// Processes a query through all configured query processors in sequence.
+    /// </summary>
+    /// <param name="query">The original query to process.</param>
+    /// <returns>The processed query after applying all processors, or the original if no processors configured.</returns>
+    private string ProcessQueryWithProcessors(string query)
+    {
+        if (QueryProcessors == null)
+            return query;
+
+        var processedQuery = query;
+        foreach (var processor in QueryProcessors)
+        {
+            processedQuery = processor.ProcessQuery(processedQuery);
+        }
+        return processedQuery;
     }
 }
