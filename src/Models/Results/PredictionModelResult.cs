@@ -938,10 +938,16 @@ public class PredictionModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
         bool applyReranking = true,
         Dictionary<string, object>? metadataFilters = null)
     {
-        if (RagRetriever == null || RagReranker == null)
+        if (RagRetriever == null)
         {
             throw new InvalidOperationException(
-                "RAG pipeline not configured. Configure RAG components using PredictionModelBuilder.ConfigureRetrievalAugmentedGeneration() before building the model.");
+                "RAG retriever not configured. Configure RAG components using PredictionModelBuilder.ConfigureRetrievalAugmentedGeneration() before building the model.");
+        }
+
+        if (applyReranking && RagReranker == null)
+        {
+            throw new InvalidOperationException(
+                "RAG reranker not configured. Either configure a reranker or call RetrieveDocuments with applyReranking = false.");
         }
 
         if (string.IsNullOrWhiteSpace(query))
@@ -953,7 +959,7 @@ public class PredictionModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
         var effectiveTopK = topK ?? RagRetriever.DefaultTopK;
         var docs = RagRetriever.Retrieve(processedQuery, effectiveTopK, filters);
 
-        if (applyReranking)
+        if (applyReranking && RagReranker != null)
         {
             docs = RagReranker.Rerank(processedQuery, docs);
         }
