@@ -92,6 +92,12 @@ public class HeaderBasedTextSplitter : ChunkingStrategyBase
             chunks.Add((content, chunkStart, position));
         }
 
+        // Combine small chunks if enabled
+        if (_combineSmallChunks && chunks.Count > 1)
+        {
+            chunks = CombineSmallChunks(chunks);
+        }
+
         return chunks;
     }
 
@@ -113,5 +119,47 @@ public class HeaderBasedTextSplitter : ChunkingStrategyBase
             return true;
 
         return false;
+    }
+
+    private List<(string, int, int)> CombineSmallChunks(List<(string content, int start, int end)> chunks)
+    {
+        var result = new List<(string, int, int)>();
+        var i = 0;
+
+        while (i < chunks.Count)
+        {
+            var current = chunks[i];
+
+            // If this chunk is large enough, add it as-is
+            if (current.content.Length >= _minChunkSize || i == chunks.Count - 1)
+            {
+                result.Add(current);
+                i++;
+                continue;
+            }
+
+            // Try to combine with next chunk
+            var combined = current.content;
+            var combinedStart = current.start;
+            var combinedEnd = current.end;
+            var j = i + 1;
+
+            while (j < chunks.Count && combined.Length < _minChunkSize)
+            {
+                var next = chunks[j];
+                combined += Environment.NewLine + next.content;
+                combinedEnd = next.end;
+                j++;
+
+                // Stop if combined chunk exceeds max chunk size
+                if (combined.Length >= ChunkSize)
+                    break;
+            }
+
+            result.Add((combined, combinedStart, combinedEnd));
+            i = j;
+        }
+
+        return result;
     }
 }
