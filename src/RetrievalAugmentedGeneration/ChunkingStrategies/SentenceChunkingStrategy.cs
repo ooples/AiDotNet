@@ -96,6 +96,27 @@ public class SentenceChunkingStrategy : ChunkingStrategyBase
                 currentChunk = currentChunk.GetRange(overlapStart, currentChunk.Count - overlapStart);
                 currentLength = currentChunk.Sum(s => s.Length + 1) - 1; // +1 for space, -1 to remove last space
             }
+            
+            // Handle sentences that exceed maxChunkSize on their own
+            if (sentenceLength > _maxChunkSize)
+            {
+                // If we have accumulated content, save it first
+                if (currentChunk.Count > 0)
+                {
+                    chunks.Add(string.Join(" ", currentChunk));
+                    currentChunk.Clear();
+                    currentLength = 0;
+                }
+                
+                // Split the oversized sentence into smaller pieces
+                for (int pos = 0; pos < sentence.Length; pos += _maxChunkSize)
+                {
+                    var pieceLength = Math.Min(_maxChunkSize, sentence.Length - pos);
+                    chunks.Add(sentence.Substring(pos, pieceLength));
+                }
+                
+                continue;
+            }
 
             currentChunk.Add(sentence);
             currentLength += sentenceLength + (currentChunk.Count > 1 ? 1 : 0); // Add space if not first sentence
@@ -118,14 +139,25 @@ public class SentenceChunkingStrategy : ChunkingStrategyBase
             chunks.Add(string.Join(" ", currentChunk));
         }
 
-        // Convert to tuples with positions
+        // Convert to tuples with positions (track actual positions in original text)
         var results = new List<(string, int, int)>();
-        var position = 0;
+        var searchPos = 0;
+        
         foreach (var chunk in chunks)
         {
-            var endPos = position + chunk.Length;
-            results.Add((chunk, position, endPos));
-            position = endPos;
+            // Find where this chunk appears in the original text
+            var startPos = text.IndexOf(chunk, searchPos, StringComparison.Ordinal);
+            if (startPos == -1)
+            {
+                // Fallback: if exact match not found (shouldn't happen), use sequential position
+                startPos = searchPos;
+            }
+            
+            var endPos = startPos + chunk.Length;
+            results.Add((chunk, startPos, endPos));
+            
+            // Move search position forward, accounting for overlap
+            searchPos = startPos + 1;
         }
 
         return results;
