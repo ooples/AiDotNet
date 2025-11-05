@@ -1,13 +1,13 @@
-using AiDotNet.Helpers;
-using AiDotNet.Interfaces;
-using AiDotNet.LinearAlgebra;
-using AiDotNet.RetrievalAugmentedGeneration.Models;
-using Newtonsoft.Json.Linq;
 using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Net.Http;
 using System.Text;
+using AiDotNet.Helpers;
+using AiDotNet.Interfaces;
+using AiDotNet.LinearAlgebra;
+using AiDotNet.RetrievalAugmentedGeneration.Models;
+using Newtonsoft.Json.Linq;
 
 namespace AiDotNet.RetrievalAugmentedGeneration.DocumentStores;
 
@@ -51,13 +51,21 @@ public class ChromaDBDocumentStore<T> : DocumentStoreBase<T>
 
     private void EnsureCollection()
     {
-        var payload = new { name = _collectionName };
-        var content = new StringContent(
-            Newtonsoft.Json.JsonConvert.SerializeObject(payload),
-            Encoding.UTF8,
-            "application/json");
+        try
+        {
+            var payload = new { name = _collectionName };
+            using var content = new StringContent(
+                Newtonsoft.Json.JsonConvert.SerializeObject(payload),
+                Encoding.UTF8,
+                "application/json");
 
-        _httpClient.PostAsync("/api/v1/collections", content).Wait();
+            using var response = _httpClient.PostAsync("/api/v1/collections", content).GetAwaiter().GetResult();
+            response.EnsureSuccessStatusCode();
+        }
+        catch (HttpRequestException)
+        {
+            // Collection may already exist, which is acceptable
+        }
     }
 
     protected override void AddCore(VectorDocument<T> vectorDocument)
@@ -77,14 +85,14 @@ public class ChromaDBDocumentStore<T> : DocumentStoreBase<T>
             metadatas = new[] { vectorDocument.Document.Metadata }
         };
 
-        var content = new StringContent(
+        using var content = new StringContent(
             Newtonsoft.Json.JsonConvert.SerializeObject(payload),
             Encoding.UTF8,
             "application/json");
 
-        var response = _httpClient.PostAsync($"/api/v1/collections/{_collectionName}/add", content).Result;
-        if (response.IsSuccessStatusCode)
-            _documentCount++;
+        using var response = _httpClient.PostAsync($"/api/v1/collections/{_collectionName}/add", content).GetAwaiter().GetResult();
+        response.EnsureSuccessStatusCode();
+        _documentCount++;
     }
 
     protected override void AddBatchCore(IList<VectorDocument<T>> vectorDocuments)
@@ -104,14 +112,14 @@ public class ChromaDBDocumentStore<T> : DocumentStoreBase<T>
         var metadatas = vectorDocuments.Select(vd => vd.Document.Metadata).ToList();
 
         var payload = new { ids, embeddings, documents, metadatas };
-        var content = new StringContent(
+        using var content = new StringContent(
             Newtonsoft.Json.JsonConvert.SerializeObject(payload),
             Encoding.UTF8,
             "application/json");
 
-        var response = _httpClient.PostAsync($"/api/v1/collections/{_collectionName}/add", content).Result;
-        if (response.IsSuccessStatusCode)
-            _documentCount += vectorDocuments.Count;
+        using var response = _httpClient.PostAsync($"/api/v1/collections/{_collectionName}/add", content).GetAwaiter().GetResult();
+        response.EnsureSuccessStatusCode();
+        _documentCount += vectorDocuments.Count;
     }
 
     protected override IEnumerable<Document<T>> GetSimilarCore(Vector<T> queryVector, int topK, Dictionary<string, object> metadataFilters)
@@ -124,13 +132,14 @@ public class ChromaDBDocumentStore<T> : DocumentStoreBase<T>
             n_results = topK
         };
 
-        var content = new StringContent(
+        using var content = new StringContent(
             Newtonsoft.Json.JsonConvert.SerializeObject(payload),
             Encoding.UTF8,
             "application/json");
 
-        var response = _httpClient.PostAsync($"/api/v1/collections/{_collectionName}/query", content).Result;
-        var responseContent = response.Content.ReadAsStringAsync().Result;
+        using var response = _httpClient.PostAsync($"/api/v1/collections/{_collectionName}/query", content).GetAwaiter().GetResult();
+        response.EnsureSuccessStatusCode();
+        var responseContent = response.Content.ReadAsStringAsync().GetAwaiter().GetResult();
         var result = JObject.Parse(responseContent);
 
         var results = new List<Document<T>>();
@@ -197,12 +206,12 @@ public class ChromaDBDocumentStore<T> : DocumentStoreBase<T>
         _cache.Remove(documentId);
 
         var payload = new { ids = new[] { documentId } };
-        var content = new StringContent(
+        using var content = new StringContent(
             Newtonsoft.Json.JsonConvert.SerializeObject(payload),
             Encoding.UTF8,
             "application/json");
 
-        var response = _httpClient.PostAsync($"/api/v1/collections/{_collectionName}/delete", content).Result;
+        using var response = _httpClient.PostAsync($"/api/v1/collections/{_collectionName}/delete", content).GetAwaiter().GetResult();
         if (response.IsSuccessStatusCode && _documentCount > 0)
         {
             _documentCount--;
@@ -279,7 +288,8 @@ public class ChromaDBDocumentStore<T> : DocumentStoreBase<T>
     public override void Clear()
     {
         _cache.Clear();
-        _httpClient.DeleteAsync($"/api/v1/collections/{_collectionName}").Wait();
+        using var response = _httpClient.DeleteAsync($"/api/v1/collections/{_collectionName}").GetAwaiter().GetResult();
+        response.EnsureSuccessStatusCode();
         _documentCount = 0;
         _vectorDimension = 0;
         EnsureCollection();
