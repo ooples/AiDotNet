@@ -157,8 +157,6 @@ public abstract class RerankerBase<T> : IReranker<T>
             return documents;
 
         var scores = docsWithScores.Select(d => d.RelevanceScore).ToList();
-        if (scores.Count == 0)
-            return documents;
 
         var minScore = scores[0];
         var maxScore = scores[0];
