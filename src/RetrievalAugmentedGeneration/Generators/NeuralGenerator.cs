@@ -262,11 +262,21 @@ public class NeuralGenerator<T> : IGenerator<T>
         var generatedAnswer = Generate(fullPrompt);
 
         // Calculate confidence based on retrieval scores
-        // NOTE: This confidence reflects retrieval quality, not generation certainty.
-        // For production systems, consider also tracking token probabilities during
-        // generation (e.g., average probability of sampled tokens) and combining
-        // both metrics for a more comprehensive confidence score.
-        // Current approach: Simple average of document relevance scores
+        // IMPORTANT: This confidence reflects retrieval quality (how well documents matched the query),
+        // NOT generation quality (how accurate or coherent the generated answer is).
+        //
+        // Limitations:
+        // - Does not measure generation confidence or hallucination risk
+        // - Does not track token probabilities during generation
+        // - Assumes retrieval scores correlate with answer quality
+        //
+        // For production RAG systems, consider implementing:
+        // 1. Token probability tracking during generation (average log-prob of generated tokens)
+        // 2. Consistency checking (generate multiple answers and measure agreement)
+        // 3. Entailment scoring (verify answer is entailed by retrieved documents)
+        // 4. Combine all metrics: confidence = α*retrieval_score + β*generation_score + γ*entailment_score
+        //
+        // Current implementation: Simple average of document relevance scores as proxy for answer quality
         var avgScore = contextList
             .Where(d => d.HasRelevanceScore)
             .Select(d => Convert.ToDouble(d.RelevanceScore))

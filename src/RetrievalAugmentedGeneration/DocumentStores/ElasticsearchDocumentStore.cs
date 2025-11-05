@@ -537,7 +537,6 @@ public class ElasticsearchDocumentStore<T> : DocumentStoreBase<T>
     /// - Index is deleted from Elasticsearch
     /// - Cache is cleared
     /// - Document count resets to 0
-    /// - Vector dimension resets to 0
     /// - Index is recreated with fresh mapping
     /// - Ready for new documents
     /// 
