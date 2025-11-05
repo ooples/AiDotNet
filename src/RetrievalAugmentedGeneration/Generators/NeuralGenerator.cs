@@ -4,49 +4,50 @@ using System.Linq;
 using System.Text;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
+using AiDotNet.LinearAlgebra;
 using AiDotNet.NeuralNetworks;
 using AiDotNet.RetrievalAugmentedGeneration.Models;
 
 namespace AiDotNet.RetrievalAugmentedGeneration.Generators;
 
 /// <summary>
-/// Production-ready neural network-based text generator for RAG systems.
+/// Neural network-based text generator for RAG systems using LSTM architecture.
 /// </summary>
 /// <typeparam name="T">The numeric data type used for calculations and relevance scoring.</typeparam>
 /// <remarks>
 /// <para>
-/// This generator uses an LSTM-based neural network architecture for text generation, providing
-/// production-ready language modeling capabilities for retrieval-augmented generation tasks.
-/// It processes retrieved context documents and generates coherent, grounded answers with proper
-/// citations to source material.
+/// This generator uses an LSTM neural network for token-by-token text generation in
+/// retrieval-augmented generation tasks. It processes context through the trained LSTM
+/// and generates responses using temperature-based sampling from the network's probability
+/// distributions.
 /// </para>
-/// <para><b>For Beginners:</b> This generator creates intelligent answers using neural networks.
+/// <para><b>For Beginners:</b> This generator uses a trained neural network to create answers.
 ///
-/// Think of it like a smart writer with training:
+/// Think of it like a smart writer:
 /// - Takes your question and retrieved documents
-/// - Uses an LSTM neural network to understand the context
-/// - Generates a well-written answer
-/// - Includes proper citations to sources
+/// - Converts text into numbers (tokens) the network understands
+/// - Uses an LSTM neural network to predict next words
+/// - Samples from probability distributions with temperature control
+/// - Converts numbers back to readable text
 ///
 /// How it works:
-/// 1. Encodes the question and context into numerical representations
-/// 2. Processes through LSTM layers to understand relationships
-/// 3. Generates text token-by-token using learned patterns
-/// 4. Formats output with citations
-/// 5. Calculates confidence based on context relevance
-///
-/// Unlike StubGenerator (which just formats text), this:
-/// - Actually understands language patterns
-/// - Can paraphrase and synthesize information
-/// - Generates fluent, natural responses
-/// - Adapts tone and style based on training
+/// 1. Tokenizes input text into numerical IDs
+/// 2. Feeds tokens through LSTM network layer-by-layer
+/// 3. Network outputs probability distribution over vocabulary
+/// 4. Samples next token using temperature (higher = more creative)
+/// 5. Repeats until generating enough tokens or reaching end token
+/// 6. Detokenizes back to human-readable text
 ///
 /// Production features:
+/// - Actual LSTM forward pass for each token
+/// - Temperature-based sampling for controlled randomness
 /// - Configurable context and generation limits
-/// - Proper error handling for edge cases
-/// - Citation extraction and source attribution
-/// - Confidence scoring based on retrieval quality
-/// - Memory-efficient processing for large contexts
+/// - Proper error handling and edge cases
+/// - Memory-efficient sequential processing
+///
+/// Note: This generator requires a pre-trained LSTM network with vocabulary matching
+/// the configured vocabulary size.  For production use, train the LSTM on your domain
+/// data or use transfer learning from a pre-trained language model.
 /// </para>
 /// </remarks>
 public class NeuralGenerator<T> : IGenerator<T>
@@ -272,36 +273,120 @@ public class NeuralGenerator<T> : IGenerator<T>
 
     private List<int> GenerateTokens(List<int> inputTokens, int maxTokens)
     {
-        var generated = new List<int>(inputTokens);
-        var random = new Random(42); // Deterministic for consistency
+        var generated = new List<int>();
+        var random = new Random(42); // For temperature sampling
+
+        // Start with input context
+        var currentSequence = new List<int>(inputTokens);
 
         for (int i = 0; i < maxTokens; i++)
         {
-            // Simplified next-token prediction (production would use full neural network forward pass)
-            var context = generated.Skip(Math.Max(0, generated.Count - 50)).ToList();
-            var nextToken = PredictNextToken(context, random);
+            // Take last N tokens as context window (prevent excessive memory use)
+            var contextWindow = currentSequence.Skip(Math.Max(0, currentSequence.Count - 128)).ToList();
+            
+            // Get next token using LSTM network
+            var nextToken = PredictNextToken(contextWindow, random);
 
             // Stop if we generate end-of-sequence token
             if (nextToken == 0)
                 break;
 
             generated.Add(nextToken);
+            currentSequence.Add(nextToken);
         }
 
-        return generated.Skip(inputTokens.Count).ToList();
+        return generated;
     }
 
     private int PredictNextToken(List<int> context, Random random)
     {
-        // Simplified prediction using context
         if (context.Count == 0)
-            return random.Next(1, _vocabularySize);
+            return random.Next(1, _vocabularySize); // Fallback for empty context
 
-        // Use last token as seed for next prediction (simplified)
-        var lastToken = context[context.Count - 1];
-        var nextToken = (lastToken + random.Next(1, 100)) % _vocabularySize;
+        // Create input tensor from context tokens
+        // Shape: [batch_size=1, sequence_length, embedding_dim=1]
+        var sequenceLength = context.Count;
+        var inputData = new T[sequenceLength];
+        
+        for (int i = 0; i < sequenceLength; i++)
+        {
+            // Normalize token IDs to [0, 1] range for network input
+            inputData[i] = NumOps.FromDouble((double)context[i] / _vocabularySize);
+        }
 
-        return nextToken;
+        var inputVector = new Vector<T>(inputData);
+        var inputTensor = new Tensor<T>(new[] { 1, sequenceLength, 1 }, inputVector);
+
+        // Forward pass through LSTM network
+        var outputTensor = _network.Predict(inputTensor);
+
+        // Extract logits for vocabulary
+        // Output shape: [batch_size, sequence_length, output_dim]
+        // We want the last time step's output
+        var outputVector = outputTensor.ToVector();
+        var outputDim = outputTensor.Shape[outputTensor.Shape.Length - 1];
+        
+        // Get the last time step's output
+        var lastStepStart = outputVector.Length - outputDim;
+        var logits = new T[Math.Min(outputDim, _vocabularySize)];
+        
+        for (int i = 0; i < logits.Length; i++)
+        {
+            logits[i] = outputVector[lastStepStart + i];
+        }
+
+        // Apply temperature and convert to probabilities
+        var probabilities = ApplyTemperatureAndSoftmax(logits, _temperature);
+
+        // Sample from probability distribution
+        return SampleFromDistribution(probabilities, random);
+    }
+
+    private double[] ApplyTemperatureAndSoftmax(T[] logits, double temperature)
+    {
+        // Apply temperature scaling: logits / temperature
+        var scaledLogits = new double[logits.Length];
+        var maxLogit = double.NegativeInfinity;
+        
+        for (int i = 0; i < logits.Length; i++)
+        {
+            scaledLogits[i] = Convert.ToDouble(logits[i]) / temperature;
+            if (scaledLogits[i] > maxLogit)
+                maxLogit = scaledLogits[i];
+        }
+
+        // Subtract max for numerical stability
+        var expSum = 0.0;
+        for (int i = 0; i < scaledLogits.Length; i++)
+        {
+            scaledLogits[i] = Math.Exp(scaledLogits[i] - maxLogit);
+            expSum += scaledLogits[i];
+        }
+
+        // Normalize to probabilities
+        var probabilities = new double[scaledLogits.Length];
+        for (int i = 0; i < scaledLogits.Length; i++)
+        {
+            probabilities[i] = scaledLogits[i] / expSum;
+        }
+
+        return probabilities;
+    }
+
+    private int SampleFromDistribution(double[] probabilities, Random random)
+    {
+        var sample = random.NextDouble();
+        var cumulative = 0.0;
+
+        for (int i = 0; i < probabilities.Length; i++)
+        {
+            cumulative += probabilities[i];
+            if (sample <= cumulative)
+                return i;
+        }
+
+        // Fallback to last token (should rarely happen due to floating point precision)
+        return probabilities.Length - 1;
     }
 
     private string TruncateText(string text, int maxLength)

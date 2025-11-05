@@ -7,6 +7,7 @@ namespace AiDotNet.RetrievalAugmentedGeneration.QueryProcessors;
 /// <summary>
 /// Rewrites queries for clarity and completeness, especially in conversational contexts.
 /// </summary>
+/// <typeparam name="T">The numeric data type for generator operations (typically double or float).</typeparam>
 /// <remarks>
 /// <para>
 /// This processor transforms conversational or context-dependent queries into standalone,
@@ -26,16 +27,16 @@ namespace AiDotNet.RetrievalAugmentedGeneration.QueryProcessors;
 /// This makes your searches clearer and gets better results!
 /// </para>
 /// </remarks>
-public class QueryRewritingProcessor : QueryProcessorBase
+public class QueryRewritingProcessor<T> : QueryProcessorBase
 {
-    private readonly IGenerator? _llmGenerator;
+    private readonly IGenerator<T>? _llmGenerator;
     private readonly List<string> _conversationHistory;
 
     /// <summary>
     /// Initializes a new instance of the QueryRewritingProcessor class.
     /// </summary>
     /// <param name="llmGenerator">Optional LLM generator for sophisticated query rewriting.</param>
-    public QueryRewritingProcessor(IGenerator? llmGenerator = null)
+    public QueryRewritingProcessor(IGenerator<T>? llmGenerator = null)
     {
         _llmGenerator = llmGenerator;
         _conversationHistory = new List<string>();

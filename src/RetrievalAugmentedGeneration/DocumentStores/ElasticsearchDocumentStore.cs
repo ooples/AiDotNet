@@ -481,7 +481,7 @@ public class ElasticsearchDocumentStore<T> : DocumentStoreBase<T>
             var content = source["content"]?.ToString() ?? string.Empty;
             var metadata = source["metadata"]?.ToObject<Dictionary<string, object>>() ?? new Dictionary<string, object>();
 
-            return new Document<T>(id, content, metadata);
+            return new Document<T>(id ?? Guid.NewGuid().ToString(), content, metadata);
         }
         catch
         {
