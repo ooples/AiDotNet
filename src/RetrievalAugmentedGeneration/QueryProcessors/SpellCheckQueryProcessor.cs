@@ -65,7 +65,11 @@ public class SpellCheckQueryProcessor : QueryProcessorBase
                 continue;
             }
 
-            var cleanWord = Regex.Replace(word, @"[^\w]", "");
+            // Extract trailing punctuation
+            var punctuation = Regex.Match(word, @"[^\w]+$").Value;
+            var leadingPunctuation = Regex.Match(word, @"^[^\w]+").Value;
+            var cleanWord = word.Trim(leadingPunctuation.ToCharArray()).Trim(punctuation.ToCharArray());
+            
             if (string.IsNullOrEmpty(cleanWord))
             {
                 correctedWords.Add(word);
@@ -73,27 +77,31 @@ public class SpellCheckQueryProcessor : QueryProcessorBase
             }
 
             var lowerWord = cleanWord.ToLowerInvariant();
+            string correctedWord;
             
             // First try exact misspelling match
             if (_misspellingToCorrect.TryGetValue(lowerWord, out var correction))
             {
-                correctedWords.Add(PreserveCase(cleanWord, correction));
+                correctedWord = PreserveCase(cleanWord, correction);
             }
             // Check if word is already correct
             else if (_correctWords.Contains(lowerWord))
             {
-                correctedWords.Add(word);
+                correctedWord = cleanWord;
             }
             // Then try fuzzy match against correct words if enabled
             else if (_maxEditDistance > 0 && lowerWord.Length > 3)
             {
                 var fuzzyMatch = FindFuzzyMatch(lowerWord);
-                correctedWords.Add(fuzzyMatch != null ? PreserveCase(cleanWord, fuzzyMatch) : word);
+                correctedWord = fuzzyMatch != null ? PreserveCase(cleanWord, fuzzyMatch) : cleanWord;
             }
             else
             {
-                correctedWords.Add(word);
+                correctedWord = cleanWord;
             }
+
+            // Reconstruct with original punctuation
+            correctedWords.Add(leadingPunctuation + correctedWord + punctuation);
         }
 
         return string.Join("", correctedWords);
