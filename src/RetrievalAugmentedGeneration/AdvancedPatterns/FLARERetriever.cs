@@ -251,7 +251,7 @@ Please provide a partial answer. If you need more information, indicate what is 
         // Check document relevance
         var relevanceScores = retrievedDocs
             .Where(d => d.HasRelevanceScore)
-            .Select(d => NumOps.ToDouble(d.RelevanceScore))
+            .Select(d => Convert.ToDouble(d.RelevanceScore))
             .ToList();
         
         var avgRelevance = relevanceScores.Any() ? relevanceScores.Average() : 0.5;
