@@ -114,6 +114,7 @@ public class SelfCorrectingRetriever<T>
     /// </summary>
     /// <param name="query">The user's question requiring a high-quality answer.</param>
     /// <param name="topK">Number of documents to retrieve in each iteration.</param>
+    /// <param name="metadataFilters">Optional metadata filters for document scoping (e.g., tenant ID, permissions).</param>
     /// <returns>Final refined answer after self-correction iterations.</returns>
     /// <exception cref="ArgumentException">Thrown when query is null or whitespace.</exception>
     /// <exception cref="ArgumentOutOfRangeException">Thrown when topK is not positive.</exception>
@@ -140,7 +141,7 @@ public class SelfCorrectingRetriever<T>
     /// Safety: Maximum 3 iterations prevent infinite loops if model keeps finding issues.
     /// </para>
     /// </remarks>
-    public string RetrieveAndAnswer(string query, int topK)
+    public string RetrieveAndAnswer(string query, int topK, Dictionary<string, object>? metadataFilters = null)
     {
         if (string.IsNullOrWhiteSpace(query))
             throw new ArgumentException("Query cannot be null or whitespace", nameof(query));
@@ -148,8 +149,10 @@ public class SelfCorrectingRetriever<T>
         if (topK <= 0)
             throw new ArgumentOutOfRangeException(nameof(topK), "topK must be positive");
 
+        metadataFilters ??= new Dictionary<string, object>();
+
         // Step 1: Initial retrieval
-        var documents = _baseRetriever.Retrieve(query, topK).ToList();
+        var documents = _baseRetriever.Retrieve(query, topK, metadataFilters).ToList();
         
         if (documents.Count == 0)
         {
@@ -199,7 +202,7 @@ Provide a brief critique.";
             }
 
             // Step 6: Retrieve additional documents
-            var additionalDocs = _baseRetriever.Retrieve(missingInfo, topK: 2).ToList();
+            var additionalDocs = _baseRetriever.Retrieve(missingInfo, topK: 2, metadataFilters).ToList();
             
             if (additionalDocs.Count == 0)
             {
