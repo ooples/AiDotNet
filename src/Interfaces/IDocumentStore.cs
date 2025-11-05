@@ -208,3 +208,4 @@ public interface IDocumentStore<T>
     /// </remarks>
     IEnumerable<Document<T>> GetAll();
 }
+

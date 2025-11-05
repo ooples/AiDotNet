@@ -63,19 +63,21 @@ namespace AiDotNet.RetrievalAugmentedGeneration.Retrievers;
 /// </para>
 /// </remarks>
 public class MultiVectorRetriever<T> : RetrieverBase<T>
+    where T : struct, IComparable<T>, IConvertible, IFormattable
 {
     private readonly int _vectorsPerDocument;
     private readonly string _aggregationMethod;
-
     private readonly IDocumentStore<T> _documentStore;
+    private readonly IEmbeddingModel<T> _embeddingModel;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="MultiVectorRetriever{T}"/> class.
     /// </summary>
     /// <param name="documentStore">The document store containing documents with multiple vector representations.</param>
+    /// <param name="embeddingModel">The embedding model used to vectorize queries for similarity matching.</param>
     /// <param name="vectorsPerDocument">Number of embedding vectors per document (typically 3-5 for optimal balance).</param>
     /// <param name="aggregationMethod">Method for combining vector scores: "max" (best match), "mean" (average), or "weighted" (position-based weights).</param>
-    /// <exception cref="ArgumentNullException">Thrown when documentStore or aggregationMethod is null.</exception>
+    /// <exception cref="ArgumentNullException">Thrown when any parameter is null.</exception>
     /// <exception cref="ArgumentOutOfRangeException">Thrown when vectorsPerDocument is less than or equal to zero.</exception>
     /// <remarks>
     /// <para><b>For Beginners:</b> This sets up the retriever with your multi-vector document store.
@@ -93,10 +95,12 @@ public class MultiVectorRetriever<T> : RetrieverBase<T>
     /// </remarks>
     public MultiVectorRetriever(
         IDocumentStore<T> documentStore,
+        IEmbeddingModel<T> embeddingModel,
         int vectorsPerDocument,
         string aggregationMethod)
     {
         _documentStore = documentStore ?? throw new ArgumentNullException(nameof(documentStore));
+        _embeddingModel = embeddingModel ?? throw new ArgumentNullException(nameof(embeddingModel));
         
         if (vectorsPerDocument <= 0)
             throw new ArgumentOutOfRangeException(nameof(vectorsPerDocument), "Vectors per document must be positive");
@@ -157,8 +161,13 @@ public class MultiVectorRetriever<T> : RetrieverBase<T>
         if (topK <= 0)
             throw new ArgumentOutOfRangeException(nameof(topK), "topK must be positive");
 
-        // Generate query embedding (would use actual embedding model in production)
-        var queryVector = new Vector<T>(new T[0]); // Placeholder
+        // Embed the query for semantic retrieval
+        var queryEmbedding = _embeddingModel.Embed(query);
+        if (queryEmbedding == null || queryEmbedding.Length == 0)
+        {
+            throw new InvalidOperationException("Failed to generate query embedding");
+        }
+        var queryVector = new Vector<T>(queryEmbedding);
 
         // Retrieve documents and their multiple vectors
         var allDocuments = _documentStore.GetSimilarWithFilters(
