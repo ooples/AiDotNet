@@ -1,13 +1,13 @@
-using AiDotNet.Helpers;
-using AiDotNet.Interfaces;
-using AiDotNet.LinearAlgebra;
-using AiDotNet.RetrievalAugmentedGeneration.Models;
-using Newtonsoft.Json.Linq;
 using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Net.Http;
 using System.Text;
+using AiDotNet.Helpers;
+using AiDotNet.Interfaces;
+using AiDotNet.LinearAlgebra;
+using AiDotNet.RetrievalAugmentedGeneration.Models;
+using Newtonsoft.Json.Linq;
 
 namespace AiDotNet.RetrievalAugmentedGeneration.DocumentStores;
 
@@ -40,11 +40,16 @@ public class ElasticsearchDocumentStore<T> : DocumentStoreBase<T>
         if (vectorDimension <= 0)
             throw new ArgumentOutOfRangeException(nameof(vectorDimension), "Vector dimension must be positive");
 
+        var hasApiKey = !string.IsNullOrWhiteSpace(apiKey);
+        var hasBasicAuth = !string.IsNullOrWhiteSpace(username) && !string.IsNullOrWhiteSpace(password);
+        if (!hasApiKey && !hasBasicAuth)
+            throw new ArgumentException("Either apiKey or both username and password must be provided for authentication");
+
         _httpClient = new HttpClient { BaseAddress = new Uri(endpoint) };
         
-        if (!string.IsNullOrWhiteSpace(apiKey))
+        if (hasApiKey)
             _httpClient.DefaultRequestHeaders.Add("Authorization", $"ApiKey {apiKey}");
-        else if (!string.IsNullOrWhiteSpace(username) && !string.IsNullOrWhiteSpace(password))
+        else
         {
             var auth = Convert.ToBase64String(Encoding.UTF8.GetBytes($"{username}:{password}"));
             _httpClient.DefaultRequestHeaders.Add("Authorization", $"Basic {auth}");
@@ -60,41 +65,49 @@ public class ElasticsearchDocumentStore<T> : DocumentStoreBase<T>
 
     private void EnsureIndex()
     {
-        var checkResponse = _httpClient.GetAsync($"/{_indexName}").Result;
-        if (checkResponse.IsSuccessStatusCode) 
+        try
         {
-            UpdateDocumentCount();
-            return;
-        }
-
-        var mapping = new
-        {
-            mappings = new
+            using var checkResponse = _httpClient.GetAsync($"/{_indexName}").GetAwaiter().GetResult();
+            if (checkResponse.IsSuccessStatusCode) 
             {
-                properties = new
-                {
-                    id = new { type = "keyword" },
-                    content = new { type = "text" },
-                    embedding = new { type = "dense_vector", dims = _vectorDimension },
-                    metadata = new { type = "object", enabled = true }
-                }
+                UpdateDocumentCount();
+                return;
             }
-        };
 
-        var content = new StringContent(
-            Newtonsoft.Json.JsonConvert.SerializeObject(mapping),
-            Encoding.UTF8,
-            "application/json");
+            var mapping = new
+            {
+                mappings = new
+                {
+                    properties = new
+                    {
+                        id = new { type = "keyword" },
+                        content = new { type = "text" },
+                        embedding = new { type = "dense_vector", dims = _vectorDimension },
+                        metadata = new { type = "object", enabled = true }
+                    }
+                }
+            };
 
-        _httpClient.PutAsync($"/{_indexName}", content).Wait();
+            using var content = new StringContent(
+                Newtonsoft.Json.JsonConvert.SerializeObject(mapping),
+                Encoding.UTF8,
+                "application/json");
+
+            using var response = _httpClient.PutAsync($"/{_indexName}", content).GetAwaiter().GetResult();
+            response.EnsureSuccessStatusCode();
+        }
+        catch (HttpRequestException ex)
+        {
+            throw new InvalidOperationException("Failed to ensure Elasticsearch index exists", ex);
+        }
     }
 
     private void UpdateDocumentCount()
     {
-        var response = _httpClient.GetAsync($"/{_indexName}/_count").Result;
+        using var response = _httpClient.GetAsync($"/{_indexName}/_count").GetAwaiter().GetResult();
         if (response.IsSuccessStatusCode)
         {
-            var responseContent = response.Content.ReadAsStringAsync().Result;
+            var responseContent = response.Content.ReadAsStringAsync().GetAwaiter().GetResult();
             var result = JObject.Parse(responseContent);
             _documentCount = result["count"]?.Value<int>() ?? 0;
         }
@@ -104,8 +117,6 @@ public class ElasticsearchDocumentStore<T> : DocumentStoreBase<T>
     {
         if (vectorDocument.Embedding.Length != _vectorDimension)
             throw new ArgumentException($"Document embedding dimension ({vectorDocument.Embedding.Length}) does not match the store's configured dimension ({_vectorDimension}).");
-
-        _cache[vectorDocument.Document.Id] = vectorDocument;
 
         var embedding = vectorDocument.Embedding.ToArray().Select(v => Convert.ToDouble(v)).ToArray();
         
@@ -117,14 +128,16 @@ public class ElasticsearchDocumentStore<T> : DocumentStoreBase<T>
             metadata = vectorDocument.Document.Metadata
         };
 
-        var content = new StringContent(
+        using var content = new StringContent(
             Newtonsoft.Json.JsonConvert.SerializeObject(doc),
             Encoding.UTF8,
             "application/json");
 
-        var response = _httpClient.PutAsync($"/{_indexName}/_doc/{vectorDocument.Document.Id}", content).Result;
-        if (response.IsSuccessStatusCode)
-            _documentCount++;
+        using var response = _httpClient.PutAsync($"/{_indexName}/_doc/{vectorDocument.Document.Id}", content).GetAwaiter().GetResult();
+        response.EnsureSuccessStatusCode();
+        
+        _cache[vectorDocument.Document.Id] = vectorDocument;
+        _documentCount++;
     }
 
     protected override void AddBatchCore(IList<VectorDocument<T>> vectorDocuments)
@@ -135,7 +148,6 @@ public class ElasticsearchDocumentStore<T> : DocumentStoreBase<T>
         {
             if (vd.Embedding.Length != _vectorDimension)
                 throw new ArgumentException($"Document embedding dimension ({vd.Embedding.Length}) does not match the store's configured dimension ({_vectorDimension}).");
-            _cache[vd.Document.Id] = vd;
         }
 
         var bulkBody = new StringBuilder();
@@ -155,10 +167,13 @@ public class ElasticsearchDocumentStore<T> : DocumentStoreBase<T>
             bulkBody.AppendLine(Newtonsoft.Json.JsonConvert.SerializeObject(doc));
         }
 
-        var content = new StringContent(bulkBody.ToString(), Encoding.UTF8, "application/x-ndjson");
-        var response = _httpClient.PostAsync($"/{_indexName}/_bulk", content).Result;
-        if (response.IsSuccessStatusCode)
-            _documentCount += vectorDocuments.Count;
+        using var content = new StringContent(bulkBody.ToString(), Encoding.UTF8, "application/x-ndjson");
+        using var response = _httpClient.PostAsync($"/{_indexName}/_bulk", content).GetAwaiter().GetResult();
+        response.EnsureSuccessStatusCode();
+        
+        foreach (var vd in vectorDocuments)
+            _cache[vd.Document.Id] = vd;
+        _documentCount += vectorDocuments.Count;
     }
 
     protected override IEnumerable<Document<T>> GetSimilarCore(Vector<T> queryVector, int topK, Dictionary<string, object> metadataFilters)
@@ -251,7 +266,32 @@ public class ElasticsearchDocumentStore<T> : DocumentStoreBase<T>
         if (_cache.TryGetValue(documentId, out var vectorDoc))
             return vectorDoc.Document;
 
-        return null;
+        try
+        {
+            using var response = _httpClient.GetAsync($"/{_indexName}/_doc/{documentId}").GetAwaiter().GetResult();
+            if (!response.IsSuccessStatusCode)
+                return null;
+
+            var responseContent = response.Content.ReadAsStringAsync().GetAwaiter().GetResult();
+            var result = JObject.Parse(responseContent);
+            
+            if (result["found"]?.Value<bool>() != true)
+                return null;
+
+            var source = result["_source"];
+            var id = source?["id"]?.ToString();
+            var content = source?["content"]?.ToString();
+            var metadataObj = source?["metadata"]?.ToObject<Dictionary<string, object>>() ?? new Dictionary<string, object>();
+
+            if (id == null || content == null)
+                return null;
+
+            return new Document<T>(id, content, metadataObj);
+        }
+        catch (HttpRequestException)
+        {
+            return null;
+        }
     }
 
     /// <summary>
@@ -280,11 +320,10 @@ public class ElasticsearchDocumentStore<T> : DocumentStoreBase<T>
     /// </remarks>
     protected override bool RemoveCore(string documentId)
     {
-        _cache.Remove(documentId);
-
-        var response = _httpClient.DeleteAsync($"/{_indexName}/_doc/{documentId}").Result;
+        using var response = _httpClient.DeleteAsync($"/{_indexName}/_doc/{documentId}").GetAwaiter().GetResult();
         if (response.IsSuccessStatusCode && _documentCount > 0)
         {
+            _cache.Remove(documentId);
             _documentCount--;
             return true;
         }
@@ -367,10 +406,18 @@ public class ElasticsearchDocumentStore<T> : DocumentStoreBase<T>
     /// </remarks>
     public override void Clear()
     {
-        _cache.Clear();
-        _httpClient.DeleteAsync($"/{_indexName}").Wait();
-        _documentCount = 0;
-        _vectorDimension = 0;
-        EnsureIndex();
+        try
+        {
+            using var response = _httpClient.DeleteAsync($"/{_indexName}").GetAwaiter().GetResult();
+            response.EnsureSuccessStatusCode();
+            
+            _cache.Clear();
+            _documentCount = 0;
+            EnsureIndex();
+        }
+        catch (HttpRequestException ex)
+        {
+            throw new InvalidOperationException("Failed to clear Elasticsearch index", ex);
+        }
     }
 }
