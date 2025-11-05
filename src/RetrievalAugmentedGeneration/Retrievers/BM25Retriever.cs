@@ -33,15 +33,10 @@ namespace AiDotNet.RetrievalAugmentedGeneration.Retrievers
             var queryTerms = Tokenize(query);
             var scores = new Dictionary<string, T>();
 
-            var candidates = _documentStore.GetSimilar(
-                new AiDotNet.LinearAlgebra.Vector<T>(new T[Math.Max(1, _documentStore.VectorDimension)]),
-                _documentStore.DocumentCount
-            );
+            var candidates = _documentStore.GetAll().ToList();
+            var corpusStats = BuildCorpusStatistics(candidates);
 
-            var candidatesList = candidates.ToList();
-            var corpusStats = BuildCorpusStatistics(candidatesList);
-
-            foreach (var doc in candidatesList.Where(d => MatchesFilters(d, metadataFilters)))
+            foreach (var doc in candidates.Where(d => MatchesFilters(d, metadataFilters)))
             {
                 var score = NumOps.Zero;
                 

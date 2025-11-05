@@ -129,6 +129,15 @@ public abstract class DocumentStoreBase<T> : IDocumentStore<T>
     public abstract void Clear();
 
     /// <summary>
+    /// Gets all documents currently stored in the document store.
+    /// </summary>
+    /// <returns>An enumerable of all documents in the store.</returns>
+    public IEnumerable<Document<T>> GetAll()
+    {
+        return GetAllCore();
+    }
+
+    /// <summary>
     /// Core logic for adding a single vector document.
     /// </summary>
     /// <param name="vectorDocument">The validated vector document to add.</param>
@@ -220,6 +229,29 @@ public abstract class DocumentStoreBase<T> : IDocumentStore<T>
     /// </para>
     /// </remarks>
     protected abstract bool RemoveCore(string documentId);
+
+    /// <summary>
+    /// Core logic for retrieving all documents.
+    /// </summary>
+    /// <returns>An enumerable of all documents in the store.</returns>
+    /// <remarks>
+    /// <para>
+    /// Derived classes must implement this method to return all stored documents without
+    /// filtering or sorting. The implementation should efficiently retrieve all documents
+    /// while being mindful of memory usage for large document collections.
+    /// </para>
+    /// <para><b>For Beginners:</b> This internal method does the actual work of getting all documents.
+    /// 
+    /// When implementing your own document store:
+    /// - Return every document you have stored
+    /// - Don't filter or sort them
+    /// - Be careful with memory if you have millions of documents
+    /// 
+    /// Think of it like walking through every shelf in the library and making
+    /// a list of every single book.
+    /// </para>
+    /// </remarks>
+    protected abstract IEnumerable<Document<T>> GetAllCore();
 
     /// <summary>
     /// Validates a vector document before adding it to the store.

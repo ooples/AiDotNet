@@ -186,4 +186,25 @@ public interface IDocumentStore<T>
     /// </para>
     /// </remarks>
     void Clear();
+
+    /// <summary>
+    /// Gets all documents currently stored in the document store.
+    /// </summary>
+    /// <returns>An enumerable of all documents in the store.</returns>
+    /// <remarks>
+    /// <para>
+    /// This method retrieves all documents without any filtering or sorting.
+    /// Use with caution on large document stores as it may be memory-intensive.
+    /// For production systems with large document collections, consider using
+    /// pagination or streaming approaches.
+    /// </para>
+    /// <para><b>For Beginners:</b> This gets every single document from the store.
+    /// 
+    /// Like asking the librarian: "Show me every book in the library"
+    /// 
+    /// Careful: If you have millions of documents, this could take a while
+    /// and use a lot of memory!
+    /// </para>
+    /// </remarks>
+    IEnumerable<Document<T>> GetAll();
 }
