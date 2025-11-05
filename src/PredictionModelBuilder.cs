@@ -42,7 +42,7 @@ public class PredictionModelBuilder<T, TInput, TOutput> : IPredictionModelBuilde
     private IRetriever<T>? _ragRetriever;
     private IReranker<T>? _ragReranker;
     private IGenerator<T>? _ragGenerator;
-    private IEnumerable<AiDotNet.RetrievalAugmentedGeneration.Interfaces.IQueryProcessor>? _queryProcessors;
+    private IEnumerable<IQueryProcessor>? _queryProcessors;
 
     /// <summary>
     /// Configures which features (input variables) should be used in the model.
@@ -417,7 +417,7 @@ public class PredictionModelBuilder<T, TInput, TOutput> : IPredictionModelBuilde
         IRetriever<T>? retriever = null,
         IReranker<T>? reranker = null,
         IGenerator<T>? generator = null,
-        IEnumerable<AiDotNet.RetrievalAugmentedGeneration.Interfaces.IQueryProcessor>? queryProcessors = null)
+        IEnumerable<IQueryProcessor>? queryProcessors = null)
     {
         _ragRetriever = retriever;
         _ragReranker = reranker;

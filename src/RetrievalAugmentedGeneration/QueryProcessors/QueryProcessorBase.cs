@@ -1,5 +1,3 @@
-using AiDotNet.RetrievalAugmentedGeneration.Interfaces;
-
 namespace AiDotNet.RetrievalAugmentedGeneration.QueryProcessors;
 
 /// <summary>

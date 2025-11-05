@@ -1,6 +1,5 @@
 global using Newtonsoft.Json;
 global using Formatting = Newtonsoft.Json.Formatting;
-using AiDotNet.Interfaces;
 using AiDotNet.Interpretability;
 using AiDotNet.Serialization;
 
@@ -197,7 +196,7 @@ public class PredictionModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
     /// Gets or sets the query processors used for RAG query preprocessing during inference.
     /// </summary>
     /// <value>Query processors for preprocessing queries, or null if not configured.</value>
-    public IEnumerable<AiDotNet.RetrievalAugmentedGeneration.Interfaces.IQueryProcessor>? QueryProcessors { get; private set; }
+    public IEnumerable<IQueryProcessor>? QueryProcessors { get; private set; }
 
     /// <summary>
     /// Initializes a new instance of the PredictionModelResult class with the specified model, optimization results, and normalization information.
@@ -257,7 +256,7 @@ public class PredictionModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
         IRetriever<T>? ragRetriever = null,
         IReranker<T>? ragReranker = null,
         IGenerator<T>? ragGenerator = null,
-        IEnumerable<AiDotNet.RetrievalAugmentedGeneration.Interfaces.IQueryProcessor>? queryProcessors = null)
+        IEnumerable<IQueryProcessor>? queryProcessors = null)
     {
         Model = optimizationResult.BestSolution;
         OptimizationResult = optimizationResult;

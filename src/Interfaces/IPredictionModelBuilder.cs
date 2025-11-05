@@ -380,5 +380,5 @@ public interface IPredictionModelBuilder<T, TInput, TOutput>
         IRetriever<T>? retriever = null,
         IReranker<T>? reranker = null,
         IGenerator<T>? generator = null,
-        IEnumerable<AiDotNet.RetrievalAugmentedGeneration.Interfaces.IQueryProcessor>? queryProcessors = null);
+        IEnumerable<IQueryProcessor>? queryProcessors = null);
 }
