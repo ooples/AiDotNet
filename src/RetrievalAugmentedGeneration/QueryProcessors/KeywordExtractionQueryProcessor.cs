@@ -62,10 +62,10 @@ public class KeywordExtractionQueryProcessor : QueryProcessorBase
         {
             "a", "an", "and", "are", "as", "at", "be", "by", "for", "from",
             "has", "he", "in", "is", "it", "its", "of", "on", "that", "the",
-            "to", "was", "will", "with", "the", "this", "but", "they", "have",
+            "to", "was", "will", "with", "this", "but", "they", "have",
             "had", "what", "when", "where", "who", "which", "why", "how",
             "can", "could", "should", "would", "may", "might", "must",
-            "shall", "will", "do", "does", "did", "tell", "me", "you",
+            "shall", "do", "does", "did", "tell", "me", "you",
             "about", "explain", "describe", "please"
         };
     }
