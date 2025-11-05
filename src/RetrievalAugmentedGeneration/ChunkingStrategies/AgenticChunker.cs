@@ -3,7 +3,6 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Text.RegularExpressions;
 using AiDotNet.Interfaces;
-using AiDotNet.Interfaces;
 using AiDotNet.RetrievalAugmentedGeneration.Models;
 
 namespace AiDotNet.RetrievalAugmentedGeneration.ChunkingStrategies;
@@ -170,30 +169,51 @@ public class AgenticChunker : ChunkingStrategyBase
             // Check if adding this boundary would exceed max size
             if (potentialChunkEnd - currentChunkStart > _maxChunkSize)
             {
-                // Finalize current chunk
+                // Check semantic coherence before splitting
+                var shouldSplit = true;
                 if (currentChunkEnd > currentChunkStart)
                 {
-                    var chunkText = text.Substring(currentChunkStart, currentChunkEnd - currentChunkStart).Trim();
-                    if (!string.IsNullOrWhiteSpace(chunkText))
+                    // Calculate coherence between current chunk and the segment up to boundary
+                    var coherence = CalculateSemanticCoherence(
+                        text.Substring(currentChunkStart, currentChunkEnd - currentChunkStart),
+                        text.Substring(currentChunkEnd, Math.Min(boundaryPos - currentChunkEnd, 500)));
+                    
+                    // If coherence is high, allow slight size overflow
+                    if (coherence >= _coherenceThreshold && 
+                        (potentialChunkEnd - currentChunkStart) <= (_maxChunkSize * 1.2))
                     {
-                        chunks.Add((chunkText, currentChunkStart, currentChunkEnd));
+                        shouldSplit = false;
+                        currentChunkEnd = potentialChunkEnd;
                     }
-
-                    // Start new chunk with overlap
-                    currentChunkStart = Math.Max(currentChunkStart, currentChunkEnd - ChunkOverlap);
-                    currentChunkEnd = boundaryPos;
                 }
-                else
+                
+                if (shouldSplit)
                 {
-                    // First chunk, split at max size
-                    var splitPos = Math.Min(currentChunkStart + _maxChunkSize, text.Length);
-                    var chunkText = text.Substring(currentChunkStart, splitPos - currentChunkStart).Trim();
-                    if (!string.IsNullOrWhiteSpace(chunkText))
+                    // Finalize current chunk
+                    if (currentChunkEnd > currentChunkStart)
                     {
-                        chunks.Add((chunkText, currentChunkStart, splitPos));
+                        var chunkText = text.Substring(currentChunkStart, currentChunkEnd - currentChunkStart).Trim();
+                        if (!string.IsNullOrWhiteSpace(chunkText))
+                        {
+                            chunks.Add((chunkText, currentChunkStart, currentChunkEnd));
+                        }
+
+                        // Start new chunk with overlap
+                        currentChunkStart = Math.Max(currentChunkStart, currentChunkEnd - ChunkOverlap);
+                        currentChunkEnd = boundaryPos;
                     }
-                    currentChunkStart = Math.Max(currentChunkStart, splitPos - ChunkOverlap);
-                    currentChunkEnd = boundaryPos;
+                    else
+                    {
+                        // First chunk, split at max size
+                        var splitPos = Math.Min(currentChunkStart + _maxChunkSize, text.Length);
+                        var chunkText = text.Substring(currentChunkStart, splitPos - currentChunkStart).Trim();
+                        if (!string.IsNullOrWhiteSpace(chunkText))
+                        {
+                            chunks.Add((chunkText, currentChunkStart, splitPos));
+                        }
+                        currentChunkStart = Math.Max(currentChunkStart, splitPos - ChunkOverlap);
+                        currentChunkEnd = boundaryPos;
+                    }
                 }
             }
             else
@@ -214,5 +234,94 @@ public class AgenticChunker : ChunkingStrategyBase
         }
 
         return chunks;
+    }
+
+    /// <summary>
+    /// Calculates semantic coherence between two text segments using lexical overlap and connectivity.
+    /// </summary>
+    /// <param name="segment1">First text segment.</param>
+    /// <param name="segment2">Second text segment.</param>
+    /// <returns>Coherence score between 0 and 1, where higher values indicate stronger semantic connection.</returns>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> This method determines how related two pieces of text are without using AI models.
+    /// It uses several heuristics:
+    /// 
+    /// 1. Word Overlap - How many words appear in both segments?
+    ///    Example: "The cat sat" and "The cat ran" share 67% of words (2 of 3)
+    /// 
+    /// 2. Entity Continuity - Are the same proper nouns/entities mentioned?
+    ///    Example: "John went home" and "He was tired" → connected by pronoun reference
+    /// 
+    /// 3. Transition Words - Does segment2 start with connecting words like "However", "Therefore"?
+    ///    These indicate the segments are logically connected
+    /// 
+    /// The final score combines these factors. High scores (>0.3) mean keep segments together.
+    /// Low scores mean a topic change occurred, so splitting is safe.
+    /// </para>
+    /// </remarks>
+    private double CalculateSemanticCoherence(string segment1, string segment2)
+    {
+        if (string.IsNullOrWhiteSpace(segment1) || string.IsNullOrWhiteSpace(segment2))
+            return 0.0;
+
+        // Extract words (excluding common stop words for better signal)
+        var stopWords = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+        {
+            "the", "a", "an", "and", "or", "but", "in", "on", "at", "to", "for",
+            "of", "with", "by", "from", "as", "is", "was", "are", "were", "be", "been"
+        };
+
+        var words1 = segment1.Split(new[] { ' ', '\n', '\r', '\t', '.', ',', '!', '?' }, 
+            StringSplitOptions.RemoveEmptyEntries)
+            .Where(w => w.Length > 2 && !stopWords.Contains(w))
+            .Select(w => w.ToLowerInvariant())
+            .ToHashSet();
+
+        var words2 = segment2.Split(new[] { ' ', '\n', '\r', '\t', '.', ',', '!', '?' }, 
+            StringSplitOptions.RemoveEmptyEntries)
+            .Where(w => w.Length > 2 && !stopWords.Contains(w))
+            .Select(w => w.ToLowerInvariant())
+            .ToHashSet();
+
+        if (words1.Count == 0 || words2.Count == 0)
+            return 0.0;
+
+        // Calculate Jaccard similarity (intersection over union)
+        var intersection = words1.Intersect(words2).Count();
+        var union = words1.Union(words2).Count();
+        var jaccardScore = union > 0 ? (double)intersection / union : 0.0;
+
+        // Check for discourse markers (transition words) at start of segment2
+        var segment2Trimmed = segment2.TrimStart();
+        var discourseMarkers = new[] 
+        { 
+            "however", "therefore", "thus", "furthermore", "moreover", "additionally",
+            "consequently", "nevertheless", "meanwhile", "similarly", "likewise",
+            "in contrast", "on the other hand", "as a result", "for example", "for instance"
+        };
+        
+        var hasTransition = discourseMarkers.Any(marker => 
+            segment2Trimmed.StartsWith(marker, StringComparison.OrdinalIgnoreCase));
+        var transitionBonus = hasTransition ? 0.15 : 0.0;
+
+        // Check for entity continuity (capitalized words that might be names/entities)
+        var entities1 = Regex.Matches(segment1, @"\b[A-Z][a-z]+(?:\s[A-Z][a-z]+)*\b")
+            .Cast<Match>()
+            .Select(m => m.Value)
+            .ToHashSet();
+            
+        var entities2 = Regex.Matches(segment2, @"\b[A-Z][a-z]+(?:\s[A-Z][a-z]+)*\b")
+            .Cast<Match>()
+            .Select(m => m.Value)
+            .ToHashSet();
+
+        var entityOverlap = entities1.Count > 0 && entities2.Count > 0
+            ? (double)entities1.Intersect(entities2).Count() / Math.Max(entities1.Count, entities2.Count)
+            : 0.0;
+
+        // Weighted combination of signals
+        var coherenceScore = (jaccardScore * 0.5) + (entityOverlap * 0.35) + transitionBonus;
+
+        return Math.Min(1.0, coherenceScore);
     }
 }
