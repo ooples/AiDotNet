@@ -28,11 +28,7 @@ namespace AiDotNet.RetrievalAugmentedGeneration.Retrievers
             var queryTerms = Tokenize(query);
             var scores = new Dictionary<string, T>();
 
-            var candidates = _documentStore.GetSimilar(
-                new AiDotNet.LinearAlgebra.Vector<T>(new T[_documentStore.VectorDimension]), 
-                _documentStore.DocumentCount
-            );
-
+            var candidates = _documentStore.GetAll();
             var candidatesList = candidates.ToList();
             var candidatesById = candidatesList.ToDictionary(d => d.Id);
             var tfidf = BuildTFIDFStatistics(candidatesList);
