@@ -209,8 +209,8 @@ namespace AiDotNet.RetrievalAugmentedGeneration.DocumentStores
                     _invertedIndex[fieldName] = new Dictionary<string, HashSet<string>>();
                 }
 
-                // Preserve original value for comparisons, convert to string only for indexing
-                var indexKey = fieldValue?.ToString() ?? string.Empty;
+                // Create normalized key that preserves type information for accurate comparisons
+                var indexKey = NormalizeMetadataValue(fieldValue);
 
                 if (!_invertedIndex[fieldName].ContainsKey(indexKey))
                 {
@@ -221,12 +221,30 @@ namespace AiDotNet.RetrievalAugmentedGeneration.DocumentStores
             }
         }
 
+        private string NormalizeMetadataValue(object? value)
+        {
+            if (value == null)
+                return "null";
+
+            // Preserve type information in the key to ensure accurate comparisons
+            return value switch
+            {
+                bool b => $"bool:{(b ? "true" : "false")}",
+                int i => $"int:{i}",
+                long l => $"long:{l}",
+                float f => $"float:{f:R}",
+                double d => $"double:{d:R}",
+                decimal dec => $"decimal:{dec}",
+                _ => $"string:{value}"
+            };
+        }
+
         private void RemoveFromIndex(Document<T> document)
         {
             foreach (var kvp in document.Metadata)
             {
                 var fieldName = kvp.Key;
-                var fieldValue = kvp.Value?.ToString() ?? string.Empty;
+                var fieldValue = NormalizeMetadataValue(kvp.Value);
 
                 if (_invertedIndex.TryGetValue(fieldName, out var fieldIndex))
                 {
@@ -256,7 +274,7 @@ namespace AiDotNet.RetrievalAugmentedGeneration.DocumentStores
             foreach (var filter in metadataFilters)
             {
                 var fieldName = filter.Key;
-                var indexKey = filter.Value?.ToString() ?? string.Empty;
+                var indexKey = NormalizeMetadataValue(filter.Value);
 
                 if (_invertedIndex.TryGetValue(fieldName, out var fieldIndex))
                 {
