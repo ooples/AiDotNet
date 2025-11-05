@@ -31,8 +31,8 @@ namespace AiDotNet.RetrievalAugmentedGeneration.Retrievers;
 /// ```csharp
 /// var graphRetriever = new GraphRetriever<double>(
 ///     documentStore: myDocStore,
-///     entityExtractor: new RegexEntityExtractor<double>(),
-///     embeddingModel: mySentenceTransformer
+///     embeddingModel: mySentenceTransformer,
+///     enableAdvancedEntityExtraction: true
 /// );
 /// 
 /// var results = graphRetriever.Retrieve("How does Einstein relate to quantum physics?", topK: 5);
@@ -52,7 +52,6 @@ namespace AiDotNet.RetrievalAugmentedGeneration.Retrievers;
 /// </para>
 /// </remarks>
 public class GraphRetriever<T> : RetrieverBase<T>
-    where T : struct, IComparable<T>, IConvertible, IFormattable
 {
     private readonly IDocumentStore<T> _documentStore;
     private readonly IEmbeddingModel<T> _embeddingModel;

@@ -81,7 +81,7 @@ public class SelectiveContextCompressor<T> : ContextCompressorBase<T> where T : 
 
     private List<string> SplitIntoSentences(string text)
     {
-        return Helpers.TextProcessingHelper.SplitIntoSentences(text);
+        return TextProcessingHelper.SplitIntoSentences(text);
     }
 
     private T CalculateRelevance(string query, string sentence)

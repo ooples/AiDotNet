@@ -38,16 +38,22 @@ namespace AiDotNet.RetrievalAugmentedGeneration.Generators;
 /// 5. Repeats until generating enough tokens or reaching end token
 /// 6. Detokenizes back to human-readable text
 ///
-/// Production features:
-/// - Actual LSTM forward pass for each token
+/// Production considerations:
+/// - Requires pre-trained LSTM network (not included)
+/// - Actual LSTM forward pass for each token (computationally intensive)
 /// - Temperature-based sampling for controlled randomness
 /// - Configurable context and generation limits
 /// - Proper error handling and edge cases
 /// - Memory-efficient sequential processing
 ///
 /// Note: This generator requires a pre-trained LSTM network with vocabulary matching
-/// the configured vocabulary size.  For production use, train the LSTM on your domain
-/// data or use transfer learning from a pre-trained language model.
+/// the configured vocabulary size. Without proper training, output will be meaningless.
+/// For production use, you must:
+/// 1. Train the LSTM on your domain data, OR
+/// 2. Use transfer learning from a pre-trained language model
+///
+/// For production RAG systems, consider using LLM-based generators with pre-trained
+/// models instead of training your own LSTM.
 /// </para>
 /// </remarks>
 public class NeuralGenerator<T> : IGenerator<T>
