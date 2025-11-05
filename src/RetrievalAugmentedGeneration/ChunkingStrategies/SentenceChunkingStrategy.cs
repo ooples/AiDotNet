@@ -70,41 +70,52 @@ public class SentenceChunkingStrategy : ChunkingStrategyBase
     }
 
     /// <summary>
-    /// Splits text into chunks at sentence boundaries.
+    /// Splits text into chunks at sentence boundaries with accurate position tracking.
     /// </summary>
     /// <param name="text">The validated text to split.</param>
     /// <returns>Chunks with position information.</returns>
     protected override IEnumerable<(string Chunk, int StartPosition, int EndPosition)> ChunkCore(string text)
     {
-        var sentences = SplitIntoSentences(text);
-        var chunks = new List<string>();
-        var currentChunk = new List<string>();
+        // Split text into sentences with their positions
+        var sentencesWithPos = SplitIntoSentencesWithPositions(text);
+        
+        if (sentencesWithPos.Count == 0)
+            yield break;
+
+        var currentSentences = new List<(string, int, int)>();
         var currentLength = 0;
 
-        for (int i = 0; i < sentences.Count; i++)
+        for (int i = 0; i < sentencesWithPos.Count; i++)
         {
-            var sentence = sentences[i];
+            var (sentence, sentStart, sentEnd) = sentencesWithPos[i];
             var sentenceLength = sentence.Length;
 
             // If adding this sentence would exceed maxChunkSize and we have content, create a chunk
-            if (currentLength + sentenceLength > _maxChunkSize && currentChunk.Count > 0)
+            if (currentLength + sentenceLength > _maxChunkSize && currentSentences.Count > 0)
             {
-                chunks.Add(string.Join(" ", currentChunk));
+                // Create chunk from accumulated sentences
+                var chunkStart = currentSentences[0].Item2;
+                var chunkEnd = currentSentences[currentSentences.Count - 1].Item3;
+                var chunkText = text.Substring(chunkStart, chunkEnd - chunkStart);
+                yield return (chunkText, chunkStart, chunkEnd);
                 
                 // Keep the last N sentences for overlap
-                var overlapStart = Math.Max(0, currentChunk.Count - _overlapSentences);
-                currentChunk = currentChunk.GetRange(overlapStart, currentChunk.Count - overlapStart);
-                currentLength = currentChunk.Sum(s => s.Length + 1) - 1; // +1 for space, -1 to remove last space
+                var overlapStart = Math.Max(0, currentSentences.Count - _overlapSentences);
+                currentSentences = currentSentences.GetRange(overlapStart, currentSentences.Count - overlapStart);
+                currentLength = currentSentences.Sum(s => s.Item1.Length);
             }
             
             // Handle sentences that exceed maxChunkSize on their own
             if (sentenceLength > _maxChunkSize)
             {
                 // If we have accumulated content, save it first
-                if (currentChunk.Count > 0)
+                if (currentSentences.Count > 0)
                 {
-                    chunks.Add(string.Join(" ", currentChunk));
-                    currentChunk.Clear();
+                    var chunkStart = currentSentences[0].Item2;
+                    var chunkEnd = currentSentences[currentSentences.Count - 1].Item3;
+                    var chunkText = text.Substring(chunkStart, chunkEnd - chunkStart);
+                    yield return (chunkText, chunkStart, chunkEnd);
+                    currentSentences.Clear();
                     currentLength = 0;
                 }
                 
@@ -112,62 +123,115 @@ public class SentenceChunkingStrategy : ChunkingStrategyBase
                 for (int pos = 0; pos < sentence.Length; pos += _maxChunkSize)
                 {
                     var pieceLength = Math.Min(_maxChunkSize, sentence.Length - pos);
-                    chunks.Add(sentence.Substring(pos, pieceLength));
+                    var pieceStart = sentStart + pos;
+                    var pieceEnd = pieceStart + pieceLength;
+                    var pieceText = text.Substring(pieceStart, pieceLength);
+                    yield return (pieceText, pieceStart, pieceEnd);
                 }
                 
                 continue;
             }
 
-            currentChunk.Add(sentence);
-            currentLength += sentenceLength + (currentChunk.Count > 1 ? 1 : 0); // Add space if not first sentence
+            currentSentences.Add((sentence, sentStart, sentEnd));
+            currentLength += sentenceLength;
 
             // If we've reached target size, create a chunk
             if (currentLength >= _targetChunkSize)
             {
-                chunks.Add(string.Join(" ", currentChunk));
+                var chunkStart = currentSentences[0].Item2;
+                var chunkEnd = currentSentences[currentSentences.Count - 1].Item3;
+                var chunkText = text.Substring(chunkStart, chunkEnd - chunkStart);
+                yield return (chunkText, chunkStart, chunkEnd);
                 
                 // Keep the last N sentences for overlap
-                var overlapStart = Math.Max(0, currentChunk.Count - _overlapSentences);
-                currentChunk = currentChunk.GetRange(overlapStart, currentChunk.Count - overlapStart);
-                currentLength = currentChunk.Sum(s => s.Length + 1) - 1;
+                var overlapStart = Math.Max(0, currentSentences.Count - _overlapSentences);
+                currentSentences = currentSentences.GetRange(overlapStart, currentSentences.Count - overlapStart);
+                currentLength = currentSentences.Sum(s => s.Item1.Length);
             }
         }
 
         // Add remaining sentences as final chunk
-        if (currentChunk.Count > 0)
+        if (currentSentences.Count > 0)
         {
-            chunks.Add(string.Join(" ", currentChunk));
+            var chunkStart = currentSentences[0].Item2;
+            var chunkEnd = currentSentences[currentSentences.Count - 1].Item3;
+            var chunkText = text.Substring(chunkStart, chunkEnd - chunkStart);
+            yield return (chunkText, chunkStart, chunkEnd);
         }
-
-        // Convert to tuples with positions (track actual positions in original text)
-        var results = new List<(string, int, int)>();
-        var searchPos = 0;
-        
-        foreach (var chunk in chunks)
-        {
-            // Find where this chunk appears in the original text
-            var startPos = text.IndexOf(chunk, searchPos, StringComparison.Ordinal);
-            if (startPos == -1)
-            {
-                // Fallback: if exact match not found (shouldn't happen), use sequential position
-                startPos = searchPos;
-            }
-            
-            var endPos = startPos + chunk.Length;
-            results.Add((chunk, startPos, endPos));
-            
-            // Move search position forward, accounting for overlap
-            searchPos = startPos + 1;
-        }
-
-        return results;
     }
 
     /// <summary>
-    /// Splits text into individual sentences.
+    /// Splits text into individual sentences with their positions in the original text.
     /// </summary>
     /// <param name="text">The text to split.</param>
-    /// <returns>A list of sentences.</returns>
+    /// <returns>A list of tuples containing (sentence, start position, end position).</returns>
+    private List<(string, int, int)> SplitIntoSentencesWithPositions(string text)
+    {
+        var results = new List<(string, int, int)>();
+        var currentStart = 0;
+        var currentLength = 0;
+        
+        for (int i = 0; i < text.Length; i++)
+        {
+            currentLength++;
+            var ch = text[i];
+            
+            // Check for sentence endings
+            var isSentenceEnd = (ch == '.' || ch == '!' || ch == '?');
+            
+            if (isSentenceEnd)
+            {
+                // Look ahead to see if this is really a sentence end
+                var nextIdx = i + 1;
+                while (nextIdx < text.Length && char.IsWhiteSpace(text[nextIdx]))
+                    nextIdx++;
+                
+                // If next character is uppercase or we're at end, it's a sentence boundary
+                var isRealEnd = nextIdx >= text.Length || char.IsUpper(text[nextIdx]);
+                
+                if (isRealEnd || i == text.Length - 1)
+                {
+                    var sentence = text.Substring(currentStart, currentLength).Trim();
+                    if (!string.IsNullOrWhiteSpace(sentence))
+                    {
+                        // Calculate actual positions of trimmed sentence
+                        var trimmedStart = currentStart;
+                        while (trimmedStart < text.Length && char.IsWhiteSpace(text[trimmedStart]))
+                            trimmedStart++;
+                        
+                        var trimmedEnd = currentStart + currentLength;
+                        while (trimmedEnd > trimmedStart && char.IsWhiteSpace(text[trimmedEnd - 1]))
+                            trimmedEnd--;
+                        
+                        results.Add((sentence, trimmedStart, trimmedEnd));
+                    }
+                    
+                    currentStart = i + 1;
+                    currentLength = 0;
+                }
+            }
+        }
+        
+        // Handle any remaining text as final sentence
+        if (currentLength > 0)
+        {
+            var sentence = text.Substring(currentStart, currentLength).Trim();
+            if (!string.IsNullOrWhiteSpace(sentence))
+            {
+                var trimmedStart = currentStart;
+                while (trimmedStart < text.Length && char.IsWhiteSpace(text[trimmedStart]))
+                    trimmedStart++;
+                
+                var trimmedEnd = currentStart + currentLength;
+                while (trimmedEnd > trimmedStart && char.IsWhiteSpace(text[trimmedEnd - 1]))
+                    trimmedEnd--;
+                
+                results.Add((sentence, trimmedStart, trimmedEnd));
+            }
+        }
+        
+        return results;
+    }
     private List<string> SplitIntoSentences(string text)
     {
         return Helpers.TextProcessingHelper.SplitIntoSentences(text);
