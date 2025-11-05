@@ -66,10 +66,8 @@ namespace AiDotNet.RetrievalAugmentedGeneration.Retrievers;
 /// </para>
 /// </remarks>
 public class ParentDocumentRetriever<T> : RetrieverBase<T>
-    where T : struct, IComparable<T>, IConvertible, IFormattable
 {
     private readonly IDocumentStore<T> _documentStore;
-    private readonly IEmbeddingModel<T> _embeddingModel;
     private readonly int _chunkSize;
     private readonly int _parentSize;
     private readonly bool _includeNeighboringChunks;
@@ -78,11 +76,10 @@ public class ParentDocumentRetriever<T> : RetrieverBase<T>
     /// Initializes a new instance of the <see cref="ParentDocumentRetriever{T}"/> class.
     /// </summary>
     /// <param name="documentStore">The document store containing chunked documents with parent metadata.</param>
-    /// <param name="embeddingModel">The embedding model used to vectorize queries for chunk matching.</param>
     /// <param name="chunkSize">Character length of child chunks used for matching (typically 128-512 characters).</param>
     /// <param name="parentSize">Character length of parent documents returned (typically 1024-4096 characters).</param>
     /// <param name="includeNeighboringChunks">Whether to include adjacent chunks around the matched chunk (expands context boundaries).</param>
-    /// <exception cref="ArgumentNullException">Thrown when documentStore or embeddingModel is null.</exception>
+    /// <exception cref="ArgumentNullException">Thrown when documentStore is null.</exception>
     /// <exception cref="ArgumentOutOfRangeException">Thrown when chunkSize or parentSize is less than or equal to zero.</exception>
     /// <exception cref="ArgumentException">Thrown when parentSize is less than chunkSize.</exception>
     /// <remarks>
@@ -110,13 +107,11 @@ public class ParentDocumentRetriever<T> : RetrieverBase<T>
     /// </remarks>
     public ParentDocumentRetriever(
         IDocumentStore<T> documentStore,
-        IEmbeddingModel<T> embeddingModel,
         int chunkSize,
         int parentSize,
         bool includeNeighboringChunks)
     {
         _documentStore = documentStore ?? throw new ArgumentNullException(nameof(documentStore));
-        _embeddingModel = embeddingModel ?? throw new ArgumentNullException(nameof(embeddingModel));
         
         if (chunkSize <= 0)
             throw new ArgumentOutOfRangeException(nameof(chunkSize), "Chunk size must be positive");
