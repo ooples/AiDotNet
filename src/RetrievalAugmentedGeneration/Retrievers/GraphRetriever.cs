@@ -30,10 +30,9 @@ namespace AiDotNet.RetrievalAugmentedGeneration.Retrievers;
 /// 
 /// ```csharp
 /// var graphRetriever = new GraphRetriever<double>(
-///     documentStore,
-///     graphEndpoint: "http://localhost:7200",
-///     graphQueryLanguage: "SPARQL",
-///     maxHops: 3
+///     documentStore: myDocStore,
+///     entityExtractor: new RegexEntityExtractor<double>(),
+///     embeddingModel: mySentenceTransformer
 /// );
 /// 
 /// var results = graphRetriever.Retrieve("How does Einstein relate to quantum physics?", topK: 5);
@@ -53,47 +52,43 @@ namespace AiDotNet.RetrievalAugmentedGeneration.Retrievers;
 /// </para>
 /// </remarks>
 public class GraphRetriever<T> : RetrieverBase<T>
+    where T : struct, IComparable<T>, IConvertible, IFormattable
 {
-    private readonly string _graphEndpoint;
-    private readonly string _graphQueryLanguage;
-    private readonly int _maxHops;
-
     private readonly IDocumentStore<T> _documentStore;
+    private readonly IEntityExtractor<T> _entityExtractor;
+    private readonly IEmbeddingModel<T> _embeddingModel;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="GraphRetriever{T}"/> class.
     /// </summary>
     /// <param name="documentStore">The document store containing indexed documents with entity metadata.</param>
-    /// <param name="graphEndpoint">The knowledge graph database endpoint URL (e.g., "http://localhost:7200" for GraphDB).</param>
-    /// <param name="graphQueryLanguage">The graph query language used by the endpoint (e.g., "SPARQL" for RDF stores, "Cypher" for Neo4j).</param>
-    /// <param name="maxHops">Maximum number of relationship hops to traverse when exploring the graph (1-3 recommended for performance).</param>
-    /// <exception cref="ArgumentNullException">Thrown when documentStore, graphEndpoint, or graphQueryLanguage is null.</exception>
-    /// <exception cref="ArgumentOutOfRangeException">Thrown when maxHops is less than or equal to zero.</exception>
+    /// <param name="entityExtractor">The entity extractor for identifying named entities in queries and documents.</param>
+    /// <param name="embeddingModel">The embedding model for semantic query vectorization.</param>
+    /// <exception cref="ArgumentNullException">Thrown when any parameter is null.</exception>
     /// <remarks>
-    /// <para><b>For Beginners:</b> This constructor sets up the retriever with your document storage and graph database connection.
+    /// <para><b>For Beginners:</b> This constructor sets up the retriever with three key components:
     /// 
-    /// The maxHops parameter controls how far the retriever looks for connections—think of it like "degrees of separation":
-    /// - maxHops = 1: Only direct connections (e.g., Einstein → relativity)
-    /// - maxHops = 2: Friends of friends (e.g., Einstein → relativity → quantum mechanics)
-    /// - maxHops = 3: Extended network (rarely needed, slower)
+    /// 1. Document Store: Where your indexed documents are stored
+    /// 2. Entity Extractor: Identifies important nouns/terms (like "Marie Curie" or "quantum physics")
+    /// 3. Embedding Model: Converts text to vectors for similarity comparison
     /// 
-    /// Most queries work well with maxHops = 2.
+    /// ```csharp
+    /// var graphRetriever = new GraphRetriever<double>(
+    ///     documentStore: myDocStore,
+    ///     entityExtractor: new RegexEntityExtractor<double>(),
+    ///     embeddingModel: mySentenceTransformer
+    /// );
+    /// ```
     /// </para>
     /// </remarks>
     public GraphRetriever(
         IDocumentStore<T> documentStore,
-        string graphEndpoint,
-        string graphQueryLanguage,
-        int maxHops)
+        IEntityExtractor<T> entityExtractor,
+        IEmbeddingModel<T> embeddingModel)
     {
         _documentStore = documentStore ?? throw new ArgumentNullException(nameof(documentStore));
-        _graphEndpoint = graphEndpoint ?? throw new ArgumentNullException(nameof(graphEndpoint));
-        _graphQueryLanguage = graphQueryLanguage ?? throw new ArgumentNullException(nameof(graphQueryLanguage));
-        
-        if (maxHops <= 0)
-            throw new ArgumentOutOfRangeException(nameof(maxHops), "Max hops must be positive");
-            
-        _maxHops = maxHops;
+        _entityExtractor = entityExtractor ?? throw new ArgumentNullException(nameof(entityExtractor));
+        _embeddingModel = embeddingModel ?? throw new ArgumentNullException(nameof(embeddingModel));
     }
 
     /// <summary>
@@ -148,24 +143,22 @@ public class GraphRetriever<T> : RetrieverBase<T>
         if (topK <= 0)
             throw new ArgumentOutOfRangeException(nameof(topK), "topK must be positive");
 
-        // Extract entities from query (simple NER)
-        var entities = ExtractEntities(query);
+        // Extract entities from query using entity extractor
+        var entityResults = _entityExtractor.Extract(query);
+        var entities = entityResults.Select(e => e.Text).ToList();
 
-        // For production, this would query a graph database
-        // Fallback: Use metadata-enhanced vector retrieval
-        var enhancedFilters = new Dictionary<string, object>(metadataFilters ?? new Dictionary<string, object>());
-        
-        // Add entity filters if entities were found
-        if (entities.Count > 0)
+        // Embed the query for semantic retrieval
+        var queryEmbedding = _embeddingModel.Embed(query);
+        if (queryEmbedding == null || queryEmbedding.Length == 0)
         {
-            enhancedFilters["entities"] = entities;
+            throw new InvalidOperationException("Failed to generate query embedding");
         }
 
-        // Retrieve documents with entity context
+        // Retrieve documents using semantic similarity
         var documents = _documentStore.GetSimilarWithFilters(
-            new Vector<T>(new T[0]), // Placeholder
-            topK * 2, // Oversample for filtering
-            enhancedFilters
+            new Vector<T>(queryEmbedding),
+            topK * 2, // Oversample for re-ranking
+            metadataFilters ?? new Dictionary<string, object>()
         ).ToList();
 
         // Score documents based on entity matches and relationships
@@ -191,25 +184,6 @@ public class GraphRetriever<T> : RetrieverBase<T>
                 x.doc.HasRelevanceScore = true;
                 return x.doc;
             });
-    }
-
-    private List<string> ExtractEntities(string text)
-    {
-        var entities = new List<string>();
-
-        // Extract capitalized phrases (simple proper noun detection)
-        var capitalizedMatches = Regex.Matches(text, @"\b[A-Z][a-z]+(?:\s+[A-Z][a-z]+)*\b");
-        entities.AddRange(capitalizedMatches.Cast<Match>().Select(m => m.Value));
-
-        // Extract quoted terms
-        var quotedMatches = Regex.Matches(text, @"""([^""]+)""");
-        entities.AddRange(quotedMatches.Cast<Match>().Select(m => m.Groups[1].Value));
-
-        // Extract numbers and dates
-        var numberMatches = Regex.Matches(text, @"\b\d+(?:\.\d+)?\b");
-        entities.AddRange(numberMatches.Cast<Match>().Select(m => m.Value));
-
-        return entities.Distinct().ToList();
     }
 
     private double CalculateEntityMatchScore(Document<T> document, List<string> entities)
