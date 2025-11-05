@@ -84,15 +84,7 @@ public class LemmatizationQueryProcessor : QueryProcessorBase
 
     private static string PreserveCase(string original, string lemma)
     {
-        if (string.IsNullOrEmpty(original) || string.IsNullOrEmpty(lemma))
-            return lemma;
-
-        if (char.IsUpper(original[0]))
-        {
-            return char.ToUpper(lemma[0]) + lemma.Substring(1);
-        }
-
-        return lemma;
+        return QueryProcessorHelpers.PreserveCase(original, lemma);
     }
 
     private static Dictionary<string, string> GetDefaultLemmaMap()

@@ -127,15 +127,7 @@ public class SpellCheckQueryProcessor : QueryProcessorBase
 
     private static string PreserveCase(string original, string corrected)
     {
-        if (string.IsNullOrEmpty(original) || string.IsNullOrEmpty(corrected))
-            return corrected;
-
-        if (char.IsUpper(original[0]))
-        {
-            return char.ToUpper(corrected[0]) + corrected.Substring(1);
-        }
-
-        return corrected;
+        return QueryProcessorHelpers.PreserveCase(original, corrected);
     }
 
     private static Dictionary<string, string> GetDefaultDictionary()
