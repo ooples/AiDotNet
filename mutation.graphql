@@ -1,8 +1,0 @@
-mutation {
-  resolveReviewThread(input: {threadId: "PRRT_kwDOKSXUF85gq9-y"}) {
-    thread {
-      id
-      isResolved
-    }
-  }
-}
