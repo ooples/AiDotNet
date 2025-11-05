@@ -46,12 +46,14 @@ public class HeaderBasedTextSplitter : ChunkingStrategyBase
         var chunks = new List<(string, int, int)>();
         var lines = text.Split(new[] { "\r\n", "\r", "\n" }, StringSplitOptions.None);
         var currentChunk = new List<string>();
+        var previousChunkLines = new List<string>();
         var chunkStart = 0;
         var position = 0;
 
         foreach (var line in lines)
         {
-            var lineLength = line.Length + Environment.NewLine.Length;
+            var actualLineEndingLength = GetActualLineEndingLength(text, position, line.Length);
+            var lineLength = line.Length + actualLineEndingLength;
 
             // Check if line is a header (Markdown ## or HTML <h>)
             if (IsHeader(line))
@@ -61,7 +63,16 @@ public class HeaderBasedTextSplitter : ChunkingStrategyBase
                 {
                     var content = string.Join(Environment.NewLine, currentChunk);
                     chunks.Add((content, chunkStart, position));
+                    
+                    // Store lines for overlap
+                    previousChunkLines = GetOverlapLines(currentChunk);
                     currentChunk.Clear();
+                }
+
+                // Add overlap from previous chunk
+                if (ChunkOverlap > 0 && previousChunkLines.Count > 0)
+                {
+                    currentChunk.AddRange(previousChunkLines);
                 }
 
                 chunkStart = position;
@@ -77,7 +88,17 @@ public class HeaderBasedTextSplitter : ChunkingStrategyBase
                 {
                     var content = string.Join(Environment.NewLine, currentChunk);
                     chunks.Add((content, chunkStart, position + lineLength));
+                    
+                    // Store lines for overlap
+                    previousChunkLines = GetOverlapLines(currentChunk);
                     currentChunk.Clear();
+                    
+                    // Add overlap from previous chunk
+                    if (ChunkOverlap > 0 && previousChunkLines.Count > 0)
+                    {
+                        currentChunk.AddRange(previousChunkLines);
+                    }
+                    
                     chunkStart = position + lineLength;
                 }
             }
@@ -99,6 +120,37 @@ public class HeaderBasedTextSplitter : ChunkingStrategyBase
         }
 
         return chunks;
+    }
+
+    private int GetActualLineEndingLength(string text, int position, int lineLength)
+    {
+        if (position + lineLength >= text.Length)
+            return 0;
+
+        var afterLine = text.Substring(position + lineLength);
+        if (afterLine.StartsWith("\r\n"))
+            return 2;
+        if (afterLine.StartsWith("\n") || afterLine.StartsWith("\r"))
+            return 1;
+        
+        return 0;
+    }
+
+    private List<string> GetOverlapLines(List<string> lines)
+    {
+        if (ChunkOverlap <= 0 || lines.Count == 0)
+            return new List<string>();
+
+        var overlapLines = new List<string>();
+        var overlapSize = 0;
+
+        for (int i = lines.Count - 1; i >= 0 && overlapSize < ChunkOverlap; i--)
+        {
+            overlapLines.Insert(0, lines[i]);
+            overlapSize += lines[i].Length + Environment.NewLine.Length;
+        }
+
+        return overlapLines;
     }
 
     private bool IsHeader(string line)
