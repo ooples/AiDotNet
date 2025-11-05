@@ -115,7 +115,9 @@ public class AgenticChunker : ChunkingStrategyBase
         }
 
         // Detect section headers (lines starting with #, or all caps)
-        var lines = text.Split('\n');
+        var lineEndings = text.Contains("\r\n") ? "\r\n" : "\n";
+        var lineEndingLength = lineEndings.Length;
+        var lines = text.Split(new[] { "\r\n", "\n" }, StringSplitOptions.None);
         var position = 0;
         foreach (var line in lines)
         {
@@ -128,7 +130,7 @@ public class AgenticChunker : ChunkingStrategyBase
                 boundaries.Add(position);
             }
             
-            position += line.Length + 1; // +1 for newline
+            position += line.Length + lineEndingLength;
         }
 
         // Detect list boundaries
@@ -140,7 +142,7 @@ public class AgenticChunker : ChunkingStrategyBase
             {
                 boundaries.Add(position);
             }
-            position += line.Length + 1;
+            position += line.Length + lineEndingLength;
         }
 
         // Sort and deduplicate boundaries
