@@ -133,13 +133,36 @@ Rewritten query:";
 
     private static string ExtractTopic(string query)
     {
-        var words = query.Split(new[] { ' ' }, StringSplitOptions.RemoveEmptyEntries);
-        
-        if (words.Length > 2)
+        if (string.IsNullOrWhiteSpace(query))
+            return string.Empty;
+
+        // Remove common question words and punctuation
+        var commonWords = new HashSet<string>(StringComparer.OrdinalIgnoreCase) 
+        { 
+            "what", "is", "are", "the", "a", "an", "how", "why", "when", "where", "who", 
+            "do", "does", "did", "can", "could", "would", "should", "will", "about", "tell",
+            "me", "you", "your", "it", "they", "them", "this", "that", "these", "those",
+            "for", "in", "on", "at", "to", "from", "with", "of", "by", "as"
+        };
+
+        var words = query.Split(new[] { ' ', '?', '.', ',', '!', ';', ':' }, StringSplitOptions.RemoveEmptyEntries)
+            .Where(w => !commonWords.Contains(w) && w.Length > 2)
+            .ToList();
+
+        if (words.Count == 0)
+            return string.Empty;
+
+        // For multi-word topics, take the first significant noun phrase (first 1-3 content words)
+        // This handles cases like "transformers", "neural networks", "machine learning models"
+        if (words.Count >= 2)
         {
-            return words[words.Length - 1];
+            // Check if the first two words form a compound term (capitalized or technical terms)
+            var firstTwo = string.Join(" ", words.Take(2));
+            if (words[0].Length > 3 && words[1].Length > 3)
+                return firstTwo;
         }
 
-        return string.Empty;
+        // Return the first significant word as the topic
+        return words[0];
     }
 }
