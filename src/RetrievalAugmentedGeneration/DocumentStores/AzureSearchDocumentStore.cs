@@ -128,6 +128,68 @@ namespace AiDotNet.RetrievalAugmentedGeneration.DocumentStores
             return true;
         }
 
+        /// <summary>
+        /// Core logic for retrieving all documents in the index.
+        /// </summary>
+        /// <returns>An enumerable of all documents without their vector embeddings.</returns>
+        /// <remarks>
+        /// <para>
+        /// Returns all documents from the Azure Search index in no particular order.
+        /// Vector embeddings are not included, only document content and metadata.
+        /// </para>
+        /// <para><b>For Beginners:</b> Gets every document in the index.
+        /// 
+        /// Use cases:
+        /// - Export all documents for backup
+        /// - Migrate to a different index or service
+        /// - Bulk reindexing or analysis
+        /// - Debugging facet indices
+        /// 
+        /// Warning: For large indices (> 10K documents), this can use significant memory.
+        /// In real Azure Search, use continuation tokens for pagination.
+        /// 
+        /// Example:
+        /// <code>
+        /// // Get all documents
+        /// var allDocs = store.GetAll().ToList();
+        /// Console.WriteLine($"Total documents in {_indexName}: {allDocs.Count}");
+        /// 
+        /// // Export to JSON
+        /// var json = JsonConvert.SerializeObject(allDocs);
+        /// File.WriteAllText($"{_serviceName}_{_indexName}_export.json", json);
+        /// </code>
+        /// </para>
+        /// </remarks>
+        protected override IEnumerable<Document<T>> GetAllCore()
+        {
+            return _documents.Values.Select(vd => vd.Document).ToList();
+        }
+
+        /// <summary>
+        /// Removes all documents from the index and clears all inverted indices.
+        /// </summary>
+        /// <remarks>
+        /// <para>
+        /// Clears all documents, field-level inverted indices, and resets the vector dimension to 0.
+        /// The service and index names remain unchanged and the index is ready to accept new documents.
+        /// </para>
+        /// <para><b>For Beginners:</b> Completely empties the Azure Search index and all its facet indices.
+        /// 
+        /// After calling Clear():
+        /// - All documents are removed
+        /// - Inverted index is cleared (all facets)
+        /// - Vector dimension resets to 0
+        /// - Index is ready for new documents
+        /// 
+        /// Use with caution - this cannot be undone!
+        /// 
+        /// Example:
+        /// <code>
+        /// store.Clear();
+        /// Console.WriteLine($"Documents in index: {store.DocumentCount}"); // 0
+        /// </code>
+        /// </para>
+        /// </remarks>
         public override void Clear()
         {
             _documents.Clear();

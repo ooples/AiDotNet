@@ -173,6 +173,25 @@ public class ChromaDBDocumentStore<T> : DocumentStoreBase<T>
         return null;
     }
 
+    /// <summary>
+    /// Core logic for removing a document from the ChromaDB collection.
+    /// </summary>
+    /// <param name="documentId">The validated document ID.</param>
+    /// <returns>True if the document was found and removed; otherwise, false.</returns>
+    /// <remarks>
+    /// <para>
+    /// Removes the document from both the cache and the ChromaDB collection via API call.
+    /// If successful, decrements the document count.
+    /// </para>
+    /// <para><b>For Beginners:</b> Deletes a document from ChromaDB.
+    /// 
+    /// Example:
+    /// <code>
+    /// if (store.Remove("doc-123"))
+    ///     Console.WriteLine("Document removed from ChromaDB");
+    /// </code>
+    /// </para>
+    /// </remarks>
     protected override bool RemoveCore(string documentId)
     {
         _cache.Remove(documentId);
@@ -192,6 +211,71 @@ public class ChromaDBDocumentStore<T> : DocumentStoreBase<T>
         return false;
     }
 
+    /// <summary>
+    /// Core logic for retrieving all documents from the ChromaDB collection.
+    /// </summary>
+    /// <returns>An enumerable of all documents without their vector embeddings.</returns>
+    /// <remarks>
+    /// <para>
+    /// Returns all documents from the cache (in-memory representation) of the ChromaDB collection.
+    /// In a real ChromaDB deployment, this would query the collection's entire dataset.
+    /// Vector embeddings are not included in the results.
+    /// </para>
+    /// <para><b>For Beginners:</b> Gets every document from the ChromaDB collection.
+    /// 
+    /// Use cases:
+    /// - Export collection contents for backup
+    /// - Migrate to a different ChromaDB collection or database
+    /// - Bulk processing or reindexing
+    /// - Debugging to see all stored documents
+    /// 
+    /// Warning: For large collections (> 10K documents), this can use significant memory.
+    /// In production ChromaDB, consider using pagination with limit/offset parameters.
+    /// 
+    /// Example:
+    /// <code>
+    /// // Get all documents
+    /// var allDocs = store.GetAll().ToList();
+    /// Console.WriteLine($"Total documents in {_collectionName}: {allDocs.Count}");
+    /// 
+    /// // Export to JSON
+    /// var json = JsonConvert.SerializeObject(allDocs);
+    /// File.WriteAllText($"chroma_{_collectionName}_export.json", json);
+    /// </code>
+    /// </para>
+    /// </remarks>
+    protected override IEnumerable<Document<T>> GetAllCore()
+    {
+        return _cache.Values.Select(vd => vd.Document).ToList();
+    }
+
+    /// <summary>
+    /// Removes all documents from the ChromaDB collection and recreates it.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Clears the cache, deletes the ChromaDB collection, resets counters, and recreates an empty collection.
+    /// The collection name remains unchanged and is ready to accept new documents.
+    /// </para>
+    /// <para><b>For Beginners:</b> Completely empties the ChromaDB collection.
+    /// 
+    /// After calling Clear():
+    /// - All documents are removed from ChromaDB
+    /// - Cache is cleared
+    /// - Document count resets to 0
+    /// - Vector dimension resets to 0
+    /// - Collection is recreated (empty)
+    /// - Ready for new documents
+    /// 
+    /// Use with caution - this cannot be undone!
+    /// 
+    /// Example:
+    /// <code>
+    /// store.Clear();
+    /// Console.WriteLine($"Documents in collection: {store.DocumentCount}"); // 0
+    /// </code>
+    /// </para>
+    /// </remarks>
     public override void Clear()
     {
         _cache.Clear();

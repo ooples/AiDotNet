@@ -223,6 +223,30 @@ public class ElasticsearchDocumentStore<T> : DocumentStoreBase<T>
         return null;
     }
 
+    /// <summary>
+    /// Core logic for removing a document from the Elasticsearch index.
+    /// </summary>
+    /// <param name="documentId">The validated document ID.</param>
+    /// <returns>True if the document was found and removed; otherwise, false.</returns>
+    /// <remarks>
+    /// <para>
+    /// Removes the document from both the cache and the Elasticsearch index via DELETE API.
+    /// If successful, decrements the document count.
+    /// </para>
+    /// <para><b>For Beginners:</b> Deletes a document from Elasticsearch.
+    /// 
+    /// In Elasticsearch terms, this is like:
+    /// <code>
+    /// DELETE /index/_doc/document_id
+    /// </code>
+    /// 
+    /// Example:
+    /// <code>
+    /// if (store.Remove("doc-123"))
+    ///     Console.WriteLine("Document removed from Elasticsearch");
+    /// </code>
+    /// </para>
+    /// </remarks>
     protected override bool RemoveCore(string documentId)
     {
         _cache.Remove(documentId);
@@ -236,6 +260,80 @@ public class ElasticsearchDocumentStore<T> : DocumentStoreBase<T>
         return false;
     }
 
+    /// <summary>
+    /// Core logic for retrieving all documents from the Elasticsearch index.
+    /// </summary>
+    /// <returns>An enumerable of all documents without their vector embeddings.</returns>
+    /// <remarks>
+    /// <para>
+    /// Returns all documents from the cache (in-memory representation) of the Elasticsearch index.
+    /// In a real Elasticsearch deployment with large indices, use the scroll API for efficient
+    /// retrieval of all documents without loading everything into memory at once.
+    /// </para>
+    /// <para><b>For Beginners:</b> Gets every document from the Elasticsearch index.
+    /// 
+    /// Use cases:
+    /// - Export index contents for backup
+    /// - Migrate to a different index or cluster
+    /// - Bulk reindexing operations
+    /// - Debugging to see all indexed documents
+    /// 
+    /// Warning: For large indices (> 10K documents), this can use significant memory.
+    /// In production Elasticsearch, use the scroll API with pagination:
+    /// - POST /index/_search?scroll=1m with size parameter
+    /// - Iterate through scroll_id responses
+    /// - Clear scroll when done
+    /// 
+    /// Example:
+    /// <code>
+    /// // Get all documents
+    /// var allDocs = store.GetAll().ToList();
+    /// Console.WriteLine($"Total documents in {_indexName}: {allDocs.Count}");
+    /// 
+    /// // Export to JSON
+    /// var json = JsonConvert.SerializeObject(allDocs);
+    /// File.WriteAllText($"elasticsearch_{_indexName}_export.json", json);
+    /// </code>
+    /// </para>
+    /// </remarks>
+    protected override IEnumerable<Document<T>> GetAllCore()
+    {
+        return _cache.Values.Select(vd => vd.Document).ToList();
+    }
+
+    /// <summary>
+    /// Removes all documents from the Elasticsearch index and recreates it.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Clears the cache, deletes the Elasticsearch index, resets counters, and recreates the index
+    /// with the same mapping. The index name remains unchanged and is ready to accept new documents.
+    /// </para>
+    /// <para><b>For Beginners:</b> Completely empties the Elasticsearch index and recreates it.
+    /// 
+    /// After calling Clear():
+    /// - Index is deleted from Elasticsearch
+    /// - Cache is cleared
+    /// - Document count resets to 0
+    /// - Vector dimension resets to 0
+    /// - Index is recreated with fresh mapping
+    /// - Ready for new documents
+    /// 
+    /// Use with caution - this cannot be undone!
+    /// 
+    /// In Elasticsearch terms, this is like:
+    /// <code>
+    /// DELETE /index_name
+    /// PUT /index_name with mappings
+    /// </code>
+    /// 
+    /// Example:
+    /// <code>
+    /// store.Clear();
+    /// Console.WriteLine($"Documents in index: {store.DocumentCount}"); // 0
+    /// </code>
+    /// </para>
+    /// </remarks>
     public override void Clear()
     {
         _cache.Clear();

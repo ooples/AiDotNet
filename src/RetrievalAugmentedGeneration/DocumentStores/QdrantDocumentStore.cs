@@ -128,6 +128,69 @@ namespace AiDotNet.RetrievalAugmentedGeneration.DocumentStores
             return true;
         }
 
+        /// <summary>
+        /// Core logic for retrieving all documents in the collection.
+        /// </summary>
+        /// <returns>An enumerable of all documents without their vector embeddings.</returns>
+        /// <remarks>
+        /// <para>
+        /// Returns all documents from the Qdrant collection in no particular order.
+        /// Vector embeddings are not included in the results, only document content and metadata.
+        /// </para>
+        /// <para><b>For Beginners:</b> Gets every document in the collection.
+        /// 
+        /// Use cases:
+        /// - Export all documents for backup
+        /// - Migrate to a different collection
+        /// - Bulk processing or analysis
+        /// - Debugging payload indices
+        /// 
+        /// Warning: For large collections (> 10K documents), this can use significant memory.
+        /// In real Qdrant, consider using scroll API with pagination for large collections.
+        /// 
+        /// Example:
+        /// <code>
+        /// // Get all documents
+        /// var allDocs = store.GetAll().ToList();
+        /// Console.WriteLine($"Total documents in {_collectionName}: {allDocs.Count}");
+        /// 
+        /// // Export to JSON
+        /// var json = JsonConvert.SerializeObject(allDocs);
+        /// File.WriteAllText($"{_collectionName}_export.json", json);
+        /// </code>
+        /// </para>
+        /// </remarks>
+        protected override IEnumerable<Document<T>> GetAllCore()
+        {
+            return _documents.Values.Select(vd => vd.Document).ToList();
+        }
+
+        /// <summary>
+        /// Removes all documents from the collection and clears all indices.
+        /// </summary>
+        /// <remarks>
+        /// <para>
+        /// Clears all documents, payload indices, and resets the vector dimension to 0.
+        /// The collection name remains unchanged and is ready to accept new documents.
+        /// </para>
+        /// <para><b>For Beginners:</b> Completely empties the collection and all its indices.
+        /// 
+        /// After calling Clear():
+        /// - All documents are removed
+        /// - Payload index is cleared
+        /// - Vector dimension resets to 0
+        /// - Collection name stays the same
+        /// - Ready for new documents
+        /// 
+        /// Use with caution - this cannot be undone!
+        /// 
+        /// Example:
+        /// <code>
+        /// store.Clear();
+        /// Console.WriteLine($"Documents in {CollectionName}: {store.DocumentCount}"); // 0
+        /// </code>
+        /// </para>
+        /// </remarks>
         public override void Clear()
         {
             _documents.Clear();
