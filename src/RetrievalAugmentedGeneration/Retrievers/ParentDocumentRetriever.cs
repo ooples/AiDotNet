@@ -208,11 +208,16 @@ public class ParentDocumentRetriever<T> : RetrieverBase<T>
         foreach (var chunk in similarChunks)
         {
             // Extract parent document ID from metadata
-            var parentId = chunk.Metadata.ContainsKey("parent_id") 
-                ? chunk.Metadata["parent_id"].ToString() 
-                : chunk.Id;
+            if (!chunk.Metadata.ContainsKey("parent_id"))
+                continue;
 
-            if (parentId == null) continue;
+            var parentIdObj = chunk.Metadata["parent_id"];
+            if (parentIdObj == null)
+                continue;
+
+            var parentId = parentIdObj.ToString();
+            if (string.IsNullOrEmpty(parentId))
+                continue;
 
             var score = chunk.RelevanceScore;
             
@@ -253,17 +258,34 @@ public class ParentDocumentRetriever<T> : RetrieverBase<T>
 
     private Document<T> CreateParentDocument(Document<T> chunk, string parentId)
     {
+        // Retrieve the full parent document from the store
+        var fullParent = _documentStore.GetById(parentId);
+        
+        if (fullParent != null)
+        {
+            // Return the complete parent document from store
+            return new Document<T>
+            {
+                Id = parentId,
+                Content = fullParent.Content,
+                Metadata = new Dictionary<string, object>(fullParent.Metadata ?? new Dictionary<string, object>())
+            };
+        }
+        
+        // Fallback: if parent not found, start with chunk content
+        // This will be expanded as more chunks from same parent are processed
         var parentDoc = new Document<T>
         {
             Id = parentId,
             Content = chunk.Content,
-            Metadata = new Dictionary<string, object>(chunk.Metadata)
+            Metadata = new Dictionary<string, object>(chunk.Metadata ?? new Dictionary<string, object>())
         };
 
         // Remove chunk-specific metadata
         parentDoc.Metadata.Remove("chunk_index");
         parentDoc.Metadata.Remove("chunk_start");
         parentDoc.Metadata.Remove("chunk_end");
+        parentDoc.Metadata.Remove("parent_id");
 
         return parentDoc;
     }

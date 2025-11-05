@@ -55,7 +55,7 @@ namespace AiDotNet.RetrievalAugmentedGeneration.ContextCompression
                 var summary = SummarizeText(doc.Content, queryTerms);
                 var summarizedDoc = new Document<T>(doc.Id, summary)
                 {
-                    Metadata = doc.Metadata,
+                    Metadata = doc.Metadata != null ? new Dictionary<string, object>(doc.Metadata) : new Dictionary<string, object>(),
                     RelevanceScore = doc.RelevanceScore,
                     HasRelevanceScore = doc.HasRelevanceScore
                 };
@@ -81,7 +81,7 @@ namespace AiDotNet.RetrievalAugmentedGeneration.ContextCompression
                 var summary = SummarizeText(doc.Content);
                 var summarizedDoc = new Document<T>(doc.Id, summary)
                 {
-                    Metadata = doc.Metadata,
+                    Metadata = doc.Metadata != null ? new Dictionary<string, object>(doc.Metadata) : new Dictionary<string, object>(),
                     RelevanceScore = doc.RelevanceScore,
                     HasRelevanceScore = doc.HasRelevanceScore
                 };

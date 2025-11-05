@@ -69,13 +69,14 @@ namespace AiDotNet.RetrievalAugmentedGeneration.Retrievers
             }
 
             var results = scores
-                .OrderByDescending(kv => kv.Value)
+                .Select(kv => new { DocId = kv.Key, Score = Convert.ToDouble(kv.Value) })
+                .OrderByDescending(x => x.Score)
                 .Take(topK)
-                .Select(kv =>
+                .Select(x =>
                 {
-                    if (candidatesById.TryGetValue(kv.Key, out var doc))
+                    if (candidatesById.TryGetValue(x.DocId, out var doc))
                     {
-                        doc.RelevanceScore = kv.Value;
+                        doc.RelevanceScore = NumOps.FromDouble(x.Score);
                         doc.HasRelevanceScore = true;
                         return doc;
                     }

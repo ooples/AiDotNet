@@ -225,13 +225,19 @@ public class ElasticsearchDocumentStore<T> : DocumentStoreBase<T>
             }
         };
 
-        var content = new StringContent(
+        using var content = new StringContent(
             Newtonsoft.Json.JsonConvert.SerializeObject(query),
             Encoding.UTF8,
             "application/json");
 
-        var response = _httpClient.PostAsync($"/{_indexName}/_search", content).Result;
-        var responseContent = response.Content.ReadAsStringAsync().Result;
+        using var response = _httpClient.PostAsync($"/{_indexName}/_search", content).GetAwaiter().GetResult();
+        if (!response.IsSuccessStatusCode)
+        {
+            var errorContent = response.Content.ReadAsStringAsync().GetAwaiter().GetResult();
+            throw new HttpRequestException($"Elasticsearch search failed with status {response.StatusCode}: {errorContent}");
+        }
+
+        var responseContent = response.Content.ReadAsStringAsync().GetAwaiter().GetResult();
         var result = JObject.Parse(responseContent);
 
         var results = new List<Document<T>>();
@@ -266,32 +272,32 @@ public class ElasticsearchDocumentStore<T> : DocumentStoreBase<T>
         if (_cache.TryGetValue(documentId, out var vectorDoc))
             return vectorDoc.Document;
 
-        try
-        {
-            using var response = _httpClient.GetAsync($"/{_indexName}/_doc/{documentId}").GetAwaiter().GetResult();
-            if (!response.IsSuccessStatusCode)
-                return null;
-
-            var responseContent = response.Content.ReadAsStringAsync().GetAwaiter().GetResult();
-            var result = JObject.Parse(responseContent);
-            
-            if (result["found"]?.Value<bool>() != true)
-                return null;
-
-            var source = result["_source"];
-            var id = source?["id"]?.ToString();
-            var content = source?["content"]?.ToString();
-            var metadataObj = source?["metadata"]?.ToObject<Dictionary<string, object>>() ?? new Dictionary<string, object>();
-
-            if (id == null || content == null)
-                return null;
-
-            return new Document<T>(id, content, metadataObj);
-        }
-        catch (HttpRequestException)
-        {
+        using var response = _httpClient.GetAsync($"/{_indexName}/_doc/{documentId}").GetAwaiter().GetResult();
+        
+        if (response.StatusCode == System.Net.HttpStatusCode.NotFound)
             return null;
+
+        if (!response.IsSuccessStatusCode)
+        {
+            var errorContent = response.Content.ReadAsStringAsync().GetAwaiter().GetResult();
+            throw new HttpRequestException($"Failed to retrieve document '{documentId}' from Elasticsearch. Status: {response.StatusCode}, Error: {errorContent}");
         }
+
+        var responseContent = response.Content.ReadAsStringAsync().GetAwaiter().GetResult();
+        var result = JObject.Parse(responseContent);
+        
+        if (result["found"]?.Value<bool>() != true)
+            return null;
+
+        var source = result["_source"];
+        var id = source?["id"]?.ToString();
+        var content = source?["content"]?.ToString();
+        var metadataObj = source?["metadata"]?.ToObject<Dictionary<string, object>>() ?? new Dictionary<string, object>();
+
+        if (id == null || content == null)
+            return null;
+
+        return new Document<T>(id, content, metadataObj);
     }
 
     /// <summary>
@@ -446,18 +452,13 @@ public class ElasticsearchDocumentStore<T> : DocumentStoreBase<T>
         try
         {
             var deleteScrollRequest = new { scroll_id = new[] { scrollId } };
-            _httpClient.DeleteAsync("_search/scroll")
-                .ContinueWith(t =>
-                {
-                    if (t.Result.IsSuccessStatusCode)
-                    {
-                        t.Result.Content = new StringContent(
-                            Newtonsoft.Json.JsonConvert.SerializeObject(deleteScrollRequest),
-                            Encoding.UTF8,
-                            "application/json"
-                        );
-                    }
-                });
+            using var deleteContent = new StringContent(
+                Newtonsoft.Json.JsonConvert.SerializeObject(deleteScrollRequest),
+                Encoding.UTF8,
+                "application/json"
+            );
+            using var deleteResponse = _httpClient.DeleteAsync("_search/scroll").GetAwaiter().GetResult();
+            deleteResponse.Content = deleteContent;
         }
         catch
         {

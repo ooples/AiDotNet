@@ -57,20 +57,23 @@ public class InMemoryDocumentStore<T> : DocumentStoreBase<T>
     /// <summary>
     /// Initializes a new instance of the InMemoryDocumentStore class.
     /// </summary>
-    /// <param name="databasePath">Logical identifier for this store instance (not used for file storage).</param>
-    /// <param name="tableName">Logical name for the document collection (used for debugging/logging).</param>
     /// <param name="vectorDimension">The dimension of vector embeddings.</param>
-    /// <exception cref="ArgumentException">Thrown when parameters are invalid.</exception>
+    /// <param name="databasePath">Optional logical identifier for this store instance (for debugging/logging).</param>
+    /// <param name="tableName">Optional logical name for the document collection (for debugging/logging).</param>
+    /// <exception cref="ArgumentOutOfRangeException">Thrown when vectorDimension is less than or equal to zero.</exception>
     /// <remarks>
     /// <para><b>For Beginners:</b> Creates a new in-memory vector store that keeps all data in RAM.
     /// 
     /// Example:
     /// <code>
     /// // Create a store with 384-dimensional embeddings
-    /// var store = new InMemoryDocumentStore&lt;float&gt;(
-    ///     "session-cache",
-    ///     "documents",
-    ///     vectorDimension: 384
+    /// var store = new InMemoryDocumentStore&lt;float&gt;(vectorDimension: 384);
+    /// 
+    /// // With optional identifiers for logging
+    /// var store2 = new InMemoryDocumentStore&lt;float&gt;(
+    ///     vectorDimension: 384,
+    ///     databasePath: "session-cache",
+    ///     tableName: "documents"
     /// );
     /// </code>
     /// 
@@ -78,14 +81,11 @@ public class InMemoryDocumentStore<T> : DocumentStoreBase<T>
     /// Vector dimension must match your embedding model's output dimension.
     /// </para>
     /// </remarks>
-    public InMemoryDocumentStore(string databasePath, string tableName, int vectorDimension)
+    public InMemoryDocumentStore(int vectorDimension, string? databasePath = null, string? tableName = null)
+    public InMemoryDocumentStore(int vectorDimension, string? databasePath = null, string? tableName = null)
     {
-        if (string.IsNullOrWhiteSpace(databasePath))
-            throw new ArgumentException("Database path cannot be empty", nameof(databasePath));
-        if (string.IsNullOrWhiteSpace(tableName))
-            throw new ArgumentException("Table name cannot be empty", nameof(tableName));
         if (vectorDimension <= 0)
-            throw new ArgumentException("Vector dimension must be positive", nameof(vectorDimension));
+            throw new ArgumentOutOfRangeException(nameof(vectorDimension), "Vector dimension must be positive");
 
         _store = new Dictionary<string, VectorDocument<T>>();
         _vectorDimension = vectorDimension;
