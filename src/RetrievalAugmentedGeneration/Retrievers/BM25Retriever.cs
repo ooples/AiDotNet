@@ -35,6 +35,9 @@ namespace AiDotNet.RetrievalAugmentedGeneration.Retrievers
 
             var candidates = _documentStore.GetAll().ToList();
             var corpusStats = BuildCorpusStatistics(candidates);
+            
+            // Build document lookup dictionary for O(1) access
+            var documentLookup = candidates.ToDictionary(d => d.Id);
 
             foreach (var doc in candidates.Where(d => MatchesFilters(d, metadataFilters)))
             {
@@ -54,13 +57,13 @@ namespace AiDotNet.RetrievalAugmentedGeneration.Retrievers
                 .Take(topK)
                 .Select(kv =>
                 {
-                    var doc = candidates.FirstOrDefault(d => d.Id == kv.Key);
-                    if (doc != null)
+                    if (documentLookup.TryGetValue(kv.Key, out var doc))
                     {
                         doc.RelevanceScore = kv.Value;
                         doc.HasRelevanceScore = true;
+                        return doc;
                     }
-                    return doc;
+                    return null;
                 })
                 .Where(d => d != null)
                 .Cast<Document<T>>();
