@@ -178,6 +178,7 @@ public class ElasticsearchDocumentStore<T> : DocumentStoreBase<T>
         {
             // Check which items succeeded
             var items = result["items"];
+            int addedCount = 0;
             if (items != null)
             {
                 for (int i = 0; i < vectorDocuments.Count && i < items.Count(); i++)
@@ -186,18 +187,26 @@ public class ElasticsearchDocumentStore<T> : DocumentStoreBase<T>
                     var status = item?["status"]?.Value<int>() ?? 500;
                     if (status >= 200 && status < 300)
                     {
+                        bool isNew = !_cache.ContainsKey(vectorDocuments[i].Document.Id);
                         _cache[vectorDocuments[i].Document.Id] = vectorDocuments[i];
+                        if (isNew)
+                            addedCount++;
                     }
                 }
             }
-            var successCount = _cache.Count(kvp => vectorDocuments.Any(vd => vd.Document.Id == kvp.Key));
-            _documentCount += successCount;
+            _documentCount += addedCount;
             throw new InvalidOperationException($"Bulk operation had partial failures");
         }
         
+        int newDocCount = 0;
         foreach (var vd in vectorDocuments)
+        {
+            bool isNew = !_cache.ContainsKey(vd.Document.Id);
             _cache[vd.Document.Id] = vd;
-        _documentCount += vectorDocuments.Count;
+            if (isNew)
+                newDocCount++;
+        }
+        _documentCount += newDocCount;
     }
 
     protected override IEnumerable<Document<T>> GetSimilarCore(Vector<T> queryVector, int topK, Dictionary<string, object> metadataFilters)

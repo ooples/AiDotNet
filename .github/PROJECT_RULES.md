@@ -38,6 +38,7 @@
 - Follow DRY principles
 - Use existing helpers (`StatisticsHelper`, `MathHelper`, etc.) - don't duplicate functionality
 - Proper null checks with exceptions, NOT nullable operators (`!`) for .NET Framework compatibility
+- **ALWAYS** ensure new code includes unit tests with a minimum of 80% code coverage.
 
 ### 6. Default Values
 - All string properties: `= string.Empty;`
@@ -101,7 +102,7 @@
 
 ### When Working on Features:
 1. Use Google Gemini CLI for comprehensive codebase analysis (2M token context)
-   - **ALWAYS** use model `gemini-2.0-flash-thinking-exp-1219` for analysis
+   - **ALWAYS** use model `gemini-2.5-flash` for analysis
 2. Check existing implementations before duplicating
 3. Integrate with existing architecture
 4. Follow established patterns exactly

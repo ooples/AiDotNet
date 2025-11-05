@@ -68,6 +68,7 @@ public class NeuralGenerator<T> : IGenerator<T>
     private readonly Dictionary<string, int> _wordToToken;
     private readonly Dictionary<int, string> _tokenToWord;
     private readonly T[,] _embeddingMatrix;
+    private readonly object _vocabularyLock = new object();
 
     /// <summary>
     /// Gets the maximum number of tokens this generator can process in a single request.
@@ -88,13 +89,19 @@ public class NeuralGenerator<T> : IGenerator<T>
     /// <param name="maxContextTokens">The maximum context tokens (default: 4096).</param>
     /// <param name="maxGenerationTokens">The maximum generation tokens (default: 1024).</param>
     /// <param name="temperature">Sampling temperature for generation (default: 0.7). Higher = more creative.</param>
+    /// <param name="prebuiltVocabulary">Optional pre-built vocabulary for frozen token mapping. If provided, vocabulary is frozen and unknown words map to [UNK].</param>
+    /// <remarks>
+    /// The vocabulary is frozen after initialization when using a pre-built vocabulary. Unknown words encountered
+    /// during tokenization are mapped to the [UNK] token to ensure compatibility with pre-trained networks.
+    /// </remarks>
     public NeuralGenerator(
         LSTMNeuralNetwork<T> network,
         int vocabularySize = 50000,
         int embeddingDimension = 256,
         int maxContextTokens = 4096,
         int maxGenerationTokens = 1024,
-        double temperature = 0.7)
+        double temperature = 0.7,
+        IDictionary<string, int>? prebuiltVocabulary = null)
     {
         _network = network ?? throw new ArgumentNullException(nameof(network));
 
@@ -150,19 +157,33 @@ public class NeuralGenerator<T> : IGenerator<T>
         }
         
         // Initialize bidirectional vocabulary mapping
-        _wordToToken = new Dictionary<string, int>();
-        _tokenToWord = new Dictionary<int, string>();
-        
-        // Reserve special tokens
-        _tokenToWord[0] = "[PAD]";   // Padding
-        _tokenToWord[1] = "[UNK]";   // Unknown
-        _tokenToWord[2] = "[BOS]";   // Beginning of sequence
-        _tokenToWord[3] = "[EOS]";   // End of sequence
-        
-        _wordToToken["[PAD]"] = 0;
-        _wordToToken["[UNK]"] = 1;
-        _wordToToken["[BOS]"] = 2;
-        _wordToToken["[EOS]"] = 3;
+        if (prebuiltVocabulary != null)
+        {
+            // Use frozen vocabulary from pre-trained model
+            _wordToToken = new Dictionary<string, int>(prebuiltVocabulary);
+            _tokenToWord = new Dictionary<int, string>();
+            foreach (var kvp in prebuiltVocabulary)
+            {
+                _tokenToWord[kvp.Value] = kvp.Key;
+            }
+        }
+        else
+        {
+            // Initialize empty vocabulary with special tokens only
+            _wordToToken = new Dictionary<string, int>();
+            _tokenToWord = new Dictionary<int, string>();
+            
+            // Reserve special tokens
+            _tokenToWord[0] = "[PAD]";   // Padding
+            _tokenToWord[1] = "[UNK]";   // Unknown
+            _tokenToWord[2] = "[BOS]";   // Beginning of sequence
+            _tokenToWord[3] = "[EOS]";   // End of sequence
+            
+            _wordToToken["[PAD]"] = 0;
+            _wordToToken["[UNK]"] = 1;
+            _wordToToken["[BOS]"] = 2;
+            _wordToToken["[EOS]"] = 3;
+        }
     }
 
     /// <summary>
@@ -223,8 +244,10 @@ public class NeuralGenerator<T> : IGenerator<T>
         {
             var doc = contextList[i];
             var citationNum = i + 1;
-
-            promptBuilder.AppendLine($"[{citationNum}] {TruncateText(doc.Content, 500)}");
+            
+            // Handle null content gracefully
+            var content = doc.Content ?? "(no content)";
+            promptBuilder.AppendLine($"[{citationNum}] {TruncateText(content, 500)}");
             promptBuilder.AppendLine();
 
             citations.Add($"[{citationNum}] Document ID: {doc.Id}");
@@ -264,31 +287,23 @@ public class NeuralGenerator<T> : IGenerator<T>
 
     private List<int> TokenizeText(string text)
     {
-        // Production-ready word-based tokenization with vocabulary tracking
+        // Production-ready word-based tokenization with thread-safe vocabulary tracking
         var words = text.Split(new[] { ' ', '\t', '\n', '\r', '.', ',', '!', '?', ';', ':' },
             StringSplitOptions.RemoveEmptyEntries);
 
         var tokens = new List<int>();
-        var nextTokenId = _wordToToken.Count;
         
         foreach (var word in words)
         {
             var normalizedWord = word.ToLowerInvariant();
             
-            // Check if word exists in vocabulary
-            if (!_wordToToken.TryGetValue(normalizedWord, out var tokenId))
+            int tokenId;
+            lock (_vocabularyLock)
             {
-                // Add new word to vocabulary if space available
-                if (nextTokenId < _vocabularySize)
+                // Check if word exists in vocabulary
+                if (!_wordToToken.TryGetValue(normalizedWord, out tokenId))
                 {
-                    tokenId = nextTokenId;
-                    _wordToToken[normalizedWord] = tokenId;
-                    _tokenToWord[tokenId] = normalizedWord;
-                    nextTokenId++;
-                }
-                else
-                {
-                    // Use [UNK] token when vocabulary is full
+                    // Map unknown words to [UNK] token (frozen vocabulary for pre-trained networks)
                     tokenId = 1;
                 }
             }
