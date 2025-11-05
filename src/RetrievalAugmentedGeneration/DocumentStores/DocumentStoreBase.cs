@@ -142,7 +142,7 @@ public abstract class DocumentStoreBase<T> : IDocumentStore<T>
     /// </summary>
     /// <param name="vectorDocument">The validated vector document to add.</param>
     /// <remarks>
-    /// <para><b>For Implementers:</b> This is where you implement document storage.
+    /// <para><b>For Beginners:</b> This is where derived classes implement their specific storage logic.
     /// 
     /// You don't need to:
     /// - Validate the vector document (already done)
@@ -163,7 +163,7 @@ public abstract class DocumentStoreBase<T> : IDocumentStore<T>
     /// The default implementation calls AddCore for each document. Override this to provide
     /// more efficient batch insertion if your storage backend supports it.
     /// </para>
-    /// <para><b>For Implementers:</b> Override this for efficient batch operations.
+    /// <para><b>For Beginners:</b> Derived classes override this to add many documents efficiently at once.
     /// 
     /// For example:
     /// - Database stores can use bulk insert
@@ -189,7 +189,7 @@ public abstract class DocumentStoreBase<T> : IDocumentStore<T>
     /// <param name="metadataFilters">The validated metadata filters.</param>
     /// <returns>Top-k similar documents ordered by similarity score.</returns>
     /// <remarks>
-    /// <para><b>For Implementers:</b> This is where you implement similarity search.
+    /// <para><b>For Beginners:</b> Derived classes implement their specific similarity search algorithms here.
     /// 
     /// You should:
     /// - Calculate similarity between queryVector and all stored embeddings
@@ -212,7 +212,7 @@ public abstract class DocumentStoreBase<T> : IDocumentStore<T>
     /// <param name="documentId">The validated document ID.</param>
     /// <returns>The document if found; otherwise, null.</returns>
     /// <remarks>
-    /// <para><b>For Implementers:</b> This is where you implement ID-based lookup.
+    /// <para><b>For Beginners:</b> Derived classes implement how to find a document by its ID.
     /// Simple dictionary lookup for in-memory stores, database query for persistent stores.
     /// </para>
     /// </remarks>
@@ -224,7 +224,7 @@ public abstract class DocumentStoreBase<T> : IDocumentStore<T>
     /// <param name="documentId">The validated document ID.</param>
     /// <returns>True if removed; false if not found.</returns>
     /// <remarks>
-    /// <para><b>For Implementers:</b> This is where you implement document removal.
+    /// <para><b>For Beginners:</b> Derived classes implement how to delete a document from storage.
     /// Remember to remove both the document and its embedding from your storage.
     /// </para>
     /// </remarks>
@@ -336,7 +336,7 @@ public abstract class DocumentStoreBase<T> : IDocumentStore<T>
     /// This helper method supports equality and range comparisons for metadata filtering.
     /// Override this to add support for more complex filter operations.
     /// </para>
-    /// <para><b>For Implementers:</b> Use this in GetSimilarCore to filter documents.
+    /// <para><b>For Beginners:</b> Use this helper method in GetSimilarCore to filter documents by metadata.
     /// 
     /// Supported filters:
     /// - Equality: metadata["category"] == "science"

@@ -195,6 +195,15 @@ public class InMemoryDocumentStore<T> : DocumentStoreBase<T>
     }
 
     /// <summary>
+    /// Core logic for retrieving all documents.
+    /// </summary>
+    /// <returns>An enumerable of all documents in the store.</returns>
+    protected override IEnumerable<Document<T>> GetAllCore()
+    {
+        return _documents.Values.Select(vd => vd.Document).ToList();
+    }
+
+    /// <summary>
     /// Gets all vector documents in the store (including embeddings).
     /// </summary>
     /// <returns>All stored vector documents.</returns>

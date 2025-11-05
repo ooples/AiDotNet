@@ -104,6 +104,11 @@ namespace AiDotNet.RetrievalAugmentedGeneration.DocumentStores
             return removed1 || removed2;
         }
 
+        protected override IEnumerable<Document<T>> GetAllCore()
+        {
+            return _vectorStore.GetAll();
+        }
+
         public override void Clear()
         {
             _vectorStore.Clear();

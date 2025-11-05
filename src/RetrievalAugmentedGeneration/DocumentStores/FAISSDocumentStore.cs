@@ -108,6 +108,11 @@ namespace AiDotNet.RetrievalAugmentedGeneration.DocumentStores
             return removed;
         }
 
+        protected override IEnumerable<Document<T>> GetAllCore()
+        {
+            return _documents.Values.Select(vd => vd.Document).ToList();
+        }
+
         public override void Clear()
         {
             _documents.Clear();
