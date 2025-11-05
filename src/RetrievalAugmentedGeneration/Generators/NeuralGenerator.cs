@@ -107,6 +107,17 @@ public class NeuralGenerator<T> : IGenerator<T>
         _maxContextTokens = maxContextTokens;
         _maxGenerationTokens = maxGenerationTokens;
         _temperature = temperature;
+
+        // Validate network output dimension matches vocabulary requirements
+        var networkOutputShape = network.Architecture.GetOutputShape();
+        if (networkOutputShape.Length > 0)
+        {
+            int networkOutputDim = networkOutputShape[networkOutputShape.Length - 1];
+            if (networkOutputDim < vocabularySize)
+                throw new ArgumentException(
+                    $"Network output dimension ({networkOutputDim}) must be >= vocabulary size ({vocabularySize})",
+                    nameof(network));
+        }
         
         // Initialize bidirectional vocabulary mapping
         _wordToToken = new Dictionary<string, int>();

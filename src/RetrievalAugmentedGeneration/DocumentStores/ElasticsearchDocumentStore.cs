@@ -170,6 +170,27 @@ public class ElasticsearchDocumentStore<T> : DocumentStoreBase<T>
         using var content = new StringContent(bulkBody.ToString(), Encoding.UTF8, "application/x-ndjson");
         using var response = _httpClient.PostAsync($"/{_indexName}/_bulk", content).GetAwaiter().GetResult();
         response.EnsureSuccessStatusCode();
+
+        var responseContent = response.Content.ReadAsStringAsync().GetAwaiter().GetResult();
+        var result = Newtonsoft.Json.Linq.JObject.Parse(responseContent);
+
+        if (result["errors"]?.Value<bool>() == true)
+        {
+            // Check which items succeeded
+            var items = result["items"];
+            for (int i = 0; i < vectorDocuments.Count && i < items?.Count(); i++)
+            {
+                var item = items[i]["index"];
+                var status = item?["status"]?.Value<int>() ?? 500;
+                if (status >= 200 && status < 300)
+                {
+                    _cache[vectorDocuments[i].Document.Id] = vectorDocuments[i];
+                }
+            }
+            var successCount = _cache.Count(kvp => vectorDocuments.Any(vd => vd.Document.Id == kvp.Key));
+            _documentCount += successCount;
+            throw new InvalidOperationException($"Bulk operation had partial failures");
+        }
         
         foreach (var vd in vectorDocuments)
             _cache[vd.Document.Id] = vd;

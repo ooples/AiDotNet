@@ -3,6 +3,7 @@ using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
 using AiDotNet.RetrievalAugmentedGeneration.Models;
 using System;
+using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Linq;
 
@@ -41,7 +42,7 @@ namespace AiDotNet.RetrievalAugmentedGeneration.DocumentStores;
 /// <typeparam name="T">The numeric data type used for vector operations.</typeparam>
 public class InMemoryDocumentStore<T> : DocumentStoreBase<T>
 {
-    private readonly Dictionary<string, VectorDocument<T>> _store;
+    private readonly ConcurrentDictionary<string, VectorDocument<T>> _store;
     private int _vectorDimension;
 
     /// <summary>
@@ -86,7 +87,7 @@ public class InMemoryDocumentStore<T> : DocumentStoreBase<T>
         if (vectorDimension <= 0)
             throw new ArgumentOutOfRangeException(nameof(vectorDimension), "Vector dimension must be positive");
 
-        _store = new Dictionary<string, VectorDocument<T>>();
+        _store = new ConcurrentDictionary<string, VectorDocument<T>>();
         _vectorDimension = vectorDimension;
     }
 
@@ -126,7 +127,13 @@ public class InMemoryDocumentStore<T> : DocumentStoreBase<T>
     /// </remarks>
     protected override void AddBatchCore(IList<VectorDocument<T>> vectorDocuments)
     {
-        if (vectorDocuments.Count == 0) return;
+        if (vectorDocuments.Count == 0)
+            return;
+
+        if (_vectorDimension == 0)
+        {
+            _vectorDimension = vectorDocuments[0].Embedding.Length;
+        }
 
         foreach (var vd in vectorDocuments)
         {
