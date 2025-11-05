@@ -109,11 +109,11 @@ public class MultiModalTextSplitter : ChunkingStrategyBase
                     {
                         var overlapLines = new List<string>();
                         var overlapSize = 0;
-                        for (int i = currentChunk.Count - 1; i >= 0 && overlapSize < ChunkOverlap; i--)
+                        for (int k = currentChunk.Count - 1; k >= 0 && overlapSize < ChunkOverlap; k--)
                         {
-                            var line = currentChunk[i];
-                            overlapLines.Insert(0, line);
-                            overlapSize += line.Length + Environment.NewLine.Length;
+                            var overlapLine = currentChunk[k];
+                            overlapLines.Insert(0, overlapLine);
+                            overlapSize += overlapLine.Length + Environment.NewLine.Length;
                         }
                         currentChunk.Clear();
                         currentChunk.AddRange(overlapLines);
