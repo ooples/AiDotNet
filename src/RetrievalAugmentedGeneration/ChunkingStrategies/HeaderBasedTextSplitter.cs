@@ -76,7 +76,7 @@ public class HeaderBasedTextSplitter : ChunkingStrategyBase
                 {
                     currentChunk.AddRange(previousChunkLines);
                     // Adjust start to account for overlapped content
-                    var overlapLength = string.Join(Environment.NewLine, previousChunkLines).Length + Environment.NewLine.Length;
+                    var overlapLength = string.Join(Environment.NewLine, previousChunkLines).Length;
                     chunkStart = Math.Max(0, position - overlapLength);
                 }
 
@@ -104,7 +104,7 @@ public class HeaderBasedTextSplitter : ChunkingStrategyBase
                     {
                         currentChunk.AddRange(previousChunkLines);
                         // Adjust start to account for overlapped content
-                        var overlapLength = string.Join(Environment.NewLine, previousChunkLines).Length + Environment.NewLine.Length;
+                        var overlapLength = string.Join(Environment.NewLine, previousChunkLines).Length;
                         chunkStart = Math.Max(0, (position + lineLength) - overlapLength);
                     }
                 }
@@ -206,13 +206,15 @@ public class HeaderBasedTextSplitter : ChunkingStrategyBase
             while (j < chunks.Count && combined.Length < _minChunkSize)
             {
                 var next = chunks[j];
+                
+                // Check if adding next chunk would exceed max chunk size
+                var nextLength = Environment.NewLine.Length + next.content.Length;
+                if (combined.Length + nextLength >= ChunkSize)
+                    break;
+                    
                 combined += Environment.NewLine + next.content;
                 combinedEnd = next.end;
                 j++;
-
-                // Stop if combined chunk exceeds max chunk size
-                if (combined.Length >= ChunkSize)
-                    break;
             }
 
             result.Add((combined, combinedStart, combinedEnd));

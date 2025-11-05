@@ -189,7 +189,6 @@ public class SpellCheckQueryProcessor : QueryProcessorBase
             { "atention", "attention" },
             { "vecotr", "vector" },
             { "tensro", "tensor" },
-            { "reranker", "reranker" },
             { "chunkin", "chunking" },
             { "semantc", "semantic" }
         };

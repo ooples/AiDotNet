@@ -80,8 +80,8 @@ public class QueryRewritingProcessor<T> : QueryProcessorBase
         var rewritten = query;
 
         // Case-insensitive replacements for common text speak
-        rewritten = Regex.Replace(rewritten, @"\b r \b", " are ", RegexOptions.IgnoreCase);
-        rewritten = Regex.Replace(rewritten, @"\b u \b", " you ", RegexOptions.IgnoreCase);
+        rewritten = Regex.Replace(rewritten, @"\br\b", "are", RegexOptions.IgnoreCase);
+        rewritten = Regex.Replace(rewritten, @"\bu\b", "you", RegexOptions.IgnoreCase);
         rewritten = Regex.Replace(rewritten, @"\bwht\b", "what", RegexOptions.IgnoreCase);
         rewritten = Regex.Replace(rewritten, @"\bhw\b", "how", RegexOptions.IgnoreCase);
         rewritten = Regex.Replace(rewritten, @" w/ ", " with ", RegexOptions.IgnoreCase);

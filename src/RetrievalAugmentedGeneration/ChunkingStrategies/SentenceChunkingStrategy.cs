@@ -99,10 +99,11 @@ public class SentenceChunkingStrategy : ChunkingStrategyBase
                 var chunkText = text.Substring(chunkStart, chunkEnd - chunkStart);
                 yield return (chunkText, chunkStart, chunkEnd);
                 
-                // Keep the last N sentences for overlap
+                // Keep the last N sentences for overlap (include separator lengths)
                 var overlapStart = Math.Max(0, currentSentences.Count - _overlapSentences);
                 currentSentences = currentSentences.GetRange(overlapStart, currentSentences.Count - overlapStart);
-                currentLength = currentSentences.Sum(s => s.Item1.Length);
+                currentLength = currentSentences.Sum(s => s.Item1.Length) + 
+                               Math.Max(0, currentSentences.Count - 1) * _separatorLength;
             }
             
             // Handle sentences that exceed maxChunkSize on their own
@@ -133,7 +134,7 @@ public class SentenceChunkingStrategy : ChunkingStrategyBase
             }
 
             currentSentences.Add((sentence, sentStart, sentEnd));
-            currentLength += sentenceLength;
+            currentLength += sentenceLength + (currentSentences.Count > 1 ? _separatorLength : 0);
 
             // If we've reached target size, create a chunk
             if (currentLength >= _targetChunkSize)
