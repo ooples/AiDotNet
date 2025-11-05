@@ -103,8 +103,9 @@ public class SentenceChunkingStrategy : ChunkingStrategyBase
                 // Keep the last N sentences for overlap (include separator lengths)
                 var overlapStart = Math.Max(0, currentSentences.Count - _overlapSentences);
                 currentSentences = currentSentences.GetRange(overlapStart, currentSentences.Count - overlapStart);
-                currentLength = currentSentences.Sum(s => s.Item1.Length) + 
-                               Math.Max(0, currentSentences.Count - 1) * _separatorLength;
+                currentLength = currentSentences.Count > 0
+                    ? currentSentences[currentSentences.Count - 1].Item3 - currentSentences[0].Item2
+                    : 0;
             }
             
             // Handle sentences that exceed maxChunkSize on their own

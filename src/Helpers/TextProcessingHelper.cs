@@ -24,18 +24,23 @@ namespace AiDotNet.Helpers
             var sentences = new List<string>();
             var sentenceEndings = new[] { ". ", "! ", "? ", ".\n", "!\n", "?\n" };
             var currentSentence = new StringBuilder();
+            var maxEndingLength = sentenceEndings.Max(e => e.Length);
 
             for (int i = 0; i < text.Length; i++)
             {
                 currentSentence.Append(text[i]);
 
-                var matchedEnding = sentenceEndings.FirstOrDefault(ending =>
-                    currentSentence.ToString().EndsWith(ending));
-                    
-                if (matchedEnding != null)
+                // Only check for endings if we have enough characters
+                if (currentSentence.Length >= maxEndingLength)
                 {
-                    sentences.Add(currentSentence.ToString().Trim());
-                    currentSentence.Clear();
+                    var lastChars = text.Substring(Math.Max(0, i - maxEndingLength + 1), Math.Min(maxEndingLength, i + 1));
+                    var matchedEnding = sentenceEndings.FirstOrDefault(ending => lastChars.EndsWith(ending));
+                        
+                    if (matchedEnding != null)
+                    {
+                        sentences.Add(currentSentence.ToString().Trim());
+                        currentSentence.Clear();
+                    }
                 }
             }
 
