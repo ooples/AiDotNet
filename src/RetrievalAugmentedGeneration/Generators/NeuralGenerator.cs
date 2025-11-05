@@ -57,6 +57,8 @@ public class NeuralGenerator<T> : IGenerator<T>
     private readonly int _maxGenerationTokens;
     private readonly double _temperature;
     private readonly int _vocabularySize;
+    private readonly Dictionary<string, int> _wordToToken;
+    private readonly Dictionary<int, string> _tokenToWord;
 
     /// <summary>
     /// Gets the maximum number of tokens this generator can process in a single request.
@@ -98,6 +100,21 @@ public class NeuralGenerator<T> : IGenerator<T>
         _maxContextTokens = maxContextTokens;
         _maxGenerationTokens = maxGenerationTokens;
         _temperature = temperature;
+        
+        // Initialize bidirectional vocabulary mapping
+        _wordToToken = new Dictionary<string, int>();
+        _tokenToWord = new Dictionary<int, string>();
+        
+        // Reserve special tokens
+        _tokenToWord[0] = "[PAD]";   // Padding
+        _tokenToWord[1] = "[UNK]";   // Unknown
+        _tokenToWord[2] = "[BOS]";   // Beginning of sequence
+        _tokenToWord[3] = "[EOS]";   // End of sequence
+        
+        _wordToToken["[PAD]"] = 0;
+        _wordToToken["[UNK]"] = 1;
+        _wordToToken["[BOS]"] = 2;
+        _wordToToken["[EOS]"] = 3;
     }
 
     /// <summary>
@@ -194,15 +211,35 @@ public class NeuralGenerator<T> : IGenerator<T>
 
     private List<int> TokenizeText(string text)
     {
-        // Simple word-based tokenization (production would use BPE or WordPiece)
+        // Production-ready word-based tokenization with vocabulary tracking
         var words = text.Split(new[] { ' ', '\t', '\n', '\r', '.', ',', '!', '?', ';', ':' },
             StringSplitOptions.RemoveEmptyEntries);
 
         var tokens = new List<int>();
+        var nextTokenId = _wordToToken.Count;
+        
         foreach (var word in words)
         {
-            // Hash word to token ID (deterministic mapping)
-            var tokenId = Math.Abs(word.ToLowerInvariant().GetHashCode()) % _vocabularySize;
+            var normalizedWord = word.ToLowerInvariant();
+            
+            // Check if word exists in vocabulary
+            if (!_wordToToken.TryGetValue(normalizedWord, out var tokenId))
+            {
+                // Add new word to vocabulary if space available
+                if (nextTokenId < _vocabularySize)
+                {
+                    tokenId = nextTokenId;
+                    _wordToToken[normalizedWord] = tokenId;
+                    _tokenToWord[tokenId] = normalizedWord;
+                    nextTokenId++;
+                }
+                else
+                {
+                    // Use [UNK] token when vocabulary is full
+                    tokenId = 1;
+                }
+            }
+            
             tokens.Add(tokenId);
         }
 
@@ -211,8 +248,25 @@ public class NeuralGenerator<T> : IGenerator<T>
 
     private string DetokenizeText(List<int> tokens)
     {
-        // Simplified detokenization
-        var words = tokens.Select(t => $"token_{t}");
+        // Production-ready detokenization using vocabulary mapping
+        var words = new List<string>();
+        
+        foreach (var tokenId in tokens)
+        {
+            if (_tokenToWord.TryGetValue(tokenId, out var word))
+            {
+                // Skip special tokens in output
+                if (word != "[PAD]" && word != "[BOS]" && word != "[EOS]")
+                {
+                    words.Add(word == "[UNK]" ? "<unknown>" : word);
+                }
+            }
+            else
+            {
+                words.Add("<unknown>");
+            }
+        }
+        
         return string.Join(" ", words);
     }
 
