@@ -344,9 +344,9 @@ Provide numbered reasoning steps.";
                     }
                 }
                 // Extract concept mentions
-                else if (trimmed.Contains("concept", StringComparison.OrdinalIgnoreCase) || 
-                        trimmed.Contains("understand", StringComparison.OrdinalIgnoreCase) || 
-                        trimmed.Contains("need to know", StringComparison.OrdinalIgnoreCase))
+                else if (trimmed.IndexOf("concept", StringComparison.OrdinalIgnoreCase) >= 0 || 
+                        trimmed.IndexOf("understand", StringComparison.OrdinalIgnoreCase) >= 0 || 
+                        trimmed.IndexOf("need to know", StringComparison.OrdinalIgnoreCase) >= 0)
                 {
                     // Extract noun phrases after keywords
                     var patterns = new[]

@@ -1,5 +1,5 @@
 mutation {
-  resolveReviewThread(input: {threadId: "PRRT_kwDOKSXUF85gsaCh"}) {
+  resolveReviewThread(input: {threadId: "PRRT_kwDOKSXUF85gsJxz"}) {
     thread {
       id
       isResolved

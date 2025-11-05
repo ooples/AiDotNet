@@ -1,0 +1,716 @@
+[
+  {
+    "id": "PRRT_kwDOKSXUF85gqWj5",
+    "isResolved": false,
+    "comments": {
+      "nodes": [
+        {
+          "id": "PRRC_kwDOKSXUF86UryNx",
+          "path": "src/RetrievalAugmentedGeneration/ContextCompression/DocumentSummarizer.cs",
+          "body": "_≡ƒ¢á∩╕Å Refactor suggestion_ | _≡ƒƒá Major_\n\n**Extract duplicated text processing methods to shared utility class.**\n\nBoth `SplitIntoSentences` (lines 163-187) and `Tokenize` (lines 189-196) are duplicated verbatim in `SemanticChunkingStrategy.cs` and `LLMContextCompressor.cs`. This violates DRY and creates maintenance burden.\n\n\n\nRefactor by creating a shared utility class:\n\n```csharp\n// In AiDotNet.Helpers or similar namespace\npublic static class TextProcessingHelper\n{\n    public static List<string> SplitIntoSentences(string text)\n    {\n        var sentences = new List<string>();\n        var sentenceEndings = new[] { \". \", \"! \", \"? \", \".\\n\", \"!\\n\", \"?\\n\" };\n        var currentSentence = new System.Text.StringBuilder();\n\n        for (int i = 0; i < text.Length; i++)\n        {\n            currentSentence.Append(text[i]);\n\n            var matchedEnding = sentenceEndings.FirstOrDefault(ending => \n                currentSentence.ToString().EndsWith(ending));\n            if (matchedEnding != null)\n            {\n                sentences.Add(currentSentence.ToString().Trim());\n                currentSentence.Clear();\n            }\n        }\n\n        if (currentSentence.Length > 0 && !string.IsNullOrWhiteSpace(currentSentence.ToString()))\n        {\n            sentences.Add(currentSentence.ToString().Trim());\n        }\n\n        return sentences;\n    }\n\n    public static List<string> Tokenize(string text)\n    {\n        if (string.IsNullOrEmpty(text)) return new List<string>();\n\n        return text.ToLowerInvariant()\n            .Split(new[] { ' ', '\\t', '\\n', '\\r', '.', ',', '!', '?' }, \n                   StringSplitOptions.RemoveEmptyEntries)\n            .ToList();\n    }\n}\n```\n\nThen update this file and the other files to use the shared methods:\n\n```diff\n private List<string> SplitIntoSentences(string text)\n {\n-    var sentences = new List<string>();\n-    var sentenceEndings = new[] { \". \", \"! \", \"? \", \".\\n\", \"!\\n\", \"?\\n\" };\n-    var currentSentence = new System.Text.StringBuilder();\n-\n-    for (int i = 0; i < text.Length; i++)\n-    {\n-        currentSentence.Append(text[i]);\n-\n-        var matchedEnding = sentenceEndings.FirstOrDefault(ending => currentSentence.ToString().EndsWith(ending));\n-        if (matchedEnding != null)\n-        {\n-            sentences.Add(currentSentence.ToString().Trim());\n-            currentSentence.Clear();\n-        }\n-    }\n-\n-    if (currentSentence.Length > 0 && !string.IsNullOrWhiteSpace(currentSentence.ToString()))\n-    {\n-        sentences.Add(currentSentence.ToString().Trim());\n-    }\n-\n-    return sentences;\n+    return TextProcessingHelper.SplitIntoSentences(text);\n }\n\n private List<string> Tokenize(string text)\n {\n-    if (string.IsNullOrEmpty(text)) return new List<string>();\n-\n-    return text.ToLowerInvariant()\n-        .Split(new[] { ' ', '\\t', '\\n', '\\r', '.', ',', '!', '?' }, StringSplitOptions.RemoveEmptyEntries)\n-        .ToList();\n+    return TextProcessingHelper.Tokenize(text);\n }\n```\n\n<!-- This is an auto-generated comment by CodeRabbit -->",
+          "createdAt": "2025-11-05T13:29:53Z"
+        }
+      ]
+    }
+  },
+  {
+    "id": "PRRT_kwDOKSXUF85gqxED",
+    "isResolved": false,
+    "comments": {
+      "nodes": [
+        {
+          "id": "PRRC_kwDOKSXUF86UsWxB",
+          "path": "src/RetrievalAugmentedGeneration/QueryProcessors/KeywordExtractionQueryProcessor.cs",
+          "body": "_ΓÜá∩╕Å Potential issue_ | _≡ƒƒá Major_\n\n**Fix duplicate \"the\" entry and extract shared stop word list.**\n\n**Issue 1**: Line 65 contains `\"the\"` twice, which is redundant in a HashSet:\n```csharp\n\"to\", \"was\", \"will\", \"with\", \"the\", \"this\", \"but\", \"they\", \"have\",\n```\n\n**Issue 2**: Multiple query processors define similar stop word lists (KeywordExtractionQueryProcessor, StopWordRemovalQueryProcessor). This should be extracted to a shared constant or utility class.\n\n\n\n\nApply this diff to fix the duplicate:\n\n```diff\n-            \"to\", \"was\", \"will\", \"with\", \"the\", \"this\", \"but\", \"they\", \"have\",\n+            \"to\", \"was\", \"will\", \"with\", \"this\", \"but\", \"they\", \"have\",\n```\n\nThen consider extracting a shared stop word set:\n\n```csharp\nnamespace AiDotNet.RetrievalAugmentedGeneration.QueryProcessors;\n\ninternal static class CommonStopWords\n{\n    internal static HashSet<string> GetEnglishStopWords() => new()\n    {\n        \"a\", \"an\", \"and\", \"are\", \"as\", \"at\", \"be\", \"by\", \"for\", \"from\",\n        // ... complete set\n    };\n}\n```\n\n<details>\n<summary>≡ƒñû Prompt for AI Agents</summary>\n\n```\nIn\nsrc/RetrievalAugmentedGeneration/QueryProcessors/KeywordExtractionQueryProcessor.cs\naround lines 59-71, remove the duplicated \"the\" from the GetDefaultStopWords\nHashSet and replace the local stopword set with a call to a shared stopword\nprovider; create an internal static CommonStopWords (e.g., GetEnglishStopWords)\nin a shared namespace that returns the canonical HashSet<string> and update\nKeywordExtractionQueryProcessor and other processors\n(StopWordRemovalQueryProcessor) to use CommonStopWords.GetEnglishStopWords()\ninstead of duplicating literals so all processors share one source of truth.\n```\n\n</details>\n\n<!-- This is an auto-generated comment by CodeRabbit -->",
+          "createdAt": "2025-11-05T14:03:50Z"
+        }
+      ]
+    }
+  },
+  {
+    "id": "PRRT_kwDOKSXUF85gqxEI",
+    "isResolved": false,
+    "comments": {
+      "nodes": [
+        {
+          "id": "PRRC_kwDOKSXUF86UsWxL",
+          "path": "src/RetrievalAugmentedGeneration/QueryProcessors/LemmatizationQueryProcessor.cs",
+          "body": "_≡ƒ¢á∩╕Å Refactor suggestion_ | _≡ƒƒá Major_\n\n**Extract duplicated PreserveCase logic to a shared utility.**\n\nThis `PreserveCase` method is duplicated across multiple query processors (SpellCheckQueryProcessor at lines 73-84, and here). The logic is identical and should be extracted to a shared helper class or base class to follow DRY principles.\n\n\n\nConsider creating a shared utility class:\n\n```csharp\nnamespace AiDotNet.RetrievalAugmentedGeneration.QueryProcessors;\n\ninternal static class QueryProcessorHelpers\n{\n    internal static string PreserveCase(string original, string transformed)\n    {\n        if (string.IsNullOrEmpty(original) || string.IsNullOrEmpty(transformed))\n            return transformed;\n\n        if (char.IsUpper(original[0]))\n        {\n            return char.ToUpper(transformed[0]) + transformed.Substring(1);\n        }\n\n        return transformed;\n    }\n}\n```\n\nThen update LemmatizationQueryProcessor, SpellCheckQueryProcessor, and any other processors to use this shared helper.\n\n<details>\n<summary>≡ƒñû Prompt for AI Agents</summary>\n\n```\nIn\nsrc/RetrievalAugmentedGeneration/QueryProcessors/LemmatizationQueryProcessor.cs\naround lines 85-96, the PreserveCase method is duplicated across processors;\nextract this logic into a shared internal static helper (e.g.,\nAiDotNet.RetrievalAugmentedGeneration.QueryProcessors.QueryProcessorHelpers.PreserveCase)\nthat accepts (string original, string transformed) and implements the same\nnull/empty and uppercase-first-char behavior, then remove the local PreserveCase\nmethod and replace calls with QueryProcessorHelpers.PreserveCase; repeat the\nsame replacement in SpellCheckQueryProcessor (around lines 73-84) and any other\nprocessors, adding the appropriate using or fully-qualified name and making the\nhelper internal static so all processors can access it.\n```\n\n</details>\n\n<!-- This is an auto-generated comment by CodeRabbit -->",
+          "createdAt": "2025-11-05T14:03:51Z"
+        }
+      ]
+    }
+  },
+  {
+    "id": "PRRT_kwDOKSXUF85gqxEO",
+    "isResolved": false,
+    "comments": {
+      "nodes": [
+        {
+          "id": "PRRC_kwDOKSXUF86UsWxQ",
+          "path": "src/RetrievalAugmentedGeneration/QueryProcessors/QueryRewritingProcessor.cs",
+          "body": "_ΓÜá∩╕Å Potential issue_ | _≡ƒƒá Major_\n\n**LLM generator parameter is ignored.**\n\nLine 69 gates contextual rewriting on `_llmGenerator`, yet neither `ProcessQueryCore` nor `RewriteWithContext` invoke the generator. Hooking up an `IGenerator<T>` provides zero effect, so the advertised advanced rewrite path is dead code. Please wire `_llmGenerator` into the rewriting flow (e.g., pass the history and current query to the generator and use its output) so that supplying a generator actually alters the processed query.\n\n<!-- fingerprinting:phantom:medusa:sabertoothed -->\n\n<!-- This is an auto-generated comment by CodeRabbit -->",
+          "createdAt": "2025-11-05T14:03:51Z"
+        }
+      ]
+    }
+  },
+  {
+    "id": "PRRT_kwDOKSXUF85gqxEW",
+    "isResolved": false,
+    "comments": {
+      "nodes": [
+        {
+          "id": "PRRC_kwDOKSXUF86UsWxe",
+          "path": "src/RetrievalAugmentedGeneration/QueryProcessors/QueryRewritingProcessor.cs",
+          "body": "_ΓÜá∩╕Å Potential issue_ | _≡ƒƒá Major_\n\n**Context rewrite fails for capitalized queries.**\n\nLines 107-108 use case-sensitive `Replace(\"what about\", ΓÇª)` / `Replace(\"how about\", ΓÇª)`, but typical inputs start with ΓÇ£What about ΓÇªΓÇ¥ or ΓÇ£How about ΓÇªΓÇ¥. Those replacements never trigger, so contextual augmentation silently fails. Consider normalizing with the lowercased check but rebuild the output using slices, e.g.:\n\n```diff\n-            if (!string.IsNullOrEmpty(topic))\n-            {\n-                return query.Replace(\"what about\", $\"what about {topic} and\")\n-                           .Replace(\"how about\", $\"how about {topic} and\");\n-            }\n+            if (!string.IsNullOrEmpty(topic))\n+            {\n+                const string whatAbout = \"what about\";\n+                const string howAbout = \"how about\";\n+\n+                if (lowerQuery.StartsWith(whatAbout, StringComparison.Ordinal))\n+                {\n+                    var suffix = query[whatAbout.Length..].TrimStart();\n+                    return $\"{query[..whatAbout.Length]} {topic} and {suffix}\";\n+                }\n+\n+                if (lowerQuery.StartsWith(howAbout, StringComparison.Ordinal))\n+                {\n+                    var suffix = query[howAbout.Length..].TrimStart();\n+                    return $\"{query[..howAbout.Length]} {topic} and {suffix}\";\n+                }\n+            }\n```\nThis keeps the original casing while making the rewrite reliable.\n\n<details>\n<summary>≡ƒñû Prompt for AI Agents</summary>\n\n```\nIn src/RetrievalAugmentedGeneration/QueryProcessors/QueryRewritingProcessor.cs\naround lines 102 to 109, the code checks lowerQuery.StartsWith(\"what about\") /\n\"how about\" but then calls case-sensitive Replace on the original query, so\ncapitalized inputs like \"What about...\" aren't modified; instead, compute the\nmatched prefix length from the lowercased check, take the original query's\nprefix slice (to preserve casing) and the remainder slice, and return\noriginalPrefix + $\" {topic} and\" + remainder (or otherwise insert the topic\nbetween the detected prefix and the rest). Do this for both \"what about\" and\n\"how about\" branches so the rewrite is reliable while preserving original\ncasing.\n```\n\n</details>\n\n<!-- fingerprinting:phantom:medusa:sabertoothed -->\n\n<!-- This is an auto-generated comment by CodeRabbit -->",
+          "createdAt": "2025-11-05T14:03:51Z"
+        }
+      ]
+    }
+  },
+  {
+    "id": "PRRT_kwDOKSXUF85gqxEe",
+    "isResolved": false,
+    "comments": {
+      "nodes": [
+        {
+          "id": "PRRC_kwDOKSXUF86UsWxp",
+          "path": "src/RetrievalAugmentedGeneration/QueryProcessors/SpellCheckQueryProcessor.cs",
+          "body": "_ΓÜá∩╕Å Potential issue_ | _≡ƒƒá Major_\n\n**Remove unused `maxEditDistance` parameter or implement fuzzy matching.**\n\nThe `maxEditDistance` field is stored but never used in the `ProcessQueryCore` method. The implementation only performs exact dictionary lookups (line 60), not fuzzy edit distance matching. This creates a misleading API where users might expect fuzzy spell correction based on the parameter name and documentation.\n\n\n\n**Option 1**: Remove the unused parameter:\n\n```diff\n public SpellCheckQueryProcessor(\n-        Dictionary<string, string>? customDictionary = null,\n-        int maxEditDistance = 2)\n+        Dictionary<string, string>? customDictionary = null)\n {\n-        _maxEditDistance = maxEditDistance;\n         _corrections = customDictionary ?? GetDefaultDictionary();\n }\n```\n\nAnd remove the field declaration:\n\n```diff\n     private readonly Dictionary<string, string> _corrections;\n-    private readonly int _maxEditDistance;\n```\n\n**Option 2**: Implement edit distance-based fuzzy matching if that functionality is intended.\n\n<!-- suggestion_start -->\n\n<details>\n<summary>≡ƒô¥ Committable suggestion</summary>\n\n> ΓÇ╝∩╕Å **IMPORTANT**\n> Carefully review the code before committing. Ensure that it accurately replaces the highlighted code, contains no missing lines, and has no issues with indentation. Thoroughly test & benchmark the code to ensure it meets the requirements.\n\n```suggestion\n    private readonly Dictionary<string, string> _corrections;\n\n    /// <summary>\n    /// Initializes a new instance of the SpellCheckQueryProcessor class.\n    /// </summary>\n    /// <param name=\"customDictionary\">Optional custom dictionary of corrections (misspelling ΓåÆ correct spelling).</param>\n    /// <param name=\"maxEditDistance\">Maximum edit distance for fuzzy matching (default: 2).</param>\n    public SpellCheckQueryProcessor(\n        Dictionary<string, string>? customDictionary = null)\n    {\n        _corrections = customDictionary ?? GetDefaultDictionary();\n    }\n```\n\n</details>\n\n<!-- suggestion_end -->\n\n<details>\n<summary>≡ƒñû Prompt for AI Agents</summary>\n\n```\nIn src/RetrievalAugmentedGeneration/QueryProcessors/SpellCheckQueryProcessor.cs\naround lines 26 to 40, the constructor stores a _maxEditDistance that is never\nused by ProcessQueryCore (only exact dictionary lookups are done), so either\nremove the misleading parameter/field and related XML docs or implement fuzzy\nmatching: if you choose removal, delete the maxEditDistance parameter, the\n_maxEditDistance field and update the XML doc and any callers; if you choose\nimplementation, add an edit-distance (e.g., Levenshtein) comparison in\nProcessQueryCore to consider dictionary entries within _maxEditDistance, prefer\nexact matches first, break ties deterministically (e.g., shortest distance then\nlexicographic), and ensure the constructor retains _maxEditDistance and the\ndocumentation reflects fuzzy matching.\n```\n\n</details>\n\n<!-- This is an auto-generated comment by CodeRabbit -->",
+          "createdAt": "2025-11-05T14:03:51Z"
+        }
+      ]
+    }
+  },
+  {
+    "id": "PRRT_kwDOKSXUF85gqxEu",
+    "isResolved": false,
+    "comments": {
+      "nodes": [
+        {
+          "id": "PRRC_kwDOKSXUF86UsWx-",
+          "path": "src/RetrievalAugmentedGeneration/QueryProcessors/SpellCheckQueryProcessor.cs",
+          "body": "_ΓÜá∩╕Å Potential issue_ | _≡ƒƒí Minor_\n\n**Remove self-mapping entry in default dictionary.**\n\nLine 105 maps `\"rerank\"` to `\"rerank\"`, which serves no purpose in a spell correction dictionary. This entry should be removed.\n\n\n\nApply this diff:\n\n```diff\n             { \"similrity\", \"similarity\" },\n             { \"relevent\", \"relevant\" },\n-            { \"rerank\", \"rerank\" }\n         };\n     }\n```\n\n<!-- suggestion_start -->\n\n<details>\n<summary>≡ƒô¥ Committable suggestion</summary>\n\n> ΓÇ╝∩╕Å **IMPORTANT**\n> Carefully review the code before committing. Ensure that it accurately replaces the highlighted code, contains no missing lines, and has no issues with indentation. Thoroughly test & benchmark the code to ensure it meets the requirements.\n\n```suggestion\n    private static Dictionary<string, string> GetDefaultDictionary()\n    {\n        return new Dictionary<string, string>\n        {\n            { \"photsynthesis\", \"photosynthesis\" },\n            { \"artifical\", \"artificial\" },\n            { \"intelligance\", \"intelligence\" },\n            { \"machin\", \"machine\" },\n            { \"lerning\", \"learning\" },\n            { \"nueral\", \"neural\" },\n            { \"netowrk\", \"network\" },\n            { \"algoritm\", \"algorithm\" },\n            { \"optmization\", \"optimization\" },\n            { \"retreival\", \"retrieval\" },\n            { \"retreive\", \"retrieve\" },\n            { \"genration\", \"generation\" },\n            { \"embeddin\", \"embedding\" },\n            { \"similrity\", \"similarity\" },\n            { \"relevent\", \"relevant\" }\n        };\n    }\n```\n\n</details>\n\n<!-- suggestion_end -->\n\n<details>\n<summary>≡ƒñû Prompt for AI Agents</summary>\n\n```\nIn src/RetrievalAugmentedGeneration/QueryProcessors/SpellCheckQueryProcessor.cs\naround lines 86 to 107, remove the pointless self-mapping entry { \"rerank\",\n\"rerank\" } from the returned dictionary so the default spell-correction\ndictionary contains only genuine misspell->correct pairs; update the initializer\nto exclude that line and ensure trailing commas/formatting remain valid.\n```\n\n</details>\n\n<!-- This is an auto-generated comment by CodeRabbit -->",
+          "createdAt": "2025-11-05T14:03:51Z"
+        }
+      ]
+    }
+  },
+  {
+    "id": "PRRT_kwDOKSXUF85gq9-y",
+    "isResolved": false,
+    "comments": {
+      "nodes": [
+        {
+          "id": "PRRC_kwDOKSXUF86UsofG",
+          "path": "src/PredictionModelBuilder.cs",
+          "body": "_ΓÜá∩╕Å Potential issue_ | _≡ƒƒá Major_\n\n**Guard against partially configured RAG pipelines**\n\nRight now weΓÇÖll happily persist `_ragRetriever` while leaving `_ragReranker`/`_ragGenerator` null, which guarantees `PredictionModelResult.GenerateAnswer(...)` will explode when someone actually uses the pipeline. Please fail fast here: if a retriever is supplied, require the reranker and generator (or initialize known defaults). For example:\n\n```diff\n     public IPredictionModelBuilder<T, TInput, TOutput> ConfigureRetrievalAugmentedGeneration(\n         IRetriever<T>? retriever = null,\n         IReranker<T>? reranker = null,\n         IGenerator<T>? generator = null,\n         IEnumerable<IQueryProcessor>? queryProcessors = null)\n     {\n+        if (retriever != null && (reranker == null || generator == null))\n+            throw new ArgumentException(\"RAG retriever requires both reranker and generator to be provided.\", nameof(retriever));\n+        if (retriever == null && (reranker != null || generator != null))\n+            throw new ArgumentException(\"RAG reranker/generator cannot be set without a retriever.\");\n+\n         _ragRetriever = retriever;\n         _ragReranker = reranker;\n         _ragGenerator = generator;\n         _queryProcessors = queryProcessors?.ToList();\n         return this;\n     }\n```\n\n(Adjust exception text or default wiring as needed.) This keeps the builder from handing out unusable models.\n\n\n\n> Committable suggestion skipped: line range outside the PR's diff.\n\n<!-- fingerprinting:phantom:medusa:sabertoothed -->\n\n<!-- This is an auto-generated comment by CodeRabbit -->",
+          "createdAt": "2025-11-05T14:21:14Z"
+        }
+      ]
+    }
+  },
+  {
+    "id": "PRRT_kwDOKSXUF85grEBb",
+    "isResolved": false,
+    "comments": {
+      "nodes": [
+        {
+          "id": "PRRC_kwDOKSXUF86Usw3z",
+          "path": "src/Models/Results/PredictionModelResult.cs",
+          "body": "_≡ƒ¢á∩╕Å Refactor suggestion_ | _≡ƒƒá Major_\n\n**Query processing logic is duplicated.**\n\nThe query processing loop (lines 889-896) is identical to the one in `RetrieveDocuments` (lines 957-964). Consider extracting this into a private helper method to eliminate duplication:\n\n\n\n```csharp\nprivate string ProcessQueryWithProcessors(string query)\n{\n    if (QueryProcessors == null)\n        return query;\n    \n    var processedQuery = query;\n    foreach (var processor in QueryProcessors)\n    {\n        processedQuery = processor.ProcessQuery(processedQuery);\n    }\n    return processedQuery;\n}\n```\n\nThen use it in both methods:\n```csharp\nvar processedQuery = ProcessQueryWithProcessors(query);\n```\n\nThis also makes the query processing pipeline easier to test and maintain.\n\n<details>\n<summary>≡ƒñû Prompt for AI Agents</summary>\n\n```\nIn src/Models/Results/PredictionModelResult.cs around lines 874 to 925, the\nquery processing loop is duplicated; extract it into a private helper (e.g.,\nProcessQueryWithProcessors) that returns the original query if QueryProcessors\nis null and otherwise runs each processor in order, then replace the inline\nloops in GenerateAnswer and RetrieveDocuments to call this helper so query\nprocessing is centralized and testable.\n```\n\n</details>\n\n<!-- This is an auto-generated comment by CodeRabbit -->",
+          "createdAt": "2025-11-05T14:28:05Z"
+        }
+      ]
+    }
+  },
+  {
+    "id": "PRRT_kwDOKSXUF85grZs1",
+    "isResolved": false,
+    "comments": {
+      "nodes": [
+        {
+          "id": "PRRC_kwDOKSXUF86UtPRP",
+          "path": "src/RetrievalAugmentedGeneration/AdvancedPatterns/FLARERetriever.cs",
+          "body": "_ΓÜá∩╕Å Potential issue_ | _≡ƒƒá Major_\n\n**Keep confidence calculations generic**\n\n`Convert.ToDouble(d.RelevanceScore)` violates the generic contractΓÇömany `INumericOperations<T>` implementations do not implement `IConvertible`, so this throws at runtime. Use the numeric-ops abstraction throughout, e.g.:\n\n```diff\n-        var avgRelevance = retrievedDocs\n-            .Where(d => d.HasRelevanceScore)\n-            .Select(d => Convert.ToDouble(d.RelevanceScore))\n-            .DefaultIfEmpty(0.5)\n-            .Average();\n+        var scored = retrievedDocs\n+            .Where(d => d.HasRelevanceScore)\n+            .Select(d => NumOps.ToDouble(d.RelevanceScore));\n+        var avgRelevance = scored.Any() ? scored.Average() : 0.5;\n```\n\n(or keep everything in `T` and only convert once via `NumOps.ToDouble`). This way FLARE works for every numeric type you just added.\n\n<!-- suggestion_start -->\n\n<details>\n<summary>≡ƒô¥ Committable suggestion</summary>\n\n> ΓÇ╝∩╕Å **IMPORTANT**\n> Carefully review the code before committing. Ensure that it accurately replaces the highlighted code, contains no missing lines, and has no issues with indentation. Thoroughly test & benchmark the code to ensure it meets the requirements.\n\n```suggestion\n        var scored = retrievedDocs\n            .Where(d => d.HasRelevanceScore)\n            .Select(d => NumOps.ToDouble(d.RelevanceScore));\n        var avgRelevance = scored.Any() ? scored.Average() : 0.5;\n\n        return (lengthScore + avgRelevance) / 2.0;\n```\n\n</details>\n\n<!-- suggestion_end -->\n\n<details>\n<summary>≡ƒñû Prompt for AI Agents</summary>\n\n```\nIn src/RetrievalAugmentedGeneration/AdvancedPatterns/FLARERetriever.cs around\nlines 253-259, the code uses Convert.ToDouble(d.RelevanceScore) which breaks the\ngeneric numeric contract; replace that call with the numeric-ops abstraction\n(e.g. use the existing INumericOperations<T> instance,\nNumOps.ToDouble(d.RelevanceScore)) or keep calculations in T and do a single\nconversion via NumOps.ToDouble when computing the final average. Ensure you\ncompute the average using NumOps (sum with NumOps.Add / divide via\nNumOps.ToDouble or convert each RelevanceScore with NumOps.ToDouble before\naveraging), and update method scope/signature to accept or use the NumOps\ninstance if it isnΓÇÖt already available.\n```\n\n</details>\n\n<!-- fingerprinting:phantom:medusa:sabertoothed -->\n\n<!-- This is an auto-generated comment by CodeRabbit -->",
+          "createdAt": "2025-11-05T14:50:57Z"
+        }
+      ]
+    }
+  },
+  {
+    "id": "PRRT_kwDOKSXUF85grZtB",
+    "isResolved": false,
+    "comments": {
+      "nodes": [
+        {
+          "id": "PRRC_kwDOKSXUF86UtPRj",
+          "path": "src/RetrievalAugmentedGeneration/AdvancedPatterns/GraphRAG.cs",
+          "body": "_ΓÜá∩╕Å Potential issue_ | _≡ƒƒí Minor_\n\n**Remove duplicate using directive.**\n\nThe `using AiDotNet.Interfaces;` directive appears on both lines 2 and 4.\n\n\nApply this diff:\n\n```diff\n using AiDotNet.Helpers;\n using AiDotNet.Interfaces;\n using AiDotNet.RetrievalAugmentedGeneration.Generators;\n-using AiDotNet.Interfaces;\n using AiDotNet.RetrievalAugmentedGeneration.Models;\n```\n\n<!-- suggestion_start -->\n\n<details>\n<summary>≡ƒô¥ Committable suggestion</summary>\n\n> ΓÇ╝∩╕Å **IMPORTANT**\n> Carefully review the code before committing. Ensure that it accurately replaces the highlighted code, contains no missing lines, and has no issues with indentation. Thoroughly test & benchmark the code to ensure it meets the requirements.\n\n```suggestion\nusing AiDotNet.Interfaces;\nusing AiDotNet.RetrievalAugmentedGeneration.Generators;\n```\n\n</details>\n\n<!-- suggestion_end -->\n\n<details>\n<summary>≡ƒñû Prompt for AI Agents</summary>\n\n```\nIn src/RetrievalAugmentedGeneration/AdvancedPatterns/GraphRAG.cs around lines 2\nto 4, there is a duplicate using directive for AiDotNet.Interfaces; remove the\nredundant duplicate (keep a single using AiDotNet.Interfaces;), ensure the\nremaining using directives are unique and ordered as desired, then save the\nfile.\n```\n\n</details>\n\n<!-- This is an auto-generated comment by CodeRabbit -->",
+          "createdAt": "2025-11-05T14:50:57Z"
+        }
+      ]
+    }
+  },
+  {
+    "id": "PRRT_kwDOKSXUF85grZtN",
+    "isResolved": false,
+    "comments": {
+      "nodes": [
+        {
+          "id": "PRRC_kwDOKSXUF86UtPR0",
+          "path": "src/RetrievalAugmentedGeneration/AdvancedPatterns/SelfCorrectingRetriever.cs",
+          "body": "_ΓÜá∩╕Å Potential issue_ | _≡ƒö┤ Critical_\n\n**Allow metadata filters to flow through the self-correction loop**\n\nThis routine always calls `_baseRetriever.Retrieve` with the overload that creates a fresh, unfiltered dictionary. In a multi-tenant store that leaks documents belonging to other tenants every time the self-corrector re-queries. Accept an optional `metadataFilters` parameter (default empty), reuse it for the initial retrieval, and pass it through each subsequent `_baseRetriever.Retrieve` call.\n\n<details>\n<summary>≡ƒñû Prompt for AI Agents</summary>\n\n```\nIn src/RetrievalAugmentedGeneration/AdvancedPatterns/SelfCorrectingRetriever.cs\naround lines 143 to 222, the method RetrieveAndAnswer always calls\n_baseRetriever.Retrieve without passing metadata filters, which causes\nunfiltered re-queries; add an optional parameter (e.g.,\nIDictionary<string,string> metadataFilters = null or\nIReadOnlyDictionary<string,string> metadataFilters = null) to RetrieveAndAnswer,\nuse that parameter for the initial _baseRetriever.Retrieve call instead of the\noverload that builds a fresh dictionary, and pass the same metadataFilters into\nevery subsequent _baseRetriever.Retrieve invocation (including the\nadditionalDocs retrieval) so the same tenant/metadata constraints persist\nthrough the entire self-correction loop.\n```\n\n</details>\n\n<!-- fingerprinting:phantom:medusa:sabertoothed -->\n\n<!-- This is an auto-generated comment by CodeRabbit -->",
+          "createdAt": "2025-11-05T14:50:57Z"
+        }
+      ]
+    }
+  },
+  {
+    "id": "PRRT_kwDOKSXUF85grZtX",
+    "isResolved": false,
+    "comments": {
+      "nodes": [
+        {
+          "id": "PRRC_kwDOKSXUF86UtPR_",
+          "path": "src/RetrievalAugmentedGeneration/ChunkingStrategies/AgenticChunker.cs",
+          "body": "_ΓÜá∩╕Å Potential issue_ | _≡ƒƒí Minor_\n\n**Unused field: _coherenceThreshold is never referenced.**\n\nThe `_coherenceThreshold` field is initialized but never used in `DetectBoundaries`, `CreateSemanticChunks`, or any other method. Either implement coherence-based logic or remove the field and parameter.\n\n\n\n\nAlso applies to: 70-70, 83-83\n\n<details>\n<summary>≡ƒñû Prompt for AI Agents</summary>\n\n```\nIn src/RetrievalAugmentedGeneration/ChunkingStrategies/AgenticChunker.cs around\nlines 59, 70 and 83, the private field _coherenceThreshold is declared and a\ncorresponding constructor parameter exists but the value is never used; remove\nthe unused field and constructor parameter (and its assignment) and update any\ncall sites that pass that parameter to the AgenticChunker constructor;\nalternatively, if coherence-based behavior is required, implement usage by\napplying the threshold in DetectBoundaries/CreateSemanticChunks where coherence\nis computedΓÇöpick one approach, remove the dead field/parameter and associated\ntests/usages if removing, or wire the threshold into the boundary/semantic chunk\nlogic if keeping.\n```\n\n</details>\n\n<!-- This is an auto-generated comment by CodeRabbit -->",
+          "createdAt": "2025-11-05T14:50:57Z"
+        }
+      ]
+    }
+  },
+  {
+    "id": "PRRT_kwDOKSXUF85grZtl",
+    "isResolved": false,
+    "comments": {
+      "nodes": [
+        {
+          "id": "PRRC_kwDOKSXUF86UtPSO",
+          "path": "src/RetrievalAugmentedGeneration/ChunkingStrategies/AgenticChunker.cs",
+          "body": "_ΓÜá∩╕Å Potential issue_ | _≡ƒƒá Major_\n\n**Fix position tracking to handle all line ending types.**\n\nThe code splits by `'\\n'` (line 119) and adds `line.Length + 1` (lines 132, 144), assuming a single-character newline. This breaks with Windows-style `\\r\\n` line endings, causing all subsequent boundary positions to be incorrect.\n\n\n\nApply this diff to handle all line ending types consistently:\n\n```diff\n-        var lines = text.Split('\\n');\n+        var lines = text.Split(new[] { \"\\r\\n\", \"\\r\", \"\\n\" }, StringSplitOptions.None);\n         var position = 0;\n         foreach (var line in lines)\n         {\n             var trimmed = line.Trim();\n             \n             // Markdown headers or all-caps headers\n             if (trimmed.StartsWith(\"#\") || \n                 (trimmed.Length > 3 && trimmed.Length < 100 && trimmed == trimmed.ToUpperInvariant() && !trimmed.All(char.IsDigit)))\n             {\n                 boundaries.Add(position);\n             }\n             \n-            position += line.Length + 1; // +1 for newline\n+            // Calculate actual newline length at this position\n+            var newlineLength = 0;\n+            if (position + line.Length < text.Length)\n+            {\n+                if (position + line.Length + 1 < text.Length && \n+                    text[position + line.Length] == '\\r' && \n+                    text[position + line.Length + 1] == '\\n')\n+                    newlineLength = 2;\n+                else if (text[position + line.Length] == '\\r' || text[position + line.Length] == '\\n')\n+                    newlineLength = 1;\n+            }\n+            position += line.Length + newlineLength;\n         }\n \n         // Detect list boundaries\n         var listPattern = @\"^\\s*[\\d\\-\\*]\\s+\";\n         position = 0;\n         foreach (var line in lines)\n         {\n             if (Regex.IsMatch(line, listPattern))\n             {\n                 boundaries.Add(position);\n             }\n-            position += line.Length + 1;\n+            var newlineLength = 0;\n+            if (position + line.Length < text.Length)\n+            {\n+                if (position + line.Length + 1 < text.Length && \n+                    text[position + line.Length] == '\\r' && \n+                    text[position + line.Length + 1] == '\\n')\n+                    newlineLength = 2;\n+                else if (text[position + line.Length] == '\\r' || text[position + line.Length] == '\\n')\n+                    newlineLength = 1;\n+            }\n+            position += line.Length + newlineLength;\n         }\n```\n\nAlternatively, track line ending positions during the split for better performance.\n\n\nAlso applies to: 132-132, 144-144\n\n<!-- This is an auto-generated comment by CodeRabbit -->",
+          "createdAt": "2025-11-05T14:50:58Z"
+        }
+      ]
+    }
+  },
+  {
+    "id": "PRRT_kwDOKSXUF85grZt2",
+    "isResolved": false,
+    "comments": {
+      "nodes": [
+        {
+          "id": "PRRC_kwDOKSXUF86UtPSo",
+          "path": "src/RetrievalAugmentedGeneration/ChunkingStrategies/SentenceChunkingStrategy.cs",
+          "body": "_ΓÜá∩╕Å Potential issue_ | _≡ƒƒá Major_\n\n**Single sentences exceeding `maxChunkSize` bypass size enforcement.**\n\nWhen `currentChunk` is empty and a sentence is longer than `maxChunkSize`, the condition on line 90 evaluates to false (because `currentChunk.Count > 0` is false), and the sentence is added at line 100 without any size check. This creates chunks that violate the configured `maxChunkSize` limit, potentially causing issues with downstream components that rely on size constraints (e.g., embedding model token limits).\n\n**Example:**\n```csharp\n// If a sentence is 5000 chars but maxChunkSize is 1000:\n// - currentChunk.Count == 0 initially\n// - Condition on line 90 evaluates to false\n// - Sentence is added at line 100\n// - Resulting chunk is 5000 chars (5├ù the limit)\n```\n\nAs noted in the previous review, consider one of these approaches:\n1. Split oversized sentences on word boundaries (preferred), falling back to character splits if necessary\n2. At minimum, log a warning when a sentence exceeds `maxChunkSize` and document this behavior clearly in XML comments\n\n<!-- This is an auto-generated comment by CodeRabbit -->",
+          "createdAt": "2025-11-05T14:50:58Z"
+        }
+      ]
+    }
+  },
+  {
+    "id": "PRRT_kwDOKSXUF85grZuC",
+    "isResolved": false,
+    "comments": {
+      "nodes": [
+        {
+          "id": "PRRC_kwDOKSXUF86UtPS4",
+          "path": "src/RetrievalAugmentedGeneration/ChunkingStrategies/SentenceChunkingStrategy.cs",
+          "body": "_ΓÜá∩╕Å Potential issue_ | _≡ƒƒá Major_\n\n**Position calculation incorrectly assumes chunks are contiguous.**\n\nThe position tracking treats chunks as sequential (non-overlapping), but the chunking logic creates overlapping chunks by retaining the last N sentences (lines 95-97, 109-111). This produces incorrect `StartPosition` and `EndPosition` values that don't reflect where chunks actually appear in the original text.\n\n**Example of the issue:**\n```\nOriginal text: \"Sentence one. Sentence two. Sentence three.\"\nWith overlapSentences=1:\n\nChunk 1: \"Sentence one. Sentence two.\"\nChunk 2: \"Sentence two. Sentence three.\" (overlap: \"Sentence two.\")\n\nCurrent code produces:\n  Chunk 1: (0, 28) Γ£ô correct\n  Chunk 2: (28, 58) Γ£ù wrong\n\nExpected positions:\n  Chunk 1: (0, 28)\n  Chunk 2: (14, 44) ΓÇö \"Sentence two.\" starts at position 14\n```\n\nThis was flagged in the previous review. To fix, track positions during chunk construction by locating each chunk in the original text, or maintain a running offset that accounts for the overlap. Any downstream code relying on accurate positions (highlighting, citations, etc.) will fail with the current implementation.\n\n<details>\n<summary>≡ƒñû Prompt for AI Agents</summary>\n\n```\nIn\nsrc/RetrievalAugmentedGeneration/ChunkingStrategies/SentenceChunkingStrategy.cs\naround lines 121-129, the code assumes chunks are contiguous when computing\nStartPosition/EndPosition, but earlier logic creates overlapping chunks so\npositions are wrong; fix by computing positions against the original source text\nas chunks are constructed (or by maintaining an offset that accounts for\noverlap) ΓÇö for each chunk find its first occurrence in the original text\nstarting from the last matched index (use IndexOf with a start index or\nequivalent) to get the actual StartPosition, set EndPosition = StartPosition +\nchunk.Length, and add those accurate positions to the results list so\noverlapping chunks reflect their true offsets in the original text.\n```\n\n</details>\n\n<!-- This is an auto-generated comment by CodeRabbit -->",
+          "createdAt": "2025-11-05T14:50:58Z"
+        }
+      ]
+    }
+  },
+  {
+    "id": "PRRT_kwDOKSXUF85grZuR",
+    "isResolved": false,
+    "comments": {
+      "nodes": [
+        {
+          "id": "PRRC_kwDOKSXUF86UtPTI",
+          "path": "src/RetrievalAugmentedGeneration/DocumentStores/DocumentStoreBase.cs",
+          "body": "_ΓÜá∩╕Å Potential issue_ | _≡ƒƒí Minor_\n\n**Remove duplicate using directive.**\n\nThe `using AiDotNet.Interfaces;` directive appears on both lines 3 and 5.\n\n\nApply this diff:\n\n```diff\n using AiDotNet.Helpers;\n using AiDotNet.Interfaces;\n using AiDotNet.LinearAlgebra;\n-using AiDotNet.Interfaces;\n using AiDotNet.RetrievalAugmentedGeneration.Models;\n```\n\n<!-- suggestion_start -->\n\n<details>\n<summary>≡ƒô¥ Committable suggestion</summary>\n\n> ΓÇ╝∩╕Å **IMPORTANT**\n> Carefully review the code before committing. Ensure that it accurately replaces the highlighted code, contains no missing lines, and has no issues with indentation. Thoroughly test & benchmark the code to ensure it meets the requirements.\n\n```suggestion\nusing AiDotNet.Interfaces;\nusing AiDotNet.LinearAlgebra;\n```\n\n</details>\n\n<!-- suggestion_end -->\n\n<details>\n<summary>≡ƒñû Prompt for AI Agents</summary>\n\n```\nIn src/RetrievalAugmentedGeneration/DocumentStores/DocumentStoreBase.cs around\nlines 3 to 5, there is a duplicate using directive for AiDotNet.Interfaces;\nremove the redundant line so each namespace is imported only once ΓÇö keep one\nusing AiDotNet.Interfaces; and retain using AiDotNet.LinearAlgebra; then save\nthe file.\n```\n\n</details>\n\n<!-- This is an auto-generated comment by CodeRabbit -->",
+          "createdAt": "2025-11-05T14:50:58Z"
+        }
+      ]
+    }
+  },
+  {
+    "id": "PRRT_kwDOKSXUF85grZuq",
+    "isResolved": false,
+    "comments": {
+      "nodes": [
+        {
+          "id": "PRRC_kwDOKSXUF86UtPTu",
+          "path": "src/RetrievalAugmentedGeneration/Evaluation/RAGMetricBase.cs",
+          "body": "_ΓÜá∩╕Å Potential issue_ | _≡ƒƒí Minor_\n\n**Remove duplicate using statement.**\n\nLine 3 duplicates the `using AiDotNet.Interfaces;` statement from line 2.\n\n\n\nApply this diff:\n\n```diff\n using AiDotNet.Helpers;\n using AiDotNet.Interfaces;\n-using AiDotNet.Interfaces;\n using AiDotNet.RetrievalAugmentedGeneration.Models;\n```\n\n<!-- suggestion_start -->\n\n<details>\n<summary>≡ƒô¥ Committable suggestion</summary>\n\n> ΓÇ╝∩╕Å **IMPORTANT**\n> Carefully review the code before committing. Ensure that it accurately replaces the highlighted code, contains no missing lines, and has no issues with indentation. Thoroughly test & benchmark the code to ensure it meets the requirements.\n\n```suggestion\nusing AiDotNet.Helpers;\nusing AiDotNet.Interfaces;\n```\n\n</details>\n\n<!-- suggestion_end -->\n\n<details>\n<summary>≡ƒñû Prompt for AI Agents</summary>\n\n```\nIn src/RetrievalAugmentedGeneration/Evaluation/RAGMetricBase.cs around lines 1\nto 3, there is a duplicate using directive for AiDotNet.Interfaces on line 3;\nremove the redundant second using statement so the file only contains a single\nusing AiDotNet.Interfaces; entry.\n```\n\n</details>\n\n<!-- This is an auto-generated comment by CodeRabbit -->",
+          "createdAt": "2025-11-05T14:50:59Z"
+        }
+      ]
+    }
+  },
+  {
+    "id": "PRRT_kwDOKSXUF85grZvC",
+    "isResolved": false,
+    "comments": {
+      "nodes": [
+        {
+          "id": "PRRC_kwDOKSXUF86UtPUL",
+          "path": "src/RetrievalAugmentedGeneration/Generators/NeuralGenerator.cs",
+          "body": "_ΓÜá∩╕Å Potential issue_ | _≡ƒƒí Minor_\n\n**Remove duplicate import.**\n\nLine 8 duplicates the `using AiDotNet.Interfaces;` statement from line 6.\n\n\nApply this diff:\n\n```diff\n using AiDotNet.Helpers;\n using AiDotNet.Interfaces;\n using AiDotNet.NeuralNetworks;\n-using AiDotNet.Interfaces;\n using AiDotNet.RetrievalAugmentedGeneration.Models;\n```\n\n\n> Committable suggestion skipped: line range outside the PR's diff.\n\n<details>\n<summary>≡ƒñû Prompt for AI Agents</summary>\n\n```\nIn src/RetrievalAugmentedGeneration/Generators/NeuralGenerator.cs around lines 6\nto 8, there is a duplicate using directive: remove the repeated \"using\nAiDotNet.Interfaces;\" on line 8 so only one import of AiDotNet.Interfaces\nremains; keep the other using statements intact and save the file.\n```\n\n</details>\n\n<!-- This is an auto-generated comment by CodeRabbit -->",
+          "createdAt": "2025-11-05T14:50:59Z"
+        }
+      ]
+    }
+  },
+  {
+    "id": "PRRT_kwDOKSXUF85grZvP",
+    "isResolved": false,
+    "comments": {
+      "nodes": [
+        {
+          "id": "PRRC_kwDOKSXUF86UtPUa",
+          "path": "src/RetrievalAugmentedGeneration/Generators/NeuralGenerator.cs",
+          "body": "_ΓÜá∩╕Å Potential issue_ | _≡ƒö┤ Critical_\n\n<details>\n<summary>≡ƒº⌐ Analysis chain</summary>\n\n**Critical: Constructor parameters are never used.**\n\nThe constructor accepts `network` and `temperature` parameters but neither is used in the actual text generation logic:\n\n1. **`_network` (LSTMNeuralNetwork)**: Stored but never invoked. The generation logic in `GenerateTokens` (lines 220-239) and `PredictNextToken` (lines 241-252) uses a simplistic random-based approach instead of the LSTM network.\n\n2. **`_temperature`**: Stored but never applied to control sampling randomness during generation.\n\nThis contradicts the class documentation claiming \"production-ready neural network-based text generator\" and misleads users who pass in a trained LSTM network expecting it to be used.\n\n\n\nEither:\n- Integrate the LSTM network into the generation pipeline and apply temperature sampling, or\n- Update documentation to clarify this is a simplified/stub implementation and remove the \"production-ready\" claims\n\nRun this script to confirm the fields are never referenced in method bodies:\n\n---\n\n≡ƒÅü Script executed:\n\n```shell\n#!/bin/bash\n# Verify _network and _temperature are not used in generation logic\nrg -n '_network\\.' src/RetrievalAugmentedGeneration/Generators/NeuralGenerator.cs\nrg -n '_temperature' src/RetrievalAugmentedGeneration/Generators/NeuralGenerator.cs | grep -v 'private readonly' | grep -v '_temperature ='\n```\n\nLength of output: 0\n\n---\n\n</parameter>\n</invoke>\n\n---\n\n≡ƒÅü Script executed:\n\n```shell\n#!/bin/bash\n# Step 1: Verify file exists and show the entire file\necho \"=== Checking if file exists ===\"\nif [ -f \"src/RetrievalAugmentedGeneration/Generators/NeuralGenerator.cs\" ]; then\n    echo \"File found\"\nelse\n    echo \"File NOT found at expected path\"\n    find . -name \"NeuralGenerator.cs\" -type f 2>/dev/null\nfi\n\necho \"\"\necho \"=== Searching for field declarations ===\"\nrg -n 'private readonly.*_network' src/RetrievalAugmentedGeneration/Generators/NeuralGenerator.cs\nrg -n 'private readonly.*_temperature' src/RetrievalAugmentedGeneration/Generators/NeuralGenerator.cs\n\necho \"\"\necho \"=== Comprehensive search for _network usage (any context) ===\"\nrg -n '_network' src/RetrievalAugmentedGeneration/Generators/NeuralGenerator.cs\n\necho \"\"\necho \"=== Comprehensive search for _temperature usage (any context) ===\"\nrg -n '_temperature' src/RetrievalAugmentedGeneration/Generators/NeuralGenerator.cs\n\necho \"\"\necho \"=== Show GenerateTokens and PredictNextToken methods ===\"\nrg -A 20 'private.*GenerateTokens\\|private.*PredictNextToken' src/RetrievalAugmentedGeneration/Generators/NeuralGenerator.cs\n```\n\nLength of output: 595\n\n---\n\n</parameter>\n</invoke>\n\n---\n\n≡ƒÅü Script executed:\n\n```shell\n#!/bin/bash\n# Get all method definitions in the class\necho \"=== All method signatures in NeuralGenerator.cs ===\"\nrg -n '^\\s*(public|private|protected).*\\(' src/RetrievalAugmentedGeneration/Generators/NeuralGenerator.cs | head -30\n\necho \"\"\necho \"=== Check for Generate method ===\"\nrg -n 'Generate' src/RetrievalAugmentedGeneration/Generators/NeuralGenerator.cs\n\necho \"\"\necho \"=== Show full method bodies to understand implementation ===\"\n# Get a larger context window to see actual method implementations\nrg -A 30 'public.*Generate' src/RetrievalAugmentedGeneration/Generators/NeuralGenerator.cs | head -100\n```\n\nLength of output: 3692\n\n---\n\n</parameter>\n</invoke>\n\n---\n\n≡ƒÅü Script executed:\n\n```shell\n#!/bin/bash\n# Get the full GenerateTokens method implementation\necho \"=== GenerateTokens method (line 220+) ===\"\nsed -n '220,240p' src/RetrievalAugmentedGeneration/Generators/NeuralGenerator.cs\n\necho \"\"\necho \"=== PredictNextToken method (line 241+) ===\"\nsed -n '241,253p' src/RetrievalAugmentedGeneration/Generators/NeuralGenerator.cs\n\necho \"\"\necho \"=== Full file line count to find end of methods ===\"\nwc -l src/RetrievalAugmentedGeneration/Generators/NeuralGenerator.cs\n\necho \"\"\necho \"=== Extended view of PredictNextToken ===\"\nsed -n '241,260p' src/RetrievalAugmentedGeneration/Generators/NeuralGenerator.cs\n```\n\nLength of output: 2078\n\n---\n\n\n\n</details>\n\n**Critical: Constructor parameters `network` and `temperature` are never used in generation logic.**\n\nThe `_network` field (assigned line 87) and `_temperature` field (assigned line 101) are stored but completely unused:\n\n- **`GenerateTokens` (lines 220-238)**: Uses a hardcoded `Random` seed and simplistic arithmetic (`(lastToken + random.Next(1, 100)) % _vocabularySize`) instead of the LSTM network. Even includes a comment admitting this: \"Simplified next-token prediction (production would use full neural network forward pass)\".\n- **`PredictNextToken` (lines 241-252)**: No reference to `_network` or `_temperature`ΓÇöjust random token generation.\n\nThis contradicts the class documentation claiming \"production-ready neural network-based text generator\" and misleads users passing a trained LSTM network.\n\n**Fix**: Either integrate `_network` and apply `_temperature` sampling, or update documentation to clarify this is a stub/simplified implementation.\n\n<details>\n<summary>≡ƒñû Prompt for AI Agents</summary>\n\n```\nIn src/RetrievalAugmentedGeneration/Generators/NeuralGenerator.cs around lines\n80 to 102, the constructor stores _network and _temperature but the generation\nmethods ignore them; update the generator so it either uses the provided\nLSTMNeuralNetwork<T> and temperature for sampling or mark the class explicitly\nas a stub. To fix, replace the current random-based next-token logic with a call\ninto _network to run a forward pass on the current context to obtain\nlogits/probabilities, apply temperature scaling to the logits (divide logits by\n_temperature), convert to a probability distribution (softmax), and sample the\nnext token from that distribution; remove the ad-hoc Random arithmetic, ensure\nproper null checks and exception messages remain, and add unit tests or comments\nshowing that the network and temperature are now used. If you choose the\nalternative, update the class documentation/summary to clearly state this is a\nsimplified stub and not production neural sampling, and keep constructor\nassignment but document why network/temperature are unused.\n```\n\n</details>\n\n<!-- This is an auto-generated comment by CodeRabbit -->",
+          "createdAt": "2025-11-05T14:50:59Z"
+        }
+      ]
+    }
+  },
+  {
+    "id": "PRRT_kwDOKSXUF85grZvf",
+    "isResolved": false,
+    "comments": {
+      "nodes": [
+        {
+          "id": "PRRC_kwDOKSXUF86UtPUr",
+          "path": "src/RetrievalAugmentedGeneration/Generators/NeuralGenerator.cs",
+          "body": "_ΓÜá∩╕Å Potential issue_ | _≡ƒö┤ Critical_\n\n**Critical: Detokenization produces placeholder text, not actual language.**\n\nThe detokenization logic returns placeholder strings like `\"token_123 token_456 token_789\"` rather than actual text. This means:\n\n1. `Generate()` will return unusable output (e.g., \"token_42 token_1337 token_891\")\n2. `GenerateGrounded()` will include this gibberish in the answer field\n3. End users will receive meaningless responses\n\nThis contradicts the \"production-ready\" claim in the class documentation (line 14) and makes the generator unsuitable for actual use.\n\n\nConsider either:\n- Implementing proper detokenization with a real vocabulary mapping, or  \n- Updating documentation to clarify this is a stub/prototype implementation and not production-ready\n\n<!-- This is an auto-generated comment by CodeRabbit -->",
+          "createdAt": "2025-11-05T14:50:59Z"
+        }
+      ]
+    }
+  },
+  {
+    "id": "PRRT_kwDOKSXUF85grZvt",
+    "isResolved": false,
+    "comments": {
+      "nodes": [
+        {
+          "id": "PRRC_kwDOKSXUF86UtPVB",
+          "path": "src/RetrievalAugmentedGeneration/Rerankers/RerankerBase.cs",
+          "body": "_ΓÜá∩╕Å Potential issue_ | _≡ƒƒí Minor_\n\n**Remove duplicate using statement.**\n\nThe `using AiDotNet.Interfaces;` directive appears twice (lines 2 and 3).\n\n\nApply this diff to remove the duplicate:\n\n```diff\n using AiDotNet.Helpers;\n using AiDotNet.Interfaces;\n-using AiDotNet.Interfaces;\n \n using AiDotNet.RetrievalAugmentedGeneration.Models;\n```\n\n<!-- suggestion_start -->\n\n<details>\n<summary>≡ƒô¥ Committable suggestion</summary>\n\n> ΓÇ╝∩╕Å **IMPORTANT**\n> Carefully review the code before committing. Ensure that it accurately replaces the highlighted code, contains no missing lines, and has no issues with indentation. Thoroughly test & benchmark the code to ensure it meets the requirements.\n\n```suggestion\nusing AiDotNet.Helpers;\nusing AiDotNet.Interfaces;\n\nusing AiDotNet.RetrievalAugmentedGeneration.Models;\n```\n\n</details>\n\n<!-- suggestion_end -->\n\n<details>\n<summary>≡ƒñû Prompt for AI Agents</summary>\n\n```\nIn src/RetrievalAugmentedGeneration/Rerankers/RerankerBase.cs around lines 2 to\n3, there is a duplicated using directive for AiDotNet.Interfaces; remove the\nredundant second occurrence (keep a single using AiDotNet.Interfaces;) and\nensure no other identical duplicate using statements remain in the file.\n```\n\n</details>\n\n<!-- This is an auto-generated comment by CodeRabbit -->",
+          "createdAt": "2025-11-05T14:51:00Z"
+        }
+      ]
+    }
+  },
+  {
+    "id": "PRRT_kwDOKSXUF85grZv_",
+    "isResolved": false,
+    "comments": {
+      "nodes": [
+        {
+          "id": "PRRC_kwDOKSXUF86UtPVV",
+          "path": "src/RetrievalAugmentedGeneration/Rerankers/RerankerBase.cs",
+          "body": "_ΓÜá∩╕Å Potential issue_ | _≡ƒƒí Minor_\n\n**Remove redundant count check.**\n\nThe check `if (scores.Count == 0)` is redundant. Since `scores` is derived from `docsWithScores` via `Select`, if `docsWithScores.Count > 0` (checked on line 157), then `scores.Count` must also be greater than 0.\n\n\nApply this diff to remove the redundant check:\n\n```diff\n var scores = docsWithScores.Select(d => d.RelevanceScore).ToList();\n-if (scores.Count == 0)\n-    return documents;\n-\n var minScore = scores[0];\n```\n\n<!-- suggestion_start -->\n\n<details>\n<summary>≡ƒô¥ Committable suggestion</summary>\n\n> ΓÇ╝∩╕Å **IMPORTANT**\n> Carefully review the code before committing. Ensure that it accurately replaces the highlighted code, contains no missing lines, and has no issues with indentation. Thoroughly test & benchmark the code to ensure it meets the requirements.\n\n```suggestion\n        var scores = docsWithScores.Select(d => d.RelevanceScore).ToList();\n        var minScore = scores[0];\n```\n\n</details>\n\n<!-- suggestion_end -->\n\n<details>\n<summary>≡ƒñû Prompt for AI Agents</summary>\n\n```\nIn src/RetrievalAugmentedGeneration/Rerankers/RerankerBase.cs around lines\n161-162, remove the redundant check \"if (scores.Count == 0) return documents;\"\nbecause scores is derived from docsWithScores and the method already verifies\ndocsWithScores.Count > 0 earlier (line 157); delete these two lines so behavior\nremains unchanged and rely on the existing docsWithScores emptiness check to\nguard against empty sequences.\n```\n\n</details>\n\n<!-- This is an auto-generated comment by CodeRabbit -->",
+          "createdAt": "2025-11-05T14:51:00Z"
+        }
+      ]
+    }
+  },
+  {
+    "id": "PRRT_kwDOKSXUF85grZwT",
+    "isResolved": false,
+    "comments": {
+      "nodes": [
+        {
+          "id": "PRRC_kwDOKSXUF86UtPVv",
+          "path": "src/RetrievalAugmentedGeneration/Retrievers/BM25Retriever.cs",
+          "body": "_ΓÜá∩╕Å Potential issue_ | _≡ƒƒá Major_\n\n**Inefficient document lookup after scoring.**\n\nLine 57 performs a linear search through `candidates` for every result in the top K, creating O(topK ├ù N) overhead. This is the same issue present in `TFIDFRetriever`. Store the `Document<T>` reference alongside the score during the scoring phase.\n\n\n\nApply this diff:\n\n```diff\n-            var scores = new Dictionary<string, T>();\n+            var scoredDocs = new List<(Document<T> Doc, T Score)>();\n\n             var candidates = _documentStore.GetAll().ToList();\n             var corpusStats = BuildCorpusStatistics(candidates);\n\n             foreach (var doc in candidates.Where(d => MatchesFilters(d, metadataFilters)))\n             {\n                 var score = NumOps.Zero;\n                 \n                 foreach (var term in queryTerms)\n                 {\n                     var termScore = CalculateBM25Term(doc.Id, term, corpusStats);\n                     score = NumOps.Add(score, termScore);\n                 }\n\n-                scores[doc.Id] = score;\n+                scoredDocs.Add((doc, score));\n             }\n\n-            var results = scores\n-                .OrderByDescending(kv => kv.Value)\n+            var results = scoredDocs\n+                .OrderByDescending(sd => sd.Score)\n                 .Take(topK)\n-                .Select(kv =>\n+                .Select(sd =>\n                 {\n-                    var doc = candidates.FirstOrDefault(d => d.Id == kv.Key);\n-                    if (doc != null)\n-                    {\n-                        doc.RelevanceScore = kv.Value;\n-                        doc.HasRelevanceScore = true;\n-                    }\n-                    return doc;\n-                })\n-                .Where(d => d != null)\n-                .Cast<Document<T>>();\n+                    sd.Doc.RelevanceScore = sd.Score;\n+                    sd.Doc.HasRelevanceScore = true;\n+                    return sd.Doc;\n+                });\n\n             return results;\n```\n\n\n> Committable suggestion skipped: line range outside the PR's diff.\n\n<!-- This is an auto-generated comment by CodeRabbit -->",
+          "createdAt": "2025-11-05T14:51:00Z"
+        }
+      ]
+    }
+  },
+  {
+    "id": "PRRT_kwDOKSXUF85grZwk",
+    "isResolved": false,
+    "comments": {
+      "nodes": [
+        {
+          "id": "PRRC_kwDOKSXUF86UtPWG",
+          "path": "src/RetrievalAugmentedGeneration/Retrievers/GraphRetriever.cs",
+          "body": "_ΓÜá∩╕Å Potential issue_ | _≡ƒö┤ Critical_\n\n**DonΓÇÖt add filters that the stores canΓÇÖt satisfy**\n\nInjecting an `\"entities\"` entry into `metadataFilters` causes every document store based on `DocumentStoreBase` to reject all candidates, because their metadata does not contain such a key. Remove this filter (or only add it when indexing stores actually persist entity metadata) and keep entity scoring in the post-processing phase.\n\n<details>\n<summary>≡ƒñû Prompt for AI Agents</summary>\n\n```\nIn src/RetrievalAugmentedGeneration/Retrievers/GraphRetriever.cs around lines\n158 to 162, the code injects an \"entities\" entry into metadata filters which\ncauses DocumentStoreBase-derived stores to reject all candidates; remove the\nenhancement that adds enhancedFilters[\"entities\"] (or guard it with a check that\nthe target store actually persists entity metadata) so that entity filtering is\nnot applied at indexing/store retrieval time; keep entity-based scoring and\nfiltering in the post-processing phase after documents are retrieved.\n```\n\n</details>\n\n<!-- fingerprinting:phantom:medusa:sabertoothed -->\n\n<!-- This is an auto-generated comment by CodeRabbit -->",
+          "createdAt": "2025-11-05T14:51:00Z"
+        }
+      ]
+    }
+  },
+  {
+    "id": "PRRT_kwDOKSXUF85grZw6",
+    "isResolved": false,
+    "comments": {
+      "nodes": [
+        {
+          "id": "PRRC_kwDOKSXUF86UtPWj",
+          "path": "src/RetrievalAugmentedGeneration/Retrievers/GraphRetriever.cs",
+          "body": "_ΓÜá∩╕Å Potential issue_ | _≡ƒö┤ Critical_\n\n**Embed the query before calling the document store**\n\nJust like the other retrievers, passing an empty vector disables semantic lookup and risks runtime failures. Add an embedding model dependency and call it here so you feed a real vector into `_documentStore.GetSimilarWithFilters`.\n\n<details>\n<summary>≡ƒñû Prompt for AI Agents</summary>\n\n```\nIn src/RetrievalAugmentedGeneration/Retrievers/GraphRetriever.cs around lines\n164 to 169, the code passes an empty Vector<T> which disables semantic lookup;\ninject or use the existing embedding model dependency here to compute the query\nembedding (await if async) and pass that real float[]/Vector<T> into\n_documentStore.GetSimilarWithFilters instead of the placeholder, keeping the\noversample topK*2 and applying enhancedFilters; ensure null/empty checks on the\nembedding result and propagate async signatures if needed.\n```\n\n</details>\n\n<!-- fingerprinting:phantom:medusa:sabertoothed -->\n\n<!-- This is an auto-generated comment by CodeRabbit -->",
+          "createdAt": "2025-11-05T14:51:01Z"
+        }
+      ]
+    }
+  },
+  {
+    "id": "PRRT_kwDOKSXUF85grZxP",
+    "isResolved": false,
+    "comments": {
+      "nodes": [
+        {
+          "id": "PRRC_kwDOKSXUF86UtPW9",
+          "path": "src/RetrievalAugmentedGeneration/Retrievers/MultiVectorRetriever.cs",
+          "body": "_ΓÜá∩╕Å Potential issue_ | _≡ƒö┤ Critical_\n\n**Real query embeddings are required**\n\n`new Vector<T>(new T[0])` is just an empty placeholder, so the multi-vector search never executes a meaningful similarity lookup and may throw dimension errors. Inject whichever embedding model produced the stored vectors, embed the query here, and pass that real vector to `_documentStore.GetSimilarWithFilters`.\n\n<details>\n<summary>≡ƒñû Prompt for AI Agents</summary>\n\n```\nIn src/RetrievalAugmentedGeneration/Retrievers/MultiVectorRetriever.cs around\nlines 160 to 168, the code creates an empty placeholder query vector which\nprevents a real similarity search and can cause dimension errors; replace the\nplaceholder with a real embedding by calling the same embedding model (or\nservice) used when indexing documents, ensure the returned vector matches the\nstored vectors' dimensionality, and pass that vector to\n_documentStore.GetSimilarWithFilters; also add null/length checks and surface a\nhelpful error or fallback if embedding generation fails or dimensions mismatch\nbefore invoking the document store.\n```\n\n</details>\n\n<!-- fingerprinting:phantom:medusa:sabertoothed -->\n\n<!-- This is an auto-generated comment by CodeRabbit -->",
+          "createdAt": "2025-11-05T14:51:01Z"
+        }
+      ]
+    }
+  },
+  {
+    "id": "PRRT_kwDOKSXUF85grZxm",
+    "isResolved": false,
+    "comments": {
+      "nodes": [
+        {
+          "id": "PRRC_kwDOKSXUF86UtPXY",
+          "path": "src/RetrievalAugmentedGeneration/Retrievers/ParentDocumentRetriever.cs",
+          "body": "_ΓÜá∩╕Å Potential issue_ | _≡ƒö┤ Critical_\n\n**Parent retrieval needs a real query embedding**\n\nCalling `GetSimilarWithFilters` with `new Vector<T>(new T[0])` defeats the whole point of dense chunk retrieval and may crash stores expecting a concrete dimension. Add an embedding model dependency to this retriever, embed `query`, and pass that vector instead of the empty placeholder.\n\n<!-- fingerprinting:phantom:medusa:sabertoothed -->\n\n<!-- This is an auto-generated comment by CodeRabbit -->",
+          "createdAt": "2025-11-05T14:51:01Z"
+        }
+      ]
+    }
+  },
+  {
+    "id": "PRRT_kwDOKSXUF85grZxx",
+    "isResolved": false,
+    "comments": {
+      "nodes": [
+        {
+          "id": "PRRC_kwDOKSXUF86UtPXr",
+          "path": "src/RetrievalAugmentedGeneration/Retrievers/RetrieverBase.cs",
+          "body": "_ΓÜá∩╕Å Potential issue_ | _≡ƒƒí Minor_\n\n**Remove duplicate using directive.**\n\nThe `using AiDotNet.Interfaces;` directive appears on both lines 2 and 3.\n\n\nApply this diff:\n\n```diff\n using AiDotNet.Helpers;\n using AiDotNet.Interfaces;\n-using AiDotNet.Interfaces;\n using AiDotNet.RetrievalAugmentedGeneration.Models;\n```\n\n<!-- suggestion_start -->\n\n<details>\n<summary>≡ƒô¥ Committable suggestion</summary>\n\n> ΓÇ╝∩╕Å **IMPORTANT**\n> Carefully review the code before committing. Ensure that it accurately replaces the highlighted code, contains no missing lines, and has no issues with indentation. Thoroughly test & benchmark the code to ensure it meets the requirements.\n\n```suggestion\nusing AiDotNet.Interfaces;\n```\n\n</details>\n\n<!-- suggestion_end -->\n\n<details>\n<summary>≡ƒñû Prompt for AI Agents</summary>\n\n```\nIn src/RetrievalAugmentedGeneration/Retrievers/RetrieverBase.cs around lines 2\nto 3, there's a duplicate using directive \"using AiDotNet.Interfaces;\" ΓÇö remove\nthe redundant second occurrence so the file contains the directive only once;\nensure no other using statements are affected and save the file.\n```\n\n</details>\n\n<!-- This is an auto-generated comment by CodeRabbit -->",
+          "createdAt": "2025-11-05T14:51:01Z"
+        }
+      ]
+    }
+  },
+  {
+    "id": "PRRT_kwDOKSXUF85gsJx5",
+    "isResolved": false,
+    "comments": {
+      "nodes": [
+        {
+          "id": "PRRC_kwDOKSXUF86UuPgO",
+          "path": "src/RetrievalAugmentedGeneration/ChunkingStrategies/HeaderBasedTextSplitter.cs",
+          "body": "_ΓÜá∩╕Å Potential issue_ | _≡ƒƒá Major_\n\n**Major: `ChunkOverlap` parameter is accepted but not implemented.**\n\nThe constructor accepts a `chunkOverlap` parameter and passes it to the base class, but `ChunkCore` never applies overlap between chunks. When splitting at header boundaries (lines 60-65) or size boundaries (lines 74-82), the code sets `chunkStart` to the position immediately after the previous chunk with no overlap (line 81). This violates the expected behavior documented in the base class.\n\n\n\nConsider one of these approaches:\n\n**Option 1: Implement overlap (recommended if overlap makes sense for header-based splitting):**\n\n```diff\n                 if (currentSize >= ChunkSize)\n                 {\n                     var content = string.Join(Environment.NewLine, currentChunk);\n                     chunks.Add((content, chunkStart, position + lineLength));\n-                    currentChunk.Clear();\n-                    chunkStart = position + lineLength;\n+                    \n+                    // Keep last ChunkOverlap characters for overlap\n+                    var overlapContent = content.Length > ChunkOverlap \n+                        ? content.Substring(content.Length - ChunkOverlap) \n+                        : content;\n+                    currentChunk.Clear();\n+                    currentChunk.Add(overlapContent);\n+                    chunkStart = position + lineLength - overlapContent.Length;\n                 }\n```\n\n**Option 2: Remove the parameter if overlap isn't applicable:**\n\n```diff\n     public HeaderBasedTextSplitter(\n         int chunkSize,\n-        int chunkOverlap = 0,\n         int minChunkSize = 100,\n         bool combineSmallChunks = true)\n-        : base(chunkSize, chunkOverlap)\n+        : base(chunkSize, 0)\n```\n\nUpdate documentation to clarify that header-based splitting doesn't support overlap since it maintains semantic boundaries.\n\n\n> Committable suggestion skipped: line range outside the PR's diff.\n\n<!-- This is an auto-generated comment by CodeRabbit -->",
+          "createdAt": "2025-11-05T15:51:43Z"
+        }
+      ]
+    }
+  },
+  {
+    "id": "PRRT_kwDOKSXUF85gsJx-",
+    "isResolved": false,
+    "comments": {
+      "nodes": [
+        {
+          "id": "PRRC_kwDOKSXUF86UuPgT",
+          "path": "src/RetrievalAugmentedGeneration/ChunkingStrategies/HeaderBasedTextSplitter.cs",
+          "body": "_ΓÜá∩╕Å Potential issue_ | _≡ƒƒá Major_\n\n**Major: Position tracking is incorrect for non-native line endings.**\n\nLine 54 increments `position` by `line.Length + Environment.NewLine.Length`, but line 47 splits on the actual separators in the input text (`\\r\\n`, `\\r`, or `\\n`). When the input uses different line endings than the current platform's `Environment.NewLine` (e.g., Unix files on Windows), the position calculations drift and `StartPosition`/`EndPosition` values become inaccurate.\n\nFor example, if processing a Unix file (LF line endings) on Windows:\n- Actual separator length: 1 byte (`\\n`)\n- `Environment.NewLine.Length` on Windows: 2 bytes (`\\r\\n`)\n- Position drift: 1 byte per line\n\n\n\nApply this diff to track positions based on actual input separators:\n\n```diff\n         var chunks = new List<(string, int, int)>();\n         var lines = text.Split(new[] { \"\\r\\n\", \"\\r\", \"\\n\" }, StringSplitOptions.None);\n         var currentChunk = new List<string>();\n         var chunkStart = 0;\n-        var position = 0;\n+        var position = 0;\n+        \n+        // Detect actual line separator used in input\n+        var separatorLength = 1; // Default to LF\n+        if (text.Contains(\"\\r\\n\"))\n+            separatorLength = 2;\n\n         foreach (var line in lines)\n         {\n-            var lineLength = line.Length + Environment.NewLine.Length;\n+            var lineLength = line.Length + separatorLength;\n```\n\n\nAlso applies to: 85-85\n\n<details>\n<summary>≡ƒñû Prompt for AI Agents</summary>\n\n```\nIn\nsrc/RetrievalAugmentedGeneration/ChunkingStrategies/HeaderBasedTextSplitter.cs\naround lines 47-54 (and also at line 85), the code increments position using\nEnvironment.NewLine.Length which is wrong when the input uses different line\nendings; instead compute the actual separator length from the original text at\nthe current position: after a line of length L, look at the original input at\nindex position+L to see whether the next character(s) form \"\\r\\n\"\n(separatorLen=2), \"\\r\" or \"\\n\" (separatorLen=1), or nothing (separatorLen=0),\nthen increment position by L + separatorLen; replace uses of\nEnvironment.NewLine.Length with this computed separatorLen logic and apply the\nsame fix at the other occurrence around line 85 so StartPosition/EndPosition are\nbased on real input separators.\n```\n\n</details>\n\n<!-- This is an auto-generated comment by CodeRabbit -->",
+          "createdAt": "2025-11-05T15:51:43Z"
+        }
+      ]
+    }
+  },
+  {
+    "id": "PRRT_kwDOKSXUF85gsJyD",
+    "isResolved": false,
+    "comments": {
+      "nodes": [
+        {
+          "id": "PRRC_kwDOKSXUF86UuPgb",
+          "path": "src/RetrievalAugmentedGeneration/DocumentStores/AzureSearchDocumentStore.cs",
+          "body": "_ΓÜá∩╕Å Potential issue_ | _≡ƒƒá Major_\n\n**Inverted index string conversion causes false negatives for typed metadata filters.**\n\nLines 213, 229, and 259 convert all metadata values and filter values to strings for indexing. This breaks filtering on non-string types:\n\n**Scenario:**\n- Document metadata: `{ \"age\": 25 }` (int)\n- Indexed as: `_invertedIndex[\"age\"][\"25\"] = {docId}`\n- Query filter: `{ \"age\": 30 }`\n- GetCandidateIds looks for `_invertedIndex[\"age\"][\"30\"]`\n- Returns empty set (line 276) because \"30\" was never indexed\n- Zero candidates ΓåÆ MatchesFilters never runs ΓåÆ document incorrectly excluded\n\nEven though `MatchesFilters` in the base class can handle `IComparable` range semantics, `GetCandidateIds` performs exact string matching and returns empty before `MatchesFilters` is reached.\n\nFor exact equality on the same value (e.g., filter `{ \"age\": 25 }`), string conversion works. But for any other value or type-aware comparison, the index causes false negatives.\n\n\n\n**Solution:** Preserve types in the inverted index or skip the index for non-string filters.\n\n<details>\n<summary>Option 1: Skip inverted index for non-string filters (simpler, safer)</summary>\n\n```diff\n private HashSet<string>? GetCandidateIds(Dictionary<string, object> metadataFilters)\n {\n     if (metadataFilters.Count == 0)\n         return null;\n+    \n+    // Skip inverted index optimization for non-string filters to avoid false negatives\n+    if (metadataFilters.Values.Any(v => v != null && v.GetType() != typeof(string)))\n+        return null; // Full scan\n \n     HashSet<string>? candidateIds = null;\n \n     foreach (var filter in metadataFilters)\n     {\n         var fieldName = filter.Key;\n         var indexKey = filter.Value?.ToString() ?? string.Empty;\n \n         if (_invertedIndex.TryGetValue(fieldName, out var fieldIndex))\n         {\n```\n\nThis approach returns `null` (triggering a full scan in `GetSimilarCore`) when any filter value is non-string, ensuring `MatchesFilters` evaluates all documents with their original typed values.\n</details>\n\n<details>\n<summary>Option 2: Preserve types in inverted index (more complex)</summary>\n\nChange the index type to handle typed keys and update all three methods accordingly. This requires careful equality comparison for boxed value types.\n</details>\n\nBased on learnings (past review comment flagged this same issue).\n\n\nAlso applies to: 249-286\n\n<details>\n<summary>≡ƒñû Prompt for AI Agents</summary>\n\n```\nIn src/RetrievalAugmentedGeneration/DocumentStores/AzureSearchDocumentStore.cs\naround lines 200-222 (and related logic at 249-286), the inverted index\ncurrently converts all metadata values to strings which causes false negatives\nfor non-string typed filters; update the logic so the index is only used for\nstring-valued metadata/filters: (1) in IndexMetadata only add entries for\nmetadata values that are already strings (skip indexing non-string values), and\n(2) in GetCandidateIds detect when any incoming filter value is non-string and\nreturn null (force a full-scan so MatchesFilters can evaluate typed\ncomparisons). Ensure these changes avoid changing stored Document.Metadata and\nonly affect whether the inverted index is consulted.\n```\n\n</details>\n\n<!-- This is an auto-generated comment by CodeRabbit -->",
+          "createdAt": "2025-11-05T15:51:43Z"
+        }
+      ]
+    }
+  },
+  {
+    "id": "PRRT_kwDOKSXUF85gsJyK",
+    "isResolved": false,
+    "comments": {
+      "nodes": [
+        {
+          "id": "PRRC_kwDOKSXUF86UuPgi",
+          "path": "src/RetrievalAugmentedGeneration/DocumentStores/ChromaDBDocumentStore.cs",
+          "body": "_ΓÜá∩╕Å Potential issue_ | _≡ƒƒí Minor_\n\n**Fix import ordering per pipeline failure.**\n\nThe pipeline reports a formatting issue with import ordering at line 1.\n\n\nEnsure using directives follow the project's style guidelines (typically: System namespaces first, then third-party, then project namespaces, all alphabetically sorted).\n\n<details>\n<summary>≡ƒº░ Tools</summary>\n\n<details>\n<summary>≡ƒ¬¢ GitHub Actions: Build</summary>\n\n[error] 1-1: Import/order formatting issue at line 1.\n\n</details>\n\n</details>\n\n<details>\n<summary>≡ƒñû Prompt for AI Agents</summary>\n\n```\nIn src/RetrievalAugmentedGeneration/DocumentStores/ChromaDBDocumentStore.cs\naround lines 1 to 11, the using directives are out of the project's expected\norder; reorder them so System namespaces come first (alphabetically), then\nthirdΓÇæparty namespaces (e.g., Newtonsoft.Json.Linq), then project namespaces\n(AiDotNet.*) alphabetically, and remove any extra blank lines so the block is\nconsistently sorted and formatted per the pipeline style rules.\n```\n\n</details>\n\n<!-- This is an auto-generated comment by CodeRabbit -->",
+          "createdAt": "2025-11-05T15:51:44Z"
+        }
+      ]
+    }
+  },
+  {
+    "id": "PRRT_kwDOKSXUF85gsJyO",
+    "isResolved": false,
+    "comments": {
+      "nodes": [
+        {
+          "id": "PRRC_kwDOKSXUF86UuPgo",
+          "path": "src/RetrievalAugmentedGeneration/DocumentStores/ChromaDBDocumentStore.cs",
+          "body": "_ΓÜá∩╕Å Potential issue_ | _≡ƒƒá Major_\n\n**Address HttpClient lifetime and synchronous blocking issues.**\n\nMultiple issues with HTTP client management and async handling:\n\n1. **HttpClient socket exhaustion** (lines 40-42): Creating `HttpClient` instances per store can exhaust sockets. Use `IHttpClientFactory` (preferred) or a static `HttpClient`.\n2. **Synchronous blocking** (line 60): `.Wait()` on async operations can cause deadlocks in ASP.NET or UI contexts. Make constructor accept a factory/client or initialize async.\n3. **No disposal** (line 24): `HttpClient` is never disposed. Implement `IDisposable` or use `IHttpClientFactory`.\n4. **No error handling** (lines 52-61): If collection creation fails or already exists, no exception is caught or logged.\n\n\nConsider this pattern:\n\n```diff\n-    private readonly HttpClient _httpClient;\n+    private readonly IHttpClientFactory _httpClientFactory;\n+    private HttpClient HttpClient => _httpClientFactory.CreateClient();\n\n-    public ChromaDBDocumentStore(string endpoint, string collectionName, string apiKey)\n+    public ChromaDBDocumentStore(\n+        string endpoint, \n+        string collectionName, \n+        string apiKey,\n+        IHttpClientFactory httpClientFactory)\n     {\n         // ... validation ...\n-        _httpClient = new HttpClient { BaseAddress = new Uri(endpoint) };\n-        if (!string.IsNullOrWhiteSpace(apiKey))\n-            _httpClient.DefaultRequestHeaders.Add(\"X-Chroma-Token\", apiKey);\n+        _httpClientFactory = httpClientFactory ?? throw new ArgumentNullException(nameof(httpClientFactory));\n+        _endpoint = endpoint;\n+        _apiKey = apiKey;\n         \n-        EnsureCollection();\n+        // Note: Initialize collection asynchronously via separate InitializeAsync method\n+        // or accept an already-initialized client\n     }\n```\n\nAlternatively, if `IHttpClientFactory` is not available, use a static `HttpClient` and configure per-request headers.\n\n\n> Committable suggestion skipped: line range outside the PR's diff.\n\n<!-- This is an auto-generated comment by CodeRabbit -->",
+          "createdAt": "2025-11-05T15:51:44Z"
+        }
+      ]
+    }
+  },
+  {
+    "id": "PRRT_kwDOKSXUF85gsJyT",
+    "isResolved": false,
+    "comments": {
+      "nodes": [
+        {
+          "id": "PRRC_kwDOKSXUF86UuPgu",
+          "path": "src/RetrievalAugmentedGeneration/DocumentStores/ChromaDBDocumentStore.cs",
+          "body": "_ΓÜá∩╕Å Potential issue_ | _≡ƒƒá Major_\n\n**Dispose HttpResponseMessage to prevent resource leaks.**\n\nThroughout the class (lines 60, 85, 112, 132, 205, 282), `HttpResponseMessage` instances returned by `PostAsync`/`DeleteAsync` are never disposed. This can exhaust connections in the HTTP connection pool.\n\n\nApply a `using` pattern for all responses:\n\n```diff\n-        var response = _httpClient.PostAsync($\"/api/v1/collections/{_collectionName}/add\", content).Result;\n-        if (response.IsSuccessStatusCode)\n-            _documentCount++;\n+        using var response = _httpClient.PostAsync($\"/api/v1/collections/{_collectionName}/add\", content).Result;\n+        response.EnsureSuccessStatusCode();\n+        _documentCount++;\n```\n\nApply this pattern to all HTTP calls in the class. Alternatively, if using async/await, wrap in `using`:\n\n```csharp\nusing var response = await _httpClient.PostAsync(...);\n```\n\n<details>\n<summary>≡ƒñû Prompt for AI Agents</summary>\n\n```\nIn src/RetrievalAugmentedGeneration/DocumentStores/ChromaDBDocumentStore.cs\naround lines 52ΓÇô286, every call that calls _httpClient.PostAsync(...) or\nDeleteAsync(...) currently uses .Wait()/.Result and never disposes the returned\nHttpResponseMessage, leaking connections; update each HTTP call to use a using\npattern to dispose the response (e.g., use using var response = await\n_httpClient.PostAsync(...); or if you must stay synchronous use using var\nresponse = _httpClient.PostAsync(...).GetAwaiter().GetResult();), remove the\nseparate .Wait()/.Result usages, and ensure success checks remain inside the\nusing scope so the response is properly disposed in all code paths.\n```\n\n</details>\n\n<!-- This is an auto-generated comment by CodeRabbit -->",
+          "createdAt": "2025-11-05T15:51:44Z"
+        }
+      ]
+    }
+  },
+  {
+    "id": "PRRT_kwDOKSXUF85gsJyW",
+    "isResolved": false,
+    "comments": {
+      "nodes": [
+        {
+          "id": "PRRC_kwDOKSXUF86UuPgx",
+          "path": "src/RetrievalAugmentedGeneration/DocumentStores/ChromaDBDocumentStore.cs",
+          "body": "_ΓÜá∩╕Å Potential issue_ | _≡ƒƒá Major_\n\n**Validate embedding dimension and avoid synchronous blocking.**\n\nTwo issues:\n\n1. **Missing dimension validation** (lines 65-66): After the first document sets `_vectorDimension`, subsequent adds don't validate that `vectorDocument.Embedding.Length == _vectorDimension`. This allows mixed dimensions to slip through.\n2. **Synchronous blocking** (line 85): `.Result` can deadlock in sync contexts.\n\n\nApply this diff:\n\n```diff\n     protected override void AddCore(VectorDocument<T> vectorDocument)\n     {\n         if (_vectorDimension == 0)\n             _vectorDimension = vectorDocument.Embedding.Length;\n+        else if (vectorDocument.Embedding.Length != _vectorDimension)\n+            throw new ArgumentException(\n+                $\"Vector dimension mismatch. Expected {_vectorDimension}, got {vectorDocument.Embedding.Length}\",\n+                nameof(vectorDocument));\n\n         _cache[vectorDocument.Document.Id] = vectorDocument;\n         // ... rest of method\n```\n\nFor the async issue, consider converting all core methods to async variants if the base class supports it, or document that this implementation is blocking and unsuitable for high-concurrency scenarios.\n\n<!-- This is an auto-generated comment by CodeRabbit -->",
+          "createdAt": "2025-11-05T15:51:44Z"
+        }
+      ]
+    }
+  },
+  {
+    "id": "PRRT_kwDOKSXUF85gsJyZ",
+    "isResolved": false,
+    "comments": {
+      "nodes": [
+        {
+          "id": "PRRC_kwDOKSXUF86UuPg2",
+          "path": "src/RetrievalAugmentedGeneration/DocumentStores/ChromaDBDocumentStore.cs",
+          "body": "_ΓÜá∩╕Å Potential issue_ | _≡ƒƒá Major_\n\n**Fix cache inconsistency on removal failure.**\n\nLine 197 removes the document from the cache before the ChromaDB API call. If the API request fails or returns an error, the cache is inconsistentΓÇödocument is gone from cache but still exists in ChromaDB.\n\n\nApply this diff:\n\n```diff\n     protected override bool RemoveCore(string documentId)\n     {\n-        _cache.Remove(documentId);\n\n         var payload = new { ids = new[] { documentId } };\n         // ... serialize and post ...\n\n         var response = _httpClient.PostAsync($\"/api/v1/collections/{_collectionName}/delete\", content).Result;\n         if (response.IsSuccessStatusCode && _documentCount > 0)\n         {\n+            _cache.Remove(documentId);\n             _documentCount--;\n             return true;\n         }\n         return false;\n     }\n```\n\nThis ensures cache is only updated after a successful ChromaDB deletion.\n\n<details>\n<summary>≡ƒñû Prompt for AI Agents</summary>\n\n```\nIn src/RetrievalAugmentedGeneration/DocumentStores/ChromaDBDocumentStore.cs\naround lines 195 to 212, the code removes the document from _cache before\ncalling the ChromaDB delete API which causes cache inconsistency if the API call\nfails; move the _cache.Remove(documentId) (and the _documentCount-- decrement)\nso they execute only after verifying response.IsSuccessStatusCode, i.e. call the\nAPI first, check success, then remove from cache and decrement _documentCount\nand return true; if the API fails return false and leave the cache untouched.\n```\n\n</details>\n\n<!-- This is an auto-generated comment by CodeRabbit -->",
+          "createdAt": "2025-11-05T15:51:44Z"
+        }
+      ]
+    }
+  },
+  {
+    "id": "PRRT_kwDOKSXUF85gsJyd",
+    "isResolved": false,
+    "comments": {
+      "nodes": [
+        {
+          "id": "PRRC_kwDOKSXUF86UuPg8",
+          "path": "src/RetrievalAugmentedGeneration/DocumentStores/ChromaDBDocumentStore.cs",
+          "body": "_ΓÜá∩╕Å Potential issue_ | _≡ƒƒá Major_\n\n**Add error handling and avoid synchronous blocking.**\n\nTwo issues:\n\n1. **No error handling** (line 282): If `DeleteAsync` fails (collection doesn't exist, network error), the exception propagates but counters are already reset, leaving the store in an inconsistent state.\n2. **Synchronous blocking** (lines 282, 285): `.Wait()` can cause deadlocks.\n\n\nApply this diff to handle errors gracefully:\n\n```diff\n     public override void Clear()\n     {\n-        _cache.Clear();\n-        _httpClient.DeleteAsync($\"/api/v1/collections/{_collectionName}\").Wait();\n-        _documentCount = 0;\n-        _vectorDimension = 0;\n-        EnsureCollection();\n+        try\n+        {\n+            _httpClient.DeleteAsync($\"/api/v1/collections/{_collectionName}\").Wait();\n+        }\n+        catch (Exception ex)\n+        {\n+            // Log error or handle collection not existing\n+            // Optionally: ignore 404 if collection already deleted\n+        }\n+        \n+        _cache.Clear();\n+        _documentCount = 0;\n+        _vectorDimension = 0;\n+        EnsureCollection();\n     }\n```\n\nConsider making this async or document that blocking behavior is expected.\n\n<details>\n<summary>≡ƒñû Prompt for AI Agents</summary>\n\n```\nIn src/RetrievalAugmentedGeneration/DocumentStores/ChromaDBDocumentStore.cs\naround lines 279-286, the Clear method synchronously blocks on\n_httpClient.DeleteAsync and resets internal counters before the delete\ncompletes; change Clear to an async method (e.g., Task ClearAsync), await\n_httpClient.DeleteAsync(...).ConfigureAwait(false), and wrap the HTTP call in a\ntry/catch to handle HttpRequestException/TaskCanceledException/Exception: on\nsuccess reset _documentCount and _vectorDimension and call EnsureCollection, on\nfailure log the error and avoid leaving counters in an inconsistent state\n(either keep previous values or set a safe fallback), and rethrow or surface the\nerror as appropriate; if you cannot change the API to async, at minimum use\nGetAwaiter().GetResult() and catch exceptions rather than using .Wait(), and\ndocument the blocking behavior.\n```\n\n</details>\n\n<!-- This is an auto-generated comment by CodeRabbit -->",
+          "createdAt": "2025-11-05T15:51:44Z"
+        }
+      ]
+    }
+  },
+  {
+    "id": "PRRT_kwDOKSXUF85gsJyj",
+    "isResolved": false,
+    "comments": {
+      "nodes": [
+        {
+          "id": "PRRC_kwDOKSXUF86UuPhF",
+          "path": "src/RetrievalAugmentedGeneration/DocumentStores/ElasticsearchDocumentStore.cs",
+          "body": "_ΓÜá∩╕Å Potential issue_ | _≡ƒƒí Minor_\n\n**Fix the import formatting issue.**\n\nThe pipeline reports an import/order formatting issue. Please run the project's code formatter to resolve this.\n\n<details>\n<summary>≡ƒº░ Tools</summary>\n\n<details>\n<summary>≡ƒ¬¢ GitHub Actions: Build</summary>\n\n[error] 1-1: Import/order formatting issue at line 1.\n\n</details>\n\n</details>\n\n<details>\n<summary>≡ƒñû Prompt for AI Agents</summary>\n\n```\nIn src/RetrievalAugmentedGeneration/DocumentStores/ElasticsearchDocumentStore.cs\naround lines 1 to 11, the using/import statements are not formatted in the\nproject's expected order; run the repository's C# formatter (e.g., dotnet format\nor your configured IDE formatter) to sort and normalize the using directives\n(remove duplicates, sort alphabetically/group system first, then thirdΓÇæparty,\nthen project namespaces) and fix spacing so the import/order linter passes.\n```\n\n</details>\n\n<!-- This is an auto-generated comment by CodeRabbit -->",
+          "createdAt": "2025-11-05T15:51:44Z"
+        }
+      ]
+    }
+  },
+  {
+    "id": "PRRT_kwDOKSXUF85gsJyp",
+    "isResolved": false,
+    "comments": {
+      "nodes": [
+        {
+          "id": "PRRC_kwDOKSXUF86UuPhO",
+          "path": "src/RetrievalAugmentedGeneration/DocumentStores/ElasticsearchDocumentStore.cs",
+          "body": "_ΓÜá∩╕Å Potential issue_ | _≡ƒƒá Major_\n\n**Validate that authentication credentials are provided.**\n\nThe constructor accepts both `apiKey` and `username`/`password` but doesn't ensure at least one authentication method is supplied. If all auth parameters are null or empty, the HTTP client will make unauthenticated requests that will likely fail.\n\n\n\nApply this diff to validate authentication:\n\n```diff\n     if (vectorDimension <= 0)\n         throw new ArgumentOutOfRangeException(nameof(vectorDimension), \"Vector dimension must be positive\");\n+    \n+    if (string.IsNullOrWhiteSpace(apiKey) && \n+        (string.IsNullOrWhiteSpace(username) || string.IsNullOrWhiteSpace(password)))\n+        throw new ArgumentException(\"Either apiKey or both username and password must be provided for authentication\");\n\n     _httpClient = new HttpClient { BaseAddress = new Uri(endpoint) };\n```\n\n<!-- suggestion_start -->\n\n<details>\n<summary>≡ƒô¥ Committable suggestion</summary>\n\n> ΓÇ╝∩╕Å **IMPORTANT**\n> Carefully review the code before committing. Ensure that it accurately replaces the highlighted code, contains no missing lines, and has no issues with indentation. Thoroughly test & benchmark the code to ensure it meets the requirements.\n\n```suggestion\n    public ElasticsearchDocumentStore(string endpoint, string indexName, string apiKey, string username, string password, int vectorDimension = 1536)\n    {\n        if (string.IsNullOrWhiteSpace(endpoint))\n            throw new ArgumentException(\"Endpoint cannot be empty\", nameof(endpoint));\n        if (string.IsNullOrWhiteSpace(indexName))\n            throw new ArgumentException(\"Index name cannot be empty\", nameof(indexName));\n        if (vectorDimension <= 0)\n            throw new ArgumentOutOfRangeException(nameof(vectorDimension), \"Vector dimension must be positive\");\n        \n        if (string.IsNullOrWhiteSpace(apiKey) && \n            (string.IsNullOrWhiteSpace(username) || string.IsNullOrWhiteSpace(password)))\n            throw new ArgumentException(\"Either apiKey or both username and password must be provided for authentication\");\n\n        _httpClient = new HttpClient { BaseAddress = new Uri(endpoint) };\n        \n        if (!string.IsNullOrWhiteSpace(apiKey))\n            _httpClient.DefaultRequestHeaders.Add(\"Authorization\", $\"ApiKey {apiKey}\");\n        else if (!string.IsNullOrWhiteSpace(username) && !string.IsNullOrWhiteSpace(password))\n        {\n            var auth = Convert.ToBase64String(Encoding.UTF8.GetBytes($\"{username}:{password}\"));\n            _httpClient.DefaultRequestHeaders.Add(\"Authorization\", $\"Basic {auth}\");\n        }\n\n        _indexName = indexName.ToLowerInvariant();\n        _vectorDimension = vectorDimension;\n        _documentCount = 0;\n        _cache = new Dictionary<string, VectorDocument<T>>();\n\n        EnsureIndex();\n    }\n```\n\n</details>\n\n<!-- suggestion_end -->\n\n<details>\n<summary>≡ƒñû Prompt for AI Agents</summary>\n\n```\nIn src/RetrievalAugmentedGeneration/DocumentStores/ElasticsearchDocumentStore.cs\naround lines 34 to 59, the constructor currently allows creating an\nunauthenticated HttpClient if both apiKey and username/password are missing; add\na precondition that at least one authentication method is supplied and throw an\nArgumentException (or similar) if neither apiKey nor both username and password\nare provided. Implement the check before creating the HttpClient (or before\nsetting Authorization headers), validating string.IsNullOrWhiteSpace(apiKey) AND\n(string.IsNullOrWhiteSpace(username) OR string.IsNullOrWhiteSpace(password)) and\nthrow with a clear message like \"Authentication required: provide apiKey or\nusername and password\".\n```\n\n</details>\n\n<!-- This is an auto-generated comment by CodeRabbit -->",
+          "createdAt": "2025-11-05T15:51:45Z"
+        }
+      ]
+    }
+  },
+  {
+    "id": "PRRT_kwDOKSXUF85gsJys",
+    "isResolved": false,
+    "comments": {
+      "nodes": [
+        {
+          "id": "PRRC_kwDOKSXUF86UuPhU",
+          "path": "src/RetrievalAugmentedGeneration/DocumentStores/ElasticsearchDocumentStore.cs",
+          "body": "_ΓÜá∩╕Å Potential issue_ | _≡ƒƒá Major_\n\n**Add error handling and consider async alternatives.**\n\nThe method uses `.Result` to block on async HTTP operations, which can cause deadlocks in UI or ASP.NET contexts and is generally considered an anti-pattern. Additionally, there's no error handling if HTTP requests fail (network issues, auth failures, Elasticsearch errors).\n\n\n\nConsider these improvements:\n\n1. Add try-catch blocks around HTTP calls to handle failures gracefully\n2. Check response status codes and throw meaningful exceptions\n3. If keeping synchronous API, document the blocking behavior\n4. Consider providing an async variant (`EnsureIndexAsync()`) for better performance\n\nExample error handling:\n\n```csharp\nprivate void EnsureIndex()\n{\n    try\n    {\n        var checkResponse = _httpClient.GetAsync($\"/{_indexName}\").Result;\n        if (checkResponse.IsSuccessStatusCode) \n        {\n            UpdateDocumentCount();\n            return;\n        }\n        \n        if (!checkResponse.StatusCode == System.Net.HttpStatusCode.NotFound)\n        {\n            throw new InvalidOperationException(\n                $\"Failed to check index existence: {checkResponse.StatusCode}\");\n        }\n\n        // Create index...\n        var createResponse = _httpClient.PutAsync($\"/{_indexName}\", content).Result;\n        if (!createResponse.IsSuccessStatusCode)\n        {\n            var errorContent = createResponse.Content.ReadAsStringAsync().Result;\n            throw new InvalidOperationException(\n                $\"Failed to create index: {createResponse.StatusCode}, {errorContent}\");\n        }\n    }\n    catch (Exception ex) when (!(ex is InvalidOperationException))\n    {\n        throw new InvalidOperationException(\n            $\"Error ensuring Elasticsearch index '{_indexName}': {ex.Message}\", ex);\n    }\n}\n```\n\n<details>\n<summary>≡ƒñû Prompt for AI Agents</summary>\n\n```\nsrc/RetrievalAugmentedGeneration/DocumentStores/ElasticsearchDocumentStore.cs\nlines 61-90: the method blocks on async HTTP calls using .Result and lacks error\nhandling; replace blocking calls with proper async alternatives by implementing\nEnsureIndexAsync() that awaits GetAsync/PutAsync, add try-catch around the HTTP\ncalls to catch and rethrow meaningful InvalidOperationException (including\nresponse.StatusCode and response.Content when non-success), validate NotFound vs\nother statuses before attempting index creation, and if you must keep a\nsynchronous wrapper either document the blocking behavior or call the async\nmethod via Task.Run(...).GetAwaiter().GetResult() with explicit comment to\nreduce deadlock risk.\n```\n\n</details>\n\n<!-- This is an auto-generated comment by CodeRabbit -->",
+          "createdAt": "2025-11-05T15:51:45Z"
+        }
+      ]
+    }
+  },
+  {
+    "id": "PRRT_kwDOKSXUF85gsJyz",
+    "isResolved": false,
+    "comments": {
+      "nodes": [
+        {
+          "id": "PRRC_kwDOKSXUF86UuPha",
+          "path": "src/RetrievalAugmentedGeneration/DocumentStores/ElasticsearchDocumentStore.cs",
+          "body": "_ΓÜá∩╕Å Potential issue_ | _≡ƒö┤ Critical_\n\n**Fix cache inconsistency and Clear() interaction bug.**\n\nTwo critical issues:\n\n1. **Clear() breaks subsequent adds**: The `Clear()` method sets `_vectorDimension = 0`, which causes this validation check to reject all documents after a clear operation. Since no document can have embedding length 0, the store becomes unusable after calling `Clear()`.\n\n2. **Cache/Elasticsearch inconsistency**: The document is added to `_cache` (line 108) before the HTTP call. If the PUT request fails, the document remains in the cache but isn't in Elasticsearch, causing `GetByIdCore` to return documents that aren't actually stored.\n\n\n\nApply this diff to fix both issues:\n\n```diff\n protected override void AddCore(VectorDocument<T> vectorDocument)\n {\n+    // Allow _vectorDimension to be set from first document if cleared\n+    if (_vectorDimension == 0)\n+        _vectorDimension = vectorDocument.Embedding.Length;\n+    \n     if (vectorDocument.Embedding.Length != _vectorDimension)\n         throw new ArgumentException($\"Document embedding dimension ({vectorDocument.Embedding.Length}) does not match the store's configured dimension ({_vectorDimension}).\");\n\n-    _cache[vectorDocument.Document.Id] = vectorDocument;\n-\n     var embedding = vectorDocument.Embedding.ToArray().Select(v => Convert.ToDouble(v)).ToArray();\n     \n     var doc = new\n     {\n         id = vectorDocument.Document.Id,\n         content = vectorDocument.Document.Content,\n         embedding,\n         metadata = vectorDocument.Document.Metadata\n     };\n\n     var content = new StringContent(\n         Newtonsoft.Json.JsonConvert.SerializeObject(doc),\n         Encoding.UTF8,\n         \"application/json\");\n\n     var response = _httpClient.PutAsync($\"/{_indexName}/_doc/{vectorDocument.Document.Id}\", content).Result;\n     if (response.IsSuccessStatusCode)\n+    {\n+        _cache[vectorDocument.Document.Id] = vectorDocument;\n         _documentCount++;\n+    }\n+    else\n+    {\n+        var errorContent = response.Content.ReadAsStringAsync().Result;\n+        throw new InvalidOperationException(\n+            $\"Failed to add document '{vectorDocument.Document.Id}': {response.StatusCode}, {errorContent}\");\n+    }\n }\n```\n\n<details>\n<summary>≡ƒñû Prompt for AI Agents</summary>\n\n```\nIn src/RetrievalAugmentedGeneration/DocumentStores/ElasticsearchDocumentStore.cs\naround lines 103 to 128, the code currently rejects all adds after Clear()\nbecause Clear() sets _vectorDimension = 0 and the validation unconditionally\ncompares embedding length to _vectorDimension, and it also writes to _cache\nbefore the HTTP PUT so failed requests leave stale cache entries. Change the\nvalidation to only enforce the dimension check when _vectorDimension is nonΓÇæzero\n(e.g., if (_vectorDimension != 0 && vectorDocument.Embedding.Length !=\n_vectorDimension) throw ...), and move the _cache update and _documentCount\nincrement to occur only after a successful HTTP response (i.e., perform the PUT,\ncheck response.IsSuccessStatusCode, then update _cache and _documentCount).\n```\n\n</details>\n\n<!-- This is an auto-generated comment by CodeRabbit -->",
+          "createdAt": "2025-11-05T15:51:45Z"
+        }
+      ]
+    }
+  },
+  {
+    "id": "PRRT_kwDOKSXUF85gsJy1",
+    "isResolved": false,
+    "comments": {
+      "nodes": [
+        {
+          "id": "PRRC_kwDOKSXUF86UuPhf",
+          "path": "src/RetrievalAugmentedGeneration/DocumentStores/ElasticsearchDocumentStore.cs",
+          "body": "_ΓÜá∩╕Å Potential issue_ | _≡ƒö┤ Critical_\n\n**Fix cache inconsistency, Clear() interaction, and bulk error handling.**\n\nMultiple critical issues:\n\n1. **Clear() breaks subsequent adds**: Same issue as `AddCore` - if `_vectorDimension` is 0 after `Clear()`, validation fails for all documents.\n\n2. **Cache/Elasticsearch inconsistency**: Documents are added to cache (line 138) before the bulk operation. If the bulk request fails or has partial errors, cached documents won't match Elasticsearch.\n\n3. **Bulk response doesn't check for errors**: Elasticsearch bulk API returns 200 even with partial failures. The response contains an `errors` boolean and per-item status that must be checked.\n\n\n\nApply this diff:\n\n```diff\n protected override void AddBatchCore(IList<VectorDocument<T>> vectorDocuments)\n {\n     if (vectorDocuments.Count == 0) return;\n\n+    // Allow _vectorDimension to be set from first document if cleared\n+    if (_vectorDimension == 0)\n+        _vectorDimension = vectorDocuments[0].Embedding.Length;\n+\n     foreach (var vd in vectorDocuments)\n     {\n         if (vd.Embedding.Length != _vectorDimension)\n             throw new ArgumentException($\"Document embedding dimension ({vd.Embedding.Length}) does not match the store's configured dimension ({_vectorDimension}).\");\n-        _cache[vd.Document.Id] = vd;\n     }\n\n     var bulkBody = new StringBuilder();\n     foreach (var vd in vectorDocuments)\n     {\n         var indexAction = new { index = new { _index = _indexName, _id = vd.Document.Id } };\n         bulkBody.AppendLine(Newtonsoft.Json.JsonConvert.SerializeObject(indexAction));\n\n         var embedding = vd.Embedding.ToArray().Select(v => Convert.ToDouble(v)).ToArray();\n         var doc = new\n         {\n             id = vd.Document.Id,\n             content = vd.Document.Content,\n             embedding,\n             metadata = vd.Document.Metadata\n         };\n         bulkBody.AppendLine(Newtonsoft.Json.JsonConvert.SerializeObject(doc));\n     }\n\n     var content = new StringContent(bulkBody.ToString(), Encoding.UTF8, \"application/x-ndjson\");\n     var response = _httpClient.PostAsync($\"/{_indexName}/_bulk\", content).Result;\n     if (response.IsSuccessStatusCode)\n-        _documentCount += vectorDocuments.Count;\n+    {\n+        var responseContent = response.Content.ReadAsStringAsync().Result;\n+        var result = JObject.Parse(responseContent);\n+        \n+        if (result[\"errors\"]?.Value<bool>() == true)\n+        {\n+            // Partial failure - check which items succeeded\n+            var items = result[\"items\"];\n+            int successCount = 0;\n+            for (int i = 0; i < vectorDocuments.Count && i < items.Count(); i++)\n+            {\n+                var item = items[i][\"index\"];\n+                var status = item[\"status\"]?.Value<int>() ?? 500;\n+                if (status >= 200 && status < 300)\n+                {\n+                    _cache[vectorDocuments[i].Document.Id] = vectorDocuments[i];\n+                    successCount++;\n+                }\n+            }\n+            _documentCount += successCount;\n+            throw new InvalidOperationException(\n+                $\"Bulk operation had errors: {successCount}/{vectorDocuments.Count} documents added successfully\");\n+        }\n+        else\n+        {\n+            // All succeeded\n+            foreach (var vd in vectorDocuments)\n+                _cache[vd.Document.Id] = vd;\n+            _documentCount += vectorDocuments.Count;\n+        }\n+    }\n+    else\n+    {\n+        var errorContent = response.Content.ReadAsStringAsync().Result;\n+        throw new InvalidOperationException(\n+            $\"Bulk operation failed: {response.StatusCode}, {errorContent}\");\n+    }\n }\n```\n\n\n> Committable suggestion skipped: line range outside the PR's diff.\n\n<!-- This is an auto-generated comment by CodeRabbit -->",
+          "createdAt": "2025-11-05T15:51:45Z"
+        }
+      ]
+    }
+  },
+  {
+    "id": "PRRT_kwDOKSXUF85gsJy5",
+    "isResolved": false,
+    "comments": {
+      "nodes": [
+        {
+          "id": "PRRC_kwDOKSXUF86UuPhi",
+          "path": "src/RetrievalAugmentedGeneration/DocumentStores/ElasticsearchDocumentStore.cs",
+          "body": "_ΓÜá∩╕Å Potential issue_ | _≡ƒƒá Major_\n\n**Document metadata filter limitations and add error handling.**\n\nThe metadata filter implementation uses `term` queries which have limitations:\n\n1. **Exact matches only**: Term queries won't work for text fields with analyzers - they require exact values. For text search, use `match` queries instead.\n2. **Numeric comparisons**: The current implementation only supports equality. Range queries (gt, gte, lt, lte) are not supported.\n3. **Error handling**: No handling for HTTP failures or malformed responses.\n\n\n\n\nConsider documenting these limitations in XML comments and adding error handling:\n\n```diff\n protected override IEnumerable<Document<T>> GetSimilarCore(Vector<T> queryVector, int topK, Dictionary<string, object> metadataFilters)\n {\n+    try\n+    {\n         var embedding = queryVector.ToArray().Select(v => Convert.ToDouble(v)).ToArray();\n         \n         // Build the query with metadata filters\n+        // Note: Filters use term queries for exact matches on keyword/numeric fields\n         object queryClause;\n         // ... rest of query building ...\n\n         var response = _httpClient.PostAsync($\"/{_indexName}/_search\", content).Result;\n+        \n+        if (!response.IsSuccessStatusCode)\n+        {\n+            var errorContent = response.Content.ReadAsStringAsync().Result;\n+            throw new InvalidOperationException(\n+                $\"Search failed: {response.StatusCode}, {errorContent}\");\n+        }\n+        \n         var responseContent = response.Content.ReadAsStringAsync().Result;\n         var result = JObject.Parse(responseContent);\n\n         // ... parse results ...\n         \n         return results;\n+    }\n+    catch (Exception ex) when (!(ex is InvalidOperationException || ex is ArgumentException))\n+    {\n+        throw new InvalidOperationException(\n+            $\"Error searching Elasticsearch: {ex.Message}\", ex);\n+    }\n }\n```\n\n<!-- This is an auto-generated comment by CodeRabbit -->",
+          "createdAt": "2025-11-05T15:51:45Z"
+        }
+      ]
+    }
+  },
+  {
+    "id": "PRRT_kwDOKSXUF85gsJy6",
+    "isResolved": false,
+    "comments": {
+      "nodes": [
+        {
+          "id": "PRRC_kwDOKSXUF86UuPhn",
+          "path": "src/RetrievalAugmentedGeneration/DocumentStores/ElasticsearchDocumentStore.cs",
+          "body": "_ΓÜá∩╕Å Potential issue_ | _≡ƒƒá Major_\n\n**Query Elasticsearch instead of relying only on cache.**\n\nThe current implementation only checks the in-memory cache, which means:\n- Documents indexed directly in Elasticsearch won't be found\n- After application restart, no documents can be retrieved by ID until they're re-added\n- The cache can become stale if documents are modified externally\n\n\n\nConsider querying Elasticsearch directly:\n\n```diff\n protected override Document<T>? GetByIdCore(string documentId)\n {\n+    try\n+    {\n-        if (_cache.TryGetValue(documentId, out var vectorDoc))\n-            return vectorDoc.Document;\n+        var response = _httpClient.GetAsync($\"/{_indexName}/_doc/{documentId}\").Result;\n+        \n+        if (response.StatusCode == System.Net.HttpStatusCode.NotFound)\n+            return null;\n+            \n+        if (!response.IsSuccessStatusCode)\n+        {\n+            var errorContent = response.Content.ReadAsStringAsync().Result;\n+            throw new InvalidOperationException(\n+                $\"Failed to get document '{documentId}': {response.StatusCode}, {errorContent}\");\n+        }\n+        \n+        var responseContent = response.Content.ReadAsStringAsync().Result;\n+        var result = JObject.Parse(responseContent);\n+        var source = result[\"_source\"];\n+        \n+        if (source == null)\n+            return null;\n+        \n+        var id = source[\"id\"]?.ToString() ?? documentId;\n+        var content = source[\"content\"]?.ToString() ?? string.Empty;\n+        var metadata = source[\"metadata\"]?.ToObject<Dictionary<string, object>>() \n+            ?? new Dictionary<string, object>();\n+        \n+        return new Document<T>(id, content, metadata);\n+    }\n+    catch (Exception ex) when (!(ex is InvalidOperationException))\n+    {\n+        throw new InvalidOperationException(\n+            $\"Error retrieving document '{documentId}': {ex.Message}\", ex);\n+    }\n-    return null;\n }\n```\n\n<!-- This is an auto-generated comment by CodeRabbit -->",
+          "createdAt": "2025-11-05T15:51:45Z"
+        }
+      ]
+    }
+  },
+  {
+    "id": "PRRT_kwDOKSXUF85gsJzD",
+    "isResolved": false,
+    "comments": {
+      "nodes": [
+        {
+          "id": "PRRC_kwDOKSXUF86UuPhx",
+          "path": "src/RetrievalAugmentedGeneration/DocumentStores/ElasticsearchDocumentStore.cs",
+          "body": "_ΓÜá∩╕Å Potential issue_ | _≡ƒƒá Major_\n\n**Fix cache inconsistency in RemoveCore.**\n\nThe document is removed from cache (line 283) before the DELETE request. If the HTTP call fails, the document is removed from the cache but remains in Elasticsearch, causing `GetByIdCore` to not find documents that still exist.\n\n\n\nApply this diff to ensure cache consistency:\n\n```diff\n protected override bool RemoveCore(string documentId)\n {\n-    _cache.Remove(documentId);\n-\n     var response = _httpClient.DeleteAsync($\"/{_indexName}/_doc/{documentId}\").Result;\n-    if (response.IsSuccessStatusCode && _documentCount > 0)\n+    \n+    if (response.StatusCode == System.Net.HttpStatusCode.NotFound)\n+    {\n+        _cache.Remove(documentId);\n+        return false;\n+    }\n+    \n+    if (response.IsSuccessStatusCode)\n     {\n+        _cache.Remove(documentId);\n-        _documentCount--;\n+        if (_documentCount > 0)\n+            _documentCount--;\n         return true;\n     }\n+    \n+    // HTTP error - don't remove from cache\n+    var errorContent = response.Content.ReadAsStringAsync().Result;\n+    throw new InvalidOperationException(\n+        $\"Failed to remove document '{documentId}': {response.StatusCode}, {errorContent}\");\n-    return false;\n }\n```\n\n<details>\n<summary>≡ƒñû Prompt for AI Agents</summary>\n\n```\nIn src/RetrievalAugmentedGeneration/DocumentStores/ElasticsearchDocumentStore.cs\naround lines 281 to 292, the code removes the document from the in-memory cache\nbefore issuing the HTTP DELETE, which can leave the cache inconsistent if the\nDELETE fails; change the flow so the DELETE is executed first and only on a\nsuccessful response decrement _documentCount and then remove the document from\n_cache and return true; on failure do not modify the cache or _documentCount and\nreturn false (also ensure any exceptions from the HTTP call are allowed to\npropagate or handled consistently with existing error handling).\n```\n\n</details>\n\n<!-- This is an auto-generated comment by CodeRabbit -->",
+          "createdAt": "2025-11-05T15:51:46Z"
+        }
+      ]
+    }
+  },
+  {
+    "id": "PRRT_kwDOKSXUF85gsJzJ",
+    "isResolved": false,
+    "comments": {
+      "nodes": [
+        {
+          "id": "PRRC_kwDOKSXUF86UuPh4",
+          "path": "src/RetrievalAugmentedGeneration/DocumentStores/ElasticsearchDocumentStore.cs",
+          "body": "_ΓÜá∩╕Å Potential issue_ | _≡ƒƒá Major_\n\n**Implement Elasticsearch scroll API as documented.**\n\nThe XML documentation mentions using the scroll API for efficient retrieval, but the implementation only returns cached documents. This means:\n- After app restart, GetAll() returns an empty collection even if Elasticsearch has documents\n- Documents indexed directly in Elasticsearch won't appear\n- The cache can become stale\n\n\n\nConsider implementing the scroll API as documented:\n\n```csharp\nprotected override IEnumerable<Document<T>> GetAllCore()\n{\n    var results = new List<Document<T>>();\n    \n    try\n    {\n        // Initial search with scroll\n        var query = new { size = 1000, query = new { match_all = new { } } };\n        var content = new StringContent(\n            Newtonsoft.Json.JsonConvert.SerializeObject(query),\n            Encoding.UTF8,\n            \"application/json\");\n        \n        var response = _httpClient.PostAsync($\"/{_indexName}/_search?scroll=1m\", content).Result;\n        if (!response.IsSuccessStatusCode)\n            throw new InvalidOperationException($\"Initial scroll failed: {response.StatusCode}\");\n        \n        var responseContent = response.Content.ReadAsStringAsync().Result;\n        var result = JObject.Parse(responseContent);\n        var scrollId = result[\"_scroll_id\"]?.ToString();\n        \n        while (true)\n        {\n            var hits = result[\"hits\"]?[\"hits\"];\n            if (hits == null || !hits.Any())\n                break;\n            \n            foreach (var hit in hits)\n            {\n                var source = hit[\"_source\"];\n                if (source != null)\n                {\n                    var id = source[\"id\"]?.ToString() ?? string.Empty;\n                    var docContent = source[\"content\"]?.ToString() ?? string.Empty;\n                    var metadata = source[\"metadata\"]?.ToObject<Dictionary<string, object>>() \n                        ?? new Dictionary<string, object>();\n                    results.Add(new Document<T>(id, docContent, metadata));\n                }\n            }\n            \n            // Continue scroll\n            var scrollQuery = new { scroll = \"1m\", scroll_id = scrollId };\n            var scrollContent = new StringContent(\n                Newtonsoft.Json.JsonConvert.SerializeObject(scrollQuery),\n                Encoding.UTF8,\n                \"application/json\");\n            response = _httpClient.PostAsync(\"/_search/scroll\", scrollContent).Result;\n            responseContent = response.Content.ReadAsStringAsync().Result;\n            result = JObject.Parse(responseContent);\n        }\n        \n        // Clear scroll\n        if (scrollId != null)\n            _httpClient.DeleteAsync($\"/_search/scroll/{scrollId}\").Wait();\n    }\n    catch (Exception ex)\n    {\n        throw new InvalidOperationException($\"Error retrieving all documents: {ex.Message}\", ex);\n    }\n    \n    return results;\n}\n```\n\n<!-- This is an auto-generated comment by CodeRabbit -->",
+          "createdAt": "2025-11-05T15:51:46Z"
+        }
+      ]
+    }
+  },
+  {
+    "id": "PRRT_kwDOKSXUF85gsJzO",
+    "isResolved": false,
+    "comments": {
+      "nodes": [
+        {
+          "id": "PRRC_kwDOKSXUF86UuPiA",
+          "path": "src/RetrievalAugmentedGeneration/DocumentStores/ElasticsearchDocumentStore.cs",
+          "body": "_ΓÜá∩╕Å Potential issue_ | _≡ƒö┤ Critical_\n\n**Don't reset vector dimension in Clear().**\n\nResetting `_vectorDimension = 0` makes the store unusable after calling `Clear()` because subsequent `AddCore` and `AddBatchCore` calls will fail validation (no document can have embedding dimension 0).\n\n\n\nApply this diff to preserve the configured dimension:\n\n```diff\n public override void Clear()\n {\n     _cache.Clear();\n     _httpClient.DeleteAsync($\"/{_indexName}\").Wait();\n     _documentCount = 0;\n-    _vectorDimension = 0;\n     EnsureIndex();\n }\n```\n\nThis preserves the dimension configured at construction time, allowing the store to continue accepting documents after a clear operation.\n\n<!-- suggestion_start -->\n\n<details>\n<summary>≡ƒô¥ Committable suggestion</summary>\n\n> ΓÇ╝∩╕Å **IMPORTANT**\n> Carefully review the code before committing. Ensure that it accurately replaces the highlighted code, contains no missing lines, and has no issues with indentation. Thoroughly test & benchmark the code to ensure it meets the requirements.\n\n```suggestion\n    public override void Clear()\n    {\n        _cache.Clear();\n        _httpClient.DeleteAsync($\"/{_indexName}\").Wait();\n        _documentCount = 0;\n        EnsureIndex();\n    }\n```\n\n</details>\n\n<!-- suggestion_end -->\n\n<details>\n<summary>≡ƒñû Prompt for AI Agents</summary>\n\n```\nIn src/RetrievalAugmentedGeneration/DocumentStores/ElasticsearchDocumentStore.cs\naround lines 368 to 375, the Clear() method resets _vectorDimension to 0 which\nbreaks subsequent AddCore/AddBatchCore validation; remove the line that sets\n_vectorDimension = 0 so the configured embedding dimension is preserved, keep\nclearing the cache, deleting the index, resetting _documentCount, and calling\nEnsureIndex() so the store can continue accepting documents after Clear().\n```\n\n</details>\n\n<!-- This is an auto-generated comment by CodeRabbit -->",
+          "createdAt": "2025-11-05T15:51:46Z"
+        }
+      ]
+    }
+  },
+  {
+    "id": "PRRT_kwDOKSXUF85gsJzT",
+    "isResolved": false,
+    "comments": {
+      "nodes": [
+        {
+          "id": "PRRC_kwDOKSXUF86UuPiH",
+          "path": "src/RetrievalAugmentedGeneration/DocumentStores/SQLiteVSSDocumentStore.cs",
+          "body": "_ΓÜá∩╕Å Potential issue_ | _≡ƒö┤ Critical_\n\n**Class name and documentation are fundamentally misleadingΓÇöimplementation is in-memory, not SQLite-based.**\n\nThe class is named `SQLiteVSSDocumentStore` and all XML documentation describes it as a \"SQLite-based vector store using the SQLite-VSS extension\" with \"file-based database\" storage, \"ACID transactions,\" and suitability for \"edge deployments, mobile apps.\" However, the actual implementation uses a transient in-memory `Dictionary<string, VectorDocument<T>>` (line 42) with no SQLite integration whatsoever.\n\n**Impact:**\n- Consumers expecting persistent, file-based storage will experience silent data loss on process restart\n- The class violates the Liskov Substitution PrincipleΓÇöit cannot substitute for a real document store in production\n- Documentation promises features (ACID, single-file backup, zero-config deployment) that are not delivered\n\n**Required actions:**\n\n1. **Rename the class** to reflect its actual behavior: `InMemoryDocumentStore<T>` or `DictionaryDocumentStore<T>`\n2. **Rewrite all XML documentation** to describe the in-memory, non-persistent nature\n3. **Remove references** to SQLite, file-based storage, edge deployment, database files, transactions, and ACID guarantees\n4. **Update constructor** to remove file-path parameters that suggest persistence (see separate comment)\n\nAlternatively, if SQLite-VSS integration is planned but deferred, mark this class `internal` or `abstract` until the real implementation is complete, and document it as a temporary in-memory stub.\n\n<details>\n<summary>≡ƒñû Prompt for AI Agents</summary>\n\n```\nIn src/RetrievalAugmentedGeneration/DocumentStores/SQLiteVSSDocumentStore.cs\naround lines 11 to 40, the class is misnamed and documented as a SQLite-VSS\nfile-based store while the implementation is an in-memory Dictionary; rename the\nclass to InMemoryDocumentStore<T> (or DictionaryDocumentStore<T>), rewrite the\nXML summary/remarks to clearly state it is an in-memory, non-persistent store\n(remove any mention of SQLite, VSS, file-based storage, ACID, transactions,\nbackups, edge/mobile persistence), remove or change constructor parameters that\nimply a file path/persistence, and update visibility to internal or abstract if\nyou intend to mark it as a temporary stub; ensure all references/usages are\nupdated to the new name and documentation reflects its transient behavior.\n```\n\n</details>\n\n<!-- This is an auto-generated comment by CodeRabbit -->",
+          "createdAt": "2025-11-05T15:51:46Z"
+        }
+      ]
+    }
+  },
+  {
+    "id": "PRRT_kwDOKSXUF85gsaCW",
+    "isResolved": false,
+    "comments": {
+      "nodes": [
+        {
+          "id": "PRRC_kwDOKSXUF86UumAe",
+          "path": "src/RetrievalAugmentedGeneration/ContextCompression/DocumentSummarizer.cs",
+          "body": "_ΓÜá∩╕Å Potential issue_ | _≡ƒƒí Minor_\n\n**Query term matching can produce false positives.**\n\nThe substring matching at line 166 will incorrectly boost sentences containing partial word matches. For example, query term \"car\" would match \"scar\" or \"cartoon\".\n\n\n\nConsider using word boundary matching:\n\n```diff\n             if (queryTerms != null && queryTerms.Count > 0)\n             {\n                 var sentenceLower = sentence.ToLowerInvariant();\n-                var matchCount = queryTerms.Count(qt => sentenceLower.Contains(qt));\n+                var sentenceTokens = Tokenize(sentenceLower);\n+                var matchCount = queryTerms.Count(qt => sentenceTokens.Contains(qt));\n                 if (matchCount > 0)\n                 {\n                     importance *= (1.0 + (matchCount * 0.5)); // Boost by 50% per matching query term\n                 }\n             }\n```\n\n<details>\n<summary>≡ƒñû Prompt for AI Agents</summary>\n\n```\nIn src/RetrievalAugmentedGeneration/ContextCompression/DocumentSummarizer.cs\naround lines 163 to 171, the current substring-based query term matching causes\nfalse positives (e.g., \"car\" matching \"scar\"); replace the simple .Contains\nchecks with word-boundary matching: build safe, case-insensitive matches by\nescaping each query term (Regex.Escape) and either compile a single alternation\nregex like @\"\\b(term1|term2|...)\\b\" with RegexOptions.CultureInvariant |\nRegexOptions.IgnoreCase | RegexOptions.Compiled or test each term with a\nper-term regex using \\b boundaries; then count matches based on regex.Matches\n(or Match collection per term) instead of substring Contains, ensuring\npunctuation and boundaries are respected and performance is considered by\nreusing the compiled regex.\n```\n\n</details>\n\n<!-- This is an auto-generated comment by CodeRabbit -->",
+          "createdAt": "2025-11-05T16:21:02Z"
+        }
+      ]
+    }
+  },
+  {
+    "id": "PRRT_kwDOKSXUF85gsaCo",
+    "isResolved": false,
+    "comments": {
+      "nodes": [
+        {
+          "id": "PRRC_kwDOKSXUF86UumA4",
+          "path": "src/RetrievalAugmentedGeneration/Retrievers/TFIDFRetriever.cs",
+          "body": "_ΓÜá∩╕Å Potential issue_ | _≡ƒƒá Major_\n\n**Performance bottleneck: TF-IDF statistics recomputed on every query.**\n\n`BuildTFIDFStatistics` is called on every retrieval, scanning the entire document collection and recomputing term frequencies, document frequencies, and TF-IDF vectors from scratch. For a corpus of N documents with average length M, this is O(N*M) on every query.\n\nFor production use with large document collections (10k+ documents), this will cause severe performance degradation. TF-IDF statistics should be computed once when documents are indexed and cached, only rebuilding when the document store changes.\n\n\n\nConsider one of these approaches:\n1. **Pre-compute and cache**: Build statistics in constructor or first query, cache in instance fields, and provide a method to refresh when documents change.\n2. **Event-based invalidation**: Subscribe to document store changes and invalidate cache when documents are added/removed.\n3. **Separate indexing phase**: Require explicit `BuildIndex()` call after documents are loaded, making the cost explicit to users.\n\nExample for approach 1:\n\n```diff\n public class TFIDFRetriever<T> : RetrieverBase<T>\n {\n     private readonly IDocumentStore<T> _documentStore;\n+    private Dictionary<string, Dictionary<string, T>>? _cachedTfidf;\n+    private int _lastDocumentCount;\n\n     // ... constructor ...\n\n     protected override IEnumerable<Document<T>> RetrieveCore(string query, int topK, Dictionary<string, object> metadataFilters)\n     {\n         var queryTerms = Tokenize(query);\n         var scores = new Dictionary<string, T>();\n\n         var candidates = _documentStore.GetSimilar(\n             new AiDotNet.LinearAlgebra.Vector<T>(new T[_documentStore.VectorDimension]), \n             _documentStore.DocumentCount\n         );\n\n         var candidatesList = candidates.ToList();\n         var candidatesById = candidatesList.ToDictionary(d => d.Id);\n-        var tfidf = BuildTFIDFStatistics(candidatesList);\n+        \n+        // Rebuild statistics only if document count changed\n+        if (_cachedTfidf == null || _lastDocumentCount != _documentStore.DocumentCount)\n+        {\n+            _cachedTfidf = BuildTFIDFStatistics(candidatesList);\n+            _lastDocumentCount = _documentStore.DocumentCount;\n+        }\n+        var tfidf = _cachedTfidf;\n\n         // ... rest of method ...\n     }\n }\n```\n\n\n> Committable suggestion skipped: line range outside the PR's diff.\n\n<details>\n<summary>≡ƒñû Prompt for AI Agents</summary>\n\n```\nIn src/RetrievalAugmentedGeneration/Retrievers/TFIDFRetriever.cs around lines\n36-38, BuildTFIDFStatistics is being called on every retrieval causing O(N*M)\nwork per query; change to compute and cache TF-IDF statistics once (e.g., in the\nconstructor or lazily on first query) storing term frequencies, document\nfrequencies and TF-IDF vectors in instance fields, and add a public RefreshIndex\nor InvalidateCache method to recompute when documents change; alternatively hook\ninto document-store change events to invalidate the cache so subsequent queries\nreuse the cached statistics instead of rebuilding them each time.\n```\n\n</details>\n\n<!-- This is an auto-generated comment by CodeRabbit -->",
+          "createdAt": "2025-11-05T16:21:02Z"
+        }
+      ]
+    }
+  }
+]

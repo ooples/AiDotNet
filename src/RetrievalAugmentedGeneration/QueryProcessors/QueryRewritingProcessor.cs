@@ -100,7 +100,7 @@ public class QueryRewritingProcessor<T> : QueryProcessorBase
         // Use LLM for contextual rewriting if available
         if (_llmGenerator != null)
         {
-            var historyContext = string.Join("\n", _conversationHistory.TakeLast(3).Select((q, i) => $"{i + 1}. {q}"));
+            var historyContext = string.Join("\n", _conversationHistory.Skip(Math.Max(0, _conversationHistory.Count - 3)).Select((q, i) => $"{i + 1}. {q}"));
             var prompt = $@"Given the conversation history:
 {historyContext}
 
@@ -121,8 +121,9 @@ Rewritten query:";
             var topic = ExtractTopic(lastContext);
             if (!string.IsNullOrEmpty(topic))
             {
-                return query.Replace("what about", $"what about {topic} and", StringComparison.OrdinalIgnoreCase)
-                           .Replace("how about", $"how about {topic} and", StringComparison.OrdinalIgnoreCase);
+                var result = System.Text.RegularExpressions.Regex.Replace(query, "what about", $"what about {topic} and", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+                result = System.Text.RegularExpressions.Regex.Replace(result, "how about", $"how about {topic} and", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+                return result;
             }
         }
 
