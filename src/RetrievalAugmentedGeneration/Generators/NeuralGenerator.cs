@@ -334,8 +334,8 @@ public class NeuralGenerator<T> : IGenerator<T>
             // Get next token using LSTM network
             var nextToken = PredictNextToken(contextWindow, random);
 
-            // Stop if we generate end-of-sequence token
-            if (nextToken == 0)
+            // Stop if we generate end-of-sequence token ([EOS] = 3)
+            if (nextToken == 3)
                 break;
 
             generated.Add(nextToken);

@@ -136,7 +136,7 @@ public class SentenceChunkingStrategy : ChunkingStrategyBase
             }
 
             currentSentences.Add((sentence, sentStart, sentEnd));
-            currentLength += sentenceLength + (currentSentences.Count > 1 ? _separatorLength : 0);
+            currentLength = currentSentences[currentSentences.Count - 1].Item3 - currentSentences[0].Item2;
 
             // If we've reached target size, create a chunk
             if (currentLength >= _targetChunkSize)
