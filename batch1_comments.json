@@ -1,0 +1,82 @@
+[
+  {
+    "id": "PRRT_kwDOKSXUF85gqWjN",
+    "isResolved": false,
+    "isOutdated": false,
+    "comments": {
+      "nodes": [
+        {
+          "id": "PRRC_kwDOKSXUF86UryM1",
+          "body": "_ΓÜá∩╕Å Potential issue_ | _≡ƒƒí Minor_\n\n**Minor: `IsHeader` accepts invalid HTML header tags like `<h7>`.**\n\nThe detection logic at lines 113-116 checks if a line starts with `<h` followed by any digit, but valid HTML headers are only `<h1>` through `<h6>`. Lines starting with `<h7>`, `<h8>`, etc. will be incorrectly treated as headers.\n\n\n\nApply this diff to restrict detection to valid HTML headers:\n\n```diff\n         // HTML headers (<h1> <h2> etc.)\n         if (trimmed.StartsWith(\"<h\", StringComparison.OrdinalIgnoreCase) &&\n             trimmed.Length > 2 &&\n-            char.IsDigit(trimmed[2]))\n+            char.IsDigit(trimmed[2]) &&\n+            trimmed[2] >= '1' && trimmed[2] <= '6')\n             return true;\n```\n\n<details>\n<summary>≡ƒñû Prompt for AI Agents</summary>\n\n```\nIn\nsrc/RetrievalAugmentedGeneration/ChunkingStrategies/HeaderBasedTextSplitter.cs\naround lines 101 to 119, the IsHeader method currently treats any <hN> with N as\nany digit as a header; change the HTML-header check to only accept digits '1'\nthrough '6' (e.g., verify trimmed.Length > 2 && trimmed[2] >= '1' && trimmed[2]\n<= '6') and optionally ensure the character after the digit is not another digit\n(or is '>'/whitespace) so tags like <h7> or <h10> are rejected; update that\nconditional accordingly.\n```\n\n</details>\n\n<!-- This is an auto-generated comment by CodeRabbit -->",
+          "path": "src/RetrievalAugmentedGeneration/ChunkingStrategies/HeaderBasedTextSplitter.cs",
+          "startLine": 98,
+          "line": 116
+        }
+      ]
+    }
+  },
+  {
+    "id": "PRRT_kwDOKSXUF85gqWjY",
+    "isResolved": false,
+    "isOutdated": false,
+    "comments": {
+      "nodes": [
+        {
+          "id": "PRRC_kwDOKSXUF86UryNH",
+          "body": "_ΓÜá∩╕Å Potential issue_ | _≡ƒö┤ Critical_\n\n<details>\n<summary>≡ƒº⌐ Analysis chain</summary>\n\n**Verify chunk overlap implementation.**\n\nThe chunking logic creates non-overlapping chunks when splitting on size. While `chunkOverlap` is passed to the base class constructor (line 29), it's unclear whether overlap is applied by the base class or should be implemented here in `ChunkCore`.\n\n\n\nVerify that `ChunkingStrategyBase` applies the overlap, or if overlap logic should be added here. If overlap must be implemented in this method, consecutive chunks should share `chunkOverlap` characters (e.g., when flushing a chunk, set `chunkStart = position + lineLength - chunkOverlap` instead of `position + lineLength`).\n\n---\n\n≡ƒÅü Script executed:\n\n```shell\n#!/bin/bash\n# Check if ChunkingStrategyBase implements overlap logic\nast-grep --pattern $'class ChunkingStrategyBase {\n  $$$\n}'\n\n# Also check if ChunkCore is expected to handle overlap\nrg -nP -A10 'class ChunkingStrategyBase' --type cs\n```\n\nLength of output: 1166\n\n---\n\n```\n\n---\n\n≡ƒÅü Script executed:\n\n```shell\n#!/bin/bash\n# Get the full ChunkingStrategyBase class to see ChunkOverlap property\ncat src/RetrievalAugmentedGeneration/ChunkingStrategies/ChunkingStrategyBase.cs\n```\n\nLength of output: 10565\n\n---\n\n≡ƒÅü Script executed:\n\n```shell\n#!/bin/bash\n# Get the ChunkCore method from MultiModalTextSplitter\nrg -n 'protected abstract.*ChunkCore|public override.*ChunkCore' -A 50 src/RetrievalAugmentedGeneration/ChunkingStrategies/MultiModalTextSplitter.cs --type cs\n```\n\nLength of output: 0\n\n---\n\n≡ƒÅü Script executed:\n\n```shell\n#!/bin/bash\n# Check if ChunkCore is actually implemented in base or if it's abstract\nrg -n 'ChunkCore' src/RetrievalAugmentedGeneration/ChunkingStrategies/ --type cs -C 2\n```\n\nLength of output: 10813\n\n---\n\n```\n\n---\n\n≡ƒÅü Script executed:\n\n```shell\n#!/bin/bash\n# Get the full ChunkCore method from MultiModalTextSplitter\ncat src/RetrievalAugmentedGeneration/ChunkingStrategies/MultiModalTextSplitter.cs | head -150\n```\n\nLength of output: 5331\n\n---\n\n≡ƒÅü Script executed:\n\n```shell\n#!/bin/bash\n# Alternative: use sed to extract lines 45-110\nsed -n '45,110p' src/RetrievalAugmentedGeneration/ChunkingStrategies/MultiModalTextSplitter.cs\n```\n\nLength of output: 2643\n\n---\n\n\n\n</details>\n\n**Chunk overlap is not implemented; chunks will never overlap even when specified.**\n\nThe `ChunkCore` method accepts and passes `chunkOverlap` to the base class but does not apply it when flushing chunks. At line 105, when flushing on size, and line 94, when flushing after image content, `chunkStart` is set to `position + lineLength` without subtracting overlap. This creates non-overlapping chunks regardless of the configured `chunkOverlap` value.\n\nFix by applying overlap to chunk boundaries (e.g., `chunkStart = position + lineLength - ChunkOverlap` at lines 94 and 105), or use the base class helper `CreateOverlappingChunks()` for the non-image portion if feasible.\n\n<details>\n<summary>≡ƒñû Prompt for AI Agents</summary>\n\n```\nIn src/RetrievalAugmentedGeneration/ChunkingStrategies/MultiModalTextSplitter.cs\naround lines 94 and 100-108, the flush logic sets chunkStart = position +\nlineLength which ignores the configured ChunkOverlap and prevents overlapping\nchunks; adjust the flush logic to apply the overlap (e.g., set chunkStart =\nMath.Max(0, position + lineLength - ChunkOverlap)) so the next chunk begins\nearlier by the overlap amount, or alternatively call the base class helper\nCreateOverlappingChunks() for the non-image flush path to produce properly\noverlapping chunks; ensure you guard against negative start indices when\nsubtracting the overlap.\n```\n\n</details>\n\n<!-- This is an auto-generated comment by CodeRabbit -->",
+          "path": "src/RetrievalAugmentedGeneration/ChunkingStrategies/MultiModalTextSplitter.cs",
+          "startLine": 100,
+          "line": 108
+        }
+      ]
+    }
+  },
+  {
+    "id": "PRRT_kwDOKSXUF85gqWjp",
+    "isResolved": false,
+    "isOutdated": false,
+    "comments": {
+      "nodes": [
+        {
+          "id": "PRRC_kwDOKSXUF86UryNd",
+          "body": "_ΓÜá∩╕Å Potential issue_ | _≡ƒƒá Major_\n\n**Query parameter is unusedΓÇösummarization ignores query relevance.**\n\nThe `query` parameter is accepted but never used. Context compressors in RAG pipelines should prioritize content relevant to the query, yet this implementation produces generic extractive summaries that don't consider query terms or semantics. Consider incorporating query tokens into the importance scoring or filtering sentences by query relevance.\n\n<!-- This is an auto-generated comment by CodeRabbit -->",
+          "path": "src/RetrievalAugmentedGeneration/ContextCompression/DocumentSummarizer.cs",
+          "startLine": 45,
+          "line": 48
+        }
+      ]
+    }
+  },
+  {
+    "id": "PRRT_kwDOKSXUF85gqWj5",
+    "isResolved": false,
+    "isOutdated": false,
+    "comments": {
+      "nodes": [
+        {
+          "id": "PRRC_kwDOKSXUF86UryNx",
+          "body": "_≡ƒ¢á∩╕Å Refactor suggestion_ | _≡ƒƒá Major_\n\n**Extract duplicated text processing methods to shared utility class.**\n\nBoth `SplitIntoSentences` (lines 163-187) and `Tokenize` (lines 189-196) are duplicated verbatim in `SemanticChunkingStrategy.cs` and `LLMContextCompressor.cs`. This violates DRY and creates maintenance burden.\n\n\n\nRefactor by creating a shared utility class:\n\n```csharp\n// In AiDotNet.Helpers or similar namespace\npublic static class TextProcessingHelper\n{\n    public static List<string> SplitIntoSentences(string text)\n    {\n        var sentences = new List<string>();\n        var sentenceEndings = new[] { \". \", \"! \", \"? \", \".\\n\", \"!\\n\", \"?\\n\" };\n        var currentSentence = new System.Text.StringBuilder();\n\n        for (int i = 0; i < text.Length; i++)\n        {\n            currentSentence.Append(text[i]);\n\n            var matchedEnding = sentenceEndings.FirstOrDefault(ending => \n                currentSentence.ToString().EndsWith(ending));\n            if (matchedEnding != null)\n            {\n                sentences.Add(currentSentence.ToString().Trim());\n                currentSentence.Clear();\n            }\n        }\n\n        if (currentSentence.Length > 0 && !string.IsNullOrWhiteSpace(currentSentence.ToString()))\n        {\n            sentences.Add(currentSentence.ToString().Trim());\n        }\n\n        return sentences;\n    }\n\n    public static List<string> Tokenize(string text)\n    {\n        if (string.IsNullOrEmpty(text)) return new List<string>();\n\n        return text.ToLowerInvariant()\n            .Split(new[] { ' ', '\\t', '\\n', '\\r', '.', ',', '!', '?' }, \n                   StringSplitOptions.RemoveEmptyEntries)\n            .ToList();\n    }\n}\n```\n\nThen update this file and the other files to use the shared methods:\n\n```diff\n private List<string> SplitIntoSentences(string text)\n {\n-    var sentences = new List<string>();\n-    var sentenceEndings = new[] { \". \", \"! \", \"? \", \".\\n\", \"!\\n\", \"?\\n\" };\n-    var currentSentence = new System.Text.StringBuilder();\n-\n-    for (int i = 0; i < text.Length; i++)\n-    {\n-        currentSentence.Append(text[i]);\n-\n-        var matchedEnding = sentenceEndings.FirstOrDefault(ending => currentSentence.ToString().EndsWith(ending));\n-        if (matchedEnding != null)\n-        {\n-            sentences.Add(currentSentence.ToString().Trim());\n-            currentSentence.Clear();\n-        }\n-    }\n-\n-    if (currentSentence.Length > 0 && !string.IsNullOrWhiteSpace(currentSentence.ToString()))\n-    {\n-        sentences.Add(currentSentence.ToString().Trim());\n-    }\n-\n-    return sentences;\n+    return TextProcessingHelper.SplitIntoSentences(text);\n }\n\n private List<string> Tokenize(string text)\n {\n-    if (string.IsNullOrEmpty(text)) return new List<string>();\n-\n-    return text.ToLowerInvariant()\n-        .Split(new[] { ' ', '\\t', '\\n', '\\r', '.', ',', '!', '?' }, StringSplitOptions.RemoveEmptyEntries)\n-        .ToList();\n+    return TextProcessingHelper.Tokenize(text);\n }\n```\n\n<!-- This is an auto-generated comment by CodeRabbit -->",
+          "path": "src/RetrievalAugmentedGeneration/ContextCompression/DocumentSummarizer.cs",
+          "startLine": 163,
+          "line": 196
+        }
+      ]
+    }
+  },
+  {
+    "id": "PRRT_kwDOKSXUF85gqWkO",
+    "isResolved": false,
+    "isOutdated": false,
+    "comments": {
+      "nodes": [
+        {
+          "id": "PRRC_kwDOKSXUF86UryOJ",
+          "body": "_ΓÜá∩╕Å Potential issue_ | _≡ƒƒá Major_\n\n**Inefficient document lookup after scoring.**\n\nLine 59 performs a linear search through `candidates` (potentially thousands of documents) for every result in the top K. Since you already iterate over the documents at line 39, store the `Document<T>` reference alongside the score to eliminate this O(topK ├ù N) overhead.\n\n\n\nApply this diff to cache document references:\n\n```diff\n protected override IEnumerable<Document<T>> RetrieveCore(string query, int topK, Dictionary<string, object> metadataFilters)\n {\n     var queryTerms = Tokenize(query);\n-    var scores = new Dictionary<string, T>();\n+    var scoredDocs = new List<(Document<T> Doc, T Score)>();\n\n     var candidates = _documentStore.GetSimilar(\n         new AiDotNet.LinearAlgebra.Vector<T>(new T[_documentStore.VectorDimension]), \n         _documentStore.DocumentCount\n     );\n\n     var candidatesList = candidates.ToList();\n     var tfidf = BuildTFIDFStatistics(candidatesList);\n\n     foreach (var doc in candidatesList.Where(d => MatchesFilters(d, metadataFilters)))\n     {\n         var score = NumOps.Zero;\n\n         if (tfidf.TryGetValue(doc.Id, out var docTfidf))\n         {\n             foreach (var term in queryTerms.Where(t => docTfidf.ContainsKey(t)))\n             {\n                 score = NumOps.Add(score, docTfidf[term]);\n             }\n         }\n\n-        scores[doc.Id] = score;\n+        scoredDocs.Add((doc, score));\n     }\n\n-    var results = scores\n-        .OrderByDescending(kv => kv.Value)\n+    var results = scoredDocs\n+        .OrderByDescending(sd => sd.Score)\n         .Take(topK)\n-        .Select(kv =>\n+        .Select(sd =>\n         {\n-            var doc = candidates.FirstOrDefault(d => d.Id == kv.Key);\n-            if (doc != null)\n-            {\n-                doc.RelevanceScore = kv.Value;\n-                doc.HasRelevanceScore = true;\n-            }\n-            return doc;\n+            sd.Doc.RelevanceScore = sd.Score;\n+            sd.Doc.HasRelevanceScore = true;\n+            return sd.Doc;\n-        })\n-        .Where(d => d != null)\n-        .Cast<Document<T>>();\n+        });\n\n     return results;\n }\n```\n\n<!-- suggestion_start -->\n\n<details>\n<summary>≡ƒô¥ Committable suggestion</summary>\n\n> ΓÇ╝∩╕Å **IMPORTANT**\n> Carefully review the code before committing. Ensure that it accurately replaces the highlighted code, contains no missing lines, and has no issues with indentation. Thoroughly test & benchmark the code to ensure it meets the requirements.\n\n```suggestion\nprotected override IEnumerable<Document<T>> RetrieveCore(string query, int topK, Dictionary<string, object> metadataFilters)\n{\n    var queryTerms = Tokenize(query);\n    var scoredDocs = new List<(Document<T> Doc, T Score)>();\n\n    var candidates = _documentStore.GetSimilar(\n        new AiDotNet.LinearAlgebra.Vector<T>(new T[_documentStore.VectorDimension]), \n        _documentStore.DocumentCount\n    );\n\n    var candidatesList = candidates.ToList();\n    var tfidf = BuildTFIDFStatistics(candidatesList);\n\n    foreach (var doc in candidatesList.Where(d => MatchesFilters(d, metadataFilters)))\n    {\n        var score = NumOps.Zero;\n\n        if (tfidf.TryGetValue(doc.Id, out var docTfidf))\n        {\n            foreach (var term in queryTerms.Where(t => docTfidf.ContainsKey(t)))\n            {\n                score = NumOps.Add(score, docTfidf[term]);\n            }\n        }\n\n        scoredDocs.Add((doc, score));\n    }\n\n    var results = scoredDocs\n        .OrderByDescending(sd => sd.Score)\n        .Take(topK)\n        .Select(sd =>\n        {\n            sd.Doc.RelevanceScore = sd.Score;\n            sd.Doc.HasRelevanceScore = true;\n            return sd.Doc;\n        });\n\n    return results;\n}\n```\n\n</details>\n\n<!-- suggestion_end -->\n\n<details>\n<summary>≡ƒñû Prompt for AI Agents</summary>\n\n```\nIn src/RetrievalAugmentedGeneration/Retrievers/TFIDFRetriever.cs around lines 54\nto 70, the code does a linear search against candidates for each topK score\nwhich creates O(topK * N) overhead; modify the scoring phase (earlier where you\niterate candidates) to store a direct reference to each Document<T> alongside\nits score (e.g., a Dictionary<string, Document<T>> or a list of (id, score, doc)\ntuples), then when ordering and taking topK, use that cached Document<T>\nreference instead of calling candidates.FirstOrDefault; set doc.RelevanceScore\nand doc.HasRelevanceScore on the cached instance and return the selected\nDocument<T> sequence ΓÇö this eliminates repeated linear lookups and reduces\ncomplexity to O(N + K log K).\n```\n\n</details>\n\n<!-- This is an auto-generated comment by CodeRabbit -->",
+          "path": "src/RetrievalAugmentedGeneration/Retrievers/TFIDFRetriever.cs",
+          "startLine": 54,
+          "line": 70
+        }
+      ]
+    }
+  }
+]

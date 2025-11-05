@@ -103,8 +103,28 @@ public class MultiModalTextSplitter : ChunkingStrategyBase
                 {
                     var content = string.Join(Environment.NewLine, currentChunk);
                     chunks.Add((content, chunkStart, position + lineLength));
-                    currentChunk.Clear();
-                    chunkStart = position + lineLength;
+                    
+                    // Apply overlap: keep last N lines for next chunk
+                    if (ChunkOverlap > 0)
+                    {
+                        var overlapLines = new List<string>();
+                        var overlapSize = 0;
+                        for (int i = currentChunk.Count - 1; i >= 0 && overlapSize < ChunkOverlap; i--)
+                        {
+                            var line = currentChunk[i];
+                            overlapLines.Insert(0, line);
+                            overlapSize += line.Length + Environment.NewLine.Length;
+                        }
+                        currentChunk.Clear();
+                        currentChunk.AddRange(overlapLines);
+                        // Adjust chunk start to account for overlap
+                        chunkStart = position + lineLength - overlapSize;
+                    }
+                    else
+                    {
+                        currentChunk.Clear();
+                        chunkStart = position + lineLength;
+                    }
                 }
             }
 

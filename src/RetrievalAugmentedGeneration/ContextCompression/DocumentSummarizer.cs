@@ -40,7 +40,7 @@ namespace AiDotNet.RetrievalAugmentedGeneration.ContextCompression
         }
 
         /// <summary>
-        /// Compresses documents by summarizing their content.
+        /// Compresses documents by summarizing their content with query-aware sentence selection.
         /// </summary>
         protected override List<Document<T>> CompressCore(
             List<Document<T>> documents,
@@ -48,10 +48,11 @@ namespace AiDotNet.RetrievalAugmentedGeneration.ContextCompression
             Dictionary<string, object>? options = null)
         {
             var summarized = new List<Document<T>>();
+            var queryTerms = Tokenize(query.ToLowerInvariant());
 
             foreach (var doc in documents)
             {
-                var summary = SummarizeText(doc.Content);
+                var summary = SummarizeText(doc.Content, queryTerms);
                 var summarizedDoc = new Document<T>(doc.Id, summary)
                 {
                     Metadata = doc.Metadata,
@@ -91,11 +92,12 @@ namespace AiDotNet.RetrievalAugmentedGeneration.ContextCompression
         }
 
         /// <summary>
-        /// Summarizes text to a maximum length.
+        /// Summarizes text to a maximum length with query-aware sentence selection.
         /// </summary>
         /// <param name="text">The text to summarize.</param>
+        /// <param name="queryTerms">Optional query terms to prioritize relevant content.</param>
         /// <returns>The summarized text.</returns>
-        public string SummarizeText(string text)
+        public string SummarizeText(string text, List<string>? queryTerms = null)
         {
             if (string.IsNullOrEmpty(text)) return text;
 
@@ -105,7 +107,7 @@ namespace AiDotNet.RetrievalAugmentedGeneration.ContextCompression
             }
 
             var sentences = SplitIntoSentences(text);
-            var importantSentences = ExtractImportantSentences(sentences);
+            var importantSentences = ExtractImportantSentences(sentences, queryTerms);
 
             var summary = new System.Text.StringBuilder();
             foreach (var sentence in importantSentences)
@@ -130,13 +132,13 @@ namespace AiDotNet.RetrievalAugmentedGeneration.ContextCompression
                 : result;
         }
 
-        private List<string> ExtractImportantSentences(List<string> sentences)
+        private List<string> ExtractImportantSentences(List<string> sentences, List<string>? queryTerms = null)
         {
             var scored = new List<(string sentence, double score)>();
 
             foreach (var sentence in sentences)
             {
-                var importance = ComputeImportance(sentence, sentences);
+                var importance = ComputeImportance(sentence, sentences, queryTerms);
                 scored.Add((sentence, importance));
             }
 
@@ -146,7 +148,7 @@ namespace AiDotNet.RetrievalAugmentedGeneration.ContextCompression
                 .ToList();
         }
 
-        private double ComputeImportance(string sentence, List<string> allSentences)
+        private double ComputeImportance(string sentence, List<string> allSentences, List<string>? queryTerms = null)
         {
             var tokens = Tokenize(sentence);
             var uniqueTokens = tokens.Distinct().Count();
@@ -156,6 +158,17 @@ namespace AiDotNet.RetrievalAugmentedGeneration.ContextCompression
 
             var importance = (uniqueTokens * 0.5) + (Math.Min(length, 200) / 200.0 * 0.5);
             importance *= positionScore;
+            
+            // Boost sentences containing query terms
+            if (queryTerms != null && queryTerms.Count > 0)
+            {
+                var sentenceLower = sentence.ToLowerInvariant();
+                var matchCount = queryTerms.Count(qt => sentenceLower.Contains(qt));
+                if (matchCount > 0)
+                {
+                    importance *= (1.0 + (matchCount * 0.5)); // Boost by 50% per matching query term
+                }
+            }
 
             return importance;
         }

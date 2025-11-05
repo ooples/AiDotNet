@@ -34,6 +34,7 @@ namespace AiDotNet.RetrievalAugmentedGeneration.Retrievers
             );
 
             var candidatesList = candidates.ToList();
+            var candidatesById = candidatesList.ToDictionary(d => d.Id);
             var tfidf = BuildTFIDFStatistics(candidatesList);
 
             foreach (var doc in candidatesList.Where(d => MatchesFilters(d, metadataFilters)))
@@ -56,13 +57,13 @@ namespace AiDotNet.RetrievalAugmentedGeneration.Retrievers
                 .Take(topK)
                 .Select(kv =>
                 {
-                    var doc = candidates.FirstOrDefault(d => d.Id == kv.Key);
-                    if (doc != null)
+                    if (candidatesById.TryGetValue(kv.Key, out var doc))
                     {
                         doc.RelevanceScore = kv.Value;
                         doc.HasRelevanceScore = true;
+                        return doc;
                     }
-                    return doc;
+                    return null;
                 })
                 .Where(d => d != null)
                 .Cast<Document<T>>();
