@@ -485,13 +485,20 @@ public class ElasticsearchDocumentStore<T> : DocumentStoreBase<T>
         try
         {
             var deleteScrollRequest = new { scroll_id = new[] { scrollId } };
-            using var deleteContent = new StringContent(
+            var deleteContent = new StringContent(
                 Newtonsoft.Json.JsonConvert.SerializeObject(deleteScrollRequest),
                 Encoding.UTF8,
                 "application/json"
             );
-            using var deleteResponse = _httpClient.DeleteAsync("_search/scroll").GetAwaiter().GetResult();
-            deleteResponse.Content = deleteContent;
+            
+            // DELETE with body requires using HttpRequestMessage
+            var request = new HttpRequestMessage(HttpMethod.Delete, "_search/scroll")
+            {
+                Content = deleteContent
+            };
+            
+            using var deleteResponse = _httpClient.SendAsync(request).GetAwaiter().GetResult();
+            deleteResponse.EnsureSuccessStatusCode();
         }
         catch
         {

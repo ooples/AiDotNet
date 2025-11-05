@@ -31,7 +31,7 @@
 ### 4. Integration with PredictionModelBuilder
 - **ALL** new features MUST integrate with existing `PredictionModelBuilder.cs` pipeline
 - **NO** standalone configuration builders - extend existing builder pattern
-- New features must work within existing model building process
+- New features must work within the existing model-building process
 
 ### 5. Code Quality
 - Follow SOLID principles
@@ -117,7 +117,7 @@
 
 ## Examples Project
 
-- Path: `C:\Users\cheat\source\repos\AiDotNet\testconsole\AiDotNetTestConsole.csproj`
+- Located in the `testconsole` directory
 - Examples go here, NOT in main library
 
 ## Authentication
