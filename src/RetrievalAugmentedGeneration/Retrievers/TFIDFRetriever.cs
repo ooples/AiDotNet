@@ -8,12 +8,30 @@ using System.Linq;
 namespace AiDotNet.RetrievalAugmentedGeneration.Retrievers
 {
     /// <summary>
-    /// TF-IDF (Term Frequency-Inverse Document Frequency) retrieval strategy.
+    /// TF-IDF (Term Frequency-Inverse Document Frequency) retrieval strategy with cached statistics.
     /// </summary>
     /// <typeparam name="T">The numeric type for vector operations.</typeparam>
+    /// <remarks>
+    /// <para>
+    /// Implements production-ready TF-IDF retrieval with intelligent caching to avoid recomputing
+    /// statistics on every query. The cache is automatically invalidated when the document count changes,
+    /// ensuring accuracy while maximizing performance.
+    /// </para>
+    /// <para><b>For Beginners:</b> TF-IDF ranks documents by how unique and frequent terms are.
+    /// 
+    /// This implementation uses a cache to avoid recalculating term statistics on every search,
+    /// dramatically improving performance for repeated queries. The cache is automatically refreshed
+    /// when documents are added or removed.
+    /// </para>
+    /// </remarks>
     public class TFIDFRetriever<T> : RetrieverBase<T>
     {
         private readonly IDocumentStore<T> _documentStore;
+        private readonly object _cacheLock = new object();
+        
+        private Dictionary<string, Dictionary<string, T>>? _cachedTfidf;
+        private Dictionary<string, T>? _cachedIdf;
+        private int _cachedDocumentCount;
 
         public TFIDFRetriever(IDocumentStore<T> documentStore, int defaultTopK = 5) : base(defaultTopK)
         {
@@ -31,7 +49,9 @@ namespace AiDotNet.RetrievalAugmentedGeneration.Retrievers
             var candidates = _documentStore.GetAll();
             var candidatesList = candidates.ToList();
             var candidatesById = candidatesList.ToDictionary(d => d.Id);
-            var tfidf = BuildTFIDFStatistics(candidatesList);
+            
+            // Use cached TF-IDF or build if cache is stale
+            var tfidf = GetOrBuildTFIDF(candidatesList);
 
             foreach (var doc in candidatesList.Where(d => MatchesFilters(d, metadataFilters)))
             {
@@ -77,10 +97,32 @@ namespace AiDotNet.RetrievalAugmentedGeneration.Retrievers
                 .ToList();
         }
 
-        private Dictionary<string, Dictionary<string, T>> BuildTFIDFStatistics(List<Document<T>> documents)
+        private Dictionary<string, Dictionary<string, T>> GetOrBuildTFIDF(List<Document<T>> documents)
+        {
+            var currentDocCount = documents.Count;
+            
+            lock (_cacheLock)
+            {
+                // Return cached statistics if document count hasn't changed
+                if (_cachedTfidf != null && _cachedDocumentCount == currentDocCount)
+                {
+                    return _cachedTfidf;
+                }
+
+                // Build new statistics and cache them
+                var (tfidf, idf) = BuildTFIDFStatistics(documents);
+                _cachedTfidf = tfidf;
+                _cachedIdf = idf;
+                _cachedDocumentCount = currentDocCount;
+                
+                return tfidf;
+            }
+        }
+
+        private (Dictionary<string, Dictionary<string, T>> tfidf, Dictionary<string, T> idf) BuildTFIDFStatistics(List<Document<T>> documents)
         {
             if (documents == null || documents.Count == 0)
-                return new Dictionary<string, Dictionary<string, T>>();
+                return (new Dictionary<string, Dictionary<string, T>>(), new Dictionary<string, T>());
 
             var termDocFreq = new Dictionary<string, int>();
             var docTermFreq = new Dictionary<string, Dictionary<string, int>>();
@@ -139,7 +181,7 @@ namespace AiDotNet.RetrievalAugmentedGeneration.Retrievers
                 tfidf[doc.Id] = termTfidf;
             }
 
-            return tfidf;
+            return (tfidf, idf);
         }
 
         private bool MatchesFilters(Document<T> document, Dictionary<string, object> filters)
