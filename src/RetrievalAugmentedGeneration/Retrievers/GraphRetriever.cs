@@ -55,40 +55,45 @@ public class GraphRetriever<T> : RetrieverBase<T>
     where T : struct, IComparable<T>, IConvertible, IFormattable
 {
     private readonly IDocumentStore<T> _documentStore;
-    private readonly IEntityExtractor<T> _entityExtractor;
     private readonly IEmbeddingModel<T> _embeddingModel;
+    private readonly bool _enableAdvancedEntityExtraction;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="GraphRetriever{T}"/> class.
     /// </summary>
     /// <param name="documentStore">The document store containing indexed documents with entity metadata.</param>
-    /// <param name="entityExtractor">The entity extractor for identifying named entities in queries and documents.</param>
     /// <param name="embeddingModel">The embedding model for semantic query vectorization.</param>
+    /// <param name="enableAdvancedEntityExtraction">When true, uses more sophisticated entity extraction (default: true).</param>
     /// <exception cref="ArgumentNullException">Thrown when any parameter is null.</exception>
     /// <remarks>
-    /// <para><b>For Beginners:</b> This constructor sets up the retriever with three key components:
+    /// <para><b>For Beginners:</b> This constructor sets up the retriever with two key components:
     /// 
     /// 1. Document Store: Where your indexed documents are stored
-    /// 2. Entity Extractor: Identifies important nouns/terms (like "Marie Curie" or "quantum physics")
-    /// 3. Embedding Model: Converts text to vectors for similarity comparison
+    /// 2. Embedding Model: Converts text to vectors for similarity comparison
+    /// 
+    /// Entity extraction is built-in using regex patterns to identify:
+    /// - Proper nouns (capitalized words like "Albert Einstein")
+    /// - Quoted terms ("quantum mechanics")
+    /// - Numbers and dates (1905, 2024)
+    /// - Technical terms with special patterns
     /// 
     /// ```csharp
     /// var graphRetriever = new GraphRetriever<double>(
     ///     documentStore: myDocStore,
-    ///     entityExtractor: new RegexEntityExtractor<double>(),
-    ///     embeddingModel: mySentenceTransformer
+    ///     embeddingModel: mySentenceTransformer,
+    ///     enableAdvancedEntityExtraction: true
     /// );
     /// ```
     /// </para>
     /// </remarks>
     public GraphRetriever(
         IDocumentStore<T> documentStore,
-        IEntityExtractor<T> entityExtractor,
-        IEmbeddingModel<T> embeddingModel)
+        IEmbeddingModel<T> embeddingModel,
+        bool enableAdvancedEntityExtraction = true)
     {
         _documentStore = documentStore ?? throw new ArgumentNullException(nameof(documentStore));
-        _entityExtractor = entityExtractor ?? throw new ArgumentNullException(nameof(entityExtractor));
         _embeddingModel = embeddingModel ?? throw new ArgumentNullException(nameof(embeddingModel));
+        _enableAdvancedEntityExtraction = enableAdvancedEntityExtraction;
     }
 
     /// <summary>
@@ -143,9 +148,8 @@ public class GraphRetriever<T> : RetrieverBase<T>
         if (topK <= 0)
             throw new ArgumentOutOfRangeException(nameof(topK), "topK must be positive");
 
-        // Extract entities from query using entity extractor
-        var entityResults = _entityExtractor.Extract(query);
-        var entities = entityResults.Select(e => e.Text).ToList();
+        // Extract entities from query using built-in entity extraction
+        var entities = ExtractEntities(query);
 
         // Embed the query for semantic retrieval
         var queryEmbedding = _embeddingModel.Embed(query);
@@ -227,5 +231,63 @@ public class GraphRetriever<T> : RetrieverBase<T>
 
         var maxPossibleRelationships = (entities.Count * (entities.Count - 1)) / 2;
         return maxPossibleRelationships > 0 ? (double)relationshipCount / maxPossibleRelationships : 0.0;
+    }
+
+    /// <summary>
+    /// Extracts entities from text using pattern matching.
+    /// </summary>
+    /// <param name="text">The text to extract entities from.</param>
+    /// <returns>List of extracted entity strings.</returns>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> Entities are important nouns or terms like:
+    /// - Proper nouns: "Albert Einstein", "New York"
+    /// - Quoted terms: "machine learning", "quantum mechanics"
+    /// - Numbers and dates: 1905, 2024
+    /// - Technical abbreviations: AI, DNA, CPU
+    /// 
+    /// This method uses regex patterns to identify these automatically without needing external NLP tools.
+    /// </para>
+    /// </remarks>
+    private List<string> ExtractEntities(string text)
+    {
+        if (string.IsNullOrWhiteSpace(text))
+            return new List<string>();
+
+        var entities = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+        // Extract capitalized phrases (proper nouns like "Albert Einstein", "New York")
+        var properNouns = Regex.Matches(text, @"\b[A-Z][a-z]+(?:\s+[A-Z][a-z]+)*\b");
+        foreach (Match match in properNouns)
+        {
+            if (match.Value.Length > 2) // Filter out single letters
+                entities.Add(match.Value);
+        }
+
+        // Extract quoted terms (explicit entities in quotes like "machine learning")
+        var quotedTerms = Regex.Matches(text, @"""([^""]{2,})""");
+        foreach (Match match in quotedTerms)
+        {
+            entities.Add(match.Groups[1].Value);
+        }
+
+        // Extract numbers and years (like 1905, 2024)
+        if (_enableAdvancedEntityExtraction)
+        {
+            var numbers = Regex.Matches(text, @"\b(19|20)\d{2}\b"); // Years
+            foreach (Match match in numbers)
+            {
+                entities.Add(match.Value);
+            }
+
+            // Extract technical abbreviations (AI, ML, DNA, etc.)
+            var abbreviations = Regex.Matches(text, @"\b[A-Z]{2,5}\b");
+            foreach (Match match in abbreviations)
+            {
+                if (match.Value.Length >= 2 && match.Value.Length <= 5)
+                    entities.Add(match.Value);
+            }
+        }
+
+        return entities.Where(e => e.Length > 1).Distinct().ToList();
     }
 }
