@@ -286,7 +286,7 @@ public abstract class ReptileTrainerBase<T, TInput, TOutput> : IMetaLearner<T, T
         return output switch
         {
             Vector<T> v => v,
-            Tensor<T> tensor => tensor.Flatten(),
+            Tensor<T> tensor => tensor.ToVector(),
             T[] array => new Vector<T>(array),
             _ => throw new NotSupportedException($"Output type {typeof(TOutput)} not supported for conversion to Vector<T>")
         };

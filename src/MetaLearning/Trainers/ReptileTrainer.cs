@@ -135,7 +135,7 @@ public class ReptileTrainer<T, TInput, TOutput> : ReptileTrainerBase<T, TInput, 
             MetaLearningTask<T> task = DataLoader.GetNextTask();
 
             // Reset model to original meta-parameters for this task
-            MetaModel.SetParameters(originalParameters.Copy());
+            MetaModel.SetParameters(originalParameters.Clone());
 
             // Inner loop: Adapt to this task using support set
             for (int step = 0; step < Configuration.InnerSteps; step++)

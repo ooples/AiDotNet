@@ -399,24 +399,6 @@ public interface IPredictionModelBuilder<T, TInput, TOutput>
     IPredictionModelBuilder<T, TInput, TOutput> ConfigureMetaLearning(IMetaLearner<T, TInput, TOutput> metaLearner);
 
     /// <summary>
-    /// Builds a predictive model using the configured components and training data.
-    /// </summary>
-    /// <remarks>
-    /// This method takes the input features and target values and creates a trained model
-    /// ready to make predictions.
-    ///
-    /// <b>For Beginners:</b> After configuring all the components of your model, this method actually
-    /// creates and trains the model using your data. It's like pressing "Start" after setting up
-    /// all your preferences.
-    ///
-    /// The model will learn patterns from your training data so it can make predictions later.
-    /// </remarks>
-    /// <param name="x">The input features matrix, where each row is a data point and each column is a feature.</param>
-    /// <param name="y">The target values vector that the model will learn to predict.</param>
-    /// <returns>A trained predictive model ready to make predictions.</returns>
-    PredictionModelResult<T, TInput, TOutput> Build(TInput x, TOutput y);
-
-    /// <summary>
     /// Builds a meta-trained model that can quickly adapt to new tasks.
     /// </summary>
     /// <remarks>
