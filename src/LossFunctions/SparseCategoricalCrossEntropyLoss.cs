@@ -79,7 +79,7 @@ public class SparseCategoricalCrossEntropyLoss<T> : LossFunctionBase<T>
         for (int i = 0; i < actual.Length; i++)
         {
             // Extract class index from actual (convert T to int)
-            int classIndex = Convert.ToInt32(NumOps.ToDouble(actual[i]));
+            int classIndex = NumOps.ToInt32(actual[i]);
 
             // Validate class index
             if (classIndex < 0 || classIndex >= predicted.Length)
@@ -129,13 +129,13 @@ public class SparseCategoricalCrossEntropyLoss<T> : LossFunctionBase<T>
         }
 
         // Initialize gradient vector with zeros
-        var gradient = Vector<T>.Build.Dense(predicted.Length, NumOps.Zero);
+        var gradient = new Vector<T>(predicted.Length);
 
         // Process each sample
         for (int i = 0; i < actual.Length; i++)
         {
             // Extract class index from actual
-            int classIndex = Convert.ToInt32(NumOps.ToDouble(actual[i]));
+            int classIndex = NumOps.ToInt32(actual[i]);
 
             // Validate class index
             if (classIndex < 0 || classIndex >= predicted.Length)

@@ -49,7 +49,7 @@ public class RootMeanSquaredErrorLoss<T> : LossFunctionBase<T>
         // Avoid division by zero - if RMSE is zero, all predictions are perfect
         if (NumOps.Equals(rmse, NumOps.Zero))
         {
-            return Vector<T>.Build.Dense(predicted.Length, NumOps.Zero);
+            return new Vector<T>(predicted.Length);
         }
 
         // The derivative of RMSE is: (predicted - actual) / (n * RMSE)
