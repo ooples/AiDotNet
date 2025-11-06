@@ -32,20 +32,149 @@
 - **ALL** new features MUST integrate with existing `PredictionModelBuilder.cs` pipeline
 - **NO** standalone configuration builders - extend existing builder pattern
 - New features must work within the existing model-building process
+- Features must be **ACTUALLY USED** in the Build() or Predict() process, not just configured
+- Add Configure methods AND integrate them into the execution flow
 
-### 5. Code Quality
+### 5. Beginner-Friendly Defaults (CRITICAL)
+- **PRIMARY GOAL**: Make the library usable by beginners with minimal configuration
+- **Beginners should ONLY need to provide**: Input data (X) and Output data (Y)
+- **EVERYTHING ELSE must have sensible defaults** based on industry standards and research
+- Follow the pattern in PredictionModelBuilder.Build():
+  ```csharp
+  var normalizer = _normalizer ?? new NoNormalizer<T, TInput, TOutput>();
+  var optimizer = _optimizer ?? new NormalOptimizer<T, TInput, TOutput>(_model);
+  ```
+
+#### Default Value Guidelines:
+- **Meta-Learning (N-way K-shot)**:
+  - Default nWay: `5` (5-way is standard in meta-learning literature)
+  - Default kShot: `5` (balanced between 1-shot difficulty and 10-shot ease)
+  - Default queryShots: `15` (3x kShot is common practice)
+  - Default loader type: `EpisodicDataLoader` (uniform random sampling)
+
+- **Neural Networks**:
+  - Default learning rate: `0.001` (Adam optimizer standard)
+  - Default batch size: `32` (good balance for most tasks)
+  - Default epochs: `100` (sufficient for initial training)
+
+- **Regularization**:
+  - Default L1/L2 lambda: `0.01` (mild regularization)
+  - Default dropout rate: `0.2` (20% is common)
+
+- **Data Splitting**:
+  - Default train/val/test: `70/15/15` (standard split)
+
+- **Feature Selection**:
+  - Default: No feature selection (use all features)
+
+- **Normalization**:
+  - Default: StandardScaler (zero mean, unit variance)
+
+#### Configure Method Pattern (CRITICAL):
+
+**ALL Configure methods MUST follow this exact pattern:**
+```csharp
+// In PredictionModelBuilder.cs:
+private ISomeInterface<T>? _someComponent;  // Private nullable field
+
+public IPredictionModelBuilder<T, TInput, TOutput> ConfigureSomeComponent(ISomeInterface<T> component)
+{
+    _someComponent = component;  // Just store the interface
+    return this;                 // Return for method chaining
+}
+
+// In Build() method - create default if needed:
+var someComponent = _someComponent ?? new DefaultSomeComponent<T>();
+```
+
+**NEVER:**
+- ❌ Add parameters to Configure methods (takes ONLY the interface)
+- ❌ Create factory functions in Configure methods
+- ❌ Store configuration values in PredictionModelBuilder fields
+- ❌ Make computed properties public that expose private nullable fields
+
+**WHY:** This pattern ensures:
+- Dependency injection compatibility
+- Consistent API across all components
+- Clean separation of concerns
+- Testability
+
+#### How to Implement Defaults:
+
+**Method 1: Constructor Parameters with Defaults (PREFERRED for simple cases)**
+- Add default values directly to constructor parameters
+- Best for classes with 3-7 parameters
+- Example from UniformEpisodicDataLoader:
+  ```csharp
+  public UniformEpisodicDataLoader(
+      Matrix<T> datasetX,
+      Vector<T> datasetY,
+      int nWay = 5,        // Default: 5-way
+      int kShot = 5,       // Default: 5-shot
+      int queryShots = 15, // Default: 15 queries
+      int? seed = null)
+  ```
+
+**Method 2: Options Classes with Property Initializers (PREFERRED for complex cases)**
+- Use options classes for components with many configuration parameters (8+)
+- Set defaults using property initializers
+- Example from AdamOptimizerOptions:
+  ```csharp
+  public class AdamOptimizerOptions
+  {
+      public double LearningRate { get; set; } = 0.001;
+      public double Beta1 { get; set; } = 0.9;
+      public double Beta2 { get; set; } = 0.999;
+      public double Epsilon { get; set; } = 1e-8;
+      // ... more properties with defaults
+  }
+  ```
+- Then use in constructor:
+  ```csharp
+  public AdamOptimizer(AdamOptimizerOptions? options = null)
+  {
+      var opts = options ?? new AdamOptimizerOptions();
+      _learningRate = opts.LearningRate;
+      // ... use other options
+  }
+  ```
+
+**General Guidelines:**
+1. **Configure methods take ONLY interfaces** - no parameters, no options
+2. **Default values belong in concrete class constructors** - NOT in PredictionModelBuilder
+3. **Check for null in Build()** and create defaults if needed (for required components)
+4. **Document defaults** in XML comments and beginner remarks
+5. **Test with minimal code**: Ensure `builder.Build(x, y)` works with just data
+
+#### Example Pattern:
+```csharp
+// Beginner-friendly: Use defaults by creating instances with default constructor parameters
+var model = new SomeModel<double>();
+var result = new PredictionModelBuilder<double, Matrix<double>, Vector<double>>()
+    .ConfigureModel(model)
+    .Build(x, y);  // Everything else uses defaults
+
+// Advanced: Create instances with custom parameters, pass to Configure methods
+var customLoader = new UniformEpisodicDataLoader<double>(x, y, nWay: 10, kShot: 1);
+var result = new PredictionModelBuilder<double, Matrix<double>, Vector<double>>()
+    .ConfigureModel(model)
+    .ConfigureEpisodicDataLoader(customLoader)  // Pass configured instance
+    .Build(x, y);
+```
+
+### 6. Code Quality
 - Follow SOLID principles
 - Follow DRY principles
 - Use existing helpers (`StatisticsHelper`, `MathHelper`, etc.) - don't duplicate functionality
 - Proper null checks with exceptions, NOT nullable operators (`!`) for .NET Framework compatibility
 - **ALWAYS** ensure new code includes unit tests with a minimum of 80% code coverage.
 
-### 6. Default Values
+### 7. Property Default Values
 - All string properties: `= string.Empty;`
 - All collection properties: `= new List<T>();` or appropriate empty collection
 - **NEVER** leave properties without default values
 
-### 7. Documentation
+### 8. Documentation
 - **Follow existing documentation format exactly**
 - **Include XML documentation for all public members**
 - **Add beginner-friendly explanations in remarks**

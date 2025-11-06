@@ -43,6 +43,7 @@ public class PredictionModelBuilder<T, TInput, TOutput> : IPredictionModelBuilde
     private IReranker<T>? _ragReranker;
     private IGenerator<T>? _ragGenerator;
     private IEnumerable<IQueryProcessor>? _queryProcessors;
+    private IEpisodicDataLoader<T>? _episodicDataLoader;
 
     /// <summary>
     /// Configures which features (input variables) should be used in the model.
@@ -242,9 +243,9 @@ public class PredictionModelBuilder<T, TInput, TOutput> : IPredictionModelBuilde
         var optimizationResult = optimizer.Optimize(OptimizerHelper<T, TInput, TOutput>.CreateOptimizationInputData(XTrain, yTrain, XVal, yVal, XTest, yTest));
 
         return new PredictionModelResult<T, TInput, TOutput>(
-            optimizationResult, 
-            normInfo, 
-            _biasDetector, 
+            optimizationResult,
+            normInfo,
+            _biasDetector,
             _fairnessEvaluator,
             _ragRetriever,
             _ragReranker,
@@ -423,6 +424,65 @@ public class PredictionModelBuilder<T, TInput, TOutput> : IPredictionModelBuilde
         _ragReranker = reranker;
         _ragGenerator = generator;
         _queryProcessors = queryProcessors;
+        return this;
+    }
+
+    /// <summary>
+    /// Configures episodic data loading for meta-learning (N-way K-shot task sampling).
+    /// </summary>
+    /// <param name="dataLoader">The episodic data loader for generating meta-learning tasks.</param>
+    /// <returns>This builder instance for method chaining.</returns>
+    /// <remarks>
+    /// <para>
+    /// Meta-learning (learning to learn) requires training on many small tasks instead of one large dataset.
+    /// This configuration enables episodic sampling where each training iteration uses a different N-way K-shot task.
+    /// </para>
+    /// <para><b>For Beginners:</b> Traditional machine learning trains a model once on a large dataset to perform
+    /// one specific task. Meta-learning is different - it trains a model to quickly adapt to new tasks with very
+    /// few examples.
+    ///
+    /// This is useful when you need a model that can:
+    /// - Learn new categories from just a few examples (few-shot learning)
+    /// - Quickly adapt to new domains or tasks
+    /// - Generalize across diverse problems
+    ///
+    /// The episodic data loader you configure here will:
+    /// - Sample random N-way K-shot tasks from your dataset
+    /// - Provide support sets (for quick adaptation) and query sets (for evaluation)
+    /// - Enable meta-learning algorithms like MAML, Reptile, and SEAL
+    ///
+    /// <b>Note:</b> Meta-learning requires specialized trainers (MAML, Reptile, SEAL) that use this
+    /// episodic data loader. Standard supervised learning with Build() does not use episodic sampling.
+    /// Meta-learning trainers will be available as part of the meta-learning suite.
+    /// </para>
+    /// </remarks>
+    /// <example>
+    /// <code>
+    /// // Load your dataset
+    /// var features = new Matrix&lt;double&gt;(1000, 784);  // 1000 examples, 784 features
+    /// var labels = new Vector&lt;double&gt;(1000);         // 10 classes (0-9)
+    ///
+    /// // Create episodic data loader for 5-way 3-shot tasks
+    /// var episodicLoader = new UniformEpisodicDataLoader&lt;double&gt;(
+    ///     datasetX: features,
+    ///     datasetY: labels,
+    ///     nWay: 5,        // 5 classes per task
+    ///     kShot: 3,       // 3 support examples per class
+    ///     queryShots: 10  // 10 query examples per class
+    /// );
+    ///
+    /// // Configure builder for meta-learning
+    /// var builder = new PredictionModelBuilder&lt;double, Matrix&lt;double&gt;, Vector&lt;double&gt;&gt;()
+    ///     .ConfigureModel(new NeuralNetworkModel&lt;double&gt;(...))
+    ///     .ConfigureEpisodicDataLoader(episodicLoader);
+    ///
+    /// // Use with meta-learning trainers (MAML, Reptile, SEAL)
+    /// // var mamlModel = builder.BuildMetaLearner(mamlTrainer);  // Future API
+    /// </code>
+    /// </example>
+    public IPredictionModelBuilder<T, TInput, TOutput> ConfigureEpisodicDataLoader(IEpisodicDataLoader<T> dataLoader)
+    {
+        _episodicDataLoader = dataLoader;
         return this;
     }
 }
