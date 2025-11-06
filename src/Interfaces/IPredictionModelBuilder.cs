@@ -409,17 +409,30 @@ public interface IPredictionModelBuilder<T, TInput, TOutput>
     /// creates and trains the model using your data. It's like pressing "Start" after setting up
     /// all your preferences.
     ///
-    /// <b>Meta-Learning Mode:</b> If you configured a meta-learner using ConfigureMetaLearning(),
-    /// this will do meta-training instead of regular training. In this case, x and y can be null
-    /// since the data is provided through the episodic data loader in your meta-learner.
-    ///
-    /// The model will learn patterns from your training data so it can make
-    /// predictions later.
+    /// The model will learn patterns from your training data so it can make predictions later.
     /// </remarks>
-    /// <param name="x">The input features matrix, where each row is a data point and each column is a feature.
-    /// Can be null if using meta-learning.</param>
-    /// <param name="y">The target values vector that the model will learn to predict.
-    /// Can be null if using meta-learning.</param>
+    /// <param name="x">The input features matrix, where each row is a data point and each column is a feature.</param>
+    /// <param name="y">The target values vector that the model will learn to predict.</param>
     /// <returns>A trained predictive model ready to make predictions.</returns>
-    PredictionModelResult<T, TInput, TOutput> Build(TInput? x = default, TOutput? y = default);
+    PredictionModelResult<T, TInput, TOutput> Build(TInput x, TOutput y);
+
+    /// <summary>
+    /// Builds a meta-trained model that can quickly adapt to new tasks.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// This method is used when you've configured a meta-learner using ConfigureMetaLearning().
+    /// It performs meta-training across many tasks to create a model that can rapidly adapt
+    /// to new tasks with just a few examples.
+    /// </para>
+    /// <para>
+    /// <b>For Beginners:</b> Use this method when you've configured meta-learning.
+    /// Unlike Build(x, y) which trains on one dataset, this trains your model to be good
+    /// at learning NEW tasks quickly. The training data comes from the episodic data loader
+    /// you configured in your meta-learner.
+    /// </para>
+    /// </remarks>
+    /// <returns>A meta-trained model with rapid adaptation capabilities.</returns>
+    /// <exception cref="InvalidOperationException">Thrown if ConfigureMetaLearning has not been called.</exception>
+    PredictionModelResult<T, TInput, TOutput> Build();
 }

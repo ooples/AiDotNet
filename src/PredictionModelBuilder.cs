@@ -197,52 +197,55 @@ public class PredictionModelBuilder<T, TInput, TOutput> : IPredictionModelBuilde
     }
 
         /// <summary>
+    /// Builds a meta-trained model that can quickly adapt to new tasks.
+    /// </summary>
+    /// <returns>A meta-trained model with rapid adaptation capabilities.</returns>
+    /// <exception cref="InvalidOperationException">Thrown if ConfigureMetaLearning has not been called.</exception>
+    /// <remarks>
+    /// <b>For Beginners:</b> This trains your model using meta-learning, which teaches it how to
+    /// quickly learn new tasks. The training data comes from the episodic data loader you configured
+    /// in your meta-learner.
+    /// </remarks>
+    public PredictionModelResult<T, TInput, TOutput> Build()
+    {
+        if (_metaLearner == null)
+            throw new InvalidOperationException("Meta-learner must be configured using ConfigureMetaLearning() before calling Build()");
+
+        // Perform meta-training using default parameters (1000 iterations, batch size from config or 1)
+        var metaResult = _metaLearner.Train(numMetaIterations: 1000, batchSize: 1);
+
+        // Create PredictionModelResult with meta-learning constructor
+        return new PredictionModelResult<T, TInput, TOutput>(
+            metaLearner: _metaLearner,
+            metaResult: metaResult,
+            loraConfiguration: _loraConfiguration,
+            biasDetector: _biasDetector,
+            fairnessEvaluator: _fairnessEvaluator,
+            ragRetriever: _ragRetriever,
+            ragReranker: _ragReranker,
+            ragGenerator: _ragGenerator,
+            queryProcessors: _queryProcessors);
+    }
+
+        /// <summary>
     /// Builds a predictive model using the provided input features and output values.
     /// </summary>
-    /// <param name="x">The matrix of input features where each row is a data point and each column is a feature.
-    /// Can be null if using meta-learning (data is in the episodic loader).</param>
-    /// <param name="y">The vector of output values corresponding to each row in the input matrix.
-    /// Can be null if using meta-learning (data is in the episodic loader).</param>
+    /// <param name="x">The matrix of input features where each row is a data point and each column is a feature.</param>
+    /// <param name="y">The vector of output values corresponding to each row in the input matrix.</param>
     /// <returns>A trained predictive model that can be used to make predictions.</returns>
-    /// <exception cref="ArgumentNullException">Thrown when input features or output values are null (for regular training).</exception>
+    /// <exception cref="ArgumentNullException">Thrown when input features or output values are null.</exception>
     /// <exception cref="ArgumentException">Thrown when the number of rows in the features matrix doesn't match the length of the output vector.</exception>
     /// <exception cref="InvalidOperationException">Thrown when no model has been specified.</exception>
     /// <remarks>
-    /// <b>For Beginners:</b> This method takes your data and creates a trained AI model.
+    /// <b>For Beginners:</b> This method takes your data (inputs and known outputs) and creates a trained AI model.
+    /// Think of it like teaching a student: you provide examples (your data) and the student (the model) learns
+    /// patterns from these examples. After building, your model is ready to make predictions on new data.
     ///
-    /// <b>Regular Training:</b> Provide x and y data, and the model learns patterns from these examples.
     /// The input matrix 'x' contains your features (like house size, number of bedrooms, etc. if predicting house prices),
     /// and the vector 'y' contains the known answers (actual house prices) for those examples.
-    ///
-    /// <b>Meta-Learning:</b> If you configured a meta-learner using ConfigureMetaLearning(), this will do
-    /// meta-training instead. In this case, x and y should be null since data comes from the episodic data loader.
     /// </remarks>
-    public PredictionModelResult<T, TInput, TOutput> Build(TInput? x = default, TOutput? y = default)
+    public PredictionModelResult<T, TInput, TOutput> Build(TInput x, TOutput y)
     {
-        // Meta-learning mode: Train across many tasks
-        if (_metaLearner != null)
-        {
-            // Get training parameters from meta-learner config
-            int numIterations = _metaLearner.Config.MetaBatchSize > 0 ? 1000 : 1000;  // Use sensible default
-            int batchSize = _metaLearner.Config.MetaBatchSize > 0 ? _metaLearner.Config.MetaBatchSize : 1;
-
-            // Perform meta-training
-            var metaResult = _metaLearner.Train(numIterations, batchSize);
-
-            // Create PredictionModelResult with meta-learning constructor
-            return new PredictionModelResult<T, TInput, TOutput>(
-                metaLearner: _metaLearner,
-                metaResult: metaResult,
-                loraConfiguration: _loraConfiguration,
-                biasDetector: _biasDetector,
-                fairnessEvaluator: _fairnessEvaluator,
-                ragRetriever: _ragRetriever,
-                ragReranker: _ragReranker,
-                ragGenerator: _ragGenerator,
-                queryProcessors: _queryProcessors);
-        }
-
-        // Regular supervised learning mode
         var convertedX = ConversionsHelper.ConvertToMatrix<T, TInput>(x);
         var convertedY = ConversionsHelper.ConvertToVector<T, TOutput>(y);
 
