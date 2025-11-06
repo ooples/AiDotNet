@@ -64,31 +64,35 @@ namespace AiDotNet.Interfaces;
 ///     queryShots: 15    // 15 query examples per class
 /// );
 ///
-/// // 2. Configure: Setup meta-learner (Reptile example)
+/// // 2. Configure: Setup meta-learner with ALL training parameters (Reptile example)
 /// var config = new ReptileTrainerConfig&lt;double&gt;(
 ///     innerLearningRate: 0.01,      // Task adaptation rate
 ///     metaLearningRate: 0.001,      // Meta-optimization rate
-///     innerSteps: 5                 // Gradient steps per task
+///     innerSteps: 5,                // Gradient steps per task
+///     metaBatchSize: 4,             // Tasks per meta-update
+///     numMetaIterations: 1000       // Total meta-training iterations
 /// );
 ///
 /// var metaLearner = new ReptileTrainer&lt;double, Matrix&lt;double&gt;, Vector&lt;double&gt;&gt;(
 ///     metaModel: neuralNetwork,
 ///     lossFunction: new CrossEntropyLoss&lt;double&gt;(),
 ///     dataLoader: dataLoader,        // Episodic data configured at construction
-///     config: config
+///     config: config                 // All training parameters configured upfront
 /// );
 ///
-/// // 3. Meta-Training: Train for 1000 iterations with batch size of 4
-/// var trainingResult = metaLearner.Train(numMetaIterations: 1000, batchSize: 4);
+/// // 3. Meta-Training: Simply call Train() - all parameters are in config
+/// var trainingResult = metaLearner.Train();
 ///
 /// Console.WriteLine($"Training complete!");
 /// Console.WriteLine($"Final Loss: {trainingResult.FinalLoss:F4}");
 /// Console.WriteLine($"Total Time: {trainingResult.TrainingTime.TotalMinutes:F1} minutes");
 ///
 /// // Or use manual loop for more control:
-/// for (int iter = 0; iter &lt; 1000; iter++)
+/// int numIterations = 1000;
+/// int batchSize = 4;
+/// for (int iter = 0; iter &lt; numIterations; iter++)
 /// {
-///     var stepResult = metaLearner.MetaTrainStep(batchSize: 4);
+///     var stepResult = metaLearner.MetaTrainStep(batchSize);
 ///
 ///     if (iter % 100 == 0)
 ///     {
@@ -135,23 +139,27 @@ public interface IMetaLearner<T, TInput, TOutput>
     MetaTrainingStepResult<T> MetaTrainStep(int batchSize);
 
     /// <summary>
-    /// Trains the meta-learner for multiple iterations with automatic metric tracking.
+    /// Trains the meta-learner using the configuration specified during construction.
     /// </summary>
     /// <remarks>
     /// <para>
     /// This method performs the complete outer-loop meta-training process, repeatedly calling
-    /// MetaTrainStep and collecting metrics across all iterations.
+    /// MetaTrainStep and collecting metrics across all iterations. All training parameters
+    /// (number of iterations, batch size, learning rates) are specified in the IMetaLearnerConfig
+    /// provided during construction, keeping complexity hidden behind clean architecture.
     /// </para>
     /// <para>
     /// <b>For Beginners:</b> This is the main training method for meta-learning. Unlike traditional
     /// training where you train once on a dataset, this trains your model across many different tasks
     /// so it learns how to quickly adapt to new tasks.
+    ///
+    /// All the settings (how many iterations, batch size, learning rates) were configured when you
+    /// created the meta-learner, so you just call Train() and it does everything automatically.
+    /// This is the same pattern as our supervised learning where Build() handles everything internally.
     /// </para>
     /// </remarks>
-    /// <param name="numMetaIterations">Number of meta-training iterations (outer loop steps). Typically 1000-10000 for good meta-learning.</param>
-    /// <param name="batchSize">Number of tasks per meta-update (default 1). Higher values (4-32) provide more stable gradients.</param>
     /// <returns>Complete training history with loss/accuracy progression and timing information.</returns>
-    MetaTrainingResult<T> Train(int numMetaIterations, int batchSize = 1);
+    MetaTrainingResult<T> Train();
 
     /// <summary>
     /// Evaluates meta-learning performance on multiple held-out tasks.

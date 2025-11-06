@@ -41,6 +41,9 @@ public class ReptileTrainerConfig<T> : IMetaLearnerConfig<T>
     /// <inheritdoc/>
     public int MetaBatchSize { get; set; } = 1;
 
+    /// <inheritdoc/>
+    public int NumMetaIterations { get; set; } = 1000;
+
     /// <summary>
     /// Creates a default Reptile configuration with standard values.
     /// </summary>
@@ -50,6 +53,7 @@ public class ReptileTrainerConfig<T> : IMetaLearnerConfig<T>
     /// - Meta learning rate: 0.001 (10x smaller than inner rate)
     /// - Inner steps: 5 (balance between adaptation and speed)
     /// - Meta batch size: 1 (online updates, typical for Reptile)
+    /// - Num meta iterations: 1000 (standard training duration)
     /// </remarks>
     public ReptileTrainerConfig()
     {
@@ -62,12 +66,14 @@ public class ReptileTrainerConfig<T> : IMetaLearnerConfig<T>
     /// <param name="metaLearningRate">Meta-learning rate (epsilon in Reptile).</param>
     /// <param name="innerSteps">Number of gradient steps per task.</param>
     /// <param name="metaBatchSize">Number of tasks per meta-update (typically 1 for Reptile).</param>
-    public ReptileTrainerConfig(double innerLearningRate, double metaLearningRate, int innerSteps, int metaBatchSize = 1)
+    /// <param name="numMetaIterations">Total number of meta-training iterations.</param>
+    public ReptileTrainerConfig(double innerLearningRate, double metaLearningRate, int innerSteps, int metaBatchSize = 1, int numMetaIterations = 1000)
     {
         InnerLearningRate = NumOps.FromDouble(innerLearningRate);
         MetaLearningRate = NumOps.FromDouble(metaLearningRate);
         InnerSteps = innerSteps;
         MetaBatchSize = metaBatchSize;
+        NumMetaIterations = numMetaIterations;
     }
 
     /// <inheritdoc/>
@@ -79,6 +85,7 @@ public class ReptileTrainerConfig<T> : IMetaLearnerConfig<T>
         return innerLr > 0 && innerLr <= 1.0 &&
                metaLr > 0 && metaLr <= 1.0 &&
                InnerSteps > 0 && InnerSteps <= 100 &&
-               MetaBatchSize > 0 && MetaBatchSize <= 128;
+               MetaBatchSize > 0 && MetaBatchSize <= 128 &&
+               NumMetaIterations > 0 && NumMetaIterations <= 1000000;
     }
 }

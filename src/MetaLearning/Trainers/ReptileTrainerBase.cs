@@ -171,12 +171,11 @@ public abstract class ReptileTrainerBase<T, TInput, TOutput> : IMetaLearner<T, T
     public abstract MetaAdaptationResult<T> AdaptAndEvaluate(MetaLearningTask<T> task);
 
     /// <inheritdoc/>
-    public virtual MetaTrainingResult<T> Train(int numMetaIterations, int batchSize = 1)
+    public virtual MetaTrainingResult<T> Train()
     {
-        if (numMetaIterations < 1)
-            throw new ArgumentException("Number of meta-iterations must be at least 1", nameof(numMetaIterations));
-        if (batchSize < 1)
-            throw new ArgumentException("Batch size must be at least 1", nameof(batchSize));
+        // Use configuration values - all parameters specified during construction
+        int numMetaIterations = Configuration.NumMetaIterations;
+        int batchSize = Configuration.MetaBatchSize;
 
         // Collect history with generic T
         var lossValues = new List<T>();

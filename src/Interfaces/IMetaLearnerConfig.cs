@@ -68,6 +68,25 @@ public interface IMetaLearnerConfig<T>
     int MetaBatchSize { get; }
 
     /// <summary>
+    /// Gets the number of meta-training iterations to perform.
+    /// </summary>
+    /// <value>
+    /// How many times to perform the outer loop meta-update.
+    /// Typical values: 100 to 10,000 depending on dataset size and complexity.
+    /// </value>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> This is the total number of meta-training iterations.
+    /// More iterations = better meta-training but longer training time.
+    ///
+    /// Typical settings:
+    /// - Quick experimentation: 100-500
+    /// - Standard training: 1,000-5,000
+    /// - Full training: 10,000+
+    /// </para>
+    /// </remarks>
+    int NumMetaIterations { get; }
+
+    /// <summary>
     /// Validates that the configuration is valid and sensible.
     /// </summary>
     /// <returns>True if the configuration is valid; false otherwise.</returns>

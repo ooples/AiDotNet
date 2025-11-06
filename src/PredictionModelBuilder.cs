@@ -211,8 +211,8 @@ public class PredictionModelBuilder<T, TInput, TOutput> : IPredictionModelBuilde
         if (_metaLearner == null)
             throw new InvalidOperationException("Meta-learner must be configured using ConfigureMetaLearning() before calling Build()");
 
-        // Perform meta-training using default parameters (1000 iterations, batch size from config or 1)
-        var metaResult = _metaLearner.Train(numMetaIterations: 1000, batchSize: 1);
+        // Perform meta-training using parameters from config (specified during meta-learner construction)
+        var metaResult = _metaLearner.Train();
 
         // Create PredictionModelResult with meta-learning constructor
         return new PredictionModelResult<T, TInput, TOutput>(

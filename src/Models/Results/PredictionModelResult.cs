@@ -593,9 +593,21 @@ public class PredictionModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
         else
         {
             // Supervised learning path: Quick fine-tuning
-            // Note: LoRA integration is pending - when implemented, will use LoRAConfiguration.ApplyLoRA()
-            // to wrap model layers for parameter-efficient adaptation
-            // For now, perform standard adaptation on all parameters
+            // LoRA Integration Note: Parameter-efficient fine-tuning with LoRA requires:
+            // 1. For neural networks: Access to model layers to apply LoRAConfiguration.ApplyLoRA()
+            //    - Requires architectural refactoring to expose layers through IFullModel
+            //    - Or adding LoRA-aware training methods to model interface
+            // 2. For non-neural models (regression, polynomial): Different approach needed
+            //    - Apply low-rank decomposition at parameter level
+            //    - Research territory for non-layer-based models
+            // For now, perform standard full-parameter adaptation
+            //
+            // When LoRA is properly integrated (future PR), this will become:
+            // if (LoRAConfiguration != null && Model is ILayeredModel layeredModel)
+            // {
+            //     var loraLayers = layeredModel.GetLayers().Select(l => LoRAConfiguration.ApplyLoRA(l));
+            //     // Train with LoRA-adapted layers
+            // }
 
             // Perform gradient descent steps
             for (int step = 0; step < steps; step++)
@@ -690,9 +702,9 @@ public class PredictionModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
         else
         {
             // Supervised learning path: Full fine-tuning
-            // Note: LoRA integration is pending - when implemented, will use LoRAConfiguration.ApplyLoRA()
-            // to wrap model layers for parameter-efficient fine-tuning
-            // For now, perform standard fine-tuning on all parameters
+            // LoRA Integration Note: Same architectural considerations as Adapt() method
+            // Parameter-efficient fine-tuning requires model architecture refactoring to expose layers
+            // For now, perform standard full-parameter fine-tuning
 
             // Perform training epochs
             for (int epoch = 0; epoch < epochs; epoch++)
@@ -700,7 +712,8 @@ public class PredictionModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
                 // Train on full dataset
                 Model.Train(trainX, trainY);
 
-                // Note: Validation monitoring is pending - will add early stopping when implemented
+                // Validation monitoring: Future enhancement for early stopping
+                // Would require loss calculation on validation set and stopping criteria
             }
         }
     }
