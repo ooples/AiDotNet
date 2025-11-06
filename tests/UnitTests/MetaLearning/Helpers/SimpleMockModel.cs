@@ -1,5 +1,6 @@
 using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
+using AiDotNet.Models;
 
 namespace AiDotNet.Tests.UnitTests.MetaLearning.Helpers;
 
@@ -24,7 +25,7 @@ public class SimpleMockModel : IFullModel<double, Tensor<double>, Tensor<double>
         PredictCallCount = 0;
     }
 
-    public Vector<double> GetParameters() => _parameters.Copy();
+    public Vector<double> GetParameters() => _parameters.Clone();
 
     public void SetParameters(Vector<double> parameters)
     {
@@ -32,7 +33,7 @@ public class SimpleMockModel : IFullModel<double, Tensor<double>, Tensor<double>
         {
             throw new ArgumentException($"Parameter count mismatch: expected {_parameters.Length}, got {parameters.Length}");
         }
-        _parameters = parameters.Copy();
+        _parameters = parameters.Clone();
     }
 
     public int ParameterCount => _parameters.Length;
@@ -66,8 +67,11 @@ public class SimpleMockModel : IFullModel<double, Tensor<double>, Tensor<double>
         return new ModelMetadata<double>();
     }
 
-    public void Save(string filePath) { }
-    public void Load(string filePath) { }
+    // IModelSerializer implementation
+    public void SaveModel(string filePath) { }
+    public void LoadModel(string filePath) { }
+    public byte[] Serialize() => Array.Empty<byte>();
+    public void Deserialize(byte[] data) { }
 
     public IFullModel<double, Tensor<double>, Tensor<double>> DeepCopy()
     {
@@ -81,8 +85,14 @@ public class SimpleMockModel : IFullModel<double, Tensor<double>, Tensor<double>
         return DeepCopy();
     }
 
+    // IFeatureAware implementation
     public int InputFeatureCount => 10;
     public int OutputFeatureCount => 1;
     public string[] FeatureNames { get; set; } = Array.Empty<string>();
+    public IEnumerable<int> GetActiveFeatureIndices() => Enumerable.Range(0, InputFeatureCount);
+    public void SetActiveFeatureIndices(IEnumerable<int> indices) { }
+    public bool IsFeatureUsed(int featureIndex) => featureIndex >= 0 && featureIndex < InputFeatureCount;
+
+    // IFeatureImportance implementation
     public Dictionary<string, double> GetFeatureImportance() => new Dictionary<string, double>();
 }

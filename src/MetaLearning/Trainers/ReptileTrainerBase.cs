@@ -61,7 +61,7 @@ public abstract class ReptileTrainerBase<T, TInput, TOutput> : IMetaLearner<T, T
     /// <summary>
     /// Episodic data loader for sampling meta-learning tasks.
     /// </summary>
-    protected readonly IEpisodicDataLoader<T> DataLoader;
+    protected readonly IEpisodicDataLoader<T, TInput, TOutput> DataLoader;
 
     /// <summary>
     /// Numeric operations for type T.
@@ -108,7 +108,7 @@ public abstract class ReptileTrainerBase<T, TInput, TOutput> : IMetaLearner<T, T
     protected ReptileTrainerBase(
         IFullModel<T, TInput, TOutput> metaModel,
         ILossFunction<T> lossFunction,
-        IEpisodicDataLoader<T> dataLoader,
+        IEpisodicDataLoader<T, TInput, TOutput> dataLoader,
         IMetaLearnerConfig<T>? config = null)
     {
         if (metaModel == null)
@@ -168,7 +168,7 @@ public abstract class ReptileTrainerBase<T, TInput, TOutput> : IMetaLearner<T, T
     }
 
     /// <inheritdoc/>
-    public abstract MetaAdaptationResult<T> AdaptAndEvaluate(MetaLearningTask<T> task);
+    public abstract MetaAdaptationResult<T> AdaptAndEvaluate(MetaLearningTask<T, TInput, TOutput> task);
 
     /// <inheritdoc/>
     public virtual MetaTrainingResult<T> Train()
@@ -208,7 +208,7 @@ public abstract class ReptileTrainerBase<T, TInput, TOutput> : IMetaLearner<T, T
         if (string.IsNullOrWhiteSpace(filePath))
             throw new ArgumentException("File path cannot be null or empty", nameof(filePath));
 
-        MetaModel.Save(filePath);
+        MetaModel.SaveModel(filePath);
     }
 
     /// <inheritdoc/>
@@ -219,7 +219,7 @@ public abstract class ReptileTrainerBase<T, TInput, TOutput> : IMetaLearner<T, T
         if (!File.Exists(filePath))
             throw new FileNotFoundException($"Model file not found: {filePath}");
 
-        MetaModel.Load(filePath);
+        MetaModel.LoadModel(filePath);
     }
 
     /// <inheritdoc/>

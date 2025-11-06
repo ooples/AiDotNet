@@ -81,7 +81,7 @@ namespace AiDotNet.Data.Loaders;
 /// }
 /// </code>
 /// </example>
-public class CurriculumEpisodicDataLoader<T> : EpisodicDataLoaderBase<T>
+public class CurriculumEpisodicDataLoader<T, TInput, TOutput> : EpisodicDataLoaderBase<T, TInput, TOutput>
 {
     private readonly int _targetNWay;
     private readonly int _targetKShot;
@@ -226,7 +226,7 @@ public class CurriculumEpisodicDataLoader<T> : EpisodicDataLoaderBase<T>
     /// - Result: 5-way 1-shot (target/hardest)
     /// </para>
     /// </remarks>
-    protected override MetaLearningTask<T> GetNextTaskCore()
+    protected override MetaLearningTask<T, TInput, TOutput> GetNextTaskCore()
     {
         // Step 1: Calculate current difficulty based on progress
         int currentNWay = CalculateCurrentNWay();
@@ -277,8 +277,8 @@ public class CurriculumEpisodicDataLoader<T> : EpisodicDataLoaderBase<T>
             }
         }
 
-        // Step 4: Convert to tensors and return
-        return BuildMetaLearningTask(supportExamples, supportLabels, queryExamples, queryLabels, currentNWay, currentKShot);
+        // Step 4: Convert to tensors and return using base class helper
+        return BuildMetaLearningTask(supportExamples, supportLabels, queryExamples, queryLabels);
     }
 
     /// <summary>
@@ -302,55 +302,5 @@ public class CurriculumEpisodicDataLoader<T> : EpisodicDataLoaderBase<T>
 
         // Ensure at least 1 shot
         return Math.Max(1, result);
-    }
-
-    /// <summary>
-    /// Builds a MetaLearningTask from lists of examples and labels with current curriculum difficulty.
-    /// </summary>
-    private MetaLearningTask<T> BuildMetaLearningTask(
-        List<Vector<T>> supportExamples,
-        List<T> supportLabels,
-        List<Vector<T>> queryExamples,
-        List<T> queryLabels,
-        int currentNWay,
-        int currentKShot)
-    {
-        int numFeatures = DatasetX.Columns;
-        int supportSize = currentNWay * currentKShot;
-        int querySize = currentNWay * QueryShots;
-
-        // Build support set tensors
-        var supportSetX = new Tensor<T>(new[] { supportSize, numFeatures });
-        var supportSetY = new Tensor<T>(new[] { supportSize });
-
-        for (int i = 0; i < supportSize; i++)
-        {
-            for (int j = 0; j < numFeatures; j++)
-            {
-                supportSetX[new[] { i, j }] = supportExamples[i][j];
-            }
-            supportSetY[new[] { i }] = supportLabels[i];
-        }
-
-        // Build query set tensors
-        var querySetX = new Tensor<T>(new[] { querySize, numFeatures });
-        var querySetY = new Tensor<T>(new[] { querySize });
-
-        for (int i = 0; i < querySize; i++)
-        {
-            for (int j = 0; j < numFeatures; j++)
-            {
-                querySetX[new[] { i, j }] = queryExamples[i][j];
-            }
-            querySetY[new[] { i }] = queryLabels[i];
-        }
-
-        return new MetaLearningTask<T>
-        {
-            SupportSetX = supportSetX,
-            SupportSetY = supportSetY,
-            QuerySetX = querySetX,
-            QuerySetY = querySetY
-        };
     }
 }

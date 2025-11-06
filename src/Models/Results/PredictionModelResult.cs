@@ -576,7 +576,7 @@ public class PredictionModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
         if (MetaLearner != null)
         {
             // Create task from support data
-            var task = new MetaLearningTask<T>
+            var task = new MetaLearningTask<T, TInput, TOutput>
             {
                 SupportSetX = supportX,
                 SupportSetY = supportY,

@@ -237,7 +237,7 @@ public class MetaTrainingResult<T>
         var recentVector = new Vector<T>(recentLosses);
         var variance = StatisticsHelper<T>.CalculateVariance(recentVector);
 
-        return MathHelper.GetNumericOperations<T>().ToDouble(variance) < varianceThreshold;
+        return Convert.ToDouble(variance) < varianceThreshold;
     }
 
     /// <summary>

@@ -106,7 +106,7 @@ public class ReptileTrainer<T, TInput, TOutput> : ReptileTrainerBase<T, TInput, 
     public ReptileTrainer(
         IFullModel<T, TInput, TOutput> metaModel,
         ILossFunction<T> lossFunction,
-        IEpisodicDataLoader<T> dataLoader,
+        IEpisodicDataLoader<T, TInput, TOutput> dataLoader,
         IMetaLearnerConfig<T>? config = null)
         : base(metaModel, lossFunction, dataLoader, config)
     {
@@ -132,7 +132,7 @@ public class ReptileTrainer<T, TInput, TOutput> : ReptileTrainerBase<T, TInput, 
         for (int taskIdx = 0; taskIdx < batchSize; taskIdx++)
         {
             // Sample a task using configured data loader
-            MetaLearningTask<T> task = DataLoader.GetNextTask();
+            MetaLearningTask<T, TInput, TOutput> task = DataLoader.GetNextTask();
 
             // Reset model to original meta-parameters for this task
             MetaModel.SetParameters(originalParameters.Clone());
@@ -192,7 +192,7 @@ public class ReptileTrainer<T, TInput, TOutput> : ReptileTrainerBase<T, TInput, 
     }
 
     /// <inheritdoc/>
-    public override MetaAdaptationResult<T> AdaptAndEvaluate(MetaLearningTask<T> task)
+    public override MetaAdaptationResult<T> AdaptAndEvaluate(MetaLearningTask<T, TInput, TOutput> task)
     {
         if (task == null)
             throw new ArgumentNullException(nameof(task));
