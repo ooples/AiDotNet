@@ -39,6 +39,10 @@ public class PredictionModelBuilder<T, TInput, TOutput> : IPredictionModelBuilde
     private IBiasDetector<T>? _biasDetector;
     private IFairnessEvaluator<T>? _fairnessEvaluator;
     private ILoRAConfiguration<T>? _loraConfiguration;
+    private IRetriever<T>? _ragRetriever;
+    private IReranker<T>? _ragReranker;
+    private IGenerator<T>? _ragGenerator;
+    private IEnumerable<IQueryProcessor>? _queryProcessors;
 
     /// <summary>
     /// Configures which features (input variables) should be used in the model.
@@ -237,7 +241,15 @@ public class PredictionModelBuilder<T, TInput, TOutput> : IPredictionModelBuilde
         // Optimize the model
         var optimizationResult = optimizer.Optimize(OptimizerHelper<T, TInput, TOutput>.CreateOptimizationInputData(XTrain, yTrain, XVal, yVal, XTest, yTest));
 
-        return new PredictionModelResult<T, TInput, TOutput>(optimizationResult, normInfo, _biasDetector, _fairnessEvaluator);
+        return new PredictionModelResult<T, TInput, TOutput>(
+            optimizationResult, 
+            normInfo, 
+            _biasDetector, 
+            _fairnessEvaluator,
+            _ragRetriever,
+            _ragReranker,
+            _ragGenerator,
+            _queryProcessors);
     }
 
     /// <summary>
@@ -380,6 +392,37 @@ public class PredictionModelBuilder<T, TInput, TOutput> : IPredictionModelBuilde
     public IPredictionModelBuilder<T, TInput, TOutput> ConfigureLoRA(ILoRAConfiguration<T> loraConfiguration)
     {
         _loraConfiguration = loraConfiguration;
+        return this;
+    }
+
+    /// <summary>
+    /// Configures the retrieval-augmented generation (RAG) components for use during model inference.
+    /// </summary>
+    /// <param name="retriever">Optional retriever for finding relevant documents. If not provided, RAG functionality won't be available.</param>
+    /// <param name="reranker">Optional reranker for improving document ranking quality. If not provided, a default reranker will be used if RAG is configured.</param>
+    /// <param name="generator">Optional generator for producing grounded answers. If not provided, a default generator will be used if RAG is configured.</param>
+    /// <param name="queryProcessors">Optional query processors for improving search quality.</param>
+    /// <returns>This builder instance for method chaining.</returns>
+    /// <remarks>
+    /// <b>For Beginners:</b> RAG combines retrieval and generation to create answers backed by real documents.
+    /// Configure it with:
+    /// - A retriever (finds relevant documents from your collection) - required for RAG
+    /// - A reranker (improves the ordering of retrieved documents) - optional, defaults provided
+    /// - A generator (creates answers based on the documents) - optional, defaults provided
+    /// - Optional query processors (improve search queries before retrieval)
+    /// 
+    /// RAG operations are performed during inference (after model training) via the PredictionModelResult.
+    /// </remarks>
+    public IPredictionModelBuilder<T, TInput, TOutput> ConfigureRetrievalAugmentedGeneration(
+        IRetriever<T>? retriever = null,
+        IReranker<T>? reranker = null,
+        IGenerator<T>? generator = null,
+        IEnumerable<IQueryProcessor>? queryProcessors = null)
+    {
+        _ragRetriever = retriever;
+        _ragReranker = reranker;
+        _ragGenerator = generator;
+        _queryProcessors = queryProcessors;
         return this;
     }
 }

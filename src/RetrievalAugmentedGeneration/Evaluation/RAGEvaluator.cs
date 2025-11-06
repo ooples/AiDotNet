@@ -1,6 +1,6 @@
 using AiDotNet.Helpers;
 using AiDotNet.LinearAlgebra;
-using AiDotNet.RetrievalAugmentedGeneration.Interfaces;
+using AiDotNet.Interfaces;
 using AiDotNet.RetrievalAugmentedGeneration.Models;
 
 namespace AiDotNet.RetrievalAugmentedGeneration.Evaluation;
@@ -34,20 +34,20 @@ namespace AiDotNet.RetrievalAugmentedGeneration.Evaluation;
 /// - Make data-driven optimization decisions
 /// </para>
 /// </remarks>
-public class RAGEvaluator
+public class RAGEvaluator<T>
 {
-    private readonly IReadOnlyList<IRAGMetric> _metrics;
+    private readonly IReadOnlyList<IRAGMetric<T>> _metrics;
 
     /// <summary>
     /// Gets the metrics used by this evaluator.
     /// </summary>
-    public IReadOnlyList<IRAGMetric> Metrics => _metrics;
+    public IReadOnlyList<IRAGMetric<T>> Metrics => _metrics;
 
     /// <summary>
     /// Initializes a new instance of the RAGEvaluator class with specified metrics.
     /// </summary>
     /// <param name="metrics">The metrics to use for evaluation.</param>
-    public RAGEvaluator(IEnumerable<IRAGMetric> metrics)
+    public RAGEvaluator(IEnumerable<IRAGMetric<T>> metrics)
     {
         if (metrics == null)
             throw new ArgumentNullException(nameof(metrics));
@@ -63,10 +63,10 @@ public class RAGEvaluator
     /// </summary>
     public RAGEvaluator()
     {
-        _metrics = new List<IRAGMetric>
+        _metrics = new List<IRAGMetric<T>>
         {
-            new FaithfulnessMetric(),
-            new ContextCoverageMetric()
+            new FaithfulnessMetric<T>(),
+            new ContextCoverageMetric<T>()
         };
     }
 
@@ -76,7 +76,7 @@ public class RAGEvaluator
     /// <param name="answer">The grounded answer to evaluate.</param>
     /// <param name="groundTruth">The reference answer (optional, required by some metrics).</param>
     /// <returns>Evaluation results with scores for each metric.</returns>
-    public EvaluationResult Evaluate(GroundedAnswer answer, string? groundTruth = null)
+    public EvaluationResult Evaluate(GroundedAnswer<T> answer, string? groundTruth = null)
     {
         if (answer == null)
             throw new ArgumentNullException(nameof(answer));
@@ -88,7 +88,7 @@ public class RAGEvaluator
             try
             {
                 var score = metric.Evaluate(answer, groundTruth);
-                metricScores[metric.Name] = score;
+                metricScores[metric.Name] = Convert.ToDouble(score);
             }
             catch (ArgumentNullException ex) when (ex.ParamName == "groundTruth")
             {
@@ -126,7 +126,7 @@ public class RAGEvaluator
     /// <param name="groundTruths">Corresponding ground truth answers (must match answer count if provided).</param>
     /// <returns>Collection of evaluation results.</returns>
     public IEnumerable<EvaluationResult> EvaluateBatch(
-        IEnumerable<GroundedAnswer> answers,
+        IEnumerable<GroundedAnswer<T>> answers,
         IEnumerable<string>? groundTruths = null)
     {
         if (answers == null)

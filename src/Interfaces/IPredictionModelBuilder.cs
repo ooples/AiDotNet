@@ -351,4 +351,34 @@ public interface IPredictionModelBuilder<T, TInput, TOutput>
     /// <param name="loraConfiguration">The LoRA configuration implementation to use.</param>
     /// <returns>The builder instance for method chaining.</returns>
     IPredictionModelBuilder<T, TInput, TOutput> ConfigureLoRA(ILoRAConfiguration<T> loraConfiguration);
+
+    /// <summary>
+    /// Configures the retrieval-augmented generation (RAG) components for use during model inference.
+    /// </summary>
+    /// <remarks>
+    /// RAG enhances text generation by retrieving relevant documents from a knowledge base
+    /// and using them as context for generating grounded, factual answers.
+    ///
+    /// <b>For Beginners:</b> RAG is like giving your AI access to a library before answering questions.
+    /// Instead of relying only on what it learned during training, it can:
+    /// 1. Search a document collection for relevant information
+    /// 2. Read the relevant documents
+    /// 3. Generate an answer based on those documents
+    /// 4. Cite its sources
+    ///
+    /// This makes answers more accurate, up-to-date, and traceable to source materials.
+    /// 
+    /// RAG operations (GenerateAnswer, RetrieveDocuments) are performed during inference via PredictionModelResult,
+    /// not during model building.
+    /// </remarks>
+    /// <param name="retriever">Optional retriever for finding relevant documents. If not provided, RAG won't be available.</param>
+    /// <param name="reranker">Optional reranker for improving document ranking quality. Default provided if retriever is set.</param>
+    /// <param name="generator">Optional generator for producing grounded answers. Default provided if retriever is set.</param>
+    /// <param name="queryProcessors">Optional query processors for improving search quality.</param>
+    /// <returns>The builder instance for method chaining.</returns>
+    IPredictionModelBuilder<T, TInput, TOutput> ConfigureRetrievalAugmentedGeneration(
+        IRetriever<T>? retriever = null,
+        IReranker<T>? reranker = null,
+        IGenerator<T>? generator = null,
+        IEnumerable<IQueryProcessor>? queryProcessors = null);
 }
