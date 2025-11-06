@@ -4,6 +4,7 @@ using AiDotNet.LinearAlgebra;
 using AiDotNet.LossFunctions;
 using AiDotNet.MetaLearning.Config;
 using AiDotNet.MetaLearning.Trainers;
+using AiDotNet.Models.Results;
 using AiDotNet.Tests.UnitTests.MetaLearning.Helpers;
 using Xunit;
 
@@ -145,7 +146,7 @@ public class ReptileTrainerIntegrationTests
         var initialParams = model.GetParameters();
 
         // Act - Meta-train for 50 iterations (as specified in requirements)
-        var metadata = trainer.Train(dataLoader, numMetaIterations: 50);
+        var result = trainer.Train(dataLoader, numMetaIterations: 50);
 
         // Assert - Parameters should have changed
         var finalParams = model.GetParameters();
@@ -162,10 +163,10 @@ public class ReptileTrainerIntegrationTests
         Assert.True(paramsChanged, "Meta-training should update model parameters");
 
         // Assert - Training should complete successfully
-        Assert.NotNull(metadata);
-        Assert.Equal(50, metadata.Iterations);
-        Assert.NotNull(metadata.LossHistory);
-        Assert.Equal(50, metadata.LossHistory.Count);
+        Assert.NotNull(result);
+        Assert.Equal(50, result.TotalIterations);
+        Assert.NotNull(result.LossHistory);
+        Assert.Equal(50, result.LossHistory.Length);
     }
 
     [Fact]
@@ -198,11 +199,11 @@ public class ReptileTrainerIntegrationTests
             config: config);
 
         // Act
-        var metadata = trainer.Train(dataLoader, numMetaIterations: 100);
+        var result = trainer.Train(dataLoader, numMetaIterations: 100);
 
         // Assert - Meta-training should process all iterations
-        Assert.NotNull(metadata);
-        Assert.Equal(100, metadata.Iterations);
+        Assert.NotNull(result);
+        Assert.Equal(100, result.TotalIterations);
 
         // Meta-trained model should have different parameters than baseline
         var metaTrainedParams = metaTrainedModel.GetParameters();
@@ -241,17 +242,17 @@ public class ReptileTrainerIntegrationTests
             config: config);
 
         // Act - Train for 100 iterations to verify metric tracking
-        var metadata = trainer.Train(dataLoader, numMetaIterations: 100);
+        var result = trainer.Train(dataLoader, numMetaIterations: 100);
 
-        // Assert - Metadata should be properly populated
-        Assert.NotNull(metadata.LossHistory);
-        Assert.Equal(100, metadata.LossHistory.Count);
-        Assert.NotNull(metadata.AccuracyHistory);
-        Assert.Equal(100, metadata.AccuracyHistory.Count);
+        // Assert - Result should be properly populated
+        Assert.NotNull(result.LossHistory);
+        Assert.Equal(100, result.LossHistory.Length);
+        Assert.NotNull(result.AccuracyHistory);
+        Assert.Equal(100, result.AccuracyHistory.Length);
 
         // Check that we have recorded losses
-        double firstLoss = metadata.LossHistory[0];
-        double lastLoss = metadata.LossHistory[metadata.LossHistory.Count - 1];
+        double firstLoss = result.LossHistory[0];
+        double lastLoss = result.LossHistory[^1];
 
         Assert.True(firstLoss >= 0, "Initial loss should be non-negative");
         Assert.True(lastLoss >= 0, "Final loss should be non-negative");
@@ -283,18 +284,18 @@ public class ReptileTrainerIntegrationTests
             config: config);
 
         // Act - Run exactly 50 meta-iterations as required
-        var metadata = trainer.Train(dataLoader, numMetaIterations: 50);
+        var result = trainer.Train(dataLoader, numMetaIterations: 50);
 
         // Assert
-        Assert.NotNull(metadata);
-        Assert.Equal(50, metadata.Iterations);
-        Assert.Equal(50, metadata.LossHistory.Count);
-        Assert.Equal(50, metadata.AccuracyHistory.Count);
+        Assert.NotNull(result);
+        Assert.Equal(50, result.TotalIterations);
+        Assert.Equal(50, result.LossHistory.Length);
+        Assert.Equal(50, result.AccuracyHistory.Length);
 
         // Verify training completed without errors
-        Assert.True(metadata.TrainingTime.TotalMilliseconds > 0);
-        Assert.False(double.IsNaN(metadata.FinalLoss), "Final loss should not be NaN");
-        Assert.False(double.IsPositiveInfinity(metadata.FinalLoss), "Final loss should not be infinity");
+        Assert.True(result.TrainingTime.TotalMilliseconds > 0);
+        Assert.False(double.IsNaN(result.FinalLoss), "Final loss should not be NaN");
+        Assert.False(double.IsPositiveInfinity(result.FinalLoss), "Final loss should not be infinity");
     }
 
     #endregion

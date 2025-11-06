@@ -3,7 +3,7 @@ using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
 using AiDotNet.MetaLearning.Config;
-using AiDotNet.MetaLearning.Metrics;
+using AiDotNet.Models.Results;
 
 namespace AiDotNet.MetaLearning.Trainers;
 
@@ -120,56 +120,46 @@ public abstract class ReptileTrainerBase<T, TInput, TOutput> : IMetaLearner<T, T
     }
 
     /// <inheritdoc/>
-    public abstract MetaTrainingMetrics MetaTrainStep(IEpisodicDataLoader<T> dataLoader, int batchSize);
+    public abstract MetaTrainingStepResult<T> MetaTrainStep(IEpisodicDataLoader<T> dataLoader, int batchSize);
 
     /// <inheritdoc/>
-    public virtual MetaEvaluationMetrics Evaluate(IEpisodicDataLoader<T> dataLoader, int numTasks)
+    public virtual MetaEvaluationResult<T> Evaluate(IEpisodicDataLoader<T> dataLoader, int numTasks)
     {
         if (dataLoader == null)
             throw new ArgumentNullException(nameof(dataLoader));
         if (numTasks < 1)
             throw new ArgumentException("Number of tasks must be at least 1", nameof(numTasks));
 
-        var accuracies = new List<double>();
-        var losses = new List<double>();
-        var adaptationTimes = new List<double>();
+        var startTime = System.Diagnostics.Stopwatch.StartNew();
+
+        // Collect per-task results with generic T
+        var accuracyValues = new List<T>();
+        var lossValues = new List<T>();
 
         for (int i = 0; i < numTasks; i++)
         {
             var task = dataLoader.GetNextTask();
-            var metrics = AdaptAndEvaluate(task);
+            var adaptResult = AdaptAndEvaluate(task);
 
-            accuracies.Add(metrics.QueryAccuracy);
-            losses.Add(metrics.QueryLoss);
-            adaptationTimes.Add(metrics.AdaptationTimeMs);
+            accuracyValues.Add(adaptResult.QueryAccuracy);
+            lossValues.Add(adaptResult.QueryLoss);
         }
 
-        // Calculate statistics
-        double meanAcc = accuracies.Average();
-        double stdAcc = CalculateStandardDeviation(accuracies);
-        double meanLoss = losses.Average();
-        double stdLoss = CalculateStandardDeviation(losses);
-        double meanTime = adaptationTimes.Average();
+        startTime.Stop();
 
-        // Calculate 95% confidence interval
-        double marginOfError = 1.96 * stdAcc / Math.Sqrt(numTasks);
-        var confidenceInterval = (meanAcc - marginOfError, meanAcc + marginOfError);
+        // Convert to vectors for statistical analysis using existing infrastructure
+        var accuracyVector = new Vector<T>(accuracyValues.ToArray());
+        var lossVector = new Vector<T>(lossValues.ToArray());
 
-        return new MetaEvaluationMetrics
-        {
-            Accuracy = meanAcc,
-            AccuracyStd = stdAcc,
-            ConfidenceInterval = confidenceInterval,
-            Loss = meanLoss,
-            LossStd = stdLoss,
-            NumTasks = numTasks,
-            MeanAdaptationTimeMs = meanTime,
-            PerTaskAccuracies = accuracies
-        };
+        // Return new Result type using our established pattern
+        return new MetaEvaluationResult<T>(
+            taskAccuracies: accuracyVector,
+            taskLosses: lossVector,
+            evaluationTime: startTime.Elapsed);
     }
 
     /// <inheritdoc/>
-    public abstract AdaptationMetrics AdaptAndEvaluate(MetaLearningTask<T> task);
+    public abstract MetaAdaptationResult<T> AdaptAndEvaluate(MetaLearningTask<T> task);
 
     /// <summary>
     /// High-level training method that runs multiple meta-training iterations.
@@ -177,7 +167,7 @@ public abstract class ReptileTrainerBase<T, TInput, TOutput> : IMetaLearner<T, T
     /// <param name="dataLoader">Data loader for sampling tasks.</param>
     /// <param name="numMetaIterations">Number of meta-training iterations to run.</param>
     /// <param name="tasksPerIteration">Number of tasks to sample per iteration (defaults to MetaBatchSize).</param>
-    /// <returns>Metadata containing training history and statistics.</returns>
+    /// <returns>Result containing training history and statistics.</returns>
     /// <remarks>
     /// <para>
     /// This is a convenience method that wraps MetaTrainStep() for complete training runs.
@@ -186,12 +176,12 @@ public abstract class ReptileTrainerBase<T, TInput, TOutput> : IMetaLearner<T, T
     /// <para><b>Example Usage:</b>
     /// <code>
     /// var trainer = new ReptileTrainer(model, lossFunction);
-    /// var metadata = trainer.Train(dataLoader, numMetaIterations: 1000);
-    /// Console.WriteLine($"Final Loss: {metadata.FinalLoss}");
+    /// var result = trainer.Train(dataLoader, numMetaIterations: 1000);
+    /// Console.WriteLine($"Final Loss: {result.FinalLoss}");
     /// </code>
     /// </para>
     /// </remarks>
-    public virtual MetaTrainingMetadata Train(
+    public virtual MetaTrainingResult<T> Train(
         IEpisodicDataLoader<T> dataLoader,
         int numMetaIterations,
         int? tasksPerIteration = null)
@@ -203,26 +193,29 @@ public abstract class ReptileTrainerBase<T, TInput, TOutput> : IMetaLearner<T, T
 
         int batchSize = tasksPerIteration ?? Configuration.MetaBatchSize;
 
-        var lossHistory = new List<double>();
-        var accuracyHistory = new List<double>();
+        // Collect history with generic T
+        var lossValues = new List<T>();
+        var accuracyValues = new List<T>();
         var startTime = System.Diagnostics.Stopwatch.StartNew();
 
         for (int iteration = 0; iteration < numMetaIterations; iteration++)
         {
-            var metrics = MetaTrainStep(dataLoader, batchSize);
-            lossHistory.Add(metrics.MetaLoss);
-            accuracyHistory.Add(metrics.Accuracy);
+            var stepResult = MetaTrainStep(dataLoader, batchSize);
+            lossValues.Add(stepResult.MetaLoss);
+            accuracyValues.Add(stepResult.Accuracy);
         }
 
         startTime.Stop();
 
-        return new MetaTrainingMetadata
-        {
-            Iterations = numMetaIterations,
-            LossHistory = lossHistory,
-            AccuracyHistory = accuracyHistory,
-            TrainingTime = startTime.Elapsed
-        };
+        // Convert to vectors for Result type
+        var lossHistory = new Vector<T>(lossValues.ToArray());
+        var accuracyHistory = new Vector<T>(accuracyValues.ToArray());
+
+        // Return new Result type following established pattern
+        return new MetaTrainingResult<T>(
+            lossHistory: lossHistory,
+            accuracyHistory: accuracyHistory,
+            trainingTime: startTime.Elapsed);
     }
 
     /// <inheritdoc/>
@@ -276,8 +269,8 @@ public abstract class ReptileTrainerBase<T, TInput, TOutput> : IMetaLearner<T, T
     /// <param name="model">Model to evaluate.</param>
     /// <param name="inputX">Input features.</param>
     /// <param name="targetY">Target labels.</param>
-    /// <returns>Accuracy between 0 and 1.</returns>
-    protected double ComputeAccuracy(IFullModel<T, TInput, TOutput> model, TInput inputX, TOutput targetY)
+    /// <returns>Accuracy as generic T (between 0 and 1).</returns>
+    protected T ComputeAccuracy(IFullModel<T, TInput, TOutput> model, TInput inputX, TOutput targetY)
     {
         var predictions = model.Predict(inputX);
         var predictedVector = ConvertToVector(predictions);
@@ -297,7 +290,8 @@ public abstract class ReptileTrainerBase<T, TInput, TOutput> : IMetaLearner<T, T
                 correct++;
         }
 
-        return total > 0 ? (double)correct / total : 0.0;
+        // Return accuracy as generic T
+        return NumOps.FromDouble(total > 0 ? (double)correct / total : 0.0);
     }
 
     /// <summary>
@@ -312,18 +306,5 @@ public abstract class ReptileTrainerBase<T, TInput, TOutput> : IMetaLearner<T, T
             T[] array => new Vector<T>(array),
             _ => throw new NotSupportedException($"Output type {typeof(TOutput)} not supported for conversion to Vector<T>")
         };
-    }
-
-    /// <summary>
-    /// Calculates standard deviation of a list of values.
-    /// </summary>
-    private double CalculateStandardDeviation(List<double> values)
-    {
-        if (values.Count < 2)
-            return 0.0;
-
-        double mean = values.Average();
-        double sumSquaredDiffs = values.Sum(v => Math.Pow(v - mean, 2));
-        return Math.Sqrt(sumSquaredDiffs / (values.Count - 1));
     }
 }

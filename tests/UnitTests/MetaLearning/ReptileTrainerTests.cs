@@ -4,6 +4,7 @@ using AiDotNet.LinearAlgebra;
 using AiDotNet.LossFunctions;
 using AiDotNet.MetaLearning.Config;
 using AiDotNet.MetaLearning.Trainers;
+using AiDotNet.Models.Results;
 using AiDotNet.Tests.UnitTests.MetaLearning.Helpers;
 using Xunit;
 
@@ -275,14 +276,14 @@ public class ReptileTrainerTests
         int numIterations = 10;
 
         // Act
-        var metadata = trainer.Train(dataLoader, numMetaIterations: numIterations);
+        var result = trainer.Train(dataLoader, numMetaIterations: numIterations);
 
         // Assert
-        Assert.NotNull(metadata);
-        Assert.Equal(numIterations, metadata.Iterations);
-        Assert.NotNull(metadata.LossHistory);
-        Assert.Equal(numIterations, metadata.LossHistory.Count);
-        Assert.True(metadata.TrainingTime.TotalMilliseconds > 0);
+        Assert.NotNull(result);
+        Assert.Equal(numIterations, result.TotalIterations);
+        Assert.NotNull(result.LossHistory);
+        Assert.Equal(numIterations, result.LossHistory.Length);
+        Assert.True(result.TrainingTime.TotalMilliseconds > 0);
     }
 
     [Fact]
@@ -297,11 +298,11 @@ public class ReptileTrainerTests
         var dataLoader = new UniformEpisodicDataLoader<double>(X, Y); // Use defaults here too
 
         // Act
-        var metadata = trainer.Train(dataLoader, numMetaIterations: 5);
+        var result = trainer.Train(dataLoader, numMetaIterations: 5);
 
         // Assert
-        Assert.NotNull(metadata);
-        Assert.Equal(5, metadata.Iterations);
+        Assert.NotNull(result);
+        Assert.Equal(5, result.TotalIterations);
     }
 
     #endregion

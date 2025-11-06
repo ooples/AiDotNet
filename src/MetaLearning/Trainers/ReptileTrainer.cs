@@ -1,8 +1,9 @@
 using AiDotNet.Data.Abstractions;
+using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
 using AiDotNet.MetaLearning.Config;
-using AiDotNet.MetaLearning.Metrics;
+using AiDotNet.Models.Results;
 using System.Diagnostics;
 
 namespace AiDotNet.MetaLearning.Trainers;
@@ -104,7 +105,7 @@ public class ReptileTrainer<T, TInput, TOutput> : ReptileTrainerBase<T, TInput, 
     }
 
     /// <inheritdoc/>
-    public override MetaTrainingMetrics MetaTrainStep(IEpisodicDataLoader<T> dataLoader, int batchSize)
+    public override MetaTrainingStepResult<T> MetaTrainStep(IEpisodicDataLoader<T> dataLoader, int batchSize)
     {
         if (dataLoader == null)
             throw new ArgumentNullException(nameof(dataLoader));
@@ -116,10 +117,10 @@ public class ReptileTrainer<T, TInput, TOutput> : ReptileTrainerBase<T, TInput, 
         // Save original meta-parameters
         Vector<T> originalParameters = MetaModel.GetParameters();
 
-        // Collect parameter updates from all tasks in batch
+        // Collect parameter updates from all tasks in batch (using generic T)
         var parameterUpdates = new List<Vector<T>>();
-        var taskLosses = new List<double>();
-        var taskAccuracies = new List<double>();
+        var taskLosses = new List<T>();
+        var taskAccuracies = new List<T>();
 
         // Process each task in the batch
         for (int taskIdx = 0; taskIdx < batchSize; taskIdx++)
@@ -143,9 +144,9 @@ public class ReptileTrainer<T, TInput, TOutput> : ReptileTrainerBase<T, TInput, 
             Vector<T> parameterUpdate = adaptedParameters.Subtract(originalParameters);
             parameterUpdates.Add(parameterUpdate);
 
-            // Evaluate on query set to measure adaptation quality
-            double queryLoss = NumOps.ToDouble(ComputeLoss(MetaModel, task.QuerySetX, task.QuerySetY));
-            double queryAccuracy = ComputeAccuracy(MetaModel, task.QuerySetX, task.QuerySetY);
+            // Evaluate on query set to measure adaptation quality (using generic T)
+            T queryLoss = ComputeLoss(MetaModel, task.QuerySetX, task.QuerySetY);
+            T queryAccuracy = ComputeAccuracy(MetaModel, task.QuerySetX, task.QuerySetY);
 
             taskLosses.Add(queryLoss);
             taskAccuracies.Add(queryAccuracy);
@@ -166,29 +167,26 @@ public class ReptileTrainer<T, TInput, TOutput> : ReptileTrainerBase<T, TInput, 
 
         startTime.Stop();
 
-        // Return comprehensive metrics
-        return new MetaTrainingMetrics
-        {
-            MetaLoss = taskLosses.Average(),
-            TaskLoss = taskLosses.Average(),
-            Accuracy = taskAccuracies.Average(),
-            NumTasks = batchSize,
-            Iteration = _currentIteration,
-            TimeMs = startTime.Elapsed.TotalMilliseconds,
-            AdditionalMetrics = new Dictionary<string, double>
-            {
-                ["accuracy_std"] = CalculateStdDev(taskAccuracies),
-                ["loss_std"] = CalculateStdDev(taskLosses),
-                ["min_accuracy"] = taskAccuracies.Min(),
-                ["max_accuracy"] = taskAccuracies.Max(),
-                ["min_loss"] = taskLosses.Min(),
-                ["max_loss"] = taskLosses.Max()
-            }
-        };
+        // Calculate aggregate metrics using generic T
+        var lossVector = new Vector<T>(taskLosses.ToArray());
+        var accuracyVector = new Vector<T>(taskAccuracies.ToArray());
+
+        // Use StatisticsHelper for proper generic calculations
+        T meanLoss = StatisticsHelper<T>.CalculateMean(lossVector);
+        T meanAccuracy = StatisticsHelper<T>.CalculateMean(accuracyVector);
+
+        // Return comprehensive metrics with new Result type
+        return new MetaTrainingStepResult<T>(
+            metaLoss: meanLoss,
+            taskLoss: meanLoss,  // For Reptile, meta-loss = avg task loss
+            accuracy: meanAccuracy,
+            numTasks: batchSize,
+            iteration: _currentIteration,
+            timeMs: startTime.Elapsed.TotalMilliseconds);
     }
 
     /// <inheritdoc/>
-    public override AdaptationMetrics AdaptAndEvaluate(MetaLearningTask<T> task)
+    public override MetaAdaptationResult<T> AdaptAndEvaluate(MetaLearningTask<T> task)
     {
         if (task == null)
             throw new ArgumentNullException(nameof(task));
@@ -198,44 +196,51 @@ public class ReptileTrainer<T, TInput, TOutput> : ReptileTrainerBase<T, TInput, 
         // Save original meta-parameters
         Vector<T> originalParameters = MetaModel.GetParameters();
 
-        // Evaluate before adaptation (baseline)
-        double initialQueryLoss = NumOps.ToDouble(ComputeLoss(MetaModel, task.QuerySetX, task.QuerySetY));
+        // Evaluate before adaptation (baseline) - using generic T
+        T initialQueryLoss = ComputeLoss(MetaModel, task.QuerySetX, task.QuerySetY);
+
+        var perStepLosses = new List<T> { initialQueryLoss };
 
         // Inner loop: Adapt to task using support set
         for (int step = 0; step < Configuration.InnerSteps; step++)
         {
             MetaModel.Train(task.SupportSetX, task.SupportSetY);
+
+            // Track loss after each step for convergence analysis
+            T stepLoss = ComputeLoss(MetaModel, task.QuerySetX, task.QuerySetY);
+            perStepLosses.Add(stepLoss);
         }
 
-        // Evaluate after adaptation
-        double queryLoss = NumOps.ToDouble(ComputeLoss(MetaModel, task.QuerySetX, task.QuerySetY));
-        double queryAccuracy = ComputeAccuracy(MetaModel, task.QuerySetX, task.QuerySetY);
+        // Evaluate after adaptation (all using generic T)
+        T queryLoss = ComputeLoss(MetaModel, task.QuerySetX, task.QuerySetY);
+        T queryAccuracy = ComputeAccuracy(MetaModel, task.QuerySetX, task.QuerySetY);
 
-        double supportLoss = NumOps.ToDouble(ComputeLoss(MetaModel, task.SupportSetX, task.SupportSetY));
-        double supportAccuracy = ComputeAccuracy(MetaModel, task.SupportSetX, task.SupportSetY);
+        T supportLoss = ComputeLoss(MetaModel, task.SupportSetX, task.SupportSetY);
+        T supportAccuracy = ComputeAccuracy(MetaModel, task.SupportSetX, task.SupportSetY);
 
         startTime.Stop();
 
         // Restore original meta-parameters (don't modify meta-model during evaluation)
         MetaModel.SetParameters(originalParameters);
 
-        return new AdaptationMetrics
+        // Calculate additional metrics
+        var additionalMetrics = new Dictionary<string, T>
         {
-            QueryAccuracy = queryAccuracy,
-            QueryLoss = queryLoss,
-            SupportAccuracy = supportAccuracy,
-            SupportLoss = supportLoss,
-            AdaptationSteps = Configuration.InnerSteps,
-            AdaptationTimeMs = startTime.Elapsed.TotalMilliseconds,
-            TaskId = task.TaskId ?? "unknown",
-            AdditionalMetrics = new Dictionary<string, double>
-            {
-                ["initial_query_loss"] = initialQueryLoss,
-                ["loss_improvement"] = initialQueryLoss - queryLoss,
-                ["loss_improvement_ratio"] = initialQueryLoss > 0 ? (initialQueryLoss - queryLoss) / initialQueryLoss : 0,
-                ["support_query_accuracy_gap"] = supportAccuracy - queryAccuracy
-            }
+            ["initial_query_loss"] = initialQueryLoss,
+            ["loss_improvement"] = NumOps.Subtract(initialQueryLoss, queryLoss),
+            ["support_query_accuracy_gap"] = NumOps.Subtract(supportAccuracy, queryAccuracy)
         };
+
+        // Return new Result type with generic T throughout
+        return new MetaAdaptationResult<T>(
+            queryAccuracy: queryAccuracy,
+            queryLoss: queryLoss,
+            supportAccuracy: supportAccuracy,
+            supportLoss: supportLoss,
+            adaptationSteps: Configuration.InnerSteps,
+            adaptationTimeMs: startTime.Elapsed.TotalMilliseconds,
+            perStepLosses: perStepLosses,
+            additionalMetrics: additionalMetrics);
     }
 
     /// <summary>
@@ -263,18 +268,5 @@ public class ReptileTrainer<T, TInput, TOutput> : ReptileTrainerBase<T, TInput, 
         result = result.Divide(divisor);
 
         return result;
-    }
-
-    /// <summary>
-    /// Calculates standard deviation of a list of values.
-    /// </summary>
-    private double CalculateStdDev(List<double> values)
-    {
-        if (values.Count < 2)
-            return 0.0;
-
-        double mean = values.Average();
-        double sumSquaredDiffs = values.Sum(v => Math.Pow(v - mean, 2));
-        return Math.Sqrt(sumSquaredDiffs / (values.Count - 1));
     }
 }
