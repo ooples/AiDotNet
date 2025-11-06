@@ -260,7 +260,7 @@ public class MetaTrainingResult<T>
 
         for (int i = 1; i < LossHistory.Length; i++)
         {
-            if (numOps.ToDouble(LossHistory[i]) < numOps.ToDouble(bestLoss))
+            if (Convert.ToDouble(LossHistory[i]) < Convert.ToDouble(bestLoss))
             {
                 bestLoss = LossHistory[i];
                 bestIteration = i;
@@ -282,7 +282,7 @@ public class MetaTrainingResult<T>
 
         for (int i = 1; i < AccuracyHistory.Length; i++)
         {
-            if (numOps.ToDouble(AccuracyHistory[i]) > numOps.ToDouble(bestAccuracy))
+            if (Convert.ToDouble(AccuracyHistory[i]) > Convert.ToDouble(bestAccuracy))
             {
                 bestAccuracy = AccuracyHistory[i];
                 bestIteration = i;

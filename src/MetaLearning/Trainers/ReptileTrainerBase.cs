@@ -267,8 +267,8 @@ public abstract class ReptileTrainerBase<T, TInput, TOutput> : IMetaLearner<T, T
         {
             // For classification: check if predictions match targets
             // This works for both hard labels and argmax of softmax outputs
-            var predValue = NumOps.ToDouble(predictedVector[i]);
-            var targetValue = NumOps.ToDouble(targetVector[i]);
+            var predValue = Convert.ToDouble(predictedVector[i]);
+            var targetValue = Convert.ToDouble(targetVector[i]);
 
             if (Math.Abs(predValue - targetValue) < 0.5) // Tolerance for classification
                 correct++;

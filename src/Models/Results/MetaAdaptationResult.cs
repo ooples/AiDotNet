@@ -248,7 +248,7 @@ public class MetaAdaptationResult<T>
         T finalLoss = PerStepLosses[^1];
         T lossReduction = numOps.Subtract(initialLoss, finalLoss);
 
-        return numOps.ToDouble(lossReduction) >= convergenceThreshold;
+        return Convert.ToDouble(lossReduction) >= convergenceThreshold;
     }
 
     /// <summary>

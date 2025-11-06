@@ -79,8 +79,8 @@ public class ReptileTrainerConfig<T> : IMetaLearnerConfig<T>
     /// <inheritdoc/>
     public bool IsValid()
     {
-        var innerLr = NumOps.ToDouble(InnerLearningRate);
-        var metaLr = NumOps.ToDouble(MetaLearningRate);
+        var innerLr = Convert.ToDouble(InnerLearningRate);
+        var metaLr = Convert.ToDouble(MetaLearningRate);
 
         return innerLr > 0 && innerLr <= 1.0 &&
                metaLr > 0 && metaLr <= 1.0 &&
