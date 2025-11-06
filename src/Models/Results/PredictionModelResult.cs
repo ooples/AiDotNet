@@ -587,8 +587,10 @@ public class PredictionModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
             // Perform fast adaptation using meta-learner
             var adaptResult = MetaLearner.AdaptAndEvaluate(task);
 
-            // The meta-learner has updated the model's parameters
-            // No need to explicitly copy - they share the same model reference
+            // Apply adapted parameters to this model
+            // The meta-learner adapts its BaseModel, so we need to copy those parameters
+            var adaptedParameters = MetaLearner.BaseModel.GetParameters();
+            Model.SetParameters(adaptedParameters);
         }
         else
         {
