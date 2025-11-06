@@ -59,7 +59,7 @@ public class ReptileTrainerTests
         var model = new SimpleMockModelDouble(10);
         var lossFunction = new MeanSquaredErrorLoss<double>();
         var (X, Y) = CreateTestDataset(numClasses: 10, examplesPerClass: 20, numFeatures: 10);
-        var dataLoader = new UniformEpisodicDataLoader<double>(X, Y, nWay: 5, kShot: 3, queryShots: 10);
+        var dataLoader = new UniformEpisodicDataLoader<double, Tensor<double>, Tensor<double>>(X, Y, nWay: 5, kShot: 3, queryShots: 10);
         var config = new ReptileTrainerConfig<double>(
             innerLearningRate: 0.01,
             metaLearningRate: 0.001,
@@ -82,7 +82,7 @@ public class ReptileTrainerTests
         // Arrange
         var lossFunction = new MeanSquaredErrorLoss<double>();
         var (X, Y) = CreateTestDataset(numClasses: 10, examplesPerClass: 20, numFeatures: 10);
-        var dataLoader = new UniformEpisodicDataLoader<double>(X, Y, nWay: 5, kShot: 3, queryShots: 10);
+        var dataLoader = new UniformEpisodicDataLoader<double, Tensor<double>, Tensor<double>>(X, Y, nWay: 5, kShot: 3, queryShots: 10);
 
         // Act & Assert
         var exception = Assert.Throws<ArgumentNullException>(() =>
@@ -100,7 +100,7 @@ public class ReptileTrainerTests
         // Arrange
         var model = new SimpleMockModelDouble(10);
         var (X, Y) = CreateTestDataset(numClasses: 10, examplesPerClass: 20, numFeatures: 10);
-        var dataLoader = new UniformEpisodicDataLoader<double>(X, Y, nWay: 5, kShot: 3, queryShots: 10);
+        var dataLoader = new UniformEpisodicDataLoader<double, Tensor<double>, Tensor<double>>(X, Y, nWay: 5, kShot: 3, queryShots: 10);
 
         // Act & Assert
         var exception = Assert.Throws<ArgumentNullException>(() =>
@@ -136,7 +136,7 @@ public class ReptileTrainerTests
         var model = new SimpleMockModelDouble(10);
         var lossFunction = new MeanSquaredErrorLoss<double>();
         var (X, Y) = CreateTestDataset(numClasses: 10, examplesPerClass: 20, numFeatures: 10);
-        var dataLoader = new UniformEpisodicDataLoader<double>(X, Y, nWay: 5, kShot: 3, queryShots: 10);
+        var dataLoader = new UniformEpisodicDataLoader<double, Tensor<double>, Tensor<double>>(X, Y, nWay: 5, kShot: 3, queryShots: 10);
         var config = new ReptileTrainerConfig<double>(
             innerLearningRate: 0.01,
             metaLearningRate: 0.001,
@@ -160,7 +160,7 @@ public class ReptileTrainerTests
         var model = new SimpleMockModelDouble(10);
         var lossFunction = new MeanSquaredErrorLoss<double>();
         var (X, Y) = CreateTestDataset(numClasses: 10, examplesPerClass: 20, numFeatures: 10);
-        var dataLoader = new UniformEpisodicDataLoader<double>(X, Y, nWay: 5, kShot: 3, queryShots: 10);
+        var dataLoader = new UniformEpisodicDataLoader<double, Tensor<double>, Tensor<double>>(X, Y, nWay: 5, kShot: 3, queryShots: 10);
         var config = new ReptileTrainerConfig<double>(
             innerLearningRate: 0.0, // Invalid
             metaLearningRate: 0.001,
@@ -184,7 +184,7 @@ public class ReptileTrainerTests
         var model = new SimpleMockModelDouble(10);
         var lossFunction = new MeanSquaredErrorLoss<double>();
         var (X, Y) = CreateTestDataset(numClasses: 10, examplesPerClass: 20, numFeatures: 10);
-        var dataLoader = new UniformEpisodicDataLoader<double>(X, Y, nWay: 5, kShot: 3, queryShots: 10);
+        var dataLoader = new UniformEpisodicDataLoader<double, Tensor<double>, Tensor<double>>(X, Y, nWay: 5, kShot: 3, queryShots: 10);
         var config = new ReptileTrainerConfig<double>(
             innerLearningRate: 0.01,
             metaLearningRate: -0.001, // Invalid
@@ -212,7 +212,7 @@ public class ReptileTrainerTests
         var model = new SimpleMockModelDouble(10);
         var lossFunction = new MeanSquaredErrorLoss<double>();
         var (X, Y) = CreateTestDataset(numClasses: 10, examplesPerClass: 20, numFeatures: 10);
-        var dataLoader = new UniformEpisodicDataLoader<double>(X, Y, nWay: 5, kShot: 3, queryShots: 10);
+        var dataLoader = new UniformEpisodicDataLoader<double, Tensor<double>, Tensor<double>>(X, Y, nWay: 5, kShot: 3, queryShots: 10);
         var trainer = new ReptileTrainerDouble(model, lossFunction, dataLoader);
 
         // Act & Assert
@@ -229,7 +229,7 @@ public class ReptileTrainerTests
         var model = new SimpleMockModelDouble(10);
         var lossFunction = new MeanSquaredErrorLoss<double>();
         var (X, Y) = CreateTestDataset(numClasses: 10, examplesPerClass: 20, numFeatures: 10);
-        var dataLoader = new UniformEpisodicDataLoader<double>(X, Y, nWay: 5, kShot: 3, queryShots: 10, seed: 42);
+        var dataLoader = new UniformEpisodicDataLoader<double, Tensor<double>, Tensor<double>>(X, Y, nWay: 5, kShot: 3, queryShots: 10, seed: 42);
         var config = new ReptileTrainerConfig<double>(innerSteps: 3);
         var trainer = new ReptileTrainerDouble(model, lossFunction, dataLoader, config);
 
@@ -263,7 +263,7 @@ public class ReptileTrainerTests
         int innerSteps = 3;
         int numMetaIterations = 5;
         var (X, Y) = CreateTestDataset(numClasses: 10, examplesPerClass: 20, numFeatures: 10);
-        var dataLoader = new UniformEpisodicDataLoader<double>(X, Y, nWay: 5, kShot: 3, queryShots: 10);
+        var dataLoader = new UniformEpisodicDataLoader<double, Tensor<double>, Tensor<double>>(X, Y, nWay: 5, kShot: 3, queryShots: 10);
         var config = new ReptileTrainerConfig<double>(innerSteps: innerSteps);
         var trainer = new ReptileTrainerDouble(model, lossFunction, dataLoader, config);
 
@@ -286,7 +286,7 @@ public class ReptileTrainerTests
         var model = new SimpleMockModelDouble(10);
         var lossFunction = new MeanSquaredErrorLoss<double>();
         var (X, Y) = CreateTestDataset(numClasses: 10, examplesPerClass: 20, numFeatures: 10);
-        var dataLoader = new UniformEpisodicDataLoader<double>(X, Y, nWay: 5, kShot: 3, queryShots: 10);
+        var dataLoader = new UniformEpisodicDataLoader<double, Tensor<double>, Tensor<double>>(X, Y, nWay: 5, kShot: 3, queryShots: 10);
         var trainer = new ReptileTrainerDouble(model, lossFunction, dataLoader);
 
         int numIterations = 10;
@@ -309,7 +309,7 @@ public class ReptileTrainerTests
         var model = new SimpleMockModelDouble(10);
         var lossFunction = new MeanSquaredErrorLoss<double>();
         var (X, Y) = CreateTestDataset(numClasses: 10, examplesPerClass: 20, numFeatures: 10);
-        var dataLoader = new UniformEpisodicDataLoader<double>(X, Y); // Use defaults here too
+        var dataLoader = new UniformEpisodicDataLoader<double, Tensor<double>, Tensor<double>>(X, Y); // Use defaults here too
         var trainer = new ReptileTrainerDouble(model, lossFunction, dataLoader); // Use all defaults
 
         // Act
@@ -331,7 +331,7 @@ public class ReptileTrainerTests
         var model = new SimpleMockModelDouble(5);
         var lossFunction = new MeanSquaredErrorLoss<double>();
         var (X, Y) = CreateTestDataset(numClasses: 10, examplesPerClass: 20, numFeatures: 10);
-        var dataLoader = new UniformEpisodicDataLoader<double>(X, Y, nWay: 5, kShot: 3, queryShots: 10, seed: 42);
+        var dataLoader = new UniformEpisodicDataLoader<double, Tensor<double>, Tensor<double>>(X, Y, nWay: 5, kShot: 3, queryShots: 10, seed: 42);
         var config = new ReptileTrainerConfig<double>(
             innerLearningRate: 0.01,
             metaLearningRate: 0.1, // Higher rate to see effect clearly

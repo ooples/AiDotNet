@@ -125,7 +125,7 @@ public class ReptileTrainerIntegrationTests
         // Generate meta-training dataset with 20 tasks
         var (X, Y) = GenerateSineWaveDataset(numTasks: 20, samplesPerTask: 25);
 
-        var dataLoader = new UniformEpisodicDataLoader<double>(
+        var dataLoader = new UniformEpisodicDataLoader<double, Tensor<double>, Tensor<double>>(
             datasetX: X,
             datasetY: Y,
             nWay: 5,       // 5 different tasks per meta-batch
@@ -187,7 +187,7 @@ public class ReptileTrainerIntegrationTests
 
         // Generate meta-training dataset
         var (X, Y) = GenerateSineWaveDataset(numTasks: 20, samplesPerTask: 25);
-        var dataLoader = new UniformEpisodicDataLoader<double>(X, Y, nWay: 5, kShot: 5, queryShots: 10, seed: 42);
+        var dataLoader = new UniformEpisodicDataLoader<double, Tensor<double>, Tensor<double>>(X, Y, nWay: 5, kShot: 5, queryShots: 10, seed: 42);
 
         // Meta-train only one model
         var config = new ReptileTrainerConfig<double>(
@@ -232,7 +232,7 @@ public class ReptileTrainerIntegrationTests
         var lossFunction = new MeanSquaredErrorLoss<double>();
 
         var (X, Y) = GenerateSineWaveDataset(numTasks: 20, samplesPerTask: 25);
-        var dataLoader = new UniformEpisodicDataLoader<double>(X, Y, nWay: 5, kShot: 5, queryShots: 10, seed: 42);
+        var dataLoader = new UniformEpisodicDataLoader<double, Tensor<double>, Tensor<double>>(X, Y, nWay: 5, kShot: 5, queryShots: 10, seed: 42);
 
         var config = new ReptileTrainerConfig<double>(
             innerLearningRate: 0.02,
@@ -275,7 +275,7 @@ public class ReptileTrainerIntegrationTests
         var lossFunction = new MeanSquaredErrorLoss<double>();
 
         var (X, Y) = GenerateSineWaveDataset(numTasks: 20, samplesPerTask: 25);
-        var dataLoader = new UniformEpisodicDataLoader<double>(X, Y, nWay: 5, kShot: 5, queryShots: 10, seed: 42);
+        var dataLoader = new UniformEpisodicDataLoader<double, Tensor<double>, Tensor<double>>(X, Y, nWay: 5, kShot: 5, queryShots: 10, seed: 42);
 
         var config = new ReptileTrainerConfig<double>(
             innerLearningRate: 0.02,

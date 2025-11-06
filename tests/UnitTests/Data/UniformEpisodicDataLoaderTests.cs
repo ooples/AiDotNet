@@ -51,7 +51,7 @@ public class UniformEpisodicDataLoaderTests
         var (X, Y) = CreateTestDataset(numClasses: 10, examplesPerClass: 20, numFeatures: 5);
 
         // Act
-        var loader = new UniformEpisodicDataLoader<double>(
+        var loader = new UniformEpisodicDataLoader<double, Tensor<double>, Tensor<double>>(
             datasetX: X,
             datasetY: Y,
             nWay: 5,
@@ -71,7 +71,7 @@ public class UniformEpisodicDataLoaderTests
 
         // Act & Assert
         var exception = Assert.Throws<ArgumentNullException>(() =>
-            new UniformEpisodicDataLoader<double>(
+            new UniformEpisodicDataLoader<double, Tensor<double>, Tensor<double>>(
                 datasetX: null!,
                 datasetY: Y,
                 nWay: 5,
@@ -89,7 +89,7 @@ public class UniformEpisodicDataLoaderTests
 
         // Act & Assert
         var exception = Assert.Throws<ArgumentNullException>(() =>
-            new UniformEpisodicDataLoader<double>(
+            new UniformEpisodicDataLoader<double, Tensor<double>, Tensor<double>>(
                 datasetX: X,
                 datasetY: null!,
                 nWay: 5,
@@ -108,7 +108,7 @@ public class UniformEpisodicDataLoaderTests
 
         // Act & Assert
         var exception = Assert.Throws<ArgumentException>(() =>
-            new UniformEpisodicDataLoader<double>(
+            new UniformEpisodicDataLoader<double, Tensor<double>, Tensor<double>>(
                 datasetX: X,
                 datasetY: Y,
                 nWay: 5,
@@ -126,7 +126,7 @@ public class UniformEpisodicDataLoaderTests
 
         // Act & Assert
         var exception = Assert.Throws<ArgumentException>(() =>
-            new UniformEpisodicDataLoader<double>(
+            new UniformEpisodicDataLoader<double, Tensor<double>, Tensor<double>>(
                 datasetX: X,
                 datasetY: Y,
                 nWay: 1,
@@ -145,7 +145,7 @@ public class UniformEpisodicDataLoaderTests
 
         // Act & Assert
         var exception = Assert.Throws<ArgumentException>(() =>
-            new UniformEpisodicDataLoader<double>(
+            new UniformEpisodicDataLoader<double, Tensor<double>, Tensor<double>>(
                 datasetX: X,
                 datasetY: Y,
                 nWay: 5,
@@ -164,7 +164,7 @@ public class UniformEpisodicDataLoaderTests
 
         // Act & Assert
         var exception = Assert.Throws<ArgumentException>(() =>
-            new UniformEpisodicDataLoader<double>(
+            new UniformEpisodicDataLoader<double, Tensor<double>, Tensor<double>>(
                 datasetX: X,
                 datasetY: Y,
                 nWay: 5,
@@ -183,7 +183,7 @@ public class UniformEpisodicDataLoaderTests
 
         // Act & Assert
         var exception = Assert.Throws<ArgumentException>(() =>
-            new UniformEpisodicDataLoader<double>(
+            new UniformEpisodicDataLoader<double, Tensor<double>, Tensor<double>>(
                 datasetX: X,
                 datasetY: Y,
                 nWay: 5,
@@ -202,7 +202,7 @@ public class UniformEpisodicDataLoaderTests
 
         // Act & Assert
         var exception = Assert.Throws<ArgumentException>(() =>
-            new UniformEpisodicDataLoader<double>(
+            new UniformEpisodicDataLoader<double, Tensor<double>, Tensor<double>>(
                 datasetX: X,
                 datasetY: Y,
                 nWay: 5,
@@ -219,7 +219,7 @@ public class UniformEpisodicDataLoaderTests
         var (X, Y) = CreateTestDataset(numClasses: 10, examplesPerClass: 25, numFeatures: 10);
 
         // Act - Use defaults by not providing nWay, kShot, queryShots parameters
-        var loader = new UniformEpisodicDataLoader<double>(X, Y);
+        var loader = new UniformEpisodicDataLoader<double, Tensor<double>, Tensor<double>>(X, Y);
 
         // Assert - Get a task and verify it uses default dimensions (5-way 5-shot 15 queries)
         var task = loader.GetNextTask();
@@ -240,7 +240,7 @@ public class UniformEpisodicDataLoaderTests
         var (X, Y) = CreateTestDataset(numClasses: 10, examplesPerClass: 25, numFeatures: 10);
 
         // Act - Override only nWay, use defaults for kShot and queryShots
-        var loader = new UniformEpisodicDataLoader<double>(X, Y, nWay: 3);
+        var loader = new UniformEpisodicDataLoader<double, Tensor<double>, Tensor<double>>(X, Y, nWay: 3);
         var task = loader.GetNextTask();
 
         // Assert - 3-way (custom), 5-shot (default), 15 queries (default)
@@ -262,7 +262,7 @@ public class UniformEpisodicDataLoaderTests
         int numFeatures = 784;
 
         var (X, Y) = CreateTestDataset(numClasses: 10, examplesPerClass: 20, numFeatures);
-        var loader = new UniformEpisodicDataLoader<double>(X, Y, nWay, kShot, queryShots, seed: 42);
+        var loader = new UniformEpisodicDataLoader<double, Tensor<double>, Tensor<double>>(X, Y, nWay, kShot, queryShots, seed: 42);
 
         // Act
         var task = loader.GetNextTask();
@@ -293,7 +293,7 @@ public class UniformEpisodicDataLoaderTests
         int queryShots = 10;
 
         var (X, Y) = CreateTestDataset(numClasses: 10, examplesPerClass: 20, numFeatures: 5);
-        var loader = new UniformEpisodicDataLoader<double>(X, Y, nWay, kShot, queryShots, seed: 42);
+        var loader = new UniformEpisodicDataLoader<double, Tensor<double>, Tensor<double>>(X, Y, nWay, kShot, queryShots, seed: 42);
 
         // Act
         var task = loader.GetNextTask();
@@ -332,7 +332,7 @@ public class UniformEpisodicDataLoaderTests
         int numFeatures = 10;
 
         var (X, Y) = CreateTestDataset(numClasses: 10, examplesPerClass: 20, numFeatures);
-        var loader = new UniformEpisodicDataLoader<double>(X, Y, nWay, kShot, queryShots, seed: 42);
+        var loader = new UniformEpisodicDataLoader<double, Tensor<double>, Tensor<double>>(X, Y, nWay, kShot, queryShots, seed: 42);
 
         // Act
         var task = loader.GetNextTask();
@@ -369,7 +369,7 @@ public class UniformEpisodicDataLoaderTests
         int queryShots = 10;
 
         var (X, Y) = CreateTestDataset(numClasses: 10, examplesPerClass: 20, numFeatures: 5);
-        var loader = new UniformEpisodicDataLoader<double>(X, Y, nWay, kShot, queryShots, seed: 42);
+        var loader = new UniformEpisodicDataLoader<double, Tensor<double>, Tensor<double>>(X, Y, nWay, kShot, queryShots, seed: 42);
 
         // Act
         var task = loader.GetNextTask();
@@ -416,7 +416,7 @@ public class UniformEpisodicDataLoaderTests
     {
         // Arrange - Use enough classes to ensure different class sets are selected
         var (X, Y) = CreateTestDataset(numClasses: 10, examplesPerClass: 20, numFeatures: 5);
-        var loader = new UniformEpisodicDataLoader<double>(X, Y, nWay: 5, kShot: 3, queryShots: 10);
+        var loader = new UniformEpisodicDataLoader<double, Tensor<double>, Tensor<double>>(X, Y, nWay: 5, kShot: 3, queryShots: 10);
 
         // Act - Generate multiple tasks
         var task1 = loader.GetNextTask();
@@ -452,8 +452,8 @@ public class UniformEpisodicDataLoaderTests
         int seed = 42;
         var (X, Y) = CreateTestDataset(numClasses: 10, examplesPerClass: 20, numFeatures: 5);
 
-        var loader1 = new UniformEpisodicDataLoader<double>(X, Y, nWay: 5, kShot: 3, queryShots: 10, seed: seed);
-        var loader2 = new UniformEpisodicDataLoader<double>(X, Y, nWay: 5, kShot: 3, queryShots: 10, seed: seed);
+        var loader1 = new UniformEpisodicDataLoader<double, Tensor<double>, Tensor<double>>(X, Y, nWay: 5, kShot: 3, queryShots: 10, seed: seed);
+        var loader2 = new UniformEpisodicDataLoader<double, Tensor<double>, Tensor<double>>(X, Y, nWay: 5, kShot: 3, queryShots: 10, seed: seed);
 
         // Act
         var task1 = loader1.GetNextTask();
@@ -480,7 +480,7 @@ public class UniformEpisodicDataLoaderTests
     {
         // Arrange
         var (X, Y) = CreateTestDataset(numClasses: 25, examplesPerClass: 30, numFeatures: 10);
-        var loader = new UniformEpisodicDataLoader<double>(X, Y, nWay, kShot, queryShots, seed: 42);
+        var loader = new UniformEpisodicDataLoader<double, Tensor<double>, Tensor<double>>(X, Y, nWay, kShot, queryShots, seed: 42);
 
         // Act
         var task = loader.GetNextTask();
@@ -497,7 +497,7 @@ public class UniformEpisodicDataLoaderTests
     {
         // Arrange
         var (X, Y) = CreateTestDataset(numClasses: 5, examplesPerClass: 20, numFeatures: 10);
-        var loader = new UniformEpisodicDataLoader<double>(X, Y, nWay: 3, kShot: 2, queryShots: 5, seed: 42);
+        var loader = new UniformEpisodicDataLoader<double, Tensor<double>, Tensor<double>>(X, Y, nWay: 3, kShot: 2, queryShots: 5, seed: 42);
 
         // Act
         var task = loader.GetNextTask();

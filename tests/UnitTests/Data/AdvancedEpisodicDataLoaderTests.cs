@@ -81,7 +81,7 @@ public class AdvancedEpisodicDataLoaderTests
         var (X, Y) = CreateTestDataset(numClasses: 10, examplesPerClass: 20, numFeatures: 5);
 
         // Act
-        var loader = new BalancedEpisodicDataLoader<double>(X, Y, nWay: 5, kShot: 3, queryShots: 10, seed: 42);
+        var loader = new BalancedEpisodicDataLoader<double, Tensor<double>, Tensor<double>>(X, Y, nWay: 5, kShot: 3, queryShots: 10, seed: 42);
 
         // Assert
         Assert.NotNull(loader);
@@ -97,7 +97,7 @@ public class AdvancedEpisodicDataLoaderTests
         int numFeatures = 20;
 
         var (X, Y) = CreateTestDataset(numClasses: 10, examplesPerClass: 20, numFeatures);
-        var loader = new BalancedEpisodicDataLoader<double>(X, Y, nWay, kShot, queryShots, seed: 42);
+        var loader = new BalancedEpisodicDataLoader<double, Tensor<double>, Tensor<double>>(X, Y, nWay, kShot, queryShots, seed: 42);
 
         // Act
         var task = loader.GetNextTask();
@@ -114,7 +114,7 @@ public class AdvancedEpisodicDataLoaderTests
     {
         // Arrange
         var (X, Y) = CreateTestDataset(numClasses: 6, examplesPerClass: 30, numFeatures: 5);
-        var loader = new BalancedEpisodicDataLoader<double>(X, Y, nWay: 3, kShot: 2, queryShots: 5, seed: 42);
+        var loader = new BalancedEpisodicDataLoader<double, Tensor<double>, Tensor<double>>(X, Y, nWay: 3, kShot: 2, queryShots: 5, seed: 42);
 
         // Act - Generate many tasks and track class usage
         var classUsage = new Dictionary<double, int>();
@@ -149,8 +149,8 @@ public class AdvancedEpisodicDataLoaderTests
         int seed = 42;
         var (X, Y) = CreateTestDataset(numClasses: 10, examplesPerClass: 20, numFeatures: 5);
 
-        var loader1 = new BalancedEpisodicDataLoader<double>(X, Y, nWay: 5, kShot: 3, queryShots: 10, seed: seed);
-        var loader2 = new BalancedEpisodicDataLoader<double>(X, Y, nWay: 5, kShot: 3, queryShots: 10, seed: seed);
+        var loader1 = new BalancedEpisodicDataLoader<double, Tensor<double>, Tensor<double>>(X, Y, nWay: 5, kShot: 3, queryShots: 10, seed: seed);
+        var loader2 = new BalancedEpisodicDataLoader<double, Tensor<double>, Tensor<double>>(X, Y, nWay: 5, kShot: 3, queryShots: 10, seed: seed);
 
         // Act
         var task1 = loader1.GetNextTask();
@@ -171,7 +171,7 @@ public class AdvancedEpisodicDataLoaderTests
         var (X, Y) = CreateTestDataset(numClasses: 10, examplesPerClass: 25, numFeatures: 10);
 
         // Act - Use defaults
-        var loader = new BalancedEpisodicDataLoader<double>(X, Y);
+        var loader = new BalancedEpisodicDataLoader<double, Tensor<double>, Tensor<double>>(X, Y);
         var task = loader.GetNextTask();
 
         // Assert - Default 5-way 5-shot 15 queries
@@ -190,7 +190,7 @@ public class AdvancedEpisodicDataLoaderTests
         var (X, Y) = CreateImbalancedDataset(numFeatures: 10);
 
         // Act
-        var loader = new StratifiedEpisodicDataLoader<double>(X, Y, nWay: 2, kShot: 5, queryShots: 10, seed: 42);
+        var loader = new StratifiedEpisodicDataLoader<double, Tensor<double>, Tensor<double>>(X, Y, nWay: 2, kShot: 5, queryShots: 10, seed: 42);
 
         // Assert
         Assert.NotNull(loader);
@@ -206,7 +206,7 @@ public class AdvancedEpisodicDataLoaderTests
         int numFeatures = 10;
 
         var (X, Y) = CreateImbalancedDataset(numFeatures);
-        var loader = new StratifiedEpisodicDataLoader<double>(X, Y, nWay, kShot, queryShots, seed: 42);
+        var loader = new StratifiedEpisodicDataLoader<double, Tensor<double>, Tensor<double>>(X, Y, nWay, kShot, queryShots, seed: 42);
 
         // Act
         var task = loader.GetNextTask();
@@ -227,7 +227,7 @@ public class AdvancedEpisodicDataLoaderTests
         // Class 1: 70 examples (23.3%)
         // Class 2: 30 examples (10%)
         var (X, Y) = CreateImbalancedDataset(numFeatures: 5);
-        var loader = new StratifiedEpisodicDataLoader<double>(X, Y, nWay: 2, kShot: 3, queryShots: 5, seed: 42);
+        var loader = new StratifiedEpisodicDataLoader<double, Tensor<double>, Tensor<double>>(X, Y, nWay: 2, kShot: 3, queryShots: 5, seed: 42);
 
         // Act - Generate tasks
         int numTasks = 100;
@@ -254,8 +254,8 @@ public class AdvancedEpisodicDataLoaderTests
         int seed = 42;
         var (X, Y) = CreateImbalancedDataset(numFeatures: 10);
 
-        var loader1 = new StratifiedEpisodicDataLoader<double>(X, Y, nWay: 2, kShot: 5, queryShots: 10, seed: seed);
-        var loader2 = new StratifiedEpisodicDataLoader<double>(X, Y, nWay: 2, kShot: 5, queryShots: 10, seed: seed);
+        var loader1 = new StratifiedEpisodicDataLoader<double, Tensor<double>, Tensor<double>>(X, Y, nWay: 2, kShot: 5, queryShots: 10, seed: seed);
+        var loader2 = new StratifiedEpisodicDataLoader<double, Tensor<double>, Tensor<double>>(X, Y, nWay: 2, kShot: 5, queryShots: 10, seed: seed);
 
         // Act
         var task1 = loader1.GetNextTask();
@@ -276,7 +276,7 @@ public class AdvancedEpisodicDataLoaderTests
         var (X, Y) = CreateTestDataset(numClasses: 10, examplesPerClass: 25, numFeatures: 10);
 
         // Act - Use defaults
-        var loader = new StratifiedEpisodicDataLoader<double>(X, Y);
+        var loader = new StratifiedEpisodicDataLoader<double, Tensor<double>, Tensor<double>>(X, Y);
         var task = loader.GetNextTask();
 
         // Assert - Default 5-way 5-shot 15 queries
@@ -295,7 +295,7 @@ public class AdvancedEpisodicDataLoaderTests
         var (X, Y) = CreateTestDataset(numClasses: 10, examplesPerClass: 30, numFeatures: 5);
 
         // Act
-        var loader = new CurriculumEpisodicDataLoader<double>(
+        var loader = new CurriculumEpisodicDataLoader<double, Tensor<double>, Tensor<double>>(
             X, Y,
             targetNWay: 5,
             targetKShot: 1,
@@ -314,7 +314,7 @@ public class AdvancedEpisodicDataLoaderTests
     {
         // Arrange
         var (X, Y) = CreateTestDataset(numClasses: 10, examplesPerClass: 30, numFeatures: 10);
-        var loader = new CurriculumEpisodicDataLoader<double>(
+        var loader = new CurriculumEpisodicDataLoader<double, Tensor<double>, Tensor<double>>(
             X, Y,
             targetNWay: 5,
             targetKShot: 1,
@@ -340,7 +340,7 @@ public class AdvancedEpisodicDataLoaderTests
     {
         // Arrange
         var (X, Y) = CreateTestDataset(numClasses: 10, examplesPerClass: 30, numFeatures: 10);
-        var loader = new CurriculumEpisodicDataLoader<double>(
+        var loader = new CurriculumEpisodicDataLoader<double, Tensor<double>, Tensor<double>>(
             X, Y,
             targetNWay: 5,
             targetKShot: 1,
@@ -366,7 +366,7 @@ public class AdvancedEpisodicDataLoaderTests
     {
         // Arrange
         var (X, Y) = CreateTestDataset(numClasses: 10, examplesPerClass: 30, numFeatures: 10);
-        var loader = new CurriculumEpisodicDataLoader<double>(
+        var loader = new CurriculumEpisodicDataLoader<double, Tensor<double>, Tensor<double>>(
             X, Y,
             targetNWay: 5,
             targetKShot: 1,
@@ -391,7 +391,7 @@ public class AdvancedEpisodicDataLoaderTests
     {
         // Arrange
         var (X, Y) = CreateTestDataset(numClasses: 10, examplesPerClass: 30, numFeatures: 10);
-        var loader = new CurriculumEpisodicDataLoader<double>(
+        var loader = new CurriculumEpisodicDataLoader<double, Tensor<double>, Tensor<double>>(
             X, Y,
             targetNWay: 5,
             targetKShot: 1,
@@ -428,7 +428,7 @@ public class AdvancedEpisodicDataLoaderTests
     {
         // Arrange
         var (X, Y) = CreateTestDataset(numClasses: 10, examplesPerClass: 30, numFeatures: 5);
-        var loader = new CurriculumEpisodicDataLoader<double>(
+        var loader = new CurriculumEpisodicDataLoader<double, Tensor<double>, Tensor<double>>(
             X, Y,
             targetNWay: 5,
             targetKShot: 1,
@@ -450,7 +450,7 @@ public class AdvancedEpisodicDataLoaderTests
         var (X, Y) = CreateTestDataset(numClasses: 10, examplesPerClass: 30, numFeatures: 5);
 
         // Act & Assert - initialNWay > targetNWay
-        Assert.Throws<ArgumentException>(() => new CurriculumEpisodicDataLoader<double>(
+        Assert.Throws<ArgumentException>(() => new CurriculumEpisodicDataLoader<double, Tensor<double>, Tensor<double>>(
             X, Y,
             targetNWay: 3,
             targetKShot: 1,
@@ -459,7 +459,7 @@ public class AdvancedEpisodicDataLoaderTests
             initialKShot: 10));
 
         // Act & Assert - initialKShot < targetKShot
-        Assert.Throws<ArgumentException>(() => new CurriculumEpisodicDataLoader<double>(
+        Assert.Throws<ArgumentException>(() => new CurriculumEpisodicDataLoader<double, Tensor<double>, Tensor<double>>(
             X, Y,
             targetNWay: 5,
             targetKShot: 10,
@@ -475,11 +475,11 @@ public class AdvancedEpisodicDataLoaderTests
         int seed = 42;
         var (X, Y) = CreateTestDataset(numClasses: 10, examplesPerClass: 30, numFeatures: 5);
 
-        var loader1 = new CurriculumEpisodicDataLoader<double>(
+        var loader1 = new CurriculumEpisodicDataLoader<double, Tensor<double>, Tensor<double>>(
             X, Y, targetNWay: 5, targetKShot: 1, queryShots: 10,
             initialNWay: 2, initialKShot: 10, seed: seed);
 
-        var loader2 = new CurriculumEpisodicDataLoader<double>(
+        var loader2 = new CurriculumEpisodicDataLoader<double, Tensor<double>, Tensor<double>>(
             X, Y, targetNWay: 5, targetKShot: 1, queryShots: 10,
             initialNWay: 2, initialKShot: 10, seed: seed);
 
@@ -505,7 +505,7 @@ public class AdvancedEpisodicDataLoaderTests
         var (X, Y) = CreateTestDataset(numClasses: 10, examplesPerClass: 30, numFeatures: 10);
 
         // Act - Use defaults
-        var loader = new CurriculumEpisodicDataLoader<double>(X, Y);
+        var loader = new CurriculumEpisodicDataLoader<double, Tensor<double>, Tensor<double>>(X, Y);
 
         // Test at initial difficulty (progress = 0.0)
         loader.SetProgress(0.0);

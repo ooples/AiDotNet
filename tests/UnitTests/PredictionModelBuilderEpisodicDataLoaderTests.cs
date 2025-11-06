@@ -49,7 +49,7 @@ public class PredictionModelBuilderEpisodicDataLoaderTests
     {
         // Arrange
         var (X, Y) = CreateTestDataset(numClasses: 10, examplesPerClass: 25, numFeatures: 10);
-        var loader = new UniformEpisodicDataLoader<double>(X, Y);
+        var loader = new UniformEpisodicDataLoader<double, Tensor<double>, Tensor<double>>(X, Y);
         var builder = new PredictionModelBuilder<double, Matrix<double>, Vector<double>>();
 
         // Act
@@ -65,7 +65,7 @@ public class PredictionModelBuilderEpisodicDataLoaderTests
     {
         // Arrange
         var (X, Y) = CreateTestDataset(numClasses: 10, examplesPerClass: 25, numFeatures: 10);
-        var loader = new BalancedEpisodicDataLoader<double>(X, Y);
+        var loader = new BalancedEpisodicDataLoader<double, Tensor<double>, Tensor<double>>(X, Y);
         var builder = new PredictionModelBuilder<double, Matrix<double>, Vector<double>>();
 
         // Act
@@ -81,7 +81,7 @@ public class PredictionModelBuilderEpisodicDataLoaderTests
     {
         // Arrange
         var (X, Y) = CreateTestDataset(numClasses: 10, examplesPerClass: 25, numFeatures: 10);
-        var loader = new StratifiedEpisodicDataLoader<double>(X, Y);
+        var loader = new StratifiedEpisodicDataLoader<double, Tensor<double>, Tensor<double>>(X, Y);
         var builder = new PredictionModelBuilder<double, Matrix<double>, Vector<double>>();
 
         // Act
@@ -97,7 +97,7 @@ public class PredictionModelBuilderEpisodicDataLoaderTests
     {
         // Arrange
         var (X, Y) = CreateTestDataset(numClasses: 10, examplesPerClass: 30, numFeatures: 10);
-        var loader = new CurriculumEpisodicDataLoader<double>(X, Y);
+        var loader = new CurriculumEpisodicDataLoader<double, Tensor<double>, Tensor<double>>(X, Y);
         var builder = new PredictionModelBuilder<double, Matrix<double>, Vector<double>>();
 
         // Act
@@ -126,7 +126,7 @@ public class PredictionModelBuilderEpisodicDataLoaderTests
     {
         // Arrange
         var (X, Y) = CreateTestDataset(numClasses: 10, examplesPerClass: 25, numFeatures: 10);
-        var loader = new UniformEpisodicDataLoader<double>(X, Y);
+        var loader = new UniformEpisodicDataLoader<double, Tensor<double>, Tensor<double>>(X, Y);
 
         // Act - Method chaining
         var builder = new PredictionModelBuilder<double, Matrix<double>, Vector<double>>()
@@ -147,7 +147,7 @@ public class PredictionModelBuilderEpisodicDataLoaderTests
         var (X, Y) = CreateTestDataset(numClasses: 10, examplesPerClass: 25, numFeatures: 10);
 
         // Act
-        IEpisodicDataLoader<double> loader = new UniformEpisodicDataLoader<double>(X, Y);
+        IEpisodicDataLoader<double, Tensor<double>, Tensor<double>> loader = new UniformEpisodicDataLoader<double, Tensor<double>, Tensor<double>>(X, Y);
 
         // Assert - Can call GetNextTask through interface
         var task = loader.GetNextTask();
@@ -165,7 +165,7 @@ public class PredictionModelBuilderEpisodicDataLoaderTests
         var (X, Y) = CreateTestDataset(numClasses: 10, examplesPerClass: 25, numFeatures: 10);
 
         // Act
-        IEpisodicDataLoader<double> loader = new BalancedEpisodicDataLoader<double>(X, Y);
+        IEpisodicDataLoader<double, Tensor<double>, Tensor<double>> loader = new BalancedEpisodicDataLoader<double, Tensor<double>, Tensor<double>>(X, Y);
 
         // Assert
         var task = loader.GetNextTask();
@@ -179,7 +179,7 @@ public class PredictionModelBuilderEpisodicDataLoaderTests
         var (X, Y) = CreateTestDataset(numClasses: 10, examplesPerClass: 25, numFeatures: 10);
 
         // Act
-        IEpisodicDataLoader<double> loader = new StratifiedEpisodicDataLoader<double>(X, Y);
+        IEpisodicDataLoader<double, Tensor<double>, Tensor<double>> loader = new StratifiedEpisodicDataLoader<double, Tensor<double>, Tensor<double>>(X, Y);
 
         // Assert
         var task = loader.GetNextTask();
@@ -193,7 +193,7 @@ public class PredictionModelBuilderEpisodicDataLoaderTests
         var (X, Y) = CreateTestDataset(numClasses: 10, examplesPerClass: 30, numFeatures: 10);
 
         // Act
-        IEpisodicDataLoader<double> loader = new CurriculumEpisodicDataLoader<double>(X, Y);
+        IEpisodicDataLoader<double, Tensor<double>, Tensor<double>> loader = new CurriculumEpisodicDataLoader<double, Tensor<double>, Tensor<double>>(X, Y);
 
         // Assert
         var task = loader.GetNextTask();
@@ -205,7 +205,7 @@ public class PredictionModelBuilderEpisodicDataLoaderTests
     {
         // Arrange
         var (X, Y) = CreateTestDataset(numClasses: 10, examplesPerClass: 25, numFeatures: 10);
-        IEpisodicDataLoader<double> loader = new UniformEpisodicDataLoader<double>(X, Y);
+        IEpisodicDataLoader<double, Tensor<double>, Tensor<double>> loader = new UniformEpisodicDataLoader<double, Tensor<double>, Tensor<double>>(X, Y);
         var builder = new PredictionModelBuilder<double, Matrix<double>, Vector<double>>();
 
         // Act
