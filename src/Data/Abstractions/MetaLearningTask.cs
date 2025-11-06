@@ -1,3 +1,4 @@
+using AiDotNet.Helpers;
 using AiDotNet.LinearAlgebra;
 
 namespace AiDotNet.Data.Abstractions;
@@ -80,7 +81,7 @@ public class MetaLearningTask<T, TInput, TOutput>
     /// The model looks at these examples to quickly understand what makes each class unique.
     /// </para>
     /// </remarks>
-    public TInput SupportSetX { get; set; }
+    public TInput SupportSetX { get; set; } = ModelHelper<T, TInput, TOutput>.CreateDefaultModelData().X;
 
     /// <summary>
     /// Gets or sets the target labels for the support set.
@@ -102,7 +103,7 @@ public class MetaLearningTask<T, TInput, TOutput>
     /// - One-hot encoded: [[1,0,0], [1,0,0], [1,0,0], [0,1,0], ...] for 3-shot
     /// </para>
     /// </remarks>
-    public TOutput SupportSetY { get; set; }
+    public TOutput SupportSetY { get; set; } = ModelHelper<T, TInput, TOutput>.CreateDefaultModelData().Y;
 
     /// <summary>
     /// Gets or sets the input features for the query set.
@@ -124,7 +125,7 @@ public class MetaLearningTask<T, TInput, TOutput>
     /// from the few support examples. This tests the model's ability to quickly adapt.
     /// </para>
     /// </remarks>
-    public TInput QuerySetX { get; set; }
+    public TInput QuerySetX { get; set; } = ModelHelper<T, TInput, TOutput>.CreateDefaultModelData().X;
 
     /// <summary>
     /// Gets or sets the target labels for the query set.
@@ -146,5 +147,5 @@ public class MetaLearningTask<T, TInput, TOutput>
     /// many different tasks, developing strong few-shot learning abilities.
     /// </para>
     /// </remarks>
-    public TOutput QuerySetY { get; set; }
+    public TOutput QuerySetY { get; set; } = ModelHelper<T, TInput, TOutput>.CreateDefaultModelData().Y;
 }
