@@ -136,7 +136,7 @@ public class CurriculumEpisodicDataLoader<T> : EpisodicDataLoaderBase<T>
         int initialNWay = 2,     // Default initial difficulty: 2-way (easier)
         int initialKShot = 10,   // Default initial difficulty: 10-shot (easier)
         int? seed = null)
-        : base(datasetX, datasetY, targetNWay, targetKShot + initialKShot, queryShots, seed)  // Ensure dataset has enough examples
+        : base(datasetX, datasetY, targetNWay, initialKShot, queryShots, seed)  // Use initialKShot as max kShot for validation
     {
         // Validate curriculum parameters
         if (initialNWay < 2)
@@ -298,7 +298,7 @@ public class CurriculumEpisodicDataLoader<T> : EpisodicDataLoaderBase<T>
     {
         // Linear interpolation from initialKShot to targetKShot
         double interpolated = _initialKShot + (_targetKShot - _initialKShot) * _progress;
-        int result = (int)Math.Round(interpolated);
+        int result = (int)Math.Round(interpolated, MidpointRounding.AwayFromZero);
 
         // Ensure at least 1 shot
         return Math.Max(1, result);
