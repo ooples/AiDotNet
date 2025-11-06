@@ -44,6 +44,7 @@ public class PredictionModelBuilder<T, TInput, TOutput> : IPredictionModelBuilde
     private IGenerator<T>? _ragGenerator;
     private IEnumerable<IQueryProcessor>? _queryProcessors;
     private IEpisodicDataLoader<T>? _episodicDataLoader;
+    private IMetaLearner<T, TInput, TOutput>? _metaLearner;
 
     /// <summary>
     /// Configures which features (input variables) should be used in the model.
@@ -451,9 +452,8 @@ public class PredictionModelBuilder<T, TInput, TOutput> : IPredictionModelBuilde
     /// - Provide support sets (for quick adaptation) and query sets (for evaluation)
     /// - Enable meta-learning algorithms like MAML, Reptile, and SEAL
     ///
-    /// <b>Note:</b> Meta-learning requires specialized trainers (MAML, Reptile, SEAL) that use this
-    /// episodic data loader. Standard supervised learning with Build() does not use episodic sampling.
-    /// Meta-learning trainers will be available as part of the meta-learning suite.
+    /// <b>Note:</b> Episodic data loading is only used for meta-learning. Configure this before
+    /// calling ConfigureMetaLearning, as meta-learners require episodic data at construction time.
     /// </para>
     /// </remarks>
     /// <example>
@@ -474,15 +474,67 @@ public class PredictionModelBuilder<T, TInput, TOutput> : IPredictionModelBuilde
     /// // Configure builder for meta-learning
     /// var builder = new PredictionModelBuilder&lt;double, Matrix&lt;double&gt;, Vector&lt;double&gt;&gt;()
     ///     .ConfigureModel(new NeuralNetworkModel&lt;double&gt;(...))
-    ///     .ConfigureEpisodicDataLoader(episodicLoader);
+    ///     .ConfigureEpisodicDataLoader(episodicLoader)
+    ///     .ConfigureMetaLearning(new ReptileTrainer&lt;double, ...&gt;(...));
     ///
-    /// // Use with meta-learning trainers (MAML, Reptile, SEAL)
-    /// // var mamlModel = builder.BuildMetaLearner(mamlTrainer);  // Future API
+    /// // Train the meta-learner
+    /// var result = builder.TrainMetaLearner(numMetaIterations: 1000, batchSize: 4);
     /// </code>
     /// </example>
     public IPredictionModelBuilder<T, TInput, TOutput> ConfigureEpisodicDataLoader(IEpisodicDataLoader<T> dataLoader)
     {
         _episodicDataLoader = dataLoader;
         return this;
+    }
+
+    /// <summary>
+    /// Configures a meta-learning algorithm (MAML, Reptile, SEAL) for training models that can quickly adapt to new tasks.
+    /// </summary>
+    /// <param name="metaLearner">The meta-learning algorithm to use (e.g., ReptileTrainer, MAMLTrainer).</param>
+    /// <returns>This builder instance for method chaining.</returns>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> Meta-learning trains models to quickly learn new tasks from just a few examples.
+    /// This method sets up the specific meta-learning algorithm you want to use (like Reptile, MAML, or SEAL).
+    /// After configuration, call TrainMetaLearner() to perform the actual meta-training.
+    ///
+    /// <b>Important:</b> You must configure an episodic data loader first using ConfigureEpisodicDataLoader(),
+    /// as meta-learners need this special data format for training.
+    /// </para>
+    /// </remarks>
+    /// <exception cref="ArgumentNullException">Thrown if metaLearner is null.</exception>
+    public IPredictionModelBuilder<T, TInput, TOutput> ConfigureMetaLearning(IMetaLearner<T, TInput, TOutput> metaLearner)
+    {
+        if (metaLearner == null)
+            throw new ArgumentNullException(nameof(metaLearner), "Meta-learner cannot be null");
+
+        _metaLearner = metaLearner;
+        return this;
+    }
+
+    /// <summary>
+    /// Trains the configured meta-learner across multiple tasks to enable rapid adaptation.
+    /// </summary>
+    /// <param name="numMetaIterations">Number of meta-training iterations. Each iteration trains on batchSize tasks.</param>
+    /// <param name="batchSize">Number of tasks to sample per meta-update (default 1). Higher values provide more stable training.</param>
+    /// <returns>Training result with complete history of loss/accuracy progression and timing information.</returns>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> This method trains your model using meta-learning, which teaches it how to
+    /// quickly learn new tasks. Unlike traditional training (Build method), this trains across many different
+    /// tasks so the model becomes good at rapid adaptation.
+    ///
+    /// <b>Typical values:</b>
+    /// - numMetaIterations: 1,000-10,000 (more for complex problems)
+    /// - batchSize: 1-32 (higher = more stable but slower)
+    /// </para>
+    /// </remarks>
+    /// <exception cref="InvalidOperationException">Thrown if ConfigureMetaLearning has not been called.</exception>
+    public MetaTrainingResult<T> TrainMetaLearner(int numMetaIterations, int batchSize = 1)
+    {
+        if (_metaLearner == null)
+            throw new InvalidOperationException("Meta-learner must be configured using ConfigureMetaLearning() before training");
+
+        return _metaLearner.Train(numMetaIterations, batchSize);
     }
 }

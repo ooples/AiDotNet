@@ -140,13 +140,14 @@ public class ReptileTrainerIntegrationTests
         var trainer = new ReptileTrainerDouble(
             metaModel: model,
             lossFunction: lossFunction,
+            dataLoader: dataLoader,
             config: config);
 
         // Get initial parameters
         var initialParams = model.GetParameters();
 
         // Act - Meta-train for 50 iterations (as specified in requirements)
-        var result = trainer.Train(dataLoader, numMetaIterations: 50);
+        var result = trainer.Train(numMetaIterations: 50);
 
         // Assert - Parameters should have changed
         var finalParams = model.GetParameters();
@@ -196,10 +197,11 @@ public class ReptileTrainerIntegrationTests
         var trainer = new ReptileTrainerDouble(
             metaModel: metaTrainedModel,
             lossFunction: lossFunction,
+            dataLoader: dataLoader,
             config: config);
 
         // Act
-        var result = trainer.Train(dataLoader, numMetaIterations: 100);
+        var result = trainer.Train(numMetaIterations: 100);
 
         // Assert - Meta-training should process all iterations
         Assert.NotNull(result);
@@ -239,10 +241,11 @@ public class ReptileTrainerIntegrationTests
         var trainer = new ReptileTrainerDouble(
             metaModel: model,
             lossFunction: lossFunction,
+            dataLoader: dataLoader,
             config: config);
 
         // Act - Train for 100 iterations to verify metric tracking
-        var result = trainer.Train(dataLoader, numMetaIterations: 100);
+        var result = trainer.Train(numMetaIterations: 100);
 
         // Assert - Result should be properly populated
         Assert.NotNull(result.LossHistory);
@@ -281,10 +284,11 @@ public class ReptileTrainerIntegrationTests
         var trainer = new ReptileTrainerDouble(
             metaModel: model,
             lossFunction: lossFunction,
+            dataLoader: dataLoader,
             config: config);
 
         // Act - Run exactly 50 meta-iterations as required
-        var result = trainer.Train(dataLoader, numMetaIterations: 50);
+        var result = trainer.Train(numMetaIterations: 50);
 
         // Assert
         Assert.NotNull(result);

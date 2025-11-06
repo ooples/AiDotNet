@@ -75,8 +75,9 @@ public class ReptileTrainer<T, TInput, TOutput> : ReptileTrainerBase<T, TInput, 
     /// </summary>
     /// <param name="metaModel">The model to meta-train.</param>
     /// <param name="lossFunction">Loss function for evaluating task performance.</param>
+    /// <param name="dataLoader">Episodic data loader for sampling meta-learning tasks.</param>
     /// <param name="config">Configuration object containing all hyperparameters. If null, uses default ReptileTrainerConfig with industry-standard values.</param>
-    /// <exception cref="ArgumentNullException">Thrown when metaModel or lossFunction is null.</exception>
+    /// <exception cref="ArgumentNullException">Thrown when metaModel, lossFunction, or dataLoader is null.</exception>
     /// <exception cref="ArgumentException">Thrown when configuration validation fails.</exception>
     /// <remarks>
     /// <para><b>For Beginners:</b> This creates a Reptile trainer ready for meta-learning.
@@ -89,6 +90,12 @@ public class ReptileTrainer<T, TInput, TOutput> : ReptileTrainerBase<T, TInput, 
     ///
     /// After meta-training, your model can quickly adapt to new tasks with very few examples.
     ///
+    /// <b>Parameters explained:</b>
+    /// - <b>metaModel:</b> Your neural network or model to be meta-trained
+    /// - <b>lossFunction:</b> How to measure errors (MSE, CrossEntropy, etc.)
+    /// - <b>dataLoader:</b> Provides N-way K-shot tasks for meta-training (configured at construction time)
+    /// - <b>config:</b> Learning rates and steps (optional - uses sensible defaults)
+    ///
     /// <b>Default configuration (if null):</b>
     /// - Inner learning rate: 0.01 (how fast the model adapts to each task)
     /// - Meta learning rate: 0.001 (how fast meta-parameters update)
@@ -99,16 +106,15 @@ public class ReptileTrainer<T, TInput, TOutput> : ReptileTrainerBase<T, TInput, 
     public ReptileTrainer(
         IFullModel<T, TInput, TOutput> metaModel,
         ILossFunction<T> lossFunction,
+        IEpisodicDataLoader<T> dataLoader,
         IMetaLearnerConfig<T>? config = null)
-        : base(metaModel, lossFunction, config)
+        : base(metaModel, lossFunction, dataLoader, config)
     {
     }
 
     /// <inheritdoc/>
-    public override MetaTrainingStepResult<T> MetaTrainStep(IEpisodicDataLoader<T> dataLoader, int batchSize)
+    public override MetaTrainingStepResult<T> MetaTrainStep(int batchSize)
     {
-        if (dataLoader == null)
-            throw new ArgumentNullException(nameof(dataLoader));
         if (batchSize < 1)
             throw new ArgumentException("Batch size must be at least 1", nameof(batchSize));
 
@@ -125,8 +131,8 @@ public class ReptileTrainer<T, TInput, TOutput> : ReptileTrainerBase<T, TInput, 
         // Process each task in the batch
         for (int taskIdx = 0; taskIdx < batchSize; taskIdx++)
         {
-            // Sample a task
-            MetaLearningTask<T> task = dataLoader.GetNextTask();
+            // Sample a task using configured data loader
+            MetaLearningTask<T> task = DataLoader.GetNextTask();
 
             // Reset model to original meta-parameters for this task
             MetaModel.SetParameters(originalParameters.Copy());

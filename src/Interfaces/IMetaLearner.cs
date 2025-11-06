@@ -59,40 +59,41 @@ namespace AiDotNet.Interfaces;
 /// var dataLoader = new UniformEpisodicDataLoader&lt;double&gt;(
 ///     datasetX: trainingFeatures,
 ///     datasetY: trainingLabels,
-///     nWay: 5,          // 5 classes per class
+///     nWay: 5,          // 5 classes per task
 ///     kShot: 5,         // 5 support examples per class
 ///     queryShots: 15    // 15 query examples per class
 /// );
 ///
 /// // 2. Configure: Setup meta-learner (Reptile example)
-/// var config = new ReptileTrainerConfig&lt;double&gt;
-/// {
-///     InnerLearningRate = 0.01,      // Task adaptation rate
-///     MetaLearningRate = 0.001,      // Meta-optimization rate
-///     InnerSteps = 5,                // Gradient steps per task
-///     MetaBatchSize = 4              // Tasks per meta-update
-/// };
+/// var config = new ReptileTrainerConfig&lt;double&gt;(
+///     innerLearningRate: 0.01,      // Task adaptation rate
+///     metaLearningRate: 0.001,      // Meta-optimization rate
+///     innerSteps: 5                 // Gradient steps per task
+/// );
 ///
 /// var metaLearner = new ReptileTrainer&lt;double, Matrix&lt;double&gt;, Vector&lt;double&gt;&gt;(
 ///     metaModel: neuralNetwork,
 ///     lossFunction: new CrossEntropyLoss&lt;double&gt;(),
+///     dataLoader: dataLoader,        // Episodic data configured at construction
 ///     config: config
 /// );
 ///
-/// // 3. Meta-Training: Outer loop for 1000 iterations
+/// // 3. Meta-Training: Train for 1000 iterations with batch size of 4
+/// var trainingResult = metaLearner.Train(numMetaIterations: 1000, batchSize: 4);
+///
+/// Console.WriteLine($"Training complete!");
+/// Console.WriteLine($"Final Loss: {trainingResult.FinalLoss:F4}");
+/// Console.WriteLine($"Total Time: {trainingResult.TrainingTime.TotalMinutes:F1} minutes");
+///
+/// // Or use manual loop for more control:
 /// for (int iter = 0; iter &lt; 1000; iter++)
 /// {
-///     // One meta-update on batch of 4 tasks
-///     var stepResult = metaLearner.MetaTrainStep(dataLoader, batchSize: 4);
+///     var stepResult = metaLearner.MetaTrainStep(batchSize: 4);
 ///
-///     Console.WriteLine($"Iter {iter}: MetaLoss={stepResult.MetaLoss:F4}, " +
-///                      $"Accuracy={stepResult.Accuracy:P2}");
-///
-///     // Periodic evaluation on held-out tasks
 ///     if (iter % 100 == 0)
 ///     {
-///         var evalResult = metaLearner.Evaluate(evalDataLoader, numTasks: 100);
-///         Console.WriteLine($"Eval: {evalResult.AccuracyStats.Mean:P2} ± {evalResult.AccuracyStats.StandardDeviation:P2}");
+///         var evalResult = metaLearner.Evaluate(numTasks: 100);
+///         Console.WriteLine($"Iter {iter}: Eval Accuracy = {evalResult.AccuracyStats.Mean:P2}");
 ///     }
 /// }
 ///
@@ -126,18 +127,41 @@ public interface IMetaLearner<T, TInput, TOutput>
     /// <summary>
     /// Performs one meta-training step (outer loop update) on a batch of tasks.
     /// </summary>
-    /// <param name="dataLoader">The episodic data loader providing meta-learning tasks.</param>
+    /// <remarks>
+    /// Uses the episodic data loader configured during construction to sample tasks for this meta-update.
+    /// </remarks>
     /// <param name="batchSize">Number of tasks to sample for this meta-update.</param>
     /// <returns>Metrics including meta-loss, task loss, accuracy, and timing information.</returns>
-    MetaTrainingStepResult<T> MetaTrainStep(IEpisodicDataLoader<T> dataLoader, int batchSize);
+    MetaTrainingStepResult<T> MetaTrainStep(int batchSize);
+
+    /// <summary>
+    /// Trains the meta-learner for multiple iterations with automatic metric tracking.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// This method performs the complete outer-loop meta-training process, repeatedly calling
+    /// MetaTrainStep and collecting metrics across all iterations.
+    /// </para>
+    /// <para>
+    /// <b>For Beginners:</b> This is the main training method for meta-learning. Unlike traditional
+    /// training where you train once on a dataset, this trains your model across many different tasks
+    /// so it learns how to quickly adapt to new tasks.
+    /// </para>
+    /// </remarks>
+    /// <param name="numMetaIterations">Number of meta-training iterations (outer loop steps). Typically 1000-10000 for good meta-learning.</param>
+    /// <param name="batchSize">Number of tasks per meta-update (default 1). Higher values (4-32) provide more stable gradients.</param>
+    /// <returns>Complete training history with loss/accuracy progression and timing information.</returns>
+    MetaTrainingResult<T> Train(int numMetaIterations, int batchSize = 1);
 
     /// <summary>
     /// Evaluates meta-learning performance on multiple held-out tasks.
     /// </summary>
-    /// <param name="dataLoader">Episodic data loader providing evaluation tasks.</param>
+    /// <remarks>
+    /// Uses the episodic data loader configured during construction to sample evaluation tasks.
+    /// </remarks>
     /// <param name="numTasks">Number of tasks to evaluate (100-1000 recommended for statistics).</param>
     /// <returns>Comprehensive metrics including mean accuracy, confidence intervals, and per-task statistics.</returns>
-    MetaEvaluationResult<T> Evaluate(IEpisodicDataLoader<T> dataLoader, int numTasks);
+    MetaEvaluationResult<T> Evaluate(int numTasks);
 
     /// <summary>
     /// Adapts the model to a specific task and evaluates adaptation quality.

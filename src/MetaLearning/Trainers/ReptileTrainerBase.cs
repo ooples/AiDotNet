@@ -59,6 +59,11 @@ public abstract class ReptileTrainerBase<T, TInput, TOutput> : IMetaLearner<T, T
     protected readonly IMetaLearnerConfig<T> Configuration;
 
     /// <summary>
+    /// Episodic data loader for sampling meta-learning tasks.
+    /// </summary>
+    protected readonly IEpisodicDataLoader<T> DataLoader;
+
+    /// <summary>
     /// Numeric operations for type T.
     /// </summary>
     protected static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();
@@ -82,8 +87,9 @@ public abstract class ReptileTrainerBase<T, TInput, TOutput> : IMetaLearner<T, T
     /// </summary>
     /// <param name="metaModel">The model to meta-train.</param>
     /// <param name="lossFunction">Loss function for evaluation.</param>
+    /// <param name="dataLoader">Episodic data loader for sampling meta-learning tasks.</param>
     /// <param name="config">Configuration object with all hyperparameters. If null, uses default ReptileTrainerConfig.</param>
-    /// <exception cref="ArgumentNullException">Thrown when metaModel or lossFunction is null.</exception>
+    /// <exception cref="ArgumentNullException">Thrown when metaModel, lossFunction, or dataLoader is null.</exception>
     /// <exception cref="ArgumentException">Thrown when configuration validation fails.</exception>
     /// <remarks>
     /// <para><b>For Beginners:</b> This constructor sets up the Reptile meta-learning trainer with your model and settings.
@@ -91,6 +97,7 @@ public abstract class ReptileTrainerBase<T, TInput, TOutput> : IMetaLearner<T, T
     /// <b>Parameters explained:</b>
     /// - <b>metaModel:</b> The neural network or model you want to train for fast adaptation
     /// - <b>lossFunction:</b> How to measure prediction errors (e.g., MSE for regression, CrossEntropy for classification)
+    /// - <b>dataLoader:</b> Provides different tasks for meta-training (N-way K-shot episodic sampling)
     /// - <b>config:</b> Learning rates and steps - can be left as default for standard meta-learning
     ///
     /// The configuration controls two learning processes:
@@ -101,12 +108,15 @@ public abstract class ReptileTrainerBase<T, TInput, TOutput> : IMetaLearner<T, T
     protected ReptileTrainerBase(
         IFullModel<T, TInput, TOutput> metaModel,
         ILossFunction<T> lossFunction,
+        IEpisodicDataLoader<T> dataLoader,
         IMetaLearnerConfig<T>? config = null)
     {
         if (metaModel == null)
             throw new ArgumentNullException(nameof(metaModel), "Meta-model cannot be null");
         if (lossFunction == null)
             throw new ArgumentNullException(nameof(lossFunction), "Loss function cannot be null");
+        if (dataLoader == null)
+            throw new ArgumentNullException(nameof(dataLoader), "Episodic data loader cannot be null");
 
         var configuration = config ?? new ReptileTrainerConfig<T>();
 
@@ -115,18 +125,17 @@ public abstract class ReptileTrainerBase<T, TInput, TOutput> : IMetaLearner<T, T
 
         MetaModel = metaModel;
         LossFunction = lossFunction;
+        DataLoader = dataLoader;
         Configuration = configuration;
         _currentIteration = 0;
     }
 
     /// <inheritdoc/>
-    public abstract MetaTrainingStepResult<T> MetaTrainStep(IEpisodicDataLoader<T> dataLoader, int batchSize);
+    public abstract MetaTrainingStepResult<T> MetaTrainStep(int batchSize);
 
     /// <inheritdoc/>
-    public virtual MetaEvaluationResult<T> Evaluate(IEpisodicDataLoader<T> dataLoader, int numTasks)
+    public virtual MetaEvaluationResult<T> Evaluate(int numTasks)
     {
-        if (dataLoader == null)
-            throw new ArgumentNullException(nameof(dataLoader));
         if (numTasks < 1)
             throw new ArgumentException("Number of tasks must be at least 1", nameof(numTasks));
 
@@ -138,7 +147,7 @@ public abstract class ReptileTrainerBase<T, TInput, TOutput> : IMetaLearner<T, T
 
         for (int i = 0; i < numTasks; i++)
         {
-            var task = dataLoader.GetNextTask();
+            var task = DataLoader.GetNextTask();
             var adaptResult = AdaptAndEvaluate(task);
 
             accuracyValues.Add(adaptResult.QueryAccuracy);
@@ -161,37 +170,13 @@ public abstract class ReptileTrainerBase<T, TInput, TOutput> : IMetaLearner<T, T
     /// <inheritdoc/>
     public abstract MetaAdaptationResult<T> AdaptAndEvaluate(MetaLearningTask<T> task);
 
-    /// <summary>
-    /// High-level training method that runs multiple meta-training iterations.
-    /// </summary>
-    /// <param name="dataLoader">Data loader for sampling tasks.</param>
-    /// <param name="numMetaIterations">Number of meta-training iterations to run.</param>
-    /// <param name="tasksPerIteration">Number of tasks to sample per iteration (defaults to MetaBatchSize).</param>
-    /// <returns>Result containing training history and statistics.</returns>
-    /// <remarks>
-    /// <para>
-    /// This is a convenience method that wraps MetaTrainStep() for complete training runs.
-    /// It tracks loss and accuracy over time, making it ideal for experiments and benchmarks.
-    /// </para>
-    /// <para><b>Example Usage:</b>
-    /// <code>
-    /// var trainer = new ReptileTrainer(model, lossFunction);
-    /// var result = trainer.Train(dataLoader, numMetaIterations: 1000);
-    /// Console.WriteLine($"Final Loss: {result.FinalLoss}");
-    /// </code>
-    /// </para>
-    /// </remarks>
-    public virtual MetaTrainingResult<T> Train(
-        IEpisodicDataLoader<T> dataLoader,
-        int numMetaIterations,
-        int? tasksPerIteration = null)
+    /// <inheritdoc/>
+    public virtual MetaTrainingResult<T> Train(int numMetaIterations, int batchSize = 1)
     {
-        if (dataLoader == null)
-            throw new ArgumentNullException(nameof(dataLoader));
         if (numMetaIterations < 1)
             throw new ArgumentException("Number of meta-iterations must be at least 1", nameof(numMetaIterations));
-
-        int batchSize = tasksPerIteration ?? Configuration.MetaBatchSize;
+        if (batchSize < 1)
+            throw new ArgumentException("Batch size must be at least 1", nameof(batchSize));
 
         // Collect history with generic T
         var lossValues = new List<T>();
@@ -200,7 +185,7 @@ public abstract class ReptileTrainerBase<T, TInput, TOutput> : IMetaLearner<T, T
 
         for (int iteration = 0; iteration < numMetaIterations; iteration++)
         {
-            var stepResult = MetaTrainStep(dataLoader, batchSize);
+            var stepResult = MetaTrainStep(batchSize);
             lossValues.Add(stepResult.MetaLoss);
             accuracyValues.Add(stepResult.Accuracy);
         }
