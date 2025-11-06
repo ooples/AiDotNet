@@ -222,14 +222,24 @@ public class PredictionModelBuilder<T, TInput, TOutput> : IPredictionModelBuilde
         // Meta-learning mode: Train across many tasks
         if (_metaLearner != null)
         {
-            // TODO: Need to determine how to get numMetaIterations and batchSize
-            // For now, use defaults from the meta-learner's config
-            var metaResult = _metaLearner.Train(numMetaIterations: 1000, batchSize: 1);
+            // Get training parameters from meta-learner config
+            int numIterations = _metaLearner.Config.MetaBatchSize > 0 ? 1000 : 1000;  // Use sensible default
+            int batchSize = _metaLearner.Config.MetaBatchSize > 0 ? _metaLearner.Config.MetaBatchSize : 1;
 
-            // TODO: Create PredictionModelResult from MetaTrainingResult
-            // This requires updates to PredictionModelResult to support meta-learning
-            throw new NotImplementedException("Meta-learning integration with PredictionModelResult is not yet implemented. " +
-                "This requires updates to PredictionModelResult to support fine-tuning and adaptation.");
+            // Perform meta-training
+            var metaResult = _metaLearner.Train(numIterations, batchSize);
+
+            // Create PredictionModelResult with meta-learning constructor
+            return new PredictionModelResult<T, TInput, TOutput>(
+                metaLearner: _metaLearner,
+                metaResult: metaResult,
+                loraConfiguration: _loraConfiguration,
+                biasDetector: _biasDetector,
+                fairnessEvaluator: _fairnessEvaluator,
+                ragRetriever: _ragRetriever,
+                ragReranker: _ragReranker,
+                ragGenerator: _ragGenerator,
+                queryProcessors: _queryProcessors);
         }
 
         // Regular supervised learning mode
@@ -270,7 +280,8 @@ public class PredictionModelBuilder<T, TInput, TOutput> : IPredictionModelBuilde
             _ragRetriever,
             _ragReranker,
             _ragGenerator,
-            _queryProcessors);
+            _queryProcessors,
+            _loraConfiguration);
     }
 
     /// <summary>
