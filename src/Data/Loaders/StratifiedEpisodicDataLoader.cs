@@ -104,9 +104,9 @@ public class StratifiedEpisodicDataLoader<T> : EpisodicDataLoaderBase<T>
     public StratifiedEpisodicDataLoader(
         Matrix<T> datasetX,
         Vector<T> datasetY,
-        int nWay,
-        int kShot,
-        int queryShots,
+        int nWay = 5,
+        int kShot = 5,
+        int queryShots = 15,
         int? seed = null)
         : base(datasetX, datasetY, nWay, kShot, queryShots, seed)
     {

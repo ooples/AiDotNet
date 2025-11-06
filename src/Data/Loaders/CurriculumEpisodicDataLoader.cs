@@ -130,11 +130,11 @@ public class CurriculumEpisodicDataLoader<T> : EpisodicDataLoaderBase<T>
     public CurriculumEpisodicDataLoader(
         Matrix<T> datasetX,
         Vector<T> datasetY,
-        int targetNWay,
-        int targetKShot,
-        int queryShots,
-        int initialNWay = 2,
-        int initialKShot = 10,
+        int targetNWay = 5,      // Default final difficulty: 5-way
+        int targetKShot = 1,     // Default final difficulty: 1-shot (challenging)
+        int queryShots = 15,     // Default: 15 queries
+        int initialNWay = 2,     // Default initial difficulty: 2-way (easier)
+        int initialKShot = 10,   // Default initial difficulty: 10-shot (easier)
         int? seed = null)
         : base(datasetX, datasetY, targetNWay, targetKShot + initialKShot, queryShots, seed)  // Ensure dataset has enough examples
     {

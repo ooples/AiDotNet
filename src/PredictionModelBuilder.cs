@@ -44,6 +44,25 @@ public class PredictionModelBuilder<T, TInput, TOutput> : IPredictionModelBuilde
     private IGenerator<T>? _ragGenerator;
     private IEnumerable<IQueryProcessor>? _queryProcessors;
     private IEpisodicDataLoader<T>? _episodicDataLoader;
+    private Func<Matrix<T>, Vector<T>, IEpisodicDataLoader<T>>? _episodicDataLoaderFactory;
+
+    /// <summary>
+    /// Gets the configured episodic data loader for meta-learning, if available.
+    /// </summary>
+    /// <value>The episodic data loader, or null if meta-learning is not configured.</value>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> This property provides access to the episodic data loader
+    /// that was either explicitly configured or automatically created when you called Build().
+    ///
+    /// You can use this loader to:
+    /// - Generate N-way K-shot tasks for meta-learning
+    /// - Train meta-learning algorithms (MAML, Reptile, SEAL)
+    /// - Evaluate few-shot learning performance
+    ///
+    /// The loader is stored here for future use with meta-learning trainers.
+    /// </para>
+    /// </remarks>
+    public IEpisodicDataLoader<T>? EpisodicDataLoader => _episodicDataLoader;
 
     /// <summary>
     /// Configures which features (input variables) should be used in the model.
@@ -225,6 +244,13 @@ public class PredictionModelBuilder<T, TInput, TOutput> : IPredictionModelBuilde
             throw new ArgumentException("Number of rows in features must match length of actual values", nameof(x));
         if (_model == null)
             throw new InvalidOperationException("Model implementation must be specified");
+
+        // Auto-create episodic data loader if factory is configured but no explicit loader provided
+        if (_episodicDataLoaderFactory != null && _episodicDataLoader == null)
+        {
+            // Create episodic loader from factory with x and y data
+            _episodicDataLoader = _episodicDataLoaderFactory(convertedX, convertedY);
+        }
 
         // Use defaults for these interfaces if they aren't set
         var normalizer = _normalizer ?? new NoNormalizer<T, TInput, TOutput>();
@@ -424,6 +450,109 @@ public class PredictionModelBuilder<T, TInput, TOutput> : IPredictionModelBuilde
         _ragReranker = reranker;
         _ragGenerator = generator;
         _queryProcessors = queryProcessors;
+        return this;
+    }
+
+    /// <summary>
+    /// Configures meta-learning with industry-standard defaults for N-way K-shot task generation.
+    /// </summary>
+    /// <param name="nWay">Number of classes per task. Default is 5 (standard in meta-learning literature).</param>
+    /// <param name="kShot">Number of support examples per class. Default is 5 (balanced difficulty).</param>
+    /// <param name="queryShots">Number of query examples per class. Default is 15 (3x kShot).</param>
+    /// <param name="loaderType">Type of episodic loader to use. Default is uniform random sampling. Options: "balanced", "stratified", "curriculum".</param>
+    /// <returns>This builder instance for method chaining.</returns>
+    /// <remarks>
+    /// <para>
+    /// This is the beginner-friendly way to enable meta-learning. You only need to call this method,
+    /// and the episodic data loader will be automatically created with sensible defaults when you call Build().
+    /// </para>
+    /// <para><b>For Beginners:</b> Meta-learning teaches AI models to "learn how to learn" - to quickly
+    /// adapt to new tasks with very few examples.
+    ///
+    /// <b>Quick Start (Use Defaults):</b>
+    /// Just call ConfigureMetaLearning() with no parameters to use industry-standard settings:
+    /// - 5-way: Each task has 5 different classes
+    /// - 5-shot: Each class has 5 training examples
+    /// - 15 queries: Each class has 15 test examples
+    ///
+    /// <b>When to Customize:</b>
+    /// - **nWay**: Increase for harder tasks (10-way), decrease for easier (2-way)
+    /// - **kShot**: Decrease for few-shot challenge (1-shot is hardest), increase for more data (10-shot)
+    /// - **queryShots**: Usually 2-3x kShot, more queries = better evaluation
+    /// - **loaderType**:
+    ///   - "uniform" (default): Random sampling, all classes equally likely
+    ///   - "balanced": Ensures all classes appear equally over time
+    ///   - "stratified": Maintains natural class proportions (for imbalanced data)
+    ///   - "curriculum": Starts easy (few classes, many shots), gets harder over time
+    ///
+    /// <b>The episodic loader will be automatically created</b> from your x and y data when you call Build().
+    /// You don't need to create it manually unless you want full control.
+    /// </para>
+    /// </remarks>
+    /// <example>
+    /// <code>
+    /// // Beginner: Use all defaults (5-way 5-shot with 15 queries)
+    /// var result = new PredictionModelBuilder&lt;double, Matrix&lt;double&gt;, Vector&lt;double&gt;&gt;()
+    ///     .ConfigureModel(new SomeMetaLearningModel&lt;double&gt;())
+    ///     .ConfigureMetaLearning()  // That's it! Uses defaults
+    ///     .Build(x, y);
+    ///
+    /// // Intermediate: Customize difficulty (harder: 10-way 1-shot)
+    /// var result = new PredictionModelBuilder&lt;double, Matrix&lt;double&gt;, Vector&lt;double&gt;&gt;()
+    ///     .ConfigureModel(new SomeMetaLearningModel&lt;double&gt;())
+    ///     .ConfigureMetaLearning(nWay: 10, kShot: 1, queryShots: 15)
+    ///     .Build(x, y);
+    ///
+    /// // Advanced: Use curriculum learning (progressive difficulty)
+    /// var result = new PredictionModelBuilder&lt;double, Matrix&lt;double&gt;, Vector&lt;double&gt;&gt;()
+    ///     .ConfigureModel(new SomeMetaLearningModel&lt;double&gt;())
+    ///     .ConfigureMetaLearning(nWay: 5, kShot: 1, queryShots: 15, loaderType: "curriculum")
+    ///     .Build(x, y);
+    /// </code>
+    /// </example>
+    public IPredictionModelBuilder<T, TInput, TOutput> ConfigureMetaLearning(
+        int nWay = 5,
+        int kShot = 5,
+        int queryShots = 15,
+        string loaderType = "uniform")
+    {
+        // Validate parameters
+        if (nWay < 2)
+        {
+            throw new ArgumentException("nWay must be at least 2", nameof(nWay));
+        }
+
+        if (kShot < 1)
+        {
+            throw new ArgumentException("kShot must be at least 1", nameof(kShot));
+        }
+
+        if (queryShots < 1)
+        {
+            throw new ArgumentException("queryShots must be at least 1", nameof(queryShots));
+        }
+
+        var validLoaderTypes = new[] { "uniform", "balanced", "stratified", "curriculum" };
+        if (!validLoaderTypes.Contains(loaderType.ToLower()))
+        {
+            throw new ArgumentException(
+                $"loaderType must be one of: {string.Join(", ", validLoaderTypes)}. Got: {loaderType}",
+                nameof(loaderType));
+        }
+
+        // Store a factory function that creates the appropriate loader when Build() is called
+        _episodicDataLoaderFactory = (x, y) =>
+        {
+            return loaderType.ToLower() switch
+            {
+                "uniform" => new Data.Loaders.EpisodicDataLoader<T>(x, y, nWay, kShot, queryShots),
+                "balanced" => new Data.Loaders.BalancedEpisodicDataLoader<T>(x, y, nWay, kShot, queryShots),
+                "stratified" => new Data.Loaders.StratifiedEpisodicDataLoader<T>(x, y, nWay, kShot, queryShots),
+                "curriculum" => new Data.Loaders.CurriculumEpisodicDataLoader<T>(x, y, nWay, kShot, queryShots),
+                _ => new Data.Loaders.EpisodicDataLoader<T>(x, y, nWay, kShot, queryShots)
+            };
+        };
+
         return this;
     }
 

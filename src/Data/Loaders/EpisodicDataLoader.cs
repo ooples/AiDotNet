@@ -78,13 +78,13 @@ namespace AiDotNet.Data.Loaders;
 public class EpisodicDataLoader<T> : EpisodicDataLoaderBase<T>
 {
     /// <summary>
-    /// Initializes a new instance of the EpisodicDataLoader for N-way K-shot task sampling.
+    /// Initializes a new instance of the EpisodicDataLoader for N-way K-shot task sampling with industry-standard defaults.
     /// </summary>
     /// <param name="datasetX">The feature matrix where each row is an example. Shape: [num_examples, num_features].</param>
     /// <param name="datasetY">The label vector containing class labels for each example. Length: num_examples.</param>
-    /// <param name="nWay">The number of unique classes per task. Must be at least 2.</param>
-    /// <param name="kShot">The number of support examples per class. Must be at least 1.</param>
-    /// <param name="queryShots">The number of query examples per class. Must be at least 1.</param>
+    /// <param name="nWay">The number of unique classes per task. Default is 5 (standard in meta-learning).</param>
+    /// <param name="kShot">The number of support examples per class. Default is 5 (balanced difficulty).</param>
+    /// <param name="queryShots">The number of query examples per class. Default is 15 (3x kShot).</param>
     /// <param name="seed">Optional random seed for reproducible task sampling. If null, uses a time-based seed.</param>
     /// <exception cref="ArgumentNullException">Thrown when datasetX or datasetY is null.</exception>
     /// <exception cref="ArgumentException">Thrown when dimensions are invalid or dataset is too small.</exception>
@@ -112,9 +112,9 @@ public class EpisodicDataLoader<T> : EpisodicDataLoaderBase<T>
     public EpisodicDataLoader(
         Matrix<T> datasetX,
         Vector<T> datasetY,
-        int nWay,
-        int kShot,
-        int queryShots,
+        int nWay = 5,
+        int kShot = 5,
+        int queryShots = 15,
         int? seed = null)
         : base(datasetX, datasetY, nWay, kShot, queryShots, seed)
     {
