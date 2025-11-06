@@ -29,7 +29,7 @@ public class RootMeanSquaredErrorLoss<T> : LossFunctionBase<T>
     public override T CalculateLoss(Vector<T> predicted, Vector<T> actual)
     {
         ValidateVectorLengths(predicted, actual);
-        return StatisticsHelper<T>.CalculateRootMeanSquaredError(actual, predicted);
+        return StatisticsHelper<T>.CalculateRootMeanSquaredError(predicted, actual);
     }
 
     /// <summary>
@@ -44,7 +44,7 @@ public class RootMeanSquaredErrorLoss<T> : LossFunctionBase<T>
         ValidateVectorLengths(predicted, actual);
 
         // Calculate RMSE for use in derivative calculation
-        T rmse = StatisticsHelper<T>.CalculateRootMeanSquaredError(actual, predicted);
+        T rmse = StatisticsHelper<T>.CalculateRootMeanSquaredError(predicted, actual);
 
         // Avoid division by zero - if RMSE is zero, all predictions are perfect
         if (NumOps.Equals(rmse, NumOps.Zero))

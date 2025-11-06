@@ -52,20 +52,25 @@ public class SparseCategoricalCrossEntropyLoss<T> : LossFunctionBase<T>
     /// <summary>
     /// Calculates the Sparse Categorical Cross Entropy loss between predicted probabilities and class indices.
     /// </summary>
-    /// <param name="predicted">The predicted probability values for all classes.</param>
-    /// <param name="actual">The actual class indices as floating-point values.</param>
+    /// <param name="predicted">The predicted probability values for all classes (length = num_classes).</param>
+    /// <param name="actual">The actual class indices as floating-point values (length = batch_size or 1 for single sample).</param>
     /// <returns>The sparse categorical cross entropy loss value.</returns>
     /// <remarks>
     /// For single-sample usage, if predicted has N classes and actual[0] = k (class index k),
     /// the loss is -log(predicted[k]).
     ///
-    /// For consistency with the ILossFunction interface, both vectors should have compatible lengths.
-    /// A common pattern is: predicted contains all class probabilities, and actual[0] contains the class index.
+    /// Unlike other loss functions, predicted and actual can have different lengths:
+    /// - predicted.Length = number of classes (N)
+    /// - actual.Length = number of samples in batch (M)
+    /// Each actual[i] contains the class index for sample i.
     /// </remarks>
-    /// <exception cref="ArgumentException">Thrown when vectors have incompatible lengths or class indices are invalid.</exception>
+    /// <exception cref="ArgumentException">Thrown when class indices are invalid or vectors are empty.</exception>
     public override T CalculateLoss(Vector<T> predicted, Vector<T> actual)
     {
-        ValidateVectorLengths(predicted, actual);
+        // Note: We do NOT validate that predicted and actual have the same length
+        // In sparse categorical cross-entropy, they can differ:
+        // - predicted contains N class probabilities
+        // - actual contains M class indices (where M can differ from N)
 
         if (predicted.Length == 0)
         {
@@ -107,8 +112,8 @@ public class SparseCategoricalCrossEntropyLoss<T> : LossFunctionBase<T>
     /// <summary>
     /// Calculates the derivative of the Sparse Categorical Cross Entropy loss function.
     /// </summary>
-    /// <param name="predicted">The predicted probability values for all classes.</param>
-    /// <param name="actual">The actual class indices as floating-point values.</param>
+    /// <param name="predicted">The predicted probability values for all classes (length = num_classes).</param>
+    /// <param name="actual">The actual class indices as floating-point values (length = batch_size or 1 for single sample).</param>
     /// <returns>A vector containing the derivatives for each class probability.</returns>
     /// <remarks>
     /// The derivative is:
@@ -118,10 +123,11 @@ public class SparseCategoricalCrossEntropyLoss<T> : LossFunctionBase<T>
     /// When used with softmax activation, this combines with the softmax derivative
     /// to produce the simplified gradient (predicted - one_hot_actual).
     /// </remarks>
-    /// <exception cref="ArgumentException">Thrown when vectors have incompatible lengths or class indices are invalid.</exception>
+    /// <exception cref="ArgumentException">Thrown when class indices are invalid or vectors are empty.</exception>
     public override Vector<T> CalculateDerivative(Vector<T> predicted, Vector<T> actual)
     {
-        ValidateVectorLengths(predicted, actual);
+        // Note: We do NOT validate that predicted and actual have the same length
+        // In sparse categorical cross-entropy, they can differ
 
         if (predicted.Length == 0)
         {
