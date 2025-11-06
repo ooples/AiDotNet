@@ -512,24 +512,47 @@ public enum MetricType
     /// </summary>
     /// <remarks>
     /// <para>
-    /// <b>For Beginners:</b> Silhouette Score measures how well each item fits into its assigned cluster 
-    /// compared to other clusters. It ranges from -1 to 1, where a high value indicates that the object is 
-    /// well matched to its own cluster and poorly matched to neighboring clusters. It's like measuring how 
-    /// well students are grouped in classes - are students in each class similar to each other and different 
+    /// <b>For Beginners:</b> Silhouette Score measures how well each item fits into its assigned cluster
+    /// compared to other clusters. It ranges from -1 to 1, where a high value indicates that the object is
+    /// well matched to its own cluster and poorly matched to neighboring clusters. It's like measuring how
+    /// well students are grouped in classes - are students in each class similar to each other and different
     /// from students in other classes?
     /// </para>
     /// </remarks>
     SilhouetteScore,
 
     /// <summary>
+    /// Measures the similarity between two clusterings adjusted for chance.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> Adjusted Rand Index (ARI) compares two different ways of grouping the same data
+    /// and measures how similar they are, while accounting for random chance. It ranges from -1 to 1:
+    /// - 1 means the two clusterings are identical
+    /// - 0 means the similarity is what you'd expect from random clustering
+    /// - Negative values mean the clusterings are worse than random
+    ///
+    /// This is useful for:
+    /// - Comparing your clustering results to known "ground truth" labels
+    /// - Evaluating how stable your clustering algorithm is across different runs
+    /// - Comparing different clustering algorithms on the same data
+    ///
+    /// For example, if you cluster customer data and want to see how well it matches predefined customer segments,
+    /// ARI tells you how similar your automated clustering is to the manual segmentation, beyond what random
+    /// grouping would achieve.
+    /// </para>
+    /// </remarks>
+    AdjustedRandIndex,
+
+    /// <summary>
     /// Measures the agreement between two sets of labels.
     /// </summary>
     /// <remarks>
     /// <para>
-    /// <b>For Beginners:</b> Cohen's Kappa measures how much better your model is at classification compared 
-    /// to random guessing. It's especially useful when your classes are imbalanced. A score of 1 indicates 
-    /// perfect agreement, 0 indicates no better than random chance. It's like comparing a student's test 
-    /// answers to the correct answers, but also taking into account how many they might get right just by 
+    /// <b>For Beginners:</b> Cohen's Kappa measures how much better your model is at classification compared
+    /// to random guessing. It's especially useful when your classes are imbalanced. A score of 1 indicates
+    /// perfect agreement, 0 indicates no better than random chance. It's like comparing a student's test
+    /// answers to the correct answers, but also taking into account how many they might get right just by
     /// guessing.
     /// </para>
     /// </remarks>
