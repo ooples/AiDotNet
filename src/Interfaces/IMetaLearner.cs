@@ -56,7 +56,7 @@ namespace AiDotNet.Interfaces;
 /// <example>
 /// <code>
 /// // 1. Setup: Create episodic data loader for 5-way 5-shot tasks
-/// var dataLoader = new UniformEpisodicDataLoader&lt;double&gt;(
+/// var dataLoader = new UniformEpisodicDataLoader&lt;double, Tensor&lt;double&gt;, Tensor&lt;double&gt;&gt;(
 ///     datasetX: trainingFeatures,
 ///     datasetY: trainingLabels,
 ///     nWay: 5,          // 5 classes per task
@@ -73,7 +73,7 @@ namespace AiDotNet.Interfaces;
 ///     numMetaIterations: 1000       // Total meta-training iterations
 /// );
 ///
-/// var metaLearner = new ReptileTrainer&lt;double, Matrix&lt;double&gt;, Vector&lt;double&gt;&gt;(
+/// var metaLearner = new ReptileTrainer&lt;double, Tensor&lt;double&gt;, Tensor&lt;double&gt;&gt;(
 ///     metaModel: neuralNetwork,
 ///     lossFunction: new CrossEntropyLoss&lt;double&gt;(),
 ///     dataLoader: dataLoader,        // Episodic data configured at construction
