@@ -45,8 +45,6 @@ public class PredictionModelBuilder<T, TInput, TOutput> : IPredictionModelBuilde
     private IReranker<T>? _ragReranker;
     private IGenerator<T>? _ragGenerator;
     private IEnumerable<IQueryProcessor>? _queryProcessors;
-    private ILossFunction<T>? _lossFunction;
-    private IEpisodicDataLoader<T>? _episodicDataLoader;
     private IMetaLearner<T, TInput, TOutput>? _metaLearner;
 
     /// <summary>
@@ -201,22 +199,40 @@ public class PredictionModelBuilder<T, TInput, TOutput> : IPredictionModelBuilde
         /// <summary>
     /// Builds a predictive model using the provided input features and output values.
     /// </summary>
-    /// <param name="x">The matrix of input features where each row is a data point and each column is a feature.</param>
-    /// <param name="y">The vector of output values corresponding to each row in the input matrix.</param>
+    /// <param name="x">The matrix of input features where each row is a data point and each column is a feature.
+    /// Can be null if using meta-learning (data is in the episodic loader).</param>
+    /// <param name="y">The vector of output values corresponding to each row in the input matrix.
+    /// Can be null if using meta-learning (data is in the episodic loader).</param>
     /// <returns>A trained predictive model that can be used to make predictions.</returns>
-    /// <exception cref="ArgumentNullException">Thrown when input features or output values are null.</exception>
+    /// <exception cref="ArgumentNullException">Thrown when input features or output values are null (for regular training).</exception>
     /// <exception cref="ArgumentException">Thrown when the number of rows in the features matrix doesn't match the length of the output vector.</exception>
-    /// <exception cref="InvalidOperationException">Thrown when no regression method has been specified.</exception>
+    /// <exception cref="InvalidOperationException">Thrown when no model has been specified.</exception>
     /// <remarks>
-    /// <b>For Beginners:</b> This method takes your data (inputs and known outputs) and creates a trained AI model.
-    /// Think of it like teaching a student: you provide examples (your data) and the student (the model) learns
-    /// patterns from these examples. After building, your model is ready to make predictions on new data.
-    /// 
+    /// <b>For Beginners:</b> This method takes your data and creates a trained AI model.
+    ///
+    /// <b>Regular Training:</b> Provide x and y data, and the model learns patterns from these examples.
     /// The input matrix 'x' contains your features (like house size, number of bedrooms, etc. if predicting house prices),
     /// and the vector 'y' contains the known answers (actual house prices) for those examples.
+    ///
+    /// <b>Meta-Learning:</b> If you configured a meta-learner using ConfigureMetaLearning(), this will do
+    /// meta-training instead. In this case, x and y should be null since data comes from the episodic data loader.
     /// </remarks>
-    public PredictionModelResult<T, TInput, TOutput> Build(TInput x, TOutput y)
+    public PredictionModelResult<T, TInput, TOutput> Build(TInput? x = default, TOutput? y = default)
     {
+        // Meta-learning mode: Train across many tasks
+        if (_metaLearner != null)
+        {
+            // TODO: Need to determine how to get numMetaIterations and batchSize
+            // For now, use defaults from the meta-learner's config
+            var metaResult = _metaLearner.Train(numMetaIterations: 1000, batchSize: 1);
+
+            // TODO: Create PredictionModelResult from MetaTrainingResult
+            // This requires updates to PredictionModelResult to support meta-learning
+            throw new NotImplementedException("Meta-learning integration with PredictionModelResult is not yet implemented. " +
+                "This requires updates to PredictionModelResult to support fine-tuning and adaptation.");
+        }
+
+        // Regular supervised learning mode
         var convertedX = ConversionsHelper.ConvertToMatrix<T, TInput>(x);
         var convertedY = ConversionsHelper.ConvertToVector<T, TOutput>(y);
 
@@ -432,79 +448,17 @@ public class PredictionModelBuilder<T, TInput, TOutput> : IPredictionModelBuilde
     }
 
     /// <summary>
-    /// Configures the loss function for training.
+    /// Configures a meta-learning algorithm for training models that can quickly adapt to new tasks.
     /// </summary>
-    /// <param name="lossFunction">The loss function implementation to use.</param>
+    /// <param name="metaLearner">The meta-learning algorithm to use (e.g., ReptileTrainer).</param>
     /// <returns>This builder instance for method chaining.</returns>
     /// <remarks>
-    /// <b>For Beginners:</b> The loss function measures how wrong your model's predictions are.
-    /// If you don't configure this, we'll choose a sensible default for you.
-    /// </remarks>
-    public IPredictionModelBuilder<T, TInput, TOutput> ConfigureLossFunction(ILossFunction<T> lossFunction)
-    {
-        _lossFunction = lossFunction;
-        return this;
-    }
-
-    /// <summary>
-    /// Configures episodic data loading for meta-learning (N-way K-shot task sampling).
-    /// </summary>
-    /// <param name="dataLoader">The episodic data loader for generating meta-learning tasks.</param>
-    /// <returns>This builder instance for method chaining.</returns>
-    /// <remarks>
-    /// <b>For Beginners:</b> This configures how your model will sample different tasks during meta-learning.
-    /// After setting this up, just call BuildMetaLearner() and we'll handle everything else automatically.
-    /// </remarks>
-    public IPredictionModelBuilder<T, TInput, TOutput> ConfigureEpisodicDataLoader(IEpisodicDataLoader<T> dataLoader)
-    {
-        _episodicDataLoader = dataLoader;
-        return this;
-    }
-
-    /// <summary>
-    /// Configures a specific meta-learning algorithm for training.
-    /// </summary>
-    /// <param name="metaLearner">The meta-learning algorithm to use.</param>
-    /// <returns>This builder instance for method chaining.</returns>
-    /// <remarks>
-    /// <b>For Beginners:</b> If you don't configure this, we'll automatically use Reptile
-    /// (the simplest and most efficient algorithm). Only configure this if you need a specific algorithm.
+    /// <b>For Beginners:</b> If you configure this, Build() will do meta-training instead of regular training.
+    /// The meta-learner should be created with all its dependencies (model, loss function, episodic data loader).
     /// </remarks>
     public IPredictionModelBuilder<T, TInput, TOutput> ConfigureMetaLearning(IMetaLearner<T, TInput, TOutput> metaLearner)
     {
         _metaLearner = metaLearner;
         return this;
-    }
-
-    /// <summary>
-    /// Builds and trains a meta-learning model automatically.
-    /// </summary>
-    /// <param name="numMetaIterations">Number of meta-training iterations (default 1000).</param>
-    /// <param name="batchSize">Number of tasks per update (default 1).</param>
-    /// <returns>Training result with complete metrics and the trained model.</returns>
-    /// <remarks>
-    /// <b>For Beginners:</b> This does everything automatically - validates your setup, creates
-    /// defaults if needed, trains the model, and returns the results. Just like Build() but for meta-learning!
-    /// </remarks>
-    public MetaTrainingResult<T> BuildMetaLearner(int numMetaIterations = 1000, int batchSize = 1)
-    {
-        // Validation (following Build() pattern)
-        if (_model == null)
-            throw new InvalidOperationException("Model must be configured using ConfigureModel() before building meta-learner");
-        if (_episodicDataLoader == null)
-            throw new InvalidOperationException("Episodic data loader must be configured using ConfigureEpisodicDataLoader() before building meta-learner");
-
-        // Provide defaults for optional components (following Build() pattern)
-        var lossFunction = _lossFunction ?? new MeanSquaredErrorLoss<T>(); // Default loss function
-
-        // Create default meta-learner if user didn't configure one (beginner-friendly)
-        var metaLearner = _metaLearner ?? new ReptileTrainer<T, TInput, TOutput>(
-            metaModel: _model,
-            lossFunction: lossFunction,
-            dataLoader: _episodicDataLoader,
-            config: null); // Use default config
-
-        // Train automatically (no separate training step needed)
-        return metaLearner.Train(numMetaIterations, batchSize);
     }
 }
