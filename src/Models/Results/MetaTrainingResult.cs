@@ -174,7 +174,7 @@ public class MetaTrainingResult<T>
         LossHistory = lossHistory;
         AccuracyHistory = accuracyHistory;
         TrainingTime = trainingTime;
-        AdditionalMetrics = additionalMetrics ?? new Dictionary<string, T>();
+        AdditionalMetrics = additionalMetrics != null ? new Dictionary<string, T>(additionalMetrics) : new Dictionary<string, T>();
     }
 
     /// <summary>

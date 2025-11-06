@@ -161,7 +161,7 @@ public class MetaEvaluationResult<T>
         PerTaskAccuracies = taskAccuracies;
         PerTaskLosses = taskLosses;
         EvaluationTime = evaluationTime;
-        AdditionalMetrics = additionalMetrics ?? new Dictionary<string, T>();
+        AdditionalMetrics = additionalMetrics != null ? new Dictionary<string, T>(additionalMetrics) : new Dictionary<string, T>();
 
         // Calculate statistics using existing infrastructure
         AccuracyStats = new BasicStats<T>(new BasicStatsInputs<T> { Values = taskAccuracies });

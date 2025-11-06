@@ -128,7 +128,7 @@ public class MetaTrainingStepResult<T>
         NumTasks = numTasks;
         Iteration = iteration;
         TimeMs = timeMs;
-        AdditionalMetrics = additionalMetrics ?? new Dictionary<string, T>();
+        AdditionalMetrics = additionalMetrics != null ? new Dictionary<string, T>(additionalMetrics) : new Dictionary<string, T>();
     }
 
     /// <summary>

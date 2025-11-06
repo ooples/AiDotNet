@@ -189,8 +189,8 @@ public class MetaAdaptationResult<T>
         SupportLoss = supportLoss;
         AdaptationSteps = adaptationSteps;
         AdaptationTimeMs = adaptationTimeMs;
-        PerStepLosses = perStepLosses ?? new List<T>();
-        AdditionalMetrics = additionalMetrics ?? new Dictionary<string, T>();
+        PerStepLosses = perStepLosses != null ? new List<T>(perStepLosses) : new List<T>();
+        AdditionalMetrics = additionalMetrics != null ? new Dictionary<string, T>(additionalMetrics) : new Dictionary<string, T>();
     }
 
     /// <summary>
