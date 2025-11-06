@@ -70,7 +70,7 @@ public class PredictionModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
     /// or you'll get an InvalidOperationException.
     /// </para>
     /// </remarks>
-    public IFullModel<T, TInput, TOutput>? Model { get; private set; }
+    internal IFullModel<T, TInput, TOutput>? Model { get; private set; }
 
     /// <summary>
     /// Gets or sets the results of the optimization process that created the model.
@@ -100,7 +100,7 @@ public class PredictionModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
     /// to understand how well the model is likely to perform on new data.
     /// </para>
     /// </remarks>
-    public OptimizationResult<T, TInput, TOutput> OptimizationResult { get; private set; } = new();
+    internal OptimizationResult<T, TInput, TOutput> OptimizationResult { get; private set; } = new();
 
     /// <summary>
     /// Gets or sets the normalization information used to preprocess input data and postprocess predictions.
@@ -132,7 +132,7 @@ public class PredictionModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
     /// need to be scaled back to the original units.
     /// </para>
     /// </remarks>
-    public NormalizationInfo<T, TInput, TOutput> NormalizationInfo { get; private set; } = new();
+    internal NormalizationInfo<T, TInput, TOutput> NormalizationInfo { get; private set; } = new();
 
     /// <summary>
     /// Gets or sets the metadata associated with the model.
@@ -162,43 +162,43 @@ public class PredictionModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
     /// based on features like "square_footage", "num_bedrooms", and "location_score".
     /// </para>
     /// </remarks>
-    public ModelMetadata<T> ModelMetaData { get; private set; } = new();
+    internal ModelMetadata<T> ModelMetaData { get; private set; } = new();
 
     /// <summary>
     /// Gets or sets the bias detector used for ethical AI evaluation.
     /// </summary>
     /// <value>An implementation of IBiasDetector&lt;T&gt; for detecting bias in model predictions, or null if not configured.</value>
-    public IBiasDetector<T>? BiasDetector { get; private set; }
+    internal IBiasDetector<T>? BiasDetector { get; private set; }
 
     /// <summary>
     /// Gets or sets the fairness evaluator used for ethical AI evaluation.
     /// </summary>
     /// <value>An implementation of IFairnessEvaluator&lt;T&gt; for evaluating fairness metrics, or null if not configured.</value>
-    public IFairnessEvaluator<T>? FairnessEvaluator { get; private set; }
+    internal IFairnessEvaluator<T>? FairnessEvaluator { get; private set; }
 
     /// <summary>
     /// Gets or sets the retriever used for RAG document retrieval during inference.
     /// </summary>
     /// <value>An implementation of IRetriever&lt;T&gt; for retrieving documents, or null if RAG is not configured.</value>
-    public IRetriever<T>? RagRetriever { get; private set; }
+    internal IRetriever<T>? RagRetriever { get; private set; }
 
     /// <summary>
     /// Gets or sets the reranker used for RAG document reranking during inference.
     /// </summary>
     /// <value>An implementation of IReranker&lt;T&gt; for reranking documents, or null if RAG is not configured.</value>
-    public IReranker<T>? RagReranker { get; private set; }
+    internal IReranker<T>? RagReranker { get; private set; }
 
     /// <summary>
     /// Gets or sets the generator used for RAG answer generation during inference.
     /// </summary>
     /// <value>An implementation of IGenerator&lt;T&gt; for generating answers, or null if RAG is not configured.</value>
-    public IGenerator<T>? RagGenerator { get; private set; }
+    internal IGenerator<T>? RagGenerator { get; private set; }
 
     /// <summary>
     /// Gets or sets the query processors used for RAG query preprocessing during inference.
     /// </summary>
     /// <value>Query processors for preprocessing queries, or null if not configured.</value>
-    public IEnumerable<IQueryProcessor>? QueryProcessors { get; private set; }
+    internal IEnumerable<IQueryProcessor>? QueryProcessors { get; private set; }
 
     /// <summary>
     /// Gets or sets the meta-learner used for few-shot adaptation and fine-tuning.
@@ -211,7 +211,7 @@ public class PredictionModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
     /// If this is null, the model was trained using standard supervised learning.
     /// </para>
     /// </remarks>
-    public IMetaLearner<T, TInput, TOutput>? MetaLearner { get; private set; }
+    internal IMetaLearner<T, TInput, TOutput>? MetaLearner { get; private set; }
 
     /// <summary>
     /// Gets or sets the results from meta-training.
@@ -225,7 +225,7 @@ public class PredictionModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
     /// check OptimizationResult instead.
     /// </para>
     /// </remarks>
-    public MetaTrainingResult<T>? MetaTrainingResult { get; private set; }
+    internal MetaTrainingResult<T>? MetaTrainingResult { get; private set; }
 
     /// <summary>
     /// Gets or sets the LoRA configuration for parameter-efficient fine-tuning.
@@ -239,7 +239,7 @@ public class PredictionModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
     /// If null, adaptation will train all model parameters (standard fine-tuning).
     /// </para>
     /// </remarks>
-    public ILoRAConfiguration<T>? LoRAConfiguration { get; private set; }
+    internal ILoRAConfiguration<T>? LoRAConfiguration { get; private set; }
 
     /// <summary>
     /// Initializes a new instance of the PredictionModelResult class with the specified model, optimization results, and normalization information.
@@ -564,12 +564,12 @@ public class PredictionModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
             steps = MetaLearner != null ? 10 : 50;
         }
 
-        // Determine default learning rate
+        // Determine default learning rate based on model type
+        // Meta-learning models use smaller LR (already meta-trained)
+        // Supervised models use standard fine-tuning LR
         if (learningRate < 0)
         {
-            learningRate = MetaLearner != null ?
-                (MetaLearner.Config.InnerLearningRate) :
-                0.01;
+            learningRate = MetaLearner != null ? 0.001 : 0.01;
         }
 
         // Meta-learning path: Use fast adaptation
@@ -593,15 +593,9 @@ public class PredictionModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
         else
         {
             // Supervised learning path: Quick fine-tuning
-            // If LoRA is configured, apply it for parameter-efficient adaptation
-            IFullModel<T, TInput, TOutput> modelToAdapt = Model;
-
-            if (LoRAConfiguration != null)
-            {
-                // TODO: Apply LoRA to model layers
-                // This requires access to model's layers which may not be exposed
-                // For now, proceed with standard adaptation
-            }
+            // Note: LoRA integration is pending - when implemented, will use LoRAConfiguration.ApplyLoRA()
+            // to wrap model layers for parameter-efficient adaptation
+            // For now, perform standard adaptation on all parameters
 
             // Perform gradient descent steps
             for (int step = 0; step < steps; step++)
@@ -678,12 +672,12 @@ public class PredictionModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
             epochs = MetaLearner != null ? 50 : 100;
         }
 
-        // Determine default learning rate
+        // Determine default learning rate based on model type
+        // Meta-learning models use smaller LR for fine-tuning (preserve meta-trained features)
+        // Supervised models use standard fine-tuning LR
         if (learningRate < 0)
         {
-            learningRate = MetaLearner != null ?
-                (MetaLearner.Config.MetaLearningRate) :
-                0.001;
+            learningRate = MetaLearner != null ? 0.0001 : 0.001;
         }
 
         // Meta-learning path: Extended adaptation
@@ -696,14 +690,9 @@ public class PredictionModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
         else
         {
             // Supervised learning path: Full fine-tuning
-            // If LoRA is configured, apply it for parameter-efficient fine-tuning
-            IFullModel<T, TInput, TOutput> modelToFineTune = Model;
-
-            if (LoRAConfiguration != null)
-            {
-                // TODO: Apply LoRA to model layers for efficient fine-tuning
-                // This requires access to model's layers
-            }
+            // Note: LoRA integration is pending - when implemented, will use LoRAConfiguration.ApplyLoRA()
+            // to wrap model layers for parameter-efficient fine-tuning
+            // For now, perform standard fine-tuning on all parameters
 
             // Perform training epochs
             for (int epoch = 0; epoch < epochs; epoch++)
@@ -711,8 +700,7 @@ public class PredictionModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
                 // Train on full dataset
                 Model.Train(trainX, trainY);
 
-                // TODO: Add validation monitoring if validation data provided
-                // This would require loss calculation and early stopping logic
+                // Note: Validation monitoring is pending - will add early stopping when implemented
             }
         }
     }
