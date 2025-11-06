@@ -147,7 +147,10 @@ public class NestedCrossValidator<T> : CrossValidatorBase<T>
             };
 
             var optimizationResult = optimizer.Optimize(optimizationInput);
-            bestModel.SetParameters(optimizationResult.BestParameters);
+            if (optimizationResult.BestSolution != null)
+            {
+                bestModel.SetParameters(optimizationResult.BestSolution.GetParameters());
+            }
 
             var validationIndices = GetValidationIndices(X, outerFoldResult.ActualValues, y);
             var validationPredictions = bestModel.Predict(X.Submatrix(validationIndices));

@@ -153,7 +153,10 @@ public abstract class CrossValidatorBase<T> : ICrossValidator<T>
             var optimizationResult = optimizer.Optimize(optimizationInput);
 
             // Update the fold model with optimized parameters
-            foldModel.SetParameters(optimizationResult.BestParameters);
+            if (optimizationResult.BestSolution != null)
+            {
+                foldModel.SetParameters(optimizationResult.BestSolution.GetParameters());
+            }
 
             trainingTimer.Stop();
             var trainingTime = trainingTimer.Elapsed;
