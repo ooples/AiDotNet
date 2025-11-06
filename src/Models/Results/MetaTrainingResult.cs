@@ -313,7 +313,8 @@ public class MetaTrainingResult<T>
         report.AppendLine("====================");
         report.AppendLine($"Total Iterations: {TotalIterations}");
         report.AppendLine($"Training Time: {TrainingTime.TotalSeconds:F2} seconds");
-        report.AppendLine($"Iterations per Second: {TotalIterations / TrainingTime.TotalSeconds:F2}");
+        double iterPerSec = TrainingTime.TotalSeconds > 0 ? TotalIterations / TrainingTime.TotalSeconds : 0;
+        report.AppendLine($"Iterations per Second: {iterPerSec:F2}");
         report.AppendLine();
 
         report.AppendLine("Loss Metrics:");
