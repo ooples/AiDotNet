@@ -25,7 +25,7 @@ public class CrossValidationResult<T>
     public int FoldCount => FoldResults.Count;
 
     /// <summary>
-    /// Gets basic statistics (mean, standard deviation, etc.) for R² values across folds.
+    /// Gets basic statistics (mean, standard deviation, etc.) for Rï¿½ values across folds.
     /// </summary>
     public BasicStats<T> R2Stats { get; }
 
@@ -43,6 +43,57 @@ public class CrossValidationResult<T>
     /// Gets a dictionary of feature importance scores aggregated across all folds.
     /// </summary>
     public Dictionary<string, BasicStats<T>> FeatureImportanceStats { get; }
+
+    /// <summary>
+    /// Gets basic statistics for Silhouette Score values across folds, or null if not applicable.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> When cross-validating clustering algorithms, this property contains
+    /// statistics about how well items fit into their assigned clusters across all folds.
+    /// Higher values (closer to 1) indicate better clustering quality. This will be null if the
+    /// model doesn't perform clustering or if clustering metrics couldn't be calculated.
+    /// </para>
+    /// </remarks>
+    public BasicStats<T>? SilhouetteScoreStats { get; }
+
+    /// <summary>
+    /// Gets basic statistics for Calinski-Harabasz Index values across folds, or null if not applicable.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> This property contains statistics about how well-separated and compact
+    /// clusters are across all folds. Higher values indicate better clustering. This will be null if the
+    /// model doesn't perform clustering or if the metric couldn't be calculated.
+    /// </para>
+    /// </remarks>
+    public BasicStats<T>? CalinskiHarabaszIndexStats { get; }
+
+    /// <summary>
+    /// Gets basic statistics for Davies-Bouldin Index values across folds, or null if not applicable.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> This property contains statistics about the average similarity between
+    /// each cluster and its most similar neighbor across all folds. Lower values indicate better
+    /// clustering (more distinct clusters). This will be null if the model doesn't perform clustering
+    /// or if the metric couldn't be calculated.
+    /// </para>
+    /// </remarks>
+    public BasicStats<T>? DaviesBouldinIndexStats { get; }
+
+    /// <summary>
+    /// Gets basic statistics for Adjusted Rand Index values across folds, or null if not applicable.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> This property contains statistics about how well the clustering matches
+    /// known ground truth labels across all folds. Values closer to 1 indicate better agreement with
+    /// the ground truth. This will be null if ground truth labels aren't available or if the model
+    /// doesn't perform clustering.
+    /// </para>
+    /// </remarks>
+    public BasicStats<T>? AdjustedRandIndexStats { get; }
 
     /// <summary>
     /// Gets the average time taken to train the model across all folds.
@@ -89,6 +140,63 @@ public class CrossValidationResult<T>
 
         // Aggregate feature importance scores across folds
         FeatureImportanceStats = AggregateFeatureImportance(foldResults);
+
+        // Aggregate clustering metrics if available
+        var foldsWithClustering = foldResults.Where(r => r.ClusteringMetrics != null).ToList();
+        if (foldsWithClustering.Any())
+        {
+            // Silhouette Score
+            var silhouetteScores = foldsWithClustering
+                .Where(r => r.ClusteringMetrics!.SilhouetteScore != null)
+                .Select(r => r.ClusteringMetrics!.SilhouetteScore!)
+                .ToArray();
+            if (silhouetteScores.Any())
+            {
+                SilhouetteScoreStats = new BasicStats<T>(new BasicStatsInputs<T>
+                {
+                    Values = new Vector<T>(silhouetteScores)
+                });
+            }
+
+            // Calinski-Harabasz Index
+            var calinskiHarabaszScores = foldsWithClustering
+                .Where(r => r.ClusteringMetrics!.CalinskiHarabaszIndex != null)
+                .Select(r => r.ClusteringMetrics!.CalinskiHarabaszIndex!)
+                .ToArray();
+            if (calinskiHarabaszScores.Any())
+            {
+                CalinskiHarabaszIndexStats = new BasicStats<T>(new BasicStatsInputs<T>
+                {
+                    Values = new Vector<T>(calinskiHarabaszScores)
+                });
+            }
+
+            // Davies-Bouldin Index
+            var daviesBouldinScores = foldsWithClustering
+                .Where(r => r.ClusteringMetrics!.DaviesBouldinIndex != null)
+                .Select(r => r.ClusteringMetrics!.DaviesBouldinIndex!)
+                .ToArray();
+            if (daviesBouldinScores.Any())
+            {
+                DaviesBouldinIndexStats = new BasicStats<T>(new BasicStatsInputs<T>
+                {
+                    Values = new Vector<T>(daviesBouldinScores)
+                });
+            }
+
+            // Adjusted Rand Index
+            var adjustedRandIndexScores = foldsWithClustering
+                .Where(r => r.ClusteringMetrics!.AdjustedRandIndex != null)
+                .Select(r => r.ClusteringMetrics!.AdjustedRandIndex!)
+                .ToArray();
+            if (adjustedRandIndexScores.Any())
+            {
+                AdjustedRandIndexStats = new BasicStats<T>(new BasicStatsInputs<T>
+                {
+                    Values = new Vector<T>(adjustedRandIndexScores)
+                });
+            }
+        }
     }
 
     /// <summary>
@@ -195,17 +303,17 @@ public class CrossValidationResult<T>
         report.AppendLine($"Average Training Time: {AverageTrainingTime.TotalSeconds:F2} seconds");
         report.AppendLine();
 
-        report.AppendLine("Performance Metrics (Mean ± Standard Deviation):");
-        report.AppendLine($"R² Score: {R2Stats.Mean} ± {R2Stats.StandardDeviation}");
-        report.AppendLine($"RMSE: {RMSEStats.Mean} ± {RMSEStats.StandardDeviation}");
-        report.AppendLine($"MAE: {MAEStats.Mean} ± {MAEStats.StandardDeviation}");
+        report.AppendLine("Performance Metrics (Mean ï¿½ Standard Deviation):");
+        report.AppendLine($"Rï¿½ Score: {R2Stats.Mean} ï¿½ {R2Stats.StandardDeviation}");
+        report.AppendLine($"RMSE: {RMSEStats.Mean} ï¿½ {RMSEStats.StandardDeviation}");
+        report.AppendLine($"MAE: {MAEStats.Mean} ï¿½ {MAEStats.StandardDeviation}");
         report.AppendLine();
 
         // Add other metrics that might be of interest
         try
         {
             var mapeStats = GetMetricStats(MetricType.MAPE);
-            report.AppendLine($"MAPE: {mapeStats.Mean} ± {mapeStats.StandardDeviation}");
+            report.AppendLine($"MAPE: {mapeStats.Mean} ï¿½ {mapeStats.StandardDeviation}");
         }
         catch (ArgumentException)
         {
@@ -215,7 +323,7 @@ public class CrossValidationResult<T>
         // Add feature importance if available
         if (FeatureImportanceStats.Count > 0)
         {
-            report.AppendLine("Feature Importance (Mean ± Standard Deviation):");
+            report.AppendLine("Feature Importance (Mean ï¿½ Standard Deviation):");
 
             // Sort features by mean importance (descending)
             var sortedFeatures = FeatureImportanceStats
@@ -226,7 +334,7 @@ public class CrossValidationResult<T>
             {
                 var feature = kvp.Key;
                 var stats = kvp.Value;
-                report.AppendLine($"- {feature}: {stats.Mean:F4} ± {stats.StandardDeviation:F4}");
+                report.AppendLine($"- {feature}: {stats.Mean:F4} ï¿½ {stats.StandardDeviation:F4}");
             }
         }
 

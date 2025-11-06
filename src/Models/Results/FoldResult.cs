@@ -73,6 +73,30 @@ public class FoldResult<T>
     public IFullModel<T, Matrix<T>, Vector<T>>? Model { get; }
 
     /// <summary>
+    /// Gets the clustering quality metrics for this fold, if applicable.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> This property stores clustering quality metrics when your model produces
+    /// cluster assignments (like K-Means, DBSCAN, or other clustering algorithms). These metrics help you
+    /// understand how well the clustering performed for this specific fold:
+    ///
+    /// - **Silhouette Score**: How well each point fits in its cluster
+    /// - **Calinski-Harabasz Index**: How well-separated and compact clusters are
+    /// - **Davies-Bouldin Index**: Average similarity between clusters (lower is better)
+    /// - **Adjusted Rand Index**: Similarity to ground truth labels (if available)
+    ///
+    /// This property will be null if:
+    /// - The model doesn't produce cluster labels (e.g., regression or standard classification)
+    /// - Clustering metrics couldn't be calculated for this fold
+    ///
+    /// When cross-validating clustering algorithms, these metrics are automatically calculated
+    /// for each fold, allowing you to see how consistent your clustering is across different data splits.
+    /// </para>
+    /// </remarks>
+    public ClusteringMetrics<T>? ClusteringMetrics { get; }
+
+    /// <summary>
     /// Creates a new instance of the FoldResult class.
     /// </summary>
     /// <param name="foldIndex">The index of this fold.</param>
@@ -85,11 +109,13 @@ public class FoldResult<T>
     /// <param name="evaluationTime">Time taken to evaluate the model.</param>
     /// <param name="featureCount">The number of features used in the model.</param>
     /// <param name="model">Optional trained model instance for this fold.</param>
+    /// <param name="clusteringMetrics">Optional clustering quality metrics for this fold.</param>
     /// <remarks>
     /// <para>
     /// <b>For Beginners:</b> This constructor creates a complete report of how well your model
     /// performed on one fold of cross-validation. It calculates various error metrics and statistics
-    /// that help you understand your model's strengths and weaknesses.
+    /// that help you understand your model's strengths and weaknesses. If your model performs clustering,
+    /// you can also include clustering-specific metrics.
     /// </para>
     /// </remarks>
     public FoldResult(
@@ -102,7 +128,8 @@ public class FoldResult<T>
         TimeSpan? trainingTime = null,
         TimeSpan? evaluationTime = null,
         int featureCount = 0,
-        IFullModel<T, Matrix<T>, Vector<T>>? model = null)
+        IFullModel<T, Matrix<T>, Vector<T>>? model = null,
+        ClusteringMetrics<T>? clusteringMetrics = null)
     {
         FoldIndex = foldIndex;
         ActualValues = validationActual;
@@ -135,5 +162,6 @@ public class FoldResult<T>
         TrainingTime = trainingTime ?? TimeSpan.Zero;
         EvaluationTime = evaluationTime ?? TimeSpan.Zero;
         Model = model;
+        ClusteringMetrics = clusteringMetrics;
     }
 }
