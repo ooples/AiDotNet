@@ -250,8 +250,7 @@ public class PredictionModelBuilder<T, TInput, TOutput> : IPredictionModelBuilde
             _ragRetriever,
             _ragReranker,
             _ragGenerator,
-            _queryProcessors,
-            _episodicDataLoader);
+            _queryProcessors);
     }
 
     /// <summary>

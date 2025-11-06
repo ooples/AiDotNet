@@ -199,12 +199,6 @@ public class PredictionModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
     public IEnumerable<IQueryProcessor>? QueryProcessors { get; private set; }
 
     /// <summary>
-    /// Gets or sets the episodic data loader used for meta-learning task generation.
-    /// </summary>
-    /// <value>An implementation of IEpisodicDataLoader&lt;T&gt; for generating N-way K-shot tasks, or null if not configured.</value>
-    public IEpisodicDataLoader<T>? EpisodicDataLoader { get; private set; }
-
-    /// <summary>
     /// Initializes a new instance of the PredictionModelResult class with the specified model, optimization results, and normalization information.
     /// </summary>
     /// <param name="model">The underlying model used for making predictions.</param>
@@ -255,7 +249,6 @@ public class PredictionModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
     /// <param name="ragReranker">Optional reranker for RAG functionality during inference.</param>
     /// <param name="ragGenerator">Optional generator for RAG functionality during inference.</param>
     /// <param name="queryProcessors">Optional query processors for RAG query preprocessing.</param>
-    /// <param name="episodicDataLoader">Optional episodic data loader for meta-learning task generation.</param>
     public PredictionModelResult(OptimizationResult<T, TInput, TOutput> optimizationResult,
         NormalizationInfo<T, TInput, TOutput> normalizationInfo,
         IBiasDetector<T>? biasDetector = null,
@@ -263,8 +256,7 @@ public class PredictionModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
         IRetriever<T>? ragRetriever = null,
         IReranker<T>? ragReranker = null,
         IGenerator<T>? ragGenerator = null,
-        IEnumerable<IQueryProcessor>? queryProcessors = null,
-        IEpisodicDataLoader<T>? episodicDataLoader = null)
+        IEnumerable<IQueryProcessor>? queryProcessors = null)
     {
         Model = optimizationResult.BestSolution;
         OptimizationResult = optimizationResult;
@@ -276,7 +268,6 @@ public class PredictionModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
         RagReranker = ragReranker;
         RagGenerator = ragGenerator;
         QueryProcessors = queryProcessors;
-        EpisodicDataLoader = episodicDataLoader;
     }
 
     /// <summary>
