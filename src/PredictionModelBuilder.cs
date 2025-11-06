@@ -243,14 +243,15 @@ public class PredictionModelBuilder<T, TInput, TOutput> : IPredictionModelBuilde
         var optimizationResult = optimizer.Optimize(OptimizerHelper<T, TInput, TOutput>.CreateOptimizationInputData(XTrain, yTrain, XVal, yVal, XTest, yTest));
 
         return new PredictionModelResult<T, TInput, TOutput>(
-            optimizationResult, 
-            normInfo, 
-            _biasDetector, 
+            optimizationResult,
+            normInfo,
+            _biasDetector,
             _fairnessEvaluator,
             _ragRetriever,
             _ragReranker,
             _ragGenerator,
-            _queryProcessors);
+            _queryProcessors,
+            _episodicDataLoader);
     }
 
     /// <summary>
@@ -482,11 +483,6 @@ public class PredictionModelBuilder<T, TInput, TOutput> : IPredictionModelBuilde
     /// </example>
     public IPredictionModelBuilder<T, TInput, TOutput> ConfigureEpisodicDataLoader(IEpisodicDataLoader<T> dataLoader)
     {
-        if (dataLoader == null)
-        {
-            throw new ArgumentNullException(nameof(dataLoader), "Episodic data loader cannot be null");
-        }
-
         _episodicDataLoader = dataLoader;
         return this;
     }
