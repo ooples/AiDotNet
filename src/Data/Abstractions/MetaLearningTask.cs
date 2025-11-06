@@ -6,6 +6,8 @@ namespace AiDotNet.Data.Abstractions;
 /// Represents a single meta-learning task for few-shot learning, containing support and query sets.
 /// </summary>
 /// <typeparam name="T">The numeric data type used for calculations (e.g., float, double).</typeparam>
+/// <typeparam name="TInput">The input data type (e.g., Matrix&lt;T&gt;, Tensor&lt;T&gt;, double[]).</typeparam>
+/// <typeparam name="TOutput">The output data type (e.g., Vector&lt;T&gt;, Tensor&lt;T&gt;, double[]).</typeparam>
 /// <remarks>
 /// <para>
 /// In meta-learning, particularly few-shot learning, a task is a small classification or regression problem
@@ -59,14 +61,14 @@ namespace AiDotNet.Data.Abstractions;
 /// var outerLoss = model.Evaluate(task.QuerySetX, task.QuerySetY);
 /// </code>
 /// </example>
-public class MetaLearningTask<T>
+public class MetaLearningTask<T, TInput, TOutput>
 {
     /// <summary>
     /// Gets or sets the input features for the support set.
     /// </summary>
     /// <value>
-    /// A tensor containing the input examples used for task adaptation.
-    /// Shape: [K × N, features] where K is shots per class and N is number of classes (ways).
+    /// Input data containing the examples used for task adaptation.
+    /// Shape depends on TInput type (e.g., Matrix&lt;T&gt;, Tensor&lt;T&gt;, double[]).
     /// </value>
     /// <remarks>
     /// <para><b>For Beginners:</b> These are the input examples the model can study to adapt to this task.
@@ -78,14 +80,14 @@ public class MetaLearningTask<T>
     /// The model looks at these examples to quickly understand what makes each class unique.
     /// </para>
     /// </remarks>
-    public Tensor<T> SupportSetX { get; set; } = new Tensor<T>(new[] { 0, 0 });
+    public TInput SupportSetX { get; set; }
 
     /// <summary>
     /// Gets or sets the target labels for the support set.
     /// </summary>
     /// <value>
-    /// A tensor containing the labels corresponding to each example in the support set.
-    /// Shape: [K × N, num_classes] for one-hot encoding or [K × N] for class indices.
+    /// Output data containing the labels corresponding to each example in the support set.
+    /// Shape depends on TOutput type (e.g., Vector&lt;T&gt;, Tensor&lt;T&gt;, double[]).
     /// </value>
     /// <remarks>
     /// <para><b>For Beginners:</b> These are the correct answers for each example in the support set.
@@ -100,14 +102,14 @@ public class MetaLearningTask<T>
     /// - One-hot encoded: [[1,0,0], [1,0,0], [1,0,0], [0,1,0], ...] for 3-shot
     /// </para>
     /// </remarks>
-    public Tensor<T> SupportSetY { get; set; } = new Tensor<T>(new[] { 0 });
+    public TOutput SupportSetY { get; set; }
 
     /// <summary>
     /// Gets or sets the input features for the query set.
     /// </summary>
     /// <value>
-    /// A tensor containing the input examples used for evaluating task adaptation.
-    /// Shape: [num_queries, features] where num_queries is typically larger than the support set size.
+    /// Input data containing the examples used for evaluating task adaptation.
+    /// Shape depends on TInput type, typically larger than the support set size.
     /// </value>
     /// <remarks>
     /// <para><b>For Beginners:</b> These are the examples used to test how well the model adapted to this task.
@@ -122,14 +124,14 @@ public class MetaLearningTask<T>
     /// from the few support examples. This tests the model's ability to quickly adapt.
     /// </para>
     /// </remarks>
-    public Tensor<T> QuerySetX { get; set; } = new Tensor<T>(new[] { 0, 0 });
+    public TInput QuerySetX { get; set; }
 
     /// <summary>
     /// Gets or sets the target labels for the query set.
     /// </summary>
     /// <value>
-    /// A tensor containing the true labels for evaluating predictions on the query set.
-    /// Shape: [num_queries, num_classes] for one-hot encoding or [num_queries] for class indices.
+    /// Output data containing the true labels for evaluating predictions on the query set.
+    /// Shape depends on TOutput type.
     /// </value>
     /// <remarks>
     /// <para><b>For Beginners:</b> These are the correct answers for the query set examples.
@@ -144,5 +146,5 @@ public class MetaLearningTask<T>
     /// many different tasks, developing strong few-shot learning abilities.
     /// </para>
     /// </remarks>
-    public Tensor<T> QuerySetY { get; set; } = new Tensor<T>(new[] { 0 });
+    public TOutput QuerySetY { get; set; }
 }
