@@ -6,6 +6,8 @@ global using AiDotNet.Normalizers;
 global using AiDotNet.OutlierRemoval;
 global using AiDotNet.DataProcessor;
 global using AiDotNet.FitDetectors;
+global using AiDotNet.LossFunctions;
+global using AiDotNet.MetaLearning.Trainers;
 
 namespace AiDotNet;
 
@@ -43,6 +45,7 @@ public class PredictionModelBuilder<T, TInput, TOutput> : IPredictionModelBuilde
     private IReranker<T>? _ragReranker;
     private IGenerator<T>? _ragGenerator;
     private IEnumerable<IQueryProcessor>? _queryProcessors;
+    private ILossFunction<T>? _lossFunction;
     private IEpisodicDataLoader<T>? _episodicDataLoader;
     private IMetaLearner<T, TInput, TOutput>? _metaLearner;
 
@@ -429,58 +432,29 @@ public class PredictionModelBuilder<T, TInput, TOutput> : IPredictionModelBuilde
     }
 
     /// <summary>
+    /// Configures the loss function for training.
+    /// </summary>
+    /// <param name="lossFunction">The loss function implementation to use.</param>
+    /// <returns>This builder instance for method chaining.</returns>
+    /// <remarks>
+    /// <b>For Beginners:</b> The loss function measures how wrong your model's predictions are.
+    /// If you don't configure this, we'll choose a sensible default for you.
+    /// </remarks>
+    public IPredictionModelBuilder<T, TInput, TOutput> ConfigureLossFunction(ILossFunction<T> lossFunction)
+    {
+        _lossFunction = lossFunction;
+        return this;
+    }
+
+    /// <summary>
     /// Configures episodic data loading for meta-learning (N-way K-shot task sampling).
     /// </summary>
     /// <param name="dataLoader">The episodic data loader for generating meta-learning tasks.</param>
     /// <returns>This builder instance for method chaining.</returns>
     /// <remarks>
-    /// <para>
-    /// Meta-learning (learning to learn) requires training on many small tasks instead of one large dataset.
-    /// This configuration enables episodic sampling where each training iteration uses a different N-way K-shot task.
-    /// </para>
-    /// <para><b>For Beginners:</b> Traditional machine learning trains a model once on a large dataset to perform
-    /// one specific task. Meta-learning is different - it trains a model to quickly adapt to new tasks with very
-    /// few examples.
-    ///
-    /// This is useful when you need a model that can:
-    /// - Learn new categories from just a few examples (few-shot learning)
-    /// - Quickly adapt to new domains or tasks
-    /// - Generalize across diverse problems
-    ///
-    /// The episodic data loader you configure here will:
-    /// - Sample random N-way K-shot tasks from your dataset
-    /// - Provide support sets (for quick adaptation) and query sets (for evaluation)
-    /// - Enable meta-learning algorithms like MAML, Reptile, and SEAL
-    ///
-    /// <b>Note:</b> Episodic data loading is only used for meta-learning. Configure this before
-    /// calling ConfigureMetaLearning, as meta-learners require episodic data at construction time.
-    /// </para>
+    /// <b>For Beginners:</b> This configures how your model will sample different tasks during meta-learning.
+    /// After setting this up, just call BuildMetaLearner() and we'll handle everything else automatically.
     /// </remarks>
-    /// <example>
-    /// <code>
-    /// // Load your dataset
-    /// var features = new Matrix&lt;double&gt;(1000, 784);  // 1000 examples, 784 features
-    /// var labels = new Vector&lt;double&gt;(1000);         // 10 classes (0-9)
-    ///
-    /// // Create episodic data loader for 5-way 3-shot tasks
-    /// var episodicLoader = new UniformEpisodicDataLoader&lt;double&gt;(
-    ///     datasetX: features,
-    ///     datasetY: labels,
-    ///     nWay: 5,        // 5 classes per task
-    ///     kShot: 3,       // 3 support examples per class
-    ///     queryShots: 10  // 10 query examples per class
-    /// );
-    ///
-    /// // Configure builder for meta-learning
-    /// var builder = new PredictionModelBuilder&lt;double, Matrix&lt;double&gt;, Vector&lt;double&gt;&gt;()
-    ///     .ConfigureModel(new NeuralNetworkModel&lt;double&gt;(...))
-    ///     .ConfigureEpisodicDataLoader(episodicLoader)
-    ///     .ConfigureMetaLearning(new ReptileTrainer&lt;double, ...&gt;(...));
-    ///
-    /// // Train the meta-learner
-    /// var result = builder.TrainMetaLearner(numMetaIterations: 1000, batchSize: 4);
-    /// </code>
-    /// </example>
     public IPredictionModelBuilder<T, TInput, TOutput> ConfigureEpisodicDataLoader(IEpisodicDataLoader<T> dataLoader)
     {
         _episodicDataLoader = dataLoader;
@@ -488,53 +462,49 @@ public class PredictionModelBuilder<T, TInput, TOutput> : IPredictionModelBuilde
     }
 
     /// <summary>
-    /// Configures a meta-learning algorithm (MAML, Reptile, SEAL) for training models that can quickly adapt to new tasks.
+    /// Configures a specific meta-learning algorithm for training.
     /// </summary>
-    /// <param name="metaLearner">The meta-learning algorithm to use (e.g., ReptileTrainer, MAMLTrainer).</param>
+    /// <param name="metaLearner">The meta-learning algorithm to use.</param>
     /// <returns>This builder instance for method chaining.</returns>
     /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> Meta-learning trains models to quickly learn new tasks from just a few examples.
-    /// This method sets up the specific meta-learning algorithm you want to use (like Reptile, MAML, or SEAL).
-    /// After configuration, call TrainMetaLearner() to perform the actual meta-training.
-    ///
-    /// <b>Important:</b> You must configure an episodic data loader first using ConfigureEpisodicDataLoader(),
-    /// as meta-learners need this special data format for training.
-    /// </para>
+    /// <b>For Beginners:</b> If you don't configure this, we'll automatically use Reptile
+    /// (the simplest and most efficient algorithm). Only configure this if you need a specific algorithm.
     /// </remarks>
-    /// <exception cref="ArgumentNullException">Thrown if metaLearner is null.</exception>
     public IPredictionModelBuilder<T, TInput, TOutput> ConfigureMetaLearning(IMetaLearner<T, TInput, TOutput> metaLearner)
     {
-        if (metaLearner == null)
-            throw new ArgumentNullException(nameof(metaLearner), "Meta-learner cannot be null");
-
         _metaLearner = metaLearner;
         return this;
     }
 
     /// <summary>
-    /// Trains the configured meta-learner across multiple tasks to enable rapid adaptation.
+    /// Builds and trains a meta-learning model automatically.
     /// </summary>
-    /// <param name="numMetaIterations">Number of meta-training iterations. Each iteration trains on batchSize tasks.</param>
-    /// <param name="batchSize">Number of tasks to sample per meta-update (default 1). Higher values provide more stable training.</param>
-    /// <returns>Training result with complete history of loss/accuracy progression and timing information.</returns>
+    /// <param name="numMetaIterations">Number of meta-training iterations (default 1000).</param>
+    /// <param name="batchSize">Number of tasks per update (default 1).</param>
+    /// <returns>Training result with complete metrics and the trained model.</returns>
     /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> This method trains your model using meta-learning, which teaches it how to
-    /// quickly learn new tasks. Unlike traditional training (Build method), this trains across many different
-    /// tasks so the model becomes good at rapid adaptation.
-    ///
-    /// <b>Typical values:</b>
-    /// - numMetaIterations: 1,000-10,000 (more for complex problems)
-    /// - batchSize: 1-32 (higher = more stable but slower)
-    /// </para>
+    /// <b>For Beginners:</b> This does everything automatically - validates your setup, creates
+    /// defaults if needed, trains the model, and returns the results. Just like Build() but for meta-learning!
     /// </remarks>
-    /// <exception cref="InvalidOperationException">Thrown if ConfigureMetaLearning has not been called.</exception>
-    public MetaTrainingResult<T> TrainMetaLearner(int numMetaIterations, int batchSize = 1)
+    public MetaTrainingResult<T> BuildMetaLearner(int numMetaIterations = 1000, int batchSize = 1)
     {
-        if (_metaLearner == null)
-            throw new InvalidOperationException("Meta-learner must be configured using ConfigureMetaLearning() before training");
+        // Validation (following Build() pattern)
+        if (_model == null)
+            throw new InvalidOperationException("Model must be configured using ConfigureModel() before building meta-learner");
+        if (_episodicDataLoader == null)
+            throw new InvalidOperationException("Episodic data loader must be configured using ConfigureEpisodicDataLoader() before building meta-learner");
 
-        return _metaLearner.Train(numMetaIterations, batchSize);
+        // Provide defaults for optional components (following Build() pattern)
+        var lossFunction = _lossFunction ?? new MeanSquaredErrorLoss<T>(); // Default loss function
+
+        // Create default meta-learner if user didn't configure one (beginner-friendly)
+        var metaLearner = _metaLearner ?? new ReptileTrainer<T, TInput, TOutput>(
+            metaModel: _model,
+            lossFunction: lossFunction,
+            dataLoader: _episodicDataLoader,
+            config: null); // Use default config
+
+        // Train automatically (no separate training step needed)
+        return metaLearner.Train(numMetaIterations, batchSize);
     }
 }

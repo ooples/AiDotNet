@@ -383,6 +383,24 @@ public interface IPredictionModelBuilder<T, TInput, TOutput>
         IEnumerable<IQueryProcessor>? queryProcessors = null);
 
     /// <summary>
+    /// Configures the loss function for training.
+    /// </summary>
+    /// <remarks>
+    /// A loss function measures how far the model's predictions are from the actual values.
+    ///
+    /// <b>For Beginners:</b> The loss function is like a scorecard that tells your model how wrong it is.
+    /// Lower loss means better predictions. Different problems need different loss functions:
+    /// - Mean Squared Error: For predicting numbers (house prices, temperatures)
+    /// - Cross Entropy: For classification (cat vs dog, spam vs not spam)
+    /// - Absolute Error: When you want to penalize all errors equally
+    ///
+    /// If you don't configure this, a sensible default will be chosen based on your task.
+    /// </remarks>
+    /// <param name="lossFunction">The loss function implementation to use.</param>
+    /// <returns>The builder instance for method chaining.</returns>
+    IPredictionModelBuilder<T, TInput, TOutput> ConfigureLossFunction(ILossFunction<T> lossFunction);
+
+    /// <summary>
     /// Configures episodic data loading for meta-learning (N-way K-shot task sampling).
     /// </summary>
     /// <remarks>
@@ -403,83 +421,55 @@ public interface IPredictionModelBuilder<T, TInput, TOutput>
     /// - Provide support sets (for quick adaptation) and query sets (for evaluation)
     /// - Enable meta-learning algorithms like MAML, Reptile, and SEAL
     ///
-    /// <b>Note:</b> Episodic data loading is only used for meta-learning. Configure this before
-    /// calling ConfigureMetaLearning, as meta-learners require episodic data at construction time.
+    /// <b>Note:</b> This is required for meta-learning. After configuring this, call BuildMetaLearner()
+    /// to automatically train your model for rapid adaptation.
     /// </remarks>
     /// <param name="dataLoader">The episodic data loader for generating meta-learning tasks.</param>
     /// <returns>The builder instance for method chaining.</returns>
     IPredictionModelBuilder<T, TInput, TOutput> ConfigureEpisodicDataLoader(IEpisodicDataLoader<T> dataLoader);
 
     /// <summary>
-    /// Configures a meta-learning algorithm (MAML, Reptile, SEAL) for training models that can quickly adapt to new tasks.
+    /// Configures a specific meta-learning algorithm (MAML, Reptile, SEAL) for training.
     /// </summary>
     /// <remarks>
     /// <para>
-    /// Meta-learning trains models to learn how to learn, enabling rapid adaptation to new tasks with minimal data.
-    /// This method configures the specific meta-learning algorithm to use (e.g., Reptile, MAML, SEAL).
-    /// </para>
-    /// <para>
-    /// <b>For Beginners:</b> Meta-learning is "learning to learn" - instead of training a model for one specific
-    /// task, you train it across many different tasks so it becomes good at quickly learning new tasks.
+    /// <b>For Beginners:</b> Meta-learning trains models to quickly learn new tasks from just a few examples.
+    /// If you don't configure this, we'll automatically use Reptile (the simplest and most efficient algorithm).
     ///
-    /// Think of it like this:
-    /// - <b>Traditional ML:</b> Teach someone to recognize cats (one task, lots of examples)
-    /// - <b>Meta-Learning:</b> Teach someone how to learn to recognize ANY animal (many tasks, few examples each)
-    ///
-    /// After meta-training, your model can learn new tasks from just a few examples!
-    ///
-    /// Common meta-learning algorithms:
-    /// - <b>Reptile:</b> Simple first-order algorithm, fast and memory-efficient
-    /// - <b>MAML:</b> More sophisticated, requires second-order gradients
-    /// - <b>SEAL:</b> Uses self-ensembling for improved adaptation
-    /// </para>
-    /// <para>
-    /// <b>Prerequisites:</b> You must configure an episodic data loader using ConfigureEpisodicDataLoader()
-    /// before calling this method, as meta-learners require episodic data at construction.
-    /// </para>
-    /// <para>
-    /// <b>Usage Pattern:</b>
-    /// 1. Configure your base model (ConfigureModel)
-    /// 2. Configure episodic data loader (ConfigureEpisodicDataLoader)
-    /// 3. Configure meta-learning algorithm (ConfigureMetaLearning)
-    /// 4. Train the meta-learner (TrainMetaLearner)
+    /// Only configure this if you want to use a specific algorithm like MAML or have custom settings.
     /// </para>
     /// </remarks>
     /// <param name="metaLearner">The meta-learning algorithm to use (e.g., ReptileTrainer, MAMLTrainer).</param>
     /// <returns>The builder instance for method chaining.</returns>
-    /// <exception cref="InvalidOperationException">Thrown if ConfigureEpisodicDataLoader has not been called first.</exception>
     IPredictionModelBuilder<T, TInput, TOutput> ConfigureMetaLearning(IMetaLearner<T, TInput, TOutput> metaLearner);
 
     /// <summary>
-    /// Trains the configured meta-learner across multiple tasks to enable rapid adaptation.
+    /// Builds and trains a meta-learning model that can quickly adapt to new tasks.
     /// </summary>
     /// <remarks>
     /// <para>
-    /// This method performs the complete meta-training process using the configured meta-learning algorithm
-    /// and episodic data loader. The model learns to quickly adapt to new tasks by training across many
-    /// different tasks sampled from your dataset.
+    /// This method automatically:
+    /// 1. Validates your configuration (model, episodic data loader)
+    /// 2. Creates a default meta-learner if you didn't configure one (uses Reptile)
+    /// 3. Trains the model across many tasks
+    /// 4. Returns comprehensive training metrics
     /// </para>
     /// <para>
-    /// <b>For Beginners:</b> This is the main training method for meta-learning. Unlike Build() which trains
-    /// a model for one specific task, this trains your model to be good at learning NEW tasks quickly.
+    /// <b>For Beginners:</b> This is like the Build() method but for meta-learning. It does everything
+    /// automatically - no need to call separate training methods. Just configure your model and data,
+    /// then call this method.
     ///
-    /// During training, the model:
-    /// 1. Samples a batch of different tasks from your data
-    /// 2. Tries to learn each task quickly (inner loop adaptation)
-    /// 3. Updates itself to get better at fast learning (outer loop meta-optimization)
-    /// 4. Repeats this for many iterations
-    ///
-    /// After meta-training, your model can adapt to brand new tasks with just a few examples!
+    /// After training, your model will be able to quickly adapt to brand new tasks with just a few examples!
     /// </para>
     /// <para>
-    /// <b>Typical Values:</b>
+    /// <b>Typical values:</b>
     /// - numMetaIterations: 1,000-10,000 (more for complex problems)
-    /// - batchSize: 1-32 tasks per update (higher = more stable but slower)
+    /// - batchSize: 1-32 (higher = more stable but slower)
     /// </para>
     /// </remarks>
-    /// <param name="numMetaIterations">Number of meta-training iterations. Each iteration trains on batchSize tasks.</param>
-    /// <param name="batchSize">Number of tasks to sample per meta-update (default 1). Higher values provide more stable training.</param>
-    /// <returns>Training result with complete history of loss/accuracy progression and timing information.</returns>
-    /// <exception cref="InvalidOperationException">Thrown if ConfigureMetaLearning has not been called.</exception>
-    MetaTrainingResult<T> TrainMetaLearner(int numMetaIterations, int batchSize = 1);
+    /// <param name="numMetaIterations">Number of meta-training iterations (default 1000). More iterations = better adaptation.</param>
+    /// <param name="batchSize">Number of tasks per update (default 1). Higher values provide more stable training.</param>
+    /// <returns>Training result with complete history of loss/accuracy progression and the trained meta-learner.</returns>
+    /// <exception cref="InvalidOperationException">Thrown if required components (model, episodic data loader) are not configured.</exception>
+    MetaTrainingResult<T> BuildMetaLearner(int numMetaIterations = 1000, int batchSize = 1);
 }
