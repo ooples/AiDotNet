@@ -150,7 +150,7 @@ public class ReptileTrainerTests
                 dataLoader: dataLoader,
                 config: config));
 
-        Assert.Contains("innersteps", exception.Message.ToLower());
+        Assert.Equal("config", exception.ParamName);
     }
 
     [Fact]
@@ -174,7 +174,7 @@ public class ReptileTrainerTests
                 dataLoader: dataLoader,
                 config: config));
 
-        Assert.Contains("learning rate", exception.Message.ToLower());
+        Assert.Equal("config", exception.ParamName);
     }
 
     [Fact]
@@ -198,7 +198,7 @@ public class ReptileTrainerTests
                 dataLoader: dataLoader,
                 config: config));
 
-        Assert.Contains("learning rate", exception.Message.ToLower());
+        Assert.Equal("config", exception.ParamName);
     }
 
     #endregion
