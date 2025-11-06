@@ -164,6 +164,21 @@ public class AdvancedEpisodicDataLoaderTests
         }
     }
 
+    [Fact]
+    public void BalancedLoader_WithDefaultParameters_UsesIndustryStandards()
+    {
+        // Arrange - Create dataset with enough data for default 5-way 5-shot 15 queries
+        var (X, Y) = CreateTestDataset(numClasses: 10, examplesPerClass: 25, numFeatures: 10);
+
+        // Act - Use defaults
+        var loader = new BalancedEpisodicDataLoader<double>(X, Y);
+        var task = loader.GetNextTask();
+
+        // Assert - Default 5-way 5-shot 15 queries
+        Assert.Equal(25, task.SupportSetX.Shape[0]); // 5 * 5
+        Assert.Equal(75, task.QuerySetX.Shape[0]); // 5 * 15
+    }
+
     #endregion
 
     #region StratifiedEpisodicDataLoader Tests
@@ -252,6 +267,21 @@ public class AdvancedEpisodicDataLoaderTests
             Assert.Equal(task1.SupportSetX[new[] { i, 0 }], task2.SupportSetX[new[] { i, 0 }]);
             Assert.Equal(task1.SupportSetY[new[] { i }], task2.SupportSetY[new[] { i }]);
         }
+    }
+
+    [Fact]
+    public void StratifiedLoader_WithDefaultParameters_UsesIndustryStandards()
+    {
+        // Arrange
+        var (X, Y) = CreateTestDataset(numClasses: 10, examplesPerClass: 25, numFeatures: 10);
+
+        // Act - Use defaults
+        var loader = new StratifiedEpisodicDataLoader<double>(X, Y);
+        var task = loader.GetNextTask();
+
+        // Assert - Default 5-way 5-shot 15 queries
+        Assert.Equal(25, task.SupportSetX.Shape[0]); // 5 * 5
+        Assert.Equal(75, task.QuerySetX.Shape[0]); // 5 * 15
     }
 
     #endregion
@@ -459,6 +489,32 @@ public class AdvancedEpisodicDataLoaderTests
             Assert.Equal(task1.SupportSetX[new[] { i, 0 }], task2.SupportSetX[new[] { i, 0 }]);
             Assert.Equal(task1.SupportSetY[new[] { i }], task2.SupportSetY[new[] { i }]);
         }
+    }
+
+    [Fact]
+    public void CurriculumLoader_WithDefaultParameters_UsesIndustryStandards()
+    {
+        // Arrange - Need enough data for initial difficulty: 2-way 10-shot + 15 queries
+        var (X, Y) = CreateTestDataset(numClasses: 10, examplesPerClass: 30, numFeatures: 10);
+
+        // Act - Use defaults
+        var loader = new CurriculumEpisodicDataLoader<double>(X, Y);
+
+        // Test at initial difficulty (progress = 0.0)
+        loader.SetProgress(0.0);
+        var initialTask = loader.GetNextTask();
+
+        // Assert - Initial: 2-way 10-shot 15 queries (defaults)
+        Assert.Equal(20, initialTask.SupportSetX.Shape[0]); // 2 * 10
+        Assert.Equal(30, initialTask.QuerySetX.Shape[0]); // 2 * 15
+
+        // Test at final difficulty (progress = 1.0)
+        loader.SetProgress(1.0);
+        var finalTask = loader.GetNextTask();
+
+        // Assert - Final: 5-way 1-shot 15 queries (defaults)
+        Assert.Equal(5, finalTask.SupportSetX.Shape[0]); // 5 * 1
+        Assert.Equal(75, finalTask.QuerySetX.Shape[0]); // 5 * 15
     }
 
     #endregion

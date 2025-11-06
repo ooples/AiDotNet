@@ -212,6 +212,42 @@ public class UniformEpisodicDataLoaderTests
         Assert.Contains("insufficient examples", exception.Message);
     }
 
+    [Fact]
+    public void Constructor_WithDefaultParameters_UsesIndustryStandards()
+    {
+        // Arrange - Create dataset with enough data for default 5-way 5-shot 15 queries
+        var (X, Y) = CreateTestDataset(numClasses: 10, examplesPerClass: 25, numFeatures: 10);
+
+        // Act - Use defaults by not providing nWay, kShot, queryShots parameters
+        var loader = new UniformEpisodicDataLoader<double>(X, Y);
+
+        // Assert - Get a task and verify it uses default dimensions (5-way 5-shot 15 queries)
+        var task = loader.GetNextTask();
+
+        // Support set: 5 classes * 5 shots = 25 examples
+        Assert.Equal(25, task.SupportSetX.Shape[0]);
+        Assert.Equal(25, task.SupportSetY.Shape[0]);
+
+        // Query set: 5 classes * 15 queries = 75 examples
+        Assert.Equal(75, task.QuerySetX.Shape[0]);
+        Assert.Equal(75, task.QuerySetY.Shape[0]);
+    }
+
+    [Fact]
+    public void Constructor_WithPartialDefaultParameters_UsesCorrectValues()
+    {
+        // Arrange
+        var (X, Y) = CreateTestDataset(numClasses: 10, examplesPerClass: 25, numFeatures: 10);
+
+        // Act - Override only nWay, use defaults for kShot and queryShots
+        var loader = new UniformEpisodicDataLoader<double>(X, Y, nWay: 3);
+        var task = loader.GetNextTask();
+
+        // Assert - 3-way (custom), 5-shot (default), 15 queries (default)
+        Assert.Equal(15, task.SupportSetX.Shape[0]); // 3 * 5
+        Assert.Equal(45, task.QuerySetX.Shape[0]); // 3 * 15
+    }
+
     #endregion
 
     #region GetNextTask Tests
