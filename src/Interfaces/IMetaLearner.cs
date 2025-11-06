@@ -176,7 +176,7 @@ public interface IMetaLearner<T, TInput, TOutput>
     /// </summary>
     /// <param name="task">Meta-learning task with support set (for adaptation) and query set (for evaluation).</param>
     /// <returns>Detailed metrics about adaptation performance and timing.</returns>
-    MetaAdaptationResult<T> AdaptAndEvaluate(MetaLearningTask<T> task);
+    MetaAdaptationResult<T> AdaptAndEvaluate(MetaLearningTask<T, TInput, TOutput> task);
 
     /// <summary>
     /// Saves the meta-trained model to disk for later deployment.
