@@ -424,11 +424,13 @@ public class UniformEpisodicDataLoaderTests
         var task3 = loader.GetNextTask();
 
         // Assert - Tasks should have different data (check first example of support set)
-        bool task1And2Different = task1.SupportSetX[new[] { 0, 0 }] != task2.SupportSetX[new[] { 0, 0 }] ||
-                                   task1.SupportSetX[new[] { 0, 1 }] != task2.SupportSetX[new[] { 0, 1 }];
+        // Use epsilon comparison for floating-point values to avoid precision issues
+        double epsilon = 1e-6;
+        bool task1And2Different = Math.Abs(task1.SupportSetX[new[] { 0, 0 }] - task2.SupportSetX[new[] { 0, 0 }]) > epsilon ||
+                                   Math.Abs(task1.SupportSetX[new[] { 0, 1 }] - task2.SupportSetX[new[] { 0, 1 }]) > epsilon;
 
-        bool task2And3Different = task2.SupportSetX[new[] { 0, 0 }] != task3.SupportSetX[new[] { 0, 0 }] ||
-                                   task2.SupportSetX[new[] { 0, 1 }] != task3.SupportSetX[new[] { 0, 1 }];
+        bool task2And3Different = Math.Abs(task2.SupportSetX[new[] { 0, 0 }] - task3.SupportSetX[new[] { 0, 0 }]) > epsilon ||
+                                   Math.Abs(task2.SupportSetX[new[] { 0, 1 }] - task3.SupportSetX[new[] { 0, 1 }]) > epsilon;
 
         // At least one pair should be different (very high probability with randomness)
         Assert.True(task1And2Different || task2And3Different);
