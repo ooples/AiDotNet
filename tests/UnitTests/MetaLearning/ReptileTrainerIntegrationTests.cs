@@ -136,7 +136,9 @@ public class ReptileTrainerIntegrationTests
         var config = new ReptileTrainerConfig<double>(
             innerLearningRate: 0.02,
             metaLearningRate: 0.01,
-            innerSteps: 10);
+            innerSteps: 10,
+            metaBatchSize: 1,
+            numMetaIterations: 50);
         var trainer = new ReptileTrainerDouble(
             metaModel: model,
             lossFunction: lossFunction,
@@ -147,7 +149,7 @@ public class ReptileTrainerIntegrationTests
         var initialParams = model.GetParameters();
 
         // Act - Meta-train for 50 iterations (as specified in requirements)
-        var result = trainer.Train(numMetaIterations: 50);
+        var result = trainer.Train();
 
         // Assert - Parameters should have changed
         var finalParams = model.GetParameters();
@@ -193,7 +195,9 @@ public class ReptileTrainerIntegrationTests
         var config = new ReptileTrainerConfig<double>(
             innerLearningRate: 0.02,
             metaLearningRate: 0.01,
-            innerSteps: 10);
+            innerSteps: 10,
+            metaBatchSize: 1,
+            numMetaIterations: 100);
         var trainer = new ReptileTrainerDouble(
             metaModel: metaTrainedModel,
             lossFunction: lossFunction,
@@ -201,7 +205,7 @@ public class ReptileTrainerIntegrationTests
             config: config);
 
         // Act
-        var result = trainer.Train(numMetaIterations: 100);
+        var result = trainer.Train();
 
         // Assert - Meta-training should process all iterations
         Assert.NotNull(result);
@@ -237,7 +241,9 @@ public class ReptileTrainerIntegrationTests
         var config = new ReptileTrainerConfig<double>(
             innerLearningRate: 0.02,
             metaLearningRate: 0.01,
-            innerSteps: 10);
+            innerSteps: 10,
+            metaBatchSize: 1,
+            numMetaIterations: 100);
         var trainer = new ReptileTrainerDouble(
             metaModel: model,
             lossFunction: lossFunction,
@@ -245,7 +251,7 @@ public class ReptileTrainerIntegrationTests
             config: config);
 
         // Act - Train for 100 iterations to verify metric tracking
-        var result = trainer.Train(numMetaIterations: 100);
+        var result = trainer.Train();
 
         // Assert - Result should be properly populated
         Assert.NotNull(result.LossHistory);
@@ -255,7 +261,7 @@ public class ReptileTrainerIntegrationTests
 
         // Check that we have recorded losses
         double firstLoss = result.LossHistory[0];
-        double lastLoss = result.LossHistory[^1];
+        double lastLoss = result.LossHistory[result.LossHistory.Length - 1];
 
         Assert.True(firstLoss >= 0, "Initial loss should be non-negative");
         Assert.True(lastLoss >= 0, "Final loss should be non-negative");
@@ -280,7 +286,9 @@ public class ReptileTrainerIntegrationTests
         var config = new ReptileTrainerConfig<double>(
             innerLearningRate: 0.02,
             metaLearningRate: 0.01,
-            innerSteps: 10);
+            innerSteps: 10,
+            metaBatchSize: 1,
+            numMetaIterations: 50);
         var trainer = new ReptileTrainerDouble(
             metaModel: model,
             lossFunction: lossFunction,
@@ -288,7 +296,7 @@ public class ReptileTrainerIntegrationTests
             config: config);
 
         // Act - Run exactly 50 meta-iterations as required
-        var result = trainer.Train(numMetaIterations: 50);
+        var result = trainer.Train();
 
         // Assert
         Assert.NotNull(result);
