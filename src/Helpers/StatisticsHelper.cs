@@ -6244,10 +6244,13 @@ public static class StatisticsHelper<T>
 
         int n = labels1.Length;
 
-        // Build contingency table
-        var uniqueLabels1 = labels1.Select(l => l?.ToString() ?? string.Empty).Distinct().ToList();
-        var uniqueLabels2 = labels2.Select(l => l?.ToString() ?? string.Empty).Distinct().ToList();
+        // Handle edge case where n < 2
+        if (n < 2)
+        {
+            return _numOps.One; // Perfect agreement for trivial cases
+        }
 
+        // Build contingency table
         var contingencyTable = new Dictionary<(string, string), int>();
         var rowSums = new Dictionary<string, int>();
         var colSums = new Dictionary<string, int>();
@@ -6265,36 +6268,27 @@ public static class StatisticsHelper<T>
 
         // Calculate sum of combinations for contingency table entries
         T sumCombinations = _numOps.Zero;
-        foreach (var count in contingencyTable.Values)
+        foreach (var count in contingencyTable.Values.Where(c => c > 1))
         {
-            if (count > 1)
-            {
-                sumCombinations = _numOps.Add(sumCombinations, _numOps.FromDouble(count * (count - 1) / 2.0));
-            }
+            sumCombinations = _numOps.Add(sumCombinations, _numOps.FromDouble((long)count * (count - 1) / 2.0));
         }
 
         // Calculate sum of combinations for row sums (a_i)
         T sumRowCombinations = _numOps.Zero;
-        foreach (var count in rowSums.Values)
+        foreach (var count in rowSums.Values.Where(c => c > 1))
         {
-            if (count > 1)
-            {
-                sumRowCombinations = _numOps.Add(sumRowCombinations, _numOps.FromDouble(count * (count - 1) / 2.0));
-            }
+            sumRowCombinations = _numOps.Add(sumRowCombinations, _numOps.FromDouble((long)count * (count - 1) / 2.0));
         }
 
         // Calculate sum of combinations for column sums (b_j)
         T sumColCombinations = _numOps.Zero;
-        foreach (var count in colSums.Values)
+        foreach (var count in colSums.Values.Where(c => c > 1))
         {
-            if (count > 1)
-            {
-                sumColCombinations = _numOps.Add(sumColCombinations, _numOps.FromDouble(count * (count - 1) / 2.0));
-            }
+            sumColCombinations = _numOps.Add(sumColCombinations, _numOps.FromDouble((long)count * (count - 1) / 2.0));
         }
 
         // Total number of pairs
-        T totalCombinations = _numOps.FromDouble(n * (n - 1) / 2.0);
+        T totalCombinations = _numOps.FromDouble((long)n * (n - 1) / 2.0);
 
         // Calculate expected index
         T expectedIndex = _numOps.Divide(
