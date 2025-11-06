@@ -1,50 +1,52 @@
+using AiDotNet.Data.Abstractions;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
 using AiDotNet.MetaLearning.Config;
+using AiDotNet.MetaLearning.Metrics;
 
 namespace AiDotNet.MetaLearning.Trainers;
 
 /// <summary>
-/// Provides a base implementation for Reptile meta-learning trainers with common functionality and validation.
+/// Production-ready base implementation for Reptile meta-learning trainers.
 /// </summary>
-/// <typeparam name="T">The numeric data type used for calculations (e.g., float, double).</typeparam>
+/// <typeparam name="T">The numeric data type (e.g., float, double).</typeparam>
+/// <typeparam name="TInput">The input data type (e.g., Matrix&lt;T&gt;, Tensor&lt;T&gt;, double[]).</typeparam>
+/// <typeparam name="TOutput">The output data type (e.g., Vector&lt;T&gt;, Tensor&lt;T&gt;, double[]).</typeparam>
 /// <remarks>
 /// <para>
-/// This abstract class implements the IMetaLearner interface and provides common functionality
-/// for Reptile-based meta-learning trainers. It handles parameter validation, loss computation,
-/// and configuration management while allowing derived classes to focus on implementing the
-/// specific Reptile algorithm variant.
+/// Reptile is a first-order meta-learning algorithm (Nichol et al., 2018) that provides
+/// a simple yet effective approach to few-shot learning. It works by repeatedly moving
+/// model parameters toward task-adapted parameters, causing them to converge to an
+/// initialization that enables rapid adaptation.
 /// </para>
-/// <para><b>For Beginners:</b> This is the foundation that Reptile trainers build upon.
-///
-/// Reptile is a simple yet powerful meta-learning algorithm published by OpenAI. It works by:
-/// 1. Starting with initial model parameters
-/// 2. For each task: clone the model, train it on that task, then move the original parameters
-///    toward the task-specific parameters
-/// 3. After many tasks, the model learns to find parameter values that are easy to fine-tune
-///
-/// Why Reptile is special:
-/// - <b>Simpler than MAML:</b> No second-order derivatives needed
-/// - <b>Effective:</b> Achieves comparable performance to MAML in many scenarios
-/// - <b>Scalable:</b> Works well with standard gradient descent optimizers
-///
-/// This base class handles:
-/// - Storing and validating configuration (learning rates, number of steps, etc.)
-/// - Providing access to the model, loss function, and numeric operations
-/// - Ensuring proper parameter validation
-/// - Offering protected helper methods for derived classes
+/// <para><b>Key Advantages:</b>
+/// - Simpler than MAML (no second-order derivatives)
+/// - Computationally efficient
+/// - Works with any gradient-based model
+/// - Strong empirical performance on few-shot tasks
 /// </para>
-/// <para>
-/// <b>Thread Safety:</b> This class is not thread-safe. Create separate instances for concurrent training.
+/// <para><b>Algorithm Overview:</b>
+/// <code>
+/// Initialize θ (meta-parameters)
+/// for each meta-iteration:
+///     Sample batch of B tasks
+///     for each task i in batch:
+///         θ_i = θ (clone parameters)
+///         for k = 1 to K (inner steps):
+///             θ_i = θ_i - α∇L(θ_i, support_set_i)
+///         Δθ_i = θ_i - θ
+///     θ = θ + ε * Average(Δθ_i) (meta-update)
+/// return θ
+/// </code>
 /// </para>
 /// </remarks>
-public abstract class ReptileTrainerBase<T> : IMetaLearner<T>
+public abstract class ReptileTrainerBase<T, TInput, TOutput> : IMetaLearner<T, TInput, TOutput>
 {
     /// <summary>
     /// The model being meta-trained.
     /// </summary>
-    protected readonly IFullModel<T, Tensor<T>, Tensor<T>> MetaModel;
+    protected readonly IFullModel<T, TInput, TOutput> MetaModel;
 
     /// <summary>
     /// The loss function used to evaluate task performance.
@@ -52,249 +54,305 @@ public abstract class ReptileTrainerBase<T> : IMetaLearner<T>
     protected readonly ILossFunction<T> LossFunction;
 
     /// <summary>
-    /// The number of gradient descent steps to perform on each task's support set.
+    /// Configuration containing learning rates and training parameters.
     /// </summary>
-    protected readonly int InnerSteps;
+    protected readonly IMetaLearnerConfig<T> Configuration;
 
     /// <summary>
-    /// The learning rate for inner loop optimization (task-specific training).
-    /// </summary>
-    protected readonly T InnerLearningRate;
-
-    /// <summary>
-    /// The meta-learning rate (epsilon) that controls how much to move toward task-adapted parameters.
-    /// </summary>
-    protected readonly T MetaLearningRate;
-
-    /// <summary>
-    /// Provides mathematical operations for the numeric type T.
+    /// Numeric operations for type T.
     /// </summary>
     protected static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();
 
     /// <summary>
-    /// Initializes a new instance of the ReptileTrainerBase class with industry-standard defaults.
+    /// Current meta-training iteration count.
     /// </summary>
-    /// <param name="metaModel">The model to be meta-trained. Must implement IFullModel for parameter access.</param>
-    /// <param name="lossFunction">The loss function used to evaluate predictions during training.</param>
-    /// <param name="innerSteps">The number of gradient steps per task. Default is 5 (common in meta-learning).</param>
-    /// <param name="innerLearningRate">The learning rate for task-specific training. Default is 0.01.</param>
-    /// <param name="metaLearningRate">The meta-learning rate for Reptile updates. Default is 0.001.</param>
-    /// <exception cref="ArgumentNullException">Thrown when metaModel or lossFunction is null.</exception>
-    /// <exception cref="ArgumentException">Thrown when configuration parameters are invalid.</exception>
-    /// <remarks>
-    /// <para><b>For Beginners:</b> This constructor sets up the Reptile trainer with all necessary components.
-    ///
-    /// <b>Parameters explained:</b>
-    /// - <b>metaModel:</b> The neural network (or other model) you want to meta-train. After meta-training,
-    ///   this model will be good at quickly adapting to new tasks.
-    ///
-    /// - <b>lossFunction:</b> Measures how wrong the model's predictions are. Common choices:
-    ///   - Mean Squared Error for regression (predicting numbers)
-    ///   - Cross Entropy for classification (predicting categories)
-    ///
-    /// - <b>innerSteps:</b> How many times to update the model on each task's support set.
-    ///   - More steps = better task-specific performance, but slower training
-    ///   - Typical range: 3-10 steps
-    ///   - Default: 5 steps (good balance)
-    ///
-    /// - <b>innerLearningRate:</b> How big of a step to take when training on each task.
-    ///   - Larger = faster adaptation but risk of instability
-    ///   - Smaller = more stable but slower adaptation
-    ///   - Default: 0.01 (conservative, stable choice)
-    ///
-    /// - <b>metaLearningRate:</b> How much to update the meta-parameters toward task-specific parameters.
-    ///   - This is Reptile's "epsilon" parameter
-    ///   - Larger = faster meta-learning but risk of forgetting
-    ///   - Smaller = more stable but slower meta-learning
-    ///   - Default: 0.001 (10x smaller than inner LR, common practice)
-    ///
-    /// <b>Typical usage:</b>
-    /// Start with default parameters and adjust based on results:
-    /// - If meta-training is unstable: reduce metaLearningRate
-    /// - If adaptation is poor: increase innerSteps or innerLearningRate
-    /// - If meta-training is too slow: increase metaLearningRate
-    /// </para>
-    /// </remarks>
+    protected int _currentIteration;
+
+    /// <inheritdoc/>
+    public IFullModel<T, TInput, TOutput> BaseModel => MetaModel;
+
+    /// <inheritdoc/>
+    public IMetaLearnerConfig<T> Config => Configuration;
+
+    /// <inheritdoc/>
+    public int CurrentIteration => _currentIteration;
+
+    /// <summary>
+    /// Initializes a new instance with individual parameters (backwards compatibility).
+    /// </summary>
+    /// <param name="metaModel">The model to meta-train.</param>
+    /// <param name="lossFunction">Loss function for evaluation.</param>
+    /// <param name="innerSteps">Number of gradient steps per task.</param>
+    /// <param name="innerLearningRate">Learning rate for inner loop.</param>
+    /// <param name="metaLearningRate">Learning rate for outer loop.</param>
     protected ReptileTrainerBase(
-        IFullModel<T, Tensor<T>, Tensor<T>> metaModel,
+        IFullModel<T, TInput, TOutput> metaModel,
         ILossFunction<T> lossFunction,
         int innerSteps = 5,
         double innerLearningRate = 0.01,
         double metaLearningRate = 0.001)
     {
-        // Validate inputs
         ValidateConstructorParameters(metaModel, lossFunction, innerSteps, innerLearningRate, metaLearningRate);
 
         MetaModel = metaModel;
         LossFunction = lossFunction;
-        InnerSteps = innerSteps;
-        InnerLearningRate = NumOps.FromDouble(innerLearningRate);
-        MetaLearningRate = NumOps.FromDouble(metaLearningRate);
+        Configuration = new ReptileTrainerConfig<T>(innerLearningRate, metaLearningRate, innerSteps);
+        _currentIteration = 0;
     }
 
     /// <summary>
-    /// Initializes a new instance of the ReptileTrainerBase class with a configuration object.
+    /// Initializes a new instance with configuration object (recommended for production).
     /// </summary>
-    /// <param name="metaModel">The model to be meta-trained. Must implement IFullModel for parameter access.</param>
-    /// <param name="lossFunction">The loss function used to evaluate predictions during training.</param>
-    /// <param name="config">Configuration object containing inner/outer learning rates and other settings.</param>
-    /// <exception cref="ArgumentNullException">Thrown when metaModel, lossFunction, or config is null.</exception>
-    /// <exception cref="ArgumentException">Thrown when configuration is invalid.</exception>
-    /// <remarks>
-    /// <para><b>For Beginners:</b> This constructor uses a configuration object which makes it easier
-    /// to manage multiple hyperparameters and share configurations across different trainers.
-    ///
-    /// Example:
-    /// <code>
-    /// var config = new ReptileTrainerConfig&lt;double&gt;
-    /// {
-    ///     InnerLearningRate = 0.01,
-    ///     MetaLearningRate = 0.001,
-    ///     InnerSteps = 5
-    /// };
-    /// var trainer = new ReptileTrainer&lt;double&gt;(model, lossFunction, config);
-    /// </code>
-    /// </para>
-    /// </remarks>
+    /// <param name="metaModel">The model to meta-train.</param>
+    /// <param name="lossFunction">Loss function for evaluation.</param>
+    /// <param name="config">Configuration object with all hyperparameters.</param>
     protected ReptileTrainerBase(
-        IFullModel<T, Tensor<T>, Tensor<T>> metaModel,
+        IFullModel<T, TInput, TOutput> metaModel,
         ILossFunction<T> lossFunction,
         IMetaLearnerConfig<T> config)
     {
         if (metaModel == null)
-        {
             throw new ArgumentNullException(nameof(metaModel), "Meta-model cannot be null");
-        }
-
         if (lossFunction == null)
-        {
             throw new ArgumentNullException(nameof(lossFunction), "Loss function cannot be null");
-        }
-
         if (config == null)
-        {
             throw new ArgumentNullException(nameof(config), "Configuration cannot be null");
-        }
-
         if (!config.IsValid())
-        {
-            throw new ArgumentException("Configuration is invalid", nameof(config));
-        }
+            throw new ArgumentException("Configuration validation failed", nameof(config));
 
         MetaModel = metaModel;
         LossFunction = lossFunction;
-        InnerSteps = config.InnerSteps;
-        InnerLearningRate = config.InnerLearningRate;
-        MetaLearningRate = config.MetaLearningRate;
+        Configuration = config;
+        _currentIteration = 0;
     }
 
-    /// <summary>
-    /// Trains the meta-learning model across multiple tasks to develop rapid adaptation capabilities.
-    /// </summary>
-    /// <param name="dataLoader">The episodic data loader that provides meta-learning tasks.</param>
-    /// <param name="numMetaIterations">The number of meta-training iterations to perform.</param>
-    /// <returns>Metadata about the meta-training process including loss history and performance metrics.</returns>
-    /// <exception cref="ArgumentNullException">Thrown when dataLoader is null.</exception>
-    /// <exception cref="ArgumentException">Thrown when numMetaIterations is less than 1.</exception>
-    public ModelMetadata<T> Train(IEpisodicDataLoader<T> dataLoader, int numMetaIterations)
+    /// <inheritdoc/>
+    public abstract MetaTrainingMetrics MetaTrainStep(IEpisodicDataLoader<T> dataLoader, int batchSize);
+
+    /// <inheritdoc/>
+    public virtual MetaEvaluationMetrics Evaluate(IEpisodicDataLoader<T> dataLoader, int numTasks)
     {
-        // Validate parameters
         if (dataLoader == null)
+            throw new ArgumentNullException(nameof(dataLoader));
+        if (numTasks < 1)
+            throw new ArgumentException("Number of tasks must be at least 1", nameof(numTasks));
+
+        var accuracies = new List<double>();
+        var losses = new List<double>();
+        var adaptationTimes = new List<double>();
+
+        for (int i = 0; i < numTasks; i++)
         {
-            throw new ArgumentNullException(nameof(dataLoader), "Data loader cannot be null");
+            var task = dataLoader.GetNextTask();
+            var metrics = AdaptAndEvaluate(task);
+
+            accuracies.Add(metrics.QueryAccuracy);
+            losses.Add(metrics.QueryLoss);
+            adaptationTimes.Add(metrics.AdaptationTimeMs);
         }
 
-        if (numMetaIterations < 1)
-        {
-            throw new ArgumentException("Number of meta-iterations must be at least 1", nameof(numMetaIterations));
-        }
+        // Calculate statistics
+        double meanAcc = accuracies.Average();
+        double stdAcc = CalculateStandardDeviation(accuracies);
+        double meanLoss = losses.Average();
+        double stdLoss = CalculateStandardDeviation(losses);
+        double meanTime = adaptationTimes.Average();
 
-        // Delegate to derived class implementation
-        return TrainCore(dataLoader, numMetaIterations);
+        // Calculate 95% confidence interval
+        double marginOfError = 1.96 * stdAcc / Math.Sqrt(numTasks);
+        var confidenceInterval = (meanAcc - marginOfError, meanAcc + marginOfError);
+
+        return new MetaEvaluationMetrics
+        {
+            Accuracy = meanAcc,
+            AccuracyStd = stdAcc,
+            ConfidenceInterval = confidenceInterval,
+            Loss = meanLoss,
+            LossStd = stdLoss,
+            NumTasks = numTasks,
+            MeanAdaptationTimeMs = meanTime,
+            PerTaskAccuracies = accuracies
+        };
     }
 
+    /// <inheritdoc/>
+    public abstract AdaptationMetrics AdaptAndEvaluate(MetaLearningTask<T> task);
+
     /// <summary>
-    /// Core meta-training logic to be implemented by derived classes.
+    /// High-level training method that runs multiple meta-training iterations.
     /// </summary>
-    /// <param name="dataLoader">The episodic data loader that provides meta-learning tasks.</param>
-    /// <param name="numMetaIterations">The number of meta-training iterations to perform.</param>
-    /// <returns>Metadata about the meta-training process.</returns>
+    /// <param name="dataLoader">Data loader for sampling tasks.</param>
+    /// <param name="numMetaIterations">Number of meta-training iterations to run.</param>
+    /// <param name="tasksPerIteration">Number of tasks to sample per iteration (defaults to MetaBatchSize).</param>
+    /// <returns>Metadata containing training history and statistics.</returns>
     /// <remarks>
-    /// <para><b>For Implementers:</b> This is where you implement the Reptile algorithm.
-    ///
-    /// You have access to:
-    /// - MetaModel: The model being meta-trained
-    /// - LossFunction: For computing loss
-    /// - InnerSteps: Number of steps per task
-    /// - InnerLearningRate: Learning rate for inner loop
-    /// - MetaLearningRate: Epsilon for Reptile updates
-    /// - NumOps: For numeric operations
-    ///
-    /// Your implementation should:
-    /// 1. For each meta-iteration:
-    ///    a. Sample a task from the data loader
-    ///    b. Clone the current model parameters
-    ///    c. Train on the task's support set for InnerSteps
-    ///    d. Compute the difference between adapted and original parameters
-    ///    e. Update meta-parameters: θ ← θ + ε(θ_adapted - θ)
-    /// 2. Track and return training metrics
+    /// <para>
+    /// This is a convenience method that wraps MetaTrainStep() for complete training runs.
+    /// It tracks loss and accuracy over time, making it ideal for experiments and benchmarks.
+    /// </para>
+    /// <para><b>Example Usage:</b>
+    /// <code>
+    /// var trainer = new ReptileTrainer(model, lossFunction);
+    /// var metadata = trainer.Train(dataLoader, numMetaIterations: 1000);
+    /// Console.WriteLine($"Final Loss: {metadata.FinalLoss}");
+    /// </code>
     /// </para>
     /// </remarks>
-    protected abstract ModelMetadata<T> TrainCore(IEpisodicDataLoader<T> dataLoader, int numMetaIterations);
+    public virtual MetaTrainingMetadata Train(
+        IEpisodicDataLoader<T> dataLoader,
+        int numMetaIterations,
+        int? tasksPerIteration = null)
+    {
+        if (dataLoader == null)
+            throw new ArgumentNullException(nameof(dataLoader));
+        if (numMetaIterations < 1)
+            throw new ArgumentException("Number of meta-iterations must be at least 1", nameof(numMetaIterations));
+
+        int batchSize = tasksPerIteration ?? Configuration.MetaBatchSize;
+
+        var lossHistory = new List<double>();
+        var accuracyHistory = new List<double>();
+        var startTime = System.Diagnostics.Stopwatch.StartNew();
+
+        for (int iteration = 0; iteration < numMetaIterations; iteration++)
+        {
+            var metrics = MetaTrainStep(dataLoader, batchSize);
+            lossHistory.Add(metrics.MetaLoss);
+            accuracyHistory.Add(metrics.Accuracy);
+        }
+
+        startTime.Stop();
+
+        return new MetaTrainingMetadata
+        {
+            Iterations = numMetaIterations,
+            LossHistory = lossHistory,
+            AccuracyHistory = accuracyHistory,
+            TrainingTime = startTime.Elapsed
+        };
+    }
+
+    /// <inheritdoc/>
+    public virtual void Save(string filePath)
+    {
+        if (string.IsNullOrWhiteSpace(filePath))
+            throw new ArgumentException("File path cannot be null or empty", nameof(filePath));
+
+        MetaModel.Save(filePath);
+    }
+
+    /// <inheritdoc/>
+    public virtual void Load(string filePath)
+    {
+        if (string.IsNullOrWhiteSpace(filePath))
+            throw new ArgumentException("File path cannot be null or empty", nameof(filePath));
+        if (!File.Exists(filePath))
+            throw new FileNotFoundException($"Model file not found: {filePath}");
+
+        MetaModel.Load(filePath);
+    }
+
+    /// <inheritdoc/>
+    public virtual void Reset()
+    {
+        _currentIteration = 0;
+        // Note: Model parameter reset should be handled by derived classes if needed
+    }
 
     /// <summary>
     /// Validates constructor parameters.
     /// </summary>
     private void ValidateConstructorParameters(
-        IFullModel<T, Tensor<T>, Tensor<T>> metaModel,
+        IFullModel<T, TInput, TOutput> metaModel,
         ILossFunction<T> lossFunction,
         int innerSteps,
         double innerLearningRate,
         double metaLearningRate)
     {
         if (metaModel == null)
-        {
             throw new ArgumentNullException(nameof(metaModel), "Meta-model cannot be null");
-        }
-
         if (lossFunction == null)
-        {
             throw new ArgumentNullException(nameof(lossFunction), "Loss function cannot be null");
-        }
-
         if (innerSteps < 1)
-        {
             throw new ArgumentException("Inner steps must be at least 1", nameof(innerSteps));
-        }
-
         if (innerLearningRate <= 0)
-        {
             throw new ArgumentException("Inner learning rate must be positive", nameof(innerLearningRate));
-        }
-
         if (metaLearningRate <= 0)
-        {
             throw new ArgumentException("Meta learning rate must be positive", nameof(metaLearningRate));
-        }
     }
 
     /// <summary>
     /// Computes the loss on a given dataset.
     /// </summary>
-    /// <param name="model">The model to evaluate.</param>
-    /// <param name="inputX">The input features.</param>
-    /// <param name="targetY">The target labels.</param>
-    /// <returns>The computed loss value.</returns>
-    /// <remarks>
-    /// <para><b>For Implementers:</b> This helper method evaluates model performance on a dataset.
-    /// It flattens the predictions and targets into vectors for the loss function.
-    /// </para>
-    /// </remarks>
-    protected T ComputeLoss(IFullModel<T, Tensor<T>, Tensor<T>> model, Tensor<T> inputX, Tensor<T> targetY)
+    /// <param name="model">Model to evaluate.</param>
+    /// <param name="inputX">Input features.</param>
+    /// <param name="targetY">Target labels.</param>
+    /// <returns>Loss value.</returns>
+    protected T ComputeLoss(IFullModel<T, TInput, TOutput> model, TInput inputX, TOutput targetY)
     {
         var predictions = model.Predict(inputX);
-        var predictedVector = predictions.Flatten();
-        var targetVector = targetY.Flatten();
+
+        // Convert predictions and targets to vectors for loss calculation
+        var predictedVector = ConvertToVector(predictions);
+        var targetVector = ConvertToVector(targetY);
+
         return LossFunction.CalculateLoss(predictedVector, targetVector);
+    }
+
+    /// <summary>
+    /// Computes accuracy for classification tasks.
+    /// </summary>
+    /// <param name="model">Model to evaluate.</param>
+    /// <param name="inputX">Input features.</param>
+    /// <param name="targetY">Target labels.</param>
+    /// <returns>Accuracy between 0 and 1.</returns>
+    protected double ComputeAccuracy(IFullModel<T, TInput, TOutput> model, TInput inputX, TOutput targetY)
+    {
+        var predictions = model.Predict(inputX);
+        var predictedVector = ConvertToVector(predictions);
+        var targetVector = ConvertToVector(targetY);
+
+        int correct = 0;
+        int total = Math.Min(predictedVector.Length, targetVector.Length);
+
+        for (int i = 0; i < total; i++)
+        {
+            // For classification: check if predictions match targets
+            // This works for both hard labels and argmax of softmax outputs
+            var predValue = NumOps.ToDouble(predictedVector[i]);
+            var targetValue = NumOps.ToDouble(targetVector[i]);
+
+            if (Math.Abs(predValue - targetValue) < 0.5) // Tolerance for classification
+                correct++;
+        }
+
+        return total > 0 ? (double)correct / total : 0.0;
+    }
+
+    /// <summary>
+    /// Converts output type to Vector for loss calculation.
+    /// </summary>
+    private Vector<T> ConvertToVector(TOutput output)
+    {
+        return output switch
+        {
+            Vector<T> v => v,
+            Tensor<T> tensor => tensor.Flatten(),
+            T[] array => new Vector<T>(array),
+            _ => throw new NotSupportedException($"Output type {typeof(TOutput)} not supported for conversion to Vector<T>")
+        };
+    }
+
+    /// <summary>
+    /// Calculates standard deviation of a list of values.
+    /// </summary>
+    private double CalculateStandardDeviation(List<double> values)
+    {
+        if (values.Count < 2)
+            return 0.0;
+
+        double mean = values.Average();
+        double sumSquaredDiffs = values.Sum(v => Math.Pow(v - mean, 2));
+        return Math.Sqrt(sumSquaredDiffs / (values.Count - 1));
     }
 }

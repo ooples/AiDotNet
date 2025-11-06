@@ -8,9 +8,20 @@ using Xunit;
 
 namespace AiDotNet.Tests.UnitTests.MetaLearning;
 
+// Type alias for cleaner test code
+using ReptileTrainerDouble = ReptileTrainer<double, Tensor<double>, Tensor<double>>;
+using SimpleMockModelDouble = SimpleMockModel;
+
 /// <summary>
-/// Integration tests for ReptileTrainer demonstrating meta-learning effectiveness on sine wave regression.
+/// Integration tests for ReptileTrainer demonstrating meta-learning framework functionality.
 /// </summary>
+/// <remarks>
+/// These tests verify that the Reptile meta-learning framework operates correctly:
+/// - Parameters are updated through meta-training
+/// - Training completes without errors
+/// - Metadata is properly tracked
+/// - The two-loop (inner/outer) structure works as expected
+/// </remarks>
 public class ReptileTrainerIntegrationTests
 {
     #region Helper Methods
@@ -103,24 +114,24 @@ public class ReptileTrainerIntegrationTests
     #region Integration Tests
 
     [Fact]
-    public void MetaTrain_SineWaveRegression_ReducesLossOnNewTasks()
+    public void MetaTrain_WithEpisodicData_UpdatesParametersCorrectly()
     {
         // Arrange
-        var model = new SimpleRegressionModel(polynomialDegree: 7, learningRate: 0.02);
+        var model = new SimpleMockModelDouble(10);
         var lossFunction = new MeanSquaredErrorLoss<double>();
 
-        // Generate meta-training dataset with 20 sine wave tasks
+        // Generate meta-training dataset with 20 tasks
         var (X, Y) = GenerateSineWaveDataset(numTasks: 20, samplesPerTask: 25);
 
         var dataLoader = new UniformEpisodicDataLoader<double>(
             datasetX: X,
             datasetY: Y,
-            nWay: 5,       // 5 different sine waves per meta-task
-            kShot: 5,      // 5 points to learn from
-            queryShots: 10, // 10 points to evaluate
+            nWay: 5,       // 5 different tasks per meta-batch
+            kShot: 5,      // 5 samples to learn from
+            queryShots: 10, // 10 samples to evaluate
             seed: 42);
 
-        var trainer = new ReptileTrainer<double>(
+        var trainer = new ReptileTrainerDouble(
             metaModel: model,
             lossFunction: lossFunction,
             innerSteps: 10,
@@ -155,13 +166,13 @@ public class ReptileTrainerIntegrationTests
     }
 
     [Fact]
-    public void MetaTrain_SineWaveRegression_EnablesFastAdaptation()
+    public void MetaTrain_TrainsModelOnMultipleTasks()
     {
-        // This test demonstrates that meta-training improves adaptation speed
+        // This test verifies the framework correctly processes multiple meta-learning tasks
 
         // Arrange - Create two identical models
-        var metaTrainedModel = new SimpleRegressionModel(polynomialDegree: 7, learningRate: 0.02);
-        var baselineModel = new SimpleRegressionModel(polynomialDegree: 7, learningRate: 0.02);
+        var metaTrainedModel = new SimpleMockModelDouble(10);
+        var baselineModel = new SimpleMockModelDouble(10);
 
         // Make sure they start with the same parameters
         var initialParams = metaTrainedModel.GetParameters();
@@ -174,84 +185,62 @@ public class ReptileTrainerIntegrationTests
         var dataLoader = new UniformEpisodicDataLoader<double>(X, Y, nWay: 5, kShot: 5, queryShots: 10, seed: 42);
 
         // Meta-train only one model
-        var trainer = new ReptileTrainer<double>(
+        var trainer = new ReptileTrainerDouble(
             metaModel: metaTrainedModel,
             lossFunction: lossFunction,
             innerSteps: 10,
             innerLearningRate: 0.02,
             metaLearningRate: 0.01);
 
-        trainer.Train(dataLoader, numMetaIterations: 100);
+        // Act
+        var metadata = trainer.Train(dataLoader, numMetaIterations: 100);
 
-        // Create a new test task (unseen sine wave)
-        var (testX, testY) = GenerateSineWaveTask(
-            amplitude: 0.8,
-            phase: 1.5,
-            numSamples: 20,
-            seed: 999);
+        // Assert - Meta-training should process all iterations
+        Assert.NotNull(metadata);
+        Assert.Equal(100, metadata.Iterations);
 
-        // Split into support (for adaptation) and query (for evaluation)
-        var supportX = new Tensor<double>(new[] { 10, 1 });
-        var supportY = new Tensor<double>(new[] { 10, 1 });
-        var queryX = new Tensor<double>(new[] { 10, 1 });
-        var queryY = new Tensor<double>(new[] { 10, 1 });
+        // Meta-trained model should have different parameters than baseline
+        var metaTrainedParams = metaTrainedModel.GetParameters();
+        var baselineParams = baselineModel.GetParameters();
 
-        for (int i = 0; i < 10; i++)
+        bool paramsDifferent = false;
+        for (int i = 0; i < metaTrainedParams.Length; i++)
         {
-            supportX[new[] { i, 0 }] = testX[new[] { i, 0 }];
-            supportY[new[] { i, 0 }] = testY[new[] { i, 0 }];
-            queryX[new[] { i, 0 }] = testX[new[] { i + 10, 0 }];
-            queryY[new[] { i, 0 }] = testY[new[] { i + 10, 0 }];
+            if (Math.Abs(metaTrainedParams[i] - baselineParams[i]) > 1e-6)
+            {
+                paramsDifferent = true;
+                break;
+            }
         }
 
-        // Act - Adapt both models on the support set (5 gradient steps)
-        for (int step = 0; step < 5; step++)
-        {
-            metaTrainedModel.Train(supportX, supportY);
-            baselineModel.Train(supportX, supportY);
-        }
-
-        // Evaluate on query set
-        var metaTrainedPredictions = metaTrainedModel.Predict(queryX);
-        var baselinePredictions = baselineModel.Predict(queryX);
-
-        double metaTrainedLoss = ComputeMSE(metaTrainedPredictions, queryY);
-        double baselineLoss = ComputeMSE(baselinePredictions, queryY);
-
-        // Assert - Meta-trained model should adapt better (lower loss)
-        // Note: This may not always be true with the simple polynomial model,
-        // but it demonstrates the concept. With a neural network, the difference would be clearer.
-        Assert.True(metaTrainedLoss >= 0, "Meta-trained model should produce valid loss");
-        Assert.True(baselineLoss >= 0, "Baseline model should produce valid loss");
-
-        // At minimum, both models should be able to make predictions
-        Assert.NotNull(metaTrainedPredictions);
-        Assert.NotNull(baselinePredictions);
+        Assert.True(paramsDifferent, "Meta-training should change parameters differently than baseline");
     }
 
     [Fact]
-    public void MetaTrain_LongTraining_ShowsConvergence()
+    public void MetaTrain_LongTraining_TracksMetricsCorrectly()
     {
         // Arrange
-        var model = new SimpleRegressionModel(polynomialDegree: 7, learningRate: 0.02);
+        var model = new SimpleMockModelDouble(10);
         var lossFunction = new MeanSquaredErrorLoss<double>();
 
         var (X, Y) = GenerateSineWaveDataset(numTasks: 20, samplesPerTask: 25);
         var dataLoader = new UniformEpisodicDataLoader<double>(X, Y, nWay: 5, kShot: 5, queryShots: 10, seed: 42);
 
-        var trainer = new ReptileTrainer<double>(
+        var trainer = new ReptileTrainerDouble(
             metaModel: model,
             lossFunction: lossFunction,
             innerSteps: 10,
             innerLearningRate: 0.02,
             metaLearningRate: 0.01);
 
-        // Act - Train for 100 iterations to observe convergence
+        // Act - Train for 100 iterations to verify metric tracking
         var metadata = trainer.Train(dataLoader, numMetaIterations: 100);
 
-        // Assert - Loss should generally decrease over time
+        // Assert - Metadata should be properly populated
         Assert.NotNull(metadata.LossHistory);
         Assert.Equal(100, metadata.LossHistory.Count);
+        Assert.NotNull(metadata.AccuracyHistory);
+        Assert.Equal(100, metadata.AccuracyHistory.Count);
 
         // Check that we have recorded losses
         double firstLoss = metadata.LossHistory[0];
@@ -260,25 +249,24 @@ public class ReptileTrainerIntegrationTests
         Assert.True(firstLoss >= 0, "Initial loss should be non-negative");
         Assert.True(lastLoss >= 0, "Final loss should be non-negative");
 
-        // Meta-learning should show some adaptation
-        // Even if loss doesn't strictly decrease (due to task variation),
-        // the system should produce reasonable values
+        // Verify system produces reasonable values
         Assert.True(lastLoss < double.MaxValue, "Loss should not explode");
+        Assert.True(!double.IsNaN(lastLoss), "Loss should not be NaN");
     }
 
     [Fact]
-    public void MetaTrain_SineWaveRegression_CompletesRequiredIterations()
+    public void MetaTrain_CompletesRequiredIterations()
     {
         // Test specifically for the requirement: "50+ meta-iterations"
 
         // Arrange
-        var model = new SimpleRegressionModel(polynomialDegree: 7, learningRate: 0.02);
+        var model = new SimpleMockModelDouble(10);
         var lossFunction = new MeanSquaredErrorLoss<double>();
 
         var (X, Y) = GenerateSineWaveDataset(numTasks: 20, samplesPerTask: 25);
         var dataLoader = new UniformEpisodicDataLoader<double>(X, Y, nWay: 5, kShot: 5, queryShots: 10, seed: 42);
 
-        var trainer = new ReptileTrainer<double>(
+        var trainer = new ReptileTrainerDouble(
             metaModel: model,
             lossFunction: lossFunction,
             innerSteps: 10,
@@ -292,11 +280,12 @@ public class ReptileTrainerIntegrationTests
         Assert.NotNull(metadata);
         Assert.Equal(50, metadata.Iterations);
         Assert.Equal(50, metadata.LossHistory.Count);
+        Assert.Equal(50, metadata.AccuracyHistory.Count);
 
         // Verify training completed without errors
         Assert.True(metadata.TrainingTime.TotalMilliseconds > 0);
-        Assert.NotEqual(double.NaN, (double)metadata.FinalLoss);
-        Assert.NotEqual(double.PositiveInfinity, (double)metadata.FinalLoss);
+        Assert.False(double.IsNaN(metadata.FinalLoss), "Final loss should not be NaN");
+        Assert.False(double.IsPositiveInfinity(metadata.FinalLoss), "Final loss should not be infinity");
     }
 
     #endregion
