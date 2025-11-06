@@ -60,7 +60,7 @@ public class ReptileTrainerIntegrationTests
                 double y = amplitude * Math.Sin(x + phase);
 
                 X[rowIdx, 0] = x;
-                Y[rowIdx] = taskIdx; // Use task index as "class" for episodic loader
+                Y[rowIdx] = y; // Store actual sine regression target
             }
         }
 
