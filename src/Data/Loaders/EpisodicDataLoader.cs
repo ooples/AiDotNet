@@ -1,12 +1,10 @@
 using AiDotNet.Data.Abstractions;
-using AiDotNet.Helpers;
-using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
 
 namespace AiDotNet.Data.Loaders;
 
 /// <summary>
-/// Provides episodic task sampling for N-way K-shot meta-learning scenarios.
+/// Provides standard episodic task sampling for N-way K-shot meta-learning scenarios.
 /// </summary>
 /// <typeparam name="T">The numeric data type used for features and labels (e.g., float, double).</typeparam>
 /// <remarks>
@@ -77,22 +75,8 @@ namespace AiDotNet.Data.Loaders;
 /// }
 /// </code>
 /// </example>
-public class EpisodicDataLoader<T>
+public class EpisodicDataLoader<T> : EpisodicDataLoaderBase<T>
 {
-    private readonly Matrix<T> _datasetX;
-    private readonly Vector<T> _datasetY;
-    private readonly int _nWay;
-    private readonly int _kShot;
-    private readonly int _queryShots;
-    private readonly Random _random;
-    private readonly Dictionary<int, List<int>> _classToIndices;
-    private readonly int[] _availableClasses;
-
-    /// <summary>
-    /// Numeric operations helper for type T.
-    /// </summary>
-    protected static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();
-
     /// <summary>
     /// Initializes a new instance of the EpisodicDataLoader for N-way K-shot task sampling.
     /// </summary>
@@ -132,95 +116,14 @@ public class EpisodicDataLoader<T>
         int kShot,
         int queryShots,
         int? seed = null)
+        : base(datasetX, datasetY, nWay, kShot, queryShots, seed)
     {
-        // Validate inputs
-        if (datasetX == null)
-        {
-            throw new ArgumentNullException(nameof(datasetX), "Dataset features cannot be null");
-        }
-
-        if (datasetY == null)
-        {
-            throw new ArgumentNullException(nameof(datasetY), "Dataset labels cannot be null");
-        }
-
-        if (datasetX.Rows != datasetY.Length)
-        {
-            throw new ArgumentException(
-                $"Number of examples in features ({datasetX.Rows}) must match number of labels ({datasetY.Length})",
-                nameof(datasetX));
-        }
-
-        if (nWay < 2)
-        {
-            throw new ArgumentException("nWay must be at least 2 (need at least 2 classes per task)", nameof(nWay));
-        }
-
-        if (kShot < 1)
-        {
-            throw new ArgumentException("kShot must be at least 1 (need at least 1 support example per class)", nameof(kShot));
-        }
-
-        if (queryShots < 1)
-        {
-            throw new ArgumentException("queryShots must be at least 1 (need at least 1 query example per class)", nameof(queryShots));
-        }
-
-        _datasetX = datasetX;
-        _datasetY = datasetY;
-        _nWay = nWay;
-        _kShot = kShot;
-        _queryShots = queryShots;
-        _random = seed.HasValue ? new Random(seed.Value) : new Random();
-
-        // Preprocess: Build class-to-indices mapping
-        _classToIndices = new Dictionary<int, List<int>>();
-
-        for (int i = 0; i < datasetY.Length; i++)
-        {
-            int classLabel = NumOps.ToInt32(datasetY[i]);
-
-            if (!_classToIndices.ContainsKey(classLabel))
-            {
-                _classToIndices[classLabel] = new List<int>();
-            }
-
-            _classToIndices[classLabel].Add(i);
-        }
-
-        _availableClasses = _classToIndices.Keys.ToArray();
-
-        // Validate dataset has enough classes
-        if (_availableClasses.Length < nWay)
-        {
-            throw new ArgumentException(
-                $"Dataset has only {_availableClasses.Length} classes, but nWay={nWay} requires at least {nWay} classes",
-                nameof(datasetY));
-        }
-
-        // Validate each class has enough examples
-        int requiredExamplesPerClass = kShot + queryShots;
-        var insufficientClasses = _classToIndices
-            .Where(kvp => kvp.Value.Count < requiredExamplesPerClass)
-            .Select(kvp => $"Class {kvp.Key}: {kvp.Value.Count} examples")
-            .ToList();
-
-        if (insufficientClasses.Count > 0)
-        {
-            throw new ArgumentException(
-                $"Some classes have insufficient examples. Need at least {requiredExamplesPerClass} " +
-                $"(kShot={kShot} + queryShots={queryShots}) per class. Insufficient classes: " +
-                string.Join(", ", insufficientClasses),
-                nameof(datasetY));
-        }
     }
 
     /// <summary>
-    /// Samples and returns the next N-way K-shot meta-learning task.
+    /// Core implementation of N-way K-shot task sampling with uniform random selection.
     /// </summary>
-    /// <returns>
-    /// A MetaLearningTask containing support and query sets with the specified N-way K-shot configuration.
-    /// </returns>
+    /// <returns>A MetaLearningTask with randomly sampled support and query sets.</returns>
     /// <remarks>
     /// <para>
     /// This method performs the following steps:
@@ -254,27 +157,12 @@ public class EpisodicDataLoader<T>
     /// Creates new tensor objects on each call.
     /// </para>
     /// </remarks>
-    /// <example>
-    /// <code>
-    /// var loader = new EpisodicDataLoader&lt;double&gt;(features, labels, nWay: 5, kShot: 3, queryShots: 10);
-    ///
-    /// // Generate a batch of tasks for meta-training
-    /// var tasks = new List&lt;MetaLearningTask&lt;double&gt;&gt;();
-    /// for (int i = 0; i &lt; 32; i++)  // Meta-batch size of 32
-    /// {
-    ///     tasks.Add(loader.GetNextTask());
-    /// }
-    ///
-    /// // Each task has different randomly-selected classes
-    /// // Train your meta-learner to perform well across all these diverse tasks
-    /// </code>
-    /// </example>
-    public MetaLearningTask<T> GetNextTask()
+    protected override MetaLearningTask<T> GetNextTaskCore()
     {
         // Step 1: Randomly select nWay unique classes
-        var selectedClasses = _availableClasses
-            .OrderBy(_ => _random.Next())
-            .Take(_nWay)
+        var selectedClasses = AvailableClasses
+            .OrderBy(_ => Random.Next())
+            .Take(NWay)
             .ToArray();
 
         // Prepare storage for support and query sets
@@ -287,40 +175,40 @@ public class EpisodicDataLoader<T>
         for (int classIdx = 0; classIdx < selectedClasses.Length; classIdx++)
         {
             int classLabel = selectedClasses[classIdx];
-            var classIndices = _classToIndices[classLabel];
+            var classIndices = ClassToIndices[classLabel];
 
             // Step 3: Sample (kShot + queryShots) examples and shuffle
             var sampledIndices = classIndices
-                .OrderBy(_ => _random.Next())
-                .Take(_kShot + _queryShots)
+                .OrderBy(_ => Random.Next())
+                .Take(KShot + QueryShots)
                 .ToList();
 
             // Shuffle the sampled indices to prevent ordering bias
-            sampledIndices = sampledIndices.OrderBy(_ => _random.Next()).ToList();
+            sampledIndices = sampledIndices.OrderBy(_ => Random.Next()).ToList();
 
             // Step 4: Split into support (first kShot) and query (remaining queryShots)
-            var supportIndices = sampledIndices.Take(_kShot);
-            var queryIndices = sampledIndices.Skip(_kShot);
+            var supportIndices = sampledIndices.Take(KShot);
+            var queryIndices = sampledIndices.Skip(KShot);
 
             // Add support examples
             foreach (var idx in supportIndices)
             {
-                supportExamples.Add(_datasetX.GetRow(idx));
+                supportExamples.Add(DatasetX.GetRow(idx));
                 supportLabels.Add(NumOps.FromDouble(classIdx)); // Use index 0..nWay-1 for the task
             }
 
             // Add query examples
             foreach (var idx in queryIndices)
             {
-                queryExamples.Add(_datasetX.GetRow(idx));
+                queryExamples.Add(DatasetX.GetRow(idx));
                 queryLabels.Add(NumOps.FromDouble(classIdx)); // Use index 0..nWay-1 for the task
             }
         }
 
         // Step 5: Convert to tensors
-        int numFeatures = _datasetX.Columns;
-        int supportSize = _nWay * _kShot;
-        int querySize = _nWay * _queryShots;
+        int numFeatures = DatasetX.Columns;
+        int supportSize = NWay * KShot;
+        int querySize = NWay * QueryShots;
 
         // Build support set tensors
         var supportSetX = new Tensor<T>(new[] { supportSize, numFeatures });
