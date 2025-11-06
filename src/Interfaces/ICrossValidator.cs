@@ -24,32 +24,39 @@ namespace AiDotNet.Interfaces;
 public interface ICrossValidator<T>
 {
     /// <summary>
-    /// Performs cross-validation on the given model using the provided data and options.
+    /// Performs cross-validation on the given model using the provided data and optimizer.
     /// </summary>
     /// <param name="model">The machine learning model to validate.</param>
     /// <param name="X">The feature matrix containing the input data.</param>
     /// <param name="y">The target vector containing the output data.</param>
+    /// <param name="optimizer">The optimizer to use for training the model on each fold.</param>
     /// <returns>A CrossValidationResult containing the results of the validation process.</returns>
     /// <remarks>
     /// <para>
-    /// This method implements the core cross-validation logic. It typically involves splitting the data into folds, 
-    /// training and evaluating the model on different combinations of these folds, and aggregating the results.
-    /// The specific implementation details may vary depending on the type of cross-validation being performed.
+    /// This method implements the core cross-validation logic. It typically involves splitting the data into folds,
+    /// training and evaluating the model on different combinations of these folds using the provided optimizer,
+    /// and aggregating the results. The specific implementation details may vary depending on the type of
+    /// cross-validation being performed.
     /// </para>
     /// <para><b>For Beginners:</b> This method is where the actual cross-validation happens.
-    /// 
+    ///
     /// What it does:
-    /// - Takes your model, your data (X and y), and your chosen options
+    /// - Takes your model, your data (X and y), and an optimizer for training
     /// - Splits your data into parts based on your options
-    /// - Trains and tests your model multiple times using these different parts
+    /// - Trains your model using the optimizer multiple times on different parts
+    /// - Tests the trained model on held-out data for each fold
     /// - Collects and summarizes the results of all these tests
-    /// 
-    /// It's like putting your model through a series of tests and then giving you a report card 
-    /// that shows how well it performed overall.
+    ///
+    /// The optimizer parameter allows you to use advanced optimization techniques (like genetic algorithms,
+    /// Bayesian optimization, etc.) during cross-validation, ensuring consistent training across all folds.
+    ///
+    /// It's like putting your model through a series of tests using a standardized training procedure
+    /// and then giving you a report card that shows how well it performed overall.
     /// </para>
     /// </remarks>
     CrossValidationResult<T> Validate(
         IFullModel<T, Matrix<T>, Vector<T>> model,
         Matrix<T> X,
-        Vector<T> y);
+        Vector<T> y,
+        IOptimizer<T, Matrix<T>, Vector<T>> optimizer);
 }

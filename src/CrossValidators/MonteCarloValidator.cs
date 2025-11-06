@@ -53,11 +53,12 @@ public class MonteCarloValidator<T> : CrossValidatorBase<T>
     }
 
     /// <summary>
-    /// Performs the Monte Carlo cross-validation process on the given model using the provided data.
+    /// Performs the Monte Carlo cross-validation process on the given model using the provided data and optimizer.
     /// </summary>
     /// <param name="model">The machine learning model to validate.</param>
     /// <param name="X">The feature matrix containing the input data.</param>
     /// <param name="y">The target vector containing the output data.</param>
+    /// <param name="optimizer">The optimizer to use for training the model on each fold.</param>
     /// <returns>A CrossValidationResult containing the results of the validation process.</returns>
     /// <remarks>
     /// <para>
@@ -65,23 +66,26 @@ public class MonteCarloValidator<T> : CrossValidatorBase<T>
     /// where each fold is a random split of the data into training and validation sets.
     /// </para>
     /// <para><b>For Beginners:</b> This method is where the actual Monte Carlo cross-validation happens.
-    /// 
+    ///
     /// What it does:
-    /// - Takes your model and your data (X and y)
+    /// - Takes your model, your data (X and y), and an optimizer for training
     /// - Creates random splits of your data (using the CreateFolds method)
     /// - Runs the PerformCrossValidation method, which:
-    ///   - Trains the model on each training set and tests it on the corresponding validation set
+    ///   - Trains the model using the optimizer on each training set and tests it on the corresponding validation set
     ///   - Repeats this for the number of iterations specified in the options
     ///   - Collects and summarizes the results of all these tests
-    /// 
-    /// It's like putting your model through a series of random tests and then giving you a report card 
-    /// that shows how well it performed overall.
+    ///
+    /// The optimizer ensures consistent training across all iterations.
+    ///
+    /// It's like putting your model through a series of random tests using a standardized training procedure
+    /// and then giving you a report card that shows how well it performed overall.
     /// </para>
     /// </remarks>
-    public override CrossValidationResult<T> Validate(IFullModel<T, Matrix<T>, Vector<T>> model, Matrix<T> X, Vector<T> y)
+    public override CrossValidationResult<T> Validate(IFullModel<T, Matrix<T>, Vector<T>> model, Matrix<T> X, Vector<T> y,
+        IOptimizer<T, Matrix<T>, Vector<T>> optimizer)
     {
         var folds = CreateFolds(X, y);
-        return PerformCrossValidation(model, X, y, folds);
+        return PerformCrossValidation(model, X, y, folds, optimizer);
     }
 
     /// <summary>

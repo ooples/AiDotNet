@@ -66,55 +66,61 @@ public abstract class CrossValidatorBase<T> : ICrossValidator<T>
     }
 
     /// <summary>
-    /// Performs cross-validation on the given model using the provided data and options.
+    /// Performs cross-validation on the given model using the provided data, options, and optimizer.
     /// </summary>
     /// <param name="model">The machine learning model to validate.</param>
     /// <param name="X">The feature matrix containing the input data.</param>
     /// <param name="y">The target vector containing the output data.</param>
-    /// <param name="options">The options specifying how to perform the cross-validation.</param>
+    /// <param name="optimizer">The optimizer to use for training the model on each fold.</param>
     /// <returns>A CrossValidationResult containing the results of the validation process.</returns>
     /// <remarks>
     /// <para>
     /// This abstract method must be implemented by derived classes to define how folds are created
     /// for a specific cross-validation strategy. The actual cross-validation process is then
-    /// performed using these folds.
+    /// performed using these folds and the provided optimizer.
     /// </para>
     /// <para>
     /// <b>For Beginners:</b> This method is like a placeholder that says "each specific type of
     /// cross-validation needs to decide how to split the data into folds". The actual splitting
-    /// logic will be implemented in the classes that inherit from this base class.
+    /// logic will be implemented in the classes that inherit from this base class. The optimizer
+    /// parameter ensures that the same training procedure is used consistently across all folds.
     /// </para>
     /// </remarks>
-    public abstract CrossValidationResult<T> Validate(IFullModel<T, Matrix<T>, Vector<T>> model, Matrix<T> X, Vector<T> y);
+    public abstract CrossValidationResult<T> Validate(IFullModel<T, Matrix<T>, Vector<T>> model, Matrix<T> X, Vector<T> y,
+        IOptimizer<T, Matrix<T>, Vector<T>> optimizer);
 
     /// <summary>
-    /// Executes the cross-validation process using the provided model, data, and folds.
+    /// Executes the cross-validation process using the provided model, data, folds, and optimizer.
     /// </summary>
     /// <param name="model">The machine learning model to validate.</param>
     /// <param name="X">The feature matrix containing the input data.</param>
     /// <param name="y">The target vector containing the output data.</param>
     /// <param name="folds">The pre-computed folds for cross-validation.</param>
-    /// <param name="options">The options specifying how to perform the cross-validation.</param>
+    /// <param name="optimizer">The optimizer to use for training the model on each fold.</param>
     /// <returns>A CrossValidationResult containing the results of the validation process.</returns>
     /// <remarks>
     /// <para>
     /// This method performs the actual cross-validation process:
     /// - It iterates through each fold.
-    /// - For each fold, it trains the model on the training data and evaluates it on the validation data.
-    /// - It collects performance metrics, timing information, and feature importance for each fold.
+    /// - For each fold, it creates an independent copy of the model to prevent state leakage.
+    /// - It trains the model using the optimizer on the training data and evaluates it on the validation data.
+    /// - It collects performance metrics, timing information, feature importance, and the trained model for each fold.
     /// - Finally, it aggregates the results from all folds into a single CrossValidationResult.
     /// </para>
     /// <para>
     /// <b>For Beginners:</b> This method is like running a series of experiments. For each fold:
-    /// 1. We train the model on most of the data (training set).
-    /// 2. We test the model on the remaining data (validation set).
-    /// 3. We record how well the model did and how long it took.
-    /// 4. At the end, we combine all these mini-experiments into one big result.
-    /// This helps us understand how well our model performs on different subsets of the data.
+    /// 1. We create a fresh copy of the model to ensure independence between folds.
+    /// 2. We train the model using the optimizer on most of the data (training set).
+    /// 3. We test the model on the remaining data (validation set).
+    /// 4. We record how well the model did, how long it took, and save the trained model.
+    /// 5. At the end, we combine all these mini-experiments into one big result.
+    /// This helps us understand how well our model performs on different subsets of the data
+    /// and ensures that the optimizer's configuration is applied consistently across all folds.
     /// </para>
     /// </remarks>
-    protected CrossValidationResult<T> PerformCrossValidation(IFullModel<T, Matrix<T>, Vector<T>> model, Matrix<T> X, Vector<T> y, 
-        IEnumerable<(int[] trainIndices, int[] validationIndices)> folds)
+    protected CrossValidationResult<T> PerformCrossValidation(IFullModel<T, Matrix<T>, Vector<T>> model, Matrix<T> X, Vector<T> y,
+        IEnumerable<(int[] trainIndices, int[] validationIndices)> folds,
+        IOptimizer<T, Matrix<T>, Vector<T>> optimizer)
     {
         var foldResults = new List<FoldResult<T>>();
         var totalTimer = Stopwatch.StartNew();
@@ -122,23 +128,43 @@ public abstract class CrossValidatorBase<T> : ICrossValidator<T>
 
         foreach (var (trainIndices, validationIndices) in folds)
         {
+            // Create a deep copy of the model for this fold to prevent state leakage
+            var foldModel = model.DeepCopy();
+
             var XTrain = X.Submatrix(trainIndices);
             var yTrain = y.Subvector(trainIndices);
             var XValidation = X.Submatrix(validationIndices);
             var yValidation = y.Subvector(validationIndices);
 
             var trainingTimer = Stopwatch.StartNew();
-            model.Train(XTrain, yTrain);
+
+            // Use optimizer.Optimize() instead of model.Train()
+            var optimizationInput = new OptimizationInputData<T, Matrix<T>, Vector<T>>
+            {
+                XTrain = XTrain,
+                YTrain = yTrain,
+                XValidation = XValidation,
+                YValidation = yValidation,
+                // Use empty test data for cross-validation
+                XTest = new Matrix<T>(0, XTrain.Columns),
+                YTest = new Vector<T>(0)
+            };
+
+            var optimizationResult = optimizer.Optimize(optimizationInput);
+
+            // Update the fold model with optimized parameters
+            foldModel.SetParameters(optimizationResult.BestParameters);
+
             trainingTimer.Stop();
             var trainingTime = trainingTimer.Elapsed;
 
             var evaluationTimer = Stopwatch.StartNew();
-            var trainingPredictions = model.Predict(XTrain);
-            var validationPredictions = model.Predict(XValidation);
+            var trainingPredictions = foldModel.Predict(XTrain);
+            var validationPredictions = foldModel.Predict(XValidation);
             evaluationTimer.Stop();
             var evaluationTime = evaluationTimer.Elapsed;
 
-            var featureImportance = model.GetModelMetadata().FeatureImportance;
+            var featureImportance = foldModel.GetModelMetadata().FeatureImportance;
 
             var foldResult = new FoldResult<T>(
                 foldIndex,
@@ -149,7 +175,8 @@ public abstract class CrossValidatorBase<T> : ICrossValidator<T>
                 featureImportance,
                 trainingTime,
                 evaluationTime,
-                X.Columns
+                X.Columns,
+                foldModel  // Pass the trained model for this fold
             );
 
             foldResults.Add(foldResult);

@@ -228,6 +228,40 @@ public class PredictionModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
     internal MetaTrainingResult<T>? MetaTrainingResult { get; private set; }
 
     /// <summary>
+    /// Gets or sets the results from cross-validation.
+    /// </summary>
+    /// <value>Cross-validation results containing fold-by-fold performance metrics and aggregated statistics, or null if cross-validation was not performed.</value>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> If cross-validation was configured during model building, this contains
+    /// detailed information about how the model performed across different subsets of the training data.
+    /// This helps you understand:
+    /// - How consistently the model performs across different data splits
+    /// - Whether the model is overfitting or underfitting
+    /// - The typical performance you can expect on new, unseen data
+    ///
+    /// The results include:
+    /// - Performance metrics for each fold (R², RMSE, MAE, etc.)
+    /// - Aggregated statistics across all folds (mean, standard deviation)
+    /// - Feature importance scores averaged across folds
+    /// - Timing information for training and evaluation
+    ///
+    /// If this is null, cross-validation was not performed, and you should rely on the
+    /// OptimizationResult for performance metrics instead.
+    ///
+    /// Example usage:
+    /// <code>
+    /// if (result.CrossValidationResult != null)
+    /// {
+    ///     var avgR2 = result.CrossValidationResult.R2Stats.Mean;
+    ///     var r2StdDev = result.CrossValidationResult.R2Stats.StandardDeviation;
+    ///     Console.WriteLine($"R² = {avgR2} ± {r2StdDev}");
+    /// }
+    /// </code>
+    /// </para>
+    /// </remarks>
+    public CrossValidationResult<T>? CrossValidationResult { get; internal set; }
+
+    /// <summary>
     /// Gets or sets the LoRA configuration for parameter-efficient fine-tuning.
     /// </summary>
     /// <value>LoRA configuration for adaptation, or null if not configured.</value>

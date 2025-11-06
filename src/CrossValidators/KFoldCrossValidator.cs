@@ -49,34 +49,39 @@ public class KFoldCrossValidator<T> : CrossValidatorBase<T>
     }
 
     /// <summary>
-    /// Performs the k-fold cross-validation process on the given model using the provided data.
+    /// Performs the k-fold cross-validation process on the given model using the provided data and optimizer.
     /// </summary>
     /// <param name="model">The machine learning model to validate.</param>
     /// <param name="X">The feature matrix containing the input data.</param>
     /// <param name="y">The target vector containing the output data.</param>
+    /// <param name="optimizer">The optimizer to use for training the model on each fold.</param>
     /// <returns>A CrossValidationResult containing the results of the validation process.</returns>
     /// <remarks>
     /// <para>
     /// This method implements the core k-fold cross-validation logic. It creates the folds using the CreateFolds method,
-    /// then performs the cross-validation using these folds.
+    /// then performs the cross-validation using these folds and the provided optimizer.
     /// </para>
     /// <para><b>For Beginners:</b> This method is where the actual k-fold cross-validation happens.
-    /// 
+    ///
     /// What it does:
-    /// - Takes your model and your data (X and y)
+    /// - Takes your model, your data (X and y), and an optimizer for training
     /// - Splits your data into k parts (folds) using the CreateFolds method
     /// - Runs the PerformCrossValidation method, which:
-    ///   - Trains and tests your model k times, each time using a different part as the test set
+    ///   - Trains your model using the optimizer k times, each time using a different part as the test set
     ///   - Collects and summarizes the results of all these tests
-    /// 
-    /// It's like putting your model through a series of k tests and then giving you a report card 
-    /// that shows how well it performed overall.
+    ///
+    /// The optimizer ensures that advanced optimization techniques (like genetic algorithms, Bayesian optimization, etc.)
+    /// are applied consistently across all folds.
+    ///
+    /// It's like putting your model through a series of k tests using a standardized training procedure
+    /// and then giving you a report card that shows how well it performed overall.
     /// </para>
     /// </remarks>
-    public override CrossValidationResult<T> Validate(IFullModel<T, Matrix<T>, Vector<T>> model, Matrix<T> X, Vector<T> y)
+    public override CrossValidationResult<T> Validate(IFullModel<T, Matrix<T>, Vector<T>> model, Matrix<T> X, Vector<T> y,
+        IOptimizer<T, Matrix<T>, Vector<T>> optimizer)
     {
         var folds = CreateFolds(X, y);
-        return PerformCrossValidation(model, X, y, folds);
+        return PerformCrossValidation(model, X, y, folds, optimizer);
     }
 
     /// <summary>

@@ -86,11 +86,12 @@ public class NestedCrossValidator<T> : CrossValidatorBase<T>
     }
 
     /// <summary>
-    /// Performs the nested cross-validation process on the given model using the provided data.
+    /// Performs the nested cross-validation process on the given model using the provided data and optimizer.
     /// </summary>
     /// <param name="model">The machine learning model to validate.</param>
     /// <param name="X">The feature matrix containing the input data.</param>
     /// <param name="y">The target vector containing the output data.</param>
+    /// <param name="optimizer">The optimizer to use for training the model on each fold.</param>
     /// <returns>A CrossValidationResult containing the results of the validation process.</returns>
     /// <remarks>
     /// <para>
@@ -98,27 +99,30 @@ public class NestedCrossValidator<T> : CrossValidatorBase<T>
     /// then for each fold, it uses the inner validator to tune hyperparameters, and finally evaluates the best model on the outer test set.
     /// </para>
     /// <para><b>For Beginners:</b> This method is where the actual nested cross-validation happens.
-    /// 
+    ///
     /// What it does:
-    /// - Takes your model and your data (X and y)
+    /// - Takes your model, your data (X and y), and an optimizer for training
     /// - Uses the outer validator to split your data into training and test sets
     /// - For each split:
-    ///   - Uses the inner validator to find the best hyperparameters on the training data
-    ///   - Trains a model with these best hyperparameters on all the training data
+    ///   - Uses the inner validator with the optimizer to find the best hyperparameters on the training data
+    ///   - Trains a model with these best hyperparameters using the optimizer on all the training data
     ///   - Tests this model on the test data
     /// - Collects and summarizes the results of all these tests
-    /// 
-    /// It's like putting your model through a series of increasingly challenging tests to find the best version
-    /// and accurately estimate how well it will perform on new data.
+    ///
+    /// The optimizer ensures consistent training across both inner and outer cross-validation loops.
+    ///
+    /// It's like putting your model through a series of increasingly challenging tests using a standardized training procedure
+    /// to find the best version and accurately estimate how well it will perform on new data.
     /// </para>
     /// </remarks>
-    public override CrossValidationResult<T> Validate(IFullModel<T, Matrix<T>, Vector<T>> model, Matrix<T> X, Vector<T> y)
+    public override CrossValidationResult<T> Validate(IFullModel<T, Matrix<T>, Vector<T>> model, Matrix<T> X, Vector<T> y,
+        IOptimizer<T, Matrix<T>, Vector<T>> optimizer)
     {
         var nestedResults = new List<FoldResult<T>>();
         var totalTimer = Stopwatch.StartNew();
 
-        // Use the Validate method of the outer validator
-        var outerResults = _outerValidator.Validate(model, X, y);
+        // Use the Validate method of the outer validator with the optimizer
+        var outerResults = _outerValidator.Validate(model, X, y, optimizer);
 
         foreach (var outerFoldResult in outerResults.FoldResults)
         {
@@ -127,12 +131,24 @@ public class NestedCrossValidator<T> : CrossValidatorBase<T>
             var outerTrainX = X.Submatrix(trainIndices);
             var outerTrainY = y.Subvector(trainIndices);
 
-            // Perform inner cross-validation
-            var innerResult = _innerValidator.Validate(model, outerTrainX, outerTrainY);
+            // Perform inner cross-validation with the optimizer
+            var innerResult = _innerValidator.Validate(model, outerTrainX, outerTrainY, optimizer);
             var bestModel = _modelSelector(innerResult);
 
-            // Perform outer fold evaluation using the best model
-            bestModel.Train(outerTrainX, outerTrainY);
+            // Perform outer fold evaluation using the best model and optimizer
+            var optimizationInput = new OptimizationInputData<T, Matrix<T>, Vector<T>>
+            {
+                XTrain = outerTrainX,
+                YTrain = outerTrainY,
+                XValidation = new Matrix<T>(0, outerTrainX.Columns),
+                YValidation = new Vector<T>(0),
+                XTest = new Matrix<T>(0, outerTrainX.Columns),
+                YTest = new Vector<T>(0)
+            };
+
+            var optimizationResult = optimizer.Optimize(optimizationInput);
+            bestModel.SetParameters(optimizationResult.BestParameters);
+
             var validationIndices = GetValidationIndices(X, outerFoldResult.ActualValues, y);
             var validationPredictions = bestModel.Predict(X.Submatrix(validationIndices));
 
@@ -149,7 +165,8 @@ public class NestedCrossValidator<T> : CrossValidatorBase<T>
                 featureImportance,
                 outerFoldResult.TrainingTime + innerResult.TotalTime,
                 outerFoldResult.EvaluationTime,
-                X.Columns
+                X.Columns,
+                bestModel  // Pass the trained model for this fold
             );
 
             nestedResults.Add(adjustedFoldResult);

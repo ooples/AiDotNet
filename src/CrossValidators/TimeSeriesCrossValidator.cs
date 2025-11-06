@@ -83,34 +83,38 @@ public class TimeSeriesCrossValidator<T> : CrossValidatorBase<T>
     }
 
     /// <summary>
-    /// Performs the time series cross-validation process on the given model using the provided data.
+    /// Performs the time series cross-validation process on the given model using the provided data and optimizer.
     /// </summary>
     /// <param name="model">The machine learning model to validate.</param>
     /// <param name="X">The feature matrix containing the input data.</param>
     /// <param name="y">The target vector containing the output data.</param>
+    /// <param name="optimizer">The optimizer to use for training the model on each fold.</param>
     /// <returns>A CrossValidationResult containing the results of the validation process.</returns>
     /// <remarks>
     /// <para>
     /// This method implements the core time series cross-validation logic. It creates the folds using the CreateFolds method,
-    /// respecting the temporal order of the data, then performs the cross-validation using these folds.
+    /// respecting the temporal order of the data, then performs the cross-validation using these folds and the provided optimizer.
     /// </para>
     /// <para><b>For Beginners:</b> This method is where the actual time series cross-validation happens.
-    /// 
+    ///
     /// What it does:
-    /// - Takes your model and your time-ordered data (X and y)
+    /// - Takes your model, your time-ordered data (X and y), and an optimizer for training
     /// - Creates time-based folds using the CreateFolds method
     /// - Runs the PerformCrossValidation method, which:
-    ///   - Trains and tests your model multiple times, each time moving forward in time
+    ///   - Trains your model using the optimizer multiple times, each time moving forward in time
     ///   - Collects and summarizes the results of all these tests
-    /// 
-    /// It's like putting your model through a series of tests that simulate how it would perform 
-    /// if you were using it to make predictions over time.
+    ///
+    /// The optimizer ensures consistent training across all folds.
+    ///
+    /// It's like putting your model through a series of tests that simulate how it would perform
+    /// if you were using it to make predictions over time, with a standardized training procedure.
     /// </para>
     /// </remarks>
-    public override CrossValidationResult<T> Validate(IFullModel<T, Matrix<T>, Vector<T>> model, Matrix<T> X, Vector<T> y)
+    public override CrossValidationResult<T> Validate(IFullModel<T, Matrix<T>, Vector<T>> model, Matrix<T> X, Vector<T> y,
+        IOptimizer<T, Matrix<T>, Vector<T>> optimizer)
     {
         var folds = CreateFolds(X, y);
-        return PerformCrossValidation(model, X, y, folds);
+        return PerformCrossValidation(model, X, y, folds, optimizer);
     }
 
     /// <summary>

@@ -59,6 +59,20 @@ public class FoldResult<T>
     public TimeSpan EvaluationTime { get; }
 
     /// <summary>
+    /// Gets the trained model instance for this fold.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> This property stores the model that was trained specifically on this fold's
+    /// training data. Having access to the individual fold models allows you to:
+    /// - Analyze how different models vary across folds
+    /// - Use ensemble methods by combining predictions from multiple fold models
+    /// - Investigate which features are important in different data subsets
+    /// </para>
+    /// </remarks>
+    public IFullModel<T, Matrix<T>, Vector<T>>? Model { get; }
+
+    /// <summary>
     /// Creates a new instance of the FoldResult class.
     /// </summary>
     /// <param name="foldIndex">The index of this fold.</param>
@@ -70,6 +84,7 @@ public class FoldResult<T>
     /// <param name="trainingTime">Time taken to train the model.</param>
     /// <param name="evaluationTime">Time taken to evaluate the model.</param>
     /// <param name="featureCount">The number of features used in the model.</param>
+    /// <param name="model">Optional trained model instance for this fold.</param>
     /// <remarks>
     /// <para>
     /// <b>For Beginners:</b> This constructor creates a complete report of how well your model
@@ -78,15 +93,16 @@ public class FoldResult<T>
     /// </para>
     /// </remarks>
     public FoldResult(
-        int foldIndex, 
-        Vector<T> trainingActual, 
-        Vector<T> trainingPredicted, 
-        Vector<T> validationActual, 
+        int foldIndex,
+        Vector<T> trainingActual,
+        Vector<T> trainingPredicted,
+        Vector<T> validationActual,
         Vector<T> validationPredicted,
         Dictionary<string, T>? featureImportance = null,
         TimeSpan? trainingTime = null,
         TimeSpan? evaluationTime = null,
-        int featureCount = 0)
+        int featureCount = 0,
+        IFullModel<T, Matrix<T>, Vector<T>>? model = null)
     {
         FoldIndex = foldIndex;
         ActualValues = validationActual;
@@ -118,5 +134,6 @@ public class FoldResult<T>
         FeatureImportance = featureImportance ?? [];
         TrainingTime = trainingTime ?? TimeSpan.Zero;
         EvaluationTime = evaluationTime ?? TimeSpan.Zero;
+        Model = model;
     }
 }

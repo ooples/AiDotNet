@@ -52,11 +52,12 @@ public class LeaveOneOutCrossValidator<T> : CrossValidatorBase<T>
     }
 
     /// <summary>
-    /// Performs the leave-one-out cross-validation process on the given model using the provided data.
+    /// Performs the leave-one-out cross-validation process on the given model using the provided data and optimizer.
     /// </summary>
     /// <param name="model">The machine learning model to validate.</param>
     /// <param name="X">The feature matrix containing the input data.</param>
     /// <param name="y">The target vector containing the output data.</param>
+    /// <param name="optimizer">The optimizer to use for training the model on each fold.</param>
     /// <returns>A CrossValidationResult containing the results of the validation process.</returns>
     /// <remarks>
     /// <para>
@@ -64,23 +65,26 @@ public class LeaveOneOutCrossValidator<T> : CrossValidatorBase<T>
     /// where each fold consists of a single data point for validation and all other points for training.
     /// </para>
     /// <para><b>For Beginners:</b> This method is where the actual leave-one-out cross-validation happens.
-    /// 
+    ///
     /// What it does:
-    /// - Takes your model and your data (X and y)
+    /// - Takes your model, your data (X and y), and an optimizer for training
     /// - Creates folds where each fold is just one data point (using the CreateFolds method)
     /// - Runs the PerformCrossValidation method, which:
-    ///   - Trains the model on all but one data point and tests it on that left-out point
+    ///   - Trains the model using the optimizer on all but one data point and tests it on that left-out point
     ///   - Repeats this for every single data point
     ///   - Collects and summarizes the results of all these tests
-    /// 
-    /// It's like putting your model through a series of tests, each focused on a single data point, 
-    /// and then giving you a report card that shows how well it performed overall.
+    ///
+    /// The optimizer ensures consistent training across all folds.
+    ///
+    /// It's like putting your model through a series of tests, each focused on a single data point,
+    /// using a standardized training procedure, and then giving you a report card that shows how well it performed overall.
     /// </para>
     /// </remarks>
-    public override CrossValidationResult<T> Validate(IFullModel<T, Matrix<T>, Vector<T>> model, Matrix<T> X, Vector<T> y)
+    public override CrossValidationResult<T> Validate(IFullModel<T, Matrix<T>, Vector<T>> model, Matrix<T> X, Vector<T> y,
+        IOptimizer<T, Matrix<T>, Vector<T>> optimizer)
     {
         var folds = CreateFolds(X, y);
-        return PerformCrossValidation(model, X, y, folds);
+        return PerformCrossValidation(model, X, y, folds, optimizer);
     }
 
     /// <summary>
