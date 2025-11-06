@@ -351,4 +351,63 @@ public interface IPredictionModelBuilder<T, TInput, TOutput>
     /// <param name="loraConfiguration">The LoRA configuration implementation to use.</param>
     /// <returns>The builder instance for method chaining.</returns>
     IPredictionModelBuilder<T, TInput, TOutput> ConfigureLoRA(ILoRAConfiguration<T> loraConfiguration);
+
+    /// <summary>
+    /// Configures the retrieval-augmented generation (RAG) components for use during model inference.
+    /// </summary>
+    /// <remarks>
+    /// RAG enhances text generation by retrieving relevant documents from a knowledge base
+    /// and using them as context for generating grounded, factual answers.
+    ///
+    /// <b>For Beginners:</b> RAG is like giving your AI access to a library before answering questions.
+    /// Instead of relying only on what it learned during training, it can:
+    /// 1. Search a document collection for relevant information
+    /// 2. Read the relevant documents
+    /// 3. Generate an answer based on those documents
+    /// 4. Cite its sources
+    ///
+    /// This makes answers more accurate, up-to-date, and traceable to source materials.
+    /// 
+    /// RAG operations (GenerateAnswer, RetrieveDocuments) are performed during inference via PredictionModelResult,
+    /// not during model building.
+    /// </remarks>
+    /// <param name="retriever">Optional retriever for finding relevant documents. If not provided, RAG won't be available.</param>
+    /// <param name="reranker">Optional reranker for improving document ranking quality. Default provided if retriever is set.</param>
+    /// <param name="generator">Optional generator for producing grounded answers. Default provided if retriever is set.</param>
+    /// <param name="queryProcessors">Optional query processors for improving search quality.</param>
+    /// <returns>The builder instance for method chaining.</returns>
+    IPredictionModelBuilder<T, TInput, TOutput> ConfigureRetrievalAugmentedGeneration(
+        IRetriever<T>? retriever = null,
+        IReranker<T>? reranker = null,
+        IGenerator<T>? generator = null,
+        IEnumerable<IQueryProcessor>? queryProcessors = null);
+
+    /// <summary>
+    /// Configures episodic data loading for meta-learning (N-way K-shot task sampling).
+    /// </summary>
+    /// <remarks>
+    /// Meta-learning requires training on many small tasks instead of one large dataset.
+    /// This configuration enables episodic sampling where each training iteration uses a different N-way K-shot task.
+    ///
+    /// <b>For Beginners:</b> Traditional machine learning trains a model once on a large dataset to perform
+    /// one specific task. Meta-learning is different - it trains a model to quickly adapt to new tasks with very
+    /// few examples.
+    ///
+    /// This is useful when you need a model that can:
+    /// - Learn new categories from just a few examples (few-shot learning)
+    /// - Quickly adapt to new domains or tasks
+    /// - Generalize across diverse problems
+    ///
+    /// The episodic data loader you configure here will:
+    /// - Sample random N-way K-shot tasks from your dataset
+    /// - Provide support sets (for quick adaptation) and query sets (for evaluation)
+    /// - Enable meta-learning algorithms like MAML, Reptile, and SEAL
+    ///
+    /// <b>Note:</b> Meta-learning requires specialized trainers (MAML, Reptile, SEAL) that use this
+    /// episodic data loader. Standard supervised learning with Build() does not use episodic sampling.
+    /// Meta-learning trainers will be available as part of the meta-learning suite.
+    /// </remarks>
+    /// <param name="dataLoader">The episodic data loader for generating meta-learning tasks.</param>
+    /// <returns>The builder instance for method chaining.</returns>
+    IPredictionModelBuilder<T, TInput, TOutput> ConfigureEpisodicDataLoader(IEpisodicDataLoader<T> dataLoader);
 }

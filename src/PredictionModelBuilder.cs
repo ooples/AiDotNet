@@ -39,6 +39,11 @@ public class PredictionModelBuilder<T, TInput, TOutput> : IPredictionModelBuilde
     private IBiasDetector<T>? _biasDetector;
     private IFairnessEvaluator<T>? _fairnessEvaluator;
     private ILoRAConfiguration<T>? _loraConfiguration;
+    private IRetriever<T>? _ragRetriever;
+    private IReranker<T>? _ragReranker;
+    private IGenerator<T>? _ragGenerator;
+    private IEnumerable<IQueryProcessor>? _queryProcessors;
+    private IEpisodicDataLoader<T>? _episodicDataLoader;
 
     /// <summary>
     /// Configures which features (input variables) should be used in the model.
@@ -237,7 +242,15 @@ public class PredictionModelBuilder<T, TInput, TOutput> : IPredictionModelBuilde
         // Optimize the model
         var optimizationResult = optimizer.Optimize(OptimizerHelper<T, TInput, TOutput>.CreateOptimizationInputData(XTrain, yTrain, XVal, yVal, XTest, yTest));
 
-        return new PredictionModelResult<T, TInput, TOutput>(optimizationResult, normInfo, _biasDetector, _fairnessEvaluator);
+        return new PredictionModelResult<T, TInput, TOutput>(
+            optimizationResult,
+            normInfo,
+            _biasDetector,
+            _fairnessEvaluator,
+            _ragRetriever,
+            _ragReranker,
+            _ragGenerator,
+            _queryProcessors);
     }
 
     /// <summary>
@@ -380,6 +393,96 @@ public class PredictionModelBuilder<T, TInput, TOutput> : IPredictionModelBuilde
     public IPredictionModelBuilder<T, TInput, TOutput> ConfigureLoRA(ILoRAConfiguration<T> loraConfiguration)
     {
         _loraConfiguration = loraConfiguration;
+        return this;
+    }
+
+    /// <summary>
+    /// Configures the retrieval-augmented generation (RAG) components for use during model inference.
+    /// </summary>
+    /// <param name="retriever">Optional retriever for finding relevant documents. If not provided, RAG functionality won't be available.</param>
+    /// <param name="reranker">Optional reranker for improving document ranking quality. If not provided, a default reranker will be used if RAG is configured.</param>
+    /// <param name="generator">Optional generator for producing grounded answers. If not provided, a default generator will be used if RAG is configured.</param>
+    /// <param name="queryProcessors">Optional query processors for improving search quality.</param>
+    /// <returns>This builder instance for method chaining.</returns>
+    /// <remarks>
+    /// <b>For Beginners:</b> RAG combines retrieval and generation to create answers backed by real documents.
+    /// Configure it with:
+    /// - A retriever (finds relevant documents from your collection) - required for RAG
+    /// - A reranker (improves the ordering of retrieved documents) - optional, defaults provided
+    /// - A generator (creates answers based on the documents) - optional, defaults provided
+    /// - Optional query processors (improve search queries before retrieval)
+    /// 
+    /// RAG operations are performed during inference (after model training) via the PredictionModelResult.
+    /// </remarks>
+    public IPredictionModelBuilder<T, TInput, TOutput> ConfigureRetrievalAugmentedGeneration(
+        IRetriever<T>? retriever = null,
+        IReranker<T>? reranker = null,
+        IGenerator<T>? generator = null,
+        IEnumerable<IQueryProcessor>? queryProcessors = null)
+    {
+        _ragRetriever = retriever;
+        _ragReranker = reranker;
+        _ragGenerator = generator;
+        _queryProcessors = queryProcessors;
+        return this;
+    }
+
+    /// <summary>
+    /// Configures episodic data loading for meta-learning (N-way K-shot task sampling).
+    /// </summary>
+    /// <param name="dataLoader">The episodic data loader for generating meta-learning tasks.</param>
+    /// <returns>This builder instance for method chaining.</returns>
+    /// <remarks>
+    /// <para>
+    /// Meta-learning (learning to learn) requires training on many small tasks instead of one large dataset.
+    /// This configuration enables episodic sampling where each training iteration uses a different N-way K-shot task.
+    /// </para>
+    /// <para><b>For Beginners:</b> Traditional machine learning trains a model once on a large dataset to perform
+    /// one specific task. Meta-learning is different - it trains a model to quickly adapt to new tasks with very
+    /// few examples.
+    ///
+    /// This is useful when you need a model that can:
+    /// - Learn new categories from just a few examples (few-shot learning)
+    /// - Quickly adapt to new domains or tasks
+    /// - Generalize across diverse problems
+    ///
+    /// The episodic data loader you configure here will:
+    /// - Sample random N-way K-shot tasks from your dataset
+    /// - Provide support sets (for quick adaptation) and query sets (for evaluation)
+    /// - Enable meta-learning algorithms like MAML, Reptile, and SEAL
+    ///
+    /// <b>Note:</b> Meta-learning requires specialized trainers (MAML, Reptile, SEAL) that use this
+    /// episodic data loader. Standard supervised learning with Build() does not use episodic sampling.
+    /// Meta-learning trainers will be available as part of the meta-learning suite.
+    /// </para>
+    /// </remarks>
+    /// <example>
+    /// <code>
+    /// // Load your dataset
+    /// var features = new Matrix&lt;double&gt;(1000, 784);  // 1000 examples, 784 features
+    /// var labels = new Vector&lt;double&gt;(1000);         // 10 classes (0-9)
+    ///
+    /// // Create episodic data loader for 5-way 3-shot tasks
+    /// var episodicLoader = new UniformEpisodicDataLoader&lt;double&gt;(
+    ///     datasetX: features,
+    ///     datasetY: labels,
+    ///     nWay: 5,        // 5 classes per task
+    ///     kShot: 3,       // 3 support examples per class
+    ///     queryShots: 10  // 10 query examples per class
+    /// );
+    ///
+    /// // Configure builder for meta-learning
+    /// var builder = new PredictionModelBuilder&lt;double, Matrix&lt;double&gt;, Vector&lt;double&gt;&gt;()
+    ///     .ConfigureModel(new NeuralNetworkModel&lt;double&gt;(...))
+    ///     .ConfigureEpisodicDataLoader(episodicLoader);
+    ///
+    /// // Use with meta-learning trainers (MAML, Reptile, SEAL)
+    /// // var mamlModel = builder.BuildMetaLearner(mamlTrainer);  // Future API
+    /// </code>
+    /// </example>
+    public IPredictionModelBuilder<T, TInput, TOutput> ConfigureEpisodicDataLoader(IEpisodicDataLoader<T> dataLoader)
+    {
+        _episodicDataLoader = dataLoader;
         return this;
     }
 }

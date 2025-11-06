@@ -3,6 +3,7 @@ namespace AiDotNet.RetrievalAugmentedGeneration.Models;
 /// <summary>
 /// Represents a generated answer with citations and source attribution for transparency and verification.
 /// </summary>
+/// <typeparam name="T">The numeric data type used for relevance scoring.</typeparam>
 /// <remarks>
 /// <para>
 /// A GroundedAnswer contains the AI-generated response along with references to the source documents
@@ -32,7 +33,7 @@ namespace AiDotNet.RetrievalAugmentedGeneration.Models;
 /// ConfidenceScore: 0.95 (95% confident this answer is accurate)
 /// </para>
 /// </remarks>
-public class GroundedAnswer
+public class GroundedAnswer<T>
 {
     /// <summary>
     /// Gets or sets the generated answer text.
@@ -75,7 +76,7 @@ public class GroundedAnswer
     /// - Document 3: "Oxygen Production in Plants" (research paper)
     /// </para>
     /// </remarks>
-    public IReadOnlyList<Document> SourceDocuments { get; set; } = Enumerable.Empty<Document>().ToList().AsReadOnly();
+    public IReadOnlyList<Document<T>> SourceDocuments { get; set; } = Enumerable.Empty<Document<T>>().ToList().AsReadOnly();
 
     /// <summary>
     /// Gets or sets the extracted citations mapping citation markers to source documents.
@@ -156,7 +157,7 @@ public class GroundedAnswer
     /// </summary>
     /// <param name="answer">The generated answer text.</param>
     /// <param name="sourceDocuments">The source documents used to generate the answer.</param>
-    public GroundedAnswer(string answer, IReadOnlyList<Document> sourceDocuments)
+    public GroundedAnswer(string answer, IReadOnlyList<Document<T>> sourceDocuments)
     {
         Answer = answer ?? throw new ArgumentNullException(nameof(answer));
         SourceDocuments = sourceDocuments ?? throw new ArgumentNullException(nameof(sourceDocuments));
@@ -170,7 +171,7 @@ public class GroundedAnswer
     /// <param name="sourceDocuments">The source documents used to generate the answer.</param>
     /// <param name="citations">The extracted citations.</param>
     /// <param name="confidenceScore">The confidence score.</param>
-    public GroundedAnswer(string query, string answer, IReadOnlyList<Document> sourceDocuments, 
+    public GroundedAnswer(string query, string answer, IReadOnlyList<Document<T>> sourceDocuments, 
         IReadOnlyList<string> citations, double confidenceScore)
     {
         Query = query ?? throw new ArgumentNullException(nameof(query));

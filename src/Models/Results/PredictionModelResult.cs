@@ -1,6 +1,5 @@
 global using Newtonsoft.Json;
 global using Formatting = Newtonsoft.Json.Formatting;
-using AiDotNet.Interfaces;
 using AiDotNet.Interpretability;
 using AiDotNet.Serialization;
 
@@ -176,6 +175,30 @@ public class PredictionModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
     public IFairnessEvaluator<T>? FairnessEvaluator { get; private set; }
 
     /// <summary>
+    /// Gets or sets the retriever used for RAG document retrieval during inference.
+    /// </summary>
+    /// <value>An implementation of IRetriever&lt;T&gt; for retrieving documents, or null if RAG is not configured.</value>
+    public IRetriever<T>? RagRetriever { get; private set; }
+
+    /// <summary>
+    /// Gets or sets the reranker used for RAG document reranking during inference.
+    /// </summary>
+    /// <value>An implementation of IReranker&lt;T&gt; for reranking documents, or null if RAG is not configured.</value>
+    public IReranker<T>? RagReranker { get; private set; }
+
+    /// <summary>
+    /// Gets or sets the generator used for RAG answer generation during inference.
+    /// </summary>
+    /// <value>An implementation of IGenerator&lt;T&gt; for generating answers, or null if RAG is not configured.</value>
+    public IGenerator<T>? RagGenerator { get; private set; }
+
+    /// <summary>
+    /// Gets or sets the query processors used for RAG query preprocessing during inference.
+    /// </summary>
+    /// <value>Query processors for preprocessing queries, or null if not configured.</value>
+    public IEnumerable<IQueryProcessor>? QueryProcessors { get; private set; }
+
+    /// <summary>
     /// Initializes a new instance of the PredictionModelResult class with the specified model, optimization results, and normalization information.
     /// </summary>
     /// <param name="model">The underlying model used for making predictions.</param>
@@ -220,10 +243,20 @@ public class PredictionModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
     /// </summary>
     /// <param name="optimizationResult">The results of the optimization process that created the model.</param>
     /// <param name="normalizationInfo">The normalization information used to preprocess input data and postprocess predictions.</param>
+    /// <param name="biasDetector">Optional bias detector for ethical AI evaluation.</param>
+    /// <param name="fairnessEvaluator">Optional fairness evaluator for ethical AI evaluation.</param>
+    /// <param name="ragRetriever">Optional retriever for RAG functionality during inference.</param>
+    /// <param name="ragReranker">Optional reranker for RAG functionality during inference.</param>
+    /// <param name="ragGenerator">Optional generator for RAG functionality during inference.</param>
+    /// <param name="queryProcessors">Optional query processors for RAG query preprocessing.</param>
     public PredictionModelResult(OptimizationResult<T, TInput, TOutput> optimizationResult,
         NormalizationInfo<T, TInput, TOutput> normalizationInfo,
         IBiasDetector<T>? biasDetector = null,
-        IFairnessEvaluator<T>? fairnessEvaluator = null)
+        IFairnessEvaluator<T>? fairnessEvaluator = null,
+        IRetriever<T>? ragRetriever = null,
+        IReranker<T>? ragReranker = null,
+        IGenerator<T>? ragGenerator = null,
+        IEnumerable<IQueryProcessor>? queryProcessors = null)
     {
         Model = optimizationResult.BestSolution;
         OptimizationResult = optimizationResult;
@@ -231,6 +264,10 @@ public class PredictionModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
         ModelMetaData = Model?.GetModelMetadata() ?? new();
         BiasDetector = biasDetector;
         FairnessEvaluator = fairnessEvaluator;
+        RagRetriever = ragRetriever;
+        RagReranker = ragReranker;
+        RagGenerator = ragGenerator;
+        QueryProcessors = queryProcessors;
     }
 
     /// <summary>
@@ -431,12 +468,16 @@ public class PredictionModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
         updatedOptimizationResult.BestSolution = newModel;
 
         // Create new result with updated optimization result
-        // Use constructor that preserves BiasDetector and FairnessEvaluator
+        // Use constructor that preserves BiasDetector, FairnessEvaluator, and RAG components
         return new PredictionModelResult<T, TInput, TOutput>(
             updatedOptimizationResult,
             NormalizationInfo,
             BiasDetector,
-            FairnessEvaluator);
+            FairnessEvaluator,
+            RagRetriever,
+            RagReranker,
+            RagGenerator,
+            QueryProcessors);
     }
 
     /// <summary>
@@ -522,12 +563,16 @@ public class PredictionModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
 
         var clonedNormalizationInfo = NormalizationInfo.DeepCopy();
 
-        // Use constructor that preserves BiasDetector and FairnessEvaluator
+        // Use constructor that preserves BiasDetector, FairnessEvaluator, and RAG components
         return new PredictionModelResult<T, TInput, TOutput>(
             clonedOptimizationResult,
             clonedNormalizationInfo,
             BiasDetector,
-            FairnessEvaluator);
+            FairnessEvaluator,
+            RagRetriever,
+            RagReranker,
+            RagGenerator,
+            QueryProcessors);
     }
 
     /// <summary>
@@ -808,5 +853,135 @@ public class PredictionModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
         };
         var deserializedObject = JsonConvert.DeserializeObject<PredictionModelResult<T, TInput, TOutput>>(jsonString, settings);
         return deserializedObject?.ModelMetaData ?? new();
+    }
+
+    /// <summary>
+    /// Generates a grounded answer using the configured RAG pipeline during inference.
+    /// </summary>
+    /// <param name="query">The question to answer.</param>
+    /// <param name="topK">Number of documents to retrieve (optional).</param>
+    /// <param name="topKAfterRerank">Number of documents after reranking (optional).</param>
+    /// <param name="metadataFilters">Optional filters for document selection.</param>
+    /// <returns>A grounded answer with source citations.</returns>
+    /// <exception cref="InvalidOperationException">Thrown when RAG components are not configured.</exception>
+    /// <remarks>
+    /// <b>For Beginners:</b> Use this during inference to get AI-generated answers backed by your documents.
+    /// The system will search your document collection, find the most relevant sources,
+    /// and generate an answer with citations.
+    /// 
+    /// RAG must be configured via PredictionModelBuilder.ConfigureRetrievalAugmentedGeneration() before building the model.
+    /// </remarks>
+    public AiDotNet.RetrievalAugmentedGeneration.Models.GroundedAnswer<T> GenerateAnswer(
+        string query,
+        int? topK = null,
+        int? topKAfterRerank = null,
+        Dictionary<string, object>? metadataFilters = null)
+    {
+        if (RagRetriever == null || RagReranker == null || RagGenerator == null)
+        {
+            throw new InvalidOperationException(
+                "RAG pipeline not configured. Configure RAG components using PredictionModelBuilder.ConfigureRetrievalAugmentedGeneration() before building the model.");
+        }
+
+        if (string.IsNullOrWhiteSpace(query))
+            throw new ArgumentException("Query cannot be null or empty", nameof(query));
+
+        var processedQuery = ProcessQueryWithProcessors(query);
+
+        var filters = metadataFilters ?? new Dictionary<string, object>();
+        var effectiveTopK = topK ?? RagRetriever.DefaultTopK;
+        var retrievedDocs = RagRetriever.Retrieve(processedQuery, effectiveTopK, filters);
+
+        var retrievedList = retrievedDocs.ToList();
+
+        if (retrievedList.Count == 0)
+        {
+            return new AiDotNet.RetrievalAugmentedGeneration.Models.GroundedAnswer<T>
+            {
+                Query = query,
+                Answer = "I couldn't find any relevant information to answer this question.",
+                SourceDocuments = new List<AiDotNet.RetrievalAugmentedGeneration.Models.Document<T>>(),
+                Citations = new List<string>(),
+                ConfidenceScore = 0.0
+            };
+        }
+
+        var rerankedDocs = RagReranker.Rerank(processedQuery, retrievedList);
+        
+        if (topKAfterRerank.HasValue)
+        {
+            rerankedDocs = rerankedDocs.Take(topKAfterRerank.Value);
+        }
+
+        var contextDocs = rerankedDocs.ToList();
+        return RagGenerator.GenerateGrounded(processedQuery, contextDocs);
+    }
+
+    /// <summary>
+    /// Retrieves relevant documents without generating an answer during inference.
+    /// </summary>
+    /// <param name="query">The search query.</param>
+    /// <param name="topK">Number of documents to retrieve (optional).</param>
+    /// <param name="applyReranking">Whether to rerank results (default: true).</param>
+    /// <param name="metadataFilters">Optional filters for document selection.</param>
+    /// <returns>Retrieved and optionally reranked documents.</returns>
+    /// <exception cref="InvalidOperationException">Thrown when RAG components are not configured.</exception>
+    /// <remarks>
+    /// <b>For Beginners:</b> Use this during inference to search your document collection without generating an answer.
+    /// Good for exploring what documents are available or debugging retrieval quality.
+    /// 
+    /// RAG must be configured via PredictionModelBuilder.ConfigureRetrievalAugmentedGeneration() before building the model.
+    /// </remarks>
+    public IEnumerable<AiDotNet.RetrievalAugmentedGeneration.Models.Document<T>> RetrieveDocuments(
+        string query,
+        int? topK = null,
+        bool applyReranking = true,
+        Dictionary<string, object>? metadataFilters = null)
+    {
+        if (RagRetriever == null)
+        {
+            throw new InvalidOperationException(
+                "RAG retriever not configured. Configure RAG components using PredictionModelBuilder.ConfigureRetrievalAugmentedGeneration() before building the model.");
+        }
+
+        if (applyReranking && RagReranker == null)
+        {
+            throw new InvalidOperationException(
+                "RAG reranker not configured. Either configure a reranker or call RetrieveDocuments with applyReranking = false.");
+        }
+
+        if (string.IsNullOrWhiteSpace(query))
+            throw new ArgumentException("Query cannot be null or empty", nameof(query));
+
+        var processedQuery = ProcessQueryWithProcessors(query);
+
+        var filters = metadataFilters ?? new Dictionary<string, object>();
+        var effectiveTopK = topK ?? RagRetriever.DefaultTopK;
+        var docs = RagRetriever.Retrieve(processedQuery, effectiveTopK, filters);
+
+        if (applyReranking && RagReranker != null)
+        {
+            docs = RagReranker.Rerank(processedQuery, docs);
+        }
+
+        return docs.ToList();
+    }
+
+    /// <summary>
+    /// Processes a query through all configured query processors in sequence.
+    /// </summary>
+    /// <param name="query">The original query to process.</param>
+    /// <returns>The processed query after applying all processors, or the original if no processors configured.</returns>
+    private string ProcessQueryWithProcessors(string query)
+    {
+        if (QueryProcessors == null)
+            return query;
+
+        var processedQuery = query;
+        foreach (var processor in QueryProcessors)
+        {
+            processedQuery = processor.ProcessQuery(processedQuery);
+        }
+        return processedQuery;
     }
 }
