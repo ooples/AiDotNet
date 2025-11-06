@@ -381,4 +381,33 @@ public interface IPredictionModelBuilder<T, TInput, TOutput>
         IReranker<T>? reranker = null,
         IGenerator<T>? generator = null,
         IEnumerable<IQueryProcessor>? queryProcessors = null);
+
+    /// <summary>
+    /// Configures episodic data loading for meta-learning (N-way K-shot task sampling).
+    /// </summary>
+    /// <remarks>
+    /// Meta-learning requires training on many small tasks instead of one large dataset.
+    /// This configuration enables episodic sampling where each training iteration uses a different N-way K-shot task.
+    ///
+    /// <b>For Beginners:</b> Traditional machine learning trains a model once on a large dataset to perform
+    /// one specific task. Meta-learning is different - it trains a model to quickly adapt to new tasks with very
+    /// few examples.
+    ///
+    /// This is useful when you need a model that can:
+    /// - Learn new categories from just a few examples (few-shot learning)
+    /// - Quickly adapt to new domains or tasks
+    /// - Generalize across diverse problems
+    ///
+    /// The episodic data loader you configure here will:
+    /// - Sample random N-way K-shot tasks from your dataset
+    /// - Provide support sets (for quick adaptation) and query sets (for evaluation)
+    /// - Enable meta-learning algorithms like MAML, Reptile, and SEAL
+    ///
+    /// <b>Note:</b> Meta-learning requires specialized trainers (MAML, Reptile, SEAL) that use this
+    /// episodic data loader. Standard supervised learning with Build() does not use episodic sampling.
+    /// Meta-learning trainers will be available as part of the meta-learning suite.
+    /// </remarks>
+    /// <param name="dataLoader">The episodic data loader for generating meta-learning tasks.</param>
+    /// <returns>The builder instance for method chaining.</returns>
+    IPredictionModelBuilder<T, TInput, TOutput> ConfigureEpisodicDataLoader(IEpisodicDataLoader<T> dataLoader);
 }

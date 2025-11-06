@@ -5,9 +5,9 @@ using Xunit;
 namespace AiDotNet.Tests.UnitTests.Data;
 
 /// <summary>
-/// Unit tests for the EpisodicDataLoader class.
+/// Unit tests for the UniformEpisodicDataLoader class.
 /// </summary>
-public class EpisodicDataLoaderTests
+public class UniformEpisodicDataLoaderTests
 {
     #region Test Helper Methods
 
@@ -51,7 +51,7 @@ public class EpisodicDataLoaderTests
         var (X, Y) = CreateTestDataset(numClasses: 10, examplesPerClass: 20, numFeatures: 5);
 
         // Act
-        var loader = new EpisodicDataLoader<double>(
+        var loader = new UniformEpisodicDataLoader<double>(
             datasetX: X,
             datasetY: Y,
             nWay: 5,
@@ -71,7 +71,7 @@ public class EpisodicDataLoaderTests
 
         // Act & Assert
         var exception = Assert.Throws<ArgumentNullException>(() =>
-            new EpisodicDataLoader<double>(
+            new UniformEpisodicDataLoader<double>(
                 datasetX: null!,
                 datasetY: Y,
                 nWay: 5,
@@ -89,7 +89,7 @@ public class EpisodicDataLoaderTests
 
         // Act & Assert
         var exception = Assert.Throws<ArgumentNullException>(() =>
-            new EpisodicDataLoader<double>(
+            new UniformEpisodicDataLoader<double>(
                 datasetX: X,
                 datasetY: null!,
                 nWay: 5,
@@ -108,7 +108,7 @@ public class EpisodicDataLoaderTests
 
         // Act & Assert
         var exception = Assert.Throws<ArgumentException>(() =>
-            new EpisodicDataLoader<double>(
+            new UniformEpisodicDataLoader<double>(
                 datasetX: X,
                 datasetY: Y,
                 nWay: 5,
@@ -126,7 +126,7 @@ public class EpisodicDataLoaderTests
 
         // Act & Assert
         var exception = Assert.Throws<ArgumentException>(() =>
-            new EpisodicDataLoader<double>(
+            new UniformEpisodicDataLoader<double>(
                 datasetX: X,
                 datasetY: Y,
                 nWay: 1,
@@ -145,7 +145,7 @@ public class EpisodicDataLoaderTests
 
         // Act & Assert
         var exception = Assert.Throws<ArgumentException>(() =>
-            new EpisodicDataLoader<double>(
+            new UniformEpisodicDataLoader<double>(
                 datasetX: X,
                 datasetY: Y,
                 nWay: 5,
@@ -164,7 +164,7 @@ public class EpisodicDataLoaderTests
 
         // Act & Assert
         var exception = Assert.Throws<ArgumentException>(() =>
-            new EpisodicDataLoader<double>(
+            new UniformEpisodicDataLoader<double>(
                 datasetX: X,
                 datasetY: Y,
                 nWay: 5,
@@ -183,7 +183,7 @@ public class EpisodicDataLoaderTests
 
         // Act & Assert
         var exception = Assert.Throws<ArgumentException>(() =>
-            new EpisodicDataLoader<double>(
+            new UniformEpisodicDataLoader<double>(
                 datasetX: X,
                 datasetY: Y,
                 nWay: 5,
@@ -202,7 +202,7 @@ public class EpisodicDataLoaderTests
 
         // Act & Assert
         var exception = Assert.Throws<ArgumentException>(() =>
-            new EpisodicDataLoader<double>(
+            new UniformEpisodicDataLoader<double>(
                 datasetX: X,
                 datasetY: Y,
                 nWay: 5,
@@ -226,7 +226,7 @@ public class EpisodicDataLoaderTests
         int numFeatures = 784;
 
         var (X, Y) = CreateTestDataset(numClasses: 10, examplesPerClass: 20, numFeatures);
-        var loader = new EpisodicDataLoader<double>(X, Y, nWay, kShot, queryShots, seed: 42);
+        var loader = new UniformEpisodicDataLoader<double>(X, Y, nWay, kShot, queryShots, seed: 42);
 
         // Act
         var task = loader.GetNextTask();
@@ -257,7 +257,7 @@ public class EpisodicDataLoaderTests
         int queryShots = 10;
 
         var (X, Y) = CreateTestDataset(numClasses: 10, examplesPerClass: 20, numFeatures: 5);
-        var loader = new EpisodicDataLoader<double>(X, Y, nWay, kShot, queryShots, seed: 42);
+        var loader = new UniformEpisodicDataLoader<double>(X, Y, nWay, kShot, queryShots, seed: 42);
 
         // Act
         var task = loader.GetNextTask();
@@ -296,7 +296,7 @@ public class EpisodicDataLoaderTests
         int numFeatures = 10;
 
         var (X, Y) = CreateTestDataset(numClasses: 10, examplesPerClass: 20, numFeatures);
-        var loader = new EpisodicDataLoader<double>(X, Y, nWay, kShot, queryShots, seed: 42);
+        var loader = new UniformEpisodicDataLoader<double>(X, Y, nWay, kShot, queryShots, seed: 42);
 
         // Act
         var task = loader.GetNextTask();
@@ -333,7 +333,7 @@ public class EpisodicDataLoaderTests
         int queryShots = 10;
 
         var (X, Y) = CreateTestDataset(numClasses: 10, examplesPerClass: 20, numFeatures: 5);
-        var loader = new EpisodicDataLoader<double>(X, Y, nWay, kShot, queryShots, seed: 42);
+        var loader = new UniformEpisodicDataLoader<double>(X, Y, nWay, kShot, queryShots, seed: 42);
 
         // Act
         var task = loader.GetNextTask();
@@ -380,7 +380,7 @@ public class EpisodicDataLoaderTests
     {
         // Arrange
         var (X, Y) = CreateTestDataset(numClasses: 10, examplesPerClass: 20, numFeatures: 5);
-        var loader = new EpisodicDataLoader<double>(X, Y, nWay: 5, kShot: 3, queryShots: 10);
+        var loader = new UniformEpisodicDataLoader<double>(X, Y, nWay: 5, kShot: 3, queryShots: 10);
 
         // Act - Generate multiple tasks
         var task1 = loader.GetNextTask();
@@ -405,8 +405,8 @@ public class EpisodicDataLoaderTests
         int seed = 42;
         var (X, Y) = CreateTestDataset(numClasses: 10, examplesPerClass: 20, numFeatures: 5);
 
-        var loader1 = new EpisodicDataLoader<double>(X, Y, nWay: 5, kShot: 3, queryShots: 10, seed: seed);
-        var loader2 = new EpisodicDataLoader<double>(X, Y, nWay: 5, kShot: 3, queryShots: 10, seed: seed);
+        var loader1 = new UniformEpisodicDataLoader<double>(X, Y, nWay: 5, kShot: 3, queryShots: 10, seed: seed);
+        var loader2 = new UniformEpisodicDataLoader<double>(X, Y, nWay: 5, kShot: 3, queryShots: 10, seed: seed);
 
         // Act
         var task1 = loader1.GetNextTask();
@@ -433,7 +433,7 @@ public class EpisodicDataLoaderTests
     {
         // Arrange
         var (X, Y) = CreateTestDataset(numClasses: 25, examplesPerClass: 30, numFeatures: 10);
-        var loader = new EpisodicDataLoader<double>(X, Y, nWay, kShot, queryShots, seed: 42);
+        var loader = new UniformEpisodicDataLoader<double>(X, Y, nWay, kShot, queryShots, seed: 42);
 
         // Act
         var task = loader.GetNextTask();
@@ -450,7 +450,7 @@ public class EpisodicDataLoaderTests
     {
         // Arrange
         var (X, Y) = CreateTestDataset(numClasses: 5, examplesPerClass: 20, numFeatures: 10);
-        var loader = new EpisodicDataLoader<double>(X, Y, nWay: 3, kShot: 2, queryShots: 5, seed: 42);
+        var loader = new UniformEpisodicDataLoader<double>(X, Y, nWay: 3, kShot: 2, queryShots: 5, seed: 42);
 
         // Act
         var task = loader.GetNextTask();

@@ -70,14 +70,43 @@
 - **Normalization**:
   - Default: StandardScaler (zero mean, unit variance)
 
+#### Configure Method Pattern (CRITICAL):
+
+**ALL Configure methods MUST follow this exact pattern:**
+```csharp
+// In PredictionModelBuilder.cs:
+private ISomeInterface<T>? _someComponent;  // Private nullable field
+
+public IPredictionModelBuilder<T, TInput, TOutput> ConfigureSomeComponent(ISomeInterface<T> component)
+{
+    _someComponent = component;  // Just store the interface
+    return this;                 // Return for method chaining
+}
+
+// In Build() method - create default if needed:
+var someComponent = _someComponent ?? new DefaultSomeComponent<T>();
+```
+
+**NEVER:**
+- ❌ Add parameters to Configure methods (takes ONLY the interface)
+- ❌ Create factory functions in Configure methods
+- ❌ Store configuration values in PredictionModelBuilder fields
+- ❌ Make computed properties public that expose private nullable fields
+
+**WHY:** This pattern ensures:
+- Dependency injection compatibility
+- Consistent API across all components
+- Clean separation of concerns
+- Testability
+
 #### How to Implement Defaults:
 
 **Method 1: Constructor Parameters with Defaults (PREFERRED for simple cases)**
 - Add default values directly to constructor parameters
 - Best for classes with 3-7 parameters
-- Example from EpisodicDataLoader:
+- Example from UniformEpisodicDataLoader:
   ```csharp
-  public EpisodicDataLoader(
+  public UniformEpisodicDataLoader(
       Matrix<T> datasetX,
       Vector<T> datasetY,
       int nWay = 5,        // Default: 5-way
@@ -110,40 +139,26 @@
   }
   ```
 
-**Method 3: Factory Pattern in PredictionModelBuilder**
-- For features that need data (X and Y) before instantiation
-- Store a factory function, create instance in Build()
-- Example from ConfigureMetaLearning:
-  ```csharp
-  // In ConfigureMetaLearning():
-  _episodicDataLoaderFactory = (x, y) =>
-      new EpisodicDataLoader<T>(x, y, nWay, kShot, queryShots);
-
-  // In Build():
-  if (_episodicDataLoaderFactory != null && _episodicDataLoader == null)
-  {
-      _episodicDataLoader = _episodicDataLoaderFactory(convertedX, convertedY);
-  }
-  ```
-
 **General Guidelines:**
-1. **Add Configure helper methods** with optional parameters and sensible defaults
-2. **Check for null in Build()** and create defaults if not configured
-3. **Document defaults** in XML comments and beginner remarks
-4. **Test with minimal code**: Ensure `builder.Build(x, y)` works with just data
-5. **NEVER store default values in PredictionModelBuilder fields** - they belong in the concrete class constructors or options classes
+1. **Configure methods take ONLY interfaces** - no parameters, no options
+2. **Default values belong in concrete class constructors** - NOT in PredictionModelBuilder
+3. **Check for null in Build()** and create defaults if needed (for required components)
+4. **Document defaults** in XML comments and beginner remarks
+5. **Test with minimal code**: Ensure `builder.Build(x, y)` works with just data
 
 #### Example Pattern:
 ```csharp
-// Beginner-friendly: Only provide data
+// Beginner-friendly: Use defaults by creating instances with default constructor parameters
+var model = new SomeModel<double>();
 var result = new PredictionModelBuilder<double, Matrix<double>, Vector<double>>()
-    .ConfigureModel(new SomeModel<double>())
+    .ConfigureModel(model)
     .Build(x, y);  // Everything else uses defaults
 
-// Advanced: Override specific defaults
+// Advanced: Create instances with custom parameters, pass to Configure methods
+var customLoader = new UniformEpisodicDataLoader<double>(x, y, nWay: 10, kShot: 1);
 var result = new PredictionModelBuilder<double, Matrix<double>, Vector<double>>()
-    .ConfigureModel(new SomeModel<double>())
-    .ConfigureMetaLearning(nWay: 10, kShot: 1)  // Override defaults
+    .ConfigureModel(model)
+    .ConfigureEpisodicDataLoader(customLoader)  // Pass configured instance
     .Build(x, y);
 ```
 

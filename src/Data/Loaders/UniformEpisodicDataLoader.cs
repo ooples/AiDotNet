@@ -4,13 +4,13 @@ using AiDotNet.LinearAlgebra;
 namespace AiDotNet.Data.Loaders;
 
 /// <summary>
-/// Provides standard episodic task sampling for N-way K-shot meta-learning scenarios.
+/// Provides uniform random episodic task sampling for N-way K-shot meta-learning scenarios.
 /// </summary>
 /// <typeparam name="T">The numeric data type used for features and labels (e.g., float, double).</typeparam>
 /// <remarks>
 /// <para>
-/// The EpisodicDataLoader transforms a standard supervised learning dataset (features + labels) into
-/// a stream of meta-learning tasks. Each task contains a support set (for quick adaptation) and a
+/// The UniformEpisodicDataLoader transforms a standard supervised learning dataset (features + labels) into
+/// a stream of meta-learning tasks using uniform random sampling. Each task contains a support set (for quick adaptation) and a
 /// query set (for evaluation), enabling algorithms like MAML, Reptile, and SEAL to learn how to
 /// learn from limited examples.
 /// </para>
@@ -50,7 +50,7 @@ namespace AiDotNet.Data.Loaders;
 /// var labels = new Vector&lt;double&gt;(1000);         // Class labels 0-9
 ///
 /// // Create 5-way 3-shot loader with 10 query examples per class
-/// var loader = new EpisodicDataLoader&lt;double&gt;(
+/// var loader = new UniformEpisodicDataLoader&lt;double&gt;(
 ///     datasetX: features,
 ///     datasetY: labels,
 ///     nWay: 5,        // 5 classes per task
@@ -75,10 +75,10 @@ namespace AiDotNet.Data.Loaders;
 /// }
 /// </code>
 /// </example>
-public class EpisodicDataLoader<T> : EpisodicDataLoaderBase<T>
+public class UniformEpisodicDataLoader<T> : EpisodicDataLoaderBase<T>
 {
     /// <summary>
-    /// Initializes a new instance of the EpisodicDataLoader for N-way K-shot task sampling with industry-standard defaults.
+    /// Initializes a new instance of the UniformEpisodicDataLoader for N-way K-shot task sampling with industry-standard defaults.
     /// </summary>
     /// <param name="datasetX">The feature matrix where each row is an example. Shape: [num_examples, num_features].</param>
     /// <param name="datasetY">The label vector containing class labels for each example. Length: num_examples.</param>
@@ -109,7 +109,7 @@ public class EpisodicDataLoader<T> : EpisodicDataLoaderBase<T>
     /// to the row numbers of all examples from that class. This makes sampling fast later.
     /// </para>
     /// </remarks>
-    public EpisodicDataLoader(
+    public UniformEpisodicDataLoader(
         Matrix<T> datasetX,
         Vector<T> datasetY,
         int nWay = 5,
