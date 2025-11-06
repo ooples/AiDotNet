@@ -6258,9 +6258,9 @@ public static class StatisticsHelper<T>
             string label2 = labels2[i]?.ToString() ?? string.Empty;
 
             var key = (label1, label2);
-            contingencyTable[key] = contingencyTable.GetValueOrDefault(key, 0) + 1;
-            rowSums[label1] = rowSums.GetValueOrDefault(label1, 0) + 1;
-            colSums[label2] = colSums.GetValueOrDefault(label2, 0) + 1;
+            contingencyTable[key] = (contingencyTable.ContainsKey(key) ? contingencyTable[key] : 0) + 1;
+            rowSums[label1] = (rowSums.ContainsKey(label1) ? rowSums[label1] : 0) + 1;
+            colSums[label2] = (colSums.ContainsKey(label2) ? colSums[label2] : 0) + 1;
         }
 
         // Calculate sum of combinations for contingency table entries
@@ -6313,7 +6313,7 @@ public static class StatisticsHelper<T>
         T denominator = _numOps.Subtract(maxIndex, expectedIndex);
 
         // Handle edge case where denominator is zero
-        if (_numOps.IsZero(denominator))
+        if (_numOps.Equals(denominator, _numOps.Zero))
         {
             return _numOps.One;
         }
