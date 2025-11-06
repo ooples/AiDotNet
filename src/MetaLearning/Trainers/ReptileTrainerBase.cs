@@ -78,51 +78,44 @@ public abstract class ReptileTrainerBase<T, TInput, TOutput> : IMetaLearner<T, T
     public int CurrentIteration => _currentIteration;
 
     /// <summary>
-    /// Initializes a new instance with individual parameters (backwards compatibility).
+    /// Initializes a new instance of the ReptileTrainerBase with a configuration object.
     /// </summary>
     /// <param name="metaModel">The model to meta-train.</param>
     /// <param name="lossFunction">Loss function for evaluation.</param>
-    /// <param name="innerSteps">Number of gradient steps per task.</param>
-    /// <param name="innerLearningRate">Learning rate for inner loop.</param>
-    /// <param name="metaLearningRate">Learning rate for outer loop.</param>
+    /// <param name="config">Configuration object with all hyperparameters. If null, uses default ReptileTrainerConfig.</param>
+    /// <exception cref="ArgumentNullException">Thrown when metaModel or lossFunction is null.</exception>
+    /// <exception cref="ArgumentException">Thrown when configuration validation fails.</exception>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> This constructor sets up the Reptile meta-learning trainer with your model and settings.
+    ///
+    /// <b>Parameters explained:</b>
+    /// - <b>metaModel:</b> The neural network or model you want to train for fast adaptation
+    /// - <b>lossFunction:</b> How to measure prediction errors (e.g., MSE for regression, CrossEntropy for classification)
+    /// - <b>config:</b> Learning rates and steps - can be left as default for standard meta-learning
+    ///
+    /// The configuration controls two learning processes:
+    /// - Inner loop: How the model adapts to each individual task
+    /// - Outer loop: How the meta-parameters improve across tasks
+    /// </para>
+    /// </remarks>
     protected ReptileTrainerBase(
         IFullModel<T, TInput, TOutput> metaModel,
         ILossFunction<T> lossFunction,
-        int innerSteps = 5,
-        double innerLearningRate = 0.01,
-        double metaLearningRate = 0.001)
-    {
-        ValidateConstructorParameters(metaModel, lossFunction, innerSteps, innerLearningRate, metaLearningRate);
-
-        MetaModel = metaModel;
-        LossFunction = lossFunction;
-        Configuration = new ReptileTrainerConfig<T>(innerLearningRate, metaLearningRate, innerSteps);
-        _currentIteration = 0;
-    }
-
-    /// <summary>
-    /// Initializes a new instance with configuration object (recommended for production).
-    /// </summary>
-    /// <param name="metaModel">The model to meta-train.</param>
-    /// <param name="lossFunction">Loss function for evaluation.</param>
-    /// <param name="config">Configuration object with all hyperparameters.</param>
-    protected ReptileTrainerBase(
-        IFullModel<T, TInput, TOutput> metaModel,
-        ILossFunction<T> lossFunction,
-        IMetaLearnerConfig<T> config)
+        IMetaLearnerConfig<T>? config = null)
     {
         if (metaModel == null)
             throw new ArgumentNullException(nameof(metaModel), "Meta-model cannot be null");
         if (lossFunction == null)
             throw new ArgumentNullException(nameof(lossFunction), "Loss function cannot be null");
-        if (config == null)
-            throw new ArgumentNullException(nameof(config), "Configuration cannot be null");
-        if (!config.IsValid())
+
+        var configuration = config ?? new ReptileTrainerConfig<T>();
+
+        if (!configuration.IsValid())
             throw new ArgumentException("Configuration validation failed", nameof(config));
 
         MetaModel = metaModel;
         LossFunction = lossFunction;
-        Configuration = config;
+        Configuration = configuration;
         _currentIteration = 0;
     }
 
@@ -257,28 +250,6 @@ public abstract class ReptileTrainerBase<T, TInput, TOutput> : IMetaLearner<T, T
     {
         _currentIteration = 0;
         // Note: Model parameter reset should be handled by derived classes if needed
-    }
-
-    /// <summary>
-    /// Validates constructor parameters.
-    /// </summary>
-    private void ValidateConstructorParameters(
-        IFullModel<T, TInput, TOutput> metaModel,
-        ILossFunction<T> lossFunction,
-        int innerSteps,
-        double innerLearningRate,
-        double metaLearningRate)
-    {
-        if (metaModel == null)
-            throw new ArgumentNullException(nameof(metaModel), "Meta-model cannot be null");
-        if (lossFunction == null)
-            throw new ArgumentNullException(nameof(lossFunction), "Loss function cannot be null");
-        if (innerSteps < 1)
-            throw new ArgumentException("Inner steps must be at least 1", nameof(innerSteps));
-        if (innerLearningRate <= 0)
-            throw new ArgumentException("Inner learning rate must be positive", nameof(innerLearningRate));
-        if (metaLearningRate <= 0)
-            throw new ArgumentException("Meta learning rate must be positive", nameof(metaLearningRate));
     }
 
     /// <summary>

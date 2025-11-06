@@ -2,6 +2,7 @@ using AiDotNet.Data.Loaders;
 using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
 using AiDotNet.LossFunctions;
+using AiDotNet.MetaLearning.Config;
 using AiDotNet.MetaLearning.Trainers;
 using AiDotNet.Tests.UnitTests.MetaLearning.Helpers;
 using Xunit;
@@ -56,14 +57,16 @@ public class ReptileTrainerTests
         // Arrange
         var model = new SimpleMockModelDouble(10);
         var lossFunction = new MeanSquaredErrorLoss<double>();
+        var config = new ReptileTrainerConfig<double>(
+            innerLearningRate: 0.01,
+            metaLearningRate: 0.001,
+            innerSteps: 5);
 
         // Act
         var trainer = new ReptileTrainerDouble(
             metaModel: model,
             lossFunction: lossFunction,
-            innerSteps: 5,
-            innerLearningRate: 0.01,
-            metaLearningRate: 0.001);
+            config: config);
 
         // Assert
         Assert.NotNull(trainer);
@@ -79,10 +82,7 @@ public class ReptileTrainerTests
         var exception = Assert.Throws<ArgumentNullException>(() =>
             new ReptileTrainerDouble(
                 metaModel: null!,
-                lossFunction: lossFunction,
-                innerSteps: 5,
-                innerLearningRate: 0.01,
-                metaLearningRate: 0.001));
+                lossFunction: lossFunction));
 
         Assert.Contains("metaModel", exception.Message);
     }
@@ -97,10 +97,7 @@ public class ReptileTrainerTests
         var exception = Assert.Throws<ArgumentNullException>(() =>
             new ReptileTrainerDouble(
                 metaModel: model,
-                lossFunction: null!,
-                innerSteps: 5,
-                innerLearningRate: 0.01,
-                metaLearningRate: 0.001));
+                lossFunction: null!));
 
         Assert.Contains("lossFunction", exception.Message);
     }
@@ -111,17 +108,19 @@ public class ReptileTrainerTests
         // Arrange
         var model = new SimpleMockModelDouble(10);
         var lossFunction = new MeanSquaredErrorLoss<double>();
+        var config = new ReptileTrainerConfig<double>(
+            innerLearningRate: 0.01,
+            metaLearningRate: 0.001,
+            innerSteps: 0); // Invalid
 
         // Act & Assert
         var exception = Assert.Throws<ArgumentException>(() =>
             new ReptileTrainerDouble(
                 metaModel: model,
                 lossFunction: lossFunction,
-                innerSteps: 0,
-                innerLearningRate: 0.01,
-                metaLearningRate: 0.001));
+                config: config));
 
-        Assert.Contains("innerSteps", exception.Message);
+        Assert.Contains("innersteps", exception.Message.ToLower());
     }
 
     [Fact]
@@ -130,15 +129,17 @@ public class ReptileTrainerTests
         // Arrange
         var model = new SimpleMockModelDouble(10);
         var lossFunction = new MeanSquaredErrorLoss<double>();
+        var config = new ReptileTrainerConfig<double>(
+            innerLearningRate: 0.0, // Invalid
+            metaLearningRate: 0.001,
+            innerSteps: 5);
 
         // Act & Assert
         var exception = Assert.Throws<ArgumentException>(() =>
             new ReptileTrainerDouble(
                 metaModel: model,
                 lossFunction: lossFunction,
-                innerSteps: 5,
-                innerLearningRate: 0.0,
-                metaLearningRate: 0.001));
+                config: config));
 
         Assert.Contains("learning rate", exception.Message.ToLower());
     }
@@ -149,15 +150,17 @@ public class ReptileTrainerTests
         // Arrange
         var model = new SimpleMockModelDouble(10);
         var lossFunction = new MeanSquaredErrorLoss<double>();
+        var config = new ReptileTrainerConfig<double>(
+            innerLearningRate: 0.01,
+            metaLearningRate: -0.001, // Invalid
+            innerSteps: 5);
 
         // Act & Assert
         var exception = Assert.Throws<ArgumentException>(() =>
             new ReptileTrainerDouble(
                 metaModel: model,
                 lossFunction: lossFunction,
-                innerSteps: 5,
-                innerLearningRate: 0.01,
-                metaLearningRate: -0.001));
+                config: config));
 
         Assert.Contains("learning rate", exception.Message.ToLower());
     }
@@ -205,7 +208,8 @@ public class ReptileTrainerTests
         // Arrange
         var model = new SimpleMockModelDouble(10);
         var lossFunction = new MeanSquaredErrorLoss<double>();
-        var trainer = new ReptileTrainerDouble(model, lossFunction, innerSteps: 3);
+        var config = new ReptileTrainerConfig<double>(innerSteps: 3);
+        var trainer = new ReptileTrainerDouble(model, lossFunction, config);
 
         var (X, Y) = CreateTestDataset(numClasses: 10, examplesPerClass: 20, numFeatures: 10);
         var dataLoader = new UniformEpisodicDataLoader<double>(X, Y, nWay: 5, kShot: 3, queryShots: 10, seed: 42);
@@ -239,7 +243,8 @@ public class ReptileTrainerTests
         var lossFunction = new MeanSquaredErrorLoss<double>();
         int innerSteps = 3;
         int numMetaIterations = 5;
-        var trainer = new ReptileTrainerDouble(model, lossFunction, innerSteps: innerSteps);
+        var config = new ReptileTrainerConfig<double>(innerSteps: innerSteps);
+        var trainer = new ReptileTrainerDouble(model, lossFunction, config);
 
         var (X, Y) = CreateTestDataset(numClasses: 10, examplesPerClass: 20, numFeatures: 10);
         var dataLoader = new UniformEpisodicDataLoader<double>(X, Y, nWay: 5, kShot: 3, queryShots: 10);
@@ -309,13 +314,11 @@ public class ReptileTrainerTests
         // Arrange
         var model = new SimpleMockModelDouble(5);
         var lossFunction = new MeanSquaredErrorLoss<double>();
-        var metaLearningRate = 0.1; // Higher rate to see effect clearly
-        var trainer = new ReptileTrainerDouble(
-            model,
-            lossFunction,
-            innerSteps: 3,
+        var config = new ReptileTrainerConfig<double>(
             innerLearningRate: 0.01,
-            metaLearningRate: metaLearningRate);
+            metaLearningRate: 0.1, // Higher rate to see effect clearly
+            innerSteps: 3);
+        var trainer = new ReptileTrainerDouble(model, lossFunction, config);
 
         var (X, Y) = CreateTestDataset(numClasses: 10, examplesPerClass: 20, numFeatures: 10);
         var dataLoader = new UniformEpisodicDataLoader<double>(X, Y, nWay: 5, kShot: 3, queryShots: 10, seed: 42);

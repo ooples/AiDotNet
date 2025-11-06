@@ -2,6 +2,7 @@ using AiDotNet.Data.Loaders;
 using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
 using AiDotNet.LossFunctions;
+using AiDotNet.MetaLearning.Config;
 using AiDotNet.MetaLearning.Trainers;
 using AiDotNet.Tests.UnitTests.MetaLearning.Helpers;
 using Xunit;
@@ -131,12 +132,14 @@ public class ReptileTrainerIntegrationTests
             queryShots: 10, // 10 samples to evaluate
             seed: 42);
 
+        var config = new ReptileTrainerConfig<double>(
+            innerLearningRate: 0.02,
+            metaLearningRate: 0.01,
+            innerSteps: 10);
         var trainer = new ReptileTrainerDouble(
             metaModel: model,
             lossFunction: lossFunction,
-            innerSteps: 10,
-            innerLearningRate: 0.02,
-            metaLearningRate: 0.01);
+            config: config);
 
         // Get initial parameters
         var initialParams = model.GetParameters();
@@ -185,12 +188,14 @@ public class ReptileTrainerIntegrationTests
         var dataLoader = new UniformEpisodicDataLoader<double>(X, Y, nWay: 5, kShot: 5, queryShots: 10, seed: 42);
 
         // Meta-train only one model
+        var config = new ReptileTrainerConfig<double>(
+            innerLearningRate: 0.02,
+            metaLearningRate: 0.01,
+            innerSteps: 10);
         var trainer = new ReptileTrainerDouble(
             metaModel: metaTrainedModel,
             lossFunction: lossFunction,
-            innerSteps: 10,
-            innerLearningRate: 0.02,
-            metaLearningRate: 0.01);
+            config: config);
 
         // Act
         var metadata = trainer.Train(dataLoader, numMetaIterations: 100);
@@ -226,12 +231,14 @@ public class ReptileTrainerIntegrationTests
         var (X, Y) = GenerateSineWaveDataset(numTasks: 20, samplesPerTask: 25);
         var dataLoader = new UniformEpisodicDataLoader<double>(X, Y, nWay: 5, kShot: 5, queryShots: 10, seed: 42);
 
+        var config = new ReptileTrainerConfig<double>(
+            innerLearningRate: 0.02,
+            metaLearningRate: 0.01,
+            innerSteps: 10);
         var trainer = new ReptileTrainerDouble(
             metaModel: model,
             lossFunction: lossFunction,
-            innerSteps: 10,
-            innerLearningRate: 0.02,
-            metaLearningRate: 0.01);
+            config: config);
 
         // Act - Train for 100 iterations to verify metric tracking
         var metadata = trainer.Train(dataLoader, numMetaIterations: 100);
@@ -266,12 +273,14 @@ public class ReptileTrainerIntegrationTests
         var (X, Y) = GenerateSineWaveDataset(numTasks: 20, samplesPerTask: 25);
         var dataLoader = new UniformEpisodicDataLoader<double>(X, Y, nWay: 5, kShot: 5, queryShots: 10, seed: 42);
 
+        var config = new ReptileTrainerConfig<double>(
+            innerLearningRate: 0.02,
+            metaLearningRate: 0.01,
+            innerSteps: 10);
         var trainer = new ReptileTrainerDouble(
             metaModel: model,
             lossFunction: lossFunction,
-            innerSteps: 10,
-            innerLearningRate: 0.02,
-            metaLearningRate: 0.01);
+            config: config);
 
         // Act - Run exactly 50 meta-iterations as required
         var metadata = trainer.Train(dataLoader, numMetaIterations: 50);

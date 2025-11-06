@@ -70,25 +70,35 @@ namespace AiDotNet.MetaLearning.Trainers;
 public class ReptileTrainer<T, TInput, TOutput> : ReptileTrainerBase<T, TInput, TOutput>
 {
     /// <summary>
-    /// Initializes with individual parameters (backwards compatibility).
+    /// Initializes a new instance of the ReptileTrainer with a configuration object.
     /// </summary>
+    /// <param name="metaModel">The model to meta-train.</param>
+    /// <param name="lossFunction">Loss function for evaluating task performance.</param>
+    /// <param name="config">Configuration object containing all hyperparameters. If null, uses default ReptileTrainerConfig with industry-standard values.</param>
+    /// <exception cref="ArgumentNullException">Thrown when metaModel or lossFunction is null.</exception>
+    /// <exception cref="ArgumentException">Thrown when configuration validation fails.</exception>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> This creates a Reptile trainer ready for meta-learning.
+    ///
+    /// Reptile is simpler than MAML but equally effective for few-shot learning. It works by:
+    /// 1. Cloning the meta-model for each task
+    /// 2. Training the clone on a few examples (inner loop)
+    /// 3. Moving the meta-model toward the trained clone (outer loop)
+    /// 4. Repeating for many tasks
+    ///
+    /// After meta-training, your model can quickly adapt to new tasks with very few examples.
+    ///
+    /// <b>Default configuration (if null):</b>
+    /// - Inner learning rate: 0.01 (how fast the model adapts to each task)
+    /// - Meta learning rate: 0.001 (how fast meta-parameters update)
+    /// - Inner steps: 5 (gradient steps per task)
+    /// - Meta batch size: 1 (tasks processed per meta-update)
+    /// </para>
+    /// </remarks>
     public ReptileTrainer(
         IFullModel<T, TInput, TOutput> metaModel,
         ILossFunction<T> lossFunction,
-        int innerSteps = 5,
-        double innerLearningRate = 0.01,
-        double metaLearningRate = 0.001)
-        : base(metaModel, lossFunction, innerSteps, innerLearningRate, metaLearningRate)
-    {
-    }
-
-    /// <summary>
-    /// Initializes with configuration object (recommended for production).
-    /// </summary>
-    public ReptileTrainer(
-        IFullModel<T, TInput, TOutput> metaModel,
-        ILossFunction<T> lossFunction,
-        IMetaLearnerConfig<T> config)
+        IMetaLearnerConfig<T>? config = null)
         : base(metaModel, lossFunction, config)
     {
     }
