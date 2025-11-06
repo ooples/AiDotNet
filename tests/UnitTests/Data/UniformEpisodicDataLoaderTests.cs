@@ -29,7 +29,7 @@ public class UniformEpisodicDataLoaderTests
                 // Populate features with unique values based on class and example
                 for (int featureIdx = 0; featureIdx < numFeatures; featureIdx++)
                 {
-                    X[rowIdx, featureIdx] = classIdx * 1000 + exampleIdx * 10 + featureIdx;
+                    X[rowIdx, featureIdx] = (double)classIdx * 1000.0 + (double)exampleIdx * 10.0 + (double)featureIdx;
                 }
 
                 // Set label

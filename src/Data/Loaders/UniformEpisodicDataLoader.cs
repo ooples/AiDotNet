@@ -183,9 +183,6 @@ public class UniformEpisodicDataLoader<T> : EpisodicDataLoaderBase<T>
                 .Take(KShot + QueryShots)
                 .ToList();
 
-            // Shuffle the sampled indices to prevent ordering bias
-            sampledIndices = sampledIndices.OrderBy(_ => Random.Next()).ToList();
-
             // Step 4: Split into support (first kShot) and query (remaining queryShots)
             var supportIndices = sampledIndices.Take(KShot);
             var queryIndices = sampledIndices.Skip(KShot);
