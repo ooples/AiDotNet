@@ -7,6 +7,8 @@ namespace AiDotNet.Data.Loaders;
 /// Provides uniform random episodic task sampling for N-way K-shot meta-learning scenarios.
 /// </summary>
 /// <typeparam name="T">The numeric data type used for features and labels (e.g., float, double).</typeparam>
+/// <typeparam name="TInput">The input data type for tasks (e.g., Matrix&lt;T&gt;, Tensor&lt;T&gt;, double[]).</typeparam>
+/// <typeparam name="TOutput">The output data type for tasks (e.g., Vector&lt;T&gt;, Tensor&lt;T&gt;, double[]).</typeparam>
 /// <remarks>
 /// <para>
 /// The UniformEpisodicDataLoader transforms a standard supervised learning dataset (features + labels) into
@@ -75,7 +77,7 @@ namespace AiDotNet.Data.Loaders;
 /// }
 /// </code>
 /// </example>
-public class UniformEpisodicDataLoader<T> : EpisodicDataLoaderBase<T>
+public class UniformEpisodicDataLoader<T, TInput, TOutput> : EpisodicDataLoaderBase<T, TInput, TOutput>
 {
     /// <summary>
     /// Initializes a new instance of the UniformEpisodicDataLoader for N-way K-shot task sampling with industry-standard defaults.
@@ -157,7 +159,7 @@ public class UniformEpisodicDataLoader<T> : EpisodicDataLoaderBase<T>
     /// Creates new tensor objects on each call.
     /// </para>
     /// </remarks>
-    protected override MetaLearningTask<T> GetNextTaskCore()
+    protected override MetaLearningTask<T, TInput, TOutput> GetNextTaskCore()
     {
         // Step 1: Randomly select nWay unique classes
         var selectedClasses = AvailableClasses
@@ -202,44 +204,7 @@ public class UniformEpisodicDataLoader<T> : EpisodicDataLoaderBase<T>
             }
         }
 
-        // Step 5: Convert to tensors
-        int numFeatures = DatasetX.Columns;
-        int supportSize = NWay * KShot;
-        int querySize = NWay * QueryShots;
-
-        // Build support set tensors
-        var supportSetX = new Tensor<T>(new[] { supportSize, numFeatures });
-        var supportSetY = new Tensor<T>(new[] { supportSize });
-
-        for (int i = 0; i < supportSize; i++)
-        {
-            for (int j = 0; j < numFeatures; j++)
-            {
-                supportSetX[new[] { i, j }] = supportExamples[i][j];
-            }
-            supportSetY[new[] { i }] = supportLabels[i];
-        }
-
-        // Build query set tensors
-        var querySetX = new Tensor<T>(new[] { querySize, numFeatures });
-        var querySetY = new Tensor<T>(new[] { querySize });
-
-        for (int i = 0; i < querySize; i++)
-        {
-            for (int j = 0; j < numFeatures; j++)
-            {
-                querySetX[new[] { i, j }] = queryExamples[i][j];
-            }
-            querySetY[new[] { i }] = queryLabels[i];
-        }
-
-        // Return the completed task
-        return new MetaLearningTask<T>
-        {
-            SupportSetX = supportSetX,
-            SupportSetY = supportSetY,
-            QuerySetX = querySetX,
-            QuerySetY = querySetY
-        };
+        // Step 5: Build and return the task using base class helper
+        return BuildMetaLearningTask(supportExamples, supportLabels, queryExamples, queryLabels);
     }
 }

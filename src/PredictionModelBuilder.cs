@@ -6,6 +6,8 @@ global using AiDotNet.Normalizers;
 global using AiDotNet.OutlierRemoval;
 global using AiDotNet.DataProcessor;
 global using AiDotNet.FitDetectors;
+global using AiDotNet.LossFunctions;
+global using AiDotNet.MetaLearning.Trainers;
 
 namespace AiDotNet;
 
@@ -43,7 +45,7 @@ public class PredictionModelBuilder<T, TInput, TOutput> : IPredictionModelBuilde
     private IReranker<T>? _ragReranker;
     private IGenerator<T>? _ragGenerator;
     private IEnumerable<IQueryProcessor>? _queryProcessors;
-    private IEpisodicDataLoader<T>? _episodicDataLoader;
+    private IMetaLearner<T, TInput, TOutput>? _metaLearner;
 
     /// <summary>
     /// Configures which features (input variables) should be used in the model.
@@ -195,6 +197,37 @@ public class PredictionModelBuilder<T, TInput, TOutput> : IPredictionModelBuilde
     }
 
         /// <summary>
+    /// Builds a meta-trained model that can quickly adapt to new tasks.
+    /// </summary>
+    /// <returns>A meta-trained model with rapid adaptation capabilities.</returns>
+    /// <exception cref="InvalidOperationException">Thrown if ConfigureMetaLearning has not been called.</exception>
+    /// <remarks>
+    /// <b>For Beginners:</b> This trains your model using meta-learning, which teaches it how to
+    /// quickly learn new tasks. The training data comes from the episodic data loader you configured
+    /// in your meta-learner.
+    /// </remarks>
+    public PredictionModelResult<T, TInput, TOutput> Build()
+    {
+        if (_metaLearner == null)
+            throw new InvalidOperationException("Meta-learner must be configured using ConfigureMetaLearning() before calling Build()");
+
+        // Perform meta-training using parameters from config (specified during meta-learner construction)
+        var metaResult = _metaLearner.Train();
+
+        // Create PredictionModelResult with meta-learning constructor
+        return new PredictionModelResult<T, TInput, TOutput>(
+            metaLearner: _metaLearner,
+            metaResult: metaResult,
+            loraConfiguration: _loraConfiguration,
+            biasDetector: _biasDetector,
+            fairnessEvaluator: _fairnessEvaluator,
+            ragRetriever: _ragRetriever,
+            ragReranker: _ragReranker,
+            ragGenerator: _ragGenerator,
+            queryProcessors: _queryProcessors);
+    }
+
+        /// <summary>
     /// Builds a predictive model using the provided input features and output values.
     /// </summary>
     /// <param name="x">The matrix of input features where each row is a data point and each column is a feature.</param>
@@ -202,12 +235,12 @@ public class PredictionModelBuilder<T, TInput, TOutput> : IPredictionModelBuilde
     /// <returns>A trained predictive model that can be used to make predictions.</returns>
     /// <exception cref="ArgumentNullException">Thrown when input features or output values are null.</exception>
     /// <exception cref="ArgumentException">Thrown when the number of rows in the features matrix doesn't match the length of the output vector.</exception>
-    /// <exception cref="InvalidOperationException">Thrown when no regression method has been specified.</exception>
+    /// <exception cref="InvalidOperationException">Thrown when no model has been specified.</exception>
     /// <remarks>
     /// <b>For Beginners:</b> This method takes your data (inputs and known outputs) and creates a trained AI model.
     /// Think of it like teaching a student: you provide examples (your data) and the student (the model) learns
     /// patterns from these examples. After building, your model is ready to make predictions on new data.
-    /// 
+    ///
     /// The input matrix 'x' contains your features (like house size, number of bedrooms, etc. if predicting house prices),
     /// and the vector 'y' contains the known answers (actual house prices) for those examples.
     /// </remarks>
@@ -250,7 +283,8 @@ public class PredictionModelBuilder<T, TInput, TOutput> : IPredictionModelBuilde
             _ragRetriever,
             _ragReranker,
             _ragGenerator,
-            _queryProcessors);
+            _queryProcessors,
+            _loraConfiguration);
     }
 
     /// <summary>
@@ -428,61 +462,17 @@ public class PredictionModelBuilder<T, TInput, TOutput> : IPredictionModelBuilde
     }
 
     /// <summary>
-    /// Configures episodic data loading for meta-learning (N-way K-shot task sampling).
+    /// Configures a meta-learning algorithm for training models that can quickly adapt to new tasks.
     /// </summary>
-    /// <param name="dataLoader">The episodic data loader for generating meta-learning tasks.</param>
+    /// <param name="metaLearner">The meta-learning algorithm to use (e.g., ReptileTrainer).</param>
     /// <returns>This builder instance for method chaining.</returns>
     /// <remarks>
-    /// <para>
-    /// Meta-learning (learning to learn) requires training on many small tasks instead of one large dataset.
-    /// This configuration enables episodic sampling where each training iteration uses a different N-way K-shot task.
-    /// </para>
-    /// <para><b>For Beginners:</b> Traditional machine learning trains a model once on a large dataset to perform
-    /// one specific task. Meta-learning is different - it trains a model to quickly adapt to new tasks with very
-    /// few examples.
-    ///
-    /// This is useful when you need a model that can:
-    /// - Learn new categories from just a few examples (few-shot learning)
-    /// - Quickly adapt to new domains or tasks
-    /// - Generalize across diverse problems
-    ///
-    /// The episodic data loader you configure here will:
-    /// - Sample random N-way K-shot tasks from your dataset
-    /// - Provide support sets (for quick adaptation) and query sets (for evaluation)
-    /// - Enable meta-learning algorithms like MAML, Reptile, and SEAL
-    ///
-    /// <b>Note:</b> Meta-learning requires specialized trainers (MAML, Reptile, SEAL) that use this
-    /// episodic data loader. Standard supervised learning with Build() does not use episodic sampling.
-    /// Meta-learning trainers will be available as part of the meta-learning suite.
-    /// </para>
+    /// <b>For Beginners:</b> If you configure this, Build() will do meta-training instead of regular training.
+    /// The meta-learner should be created with all its dependencies (model, loss function, episodic data loader).
     /// </remarks>
-    /// <example>
-    /// <code>
-    /// // Load your dataset
-    /// var features = new Matrix&lt;double&gt;(1000, 784);  // 1000 examples, 784 features
-    /// var labels = new Vector&lt;double&gt;(1000);         // 10 classes (0-9)
-    ///
-    /// // Create episodic data loader for 5-way 3-shot tasks
-    /// var episodicLoader = new UniformEpisodicDataLoader&lt;double&gt;(
-    ///     datasetX: features,
-    ///     datasetY: labels,
-    ///     nWay: 5,        // 5 classes per task
-    ///     kShot: 3,       // 3 support examples per class
-    ///     queryShots: 10  // 10 query examples per class
-    /// );
-    ///
-    /// // Configure builder for meta-learning
-    /// var builder = new PredictionModelBuilder&lt;double, Matrix&lt;double&gt;, Vector&lt;double&gt;&gt;()
-    ///     .ConfigureModel(new NeuralNetworkModel&lt;double&gt;(...))
-    ///     .ConfigureEpisodicDataLoader(episodicLoader);
-    ///
-    /// // Use with meta-learning trainers (MAML, Reptile, SEAL)
-    /// // var mamlModel = builder.BuildMetaLearner(mamlTrainer);  // Future API
-    /// </code>
-    /// </example>
-    public IPredictionModelBuilder<T, TInput, TOutput> ConfigureEpisodicDataLoader(IEpisodicDataLoader<T> dataLoader)
+    public IPredictionModelBuilder<T, TInput, TOutput> ConfigureMetaLearning(IMetaLearner<T, TInput, TOutput> metaLearner)
     {
-        _episodicDataLoader = dataLoader;
+        _metaLearner = metaLearner;
         return this;
     }
 }

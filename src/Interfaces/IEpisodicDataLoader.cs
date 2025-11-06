@@ -6,6 +6,8 @@ namespace AiDotNet.Interfaces;
 /// Defines the contract for episodic data loaders that sample N-way K-shot meta-learning tasks.
 /// </summary>
 /// <typeparam name="T">The numeric data type used for calculations (e.g., float, double).</typeparam>
+/// <typeparam name="TInput">The input data type (e.g., Matrix&lt;T&gt;, Tensor&lt;T&gt;, double[]).</typeparam>
+/// <typeparam name="TOutput">The output data type (e.g., Vector&lt;T&gt;, Tensor&lt;T&gt;, double[]).</typeparam>
 /// <remarks>
 /// <para>
 /// This interface defines the core functionality required for meta-learning data loaders.
@@ -25,7 +27,7 @@ namespace AiDotNet.Interfaces;
 /// a support set (for learning) and a query set (for evaluation).
 /// </para>
 /// </remarks>
-public interface IEpisodicDataLoader<T>
+public interface IEpisodicDataLoader<T, TInput, TOutput>
 {
     /// <summary>
     /// Samples and returns the next N-way K-shot meta-learning task.
@@ -49,5 +51,5 @@ public interface IEpisodicDataLoader<T>
     /// adapt to new tasks by recognizing patterns across diverse problems.
     /// </para>
     /// </remarks>
-    MetaLearningTask<T> GetNextTask();
+    MetaLearningTask<T, TInput, TOutput> GetNextTask();
 }

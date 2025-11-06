@@ -29,6 +29,11 @@
     <TreatWarningsAsErrors>True</TreatWarningsAsErrors>
   </PropertyGroup>
 
+  <ItemGroup>
+    <InternalsVisibleTo Include="AiDotNetTests" />
+    <InternalsVisibleTo Include="AiDotNetTestConsole" />
+  </ItemGroup>
+
 	<ItemGroup>
 		<None Include="Images\Favicon.jpg">
 			<Pack>True</Pack>
