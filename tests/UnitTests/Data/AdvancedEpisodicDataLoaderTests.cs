@@ -375,12 +375,14 @@ public class AdvancedEpisodicDataLoaderTests
             initialKShot: 10,
             seed: 42);
 
-        // Act - At progress 0.5, should get approximately 3-4 way, 5-6 shot
+        // Act - At progress 0.5, nWay interpolates to 3.5->4, kShot interpolates to 5.5->6
         loader.SetProgress(0.5);
         var task = loader.GetNextTask();
 
-        // Assert - Support set should be between easy (20) and hard (5)
-        Assert.InRange(task.SupportSetX.Shape[0], 5, 20);
+        // Assert - Support set should be 4-way * 6-shot = 24 examples
+        // Note: Curriculum increases nWay (harder) while decreasing kShot (harder),
+        // so mid-progress support size may exceed initial size
+        Assert.Equal(24, task.SupportSetX.Shape[0]);
         Assert.Equal(10, task.SupportSetX.Shape[1]);
     }
 
@@ -398,7 +400,7 @@ public class AdvancedEpisodicDataLoaderTests
             initialKShot: 10,
             seed: 42);
 
-        // Act & Assert - Tasks should get progressively harder
+        // Act & Assert - Verify endpoint support sizes
         loader.SetProgress(0.0);
         var easyTask = loader.GetNextTask();
         int easySupport = easyTask.SupportSetX.Shape[0];
@@ -411,9 +413,14 @@ public class AdvancedEpisodicDataLoaderTests
         var hardTask = loader.GetNextTask();
         int hardSupport = hardTask.SupportSetX.Shape[0];
 
-        // Difficulty increases = support set size decreases
-        Assert.True(easySupport >= mediumSupport);
-        Assert.True(mediumSupport >= hardSupport);
+        // Verify expected support sizes: progress 0.0: 2*10=20, progress 0.5: 4*6=24, progress 1.0: 5*1=5
+        // Note: Support size is not monotonically decreasing because nWay increases while kShot decreases
+        Assert.Equal(20, easySupport);
+        Assert.Equal(24, mediumSupport);
+        Assert.Equal(5, hardSupport);
+
+        // Verify progression from easiest to hardest endpoints
+        Assert.True(easySupport > hardSupport, "Initial (easy) support set should be larger than final (hard) support set");
     }
 
     [Fact]

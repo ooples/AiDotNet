@@ -414,26 +414,35 @@ public class UniformEpisodicDataLoaderTests
     [Fact]
     public void GetNextTask_MultipleCalls_ProducesDifferentTasks()
     {
-        // Arrange
+        // Arrange - Use enough classes to ensure different class sets are selected
         var (X, Y) = CreateTestDataset(numClasses: 10, examplesPerClass: 20, numFeatures: 5);
         var loader = new UniformEpisodicDataLoader<double>(X, Y, nWay: 5, kShot: 3, queryShots: 10);
 
         // Act - Generate multiple tasks
         var task1 = loader.GetNextTask();
         var task2 = loader.GetNextTask();
-        var task3 = loader.GetNextTask();
 
-        // Assert - Tasks should have different data (check first example of support set)
-        // Use epsilon comparison for floating-point values to avoid precision issues
-        double epsilon = 1e-6;
-        bool task1And2Different = Math.Abs(task1.SupportSetX[new[] { 0, 0 }] - task2.SupportSetX[new[] { 0, 0 }]) > epsilon ||
-                                   Math.Abs(task1.SupportSetX[new[] { 0, 1 }] - task2.SupportSetX[new[] { 0, 1 }]) > epsilon;
+        // Assert - Collect all class labels from both tasks
+        var task1Classes = new HashSet<double>();
+        for (int i = 0; i < task1.SupportSetY.Shape[0]; i++)
+        {
+            task1Classes.Add(task1.SupportSetY[new[] { i }]);
+        }
 
-        bool task2And3Different = Math.Abs(task2.SupportSetX[new[] { 0, 0 }] - task3.SupportSetX[new[] { 0, 0 }]) > epsilon ||
-                                   Math.Abs(task2.SupportSetX[new[] { 0, 1 }] - task3.SupportSetX[new[] { 0, 1 }]) > epsilon;
+        var task2Classes = new HashSet<double>();
+        for (int i = 0; i < task2.SupportSetY.Shape[0]; i++)
+        {
+            task2Classes.Add(task2.SupportSetY[new[] { i }]);
+        }
 
-        // At least one pair should be different (very high probability with randomness)
-        Assert.True(task1And2Different || task2And3Different);
+        // The two tasks should have different class sets (or if same classes, different examples)
+        // With 10 total classes and selecting 5 per task, there are C(10,5)=252 possible class combinations
+        // Probability of getting the same classes twice is 1/252, so we check if classes differ OR examples differ
+        bool differentClasses = !task1Classes.SetEquals(task2Classes);
+        bool differentExamples = task1.SupportSetX[new[] { 0, 0 }] != task2.SupportSetX[new[] { 0, 0 }];
+
+        Assert.True(differentClasses || differentExamples,
+            "Multiple calls to GetNextTask should produce different tasks (different classes or different examples)");
     }
 
     [Fact]
