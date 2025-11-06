@@ -1,6 +1,7 @@
 using AiDotNet.Data.Loaders;
 using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
+using AiDotNet.LossFunctions;
 using AiDotNet.MetaLearning.Trainers;
 using AiDotNet.Tests.UnitTests.MetaLearning.Helpers;
 using Xunit;
@@ -106,7 +107,7 @@ public class ReptileTrainerIntegrationTests
     {
         // Arrange
         var model = new SimpleRegressionModel(polynomialDegree: 7, learningRate: 0.02);
-        var lossFunction = new MeanSquaredErrorLoss();
+        var lossFunction = new MeanSquaredErrorLoss<double>();
 
         // Generate meta-training dataset with 20 sine wave tasks
         var (X, Y) = GenerateSineWaveDataset(numTasks: 20, samplesPerTask: 25);
@@ -166,7 +167,7 @@ public class ReptileTrainerIntegrationTests
         var initialParams = metaTrainedModel.GetParameters();
         baselineModel.SetParameters(initialParams);
 
-        var lossFunction = new MeanSquaredErrorLoss();
+        var lossFunction = new MeanSquaredErrorLoss<double>();
 
         // Generate meta-training dataset
         var (X, Y) = GenerateSineWaveDataset(numTasks: 20, samplesPerTask: 25);
@@ -233,7 +234,7 @@ public class ReptileTrainerIntegrationTests
     {
         // Arrange
         var model = new SimpleRegressionModel(polynomialDegree: 7, learningRate: 0.02);
-        var lossFunction = new MeanSquaredErrorLoss();
+        var lossFunction = new MeanSquaredErrorLoss<double>();
 
         var (X, Y) = GenerateSineWaveDataset(numTasks: 20, samplesPerTask: 25);
         var dataLoader = new UniformEpisodicDataLoader<double>(X, Y, nWay: 5, kShot: 5, queryShots: 10, seed: 42);
@@ -272,7 +273,7 @@ public class ReptileTrainerIntegrationTests
 
         // Arrange
         var model = new SimpleRegressionModel(polynomialDegree: 7, learningRate: 0.02);
-        var lossFunction = new MeanSquaredErrorLoss();
+        var lossFunction = new MeanSquaredErrorLoss<double>();
 
         var (X, Y) = GenerateSineWaveDataset(numTasks: 20, samplesPerTask: 25);
         var dataLoader = new UniformEpisodicDataLoader<double>(X, Y, nWay: 5, kShot: 5, queryShots: 10, seed: 42);

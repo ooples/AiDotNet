@@ -1,6 +1,7 @@
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
+using AiDotNet.MetaLearning.Config;
 
 namespace AiDotNet.MetaLearning.Trainers;
 
@@ -129,6 +130,62 @@ public abstract class ReptileTrainerBase<T> : IMetaLearner<T>
         InnerSteps = innerSteps;
         InnerLearningRate = NumOps.FromDouble(innerLearningRate);
         MetaLearningRate = NumOps.FromDouble(metaLearningRate);
+    }
+
+    /// <summary>
+    /// Initializes a new instance of the ReptileTrainerBase class with a configuration object.
+    /// </summary>
+    /// <param name="metaModel">The model to be meta-trained. Must implement IFullModel for parameter access.</param>
+    /// <param name="lossFunction">The loss function used to evaluate predictions during training.</param>
+    /// <param name="config">Configuration object containing inner/outer learning rates and other settings.</param>
+    /// <exception cref="ArgumentNullException">Thrown when metaModel, lossFunction, or config is null.</exception>
+    /// <exception cref="ArgumentException">Thrown when configuration is invalid.</exception>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> This constructor uses a configuration object which makes it easier
+    /// to manage multiple hyperparameters and share configurations across different trainers.
+    ///
+    /// Example:
+    /// <code>
+    /// var config = new ReptileTrainerConfig&lt;double&gt;
+    /// {
+    ///     InnerLearningRate = 0.01,
+    ///     MetaLearningRate = 0.001,
+    ///     InnerSteps = 5
+    /// };
+    /// var trainer = new ReptileTrainer&lt;double&gt;(model, lossFunction, config);
+    /// </code>
+    /// </para>
+    /// </remarks>
+    protected ReptileTrainerBase(
+        IFullModel<T, Tensor<T>, Tensor<T>> metaModel,
+        ILossFunction<T> lossFunction,
+        IMetaLearnerConfig<T> config)
+    {
+        if (metaModel == null)
+        {
+            throw new ArgumentNullException(nameof(metaModel), "Meta-model cannot be null");
+        }
+
+        if (lossFunction == null)
+        {
+            throw new ArgumentNullException(nameof(lossFunction), "Loss function cannot be null");
+        }
+
+        if (config == null)
+        {
+            throw new ArgumentNullException(nameof(config), "Configuration cannot be null");
+        }
+
+        if (!config.IsValid())
+        {
+            throw new ArgumentException("Configuration is invalid", nameof(config));
+        }
+
+        MetaModel = metaModel;
+        LossFunction = lossFunction;
+        InnerSteps = config.InnerSteps;
+        InnerLearningRate = config.InnerLearningRate;
+        MetaLearningRate = config.MetaLearningRate;
     }
 
     /// <summary>

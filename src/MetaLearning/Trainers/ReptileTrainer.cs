@@ -1,6 +1,7 @@
 using AiDotNet.Data.Abstractions;
 using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
+using AiDotNet.MetaLearning.Config;
 
 namespace AiDotNet.MetaLearning.Trainers;
 
@@ -128,6 +129,45 @@ public class ReptileTrainer<T> : ReptileTrainerBase<T>
         double innerLearningRate = 0.01,
         double metaLearningRate = 0.001)
         : base(metaModel, lossFunction, innerSteps, innerLearningRate, metaLearningRate)
+    {
+    }
+
+    /// <summary>
+    /// Initializes a new instance of the ReptileTrainer class with a configuration object.
+    /// </summary>
+    /// <param name="metaModel">The model to be meta-trained. Must implement IFullModel for parameter access and cloning.</param>
+    /// <param name="lossFunction">The loss function used to evaluate predictions during training.</param>
+    /// <param name="config">Configuration object specifying inner/outer learning rates and training parameters.</param>
+    /// <exception cref="ArgumentNullException">Thrown when metaModel, lossFunction, or config is null.</exception>
+    /// <exception cref="ArgumentException">Thrown when configuration is invalid.</exception>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> This constructor accepts a configuration object for cleaner code:
+    ///
+    /// <code>
+    /// // Create configuration
+    /// var config = new ReptileTrainerConfig&lt;double&gt;
+    /// {
+    ///     InnerLearningRate = 0.02,
+    ///     MetaLearningRate = 0.001,
+    ///     InnerSteps = 10
+    /// };
+    ///
+    /// // Create trainer with config
+    /// var trainer = new ReptileTrainer&lt;double&gt;(model, lossFunction, config);
+    /// </code>
+    ///
+    /// Benefits of using configuration objects:
+    /// - Easier to manage multiple hyperparameters
+    /// - Can be saved/loaded for reproducibility
+    /// - Can be shared across multiple trainers
+    /// - Validated once at construction
+    /// </para>
+    /// </remarks>
+    public ReptileTrainer(
+        IFullModel<T, Tensor<T>, Tensor<T>> metaModel,
+        ILossFunction<T> lossFunction,
+        IMetaLearnerConfig<T> config)
+        : base(metaModel, lossFunction, config)
     {
     }
 

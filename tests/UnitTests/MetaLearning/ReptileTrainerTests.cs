@@ -1,6 +1,7 @@
 using AiDotNet.Data.Loaders;
 using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
+using AiDotNet.LossFunctions;
 using AiDotNet.MetaLearning.Trainers;
 using AiDotNet.Tests.UnitTests.MetaLearning.Helpers;
 using Xunit;
@@ -50,7 +51,7 @@ public class ReptileTrainerTests
     {
         // Arrange
         var model = new SimpleMockModel(10);
-        var lossFunction = new SimpleMockLossFunction();
+        var lossFunction = new MeanSquaredErrorLoss<double>();
 
         // Act
         var trainer = new ReptileTrainer<double>(
@@ -68,7 +69,7 @@ public class ReptileTrainerTests
     public void Constructor_NullModel_ThrowsArgumentNullException()
     {
         // Arrange
-        var lossFunction = new SimpleMockLossFunction();
+        var lossFunction = new MeanSquaredErrorLoss<double>();
 
         // Act & Assert
         var exception = Assert.Throws<ArgumentNullException>(() =>
@@ -105,7 +106,7 @@ public class ReptileTrainerTests
     {
         // Arrange
         var model = new SimpleMockModel(10);
-        var lossFunction = new SimpleMockLossFunction();
+        var lossFunction = new MeanSquaredErrorLoss<double>();
 
         // Act & Assert
         var exception = Assert.Throws<ArgumentException>(() =>
@@ -124,7 +125,7 @@ public class ReptileTrainerTests
     {
         // Arrange
         var model = new SimpleMockModel(10);
-        var lossFunction = new SimpleMockLossFunction();
+        var lossFunction = new MeanSquaredErrorLoss<double>();
 
         // Act & Assert
         var exception = Assert.Throws<ArgumentException>(() =>
@@ -143,7 +144,7 @@ public class ReptileTrainerTests
     {
         // Arrange
         var model = new SimpleMockModel(10);
-        var lossFunction = new SimpleMockLossFunction();
+        var lossFunction = new MeanSquaredErrorLoss<double>();
 
         // Act & Assert
         var exception = Assert.Throws<ArgumentException>(() =>
@@ -166,7 +167,7 @@ public class ReptileTrainerTests
     {
         // Arrange
         var model = new SimpleMockModel(10);
-        var lossFunction = new SimpleMockLossFunction();
+        var lossFunction = new MeanSquaredErrorLoss<double>();
         var trainer = new ReptileTrainer<double>(model, lossFunction);
 
         // Act & Assert
@@ -181,7 +182,7 @@ public class ReptileTrainerTests
     {
         // Arrange
         var model = new SimpleMockModel(10);
-        var lossFunction = new SimpleMockLossFunction();
+        var lossFunction = new MeanSquaredErrorLoss<double>();
         var trainer = new ReptileTrainer<double>(model, lossFunction);
 
         var (X, Y) = CreateTestDataset(numClasses: 10, examplesPerClass: 20, numFeatures: 10);
@@ -199,7 +200,7 @@ public class ReptileTrainerTests
     {
         // Arrange
         var model = new SimpleMockModel(10);
-        var lossFunction = new SimpleMockLossFunction();
+        var lossFunction = new MeanSquaredErrorLoss<double>();
         var trainer = new ReptileTrainer<double>(model, lossFunction, innerSteps: 3);
 
         var (X, Y) = CreateTestDataset(numClasses: 10, examplesPerClass: 20, numFeatures: 10);
@@ -231,7 +232,7 @@ public class ReptileTrainerTests
     {
         // Arrange
         var model = new SimpleMockModel(10);
-        var lossFunction = new SimpleMockLossFunction();
+        var lossFunction = new MeanSquaredErrorLoss<double>();
         int innerSteps = 3;
         int numMetaIterations = 5;
         var trainer = new ReptileTrainer<double>(model, lossFunction, innerSteps: innerSteps);
@@ -256,7 +257,7 @@ public class ReptileTrainerTests
     {
         // Arrange
         var model = new SimpleMockModel(10);
-        var lossFunction = new SimpleMockLossFunction();
+        var lossFunction = new MeanSquaredErrorLoss<double>();
         var trainer = new ReptileTrainer<double>(model, lossFunction);
 
         var (X, Y) = CreateTestDataset(numClasses: 10, examplesPerClass: 20, numFeatures: 10);
@@ -280,7 +281,7 @@ public class ReptileTrainerTests
     {
         // Arrange
         var model = new SimpleMockModel(10);
-        var lossFunction = new SimpleMockLossFunction();
+        var lossFunction = new MeanSquaredErrorLoss<double>();
         var trainer = new ReptileTrainer<double>(model, lossFunction); // Use all defaults
 
         var (X, Y) = CreateTestDataset(numClasses: 10, examplesPerClass: 20, numFeatures: 10);
@@ -303,7 +304,7 @@ public class ReptileTrainerTests
     {
         // Arrange
         var model = new SimpleMockModel(5);
-        var lossFunction = new SimpleMockLossFunction();
+        var lossFunction = new MeanSquaredErrorLoss<double>();
         var metaLearningRate = 0.1; // Higher rate to see effect clearly
         var trainer = new ReptileTrainer<double>(
             model,
