@@ -29,10 +29,11 @@ public class ReptileTrainerIntegrationTests
     #region Helper Methods
 
     /// <summary>
-    /// Generates a dataset for N-way classification where each task represents a different class.
-    /// Features are generated using sine wave patterns with different amplitudes and phases per class.
+    /// Generates a classification dataset where features are derived from sine waves with task-specific amplitudes and phases.
+    /// Labels are discrete class indices (0 to numTasks-1) for N-way episodic classification tasks.
+    /// NOTE: This is classification, not regression - Y contains class labels, not continuous sine values.
     /// </summary>
-    private (Matrix<double> X, Vector<double> Y) GenerateSineWaveDataset(
+    private (Matrix<double> X, Vector<double> Y) GenerateSineWaveFeaturesDataset(
         int numTasks,
         int samplesPerTask,
         double minX = 0.0,
@@ -124,7 +125,7 @@ public class ReptileTrainerIntegrationTests
         var lossFunction = new MeanSquaredErrorLoss<double>();
 
         // Generate meta-training dataset with 20 tasks
-        var (X, Y) = GenerateSineWaveDataset(numTasks: 20, samplesPerTask: 25);
+        var (X, Y) = GenerateSineWaveFeaturesDataset(numTasks: 20, samplesPerTask: 25);
 
         var dataLoader = new UniformEpisodicDataLoader<double, Tensor<double>, Tensor<double>>(
             datasetX: X,
@@ -189,7 +190,7 @@ public class ReptileTrainerIntegrationTests
         var lossFunction = new MeanSquaredErrorLoss<double>();
 
         // Generate meta-training dataset
-        var (X, Y) = GenerateSineWaveDataset(numTasks: 20, samplesPerTask: 25);
+        var (X, Y) = GenerateSineWaveFeaturesDataset(numTasks: 20, samplesPerTask: 25);
         var dataLoader = new UniformEpisodicDataLoader<double, Tensor<double>, Tensor<double>>(X, Y, nWay: 5, kShot: 5, queryShots: 10, seed: 42);
 
         // Meta-train only one model
@@ -236,7 +237,7 @@ public class ReptileTrainerIntegrationTests
         var model = new SimpleMockModelDouble(10);
         var lossFunction = new MeanSquaredErrorLoss<double>();
 
-        var (X, Y) = GenerateSineWaveDataset(numTasks: 20, samplesPerTask: 25);
+        var (X, Y) = GenerateSineWaveFeaturesDataset(numTasks: 20, samplesPerTask: 25);
         var dataLoader = new UniformEpisodicDataLoader<double, Tensor<double>, Tensor<double>>(X, Y, nWay: 5, kShot: 5, queryShots: 10, seed: 42);
 
         var config = new ReptileTrainerConfig<double>(
@@ -281,7 +282,7 @@ public class ReptileTrainerIntegrationTests
         var model = new SimpleMockModelDouble(10);
         var lossFunction = new MeanSquaredErrorLoss<double>();
 
-        var (X, Y) = GenerateSineWaveDataset(numTasks: 20, samplesPerTask: 25);
+        var (X, Y) = GenerateSineWaveFeaturesDataset(numTasks: 20, samplesPerTask: 25);
         var dataLoader = new UniformEpisodicDataLoader<double, Tensor<double>, Tensor<double>>(X, Y, nWay: 5, kShot: 5, queryShots: 10, seed: 42);
 
         var config = new ReptileTrainerConfig<double>(
