@@ -29,8 +29,8 @@ public class ReptileTrainerIntegrationTests
     #region Helper Methods
 
     /// <summary>
-    /// Generates a dataset of sine wave tasks with different amplitudes and phases.
-    /// Each task is a different sine wave function.
+    /// Generates a dataset for N-way classification where each task represents a different class.
+    /// Features are generated using sine wave patterns with different amplitudes and phases per class.
     /// </summary>
     private (Matrix<double> X, Vector<double> Y) GenerateSineWaveDataset(
         int numTasks,
@@ -45,7 +45,7 @@ public class ReptileTrainerIntegrationTests
 
         for (int taskIdx = 0; taskIdx < numTasks; taskIdx++)
         {
-            // Random amplitude and phase for each task
+            // Random amplitude and phase for each task/class
             double amplitude = 0.5 + random.NextDouble(); // Range: [0.5, 1.5]
             double phase = random.NextDouble() * 2 * Math.PI; // Range: [0, 2π]
 
@@ -56,11 +56,11 @@ public class ReptileTrainerIntegrationTests
                 // Random x value
                 double x = minX + random.NextDouble() * (maxX - minX);
 
-                // y = amplitude * sin(x + phase)
-                double y = amplitude * Math.Sin(x + phase);
+                // Feature: sine wave value with task-specific amplitude and phase
+                double sineValue = amplitude * Math.Sin(x + phase);
 
-                X[rowIdx, 0] = x;
-                Y[rowIdx] = y; // Store actual sine regression target
+                X[rowIdx, 0] = sineValue;
+                Y[rowIdx] = taskIdx; // Class label (0 to numTasks-1)
             }
         }
 
@@ -68,11 +68,12 @@ public class ReptileTrainerIntegrationTests
     }
 
     /// <summary>
-    /// Generates a single sine wave task for testing adaptation.
+    /// Generates a single classification task with features based on sine wave patterns.
     /// </summary>
     private (Tensor<double> X, Tensor<double> Y) GenerateSineWaveTask(
         double amplitude,
         double phase,
+        int classLabel,
         int numSamples,
         double minX = 0.0,
         double maxX = 2 * Math.PI,
@@ -85,10 +86,10 @@ public class ReptileTrainerIntegrationTests
         for (int i = 0; i < numSamples; i++)
         {
             double x = minX + random.NextDouble() * (maxX - minX);
-            double y = amplitude * Math.Sin(x + phase);
+            double sineValue = amplitude * Math.Sin(x + phase);
 
-            X[new[] { i, 0 }] = x;
-            Y[new[] { i, 0 }] = y;
+            X[new[] { i, 0 }] = sineValue;
+            Y[new[] { i, 0 }] = classLabel; // Classification label
         }
 
         return (X, Y);
