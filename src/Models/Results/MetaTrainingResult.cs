@@ -92,7 +92,7 @@ public class MetaTrainingResult<T>
     /// <value>
     /// The meta-loss from the last iteration, representing final training performance.
     /// </value>
-    public T FinalLoss => LossHistory.Length > 0 ? LossHistory[^1] : MathHelper.GetNumericOperations<T>().Zero;
+    public T FinalLoss => LossHistory.Length > 0 ? LossHistory[LossHistory.Length - 1] : MathHelper.GetNumericOperations<T>().Zero;
 
     /// <summary>
     /// Gets the final accuracy after training.
@@ -100,7 +100,7 @@ public class MetaTrainingResult<T>
     /// <value>
     /// The accuracy from the last iteration, representing final training performance.
     /// </value>
-    public T FinalAccuracy => AccuracyHistory.Length > 0 ? AccuracyHistory[^1] : MathHelper.GetNumericOperations<T>().Zero;
+    public T FinalAccuracy => AccuracyHistory.Length > 0 ? AccuracyHistory[AccuracyHistory.Length - 1] : MathHelper.GetNumericOperations<T>().Zero;
 
     /// <summary>
     /// Gets the initial meta-loss before training.

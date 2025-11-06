@@ -245,7 +245,7 @@ public class MetaAdaptationResult<T>
 
         var numOps = MathHelper.GetNumericOperations<T>();
         T initialLoss = PerStepLosses[0];
-        T finalLoss = PerStepLosses[^1];
+        T finalLoss = PerStepLosses[PerStepLosses.Count - 1];
         T lossReduction = numOps.Subtract(initialLoss, finalLoss);
 
         return Convert.ToDouble(lossReduction) >= convergenceThreshold;
@@ -282,7 +282,7 @@ public class MetaAdaptationResult<T>
         {
             report.AppendLine($"Converged: {DidConverge()}");
             report.AppendLine($"Initial Loss: {PerStepLosses[0]}");
-            report.AppendLine($"Final Loss: {PerStepLosses[^1]}");
+            report.AppendLine($"Final Loss: {PerStepLosses[PerStepLosses.Count - 1]}");
         }
 
         if (AdditionalMetrics.Count > 0)
