@@ -4,14 +4,16 @@ namespace AiDotNet.Models.Results;
 /// Represents the results of a single fold in cross-validation.
 /// </summary>
 /// <typeparam name="T">The numeric type used for calculations (e.g., float, double).</typeparam>
+/// <typeparam name="TInput">The type of input data (e.g., Matrix&lt;T&gt; for tabular data, Tensor&lt;T&gt; for images).</typeparam>
+/// <typeparam name="TOutput">The type of output data (e.g., Vector&lt;T&gt; for predictions, custom types for other formats).</typeparam>
 /// <remarks>
 /// <para>
-/// <b>For Beginners:</b> A FoldResult contains all the performance metrics for one "fold" 
+/// <b>For Beginners:</b> A FoldResult contains all the performance metrics for one "fold"
 /// in cross-validation. Think of it like a report card for a single test of your model,
 /// where the model was trained on one subset of your data and tested on another.
 /// </para>
 /// </remarks>
-public class FoldResult<T>
+public class FoldResult<T, TInput, TOutput>
 {
     /// <summary>
     /// Gets the index of this fold in the cross-validation process.
@@ -70,7 +72,7 @@ public class FoldResult<T>
     /// - Investigate which features are important in different data subsets
     /// </para>
     /// </remarks>
-    public IFullModel<T, Matrix<T>, Vector<T>>? Model { get; }
+    public IFullModel<T, TInput, TOutput>? Model { get; }
 
     /// <summary>
     /// Gets the clustering quality metrics for this fold, if applicable.
@@ -128,7 +130,7 @@ public class FoldResult<T>
         TimeSpan? trainingTime = null,
         TimeSpan? evaluationTime = null,
         int featureCount = 0,
-        IFullModel<T, Matrix<T>, Vector<T>>? model = null,
+        IFullModel<T, TInput, TOutput>? model = null,
         ClusteringMetrics<T>? clusteringMetrics = null)
     {
         FoldIndex = foldIndex;

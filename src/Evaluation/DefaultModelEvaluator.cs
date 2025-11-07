@@ -234,7 +234,7 @@ public class DefaultModelEvaluator<T, TInput, TOutput> : IModelEvaluator<T, TInp
     /// each time using 4 parts for training and 1 for testing. The results are then averaged to get an overall performance score.
     /// </para>
     /// </remarks>
-    public CrossValidationResult<T> PerformCrossValidation(
+    public CrossValidationResult<T, TInput, TOutput> PerformCrossValidation(
         IFullModel<T, TInput, TOutput> model,
         TInput X,
         TOutput y,
@@ -244,7 +244,7 @@ public class DefaultModelEvaluator<T, TInput, TOutput> : IModelEvaluator<T, TInp
         // For Matrix/Vector types, provide a default StandardCrossValidator
         if (crossValidator == null && typeof(TInput) == typeof(Matrix<T>) && typeof(TOutput) == typeof(Vector<T>))
         {
-            crossValidator = new StandardCrossValidator<T>() as ICrossValidator<T, TInput, TOutput>;
+            crossValidator = new StandardCrossValidator<T, TInput, TOutput>() as ICrossValidator<T, TInput, TOutput>;
         }
 
         if (crossValidator == null)

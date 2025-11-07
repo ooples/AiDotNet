@@ -57,7 +57,7 @@ public interface ICrossValidator<T, TInput, TOutput>
     /// and then giving you a report card that shows how well it performed overall.
     /// </para>
     /// </remarks>
-    CrossValidationResult<T> Validate(
+    CrossValidationResult<T, TInput, TOutput> Validate(
         IFullModel<T, TInput, TOutput> model,
         TInput X,
         TOutput y,

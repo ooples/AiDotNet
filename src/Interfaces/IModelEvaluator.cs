@@ -109,7 +109,7 @@ public interface IModelEvaluator<T, TInput, TOutput>
     /// each time using 4 parts for training and 1 for testing. The results are then averaged to get an overall performance score.
     /// </para>
     /// </remarks>
-    CrossValidationResult<T> PerformCrossValidation(
+    CrossValidationResult<T, TInput, TOutput> PerformCrossValidation(
         IFullModel<T, TInput, TOutput> model,
         TInput X,
         TOutput y,

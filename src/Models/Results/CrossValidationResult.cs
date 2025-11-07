@@ -5,6 +5,8 @@ namespace AiDotNet.Models.Results;
 /// Aggregates results from all folds in a cross-validation procedure.
 /// </summary>
 /// <typeparam name="T">The numeric type used for calculations (e.g., float, double).</typeparam>
+/// <typeparam name="TInput">The type of input data (e.g., Matrix&lt;T&gt; for tabular data, Tensor&lt;T&gt; for images).</typeparam>
+/// <typeparam name="TOutput">The type of output data (e.g., Vector&lt;T&gt; for predictions, custom types for other formats).</typeparam>
 /// <remarks>
 /// <para>
 /// <b>For Beginners:</b> Cross-validation helps you understand how well your model will perform
@@ -12,12 +14,12 @@ namespace AiDotNet.Models.Results;
 /// the results from all those tests to give you an overall picture of your model's performance.
 /// </para>
 /// </remarks>
-public class CrossValidationResult<T>
+public class CrossValidationResult<T, TInput, TOutput>
 {
     /// <summary>
     /// Gets the individual results for each fold.
     /// </summary>
-    public List<FoldResult<T>> FoldResults { get; }
+    public List<FoldResult<T, TInput, TOutput>> FoldResults { get; }
 
     /// <summary>
     /// Gets the number of folds used in cross-validation.
@@ -118,7 +120,7 @@ public class CrossValidationResult<T>
     /// across different subsets of your data.
     /// </para>
     /// </remarks>
-    public CrossValidationResult(List<FoldResult<T>> foldResults, TimeSpan totalTime)
+    public CrossValidationResult(List<FoldResult<T, TInput, TOutput>> foldResults, TimeSpan totalTime)
     {
         FoldResults = foldResults;
         TotalTime = totalTime;

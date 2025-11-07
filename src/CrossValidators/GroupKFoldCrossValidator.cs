@@ -23,7 +23,7 @@ namespace AiDotNet.CrossValidators;
 /// - You want to ensure that related data points are not split between training and testing sets
 /// </para>
 /// </remarks>
-public class GroupKFoldCrossValidator<T> : CrossValidatorBase<T>
+public class GroupKFoldCrossValidator<T> : CrossValidatorBase<T, Matrix<T>, Vector<T>>
 {
     /// <summary>
     /// The group identifiers for each sample in the dataset.

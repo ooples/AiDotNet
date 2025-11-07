@@ -5,6 +5,8 @@ namespace AiDotNet.CrossValidators;
 /// Provides a base implementation for cross-validation strategies in machine learning models.
 /// </summary>
 /// <typeparam name="T">The numeric type used for calculations (e.g., float, double, decimal).</typeparam>
+/// <typeparam name="TInput">The type of input data (e.g., Matrix&lt;T&gt; for tabular data, Tensor&lt;T&gt; for images).</typeparam>
+/// <typeparam name="TOutput">The type of output data (e.g., Vector&lt;T&gt; for predictions, custom types for other formats).</typeparam>
 /// <remarks>
 /// <para>
 /// This abstract class serves as a foundation for implementing various cross-validation strategies.
@@ -23,9 +25,10 @@ namespace AiDotNet.CrossValidators;
 /// - Manages numeric operations and random number generation.
 /// - Provides a common method for performing cross-validation once folds are created.
 /// - Allows for easy implementation of various cross-validation strategies by extending this class.
+/// - Supports generic input and output types for flexibility with different data formats.
 /// </para>
 /// </remarks>
-public abstract class CrossValidatorBase<T> : ICrossValidator<T, Matrix<T>, Vector<T>>
+public abstract class CrossValidatorBase<T, TInput, TOutput> : ICrossValidator<T, TInput, TOutput>
 {
     /// <summary>
     /// Provides operations for numeric calculations specific to type T.
@@ -69,8 +72,8 @@ public abstract class CrossValidatorBase<T> : ICrossValidator<T, Matrix<T>, Vect
     /// Performs cross-validation on the given model using the provided data, options, and optimizer.
     /// </summary>
     /// <param name="model">The machine learning model to validate.</param>
-    /// <param name="X">The feature matrix containing the input data.</param>
-    /// <param name="y">The target vector containing the output data.</param>
+    /// <param name="X">The input data containing the features.</param>
+    /// <param name="y">The output data containing the targets.</param>
     /// <param name="optimizer">The optimizer to use for training the model on each fold.</param>
     /// <returns>A CrossValidationResult containing the results of the validation process.</returns>
     /// <remarks>
@@ -86,15 +89,15 @@ public abstract class CrossValidatorBase<T> : ICrossValidator<T, Matrix<T>, Vect
     /// parameter ensures that the same training procedure is used consistently across all folds.
     /// </para>
     /// </remarks>
-    public abstract CrossValidationResult<T> Validate(IFullModel<T, Matrix<T>, Vector<T>> model, Matrix<T> X, Vector<T> y,
-        IOptimizer<T, Matrix<T>, Vector<T>> optimizer);
+    public abstract CrossValidationResult<T, TInput, TOutput> Validate(IFullModel<T, TInput, TOutput> model, TInput X, TOutput y,
+        IOptimizer<T, TInput, TOutput> optimizer);
 
     /// <summary>
     /// Executes the cross-validation process using the provided model, data, folds, and optimizer.
     /// </summary>
     /// <param name="model">The machine learning model to validate.</param>
-    /// <param name="X">The feature matrix containing the input data.</param>
-    /// <param name="y">The target vector containing the output data.</param>
+    /// <param name="X">The input data containing the features.</param>
+    /// <param name="y">The output data containing the targets.</param>
     /// <param name="folds">The pre-computed folds for cross-validation.</param>
     /// <param name="optimizer">The optimizer to use for training the model on each fold.</param>
     /// <returns>A CrossValidationResult containing the results of the validation process.</returns>
@@ -118,11 +121,11 @@ public abstract class CrossValidatorBase<T> : ICrossValidator<T, Matrix<T>, Vect
     /// and ensures that the optimizer's configuration is applied consistently across all folds.
     /// </para>
     /// </remarks>
-    protected CrossValidationResult<T> PerformCrossValidation(IFullModel<T, Matrix<T>, Vector<T>> model, Matrix<T> X, Vector<T> y,
+    protected CrossValidationResult<T, TInput, TOutput> PerformCrossValidation(IFullModel<T, TInput, TOutput> model, TInput X, TOutput y,
         IEnumerable<(int[] trainIndices, int[] validationIndices)> folds,
-        IOptimizer<T, Matrix<T>, Vector<T>> optimizer)
+        IOptimizer<T, TInput, TOutput> optimizer)
     {
-        var foldResults = new List<FoldResult<T>>();
+        var foldResults = new List<FoldResult<T, TInput, TOutput>>();
         var totalTimer = Stopwatch.StartNew();
         int foldIndex = 0;
 
@@ -131,23 +134,27 @@ public abstract class CrossValidatorBase<T> : ICrossValidator<T, Matrix<T>, Vect
             // Create a deep copy of the model for this fold to prevent state leakage
             var foldModel = model.DeepCopy();
 
-            var XTrain = X.Submatrix(trainIndices);
-            var yTrain = y.Subvector(trainIndices);
-            var XValidation = X.Submatrix(validationIndices);
-            var yValidation = y.Subvector(validationIndices);
+            // Use InputHelper to subset data generically
+            var XTrain = InputHelper<T, TInput>.GetBatch(X, trainIndices);
+            var yTrain = InputHelper<T, TOutput>.GetBatch(y, trainIndices);
+            var XValidation = InputHelper<T, TInput>.GetBatch(X, validationIndices);
+            var yValidation = InputHelper<T, TOutput>.GetBatch(y, validationIndices);
 
             var trainingTimer = Stopwatch.StartNew();
 
             // Use optimizer.Optimize() instead of model.Train()
-            var optimizationInput = new OptimizationInputData<T, Matrix<T>, Vector<T>>
+            // Create empty test data using ModelHelper
+            var (emptyXTest, emptyYTest, _) = ModelHelper<T, TInput, TOutput>.CreateDefaultModelData();
+
+            var optimizationInput = new OptimizationInputData<T, TInput, TOutput>
             {
                 XTrain = XTrain,
                 YTrain = yTrain,
                 XValidation = XValidation,
                 YValidation = yValidation,
                 // Use empty test data for cross-validation
-                XTest = new Matrix<T>(0, XTrain.Columns),
-                YTest = new Vector<T>(0)
+                XTest = emptyXTest,
+                YTest = emptyYTest
             };
 
             var optimizationResult = optimizer.Optimize(optimizationInput);
@@ -169,16 +176,24 @@ public abstract class CrossValidatorBase<T> : ICrossValidator<T, Matrix<T>, Vect
 
             var featureImportance = foldModel.GetModelMetadata().FeatureImportance;
 
-            var foldResult = new FoldResult<T>(
+            // Convert predictions to Vector<T> for metrics calculation
+            var trainingPredictionsVector = ConversionsHelper.ConvertToVector<T, TOutput>(trainingPredictions);
+            var trainingActualVector = ConversionsHelper.ConvertToVector<T, TOutput>(yTrain);
+            var validationPredictionsVector = ConversionsHelper.ConvertToVector<T, TOutput>(validationPredictions);
+            var validationActualVector = ConversionsHelper.ConvertToVector<T, TOutput>(yValidation);
+
+            var featureCount = InputHelper<T, TInput>.GetInputSize(X);
+
+            var foldResult = new FoldResult<T, TInput, TOutput>(
                 foldIndex,
-                yTrain,
-                trainingPredictions,
-                yValidation,
-                validationPredictions,
+                trainingActualVector,
+                trainingPredictionsVector,
+                validationActualVector,
+                validationPredictionsVector,
                 featureImportance,
                 trainingTime,
                 evaluationTime,
-                X.Columns,
+                featureCount,
                 foldModel  // Pass the trained model for this fold
             );
 
@@ -188,6 +203,6 @@ public abstract class CrossValidatorBase<T> : ICrossValidator<T, Matrix<T>, Vect
 
         totalTimer.Stop();
 
-        return new CrossValidationResult<T>(foldResults, totalTimer.Elapsed);
+        return new CrossValidationResult<T, TInput, TOutput>(foldResults, totalTimer.Elapsed);
     }
 }
