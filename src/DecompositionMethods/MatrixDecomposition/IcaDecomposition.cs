@@ -400,15 +400,25 @@ public class IcaDecomposition<T> : MatrixDecompositionBase<T>
     }
 
     /// <summary>
-    /// Computes the hyperbolic tangent (tanh) function.
+    /// Computes the hyperbolic tangent (tanh) function using only INumericOperations.
     /// </summary>
     /// <param name="x">Input value.</param>
-    /// <returns>tanh(x).</returns>
+    /// <returns>tanh(x) = (e^x - e^-x) / (e^x + e^-x).</returns>
+    /// <remarks>
+    /// This implementation uses only INumericOperations primitives to ensure compatibility
+    /// with any numeric type, avoiding Convert.ToDouble which would fail for custom types.
+    /// </remarks>
     private T Tanh(T x)
     {
-        double xd = Convert.ToDouble(x);
-        double result = Math.Tanh(xd);
-        return NumOps.FromDouble(result);
+        // tanh(x) = (e^x - e^-x) / (e^x + e^-x)
+        T expX = NumOps.Exp(x);
+        T negX = NumOps.Negate(x);
+        T expNegX = NumOps.Exp(negX);
+
+        T numerator = NumOps.Subtract(expX, expNegX);
+        T denominator = NumOps.Add(expX, expNegX);
+
+        return NumOps.Divide(numerator, denominator);
     }
 
     /// <summary>
