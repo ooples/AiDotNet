@@ -119,18 +119,18 @@ public class RecursiveFeatureElimination<T, TInput, TOutput> : FeatureSelectorBa
 
         actualNumFeaturesToSelect = Math.Min(actualNumFeaturesToSelect, numFeatures);
 
-        var featureIndices = Enumerable.Range(0, numFeatures).ToList();
-        var selectedIndices = new List<int>();
+        var remainingFeatureIndices = Enumerable.Range(0, numFeatures).ToList();
 
         // Create a dummy target for training using the provided function
         TOutput dummyTarget = _createDummyTarget(numSamples);
 
-        while (selectedIndices.Count < actualNumFeaturesToSelect && featureIndices.Count > 0)
+        // Eliminate features one by one until we reach the desired number
+        while (remainingFeatureIndices.Count > actualNumFeaturesToSelect)
         {
             // Create a subset of features to evaluate
             TInput featureSubset = FeatureSelectorHelper<T, TInput>.CreateFeatureSubset(
                 allFeatures,
-                featureIndices);
+                remainingFeatureIndices);
 
             // Train model to get feature importances
             _model.Train(featureSubset, dummyTarget);
@@ -146,16 +146,14 @@ public class RecursiveFeatureElimination<T, TInput, TOutput> : FeatureSelectorBa
                 NumOps.GreaterThan(b.Item1, a.Item1) ? -1 :
                 (NumOps.Equals(b.Item1, a.Item1) ? 0 : 1));
 
-            // Get the least important feature
+            // Get the least important feature's index in the current subset
             var leastImportantFeatureIndex = featureImportances.Last().i;
 
-            // Add this feature to selected list (in reverse order of elimination)
-            selectedIndices.Insert(0, featureIndices[leastImportantFeatureIndex]);
-
-            // Remove from current feature set
-            featureIndices.RemoveAt(leastImportantFeatureIndex);
+            // Remove the least important feature from the remaining set
+            remainingFeatureIndices.RemoveAt(leastImportantFeatureIndex);
         }
 
-        return selectedIndices;
+        // Return the remaining most important features, sorted for consistent output
+        return remainingFeatureIndices.OrderBy(x => x).ToList();
     }
 }

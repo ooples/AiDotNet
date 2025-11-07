@@ -54,7 +54,7 @@ public class SelectFromModel<T, TInput> : FeatureSelectorBase<T, TInput>
     /// <b>For Beginners:</b> If specified, only features with importance above this value are kept.
     /// This gives you direct control over the cutoff point.
     /// </remarks>
-    private readonly T? _customThreshold;
+    private readonly T _customThreshold;
 
     /// <summary>
     /// The maximum number of features to select.
@@ -108,7 +108,7 @@ public class SelectFromModel<T, TInput> : FeatureSelectorBase<T, TInput>
     {
         _model = model ?? throw new ArgumentNullException(nameof(model));
         _thresholdStrategy = thresholdStrategy;
-        _customThreshold = default;
+        _customThreshold = NumOps.Zero;
         _maxFeatures = maxFeatures;
     }
 
@@ -166,7 +166,7 @@ public class SelectFromModel<T, TInput> : FeatureSelectorBase<T, TInput>
     {
         _model = model ?? throw new ArgumentNullException(nameof(model));
         _thresholdStrategy = null;
-        _customThreshold = default;
+        _customThreshold = NumOps.Zero;
         _maxFeatures = k;
     }
 
@@ -206,37 +206,52 @@ public class SelectFromModel<T, TInput> : FeatureSelectorBase<T, TInput>
             }))
             .ToList();
 
-        // Determine threshold
-        T threshold;
-        if (_customThreshold != null)
-        {
-            // Use custom threshold
-            threshold = _customThreshold;
-        }
-        else if (_thresholdStrategy == ImportanceThresholdStrategy.Median)
-        {
-            // Use median
-            threshold = CalculateMedian(featureImportances.Select(fi => fi.importance).ToList());
-        }
-        else // Default to Mean
-        {
-            // Use mean
-            var importances = featureImportances.Select(fi => fi.importance).ToList();
-            threshold = importances.Count > 0
-                ? StatisticsHelper<T>.CalculateMean(importances)
-                : NumOps.Zero;
-        }
+        List<int> selectedFeatures;
 
-        // Select features above threshold
-        var selectedFeatures = sortedFeatures
-            .Where(fi => NumOps.GreaterThanOrEquals(fi.importance, threshold))
-            .Select(fi => fi.index)
-            .ToList();
-
-        // Apply max features limit if specified
-        if (_maxFeatures.HasValue && selectedFeatures.Count > _maxFeatures.Value)
+        // Check if we're in "top-K only" mode (no threshold strategy or custom threshold, just maxFeatures)
+        // This is when constructor with k parameter was used
+        if (_thresholdStrategy == null && NumOps.Equals(_customThreshold, NumOps.Zero) && _maxFeatures.HasValue)
         {
-            selectedFeatures = selectedFeatures.Take(_maxFeatures.Value).ToList();
+            // Top-K mode: select top K features by importance, no threshold filtering
+            selectedFeatures = sortedFeatures
+                .Take(_maxFeatures.Value)
+                .Select(fi => fi.index)
+                .ToList();
+        }
+        else
+        {
+            // Threshold-based mode: determine threshold and filter
+            T threshold;
+            if (_thresholdStrategy == null && !NumOps.Equals(_customThreshold, NumOps.Zero))
+            {
+                // Use custom threshold
+                threshold = _customThreshold;
+            }
+            else if (_thresholdStrategy == ImportanceThresholdStrategy.Median)
+            {
+                // Use median
+                threshold = CalculateMedian(featureImportances.Select(fi => fi.importance).ToList());
+            }
+            else // Default to Mean
+            {
+                // Use mean
+                var importances = featureImportances.Select(fi => fi.importance).ToList();
+                threshold = importances.Count > 0
+                    ? StatisticsHelper<T>.CalculateMean(importances)
+                    : NumOps.Zero;
+            }
+
+            // Select features above threshold
+            selectedFeatures = sortedFeatures
+                .Where(fi => NumOps.GreaterThanOrEquals(fi.importance, threshold))
+                .Select(fi => fi.index)
+                .ToList();
+
+            // Apply max features limit if specified
+            if (_maxFeatures.HasValue && selectedFeatures.Count > _maxFeatures.Value)
+            {
+                selectedFeatures = selectedFeatures.Take(_maxFeatures.Value).ToList();
+            }
         }
 
         // Ensure at least one feature is selected

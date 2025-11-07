@@ -88,6 +88,12 @@ public class UnivariateFeatureSelector<T, TInput> : FeatureSelectorBase<T, TInpu
     {
         _target = target ?? throw new ArgumentNullException(nameof(target));
         _scoringFunction = scoringFunction;
+
+        if (k.HasValue && k.Value <= 0)
+        {
+            throw new ArgumentException("The number of features to select (k) must be greater than 0.", nameof(k));
+        }
+
         _k = k;
     }
 
@@ -116,9 +122,8 @@ public class UnivariateFeatureSelector<T, TInput> : FeatureSelectorBase<T, TInpu
         }
 
         // Determine how many features to select
-        int numToSelect = _k ?? (numFeatures / 2);
+        int numToSelect = _k ?? Math.Max(1, numFeatures / 2);
         numToSelect = Math.Min(numToSelect, numFeatures);
-        numToSelect = Math.Max(1, numToSelect);
 
         // Calculate scores for each feature
         var featureScores = new List<(int index, T score)>();

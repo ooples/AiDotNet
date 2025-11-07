@@ -13,7 +13,10 @@ namespace AiDotNet.Enums;
 /// Think of it like deciding which students make the honor roll:
 /// - Mean: Keep students who score above the class average
 /// - Median: Keep the top 50% of students
-/// - Custom: Set a specific score threshold (e.g., above 85%)
+/// </para>
+/// <para>
+/// Note: You can also use a custom threshold by calling the SelectFromModel constructor
+/// that accepts a specific threshold value instead of a strategy.
 /// </para>
 /// </remarks>
 public enum ImportanceThresholdStrategy
