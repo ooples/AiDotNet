@@ -75,8 +75,6 @@ namespace AiDotNet.MetaLearning.Trainers;
 /// </remarks>
 public class MAMLTrainer<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOutput>
 {
-    private static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();
-
     /// <summary>
     /// Gets the MAML-specific configuration.
     /// </summary>
