@@ -13,11 +13,21 @@ using AiDotNet.Helpers;
 namespace AiDotNet.Serving.Tests;
 
 /// <summary>
+/// Collection definition for serving integration tests to ensure proper test isolation.
+/// This ensures all tests in this collection run sequentially and clean up the singleton repository.
+/// </summary>
+[CollectionDefinition("ServingIntegrationTests")]
+public class ServingIntegrationTestCollection : ICollectionFixture<WebApplicationFactory<Program>>
+{
+}
+
+/// <summary>
 /// Integration tests for the AiDotNet Serving API.
 /// These tests verify the end-to-end functionality of the model serving framework,
 /// including model management, request batching, and inference endpoints.
 /// </summary>
-public class ServingIntegrationTests : IClassFixture<WebApplicationFactory<Program>>
+[Collection("ServingIntegrationTests")]
+public class ServingIntegrationTests : IClassFixture<WebApplicationFactory<Program>>, IAsyncLifetime
 {
     private readonly WebApplicationFactory<Program> _factory;
     private readonly HttpClient _client;
@@ -26,6 +36,33 @@ public class ServingIntegrationTests : IClassFixture<WebApplicationFactory<Progr
     {
         _factory = factory;
         _client = _factory.CreateClient();
+    }
+
+    /// <summary>
+    /// Initializes the test (called before each test method).
+    /// </summary>
+    public Task InitializeAsync()
+    {
+        return Task.CompletedTask;
+    }
+
+    /// <summary>
+    /// Cleans up after each test by unloading all models from the singleton repository.
+    /// This ensures test isolation even though IModelRepository is a singleton.
+    /// </summary>
+    public Task DisposeAsync()
+    {
+        using var scope = _factory.Services.CreateScope();
+        var repository = scope.ServiceProvider.GetRequiredService<IModelRepository>();
+
+        // Unload all models to ensure test isolation
+        var models = repository.GetAllModelInfo();
+        foreach (var model in models)
+        {
+            repository.UnloadModel(model.Name);
+        }
+
+        return Task.CompletedTask;
     }
 
     /// <summary>
@@ -212,8 +249,16 @@ public class ServingIntegrationTests : IClassFixture<WebApplicationFactory<Progr
             response.EnsureSuccessStatusCode();
         }
 
-        // Wait a moment for all batch processing to complete
-        await Task.Delay(100);
+        // Wait for batch processing to complete with polling instead of fixed delay
+        // This prevents flakiness from race conditions
+        var maxWaitMs = 1000;
+        var pollIntervalMs = 10;
+        var waited = 0;
+        while (batchCallCount.Value == 0 && waited < maxWaitMs)
+        {
+            await Task.Delay(pollIntervalMs);
+            waited += pollIntervalMs;
+        }
 
         // Verify that batch processing occurred
         // The model should have been called fewer times than the number of requests

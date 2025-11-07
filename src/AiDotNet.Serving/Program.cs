@@ -18,6 +18,16 @@ public class Program
         builder.Services.Configure<ServingOptions>(
             builder.Configuration.GetSection("ServingOptions"));
 
+        // Get serving options to configure Kestrel
+        var servingOptions = new ServingOptions();
+        builder.Configuration.GetSection("ServingOptions").Bind(servingOptions);
+
+        // Configure Kestrel to use the specified port
+        builder.WebHost.ConfigureKestrel(serverOptions =>
+        {
+            serverOptions.ListenAnyIP(servingOptions.Port);
+        });
+
         // Register services as singletons for thread-safe shared access
         builder.Services.AddSingleton<IModelRepository, ModelRepository>();
         builder.Services.AddSingleton<IRequestBatcher, RequestBatcher>();
@@ -79,7 +89,7 @@ public class Program
         // Log startup information
         var logger = app.Services.GetRequiredService<ILogger<Program>>();
         logger.LogInformation("AiDotNet Model Serving API is starting");
-        logger.LogInformation("Swagger UI available at: http://localhost:5000");
+        logger.LogInformation("Swagger UI available at: http://localhost:{Port}", servingOptions.Port);
 
         app.Run();
     }
