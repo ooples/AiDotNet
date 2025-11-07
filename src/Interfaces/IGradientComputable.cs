@@ -1,3 +1,6 @@
+using AiDotNet.LinearAlgebra;
+using AiDotNet.LossFunctions;
+
 namespace AiDotNet.Interfaces;
 
 /// <summary>
