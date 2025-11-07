@@ -17,6 +17,11 @@ namespace AiDotNetTests.UnitTests.Optimizers
 
             // Assert
             Assert.NotNull(options);
+            if (options == null)
+            {
+                throw new InvalidOperationException("Options should not be null after assertion.");
+            }
+
             Assert.Equal(1e-4, options.LearningRate);
             Assert.Equal(0.9, options.Beta1);
             Assert.Equal(0.99, options.Beta2);
@@ -41,6 +46,11 @@ namespace AiDotNetTests.UnitTests.Optimizers
 
             // Assert
             Assert.NotNull(options);
+            if (options == null)
+            {
+                throw new InvalidOperationException("Options should not be null after assertion.");
+            }
+
             Assert.Equal(0.001, options.LearningRate);
             Assert.Equal(0.95, options.Beta1);
             Assert.Equal(0.999, options.Beta2);
@@ -296,6 +306,11 @@ namespace AiDotNetTests.UnitTests.Optimizers
 
             // Assert
             Assert.NotNull(deserializedOptions);
+            if (deserializedOptions == null)
+            {
+                throw new InvalidOperationException("Deserialized options should not be null after assertion.");
+            }
+
             Assert.Equal(options.LearningRate, deserializedOptions.LearningRate);
             Assert.Equal(options.Beta1, deserializedOptions.Beta1);
             Assert.Equal(options.Beta2, deserializedOptions.Beta2);
@@ -326,6 +341,11 @@ namespace AiDotNetTests.UnitTests.Optimizers
 
             // Assert
             Assert.NotNull(currentOptions);
+            if (currentOptions == null)
+            {
+                throw new InvalidOperationException("Current options should not be null after assertion.");
+            }
+
             Assert.Equal(0.01, currentOptions.LearningRate);
         }
 
@@ -479,6 +499,11 @@ namespace AiDotNetTests.UnitTests.Optimizers
 
             // Assert
             Assert.NotNull(retrievedOptions);
+            if (retrievedOptions == null)
+            {
+                throw new InvalidOperationException("Retrieved options should not be null after assertion.");
+            }
+
             Assert.Equal(0.002, retrievedOptions.LearningRate);
             Assert.Equal(0.85, retrievedOptions.Beta1);
             Assert.Equal(0.98, retrievedOptions.Beta2);

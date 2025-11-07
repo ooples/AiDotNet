@@ -3,7 +3,7 @@ using Newtonsoft.Json;
 namespace AiDotNet.Optimizers;
 
 /// <summary>
-/// Implements the Lion (EvoLved Sign Momentum) optimization algorithm for gradient-based optimization.
+/// Implements the Lion (Evolved Sign Momentum) optimization algorithm for gradient-based optimization.
 /// </summary>
 /// <typeparam name="T">The numeric type used for calculations (e.g., float, double).</typeparam>
 /// <remarks>
@@ -260,8 +260,8 @@ public class LionOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, T
         {
             // Interpolate: c_t = beta1 * m_{t-1} + (1 - beta1) * g_t
             var interpolated = NumOps.Add(
-                NumOps.Multiply(_m[i], NumOps.FromDouble(_options.Beta1)),
-                NumOps.Multiply(gradient[i], NumOps.FromDouble(1 - _options.Beta1))
+                NumOps.Multiply(_m[i], _currentBeta1),
+                NumOps.Multiply(gradient[i], NumOps.Subtract(NumOps.One, _currentBeta1))
             );
 
             // Compute sign
@@ -277,13 +277,13 @@ public class LionOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, T
 
             updatedParams[i] = NumOps.Subtract(
                 parameters[i],
-                NumOps.Multiply(NumOps.FromDouble(_options.LearningRate), update)
+                NumOps.Multiply(_currentLearningRate, update)
             );
 
             // Update momentum: m_t = beta2 * m_{t-1} + (1 - beta2) * g_t
             _m[i] = NumOps.Add(
-                NumOps.Multiply(_m[i], NumOps.FromDouble(_options.Beta2)),
-                NumOps.Multiply(gradient[i], NumOps.FromDouble(1 - _options.Beta2))
+                NumOps.Multiply(_m[i], _currentBeta2),
+                NumOps.Multiply(gradient[i], NumOps.Subtract(NumOps.One, _currentBeta2))
             );
         }
 
@@ -323,8 +323,8 @@ public class LionOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, T
 
                 // Interpolate: c_t = beta1 * m_{t-1} + (1 - beta1) * g_t
                 var interpolated = NumOps.Add(
-                    NumOps.Multiply(_m[index], NumOps.FromDouble(_options.Beta1)),
-                    NumOps.Multiply(g, NumOps.FromDouble(1 - _options.Beta1))
+                    NumOps.Multiply(_m[index], _currentBeta1),
+                    NumOps.Multiply(g, NumOps.Subtract(NumOps.One, _currentBeta1))
                 );
 
                 // Compute sign
@@ -340,13 +340,13 @@ public class LionOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, T
 
                 updatedMatrix[i, j] = NumOps.Subtract(
                     parameters[i, j],
-                    NumOps.Multiply(NumOps.FromDouble(_options.LearningRate), update)
+                    NumOps.Multiply(_currentLearningRate, update)
                 );
 
                 // Update momentum: m_t = beta2 * m_{t-1} + (1 - beta2) * g_t
                 _m[index] = NumOps.Add(
-                    NumOps.Multiply(_m[index], NumOps.FromDouble(_options.Beta2)),
-                    NumOps.Multiply(g, NumOps.FromDouble(1 - _options.Beta2))
+                    NumOps.Multiply(_m[index], _currentBeta2),
+                    NumOps.Multiply(g, NumOps.Subtract(NumOps.One, _currentBeta2))
                 );
 
                 index++;

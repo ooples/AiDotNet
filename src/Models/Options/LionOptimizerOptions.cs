@@ -1,7 +1,7 @@
 namespace AiDotNet.Models.Options;
 
 /// <summary>
-/// Configuration options for the Lion (EvoLved Sign Momentum) optimization algorithm.
+/// Configuration options for the Lion (Evolved Sign Momentum) optimization algorithm.
 /// </summary>
 /// <remarks>
 /// <para>
