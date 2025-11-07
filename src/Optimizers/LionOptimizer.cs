@@ -385,6 +385,7 @@ public class LionOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, T
         if (options is LionOptimizerOptions<T, TInput, TOutput> lionOptions)
         {
             _options = lionOptions;
+            InitializeAdaptiveParameters();
         }
         else
         {
@@ -463,6 +464,8 @@ public class LionOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, T
             string optionsJson = reader.ReadString();
             _options = JsonConvert.DeserializeObject<LionOptimizerOptions<T, TInput, TOutput>>(optionsJson)
                 ?? throw new InvalidOperationException("Failed to deserialize optimizer options.");
+
+            InitializeAdaptiveParameters();
 
             // Deserialize Lion-specific data
             _t = reader.ReadInt32();
