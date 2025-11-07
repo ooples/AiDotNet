@@ -6250,20 +6250,32 @@ public static class StatisticsHelper<T>
             return _numOps.One; // Perfect agreement for trivial cases
         }
 
-        // Build contingency table
-        var contingencyTable = new Dictionary<(string, string), int>();
-        var rowSums = new Dictionary<string, int>();
-        var colSums = new Dictionary<string, int>();
+        // Build contingency table with type-safe keys
+        // Note: Suppressing CS8714 because T is constrained by INumericOperations which ensures
+        // valid comparison semantics. The notnull constraint would break backwards compatibility.
+#pragma warning disable CS8714
+        var contingencyTable = new Dictionary<(T, T), int>(EqualityComparer<(T, T)>.Default);
+        var rowSums = new Dictionary<T, int>(EqualityComparer<T>.Default);
+        var colSums = new Dictionary<T, int>(EqualityComparer<T>.Default);
+#pragma warning restore CS8714
 
         for (int i = 0; i < n; i++)
         {
-            string label1 = labels1[i]?.ToString() ?? string.Empty;
-            string label2 = labels2[i]?.ToString() ?? string.Empty;
+            T label1 = labels1[i];
+            T label2 = labels2[i];
 
             var key = (label1, label2);
-            contingencyTable[key] = (contingencyTable.ContainsKey(key) ? contingencyTable[key] : 0) + 1;
-            rowSums[label1] = (rowSums.ContainsKey(label1) ? rowSums[label1] : 0) + 1;
-            colSums[label2] = (colSums.ContainsKey(label2) ? colSums[label2] : 0) + 1;
+            if (!contingencyTable.TryGetValue(key, out var cellCount))
+                cellCount = 0;
+            contingencyTable[key] = cellCount + 1;
+
+            if (!rowSums.TryGetValue(label1, out var rowCount))
+                rowCount = 0;
+            rowSums[label1] = rowCount + 1;
+
+            if (!colSums.TryGetValue(label2, out var colCount))
+                colCount = 0;
+            colSums[label2] = colCount + 1;
         }
 
         // Calculate sum of combinations for contingency table entries

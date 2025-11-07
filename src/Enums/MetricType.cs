@@ -522,29 +522,6 @@ public enum MetricType
     SilhouetteScore,
 
     /// <summary>
-    /// Measures the similarity between two clusterings adjusted for chance.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> Adjusted Rand Index (ARI) compares two different ways of grouping the same data
-    /// and measures how similar they are, while accounting for random chance. It ranges from -1 to 1:
-    /// - 1 means the two clusterings are identical
-    /// - 0 means the similarity is what you'd expect from random clustering
-    /// - Negative values mean the clusterings are worse than random
-    ///
-    /// This is useful for:
-    /// - Comparing your clustering results to known "ground truth" labels
-    /// - Evaluating how stable your clustering algorithm is across different runs
-    /// - Comparing different clustering algorithms on the same data
-    ///
-    /// For example, if you cluster customer data and want to see how well it matches predefined customer segments,
-    /// ARI tells you how similar your automated clustering is to the manual segmentation, beyond what random
-    /// grouping would achieve.
-    /// </para>
-    /// </remarks>
-    AdjustedRandIndex,
-
-    /// <summary>
     /// Measures the agreement between two sets of labels.
     /// </summary>
     /// <remarks>
@@ -1186,4 +1163,27 @@ public enum MetricType
     /// </para>
     /// </remarks>
     MeanReciprocalRank,
+
+    /// <summary>
+    /// Measures the similarity between two clusterings adjusted for chance.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> Adjusted Rand Index (ARI) compares two different ways of grouping the same data
+    /// and measures how similar they are, while accounting for random chance. It ranges from -1 to 1:
+    /// - 1 means the two clusterings are identical
+    /// - 0 means the similarity is what you'd expect from random clustering
+    /// - Negative values mean the clusterings are worse than random
+    ///
+    /// This is useful for:
+    /// - Comparing your clustering results to known "ground truth" labels
+    /// - Evaluating how stable your clustering algorithm is across different runs
+    /// - Comparing different clustering algorithms on the same data
+    ///
+    /// For example, if you cluster customer data and want to see how well it matches predefined customer segments,
+    /// ARI tells you how similar your automated clustering is to the manual segmentation, beyond what random
+    /// grouping would achieve.
+    /// </para>
+    /// </remarks>
+    AdjustedRandIndex,
 }
