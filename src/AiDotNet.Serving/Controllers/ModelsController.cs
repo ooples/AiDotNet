@@ -148,13 +148,49 @@ public class ModelsController : ControllerBase
             // var success = _modelRepository.LoadModel(request.Name, model, request.Path);
             // return Ok(new LoadModelResponse { Success = true, ModelInfo = ... });
         }
-        catch (Exception ex)
+        catch (UnauthorizedAccessException ex)
         {
-            _logger.LogError(ex, "Error loading model '{ModelName}'", request.Name);
+            _logger.LogError(ex, "Access denied when loading model '{ModelName}'", request.Name);
+            return StatusCode(403, new LoadModelResponse
+            {
+                Success = false,
+                Error = "Access denied to model file"
+            });
+        }
+        catch (FileNotFoundException ex)
+        {
+            _logger.LogError(ex, "Model file not found for '{ModelName}'", request.Name);
             return BadRequest(new LoadModelResponse
             {
                 Success = false,
-                Error = $"Error loading model: {ex.Message}"
+                Error = "Model file not found or access denied"
+            });
+        }
+        catch (IOException ex)
+        {
+            _logger.LogError(ex, "I/O error loading model '{ModelName}'", request.Name);
+            return StatusCode(500, new LoadModelResponse
+            {
+                Success = false,
+                Error = $"File I/O error: {ex.Message}"
+            });
+        }
+        catch (InvalidOperationException ex)
+        {
+            _logger.LogError(ex, "Invalid operation when loading model '{ModelName}'", request.Name);
+            return StatusCode(500, new LoadModelResponse
+            {
+                Success = false,
+                Error = $"Model operation error: {ex.Message}"
+            });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Unexpected error loading model '{ModelName}'", request.Name);
+            return StatusCode(500, new LoadModelResponse
+            {
+                Success = false,
+                Error = $"An unexpected error occurred: {ex.Message}"
             });
         }
     }
