@@ -22,7 +22,7 @@ public class ModelRepository : IModelRepository
     /// <param name="model">The model instance</param>
     /// <param name="sourcePath">Optional source path where the model was loaded from</param>
     /// <returns>True if the model was loaded successfully, false if a model with that name already exists</returns>
-    public bool LoadModel<T>(string name, IServableModel<T> model, string? sourcePath = null) where T : struct
+    public bool LoadModel<T>(string name, IServableModel<T> model, string? sourcePath = null)
     {
         if (string.IsNullOrWhiteSpace(name))
         {
@@ -51,7 +51,7 @@ public class ModelRepository : IModelRepository
     /// <typeparam name="T">The numeric type used by the model</typeparam>
     /// <param name="name">The name of the model</param>
     /// <returns>The model if found, null otherwise</returns>
-    public IServableModel<T>? GetModel<T>(string name) where T : struct
+    public IServableModel<T>? GetModel<T>(string name)
     {
         if (!_models.TryGetValue(name, out var entry))
         {

@@ -15,7 +15,7 @@ public interface IModelRepository
     /// <param name="model">The model instance</param>
     /// <param name="sourcePath">Optional source path where the model was loaded from</param>
     /// <returns>True if the model was loaded successfully, false if a model with that name already exists</returns>
-    bool LoadModel<T>(string name, IServableModel<T> model, string? sourcePath = null) where T : struct;
+    bool LoadModel<T>(string name, IServableModel<T> model, string? sourcePath = null);
 
     /// <summary>
     /// Retrieves a model by name and type.
@@ -23,7 +23,7 @@ public interface IModelRepository
     /// <typeparam name="T">The numeric type used by the model</typeparam>
     /// <param name="name">The name of the model</param>
     /// <returns>The model if found, null otherwise</returns>
-    IServableModel<T>? GetModel<T>(string name) where T : struct;
+    IServableModel<T>? GetModel<T>(string name);
 
     /// <summary>
     /// Unloads a model by name.

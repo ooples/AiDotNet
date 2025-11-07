@@ -8,7 +8,7 @@ namespace AiDotNet.Serving.Models;
 /// This allows any model with a Predict method to be served via the REST API.
 /// </summary>
 /// <typeparam name="T">The numeric type used by the model</typeparam>
-public class ServableModelWrapper<T> : IServableModel<T> where T : struct
+public class ServableModelWrapper<T> : IServableModel<T>
 {
     private readonly Func<Vector<T>, Vector<T>> _predictFunc;
     private readonly Func<Matrix<T>, Matrix<T>>? _predictBatchFunc;

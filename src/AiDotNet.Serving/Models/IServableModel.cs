@@ -7,7 +7,7 @@ namespace AiDotNet.Serving.Models;
 /// Models must implement this interface to support prediction operations.
 /// </summary>
 /// <typeparam name="T">The numeric type used by the model (e.g., double, float, decimal)</typeparam>
-public interface IServableModel<T> where T : struct
+public interface IServableModel<T>
 {
     /// <summary>
     /// Performs prediction on a single input vector.

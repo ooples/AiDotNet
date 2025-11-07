@@ -1,4 +1,6 @@
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.Extensions.Options;
+using AiDotNet.Serving.Configuration;
 using AiDotNet.Serving.Models;
 using AiDotNet.Serving.Services;
 
@@ -15,16 +17,22 @@ public class ModelsController : ControllerBase
 {
     private readonly IModelRepository _modelRepository;
     private readonly ILogger<ModelsController> _logger;
+    private readonly ServingOptions _servingOptions;
 
     /// <summary>
     /// Initializes a new instance of the ModelsController.
     /// </summary>
     /// <param name="modelRepository">The model repository service</param>
     /// <param name="logger">Logger for diagnostics</param>
-    public ModelsController(IModelRepository modelRepository, ILogger<ModelsController> logger)
+    /// <param name="servingOptions">Configuration options for the serving framework</param>
+    public ModelsController(
+        IModelRepository modelRepository,
+        ILogger<ModelsController> logger,
+        IOptions<ServingOptions> servingOptions)
     {
         _modelRepository = modelRepository ?? throw new ArgumentNullException(nameof(modelRepository));
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
+        _servingOptions = servingOptions?.Value ?? throw new ArgumentNullException(nameof(servingOptions));
     }
 
     /// <summary>
@@ -76,13 +84,30 @@ public class ModelsController : ControllerBase
                 });
             }
 
-            // Check if file exists
-            if (!System.IO.File.Exists(request.Path))
+            // Validate and canonicalize the path to prevent directory traversal
+            var modelsRoot = Path.GetFullPath(_servingOptions.ModelDirectory);
+            var candidatePath = Path.GetFullPath(Path.Combine(modelsRoot, request.Path));
+
+            // Ensure the resolved path is within the models directory
+            if (!candidatePath.StartsWith(modelsRoot, StringComparison.OrdinalIgnoreCase))
             {
+                _logger.LogWarning("Attempted path traversal: requested path '{Path}' resolves outside model directory",
+                    request.Path);
                 return BadRequest(new LoadModelResponse
                 {
                     Success = false,
-                    Error = $"Model file not found at path: {request.Path}"
+                    Error = "Model file not found or access denied"
+                });
+            }
+
+            // Check if file exists
+            if (!System.IO.File.Exists(candidatePath))
+            {
+                _logger.LogWarning("Model file not found at canonical path: {Path}", candidatePath);
+                return BadRequest(new LoadModelResponse
+                {
+                    Success = false,
+                    Error = "Model file not found or access denied"
                 });
             }
 

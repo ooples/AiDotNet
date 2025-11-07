@@ -119,31 +119,33 @@ public class InferenceController : ControllerBase
     /// <summary>
     /// Performs prediction with a specific numeric type.
     /// </summary>
-    private async Task<double[][]> PredictWithType<T>(string modelName, double[][] features) where T : struct
+    private async Task<double[][]> PredictWithType<T>(string modelName, double[][] features)
     {
-        var predictions = new List<double[]>();
-
-        // Process each input through the batcher
+        // Queue all requests first to enable batching
+        var tasks = new List<Task<Vector<T>>>(features.Length);
         foreach (var featureArray in features)
         {
-            // Convert double array to Vector<T>
             var inputVector = ConvertToVector<T>(featureArray);
-
-            // Queue the request - it will be batched with other concurrent requests
-            var resultVector = await _requestBatcher.QueueRequest(modelName, inputVector);
-
-            // Convert result back to double array
-            var resultArray = ConvertFromVector(resultVector);
-            predictions.Add(resultArray);
+            tasks.Add(_requestBatcher.QueueRequest(modelName, inputVector));
         }
 
-        return predictions.ToArray();
+        // Await all requests together
+        var resultVectors = await Task.WhenAll(tasks);
+
+        // Convert results back to double arrays
+        var predictions = new double[resultVectors.Length][];
+        for (int i = 0; i < resultVectors.Length; i++)
+        {
+            predictions[i] = ConvertFromVector(resultVectors[i]);
+        }
+
+        return predictions;
     }
 
     /// <summary>
     /// Converts a double array to a Vector of the specified type.
     /// </summary>
-    private static Vector<T> ConvertToVector<T>(double[] values) where T : struct
+    private static Vector<T> ConvertToVector<T>(double[] values)
     {
         var result = new Vector<T>(values.Length);
         for (int i = 0; i < values.Length; i++)
@@ -156,7 +158,7 @@ public class InferenceController : ControllerBase
     /// <summary>
     /// Converts a Vector back to a double array.
     /// </summary>
-    private static double[] ConvertFromVector<T>(Vector<T> vector) where T : struct
+    private static double[] ConvertFromVector<T>(Vector<T> vector)
     {
         var result = new double[vector.Length];
         for (int i = 0; i < vector.Length; i++)
@@ -169,7 +171,7 @@ public class InferenceController : ControllerBase
     /// <summary>
     /// Converts a double value to the specified type.
     /// </summary>
-    private static T ConvertValue<T>(double value) where T : struct
+    private static T ConvertValue<T>(double value)
     {
         return (T)Convert.ChangeType(value, typeof(T));
     }

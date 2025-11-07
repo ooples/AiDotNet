@@ -14,7 +14,7 @@ public interface IRequestBatcher
     /// <param name="modelName">The name of the model to use for prediction</param>
     /// <param name="input">The input features</param>
     /// <returns>A task that completes with the prediction result</returns>
-    Task<Vector<T>> QueueRequest<T>(string modelName, Vector<T> input) where T : struct;
+    Task<Vector<T>> QueueRequest<T>(string modelName, Vector<T> input);
 
     /// <summary>
     /// Gets statistics about the batcher's performance.

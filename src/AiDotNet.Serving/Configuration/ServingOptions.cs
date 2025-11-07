@@ -27,8 +27,14 @@ public class ServingOptions
     public int MaxBatchSize { get; set; } = 100;
 
     /// <summary>
+    /// Gets or sets the root directory where model files are stored.
+    /// Model paths are restricted to this directory for security.
+    /// Default is "models" relative to the application directory.
+    /// </summary>
+    public string ModelDirectory { get; set; } = "models";
+
+    /// <summary>
     /// Gets or sets the list of models to load at startup.
-    /// Each entry should be a dictionary with "name" and "path" keys.
     /// </summary>
     public List<StartupModel> StartupModels { get; set; } = new();
 }

@@ -1,5 +1,6 @@
 using System.Net;
 using System.Net.Http.Json;
+using System.Runtime.CompilerServices;
 using System.Text.Json;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.Extensions.DependencyInjection;
@@ -187,8 +188,8 @@ public class ServingIntegrationTests : IClassFixture<WebApplicationFactory<Progr
         using var scope = _factory.Services.CreateScope();
         var repository = scope.ServiceProvider.GetRequiredService<IModelRepository>();
 
-        int batchCallCount = 0;
-        var testModel = CreateCountingTestModel("batch-test-model", ref batchCallCount);
+        var batchCallCount = new StrongBox<int>(0);
+        var testModel = CreateCountingTestModel("batch-test-model", batchCallCount);
         repository.LoadModel("batch-test-model", testModel);
 
         // Create 10 prediction requests
@@ -217,8 +218,8 @@ public class ServingIntegrationTests : IClassFixture<WebApplicationFactory<Progr
         // Verify that batch processing occurred
         // The model should have been called fewer times than the number of requests
         // In ideal conditions with the 10ms batching window, it should be called once or a few times
-        Assert.True(batchCallCount > 0, "Model was never called");
-        Assert.True(batchCallCount <= 10, "Batching did not occur - model was called for each request individually");
+        Assert.True(batchCallCount.Value > 0, "Model was never called");
+        Assert.True(batchCallCount.Value <= 10, "Batching did not occur - model was called for each request individually");
 
         // Get batcher statistics
         var statsResponse = await _client.GetAsync("/api/inference/stats");
@@ -328,10 +329,9 @@ public class ServingIntegrationTests : IClassFixture<WebApplicationFactory<Progr
     /// Creates a test model that counts how many times batch prediction is called.
     /// This is used to verify that batching is working correctly.
     /// </summary>
-    private static IServableModel<double> CreateCountingTestModel(string name, ref int callCount)
+    private static IServableModel<double> CreateCountingTestModel(string name, StrongBox<int> callCount)
     {
         var numOps = MathHelper.GetNumericOperations<double>();
-        var localCallCount = callCount; // Capture for closure
 
         return new ServableModelWrapper<double>(
             modelName: name,
@@ -350,7 +350,7 @@ public class ServingIntegrationTests : IClassFixture<WebApplicationFactory<Progr
             predictBatchFunc: inputs =>
             {
                 // Increment call count when batch prediction is called
-                System.Threading.Interlocked.Increment(ref callCount);
+                System.Threading.Interlocked.Increment(ref callCount.Value);
 
                 // Process batch
                 var result = new Matrix<double>(inputs.Rows, 1);

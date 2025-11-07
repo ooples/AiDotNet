@@ -55,9 +55,9 @@ public class RequestBatcher : IRequestBatcher, IDisposable
     /// <param name="modelName">The name of the model to use for prediction</param>
     /// <param name="input">The input features</param>
     /// <returns>A task that completes with the prediction result</returns>
-    public Task<Vector<T>> QueueRequest<T>(string modelName, Vector<T> input) where T : struct
+    public Task<Vector<T>> QueueRequest<T>(string modelName, Vector<T> input)
     {
-        var tcs = new TaskCompletionSource<Vector<T>>();
+        var tcs = new TaskCompletionSource<Vector<T>>(TaskCreationOptions.RunContinuationsAsynchronously);
 
         var request = new BatchRequest
         {
@@ -165,7 +165,7 @@ public class RequestBatcher : IRequestBatcher, IDisposable
     /// <summary>
     /// Processes a batch of requests for a specific model and numeric type.
     /// </summary>
-    private void ProcessBatch<T>(string modelName, List<BatchRequest> requests) where T : struct
+    private void ProcessBatch<T>(string modelName, List<BatchRequest> requests)
     {
         if (requests.Count == 0)
         {
@@ -227,7 +227,7 @@ public class RequestBatcher : IRequestBatcher, IDisposable
     /// <summary>
     /// Sets the result for a batch request.
     /// </summary>
-    private static void SetResult<T>(BatchRequest request, Vector<T> result) where T : struct
+    private static void SetResult<T>(BatchRequest request, Vector<T> result)
     {
         if (request.CompletionSource is TaskCompletionSource<Vector<T>> tcs)
         {
