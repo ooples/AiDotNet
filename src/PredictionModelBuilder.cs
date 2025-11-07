@@ -290,6 +290,10 @@ public class PredictionModelBuilder<T, TInput, TOutput> : IPredictionModelBuilde
             );
         }
 
+        // Reset optimizer state after cross-validation to ensure final model training starts fresh
+        // This prevents state contamination from CV (accumulated fitness lists, cache, learning rates)
+        optimizer.Reset();
+
         // Optimize the final model on the full training set
         var optimizationResult = optimizer.Optimize(OptimizerHelper<T, TInput, TOutput>.CreateOptimizationInputData(XTrain, yTrain, XVal, yVal, XTest, yTest));
 

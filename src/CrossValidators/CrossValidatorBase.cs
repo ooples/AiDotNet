@@ -131,6 +131,10 @@ public abstract class CrossValidatorBase<T, TInput, TOutput> : ICrossValidator<T
 
         foreach (var (trainIndices, validationIndices) in folds)
         {
+            // Reset optimizer state before each fold to ensure independent evaluations
+            // This prevents state contamination (accumulated fitness lists, cache, learning rates)
+            optimizer.Reset();
+
             // Create a deep copy of the model for this fold to prevent state leakage
             var foldModel = model.DeepCopy();
 
