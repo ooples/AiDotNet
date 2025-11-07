@@ -151,9 +151,37 @@ public class RequestBatcher : IRequestBatcher, IDisposable
                     }
                 }
             }
+            catch (InvalidOperationException ex)
+            {
+                // Model not found or invalid operation
+                _logger.LogError(ex, "Invalid operation processing batch for model '{ModelName}'", modelName);
+                foreach (var req in batchRequests)
+                {
+                    SetException(req, ex);
+                }
+            }
+            catch (ArgumentException ex)
+            {
+                // Dimension mismatch or invalid argument
+                _logger.LogError(ex, "Invalid argument processing batch for model '{ModelName}'", modelName);
+                foreach (var req in batchRequests)
+                {
+                    SetException(req, ex);
+                }
+            }
+            catch (InvalidCastException ex)
+            {
+                // Type casting error
+                _logger.LogError(ex, "Type cast error processing batch for model '{ModelName}'", modelName);
+                foreach (var req in batchRequests)
+                {
+                    SetException(req, ex);
+                }
+            }
             catch (Exception ex)
             {
-                // If batch processing fails, fail all requests in this batch
+                // Unexpected error - fail all requests in this batch
+                _logger.LogError(ex, "Unexpected error processing batch for model '{ModelName}'", modelName);
                 foreach (var req in batchRequests)
                 {
                     SetException(req, ex);
@@ -214,9 +242,37 @@ public class RequestBatcher : IRequestBatcher, IDisposable
             Interlocked.Increment(ref _totalBatches);
             Interlocked.Add(ref _totalBatchSize, batchSize);
         }
+        catch (ArgumentException ex)
+        {
+            // Dimension mismatch or invalid argument in batch prediction
+            _logger.LogError(ex, "Invalid argument in batch prediction for model '{ModelName}'", modelName);
+            foreach (var req in requests)
+            {
+                SetException(req, ex);
+            }
+        }
+        catch (InvalidOperationException ex)
+        {
+            // Model operation error during batch prediction
+            _logger.LogError(ex, "Model operation error in batch prediction for '{ModelName}'", modelName);
+            foreach (var req in requests)
+            {
+                SetException(req, ex);
+            }
+        }
+        catch (IndexOutOfRangeException ex)
+        {
+            // Matrix indexing error
+            _logger.LogError(ex, "Index out of range in batch prediction for '{ModelName}'", modelName);
+            foreach (var req in requests)
+            {
+                SetException(req, ex);
+            }
+        }
         catch (Exception ex)
         {
-            // If batch processing fails, fail all requests
+            // Unexpected error - fail all requests in batch
+            _logger.LogError(ex, "Unexpected error in batch prediction for '{ModelName}'", modelName);
             foreach (var req in requests)
             {
                 SetException(req, ex);
