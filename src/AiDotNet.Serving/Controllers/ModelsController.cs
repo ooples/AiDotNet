@@ -51,6 +51,15 @@ public class ModelsController : ControllerBase
     {
         try
         {
+            if (request == null)
+            {
+                return BadRequest(new LoadModelResponse
+                {
+                    Success = false,
+                    Error = "Request body is required"
+                });
+            }
+
             _logger.LogInformation("Attempting to load model '{ModelName}' from path '{Path}'",
                 request.Name, request.Path);
 
