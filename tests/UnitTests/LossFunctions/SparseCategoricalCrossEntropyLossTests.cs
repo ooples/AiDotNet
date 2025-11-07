@@ -47,17 +47,18 @@ namespace AiDotNetTests.UnitTests.LossFunctions
         {
             // Arrange
             var loss = new SparseCategoricalCrossEntropyLoss<double>();
-            // 3 classes
+            // One set of predicted probabilities for 3 classes
             var predicted = new Vector<double>(new double[] { 0.7, 0.2, 0.1 });
-            // Two samples: first wants class 0, second wants class 1
+            // Two samples with different target classes: sample 1 targets class 0, sample 2 targets class 1
+            // This tests evaluating the same prediction vector against multiple class indices
             var actual = new Vector<double>(new double[] { 0.0, 1.0 });
 
             // Act
             var result = loss.CalculateLoss(predicted, actual);
 
             // Assert
-            // Loss for sample 1: -log(0.7) = 0.3567...
-            // Loss for sample 2: -log(0.2) = 1.6094...
+            // Sample 1 loss: -log(predicted[0]) = -log(0.7) = 0.3567...
+            // Sample 2 loss: -log(predicted[1]) = -log(0.2) = 1.6094...
             // Average: (0.3567 + 1.6094) / 2 = 0.9830...
             Assert.Equal(0.9830481536968003, result, 10);
         }
@@ -144,7 +145,7 @@ namespace AiDotNetTests.UnitTests.LossFunctions
             // Arrange
             var loss = new SparseCategoricalCrossEntropyLoss<double>();
             var predicted = new Vector<double>(new double[] { 0.7, 0.2, 0.1 });
-            // Two samples: both want class 0
+            // Two samples, both targeting class 0 (class indices [0, 0])
             var actual = new Vector<double>(new double[] { 0.0, 0.0 });
 
             // Act
@@ -164,7 +165,7 @@ namespace AiDotNetTests.UnitTests.LossFunctions
             // Arrange
             var loss = new SparseCategoricalCrossEntropyLoss<double>();
             var predicted = new Vector<double>(new double[] { 0.5, 0.3, 0.2 });
-            // Three samples: class 0, 1, 2
+            // Three samples with class indices [0, 1, 2]
             var actual = new Vector<double>(new double[] { 0.0, 1.0, 2.0 });
 
             // Act
