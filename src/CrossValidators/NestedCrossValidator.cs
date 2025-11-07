@@ -4,13 +4,15 @@ namespace AiDotNet.CrossValidators;
 /// Implements a nested cross-validation strategy for model evaluation and hyperparameter tuning.
 /// </summary>
 /// <typeparam name="T">The numeric type used for calculations (e.g., float, double, decimal).</typeparam>
+/// <typeparam name="TInput">The type of input data (e.g., Matrix&lt;T&gt; for tabular data, Tensor&lt;T&gt; for images).</typeparam>
+/// <typeparam name="TOutput">The type of output data (e.g., Vector&lt;T&gt; for predictions, custom types for other formats).</typeparam>
 /// <remarks>
 /// <para>
 /// This class provides a nested cross-validation implementation, which consists of an outer loop for model assessment
 /// and an inner loop for model selection (hyperparameter tuning).
 /// </para>
 /// <para><b>For Beginners:</b> Nested cross-validation is like a two-layer testing process for your model.
-/// 
+///
 /// What this class does:
 /// - Splits your data into outer folds for overall model assessment
 /// - For each outer fold:
@@ -19,14 +21,14 @@ namespace AiDotNet.CrossValidators;
 ///   - Trains a model with the best hyperparameters on the full outer training set
 ///   - Evaluates this model on the outer test set
 /// - Calculates how well your model performs on average across all outer folds
-/// 
+///
 /// This is useful because:
 /// - It helps you choose the best hyperparameters for your model
 /// - It provides an unbiased estimate of your model's performance on new data
 /// - It helps prevent overfitting during the model selection process
 /// </para>
 /// </remarks>
-public class NestedCrossValidator<T> : CrossValidatorBase<T>
+public class NestedCrossValidator<T, TInput, TOutput> : CrossValidatorBase<T, TInput, TOutput>
 {
     /// <summary>
     /// The cross-validator used for the outer loop of nested cross-validation.
@@ -35,7 +37,7 @@ public class NestedCrossValidator<T> : CrossValidatorBase<T>
     /// This validator is responsible for creating the main folds used for overall model assessment.
     /// For beginners: Think of this as the main test that your model will go through.
     /// </remarks>
-    private readonly ICrossValidator<T> _outerValidator;
+    private readonly ICrossValidator<T, TInput, TOutput> _outerValidator;
 
     /// <summary>
     /// The cross-validator used for the inner loop of nested cross-validation.
@@ -44,7 +46,7 @@ public class NestedCrossValidator<T> : CrossValidatorBase<T>
     /// This validator is used within each outer fold to tune hyperparameters.
     /// For beginners: This is like a practice test that helps your model improve before the main test.
     /// </remarks>
-    private readonly ICrossValidator<T> _innerValidator;
+    private readonly ICrossValidator<T, TInput, TOutput> _innerValidator;
 
     /// <summary>
     /// A function that selects the best model based on inner cross-validation results.
@@ -53,7 +55,7 @@ public class NestedCrossValidator<T> : CrossValidatorBase<T>
     /// This function takes the results of the inner cross-validation and returns the best model configuration.
     /// For beginners: This is like choosing the best version of your model after the practice tests.
     /// </remarks>
-    private readonly Func<CrossValidationResult<T>, IFullModel<T, Matrix<T>, Vector<T>>> _modelSelector;
+    private readonly Func<CrossValidationResult<T, TInput, TOutput>, IFullModel<T, TInput, TOutput>> _modelSelector;
 
     /// <summary>
     /// Initializes a new instance of the NestedCrossValidator class.
@@ -76,8 +78,8 @@ public class NestedCrossValidator<T> : CrossValidatorBase<T>
     /// It's like setting up a complex series of tests that will help you find the best version of your model.
     /// </para>
     /// </remarks>
-    public NestedCrossValidator(ICrossValidator<T> outerValidator, ICrossValidator<T> innerValidator, 
-        Func<CrossValidationResult<T>, IFullModel<T, Matrix<T>, Vector<T>>> modelSelector, CrossValidationOptions? options = null) 
+    public NestedCrossValidator(ICrossValidator<T, TInput, TOutput> outerValidator, ICrossValidator<T, TInput, TOutput> innerValidator,
+        Func<CrossValidationResult<T, TInput, TOutput>, IFullModel<T, TInput, TOutput>> modelSelector, CrossValidationOptions? options = null)
         : base(options ?? new())
     {
         _outerValidator = outerValidator;
@@ -115,10 +117,10 @@ public class NestedCrossValidator<T> : CrossValidatorBase<T>
     /// to find the best version and accurately estimate how well it will perform on new data.
     /// </para>
     /// </remarks>
-    public override CrossValidationResult<T> Validate(IFullModel<T, Matrix<T>, Vector<T>> model, Matrix<T> X, Vector<T> y,
-        IOptimizer<T, Matrix<T>, Vector<T>> optimizer)
+    public override CrossValidationResult<T, TInput, TOutput> Validate(IFullModel<T, TInput, TOutput> model, TInput X, TOutput y,
+        IOptimizer<T, TInput, TOutput> optimizer)
     {
-        var nestedResults = new List<FoldResult<T>>();
+        var nestedResults = new List<FoldResult<T, TInput, TOutput>>();
         var totalTimer = Stopwatch.StartNew();
 
         // Use the Validate method of the outer validator with the optimizer
@@ -127,23 +129,25 @@ public class NestedCrossValidator<T> : CrossValidatorBase<T>
         foreach (var outerFoldResult in outerResults.FoldResults)
         {
             // Extract training data for this outer fold
-            var trainIndices = GetTrainingIndices(X, outerFoldResult.ActualValues, y);
-            var outerTrainX = X.Submatrix(trainIndices);
-            var outerTrainY = y.Subvector(trainIndices);
+            var validationActualVector = outerFoldResult.ActualValues;
+            var trainIndices = GetTrainingIndices(X, validationActualVector, y);
+            var outerTrainX = InputHelper<T, TInput>.GetBatch(X, trainIndices);
+            var outerTrainY = InputHelper<T, TOutput>.GetBatch(y, trainIndices);
 
             // Perform inner cross-validation with the optimizer
             var innerResult = _innerValidator.Validate(model, outerTrainX, outerTrainY, optimizer);
             var bestModel = _modelSelector(innerResult);
 
             // Perform outer fold evaluation using the best model and optimizer
-            var optimizationInput = new OptimizationInputData<T, Matrix<T>, Vector<T>>
+            var (emptyXVal, emptyYVal, _) = ModelHelper<T, TInput, TOutput>.CreateDefaultModelData();
+            var optimizationInput = new OptimizationInputData<T, TInput, TOutput>
             {
                 XTrain = outerTrainX,
                 YTrain = outerTrainY,
-                XValidation = new Matrix<T>(0, outerTrainX.Columns),
-                YValidation = new Vector<T>(0),
-                XTest = new Matrix<T>(0, outerTrainX.Columns),
-                YTest = new Vector<T>(0)
+                XValidation = emptyXVal,
+                YValidation = emptyYVal,
+                XTest = emptyXVal,
+                YTest = emptyYVal
             };
 
             var optimizationResult = optimizer.Optimize(optimizationInput);
@@ -152,23 +156,31 @@ public class NestedCrossValidator<T> : CrossValidatorBase<T>
                 bestModel.SetParameters(optimizationResult.BestSolution.GetParameters());
             }
 
-            var validationIndices = GetValidationIndices(X, outerFoldResult.ActualValues, y);
-            var validationPredictions = bestModel.Predict(X.Submatrix(validationIndices));
+            var validationIndices = GetValidationIndices(X, validationActualVector, y);
+            var outerValidationX = InputHelper<T, TInput>.GetBatch(X, validationIndices);
+            var validationPredictions = bestModel.Predict(outerValidationX);
 
             // Get feature importance from the best model
             var featureImportance = bestModel.GetModelMetadata().FeatureImportance;
 
+            // Convert predictions to Vector<T> for metrics calculation
+            var trainingPredictionsVector = ConversionsHelper.ConvertToVector<T, TOutput>(bestModel.Predict(outerTrainX));
+            var trainingActualVector = ConversionsHelper.ConvertToVector<T, TOutput>(outerTrainY);
+            var validationPredictionsVector = ConversionsHelper.ConvertToVector<T, TOutput>(validationPredictions);
+
+            var featureCount = InputHelper<T, TInput>.GetInputSize(X);
+
             // Create adjusted fold result
-            var adjustedFoldResult = new FoldResult<T>(
+            var adjustedFoldResult = new FoldResult<T, TInput, TOutput>(
                 outerFoldResult.FoldIndex,
-                outerTrainY,
-                bestModel.Predict(outerTrainX),
-                outerFoldResult.ActualValues,
-                validationPredictions,
+                trainingActualVector,
+                trainingPredictionsVector,
+                validationActualVector,
+                validationPredictionsVector,
                 featureImportance,
                 outerFoldResult.TrainingTime + innerResult.TotalTime,
                 outerFoldResult.EvaluationTime,
-                X.Columns,
+                featureCount,
                 bestModel  // Pass the trained model for this fold
             );
 
@@ -176,60 +188,63 @@ public class NestedCrossValidator<T> : CrossValidatorBase<T>
         }
 
         totalTimer.Stop();
-        return new CrossValidationResult<T>(nestedResults, totalTimer.Elapsed);
+        return new CrossValidationResult<T, TInput, TOutput>(nestedResults, totalTimer.Elapsed);
     }
 
     /// <summary>
     /// Gets the indices of the training set based on the validation set.
     /// </summary>
-    /// <param name="X">The feature matrix containing the input data.</param>
+    /// <param name="X">The input data.</param>
     /// <param name="validationSet">The validation set vector.</param>
-    /// <param name="y">The target vector containing the output data.</param>
+    /// <param name="y">The target data.</param>
     /// <returns>An array of indices representing the training set.</returns>
     /// <remarks>
     /// <para>
     /// This method determines the training set indices by excluding the validation set indices from the full dataset.
     /// </para>
     /// <para><b>For Beginners:</b> This method figures out which data points should be used for training.
-    /// 
+    ///
     /// What it does:
     /// - Looks at all the data points
     /// - Removes the ones that are used for validation
     /// - Returns the remaining ones, which will be used for training
-    /// 
-    /// It's like separating your study materials into what you'll use for practice (training) 
+    ///
+    /// It's like separating your study materials into what you'll use for practice (training)
     /// and what you'll use for the final test (validation).
     /// </para>
     /// </remarks>
-    private int[] GetTrainingIndices(Matrix<T> X, Vector<T> validationSet, Vector<T> y)
+    private int[] GetTrainingIndices(TInput X, Vector<T> validationSet, TOutput y)
     {
-        return [.. Enumerable.Range(0, X.Rows).Except(GetValidationIndices(X, validationSet, y))];
+        var batchSize = InputHelper<T, TInput>.GetBatchSize(X);
+        return [.. Enumerable.Range(0, batchSize).Except(GetValidationIndices(X, validationSet, y))];
     }
 
     /// <summary>
     /// Gets the indices of the validation set.
     /// </summary>
-    /// <param name="X">The feature matrix containing the input data.</param>
+    /// <param name="X">The input data.</param>
     /// <param name="validationSet">The validation set vector.</param>
-    /// <param name="y">The target vector containing the output data.</param>
+    /// <param name="y">The target data.</param>
     /// <returns>An array of indices representing the validation set.</returns>
     /// <remarks>
     /// <para>
     /// This method determines the validation set indices by finding which elements of y are present in the validationSet.
     /// </para>
     /// <para><b>For Beginners:</b> This method identifies which data points should be used for validation.
-    /// 
+    ///
     /// What it does:
     /// - Looks at all the data points
     /// - Checks which ones match the values in the validation set
     /// - Returns the indices of those matching points
-    /// 
-    /// It's like picking out specific questions from your study materials to use as a practice test, 
+    ///
+    /// It's like picking out specific questions from your study materials to use as a practice test,
     /// helping you gauge how well you've learned the material.
     /// </para>
     /// </remarks>
-    private int[] GetValidationIndices(Matrix<T> X, Vector<T> validationSet, Vector<T> y)
+    private int[] GetValidationIndices(TInput X, Vector<T> validationSet, TOutput y)
     {
-        return [.. Enumerable.Range(0, X.Rows).Where(i => validationSet.Contains(y[i]))];
+        var batchSize = InputHelper<T, TInput>.GetBatchSize(X);
+        var yVector = ConversionsHelper.ConvertToVector<T, TOutput>(y);
+        return [.. Enumerable.Range(0, batchSize).Where(i => validationSet.Contains(yVector[i]))];
     }
 }

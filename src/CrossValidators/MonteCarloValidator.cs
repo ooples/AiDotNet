@@ -4,12 +4,14 @@ namespace AiDotNet.CrossValidators;
 /// Implements a Monte Carlo cross-validation strategy for model evaluation.
 /// </summary>
 /// <typeparam name="T">The numeric type used for calculations (e.g., float, double, decimal).</typeparam>
+/// <typeparam name="TInput">The type of input data (e.g., Matrix&lt;T&gt; for tabular data, Tensor&lt;T&gt; for images).</typeparam>
+/// <typeparam name="TOutput">The type of output data (e.g., Vector&lt;T&gt; for predictions, custom types for other formats).</typeparam>
 /// <remarks>
 /// <para>
 /// This class provides a Monte Carlo cross-validation implementation, which randomly splits the data into training and validation sets multiple times.
 /// </para>
 /// <para><b>For Beginners:</b> Monte Carlo cross-validation is like repeatedly shuffling and splitting your data to test your model.
-/// 
+///
 /// What this class does:
 /// - Randomly splits your data into training and validation sets
 /// - Repeats this process multiple times (as specified in the options)
@@ -17,16 +19,16 @@ namespace AiDotNet.CrossValidators;
 ///   - Trains the model on the training set
 ///   - Evaluates the model on the validation set
 /// - Calculates how well your model performs on average across all splits
-/// 
+///
 /// This is useful because:
 /// - It provides a robust estimate of model performance
 /// - It helps to reduce the impact of how the data is split on the results
 /// - It can be more flexible than k-fold cross-validation for certain types of data
-/// 
+///
 /// However, it can be computationally expensive for a large number of iterations.
 /// </para>
 /// </remarks>
-public class MonteCarloValidator<T> : CrossValidatorBase<T>
+public class MonteCarloValidator<T, TInput, TOutput> : CrossValidatorBase<T, TInput, TOutput>
 {
     /// <summary>
     /// Initializes a new instance of the MonteCarloValidator class.
@@ -81,8 +83,8 @@ public class MonteCarloValidator<T> : CrossValidatorBase<T>
     /// and then giving you a report card that shows how well it performed overall.
     /// </para>
     /// </remarks>
-    public override CrossValidationResult<T> Validate(IFullModel<T, Matrix<T>, Vector<T>> model, Matrix<T> X, Vector<T> y,
-        IOptimizer<T, Matrix<T>, Vector<T>> optimizer)
+    public override CrossValidationResult<T, TInput, TOutput> Validate(IFullModel<T, TInput, TOutput> model, TInput X, TOutput y,
+        IOptimizer<T, TInput, TOutput> optimizer)
     {
         var folds = CreateFolds(X, y);
         return PerformCrossValidation(model, X, y, folds, optimizer);
@@ -108,13 +110,13 @@ public class MonteCarloValidator<T> : CrossValidatorBase<T>
     ///   - Uses the remaining data points for training
     /// - Returns these splits so the main method can use them
     /// 
-    /// It's like shuffling a deck of cards and dealing them into two piles (training and validation) 
+    /// It's like shuffling a deck of cards and dealing them into two piles (training and validation)
     /// multiple times, with each deal creating a new test scenario for your model.
     /// </para>
     /// </remarks>
-    private IEnumerable<(int[] trainIndices, int[] validationIndices)> CreateFolds(Matrix<T> X, Vector<T> y)
+    private IEnumerable<(int[] trainIndices, int[] validationIndices)> CreateFolds(TInput X, TOutput y)
     {
-        int totalSamples = X.Rows;
+        int totalSamples = InputHelper<T, TInput>.GetBatchSize(X);
         int validationSize = (int)(totalSamples * Options.ValidationSize);
 
         for (int i = 0; i < Options.NumberOfFolds; i++)

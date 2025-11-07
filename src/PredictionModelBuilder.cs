@@ -46,6 +46,8 @@ public class PredictionModelBuilder<T, TInput, TOutput> : IPredictionModelBuilde
     private IGenerator<T>? _ragGenerator;
     private IEnumerable<IQueryProcessor>? _queryProcessors;
     private IMetaLearner<T, TInput, TOutput>? _metaLearner;
+    private IModelEvaluator<T, TInput, TOutput>? _modelEvaluator;
+    private ICrossValidator<T, TInput, TOutput>? _crossValidator;
 
     /// <summary>
     /// Configures which features (input variables) should be used in the model.
@@ -272,9 +274,26 @@ public class PredictionModelBuilder<T, TInput, TOutput> : IPredictionModelBuilde
         // Split the data
         var (XTrain, yTrain, XVal, yVal, XTest, yTest) = dataPreprocessor.SplitData(preprocessedX, preprocessedY);
 
-        // Optimize the model
+        // Perform cross-validation on training data BEFORE final model training (if configured)
+        // This follows industry standard patterns from H2O and caret where CV is integrated into model building
+        CrossValidationResult<T, TInput, TOutput>? cvResults = null;
+        if (_crossValidator != null && _modelEvaluator != null)
+        {
+            // Cross-validation uses only the training data to prevent data leakage
+            // It trains multiple models on different folds to assess generalization
+            cvResults = _modelEvaluator.PerformCrossValidation(
+                model: _model,
+                X: XTrain,
+                y: yTrain,
+                optimizer: optimizer,
+                crossValidator: _crossValidator
+            );
+        }
+
+        // Optimize the final model on the full training set
         var optimizationResult = optimizer.Optimize(OptimizerHelper<T, TInput, TOutput>.CreateOptimizationInputData(XTrain, yTrain, XVal, yVal, XTest, yTest));
 
+        // Return PredictionModelResult with CV results passed through constructor for immutability
         return new PredictionModelResult<T, TInput, TOutput>(
             optimizationResult,
             normInfo,
@@ -284,7 +303,8 @@ public class PredictionModelBuilder<T, TInput, TOutput> : IPredictionModelBuilde
             _ragReranker,
             _ragGenerator,
             _queryProcessors,
-            _loraConfiguration);
+            _loraConfiguration,
+            cvResults);
     }
 
     /// <summary>
@@ -458,6 +478,41 @@ public class PredictionModelBuilder<T, TInput, TOutput> : IPredictionModelBuilde
         _ragReranker = reranker;
         _ragGenerator = generator;
         _queryProcessors = queryProcessors;
+        return this;
+    }
+
+    /// <summary>
+    /// Configures the model evaluator component for comprehensive model evaluation and cross-validation.
+    /// </summary>
+    /// <param name="evaluator">The model evaluator implementation to use.</param>
+    /// <returns>This builder instance for method chaining.</returns>
+    /// <remarks>
+    /// <b>For Beginners:</b> The model evaluator helps you understand how well your model performs.
+    /// If you configure both a model evaluator and cross-validator (via ConfigureCrossValidation),
+    /// cross-validation will automatically run during Build() on your training data, and the results
+    /// will be included in your trained model.
+    /// </remarks>
+    public IPredictionModelBuilder<T, TInput, TOutput> ConfigureModelEvaluator(IModelEvaluator<T, TInput, TOutput> evaluator)
+    {
+        _modelEvaluator = evaluator;
+        return this;
+    }
+
+    /// <summary>
+    /// Configures the cross-validation strategy for automatic model evaluation during training.
+    /// </summary>
+    /// <param name="crossValidator">The cross-validation strategy to use.</param>
+    /// <returns>This builder instance for method chaining.</returns>
+    /// <remarks>
+    /// <b>For Beginners:</b> Cross-validation tests how well your model will perform on new data
+    /// by training and testing it multiple times on different subsets of your training data.
+    /// If you configure both a cross-validator and model evaluator (via ConfigureModelEvaluator),
+    /// cross-validation will automatically run during Build() and the results will be included
+    /// in your trained model.
+    /// </remarks>
+    public IPredictionModelBuilder<T, TInput, TOutput> ConfigureCrossValidation(ICrossValidator<T, TInput, TOutput> crossValidator)
+    {
+        _crossValidator = crossValidator;
         return this;
     }
 

@@ -259,7 +259,7 @@ public class PredictionModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
     /// </code>
     /// </para>
     /// </remarks>
-    public CrossValidationResult<T>? CrossValidationResult { get; internal set; }
+    public CrossValidationResult<T, TInput, TOutput>? CrossValidationResult { get; internal set; }
 
     /// <summary>
     /// Gets or sets the LoRA configuration for parameter-efficient fine-tuning.
@@ -327,6 +327,7 @@ public class PredictionModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
     /// <param name="ragGenerator">Optional generator for RAG functionality during inference.</param>
     /// <param name="queryProcessors">Optional query processors for RAG query preprocessing.</param>
     /// <param name="loraConfiguration">Optional LoRA configuration for parameter-efficient fine-tuning.</param>
+    /// <param name="crossValidationResult">Optional cross-validation results from training.</param>
     public PredictionModelResult(OptimizationResult<T, TInput, TOutput> optimizationResult,
         NormalizationInfo<T, TInput, TOutput> normalizationInfo,
         IBiasDetector<T>? biasDetector = null,
@@ -335,7 +336,8 @@ public class PredictionModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
         IReranker<T>? ragReranker = null,
         IGenerator<T>? ragGenerator = null,
         IEnumerable<IQueryProcessor>? queryProcessors = null,
-        ILoRAConfiguration<T>? loraConfiguration = null)
+        ILoRAConfiguration<T>? loraConfiguration = null,
+        CrossValidationResult<T, TInput, TOutput>? crossValidationResult = null)
     {
         Model = optimizationResult.BestSolution;
         OptimizationResult = optimizationResult;
@@ -348,6 +350,7 @@ public class PredictionModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
         RagGenerator = ragGenerator;
         QueryProcessors = queryProcessors;
         LoRAConfiguration = loraConfiguration;
+        CrossValidationResult = crossValidationResult;
     }
 
     /// <summary>

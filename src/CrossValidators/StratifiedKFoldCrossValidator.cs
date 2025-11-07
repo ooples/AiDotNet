@@ -4,6 +4,9 @@ namespace AiDotNet.CrossValidators;
 /// Implements a stratified k-fold cross-validation strategy for model evaluation.
 /// </summary>
 /// <typeparam name="T">The numeric type used for calculations (e.g., float, double, decimal).</typeparam>
+/// <typeparam name="TInput">The type of input data (e.g., Matrix&lt;T&gt; for tabular data, Tensor&lt;T&gt; for images).</typeparam>
+/// <typeparam name="TOutput">The type of output data (e.g., Vector&lt;T&gt; for predictions, custom types for other formats).</typeparam>
+/// <typeparam name="TMetadata">The type of class labels or metadata used for stratification.</typeparam>
 /// <remarks>
 /// <para>
 /// This class provides a stratified k-fold cross-validation implementation, where the data is split into k folds
@@ -11,19 +14,19 @@ namespace AiDotNet.CrossValidators;
 /// </para>
 /// <para><b>For Beginners:</b> Stratified k-fold cross-validation is like k-fold, but it ensures that each fold
 /// has roughly the same proportion of different types of data as the whole dataset.
-/// 
+///
 /// What this class does:
 /// - Splits your data into k parts (folds), maintaining the balance of different classes in each fold
 /// - Uses each part once for testing and the rest for training
 /// - Repeats this process k times, so each part gets a chance to be the test set
 /// - Calculates how well your model performs on average across all these tests
-/// 
+///
 /// This is particularly useful when:
 /// - Your data has imbalanced classes (some types of data are much more common than others)
 /// - You want to ensure each fold is representative of the overall dataset
 /// </para>
 /// </remarks>
-public class StratifiedKFoldCrossValidator<T, TInput, TOutput, TMetadata> : CrossValidatorBase<T>
+public class StratifiedKFoldCrossValidator<T, TInput, TOutput, TMetadata> : CrossValidatorBase<T, TInput, TOutput>
 {
     /// <summary>
     /// Initializes a new instance of the StratifiedKFoldCrossValidator class.
@@ -76,8 +79,8 @@ public class StratifiedKFoldCrossValidator<T, TInput, TOutput, TMetadata> : Cros
     /// and then giving you a report card that shows how well it performed overall.
     /// </para>
     /// </remarks>
-    public override CrossValidationResult<T> Validate(IFullModel<T, Matrix<T>, Vector<T>> model, Matrix<T> X, Vector<T> y,
-        IOptimizer<T, Matrix<T>, Vector<T>> optimizer)
+    public override CrossValidationResult<T, TInput, TOutput> Validate(IFullModel<T, TInput, TOutput> model, TInput X, TOutput y,
+        IOptimizer<T, TInput, TOutput> optimizer)
     {
         var folds = CreateFolds(X, y);
         return PerformCrossValidation(model, X, y, folds, optimizer);
@@ -109,15 +112,16 @@ public class StratifiedKFoldCrossValidator<T, TInput, TOutput, TMetadata> : Cros
     /// It's like dealing a deck of cards into k piles, but making sure each pile has the same proportion of each suit as the whole deck.
     /// </para>
     /// </remarks>
-    private IEnumerable<(int[] trainIndices, int[] validationIndices)> CreateFolds(Matrix<T> X, Vector<T> y)
+    private IEnumerable<(int[] trainIndices, int[] validationIndices)> CreateFolds(TInput X, TOutput y)
     {
-        var classes = y.Distinct().Where(c => c != null).ToArray();
+        var yVector = ConversionsHelper.ConvertToVector<T, TOutput>(y);
+        var classes = yVector.Distinct().Where(c => c != null).ToArray();
         var classIndices = new Dictionary<int, List<int>>();
 
         for (int classIndex = 0; classIndex < classes.Length; classIndex++)
         {
             var currentClass = classes[classIndex];
-            classIndices[classIndex] = [.. y.Select((v, i) => (v, i))
+            classIndices[classIndex] = [.. yVector.Select((v, i) => (v, i))
                                          .Where(vi => vi.v != null && vi.v.Equals(currentClass))
                                          .Select(vi => vi.i)];
         }
