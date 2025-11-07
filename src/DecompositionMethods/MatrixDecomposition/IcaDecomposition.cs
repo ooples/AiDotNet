@@ -24,7 +24,7 @@ namespace AiDotNet.DecompositionMethods.MatrixDecomposition;
 /// - Telecommunications signal processing
 /// </para>
 /// </remarks>
-public class IcaDecomposition<T> : IMatrixDecomposition<T>
+public class IcaDecomposition<T> : MatrixDecompositionBase<T>
 {
     /// <summary>
     /// Gets the unmixing matrix (separation matrix).
@@ -74,11 +74,6 @@ public class IcaDecomposition<T> : IMatrixDecomposition<T>
     public Matrix<T> IndependentComponents { get; private set; }
 
     /// <summary>
-    /// Gets the original matrix that was decomposed.
-    /// </summary>
-    public Matrix<T> A { get; private set; }
-
-    /// <summary>
     /// Gets the mean vector used for centering the data.
     /// </summary>
     public Vector<T> Mean { get; private set; }
@@ -88,7 +83,9 @@ public class IcaDecomposition<T> : IMatrixDecomposition<T>
     /// </summary>
     public Matrix<T> WhiteningMatrix { get; private set; }
 
-    private readonly INumericOperations<T> _numOps;
+    private readonly int _numComponents;
+    private readonly int _maxIterations;
+    private readonly double _tolerance;
 
     /// <summary>
     /// Initializes a new instance of the ICA decomposition for the specified matrix.
@@ -110,20 +107,27 @@ public class IcaDecomposition<T> : IMatrixDecomposition<T>
     /// </para>
     /// </remarks>
     public IcaDecomposition(Matrix<T> matrix, int? components = null, int maxIterations = 200, double tolerance = 1e-4)
+        : base(matrix)
     {
-        _numOps = MathHelper.GetNumericOperations<T>();
-        A = matrix;
+        _numComponents = components ?? Math.Min(matrix.Rows, matrix.Columns);
 
-        int n = components ?? Math.Min(matrix.Rows, matrix.Columns);
-
-        if (n <= 0 || n > Math.Min(matrix.Rows, matrix.Columns))
+        if (_numComponents <= 0 || _numComponents > Math.Min(matrix.Rows, matrix.Columns))
         {
             throw new ArgumentException($"Number of components must be between 1 and {Math.Min(matrix.Rows, matrix.Columns)}.");
         }
 
+        _maxIterations = maxIterations;
+        _tolerance = tolerance;
+    }
+
+    /// <summary>
+    /// Performs the ICA decomposition.
+    /// </summary>
+    protected override void Decompose()
+    {
         // Perform ICA decomposition
         (UnmixingMatrix, MixingMatrix, IndependentComponents, Mean, WhiteningMatrix) =
-            ComputeFastIca(matrix, n, maxIterations, tolerance);
+            ComputeFastIca(A, _numComponents, _maxIterations, _tolerance);
     }
 
     /// <summary>
@@ -188,16 +192,16 @@ public class IcaDecomposition<T> : IMatrixDecomposition<T>
         int n = X.Columns;
         int m = X.Rows;
         Vector<T> mean = new Vector<T>(n);
-        T invM = _numOps.FromDouble(1.0 / m);
+        T invM = NumOps.FromDouble(1.0 / m);
 
         for (int j = 0; j < n; j++)
         {
-            T sum = _numOps.Zero;
+            T sum = NumOps.Zero;
             for (int i = 0; i < m; i++)
             {
-                sum = _numOps.Add(sum, X[i, j]);
+                sum = NumOps.Add(sum, X[i, j]);
             }
-            mean[j] = _numOps.Multiply(sum, invM);
+            mean[j] = NumOps.Multiply(sum, invM);
         }
 
         return mean;
@@ -219,7 +223,7 @@ public class IcaDecomposition<T> : IMatrixDecomposition<T>
         {
             for (int j = 0; j < n; j++)
             {
-                centered[i, j] = _numOps.Subtract(X[i, j], mean[j]);
+                centered[i, j] = NumOps.Subtract(X[i, j], mean[j]);
             }
         }
 
@@ -250,13 +254,13 @@ public class IcaDecomposition<T> : IMatrixDecomposition<T>
         // Compute covariance matrix C = (1/m) × X^T × X
         Matrix<T> XT = X.Transpose();
         Matrix<T> C = XT.Multiply(X);
-        T scale = _numOps.FromDouble(1.0 / m);
+        T scale = NumOps.FromDouble(1.0 / m);
 
         for (int i = 0; i < C.Rows; i++)
         {
             for (int j = 0; j < C.Columns; j++)
             {
-                C[i, j] = _numOps.Multiply(C[i, j], scale);
+                C[i, j] = NumOps.Multiply(C[i, j], scale);
             }
         }
 
@@ -280,10 +284,10 @@ public class IcaDecomposition<T> : IMatrixDecomposition<T>
         Matrix<T> K = new Matrix<T>(numComponents, C.Rows);
         for (int i = 0; i < numComponents; i++)
         {
-            T invSqrtEigenvalue = _numOps.Divide(_numOps.One, _numOps.Sqrt(D[i]));
+            T invSqrtEigenvalue = NumOps.Divide(NumOps.One, NumOps.Sqrt(D[i]));
             for (int j = 0; j < C.Rows; j++)
             {
-                K[i, j] = _numOps.Multiply(E[i, j], invSqrtEigenvalue);
+                K[i, j] = NumOps.Multiply(E[i, j], invSqrtEigenvalue);
             }
         }
 
@@ -313,14 +317,14 @@ public class IcaDecomposition<T> : IMatrixDecomposition<T>
         {
             for (int j = 0; j < n; j++)
             {
-                W[i, j] = _numOps.FromDouble(random.NextDouble() * 2 - 1);
+                W[i, j] = NumOps.FromDouble(random.NextDouble() * 2 - 1);
             }
         }
 
         // Orthogonalize initial W
         W = GramSchmidtOrthogonalization(W);
 
-        T toleranceT = _numOps.FromDouble(tolerance);
+        T toleranceT = NumOps.FromDouble(tolerance);
 
         // Iterate to find each independent component
         for (int component = 0; component < numComponents; component++)
@@ -334,12 +338,12 @@ public class IcaDecomposition<T> : IMatrixDecomposition<T>
                 // Compute w = E{x × g(w^T × x)} - E{g'(w^T × x)} × w
                 // where g(u) = tanh(u) is the non-linearity function
                 Vector<T> wNew = new Vector<T>(n);
-                T invM = _numOps.FromDouble(1.0 / m);
+                T invM = NumOps.FromDouble(1.0 / m);
 
                 for (int j = 0; j < n; j++)
                 {
-                    T sum1 = _numOps.Zero;
-                    T sum2 = _numOps.Zero;
+                    T sum1 = NumOps.Zero;
+                    T sum2 = NumOps.Zero;
 
                     for (int i = 0; i < m; i++)
                     {
@@ -349,15 +353,15 @@ public class IcaDecomposition<T> : IMatrixDecomposition<T>
                         // g(u) = tanh(u)
                         T g = Tanh(wtx);
                         // g'(u) = 1 - tanh²(u)
-                        T gPrime = _numOps.Subtract(_numOps.One, _numOps.Multiply(g, g));
+                        T gPrime = NumOps.Subtract(NumOps.One, NumOps.Multiply(g, g));
 
-                        sum1 = _numOps.Add(sum1, _numOps.Multiply(x[j], g));
-                        sum2 = _numOps.Add(sum2, gPrime);
+                        sum1 = NumOps.Add(sum1, NumOps.Multiply(x[j], g));
+                        sum2 = NumOps.Add(sum2, gPrime);
                     }
 
-                    T avg1 = _numOps.Multiply(sum1, invM);
-                    T avg2 = _numOps.Multiply(sum2, invM);
-                    wNew[j] = _numOps.Subtract(avg1, _numOps.Multiply(avg2, w[j]));
+                    T avg1 = NumOps.Multiply(sum1, invM);
+                    T avg2 = NumOps.Multiply(sum2, invM);
+                    wNew[j] = NumOps.Subtract(avg1, NumOps.Multiply(avg2, w[j]));
                 }
 
                 w = wNew;
@@ -372,14 +376,14 @@ public class IcaDecomposition<T> : IMatrixDecomposition<T>
 
                 // Normalize w
                 T norm = w.Norm();
-                if (!_numOps.Equals(norm, _numOps.Zero))
+                if (!NumOps.Equals(norm, NumOps.Zero))
                 {
                     w = w.Divide(norm);
                 }
 
                 // Check for convergence
-                T distance = _numOps.Abs(_numOps.Subtract(_numOps.Abs(w.DotProduct(wOld)), _numOps.One));
-                if (_numOps.LessThan(distance, toleranceT))
+                T distance = NumOps.Abs(NumOps.Subtract(NumOps.Abs(w.DotProduct(wOld)), NumOps.One));
+                if (NumOps.LessThan(distance, toleranceT))
                 {
                     break;
                 }
@@ -404,7 +408,7 @@ public class IcaDecomposition<T> : IMatrixDecomposition<T>
     {
         double xd = Convert.ToDouble(x);
         double result = Math.Tanh(xd);
-        return _numOps.FromDouble(result);
+        return NumOps.FromDouble(result);
     }
 
     /// <summary>
@@ -432,7 +436,7 @@ public class IcaDecomposition<T> : IMatrixDecomposition<T>
 
             // Normalize
             T norm = v.Norm();
-            if (!_numOps.Equals(norm, _numOps.Zero))
+            if (!NumOps.Equals(norm, NumOps.Zero))
             {
                 v = v.Divide(norm);
             }
@@ -476,7 +480,7 @@ public class IcaDecomposition<T> : IMatrixDecomposition<T>
     /// purpose, such as LU or QR decomposition.
     /// </para>
     /// </remarks>
-    public Vector<T> Solve(Vector<T> b)
+    public override Vector<T> Solve(Vector<T> b)
     {
         // Use the mixing matrix to solve: A × x = b
         // We approximate: x ≈ unmixing_matrix × whitening_matrix^T × (b - mean)
@@ -485,7 +489,7 @@ public class IcaDecomposition<T> : IMatrixDecomposition<T>
         Vector<T> bCentered = new Vector<T>(b.Length);
         for (int i = 0; i < b.Length && i < Mean.Length; i++)
         {
-            bCentered[i] = _numOps.Subtract(b[i], Mean[i]);
+            bCentered[i] = NumOps.Subtract(b[i], Mean[i]);
         }
 
         // Apply whitening and unmixing
@@ -509,7 +513,7 @@ public class IcaDecomposition<T> : IMatrixDecomposition<T>
     /// For accurate matrix inversion, use decomposition methods like LU or SVD.
     /// </para>
     /// </remarks>
-    public Matrix<T> Invert()
+    public override Matrix<T> Invert()
     {
         // Return the mixing matrix as an approximation of the inverse
         return MixingMatrix;

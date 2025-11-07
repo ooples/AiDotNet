@@ -24,7 +24,7 @@ namespace AiDotNet.DecompositionMethods.MatrixDecomposition;
 /// - Bioinformatics data analysis
 /// </para>
 /// </remarks>
-public class NmfDecomposition<T> : IMatrixDecomposition<T>
+public class NmfDecomposition<T> : MatrixDecompositionBase<T>
 {
     /// <summary>
     /// Gets the basis matrix W (features/components).
@@ -63,16 +63,12 @@ public class NmfDecomposition<T> : IMatrixDecomposition<T>
     public Matrix<T> H { get; private set; }
 
     /// <summary>
-    /// Gets the original matrix that was decomposed.
-    /// </summary>
-    public Matrix<T> A { get; private set; }
-
-    /// <summary>
     /// Gets the number of components (features) used in the factorization.
     /// </summary>
     public int Components { get; private set; }
 
-    private readonly INumericOperations<T> _numOps;
+    private readonly int _maxIterations;
+    private readonly double _tolerance;
 
     /// <summary>
     /// Initializes a new instance of the NMF decomposition for the specified matrix.
@@ -91,21 +87,10 @@ public class NmfDecomposition<T> : IMatrixDecomposition<T>
     /// </para>
     /// </remarks>
     public NmfDecomposition(Matrix<T> matrix, int? components = null, int maxIterations = 200, double tolerance = 1e-4)
+        : base(matrix)
     {
-        _numOps = MathHelper.GetNumericOperations<T>();
-        A = matrix;
-
         // Validate that all elements are non-negative
-        for (int i = 0; i < matrix.Rows; i++)
-        {
-            for (int j = 0; j < matrix.Columns; j++)
-            {
-                if (_numOps.LessThan(matrix[i, j], _numOps.Zero))
-                {
-                    throw new ArgumentException($"NMF requires all matrix elements to be non-negative. Found negative value at position ({i}, {j}).");
-                }
-            }
-        }
+        ValidateMatrix(matrix, requireNonNegative: true);
 
         Components = components ?? Math.Min(matrix.Rows, matrix.Columns) / 2;
 
@@ -114,7 +99,16 @@ public class NmfDecomposition<T> : IMatrixDecomposition<T>
             throw new ArgumentException($"Number of components must be between 1 and {Math.Min(matrix.Rows, matrix.Columns)}.");
         }
 
-        (W, H) = ComputeNmf(matrix, Components, maxIterations, tolerance);
+        _maxIterations = maxIterations;
+        _tolerance = tolerance;
+    }
+
+    /// <summary>
+    /// Performs the NMF decomposition.
+    /// </summary>
+    protected override void Decompose()
+    {
+        (W, H) = ComputeNmf(A, Components, _maxIterations, _tolerance);
     }
 
     /// <summary>
@@ -148,9 +142,9 @@ public class NmfDecomposition<T> : IMatrixDecomposition<T>
         Matrix<T> W = InitializeRandomMatrix(m, k);
         Matrix<T> H = InitializeRandomMatrix(k, n);
 
-        T previousError = _numOps.FromDouble(double.MaxValue);
-        T toleranceT = _numOps.FromDouble(tolerance);
-        T epsilon = _numOps.FromDouble(1e-10); // Small value to prevent division by zero
+        T previousError = NumOps.FromDouble(double.MaxValue);
+        T toleranceT = NumOps.FromDouble(tolerance);
+        T epsilon = NumOps.FromDouble(1e-10); // Small value to prevent division by zero
 
         for (int iteration = 0; iteration < maxIterations; iteration++)
         {
@@ -165,9 +159,9 @@ public class NmfDecomposition<T> : IMatrixDecomposition<T>
                 for (int j = 0; j < n; j++)
                 {
                     T numerator = WTV[i, j];
-                    T denominator = _numOps.Add(WTWH[i, j], epsilon);
-                    T ratio = _numOps.Divide(numerator, denominator);
-                    H[i, j] = _numOps.Multiply(H[i, j], ratio);
+                    T denominator = NumOps.Add(WTWH[i, j], epsilon);
+                    T ratio = NumOps.Divide(numerator, denominator);
+                    H[i, j] = NumOps.Multiply(H[i, j], ratio);
                 }
             }
 
@@ -182,9 +176,9 @@ public class NmfDecomposition<T> : IMatrixDecomposition<T>
                 for (int j = 0; j < k; j++)
                 {
                     T numerator = VHT[i, j];
-                    T denominator = _numOps.Add(WHHT[i, j], epsilon);
-                    T ratio = _numOps.Divide(numerator, denominator);
-                    W[i, j] = _numOps.Multiply(W[i, j], ratio);
+                    T denominator = NumOps.Add(WHHT[i, j], epsilon);
+                    T ratio = NumOps.Divide(numerator, denominator);
+                    W[i, j] = NumOps.Multiply(W[i, j], ratio);
                 }
             }
 
@@ -192,9 +186,9 @@ public class NmfDecomposition<T> : IMatrixDecomposition<T>
             if (iteration % 10 == 0)
             {
                 T error = ComputeReconstructionError(V, W, H);
-                T errorChange = _numOps.Abs(_numOps.Subtract(previousError, error));
+                T errorChange = NumOps.Abs(NumOps.Subtract(previousError, error));
 
-                if (_numOps.LessThan(errorChange, toleranceT))
+                if (NumOps.LessThan(errorChange, toleranceT))
                 {
                     break;
                 }
@@ -222,7 +216,7 @@ public class NmfDecomposition<T> : IMatrixDecomposition<T>
             for (int j = 0; j < cols; j++)
             {
                 // Initialize with small random positive values between 0 and 1
-                matrix[i, j] = _numOps.FromDouble(random.NextDouble());
+                matrix[i, j] = NumOps.FromDouble(random.NextDouble());
             }
         }
 
@@ -246,18 +240,18 @@ public class NmfDecomposition<T> : IMatrixDecomposition<T>
     private T ComputeReconstructionError(Matrix<T> V, Matrix<T> W, Matrix<T> H)
     {
         Matrix<T> WH = W.Multiply(H);
-        T sumSquaredError = _numOps.Zero;
+        T sumSquaredError = NumOps.Zero;
 
         for (int i = 0; i < V.Rows; i++)
         {
             for (int j = 0; j < V.Columns; j++)
             {
-                T diff = _numOps.Subtract(V[i, j], WH[i, j]);
-                sumSquaredError = _numOps.Add(sumSquaredError, _numOps.Multiply(diff, diff));
+                T diff = NumOps.Subtract(V[i, j], WH[i, j]);
+                sumSquaredError = NumOps.Add(sumSquaredError, NumOps.Multiply(diff, diff));
             }
         }
 
-        return _numOps.Sqrt(sumSquaredError);
+        return NumOps.Sqrt(sumSquaredError);
     }
 
     /// <summary>
@@ -277,7 +271,7 @@ public class NmfDecomposition<T> : IMatrixDecomposition<T>
     /// For exact solutions, consider using other decomposition methods like LU or QR.
     /// </para>
     /// </remarks>
-    public Vector<T> Solve(Vector<T> b)
+    public override Vector<T> Solve(Vector<T> b)
     {
         // Since A ≈ W × H, we solve W × H × x = b
         // First solve W × y = b for y using least squares
@@ -329,7 +323,7 @@ public class NmfDecomposition<T> : IMatrixDecomposition<T>
             int maxRow = k;
             for (int i = k + 1; i < n; i++)
             {
-                if (_numOps.GreaterThan(_numOps.Abs(augmented[i, k]), _numOps.Abs(augmented[maxRow, k])))
+                if (NumOps.GreaterThan(NumOps.Abs(augmented[i, k]), NumOps.Abs(augmented[maxRow, k])))
                 {
                     maxRow = i;
                 }
@@ -349,12 +343,12 @@ public class NmfDecomposition<T> : IMatrixDecomposition<T>
             // Eliminate column
             for (int i = k + 1; i < n; i++)
             {
-                if (!_numOps.Equals(augmented[k, k], _numOps.Zero))
+                if (!NumOps.Equals(augmented[k, k], NumOps.Zero))
                 {
-                    T factor = _numOps.Divide(augmented[i, k], augmented[k, k]);
+                    T factor = NumOps.Divide(augmented[i, k], augmented[k, k]);
                     for (int j = k; j <= n; j++)
                     {
-                        augmented[i, j] = _numOps.Subtract(augmented[i, j], _numOps.Multiply(factor, augmented[k, j]));
+                        augmented[i, j] = NumOps.Subtract(augmented[i, j], NumOps.Multiply(factor, augmented[k, j]));
                     }
                 }
             }
@@ -364,19 +358,19 @@ public class NmfDecomposition<T> : IMatrixDecomposition<T>
         Vector<T> x = new Vector<T>(n);
         for (int i = n - 1; i >= 0; i--)
         {
-            T sum = _numOps.Zero;
+            T sum = NumOps.Zero;
             for (int j = i + 1; j < n; j++)
             {
-                sum = _numOps.Add(sum, _numOps.Multiply(augmented[i, j], x[j]));
+                sum = NumOps.Add(sum, NumOps.Multiply(augmented[i, j], x[j]));
             }
 
-            if (!_numOps.Equals(augmented[i, i], _numOps.Zero))
+            if (!NumOps.Equals(augmented[i, i], NumOps.Zero))
             {
-                x[i] = _numOps.Divide(_numOps.Subtract(augmented[i, n], sum), augmented[i, i]);
+                x[i] = NumOps.Divide(NumOps.Subtract(augmented[i, n], sum), augmented[i, i]);
             }
             else
             {
-                x[i] = _numOps.Zero;
+                x[i] = NumOps.Zero;
             }
         }
 
@@ -398,7 +392,7 @@ public class NmfDecomposition<T> : IMatrixDecomposition<T>
     /// or doesn't have a true inverse.
     /// </para>
     /// </remarks>
-    public Matrix<T> Invert()
+    public override Matrix<T> Invert()
     {
         // A ≈ W × H, so A^+ ≈ H^T × (H × H^T)^(-1) × (W^T × W)^(-1) × W^T
         // This is a simplified pseudo-inverse based on the NMF factorization
