@@ -86,9 +86,17 @@ public class ModelsController : ControllerBase
 
             // Validate and canonicalize the path to prevent directory traversal
             var modelsRoot = Path.GetFullPath(_servingOptions.ModelDirectory);
+
+            // Ensure modelsRoot ends with directory separator for proper boundary checking
+            if (!modelsRoot.EndsWith(Path.DirectorySeparatorChar.ToString()) &&
+                !modelsRoot.EndsWith(Path.AltDirectorySeparatorChar.ToString()))
+            {
+                modelsRoot += Path.DirectorySeparatorChar;
+            }
+
             var candidatePath = Path.GetFullPath(Path.Combine(modelsRoot, request.Path));
 
-            // Ensure the resolved path is within the models directory
+            // Ensure the resolved path is within the models directory (with directory boundary check)
             if (!candidatePath.StartsWith(modelsRoot, StringComparison.OrdinalIgnoreCase))
             {
                 _logger.LogWarning("Attempted path traversal: requested path '{Path}' resolves outside model directory",
