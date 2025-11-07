@@ -111,19 +111,27 @@ public class ModelsController : ControllerBase
                 });
             }
 
-            // Note: In a real implementation, you would deserialize the model from the file here.
-            // For now, we'll return a message indicating this is a placeholder.
-            // The actual model loading logic would depend on the serialization format used.
+            // LoadModel from file requires a model metadata and type registry system.
+            // This is deferred to a future feature that will include:
+            // - Model serialization with type metadata headers
+            // - Model type registry and factory pattern
+            // - License verification for premium models
+            // - Integration with AiDotNet Platform (web-based model creation)
 
-            _logger.LogWarning("Model loading from file is not yet implemented. " +
-                "This is a placeholder endpoint. You need to implement model serialization/deserialization.");
+            _logger.LogWarning("LoadModel endpoint requires model metadata system. " +
+                "This feature is deferred to support the broader AiDotNet Platform integration.");
 
-            return BadRequest(new LoadModelResponse
+            return StatusCode(501, new LoadModelResponse
             {
                 Success = false,
-                Error = "Model loading from file is not yet implemented. " +
-                        "Please use the programmatic API to load models directly, " +
-                        "or implement model serialization in your application."
+                Error = "LoadModel from file is not yet implemented. " +
+                        "This endpoint requires a model metadata and type registry system.\n\n" +
+                        "Current options:\n" +
+                        "1. Use IModelRepository.LoadModel<T>(name, model) programmatically\n" +
+                        "2. Configure StartupModels in appsettings.json\n" +
+                        "3. Track GitHub issues for REST API support roadmap\n\n" +
+                        "For production deployments, see documentation at: " +
+                        "https://github.com/ooples/AiDotNet/wiki"
             });
 
             // TODO: Implement actual model loading logic
