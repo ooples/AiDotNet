@@ -398,7 +398,13 @@ public class MAMLTrainer<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOutpu
 
         // Compute Adam update: θ = θ - α * m̂_t / (√v̂_t + ε)
         Vector<T> vHatSqrt = ElementwiseSqrt(vHat);
-        Vector<T> denominator = vHatSqrt.Add(Vector<T>.Fill(parameters.Length, MAMLConfig.AdamEpsilon));
+        T[] epsilonArray = new T[parameters.Length];
+        for (int i = 0; i < parameters.Length; i++)
+        {
+            epsilonArray[i] = MAMLConfig.AdamEpsilon;
+        }
+        Vector<T> epsilonVector = new Vector<T>(epsilonArray);
+        Vector<T> denominator = vHatSqrt.Add(epsilonVector);
         Vector<T> adamUpdate = ElementwiseDivide(mHat, denominator);
         Vector<T> scaledUpdate = adamUpdate.Multiply(Configuration.MetaLearningRate);
 
