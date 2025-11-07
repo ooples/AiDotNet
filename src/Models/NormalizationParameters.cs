@@ -70,8 +70,10 @@ public class NormalizationParameters<T>
     {
         _numOps = numOps ?? MathHelper.GetNumericOperations<T>();
         Method = NormalizationMethod.None;
-        Min = Max = Mean = StdDev = Scale = Shift = Median = IQR = P = _numOps.Zero;
+        Min = Max = Mean = StdDev = Scale = Shift = Median = IQR = P = MaxAbs = _numOps.Zero;
         Bins = [];
+        Quantiles = [];
+        OutputDistribution = "uniform";
     }
 
     /// <summary>
@@ -372,29 +374,120 @@ public class NormalizationParameters<T>
     /// <value>The power parameter, used for power transformations.</value>
     /// <remarks>
     /// <para>
-    /// This property stores a power parameter that can be used for certain normalization methods, such as power transformations 
-    /// like Box-Cox or Yeo-Johnson transformations. These transformations can help make skewed data more normally distributed 
-    /// by raising values to a certain power. The optimal power parameter is typically determined during training to maximize 
+    /// This property stores a power parameter that can be used for certain normalization methods, such as power transformations
+    /// like Box-Cox or Yeo-Johnson transformations. These transformations can help make skewed data more normally distributed
+    /// by raising values to a certain power. The optimal power parameter is typically determined during training to maximize
     /// the normality of the transformed data.
     /// </para>
     /// <para><b>For Beginners:</b> This stores a power value used for certain advanced normalization techniques.
-    /// 
+    ///
     /// The power parameter:
     /// - Is used for power transformations like Box-Cox or Yeo-Johnson
     /// - Helps make skewed data more normally distributed
     /// - Can be optimized to find the best transformation
-    /// 
+    ///
     /// For example, a value of 0.5 would correspond to a square root transformation,
     /// which can help normalize right-skewed data.
-    /// 
+    ///
     /// This parameter is useful when:
     /// - Your data has a skewed distribution
     /// - You want to make the data more normally distributed
     /// - Standard normalization methods don't work well
-    /// 
+    ///
     /// Power transformations are more advanced techniques but can significantly
     /// improve model performance with certain types of data.
     /// </para>
     /// </remarks>
     public T P { get; set; }
+
+    /// <summary>
+    /// Gets or sets the maximum absolute value observed in the data.
+    /// </summary>
+    /// <value>The maximum absolute value, used for MaxAbsScaler normalization.</value>
+    /// <remarks>
+    /// <para>
+    /// This property stores the maximum absolute value observed in the data for the feature or target variable.
+    /// It is used for MaxAbsScaler normalization, which scales data to the range [-1, 1] by dividing each value
+    /// by the maximum absolute value. This method preserves the sign of values and maintains zeros (which is
+    /// important for sparse data). The maximum absolute value is typically calculated during training based on
+    /// the training data.
+    /// </para>
+    /// <para><b>For Beginners:</b> This stores the largest absolute value (ignoring the sign) in your data.
+    ///
+    /// The maximum absolute value:
+    /// - Is used for MaxAbsScaler normalization
+    /// - Represents the farthest distance from zero in either direction
+    /// - Is used as a divisor to scale values to the range [-1, 1]
+    ///
+    /// For example, if your data ranges from -75 to 100, the maximum absolute value would be 100,
+    /// and all values would be divided by 100 to scale them to [-0.75, 1.0].
+    ///
+    /// This parameter is important because:
+    /// - It preserves the sign of values (positive stays positive, negative stays negative)
+    /// - It keeps zero values as zero (important for sparse data)
+    /// - It's simpler than min-max scaling but still effective
+    /// </para>
+    /// </remarks>
+    public T MaxAbs { get; set; }
+
+    /// <summary>
+    /// Gets or sets the quantile values used for quantile transformation.
+    /// </summary>
+    /// <value>A list of quantile values representing the empirical distribution.</value>
+    /// <remarks>
+    /// <para>
+    /// This property stores the quantile values calculated from the training data for QuantileTransformer.
+    /// These quantiles represent the empirical cumulative distribution function (CDF) of the data and are
+    /// used to map values to either a uniform or normal distribution. The number of quantiles determines
+    /// the granularity of the transformation.
+    /// </para>
+    /// <para><b>For Beginners:</b> This stores the distribution pattern learned from your training data.
+    ///
+    /// The quantiles list:
+    /// - Is used for QuantileTransformer normalization
+    /// - Contains values that divide your data into equal-sized groups
+    /// - Helps map your data to a target distribution (uniform or normal)
+    ///
+    /// For example, with 100 quantiles:
+    /// - The 25th quantile is the value below which 25% of the data falls
+    /// - The 50th quantile is the median
+    /// - The 75th quantile is the value below which 75% of the data falls
+    ///
+    /// This approach is powerful because:
+    /// - It can handle any input distribution
+    /// - It's very robust to outliers
+    /// - It can transform data to match a desired distribution shape
+    /// </para>
+    /// </remarks>
+    public List<T> Quantiles { get; set; }
+
+    /// <summary>
+    /// Gets or sets the target output distribution for quantile transformation.
+    /// </summary>
+    /// <value>A string indicating either "uniform" or "normal" distribution.</value>
+    /// <remarks>
+    /// <para>
+    /// This property specifies whether the QuantileTransformer should map data to a uniform distribution
+    /// (where all ranges have equal probability) or a normal distribution (bell-shaped curve). This setting
+    /// determines how the quantiles are mapped during transformation.
+    /// </para>
+    /// <para><b>For Beginners:</b> This specifies what shape you want your data to have after transformation.
+    ///
+    /// The output distribution:
+    /// - Can be "uniform" (flat distribution) or "normal" (bell curve)
+    /// - Affects how values are redistributed
+    /// - Depends on what your machine learning algorithm expects
+    ///
+    /// Uniform distribution:
+    /// - All value ranges have equal numbers of data points
+    /// - Values are spread evenly across the range
+    /// - Good for algorithms that don't assume any particular distribution
+    ///
+    /// Normal distribution:
+    /// - Creates a bell-shaped curve
+    /// - Most values cluster around the center
+    /// - Good for algorithms that work best with normally-distributed data
+    /// </para>
+    /// </remarks>
+    public string OutputDistribution { get; set; }
 }
