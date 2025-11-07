@@ -1378,20 +1378,20 @@ public static class StatisticsHelper<T>
     }
 
     /// <summary>
-    /// Calculates the coefficient of determination (R�) between actual and predicted values.
+    /// Calculates the coefficient of determination (R²) between actual and predicted values.
     /// </summary>
     /// <param name="actualValues">The actual observed values.</param>
     /// <param name="predictedValues">The predicted values from a model.</param>
-    /// <returns>The R� value, ranging from 0 to 1 (or negative in case of poor fit).</returns>
+    /// <returns>The R² value, ranging from 0 to 1 (or negative in case of poor fit).</returns>
     /// <remarks>
     /// <para>
-    /// <b>For Beginners:</b> R� (R-squared) tells you how well your model explains the variation in your data.
+    /// <b>For Beginners:</b> R² (R-squared) tells you how well your model explains the variation in your data.
     /// It ranges from 0 to 1, where:
     /// - 1 means your model perfectly predicts the data
     /// - 0 means your model is no better than just using the average value
     /// - Negative values can occur when the model performs worse than using the average
     /// 
-    /// For example, an R� of 0.75 means your model explains 75% of the variation in the data.
+    /// For example, an R² of 0.75 means your model explains 75% of the variation in the data.
     /// </para>
     /// </remarks>
     public static T CalculateR2(Vector<T> actualValues, Vector<T> predictedValues)
@@ -1422,18 +1422,18 @@ public static class StatisticsHelper<T>
     }
 
     /// <summary>
-    /// Calculates the adjusted R� value, which accounts for the number of predictors in the model.
+    /// Calculates the adjusted R² value, which accounts for the number of predictors in the model.
     /// </summary>
-    /// <param name="r2">The standard R� value.</param>
+    /// <param name="r2">The standard R² value.</param>
     /// <param name="n">The number of observations (sample size).</param>
     /// <param name="p">The number of predictors (independent variables) in the model.</param>
-    /// <returns>The adjusted R� value.</returns>
+    /// <returns>The adjusted R² value.</returns>
     /// <remarks>
     /// <para>
-    /// <b>For Beginners:</b> Adjusted R� is a modified version of R� that accounts for the number of predictors in your model.
-    /// Regular R� always increases when you add more variables to your model, even if those variables don't actually improve predictions.
-    /// Adjusted R� penalizes you for adding variables that don't help, making it more useful when comparing models with different numbers of variables.
-    /// Like regular R�, higher values indicate better model fit.
+    /// <b>For Beginners:</b> Adjusted R² is a modified version of R² that accounts for the number of predictors in your model.
+    /// Regular R² always increases when you add more variables to your model, even if those variables don't actually improve predictions.
+    /// Adjusted R² penalizes you for adding variables that don't help, making it more useful when comparing models with different numbers of variables.
+    /// Like regular R², higher values indicate better model fit.
     /// </para>
     /// </remarks>
     public static T CalculateAdjustedR2(T r2, int n, int p)
@@ -1454,7 +1454,7 @@ public static class StatisticsHelper<T>
     /// <remarks>
     /// <para>
     /// <b>For Beginners:</b> The explained variance score measures how much of the variance in the actual data is captured by your model.
-    /// It's similar to R�, but focuses specifically on variance.
+    /// It's similar to R², but focuses specifically on variance.
     /// - A score of 1 means your model perfectly captures the variance in the data
     /// - A score of 0 means your model doesn't explain any of the variance
     /// - Negative scores can occur when the model is worse than just predicting the mean
@@ -3176,7 +3176,7 @@ public static class StatisticsHelper<T>
     /// <b>For Beginners:</b> This method calculates confidence intervals around specific quantiles 
     /// (percentiles) of your predicted values. For example, you might want to know the range around 
     /// the median (50th percentile) or the 90th percentile of your predictions. For each quantile you 
-    /// specify, this method calculates a lower and upper bound by looking at nearby quantiles (�2.5%). 
+    /// specify, this method calculates a lower and upper bound by looking at nearby quantiles (²2.5%). 
     /// This gives you an idea of the uncertainty around different parts of your prediction distribution. 
     /// These intervals are useful when you're interested in specific parts of the distribution rather 
     /// than just the mean or a single prediction.
@@ -3739,8 +3739,8 @@ public static class StatisticsHelper<T>
     /// <para>
     /// <b>For Beginners:</b> This method calculates three important metrics for evaluating prediction 
     /// performance. Precision measures how many of your positive predictions were actually correct 
-    /// (true positives � (true positives + false positives)). Recall measures how many of the actual 
-    /// positives your model correctly identified (true positives � (true positives + false negatives)). 
+    /// (true positives ² (true positives + false positives)). Recall measures how many of the actual 
+    /// positives your model correctly identified (true positives ² (true positives + false negatives)). 
     /// The F1 score is the harmonic mean of precision and recall, providing a single metric that balances 
     /// both concerns. For binary classification, these metrics are calculated based on the standard 
     /// definitions. For regression problems, the method adapts these concepts by considering predictions 
@@ -3892,7 +3892,7 @@ public static class StatisticsHelper<T>
     /// <b>For Beginners:</b> The Variance Inflation Factor (VIF) measures how much the variance of a 
     /// regression coefficient is increased due to multicollinearity (correlation between features). 
     /// For each feature, the VIF is calculated by regressing that feature against all other features 
-    /// and then using the formula 1/(1-R�), where R� is the coefficient of determination from that 
+    /// and then using the formula 1/(1-R²), where R² is the coefficient of determination from that 
     /// regression. A VIF of 1 means there's no correlation between this feature and others, while higher 
     /// values indicate increasing multicollinearity. As a rule of thumb, VIF values above 5-10 are 
     /// considered problematic. This method calculates VIF for each feature and logs a warning when it 
@@ -4196,7 +4196,7 @@ public static class StatisticsHelper<T>
     /// <para>
     /// <b>For Beginners:</b> The Deviance Information Criterion (DIC) is a hierarchical modeling 
     /// generalization of the AIC and BIC, used for Bayesian model comparison. It's calculated as 
-    /// D(?�) + 2pD, where D(?�) is the deviance at the posterior mean (a measure of how well the model 
+    /// D(?²) + 2pD, where D(?²) is the deviance at the posterior mean (a measure of how well the model 
     /// fits the data), and pD is the effective number of parameters (a measure of model complexity). 
     /// Lower DIC values indicate better models. DIC is particularly useful for comparing Bayesian models 
     /// where the posterior distributions have been obtained using Markov Chain Monte Carlo (MCMC) methods. 
@@ -4207,8 +4207,8 @@ public static class StatisticsHelper<T>
     /// </remarks>
     public static T CalculateDIC<TInput, TOutput>(ModelStats<T, TInput, TOutput> modelStats)
     {
-        // DIC = D(?�) + 2pD
-        // where D(?�) is the deviance at the posterior mean, and pD is the effective number of parameters
+        // DIC = D(?²) + 2pD
+        // where D(?²) is the deviance at the posterior mean, and pD is the effective number of parameters
         var devianceAtPosteriorMean = _numOps.Multiply(_numOps.FromDouble(-2), modelStats.LogLikelihood);
         var effectiveNumberOfParameters = modelStats.EffectiveNumberOfParameters;
 
@@ -4339,7 +4339,7 @@ public static class StatisticsHelper<T>
     /// <para>
     /// <b>For Beginners:</b> Likelihood measures how probable the observed data is under a specific model. 
     /// This method calculates the likelihood for a single observation using a Gaussian (normal) distribution 
-    /// centered at the predicted value. It computes exp(-0.5 * residual�), where residual is the difference 
+    /// centered at the predicted value. It computes exp(-0.5 * residual²), where residual is the difference 
     /// between the actual and predicted values. Higher likelihood values indicate that the model's prediction 
     /// is closer to the actual value. Likelihood is a fundamental concept in statistics and forms the basis 
     /// for many estimation methods, including maximum likelihood estimation. In Bayesian statistics, the 
@@ -4712,7 +4712,7 @@ public static class StatisticsHelper<T>
     /// regression analysis, SST is the total variance that a model attempts to explain. It can be 
     /// partitioned into the explained sum of squares (SSR, the variation explained by the model) and 
     /// the residual sum of squares (SSE, the unexplained variation). The ratio SSR/SST gives the 
-    /// coefficient of determination (R�), which indicates the proportion of variance explained by the model.
+    /// coefficient of determination (R²), which indicates the proportion of variance explained by the model.
     /// </para>
     /// </remarks>
     public static T CalculateTotalSumOfSquares(Vector<T> values)
@@ -6093,7 +6093,7 @@ public static class StatisticsHelper<T>
     /// cluster, then for each cluster, calculates the squared distance between its centroid and the global 
     /// centroid, multiplies by the cluster size, and adds to the total variance. Between-cluster variance is 
     /// a key component in the Calinski-Harabasz Index and other clustering evaluation metrics. It quantifies 
-    /// the "separation" aspect of clustering quality�how well the algorithm has identified distinct groups 
+    /// the "separation" aspect of clustering quality²how well the algorithm has identified distinct groups 
     /// in the data.
     /// </para>
     /// </remarks>
@@ -6135,7 +6135,7 @@ public static class StatisticsHelper<T>
     /// all data points, finds the centroid of the cluster each point belongs to, calculates the squared 
     /// distance between the point and its centroid, and adds to the total variance. Within-cluster variance 
     /// is a key component in the Calinski-Harabasz Index and other clustering evaluation metrics. It quantifies 
-    /// the "cohesion" aspect of clustering quality�how similar points within the same cluster are to each 
+    /// the "cohesion" aspect of clustering quality²how similar points within the same cluster are to each 
     /// other. Good clustering algorithms minimize this variance while maximizing between-cluster variance.
     /// </para>
     /// </remarks>
@@ -6326,13 +6326,13 @@ public static class StatisticsHelper<T>
     /// <returns>The average distance from points to the centroid.</returns>
     /// <remarks>
     /// <para>
-    /// <b>For Beginners:</b> This helper method calculates the average distance from all points in a specific 
-    /// cluster to that cluster's centroid. It's a measure of cluster scatter or dispersion�how spread out 
-    /// the points in a cluster are. The method identifies all points with the specified label, calculates 
-    /// the Euclidean distance from each point to the centroid, and returns the average. Lower average 
-    /// distances indicate more compact, homogeneous clusters. This measure is used in clustering evaluation 
-    /// metrics like the Davies-Bouldin Index to assess the compactness of clusters. It helps determine 
-    /// whether a clustering algorithm has successfully grouped similar points together, which is a key 
+    /// <b>For Beginners:</b> This helper method calculates the average distance from all points in a specific
+    /// cluster to that cluster's centroid. It's a measure of cluster scatter or dispersion—how spread out
+    /// the points in a cluster are. The method identifies all points with the specified label, calculates
+    /// the Euclidean distance from each point to the centroid, and returns the average. Lower average
+    /// distances indicate more compact, homogeneous clusters. This measure is used in clustering evaluation
+    /// metrics like the Davies-Bouldin Index to assess the compactness of clusters. It helps determine
+    /// whether a clustering algorithm has successfully grouped similar points together, which is a key
     /// aspect of clustering quality.
     /// </para>
     /// </remarks>
