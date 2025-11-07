@@ -26,7 +26,7 @@
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\src\AiDotNet.csproj" />
+    <ProjectReference Include="..\..\src\AiDotNet.csproj" />
   </ItemGroup>
 
 </Project>
