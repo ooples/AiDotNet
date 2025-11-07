@@ -188,6 +188,7 @@ public class IcaDecomposition<T> : IMatrixDecomposition<T>
         int n = X.Columns;
         int m = X.Rows;
         Vector<T> mean = new Vector<T>(n);
+        T invM = _numOps.FromDouble(1.0 / m);
 
         for (int j = 0; j < n; j++)
         {
@@ -196,7 +197,7 @@ public class IcaDecomposition<T> : IMatrixDecomposition<T>
             {
                 sum = _numOps.Add(sum, X[i, j]);
             }
-            mean[j] = _numOps.Divide(sum, _numOps.FromInt(m));
+            mean[j] = _numOps.Multiply(sum, invM);
         }
 
         return mean;
@@ -268,10 +269,10 @@ public class IcaDecomposition<T> : IMatrixDecomposition<T>
 
         for (int i = 0; i < numComponents; i++)
         {
-            D[i] = eigen.Eigenvalues[i];
+            D[i] = eigen.EigenValues[i];
             for (int j = 0; j < C.Rows; j++)
             {
-                E[i, j] = eigen.Eigenvectors[j, i];
+                E[i, j] = eigen.EigenVectors[j, i];
             }
         }
 
@@ -304,7 +305,7 @@ public class IcaDecomposition<T> : IMatrixDecomposition<T>
     {
         int m = X.Rows;
         int n = X.Columns;
-        Matrix<T> W = Matrix<T>.CreateIdentityMatrix(numComponents);
+        Matrix<T> W = new Matrix<T>(numComponents, n);
 
         // Initialize W with random values
         var random = new Random();
@@ -333,6 +334,7 @@ public class IcaDecomposition<T> : IMatrixDecomposition<T>
                 // Compute w = E{x × g(w^T × x)} - E{g'(w^T × x)} × w
                 // where g(u) = tanh(u) is the non-linearity function
                 Vector<T> wNew = new Vector<T>(n);
+                T invM = _numOps.FromDouble(1.0 / m);
 
                 for (int j = 0; j < n; j++)
                 {
@@ -353,8 +355,8 @@ public class IcaDecomposition<T> : IMatrixDecomposition<T>
                         sum2 = _numOps.Add(sum2, gPrime);
                     }
 
-                    T avg1 = _numOps.Divide(sum1, _numOps.FromInt(m));
-                    T avg2 = _numOps.Divide(sum2, _numOps.FromInt(m));
+                    T avg1 = _numOps.Multiply(sum1, invM);
+                    T avg2 = _numOps.Multiply(sum2, invM);
                     wNew[j] = _numOps.Subtract(avg1, _numOps.Multiply(avg2, w[j]));
                 }
 
@@ -400,7 +402,7 @@ public class IcaDecomposition<T> : IMatrixDecomposition<T>
     /// <returns>tanh(x).</returns>
     private T Tanh(T x)
     {
-        double xd = _numOps.ToDouble(x);
+        double xd = Convert.ToDouble(x);
         double result = Math.Tanh(xd);
         return _numOps.FromDouble(result);
     }
