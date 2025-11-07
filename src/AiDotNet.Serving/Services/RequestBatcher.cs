@@ -3,6 +3,7 @@ using System.Diagnostics;
 using AiDotNet.LinearAlgebra;
 using AiDotNet.Serving.Configuration;
 using AiDotNet.Serving.Models;
+using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 
 namespace AiDotNet.Serving.Services;
@@ -20,6 +21,7 @@ namespace AiDotNet.Serving.Services;
 public class RequestBatcher : IRequestBatcher, IDisposable
 {
     private readonly IModelRepository _modelRepository;
+    private readonly ILogger<RequestBatcher> _logger;
     private readonly ServingOptions _options;
     private readonly ConcurrentQueue<BatchRequest> _requestQueue = new();
     private readonly Timer _batchTimer;
@@ -34,10 +36,15 @@ public class RequestBatcher : IRequestBatcher, IDisposable
     /// Initializes a new instance of the RequestBatcher.
     /// </summary>
     /// <param name="modelRepository">The model repository for accessing loaded models</param>
+    /// <param name="logger">Logger for diagnostics</param>
     /// <param name="options">Configuration options for batching behavior</param>
-    public RequestBatcher(IModelRepository modelRepository, IOptions<ServingOptions> options)
+    public RequestBatcher(
+        IModelRepository modelRepository,
+        ILogger<RequestBatcher> logger,
+        IOptions<ServingOptions> options)
     {
         _modelRepository = modelRepository ?? throw new ArgumentNullException(nameof(modelRepository));
+        _logger = logger ?? throw new ArgumentNullException(nameof(logger));
         _options = options?.Value ?? throw new ArgumentNullException(nameof(options));
 
         // Start the batch processing timer
