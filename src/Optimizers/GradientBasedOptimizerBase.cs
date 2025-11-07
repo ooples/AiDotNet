@@ -236,19 +236,22 @@ public abstract class GradientBasedOptimizerBase<T, TInput, TOutput> : Optimizer
 
                 var perturbedModel = model.WithParameters(perturbedParams);
 
-                if (perturbedModel is IGradientComputable<T, TInput, TOutput> perturbedGradientModel)
+                if (perturbedModel is not IGradientComputable<T, TInput, TOutput> perturbedGradientModel)
                 {
-                    var perturbedGradient = perturbedGradientModel.ComputeGradients(
-                        inputData.XTrain,
-                        inputData.YTrain,
-                        LossFunction);
+                    // Fallback to finite differences when perturbed model loses IGradientComputable
+                    return ComputeHessianFiniteDifferences(model, inputData);
+                }
 
-                    // Hessian column i = (∇f(x + εe_i) - ∇f(x)) / ε
-                    for (int j = 0; j < n; j++)
-                    {
-                        var diff = NumOps.Subtract(perturbedGradient[j], baseGradient[j]);
-                        hessian[j, i] = NumOps.Divide(diff, epsilon);
-                    }
+                var perturbedGradient = perturbedGradientModel.ComputeGradients(
+                    inputData.XTrain,
+                    inputData.YTrain,
+                    LossFunction);
+
+                // Hessian column i = (∇f(x + εe_i) - ∇f(x)) / ε
+                for (int j = 0; j < n; j++)
+                {
+                    var diff = NumOps.Subtract(perturbedGradient[j], baseGradient[j]);
+                    hessian[j, i] = NumOps.Divide(diff, epsilon);
                 }
             }
         }
