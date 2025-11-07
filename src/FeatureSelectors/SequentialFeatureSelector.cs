@@ -332,8 +332,10 @@ public class SequentialFeatureSelector<T, TInput, TOutput> : FeatureSelectorBase
             // Calculate score
             return _scoringFunction(predictions, _target);
         }
-        catch
+        catch (Exception ex)
         {
+            // Log the exception for diagnostics
+            Console.Error.WriteLine($"SequentialFeatureSelector.EvaluateFeatureSubset exception: {ex.Message}\n{ex.StackTrace}");
             // Return worst possible score if evaluation fails
             return NumOps.FromDouble(double.NegativeInfinity);
         }

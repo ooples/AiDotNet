@@ -198,7 +198,12 @@ public class SelectFromModel<T, TInput> : FeatureSelectorBase<T, TInput>
 
         // Sort by importance descending
         var sortedFeatures = featureImportances
-            .OrderByDescending(fi => fi.importance, Comparer<T>.Create((a, b) => NumOps.Compare(a, b)))
+            .OrderByDescending(fi => fi.importance, Comparer<T>.Create((a, b) =>
+            {
+                if (NumOps.GreaterThan(a, b)) return 1;
+                if (NumOps.LessThan(a, b)) return -1;
+                return 0;
+            }))
             .ToList();
 
         // Determine threshold
@@ -269,12 +274,9 @@ public class SelectFromModel<T, TInput> : FeatureSelectorBase<T, TInput>
         // Try to parse feature names as "Feature_N" format
         foreach (var kvp in importanceDict)
         {
-            if (TryParseFeatureIndex(kvp.Key, out int index))
+            if (TryParseFeatureIndex(kvp.Key, out int index) && index >= 0 && index < numFeatures)
             {
-                if (index >= 0 && index < numFeatures)
-                {
-                    result.Add((index, kvp.Value));
-                }
+                result.Add((index, kvp.Value));
             }
         }
 
@@ -373,20 +375,20 @@ public class SelectFromModel<T, TInput> : FeatureSelectorBase<T, TInput>
             return NumOps.Zero;
         }
 
-        var sorted = values.OrderBy(x => x, Comparer<T>.Create((a, b) => NumOps.Compare(a, b))).ToList();
+        var sorted = values.OrderBy(x => x, Comparer<T>.Create((a, b) =>
+        {
+            if (NumOps.GreaterThan(a, b)) return 1;
+            if (NumOps.LessThan(a, b)) return -1;
+            return 0;
+        })).ToList();
         int mid = sorted.Count / 2;
 
-        if (sorted.Count % 2 == 0)
-        {
-            // Even number of elements: average the two middle values
-            return NumOps.Divide(
+        // Even number of elements: average the two middle values
+        // Odd number of elements: return the middle value
+        return (sorted.Count % 2 == 0)
+            ? NumOps.Divide(
                 NumOps.Add(sorted[mid - 1], sorted[mid]),
-                NumOps.FromDouble(2.0));
-        }
-        else
-        {
-            // Odd number of elements: return the middle value
-            return sorted[mid];
-        }
+                NumOps.FromDouble(2.0))
+            : sorted[mid];
     }
 }

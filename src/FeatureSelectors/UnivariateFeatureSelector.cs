@@ -132,7 +132,12 @@ public class UnivariateFeatureSelector<T, TInput> : FeatureSelectorBase<T, TInpu
 
         // Sort by score descending and select top K
         var selectedIndices = featureScores
-            .OrderByDescending(fs => fs.score, Comparer<T>.Create((a, b) => NumOps.Compare(a, b)))
+            .OrderByDescending(fs => fs.score, Comparer<T>.Create((a, b) =>
+            {
+                if (NumOps.GreaterThan(a, b)) return 1;
+                if (NumOps.LessThan(a, b)) return -1;
+                return 0;
+            }))
             .Take(numToSelect)
             .Select(fs => fs.index)
             .OrderBy(idx => idx) // Sort indices for consistent output
@@ -185,9 +190,14 @@ public class UnivariateFeatureSelector<T, TInput> : FeatureSelectorBase<T, TInpu
             var result = StatisticsHelper<T>.ChiSquareTest(featureVector, _target);
             return result.ChiSquareStatistic;
         }
-        catch
+        catch (ArgumentException)
         {
-            // Return zero score if test fails (e.g., insufficient variation)
+            // Return zero score if test fails due to invalid arguments (e.g., insufficient variation)
+            return NumOps.Zero;
+        }
+        catch (InvalidOperationException)
+        {
+            // Return zero score if test fails due to invalid operation (e.g., not enough data)
             return NumOps.Zero;
         }
     }
@@ -243,9 +253,14 @@ public class UnivariateFeatureSelector<T, TInput> : FeatureSelectorBase<T, TInpu
             // Calculate ANOVA F-statistic
             return CalculateAnovaFStatistic(groups);
         }
-        catch
+        catch (ArgumentException)
         {
-            // Return zero score if calculation fails
+            // Return zero score if calculation fails due to invalid arguments
+            return NumOps.Zero;
+        }
+        catch (InvalidOperationException)
+        {
+            // Return zero score if calculation fails due to invalid operation
             return NumOps.Zero;
         }
     }
@@ -267,9 +282,16 @@ public class UnivariateFeatureSelector<T, TInput> : FeatureSelectorBase<T, TInpu
         {
             return StatisticsHelper<T>.CalculateMutualInformation(featureVector, _target);
         }
-        catch
+        catch (InvalidOperationException ex)
         {
-            // Return zero score if calculation fails
+            // Log the exception for debugging purposes
+            Console.WriteLine($"Mutual information calculation failed: {ex.Message}");
+            return NumOps.Zero;
+        }
+        catch (ArgumentException ex)
+        {
+            // Log the exception for debugging purposes
+            Console.WriteLine($"Mutual information calculation failed: {ex.Message}");
             return NumOps.Zero;
         }
     }
@@ -313,30 +335,24 @@ public class UnivariateFeatureSelector<T, TInput> : FeatureSelectorBase<T, TInpu
 
         // Calculate between-group sum of squares (SSB)
         T ssb = NumOps.Zero;
-        foreach (var group in groups)
+        foreach (var group in groups.Where(g => g.Count > 0))
         {
-            if (group.Count > 0)
-            {
-                T groupMean = StatisticsHelper<T>.CalculateMean(group);
-                T diff = NumOps.Subtract(groupMean, overallMean);
-                T squaredDiff = NumOps.Multiply(diff, diff);
-                T weightedSquaredDiff = NumOps.Multiply(NumOps.FromDouble(group.Count), squaredDiff);
-                ssb = NumOps.Add(ssb, weightedSquaredDiff);
-            }
+            T groupMean = StatisticsHelper<T>.CalculateMean(group);
+            T diff = NumOps.Subtract(groupMean, overallMean);
+            T squaredDiff = NumOps.Multiply(diff, diff);
+            T weightedSquaredDiff = NumOps.Multiply(NumOps.FromDouble(group.Count), squaredDiff);
+            ssb = NumOps.Add(ssb, weightedSquaredDiff);
         }
 
         // Calculate within-group sum of squares (SSW)
         T ssw = NumOps.Zero;
-        foreach (var group in groups)
+        foreach (var group in groups.Where(g => g.Count > 0))
         {
-            if (group.Count > 0)
+            T groupMean = StatisticsHelper<T>.CalculateMean(group);
+            foreach (var value in group)
             {
-                T groupMean = StatisticsHelper<T>.CalculateMean(group);
-                foreach (var value in group)
-                {
-                    T diff = NumOps.Subtract(value, groupMean);
-                    ssw = NumOps.Add(ssw, NumOps.Multiply(diff, diff));
-                }
+                T diff = NumOps.Subtract(value, groupMean);
+                ssw = NumOps.Add(ssw, NumOps.Multiply(diff, diff));
             }
         }
 
