@@ -75,6 +75,87 @@ public class MAMLTrainerConfig<T> : IMetaLearnerConfig<T>
     public bool UseFirstOrderApproximation { get; set; } = true;
 
     /// <summary>
+    /// Gets or sets the maximum gradient norm for gradient clipping.
+    /// </summary>
+    /// <value>
+    /// Maximum allowed gradient norm. Gradients exceeding this will be scaled down.
+    /// Set to 0 or negative to disable gradient clipping. Default is 10.0.
+    /// </value>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> Gradient clipping prevents training instability.
+    ///
+    /// During meta-learning, gradients can sometimes become very large, causing:
+    /// - Unstable training (parameters jumping around)
+    /// - Numerical overflow (infinity/NaN values)
+    /// - Poor convergence
+    ///
+    /// Gradient clipping limits how large gradients can be:
+    /// - If gradients are too large, scale them down proportionally
+    /// - This stabilizes training without changing the direction
+    /// - Common in production meta-learning systems
+    ///
+    /// Recommended values:
+    /// - 10.0 (default) for most tasks
+    /// - 1.0 for very sensitive tasks
+    /// - 0 to disable (only if training is already stable)
+    /// </para>
+    /// </remarks>
+    public T MaxGradientNorm { get; set; } = NumOps.FromDouble(10.0);
+
+    /// <summary>
+    /// Gets or sets whether to use adaptive meta-learning rates (Adam-style).
+    /// </summary>
+    /// <value>
+    /// If true, uses Adam-style adaptive learning rates for meta-optimization.
+    /// If false, uses vanilla SGD. Default is true for better convergence.
+    /// </value>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> Adaptive learning rates help training converge faster and more reliably.
+    ///
+    /// Vanilla SGD uses the same learning rate for all parameters:
+    /// - Simple but can be slow to converge
+    /// - Sensitive to learning rate choice
+    ///
+    /// Adam (Adaptive Moment Estimation):
+    /// - Adjusts learning rate per parameter
+    /// - Remembers recent gradients (momentum)
+    /// - More robust to learning rate choice
+    /// - Industry standard for deep learning
+    /// - Recommended for meta-learning
+    ///
+    /// This is the meta-optimizer - it updates the meta-parameters, not the task adaptation.
+    /// </para>
+    /// </remarks>
+    public bool UseAdaptiveMetaOptimizer { get; set; } = true;
+
+    /// <summary>
+    /// Gets or sets the Adam beta1 parameter for adaptive meta-optimization.
+    /// </summary>
+    /// <value>
+    /// Exponential decay rate for first moment estimates. Default is 0.9.
+    /// Only used if UseAdaptiveMetaOptimizer is true.
+    /// </value>
+    public T AdamBeta1 { get; set; } = NumOps.FromDouble(0.9);
+
+    /// <summary>
+    /// Gets or sets the Adam beta2 parameter for adaptive meta-optimization.
+    /// </summary>
+    /// <value>
+    /// Exponential decay rate for second moment estimates. Default is 0.999.
+    /// Only used if UseAdaptiveMetaOptimizer is true.
+    /// </value>
+    public T AdamBeta2 { get; set; } = NumOps.FromDouble(0.999);
+
+    /// <summary>
+    /// Gets or sets the Adam epsilon parameter for numerical stability.
+    /// </summary>
+    /// <value>
+    /// Small constant added to denominator for numerical stability. Default is 1e-8.
+    /// Only used if UseAdaptiveMetaOptimizer is true.
+    /// </value>
+    public T AdamEpsilon { get; set; } = NumOps.FromDouble(1e-8);
+
+    /// <summary>
     /// Creates a default MAML configuration with standard values.
     /// </summary>
     /// <remarks>

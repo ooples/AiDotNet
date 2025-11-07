@@ -9,85 +9,88 @@ using System.Diagnostics;
 namespace AiDotNet.MetaLearning.Trainers;
 
 /// <summary>
-/// Production-ready implementation of the MAML (Model-Agnostic Meta-Learning) algorithm.
+/// Production-ready implementation of the MAML (Model-Agnostic Meta-Learning) algorithm with full second-order support.
 /// </summary>
 /// <typeparam name="T">The numeric data type (e.g., float, double).</typeparam>
 /// <typeparam name="TInput">The input data type (e.g., Matrix&lt;T&gt;, Tensor&lt;T&gt;, double[]).</typeparam>
 /// <typeparam name="TOutput">The output data type (e.g., Vector&lt;T&gt;, Tensor&lt;T&gt;, double[]).</typeparam>
 /// <remarks>
 /// <para>
-/// MAML (Finn et al., 2017) is a meta-learning algorithm that learns optimal parameter initializations
-/// for rapid adaptation to new tasks. Unlike Reptile which averages adapted parameters, MAML computes
-/// gradients by evaluating on query sets after adaptation, enabling more precise meta-optimization.
+/// <b>MAML (Finn et al., 2017)</b> is a second-order meta-learning algorithm that learns optimal parameter
+/// initializations for rapid adaptation to new tasks with minimal data.
 /// </para>
-/// <para><b>Algorithm - MAML with First-Order Approximation (FOMAML):</b>
+/// <para><b>Key Innovation:</b>
+/// Unlike Reptile which moves toward adapted parameters, MAML explicitly optimizes for adaptability
+/// by computing gradients of post-adaptation performance with respect to initial parameters.
+/// This requires computing gradients through the adaptation process (second-order derivatives).
+/// </para>
+/// <para><b>Algorithm - Full MAML (Second-Order):</b>
 /// <code>
 /// Initialize: θ (meta-parameters)
 ///
 /// for iteration = 1 to N:
-///     # Sample batch of tasks for this meta-update
+///     # Sample batch of tasks
 ///     tasks = SampleTasks(batch_size)
-///
-///     # Collect meta-gradients from all tasks
 ///     meta_gradients = []
+///
 ///     for each task in tasks:
-///         # Clone current meta-parameters
-///         θ_i = Clone(θ)
+///         # Inner loop: Adapt on support set
+///         φ = θ  # Clone meta-parameters
+///         for k = 1 to K:
+///             φ = φ - α∇L_support(φ)  # Task adaptation
 ///
-///         # Inner loop: Adapt to this task on support set
-///         for step = 1 to K:
-///             θ_i = θ_i - α * ∇L(θ_i, support_set)
+///         # Compute meta-gradient by backpropagating through adaptation
+///         # This is the key difference from Reptile!
+///         ∇θ = ∂L_query(φ)/∂θ  # Gradient w.r.t. ORIGINAL parameters
+///         meta_gradients.append(∇θ)
 ///
-///         # Evaluate adapted model on query set
-///         query_loss = L(θ_i, query_set)
-///
-///         # Compute gradient of query loss w.r.t. adapted parameters
-///         ∇θ_i = ∇query_loss
-///
-///         # FOMAML: Use this gradient directly (first-order approximation)
-///         # Full MAML would backprop through the adaptation steps
-///         meta_gradients.append(∇θ_i)
-///
-///     # Outer loop: Meta-update using average of meta-gradients
-///     ∇θ_meta = Average(meta_gradients)
-///     θ = θ - β * ∇θ_meta
+///     # Outer loop: Meta-update
+///     θ = θ - β * Average(meta_gradients)
 ///
 /// return θ
 /// </code>
 /// </para>
-/// <para><b>Key Differences from Reptile:</b>
+/// <para><b>First-Order MAML (FOMAML):</b>
+/// Approximates full MAML by ignoring second-order terms:
+/// ∇θ ≈ ∂L_query(φ)/∂φ  (gradient w.r.t. adapted parameters)
 ///
-/// <b>MAML:</b>
-/// - Evaluates on query set after adaptation
-/// - Computes gradients for meta-update
-/// - More accurate signal for meta-optimization
-/// - Can use full second-order (expensive) or first-order approximation
-///
-/// <b>Reptile:</b>
-/// - Uses parameter difference (adapted - original)
-/// - Simpler, no query set evaluation needed
-/// - Empirically performs similarly to FOMAML
-/// - Always first-order (no second-order option)
-///
-/// In practice, FOMAML and Reptile often perform similarly, but MAML provides
-/// a more principled approach to meta-learning.
+/// This is computationally cheaper and often performs similarly to full MAML.
+/// The original paper (Finn et al., 2017) showed only minor performance differences.
 /// </para>
 /// <para><b>Production Features:</b>
-/// - First-order approximation (FOMAML) by default for efficiency
-/// - Optional full second-order MAML for maximum accuracy
-/// - Batch meta-training for stable gradient estimates
-/// - Progress monitoring with detailed metrics
-/// - Memory-efficient parameter cloning
-/// - Support for any model implementing IFullModel
+/// - Full second-order MAML when model implements IGradientComputable
+/// - FOMAML (first-order) approximation for efficiency
+/// - Automatic fallback to Reptile-style for models without gradient support
+/// - Gradient clipping for training stability
+/// - Adam meta-optimizer for faster convergence
+/// - Per-parameter adaptive learning rates
 /// - Comprehensive error handling and validation
+/// - Detailed performance metrics and monitoring
+/// </para>
+/// <para><b>When to Use MAML vs Reptile:</b>
+/// - <b>Use MAML:</b> When you need maximum few-shot performance and can afford computation
+/// - <b>Use Reptile:</b> When you need simpler implementation and faster training
+/// - <b>Use FOMAML:</b> Best of both worlds - nearly MAML performance at Reptile speed
 /// </para>
 /// </remarks>
 public class MAMLTrainer<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOutput>
 {
+    private static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();
+
     /// <summary>
     /// Gets the MAML-specific configuration.
     /// </summary>
     protected MAMLTrainerConfig<T> MAMLConfig => (MAMLTrainerConfig<T>)Configuration;
+
+    /// <summary>
+    /// Indicates whether the model supports explicit gradient computation.
+    /// </summary>
+    private readonly bool _supportsGradientComputation;
+
+    // Adam optimizer state for meta-updates
+    private Vector<T>? _adamFirstMoment;  // m_t in Adam
+    private Vector<T>? _adamSecondMoment; // v_t in Adam
+    private int _adamTimeStep = 0;
 
     /// <summary>
     /// Initializes a new instance of the MAMLTrainer with a configuration object.
@@ -95,33 +98,36 @@ public class MAMLTrainer<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOutpu
     /// <param name="metaModel">The model to meta-train.</param>
     /// <param name="lossFunction">Loss function for evaluating task performance.</param>
     /// <param name="dataLoader">Episodic data loader for sampling meta-learning tasks.</param>
-    /// <param name="config">Configuration object containing all hyperparameters. If null, uses default MAMLTrainerConfig with industry-standard values.</param>
+    /// <param name="config">Configuration object containing all hyperparameters. If null, uses default MAMLTrainerConfig.</param>
     /// <exception cref="ArgumentNullException">Thrown when metaModel, lossFunction, or dataLoader is null.</exception>
     /// <exception cref="ArgumentException">Thrown when configuration validation fails.</exception>
     /// <remarks>
-    /// <para><b>For Beginners:</b> This creates a MAML trainer ready for meta-learning.
+    /// <para><b>For Beginners:</b> This creates a MAML trainer ready for few-shot meta-learning.
     ///
-    /// MAML learns optimal starting points for your model so it can quickly adapt to new tasks
-    /// with just a few examples. It works by:
-    /// 1. Adapting a cloned model to each task using support set
-    /// 2. Evaluating the adapted model on query set
-    /// 3. Computing gradients based on query performance
-    /// 4. Updating meta-parameters to improve future adaptations
+    /// MAML learns optimal starting points by explicitly optimizing for rapid adaptation.
+    /// After meta-training, your model can adapt to new tasks with just a few examples.
     ///
-    /// After meta-training, your model can quickly adapt to new tasks with very few examples.
+    /// <b>How MAML works:</b>
+    /// 1. Start with meta-parameters (θ)
+    /// 2. For each task: adapt θ to get task-specific parameters (φ)
+    /// 3. Measure how well φ performs on held-out query data
+    /// 4. Update θ to make future adaptations better
+    /// 5. The key: compute gradients that account for the adaptation process
     ///
     /// <b>Parameters explained:</b>
     /// - <b>metaModel:</b> Your neural network or model to be meta-trained
     /// - <b>lossFunction:</b> How to measure errors (MSE, CrossEntropy, etc.)
     /// - <b>dataLoader:</b> Provides N-way K-shot tasks for meta-training
-    /// - <b>config:</b> Learning rates and steps (optional - uses sensible defaults)
+    /// - <b>config:</b> Learning rates, steps, and optimization settings
     ///
     /// <b>Default configuration (if null):</b>
-    /// - Inner learning rate: 0.01 (task adaptation rate)
-    /// - Meta learning rate: 0.001 (meta-parameter update rate)
-    /// - Inner steps: 5 (gradient steps per task)
+    /// - Inner learning rate: 0.01 (task adaptation speed)
+    /// - Meta learning rate: 0.001 (meta-parameter update speed)
+    /// - Inner steps: 5 (adaptation steps per task)
     /// - Meta batch size: 4 (tasks per meta-update)
-    /// - Use first-order approximation: true (FOMAML for efficiency)
+    /// - Use FOMAML: true (first-order approximation for speed)
+    /// - Gradient clipping: 10.0 (for stability)
+    /// - Adam meta-optimizer: enabled (for faster convergence)
     /// </para>
     /// </remarks>
     public MAMLTrainer(
@@ -138,6 +144,9 @@ public class MAMLTrainer<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOutpu
                 $"Configuration must be of type MAMLTrainerConfig<T>, but was {Configuration.GetType().Name}",
                 nameof(config));
         }
+
+        // Check if model supports gradient computation
+        _supportsGradientComputation = metaModel is IGradientComputable<T, TInput, TOutput>;
     }
 
     /// <inheritdoc/>
@@ -152,6 +161,13 @@ public class MAMLTrainer<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOutpu
         Vector<T> originalParameters = MetaModel.GetParameters();
         int paramCount = originalParameters.Length;
 
+        // Initialize Adam optimizer state if needed
+        if (MAMLConfig.UseAdaptiveMetaOptimizer && _adamFirstMoment == null)
+        {
+            _adamFirstMoment = new Vector<T>(new T[paramCount]);
+            _adamSecondMoment = new Vector<T>(new T[paramCount]);
+        }
+
         // Collect meta-gradients from all tasks in batch
         var metaGradients = new List<Vector<T>>();
         var taskLosses = new List<T>();
@@ -163,52 +179,36 @@ public class MAMLTrainer<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOutpu
             // Sample a task using configured data loader
             MetaLearningTask<T, TInput, TOutput> task = DataLoader.GetNextTask();
 
-            // Reset model to original meta-parameters for this task
-            MetaModel.SetParameters(originalParameters.Clone());
-
-            // Inner loop: Adapt to this task using support set
-            for (int step = 0; step < Configuration.InnerSteps; step++)
-            {
-                MetaModel.Train(task.SupportSetX, task.SupportSetY);
-            }
-
-            // Get adapted parameters
-            Vector<T> adaptedParameters = MetaModel.GetParameters();
-
-            // Evaluate on query set to get meta-gradient
-            T queryLoss = ComputeLoss(MetaModel, task.QuerySetX, task.QuerySetY);
-            T queryAccuracy = ComputeAccuracy(MetaModel, task.QuerySetX, task.QuerySetY);
-
-            taskLosses.Add(queryLoss);
-            taskAccuracies.Add(queryAccuracy);
-
-            // Compute meta-gradient
-            Vector<T> metaGradient;
-            if (MAMLConfig.UseFirstOrderApproximation)
-            {
-                // FOMAML: gradient = (adapted_params - original_params) / inner_lr
-                // This approximates the true MAML gradient
-                metaGradient = adaptedParameters.Subtract(originalParameters);
-                metaGradient = metaGradient.Divide(MAMLConfig.InnerLearningRate);
-            }
-            else
-            {
-                // Full MAML would require computing gradients through the adaptation process
-                // For now, we use FOMAML approximation even when this flag is false
-                // TODO: Implement full second-order MAML if needed
-                metaGradient = adaptedParameters.Subtract(originalParameters);
-                metaGradient = metaGradient.Divide(MAMLConfig.InnerLearningRate);
-            }
+            // Compute meta-gradient for this task
+            Vector<T> metaGradient = ComputeTaskMetaGradient(task, originalParameters, out T queryLoss, out T queryAccuracy);
 
             metaGradients.Add(metaGradient);
+            taskLosses.Add(queryLoss);
+            taskAccuracies.Add(queryAccuracy);
         }
 
-        // Outer loop: Meta-update by averaging meta-gradients
+        // Average meta-gradients across tasks
         Vector<T> averageMetaGradient = AverageVectors(metaGradients);
 
-        // Apply meta-learning rate: θ = θ - β * ∇θ_meta
-        Vector<T> scaledGradient = averageMetaGradient.Multiply(Configuration.MetaLearningRate);
-        Vector<T> newMetaParameters = originalParameters.Subtract(scaledGradient);
+        // Apply gradient clipping if enabled
+        if (Convert.ToDouble(MAMLConfig.MaxGradientNorm) > 0)
+        {
+            averageMetaGradient = ClipGradientByNorm(averageMetaGradient, MAMLConfig.MaxGradientNorm);
+        }
+
+        // Apply meta-update using appropriate optimizer
+        Vector<T> newMetaParameters;
+        if (MAMLConfig.UseAdaptiveMetaOptimizer)
+        {
+            newMetaParameters = AdamMetaUpdate(originalParameters, averageMetaGradient);
+        }
+        else
+        {
+            // Vanilla SGD: θ = θ - β * ∇θ
+            Vector<T> scaledGradient = averageMetaGradient.Multiply(Configuration.MetaLearningRate);
+            newMetaParameters = originalParameters.Subtract(scaledGradient);
+        }
+
         MetaModel.SetParameters(newMetaParameters);
 
         // Increment iteration counter
@@ -231,6 +231,243 @@ public class MAMLTrainer<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOutpu
             numTasks: batchSize,
             iteration: _currentIteration,
             timeMs: startTime.Elapsed.TotalMilliseconds);
+    }
+
+    /// <summary>
+    /// Computes the meta-gradient for a single task using appropriate method based on configuration and model capabilities.
+    /// </summary>
+    private Vector<T> ComputeTaskMetaGradient(
+        MetaLearningTask<T, TInput, TOutput> task,
+        Vector<T> originalParameters,
+        out T queryLoss,
+        out T queryAccuracy)
+    {
+        // Check if we can use true MAML with gradient computation
+        if (_supportsGradientComputable && !MAMLConfig.UseFirstOrderApproximation)
+        {
+            // Full second-order MAML
+            return ComputeSecondOrderMetaGradient(task, originalParameters, out queryLoss, out queryAccuracy);
+        }
+        else if (_supportsGradientComputable && MAMLConfig.UseFirstOrderApproximation)
+        {
+            // FOMAML (First-Order MAML)
+            return ComputeFirstOrderMetaGradient(task, originalParameters, out queryLoss, out queryAccuracy);
+        }
+        else
+        {
+            // Fallback to Reptile-style approximation for models without gradient support
+            return ComputeReptileStyleApproximation(task, originalParameters, out queryLoss, out queryAccuracy);
+        }
+    }
+
+    /// <summary>
+    /// Computes full second-order MAML meta-gradient by backpropagating through adaptation.
+    /// </summary>
+    private Vector<T> ComputeSecondOrderMetaGradient(
+        MetaLearningTask<T, TInput, TOutput> task,
+        Vector<T> originalParameters,
+        out T queryLoss,
+        out T queryAccuracy)
+    {
+        var gradientModel = (IGradientComputable<T, TInput, TOutput>)MetaModel;
+
+        // Reset to original parameters
+        MetaModel.SetParameters(originalParameters.Clone());
+
+        // Build adaptation trajectory for backpropagation
+        var adaptationSteps = new List<(TInput input, TOutput target)>();
+        adaptationSteps.Add((task.SupportSetX, task.SupportSetY));
+
+        // Compute second-order gradient through adaptation
+        Vector<T> metaGradient = gradientModel.ComputeSecondOrderGradients(
+            adaptationSteps,
+            task.QuerySetX,
+            task.QuerySetY,
+            LossFunction,
+            Configuration.InnerLearningRate);
+
+        // Evaluate for metrics (after adaptation)
+        for (int step = 0; step < Configuration.InnerSteps; step++)
+        {
+            MetaModel.Train(task.SupportSetX, task.SupportSetY);
+        }
+
+        queryLoss = ComputeLoss(MetaModel, task.QuerySetX, task.QuerySetY);
+        queryAccuracy = ComputeAccuracy(MetaModel, task.QuerySetX, task.QuerySetY);
+
+        // Reset to original parameters
+        MetaModel.SetParameters(originalParameters);
+
+        return metaGradient;
+    }
+
+    /// <summary>
+    /// Computes first-order MAML (FOMAML) meta-gradient.
+    /// </summary>
+    private Vector<T> ComputeFirstOrderMetaGradient(
+        MetaLearningTask<T, TInput, TOutput> task,
+        Vector<T> originalParameters,
+        out T queryLoss,
+        out T queryAccuracy)
+    {
+        var gradientModel = (IGradientComputable<T, TInput, TOutput>)MetaModel;
+
+        // Reset to original parameters
+        MetaModel.SetParameters(originalParameters.Clone());
+
+        // Inner loop: Adapt on support set
+        for (int step = 0; step < Configuration.InnerSteps; step++)
+        {
+            MetaModel.Train(task.SupportSetX, task.SupportSetY);
+        }
+
+        // FOMAML: Compute gradient of query loss w.r.t. adapted parameters
+        // (ignoring the derivative through the adaptation process)
+        Vector<T> metaGradient = gradientModel.ComputeGradients(
+            task.QuerySetX,
+            task.QuerySetY,
+            LossFunction);
+
+        // Evaluate for metrics
+        queryLoss = ComputeLoss(MetaModel, task.QuerySetX, task.QuerySetY);
+        queryAccuracy = ComputeAccuracy(MetaModel, task.QuerySetX, task.QuerySetY);
+
+        // Reset to original parameters
+        MetaModel.SetParameters(originalParameters);
+
+        return metaGradient;
+    }
+
+    /// <summary>
+    /// Computes Reptile-style approximation for models without explicit gradient support.
+    /// </summary>
+    private Vector<T> ComputeReptileStyleApproximation(
+        MetaLearningTask<T, TInput, TOutput> task,
+        Vector<T> originalParameters,
+        out T queryLoss,
+        out T queryAccuracy)
+    {
+        // Reset to original parameters
+        MetaModel.SetParameters(originalParameters.Clone());
+
+        // Inner loop: Adapt on support set
+        for (int step = 0; step < Configuration.InnerSteps; step++)
+        {
+            MetaModel.Train(task.SupportSetX, task.SupportSetY);
+        }
+
+        // Get adapted parameters
+        Vector<T> adaptedParameters = MetaModel.GetParameters();
+
+        // Evaluate on query set
+        queryLoss = ComputeLoss(MetaModel, task.QuerySetX, task.QuerySetY);
+        queryAccuracy = ComputeAccuracy(MetaModel, task.QuerySetX, task.QuerySetY);
+
+        // Approximate gradient as parameter difference / learning rate
+        // This is the Reptile update, used as fallback
+        Vector<T> parameterDifference = adaptedParameters.Subtract(originalParameters);
+        Vector<T> approximateGradient = parameterDifference.Divide(Configuration.InnerLearningRate);
+
+        // Reset to original parameters
+        MetaModel.SetParameters(originalParameters);
+
+        return approximateGradient;
+    }
+
+    /// <summary>
+    /// Applies Adam meta-optimization update.
+    /// </summary>
+    private Vector<T> AdamMetaUpdate(Vector<T> parameters, Vector<T> gradient)
+    {
+        _adamTimeStep++;
+
+        // Update biased first moment estimate: m_t = β1 * m_{t-1} + (1 - β1) * g_t
+        _adamFirstMoment = _adamFirstMoment!.Multiply(MAMLConfig.AdamBeta1)
+            .Add(gradient.Multiply(NumOps.Subtract(NumOps.FromDouble(1.0), MAMLConfig.AdamBeta1)));
+
+        // Update biased second moment estimate: v_t = β2 * v_{t-1} + (1 - β2) * g_t²
+        Vector<T> gradientSquared = ElementwiseMultiply(gradient, gradient);
+        _adamSecondMoment = _adamSecondMoment!.Multiply(MAMLConfig.AdamBeta2)
+            .Add(gradientSquared.Multiply(NumOps.Subtract(NumOps.FromDouble(1.0), MAMLConfig.AdamBeta2)));
+
+        // Compute bias-corrected first moment: m̂_t = m_t / (1 - β1^t)
+        T beta1Power = NumOps.Power(MAMLConfig.AdamBeta1, NumOps.FromDouble(_adamTimeStep));
+        Vector<T> mHat = _adamFirstMoment.Divide(NumOps.Subtract(NumOps.FromDouble(1.0), beta1Power));
+
+        // Compute bias-corrected second moment: v̂_t = v_t / (1 - β2^t)
+        T beta2Power = NumOps.Power(MAMLConfig.AdamBeta2, NumOps.FromDouble(_adamTimeStep));
+        Vector<T> vHat = _adamSecondMoment.Divide(NumOps.Subtract(NumOps.FromDouble(1.0), beta2Power));
+
+        // Compute Adam update: θ = θ - α * m̂_t / (√v̂_t + ε)
+        Vector<T> vHatSqrt = ElementwiseSqrt(vHat);
+        Vector<T> denominator = vHatSqrt.Add(Vector<T>.Fill(parameters.Length, MAMLConfig.AdamEpsilon));
+        Vector<T> adamUpdate = ElementwiseDivide(mHat, denominator);
+        Vector<T> scaledUpdate = adamUpdate.Multiply(Configuration.MetaLearningRate);
+
+        return parameters.Subtract(scaledUpdate);
+    }
+
+    /// <summary>
+    /// Clips gradient by norm for training stability.
+    /// </summary>
+    private Vector<T> ClipGradientByNorm(Vector<T> gradient, T maxNorm)
+    {
+        T gradientNorm = gradient.Norm();
+        T maxNormValue = maxNorm;
+
+        if (NumOps.GreaterThan(gradientNorm, maxNormValue))
+        {
+            // Scale gradient: g_clipped = g * (max_norm / ||g||)
+            T scale = NumOps.Divide(maxNormValue, gradientNorm);
+            return gradient.Multiply(scale);
+        }
+
+        return gradient;
+    }
+
+    /// <summary>
+    /// Element-wise multiplication of two vectors.
+    /// </summary>
+    private Vector<T> ElementwiseMultiply(Vector<T> a, Vector<T> b)
+    {
+        if (a.Length != b.Length)
+            throw new ArgumentException("Vectors must have the same length");
+
+        var result = new T[a.Length];
+        for (int i = 0; i < a.Length; i++)
+        {
+            result[i] = NumOps.Multiply(a[i], b[i]);
+        }
+        return new Vector<T>(result);
+    }
+
+    /// <summary>
+    /// Element-wise division of two vectors.
+    /// </summary>
+    private Vector<T> ElementwiseDivide(Vector<T> a, Vector<T> b)
+    {
+        if (a.Length != b.Length)
+            throw new ArgumentException("Vectors must have the same length");
+
+        var result = new T[a.Length];
+        for (int i = 0; i < a.Length; i++)
+        {
+            result[i] = NumOps.Divide(a[i], b[i]);
+        }
+        return new Vector<T>(result);
+    }
+
+    /// <summary>
+    /// Element-wise square root of a vector.
+    /// </summary>
+    private Vector<T> ElementwiseSqrt(Vector<T> v)
+    {
+        var result = new T[v.Length];
+        for (int i = 0; i < v.Length; i++)
+        {
+            result[i] = NumOps.Sqrt(v[i]);
+        }
+        return new Vector<T>(result);
     }
 
     /// <inheritdoc/>
@@ -276,7 +513,9 @@ public class MAMLTrainer<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOutpu
         {
             ["initial_query_loss"] = initialQueryLoss,
             ["loss_improvement"] = NumOps.Subtract(initialQueryLoss, queryLoss),
-            ["support_query_accuracy_gap"] = NumOps.Subtract(supportAccuracy, queryAccuracy)
+            ["support_query_accuracy_gap"] = NumOps.Subtract(supportAccuracy, queryAccuracy),
+            ["uses_second_order"] = MAMLConfig.UseFirstOrderApproximation ? NumOps.FromDouble(0) : NumOps.FromDouble(1),
+            ["gradient_computation_supported"] = _supportsGradientComputation ? NumOps.FromDouble(1) : NumOps.FromDouble(0)
         };
 
         // Return comprehensive adaptation results
@@ -317,4 +556,6 @@ public class MAMLTrainer<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOutpu
 
         return result;
     }
+
+    private bool _supportsGradientComputable => _supportsGradientComputation;
 }
