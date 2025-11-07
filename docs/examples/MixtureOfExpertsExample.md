@@ -1,209 +1,107 @@
 # Mixture-of-Experts (MoE) Usage Guide
 
-This guide demonstrates how to use Mixture-of-Experts layers with AiDotNet's PredictionModelBuilder pattern.
+This guide demonstrates how to use Mixture-of-Experts layers with AiDotNet's PredictionModelBuilder.
 
 ## Overview
 
 Mixture-of-Experts (MoE) is a powerful architecture that enables models with extremely high capacity while remaining computationally efficient by activating only a subset of parameters per input.
 
-## Quick Start
+## Standard Pattern (Same as All Neural Networks)
 
-The easiest way to use MoE is through the extension methods:
+MoE follows the exact same pattern as other neural network models in AiDotNet:
 
 ```csharp
 using AiDotNet;
-using AiDotNet.Extensions;
 using AiDotNet.LinearAlgebra;
-
-// 1. Prepare your data
-var trainingData = new Tensor<float>(new[] { 100, 10 }); // 100 samples, 10 features
-var trainingLabels = new Tensor<float>(new[] { 100, 3 }); // 3 classes
-
-// 2. Create MoE model using extension method
-var moeModel = MixtureOfExpertsExtensions.CreateMoEModel<float>(
-    inputSize: 10,          // Number of input features
-    outputSize: 3,          // Number of output classes
-    numExperts: 8,          // 8 specialist networks
-    topK: 2,                // Use top 2 experts per input
-    useLoadBalancing: true  // Enable load balancing
-);
-
-// 3. Configure and build with PredictionModelBuilder
-var builder = new PredictionModelBuilder<float, Tensor<float>, Tensor<float>>();
-var result = builder
-    .ConfigureModel(moeModel)
-    .Build(trainingData, trainingLabels);
-
-// 4. Make predictions
-var testData = new Tensor<float>(new[] { 10, 10 }); // 10 test samples
-var predictions = builder.Predict(testData, result);
-```
-
-## Advanced: Custom Architecture
-
-For more control, create a custom architecture:
-
-```csharp
 using AiDotNet.NeuralNetworks;
 using AiDotNet.NeuralNetworks.Layers;
+using AiDotNet.Models;
 
-// Create custom MoE architecture
-var architecture = MixtureOfExpertsExtensions.CreateMoEArchitecture<float>(
-    inputSize: 128,
-    outputSize: 10,
-    numExperts: 16,
-    topK: 4,  // Use top 4 out of 16 experts
-    useLoadBalancing: true,
-    loadBalancingWeight: 0.01,
-    taskType: NeuralNetworkTaskType.MultiClassClassification
-);
-
-// Wrap in model
-var model = new NeuralNetworkModel<float>(architecture);
-
-// Use with PredictionModelBuilder
-var builder = new PredictionModelBuilder<float, Tensor<float>, Tensor<float>>();
-var result = builder.ConfigureModel(model).Build(trainingData, trainingLabels);
-```
-
-## Deep MoE Architecture
-
-For complex tasks requiring deep learning:
-
-```csharp
-// Create a 3-layer deep MoE model
-var deepMoE = MixtureOfExpertsExtensions.CreateDeepMoEModel<float>(
-    inputSize: 128,         // Input features
-    hiddenSize: 256,        // Hidden layer size
-    outputSize: 10,         // Output classes
-    numMoELayers: 3,        // Stack 3 MoE layers
-    numExperts: 8,          // 8 experts per layer
-    topK: 2                 // Top 2 experts per layer
-);
-
-var result = new PredictionModelBuilder<float, Tensor<float>, Tensor<float>>()
-    .ConfigureModel(deepMoE)
-    .Build(trainingData, trainingLabels);
-```
-
-## Manual Configuration (Maximum Control)
-
-For complete control over the architecture:
-
-```csharp
-using AiDotNet.ActivationFunctions;
-
-// 1. Build MoE layer using the builder
+// 1. Create MoE layer using the builder
 var moeLayer = new MixtureOfExpertsBuilder<float>()
-    .WithExperts(8)                     // 8 experts
-    .WithDimensions(128, 128)           // Input/output size
-    .WithExpertHiddenDim(512)           // Expert hidden size (4x expansion)
-    .WithTopK(2)                        // Sparse routing
-    .WithLoadBalancing(true, 0.01)      // Load balancing enabled
-    .WithExpertActivation(new GELUActivation<float>())  // Custom activation
+    .WithExperts(8)                 // 8 specialist networks
+    .WithDimensions(128, 128)       // Input/output dimensions
+    .WithTopK(2)                    // Use top 2 experts per input
+    .WithLoadBalancing(true, 0.01)  // Enable load balancing
     .Build();
 
-// 2. Create custom layer sequence
-var layers = new List<ILayer<float>>
-{
-    moeLayer,
-    new DenseLayer<float>(128, 10, new SoftmaxActivation<float>())
-};
+// 2. Create output layer
+var outputLayer = new DenseLayer<float>(128, 10, new SoftmaxActivation<float>());
 
-// 3. Create architecture with custom layers
+// 3. Create architecture with your layers
 var architecture = new NeuralNetworkArchitecture<float>(
     inputType: InputType.OneDimensional,
     taskType: NeuralNetworkTaskType.MultiClassClassification,
     complexity: NetworkComplexity.Medium,
     inputSize: 128,
     outputSize: 10,
-    layers: layers
+    layers: new List<ILayer<float>> { moeLayer, outputLayer }
 );
 
-// 4. Wrap and use with PredictionModelBuilder
+// 4. Wrap in NeuralNetworkModel (same as always)
 var model = new NeuralNetworkModel<float>(architecture);
-var result = builder.ConfigureModel(model).Build(trainingData, trainingLabels);
+
+// 5. Use with PredictionModelBuilder (same as always)
+var builder = new PredictionModelBuilder<float, Tensor<float>, Tensor<float>>();
+var result = builder
+    .ConfigureModel(model)
+    .Build(trainingData, trainingLabels);
+
+// 6. Make predictions (same as always)
+var predictions = builder.Predict(testData, result);
 ```
-
-## Monitoring Expert Usage
-
-Check if experts are being used balanced during training:
-
-```csharp
-using AiDotNet.Interfaces;
-
-// After training, access the underlying network
-var network = ((NeuralNetworkModel<float>)result.Model).Network;
-
-// Find MoE layers
-foreach (var layer in network.Layers)
-{
-    if (layer is IAuxiliaryLossLayer<float> auxLayer)
-    {
-        var diagnostics = auxLayer.GetAuxiliaryLossDiagnostics();
-
-        Console.WriteLine("Expert Usage Statistics:");
-        foreach (var (key, value) in diagnostics)
-        {
-            Console.WriteLine($"{key}: {value}");
-        }
-    }
-}
-```
-
-## Parameter Guidelines
-
-### Number of Experts (`numExperts`)
-- **2-4 experts**: Good for small models or limited compute
-- **4-8 experts**: Sweet spot for most applications
-- **8-16 experts**: For larger, more complex tasks
-- **16+ experts**: For very large scale models (use with TopK)
-
-### Top-K Selection (`topK`)
-- **topK = 0**: All experts process every input (soft routing)
-  - Best for: Small models (4-8 experts), maximum quality
-- **topK = 1**: Only the best expert per input
-  - Best for: Very large models (32+ experts), inference speed critical
-- **topK = 2**: Top 2 experts per input
-  - Best for: Medium to large models (8-32 experts), good balance
-
-### Load Balancing Weight (`loadBalancingWeight`)
-- **0.01**: Gentle encouragement (default, rarely hurts accuracy)
-- **0.05**: Moderate encouragement (use if you see imbalance)
-- **0.1**: Strong encouragement (may slightly reduce accuracy)
 
 ## Complete Example: Classification Task
 
 ```csharp
 using AiDotNet;
-using AiDotNet.Extensions;
+using AiDotNet.ActivationFunctions;
 using AiDotNet.LinearAlgebra;
+using AiDotNet.Models;
 using AiDotNet.NeuralNetworks;
+using AiDotNet.NeuralNetworks.Layers;
 
-// Prepare data (e.g., MNIST-like classification)
+// Prepare your data
 int numSamples = 1000;
-int numFeatures = 784;  // 28x28 images flattened
-int numClasses = 10;    // 10 digits
+int numFeatures = 784;  // e.g., 28x28 images flattened
+int numClasses = 10;
 
 var trainingData = new Tensor<float>(new[] { numSamples, numFeatures });
 var trainingLabels = new Tensor<float>(new[] { numSamples, numClasses });
-
 // ... fill with actual data ...
 
-// Create MoE model with sensible defaults
-var moeModel = MixtureOfExpertsExtensions.CreateMoEModel<float>(
-    inputSize: numFeatures,
-    outputSize: numClasses,
-    numExperts: 8,
-    topK: 2,  // Use only top 2 experts (75% computation reduction!)
-    useLoadBalancing: true,
-    taskType: NeuralNetworkTaskType.MultiClassClassification
+// Create MoE layer
+var moeLayer = new MixtureOfExpertsBuilder<float>()
+    .WithExperts(8)
+    .WithDimensions(numFeatures, numFeatures)
+    .WithTopK(2)
+    .WithLoadBalancing(true)
+    .Build();
+
+// Create output layer
+var outputLayer = new DenseLayer<float>(
+    numFeatures,
+    numClasses,
+    new SoftmaxActivation<float>()
 );
 
-// Build and train
+// Assemble architecture
+var architecture = new NeuralNetworkArchitecture<float>(
+    inputType: InputType.OneDimensional,
+    taskType: NeuralNetworkTaskType.MultiClassClassification,
+    complexity: NetworkComplexity.Medium,
+    inputSize: numFeatures,
+    outputSize: numClasses,
+    layers: new List<ILayer<float>> { moeLayer, outputLayer }
+);
+
+// Create model
+var model = new NeuralNetworkModel<float>(architecture);
+
+// Train with PredictionModelBuilder
 var builder = new PredictionModelBuilder<float, Tensor<float>, Tensor<float>>();
 var result = builder
-    .ConfigureModel(moeModel)
+    .ConfigureModel(model)
     .Build(trainingData, trainingLabels);
 
 // Evaluate
@@ -212,39 +110,203 @@ Console.WriteLine($"Validation Accuracy: {result.ValidationAccuracy:P2}");
 
 // Make predictions
 var testData = new Tensor<float>(new[] { 100, numFeatures });
-// ... fill with test data ...
-
 var predictions = builder.Predict(testData, result);
 
-// Save for later use
-builder.SaveModel(result, "moe_classifier.bin");
+// Save model
+builder.SaveModel(result, "moe_model.bin");
 
 // Load and use later
-var loadedModel = builder.LoadModel("moe_classifier.bin");
+var loadedModel = builder.LoadModel("moe_model.bin");
 var newPredictions = builder.Predict(testData, loadedModel);
 ```
 
-## Tips for Best Results
+## Deep MoE Architecture (Multiple Layers)
 
-1. **Start Simple**: Begin with 4-8 experts and soft routing (topK=0)
-2. **Add Sparsity**: Once working, try topK=2 for efficiency gains
-3. **Monitor Balance**: Check expert usage diagnostics to ensure no collapse
-4. **Tune Load Balancing**: Adjust weight if you see severe imbalance
-5. **Scale Gradually**: Increase number of experts as data and compute allow
+Stack multiple MoE layers for deeper architectures:
 
-## Research References
+```csharp
+var layers = new List<ILayer<float>>();
 
-- Switch Transformer (Google, 2021): Introduced load balancing loss
-- GShard (Google, 2020): Demonstrated massive scaling with MoE
-- Mixtral 8x7B (Mistral AI, 2023): Modern sparse MoE for language models
+// Input projection
+layers.Add(new DenseLayer<float>(784, 256, new ReLUActivation<float>()));
 
-## Architecture Comparison
+// Stack multiple MoE layers
+for (int i = 0; i < 3; i++)
+{
+    var moeLayer = new MixtureOfExpertsBuilder<float>()
+        .WithExperts(8)
+        .WithDimensions(256, 256)
+        .WithTopK(2)
+        .WithLoadBalancing(true)
+        .Build();
 
-| Configuration | Experts | TopK | Parameters | Computation | Best For |
-|--------------|---------|------|------------|-------------|----------|
-| Dense Baseline | - | - | 100K | 100% | Small datasets |
-| MoE Soft | 4 | 0 | 400K | 400% | Moderate datasets |
-| MoE Sparse | 8 | 2 | 800K | 200% | Large datasets |
-| MoE Very Sparse | 16 | 1 | 1.6M | 100% | Very large scale |
+    layers.Add(moeLayer);
+}
 
-As shown, sparse MoE (TopK < numExperts) provides massive capacity with controlled computation!
+// Output layer
+layers.Add(new DenseLayer<float>(256, 10, new SoftmaxActivation<float>()));
+
+// Create architecture
+var architecture = new NeuralNetworkArchitecture<float>(
+    inputType: InputType.OneDimensional,
+    taskType: NeuralNetworkTaskType.MultiClassClassification,
+    complexity: NetworkComplexity.Complex,
+    inputSize: 784,
+    outputSize: 10,
+    layers: layers
+);
+
+var model = new NeuralNetworkModel<float>(architecture);
+var result = builder.ConfigureModel(model).Build(trainingData, trainingLabels);
+```
+
+## Configuring the MoE Builder
+
+The `MixtureOfExpertsBuilder` provides a fluent API for creating MoE layers:
+
+```csharp
+var moeLayer = new MixtureOfExpertsBuilder<float>()
+    .WithExperts(8)                    // Number of expert networks
+    .WithDimensions(128, 128)          // Input and output dimensions
+    .WithExpertHiddenDim(512)          // Hidden size in experts (4x expansion)
+    .WithTopK(2)                       // Sparse routing: top 2 experts
+    .WithLoadBalancing(true, 0.01)     // Enable load balancing
+    .WithExpertActivation(new GELUActivation<float>())  // Custom activation
+    .WithOutputActivation(new IdentityActivation<float>())
+    .WithIntermediateLayer(true)       // Use 2-layer experts
+    .Build();
+```
+
+### Parameter Guidelines
+
+**Number of Experts:**
+- 2-4: Small models, limited compute
+- 4-8: Most applications (recommended)
+- 8-16: Larger, more complex tasks
+- 16+: Very large models (use with TopK)
+
+**Top-K Selection:**
+- `topK = 0`: All experts active (soft routing) - best for 4-8 experts
+- `topK = 1`: Only best expert - very fast, for 32+ experts
+- `topK = 2`: Top 2 experts - good balance for 8-32 experts
+
+**Load Balancing Weight:**
+- `0.01`: Gentle (default, works well)
+- `0.05`: Moderate (if you see imbalance)
+- `0.1`: Strong (may reduce accuracy slightly)
+
+## Monitoring Expert Usage
+
+Access diagnostics to monitor expert balance during training:
+
+```csharp
+using AiDotNet.Interfaces;
+
+// After training, get the underlying network
+var network = ((NeuralNetworkModel<float>)result.Model).Network;
+
+// Find MoE layers and check diagnostics
+foreach (var layer in network.Layers)
+{
+    if (layer is IAuxiliaryLossLayer<float> auxLayer)
+    {
+        var diagnostics = auxLayer.GetAuxiliaryLossDiagnostics();
+
+        Console.WriteLine("\nExpert Usage Statistics:");
+        foreach (var (key, value) in diagnostics)
+        {
+            Console.WriteLine($"  {key}: {value}");
+        }
+    }
+}
+```
+
+## Advanced: Custom Expert Architectures
+
+Create custom expert networks instead of using the builder:
+
+```csharp
+// Create custom experts
+var experts = new List<ILayer<float>>();
+for (int i = 0; i < 8; i++)
+{
+    var expertLayers = new List<ILayer<float>>
+    {
+        new DenseLayer<float>(128, 512, new ReLUActivation<float>()),
+        new DenseLayer<float>(512, 256, new ReLUActivation<float>()),
+        new DenseLayer<float>(256, 128, new IdentityActivation<float>())
+    };
+
+    experts.Add(new Expert<float>(expertLayers, new[] { 128 }, new[] { 128 }));
+}
+
+// Create router
+var router = new DenseLayer<float>(128, 8); // 8 outputs for 8 experts
+
+// Create MoE layer directly
+var moeLayer = new MixtureOfExpertsLayer<float>(
+    experts,
+    router,
+    inputShape: new[] { 128 },
+    outputShape: new[] { 128 },
+    topK: 2,
+    activationFunction: new IdentityActivation<float>(),
+    useLoadBalancing: true,
+    loadBalancingWeight: 0.01f
+);
+
+// Use in architecture as before
+var layers = new List<ILayer<float>> { moeLayer, outputLayer };
+var architecture = new NeuralNetworkArchitecture<float>(...);
+```
+
+## Regression Example
+
+MoE works for regression too - just change the task type and output activation:
+
+```csharp
+var moeLayer = new MixtureOfExpertsBuilder<float>()
+    .WithExperts(4)
+    .WithDimensions(10, 10)
+    .Build();
+
+var outputLayer = new DenseLayer<float>(10, 1, new IdentityActivation<float>());
+
+var architecture = new NeuralNetworkArchitecture<float>(
+    inputType: InputType.OneDimensional,
+    taskType: NeuralNetworkTaskType.Regression,  // Regression task
+    inputSize: 10,
+    outputSize: 1,
+    layers: new List<ILayer<float>> { moeLayer, outputLayer }
+);
+
+var model = new NeuralNetworkModel<float>(architecture);
+var result = builder.ConfigureModel(model).Build(trainingData, trainingTargets);
+```
+
+## Key Points
+
+1. **Same Pattern**: MoE uses the exact same pattern as all neural networks in AiDotNet
+2. **Layer Integration**: MoE layers work like any other layer (Dense, Conv, etc.)
+3. **Builder Pattern**: Use MixtureOfExpertsBuilder for convenient MoE layer creation
+4. **Architecture Flexibility**: Combine MoE with any other layers
+5. **Automatic Training**: PredictionModelBuilder handles all training automatically
+
+## Common Patterns
+
+### Simple MoE Network
+```csharp
+layers: { MoELayer, OutputLayer }
+```
+
+### Deep MoE Network
+```csharp
+layers: { InputProjection, MoELayer1, MoELayer2, MoELayer3, OutputLayer }
+```
+
+### Hybrid Architecture
+```csharp
+layers: { DenseLayer, MoELayer, DenseLayer, MoELayer, OutputLayer }
+```
+
+All use the same NeuralNetworkArchitecture + NeuralNetworkModel + PredictionModelBuilder pattern!
