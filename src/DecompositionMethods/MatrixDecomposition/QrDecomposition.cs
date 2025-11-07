@@ -6,19 +6,19 @@ namespace AiDotNet.DecompositionMethods.MatrixDecomposition;
 /// <typeparam name="T">The numeric type used in the matrix (e.g., double, float).</typeparam>
 /// <remarks>
 /// <para>
-/// <b>For Beginners:</b> QR decomposition breaks down a matrix into two parts - Q (which has perpendicular columns with length 1) 
+/// <b>For Beginners:</b> QR decomposition breaks down a matrix into two parts - Q (which has perpendicular columns with length 1)
 /// and R (which is triangular with zeros below the diagonal). This is useful for solving equations and other matrix operations.
 /// Think of it like factoring a number into its prime components, but for matrices.
 /// </para>
 /// </remarks>
-public class QrDecomposition<T> : IMatrixDecomposition<T>
+public class QrDecomposition<T> : MatrixDecompositionBase<T>
 {
     /// <summary>
     /// Gets the orthogonal matrix Q from the decomposition.
     /// </summary>
     /// <remarks>
     /// <para>
-    /// <b>For Beginners:</b> The Q matrix has special properties - its columns are perpendicular to each other 
+    /// <b>For Beginners:</b> The Q matrix has special properties - its columns are perpendicular to each other
     /// (orthogonal) and each column has a length of 1. This makes it useful for many calculations.
     /// </para>
     /// </remarks>
@@ -35,15 +35,7 @@ public class QrDecomposition<T> : IMatrixDecomposition<T>
     /// </remarks>
     public Matrix<T> R { get; private set; }
 
-    /// <summary>
-    /// Gets the original matrix that was decomposed.
-    /// </summary>
-    public Matrix<T> A { get; private set; }
-
-    /// <summary>
-    /// Operations for performing numeric calculations with type T.
-    /// </summary>
-    private readonly INumericOperations<T> _numOps;
+    private readonly QrAlgorithmType _algorithm;
 
     /// <summary>
     /// Creates a new QR decomposition of the specified matrix.
@@ -52,22 +44,29 @@ public class QrDecomposition<T> : IMatrixDecomposition<T>
     /// <param name="qrAlgorithm">The algorithm to use for QR decomposition (default is Householder).</param>
     /// <remarks>
     /// <para>
-    /// <b>For Beginners:</b> Different algorithms can be used to perform QR decomposition. Each has advantages in terms of 
+    /// <b>For Beginners:</b> Different algorithms can be used to perform QR decomposition. Each has advantages in terms of
     /// speed, accuracy, or memory usage. Householder is generally a good default choice for most applications.
     /// </para>
     /// </remarks>
     public QrDecomposition(Matrix<T> matrix, QrAlgorithmType qrAlgorithm = QrAlgorithmType.Householder)
+        : base(matrix)
     {
-        A = matrix;
-        _numOps = MathHelper.GetNumericOperations<T>();
-        (Q, R) = Decompose(matrix, qrAlgorithm);
+        _algorithm = qrAlgorithm;
+    }
+
+    /// <summary>
+    /// Performs the QR decomposition.
+    /// </summary>
+    protected override void Decompose()
+    {
+        (Q, R) = ComputeDecomposition(A, _algorithm);
     }
 
     /// <summary>
     /// Solves the linear system Ax = b using the QR decomposition.
     /// </summary>
     /// <param name="b">The right-hand side vector.</param>
-    /// <returns>The solution vector x such that Ax ˜ b.</returns>
+    /// <returns>The solution vector x such that Ax ï¿½ b.</returns>
     /// <remarks>
     /// <para>
     /// <b>For Beginners:</b> This method solves equations of the form Ax = b, where A is a matrix, and x and b are vectors.
@@ -75,7 +74,7 @@ public class QrDecomposition<T> : IMatrixDecomposition<T>
     /// than other methods, especially for complex matrices.
     /// </para>
     /// </remarks>
-    public Vector<T> Solve(Vector<T> b)
+    public override Vector<T> Solve(Vector<T> b)
     {
         var y = Q.Transpose().Multiply(b);
         return BackSubstitution(R, y);
@@ -87,7 +86,7 @@ public class QrDecomposition<T> : IMatrixDecomposition<T>
     /// <param name="matrix">The matrix to decompose.</param>
     /// <param name="algorithm">The algorithm to use.</param>
     /// <returns>A tuple containing the Q and R matrices.</returns>
-    private (Matrix<T> Q, Matrix<T> R) Decompose(Matrix<T> matrix, QrAlgorithmType algorithm)
+    private (Matrix<T> Q, Matrix<T> R) ComputeDecomposition(Matrix<T> matrix, QrAlgorithmType algorithm)
     {
         return algorithm switch
         {
@@ -128,11 +127,11 @@ public class QrDecomposition<T> : IMatrixDecomposition<T>
                 v = v.Subtract(Q.GetColumn(i).Multiply(R[i, j]));
             }
             R[j, j] = v.Norm();
-            if (!_numOps.Equals(R[j, j], _numOps.Zero))
+            if (!NumOps.Equals(R[j, j], NumOps.Zero))
             {
                 for (int i = 0; i < m; i++)
                 {
-                    Q[i, j] = _numOps.Divide(v[i], R[j, j]);
+                    Q[i, j] = NumOps.Divide(v[i], R[j, j]);
                 }
             }
         }
@@ -166,17 +165,17 @@ public class QrDecomposition<T> : IMatrixDecomposition<T>
             T normX = x.Norm();
             Vector<T> e = new(m - k)
             {
-                [0] = _numOps.One
+                [0] = NumOps.One
             };
 
             Vector<T> u = x.Add(e.Multiply(normX));
             T normU = u.Norm();
 
-            if (!_numOps.Equals(normU, _numOps.Zero))
+            if (!NumOps.Equals(normU, NumOps.Zero))
             {
                 u = u.Divide(normU);
                 Matrix<T> H = Matrix<T>.CreateIdentityMatrix(m - k)
-                    .Subtract(u.OuterProduct(u).Multiply(_numOps.FromDouble(2)));
+                    .Subtract(u.OuterProduct(u).Multiply(NumOps.FromDouble(2)));
 
                 Matrix<T> QkTranspose = Matrix<T>.CreateIdentityMatrix(m);
                 for (int i = k; i < m; i++)
@@ -218,19 +217,19 @@ public class QrDecomposition<T> : IMatrixDecomposition<T>
         {
             for (int i = m - 1; i > j; i--)
             {
-                if (!_numOps.Equals(R[i, j], _numOps.Zero))
+                if (!NumOps.Equals(R[i, j], NumOps.Zero))
                 {
                     T a = R[i - 1, j];
                     T b = R[i, j];
-                    T r = _numOps.Sqrt(_numOps.Add(_numOps.Multiply(a, a), _numOps.Multiply(b, b)));
-                    T c = _numOps.Divide(a, r);
-                    T s = _numOps.Divide(b, r);
+                    T r = NumOps.Sqrt(NumOps.Add(NumOps.Multiply(a, a), NumOps.Multiply(b, b)));
+                    T c = NumOps.Divide(a, r);
+                    T s = NumOps.Divide(b, r);
 
                     Matrix<T> G = Matrix<T>.CreateIdentityMatrix(m);
                     G[i - 1, i - 1] = c;
                     G[i, i] = c;
                     G[i - 1, i] = s;
-                    G[i, i - 1] = _numOps.Negate(s);
+                    G[i, i - 1] = NumOps.Negate(s);
 
                     R = G.Multiply(R);
                     Q = Q.Multiply(G.Transpose());
@@ -303,7 +302,7 @@ public class QrDecomposition<T> : IMatrixDecomposition<T>
                 for (int j = 0; j < k; j++)
                 {
                     T r = Q.GetColumn(j).DotProduct(v);
-                    R[j, k] = _numOps.Add(R[j, k], r);
+                    R[j, k] = NumOps.Add(R[j, k], r);
                     v = v.Subtract(Q.GetColumn(j).Multiply(r));
                 }
             }
@@ -333,31 +332,14 @@ public class QrDecomposition<T> : IMatrixDecomposition<T>
         var x = new Vector<T>(R.Columns);
         for (int i = R.Columns - 1; i >= 0; i--)
         {
-            T sum = _numOps.Zero;
+            T sum = NumOps.Zero;
             for (int j = i + 1; j < R.Columns; j++)
             {
-                sum = _numOps.Add(sum, _numOps.Multiply(R[i, j], x[j]));
+                sum = NumOps.Add(sum, NumOps.Multiply(R[i, j], x[j]));
             }
-            x[i] = _numOps.Divide(_numOps.Subtract(y[i], sum), R[i, i]);
+            x[i] = NumOps.Divide(NumOps.Subtract(y[i], sum), R[i, i]);
         }
 
         return x;
-    }
-
-    /// <summary>
-    /// Calculates the inverse of the original matrix using QR decomposition.
-    /// </summary>
-    /// <returns>The inverse of the original matrix.</returns>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> The inverse of a matrix is like the reciprocal of a number. When you multiply a matrix by its inverse,
-    /// you get the identity matrix (similar to how multiplying a number by its reciprocal gives 1).
-    /// Finding the inverse is useful for solving systems of equations and many other matrix operations.
-    /// QR decomposition provides a stable way to calculate this inverse.
-    /// </para>
-    /// </remarks>
-    public Matrix<T> Invert()
-    {
-        return MatrixHelper<T>.InvertUsingDecomposition(this);
     }
 }

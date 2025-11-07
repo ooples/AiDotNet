@@ -11,7 +11,7 @@ namespace AiDotNet.DecompositionMethods.MatrixDecomposition;
 /// compression, noise reduction, and solving systems of equations.
 /// </para>
 /// </remarks>
-public class SvdDecomposition<T> : IMatrixDecomposition<T>
+public class SvdDecomposition<T> : MatrixDecompositionBase<T>
 {
     /// <summary>
     /// Gets the left singular vectors matrix.
@@ -47,12 +47,7 @@ public class SvdDecomposition<T> : IMatrixDecomposition<T>
     /// </remarks>
     public Matrix<T> Vt { get; private set; }
 
-    /// <summary>
-    /// Gets the original matrix that was decomposed.
-    /// </summary>
-    public Matrix<T> A { get; private set; }
-
-    private readonly INumericOperations<T> _numOps;
+    private readonly SvdAlgorithmType _algorithm;
 
     /// <summary>
     /// Initializes a new instance of the SVD decomposition for the specified matrix.
@@ -60,10 +55,17 @@ public class SvdDecomposition<T> : IMatrixDecomposition<T>
     /// <param name="matrix">The matrix to decompose.</param>
     /// <param name="svdAlgorithm">The algorithm to use for SVD computation.</param>
     public SvdDecomposition(Matrix<T> matrix, SvdAlgorithmType svdAlgorithm = SvdAlgorithmType.GolubReinsch)
+        : base(matrix)
     {
-        A = matrix;
-        _numOps = MathHelper.GetNumericOperations<T>();
-        (U, S, Vt) = Decompose(matrix, svdAlgorithm);
+        _algorithm = svdAlgorithm;
+    }
+
+    /// <summary>
+    /// Performs the SVD decomposition.
+    /// </summary>
+    protected override void Decompose()
+    {
+        (U, S, Vt) = ComputeDecomposition(A, _algorithm);
     }
 
     /// <summary>
@@ -72,7 +74,7 @@ public class SvdDecomposition<T> : IMatrixDecomposition<T>
     /// <param name="matrix">The matrix to decompose.</param>
     /// <param name="algorithm">The SVD algorithm to use.</param>
     /// <returns>A tuple containing the U, S, and V^T components of the decomposition.</returns>
-    private (Matrix<T> U, Vector<T> S, Matrix<T> VT) Decompose(Matrix<T> matrix, SvdAlgorithmType algorithm)
+    private (Matrix<T> U, Vector<T> S, Matrix<T> VT) ComputeDecomposition(Matrix<T> matrix, SvdAlgorithmType algorithm)
     {
         return algorithm switch
         {
@@ -98,22 +100,22 @@ public class SvdDecomposition<T> : IMatrixDecomposition<T>
     /// or when A is not a square matrix. It provides the best approximate solution in these cases.
     /// </para>
     /// </remarks>
-    public Vector<T> Solve(Vector<T> b)
+    public override Vector<T> Solve(Vector<T> b)
     {
         var x = new Vector<T>(Vt.Rows);
         for (int i = 0; i < S.Length; i++)
         {
-            if (!_numOps.Equals(S[i], _numOps.Zero))
+            if (!NumOps.Equals(S[i], NumOps.Zero))
             {
-                T r = _numOps.Zero;
+                T r = NumOps.Zero;
                 for (int j = 0; j < U.Rows; j++)
                 {
-                    r = _numOps.Add(r, _numOps.Multiply(U[j, i], b[j]));
+                    r = NumOps.Add(r, NumOps.Multiply(U[j, i], b[j]));
                 }
-                r = _numOps.Divide(r, S[i]);
+                r = NumOps.Divide(r, S[i]);
                 for (int j = 0; j < Vt.Columns; j++)
                 {
-                    x[j] = _numOps.Add(x[j], _numOps.Multiply(Vt[i, j], r));
+                    x[j] = NumOps.Add(x[j], NumOps.Multiply(Vt[i, j], r));
                 }
             }
         }
@@ -185,74 +187,74 @@ public class SvdDecomposition<T> : IMatrixDecomposition<T>
             // Compute the Householder vector for the kth column
             Vector<T> x = A.GetColumn(k).Slice(k, m - k);
             T alpha = x.Norm();
-            if (_numOps.LessThan(A[k, k], _numOps.Zero))
-                alpha = _numOps.Negate(alpha);
+            if (NumOps.LessThan(A[k, k], NumOps.Zero))
+                alpha = NumOps.Negate(alpha);
 
             Vector<T> u = x.Clone();
-            u[0] = _numOps.Add(u[0], alpha);
-            T beta = _numOps.Multiply(_numOps.FromDouble(2), _numOps.Divide(_numOps.One, u.DotProduct(u)));
+            u[0] = NumOps.Add(u[0], alpha);
+            T beta = NumOps.Multiply(NumOps.FromDouble(2), NumOps.Divide(NumOps.One, u.DotProduct(u)));
 
             // Apply the Householder reflection to A and U
             for (int j = k; j < n; j++)
             {
-                T sum = _numOps.Zero;
+                T sum = NumOps.Zero;
                 for (int i = k; i < m; i++)
-                    sum = _numOps.Add(sum, _numOps.Multiply(u[i - k], A[i, j]));
-                sum = _numOps.Multiply(beta, sum);
+                    sum = NumOps.Add(sum, NumOps.Multiply(u[i - k], A[i, j]));
+                sum = NumOps.Multiply(beta, sum);
 
                 for (int i = k; i < m; i++)
-                    A[i, j] = _numOps.Subtract(A[i, j], _numOps.Multiply(u[i - k], sum));
+                    A[i, j] = NumOps.Subtract(A[i, j], NumOps.Multiply(u[i - k], sum));
             }
 
             for (int j = 0; j < m; j++)
             {
-                T sum = _numOps.Zero;
+                T sum = NumOps.Zero;
                 for (int i = k; i < m; i++)
-                    sum = _numOps.Add(sum, _numOps.Multiply(u[i - k], U[j, i]));
-                sum = _numOps.Multiply(beta, sum);
+                    sum = NumOps.Add(sum, NumOps.Multiply(u[i - k], U[j, i]));
+                sum = NumOps.Multiply(beta, sum);
 
                 for (int i = k; i < m; i++)
-                    U[j, i] = _numOps.Subtract(U[j, i], _numOps.Multiply(u[i - k], sum));
+                    U[j, i] = NumOps.Subtract(U[j, i], NumOps.Multiply(u[i - k], sum));
             }
 
-            A[k, k] = _numOps.Negate(alpha);
+            A[k, k] = NumOps.Negate(alpha);
 
             // If this is not the last column, compute the Householder vector for the kth row
             if (k < n - 2)
             {
                 x = A.GetRow(k).Slice(k + 1, n - k - 1);
                 alpha = x.Norm();
-                if (_numOps.LessThan(A[k, k + 1], _numOps.Zero))
-                    alpha = _numOps.Negate(alpha);
+                if (NumOps.LessThan(A[k, k + 1], NumOps.Zero))
+                    alpha = NumOps.Negate(alpha);
 
                 Vector<T> v = x.Clone();
-                v[0] = _numOps.Add(v[0], alpha);
-                beta = _numOps.Multiply(_numOps.FromDouble(2), _numOps.Divide(_numOps.One, v.DotProduct(v)));
+                v[0] = NumOps.Add(v[0], alpha);
+                beta = NumOps.Multiply(NumOps.FromDouble(2), NumOps.Divide(NumOps.One, v.DotProduct(v)));
 
                 // Apply the Householder reflection to A and VT
                 for (int i = k; i < m; i++)
                 {
-                    T sum = _numOps.Zero;
+                    T sum = NumOps.Zero;
                     for (int j = k + 1; j < n; j++)
-                        sum = _numOps.Add(sum, _numOps.Multiply(v[j - k - 1], A[i, j]));
-                    sum = _numOps.Multiply(beta, sum);
+                        sum = NumOps.Add(sum, NumOps.Multiply(v[j - k - 1], A[i, j]));
+                    sum = NumOps.Multiply(beta, sum);
 
                     for (int j = k + 1; j < n; j++)
-                        A[i, j] = _numOps.Subtract(A[i, j], _numOps.Multiply(v[j - k - 1], sum));
+                        A[i, j] = NumOps.Subtract(A[i, j], NumOps.Multiply(v[j - k - 1], sum));
                 }
 
                 for (int i = 0; i < n; i++)
                 {
-                    T sum = _numOps.Zero;
+                    T sum = NumOps.Zero;
                     for (int j = k + 1; j < n; j++)
-                        sum = _numOps.Add(sum, _numOps.Multiply(v[j - k - 1], VT[j, i]));
-                    sum = _numOps.Multiply(beta, sum);
+                        sum = NumOps.Add(sum, NumOps.Multiply(v[j - k - 1], VT[j, i]));
+                    sum = NumOps.Multiply(beta, sum);
 
                     for (int j = k + 1; j < n; j++)
-                        VT[j, i] = _numOps.Subtract(VT[j, i], _numOps.Multiply(v[j - k - 1], sum));
+                        VT[j, i] = NumOps.Subtract(VT[j, i], NumOps.Multiply(v[j - k - 1], sum));
                 }
 
-                A[k, k + 1] = _numOps.Negate(alpha);
+                A[k, k + 1] = NumOps.Negate(alpha);
             }
         }
     }
@@ -293,13 +295,13 @@ public class SvdDecomposition<T> : IMatrixDecomposition<T>
                 bool flag = true;
                 for (int l = k; l >= 0; l--)
                 {
-                    if (l == 0 || _numOps.LessThanOrEquals(_numOps.Abs(_e[l - 1]), _numOps.Multiply(_numOps.FromDouble(1e-12), _numOps.Add(_numOps.Abs(_d[l]), _numOps.Abs(_d[l - 1])))))
+                    if (l == 0 || NumOps.LessThanOrEquals(NumOps.Abs(_e[l - 1]), NumOps.Multiply(NumOps.FromDouble(1e-12), NumOps.Add(NumOps.Abs(_d[l]), NumOps.Abs(_d[l - 1])))))
                     {
-                        _e[l] = _numOps.Zero;
+                        _e[l] = NumOps.Zero;
                         flag = false;
                         break;
                     }
-                    if (_numOps.LessThanOrEquals(_numOps.Abs(_d[l - 1]), _numOps.Multiply(_numOps.FromDouble(1e-12), _numOps.Abs(_d[l]))))
+                    if (NumOps.LessThanOrEquals(NumOps.Abs(_d[l - 1]), NumOps.Multiply(NumOps.FromDouble(1e-12), NumOps.Abs(_d[l]))))
                     {
                         GolubKahanStep(_d, _e, l, k, U, VT);
                         flag = false;
@@ -340,57 +342,57 @@ public class SvdDecomposition<T> : IMatrixDecomposition<T>
     /// </remarks>
     private void GolubKahanStep(Vector<T> d, Vector<T> e, int l, int k, Matrix<T> U, Matrix<T> VT)
     {
-        T f = _numOps.Add(_numOps.Abs(d[l]), _numOps.Abs(d[l + 1]));
-        T tst1 = _numOps.Add(f, _numOps.Abs(e[l]));
-        if (_numOps.Equals(tst1, f))
+        T f = NumOps.Add(NumOps.Abs(d[l]), NumOps.Abs(d[l + 1]));
+        T tst1 = NumOps.Add(f, NumOps.Abs(e[l]));
+        if (NumOps.Equals(tst1, f))
         {
-            e[l] = _numOps.Zero;
+            e[l] = NumOps.Zero;
             return;
         }
 
-        T g = _numOps.Divide(_numOps.Subtract(d[l + 1], d[l]), _numOps.Multiply(_numOps.FromDouble(2), e[l]));
-        T r = _numOps.Sqrt(_numOps.Add(_numOps.One, _numOps.Multiply(g, g)));
-        g = _numOps.Add(d[k], _numOps.Divide(e[l], _numOps.Add(g, _numOps.Multiply(_numOps.SignOrZero(g), r))));
+        T g = NumOps.Divide(NumOps.Subtract(d[l + 1], d[l]), NumOps.Multiply(NumOps.FromDouble(2), e[l]));
+        T r = NumOps.Sqrt(NumOps.Add(NumOps.One, NumOps.Multiply(g, g)));
+        g = NumOps.Add(d[k], NumOps.Divide(e[l], NumOps.Add(g, NumOps.Multiply(NumOps.SignOrZero(g), r))));
 
-        T s = _numOps.One;
-        T c = _numOps.One;
-        T p = _numOps.Zero;
+        T s = NumOps.One;
+        T c = NumOps.One;
+        T p = NumOps.Zero;
 
         for (int i = k - 1; i >= l; i--)
         {
-            T f2 = _numOps.Multiply(s, e[i]);
-            T b = _numOps.Multiply(c, e[i]);
-            r = _numOps.Sqrt(_numOps.Add(_numOps.Multiply(f2, f2), _numOps.Multiply(g, g)));
+            T f2 = NumOps.Multiply(s, e[i]);
+            T b = NumOps.Multiply(c, e[i]);
+            r = NumOps.Sqrt(NumOps.Add(NumOps.Multiply(f2, f2), NumOps.Multiply(g, g)));
             e[i + 1] = r;
 
-            if (_numOps.Equals(r, _numOps.Zero))
+            if (NumOps.Equals(r, NumOps.Zero))
             {
-                d[i + 1] = _numOps.Subtract(d[i + 1], p);
-                e[k] = _numOps.Zero;
+                d[i + 1] = NumOps.Subtract(d[i + 1], p);
+                e[k] = NumOps.Zero;
                 break;
             }
 
-            s = _numOps.Divide(f2, r);
-            c = _numOps.Divide(g, r);
-            g = _numOps.Subtract(d[i + 1], p);
-            r = _numOps.Divide(_numOps.Add(_numOps.Multiply(d[i], c), _numOps.Multiply(b, s)), g);
-            p = _numOps.Multiply(r, s);
-            d[i + 1] = _numOps.Add(g, p);
-            g = _numOps.Subtract(_numOps.Multiply(c, r), b);
+            s = NumOps.Divide(f2, r);
+            c = NumOps.Divide(g, r);
+            g = NumOps.Subtract(d[i + 1], p);
+            r = NumOps.Divide(NumOps.Add(NumOps.Multiply(d[i], c), NumOps.Multiply(b, s)), g);
+            p = NumOps.Multiply(r, s);
+            d[i + 1] = NumOps.Add(g, p);
+            g = NumOps.Subtract(NumOps.Multiply(c, r), b);
 
             // Accumulate transformation in U and VT
             for (int j = 0; j < U.Rows; j++)
             {
                 T t = U[j, i + 1];
-                U[j, i + 1] = _numOps.Add(_numOps.Multiply(s, U[j, i]), _numOps.Multiply(c, t));
-                U[j, i] = _numOps.Subtract(_numOps.Multiply(c, U[j, i]), _numOps.Multiply(s, t));
+                U[j, i + 1] = NumOps.Add(NumOps.Multiply(s, U[j, i]), NumOps.Multiply(c, t));
+                U[j, i] = NumOps.Subtract(NumOps.Multiply(c, U[j, i]), NumOps.Multiply(s, t));
             }
 
             for (int j = 0; j < VT.Columns; j++)
             {
                 T t = VT[i, j];
-                VT[i, j] = _numOps.Add(_numOps.Multiply(c, t), _numOps.Multiply(s, VT[i + 1, j]));
-                VT[i + 1, j] = _numOps.Subtract(_numOps.Multiply(_numOps.Negate(s), t), _numOps.Multiply(c, VT[i + 1, j]));
+                VT[i, j] = NumOps.Add(NumOps.Multiply(c, t), NumOps.Multiply(s, VT[i + 1, j]));
+                VT[i + 1, j] = NumOps.Subtract(NumOps.Multiply(NumOps.Negate(s), t), NumOps.Multiply(c, VT[i + 1, j]));
             }
         }
     }
@@ -429,40 +431,40 @@ public class SvdDecomposition<T> : IMatrixDecomposition<T>
             {
                 for (int j = i + 1; j < n; j++)
                 {
-                    T alpha = _numOps.Zero;
-                    T beta = _numOps.Zero;
-                    T gamma = _numOps.Zero;
+                    T alpha = NumOps.Zero;
+                    T beta = NumOps.Zero;
+                    T gamma = NumOps.Zero;
 
                     for (int k = 0; k < m; k++)
                     {
-                        alpha = _numOps.Add(alpha, _numOps.Multiply(A[k, i], A[k, i]));
-                        beta = _numOps.Add(beta, _numOps.Multiply(A[k, j], A[k, j]));
-                        gamma = _numOps.Add(gamma, _numOps.Multiply(A[k, i], A[k, j]));
+                        alpha = NumOps.Add(alpha, NumOps.Multiply(A[k, i], A[k, i]));
+                        beta = NumOps.Add(beta, NumOps.Multiply(A[k, j], A[k, j]));
+                        gamma = NumOps.Add(gamma, NumOps.Multiply(A[k, i], A[k, j]));
                     }
 
-                    if (!_numOps.Equals(gamma, _numOps.Zero))
+                    if (!NumOps.Equals(gamma, NumOps.Zero))
                     {
                         converged = false;
-                        T zeta = _numOps.Divide(_numOps.Subtract(beta, alpha), _numOps.Multiply(_numOps.FromDouble(2), gamma));
-                        T t = _numOps.Divide(_numOps.One, _numOps.Add(_numOps.Abs(zeta), _numOps.Sqrt(_numOps.Add(_numOps.One, _numOps.Multiply(zeta, zeta)))));
-                        if (_numOps.LessThan(zeta, _numOps.Zero))
-                            t = _numOps.Negate(t);
+                        T zeta = NumOps.Divide(NumOps.Subtract(beta, alpha), NumOps.Multiply(NumOps.FromDouble(2), gamma));
+                        T t = NumOps.Divide(NumOps.One, NumOps.Add(NumOps.Abs(zeta), NumOps.Sqrt(NumOps.Add(NumOps.One, NumOps.Multiply(zeta, zeta)))));
+                        if (NumOps.LessThan(zeta, NumOps.Zero))
+                            t = NumOps.Negate(t);
 
-                        T c = _numOps.Divide(_numOps.One, _numOps.Sqrt(_numOps.Add(_numOps.One, _numOps.Multiply(t, t))));
-                        T s = _numOps.Multiply(t, c);
+                        T c = NumOps.Divide(NumOps.One, NumOps.Sqrt(NumOps.Add(NumOps.One, NumOps.Multiply(t, t))));
+                        T s = NumOps.Multiply(t, c);
 
                         for (int k = 0; k < m; k++)
                         {
                             T temp = A[k, i];
-                            A[k, i] = _numOps.Add(_numOps.Multiply(c, temp), _numOps.Multiply(s, A[k, j]));
-                            A[k, j] = _numOps.Subtract(_numOps.Multiply(_numOps.Negate(s), temp), _numOps.Multiply(c, A[k, j]));
+                            A[k, i] = NumOps.Add(NumOps.Multiply(c, temp), NumOps.Multiply(s, A[k, j]));
+                            A[k, j] = NumOps.Subtract(NumOps.Multiply(NumOps.Negate(s), temp), NumOps.Multiply(c, A[k, j]));
                         }
 
                         for (int k = 0; k < n; k++)
                         {
                             T temp = VT[i, k];
-                            VT[i, k] = _numOps.Add(_numOps.Multiply(c, temp), _numOps.Multiply(s, VT[j, k]));
-                            VT[j, k] = _numOps.Subtract(_numOps.Multiply(_numOps.Negate(s), temp), _numOps.Multiply(c, VT[j, k]));
+                            VT[i, k] = NumOps.Add(NumOps.Multiply(c, temp), NumOps.Multiply(s, VT[j, k]));
+                            VT[j, k] = NumOps.Subtract(NumOps.Multiply(NumOps.Negate(s), temp), NumOps.Multiply(c, VT[j, k]));
                         }
                     }
                 }
@@ -477,7 +479,7 @@ public class SvdDecomposition<T> : IMatrixDecomposition<T>
         // Extract singular values
         for (int i = 0; i < l; i++)
         {
-            S[i] = _numOps.Sqrt(_numOps.Add(_numOps.Multiply(A[i, i], A[i, i]), _numOps.Multiply(A[i, i + 1], A[i, i + 1])));
+            S[i] = NumOps.Sqrt(NumOps.Add(NumOps.Multiply(A[i, i], A[i, i]), NumOps.Multiply(A[i, i + 1], A[i, i + 1])));
         }
 
         // Sort singular values in descending order
@@ -540,7 +542,7 @@ public class SvdDecomposition<T> : IMatrixDecomposition<T>
         {
             for (int j = 0; j < cols; j++)
             {
-                matrix[i, j] = _numOps.FromDouble(random.NextDouble() * 2 - 1);
+                matrix[i, j] = NumOps.FromDouble(random.NextDouble() * 2 - 1);
             }
         }
 
@@ -560,7 +562,7 @@ public class SvdDecomposition<T> : IMatrixDecomposition<T>
         {
             for (int j = i + 1; j < l; j++)
             {
-                if (_numOps.LessThan(S[i], S[j]))
+                if (NumOps.LessThan(S[i], S[j]))
                 {
                     // Swap singular values
                     T temp = S[i];
@@ -613,25 +615,25 @@ public class SvdDecomposition<T> : IMatrixDecomposition<T>
         Matrix<T> VT = new(n, n);
 
         // Initialize U and VT as identity matrices
-        for (int i = 0; i < m; i++) U[i, i] = _numOps.One;
-        for (int i = 0; i < n; i++) VT[i, i] = _numOps.One;
+        for (int i = 0; i < m; i++) U[i, i] = NumOps.One;
+        for (int i = 0; i < n; i++) VT[i, i] = NumOps.One;
 
         // Bidiagonalization
         for (int k = 0; k < l; k++)
         {
             // Householder transformation for columns
-            T alpha = _numOps.Zero;
+            T alpha = NumOps.Zero;
             for (int i = k; i < m; i++)
-                alpha = _numOps.Add(alpha, _numOps.Multiply(A[i, k], A[i, k]));
-            alpha = _numOps.Sqrt(alpha);
-            if (_numOps.GreaterThan(A[k, k], _numOps.Zero))
-                alpha = _numOps.Negate(alpha);
+                alpha = NumOps.Add(alpha, NumOps.Multiply(A[i, k], A[i, k]));
+            alpha = NumOps.Sqrt(alpha);
+            if (NumOps.GreaterThan(A[k, k], NumOps.Zero))
+                alpha = NumOps.Negate(alpha);
 
-            T r = _numOps.Sqrt(_numOps.Multiply(_numOps.Multiply(_numOps.FromDouble(2), alpha), _numOps.Subtract(A[k, k], alpha)));
+            T r = NumOps.Sqrt(NumOps.Multiply(NumOps.Multiply(NumOps.FromDouble(2), alpha), NumOps.Subtract(A[k, k], alpha)));
             Vector<T> u = new Vector<T>(m - k);
-            u[0] = _numOps.Divide(_numOps.Subtract(A[k, k], alpha), r);
+            u[0] = NumOps.Divide(NumOps.Subtract(A[k, k], alpha), r);
             for (int i = 1; i < m - k; i++)
-                u[i] = _numOps.Divide(A[k + i, k], r);
+                u[i] = NumOps.Divide(A[k + i, k], r);
 
             ApplyHouseholderLeft(A, u, k, m, k, n);
             ApplyHouseholderRight(U, u, 0, m, k, m);
@@ -639,21 +641,21 @@ public class SvdDecomposition<T> : IMatrixDecomposition<T>
             if (k < n - 1)
             {
                 // Householder transformation for rows
-                T beta = _numOps.Zero;
+                T beta = NumOps.Zero;
                 for (int j = k + 1; j < n; j++)
-                    beta = _numOps.Add(beta, _numOps.Multiply(A[k, j], A[k, j]));
-                beta = _numOps.Sqrt(beta);
-                if (_numOps.GreaterThan(A[k, k + 1], _numOps.Zero))
-                    beta = _numOps.Negate(beta);
+                    beta = NumOps.Add(beta, NumOps.Multiply(A[k, j], A[k, j]));
+                beta = NumOps.Sqrt(beta);
+                if (NumOps.GreaterThan(A[k, k + 1], NumOps.Zero))
+                    beta = NumOps.Negate(beta);
 
-                r = _numOps.Sqrt(_numOps.Multiply(_numOps.Multiply(_numOps.FromDouble(2), beta), _numOps.Subtract(A[k, k + 1], beta)));
+                r = NumOps.Sqrt(NumOps.Multiply(NumOps.Multiply(NumOps.FromDouble(2), beta), NumOps.Subtract(A[k, k + 1], beta)));
                 Vector<T> v = new(n - k - 1)
                 {
-                    [0] = _numOps.Divide(_numOps.Subtract(A[k, k + 1], beta), r)
+                    [0] = NumOps.Divide(NumOps.Subtract(A[k, k + 1], beta), r)
                 };
 
                 for (int j = 1; j < n - k - 1; j++)
-                    v[j] = _numOps.Divide(A[k, k + j + 1], r);
+                    v[j] = NumOps.Divide(A[k, k + j + 1], r);
 
                 ApplyHouseholderRight(A, v, k, m, k + 1, n);
                 ApplyHouseholderLeft(VT, v, k + 1, n, 0, n);
@@ -671,7 +673,7 @@ public class SvdDecomposition<T> : IMatrixDecomposition<T>
         {
             for (int j = i + 1; j < l; j++)
             {
-                if (_numOps.LessThan(S[i], S[j]))
+                if (NumOps.LessThan(S[i], S[j]))
                 {
                     T temp = S[i];
                     S[i] = S[j];
@@ -717,13 +719,13 @@ public class SvdDecomposition<T> : IMatrixDecomposition<T>
     {
         for (int j = colStart; j < colEnd; j++)
         {
-            T s = _numOps.Zero;
+            T s = NumOps.Zero;
             for (int i = 0; i < rowEnd - rowStart; i++)
-                s = _numOps.Add(s, _numOps.Multiply(u[i], A[rowStart + i, j]));
-            s = _numOps.Multiply(_numOps.FromDouble(2), s);
+                s = NumOps.Add(s, NumOps.Multiply(u[i], A[rowStart + i, j]));
+            s = NumOps.Multiply(NumOps.FromDouble(2), s);
 
             for (int i = 0; i < rowEnd - rowStart; i++)
-                A[rowStart + i, j] = _numOps.Subtract(A[rowStart + i, j], _numOps.Multiply(s, u[i]));
+                A[rowStart + i, j] = NumOps.Subtract(A[rowStart + i, j], NumOps.Multiply(s, u[i]));
         }
     }
 
@@ -740,13 +742,13 @@ public class SvdDecomposition<T> : IMatrixDecomposition<T>
     {
         for (int i = rowStart; i < rowEnd; i++)
         {
-            T s = _numOps.Zero;
+            T s = NumOps.Zero;
             for (int j = 0; j < colEnd - colStart; j++)
-                s = _numOps.Add(s, _numOps.Multiply(A[i, colStart + j], u[j]));
-            s = _numOps.Multiply(_numOps.FromDouble(2), s);
+                s = NumOps.Add(s, NumOps.Multiply(A[i, colStart + j], u[j]));
+            s = NumOps.Multiply(NumOps.FromDouble(2), s);
 
             for (int j = 0; j < colEnd - colStart; j++)
-                A[i, colStart + j] = _numOps.Subtract(A[i, colStart + j], _numOps.Multiply(s, u[j]));
+                A[i, colStart + j] = NumOps.Subtract(A[i, colStart + j], NumOps.Multiply(s, u[j]));
         }
     }
 
@@ -786,7 +788,7 @@ public class SvdDecomposition<T> : IMatrixDecomposition<T>
                 v = v.Normalize();
             }
 
-            T sigma = _numOps.Sqrt(ATA.Multiply(v).DotProduct(v));
+            T sigma = NumOps.Sqrt(ATA.Multiply(v).DotProduct(v));
             Vector<T> u = matrix.Multiply(v).Divide(sigma);
 
             S[i] = sigma;
@@ -798,7 +800,7 @@ public class SvdDecomposition<T> : IMatrixDecomposition<T>
             {
                 for (int c = 0; c < n; c++)
                 {
-                    ATA[r, c] = _numOps.Subtract(ATA[r, c], _numOps.Multiply(_numOps.Multiply(sigma, v[r]), v[c]));
+                    ATA[r, c] = NumOps.Subtract(ATA[r, c], NumOps.Multiply(NumOps.Multiply(sigma, v[r]), v[c]));
                 }
             }
         }
@@ -917,22 +919,5 @@ public class SvdDecomposition<T> : IMatrixDecomposition<T>
         }
 
         return diagonal;
-    }
-
-    /// <summary>
-    /// Computes the inverse of the matrix using SVD.
-    /// </summary>
-    /// <returns>The inverse of the matrix</returns>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> Matrix inversion is like finding the opposite operation. If a matrix represents 
-    /// a transformation (like scaling, rotating, or skewing data), its inverse undoes that transformation. 
-    /// SVD provides a stable way to compute the inverse even for matrices that are nearly singular 
-    /// (matrices that almost don't have an inverse).
-    /// </para>
-    /// </remarks>
-    public Matrix<T> Invert()
-    {
-        return MatrixHelper<T>.InvertUsingDecomposition(this);
     }
 }

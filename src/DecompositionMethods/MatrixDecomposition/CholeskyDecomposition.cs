@@ -5,26 +5,18 @@ namespace AiDotNet.DecompositionMethods.MatrixDecomposition;
 /// </summary>
 /// <typeparam name="T">The numeric type used in the matrix (e.g., double, float).</typeparam>
 /// <remarks>
-/// The Cholesky decomposition breaks down a symmetric positive definite matrix into 
+/// The Cholesky decomposition breaks down a symmetric positive definite matrix into
 /// the product of a lower triangular matrix and its transpose (A = L * L^T).
 /// This is useful for solving linear systems and matrix inversion more efficiently.
 /// </remarks>
-public class CholeskyDecomposition<T> : IMatrixDecomposition<T>
+public class CholeskyDecomposition<T> : MatrixDecompositionBase<T>
 {
-    /// <summary>
-    /// Provides numeric operations for the specified type T.
-    /// </summary>
-    private readonly INumericOperations<T> _numOps;
-
     /// <summary>
     /// Gets the lower triangular matrix L from the decomposition A = L * L^T.
     /// </summary>
     public Matrix<T> L { get; private set; }
 
-    /// <summary>
-    /// Gets the original matrix that was decomposed.
-    /// </summary>
-    public Matrix<T> A { get; private set; }
+    private readonly CholeskyAlgorithmType _algorithm;
 
     /// <summary>
     /// Initializes a new instance of the Cholesky decomposition for the specified matrix.
@@ -40,10 +32,17 @@ public class CholeskyDecomposition<T> : IMatrixDecomposition<T>
     /// science, this means the matrix must be symmetric with positive values on the diagonal.
     /// </remarks>
     public CholeskyDecomposition(Matrix<T> matrix, CholeskyAlgorithmType algorithm = CholeskyAlgorithmType.Crout)
+        : base(matrix)
     {
-        A = matrix;
-        _numOps = MathHelper.GetNumericOperations<T>();
-        L = Decompose(matrix, algorithm);
+        _algorithm = algorithm;
+    }
+
+    /// <summary>
+    /// Performs the Cholesky decomposition.
+    /// </summary>
+    protected override void Decompose()
+    {
+        L = ComputeDecomposition(A, _algorithm);
     }
 
     /// <summary>
@@ -56,7 +55,7 @@ public class CholeskyDecomposition<T> : IMatrixDecomposition<T>
     /// 1. Forward substitution to solve Ly = b
     /// 2. Back substitution to solve L^Tx = y
     /// </remarks>
-    public Vector<T> Solve(Vector<T> b)
+    public override Vector<T> Solve(Vector<T> b)
     {
         var y = ForwardSubstitution(L, b);
         return BackSubstitution(L.Transpose(), y);
@@ -69,7 +68,7 @@ public class CholeskyDecomposition<T> : IMatrixDecomposition<T>
     /// <param name="algorithm">The algorithm type to use.</param>
     /// <returns>The lower triangular matrix L from the decomposition.</returns>
     /// <exception cref="ArgumentException">Thrown when an unsupported algorithm is specified.</exception>
-    private Matrix<T> Decompose(Matrix<T> matrix, CholeskyAlgorithmType algorithm)
+    private Matrix<T> ComputeDecomposition(Matrix<T> matrix, CholeskyAlgorithmType algorithm)
     {
         return algorithm switch
         {
@@ -103,33 +102,33 @@ public class CholeskyDecomposition<T> : IMatrixDecomposition<T>
         {
             for (int j = 0; j <= i; j++)
             {
-                if (i != j && !_numOps.Equals(matrix[i, j], matrix[j, i]))
+                if (i != j && !NumOps.Equals(matrix[i, j], matrix[j, i]))
                 {
                     throw new ArgumentException("Matrix must be symmetric for Cholesky decomposition.");
                 }
 
-                T sum = _numOps.Zero;
+                T sum = NumOps.Zero;
 
                 if (j == i) // Diagonal elements
                 {
                     for (int k = 0; k < j; k++)
                     {
-                        sum = _numOps.Add(sum, _numOps.Multiply(L[j, k], L[j, k]));
+                        sum = NumOps.Add(sum, NumOps.Multiply(L[j, k], L[j, k]));
                     }
-                    T diagonalValue = _numOps.Subtract(matrix[j, j], sum);
-                    if (_numOps.LessThanOrEquals(diagonalValue, _numOps.Zero))
+                    T diagonalValue = NumOps.Subtract(matrix[j, j], sum);
+                    if (NumOps.LessThanOrEquals(diagonalValue, NumOps.Zero))
                     {
                         throw new ArgumentException("Matrix is not positive definite.");
                     }
-                    L[j, j] = _numOps.Sqrt(diagonalValue);
+                    L[j, j] = NumOps.Sqrt(diagonalValue);
                 }
                 else // Lower triangular elements
                 {
                     for (int k = 0; k < j; k++)
                     {
-                        sum = _numOps.Add(sum, _numOps.Multiply(L[i, k], L[j, k]));
+                        sum = NumOps.Add(sum, NumOps.Multiply(L[i, k], L[j, k]));
                     }
-                    L[i, j] = _numOps.Divide(_numOps.Subtract(matrix[i, j], sum), L[j, j]);
+                    L[i, j] = NumOps.Divide(NumOps.Subtract(matrix[i, j], sum), L[j, j]);
                 }
             }
         }
@@ -161,26 +160,26 @@ public class CholeskyDecomposition<T> : IMatrixDecomposition<T>
 
         for (int j = 0; j < n; j++)
         {
-            T sum = _numOps.Zero;
+            T sum = NumOps.Zero;
             for (int k = 0; k < j; k++)
             {
-                sum = _numOps.Add(sum, _numOps.Multiply(L[j, k], L[j, k]));
+                sum = NumOps.Add(sum, NumOps.Multiply(L[j, k], L[j, k]));
             }
-            T diagonalValue = _numOps.Subtract(matrix[j, j], sum);
-            if (_numOps.LessThanOrEquals(diagonalValue, _numOps.Zero))
+            T diagonalValue = NumOps.Subtract(matrix[j, j], sum);
+            if (NumOps.LessThanOrEquals(diagonalValue, NumOps.Zero))
             {
                 throw new ArgumentException("Matrix is not positive definite.");
             }
-            L[j, j] = _numOps.Sqrt(diagonalValue);
+            L[j, j] = NumOps.Sqrt(diagonalValue);
 
             for (int i = j + 1; i < n; i++)
             {
-                sum = _numOps.Zero;
+                sum = NumOps.Zero;
                 for (int k = 0; k < j; k++)
                 {
-                    sum = _numOps.Add(sum, _numOps.Multiply(L[i, k], L[j, k]));
+                    sum = NumOps.Add(sum, NumOps.Multiply(L[i, k], L[j, k]));
                 }
-                L[i, j] = _numOps.Divide(_numOps.Subtract(matrix[i, j], sum), L[j, j]);
+                L[i, j] = NumOps.Divide(NumOps.Subtract(matrix[i, j], sum), L[j, j]);
             }
         }
 
@@ -213,24 +212,24 @@ public class CholeskyDecomposition<T> : IMatrixDecomposition<T>
         {
             for (int j = 0; j <= i; j++)
             {
-                T sum = _numOps.Zero;
+                T sum = NumOps.Zero;
                 for (int k = 0; k < j; k++)
                 {
-                    sum = _numOps.Add(sum, _numOps.Multiply(L[i, k], L[j, k]));
+                    sum = NumOps.Add(sum, NumOps.Multiply(L[i, k], L[j, k]));
                 }
 
                 if (i == j)
                 {
-                    T diagonalValue = _numOps.Subtract(matrix[i, i], sum);
-                    if (_numOps.LessThanOrEquals(diagonalValue, _numOps.Zero))
+                    T diagonalValue = NumOps.Subtract(matrix[i, i], sum);
+                    if (NumOps.LessThanOrEquals(diagonalValue, NumOps.Zero))
                     {
                         throw new ArgumentException("Matrix is not positive definite.");
                     }
-                    L[i, j] = _numOps.Sqrt(diagonalValue);
+                    L[i, j] = NumOps.Sqrt(diagonalValue);
                 }
                 else
                 {
-                    L[i, j] = _numOps.Divide(_numOps.Subtract(matrix[i, j], sum), L[j, j]);
+                    L[i, j] = NumOps.Divide(NumOps.Subtract(matrix[i, j], sum), L[j, j]);
                 }
             }
         }
@@ -266,7 +265,7 @@ public class CholeskyDecomposition<T> : IMatrixDecomposition<T>
             T d = matrix[j, j];
             for (int k = 0; k < j; k++)
             {
-                d = _numOps.Subtract(d, _numOps.Multiply(_numOps.Multiply(L[j, k], L[j, k]), D[k]));
+                d = NumOps.Subtract(d, NumOps.Multiply(NumOps.Multiply(L[j, k], L[j, k]), D[k]));
             }
             D[j] = d;
 
@@ -275,9 +274,9 @@ public class CholeskyDecomposition<T> : IMatrixDecomposition<T>
                 T sum = matrix[i, j];
                 for (int k = 0; k < j; k++)
                 {
-                    sum = _numOps.Subtract(sum, _numOps.Multiply(_numOps.Multiply(L[i, k], L[j, k]), D[k]));
+                    sum = NumOps.Subtract(sum, NumOps.Multiply(NumOps.Multiply(L[i, k], L[j, k]), D[k]));
                 }
-                L[i, j] = _numOps.Divide(sum, d);
+                L[i, j] = NumOps.Divide(sum, d);
             }
         }
 
@@ -286,7 +285,7 @@ public class CholeskyDecomposition<T> : IMatrixDecomposition<T>
         {
             for (int j = 0; j <= i; j++)
             {
-                L[i, j] = _numOps.Multiply(L[i, j], _numOps.Sqrt(D[j]));
+                L[i, j] = NumOps.Multiply(L[i, j], NumOps.Sqrt(D[j]));
             }
         }
 
@@ -349,12 +348,12 @@ public class CholeskyDecomposition<T> : IMatrixDecomposition<T>
                 {
                     for (int c = 0; c <= r; c++)
                     {
-                        T sum = _numOps.Zero;
+                        T sum = NumOps.Zero;
                         for (int k = 0; k < size; k++)
                         {
-                            sum = _numOps.Add(sum, _numOps.Multiply(L[i + size + r, i + k], L[i + size + c, i + k]));
+                            sum = NumOps.Add(sum, NumOps.Multiply(L[i + size + r, i + k], L[i + size + c, i + k]));
                         }
-                        C[r, c] = _numOps.Subtract(C[r, c], sum);
+                        C[r, c] = NumOps.Subtract(C[r, c], sum);
                         C[c, r] = C[r, c];
                     }
                 }
@@ -395,13 +394,13 @@ public class CholeskyDecomposition<T> : IMatrixDecomposition<T>
         var y = new Vector<T>(L.Rows);
         for (int i = 0; i < L.Rows; i++)
         {
-            T sum = _numOps.Zero;
+            T sum = NumOps.Zero;
             for (int j = 0; j < i; j++)
             {
-                sum = _numOps.Add(sum, _numOps.Multiply(L[i, j], y[j]));
+                sum = NumOps.Add(sum, NumOps.Multiply(L[i, j], y[j]));
             }
 
-            y[i] = _numOps.Divide(_numOps.Subtract(b[i], sum), L[i, i]);
+            y[i] = NumOps.Divide(NumOps.Subtract(b[i], sum), L[i, i]);
         }
 
         return y;
@@ -418,27 +417,15 @@ public class CholeskyDecomposition<T> : IMatrixDecomposition<T>
         var x = new Vector<T>(LT.Columns);
         for (int i = LT.Columns - 1; i >= 0; i--)
         {
-            T sum = _numOps.Zero;
+            T sum = NumOps.Zero;
             for (int j = i + 1; j < LT.Columns; j++)
             {
-                sum = _numOps.Add(sum, _numOps.Multiply(LT[i, j], x[j]));
+                sum = NumOps.Add(sum, NumOps.Multiply(LT[i, j], x[j]));
             }
 
-            x[i] = _numOps.Divide(_numOps.Subtract(y[i], sum), LT[i, i]);
+            x[i] = NumOps.Divide(NumOps.Subtract(y[i], sum), LT[i, i]);
         }
 
         return x;
-    }
-
-    /// <summary>
-    /// Computes the inverse of the original matrix using the Cholesky decomposition.
-    /// </summary>
-    /// <returns>The inverse of the original matrix A.</returns>
-    /// <remarks>
-    /// This method delegates to MatrixHelper to perform the inversion using this decomposition.
-    /// </remarks>
-    public Matrix<T> Invert()
-    {
-        return MatrixHelper<T>.InvertUsingDecomposition(this);
     }
 }

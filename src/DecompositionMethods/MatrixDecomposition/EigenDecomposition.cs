@@ -9,13 +9,8 @@ namespace AiDotNet.DecompositionMethods.MatrixDecomposition;
 /// and solving systems of differential equations.
 /// </remarks>
 /// <typeparam name="T">The numeric data type used in calculations (e.g., float, double).</typeparam>
-public class EigenDecomposition<T> : IMatrixDecomposition<T>
+public class EigenDecomposition<T> : MatrixDecompositionBase<T>
 {
-    /// <summary>
-    /// Operations for performing numeric calculations with type T.
-    /// </summary>
-    private readonly INumericOperations<T> _numOps;
-
     /// <summary>
     /// Gets the eigenvectors of the decomposed matrix.
     /// </summary>
@@ -36,10 +31,7 @@ public class EigenDecomposition<T> : IMatrixDecomposition<T>
     /// </remarks>
     public Vector<T> EigenValues { get; private set; }
 
-    /// <summary>
-    /// Gets the original matrix that was decomposed.
-    /// </summary>
-    public Matrix<T> A { get; private set; }
+    private readonly EigenAlgorithmType _algorithm;
 
     /// <summary>
     /// Creates a new eigenvalue decomposition for the specified matrix.
@@ -53,10 +45,17 @@ public class EigenDecomposition<T> : IMatrixDecomposition<T>
     /// - Jacobi: Works well for symmetric matrices.
     /// </remarks>
     public EigenDecomposition(Matrix<T> matrix, EigenAlgorithmType algorithm = EigenAlgorithmType.QR)
+        : base(matrix)
     {
-        _numOps = MathHelper.GetNumericOperations<T>();
-        A = matrix;
-        (EigenValues, EigenVectors) = Decompose(matrix, algorithm);
+        _algorithm = algorithm;
+    }
+
+    /// <summary>
+    /// Performs the eigenvalue decomposition.
+    /// </summary>
+    protected override void Decompose()
+    {
+        (EigenValues, EigenVectors) = ComputeDecomposition(A, _algorithm);
     }
 
     /// <summary>
@@ -66,7 +65,7 @@ public class EigenDecomposition<T> : IMatrixDecomposition<T>
     /// <param name="algorithm">The algorithm to use for eigenvalue decomposition.</param>
     /// <returns>A tuple containing the eigenvalues and eigenvectors of the matrix.</returns>
     /// <exception cref="ArgumentException">Thrown when an unsupported algorithm is specified.</exception>
-    private (Vector<T> eigenValues, Matrix<T> eigenVectors) Decompose(Matrix<T> matrix, EigenAlgorithmType algorithm)
+    private (Vector<T> eigenValues, Matrix<T> eigenVectors) ComputeDecomposition(Matrix<T> matrix, EigenAlgorithmType algorithm)
     {
         return algorithm switch
         {
@@ -104,10 +103,10 @@ public class EigenDecomposition<T> : IMatrixDecomposition<T>
             for (int iter = 0; iter < 100; iter++)
             {
                 Vector<T> w = matrix.Multiply(v);
-                T eigenValue = _numOps.Divide(w.DotProduct(v), v.DotProduct(v));
+                T eigenValue = NumOps.Divide(w.DotProduct(v), v.DotProduct(v));
                 v = w.Divide(w.Norm());
 
-                if (iter > 0 && _numOps.LessThan(_numOps.Abs(_numOps.Subtract(eigenValue, eigenValues[i])), _numOps.FromDouble(1e-10)))
+                if (iter > 0 && NumOps.LessThan(NumOps.Abs(NumOps.Subtract(eigenValue, eigenValues[i])), NumOps.FromDouble(1e-10)))
                 {
                     break;
                 }
@@ -149,7 +148,7 @@ public class EigenDecomposition<T> : IMatrixDecomposition<T>
             A = r.Multiply(q);
             Q = Q.Multiply(q);
 
-            if (A.IsUpperTriangularMatrix(_numOps.FromDouble(1e-10)))
+            if (A.IsUpperTriangularMatrix(NumOps.FromDouble(1e-10)))
                 break;
         }
 
@@ -180,15 +179,15 @@ public class EigenDecomposition<T> : IMatrixDecomposition<T>
         for (int iter = 0; iter < 100; iter++)
         {
             // Find the largest off-diagonal element
-            T maxOffDiagonal = _numOps.Zero;
+            T maxOffDiagonal = NumOps.Zero;
             int p = 0, q = 0;
 
             for (int i = 0; i < n - 1; i++)
             {
                 for (int j = i + 1; j < n; j++)
                 {
-                    T absValue = _numOps.Abs(A[i, j]);
-                    if (_numOps.GreaterThan(absValue, maxOffDiagonal))
+                    T absValue = NumOps.Abs(A[i, j]);
+                    if (NumOps.GreaterThan(absValue, maxOffDiagonal))
                     {
                         maxOffDiagonal = absValue;
                         p = i;
@@ -198,19 +197,19 @@ public class EigenDecomposition<T> : IMatrixDecomposition<T>
             }
 
             // Check if we've reached the desired precision
-            if (_numOps.LessThan(maxOffDiagonal, _numOps.FromDouble(1e-10)))
+            if (NumOps.LessThan(maxOffDiagonal, NumOps.FromDouble(1e-10)))
                 break;
 
             // Calculate the Jacobi rotation parameters
-            T theta = _numOps.Divide(_numOps.Subtract(A[q, q], A[p, p]), _numOps.Multiply(_numOps.FromDouble(2), A[p, q]));
-            T t = _numOps.Divide(_numOps.SignOrZero(theta), _numOps.Add(_numOps.Abs(theta), _numOps.Sqrt(_numOps.Add(_numOps.One, _numOps.Multiply(theta, theta)))));
-            T c = _numOps.Divide(_numOps.One, _numOps.Sqrt(_numOps.Add(_numOps.One, _numOps.Multiply(t, t))));
-            T s = _numOps.Multiply(t, c);
+            T theta = NumOps.Divide(NumOps.Subtract(A[q, q], A[p, p]), NumOps.Multiply(NumOps.FromDouble(2), A[p, q]));
+            T t = NumOps.Divide(NumOps.SignOrZero(theta), NumOps.Add(NumOps.Abs(theta), NumOps.Sqrt(NumOps.Add(NumOps.One, NumOps.Multiply(theta, theta)))));
+            T c = NumOps.Divide(NumOps.One, NumOps.Sqrt(NumOps.Add(NumOps.One, NumOps.Multiply(t, t))));
+            T s = NumOps.Multiply(t, c);
 
             // Create the Jacobi rotation matrix
             Matrix<T> J = Matrix<T>.CreateIdentity(n);
             J[p, p] = c; J[q, q] = c;
-            J[p, q] = s; J[q, p] = _numOps.Negate(s);
+            J[p, q] = s; J[q, p] = NumOps.Negate(s);
 
             // Apply the rotation to A and accumulate in V
             A = J.Transpose().Multiply(A).Multiply(J);
@@ -228,14 +227,14 @@ public class EigenDecomposition<T> : IMatrixDecomposition<T>
     /// This method uses the eigenvalue decomposition to solve the system of equations.
     /// It works by transforming the problem into the eigenvector basis, where the system
     /// becomes diagonal and easy to solve, then transforming back to the original basis.
-    /// 
-    /// The solution is computed as: x = V * D?¹ * V^T * b
+    ///
+    /// The solution is computed as: x = V * D?ï¿½ * V^T * b
     /// where V is the matrix of eigenvectors, D is a diagonal matrix of eigenvalues,
     /// and V^T is the transpose of V.
     /// </remarks>
     /// <param name="b">The right-hand side vector of the equation Ax = b.</param>
     /// <returns>The solution vector x.</returns>
-    public Vector<T> Solve(Vector<T> b)
+    public override Vector<T> Solve(Vector<T> b)
     {
         Matrix<T> D = Matrix<T>.CreateDiagonal(EigenValues);
         return EigenVectors.Multiply(D.InvertDiagonalMatrix()).Multiply(EigenVectors.Transpose()).Multiply(b);
@@ -246,15 +245,15 @@ public class EigenDecomposition<T> : IMatrixDecomposition<T>
     /// </summary>
     /// <remarks>
     /// This method uses the eigenvalue decomposition to compute the inverse of the matrix.
-    /// The inverse is calculated as: A?¹ = V * D?¹ * V^T
+    /// The inverse is calculated as: A?ï¿½ = V * D?ï¿½ * V^T
     /// where V is the matrix of eigenvectors, D is a diagonal matrix of eigenvalues,
     /// and V^T is the transpose of V.
-    /// 
+    ///
     /// This approach can be more numerically stable than directly inverting the matrix,
     /// especially for matrices that are nearly singular (close to having no inverse).
     /// </remarks>
     /// <returns>The inverse of the original matrix.</returns>
-    public Matrix<T> Invert()
+    public override Matrix<T> Invert()
     {
         Matrix<T> D = Matrix<T>.CreateDiagonal(EigenValues);
         return EigenVectors.Multiply(D.InvertDiagonalMatrix()).Multiply(EigenVectors.Transpose());
