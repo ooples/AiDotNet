@@ -122,10 +122,25 @@ public class InferenceController : ControllerBase
 
             return Ok(response);
         }
+        catch (InvalidOperationException ex)
+        {
+            _logger.LogError(ex, "Invalid operation during prediction for model '{ModelName}'", modelName);
+            return StatusCode(500, new { error = $"Model operation error: {ex.Message}" });
+        }
+        catch (NotSupportedException ex)
+        {
+            _logger.LogError(ex, "Unsupported operation for model '{ModelName}'", modelName);
+            return StatusCode(500, new { error = $"Unsupported operation: {ex.Message}" });
+        }
+        catch (ArgumentException ex)
+        {
+            _logger.LogError(ex, "Invalid argument during prediction for model '{ModelName}'", modelName);
+            return BadRequest(new { error = $"Invalid input: {ex.Message}" });
+        }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error during prediction for model '{ModelName}'", modelName);
-            return StatusCode(500, new { error = $"Error during prediction: {ex.Message}" });
+            _logger.LogError(ex, "Unexpected error during prediction for model '{ModelName}'", modelName);
+            return StatusCode(500, new { error = $"An unexpected error occurred during prediction: {ex.Message}" });
         }
     }
 
