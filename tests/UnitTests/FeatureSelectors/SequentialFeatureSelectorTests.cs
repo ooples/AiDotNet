@@ -2,7 +2,7 @@ using AiDotNet.Enums;
 using AiDotNet.FeatureSelectors;
 using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
-using AiDotNet.Metadata;
+using AiDotNet.Models;
 using Xunit;
 
 namespace AiDotNetTests.UnitTests.FeatureSelectors
@@ -25,11 +25,11 @@ namespace AiDotNetTests.UnitTests.FeatureSelectors
         public Vector<double> Predict(Matrix<double> input)
         {
             // Simple prediction: classify based on sum of features
-            var predictions = new Vector<double>(input.RowCount);
-            for (int i = 0; i < input.RowCount; i++)
+            var predictions = new Vector<double>(input.Rows);
+            for (int i = 0; i < input.Rows; i++)
             {
                 double sum = 0;
-                for (int j = 0; j < input.ColumnCount; j++)
+                for (int j = 0; j < input.Columns; j++)
                 {
                     sum += input[i, j];
                 }
@@ -43,15 +43,36 @@ namespace AiDotNetTests.UnitTests.FeatureSelectors
             return new ModelMetadata<double>();
         }
 
+        // IModelSerializer implementation
+        public byte[] Serialize() => Array.Empty<byte>();
+        public void Deserialize(byte[] data) { }
         public void SaveModel(string filePath) { }
         public void LoadModel(string filePath) { }
-        public void SetParameters(Dictionary<string, object> parameters) { }
-        public Dictionary<string, object> GetParameters() => new();
+
+        // IParameterizable implementation
+        public Vector<double> GetParameters() => new Vector<double>(0);
+        public void SetParameters(Vector<double> parameters) { }
+        public int ParameterCount => 0;
+        public IFullModel<double, Matrix<double>, Vector<double>> WithParameters(Vector<double> parameters)
+        {
+            return new SimpleMockModel();
+        }
+
+        // IFeatureAware implementation
         public IEnumerable<int> GetActiveFeatureIndices() => Enumerable.Empty<int>();
         public void SetActiveFeatureIndices(IEnumerable<int> featureIndices) { }
         public bool IsFeatureUsed(int featureIndex) => true;
+
+        // IFeatureImportance implementation
         public Dictionary<string, double> GetFeatureImportance() => new();
+
+        // ICloneable implementation
         public IFullModel<double, Matrix<double>, Vector<double>> Clone()
+        {
+            return new SimpleMockModel();
+        }
+
+        public IFullModel<double, Matrix<double>, Vector<double>> DeepCopy()
         {
             return new SimpleMockModel();
         }
@@ -100,8 +121,8 @@ namespace AiDotNetTests.UnitTests.FeatureSelectors
             var result = selector.SelectFeatures(features);
 
             // Assert
-            Assert.Equal(4, result.RowCount);
-            Assert.Equal(2, result.ColumnCount); // 2 features selected
+            Assert.Equal(4, result.Rows);
+            Assert.Equal(2, result.Columns); // 2 features selected
         }
 
         [Fact]
@@ -129,8 +150,8 @@ namespace AiDotNetTests.UnitTests.FeatureSelectors
             var result = selector.SelectFeatures(features);
 
             // Assert
-            Assert.Equal(4, result.RowCount);
-            Assert.Equal(2, result.ColumnCount);
+            Assert.Equal(4, result.Rows);
+            Assert.Equal(2, result.Columns);
         }
 
         [Fact]
@@ -157,8 +178,8 @@ namespace AiDotNetTests.UnitTests.FeatureSelectors
             var result = selector.SelectFeatures(features);
 
             // Assert
-            Assert.Equal(4, result.RowCount);
-            Assert.Equal(2, result.ColumnCount); // 50% of 4 = 2
+            Assert.Equal(4, result.Rows);
+            Assert.Equal(2, result.Columns); // 50% of 4 = 2
         }
 
         [Fact]
@@ -186,8 +207,8 @@ namespace AiDotNetTests.UnitTests.FeatureSelectors
             var result = selector.SelectFeatures(features);
 
             // Assert
-            Assert.Equal(4, result.RowCount);
-            Assert.Equal(1, result.ColumnCount);
+            Assert.Equal(4, result.Rows);
+            Assert.Equal(1, result.Columns);
         }
 
         [Fact]
@@ -215,8 +236,8 @@ namespace AiDotNetTests.UnitTests.FeatureSelectors
             var result = selector.SelectFeatures(features);
 
             // Assert
-            Assert.Equal(4, result.RowCount);
-            Assert.Equal(2, result.ColumnCount); // All features
+            Assert.Equal(4, result.Rows);
+            Assert.Equal(2, result.Columns); // All features
         }
 
         [Fact]
@@ -296,8 +317,8 @@ namespace AiDotNetTests.UnitTests.FeatureSelectors
             var backwardResult = backwardSelector.SelectFeatures(features);
 
             // Assert - Both should select 2 features
-            Assert.Equal(2, forwardResult.ColumnCount);
-            Assert.Equal(2, backwardResult.ColumnCount);
+            Assert.Equal(2, forwardResult.Columns);
+            Assert.Equal(2, backwardResult.Columns);
             // Results may differ depending on the selection process
         }
 
@@ -334,8 +355,8 @@ namespace AiDotNetTests.UnitTests.FeatureSelectors
             var result = selector.SelectFeatures(features);
 
             // Assert
-            Assert.Equal(4, result.RowCount);
-            Assert.Equal(2, result.ColumnCount);
+            Assert.Equal(4, result.Rows);
+            Assert.Equal(2, result.Columns);
         }
     }
 
@@ -348,11 +369,11 @@ namespace AiDotNetTests.UnitTests.FeatureSelectors
 
         public Vector<float> Predict(Matrix<float> input)
         {
-            var predictions = new Vector<float>(input.RowCount);
-            for (int i = 0; i < input.RowCount; i++)
+            var predictions = new Vector<float>(input.Rows);
+            for (int i = 0; i < input.Rows; i++)
             {
                 float sum = 0;
-                for (int j = 0; j < input.ColumnCount; j++)
+                for (int j = 0; j < input.Columns; j++)
                 {
                     sum += input[i, j];
                 }
@@ -362,15 +383,37 @@ namespace AiDotNetTests.UnitTests.FeatureSelectors
         }
 
         public ModelMetadata<float> GetModelMetadata() => new();
+
+        // IModelSerializer implementation
+        public byte[] Serialize() => Array.Empty<byte>();
+        public void Deserialize(byte[] data) { }
         public void SaveModel(string filePath) { }
         public void LoadModel(string filePath) { }
-        public void SetParameters(Dictionary<string, object> parameters) { }
-        public Dictionary<string, object> GetParameters() => new();
+
+        // IParameterizable implementation
+        public Vector<float> GetParameters() => new Vector<float>(0);
+        public void SetParameters(Vector<float> parameters) { }
+        public int ParameterCount => 0;
+        public IFullModel<float, Matrix<float>, Vector<float>> WithParameters(Vector<float> parameters)
+        {
+            return new SimpleMockModelFloat();
+        }
+
+        // IFeatureAware implementation
         public IEnumerable<int> GetActiveFeatureIndices() => Enumerable.Empty<int>();
         public void SetActiveFeatureIndices(IEnumerable<int> featureIndices) { }
         public bool IsFeatureUsed(int featureIndex) => true;
+
+        // IFeatureImportance implementation
         public Dictionary<string, float> GetFeatureImportance() => new();
+
+        // ICloneable implementation
         public IFullModel<float, Matrix<float>, Vector<float>> Clone()
+        {
+            return new SimpleMockModelFloat();
+        }
+
+        public IFullModel<float, Matrix<float>, Vector<float>> DeepCopy()
         {
             return new SimpleMockModelFloat();
         }

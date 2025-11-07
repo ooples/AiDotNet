@@ -54,8 +54,8 @@ namespace AiDotNetTests.UnitTests.FeatureSelectors
             var result = selector.SelectFeatures(features);
 
             // Assert
-            Assert.Equal(2, result.RowCount);
-            Assert.Equal(2, result.ColumnCount); // Features 2 and 3 (>= 0.25)
+            Assert.Equal(2, result.Rows);
+            Assert.Equal(2, result.Columns); // Features 2 and 3 (>= 0.25)
         }
 
         [Fact]
@@ -86,8 +86,8 @@ namespace AiDotNetTests.UnitTests.FeatureSelectors
             var result = selector.SelectFeatures(features);
 
             // Assert
-            Assert.Equal(2, result.RowCount);
-            Assert.Equal(2, result.ColumnCount); // Top 50% features
+            Assert.Equal(2, result.Rows);
+            Assert.Equal(2, result.Columns); // Top 50% features
         }
 
         [Fact]
@@ -117,8 +117,8 @@ namespace AiDotNetTests.UnitTests.FeatureSelectors
             var result = selector.SelectFeatures(features);
 
             // Assert
-            Assert.Equal(2, result.RowCount);
-            Assert.Equal(2, result.ColumnCount); // Features with importance >= 0.25
+            Assert.Equal(2, result.Rows);
+            Assert.Equal(2, result.Columns); // Features with importance >= 0.25
         }
 
         [Fact]
@@ -149,8 +149,8 @@ namespace AiDotNetTests.UnitTests.FeatureSelectors
             var result = selector.SelectFeatures(features);
 
             // Assert
-            Assert.Equal(2, result.RowCount);
-            Assert.Equal(1, result.ColumnCount); // Limited to 1 feature
+            Assert.Equal(2, result.Rows);
+            Assert.Equal(1, result.Columns); // Limited to 1 feature
         }
 
         [Fact]
@@ -181,8 +181,8 @@ namespace AiDotNetTests.UnitTests.FeatureSelectors
             var result = selector.SelectFeatures(features);
 
             // Assert
-            Assert.Equal(2, result.RowCount);
-            Assert.Equal(3, result.ColumnCount); // Top 3 features
+            Assert.Equal(2, result.Rows);
+            Assert.Equal(3, result.Columns); // Top 3 features
         }
 
         [Fact]
@@ -212,8 +212,8 @@ namespace AiDotNetTests.UnitTests.FeatureSelectors
             var result = selector.SelectFeatures(features);
 
             // Assert
-            Assert.Equal(2, result.RowCount);
-            Assert.Equal(2, result.ColumnCount); // Features with importance >= 0.15
+            Assert.Equal(2, result.Rows);
+            Assert.Equal(2, result.Columns); // Features with importance >= 0.15
         }
 
         [Fact]
@@ -243,8 +243,8 @@ namespace AiDotNetTests.UnitTests.FeatureSelectors
             var result = selector.SelectFeatures(features);
 
             // Assert
-            Assert.Equal(2, result.RowCount);
-            Assert.Equal(2, result.ColumnCount);
+            Assert.Equal(2, result.Rows);
+            Assert.Equal(2, result.Columns);
         }
 
         [Fact]
@@ -273,8 +273,8 @@ namespace AiDotNetTests.UnitTests.FeatureSelectors
             var result = selector.SelectFeatures(features);
 
             // Assert
-            Assert.Equal(2, result.RowCount);
-            Assert.Equal(1, result.ColumnCount); // At least one feature selected (the best one)
+            Assert.Equal(2, result.Rows);
+            Assert.Equal(1, result.Columns); // At least one feature selected (the best one)
         }
 
         [Fact]
@@ -303,8 +303,8 @@ namespace AiDotNetTests.UnitTests.FeatureSelectors
             var result = selector.SelectFeatures(features);
 
             // Assert
-            Assert.Equal(2, result.RowCount);
-            Assert.Equal(3, result.ColumnCount); // All features have equal importance >= mean
+            Assert.Equal(2, result.Rows);
+            Assert.Equal(3, result.Columns); // All features have equal importance >= mean
         }
 
         [Fact]
@@ -343,8 +343,8 @@ namespace AiDotNetTests.UnitTests.FeatureSelectors
             var result = selector.SelectFeatures(features);
 
             // Assert
-            Assert.Equal(2, result.RowCount);
-            Assert.Equal(2, result.ColumnCount);
+            Assert.Equal(2, result.Rows);
+            Assert.Equal(2, result.Columns);
         }
 
         [Fact]
@@ -375,9 +375,9 @@ namespace AiDotNetTests.UnitTests.FeatureSelectors
             var result = selector.SelectFeatures(features);
 
             // Assert
-            Assert.Equal(2, result.RowCount);
+            Assert.Equal(2, result.Rows);
             // Should select features >= median (0.3)
-            Assert.True(result.ColumnCount >= 2 && result.ColumnCount <= 3);
+            Assert.True(result.Columns >= 2 && result.Columns <= 3);
         }
 
         [Fact]
@@ -406,9 +406,9 @@ namespace AiDotNetTests.UnitTests.FeatureSelectors
             var result = selector.SelectFeatures(features);
 
             // Assert
-            Assert.Equal(2, result.RowCount);
+            Assert.Equal(2, result.Rows);
             // Should select all features since all have importance >= mean (0.0)
-            Assert.Equal(3, result.ColumnCount);
+            Assert.Equal(3, result.Columns);
         }
     }
 

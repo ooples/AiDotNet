@@ -31,8 +31,8 @@ namespace AiDotNetTests.UnitTests.FeatureSelectors
             var result = selector.SelectFeatures(features);
 
             // Assert
-            Assert.Equal(6, result.RowCount); // Same number of samples
-            Assert.Equal(2, result.ColumnCount); // Only 2 features selected
+            Assert.Equal(6, result.Rows); // Same number of samples
+            Assert.Equal(2, result.Columns); // Only 2 features selected
         }
 
         [Fact]
@@ -57,8 +57,8 @@ namespace AiDotNetTests.UnitTests.FeatureSelectors
             var result = selector.SelectFeatures(features);
 
             // Assert
-            Assert.Equal(4, result.RowCount);
-            Assert.Equal(2, result.ColumnCount);
+            Assert.Equal(4, result.Rows);
+            Assert.Equal(2, result.Columns);
         }
 
         [Fact]
@@ -83,8 +83,8 @@ namespace AiDotNetTests.UnitTests.FeatureSelectors
             var result = selector.SelectFeatures(features);
 
             // Assert
-            Assert.Equal(4, result.RowCount);
-            Assert.Equal(2, result.ColumnCount);
+            Assert.Equal(4, result.Rows);
+            Assert.Equal(2, result.Columns);
         }
 
         [Fact]
@@ -108,8 +108,8 @@ namespace AiDotNetTests.UnitTests.FeatureSelectors
             var result = selector.SelectFeatures(features);
 
             // Assert
-            Assert.Equal(4, result.RowCount);
-            Assert.Equal(3, result.ColumnCount); // Default is 50% = 3 features
+            Assert.Equal(4, result.Rows);
+            Assert.Equal(3, result.Columns); // Default is 50% = 3 features
         }
 
         [Fact]
@@ -134,8 +134,8 @@ namespace AiDotNetTests.UnitTests.FeatureSelectors
             var result = selector.SelectFeatures(features);
 
             // Assert
-            Assert.Equal(4, result.RowCount);
-            Assert.Equal(3, result.ColumnCount); // All 3 features
+            Assert.Equal(4, result.Rows);
+            Assert.Equal(3, result.Columns); // All 3 features
         }
 
         [Fact]
@@ -181,8 +181,8 @@ namespace AiDotNetTests.UnitTests.FeatureSelectors
             var result = selector.SelectFeatures(features);
 
             // Assert
-            Assert.Equal(4, result.RowCount);
-            Assert.Equal(2, result.ColumnCount);
+            Assert.Equal(4, result.Rows);
+            Assert.Equal(2, result.Columns);
         }
 
         [Fact]
@@ -206,8 +206,8 @@ namespace AiDotNetTests.UnitTests.FeatureSelectors
             var result = selector.SelectFeatures(features);
 
             // Assert
-            Assert.Equal(3, result.RowCount);
-            Assert.Equal(2, result.ColumnCount); // Should still select 2 features
+            Assert.Equal(3, result.Rows);
+            Assert.Equal(2, result.Columns); // Should still select 2 features
         }
 
         [Fact]
@@ -243,8 +243,8 @@ namespace AiDotNetTests.UnitTests.FeatureSelectors
             var result = selector.SelectFeatures(features);
 
             // Assert
-            Assert.Equal(4, result.RowCount);
-            Assert.Equal(1, result.ColumnCount); // Only 1 feature
+            Assert.Equal(4, result.Rows);
+            Assert.Equal(1, result.Columns); // Only 1 feature
             // First feature should be selected (has highest variance between classes)
             Assert.True(Math.Abs(result[0, 0] - 1.0) < 0.01 || Math.Abs(result[0, 0] - 5.0) < 0.01);
         }
@@ -273,8 +273,8 @@ namespace AiDotNetTests.UnitTests.FeatureSelectors
             var result = selector.SelectFeatures(features);
 
             // Assert
-            Assert.Equal(6, result.RowCount);
-            Assert.Equal(2, result.ColumnCount);
+            Assert.Equal(6, result.Rows);
+            Assert.Equal(2, result.Columns);
         }
     }
 }
