@@ -106,7 +106,8 @@ public class NewtonMethodOptimizer<T, TInput, TOutput> : GradientBasedOptimizerB
         {
             _iteration++;
             var gradient = CalculateGradient(currentSolution, inputData.XTrain, inputData.YTrain);
-            var hessian = CalculateHessian(currentSolution, inputData);
+            // Use efficient Hessian computation (automatically uses IGradientComputable if available)
+            var hessian = ComputeHessianEfficiently(currentSolution, inputData);
             var direction = CalculateDirection(gradient, hessian);
             var newSolution = UpdateSolution(currentSolution, direction);
 
