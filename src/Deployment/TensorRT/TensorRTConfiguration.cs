@@ -1,0 +1,192 @@
+namespace AiDotNet.Deployment.TensorRT;
+
+/// <summary>
+/// Configuration for TensorRT model conversion and execution.
+/// </summary>
+public class TensorRTConfiguration
+{
+    /// <summary>
+    /// Gets or sets the maximum batch size for inference (default: 1).
+    /// </summary>
+    public int MaxBatchSize { get; set; } = 1;
+
+    /// <summary>
+    /// Gets or sets the maximum workspace size in bytes for TensorRT (default: 1GB).
+    /// </summary>
+    public long MaxWorkspaceSize { get; set; } = 1L << 30; // 1 GB
+
+    /// <summary>
+    /// Gets or sets whether to use FP16 precision (default: true).
+    /// </summary>
+    public bool UseFp16 { get; set; } = true;
+
+    /// <summary>
+    /// Gets or sets whether to use INT8 precision (requires calibration, default: false).
+    /// </summary>
+    public bool UseInt8 { get; set; } = false;
+
+    /// <summary>
+    /// Gets or sets whether to enable strict type constraints (default: false).
+    /// </summary>
+    public bool StrictTypeConstraints { get; set; } = false;
+
+    /// <summary>
+    /// Gets or sets whether to enable dynamic shapes (default: false).
+    /// </summary>
+    public bool EnableDynamicShapes { get; set; } = false;
+
+    /// <summary>
+    /// Gets or sets the GPU device ID to use (default: 0).
+    /// </summary>
+    public int DeviceId { get; set; } = 0;
+
+    /// <summary>
+    /// Gets or sets the DLA core to use (null for GPU only, default: null).
+    /// </summary>
+    public int? DlaCore { get; set; } = null;
+
+    /// <summary>
+    /// Gets or sets optimization profiles for dynamic shapes.
+    /// </summary>
+    public List<OptimizationProfileConfig> OptimizationProfiles { get; set; } = new();
+
+    /// <summary>
+    /// Gets or sets custom plugin library paths.
+    /// </summary>
+    public List<string> CustomPluginPaths { get; set; } = new();
+
+    /// <summary>
+    /// Gets or sets the path to calibration data for INT8 quantization.
+    /// </summary>
+    public string? CalibrationDataPath { get; set; }
+
+    /// <summary>
+    /// Gets or sets whether to use multi-stream execution (default: false).
+    /// </summary>
+    public bool EnableMultiStream { get; set; } = false;
+
+    /// <summary>
+    /// Gets or sets the number of streams for multi-stream execution (default: 2).
+    /// </summary>
+    public int NumStreams { get; set; } = 2;
+
+    /// <summary>
+    /// Gets or sets whether to enable CUDA graph capture (default: false).
+    /// </summary>
+    public bool EnableCudaGraphs { get; set; } = false;
+
+    /// <summary>
+    /// Gets or sets whether to cleanup intermediate files (ONNX, etc.) (default: true).
+    /// </summary>
+    public bool CleanupIntermediateFiles { get; set; } = true;
+
+    /// <summary>
+    /// Gets or sets whether to enable profiling (default: false).
+    /// </summary>
+    public bool EnableProfiling { get; set; } = false;
+
+    /// <summary>
+    /// Gets or sets the engine cache path for faster reloading.
+    /// </summary>
+    public string? EngineCachePath { get; set; }
+
+    /// <summary>
+    /// Gets or sets the builder optimization level (0-5, higher is more optimization).
+    /// </summary>
+    public int BuilderOptimizationLevel { get; set; } = 3;
+
+    /// <summary>
+    /// Creates a configuration optimized for maximum performance.
+    /// </summary>
+    public static TensorRTConfiguration ForMaxPerformance()
+    {
+        return new TensorRTConfiguration
+        {
+            MaxBatchSize = 32,
+            MaxWorkspaceSize = 4L << 30, // 4 GB
+            UseFp16 = true,
+            UseInt8 = false,
+            EnableMultiStream = true,
+            NumStreams = 4,
+            EnableCudaGraphs = true,
+            BuilderOptimizationLevel = 5
+        };
+    }
+
+    /// <summary>
+    /// Creates a configuration optimized for low latency (batch size 1).
+    /// </summary>
+    public static TensorRTConfiguration ForLowLatency()
+    {
+        return new TensorRTConfiguration
+        {
+            MaxBatchSize = 1,
+            MaxWorkspaceSize = 1L << 30, // 1 GB
+            UseFp16 = true,
+            UseInt8 = false,
+            EnableMultiStream = false,
+            EnableCudaGraphs = true,
+            BuilderOptimizationLevel = 5
+        };
+    }
+
+    /// <summary>
+    /// Creates a configuration optimized for high throughput.
+    /// </summary>
+    public static TensorRTConfiguration ForHighThroughput(int batchSize = 64)
+    {
+        return new TensorRTConfiguration
+        {
+            MaxBatchSize = batchSize,
+            MaxWorkspaceSize = 8L << 30, // 8 GB
+            UseFp16 = true,
+            UseInt8 = true,
+            EnableMultiStream = true,
+            NumStreams = 8,
+            EnableCudaGraphs = false, // CUDA graphs work better with fixed batch sizes
+            BuilderOptimizationLevel = 4
+        };
+    }
+
+    /// <summary>
+    /// Creates a configuration with INT8 quantization.
+    /// </summary>
+    public static TensorRTConfiguration ForInt8(string calibrationDataPath)
+    {
+        return new TensorRTConfiguration
+        {
+            MaxBatchSize = 8,
+            MaxWorkspaceSize = 2L << 30, // 2 GB
+            UseFp16 = false,
+            UseInt8 = true,
+            CalibrationDataPath = calibrationDataPath,
+            BuilderOptimizationLevel = 4
+        };
+    }
+}
+
+/// <summary>
+/// Configuration for a single optimization profile (for dynamic shapes).
+/// </summary>
+public class OptimizationProfileConfig
+{
+    /// <summary>
+    /// Gets or sets the input tensor name.
+    /// </summary>
+    public string InputName { get; set; } = "input";
+
+    /// <summary>
+    /// Gets or sets the minimum shape for this input.
+    /// </summary>
+    public int[] MinShape { get; set; } = Array.Empty<int>();
+
+    /// <summary>
+    /// Gets or sets the optimal shape for this input (used for optimization).
+    /// </summary>
+    public int[] OptimalShape { get; set; } = Array.Empty<int>();
+
+    /// <summary>
+    /// Gets or sets the maximum shape for this input.
+    /// </summary>
+    public int[] MaxShape { get; set; } = Array.Empty<int>();
+}
