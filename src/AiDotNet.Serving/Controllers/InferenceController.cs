@@ -74,6 +74,19 @@ public class InferenceController : ControllerBase
                 return NotFound(new { error = $"Model '{modelName}' not found" });
             }
 
+            // Validate feature dimensions
+            for (int i = 0; i < request.Features.Length; i++)
+            {
+                if (request.Features[i].Length != modelInfo.InputDimension)
+                {
+                    return BadRequest(new
+                    {
+                        error = $"Feature vector at index {i} has {request.Features[i].Length} dimensions, " +
+                                $"but model '{modelName}' expects {modelInfo.InputDimension} dimensions"
+                    });
+                }
+            }
+
             // Process based on numeric type
             double[][] predictions;
             int batchSize = request.Features.Length;
