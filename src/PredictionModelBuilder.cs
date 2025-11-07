@@ -46,7 +46,6 @@ public class PredictionModelBuilder<T, TInput, TOutput> : IPredictionModelBuilde
     private IGenerator<T>? _ragGenerator;
     private IEnumerable<IQueryProcessor>? _queryProcessors;
     private IMetaLearner<T, TInput, TOutput>? _metaLearner;
-    private ICrossValidator<T>? _crossValidator;
 
     /// <summary>
     /// Configures which features (input variables) should be used in the model.
@@ -161,24 +160,6 @@ public class PredictionModelBuilder<T, TInput, TOutput> : IPredictionModelBuilde
     public IPredictionModelBuilder<T, TInput, TOutput> ConfigureOptimizer(IOptimizer<T, TInput, TOutput> optimizationAlgorithm)
     {
         _optimizer = optimizationAlgorithm;
-        return this;
-    }
-
-    /// <summary>
-    /// Configures cross-validation to assess model performance.
-    /// </summary>
-    /// <param name="crossValidator">The cross-validation strategy to use.</param>
-    /// <returns>This builder instance for method chaining.</returns>
-    /// <remarks>
-    /// <b>For Beginners:</b> Cross-validation helps you understand how well your model will perform on new,
-    /// unseen data by testing it on different subsets of your training data. This is like practicing
-    /// a test multiple times with different questions to ensure you really understand the material,
-    /// not just memorizing specific answers. When configured, cross-validation will be performed
-    /// during the Build() process, and results will be accessible via the PredictionModelResult.
-    /// </remarks>
-    public IPredictionModelBuilder<T, TInput, TOutput> ConfigureCrossValidator(ICrossValidator<T> crossValidator)
-    {
-        _crossValidator = crossValidator;
         return this;
     }
 

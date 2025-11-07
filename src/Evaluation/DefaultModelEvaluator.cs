@@ -203,11 +203,11 @@ public class DefaultModelEvaluator<T, TInput, TOutput> : IModelEvaluator<T, TInp
     }
 
     /// <summary>
-    /// Performs cross-validation on the given model using the provided data and options.
+    /// Performs cross-validation on the given model using the provided data and optimizer.
     /// </summary>
     /// <param name="model">The model to evaluate.</param>
-    /// <param name="X">The feature matrix.</param>
-    /// <param name="y">The target vector.</param>
+    /// <param name="X">The input data.</param>
+    /// <param name="y">The output data.</param>
     /// <param name="optimizer">The optimizer to use for training the model on each fold.</param>
     /// <param name="crossValidator">Optional custom cross-validator implementation.</param>
     /// <returns>A CrossValidationResult containing the evaluation metrics for each fold.</returns>
@@ -235,13 +235,24 @@ public class DefaultModelEvaluator<T, TInput, TOutput> : IModelEvaluator<T, TInp
     /// </para>
     /// </remarks>
     public CrossValidationResult<T> PerformCrossValidation(
-        IFullModel<T, Matrix<T>, Vector<T>> model,
-        Matrix<T> X,
-        Vector<T> y,
-        IOptimizer<T, Matrix<T>, Vector<T>> optimizer,
-        ICrossValidator<T>? crossValidator = null)
+        IFullModel<T, TInput, TOutput> model,
+        TInput X,
+        TOutput y,
+        IOptimizer<T, TInput, TOutput> optimizer,
+        ICrossValidator<T, TInput, TOutput>? crossValidator = null)
     {
-        crossValidator ??= new StandardCrossValidator<T>();
+        // For Matrix/Vector types, provide a default StandardCrossValidator
+        if (crossValidator == null && typeof(TInput) == typeof(Matrix<T>) && typeof(TOutput) == typeof(Vector<T>))
+        {
+            crossValidator = new StandardCrossValidator<T>() as ICrossValidator<T, TInput, TOutput>;
+        }
+
+        if (crossValidator == null)
+        {
+            throw new ArgumentNullException(nameof(crossValidator),
+                "Cross-validator must be provided when using custom input/output types (non-Matrix/Vector types). " +
+                "For Matrix<T>/Vector<T> types, a StandardCrossValidator is used by default.");
+        }
 
         return crossValidator.Validate(model, X, y, optimizer);
     }

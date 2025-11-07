@@ -25,7 +25,7 @@ namespace AiDotNet.CrossValidators;
 /// - Allows for easy implementation of various cross-validation strategies by extending this class.
 /// </para>
 /// </remarks>
-public abstract class CrossValidatorBase<T> : ICrossValidator<T>
+public abstract class CrossValidatorBase<T> : ICrossValidator<T, Matrix<T>, Vector<T>>
 {
     /// <summary>
     /// Provides operations for numeric calculations specific to type T.
