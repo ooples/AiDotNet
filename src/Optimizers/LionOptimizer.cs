@@ -158,21 +158,38 @@ public class LionOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, T
     {
         base.UpdateAdaptiveParameters(currentStepData, previousStepData);
 
-        // Lion-specific adaptive parameter updates (if enabled)
-        if (_options.UseAdaptiveLearningRate)
-        {
-            _currentLearningRate = MathHelper.Max(NumOps.FromDouble(_options.MinLearningRate),
-                MathHelper.Min(NumOps.FromDouble(_options.MaxLearningRate), _currentLearningRate));
-        }
-
+        // Adaptive Beta1 updates (if enabled)
         if (_options.UseAdaptiveBeta1)
         {
+            // Increase Beta1 (more smoothing) if fitness is improving, decrease (faster adaptation) otherwise
+            if (NumOps.GreaterThan(currentStepData.FitnessScore, previousStepData.FitnessScore))
+            {
+                _currentBeta1 = NumOps.Multiply(_currentBeta1, NumOps.FromDouble(_options.Beta1IncreaseFactor));
+            }
+            else
+            {
+                _currentBeta1 = NumOps.Multiply(_currentBeta1, NumOps.FromDouble(_options.Beta1DecreaseFactor));
+            }
+
+            // Clamp to configured bounds
             _currentBeta1 = MathHelper.Max(NumOps.FromDouble(_options.MinBeta1),
                 MathHelper.Min(NumOps.FromDouble(_options.MaxBeta1), _currentBeta1));
         }
 
+        // Adaptive Beta2 updates (if enabled)
         if (_options.UseAdaptiveBeta2)
         {
+            // Increase Beta2 (more stability) if fitness is improving, decrease otherwise
+            if (NumOps.GreaterThan(currentStepData.FitnessScore, previousStepData.FitnessScore))
+            {
+                _currentBeta2 = NumOps.Multiply(_currentBeta2, NumOps.FromDouble(_options.Beta2IncreaseFactor));
+            }
+            else
+            {
+                _currentBeta2 = NumOps.Multiply(_currentBeta2, NumOps.FromDouble(_options.Beta2DecreaseFactor));
+            }
+
+            // Clamp to configured bounds
             _currentBeta2 = MathHelper.Max(NumOps.FromDouble(_options.MinBeta2),
                 MathHelper.Min(NumOps.FromDouble(_options.MaxBeta2), _currentBeta2));
         }
@@ -229,6 +246,7 @@ public class LionOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, T
             );
         }
 
+        currentSolution.SetParameters(parameters);
         return currentSolution;
     }
 

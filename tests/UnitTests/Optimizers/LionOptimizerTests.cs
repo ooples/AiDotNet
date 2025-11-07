@@ -243,7 +243,7 @@ namespace AiDotNetTests.UnitTests.Optimizers
             // With beta1=0, both should produce same result (sign-based)
             for (int i = 0; i < parameters.Length; i++)
             {
-                Assert.Equal(updated1[i], updated2[i], 10);
+                Assert.Equal(updated1[i], updated2[i], 1e-9);
             }
         }
 
@@ -439,9 +439,21 @@ namespace AiDotNetTests.UnitTests.Optimizers
             var updated2 = optimizer2.UpdateParameters(parameters, gradient2);
 
             // Assert - Different beta1 values should produce different interpolations
-            // and thus potentially different results
+            // and thus different results
             Assert.NotNull(updated1);
             Assert.NotNull(updated2);
+
+            // Verify that at least one parameter value is different
+            bool anyDifferent = false;
+            for (int i = 0; i < updated1.Length; i++)
+            {
+                if (Math.Abs(updated1[i] - updated2[i]) > 1e-9)
+                {
+                    anyDifferent = true;
+                    break;
+                }
+            }
+            Assert.True(anyDifferent, "Different beta1 values should produce different results");
         }
 
         [Fact]
@@ -480,6 +492,18 @@ namespace AiDotNetTests.UnitTests.Optimizers
             // Assert - Both should update, but momentum behavior differs
             Assert.NotEqual(parameters, params1);
             Assert.NotEqual(parameters, params2);
+
+            // Verify that different Beta2 values produce different momentum behavior
+            bool anyDifferent = false;
+            for (int i = 0; i < params1.Length; i++)
+            {
+                if (Math.Abs(params1[i] - params2[i]) > 1e-9)
+                {
+                    anyDifferent = true;
+                    break;
+                }
+            }
+            Assert.True(anyDifferent, "Different beta2 values should produce different momentum behavior");
         }
 
         [Fact]

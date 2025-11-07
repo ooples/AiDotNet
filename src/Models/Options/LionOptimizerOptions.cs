@@ -131,4 +131,48 @@ public class LionOptimizerOptions<T, TInput, TOutput> : GradientBasedOptimizerOp
     /// A maximum of 0.999 ensures the momentum state can still adapt to changes.</para>
     /// </remarks>
     public double MaxBeta2 { get; set; } = 0.999;
+
+    /// <summary>
+    /// Gets or sets the factor by which Beta1 is increased when fitness improves.
+    /// </summary>
+    /// <value>The Beta1 increase factor, defaulting to 1.02.</value>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> When adaptive Beta1 is enabled and the optimizer is improving,
+    /// Beta1 is multiplied by this factor. A value of 1.02 means Beta1 increases by 2% each time
+    /// fitness improves. Higher Beta1 values create smoother, more stable updates.</para>
+    /// </remarks>
+    public double Beta1IncreaseFactor { get; set; } = 1.02;
+
+    /// <summary>
+    /// Gets or sets the factor by which Beta1 is decreased when fitness does not improve.
+    /// </summary>
+    /// <value>The Beta1 decrease factor, defaulting to 0.98.</value>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> When adaptive Beta1 is enabled and the optimizer is not improving,
+    /// Beta1 is multiplied by this factor. A value of 0.98 means Beta1 decreases by 2% each time
+    /// fitness doesn't improve. Lower Beta1 values make the optimizer more responsive to new gradients.</para>
+    /// </remarks>
+    public double Beta1DecreaseFactor { get; set; } = 0.98;
+
+    /// <summary>
+    /// Gets or sets the factor by which Beta2 is increased when fitness improves.
+    /// </summary>
+    /// <value>The Beta2 increase factor, defaulting to 1.02.</value>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> When adaptive Beta2 is enabled and the optimizer is improving,
+    /// Beta2 is multiplied by this factor. A value of 1.02 means Beta2 increases by 2% each time
+    /// fitness improves. Higher Beta2 values create longer memory of past gradients for more stability.</para>
+    /// </remarks>
+    public double Beta2IncreaseFactor { get; set; } = 1.02;
+
+    /// <summary>
+    /// Gets or sets the factor by which Beta2 is decreased when fitness does not improve.
+    /// </summary>
+    /// <value>The Beta2 decrease factor, defaulting to 0.98.</value>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> When adaptive Beta2 is enabled and the optimizer is not improving,
+    /// Beta2 is multiplied by this factor. A value of 0.98 means Beta2 decreases by 2% each time
+    /// fitness doesn't improve. Lower Beta2 values make the momentum state more responsive to recent changes.</para>
+    /// </remarks>
+    public double Beta2DecreaseFactor { get; set; } = 0.98;
 }
