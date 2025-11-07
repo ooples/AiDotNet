@@ -122,12 +122,11 @@ public class InferenceController : ControllerBase
     private async Task<double[][]> PredictWithType<T>(string modelName, double[][] features)
     {
         // Queue all requests first to enable batching
-        var tasks = new List<Task<Vector<T>>>(features.Length);
-        foreach (var featureArray in features)
+        var tasks = features.Select(featureArray =>
         {
             var inputVector = ConvertToVector<T>(featureArray);
-            tasks.Add(_requestBatcher.QueueRequest(modelName, inputVector));
-        }
+            return _requestBatcher.QueueRequest(modelName, inputVector);
+        }).ToArray();
 
         // Await all requests together
         var resultVectors = await Task.WhenAll(tasks);

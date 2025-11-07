@@ -272,12 +272,12 @@ public class ServingIntegrationTests : IClassFixture<WebApplicationFactory<Progr
         var stats = await statsResponse.Content.ReadFromJsonAsync<Dictionary<string, object>>();
 
         Assert.NotNull(stats);
-        Assert.True(stats.ContainsKey("totalRequests"));
-        Assert.True(stats.ContainsKey("totalBatches"));
-        Assert.True(stats.ContainsKey("averageBatchSize"));
+        Assert.True(stats.TryGetValue("totalRequests", out var totalRequestsObj));
+        Assert.True(stats.TryGetValue("totalBatches", out _));
+        Assert.True(stats.TryGetValue("averageBatchSize", out _));
 
         // Verify the total requests is at least 10
-        var totalRequests = ((JsonElement)stats["totalRequests"]).GetInt64();
+        var totalRequests = ((JsonElement)totalRequestsObj).GetInt64();
         Assert.True(totalRequests >= 10);
 
         // Cleanup
