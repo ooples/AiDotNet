@@ -329,10 +329,10 @@ public class MAMLTrainerTests
 
         // Assert
         Assert.NotNull(result);
-        Assert.NotNull(result.TaskAccuracies);
-        Assert.NotNull(result.TaskLosses);
-        Assert.Equal(10, result.TaskAccuracies.Length);
-        Assert.Equal(10, result.TaskLosses.Length);
+        Assert.NotNull(result.PerTaskAccuracies);
+        Assert.NotNull(result.PerTaskLosses);
+        Assert.Equal(10, result.PerTaskAccuracies.Length);
+        Assert.Equal(10, result.PerTaskLosses.Length);
     }
 
     [Fact]

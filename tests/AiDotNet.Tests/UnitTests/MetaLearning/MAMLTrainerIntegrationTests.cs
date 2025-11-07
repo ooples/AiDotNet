@@ -283,10 +283,10 @@ public class MAMLTrainerIntegrationTests
 
         // Assert
         Assert.NotNull(result);
-        Assert.NotNull(result.TaskAccuracies);
-        Assert.NotNull(result.TaskLosses);
-        Assert.Equal(20, result.TaskAccuracies.Length);
-        Assert.Equal(20, result.TaskLosses.Length);
+        Assert.NotNull(result.PerTaskAccuracies);
+        Assert.NotNull(result.PerTaskLosses);
+        Assert.Equal(20, result.PerTaskAccuracies.Length);
+        Assert.Equal(20, result.PerTaskLosses.Length);
         Assert.NotNull(result.AccuracyStats);
         Assert.NotNull(result.LossStats);
     }
