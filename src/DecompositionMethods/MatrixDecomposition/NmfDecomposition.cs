@@ -92,7 +92,7 @@ public class NmfDecomposition<T> : MatrixDecompositionBase<T>
         // Validate that all elements are non-negative
         ValidateMatrix(matrix, requireNonNegative: true);
 
-        Components = components ?? Math.Min(matrix.Rows, matrix.Columns) / 2;
+        Components = components ?? Math.Max(1, Math.Min(matrix.Rows, matrix.Columns) / 2);
 
         if (Components <= 0 || Components > Math.Min(matrix.Rows, matrix.Columns))
         {
@@ -137,6 +137,15 @@ public class NmfDecomposition<T> : MatrixDecompositionBase<T>
     {
         int m = V.Rows;
         int n = V.Columns;
+
+        // Validate that numeric type supports small positive values (required for NMF algorithm)
+        T testEpsilon = _numOps.FromDouble(1e-10);
+        if (_numOps.Equals(testEpsilon, _numOps.Zero))
+        {
+            throw new ArgumentException(
+                "NMF decomposition requires a floating-point INumericOperations<T> implementation. " +
+                "Integer-based numeric types cannot represent the small positive values required by the algorithm.");
+        }
 
         // Initialize W and H with small random positive values
         Matrix<T> W = InitializeRandomMatrix(m, k);
