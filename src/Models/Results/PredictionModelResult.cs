@@ -278,11 +278,11 @@ public class PredictionModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
     internal ILoRAConfiguration<T>? LoRAConfiguration { get; private set; }
 
     /// <summary>
-    /// Gets or sets the agent configuration used during model building.
+    /// Gets the agent configuration used during model building.
     /// </summary>
     /// <value>Agent configuration containing API keys and settings, or null if agent assistance wasn't used.</value>
     /// <remarks>
-    /// <para><b>For Beginners:</b> If you enabled agent assistance during model building with WithAgentAssistance(),
+    /// <para><b>For Beginners:</b> If you enabled agent assistance during model building with ConfigureAgentAssistance(),
     /// this property stores the configuration. The API key is stored here so you can use AskAsync() on the trained
     /// model without providing the key again.
     ///
@@ -290,10 +290,10 @@ public class PredictionModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
     /// </para>
     /// </remarks>
     [JsonIgnore]
-    public AgentConfiguration<T>? AgentConfig { get; set; }
+    internal AgentConfiguration<T>? AgentConfig { get; private set; }
 
     /// <summary>
-    /// Gets or sets the agent's recommendations made during model building.
+    /// Gets the agent's recommendations made during model building.
     /// </summary>
     /// <value>Agent recommendations including suggested models and reasoning, or null if agent assistance wasn't used.</value>
     /// <remarks>
@@ -315,7 +315,7 @@ public class PredictionModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
     /// </code>
     /// </para>
     /// </remarks>
-    public AgentRecommendation<T, TInput, TOutput>? AgentRecommendation { get; set; }
+    internal AgentRecommendation<T, TInput, TOutput>? AgentRecommendation { get; private set; }
 
     /// <summary>
     /// Initializes a new instance of the PredictionModelResult class with the specified model, optimization results, and normalization information.
@@ -370,6 +370,8 @@ public class PredictionModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
     /// <param name="queryProcessors">Optional query processors for RAG query preprocessing.</param>
     /// <param name="loraConfiguration">Optional LoRA configuration for parameter-efficient fine-tuning.</param>
     /// <param name="crossValidationResult">Optional cross-validation results from training.</param>
+    /// <param name="agentConfig">Optional agent configuration used during model building.</param>
+    /// <param name="agentRecommendation">Optional agent recommendations from model building.</param>
     public PredictionModelResult(OptimizationResult<T, TInput, TOutput> optimizationResult,
         NormalizationInfo<T, TInput, TOutput> normalizationInfo,
         IBiasDetector<T>? biasDetector = null,
@@ -379,7 +381,9 @@ public class PredictionModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
         IGenerator<T>? ragGenerator = null,
         IEnumerable<IQueryProcessor>? queryProcessors = null,
         ILoRAConfiguration<T>? loraConfiguration = null,
-        CrossValidationResult<T, TInput, TOutput>? crossValidationResult = null)
+        CrossValidationResult<T, TInput, TOutput>? crossValidationResult = null,
+        AgentConfiguration<T>? agentConfig = null,
+        AgentRecommendation<T, TInput, TOutput>? agentRecommendation = null)
     {
         Model = optimizationResult.BestSolution;
         OptimizationResult = optimizationResult;
@@ -393,6 +397,8 @@ public class PredictionModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
         QueryProcessors = queryProcessors;
         LoRAConfiguration = loraConfiguration;
         CrossValidationResult = crossValidationResult;
+        AgentConfig = agentConfig;
+        AgentRecommendation = agentRecommendation;
     }
 
     /// <summary>

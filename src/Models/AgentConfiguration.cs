@@ -146,4 +146,27 @@ public class AgentConfiguration<T>
     /// </para>
     /// </remarks>
     public string? AzureDeployment { get; set; }
+
+    /// <summary>
+    /// Gets or sets the agent assistance options that control which types of help the agent provides.
+    /// </summary>
+    /// <value>Agent assistance options, or null to use AgentAssistanceOptions.Default.</value>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> This controls what the agent helps with during model building.
+    ///
+    /// You can customize exactly which assistance features you want:
+    /// - Data analysis (examines your dataset characteristics)
+    /// - Model selection (recommends which model type to use)
+    /// - Hyperparameter tuning (suggests optimal parameter values)
+    /// - Feature analysis (identifies important features)
+    /// - Meta-learning advice (guidance on validation and regularization)
+    ///
+    /// If you don't set this, it defaults to AgentAssistanceOptions.Default which enables
+    /// data analysis and model selection (the most commonly useful features).
+    ///
+    /// For full assistance, use AgentAssistanceOptions.Comprehensive.
+    /// For minimal assistance, use AgentAssistanceOptions.Minimal.
+    /// </para>
+    /// </remarks>
+    public AgentAssistanceOptions? AssistanceOptions { get; set; }
 }

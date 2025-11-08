@@ -393,21 +393,26 @@ public interface IPredictionModelBuilder<T, TInput, TOutput>
     /// The agent can analyze your data, suggest which model type to use, recommend hyperparameters,
     /// and provide insights about feature importance.
     ///
-    /// The API key is stored securely and will be reused during inference if you call AskAsync() on the trained model.
+    /// The configuration is stored securely and will be reused during inference if you call AskAsync() on the trained model.
+    /// </para>
+    /// <para>
+    /// Example usage:
+    /// <code>
+    /// var agentConfig = new AgentConfiguration&lt;double&gt;
+    /// {
+    ///     ApiKey = "sk-...",
+    ///     Provider = LLMProvider.OpenAI,
+    ///     IsEnabled = true
+    /// };
+    ///
+    /// var builder = new PredictionModelBuilder&lt;double, Matrix&lt;double&gt;, Vector&lt;double&gt;&gt;()
+    ///     .ConfigureAgentAssistance(agentConfig);
+    /// </code>
     /// </para>
     /// </remarks>
-    /// <param name="apiKey">The API key for the LLM provider. If null, will check environment variables.</param>
-    /// <param name="provider">The LLM provider to use (OpenAI, Anthropic, or AzureOpenAI). Defaults to OpenAI.</param>
-    /// <param name="options">Options to customize what the agent helps with. Defaults to AgentAssistanceOptions.Default.</param>
-    /// <param name="azureEndpoint">Azure OpenAI endpoint (only needed if provider is AzureOpenAI).</param>
-    /// <param name="azureDeployment">Azure OpenAI deployment name (only needed if provider is AzureOpenAI).</param>
+    /// <param name="configuration">The agent configuration containing API keys, provider settings, and options.</param>
     /// <returns>The builder instance for method chaining.</returns>
-    IPredictionModelBuilder<T, TInput, TOutput> ConfigureAgentAssistance(
-        string? apiKey = null,
-        LLMProvider provider = LLMProvider.OpenAI,
-        AgentAssistanceOptions? options = null,
-        string? azureEndpoint = null,
-        string? azureDeployment = null);
+    IPredictionModelBuilder<T, TInput, TOutput> ConfigureAgentAssistance(AgentConfiguration<T> configuration);
 
     /// <summary>
     /// Configures a meta-learning algorithm (MAML, Reptile, SEAL) for training models that can quickly adapt to new tasks.
