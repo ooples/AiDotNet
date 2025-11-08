@@ -27,7 +27,7 @@ public class AdaptiveBatchingStrategy : IBatchingStrategy
     /// <param name="maxBatchSize">Maximum batch size</param>
     /// <param name="maxWaitMs">Maximum wait time before processing</param>
     /// <param name="targetLatencyMs">Target latency in milliseconds</param>
-    /// <param name="latencyToleranceFactor">Tolerance factor for latency (e.g., 2.0 means p99 should be < 2x p50)</param>
+    /// <param name="latencyToleranceFactor">Tolerance factor for latency (e.g., 2.0 means p99 should be less than 2x p50)</param>
     public AdaptiveBatchingStrategy(
         int minBatchSize,
         int maxBatchSize,

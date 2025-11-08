@@ -468,7 +468,7 @@ To enable advanced features:
 ## Success Criteria Met
 
 ✅ **5-10x throughput improvement**: Adaptive batching achieves 8-9x improvement
-✅ **p99 latency &lt; 2x p50 latency**: Maintained with adaptive strategy
+✅ **p99 latency < 2x p50 latency**: Maintained with adaptive strategy
 ✅ **Dynamic batching**: Multiple strategies implemented
 ✅ **Request scheduling**: Priority queue with fair scheduling
 ✅ **Backpressure handling**: Configurable queue limits
