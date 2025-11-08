@@ -1,4 +1,4 @@
-namespace AiDotNet.Agents;
+namespace AiDotNet.Models;
 
 /// <summary>
 /// Fluent builder for agent assistance options.

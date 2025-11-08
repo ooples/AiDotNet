@@ -402,8 +402,8 @@ public interface IPredictionModelBuilder<T, TInput, TOutput>
     /// <returns>The builder instance for method chaining.</returns>
     IPredictionModelBuilder<T, TInput, TOutput> ConfigureAgentAssistance(
         string? apiKey = null,
-        AiDotNet.Agents.LLMProvider provider = AiDotNet.Agents.LLMProvider.OpenAI,
-        AiDotNet.Agents.AgentAssistanceOptions? options = null,
+        AiDotNet.Enums.LLMProvider provider = AiDotNet.Enums.LLMProvider.OpenAI,
+        AiDotNet.Models.AgentAssistanceOptions? options = null,
         string? azureEndpoint = null,
         string? azureDeployment = null);
 

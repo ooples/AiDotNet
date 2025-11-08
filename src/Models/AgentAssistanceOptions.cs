@@ -1,4 +1,4 @@
-namespace AiDotNet.Agents;
+namespace AiDotNet.Models;
 
 /// <summary>
 /// Options for customizing what the agent helps with during building.

@@ -1,6 +1,6 @@
 using AiDotNet.Enums;
 
-namespace AiDotNet.Agents;
+namespace AiDotNet.Models;
 
 /// <summary>
 /// Contains the agent's recommendations after analyzing the data and configuration.

@@ -11,6 +11,8 @@ global using AiDotNet.MetaLearning.Trainers;
 global using AiDotNet.Agents;
 global using AiDotNet.LanguageModels;
 global using AiDotNet.Tools;
+global using AiDotNet.Models;
+global using AiDotNet.Enums;
 
 namespace AiDotNet;
 

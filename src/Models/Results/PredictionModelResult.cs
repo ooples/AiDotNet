@@ -5,6 +5,7 @@ using AiDotNet.Interfaces;
 using AiDotNet.Interpretability;
 using AiDotNet.Serialization;
 using AiDotNet.Agents;
+using AiDotNet.Models;
 
 namespace AiDotNet.Models.Results;
 

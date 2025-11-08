@@ -1,3 +1,6 @@
+using AiDotNet.Enums;
+using AiDotNet.Models;
+
 namespace AiDotNet.Agents;
 
 /// <summary>

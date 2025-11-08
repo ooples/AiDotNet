@@ -1,4 +1,7 @@
-namespace AiDotNet.Agents;
+using AiDotNet.Agents;
+using AiDotNet.Enums;
+
+namespace AiDotNet.Models;
 
 /// <summary>
 /// Builder for global agent configuration.

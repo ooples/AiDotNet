@@ -1,4 +1,6 @@
-namespace AiDotNet.Agents;
+using AiDotNet.Enums;
+
+namespace AiDotNet.Models;
 
 /// <summary>
 /// Configuration for AI agent assistance during model building.

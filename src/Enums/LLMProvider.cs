@@ -1,4 +1,4 @@
-namespace AiDotNet.Agents;
+namespace AiDotNet.Enums;
 
 /// <summary>
 /// Supported LLM providers for agent assistance.
