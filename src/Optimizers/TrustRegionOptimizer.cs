@@ -100,7 +100,8 @@ public class TrustRegionOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBa
             _iteration++;
 
             var gradient = CalculateGradient(currentSolution, inputData.XTrain, inputData.YTrain);
-            var hessian = CalculateHessian(currentSolution, inputData);
+            // Use efficient Hessian computation (automatically uses IGradientComputable if available)
+            var hessian = ComputeHessianEfficiently(currentSolution, inputData);
 
             var stepDirection = SolveSubproblem(gradient, hessian);
             var proposedSolution = MoveInDirection(currentSolution, stepDirection, NumOps.One);

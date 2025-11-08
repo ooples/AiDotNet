@@ -40,7 +40,7 @@ public class VectorDocument<T>
     /// Contains the text, ID, metadata - everything except the vector.
     /// </para>
     /// </remarks>
-    public Document Document { get; set; } = new();
+    public Document<T> Document { get; set; } = new();
 
     /// <summary>
     /// Gets or sets the vector embedding representing the document's semantic meaning.
@@ -78,7 +78,7 @@ public class VectorDocument<T>
     /// </summary>
     /// <param name="document">The document containing content and metadata.</param>
     /// <param name="embedding">The vector embedding of the document.</param>
-    public VectorDocument(Document document, Vector<T> embedding)
+    public VectorDocument(Document<T> document, Vector<T> embedding)
     {
         Document = document ?? throw new ArgumentNullException(nameof(document));
         Embedding = embedding ?? throw new ArgumentNullException(nameof(embedding));

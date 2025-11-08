@@ -124,14 +124,19 @@ public abstract class GradientBasedOptimizerBase<T, TInput, TOutput> : Optimizer
     /// It helps determine which way the optimizer should step to improve the model.
     /// This implementation uses the loss function's derivative for efficient gradient calculation.
     /// </para>
+    /// <para><b>Production Enhancement:</b>
+    /// If the model implements IGradientComputable, this method automatically uses efficient
+    /// backpropagation-based gradient computation. Otherwise, it falls back to the traditional
+    /// approach using loss function derivatives.
+    /// </para>
     /// </remarks>
     /// <param name="solution">The current solution.</param>
     /// <param name="X">The input features.</param>
     /// <param name="y">The target values.</param>
     /// <returns>The calculated gradient.</returns>
     protected virtual Vector<T> CalculateGradient(
-        IFullModel<T, TInput, TOutput> solution, 
-        TInput X, 
+        IFullModel<T, TInput, TOutput> solution,
+        TInput X,
         TOutput y)
     {
         string cacheKey = GenerateGradientCacheKey(solution, X, y);
@@ -141,20 +146,30 @@ public abstract class GradientBasedOptimizerBase<T, TInput, TOutput> : Optimizer
             return cachedGradient.Parameters;
         }
 
-        TOutput predictions = solution.Predict(X);
         Vector<T> gradient;
 
-        if (predictions is Tensor<T> tensorPredictions && y is Tensor<T> tensorY)
+        // Try to use explicit gradient computation if available (more efficient and accurate)
+        if (solution is IGradientComputable<T, TInput, TOutput> gradientComputable)
         {
-            gradient = LossFunction.CalculateDerivative(tensorPredictions.ToVector(), tensorY.ToVector());
-        }
-        else if (predictions is Vector<T> vectorPredictions && y is Vector<T> vectorY)
-        {
-            gradient = LossFunction.CalculateDerivative(vectorPredictions, vectorY);
+            gradient = gradientComputable.ComputeGradients(X, y, LossFunction);
         }
         else
         {
-            throw new ArgumentException("Unsupported prediction or target type");
+            // Fallback to traditional gradient computation via loss function derivative
+            TOutput predictions = solution.Predict(X);
+
+            if (predictions is Tensor<T> tensorPredictions && y is Tensor<T> tensorY)
+            {
+                gradient = LossFunction.CalculateDerivative(tensorPredictions.ToVector(), tensorY.ToVector());
+            }
+            else if (predictions is Vector<T> vectorPredictions && y is Vector<T> vectorY)
+            {
+                gradient = LossFunction.CalculateDerivative(vectorPredictions, vectorY);
+            }
+            else
+            {
+                throw new ArgumentException("Unsupported prediction or target type");
+            }
         }
 
         // Apply regularization to the gradient
@@ -170,6 +185,148 @@ public abstract class GradientBasedOptimizerBase<T, TInput, TOutput> : Optimizer
         GradientCache.CacheGradient(cacheKey, gradientModel);
 
         return gradient;
+    }
+
+    /// <summary>
+    /// Computes the Hessian matrix (second derivatives) more efficiently when the model supports explicit gradient computation.
+    /// </summary>
+    /// <param name="model">The model to compute Hessian for.</param>
+    /// <param name="inputData">The input data for optimization.</param>
+    /// <returns>The Hessian matrix.</returns>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> The Hessian tells us how the gradient changes - it's the "curvature" of the loss landscape.
+    /// This is crucial for second-order optimization methods like Newton's method.
+    /// </para>
+    /// <para><b>Production Enhancement:</b>
+    /// If the model implements IGradientComputable, this method computes the Hessian by taking gradients
+    /// of the gradient (using finite differences on the gradient function), which is much more efficient
+    /// than the traditional double finite differences approach. This is O(n) gradient evaluations instead
+    /// of O(n²) loss evaluations.
+    /// </para>
+    /// <para><b>Note:</b>
+    /// For models implementing IGradientComputable with ComputeSecondOrderGradients support,
+    /// true Hessian-vector products could be computed even more efficiently. This is currently
+    /// a middle ground that works with any model implementing ComputeGradients.
+    /// </para>
+    /// </remarks>
+    protected virtual Matrix<T> ComputeHessianEfficiently(
+        IFullModel<T, TInput, TOutput> model,
+        OptimizationInputData<T, TInput, TOutput> inputData)
+    {
+        var parameters = model.GetParameters();
+        int n = parameters.Length;
+        var hessian = new Matrix<T>(n, n);
+        var epsilon = NumOps.FromDouble(1e-5);
+
+        // Check if model supports explicit gradient computation
+        if (model is IGradientComputable<T, TInput, TOutput> gradientComputable)
+        {
+            // Efficient approach: Compute gradients at perturbed points
+            // This is O(n) gradient computations instead of O(n²) loss computations
+            var baseGradient = gradientComputable.ComputeGradients(
+                inputData.XTrain,
+                inputData.YTrain,
+                LossFunction);
+
+            for (int i = 0; i < n; i++)
+            {
+                // Perturb parameter i
+                var perturbedParams = parameters.Clone();
+                perturbedParams[i] = NumOps.Add(perturbedParams[i], epsilon);
+
+                var perturbedModel = model.WithParameters(perturbedParams);
+
+                if (perturbedModel is not IGradientComputable<T, TInput, TOutput> perturbedGradientModel)
+                {
+                    // Fallback to finite differences when perturbed model loses IGradientComputable
+                    return ComputeHessianFiniteDifferences(model, inputData);
+                }
+
+                var perturbedGradient = perturbedGradientModel.ComputeGradients(
+                    inputData.XTrain,
+                    inputData.YTrain,
+                    LossFunction);
+
+                // Hessian column i = (∇f(x + εe_i) - ∇f(x)) / ε
+                for (int j = 0; j < n; j++)
+                {
+                    var diff = NumOps.Subtract(perturbedGradient[j], baseGradient[j]);
+                    hessian[j, i] = NumOps.Divide(diff, epsilon);
+                }
+            }
+        }
+        else
+        {
+            // Fallback: Traditional finite differences (slower but works for all models)
+            hessian = ComputeHessianFiniteDifferences(model, inputData);
+        }
+
+        return hessian;
+    }
+
+    /// <summary>
+    /// Computes the Hessian matrix using traditional finite differences (fallback method).
+    /// </summary>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> This is the slower but more universally applicable method.
+    /// It approximates the curvature by testing small changes in parameters.
+    /// </para>
+    /// </remarks>
+    protected virtual Matrix<T> ComputeHessianFiniteDifferences(
+        IFullModel<T, TInput, TOutput> model,
+        OptimizationInputData<T, TInput, TOutput> inputData)
+    {
+        var parameters = model.GetParameters();
+        int n = parameters.Length;
+        var hessian = new Matrix<T>(n, n);
+        var epsilon = NumOps.FromDouble(1e-5);
+
+        for (int i = 0; i < n; i++)
+        {
+            for (int j = i; j < n; j++)  // Symmetric matrix, only compute upper triangle
+            {
+                // Compute second partial derivative ∂²f/∂xi∂xj using finite differences
+                // f''(x,y) ≈ [f(x+h,y+h) - f(x+h,y-h) - f(x-h,y+h) + f(x-h,y-h)] / (4h²)
+
+                var params_pp = parameters.Clone();
+                params_pp[i] = NumOps.Add(params_pp[i], epsilon);
+                params_pp[j] = NumOps.Add(params_pp[j], epsilon);
+                var model_pp = model.WithParameters(params_pp);
+                var loss_pp = CalculateLoss(model_pp, inputData);
+
+                var params_pm = parameters.Clone();
+                params_pm[i] = NumOps.Add(params_pm[i], epsilon);
+                params_pm[j] = NumOps.Subtract(params_pm[j], epsilon);
+                var model_pm = model.WithParameters(params_pm);
+                var loss_pm = CalculateLoss(model_pm, inputData);
+
+                var params_mp = parameters.Clone();
+                params_mp[i] = NumOps.Subtract(params_mp[i], epsilon);
+                params_mp[j] = NumOps.Add(params_mp[j], epsilon);
+                var model_mp = model.WithParameters(params_mp);
+                var loss_mp = CalculateLoss(model_mp, inputData);
+
+                var params_mm = parameters.Clone();
+                params_mm[i] = NumOps.Subtract(params_mm[i], epsilon);
+                params_mm[j] = NumOps.Subtract(params_mm[j], epsilon);
+                var model_mm = model.WithParameters(params_mm);
+                var loss_mm = CalculateLoss(model_mm, inputData);
+
+                // Compute second derivative
+                var numerator = NumOps.Add(
+                    NumOps.Subtract(loss_pp, loss_pm),
+                    NumOps.Subtract(loss_mm, loss_mp));
+                var denominator = NumOps.Multiply(
+                    NumOps.Multiply(NumOps.FromDouble(4.0), epsilon),
+                    epsilon);
+                var secondDerivative = NumOps.Divide(numerator, denominator);
+
+                hessian[i, j] = secondDerivative;
+                hessian[j, i] = secondDerivative;  // Symmetric
+            }
+        }
+
+        return hessian;
     }
 
     /// <summary>

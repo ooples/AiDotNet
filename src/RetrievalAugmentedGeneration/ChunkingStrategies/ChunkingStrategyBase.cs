@@ -1,4 +1,4 @@
-using AiDotNet.RetrievalAugmentedGeneration.Interfaces;
+using AiDotNet.Interfaces;
 
 namespace AiDotNet.RetrievalAugmentedGeneration.ChunkingStrategies;
 

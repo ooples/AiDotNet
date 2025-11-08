@@ -1,30 +1,23 @@
 namespace AiDotNet.DecompositionMethods.MatrixDecomposition;
 
 /// <summary>
-/// Implements the Polar Decomposition of a matrix, which factors a matrix A into the product of 
+/// Implements the Polar Decomposition of a matrix, which factors a matrix A into the product of
 /// an orthogonal matrix U and a positive semi-definite matrix P.
 /// </summary>
 /// <typeparam name="T">The numeric type used in the matrices and vectors.</typeparam>
 /// <remarks>
 /// <para>
-/// The Polar Decomposition expresses a matrix A as A = UP, where U is orthogonal (U^T * U = I) 
+/// The Polar Decomposition expresses a matrix A as A = UP, where U is orthogonal (U^T * U = I)
 /// and P is positive semi-definite.
 /// </para>
 /// <para>
 /// <b>For Beginners:</b> Think of Polar Decomposition as breaking down a transformation into two simpler steps:
-/// first a rotation/reflection (U), and then a stretching/scaling (P). This is similar to how polar 
+/// first a rotation/reflection (U), and then a stretching/scaling (P). This is similar to how polar
 /// coordinates break down a point into an angle and a distance.
 /// </para>
 /// </remarks>
-public class PolarDecomposition<T> : IMatrixDecomposition<T>
+public class PolarDecomposition<T> : MatrixDecompositionBase<T>
 {
-    private readonly INumericOperations<T> _numOps;
-
-    /// <summary>
-    /// Gets the original matrix being decomposed.
-    /// </summary>
-    public Matrix<T> A { get; }
-    
     /// <summary>
     /// Gets the orthogonal factor of the decomposition.
     /// </summary>
@@ -32,8 +25,8 @@ public class PolarDecomposition<T> : IMatrixDecomposition<T>
     /// <b>For Beginners:</b> This matrix represents the rotation/reflection part of the transformation.
     /// It preserves angles and distances when applied to vectors.
     /// </remarks>
-    public Matrix<T> U { get; private set; }
-    
+    public Matrix<T> U { get; private set; } = new Matrix<T>(0, 0);
+
     /// <summary>
     /// Gets the positive semi-definite factor of the decomposition.
     /// </summary>
@@ -41,7 +34,9 @@ public class PolarDecomposition<T> : IMatrixDecomposition<T>
     /// <b>For Beginners:</b> This matrix represents the stretching/scaling part of the transformation.
     /// It may change the length of vectors but in a symmetric way.
     /// </remarks>
-    public Matrix<T> P { get; private set; }
+    public Matrix<T> P { get; private set; } = new Matrix<T>(0, 0);
+
+    private readonly PolarAlgorithmType _algorithm;
 
     /// <summary>
     /// Initializes a new instance of the PolarDecomposition class.
@@ -53,16 +48,22 @@ public class PolarDecomposition<T> : IMatrixDecomposition<T>
     /// If you're not sure which algorithm to use, the default (SVD) is generally reliable but may be slower.
     /// </remarks>
     public PolarDecomposition(Matrix<T> matrix, PolarAlgorithmType algorithm = PolarAlgorithmType.SVD)
+        : base(matrix)
     {
-        A = matrix;
-        _numOps = MathHelper.GetNumericOperations<T>();
-        U = new Matrix<T>(matrix.Rows, matrix.Columns);
-        P = new Matrix<T>(matrix.Rows, matrix.Columns);
-        Decompose(algorithm);
+        _algorithm = algorithm;
+        Decompose();
     }
 
     /// <summary>
-    /// Performs the polar decomposition using the specified algorithm.
+    /// Performs the polar decomposition.
+    /// </summary>
+    protected override void Decompose()
+    {
+        ComputeDecomposition(_algorithm);
+    }
+
+    /// <summary>
+    /// Computes the polar decomposition using the specified algorithm.
     /// </summary>
     /// <param name="algorithm">The algorithm to use for the decomposition.</param>
     /// <remarks>
@@ -79,7 +80,7 @@ public class PolarDecomposition<T> : IMatrixDecomposition<T>
     /// - Scaling and Squaring: Good for matrices with large condition numbers
     /// </para>
     /// </remarks>
-    public void Decompose(PolarAlgorithmType algorithm = PolarAlgorithmType.SVD)
+    private void ComputeDecomposition(PolarAlgorithmType algorithm)
     {
         switch (algorithm)
         {
@@ -144,7 +145,7 @@ public class PolarDecomposition<T> : IMatrixDecomposition<T>
     {
         Matrix<T> X = A.Clone();
         Matrix<T> Y = Matrix<T>.CreateIdentity(A.Rows);
-        T tolerance = _numOps.FromDouble(1e-12);
+        T tolerance = NumOps.FromDouble(1e-12);
         int maxIterations = 100;
 
         for (int i = 0; i < maxIterations; i++)
@@ -158,13 +159,13 @@ public class PolarDecomposition<T> : IMatrixDecomposition<T>
                 throw new InvalidOperationException("Matrix became singular during Newton-Schulz iteration.");
             }
 
-            Matrix<T> nextX = X.Multiply(_numOps.FromDouble(0.5)).Add(Y.Transpose().Multiply(_numOps.FromDouble(0.5)));
-            Matrix<T> nextY = Y.Multiply(_numOps.FromDouble(0.5)).Add(XtX.Inverse().Multiply(X.Transpose()).Multiply(_numOps.FromDouble(0.5)));
+            Matrix<T> nextX = X.Multiply(NumOps.FromDouble(0.5)).Add(Y.Transpose().Multiply(NumOps.FromDouble(0.5)));
+            Matrix<T> nextY = Y.Multiply(NumOps.FromDouble(0.5)).Add(XtX.Inverse().Multiply(X.Transpose()).Multiply(NumOps.FromDouble(0.5)));
 
             T errorX = nextX.Subtract(X).FrobeniusNorm();
             T errorY = nextY.Subtract(Y).FrobeniusNorm();
 
-            if (_numOps.LessThan(errorX, tolerance) && _numOps.LessThan(errorY, tolerance))
+            if (NumOps.LessThan(errorX, tolerance) && NumOps.LessThan(errorY, tolerance))
             {
                 break;
             }
@@ -173,7 +174,7 @@ public class PolarDecomposition<T> : IMatrixDecomposition<T>
             Y = nextY;
 
             // Check for divergence
-            if (_numOps.GreaterThan(errorX, _numOps.FromDouble(1e6)) || _numOps.GreaterThan(errorY, _numOps.FromDouble(1e6)))
+            if (NumOps.GreaterThan(errorX, NumOps.FromDouble(1e6)) || NumOps.GreaterThan(errorY, NumOps.FromDouble(1e6)))
             {
                 throw new InvalidOperationException("Newton-Schulz iteration diverged.");
             }
@@ -204,7 +205,7 @@ public class PolarDecomposition<T> : IMatrixDecomposition<T>
     private void DecomposeHalleyIteration()
     {
         Matrix<T> X = A.Clone();
-        T tolerance = _numOps.FromDouble(1e-12);
+        T tolerance = NumOps.FromDouble(1e-12);
         int maxIterations = 100;
 
         for (int i = 0; i < maxIterations; i++)
@@ -216,12 +217,12 @@ public class PolarDecomposition<T> : IMatrixDecomposition<T>
 
             Matrix<T> Y = X.Inverse();
             Matrix<T> Z = Y.Transpose();
-            Matrix<T> nextX = X.Multiply(_numOps.FromDouble(3)).Add(Z).Multiply(_numOps.FromDouble(0.25))
-                .Add(X.Multiply(_numOps.FromDouble(3)).Multiply(Y).Multiply(Z).Multiply(_numOps.FromDouble(0.25)));
+            Matrix<T> nextX = X.Multiply(NumOps.FromDouble(3)).Add(Z).Multiply(NumOps.FromDouble(0.25))
+                .Add(X.Multiply(NumOps.FromDouble(3)).Multiply(Y).Multiply(Z).Multiply(NumOps.FromDouble(0.25)));
 
             T error = nextX.Subtract(X).FrobeniusNorm();
 
-            if (_numOps.LessThan(error, tolerance))
+            if (NumOps.LessThan(error, tolerance))
             {
                 break;
             }
@@ -229,7 +230,7 @@ public class PolarDecomposition<T> : IMatrixDecomposition<T>
             X = nextX;
 
             // Check for divergence
-            if (_numOps.GreaterThan(error, _numOps.FromDouble(1e6)))
+            if (NumOps.GreaterThan(error, NumOps.FromDouble(1e6)))
             {
                 throw new InvalidOperationException("Halley iteration diverged.");
             }
@@ -259,7 +260,7 @@ public class PolarDecomposition<T> : IMatrixDecomposition<T>
     private void DecomposeQRIteration()
     {
         Matrix<T> X = A.Clone();
-        T tolerance = _numOps.FromDouble(1e-12);
+        T tolerance = NumOps.FromDouble(1e-12);
         int maxIterations = 100;
 
         for (int i = 0; i < maxIterations; i++)
@@ -268,11 +269,11 @@ public class PolarDecomposition<T> : IMatrixDecomposition<T>
             Matrix<T> Q = qr.Q;
             Matrix<T> R = qr.R;
 
-            Matrix<T> nextX = Q.Multiply(R.Add(R.Transpose())).Multiply(_numOps.FromDouble(0.5));
+            Matrix<T> nextX = Q.Multiply(R.Add(R.Transpose())).Multiply(NumOps.FromDouble(0.5));
 
             T error = nextX.Subtract(X).FrobeniusNorm();
 
-            if (_numOps.LessThan(error, tolerance))
+            if (NumOps.LessThan(error, tolerance))
             {
                 break;
             }
@@ -280,7 +281,7 @@ public class PolarDecomposition<T> : IMatrixDecomposition<T>
             X = nextX;
 
             // Check for divergence
-            if (_numOps.GreaterThan(error, _numOps.FromDouble(1e6)))
+            if (NumOps.GreaterThan(error, NumOps.FromDouble(1e6)))
             {
                 throw new InvalidOperationException("QR iteration diverged.");
             }
@@ -317,11 +318,11 @@ public class PolarDecomposition<T> : IMatrixDecomposition<T>
 
         if (scalingFactor > 0)
         {
-            X = X.Multiply(_numOps.FromDouble(Math.Pow(2, -scalingFactor)));
+            X = X.Multiply(NumOps.FromDouble(Math.Pow(2, -scalingFactor)));
         }
 
         Matrix<T> Y = Matrix<T>.CreateIdentity(A.Rows);
-        T tolerance = _numOps.FromDouble(1e-12);
+        T tolerance = NumOps.FromDouble(1e-12);
         int maxIterations = 20;
 
         for (int i = 0; i < maxIterations; i++)
@@ -332,18 +333,18 @@ public class PolarDecomposition<T> : IMatrixDecomposition<T>
             }
 
             Matrix<T> Z = X.Subtract(Y.Inverse());
-            Y = Y.Add(Y.Multiply(Z).Multiply(_numOps.FromDouble(0.5)));
-            X = X.Subtract(Z.Multiply(X).Multiply(_numOps.FromDouble(0.5)));
+            Y = Y.Add(Y.Multiply(Z).Multiply(NumOps.FromDouble(0.5)));
+            X = X.Subtract(Z.Multiply(X).Multiply(NumOps.FromDouble(0.5)));
 
             T error = Z.FrobeniusNorm();
 
-            if (_numOps.LessThan(error, tolerance))
+            if (NumOps.LessThan(error, tolerance))
             {
                 break;
             }
 
             // Check for divergence
-            if (_numOps.GreaterThan(error, _numOps.FromDouble(1e6)))
+            if (NumOps.GreaterThan(error, NumOps.FromDouble(1e6)))
             {
                 throw new InvalidOperationException("Scaling and Squaring iteration diverged.");
             }
@@ -365,7 +366,7 @@ public class PolarDecomposition<T> : IMatrixDecomposition<T>
     /// Solves the linear system Ax = b using the polar decomposition.
     /// </summary>
     /// <param name="b">The right-hand side vector.</param>
-    /// <returns>The solution vector x such that Ax � b.</returns>
+    /// <returns>The solution vector x such that Ax = b.</returns>
     /// <remarks>
     /// <para>
     /// This method solves the system by first solving Px = b, then computing y = U^T * x.
@@ -377,7 +378,7 @@ public class PolarDecomposition<T> : IMatrixDecomposition<T>
     /// more stable than solving the original equation directly.
     /// </para>
     /// </remarks>
-    public Vector<T> Solve(Vector<T> b)
+    public override Vector<T> Solve(Vector<T> b)
     {
         // Solve Px = b
         var x = MatrixSolutionHelper.SolveLinearSystem(P, b, MatrixDecompositionType.Polar);
@@ -389,19 +390,19 @@ public class PolarDecomposition<T> : IMatrixDecomposition<T>
     /// <summary>
     /// Computes the inverse of the original matrix A using its polar decomposition.
     /// </summary>
-    /// <returns>The inverse matrix A^(-1).</returns>
+    /// <returns>The inverse matrix A⁻¹.</returns>
     /// <remarks>
     /// <para>
-    /// Since A = UP, the inverse is A^(-1) = P^(-1) * U^T.
+    /// Since A = UP, the inverse is A⁻¹ = P⁻¹ * U^T.
     /// </para>
     /// <para>
     /// <b>For Beginners:</b> The inverse of a matrix is like the reciprocal of a number - when you multiply
-    /// a matrix by its inverse, you get the identity matrix (similar to how 5 � 1/5 = 1). This method
+    /// a matrix by its inverse, you get the identity matrix (similar to how 5 * 1/5 = 1). This method
     /// finds the inverse by using the special properties of the polar decomposition, which makes the
     /// calculation more reliable than directly inverting the original matrix.
     /// </para>
     /// </remarks>
-    public Matrix<T> Invert()
+    public override Matrix<T> Invert()
     {
         var invP = P.Inverse();
         var invU = U.Transpose();

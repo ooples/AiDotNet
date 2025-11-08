@@ -4,29 +4,32 @@ namespace AiDotNet.FeatureSelectors;
 /// A feature selector that passes through all features without any selection.
 /// </summary>
 /// <typeparam name="T">The data type used for calculations (typically float or double).</typeparam>
+/// <typeparam name="TInput">The input data type (Matrix, Tensor, etc.).</typeparam>
 /// <remarks>
 /// <para>
-/// <b>For Beginners:</b> This class implements the "pass-through" or "identity" pattern, where 
-/// the output is identical to the input. It's used when you want to maintain the same interface 
+/// <b>For Beginners:</b> This class implements the "pass-through" or "identity" pattern, where
+/// the output is identical to the input. It's used when you want to maintain the same interface
 /// as other feature selectors but don't actually want to remove any features.
 /// </para>
 /// <para>
 /// Think of it like a filter that doesn't filter anything out - it lets everything pass through unchanged.
-/// This is useful in scenarios where feature selection is optional but your code expects a feature 
+/// This is useful in scenarios where feature selection is optional but your code expects a feature
 /// selector to be provided.
 /// </para>
 /// </remarks>
-public class NoFeatureSelector<T, TInput> : IFeatureSelector<T, TInput>
+public class NoFeatureSelector<T, TInput> : FeatureSelectorBase<T, TInput>
 {
     /// <summary>
-    /// Returns the input feature matrix without any selection or modification.
+    /// Returns all feature indices without any selection.
     /// </summary>
-    /// <param name="allFeaturesMatrix">The matrix containing all features.</param>
-    /// <returns>The same matrix that was provided as input.</returns>
+    /// <param name="allFeatures">The input data containing all features.</param>
+    /// <param name="numSamples">The number of samples in the dataset.</param>
+    /// <param name="numFeatures">The total number of features in the dataset.</param>
+    /// <returns>A list containing all feature indices (0 to numFeatures-1).</returns>
     /// <remarks>
     /// <para>
-    /// <b>For Beginners:</b> This method simply returns the exact same data that was passed to it. 
-    /// No features are removed or modified in any way.
+    /// <b>For Beginners:</b> This method simply returns a list of all feature indices, which means
+    /// all features will be kept without any filtering.
     /// </para>
     /// <para>
     /// This is useful in several scenarios:
@@ -37,8 +40,9 @@ public class NoFeatureSelector<T, TInput> : IFeatureSelector<T, TInput>
     /// </list>
     /// </para>
     /// </remarks>
-    public TInput SelectFeatures(TInput allFeaturesInput)
+    protected override List<int> SelectFeatureIndices(TInput allFeatures, int numSamples, int numFeatures)
     {
-        return allFeaturesInput;
+        // Return all feature indices (no filtering)
+        return Enumerable.Range(0, numFeatures).ToList();
     }
 }

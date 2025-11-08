@@ -1,7 +1,7 @@
 using System.Linq;
 using AiDotNet.Helpers;
+using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
-using AiDotNet.RetrievalAugmentedGeneration.Interfaces;
 using AiDotNet.RetrievalAugmentedGeneration.Models;
 
 namespace AiDotNet.RetrievalAugmentedGeneration.DocumentStores;
@@ -27,6 +27,11 @@ namespace AiDotNet.RetrievalAugmentedGeneration.DocumentStores;
 /// <typeparam name="T">The numeric data type used for vector calculations (typically float or double).</typeparam>
 public abstract class DocumentStoreBase<T> : IDocumentStore<T>
 {
+    /// <summary>
+    /// Provides mathematical operations for the numeric type T.
+    /// </summary>
+    protected static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();
+
     /// <summary>
     /// Gets the number of documents currently stored in the document store.
     /// </summary>
@@ -74,7 +79,7 @@ public abstract class DocumentStoreBase<T> : IDocumentStore<T>
     /// <param name="queryVector">The vector to search for similar documents.</param>
     /// <param name="topK">The number of most similar documents to return.</param>
     /// <returns>An enumerable of documents ordered by similarity (most similar first), with relevance scores populated.</returns>
-    public IEnumerable<Document> GetSimilar(Vector<T> queryVector, int topK)
+    public IEnumerable<Document<T>> GetSimilar(Vector<T> queryVector, int topK)
     {
         return GetSimilarWithFilters(queryVector, topK, new Dictionary<string, object>());
     }
@@ -86,7 +91,7 @@ public abstract class DocumentStoreBase<T> : IDocumentStore<T>
     /// <param name="topK">The number of most similar documents to return.</param>
     /// <param name="metadataFilters">Metadata filters to apply before similarity search.</param>
     /// <returns>An enumerable of filtered documents ordered by similarity, with relevance scores populated.</returns>
-    public IEnumerable<Document> GetSimilarWithFilters(Vector<T> queryVector, int topK, Dictionary<string, object> metadataFilters)
+    public IEnumerable<Document<T>> GetSimilarWithFilters(Vector<T> queryVector, int topK, Dictionary<string, object> metadataFilters)
     {
         ValidateQueryVector(queryVector);
         ValidateTopK(topK);
@@ -100,7 +105,7 @@ public abstract class DocumentStoreBase<T> : IDocumentStore<T>
     /// </summary>
     /// <param name="documentId">The unique identifier of the document to retrieve.</param>
     /// <returns>The document if found; otherwise, null.</returns>
-    public Document? GetById(string documentId)
+    public Document<T>? GetById(string documentId)
     {
         ValidateDocumentId(documentId);
         return GetByIdCore(documentId);
@@ -123,11 +128,20 @@ public abstract class DocumentStoreBase<T> : IDocumentStore<T>
     public abstract void Clear();
 
     /// <summary>
+    /// Gets all documents currently stored in the document store.
+    /// </summary>
+    /// <returns>An enumerable of all documents in the store.</returns>
+    public IEnumerable<Document<T>> GetAll()
+    {
+        return GetAllCore();
+    }
+
+    /// <summary>
     /// Core logic for adding a single vector document.
     /// </summary>
     /// <param name="vectorDocument">The validated vector document to add.</param>
     /// <remarks>
-    /// <para><b>For Implementers:</b> This is where you implement document storage.
+    /// <para><b>For Beginners:</b> This is where derived classes implement their specific storage logic.
     /// 
     /// You don't need to:
     /// - Validate the vector document (already done)
@@ -148,7 +162,7 @@ public abstract class DocumentStoreBase<T> : IDocumentStore<T>
     /// The default implementation calls AddCore for each document. Override this to provide
     /// more efficient batch insertion if your storage backend supports it.
     /// </para>
-    /// <para><b>For Implementers:</b> Override this for efficient batch operations.
+    /// <para><b>For Beginners:</b> Derived classes override this to add many documents efficiently at once.
     /// 
     /// For example:
     /// - Database stores can use bulk insert
@@ -174,7 +188,7 @@ public abstract class DocumentStoreBase<T> : IDocumentStore<T>
     /// <param name="metadataFilters">The validated metadata filters.</param>
     /// <returns>Top-k similar documents ordered by similarity score.</returns>
     /// <remarks>
-    /// <para><b>For Implementers:</b> This is where you implement similarity search.
+    /// <para><b>For Beginners:</b> Derived classes implement their specific similarity search algorithms here.
     /// 
     /// You should:
     /// - Calculate similarity between queryVector and all stored embeddings
@@ -189,7 +203,7 @@ public abstract class DocumentStoreBase<T> : IDocumentStore<T>
     /// - Jaccard similarity: Use StatisticsHelper&lt;T&gt;.JaccardSimilarity(vector1, vector2)
     /// </para>
     /// </remarks>
-    protected abstract IEnumerable<Document> GetSimilarCore(Vector<T> queryVector, int topK, Dictionary<string, object> metadataFilters);
+    protected abstract IEnumerable<Document<T>> GetSimilarCore(Vector<T> queryVector, int topK, Dictionary<string, object> metadataFilters);
 
     /// <summary>
     /// Core logic for retrieving a document by ID.
@@ -197,11 +211,11 @@ public abstract class DocumentStoreBase<T> : IDocumentStore<T>
     /// <param name="documentId">The validated document ID.</param>
     /// <returns>The document if found; otherwise, null.</returns>
     /// <remarks>
-    /// <para><b>For Implementers:</b> This is where you implement ID-based lookup.
+    /// <para><b>For Beginners:</b> Derived classes implement how to find a document by its ID.
     /// Simple dictionary lookup for in-memory stores, database query for persistent stores.
     /// </para>
     /// </remarks>
-    protected abstract Document? GetByIdCore(string documentId);
+    protected abstract Document<T>? GetByIdCore(string documentId);
 
     /// <summary>
     /// Core logic for removing a document by ID.
@@ -209,11 +223,34 @@ public abstract class DocumentStoreBase<T> : IDocumentStore<T>
     /// <param name="documentId">The validated document ID.</param>
     /// <returns>True if removed; false if not found.</returns>
     /// <remarks>
-    /// <para><b>For Implementers:</b> This is where you implement document removal.
+    /// <para><b>For Beginners:</b> Derived classes implement how to delete a document from storage.
     /// Remember to remove both the document and its embedding from your storage.
     /// </para>
     /// </remarks>
     protected abstract bool RemoveCore(string documentId);
+
+    /// <summary>
+    /// Core logic for retrieving all documents.
+    /// </summary>
+    /// <returns>An enumerable of all documents in the store.</returns>
+    /// <remarks>
+    /// <para>
+    /// Derived classes must implement this method to return all stored documents without
+    /// filtering or sorting. The implementation should efficiently retrieve all documents
+    /// while being mindful of memory usage for large document collections.
+    /// </para>
+    /// <para><b>For Beginners:</b> This internal method does the actual work of getting all documents.
+    /// 
+    /// When implementing your own document store:
+    /// - Return every document you have stored
+    /// - Don't filter or sort them
+    /// - Be careful with memory if you have millions of documents
+    /// 
+    /// Think of it like walking through every shelf in the library and making
+    /// a list of every single book.
+    /// </para>
+    /// </remarks>
+    protected abstract IEnumerable<Document<T>> GetAllCore();
 
     /// <summary>
     /// Validates a vector document before adding it to the store.
@@ -298,7 +335,7 @@ public abstract class DocumentStoreBase<T> : IDocumentStore<T>
     /// This helper method supports equality and range comparisons for metadata filtering.
     /// Override this to add support for more complex filter operations.
     /// </para>
-    /// <para><b>For Implementers:</b> Use this in GetSimilarCore to filter documents.
+    /// <para><b>For Beginners:</b> Use this helper method in GetSimilarCore to filter documents by metadata.
     /// 
     /// Supported filters:
     /// - Equality: metadata["category"] == "science"
@@ -309,7 +346,7 @@ public abstract class DocumentStoreBase<T> : IDocumentStore<T>
     /// Matches if: doc.Metadata["category"] == "science" AND doc.Metadata["year"] >= 2020
     /// </para>
     /// </remarks>
-    protected bool MatchesFilters(Document document, Dictionary<string, object> filters)
+    protected bool MatchesFilters(Document<T> document, Dictionary<string, object> filters)
     {
         if (filters.Count == 0)
             return true;

@@ -4,27 +4,29 @@ namespace AiDotNet.CrossValidators;
 /// Implements a time series cross-validation strategy for model evaluation.
 /// </summary>
 /// <typeparam name="T">The numeric type used for calculations (e.g., float, double, decimal).</typeparam>
+/// <typeparam name="TInput">The type of input data (e.g., Matrix&lt;T&gt; for tabular data, Tensor&lt;T&gt; for images).</typeparam>
+/// <typeparam name="TOutput">The type of output data (e.g., Vector&lt;T&gt; for predictions, custom types for other formats).</typeparam>
 /// <remarks>
 /// <para>
 /// This class provides a time series cross-validation implementation, which respects the temporal order of the data.
 /// It uses an expanding window approach, where the training set grows over time.
 /// </para>
 /// <para><b>For Beginners:</b> Time series cross-validation is designed for data that has a time component.
-/// 
+///
 /// What this class does:
 /// - Starts with a small portion of your data for training
 /// - Uses the next part for validation
 /// - Expands the training set to include the previous validation set
 /// - Repeats this process, moving forward in time
 /// - Calculates how well your model performs on average across all these tests
-/// 
+///
 /// This is useful because:
 /// - It respects the time order of your data
 /// - It simulates how the model would perform in a real-world scenario where you use past data to predict the future
 /// - It helps detect if your model's performance changes over time
 /// </para>
 /// </remarks>
-public class TimeSeriesCrossValidator<T> : CrossValidatorBase<T>
+public class TimeSeriesCrossValidator<T, TInput, TOutput> : CrossValidatorBase<T, TInput, TOutput>
 {
     /// <summary>
     /// The initial size of the training set.
@@ -83,34 +85,38 @@ public class TimeSeriesCrossValidator<T> : CrossValidatorBase<T>
     }
 
     /// <summary>
-    /// Performs the time series cross-validation process on the given model using the provided data.
+    /// Performs the time series cross-validation process on the given model using the provided data and optimizer.
     /// </summary>
     /// <param name="model">The machine learning model to validate.</param>
     /// <param name="X">The feature matrix containing the input data.</param>
     /// <param name="y">The target vector containing the output data.</param>
+    /// <param name="optimizer">The optimizer to use for training the model on each fold.</param>
     /// <returns>A CrossValidationResult containing the results of the validation process.</returns>
     /// <remarks>
     /// <para>
     /// This method implements the core time series cross-validation logic. It creates the folds using the CreateFolds method,
-    /// respecting the temporal order of the data, then performs the cross-validation using these folds.
+    /// respecting the temporal order of the data, then performs the cross-validation using these folds and the provided optimizer.
     /// </para>
     /// <para><b>For Beginners:</b> This method is where the actual time series cross-validation happens.
-    /// 
+    ///
     /// What it does:
-    /// - Takes your model and your time-ordered data (X and y)
+    /// - Takes your model, your time-ordered data (X and y), and an optimizer for training
     /// - Creates time-based folds using the CreateFolds method
     /// - Runs the PerformCrossValidation method, which:
-    ///   - Trains and tests your model multiple times, each time moving forward in time
+    ///   - Trains your model using the optimizer multiple times, each time moving forward in time
     ///   - Collects and summarizes the results of all these tests
-    /// 
-    /// It's like putting your model through a series of tests that simulate how it would perform 
-    /// if you were using it to make predictions over time.
+    ///
+    /// The optimizer ensures consistent training across all folds.
+    ///
+    /// It's like putting your model through a series of tests that simulate how it would perform
+    /// if you were using it to make predictions over time, with a standardized training procedure.
     /// </para>
     /// </remarks>
-    public override CrossValidationResult<T> Validate(IFullModel<T, Matrix<T>, Vector<T>> model, Matrix<T> X, Vector<T> y)
+    public override CrossValidationResult<T, TInput, TOutput> Validate(IFullModel<T, TInput, TOutput> model, TInput X, TOutput y,
+        IOptimizer<T, TInput, TOutput> optimizer)
     {
         var folds = CreateFolds(X, y);
-        return PerformCrossValidation(model, X, y, folds);
+        return PerformCrossValidation(model, X, y, folds, optimizer);
     }
 
     /// <summary>
@@ -134,13 +140,13 @@ public class TimeSeriesCrossValidator<T> : CrossValidatorBase<T>
     ///   - Moves forward in time by the step size for the next fold
     /// - Returns these time-based splits so the main method can use them
     /// 
-    /// It's like reading through a history book, using more and more of the past to predict 
+    /// It's like reading through a history book, using more and more of the past to predict
     /// what happens next, and then checking if your prediction was correct.
     /// </para>
     /// </remarks>
-    private IEnumerable<(int[] trainIndices, int[] validationIndices)> CreateFolds(Matrix<T> X, Vector<T> y)
+    private IEnumerable<(int[] trainIndices, int[] validationIndices)> CreateFolds(TInput X, TOutput y)
     {
-        int totalSamples = X.Rows;
+        int totalSamples = InputHelper<T, TInput>.GetBatchSize(X);
         
         for (int trainEnd = _initialTrainSize; trainEnd < totalSamples - _validationSize; trainEnd += _step)
         {

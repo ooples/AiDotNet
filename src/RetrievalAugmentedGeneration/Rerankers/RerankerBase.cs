@@ -1,11 +1,14 @@
-using AiDotNet.RetrievalAugmentedGeneration.Interfaces;
+using AiDotNet.Helpers;
+using AiDotNet.Interfaces;
 using AiDotNet.RetrievalAugmentedGeneration.Models;
+using System.Collections.Generic;
 
 namespace AiDotNet.RetrievalAugmentedGeneration.Rerankers;
 
 /// <summary>
 /// Provides a base implementation for document rerankers with common functionality.
 /// </summary>
+/// <typeparam name="T">The numeric data type used for relevance scoring.</typeparam>
 /// <remarks>
 /// <para>
 /// This abstract class implements the IReranker interface and provides common functionality
@@ -20,8 +23,13 @@ namespace AiDotNet.RetrievalAugmentedGeneration.Rerankers;
 /// - This ensures all rerankers work consistently
 /// </para>
 /// </remarks>
-public abstract class RerankerBase : IReranker
+public abstract class RerankerBase<T> : IReranker<T>
 {
+    /// <summary>
+    /// Provides mathematical operations for the numeric type T.
+    /// </summary>
+    protected static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();
+
     /// <summary>
     /// Gets a value indicating whether this reranker modifies relevance scores.
     /// </summary>
@@ -33,7 +41,7 @@ public abstract class RerankerBase : IReranker
     /// <param name="query">The query text used to assess relevance.</param>
     /// <param name="documents">The documents to rerank.</param>
     /// <returns>The documents reordered by relevance, with updated relevance scores.</returns>
-    public IEnumerable<Document> Rerank(string query, IEnumerable<Document> documents)
+    public IEnumerable<Document<T>> Rerank(string query, IEnumerable<Document<T>> documents)
     {
         ValidateQuery(query);
         ValidateDocuments(documents);
@@ -52,7 +60,7 @@ public abstract class RerankerBase : IReranker
     /// <param name="documents">The documents to rerank.</param>
     /// <param name="topK">The number of top-ranked documents to return.</param>
     /// <returns>The top-k documents ordered by relevance, with updated relevance scores.</returns>
-    public IEnumerable<Document> Rerank(string query, IEnumerable<Document> documents, int topK)
+    public IEnumerable<Document<T>> Rerank(string query, IEnumerable<Document<T>> documents, int topK)
     {
         ValidateTopK(topK);
         
@@ -79,7 +87,7 @@ public abstract class RerankerBase : IReranker
     /// Make sure to update each document's RelevanceScore property!
     /// </para>
     /// </remarks>
-    protected abstract IEnumerable<Document> RerankCore(string query, IList<Document> documents);
+    protected abstract IEnumerable<Document<T>> RerankCore(string query, IList<Document<T>> documents);
 
     /// <summary>
     /// Validates the query string.
@@ -104,7 +112,7 @@ public abstract class RerankerBase : IReranker
     /// For example, checking that documents have content or required metadata.
     /// </para>
     /// </remarks>
-    protected virtual void ValidateDocuments(IEnumerable<Document> documents)
+    protected virtual void ValidateDocuments(IEnumerable<Document<T>> documents)
     {
         if (documents == null)
             throw new ArgumentNullException(nameof(documents));
@@ -142,31 +150,48 @@ public abstract class RerankerBase : IReranker
     /// - Makes scores consistent with other retrievers/rerankers
     /// </para>
     /// </remarks>
-    protected IList<Document> NormalizeScores(IList<Document> documents)
+    protected IList<Document<T>> NormalizeScores(IList<Document<T>> documents)
     {
-        var docsWithScores = documents.Where(d => d.RelevanceScore.HasValue).ToList();
+        var docsWithScores = documents.Where(d => d.HasRelevanceScore).ToList();
         if (docsWithScores.Count == 0)
             return documents;
 
-        var scores = docsWithScores.Select(d => d.RelevanceScore!.Value).ToList();
-        var minScore = scores.Min();
-        var maxScore = scores.Max();
-        var range = maxScore - minScore;
+        var scores = docsWithScores.Select(d => d.RelevanceScore).ToList();
 
-        const double epsilon = 1e-8;
-        if (Math.Abs(range) < epsilon)
+        var minScore = scores[0];
+        var maxScore = scores[0];
+        for (var i = 1; i < scores.Count; i++)
+        {
+            var score = scores[i];
+            if (NumOps.LessThan(score, minScore))
+            {
+                minScore = score;
+            }
+            if (NumOps.GreaterThan(score, maxScore))
+            {
+                maxScore = score;
+            }
+        }
+
+        var range = NumOps.Subtract(maxScore, minScore);
+        var epsilon = NumOps.FromDouble(1e-8);
+        var isZeroRange = EqualityComparer<T>.Default.Equals(range, NumOps.Zero);
+        if (isZeroRange || NumOps.LessThan(NumOps.Abs(range), epsilon))
         {
             // All scores are the same, set them all to 1.0
+            var one = NumOps.One;
             foreach (var doc in docsWithScores)
             {
-                doc.RelevanceScore = 1.0;
+                doc.RelevanceScore = one;
+                doc.HasRelevanceScore = true;
             }
         }
         else
         {
             foreach (var doc in docsWithScores)
             {
-                doc.RelevanceScore = (doc.RelevanceScore!.Value - minScore) / range;
+                doc.RelevanceScore = NumOps.Divide(NumOps.Subtract(doc.RelevanceScore, minScore), range);
+                doc.HasRelevanceScore = true;
             }
         }
 

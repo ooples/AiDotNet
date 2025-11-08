@@ -1,4 +1,5 @@
-using AiDotNet.RetrievalAugmentedGeneration.Interfaces;
+using AiDotNet.Helpers;
+using AiDotNet.Interfaces;
 using AiDotNet.RetrievalAugmentedGeneration.Models;
 
 namespace AiDotNet.RetrievalAugmentedGeneration.Evaluation;
@@ -23,8 +24,13 @@ namespace AiDotNet.RetrievalAugmentedGeneration.Evaluation;
 /// their specific scoring logic.
 /// </para>
 /// </remarks>
-public abstract class RAGMetricBase : IRAGMetric
+public abstract class RAGMetricBase<T> : IRAGMetric<T>
 {
+    /// <summary>
+    /// Provides mathematical operations for the numeric type T.
+    /// </summary>
+    protected static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();
+
     /// <summary>
     /// Gets the name of this metric.
     /// </summary>
@@ -41,7 +47,7 @@ public abstract class RAGMetricBase : IRAGMetric
     /// <param name="answer">The grounded answer to evaluate.</param>
     /// <param name="groundTruth">The expected/correct answer (null for reference-free metrics).</param>
     /// <returns>A score between 0 and 1, where 1 is perfect.</returns>
-    public double Evaluate(GroundedAnswer answer, string? groundTruth = null)
+    public T Evaluate(GroundedAnswer<T> answer, string? groundTruth = null)
     {
         ValidateAnswer(answer);
         
@@ -49,7 +55,7 @@ public abstract class RAGMetricBase : IRAGMetric
             throw new ArgumentException("This metric requires ground truth for evaluation", nameof(groundTruth));
 
         var score = EvaluateCore(answer, groundTruth);
-        return ClampScore(score);
+        return MathHelper.Clamp(score, NumOps.Zero, NumOps.One);
     }
 
     /// <summary>
@@ -63,46 +69,19 @@ public abstract class RAGMetricBase : IRAGMetric
     /// <param name="answer">The validated grounded answer.</param>
     /// <param name="groundTruth">The ground truth (if required).</param>
     /// <returns>A score (will be clamped to 0-1 range).</returns>
-    protected abstract double EvaluateCore(GroundedAnswer answer, string? groundTruth);
+    protected abstract T EvaluateCore(GroundedAnswer<T> answer, string? groundTruth);
 
     /// <summary>
     /// Validates the grounded answer.
     /// </summary>
     /// <param name="answer">The answer to validate.</param>
-    protected virtual void ValidateAnswer(GroundedAnswer answer)
+    protected virtual void ValidateAnswer(GroundedAnswer<T> answer)
     {
         if (answer == null)
             throw new ArgumentNullException(nameof(answer));
 
         if (string.IsNullOrWhiteSpace(answer.Answer))
             throw new ArgumentException("Answer text cannot be null or empty", nameof(answer));
-    }
-
-    /// <summary>
-    /// Clamps a score to the 0-1 range.
-    /// </summary>
-    /// <param name="score">The score to clamp.</param>
-    /// <returns>The clamped score.</returns>
-    protected double ClampScore(double score)
-    {
-        return Math.Max(0.0, Math.Min(1.0, score));
-    }
-
-    /// <summary>
-    /// Calculates Jaccard similarity between two sets of words.
-    /// </summary>
-    /// <param name="text1">First text.</param>
-    /// <param name="text2">Second text.</param>
-    /// <returns>Jaccard similarity score (0-1).</returns>
-    protected double JaccardSimilarity(string text1, string text2)
-    {
-        var words1 = GetWords(text1);
-        var words2 = GetWords(text2);
-
-        var intersection = words1.Intersect(words2).Count();
-        var union = words1.Union(words2).Count();
-
-        return union == 0 ? 0.0 : (double)intersection / union;
     }
 
     /// <summary>

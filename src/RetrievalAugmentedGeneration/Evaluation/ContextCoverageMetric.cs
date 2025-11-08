@@ -44,7 +44,7 @@ namespace AiDotNet.RetrievalAugmentedGeneration.Evaluation;
 /// - Helps tune retrieval parameters (topK, similarity threshold)
 /// </para>
 /// </remarks>
-public class ContextCoverageMetric : RAGMetricBase
+public class ContextCoverageMetric<T> : RAGMetricBase<T>
 {
     /// <summary>
     /// Gets the name of this metric.
@@ -72,72 +72,76 @@ public class ContextCoverageMetric : RAGMetricBase
     /// <param name="answer">The grounded answer to evaluate.</param>
     /// <param name="groundTruth">The reference answer (optional).</param>
     /// <returns>Coverage score (0-1).</returns>
-    protected override double EvaluateCore(GroundedAnswer answer, string? groundTruth)
+    protected override T EvaluateCore(GroundedAnswer<T> answer, string? groundTruth)
     {
         if (!answer.SourceDocuments.Any())
-            return 0.0;  // No sources = no coverage
+            return NumOps.Zero;
 
-        // If ground truth is provided, check if sources contain ground truth information
         if (!string.IsNullOrWhiteSpace(groundTruth))
         {
             return EvaluateWithGroundTruth(answer, groundTruth!);
         }
 
-        // Without ground truth, use heuristics based on relevance scores
         return EvaluateWithoutGroundTruth(answer);
     }
 
     /// <summary>
     /// Evaluates coverage when ground truth is available.
     /// </summary>
-    private double EvaluateWithGroundTruth(GroundedAnswer answer, string groundTruth)
+    private T EvaluateWithGroundTruth(GroundedAnswer<T> answer, string groundTruth)
     {
-        // Extract key terms from ground truth
         var groundTruthWords = GetWords(groundTruth);
         if (groundTruthWords.Count == 0)
-            return 0.0;
+            return NumOps.Zero;
 
-        // Combine all source documents
         var sourceText = string.Join(" ", answer.SourceDocuments.Select(d => d.Content));
         var sourceWords = GetWords(sourceText);
 
-        // Calculate what percentage of ground truth words appear in sources
         var coveredWords = groundTruthWords.Intersect(sourceWords).Count();
-        var coverageScore = (double)coveredWords / groundTruthWords.Count;
-
-        return coverageScore;
+        
+        return NumOps.Divide(NumOps.FromDouble(coveredWords), NumOps.FromDouble(groundTruthWords.Count));
     }
 
     /// <summary>
     /// Evaluates coverage without ground truth using heuristics.
     /// </summary>
-    private double EvaluateWithoutGroundTruth(GroundedAnswer answer)
+    private T EvaluateWithoutGroundTruth(GroundedAnswer<T> answer)
     {
         var docs = answer.SourceDocuments.ToList();
 
-        // Heuristic 1: Average relevance score (if available)
-        var avgRelevance = docs
-            .Where(d => d.RelevanceScore.HasValue)
-            .Select(d => d.RelevanceScore!.Value)
-            .DefaultIfEmpty(0.5)
-            .Average();
+        var sumRelevance = NumOps.Zero;
+        var countWithScores = 0;
 
-        // Heuristic 2: Document diversity (measured by unique word ratio)
+        foreach (var doc in docs)
+        {
+            if (doc.HasRelevanceScore)
+            {
+                sumRelevance = NumOps.Add(sumRelevance, doc.RelevanceScore);
+                countWithScores++;
+            }
+        }
+
+        var avgRelevance = countWithScores > 0 
+            ? NumOps.Divide(sumRelevance, NumOps.FromDouble(countWithScores))
+            : NumOps.FromDouble(0.5);
+
         var allWords = new HashSet<string>();
         var totalWords = 0;
 
-        var docWordsList = docs.Select(doc => GetWords(doc.Content)).ToList();
-        foreach (var docWords in docWordsList)
+        foreach (var doc in docs)
         {
+            var docWords = GetWords(doc.Content);
             allWords.UnionWith(docWords);
             totalWords += docWords.Count;
         }
 
-        var diversityScore = totalWords == 0 ? 0.0 : (double)allWords.Count / totalWords;
+        var diversityScore = totalWords == 0 
+            ? NumOps.Zero 
+            : NumOps.Divide(NumOps.FromDouble(allWords.Count), NumOps.FromDouble(totalWords));
 
-        // Combine heuristics (weighted average)
-        var coverageScore = (0.7 * avgRelevance) + (0.3 * diversityScore);
-
-        return coverageScore;
+        var weightedRelevance = NumOps.Multiply(avgRelevance, NumOps.FromDouble(0.7));
+        var weightedDiversity = NumOps.Multiply(diversityScore, NumOps.FromDouble(0.3));
+        
+        return NumOps.Add(weightedRelevance, weightedDiversity);
     }
 }

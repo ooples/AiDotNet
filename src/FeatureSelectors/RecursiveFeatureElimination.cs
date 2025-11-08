@@ -17,54 +17,25 @@ namespace AiDotNet.FeatureSelectors;
 /// then iteratively removes the least important ones.
 /// </para>
 /// </remarks>
-public class RecursiveFeatureElimination<T, TInput, TOutput> : IFeatureSelector<T, TInput>
+public class RecursiveFeatureElimination<T, TInput, TOutput> : FeatureSelectorBase<T, TInput>
 {
     /// <summary>
     /// The number of features to select.
     /// </summary>
     /// <remarks>
-    /// <b>For Beginners:</b> This determines how many features will remain after the elimination process. 
+    /// <b>For Beginners:</b> This determines how many features will remain after the elimination process.
     /// By default, it's set to 50% of the original features.
     /// </remarks>
     private readonly int _numFeaturesToSelect;
-    
+
     /// <summary>
     /// The full model used to evaluate feature importance.
     /// </summary>
     /// <remarks>
-    /// <b>For Beginners:</b> This model helps determine which features are most important by examining 
+    /// <b>For Beginners:</b> This model helps determine which features are most important by examining
     /// the coefficients (weights) it assigns to each feature during training.
     /// </remarks>
     private readonly IFullModel<T, TInput, TOutput> _model;
-    
-    /// <summary>
-    /// Provides operations for numeric calculations with type T.
-    /// </summary>
-    /// <remarks>
-    /// <b>For Beginners:</b> This is a helper object that knows how to perform math operations 
-    /// on the specific number type you're using (like float or double).
-    /// </remarks>
-    private readonly INumericOperations<T> _numOps;
-
-    /// <summary>
-    /// The strategy to use for extracting features from higher-dimensional tensors.
-    /// </summary>
-    /// <remarks>
-    /// <b>For Beginners:</b> When working with complex data like images (which have height, width, and color channels),
-    /// we need a strategy to convert these multi-dimensional values into single values that can be ranked.
-    /// This setting controls how that conversion happens.
-    /// </remarks>
-    private readonly FeatureExtractionStrategy _higherDimensionStrategy = FeatureExtractionStrategy.Mean;
-
-    /// <summary>
-    /// Weights to apply when using the WeightedSum feature extraction strategy.
-    /// </summary>
-    /// <remarks>
-    /// <b>For Beginners:</b> When combining multiple values from complex data, this dictionary lets you
-    /// assign different levels of importance to different parts of your data. Higher weights mean
-    /// those parts have more influence on the final value.
-    /// </remarks>
-    private readonly Dictionary<int, T> _dimensionWeights = [];
 
     /// <summary>
     /// Function that creates a dummy target of the appropriate TOutput type for training.
@@ -84,11 +55,11 @@ public class RecursiveFeatureElimination<T, TInput, TOutput> : IFeatureSelector<
     /// <param name="higherDimensionStrategy">Strategy to use for extracting features from higher-dimensional tensors.</param>
     /// <remarks>
     /// <para>
-    /// <b>For Beginners:</b> This constructor creates a new feature selector that will use the specified 
+    /// <b>For Beginners:</b> This constructor creates a new feature selector that will use the specified
     /// model to determine which features are most important.
     /// </para>
     /// <para>
-    /// The model is used to assign importance scores to features based on their coefficients. Features 
+    /// The model is used to assign importance scores to features based on their coefficients. Features
     /// with larger coefficient magnitudes (absolute values) are considered more important.
     /// </para>
     /// <para>
@@ -103,19 +74,20 @@ public class RecursiveFeatureElimination<T, TInput, TOutput> : IFeatureSelector<
         Func<int, TOutput> createDummyTarget,
         int? numFeaturesToSelect = null,
         FeatureExtractionStrategy higherDimensionStrategy = FeatureExtractionStrategy.Mean)
+        : base(higherDimensionStrategy)
     {
         _model = model;
-        _numOps = MathHelper.GetNumericOperations<T>();
-        _numFeaturesToSelect = numFeaturesToSelect ?? 0; // Will be set in SelectFeatures if still 0
-        _higherDimensionStrategy = higherDimensionStrategy;
+        _numFeaturesToSelect = numFeaturesToSelect ?? 0; // Will be set in SelectFeatureIndices if still 0
         _createDummyTarget = createDummyTarget;
     }
 
     /// <summary>
-    /// Selects features from the input data using Recursive Feature Elimination.
+    /// Determines which features to select using Recursive Feature Elimination.
     /// </summary>
     /// <param name="allFeatures">The input data containing all potential features.</param>
-    /// <returns>Data containing only the selected features.</returns>
+    /// <param name="numSamples">The number of samples in the dataset.</param>
+    /// <param name="numFeatures">The total number of features in the dataset.</param>
+    /// <returns>A list of indices representing the selected features.</returns>
     /// <remarks>
     /// <para>
     /// <b>For Beginners:</b> This method implements the Recursive Feature Elimination algorithm, which works as follows:
@@ -133,62 +105,55 @@ public class RecursiveFeatureElimination<T, TInput, TOutput> : IFeatureSelector<
     /// 4. Repeat steps 2-3 until the desired number of features remains
     /// </para>
     /// <para>
-    /// This approach helps identify the most important features for prediction while considering how 
-    /// features interact with each other, which is more sophisticated than simply looking at each feature 
+    /// This approach helps identify the most important features for prediction while considering how
+    /// features interact with each other, which is more sophisticated than simply looking at each feature
     /// in isolation.
     /// </para>
     /// </remarks>
-    public TInput SelectFeatures(TInput allFeatures)
+    protected override List<int> SelectFeatureIndices(TInput allFeatures, int numSamples, int numFeatures)
     {
-        // Get dimensions using the helper methods
-        int numSamples = InputHelper<T, TInput>.GetBatchSize(allFeatures);
-        int numFeatures = InputHelper<T, TInput>.GetInputSize(allFeatures);
-    
         // If numFeaturesToSelect wasn't specified in constructor, default to 50% of features
-        int actualNumFeaturesToSelect = _numFeaturesToSelect > 0 
-            ? _numFeaturesToSelect 
+        int actualNumFeaturesToSelect = _numFeaturesToSelect > 0
+            ? _numFeaturesToSelect
             : Math.Max(1, (int)(numFeatures * 0.5));
-        
+
         actualNumFeaturesToSelect = Math.Min(actualNumFeaturesToSelect, numFeatures);
-    
-        var featureIndices = Enumerable.Range(0, numFeatures).ToList();
-        var selectedIndices = new List<int>();
-    
+
+        var remainingFeatureIndices = Enumerable.Range(0, numFeatures).ToList();
+
         // Create a dummy target for training using the provided function
         TOutput dummyTarget = _createDummyTarget(numSamples);
-    
-        while (selectedIndices.Count < actualNumFeaturesToSelect && featureIndices.Count > 0)
+
+        // Eliminate features one by one until we reach the desired number
+        while (remainingFeatureIndices.Count > actualNumFeaturesToSelect)
         {
             // Create a subset of features to evaluate
             TInput featureSubset = FeatureSelectorHelper<T, TInput>.CreateFeatureSubset(
-                allFeatures, 
-                featureIndices);
-        
+                allFeatures,
+                remainingFeatureIndices);
+
             // Train model to get feature importances
             _model.Train(featureSubset, dummyTarget);
-        
+
             // Get feature importances from model coefficients
             var parameters = _model.GetParameters();
             var featureImportances = parameters
-                .Select((c, i) => (_numOps.Abs(c), i))
+                .Select((c, i) => (NumOps.Abs(c), i))
                 .ToList();
-            
+
             // Sort by importance (descending)
-            featureImportances.Sort((a, b) => 
-                _numOps.GreaterThan(b.Item1, a.Item1) ? -1 : 
-                (_numOps.Equals(b.Item1, a.Item1) ? 0 : 1));
-        
-            // Get the least important feature
+            featureImportances.Sort((a, b) =>
+                NumOps.GreaterThan(b.Item1, a.Item1) ? -1 :
+                (NumOps.Equals(b.Item1, a.Item1) ? 0 : 1));
+
+            // Get the least important feature's index in the current subset
             var leastImportantFeatureIndex = featureImportances.Last().i;
-        
-            // Add this feature to selected list (in reverse order of elimination)
-            selectedIndices.Insert(0, featureIndices[leastImportantFeatureIndex]);
-        
-            // Remove from current feature set
-            featureIndices.RemoveAt(leastImportantFeatureIndex);
+
+            // Remove the least important feature from the remaining set
+            remainingFeatureIndices.RemoveAt(leastImportantFeatureIndex);
         }
-    
-        // Create result with only the selected features
-        return FeatureSelectorHelper<T, TInput>.CreateFilteredData(allFeatures, selectedIndices);
+
+        // Return the remaining most important features, sorted for consistent output
+        return remainingFeatureIndices.OrderBy(x => x).ToList();
     }
 }

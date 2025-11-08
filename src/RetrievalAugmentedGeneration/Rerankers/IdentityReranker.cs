@@ -5,6 +5,7 @@ namespace AiDotNet.RetrievalAugmentedGeneration.Rerankers;
 /// <summary>
 /// A pass-through reranker that returns documents without modifying their order or scores.
 /// </summary>
+/// <typeparam name="T">The numeric data type used for relevance scoring.</typeparam>
 /// <remarks>
 /// <para>
 /// This implementation is a no-op reranker that simply returns the input documents unchanged.
@@ -33,7 +34,7 @@ namespace AiDotNet.RetrievalAugmentedGeneration.Rerankers;
 /// Later, replace with CrossEncoderReranker for better results without changing your code.
 /// </para>
 /// </remarks>
-public class IdentityReranker : RerankerBase
+public class IdentityReranker<T> : RerankerBase<T>
 {
     /// <summary>
     /// Gets a value indicating whether this reranker modifies relevance scores.
@@ -51,7 +52,7 @@ public class IdentityReranker : RerankerBase
     /// <param name="query">The validated query text.</param>
     /// <param name="documents">The validated and materialized list of documents.</param>
     /// <returns>The same documents in the same order with unchanged scores.</returns>
-    protected override IEnumerable<Document> RerankCore(string query, IList<Document> documents)
+    protected override IEnumerable<Document<T>> RerankCore(string query, IList<Document<T>> documents)
     {
         // Pass through without changes
         return documents;

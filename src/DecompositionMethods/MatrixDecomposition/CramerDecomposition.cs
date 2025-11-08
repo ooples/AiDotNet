@@ -3,42 +3,49 @@ namespace AiDotNet.DecompositionMethods.MatrixDecomposition;
 /// <summary>
 /// Implements Cramer's rule for solving systems of linear equations and matrix inversion.
 /// </summary>
+/// <typeparam name="T">The numeric data type used in calculations (e.g., float, double).</typeparam>
 /// <remarks>
+/// <para>
 /// Cramer's rule is a method for solving systems of linear equations using determinants.
 /// It works by replacing columns in the coefficient matrix with the solution vector
 /// and calculating ratios of determinants. This method is primarily educational and not
 /// recommended for large matrices due to its computational complexity.
+/// </para>
+/// <para>
+/// <b>For Beginners:</b> Cramer's Rule is a formula-based method for solving systems of equations.
+/// It uses determinants (a special number calculated from a matrix) to find the solution directly.
+/// Think of it like using a formula to solve a math problem rather than using step-by-step algebra.
+/// While elegant, it becomes slow for large matrices.
+/// </para>
+/// <para>
+/// Real-world applications:
+/// - Solving small systems of equations (2x2 or 3x3) in engineering
+/// - Teaching linear algebra concepts
+/// - Theoretical analysis and mathematical proofs
+/// </para>
 /// </remarks>
-/// <typeparam name="T">The numeric data type used in calculations (e.g., float, double).</typeparam>
-public class CramerDecomposition<T> : IMatrixDecomposition<T>
+public class CramerDecomposition<T> : MatrixDecompositionBase<T>
 {
-    /// <summary>
-    /// Operations for performing numeric calculations with type T.
-    /// </summary>
-    private readonly INumericOperations<T> _numOps;
-
-    /// <summary>
-    /// Gets the original matrix that was decomposed.
-    /// </summary>
-    /// <value>
-    /// The square matrix used to create this decomposition.
-    /// </value>
-    public Matrix<T> A { get; private set; }
-
     /// <summary>
     /// Creates a new Cramer's rule decomposition for the specified matrix.
     /// </summary>
     /// <param name="matrix">The square matrix to decompose.</param>
     /// <exception cref="ArgumentException">Thrown when the input matrix is not square.</exception>
-    public CramerDecomposition(Matrix<T> matrix)
+    public CramerDecomposition(Matrix<T> matrix) : base(matrix)
     {
-        _numOps = MathHelper.GetNumericOperations<T>();
-        A = matrix;
-
         if (A.Rows != A.Columns)
         {
             throw new ArgumentException("Cramer's rule requires a square matrix.");
         }
+    }
+
+    /// <summary>
+    /// Decompose is not applicable for Cramer's rule as it directly solves without factorization.
+    /// </summary>
+    protected override void Decompose()
+    {
+        // Cramer's rule doesn't require a decomposition step
+        // The solving is done directly in the Solve method using determinants
     }
 
     /// <summary>
@@ -55,7 +62,7 @@ public class CramerDecomposition<T> : IMatrixDecomposition<T>
     /// <returns>The solution vector x that satisfies Ax = b.</returns>
     /// <exception cref="ArgumentException">Thrown when the dimensions of A and b don't match.</exception>
     /// <exception cref="InvalidOperationException">Thrown when the matrix is singular (has zero determinant).</exception>
-    public Vector<T> Solve(Vector<T> b)
+    public override Vector<T> Solve(Vector<T> b)
     {
         if (A.Rows != b.Length)
         {
@@ -63,7 +70,7 @@ public class CramerDecomposition<T> : IMatrixDecomposition<T>
         }
 
         T detA = Determinant(A);
-        if (_numOps.Equals(detA, _numOps.Zero))
+        if (NumOps.Equals(detA, NumOps.Zero))
         {
             throw new InvalidOperationException("The matrix is singular and cannot be solved using Cramer's rule.");
         }
@@ -72,7 +79,7 @@ public class CramerDecomposition<T> : IMatrixDecomposition<T>
         for (int i = 0; i < A.Columns; i++)
         {
             Matrix<T> Ai = ReplaceColumn(A, b, i);
-            x[i] = _numOps.Divide(Determinant(Ai), detA);
+            x[i] = NumOps.Divide(Determinant(Ai), detA);
         }
 
         return x;
@@ -89,10 +96,10 @@ public class CramerDecomposition<T> : IMatrixDecomposition<T>
     /// </remarks>
     /// <returns>The inverse of the original matrix A.</returns>
     /// <exception cref="InvalidOperationException">Thrown when the matrix is singular (has zero determinant).</exception>
-    public Matrix<T> Invert()
+    public override Matrix<T> Invert()
     {
         T detA = Determinant(A);
-        if (_numOps.Equals(detA, _numOps.Zero))
+        if (NumOps.Equals(detA, NumOps.Zero))
         {
             throw new InvalidOperationException("The matrix is singular and cannot be inverted.");
         }
@@ -103,7 +110,7 @@ public class CramerDecomposition<T> : IMatrixDecomposition<T>
             for (int j = 0; j < A.Columns; j++)
             {
                 T cofactor = Cofactor(A, i, j);
-                inverse[j, i] = _numOps.Divide(cofactor, detA);
+                inverse[j, i] = NumOps.Divide(cofactor, detA);
             }
         }
 
@@ -127,10 +134,10 @@ public class CramerDecomposition<T> : IMatrixDecomposition<T>
             return matrix[0, 0];
         }
 
-        T det = _numOps.Zero;
+        T det = NumOps.Zero;
         for (int j = 0; j < matrix.Columns; j++)
         {
-            det = _numOps.Add(det, _numOps.Multiply(matrix[0, j], Cofactor(matrix, 0, j)));
+            det = NumOps.Add(det, NumOps.Multiply(matrix[0, j], Cofactor(matrix, 0, j)));
         }
 
         return det;
@@ -166,8 +173,8 @@ public class CramerDecomposition<T> : IMatrixDecomposition<T>
             m++;
         }
 
-        T sign = (row + col) % 2 == 0 ? _numOps.One : _numOps.Negate(_numOps.One);
-        return _numOps.Multiply(sign, Determinant(minor));
+        T sign = (row + col) % 2 == 0 ? NumOps.One : NumOps.Negate(NumOps.One);
+        return NumOps.Multiply(sign, Determinant(minor));
     }
 
     /// <summary>

@@ -4,26 +4,28 @@ namespace AiDotNet.CrossValidators;
 /// Implements a Group K-Fold cross-validation strategy for model evaluation.
 /// </summary>
 /// <typeparam name="T">The numeric type used for calculations (e.g., float, double, decimal).</typeparam>
+/// <typeparam name="TInput">The type of input data (e.g., Matrix&lt;T&gt; for tabular data, Tensor&lt;T&gt; for images).</typeparam>
+/// <typeparam name="TOutput">The type of output data (e.g., Vector&lt;T&gt; for predictions, custom types for other formats).</typeparam>
 /// <remarks>
 /// <para>
 /// This class provides a Group K-Fold cross-validation implementation, where the data is split into k folds
 /// based on a group identifier. This ensures that all samples from the same group are in the same fold.
 /// </para>
 /// <para><b>For Beginners:</b> Group K-Fold cross-validation is useful when your data has natural groupings.
-/// 
+///
 /// What this class does:
 /// - Splits your data into k parts (folds) based on group identifiers
 /// - Ensures that all data points from the same group stay together
 /// - Uses each part once for testing and the rest for training
 /// - Repeats this process k times, so each part gets a chance to be the test set
 /// - Calculates how well your model performs on average across all these tests
-/// 
+///
 /// This is particularly useful when:
 /// - Your data has natural groups (e.g., multiple measurements from the same person)
 /// - You want to ensure that related data points are not split between training and testing sets
 /// </para>
 /// </remarks>
-public class GroupKFoldCrossValidator<T> : CrossValidatorBase<T>
+public class GroupKFoldCrossValidator<T, TInput, TOutput> : CrossValidatorBase<T, TInput, TOutput>
 {
     /// <summary>
     /// The group identifiers for each sample in the dataset.
@@ -57,33 +59,38 @@ public class GroupKFoldCrossValidator<T> : CrossValidatorBase<T>
     }
 
     /// <summary>
-    /// Performs the group k-fold cross-validation process on the given model using the provided data.
+    /// Performs the group k-fold cross-validation process on the given model using the provided data and optimizer.
     /// </summary>
     /// <param name="model">The machine learning model to validate.</param>
     /// <param name="X">The feature matrix containing the input data.</param>
     /// <param name="y">The target vector containing the output data.</param>
+    /// <param name="optimizer">The optimizer to use for training the model on each fold.</param>
     /// <returns>A CrossValidationResult containing the results of the validation process.</returns>
     /// <remarks>
     /// <para>
     /// This method implements the core group k-fold cross-validation logic. It creates the folds using the CreateFolds method,
-    /// respecting the group structure of the data, then performs the cross-validation using these folds.
+    /// respecting the group structure of the data, then performs the cross-validation using these folds and the provided optimizer.
     /// </para>
     /// <para><b>For Beginners:</b> This method is where the actual group k-fold cross-validation happens.
-    /// 
+    ///
     /// What it does:
-    /// - Takes your model and your data (X and y)
+    /// - Takes your model, your data (X and y), and an optimizer for training
     /// - Creates group-based folds using the CreateFolds method and the group identifiers provided in the constructor
     /// - Runs the PerformCrossValidation method, which:
-    ///   - Trains and tests your model multiple times, each time using different groups for testing
+    ///   - Trains your model using the optimizer multiple times, each time using different groups for testing
     ///   - Collects and summarizes the results of all these tests
-    /// 
-    /// It's like putting your model through a series of tests that respect the natural groupings in your data.
+    ///
+    /// The optimizer ensures consistent training across all folds.
+    ///
+    /// It's like putting your model through a series of tests that respect the natural groupings in your data,
+    /// using a standardized training procedure.
     /// </para>
     /// </remarks>
-    public override CrossValidationResult<T> Validate(IFullModel<T, Matrix<T>, Vector<T>> model, Matrix<T> X, Vector<T> y)
+    public override CrossValidationResult<T, TInput, TOutput> Validate(IFullModel<T, TInput, TOutput> model, TInput X, TOutput y,
+        IOptimizer<T, TInput, TOutput> optimizer)
     {
         var folds = CreateFolds(X, y, _groups);
-        return PerformCrossValidation(model, X, y, folds);
+        return PerformCrossValidation(model, X, y, folds, optimizer);
     }
 
     /// <summary>
@@ -108,11 +115,11 @@ public class GroupKFoldCrossValidator<T> : CrossValidatorBase<T>
     ///   - Uses all other groups for training
     /// - Returns these group-based splits so the main method can use them
     /// 
-    /// It's like dividing a class into study groups, then using each group's results to test 
+    /// It's like dividing a class into study groups, then using each group's results to test
     /// how well the teaching method works for the whole class.
     /// </para>
     /// </remarks>
-    private IEnumerable<(int[] trainIndices, int[] validationIndices)> CreateFolds(Matrix<T> X, Vector<T> y, int[] groups)
+    private IEnumerable<(int[] trainIndices, int[] validationIndices)> CreateFolds(TInput X, TOutput y, int[] groups)
     {
         var uniqueGroups = groups.Distinct().ToArray();
         var groupIndices = uniqueGroups.Select(g => groups.Select((v, i) => (v, i)).Where(t => t.v == g).Select(t => t.i).ToArray()).ToArray();
