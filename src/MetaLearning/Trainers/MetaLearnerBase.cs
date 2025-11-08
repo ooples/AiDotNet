@@ -2,46 +2,35 @@ using AiDotNet.Data.Abstractions;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
-using AiDotNet.MetaLearning.Config;
 using AiDotNet.Models.Results;
 
 namespace AiDotNet.MetaLearning.Trainers;
 
 /// <summary>
-/// Production-ready base implementation for Reptile meta-learning trainers.
+/// Base class providing shared functionality for all meta-learning algorithms.
 /// </summary>
 /// <typeparam name="T">The numeric data type (e.g., float, double).</typeparam>
 /// <typeparam name="TInput">The input data type (e.g., Matrix&lt;T&gt;, Tensor&lt;T&gt;, double[]).</typeparam>
 /// <typeparam name="TOutput">The output data type (e.g., Vector&lt;T&gt;, Tensor&lt;T&gt;, double[]).</typeparam>
 /// <remarks>
 /// <para>
-/// Reptile is a first-order meta-learning algorithm (Nichol et al., 2018) that provides
-/// a simple yet effective approach to few-shot learning. It works by repeatedly moving
-/// model parameters toward task-adapted parameters, causing them to converge to an
-/// initialization that enables rapid adaptation.
+/// This base class implements the common infrastructure needed by all meta-learning algorithms
+/// including MAML, Reptile, and SEAL. It provides:
+/// - Configuration management and validation
+/// - Loss and accuracy computation
+/// - Model saving/loading
+/// - Training loop orchestration
+/// - Evaluation on multiple tasks
 /// </para>
-/// <para><b>Key Advantages:</b>
-/// - Simpler than MAML (no second-order derivatives)
-/// - Computationally efficient
-/// - Works with any gradient-based model
-/// - Strong empirical performance on few-shot tasks
-/// </para>
-/// <para><b>Algorithm Overview:</b>
-/// <code>
-/// Initialize θ (meta-parameters)
-/// for each meta-iteration:
-///     Sample batch of B tasks
-///     for each task i in batch:
-///         θ_i = θ (clone parameters)
-///         for k = 1 to K (inner steps):
-///             θ_i = θ_i - α∇L(θ_i, support_set_i)
-///         Δθ_i = θ_i - θ
-///     θ = θ + ε * Average(Δθ_i) (meta-update)
-/// return θ
-/// </code>
+/// <para><b>For Algorithm Implementers:</b>
+/// To create a new meta-learning algorithm:
+/// 1. Extend this base class
+/// 2. Implement MetaTrainStep() with your algorithm's meta-update logic
+/// 3. Optionally override AdaptAndEvaluate() if your algorithm needs custom adaptation
+/// 4. All shared functionality (metrics, saving, evaluation) is handled automatically
 /// </para>
 /// </remarks>
-public abstract class ReptileTrainerBase<T, TInput, TOutput> : IMetaLearner<T, TInput, TOutput>
+public abstract class MetaLearnerBase<T, TInput, TOutput> : IMetaLearner<T, TInput, TOutput>
 {
     /// <summary>
     /// The model being meta-trained.
@@ -83,16 +72,16 @@ public abstract class ReptileTrainerBase<T, TInput, TOutput> : IMetaLearner<T, T
     public int CurrentIteration => _currentIteration;
 
     /// <summary>
-    /// Initializes a new instance of the ReptileTrainerBase with a configuration object.
+    /// Initializes a new instance of the MetaLearnerBase with a configuration object.
     /// </summary>
     /// <param name="metaModel">The model to meta-train.</param>
     /// <param name="lossFunction">Loss function for evaluation.</param>
     /// <param name="dataLoader">Episodic data loader for sampling meta-learning tasks.</param>
-    /// <param name="config">Configuration object with all hyperparameters. If null, uses default ReptileTrainerConfig.</param>
+    /// <param name="config">Configuration object with all hyperparameters.</param>
     /// <exception cref="ArgumentNullException">Thrown when metaModel, lossFunction, or dataLoader is null.</exception>
     /// <exception cref="ArgumentException">Thrown when configuration validation fails.</exception>
     /// <remarks>
-    /// <para><b>For Beginners:</b> This constructor sets up the Reptile meta-learning trainer with your model and settings.
+    /// <para><b>For Beginners:</b> This constructor sets up the meta-learning trainer with your model and settings.
     ///
     /// <b>Parameters explained:</b>
     /// - <b>metaModel:</b> The neural network or model you want to train for fast adaptation
@@ -105,11 +94,11 @@ public abstract class ReptileTrainerBase<T, TInput, TOutput> : IMetaLearner<T, T
     /// - Outer loop: How the meta-parameters improve across tasks
     /// </para>
     /// </remarks>
-    protected ReptileTrainerBase(
+    protected MetaLearnerBase(
         IFullModel<T, TInput, TOutput> metaModel,
         ILossFunction<T> lossFunction,
         IEpisodicDataLoader<T, TInput, TOutput> dataLoader,
-        IMetaLearnerConfig<T>? config = null)
+        IMetaLearnerConfig<T> config)
     {
         if (metaModel == null)
             throw new ArgumentNullException(nameof(metaModel), "Meta-model cannot be null");
@@ -117,16 +106,16 @@ public abstract class ReptileTrainerBase<T, TInput, TOutput> : IMetaLearner<T, T
             throw new ArgumentNullException(nameof(lossFunction), "Loss function cannot be null");
         if (dataLoader == null)
             throw new ArgumentNullException(nameof(dataLoader), "Episodic data loader cannot be null");
+        if (config == null)
+            throw new ArgumentNullException(nameof(config), "Configuration cannot be null");
 
-        var configuration = config ?? new ReptileTrainerConfig<T>();
-
-        if (!configuration.IsValid())
+        if (!config.IsValid())
             throw new ArgumentException("Configuration validation failed", nameof(config));
 
         MetaModel = metaModel;
         LossFunction = lossFunction;
         DataLoader = dataLoader;
-        Configuration = configuration;
+        Configuration = config;
         _currentIteration = 0;
     }
 

@@ -95,29 +95,6 @@ public interface IGradientBasedOptimizer<T, TInput, TOutput> : IOptimizer<T, TIn
     Vector<T> UpdateParameters(Vector<T> parameters, Vector<T> gradient);
 
     /// <summary>
-    /// Resets the internal state of the optimizer.
-    /// </summary>
-    /// <remarks>
-    /// <b>For Beginners:</b> This method clears the optimizer's memory and starts fresh.
-    /// 
-    /// Many advanced optimizers (like Adam or RMSProp) keep track of information from previous
-    /// updates to make better decisions about future updates. This is like having a "memory"
-    /// of how parameters have been changing.
-    /// 
-    /// When you call Reset():
-    /// - All this accumulated memory is cleared
-    /// - The optimizer starts fresh, as if it had just been created
-    /// - Any adaptive behavior starts over from scratch
-    /// 
-    /// You might want to reset an optimizer when:
-    /// - Starting to train a new model
-    /// - Making a significant change to your training approach
-    /// - The optimizer seems to be stuck and you want it to try a fresh start
-    /// - You're reusing the same optimizer instance for multiple training runs
-    /// </remarks>
-    void Reset();
-
-    /// <summary>
     /// Updates the parameters of all layers in a model based on their calculated gradients.
     /// </summary>
     /// <param name="layers">A list of layers in the model whose parameters need to be updated.</param>

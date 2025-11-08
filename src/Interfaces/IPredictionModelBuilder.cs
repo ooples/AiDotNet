@@ -399,6 +399,46 @@ public interface IPredictionModelBuilder<T, TInput, TOutput>
     IPredictionModelBuilder<T, TInput, TOutput> ConfigureMetaLearning(IMetaLearner<T, TInput, TOutput> metaLearner);
 
     /// <summary>
+    /// Configures the model evaluator component for comprehensive model evaluation and cross-validation.
+    /// </summary>
+    /// <remarks>
+    /// A model evaluator provides methods to evaluate model performance on different datasets and
+    /// perform cross-validation to assess generalization.
+    ///
+    /// <b>For Beginners:</b> The model evaluator helps you understand how well your model performs.
+    /// If you configure both a model evaluator and cross-validator (via ConfigureCrossValidation),
+    /// cross-validation will automatically run during Build() and the results will be included
+    /// in your trained model.
+    /// </remarks>
+    /// <param name="evaluator">The model evaluator implementation to use.</param>
+    /// <returns>The builder instance for method chaining.</returns>
+    IPredictionModelBuilder<T, TInput, TOutput> ConfigureModelEvaluator(IModelEvaluator<T, TInput, TOutput> evaluator);
+
+    /// <summary>
+    /// Configures the cross-validation strategy for automatic model evaluation during training.
+    /// </summary>
+    /// <remarks>
+    /// A cross-validator determines how data should be split into folds for cross-validation.
+    /// Different strategies (K-Fold, Leave-One-Out, Stratified, Time Series, etc.) are appropriate
+    /// for different types of data and problems.
+    ///
+    /// <b>For Beginners:</b> Cross-validation tests how well your model will perform on new data
+    /// by training and testing it multiple times on different subsets of your training data.
+    /// If you configure both a cross-validator and model evaluator (via ConfigureModelEvaluator),
+    /// cross-validation will automatically run during Build() and the results will be included
+    /// in your trained model.
+    ///
+    /// Common strategies:
+    /// - StandardCrossValidator (K-Fold): General purpose, splits data into K equal parts
+    /// - LeaveOneOutCrossValidator: For small datasets, uses each sample once as test
+    /// - StratifiedKFoldCrossValidator: For classification, maintains class proportions
+    /// - TimeSeriesCrossValidator: For sequential data, respects temporal ordering
+    /// </remarks>
+    /// <param name="crossValidator">The cross-validation strategy to use.</param>
+    /// <returns>The builder instance for method chaining.</returns>
+    IPredictionModelBuilder<T, TInput, TOutput> ConfigureCrossValidation(ICrossValidator<T, TInput, TOutput> crossValidator);
+
+    /// <summary>
     /// Builds a meta-trained model that can quickly adapt to new tasks.
     /// </summary>
     /// <remarks>
