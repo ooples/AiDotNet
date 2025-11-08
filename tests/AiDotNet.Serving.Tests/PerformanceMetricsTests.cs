@@ -77,7 +77,7 @@ public class PerformanceMetricsTests
             metrics.RecordBatch(batchSize: 10, latencyMs: 10.0);
         }
 
-        Thread.Sleep(1000); // Wait 1 second
+        Thread.Sleep(100); // Wait 100ms to ensure elapsed time
 
         // Assert
         var throughput = metrics.GetThroughput();
