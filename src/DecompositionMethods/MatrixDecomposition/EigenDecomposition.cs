@@ -47,8 +47,9 @@ public class EigenDecomposition<T> : MatrixDecompositionBase<T>
     public EigenDecomposition(Matrix<T> matrix, EigenAlgorithmType algorithm = EigenAlgorithmType.QR)
         : base(matrix)
     {
+        ValidateMatrix(matrix, requireSquare: true);
         _algorithm = algorithm;
-    
+
         Decompose();
     }
 
@@ -108,7 +109,7 @@ public class EigenDecomposition<T> : MatrixDecompositionBase<T>
                 T eigenValue = NumOps.Divide(w.DotProduct(v), v.DotProduct(v));
                 v = w.Divide(w.Norm());
 
-                if (iter > 0 && NumOps.LessThan(NumOps.Abs(NumOps.Subtract(eigenValue, eigenValues[i])), NumOps.FromDouble(1e-10)))
+                if (iter > 0 && NumOps.LessThan(NumOps.Abs(NumOps.Subtract(eigenValue, eigenValues[i])), NumOps.FromDouble(1e-6)))
                 {
                     break;
                 }
@@ -150,7 +151,7 @@ public class EigenDecomposition<T> : MatrixDecompositionBase<T>
             A = r.Multiply(q);
             Q = Q.Multiply(q);
 
-            if (A.IsUpperTriangularMatrix(NumOps.FromDouble(1e-10)))
+            if (A.IsUpperTriangularMatrix(NumOps.FromDouble(1e-6)))
                 break;
         }
 
@@ -199,7 +200,7 @@ public class EigenDecomposition<T> : MatrixDecompositionBase<T>
             }
 
             // Check if we've reached the desired precision
-            if (NumOps.LessThan(maxOffDiagonal, NumOps.FromDouble(1e-10)))
+            if (NumOps.LessThan(maxOffDiagonal, NumOps.FromDouble(1e-6)))
                 break;
 
             // Calculate the Jacobi rotation parameters

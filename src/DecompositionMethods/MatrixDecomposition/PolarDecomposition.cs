@@ -366,7 +366,7 @@ public class PolarDecomposition<T> : MatrixDecompositionBase<T>
     /// Solves the linear system Ax = b using the polar decomposition.
     /// </summary>
     /// <param name="b">The right-hand side vector.</param>
-    /// <returns>The solution vector x such that Ax * b.</returns>
+    /// <returns>The solution vector x such that Ax = b.</returns>
     /// <remarks>
     /// <para>
     /// This method solves the system by first solving Px = b, then computing y = U^T * x.

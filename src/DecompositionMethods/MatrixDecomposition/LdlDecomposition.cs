@@ -33,7 +33,7 @@ public class LdlDecomposition<T> : MatrixDecompositionBase<T>
     /// </remarks>
     public Vector<T> D { get; private set; }
 
-    private LdlAlgorithmType _algorithm;
+    private readonly LdlAlgorithmType _algorithm;
 
     /// <summary>
     /// Initializes a new instance of the LDL decomposition for the specified matrix.
@@ -66,21 +66,6 @@ public class LdlDecomposition<T> : MatrixDecompositionBase<T>
         ComputeDecomposition(_algorithm);
     }
 
-    /// <summary>
-    /// Performs the LDL decomposition using the specified algorithm.
-    /// </summary>
-    /// <param name="algorithm">The algorithm to use for decomposition (default is Cholesky).</param>
-    /// <exception cref="ArgumentException">Thrown when an unsupported algorithm is specified.</exception>
-    /// <remarks>
-    /// <b>For Beginners:</b> This method does the actual work of breaking down the original matrix
-    /// into the L and D components. Different algorithms may be more efficient for different
-    /// types of matrices.
-    /// </remarks>
-    public void Decompose(LdlAlgorithmType algorithm = LdlAlgorithmType.Cholesky)
-    {
-        _algorithm = algorithm;
-        ComputeDecomposition(algorithm);
-    }
 
     /// <summary>
     /// Performs the actual decomposition computation using the specified algorithm.
