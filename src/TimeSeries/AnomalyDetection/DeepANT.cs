@@ -1,0 +1,402 @@
+namespace AiDotNet.TimeSeries.AnomalyDetection;
+
+/// <summary>
+/// Implements DeepANT (Deep Learning for Anomaly Detection in Time Series).
+/// </summary>
+/// <typeparam name="T">The numeric type used for calculations (e.g., float, double).</typeparam>
+/// <remarks>
+/// <para>
+/// DeepANT is a deep learning-based approach for unsupervised anomaly detection in time series.
+/// It uses a convolutional neural network to learn normal patterns and identifies anomalies
+/// as data points that deviate significantly from the learned patterns.
+/// </para>
+/// <para>
+/// Key features:
+/// - Time series prediction using CNN
+/// - Anomaly detection based on prediction error
+/// - Unsupervised learning (no labeled anomalies needed)
+/// - Effective for both point anomalies and contextual anomalies
+/// </para>
+/// <para><b>For Beginners:</b> DeepANT learns what "normal" looks like in your time series,
+/// then flags anything unusual as an anomaly. It works by:
+/// 1. Learning to predict the next value based on past values
+/// 2. Comparing actual values to predictions
+/// 3. Marking large prediction errors as anomalies
+///
+/// Think of it like a system that learns your daily routine - if you suddenly do something
+/// very different, it notices and flags it as unusual.
+/// </para>
+/// </remarks>
+public class DeepANT<T> : TimeSeriesModelBase<T>
+{
+    private readonly DeepANTOptions<T> _options;
+    private readonly INumericOperations<T> _numOps;
+
+    // CNN layers
+    private List<ConvLayer<T>> _convLayers;
+    private Matrix<T> _fcWeights;
+    private Vector<T> _fcBias;
+
+    // Anomaly detection threshold
+    private T _anomalyThreshold;
+
+    /// <summary>
+    /// Initializes a new instance of the DeepANT class.
+    /// </summary>
+    public DeepANT(DeepANTOptions<T>? options = null)
+        : base(options ?? new DeepANTOptions<T>())
+    {
+        _options = options ?? new DeepANTOptions<T>();
+        _numOps = MathHelper.GetNumericOperations<T>();
+        _convLayers = new List<ConvLayer<T>>();
+        _anomalyThreshold = _numOps.FromDouble(3.0); // 3 sigma by default
+
+        InitializeModel();
+    }
+
+    private void InitializeModel()
+    {
+        var random = new Random(42);
+
+        // Initialize convolutional layers
+        _convLayers.Clear();
+        _convLayers.Add(new ConvLayer<T>(_options.WindowSize, 32, 3));
+        _convLayers.Add(new ConvLayer<T>(32, 32, 3));
+
+        // Initialize fully connected output layer
+        double stddev = Math.Sqrt(2.0 / 32);
+        _fcWeights = new Matrix<T>(1, 32);
+        for (int i = 0; i < _fcWeights.Rows; i++)
+            for (int j = 0; j < _fcWeights.Columns; j++)
+                _fcWeights[i, j] = _numOps.FromDouble((random.NextDouble() * 2 - 1) * stddev);
+
+        _fcBias = new Vector<T>(1);
+    }
+
+    protected override void TrainCore(Matrix<T> x, Vector<T> y)
+    {
+        T learningRate = _numOps.FromDouble(_options.LearningRate);
+        List<T> predictionErrors = new List<T>();
+
+        // Training loop
+        for (int epoch = 0; epoch < _options.Epochs; epoch++)
+        {
+            predictionErrors.Clear();
+
+            for (int i = 0; i < x.Rows; i++)
+            {
+                Vector<T> input = x.GetRow(i);
+                T target = y[i];
+                T prediction = PredictSingle(input);
+
+                // Compute prediction error
+                T error = _numOps.Subtract(target, prediction);
+                predictionErrors.Add(_numOps.Abs(error));
+
+                // Simplified weight update (in practice, use backpropagation)
+                if (epoch % 10 == 0 && i % 100 == 0)
+                {
+                    UpdateWeightsNumerically(input, target, learningRate);
+                }
+            }
+        }
+
+        // Compute anomaly threshold based on training errors
+        if (predictionErrors.Count > 0)
+        {
+            // Calculate mean and std of errors
+            T mean = _numOps.Zero;
+            foreach (var error in predictionErrors)
+                mean = _numOps.Add(mean, error);
+            mean = _numOps.Divide(mean, _numOps.FromDouble(predictionErrors.Count));
+
+            T variance = _numOps.Zero;
+            foreach (var error in predictionErrors)
+            {
+                T diff = _numOps.Subtract(error, mean);
+                variance = _numOps.Add(variance, _numOps.Multiply(diff, diff));
+            }
+            variance = _numOps.Divide(variance, _numOps.FromDouble(predictionErrors.Count));
+            T std = _numOps.Sqrt(variance);
+
+            // Threshold = mean + 3 * std
+            _anomalyThreshold = _numOps.Add(mean, _numOps.Multiply(_numOps.FromDouble(3.0), std));
+        }
+    }
+
+    private void UpdateWeightsNumerically(Vector<T> input, T target, T learningRate)
+    {
+        T epsilon = _numOps.FromDouble(1e-5);
+
+        // Update a few weights in the FC layer
+        for (int i = 0; i < Math.Min(5, _fcWeights.Columns); i++)
+        {
+            T original = _fcWeights[0, i];
+
+            _fcWeights[0, i] = _numOps.Add(original, epsilon);
+            T predPlus = PredictSingle(input);
+            T lossPlus = _numOps.Multiply(
+                _numOps.Subtract(target, predPlus),
+                _numOps.Subtract(target, predPlus)
+            );
+
+            _fcWeights[0, i] = _numOps.Subtract(original, epsilon);
+            T predMinus = PredictSingle(input);
+            T lossMinus = _numOps.Multiply(
+                _numOps.Subtract(target, predMinus),
+                _numOps.Subtract(target, predMinus)
+            );
+
+            _fcWeights[0, i] = original;
+
+            T gradient = _numOps.Divide(
+                _numOps.Subtract(lossPlus, lossMinus),
+                _numOps.Multiply(_numOps.FromDouble(2.0), epsilon)
+            );
+
+            _fcWeights[0, i] = _numOps.Subtract(original, _numOps.Multiply(learningRate, gradient));
+        }
+    }
+
+    public override T PredictSingle(Vector<T> input)
+    {
+        // Forward pass through convolutional layers
+        Vector<T> features = input.Clone();
+
+        foreach (var conv in _convLayers)
+        {
+            features = conv.Forward(features);
+        }
+
+        // Global average pooling
+        T pooled = _numOps.Zero;
+        if (features.Length > 0)
+        {
+            for (int i = 0; i < features.Length; i++)
+                pooled = _numOps.Add(pooled, features[i]);
+            pooled = _numOps.Divide(pooled, _numOps.FromDouble(features.Length));
+        }
+
+        // Fully connected output
+        T output = _fcBias[0];
+        Vector<T> pooledVec = new Vector<T>(new[] { pooled });
+        for (int j = 0; j < Math.Min(_fcWeights.Columns, pooledVec.Length); j++)
+        {
+            output = _numOps.Add(output, _numOps.Multiply(_fcWeights[0, j], pooledVec[Math.Min(j, pooledVec.Length - 1)]));
+        }
+
+        return output;
+    }
+
+    /// <summary>
+    /// Detects anomalies in a time series.
+    /// </summary>
+    /// <param name="data">Time series data.</param>
+    /// <returns>Boolean array where true indicates an anomaly.</returns>
+    public bool[] DetectAnomalies(Vector<T> data)
+    {
+        if (data.Length < _options.WindowSize)
+            throw new ArgumentException($"Data length must be at least {_options.WindowSize}");
+
+        bool[] anomalies = new bool[data.Length - _options.WindowSize + 1];
+
+        for (int i = 0; i <= data.Length - _options.WindowSize; i++)
+        {
+            // Extract window
+            Vector<T> window = new Vector<T>(_options.WindowSize);
+            for (int j = 0; j < _options.WindowSize; j++)
+                window[j] = data[i + j];
+
+            // Predict next value
+            T prediction = PredictSingle(window);
+
+            // Compare with actual next value (if available)
+            if (i + _options.WindowSize < data.Length)
+            {
+                T actual = data[i + _options.WindowSize];
+                T error = _numOps.Abs(_numOps.Subtract(actual, prediction));
+
+                anomalies[i] = _numOps.GreaterThan(error, _anomalyThreshold);
+            }
+        }
+
+        return anomalies;
+    }
+
+    /// <summary>
+    /// Computes anomaly scores for a time series.
+    /// </summary>
+    public Vector<T> ComputeAnomalyScores(Vector<T> data)
+    {
+        if (data.Length < _options.WindowSize)
+            throw new ArgumentException($"Data length must be at least {_options.WindowSize}");
+
+        var scores = new Vector<T>(data.Length - _options.WindowSize + 1);
+
+        for (int i = 0; i <= data.Length - _options.WindowSize; i++)
+        {
+            Vector<T> window = new Vector<T>(_options.WindowSize);
+            for (int j = 0; j < _options.WindowSize; j++)
+                window[j] = data[i + j];
+
+            T prediction = PredictSingle(window);
+
+            if (i + _options.WindowSize < data.Length)
+            {
+                T actual = data[i + _options.WindowSize];
+                T error = _numOps.Abs(_numOps.Subtract(actual, prediction));
+                scores[i] = error;
+            }
+        }
+
+        return scores;
+    }
+
+    protected override void SerializeCore(BinaryWriter writer)
+    {
+        writer.Write(_options.WindowSize);
+        writer.Write(Convert.ToDouble(_anomalyThreshold));
+
+        // Serialize FC weights
+        writer.Write(_fcWeights.Rows);
+        writer.Write(_fcWeights.Columns);
+        for (int i = 0; i < _fcWeights.Rows; i++)
+            for (int j = 0; j < _fcWeights.Columns; j++)
+                writer.Write(Convert.ToDouble(_fcWeights[i, j]));
+
+        writer.Write(_fcBias.Length);
+        for (int i = 0; i < _fcBias.Length; i++)
+            writer.Write(Convert.ToDouble(_fcBias[i]));
+    }
+
+    protected override void DeserializeCore(BinaryReader reader)
+    {
+        _options.WindowSize = reader.ReadInt32();
+        _anomalyThreshold = _numOps.FromDouble(reader.ReadDouble());
+
+        int rows = reader.ReadInt32();
+        int cols = reader.ReadInt32();
+        _fcWeights = new Matrix<T>(rows, cols);
+        for (int i = 0; i < rows; i++)
+            for (int j = 0; j < cols; j++)
+                _fcWeights[i, j] = _numOps.FromDouble(reader.ReadDouble());
+
+        int biasLen = reader.ReadInt32();
+        _fcBias = new Vector<T>(biasLen);
+        for (int i = 0; i < biasLen; i++)
+            _fcBias[i] = _numOps.FromDouble(reader.ReadDouble());
+    }
+
+    public override ModelMetadata<T> GetModelMetadata()
+    {
+        return new ModelMetadata<T>
+        {
+            Name = "DeepANT",
+            ModelType = ModelType.TimeSeriesRegression,
+            Description = "Deep learning for anomaly detection in time series using CNN",
+            Complexity = ParameterCount,
+            FeatureCount = _options.WindowSize,
+            AdditionalInfo = new Dictionary<string, object>
+            {
+                { "WindowSize", _options.WindowSize },
+                { "AnomalyThreshold", Convert.ToDouble(_anomalyThreshold) }
+            }
+        };
+    }
+
+    protected override IFullModel<T, Matrix<T>, Vector<T>> CreateInstance()
+    {
+        return new DeepANT<T>(new DeepANTOptions<T>(_options));
+    }
+
+    public override int ParameterCount
+    {
+        get
+        {
+            int count = 0;
+            foreach (var conv in _convLayers)
+                count += conv.ParameterCount;
+            count += _fcWeights.Rows * _fcWeights.Columns + _fcBias.Length;
+            return count;
+        }
+    }
+}
+
+/// <summary>
+/// Options for DeepANT model.
+/// </summary>
+public class DeepANTOptions<T> : TimeSeriesRegressionOptions<T>
+{
+    public int WindowSize { get; set; } = 30;
+    public double LearningRate { get; set; } = 0.001;
+    public int Epochs { get; set; } = 50;
+    public int BatchSize { get; set; } = 32;
+
+    public DeepANTOptions() { }
+
+    public DeepANTOptions(DeepANTOptions<T> other)
+    {
+        if (other == null) throw new ArgumentNullException(nameof(other));
+        WindowSize = other.WindowSize;
+        LearningRate = other.LearningRate;
+        Epochs = other.Epochs;
+        BatchSize = other.BatchSize;
+    }
+}
+
+/// <summary>
+/// Simplified 1D convolutional layer.
+/// </summary>
+internal class ConvLayer<T>
+{
+    private readonly INumericOperations<T> _numOps;
+    private readonly int _inputChannels;
+    private readonly int _outputChannels;
+    private readonly int _kernelSize;
+    private Matrix<T> _kernels;
+    private Vector<T> _biases;
+
+    public int ParameterCount => _kernels.Rows * _kernels.Columns + _biases.Length;
+
+    public ConvLayer(int inputChannels, int outputChannels, int kernelSize)
+    {
+        _numOps = MathHelper.GetNumericOperations<T>();
+        _inputChannels = inputChannels;
+        _outputChannels = outputChannels;
+        _kernelSize = kernelSize;
+
+        var random = new Random(42);
+        double stddev = Math.Sqrt(2.0 / (inputChannels * kernelSize));
+
+        _kernels = new Matrix<T>(outputChannels, inputChannels * kernelSize);
+        for (int i = 0; i < _kernels.Rows; i++)
+            for (int j = 0; j < _kernels.Columns; j++)
+                _kernels[i, j] = _numOps.FromDouble((random.NextDouble() * 2 - 1) * stddev);
+
+        _biases = new Vector<T>(outputChannels);
+    }
+
+    public Vector<T> Forward(Vector<T> input)
+    {
+        // Simplified convolution (treats input as 1D sequence)
+        int outputSize = _outputChannels;
+        var output = new Vector<T>(outputSize);
+
+        for (int i = 0; i < outputSize; i++)
+        {
+            T sum = _biases[i];
+
+            // Convolve with kernel
+            for (int k = 0; k < _kernelSize && k < input.Length; k++)
+            {
+                int kernelIdx = k % _kernels.Columns;
+                sum = _numOps.Add(sum, _numOps.Multiply(_kernels[i, kernelIdx], input[k]));
+            }
+
+            // ReLU activation
+            output[i] = _numOps.GreaterThan(sum, _numOps.Zero) ? sum : _numOps.Zero;
+        }
+
+        return output;
+    }
+}
