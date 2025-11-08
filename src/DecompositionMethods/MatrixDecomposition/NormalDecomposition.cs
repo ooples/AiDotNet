@@ -17,7 +17,7 @@ namespace AiDotNet.DecompositionMethods.MatrixDecomposition;
 /// minimizes the overall error.
 /// </para>
 /// </remarks>
-public class NormalDecomposition<T> : IMatrixDecomposition<T>
+public class NormalDecomposition<T> : MatrixDecompositionBase<T>
 {
     /// <summary>
     /// Gets the original matrix used in the decomposition.
@@ -82,7 +82,7 @@ public class NormalDecomposition<T> : IMatrixDecomposition<T>
     /// the slope and intercept of that line.
     /// </para>
     /// </remarks>
-    public Vector<T> Solve(Vector<T> b)
+    public override Vector<T> Solve(Vector<T> b)
     {
         var aTb = A.Transpose().Multiply(b);
         return _choleskyDecomposition.Solve(aTb);
@@ -107,7 +107,7 @@ public class NormalDecomposition<T> : IMatrixDecomposition<T>
     /// When possible, use the Solve method instead.
     /// </para>
     /// </remarks>
-    public Matrix<T> Invert()
+    public override Matrix<T> Invert()
     {
         return _choleskyDecomposition.Invert();
     }

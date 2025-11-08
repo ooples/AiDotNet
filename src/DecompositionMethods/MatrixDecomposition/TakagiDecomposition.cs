@@ -11,10 +11,8 @@ namespace AiDotNet.DecompositionMethods.MatrixDecomposition;
 /// factoring a number into its prime components, but for matrices.
 /// </para>
 /// </remarks>
-public class TakagiDecomposition<T> : IMatrixDecomposition<T>
+public class TakagiDecomposition<T> : MatrixDecompositionBase<T>
 {
-    private readonly INumericOperations<T> NumOps;
-
     /// <summary>
     /// Gets the diagonal matrix containing the singular values.
     /// </summary>
@@ -22,7 +20,7 @@ public class TakagiDecomposition<T> : IMatrixDecomposition<T>
     /// <b>For Beginners:</b> Singular values represent the "strength" or "importance" of different dimensions in your data.
     /// Larger singular values indicate more important patterns in the data.
     /// </remarks>
-    public Matrix<T> SigmaMatrix { get; private set; }
+    public Matrix<T> SigmaMatrix { get; private set; };
 
     /// <summary>
     /// Gets the unitary matrix used in the decomposition.
@@ -31,12 +29,9 @@ public class TakagiDecomposition<T> : IMatrixDecomposition<T>
     /// <b>For Beginners:</b> A unitary matrix preserves lengths and angles when multiplied with vectors.
     /// It's like rotating or reflecting data without changing its fundamental structure.
     /// </remarks>
-    public Matrix<Complex<T>> UnitaryMatrix { get; private set; }
+    public Matrix<Complex<T>> UnitaryMatrix { get; private set; };
 
-    /// <summary>
-    /// Gets the original matrix that was decomposed.
-    /// </summary>
-    public Matrix<T> A { get; private set; }
+    private readonly TakagiAlgorithmType _algorithm;
 
     /// <summary>
     /// Initializes a new instance of the TakagiDecomposition class.
@@ -48,19 +43,26 @@ public class TakagiDecomposition<T> : IMatrixDecomposition<T>
     /// Different algorithms have different trade-offs in terms of speed and accuracy.
     /// </remarks>
     public TakagiDecomposition(Matrix<T> matrix, TakagiAlgorithmType algorithm = TakagiAlgorithmType.Jacobi)
+        : base(matrix)
     {
-        NumOps = MathHelper.GetNumericOperations<T>();
-        A = matrix;
-        (SigmaMatrix, UnitaryMatrix) = Decompose(A, algorithm);
+        _algorithm = algorithm;
     }
 
     /// <summary>
-    /// Decomposes the matrix using the specified algorithm.
+    /// Performs the Takagi decomposition.
+    /// </summary>
+    protected override void Decompose()
+    {
+        (SigmaMatrix, UnitaryMatrix) = ComputeDecomposition(A, _algorithm);
+    }
+
+    /// <summary>
+    /// Computes the Takagi decomposition using the specified algorithm.
     /// </summary>
     /// <param name="matrix">The matrix to decompose</param>
     /// <param name="algorithm">The algorithm to use</param>
     /// <returns>A tuple containing the singular values matrix and unitary matrix</returns>
-    private (Matrix<T> S, Matrix<Complex<T>> U) Decompose(Matrix<T> matrix, TakagiAlgorithmType algorithm)
+    private (Matrix<T> S, Matrix<Complex<T>> U) ComputeDecomposition(Matrix<T> matrix, TakagiAlgorithmType algorithm)
     {
         return algorithm switch
         {
@@ -269,7 +271,7 @@ public class TakagiDecomposition<T> : IMatrixDecomposition<T>
     /// <remarks>
     /// <para>
     /// <b>For Beginners:</b> The magnitude of a complex number is its distance from zero in the complex plane.
-    /// It's calculated using the Pythagorean theorem: sqrt(real² + imaginary²).
+    /// It's calculated using the Pythagorean theorem: sqrt(realï¿½ + imaginaryï¿½).
     /// </para>
     /// </remarks>
     private T CalculateMagnitude(Complex<T> complex)
@@ -516,7 +518,7 @@ public class TakagiDecomposition<T> : IMatrixDecomposition<T>
     /// This method uses the decomposition we've already calculated to find the inverse efficiently.
     /// </para>
     /// </remarks>
-    public Matrix<T> Invert()
+    public override Matrix<T> Invert()
     {
         var invSigma = SigmaMatrix.InvertDiagonalMatrix();
         var invU = UnitaryMatrix.InvertUnitaryMatrix();
@@ -539,7 +541,7 @@ public class TakagiDecomposition<T> : IMatrixDecomposition<T>
     /// this process much more efficient than directly inverting the matrix.
     /// </para>
     /// </remarks>
-    public Vector<T> Solve(Vector<T> bVector)
+    public override Vector<T> Solve(Vector<T> bVector)
     {
         var bComplex = new Vector<Complex<T>>(bVector.Length);
         for (int i = 0; i < bVector.Length; i++)

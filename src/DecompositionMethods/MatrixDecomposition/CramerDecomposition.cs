@@ -10,7 +10,7 @@ namespace AiDotNet.DecompositionMethods.MatrixDecomposition;
 /// recommended for large matrices due to its computational complexity.
 /// </remarks>
 /// <typeparam name="T">The numeric data type used in calculations (e.g., float, double).</typeparam>
-public class CramerDecomposition<T> : IMatrixDecomposition<T>
+public class CramerDecomposition<T> : MatrixDecompositionBase<T>
 {
     /// <summary>
     /// Operations for performing numeric calculations with type T.
@@ -55,7 +55,7 @@ public class CramerDecomposition<T> : IMatrixDecomposition<T>
     /// <returns>The solution vector x that satisfies Ax = b.</returns>
     /// <exception cref="ArgumentException">Thrown when the dimensions of A and b don't match.</exception>
     /// <exception cref="InvalidOperationException">Thrown when the matrix is singular (has zero determinant).</exception>
-    public Vector<T> Solve(Vector<T> b)
+    public override Vector<T> Solve(Vector<T> b)
     {
         if (A.Rows != b.Length)
         {
@@ -89,7 +89,7 @@ public class CramerDecomposition<T> : IMatrixDecomposition<T>
     /// </remarks>
     /// <returns>The inverse of the original matrix A.</returns>
     /// <exception cref="InvalidOperationException">Thrown when the matrix is singular (has zero determinant).</exception>
-    public Matrix<T> Invert()
+    public override Matrix<T> Invert()
     {
         T detA = Determinant(A);
         if (_numOps.Equals(detA, _numOps.Zero))

@@ -9,7 +9,7 @@ namespace AiDotNet.DecompositionMethods.MatrixDecomposition;
 /// matrices that have real values (the imaginary parts are all zero).
 /// </remarks>
 /// <typeparam name="T">The numeric data type used for the real and imaginary parts (e.g., float, double).</typeparam>
-public class ComplexMatrixDecomposition<T> : IMatrixDecomposition<Complex<T>>
+public class ComplexMatrixDecomposition<T> : MatrixDecompositionBase<Complex<T>>
 {
     /// <summary>
     /// The underlying real-valued matrix decomposition.
@@ -61,7 +61,7 @@ public class ComplexMatrixDecomposition<T> : IMatrixDecomposition<Complex<T>>
     /// Calculates the inverse of the original matrix.
     /// </summary>
     /// <remarks>
-    /// The inverse of a matrix A is another matrix A?¹ such that A × A?¹ = I, 
+    /// The inverse of a matrix A is another matrix A?ï¿½ such that A ï¿½ A?ï¿½ = I, 
     /// where I is the identity matrix. This method uses the base decomposition
     /// to calculate the inverse and then converts it to complex form.
     /// </remarks>
