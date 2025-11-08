@@ -342,4 +342,29 @@ public class ShardedModel<T, TInput, TOutput> : IShardedModel<T, TInput, TOutput
     {
         _wrappedModel.SetFeatureNames(featureNames);
     }
+
+    /// <inheritdoc/>
+    public IFullModel<T, TInput, TOutput> DeepCopy()
+    {
+        var deepCopiedWrappedModel = _wrappedModel.DeepCopy();
+        return new ShardedModel<T, TInput, TOutput>(deepCopiedWrappedModel, _config);
+    }
+
+    /// <inheritdoc/>
+    public IEnumerable<int> GetActiveFeatureIndices()
+    {
+        return _wrappedModel.GetActiveFeatureIndices();
+    }
+
+    /// <inheritdoc/>
+    public void SetActiveFeatureIndices(IEnumerable<int> featureIndices)
+    {
+        _wrappedModel.SetActiveFeatureIndices(featureIndices);
+    }
+
+    /// <inheritdoc/>
+    public bool IsFeatureUsed(int featureIndex)
+    {
+        return _wrappedModel.IsFeatureUsed(featureIndex);
+    }
 }
