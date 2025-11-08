@@ -122,6 +122,7 @@ public class NestedCrossValidator<T, TInput, TOutput> : CrossValidatorBase<T, TI
     {
         var nestedResults = new List<FoldResult<T, TInput, TOutput>>();
         var totalTimer = Stopwatch.StartNew();
+        int outerFoldIndex = 0;
 
         // Use the Validate method of the outer validator with the optimizer
         var outerResults = _outerValidator.Validate(model, X, y, optimizer);
@@ -151,10 +152,17 @@ public class NestedCrossValidator<T, TInput, TOutput> : CrossValidatorBase<T, TI
             };
 
             var optimizationResult = optimizer.Optimize(optimizationInput);
-            if (optimizationResult.BestSolution != null)
+
+            // Throw exception if optimization failed to prevent evaluating untrained models
+            if (optimizationResult.BestSolution == null)
             {
-                bestModel.SetParameters(optimizationResult.BestSolution.GetParameters());
+                throw new InvalidOperationException(
+                    $"Optimization failed for outer fold {outerFoldIndex} in nested cross-validation: BestSolution is null. " +
+                    "Cannot evaluate an untrained model. " +
+                    "This indicates the optimizer was unable to find a valid solution.");
             }
+
+            bestModel.SetParameters(optimizationResult.BestSolution.GetParameters());
 
             var validationIndices = GetValidationIndices(X, validationActualVector, y);
             var outerValidationX = InputHelper<T, TInput>.GetBatch(X, validationIndices);
@@ -185,6 +193,7 @@ public class NestedCrossValidator<T, TInput, TOutput> : CrossValidatorBase<T, TI
             );
 
             nestedResults.Add(adjustedFoldResult);
+            outerFoldIndex++;
         }
 
         totalTimer.Stop();

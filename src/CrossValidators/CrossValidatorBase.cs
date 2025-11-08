@@ -164,10 +164,16 @@ public abstract class CrossValidatorBase<T, TInput, TOutput> : ICrossValidator<T
             var optimizationResult = optimizer.Optimize(optimizationInput);
 
             // Update the fold model with optimized parameters
-            if (optimizationResult.BestSolution != null)
+            // Throw exception if optimization failed to prevent evaluating untrained models
+            if (optimizationResult.BestSolution == null)
             {
-                foldModel.SetParameters(optimizationResult.BestSolution.GetParameters());
+                throw new InvalidOperationException(
+                    $"Optimization failed for fold {foldIndex}: BestSolution is null. " +
+                    "Cannot evaluate an untrained model in cross-validation. " +
+                    "This indicates the optimizer was unable to find a valid solution.");
             }
+
+            foldModel.SetParameters(optimizationResult.BestSolution.GetParameters());
 
             trainingTimer.Stop();
             var trainingTime = trainingTimer.Elapsed;
