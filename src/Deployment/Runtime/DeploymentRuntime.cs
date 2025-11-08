@@ -74,13 +74,11 @@ public class DeploymentRuntime<T> where T : struct
 
         var stopwatch = Stopwatch.StartNew();
 
-        // Create dummy input
-        var dummyInput = CreateDummyInput();
-
-        // Run warm-up iterations
+        // Run warm-up iterations with dummy input
         for (int i = 0; i < numIterations; i++)
         {
-            // Simulate inference
+            // Simulate inference with dummy data
+            // In production, this would use CreateDummyInput() and call actual inference
             Thread.Sleep(1);
         }
 
@@ -240,16 +238,16 @@ public class DeploymentRuntime<T> where T : struct
         if (version.Equals("latest", StringComparison.OrdinalIgnoreCase))
         {
             // Find latest version
-            var versions = _models.Keys
+            var latestVersion = _models.Keys
                 .Where(k => k.StartsWith($"{modelName}:"))
                 .Select(k => k.Split(':')[1])
                 .OrderByDescending(v => v)
                 .FirstOrDefault();
 
-            if (versions == null)
+            if (latestVersion == null)
                 throw new InvalidOperationException($"No versions found for model {modelName}");
 
-            return versions;
+            return latestVersion;
         }
 
         return version;

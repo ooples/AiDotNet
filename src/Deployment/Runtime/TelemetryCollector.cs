@@ -51,12 +51,26 @@ public class TelemetryCollector
 
         lock (metrics)
         {
-            metrics.TotalInferences++;
+            Interlocked.Increment(ref metrics.TotalInferences);
             if (fromCache)
-                metrics.CacheHits++;
-            metrics.TotalLatencyMs += latencyMs;
-            metrics.MinLatencyMs = Math.Min(metrics.MinLatencyMs, latencyMs);
-            metrics.MaxLatencyMs = Math.Max(metrics.MaxLatencyMs, latencyMs);
+                Interlocked.Increment(ref metrics.CacheHits);
+            Interlocked.Add(ref metrics.TotalLatencyMs, latencyMs);
+
+            // Update min/max atomically
+            long currentMin;
+            do
+            {
+                currentMin = Interlocked.Read(ref metrics.MinLatencyMs);
+                if (latencyMs >= currentMin) break;
+            } while (Interlocked.CompareExchange(ref metrics.MinLatencyMs, latencyMs, currentMin) != currentMin);
+
+            long currentMax;
+            do
+            {
+                currentMax = Interlocked.Read(ref metrics.MaxLatencyMs);
+                if (latencyMs <= currentMax) break;
+            } while (Interlocked.CompareExchange(ref metrics.MaxLatencyMs, latencyMs, currentMax) != currentMax);
+
             metrics.LastInferenceTime = DateTime.UtcNow;
         }
 
@@ -85,7 +99,7 @@ public class TelemetryCollector
 
         lock (metrics)
         {
-            metrics.TotalErrors++;
+            Interlocked.Increment(ref metrics.TotalErrors);
             metrics.LastError = exception.Message;
             metrics.LastErrorTime = DateTime.UtcNow;
         }
@@ -102,17 +116,19 @@ public class TelemetryCollector
 
     /// <summary>
     /// Gets statistics for a model.
+    /// Note: This method reads from metrics that may be concurrently updated. Results provide a snapshot view.
     /// </summary>
     public ModelStatistics GetStatistics(string modelName, string? version = null)
     {
-        var relevantMetrics = version == null
+        // Take a snapshot to avoid repeated enumeration during concurrent modifications
+        var relevantMetrics = (version == null
             ? _metrics.Values.Where(m => m.ModelName == modelName)
-            : _metrics.Values.Where(m => m.ModelName == modelName && m.Version == version);
+            : _metrics.Values.Where(m => m.ModelName == modelName && m.Version == version)).ToList();
 
-        var totalInferences = relevantMetrics.Sum(m => m.TotalInferences);
-        var totalErrors = relevantMetrics.Sum(m => m.TotalErrors);
-        var totalLatency = relevantMetrics.Sum(m => m.TotalLatencyMs);
-        var cacheHits = relevantMetrics.Sum(m => m.CacheHits);
+        var totalInferences = relevantMetrics.Sum(m => Interlocked.Read(ref m.TotalInferences));
+        var totalErrors = relevantMetrics.Sum(m => Interlocked.Read(ref m.TotalErrors));
+        var totalLatency = relevantMetrics.Sum(m => Interlocked.Read(ref m.TotalLatencyMs));
+        var cacheHits = relevantMetrics.Sum(m => Interlocked.Read(ref m.CacheHits));
 
         return new ModelStatistics
         {
@@ -122,8 +138,8 @@ public class TelemetryCollector
             TotalErrors = totalErrors,
             ErrorRate = totalInferences > 0 ? (double)totalErrors / totalInferences : 0.0,
             AverageLatencyMs = totalInferences > 0 ? (double)totalLatency / totalInferences : 0.0,
-            MinLatencyMs = relevantMetrics.Any() ? relevantMetrics.Min(m => m.MinLatencyMs) : 0,
-            MaxLatencyMs = relevantMetrics.Any() ? relevantMetrics.Max(m => m.MaxLatencyMs) : 0,
+            MinLatencyMs = relevantMetrics.Any() ? relevantMetrics.Min(m => Interlocked.Read(ref m.MinLatencyMs)) : 0,
+            MaxLatencyMs = relevantMetrics.Any() ? relevantMetrics.Max(m => Interlocked.Read(ref m.MaxLatencyMs)) : 0,
             CacheHitRate = totalInferences > 0 ? (double)cacheHits / totalInferences : 0.0,
             LastInferenceTime = relevantMetrics.Any()
                 ? relevantMetrics.Max(m => m.LastInferenceTime)
@@ -141,6 +157,7 @@ public class TelemetryCollector
 
     /// <summary>
     /// Clears all telemetry data.
+    /// Note: While ConcurrentBag.Clear() is thread-safe in .NET 5+, it may lose events added concurrently during clear.
     /// </summary>
     public void Clear()
     {
@@ -163,17 +180,18 @@ public class TelemetryEvent
 
 /// <summary>
 /// Internal metrics for a model version.
+/// Thread-safe: Numeric fields are accessed via Interlocked operations. DateTime fields are protected by lock in RecordInference/RecordError.
 /// </summary>
 internal class ModelMetrics
 {
     public string ModelName { get; set; } = string.Empty;
     public string Version { get; set; } = string.Empty;
-    public long TotalInferences { get; set; }
-    public long TotalErrors { get; set; }
-    public long TotalLatencyMs { get; set; }
-    public long MinLatencyMs { get; set; } = long.MaxValue;
-    public long MaxLatencyMs { get; set; }
-    public long CacheHits { get; set; }
+    public long TotalInferences;
+    public long TotalErrors;
+    public long TotalLatencyMs;
+    public long MinLatencyMs = long.MaxValue;
+    public long MaxLatencyMs;
+    public long CacheHits;
     public DateTime LastInferenceTime { get; set; }
     public string? LastError { get; set; }
     public DateTime? LastErrorTime { get; set; }

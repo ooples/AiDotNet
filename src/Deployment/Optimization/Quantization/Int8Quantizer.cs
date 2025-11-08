@@ -1,4 +1,3 @@
-using AiDotNet.Deployment.Export;
 using AiDotNet.Interfaces;
 
 namespace AiDotNet.Deployment.Optimization.Quantization;
@@ -14,7 +13,7 @@ public class Int8Quantizer<T> : IQuantizer<T> where T : struct
     private bool _isCalibrated = false;
 
     /// <inheritdoc/>
-    public QuantizationMode Mode => QuantizationMode.Int8;
+    public Optimization.Quantization.QuantizationMode Mode => Optimization.Quantization.QuantizationMode.Int8;
 
     /// <inheritdoc/>
     public int BitWidth => 8;
@@ -75,6 +74,10 @@ public class Int8Quantizer<T> : IQuantizer<T> where T : struct
         // Calculate scale factor and zero point for symmetric quantization
         var absMax = Math.Max(Math.Abs(globalMin), Math.Abs(globalMax));
         var scaleFactor = absMax / 127.0; // INT8 range: -128 to 127
+
+        // Prevent zero scale when all calibration values are zero or very small
+        if (scaleFactor < 1e-10)
+            scaleFactor = 1.0;
 
         // Store calibration results
         _scaleFactors["global"] = scaleFactor;

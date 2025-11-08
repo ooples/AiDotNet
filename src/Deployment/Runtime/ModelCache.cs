@@ -33,9 +33,9 @@ public class ModelCache<T> where T : struct
 
         if (_cache.TryGetValue(cacheKey, out var entry))
         {
-            // Update access time and count
-            entry.LastAccessed = DateTime.UtcNow;
-            entry.AccessCount++;
+            // Update access time and count atomically
+            Interlocked.Increment(ref entry.AccessCount);
+            Interlocked.Exchange(ref entry.LastAccessedTicks, DateTime.UtcNow.Ticks);
             _accessCounts.AddOrUpdate(cacheKey, 1, (_, count) => count + 1);
 
             return entry.Result;
@@ -77,26 +77,32 @@ public class ModelCache<T> where T : struct
 
     /// <summary>
     /// Removes entries older than the specified age.
+    /// Note: Enumeration provides a snapshot of the cache, so concurrent modifications are safe but counts may be approximate.
     /// </summary>
     public int EvictOlderThan(TimeSpan maxAge)
     {
         var now = DateTime.UtcNow;
         var keysToRemove = _cache
-            .Where(kvp => now - kvp.Value.LastAccessed > maxAge)
+            .Where(kvp => now - new DateTime(Interlocked.Read(ref kvp.Value.LastAccessedTicks), DateTimeKind.Utc) > maxAge)
             .Select(kvp => kvp.Key)
             .ToList();
 
+        int removed = 0;
         foreach (var key in keysToRemove)
         {
-            _cache.TryRemove(key, out _);
-            _accessCounts.TryRemove(key, out _);
+            if (_cache.TryRemove(key, out _))
+            {
+                _accessCounts.TryRemove(key, out _);
+                removed++;
+            }
         }
 
-        return keysToRemove.Count;
+        return removed;
     }
 
     /// <summary>
     /// Evicts least recently used entries to maintain size limit.
+    /// Note: Enumeration provides a snapshot of the cache, so concurrent modifications are safe but counts may be approximate.
     /// </summary>
     public int EvictLRU(int maxEntries)
     {
@@ -104,22 +110,27 @@ public class ModelCache<T> where T : struct
             return 0;
 
         var entriesToRemove = _cache
-            .OrderBy(kvp => kvp.Value.LastAccessed)
+            .OrderBy(kvp => new DateTime(Interlocked.Read(ref kvp.Value.LastAccessedTicks), DateTimeKind.Utc))
             .Take(_cache.Count - maxEntries)
             .Select(kvp => kvp.Key)
             .ToList();
 
+        int removed = 0;
         foreach (var key in entriesToRemove)
         {
-            _cache.TryRemove(key, out _);
-            _accessCounts.TryRemove(key, out _);
+            if (_cache.TryRemove(key, out _))
+            {
+                _accessCounts.TryRemove(key, out _);
+                removed++;
+            }
         }
 
-        return entriesToRemove.Count;
+        return removed;
     }
 
     /// <summary>
     /// Evicts least frequently used entries.
+    /// Note: Enumeration provides a snapshot of the cache, so concurrent modifications are safe but counts may be approximate.
     /// </summary>
     public int EvictLFU(int maxEntries)
     {
@@ -132,13 +143,17 @@ public class ModelCache<T> where T : struct
             .Select(kvp => kvp.Key)
             .ToList();
 
+        int removed = 0;
         foreach (var key in entriesToRemove)
         {
-            _cache.TryRemove(key, out _);
-            _accessCounts.TryRemove(key, out _);
+            if (_cache.TryRemove(key, out _))
+            {
+                _accessCounts.TryRemove(key, out _);
+                removed++;
+            }
         }
 
-        return entriesToRemove.Count;
+        return removed;
     }
 
     /// <summary>
@@ -179,14 +194,20 @@ public class ModelCache<T> where T : struct
 }
 
 /// <summary>
-/// Represents a cached inference result.
+/// Represents a cached inference result with thread-safe access tracking.
 /// </summary>
 internal class CacheEntry<T> where T : struct
 {
     public T[] Result { get; set; } = Array.Empty<T>();
     public DateTime CachedAt { get; set; }
-    public DateTime LastAccessed { get; set; }
-    public long AccessCount { get; set; }
+    public long LastAccessedTicks;
+    public long AccessCount;
+
+    public DateTime LastAccessed
+    {
+        get => new DateTime(Interlocked.Read(ref LastAccessedTicks), DateTimeKind.Utc);
+        set => Interlocked.Exchange(ref LastAccessedTicks, value.Ticks);
+    }
 }
 
 /// <summary>

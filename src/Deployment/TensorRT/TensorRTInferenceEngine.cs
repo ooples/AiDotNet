@@ -11,8 +11,8 @@ public class TensorRTInferenceEngine<T> : IDisposable where T : struct
 {
     private readonly string _enginePath;
     private readonly TensorRTConfiguration _config;
-    private readonly ConcurrentQueue<int> _availableStreams;
-    private readonly Dictionary<int, StreamContext> _streamContexts;
+    private readonly SemaphoreSlim _streamSemaphore;
+    private readonly ConcurrentDictionary<int, StreamContext> _streamContexts;
     private bool _isInitialized = false;
     private bool _disposed = false;
 
@@ -20,8 +20,9 @@ public class TensorRTInferenceEngine<T> : IDisposable where T : struct
     {
         _enginePath = enginePath ?? throw new ArgumentNullException(nameof(enginePath));
         _config = config ?? throw new ArgumentNullException(nameof(config));
-        _availableStreams = new ConcurrentQueue<int>();
-        _streamContexts = new Dictionary<int, StreamContext>();
+        var numContexts = config.EnableMultiStream ? config.NumStreams : 1;
+        _streamSemaphore = new SemaphoreSlim(numContexts, numContexts);
+        _streamContexts = new ConcurrentDictionary<int, StreamContext>();
     }
 
     /// <summary>
@@ -46,7 +47,6 @@ public class TensorRTInferenceEngine<T> : IDisposable where T : struct
         {
             var context = CreateExecutionContext(i);
             _streamContexts[i] = context;
-            _availableStreams.Enqueue(i);
         }
 
         _isInitialized = true;
@@ -62,22 +62,21 @@ public class TensorRTInferenceEngine<T> : IDisposable where T : struct
         if (!_isInitialized)
             throw new InvalidOperationException("Engine not initialized. Call Initialize() first.");
 
-        // Get available stream
-        while (!_availableStreams.TryDequeue(out var streamId))
-        {
-            await Task.Delay(1); // Wait for available stream
-        }
+        // Wait for available stream using semaphore (avoids busy-waiting)
+        await _streamSemaphore.WaitAsync();
 
         try
         {
+            // Find an inactive stream
+            var streamId = _streamContexts.First(kvp => !kvp.Value.GetIsActive()).Key;
             var context = _streamContexts[streamId];
             var result = await ExecuteInferenceAsync(context, input);
             return result;
         }
         finally
         {
-            // Return stream to pool
-            _availableStreams.Enqueue(streamId);
+            // Release semaphore to allow next inference
+            _streamSemaphore.Release();
         }
     }
 
@@ -94,7 +93,7 @@ public class TensorRTInferenceEngine<T> : IDisposable where T : struct
     /// <summary>
     /// Warms up the model by running inference on dummy data.
     /// </summary>
-    public void WarmUp(int numIterations = 10, int[]? inputShape = null)
+    public async Task WarmUpAsync(int numIterations = 10, int[]? inputShape = null)
     {
         if (!_isInitialized)
             throw new InvalidOperationException("Engine not initialized. Call Initialize() first.");
@@ -104,7 +103,7 @@ public class TensorRTInferenceEngine<T> : IDisposable where T : struct
         // Run inference multiple times to warm up GPU
         for (int i = 0; i < numIterations; i++)
         {
-            InferAsync(dummyInput).Wait();
+            await InferAsync(dummyInput);
         }
     }
 
@@ -119,11 +118,11 @@ public class TensorRTInferenceEngine<T> : IDisposable where T : struct
         if (header != "TRTENGINE")
             throw new InvalidDataException("Invalid TensorRT engine file format");
 
-        var version = reader.ReadInt32();
-        var maxBatchSize = reader.ReadInt32();
-        var maxWorkspaceSize = reader.ReadInt64();
-        var useFp16 = reader.ReadBoolean();
-        var useInt8 = reader.ReadBoolean();
+        reader.ReadInt32(); // version
+        reader.ReadInt32(); // maxBatchSize
+        reader.ReadInt64(); // maxWorkspaceSize
+        reader.ReadBoolean(); // useFp16
+        reader.ReadBoolean(); // useInt8
 
         // Store engine properties for later use
         // In production, this would load the actual TensorRT engine
@@ -131,18 +130,19 @@ public class TensorRTInferenceEngine<T> : IDisposable where T : struct
 
     private StreamContext CreateExecutionContext(int streamId)
     {
-        return new StreamContext
+        var context = new StreamContext
         {
-            StreamId = streamId,
-            IsActive = false,
-            LastUsedTime = DateTime.UtcNow
+            StreamId = streamId
         };
+        context.SetIsActive(false);
+        context.SetLastUsedTime(DateTime.UtcNow);
+        return context;
     }
 
     private async Task<T[]> ExecuteInferenceAsync(StreamContext context, T[] input)
     {
-        context.IsActive = true;
-        context.LastUsedTime = DateTime.UtcNow;
+        context.SetIsActive(true);
+        context.SetLastUsedTime(DateTime.UtcNow);
 
         try
         {
@@ -166,7 +166,7 @@ public class TensorRTInferenceEngine<T> : IDisposable where T : struct
         }
         finally
         {
-            context.IsActive = false;
+            context.SetIsActive(false);
         }
     }
 
@@ -190,8 +190,8 @@ public class TensorRTInferenceEngine<T> : IDisposable where T : struct
         return new InferenceStatistics
         {
             NumStreams = _streamContexts.Count,
-            AvailableStreams = _availableStreams.Count,
-            ActiveStreams = _streamContexts.Values.Count(c => c.IsActive)
+            AvailableStreams = _streamSemaphore.CurrentCount,
+            ActiveStreams = _streamContexts.Values.Count(c => c.GetIsActive())
         };
     }
 
@@ -202,17 +202,29 @@ public class TensorRTInferenceEngine<T> : IDisposable where T : struct
 
         // Cleanup resources
         _streamContexts.Clear();
-        _availableStreams.Clear();
+        _streamSemaphore?.Dispose();
 
         _disposed = true;
         GC.SuppressFinalize(this);
     }
 
+    /// <summary>
+    /// Stream context with thread-safe property access.
+    /// </summary>
     private class StreamContext
     {
+        private int _isActive;
+        private long _lastUsedTimeTicks;
+
         public int StreamId { get; set; }
-        public bool IsActive { get; set; }
-        public DateTime LastUsedTime { get; set; }
+
+        public bool GetIsActive() => Interlocked.CompareExchange(ref _isActive, 0, 0) == 1;
+
+        public void SetIsActive(bool value) => Interlocked.Exchange(ref _isActive, value ? 1 : 0);
+
+        public DateTime GetLastUsedTime() => new DateTime(Interlocked.Read(ref _lastUsedTimeTicks), DateTimeKind.Utc);
+
+        public void SetLastUsedTime(DateTime value) => Interlocked.Exchange(ref _lastUsedTimeTicks, value.Ticks);
     }
 }
 

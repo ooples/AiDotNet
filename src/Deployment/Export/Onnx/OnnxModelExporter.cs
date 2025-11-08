@@ -78,7 +78,7 @@ public class OnnxModelExporter<T> : ModelExporterBase<T> where T : struct
         var layers = GetLayersFromModel(model);
 
         // Build input node
-        var inputShape = GetInputShapeWithBatch(config);
+        var inputShape = GetInputShapeWithBatch(model, config);
         graph.Inputs.Add(new OnnxNode
         {
             Name = "input",
@@ -130,7 +130,7 @@ public class OnnxModelExporter<T> : ModelExporterBase<T> where T : struct
             OpsetVersion = config.OpsetVersion
         };
 
-        var inputShape = GetInputShapeWithBatch(config);
+        var inputShape = GetInputShapeWithBatch(model, config);
 
         graph.Inputs.Add(new OnnxNode
         {
@@ -389,31 +389,22 @@ public class OnnxModelExporter<T> : ModelExporterBase<T> where T : struct
             "LSTMLayer", "GRULayer"
         };
 
-        foreach (var layer in layers)
-        {
-            var layerType = layer.GetType().Name;
-            if (!supportedLayerTypes.Contains(layerType))
-            {
-                unsupported.Add(layerType);
-            }
-        }
+        unsupported.AddRange(layers
+            .Select(layer => layer.GetType().Name)
+            .Where(layerType => !supportedLayerTypes.Contains(layerType)));
 
         return unsupported;
     }
 
-    private int[] GetInputShapeWithBatch(ExportConfiguration config)
+    private int[] GetInputShapeWithBatch(object model, ExportConfiguration config)
     {
-        var shape = GetInputShape(null, config);
+        var shape = GetInputShape(model, config);
 
-        if (config.UseDynamicShapes)
-        {
-            // Use -1 for dynamic batch dimension
-            return new[] { -1 }.Concat(shape).ToArray();
-        }
-        else
-        {
-            return new[] { config.BatchSize }.Concat(shape).ToArray();
-        }
+        // Use -1 for dynamic batch dimension if enabled, otherwise use batch size
+        return (config.UseDynamicShapes
+            ? new[] { -1 }.Concat(shape)
+            : new[] { config.BatchSize }.Concat(shape)
+        ).ToArray();
     }
 
     private string GetOnnxDataType<TData>() where TData : struct

@@ -171,7 +171,7 @@ public enum PartitionStrategy
     EarlyLayers,
 
     /// <summary>Execute most layers on edge, only final on cloud</summary>
-    LateLayer,
+    LateLayers,
 
     /// <summary>Balanced partition</summary>
     Balanced,

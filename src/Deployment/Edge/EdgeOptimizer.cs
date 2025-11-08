@@ -124,10 +124,21 @@ public class EdgeOptimizer<T> where T : struct
 
     private object ApplyQuantization(object model)
     {
+        // Note: This is a placeholder implementation. In production:
+        // 1. Provide representative calibration samples via EdgeConfiguration
+        // 2. Call quantizer.Calibrate(samples, quantConfig) before Quantize
+        // 3. Or use CalibrationMethod.None if no calibration data is available
+        //
+        // Current limitation: Will throw InvalidOperationException without calibration
+        // when CalibrationMethod is not None. See issue in code review.
+
         var quantizer = new Int8Quantizer<T>();
         var quantConfig = QuantizationConfiguration.ForInt8();
 
-        // Note: Calibration would be done separately with sample data
+        // TODO: Add calibration data support to EdgeConfiguration and call:
+        // if (_config.CalibrationData != null)
+        //     quantizer.Calibrate(_config.CalibrationData, quantConfig);
+
         return quantizer.Quantize(model, quantConfig);
     }
 
@@ -168,7 +179,7 @@ public class EdgeOptimizer<T> where T : struct
         return _config.PartitionStrategy switch
         {
             PartitionStrategy.EarlyLayers => 3, // First 3 layers on edge
-            PartitionStrategy.LateLayer => 10, // Most layers on edge
+            PartitionStrategy.LateLayers => 10, // Most layers on edge
             PartitionStrategy.Adaptive => CalculateAdaptivePartitionPoint(model),
             _ => 5 // Default: middle partition
         };

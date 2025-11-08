@@ -1,4 +1,3 @@
-using AiDotNet.Deployment.Export;
 using AiDotNet.Interfaces;
 
 namespace AiDotNet.Deployment.Optimization.Quantization;
@@ -10,7 +9,7 @@ namespace AiDotNet.Deployment.Optimization.Quantization;
 public class Float16Quantizer<T> : IQuantizer<T> where T : struct
 {
     /// <inheritdoc/>
-    public QuantizationMode Mode => QuantizationMode.Float16;
+    public Optimization.Quantization.QuantizationMode Mode => Optimization.Quantization.QuantizationMode.Float16;
 
     /// <inheritdoc/>
     public int BitWidth => 16;
@@ -94,8 +93,9 @@ public class Float16Quantizer<T> : IQuantizer<T> where T : struct
         // Handle special cases
         if (exponent == 0xFF)
         {
-            // Infinity or NaN
-            return (ushort)((sign << 15) | 0x7C00 | (mantissa != 0 ? 1 : 0));
+            // Infinity or NaN - preserve mantissa bits for NaN
+            ushort nanMantissa = (ushort)(mantissa != 0 ? ((mantissa >> 13) | 0x200) : 0);
+            return (ushort)((sign << 15) | 0x7C00 | nanMantissa);
         }
 
         if (exponent == 0 && mantissa == 0)

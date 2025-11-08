@@ -99,24 +99,21 @@ public class TensorRTConverter<T> where T : struct
 
     private List<OptimizationProfile> BuildOptimizationProfiles(TensorRTConfiguration config)
     {
-        var profiles = new List<OptimizationProfile>();
-
-        foreach (var profileConfig in config.OptimizationProfiles)
+        return config.OptimizationProfiles.Select(profileConfig => new OptimizationProfile
         {
-            var profile = new OptimizationProfile
-            {
-                MinShape = profileConfig.MinShape,
-                OptimalShape = profileConfig.OptimalShape,
-                MaxShape = profileConfig.MaxShape,
-                InputName = profileConfig.InputName
-            };
-
-            profiles.Add(profile);
-        }
-
-        return profiles;
+            MinShape = profileConfig.MinShape,
+            OptimalShape = profileConfig.OptimalShape,
+            MaxShape = profileConfig.MaxShape,
+            InputName = profileConfig.InputName
+        }).ToList();
     }
 
+    /// <summary>
+    /// Placeholder implementation for TensorRT engine serialization.
+    /// CRITICAL: This is not a real TensorRT engine and cannot be used for actual inference.
+    /// In production, this would call the NVIDIA TensorRT C++ library to build and serialize a real engine.
+    /// For now, creates a metadata file that describes the engine configuration only.
+    /// </summary>
     private byte[] SerializeTensorRTEngine(TensorRTEngineBuilder builder, string onnxPath, TensorRTConfiguration config)
     {
         // This is a placeholder for actual TensorRT engine serialization
