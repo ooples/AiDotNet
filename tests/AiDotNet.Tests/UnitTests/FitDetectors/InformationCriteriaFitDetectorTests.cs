@@ -25,12 +25,17 @@ namespace AiDotNetTests.UnitTests.FitDetectors
             var aicProperty = typeof(ErrorStats<double>).GetProperty("AIC");
             var bicProperty = typeof(ErrorStats<double>).GetProperty("BIC");
 
-            aicProperty?.SetValue(trainingErrorStats, trainingAic);
-            bicProperty?.SetValue(trainingErrorStats, trainingBic);
-            aicProperty?.SetValue(validationErrorStats, validationAic);
-            bicProperty?.SetValue(validationErrorStats, validationBic);
-            aicProperty?.SetValue(testErrorStats, testAic);
-            bicProperty?.SetValue(testErrorStats, testBic);
+            if (aicProperty == null || bicProperty == null)
+            {
+                throw new InvalidOperationException("AIC or BIC property not found on ErrorStats<double>. This test needs to be updated to match the current implementation.");
+            }
+
+            aicProperty.SetValue(trainingErrorStats, trainingAic);
+            bicProperty.SetValue(trainingErrorStats, trainingBic);
+            aicProperty.SetValue(validationErrorStats, validationAic);
+            bicProperty.SetValue(validationErrorStats, validationBic);
+            aicProperty.SetValue(testErrorStats, testAic);
+            bicProperty.SetValue(testErrorStats, testBic);
 
             return new ModelEvaluationData<double, Matrix<double>, Vector<double>>
             {

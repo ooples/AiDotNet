@@ -16,7 +16,7 @@ namespace AiDotNetTests.UnitTests.FitDetectors
         private static ModelEvaluationData<double, Matrix<double>, Vector<double>> CreateTestEvaluationData(
             double dic, double waic, double loo, double posteriorCheck, double bayesFactor)
         {
-            var modelStats = new ModelStats<double, Matrix<double>, Vector<double>>();
+            var modelStats = ModelStats<double, Matrix<double>, Vector<double>>.Empty();
 
             // Use reflection to set the internal calculated values for testing
             var dicField = typeof(ModelStats<double, Matrix<double>, Vector<double>>).GetField("_dic",
@@ -30,11 +30,16 @@ namespace AiDotNetTests.UnitTests.FitDetectors
             var bayesFactorField = typeof(ModelStats<double, Matrix<double>, Vector<double>>).GetField("_bayesFactor",
                 System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
 
-            dicField?.SetValue(modelStats, dic);
-            waicField?.SetValue(modelStats, waic);
-            looField?.SetValue(modelStats, loo);
-            posteriorField?.SetValue(modelStats, posteriorCheck);
-            bayesFactorField?.SetValue(modelStats, bayesFactor);
+            if (dicField == null || waicField == null || looField == null || posteriorField == null || bayesFactorField == null)
+            {
+                throw new InvalidOperationException("One or more private fields not found on ModelStats. This test needs to be updated to match the current implementation.");
+            }
+
+            dicField.SetValue(modelStats, dic);
+            waicField.SetValue(modelStats, waic);
+            looField.SetValue(modelStats, loo);
+            posteriorField.SetValue(modelStats, posteriorCheck);
+            bayesFactorField.SetValue(modelStats, bayesFactor);
 
             return new ModelEvaluationData<double, Matrix<double>, Vector<double>>
             {
@@ -361,7 +366,7 @@ namespace AiDotNetTests.UnitTests.FitDetectors
         {
             // Arrange
             var detector = new BayesianFitDetector<float, Matrix<float>, Vector<float>>();
-            var modelStats = new ModelStats<float, Matrix<float>, Vector<float>>();
+            var modelStats = ModelStats<float, Matrix<float>, Vector<float>>.Empty();
 
             var dicField = typeof(ModelStats<float, Matrix<float>, Vector<float>>).GetField("_dic",
                 System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
