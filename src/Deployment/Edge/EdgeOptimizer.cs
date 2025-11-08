@@ -1,13 +1,17 @@
 using AiDotNet.Deployment.Export;
 using AiDotNet.Deployment.Optimization.Quantization;
+using AiDotNet.Interfaces;
 
 namespace AiDotNet.Deployment.Edge;
 
 /// <summary>
 /// Optimizer for edge device deployment with ARM NEON and other optimizations.
+/// Properly integrates with IFullModel architecture.
 /// </summary>
 /// <typeparam name="T">The numeric type used in the model</typeparam>
-public class EdgeOptimizer<T> where T : struct
+/// <typeparam name="TInput">The input type for the model</typeparam>
+/// <typeparam name="TOutput">The output type for the model</typeparam>
+public class EdgeOptimizer<T, TInput, TOutput> where T : struct
 {
     private readonly EdgeConfiguration _config;
 
@@ -21,7 +25,7 @@ public class EdgeOptimizer<T> where T : struct
     /// </summary>
     /// <param name="model">The model to optimize</param>
     /// <returns>The optimized model</returns>
-    public object OptimizeForEdge(object model)
+    public IFullModel<T, TInput, TOutput> OptimizeForEdge(IFullModel<T, TInput, TOutput> model)
     {
         if (model == null)
             throw new ArgumentNullException(nameof(model));
@@ -66,7 +70,7 @@ public class EdgeOptimizer<T> where T : struct
     /// </summary>
     /// <param name="model">The model to partition</param>
     /// <returns>Partitioned model structure</returns>
-    public PartitionedModel PartitionModel(object model)
+    public PartitionedModel PartitionModel(IFullModel<T, TInput, TOutput> model)
     {
         if (model == null)
             throw new ArgumentNullException(nameof(model));
@@ -122,7 +126,7 @@ public class EdgeOptimizer<T> where T : struct
         return config;
     }
 
-    private object ApplyQuantization(object model)
+    private IFullModel<T, TInput, TOutput> ApplyQuantization(IFullModel<T, TInput, TOutput> model)
     {
         // Note: This is a placeholder implementation. In production:
         // 1. Provide representative calibration samples via EdgeConfiguration
@@ -132,7 +136,7 @@ public class EdgeOptimizer<T> where T : struct
         // Current limitation: Will throw InvalidOperationException without calibration
         // when CalibrationMethod is not None. See issue in code review.
 
-        var quantizer = new Int8Quantizer<T>();
+        var quantizer = new Int8Quantizer<T, TInput, TOutput>();
         var quantConfig = QuantizationConfiguration.ForInt8();
 
         // TODO: Add calibration data support to EdgeConfiguration and call:
@@ -142,7 +146,7 @@ public class EdgeOptimizer<T> where T : struct
         return quantizer.Quantize(model, quantConfig);
     }
 
-    private object ApplyPruning(object model)
+    private IFullModel<T, TInput, TOutput> ApplyPruning(IFullModel<T, TInput, TOutput> model)
     {
         // Implement pruning logic
         // Remove weights below threshold
@@ -150,7 +154,7 @@ public class EdgeOptimizer<T> where T : struct
         return model;
     }
 
-    private object ApplyLayerFusion(object model)
+    private IFullModel<T, TInput, TOutput> ApplyLayerFusion(IFullModel<T, TInput, TOutput> model)
     {
         // Fuse adjacent layers for better performance
         // Common fusions:
@@ -159,7 +163,7 @@ public class EdgeOptimizer<T> where T : struct
         return model;
     }
 
-    private object OptimizeForArmNeon(object model)
+    private IFullModel<T, TInput, TOutput> OptimizeForArmNeon(IFullModel<T, TInput, TOutput> model)
     {
         // Optimize operations for ARM NEON SIMD instructions
         // - Vectorize matrix operations
@@ -168,7 +172,7 @@ public class EdgeOptimizer<T> where T : struct
         return model;
     }
 
-    private int DeterminePartitionPoint(object model)
+    private int DeterminePartitionPoint(IFullModel<T, TInput, TOutput> model)
     {
         // Analyze model and determine optimal partition point
         // Based on:
@@ -185,21 +189,21 @@ public class EdgeOptimizer<T> where T : struct
         };
     }
 
-    private int CalculateAdaptivePartitionPoint(object model)
+    private int CalculateAdaptivePartitionPoint(IFullModel<T, TInput, TOutput> model)
     {
         // Calculate based on runtime conditions
         // Consider: network bandwidth, edge compute power, battery level
         return 5; // Placeholder
     }
 
-    private object ExtractEdgeLayers(object model, int start, int end)
+    private object ExtractEdgeLayers(IFullModel<T, TInput, TOutput> model, int start, int end)
     {
         // Extract layers from start to end for edge execution
         // This would create a new model with only these layers
         return model; // Placeholder
     }
 
-    private object ExtractCloudLayers(object model, int startFrom)
+    private object ExtractCloudLayers(IFullModel<T, TInput, TOutput> model, int startFrom)
     {
         // Extract remaining layers for cloud execution
         return model; // Placeholder
@@ -219,58 +223,4 @@ public class EdgeOptimizer<T> where T : struct
         return arch == System.Runtime.InteropServices.Architecture.Arm ||
                arch == System.Runtime.InteropServices.Architecture.Arm64;
     }
-}
-
-/// <summary>
-/// Represents a model partitioned for cloud+edge deployment.
-/// </summary>
-public class PartitionedModel
-{
-    /// <summary>Gets or sets the original model.</summary>
-    public object? OriginalModel { get; set; }
-
-    /// <summary>Gets or sets the model part for edge execution.</summary>
-    public object? EdgeModel { get; set; }
-
-    /// <summary>Gets or sets the model part for cloud execution.</summary>
-    public object? CloudModel { get; set; }
-
-    /// <summary>Gets or sets the partition strategy used.</summary>
-    public PartitionStrategy PartitionStrategy { get; set; }
-
-    /// <summary>Gets or sets the intermediate tensor shape between edge and cloud.</summary>
-    public int[]? IntermediateShape { get; set; }
-}
-
-/// <summary>
-/// Configuration for adaptive inference.
-/// </summary>
-public class AdaptiveInferenceConfig
-{
-    /// <summary>Gets or sets the quality level.</summary>
-    public QualityLevel QualityLevel { get; set; }
-
-    /// <summary>Gets or sets whether to use quantization.</summary>
-    public bool UseQuantization { get; set; }
-
-    /// <summary>Gets or sets the quantization bit width.</summary>
-    public int QuantizationBits { get; set; }
-
-    /// <summary>Gets or sets the layers to skip for speed.</summary>
-    public List<string> SkipLayers { get; set; } = new();
-}
-
-/// <summary>
-/// Quality levels for adaptive inference.
-/// </summary>
-public enum QualityLevel
-{
-    /// <summary>Low quality, maximum speed</summary>
-    Low,
-
-    /// <summary>Medium quality, balanced</summary>
-    Medium,
-
-    /// <summary>High quality, maximum accuracy</summary>
-    High
 }
