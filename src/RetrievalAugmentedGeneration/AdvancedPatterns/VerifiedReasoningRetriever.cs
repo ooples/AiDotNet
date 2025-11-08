@@ -292,7 +292,7 @@ Step 3: [reasoning statement]";
         string originalQuery)
     {
         var docsContext = supportingDocs.Count > 0
-            ? string.Join("\n\n", supportingDocs.Select((d, i) => $"[{i + 1}] {d.Content[..Math.Min(200, d.Content.Length)]}..."))
+            ? string.Join("\n\n", supportingDocs.Select((d, i) => $"[{i + 1}] {d.Content.Substring(0, Math.Min(200, d.Content.Length))}..."))
             : "No supporting documents found.";
 
         var criticPrompt = $@"You are a critical evaluator of reasoning steps.

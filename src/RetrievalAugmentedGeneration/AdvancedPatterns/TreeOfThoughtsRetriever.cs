@@ -161,6 +161,7 @@ public class TreeOfThoughtsRetriever<T>
 
         // Build the reasoning tree
         var rootNode = new ThoughtNode { Thought = query, Depth = 0 };
+        EvaluateAndRetrieve(rootNode, metadataFilters);
         ExpandTree(rootNode, searchStrategy, metadataFilters);
 
         // Collect all documents from the tree

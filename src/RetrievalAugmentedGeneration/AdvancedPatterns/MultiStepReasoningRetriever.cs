@@ -251,7 +251,7 @@ Next step:";
 
         var response = _generator.Generate(prompt).Trim();
 
-        bool isFinalStep = response.Contains("COMPLETE", StringComparison.OrdinalIgnoreCase);
+        bool isFinalStep = response.IndexOf("COMPLETE", StringComparison.OrdinalIgnoreCase) >= 0;
 
         if (isFinalStep)
         {
@@ -297,7 +297,7 @@ Next step:";
 
         var topDocsContent = string.Join("\n",
             documents.Take(3).Select((d, i) =>
-                $"[{i + 1}] {d.Content[..Math.Min(150, d.Content.Length)]}..."));
+                $"[{i + 1}] {d.Content.Substring(0, Math.Min(150, d.Content.Length))}..."));
 
         var summaryPrompt = $@"Query: {stepQuery}
 
@@ -492,7 +492,7 @@ public class ToolAugmentedReasoningRetriever<T>
         // String manipulation tool
         RegisterTool("text_analyzer", input =>
         {
-            return $"Length: {input.Length} characters, Words: {input.Split(' ', StringSplitOptions.RemoveEmptyEntries).Length}";
+            return $"Length: {input.Length} characters, Words: {input.Split(new[] { ' ' }, StringSplitOptions.RemoveEmptyEntries).Length}";
         });
     }
 
@@ -543,7 +543,7 @@ TOOL_CALLS: [if yes, list as 'toolname:input' separated by newlines]";
 
         var response = _generator.Generate(analysisPrompt);
 
-        bool needsTools = response.Contains("NEEDS_TOOLS: yes", StringComparison.OrdinalIgnoreCase);
+        bool needsTools = response.IndexOf("NEEDS_TOOLS: yes", StringComparison.OrdinalIgnoreCase) >= 0;
         string reasoning = ExtractSection(response, "REASONING:");
         var toolCalls = ParseToolCalls(response);
 
@@ -568,8 +568,8 @@ TOOL_CALLS: [if yes, list as 'toolname:input' separated by newlines]";
         if (string.IsNullOrWhiteSpace(section))
             return new List<(string, string)>();
 
-        var calls = section.Split('\n', StringSplitOptions.RemoveEmptyEntries)
-            .Select(line => line.Split(':', 2))
+        var calls = section.Split(new[] { '\n' }, StringSplitOptions.RemoveEmptyEntries)
+            .Select(line => line.Split(new[] { ':' }, 2))
             .Where(parts => parts.Length == 2)
             .Select(parts => (parts[0].Trim(), parts[1].Trim()))
             .ToList();
