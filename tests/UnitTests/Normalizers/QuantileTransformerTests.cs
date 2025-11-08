@@ -13,7 +13,7 @@ namespace AiDotNetTests.UnitTests.Normalizers
         public void Constructor_WithValidUniformDistribution_Succeeds()
         {
             // Act
-            var transformer = new QuantileTransformer<double, Matrix<double>, Vector<double>>("uniform", 100);
+            var transformer = new QuantileTransformer<double, Matrix<double>, Vector<double>>(OutputDistribution.Uniform, 100);
 
             // Assert
             Assert.NotNull(transformer);
@@ -23,18 +23,10 @@ namespace AiDotNetTests.UnitTests.Normalizers
         public void Constructor_WithValidNormalDistribution_Succeeds()
         {
             // Act
-            var transformer = new QuantileTransformer<double, Matrix<double>, Vector<double>>("normal", 100);
+            var transformer = new QuantileTransformer<double, Matrix<double>, Vector<double>>(OutputDistribution.Normal, 100);
 
             // Assert
             Assert.NotNull(transformer);
-        }
-
-        [Fact]
-        public void Constructor_WithInvalidDistribution_ThrowsArgumentException()
-        {
-            // Act & Assert
-            Assert.Throws<ArgumentException>(() =>
-                new QuantileTransformer<double, Matrix<double>, Vector<double>>("invalid", 100));
         }
 
         [Fact]
@@ -42,14 +34,14 @@ namespace AiDotNetTests.UnitTests.Normalizers
         {
             // Act & Assert
             Assert.Throws<ArgumentException>(() =>
-                new QuantileTransformer<double, Matrix<double>, Vector<double>>("uniform", 5));
+                new QuantileTransformer<double, Matrix<double>, Vector<double>>(OutputDistribution.Uniform, 5));
         }
 
         [Fact]
         public void NormalizeOutput_WithUniformDistribution_MapsToZeroOne()
         {
             // Arrange
-            var transformer = new QuantileTransformer<double, Matrix<double>, Vector<double>>("uniform", 100);
+            var transformer = new QuantileTransformer<double, Matrix<double>, Vector<double>>(OutputDistribution.Uniform, 100);
             var data = new Vector<double>(new double[] { 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0 });
 
             // Act
@@ -57,7 +49,7 @@ namespace AiDotNetTests.UnitTests.Normalizers
 
             // Assert
             Assert.Equal(NormalizationMethod.QuantileTransformer, parameters.Method);
-            Assert.Equal("uniform", parameters.OutputDistribution);
+            Assert.Equal(OutputDistribution.Uniform, parameters.OutputDistribution);
             Assert.Equal(100, parameters.Quantiles.Count);
 
             // Values should be between 0 and 1
@@ -76,7 +68,7 @@ namespace AiDotNetTests.UnitTests.Normalizers
         public void NormalizeOutput_WithNormalDistribution_TransformsData()
         {
             // Arrange
-            var transformer = new QuantileTransformer<double, Matrix<double>, Vector<double>>("normal", 100);
+            var transformer = new QuantileTransformer<double, Matrix<double>, Vector<double>>(OutputDistribution.Normal, 100);
             var data = new Vector<double>(new double[] { 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0 });
 
             // Act
@@ -84,7 +76,7 @@ namespace AiDotNetTests.UnitTests.Normalizers
 
             // Assert
             Assert.Equal(NormalizationMethod.QuantileTransformer, parameters.Method);
-            Assert.Equal("normal", parameters.OutputDistribution);
+            Assert.Equal(OutputDistribution.Normal, parameters.OutputDistribution);
             Assert.Equal(100, parameters.Quantiles.Count);
 
             // With normal distribution, values are not strictly bounded but should be reasonable
@@ -105,12 +97,12 @@ namespace AiDotNetTests.UnitTests.Normalizers
         public void NormalizeOutput_WithSkewedData_HandlesOutliers()
         {
             // Arrange
-            var transformer = new QuantileTransformer<double, Matrix<double>, Vector<double>>("uniform", 100);
+            var transformer = new QuantileTransformer<double, Matrix<double>, Vector<double>>(OutputDistribution.Uniform, 100);
             // Data with outliers: most values are small, few are very large
             var data = new Vector<double>(new double[] { 1.0, 2.0, 3.0, 4.0, 5.0, 100.0, 1000.0 });
 
             // Act
-            var (normalized, parameters) = transformer.NormalizeOutput(data);
+            var (normalized, _) = transformer.NormalizeOutput(data);
 
             // Assert
             // All values should still be mapped to [0, 1] range
@@ -134,7 +126,7 @@ namespace AiDotNetTests.UnitTests.Normalizers
         public void NormalizeInput_WithMatrix_NormalizesEachColumnIndependently()
         {
             // Arrange
-            var transformer = new QuantileTransformer<double, Matrix<double>, Vector<double>>("uniform", 100);
+            var transformer = new QuantileTransformer<double, Matrix<double>, Vector<double>>(OutputDistribution.Uniform, 100);
             var matrix = new Matrix<double>(5, 2);
             // First column: 1-5
             matrix[0, 0] = 1.0; matrix[0, 1] = 10.0;
@@ -166,7 +158,7 @@ namespace AiDotNetTests.UnitTests.Normalizers
         public void Denormalize_WithUniformDistribution_RestoresApproximateValues()
         {
             // Arrange
-            var transformer = new QuantileTransformer<double, Matrix<double>, Vector<double>>("uniform", 1000);
+            var transformer = new QuantileTransformer<double, Matrix<double>, Vector<double>>(OutputDistribution.Uniform, 1000);
             var original = new Vector<double>(new double[] { 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0 });
             var (normalized, parameters) = transformer.NormalizeOutput(original);
 
@@ -185,7 +177,7 @@ namespace AiDotNetTests.UnitTests.Normalizers
         public void Denormalize_WithNormalDistribution_RestoresApproximateValues()
         {
             // Arrange
-            var transformer = new QuantileTransformer<double, Matrix<double>, Vector<double>>("normal", 1000);
+            var transformer = new QuantileTransformer<double, Matrix<double>, Vector<double>>(OutputDistribution.Normal, 1000);
             var original = new Vector<double>(new double[] { 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0 });
             var (normalized, parameters) = transformer.NormalizeOutput(original);
 
@@ -234,7 +226,7 @@ namespace AiDotNetTests.UnitTests.Normalizers
         public void NormalizeOutput_WithFloatType_WorksCorrectly()
         {
             // Arrange
-            var transformer = new QuantileTransformer<float, Matrix<float>, Vector<float>>("uniform", 100);
+            var transformer = new QuantileTransformer<float, Matrix<float>, Vector<float>>(OutputDistribution.Uniform, 100);
             var data = new Vector<float>(new float[] { 1.0f, 2.0f, 3.0f, 4.0f, 5.0f });
 
             // Act
@@ -252,7 +244,7 @@ namespace AiDotNetTests.UnitTests.Normalizers
         public void NormalizeOutput_WithTensor_WorksCorrectly()
         {
             // Arrange
-            var transformer = new QuantileTransformer<double, Matrix<double>, Tensor<double>>("uniform", 100);
+            var transformer = new QuantileTransformer<double, Matrix<double>, Tensor<double>>(OutputDistribution.Uniform, 100);
             var data = new Tensor<double>(new[] { 5 }, new double[] { 1.0, 2.0, 3.0, 4.0, 5.0 });
 
             // Act
@@ -270,7 +262,7 @@ namespace AiDotNetTests.UnitTests.Normalizers
         public void NormalizeInput_WithTensor_WorksCorrectly()
         {
             // Arrange
-            var transformer = new QuantileTransformer<double, Tensor<double>, Vector<double>>("uniform", 100);
+            var transformer = new QuantileTransformer<double, Tensor<double>, Vector<double>>(OutputDistribution.Uniform, 100);
             var tensor = new Tensor<double>(new[] { 5, 2 });
             tensor[0, 0] = 1.0; tensor[0, 1] = 10.0;
             tensor[1, 0] = 2.0; tensor[1, 1] = 20.0;
@@ -279,7 +271,7 @@ namespace AiDotNetTests.UnitTests.Normalizers
             tensor[4, 0] = 5.0; tensor[4, 1] = 50.0;
 
             // Act
-            var (normalized, parametersList) = transformer.NormalizeInput(tensor);
+            var (_, parametersList) = transformer.NormalizeInput(tensor);
 
             // Assert
             Assert.Equal(2, parametersList.Count);
@@ -289,11 +281,11 @@ namespace AiDotNetTests.UnitTests.Normalizers
         public void NormalizeOutput_PreservesRankOrdering()
         {
             // Arrange
-            var transformer = new QuantileTransformer<double, Matrix<double>, Vector<double>>("uniform", 100);
+            var transformer = new QuantileTransformer<double, Matrix<double>, Vector<double>>(OutputDistribution.Uniform, 100);
             var data = new Vector<double>(new double[] { 10.0, 5.0, 20.0, 15.0, 1.0 });
 
             // Act
-            var (normalized, parameters) = transformer.NormalizeOutput(data);
+            var (normalized, _) = transformer.NormalizeOutput(data);
 
             // Assert
             // The rank ordering should be preserved: 1.0 < 5.0 < 10.0 < 15.0 < 20.0
@@ -308,7 +300,7 @@ namespace AiDotNetTests.UnitTests.Normalizers
         public void RoundTrip_NormalizeAndDenormalize_ReturnsApproximateOriginal()
         {
             // Arrange
-            var transformer = new QuantileTransformer<double, Matrix<double>, Vector<double>>("uniform", 1000);
+            var transformer = new QuantileTransformer<double, Matrix<double>, Vector<double>>(OutputDistribution.Uniform, 1000);
             var original = new Vector<double>(new double[] { 1.0, 5.0, 10.0, 50.0, 100.0, 500.0, 1000.0 });
 
             // Act
@@ -329,11 +321,11 @@ namespace AiDotNetTests.UnitTests.Normalizers
         public void NormalizeOutput_WithRepeatedValues_HandlesCorrectly()
         {
             // Arrange
-            var transformer = new QuantileTransformer<double, Matrix<double>, Vector<double>>("uniform", 100);
+            var transformer = new QuantileTransformer<double, Matrix<double>, Vector<double>>(OutputDistribution.Uniform, 100);
             var data = new Vector<double>(new double[] { 1.0, 1.0, 1.0, 5.0, 5.0, 10.0 });
 
             // Act
-            var (normalized, parameters) = transformer.NormalizeOutput(data);
+            var (normalized, _) = transformer.NormalizeOutput(data);
 
             // Assert
             // Repeated values should map to similar (not necessarily identical) normalized values
@@ -347,11 +339,11 @@ namespace AiDotNetTests.UnitTests.Normalizers
         public void NormalizeOutput_WithExtremeOutliers_HandlesGracefully()
         {
             // Arrange
-            var transformer = new QuantileTransformer<double, Matrix<double>, Vector<double>>("uniform", 100);
+            var transformer = new QuantileTransformer<double, Matrix<double>, Vector<double>>(OutputDistribution.Uniform, 100);
             var data = new Vector<double>(new double[] { 1.0, 2.0, 3.0, 4.0, 5.0, 1000000.0 });
 
             // Act
-            var (normalized, parameters) = transformer.NormalizeOutput(data);
+            var (normalized, _) = transformer.NormalizeOutput(data);
 
             // Assert
             // All values should still be in valid range

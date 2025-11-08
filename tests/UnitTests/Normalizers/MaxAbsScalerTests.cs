@@ -220,7 +220,7 @@ namespace AiDotNetTests.UnitTests.Normalizers
             matrix[2, 0] = 50.0f; matrix[2, 1] = 100.0f;
 
             // Act
-            var (normalized, parametersList) = scaler.NormalizeInput(matrix);
+            var (_, parametersList) = scaler.NormalizeInput(matrix);
 
             // Assert
             Assert.Equal(2, parametersList.Count);

@@ -53,33 +53,28 @@ namespace AiDotNet.Normalizers;
 /// <typeparam name="TOutput">The type of output data structure.</typeparam>
 public class QuantileTransformer<T, TInput, TOutput> : NormalizerBase<T, TInput, TOutput>
 {
-    private readonly string _outputDistribution;
+    private readonly OutputDistribution _outputDistribution;
     private readonly int _nQuantiles;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="QuantileTransformer{T, TInput, TOutput}"/> class.
     /// </summary>
-    /// <param name="outputDistribution">The target distribution: "uniform" or "normal". Default is "uniform".</param>
+    /// <param name="outputDistribution">The target distribution: Uniform or Normal. Default is Uniform.</param>
     /// <param name="nQuantiles">The number of quantiles to compute. Default is 1000.</param>
     /// <remarks>
     /// <para><b>For Beginners:</b> This sets up your quantile transformation system.
     ///
     /// Parameters to choose:
-    /// - outputDistribution: "uniform" spreads values evenly, "normal" creates a bell curve
+    /// - outputDistribution: Uniform spreads values evenly, Normal creates a bell curve
     /// - nQuantiles: More quantiles (1000) = more accurate but slower, fewer (100) = faster but less precise
     ///
-    /// Most users should stick with the defaults (uniform, 1000 quantiles).
+    /// Most users should stick with the defaults (Uniform, 1000 quantiles).
     /// </para>
     /// </remarks>
-    public QuantileTransformer(string outputDistribution = "uniform", int nQuantiles = 1000) : base()
+    public QuantileTransformer(OutputDistribution outputDistribution = OutputDistribution.Uniform, int nQuantiles = 1000) : base()
     {
-        _outputDistribution = outputDistribution.ToLowerInvariant();
+        _outputDistribution = outputDistribution;
         _nQuantiles = nQuantiles;
-
-        if (_outputDistribution != "uniform" && _outputDistribution != "normal")
-        {
-            throw new ArgumentException("outputDistribution must be either 'uniform' or 'normal'", nameof(outputDistribution));
-        }
 
         if (_nQuantiles < 10)
         {
@@ -416,11 +411,11 @@ public class QuantileTransformer<T, TInput, TOutput> : NormalizerBase<T, TInput,
         // Handle values outside the range
         if (NumOps.LessThanOrEquals(value, quantiles[0]))
         {
-            return _outputDistribution == "uniform" ? NumOps.Zero : NumOps.FromDouble(-8.0); // Approximate -infinity for normal
+            return _outputDistribution == OutputDistribution.Uniform ? NumOps.Zero : NumOps.FromDouble(-8.0); // Approximate -infinity for normal
         }
         if (NumOps.GreaterThanOrEquals(value, quantiles[quantiles.Count - 1]))
         {
-            return _outputDistribution == "uniform" ? NumOps.One : NumOps.FromDouble(8.0); // Approximate infinity for normal
+            return _outputDistribution == OutputDistribution.Uniform ? NumOps.One : NumOps.FromDouble(8.0); // Approximate infinity for normal
         }
 
         // Binary search for the position
@@ -470,33 +465,15 @@ public class QuantileTransformer<T, TInput, TOutput> : NormalizerBase<T, TInput,
         }
 
         // Map to output distribution
-        if (_outputDistribution == "uniform")
-        {
-            return percentile;
-        }
-        else // normal
-        {
-            // Convert percentile to normal distribution using inverse CDF approximation
-            return InverseNormalCDF(percentile);
-        }
+        return _outputDistribution == OutputDistribution.Uniform ? percentile : InverseNormalCDF(percentile);
     }
 
     /// <summary>
     /// Inverse transforms a value back to the original distribution.
     /// </summary>
-    private T InverseTransformValue(T transformedValue, List<T> quantiles, string outputDistribution)
+    private T InverseTransformValue(T transformedValue, List<T> quantiles, OutputDistribution outputDistribution)
     {
-        T percentile;
-
-        if (outputDistribution == "uniform")
-        {
-            percentile = transformedValue;
-        }
-        else // normal
-        {
-            // Convert from normal distribution back to percentile
-            percentile = NormalCDF(transformedValue);
-        }
+        T percentile = outputDistribution == OutputDistribution.Uniform ? transformedValue : NormalCDF(transformedValue);
 
         // Clamp percentile to [0, 1]
         if (NumOps.LessThan(percentile, NumOps.Zero))
