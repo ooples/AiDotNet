@@ -160,9 +160,6 @@ public class IcaDecomposition<T> : MatrixDecompositionBase<T>
     private (Matrix<T> W, Matrix<T> A, Matrix<T> S, Vector<T> mean, Matrix<T> K)
         ComputeFastIca(Matrix<T> X, int numComponents, int maxIterations, double tolerance)
     {
-        int m = X.Rows; // Number of observations
-        int n = X.Columns; // Number of features
-
         // Step 1: Center the data (subtract mean from each column)
         Vector<T> mean = ComputeColumnMean(X);
         Matrix<T> XCentered = CenterData(X, mean);

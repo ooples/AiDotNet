@@ -139,8 +139,8 @@ public class NmfDecomposition<T> : MatrixDecompositionBase<T>
         int n = V.Columns;
 
         // Validate that numeric type supports small positive values (required for NMF algorithm)
-        T testEpsilon = _numOps.FromDouble(1e-10);
-        if (_numOps.Equals(testEpsilon, _numOps.Zero))
+        T testEpsilon = NumOps.FromDouble(1e-10);
+        if (NumOps.Equals(testEpsilon, NumOps.Zero))
         {
             throw new ArgumentException(
                 "NMF decomposition requires a floating-point INumericOperations<T> implementation. " +
@@ -408,10 +408,6 @@ public class NmfDecomposition<T> : MatrixDecompositionBase<T>
 
         Matrix<T> WT = W.Transpose();
         Matrix<T> HT = H.Transpose();
-
-        // Compute (W^T × W)^(-1) × W^T using a simpler approach
-        Matrix<T> WTW = WT.Multiply(W);
-        Matrix<T> HHT = H.Multiply(HT);
 
         // For simplicity, use H^T × W^T as an approximation
         // This gives a rough inverse that satisfies the interface requirement

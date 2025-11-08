@@ -106,7 +106,7 @@ public class NmfDecompositionTests
             }
         }
 
-        double rmse = Math.Sqrt(totalError / (matrix.Rows * matrix.Columns));
+        double rmse = Math.Sqrt(totalError / ((double)((long)matrix.Rows * (long)matrix.Columns)));
         Assert.True(rmse < 2.0, $"RMSE {rmse} should be less than 2.0");
     }
 
