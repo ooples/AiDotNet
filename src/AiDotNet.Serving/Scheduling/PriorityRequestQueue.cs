@@ -133,13 +133,16 @@ public class PriorityRequestQueue<T>
     /// <returns>Dictionary mapping priority to count</returns>
     public Dictionary<RequestPriority, int> GetPriorityCounts()
     {
-        return new Dictionary<RequestPriority, int>
+        lock (_lock)
         {
-            [RequestPriority.Critical] = _queues[3].Count,
-            [RequestPriority.High] = _queues[2].Count,
-            [RequestPriority.Normal] = _queues[1].Count,
-            [RequestPriority.Low] = _queues[0].Count
-        };
+            return new Dictionary<RequestPriority, int>
+            {
+                [RequestPriority.Critical] = _queues[3].Count,
+                [RequestPriority.High] = _queues[2].Count,
+                [RequestPriority.Normal] = _queues[1].Count,
+                [RequestPriority.Low] = _queues[0].Count
+            };
+        }
     }
 
     /// <summary>
