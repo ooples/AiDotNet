@@ -282,6 +282,15 @@ public class IcaDecomposition<T> : MatrixDecompositionBase<T>
         Matrix<T> K = new Matrix<T>(numComponents, C.Rows);
         for (int i = 0; i < numComponents; i++)
         {
+            // Validate eigenvalue is positive before taking square root
+            if (NumOps.LessThanOrEquals(D[i], NumOps.Zero))
+            {
+                throw new InvalidOperationException(
+                    $"Eigenvalue at index {i} is non-positive ({D[i]}). " +
+                    "ICA whitening requires positive definite covariance matrix. " +
+                    "This may indicate ill-conditioned or degenerate data.");
+            }
+            
             T invSqrtEigenvalue = NumOps.Divide(NumOps.One, NumOps.Sqrt(D[i]));
             for (int j = 0; j < C.Rows; j++)
             {
