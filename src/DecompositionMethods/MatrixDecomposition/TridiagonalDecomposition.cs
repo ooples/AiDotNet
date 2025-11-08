@@ -13,15 +13,8 @@ namespace AiDotNet.DecompositionMethods.MatrixDecomposition;
 /// calculations much faster and more efficient.
 /// </para>
 /// </remarks>
-public class TridiagonalDecomposition<T> : IMatrixDecomposition<T>
+public class TridiagonalDecomposition<T> : MatrixDecompositionBase<T>
 {
-    private readonly INumericOperations<T> NumOps;
-
-    /// <summary>
-    /// Gets the original matrix being decomposed.
-    /// </summary>
-    public Matrix<T> A { get; }
-    
     /// <summary>
     /// Gets the orthogonal matrix Q in the decomposition A = Q*T*Q^T.
     /// </summary>
@@ -32,12 +25,14 @@ public class TridiagonalDecomposition<T> : IMatrixDecomposition<T>
     /// This property makes orthogonal matrices very useful in many calculations.
     /// </para>
     /// </remarks>
-    public Matrix<T> QMatrix { get; private set; }
-    
+    public Matrix<T> QMatrix { get; private set; };
+
     /// <summary>
     /// Gets the tridiagonal matrix T in the decomposition A = Q*T*Q^T.
     /// </summary>
-    public Matrix<T> TMatrix { get; private set; }
+    public Matrix<T> TMatrix { get; private set; };
+
+    private readonly TridiagonalAlgorithmType _algorithm;
 
     /// <summary>
     /// Initializes a new instance of the TridiagonalDecomposition class.
@@ -45,20 +40,25 @@ public class TridiagonalDecomposition<T> : IMatrixDecomposition<T>
     /// <param name="matrix">The matrix to decompose</param>
     /// <param name="algorithm">The algorithm to use for decomposition (default is Householder)</param>
     public TridiagonalDecomposition(Matrix<T> matrix, TridiagonalAlgorithmType algorithm = TridiagonalAlgorithmType.Householder)
+        : base(matrix)
     {
-        A = matrix;
-        NumOps = MathHelper.GetNumericOperations<T>();
-        QMatrix = new Matrix<T>(matrix.Rows, matrix.Columns);
-        TMatrix = new Matrix<T>(matrix.Rows, matrix.Columns);
-        Decompose(algorithm);
+        _algorithm = algorithm;
     }
 
     /// <summary>
-    /// Performs the tridiagonal decomposition using the specified algorithm.
+    /// Performs the tridiagonal decomposition.
+    /// </summary>
+    protected override void Decompose()
+    {
+        ComputeDecomposition(_algorithm);
+    }
+
+    /// <summary>
+    /// Computes the tridiagonal decomposition using the specified algorithm.
     /// </summary>
     /// <param name="algorithm">The algorithm to use for decomposition</param>
     /// <exception cref="ArgumentException">Thrown when an unsupported algorithm is specified</exception>
-    public void Decompose(TridiagonalAlgorithmType algorithm = TridiagonalAlgorithmType.Householder)
+    private void ComputeDecomposition(TridiagonalAlgorithmType algorithm)
     {
         switch (algorithm)
         {
@@ -249,7 +249,7 @@ public class TridiagonalDecomposition<T> : IMatrixDecomposition<T>
     /// this process much more efficient than directly solving the original system.
     /// </para>
     /// </remarks>
-    public Vector<T> Solve(Vector<T> b)
+    public override Vector<T> Solve(Vector<T> b)
     {
         // Solve Tx = Q^T b
         Vector<T> y = QMatrix.Transpose().Multiply(b);
@@ -306,12 +306,12 @@ public class TridiagonalDecomposition<T> : IMatrixDecomposition<T>
     /// <remarks>
     /// <para>
     /// <b>For Beginners:</b> The inverse of a matrix is like the reciprocal of a number. Just as 1/3 is the
-    /// reciprocal of 3 (because 3 × 1/3 = 1), the inverse of a matrix A is another matrix that,
+    /// reciprocal of 3 (because 3 ï¿½ 1/3 = 1), the inverse of a matrix A is another matrix that,
     /// when multiplied by A, gives the identity matrix (the matrix equivalent of the number 1).
     /// Finding the inverse is useful for solving multiple systems of equations with the same coefficient matrix.
     /// </para>
     /// </remarks>
-    public Matrix<T> Invert()
+    public override Matrix<T> Invert()
     {
         // Invert T
         Matrix<T> invT = InvertTridiagonal();

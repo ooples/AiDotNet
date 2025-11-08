@@ -9,19 +9,12 @@ namespace AiDotNet.DecompositionMethods.MatrixDecomposition;
 /// <remarks>
 /// <para>
 /// <b>For Beginners:</b> UDU' decomposition is a way to break down a complex matrix into simpler parts.
-/// Think of it like factoring a number (e.g., 12 = 3 × 4). This decomposition is particularly
+/// Think of it like factoring a number (e.g., 12 = 3 ï¿½ 4). This decomposition is particularly
 /// useful for solving systems of linear equations and for numerical stability in calculations.
 /// </para>
 /// </remarks>
-public class UduDecomposition<T> : IMatrixDecomposition<T>
+public class UduDecomposition<T> : MatrixDecompositionBase<T>
 {
-    private readonly INumericOperations<T> NumOps;
-
-    /// <summary>
-    /// Gets the original matrix being decomposed.
-    /// </summary>
-    public Matrix<T> A { get; }
-    
     /// <summary>
     /// Gets the upper triangular matrix U from the decomposition.
     /// </summary>
@@ -31,8 +24,8 @@ public class UduDecomposition<T> : IMatrixDecomposition<T>
     /// (the diagonal from top-left to bottom-right). All values below this diagonal are zero.
     /// </para>
     /// </remarks>
-    public Matrix<T> U { get; private set; }
-    
+    public Matrix<T> U { get; private set; };
+
     /// <summary>
     /// Gets the diagonal matrix D represented as a vector of its diagonal elements.
     /// </summary>
@@ -42,7 +35,9 @@ public class UduDecomposition<T> : IMatrixDecomposition<T>
     /// We store it as a vector to save memory since all other values are zero.
     /// </para>
     /// </remarks>
-    public Vector<T> D { get; private set; }
+    public Vector<T> D { get; private set; };
+
+    private readonly UduAlgorithmType _algorithm;
 
     /// <summary>
     /// Initializes a new instance of the UduDecomposition class and performs the decomposition.
@@ -58,24 +53,32 @@ public class UduDecomposition<T> : IMatrixDecomposition<T>
     /// </para>
     /// </remarks>
     public UduDecomposition(Matrix<T> matrix, UduAlgorithmType algorithm = UduAlgorithmType.Crout)
+        : base(matrix)
     {
         if (!matrix.IsSquareMatrix())
             throw new ArgumentException("Matrix must be square for UDU decomposition.");
-        A = matrix;
-        var n = A.Rows;
-        U = new Matrix<T>(n, n);
-        D = new Vector<T>(n);
-        NumOps = MathHelper.GetNumericOperations<T>();
 
-        Decompose(algorithm);
+        _algorithm = algorithm;
     }
 
     /// <summary>
-    /// Performs the UDU' decomposition using the specified algorithm.
+    /// Performs the UDU' decomposition.
     /// </summary>
-    /// <param name="algorithm">The algorithm to use for decomposition (default is Crout)</param>
+    protected override void Decompose()
+    {
+        int n = A.Rows;
+        U = new Matrix<T>(n, n);
+        D = new Vector<T>(n);
+
+        ComputeDecomposition(_algorithm);
+    }
+
+    /// <summary>
+    /// Computes the UDU' decomposition using the specified algorithm.
+    /// </summary>
+    /// <param name="algorithm">The algorithm to use for decomposition</param>
     /// <exception cref="ArgumentException">Thrown when an unsupported algorithm is specified</exception>
-    public void Decompose(UduAlgorithmType algorithm = UduAlgorithmType.Crout)
+    private void ComputeDecomposition(UduAlgorithmType algorithm)
     {
         switch (algorithm)
         {
@@ -103,8 +106,6 @@ public class UduDecomposition<T> : IMatrixDecomposition<T>
     private void DecomposeCrout()
     {
         int n = A.Rows;
-        U = new Matrix<T>(n, n);
-        D = new Vector<T>(n);
 
         for (int j = 0; j < n; j++)
         {
@@ -142,8 +143,6 @@ public class UduDecomposition<T> : IMatrixDecomposition<T>
     private void DecomposeDoolittle()
     {
         int n = A.Rows;
-        U = new Matrix<T>(n, n);
-        D = new Vector<T>(n);
 
         for (int i = 0; i < n; i++)
         {
@@ -183,7 +182,7 @@ public class UduDecomposition<T> : IMatrixDecomposition<T>
     /// forward substitution, diagonal scaling, and backward substitution.
     /// </para>
     /// </remarks>
-    public Vector<T> Solve(Vector<T> b)
+    public override Vector<T> Solve(Vector<T> b)
     {
         if (b.Length != A.Rows)
             throw new ArgumentException("Vector b must have the same length as the number of rows in matrix A.");
@@ -228,12 +227,12 @@ public class UduDecomposition<T> : IMatrixDecomposition<T>
     /// <remarks>
     /// <para>
     /// <b>For Beginners:</b> The inverse of a matrix is like the reciprocal of a number. Just as 1/3 is the
-    /// reciprocal of 3 (because 3 × 1/3 = 1), the inverse of a matrix A is another matrix that,
+    /// reciprocal of 3 (because 3 ï¿½ 1/3 = 1), the inverse of a matrix A is another matrix that,
     /// when multiplied by A, gives the identity matrix (the matrix equivalent of the number 1).
     /// This method finds the inverse by solving multiple equation systems, one for each column.
     /// </para>
     /// </remarks>
-    public Matrix<T> Invert()
+    public override Matrix<T> Invert()
     {
         int n = A.Rows;
         Matrix<T> inverse = new Matrix<T>(n, n);

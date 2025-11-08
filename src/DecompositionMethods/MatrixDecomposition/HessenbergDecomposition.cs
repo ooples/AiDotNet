@@ -7,15 +7,13 @@ namespace AiDotNet.DecompositionMethods.MatrixDecomposition;
 /// A Hessenberg matrix has zeros below the first subdiagonal, making it easier to work with for
 /// many numerical algorithms. This decomposition is often used as a preprocessing step for
 /// eigenvalue calculations and solving linear systems.
-/// 
+///
 /// <b>For Beginners:</b> Think of Hessenberg decomposition as a way to simplify a matrix by making
 /// most elements below the diagonal equal to zero, which makes further calculations much faster.
 /// </remarks>
 /// <typeparam name="T">The numeric type used in the matrix (e.g., double, float).</typeparam>
-public class HessenbergDecomposition<T> : IMatrixDecomposition<T>
+public class HessenbergDecomposition<T> : MatrixDecompositionBase<T>
 {
-    private readonly INumericOperations<T> NumOps;
-
     /// <summary>
     /// Gets the resulting Hessenberg matrix after decomposition.
     /// </summary>
@@ -23,12 +21,9 @@ public class HessenbergDecomposition<T> : IMatrixDecomposition<T>
     /// A Hessenberg matrix has zeros in all positions below the first subdiagonal.
     /// This simplified form makes many matrix operations more efficient.
     /// </remarks>
-    public Matrix<T> HessenbergMatrix { get; private set; }
+    public Matrix<T> HessenbergMatrix { get; private set; };
 
-    /// <summary>
-    /// Gets the original matrix that was decomposed.
-    /// </summary>
-    public Matrix<T> A { get; private set; }
+    private readonly HessenbergAlgorithmType _algorithm;
 
     /// <summary>
     /// Initializes a new instance of the Hessenberg decomposition for the specified matrix.
@@ -42,25 +37,32 @@ public class HessenbergDecomposition<T> : IMatrixDecomposition<T>
     /// - ElementaryTransformations: Simpler to understand but less numerically stable
     /// - ImplicitQR: Combines Hessenberg reduction with QR iteration
     /// - Lanczos: Efficient for large, sparse matrices
-    /// 
+    ///
     /// For beginners, the default Householder algorithm is recommended as it provides
     /// a good balance of stability and performance.
     /// </remarks>
     public HessenbergDecomposition(Matrix<T> matrix, HessenbergAlgorithmType algorithm = HessenbergAlgorithmType.Householder)
+        : base(matrix)
     {
-        NumOps = MathHelper.GetNumericOperations<T>();
-        A = matrix;
-        HessenbergMatrix = Decompose(matrix, algorithm);
+        _algorithm = algorithm;
     }
 
     /// <summary>
-    /// Selects and applies the appropriate decomposition algorithm.
+    /// Performs the Hessenberg decomposition.
+    /// </summary>
+    protected override void Decompose()
+    {
+        HessenbergMatrix = ComputeDecomposition(A, _algorithm);
+    }
+
+    /// <summary>
+    /// Computes the Hessenberg decomposition using the specified algorithm.
     /// </summary>
     /// <param name="matrix">The matrix to decompose.</param>
     /// <param name="algorithm">The algorithm to use for decomposition.</param>
     /// <returns>The resulting Hessenberg matrix.</returns>
     /// <exception cref="ArgumentException">Thrown when an unsupported algorithm is specified.</exception>
-    private Matrix<T> Decompose(Matrix<T> matrix, HessenbergAlgorithmType algorithm)
+    private Matrix<T> ComputeDecomposition(Matrix<T> matrix, HessenbergAlgorithmType algorithm)
     {
         return algorithm switch
         {
@@ -276,15 +278,15 @@ public class HessenbergDecomposition<T> : IMatrixDecomposition<T>
     /// <returns>The solution vector x.</returns>
     /// <remarks>
     /// This method solves the linear system by using the special structure of the Hessenberg matrix.
-    /// 
+    ///
     /// <b>For Beginners:</b> Solving a linear system means finding values for x that satisfy the equation Ax = b.
     /// This method:
     /// 1. First performs forward substitution (working from top to bottom) to solve an intermediate system
     /// 2. Then performs backward substitution (working from bottom to top) to find the final solution
-    /// 
+    ///
     /// The Hessenberg form makes this process more efficient than solving with the original matrix.
     /// </remarks>
-    public Vector<T> Solve(Vector<T> b)
+    public override Vector<T> Solve(Vector<T> b)
     {
         var n = A.Rows;
         var y = new Vector<T>(n);
@@ -322,16 +324,16 @@ public class HessenbergDecomposition<T> : IMatrixDecomposition<T>
     /// </summary>
     /// <returns>The inverse of the original matrix.</returns>
     /// <remarks>
-    /// Matrix inversion finds a matrix A?¹ such that A × A?¹ = I (identity matrix).
-    /// 
+    /// Matrix inversion finds a matrix A?ï¿½ such that A ï¿½ A?ï¿½ = I (identity matrix).
+    ///
     /// <b>For Beginners:</b> The inverse of a matrix is like the reciprocal of a number.
-    /// Just as 5 × (1/5) = 1, a matrix multiplied by its inverse gives the identity matrix.
-    /// 
+    /// Just as 5 ï¿½ (1/5) = 1, a matrix multiplied by its inverse gives the identity matrix.
+    ///
     /// This method uses the MatrixHelper class to efficiently compute the inverse
     /// based on the Hessenberg decomposition, which is generally faster than
     /// directly inverting the original matrix.
     /// </remarks>
-    public Matrix<T> Invert()
+    public override Matrix<T> Invert()
     {
         return MatrixHelper<T>.InvertUsingDecomposition(this);
     }

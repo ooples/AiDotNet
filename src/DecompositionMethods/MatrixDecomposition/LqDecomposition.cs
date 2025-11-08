@@ -21,7 +21,7 @@ public class LqDecomposition<T> : MatrixDecompositionBase<T>
     /// <b>For Beginners:</b> The L matrix contains values only on and below the diagonal.
     /// It represents one part of the factorization of the original matrix.
     /// </remarks>
-    public Matrix<T> L { get; private set; } = null!;
+    public Matrix<T> L { get; private set; };
 
     /// <summary>
     /// Gets the orthogonal matrix Q from the decomposition.
@@ -30,7 +30,7 @@ public class LqDecomposition<T> : MatrixDecompositionBase<T>
     /// <b>For Beginners:</b> An orthogonal matrix has columns that are perpendicular to each other
     /// and have unit length. This means Q^T � Q = I (the identity matrix).
     /// </remarks>
-    public Matrix<T> Q { get; private set; } = null!;
+    public Matrix<T> Q { get; private set; };
 
     private readonly LqAlgorithmType _algorithm;
 
