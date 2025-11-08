@@ -471,6 +471,8 @@ public class InMemoryCommunicationBackend<T> : ICommunicationBackend<T> where T 
             }
 
             // Apply averaging if needed
+            // Average operation: sum all vectors then divide by count
+            // This is mathematically correct: (v0 + v1 + ... + vn-1) / n
             if (operation == ReductionOperation.Average)
             {
                 var count = _numOps.FromDouble(vectors.Count);
