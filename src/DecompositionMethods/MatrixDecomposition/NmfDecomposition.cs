@@ -159,9 +159,9 @@ public class NmfDecomposition<T> : MatrixDecompositionBase<T>
         for (int iteration = 0; iteration < maxIterations; iteration++)
         {
             // Update H: H = H .* (W^T * V) ./ (W^T * W * H + epsilon)
-            Matrix<T> WT = W.Transpose();
+            Matrix<T> WT = tempW.Transpose();
             Matrix<T> WTV = WT.Multiply(V);
-            Matrix<T> WTW = WT.Multiply(W);
+            Matrix<T> WTW = WT.Multiply(tempW);
             Matrix<T> WTWH = WTW.Multiply(tempH);
 
             for (int i = 0; i < k; i++)
@@ -171,12 +171,12 @@ public class NmfDecomposition<T> : MatrixDecompositionBase<T>
                     T numerator = WTV[i, j];
                     T denominator = NumOps.Add(WTWH[i, j], epsilon);
                     T ratio = NumOps.Divide(numerator, denominator);
-                    H[i, j] = NumOps.Multiply(H[i, j], ratio);
+                    tempH[i, j] = NumOps.Multiply(tempH[i, j], ratio);
                 }
             }
 
             // Update W: W = W .* (V * H^T) ./ (W * H * H^T + epsilon)
-            Matrix<T> HT = H.Transpose();
+            Matrix<T> HT = tempH.Transpose();
             Matrix<T> VHT = V.Multiply(HT);
             Matrix<T> WH = tempW.Multiply(tempH);
             Matrix<T> WHHT = WH.Multiply(HT);
@@ -188,14 +188,14 @@ public class NmfDecomposition<T> : MatrixDecompositionBase<T>
                     T numerator = VHT[i, j];
                     T denominator = NumOps.Add(WHHT[i, j], epsilon);
                     T ratio = NumOps.Divide(numerator, denominator);
-                    W[i, j] = NumOps.Multiply(W[i, j], ratio);
+                    tempW[i, j] = NumOps.Multiply(tempW[i, j], ratio);
                 }
             }
 
             // Check for convergence
             if (iteration % 10 == 0)
             {
-                T error = ComputeReconstructionError(V, W, tempH);
+                T error = ComputeReconstructionError(V, tempW, tempH);
                 T errorChange = NumOps.Abs(NumOps.Subtract(previousError, error));
 
                 if (NumOps.LessThan(errorChange, toleranceT))
@@ -385,34 +385,6 @@ public class NmfDecomposition<T> : MatrixDecompositionBase<T>
         }
 
         return x;
-    }
-
-    /// <summary>
-    /// Computes the (pseudo)inverse of the matrix using NMF.
-    /// </summary>
-    /// <returns>The pseudo-inverse of the matrix.</returns>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> This method computes an approximation of the matrix inverse using the NMF factorization.
-    /// Since A ~= W * H, the pseudo-inverse is approximated as A^+ ~= H^+ * W^+, where ^+ denotes the pseudo-inverse.
-    /// </para>
-    /// <para>
-    /// Note that this is an approximation. For exact matrix inversion, consider using other decomposition
-    /// methods like LU or QR decomposition. The pseudo-inverse is useful when the matrix is not square
-    /// or doesn't have a true inverse.
-    /// </para>
-    /// </remarks>
-    public override Matrix<T> Invert()
-    {
-        // A ~= W * H, so A^+ ~= H^T * (H * H^T)^(-1) * (W^T * tempW)^(-1) * W^T
-        // This is a simplified pseudo-inverse based on the NMF factorization
-
-        Matrix<T> WT = W.Transpose();
-        Matrix<T> HT = H.Transpose();
-
-        // For simplicity, use H^T * W^T as an approximation
-        // This gives a rough inverse that satisfies the interface requirement
-        return HT.Multiply(WT);
     }
 
     /// <summary>

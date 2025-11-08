@@ -55,6 +55,7 @@ public class LdlDecomposition<T> : MatrixDecompositionBase<T>
         int n = A.Rows;
         L = new Matrix<T>(n, n);
         D = new Vector<T>(n);
+        Decompose();
     }
 
     /// <summary>

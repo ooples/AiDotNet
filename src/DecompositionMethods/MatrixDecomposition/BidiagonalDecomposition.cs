@@ -39,6 +39,7 @@ public class BidiagonalDecomposition<T> : MatrixDecompositionBase<T>
         U = new Matrix<T>(matrix.Rows, matrix.Rows);
         B = new Matrix<T>(matrix.Columns, matrix.Columns);
         V = new Matrix<T>(matrix.Columns, matrix.Columns);
+        Decompose();
     }
 
     /// <summary>
