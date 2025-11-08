@@ -11,18 +11,18 @@ public class LuDecomposition<T> : MatrixDecompositionBase<T>
     /// <summary>
     /// Gets the lower triangular matrix from the decomposition.
     /// </summary>
-    public Matrix<T> L { get; private set; } = null!;
+    public Matrix<T> L { get; private set; };
 
     /// <summary>
     /// Gets the upper triangular matrix from the decomposition.
     /// </summary>
-    public Matrix<T> U { get; private set; } = null!;
+    public Matrix<T> U { get; private set; };
 
     /// <summary>
     /// Gets the permutation vector that tracks row exchanges during pivoting.
     /// Each value represents the original row index for the current row position.
     /// </summary>
-    public Vector<int> P { get; private set; } = null!;
+    public Vector<int> P { get; private set; };
 
     /// <summary>
     /// The algorithm to use for LU decomposition.
