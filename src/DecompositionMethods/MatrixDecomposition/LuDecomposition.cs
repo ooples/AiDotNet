@@ -6,33 +6,48 @@ namespace AiDotNet.DecompositionMethods.MatrixDecomposition;
 /// Implements LU decomposition for matrices, which factorizes a matrix into a product of lower and upper triangular matrices.
 /// </summary>
 /// <typeparam name="T">The numeric data type used for calculations (typically double or float).</typeparam>
-public class LuDecomposition<T> : IMatrixDecomposition<T>
+/// <remarks>
+/// <para>
+/// LU decomposition factors a matrix A into the product of a lower triangular matrix L and an upper
+/// triangular matrix U, often with row permutations represented by a permutation matrix P (P*A = L*U).
+/// This decomposition is fundamental in numerical linear algebra and is used for solving linear systems,
+/// computing determinants, and matrix inversion.
+/// </para>
+/// <para>
+/// <b>For Beginners:</b> LU decomposition breaks a matrix into two simpler triangular matrices:
+/// L (lower triangular, with values only on and below the diagonal) and U (upper triangular, with
+/// values only on and above the diagonal). Think of it like factoring a number into simpler parts,
+/// but for matrices. This makes solving equations much faster.
+/// </para>
+/// <para>
+/// Real-world applications:
+/// - Solving systems of linear equations efficiently
+/// - Computing matrix determinants
+/// - Finding matrix inverses in numerical algorithms
+/// </para>
+/// </remarks>
+public class LuDecomposition<T> : MatrixDecompositionBase<T>
 {
     /// <summary>
     /// Gets the lower triangular matrix from the decomposition.
     /// </summary>
-    public Matrix<T> L { get; private set; }
-    
+    public Matrix<T> L { get; private set; } = new Matrix<T>(0, 0);
+
     /// <summary>
     /// Gets the upper triangular matrix from the decomposition.
     /// </summary>
-    public Matrix<T> U { get; private set; }
-    
+    public Matrix<T> U { get; private set; } = new Matrix<T>(0, 0);
+
     /// <summary>
     /// Gets the permutation vector that tracks row exchanges during pivoting.
     /// Each value represents the original row index for the current row position.
     /// </summary>
-    public Vector<int> P { get; private set; }
-    
-    /// <summary>
-    /// Gets the original matrix that was decomposed.
-    /// </summary>
-    public Matrix<T> A { get; private set; }
+    public Vector<int> P { get; private set; } = new Vector<int>(0);
 
     /// <summary>
-    /// Provides numeric operations for the specified type T.
+    /// The algorithm to use for LU decomposition.
     /// </summary>
-    private readonly INumericOperations<T> _numOps;
+    private readonly LuAlgorithmType _algorithm;
 
     /// <summary>
     /// Initializes a new instance of the LuDecomposition class and performs the decomposition.
@@ -40,14 +55,30 @@ public class LuDecomposition<T> : IMatrixDecomposition<T>
     /// <param name="matrix">The matrix to decompose.</param>
     /// <param name="luAlgorithm">The algorithm to use for LU decomposition. Defaults to partial pivoting.</param>
     /// <remarks>
+    /// <para>
     /// LU decomposition factorizes a matrix A into the product of a lower triangular matrix L and an upper triangular matrix U,
     /// possibly with row permutations (P*A = L*U). This is useful for solving linear systems and calculating determinants.
+    /// </para>
+    /// <para>
+    /// <b>For Beginners:</b> This constructor takes your input matrix and immediately breaks it down into
+    /// the L and U components using the specified algorithm. Different algorithms have different trade-offs
+    /// in terms of speed and numerical stability.
+    /// </para>
     /// </remarks>
     public LuDecomposition(Matrix<T> matrix, LuAlgorithmType luAlgorithm = LuAlgorithmType.PartialPivoting)
+        : base(matrix)
     {
-        A = matrix;
-        _numOps = MathHelper.GetNumericOperations<T>();
-        (L, U, P) = Decompose(matrix, luAlgorithm);
+        _algorithm = luAlgorithm;
+    
+        Decompose();
+    }
+
+    /// <summary>
+    /// Performs the LU decomposition.
+    /// </summary>
+    protected override void Decompose()
+    {
+        (L, U, P) = ComputeDecomposition(A, _algorithm);
     }
 
     /// <summary>
@@ -60,7 +91,7 @@ public class LuDecomposition<T> : IMatrixDecomposition<T>
     /// 1. Forward substitution to solve Ly = Pb
     /// 2. Back substitution to solve Ux = y
     /// </remarks>
-    public Vector<T> Solve(Vector<T> b)
+    public override Vector<T> Solve(Vector<T> b)
     {
         var pb = PermutateVector(b, P);
         var y = ForwardSubstitution(L, pb);
@@ -74,7 +105,7 @@ public class LuDecomposition<T> : IMatrixDecomposition<T>
     /// <param name="matrix">The matrix to decompose.</param>
     /// <param name="algorithm">The algorithm to use for decomposition.</param>
     /// <returns>A tuple containing the L matrix, U matrix, and permutation vector P.</returns>
-    private (Matrix<T> L, Matrix<T> U, Vector<int> P) Decompose(Matrix<T> matrix, LuAlgorithmType algorithm)
+    private (Matrix<T> L, Matrix<T> U, Vector<int> P) ComputeDecomposition(Matrix<T> matrix, LuAlgorithmType algorithm)
     {
         return algorithm switch
         {
@@ -114,11 +145,11 @@ public class LuDecomposition<T> : IMatrixDecomposition<T>
         {
             // Find pivot (largest absolute value in current column)
             int pivotRow = k;
-            T pivotValue = _numOps.Abs(A[k, k]);
+            T pivotValue = NumOps.Abs(A[k, k]);
             for (int i = k + 1; i < n; i++)
             {
-                T absValue = _numOps.Abs(A[i, k]);
-                if (_numOps.GreaterThan(absValue, pivotValue))
+                T absValue = NumOps.Abs(A[i, k]);
+                if (NumOps.GreaterThan(absValue, pivotValue))
                 {
                     pivotRow = i;
                     pivotValue = absValue;
@@ -141,11 +172,11 @@ public class LuDecomposition<T> : IMatrixDecomposition<T>
             // Perform elimination
             for (int i = k + 1; i < n; i++)
             {
-                T factor = _numOps.Divide(A[i, k], A[k, k]);
+                T factor = NumOps.Divide(A[i, k], A[k, k]);
                 L[i, k] = factor;
                 for (int j = k; j < n; j++)
                 {
-                    A[i, j] = _numOps.Subtract(A[i, j], _numOps.Multiply(factor, A[k, j]));
+                    A[i, j] = NumOps.Subtract(A[i, j], NumOps.Multiply(factor, A[k, j]));
                 }
             }
         }
@@ -159,7 +190,7 @@ public class LuDecomposition<T> : IMatrixDecomposition<T>
                 if (i > j)
                     L[i, j] = A[i, j];
                 else if (i == j)
-                    L[i, j] = _numOps.One;
+                    L[i, j] = NumOps.One;
                 else
                     U[i, j] = A[i, j];
             }
@@ -196,14 +227,14 @@ public class LuDecomposition<T> : IMatrixDecomposition<T>
         for (int k = 0; k < n - 1; k++)
         {
             int pivotRow = k, pivotCol = k;
-            T pivotValue = _numOps.Abs(A[k, k]);
+            T pivotValue = NumOps.Abs(A[k, k]);
 
             for (int i = k; i < n; i++)
             {
                 for (int j = k; j < n; j++)
                 {
-                    T absValue = _numOps.Abs(A[i, j]);
-                    if (_numOps.GreaterThan(absValue, pivotValue))
+                    T absValue = NumOps.Abs(A[i, j]);
+                    if (NumOps.GreaterThan(absValue, pivotValue))
                     {
                         pivotRow = i;
                         pivotCol = j;
@@ -236,11 +267,11 @@ public class LuDecomposition<T> : IMatrixDecomposition<T>
 
             for (int i = k + 1; i < n; i++)
             {
-                T factor = _numOps.Divide(A[i, k], A[k, k]);
+                T factor = NumOps.Divide(A[i, k], A[k, k]);
                 L[i, k] = factor;
                 for (int j = k; j < n; j++)
                 {
-                    A[i, j] = _numOps.Subtract(A[i, j], _numOps.Multiply(factor, A[k, j]));
+                    A[i, j] = NumOps.Subtract(A[i, j], NumOps.Multiply(factor, A[k, j]));
                 }
             }
         }
@@ -253,7 +284,7 @@ public class LuDecomposition<T> : IMatrixDecomposition<T>
                 if (i > j)
                     L[i, j] = A[i, j];
                 else if (i == j)
-                    L[i, j] = _numOps.One;
+                    L[i, j] = NumOps.One;
                 else
                     U[i, j] = A[i, j];
             }
@@ -304,24 +335,24 @@ public class LuDecomposition<T> : IMatrixDecomposition<T>
         {
             for (int j = 0; j <= i; j++)
             {
-                T sum = _numOps.Zero;
+                T sum = NumOps.Zero;
 
                 if (j == i)
                 {
                     for (int k = 0; k < j; k++)
                     {
-                        sum = _numOps.Add(sum, _numOps.Multiply(L[j, k], L[j, k]));
+                        sum = NumOps.Add(sum, NumOps.Multiply(L[j, k], L[j, k]));
                     }
-                    L[j, j] = _numOps.Sqrt(_numOps.Subtract(matrix[j, j], sum));
+                    L[j, j] = NumOps.Sqrt(NumOps.Subtract(matrix[j, j], sum));
                 }
                 else
                 {
                     for (int k = 0; k < j; k++)
                     {
-                        sum = _numOps.Add(sum, _numOps.Multiply(L[i, k], L[j, k]));
+                        sum = NumOps.Add(sum, NumOps.Multiply(L[i, k], L[j, k]));
                     }
 
-                    L[i, j] = _numOps.Divide(_numOps.Subtract(matrix[i, j], sum), L[j, j]);
+                    L[i, j] = NumOps.Divide(NumOps.Subtract(matrix[i, j], sum), L[j, j]);
                 }
             }
         }
@@ -365,23 +396,23 @@ public class LuDecomposition<T> : IMatrixDecomposition<T>
             // Upper Triangular
             for (int k = i; k < n; k++)
             {
-                T sum = _numOps.Zero;
+                T sum = NumOps.Zero;
                 for (int j = 0; j < i; j++)
-                    sum = _numOps.Add(sum, _numOps.Multiply(L[i, j], U[j, k]));
-                U[i, k] = _numOps.Subtract(matrix[i, k], sum);
+                    sum = NumOps.Add(sum, NumOps.Multiply(L[i, j], U[j, k]));
+                U[i, k] = NumOps.Subtract(matrix[i, k], sum);
             }
 
             // Lower Triangular
             for (int k = i; k < n; k++)
             {
                 if (i == k)
-                    L[i, i] = _numOps.One;
+                    L[i, i] = NumOps.One;
                 else
                 {
-                    T sum = _numOps.Zero;
+                    T sum = NumOps.Zero;
                     for (int j = 0; j < i; j++)
-                        sum = _numOps.Add(sum, _numOps.Multiply(L[k, j], U[j, i]));
-                    L[k, i] = _numOps.Divide(_numOps.Subtract(matrix[k, i], sum), U[i, i]);
+                        sum = NumOps.Add(sum, NumOps.Multiply(L[k, j], U[j, i]));
+                    L[k, i] = NumOps.Divide(NumOps.Subtract(matrix[k, i], sum), U[i, i]);
                 }
             }
         }
@@ -406,7 +437,7 @@ public class LuDecomposition<T> : IMatrixDecomposition<T>
     /// </para>
     /// <para>
     /// <b>For Beginners:</b> Crout's method is a way to break down a complex matrix into simpler parts.
-    /// Think of it like factoring a number (e.g., 12 = 3 × 4). Here, we're factoring a matrix into 
+    /// Think of it like factoring a number (e.g., 12 = 3 * 4). Here, we're factoring a matrix into 
     /// two triangular matrices - one with values only below the diagonal (L) and one with values 
     /// only above the diagonal and 1's on the diagonal itself (U). This makes solving equations much easier.
     /// </para>
@@ -427,35 +458,35 @@ public class LuDecomposition<T> : IMatrixDecomposition<T>
 
         for (int j = 0; j < n; j++)
         {
-            U[j, j] = _numOps.One;
+            U[j, j] = NumOps.One;
         }
 
         for (int j = 0; j < n; j++)
         {
             for (int i = j; i < n; i++)
             {
-                T sum = _numOps.Zero;
+                T sum = NumOps.Zero;
                 for (int k = 0; k < j; k++)
                 {
-                    sum = _numOps.Add(sum, _numOps.Multiply(L[i, k], U[k, j]));
+                    sum = NumOps.Add(sum, NumOps.Multiply(L[i, k], U[k, j]));
                 }
-                L[i, j] = _numOps.Subtract(matrix[i, j], sum);
+                L[i, j] = NumOps.Subtract(matrix[i, j], sum);
             }
 
             for (int i = j; i < n; i++)
             {
-                T sum = _numOps.Zero;
+                T sum = NumOps.Zero;
                 for (int k = 0; k < j; k++)
                 {
-                    sum = _numOps.Add(sum, _numOps.Multiply(L[j, k], U[k, i]));
+                    sum = NumOps.Add(sum, NumOps.Multiply(L[j, k], U[k, i]));
                 }
-                if (!_numOps.Equals(L[j, j], _numOps.Zero))
+                if (!NumOps.Equals(L[j, j], NumOps.Zero))
                 {
-                    U[j, i] = _numOps.Divide(_numOps.Subtract(matrix[j, i], sum), L[j, j]);
+                    U[j, i] = NumOps.Divide(NumOps.Subtract(matrix[j, i], sum), L[j, j]);
                 }
                 else
                 {
-                    U[j, i] = _numOps.Zero;
+                    U[j, i] = NumOps.Zero;
                 }
             }
         }
@@ -514,12 +545,18 @@ public class LuDecomposition<T> : IMatrixDecomposition<T>
         var y = new Vector<T>(L.Rows);
         for (int i = 0; i < L.Rows; i++)
         {
-            T sum = _numOps.Zero;
+            T sum = NumOps.Zero;
             for (int j = 0; j < i; j++)
             {
-                sum = _numOps.Add(sum, _numOps.Multiply(L[i, j], y[j]));
+                sum = NumOps.Add(sum, NumOps.Multiply(L[i, j], y[j]));
             }
-            y[i] = _numOps.Subtract(b[i], sum);
+            T rhs = NumOps.Subtract(b[i], sum);
+            T diag = L[i, i];
+            if (NumOps.Equals(diag, NumOps.Zero))
+            {
+                throw new InvalidOperationException("Lower triangular factor is singular.");
+            }
+            y[i] = NumOps.Divide(rhs, diag);
         }
 
         return y;
@@ -548,13 +585,13 @@ public class LuDecomposition<T> : IMatrixDecomposition<T>
         var x = new Vector<T>(U.Columns);
         for (int i = U.Columns - 1; i >= 0; i--)
         {
-            T sum = _numOps.Zero;
+            T sum = NumOps.Zero;
             for (int j = i + 1; j < U.Columns; j++)
             {
-                sum = _numOps.Add(sum, _numOps.Multiply(U[i, j], x[j]));
+                sum = NumOps.Add(sum, NumOps.Multiply(U[i, j], x[j]));
             }
 
-            x[i] = _numOps.Divide(_numOps.Subtract(y[i], sum), U[i, i]);
+            x[i] = NumOps.Divide(NumOps.Subtract(y[i], sum), U[i, i]);
         }
 
         return x;
@@ -568,8 +605,5 @@ public class LuDecomposition<T> : IMatrixDecomposition<T>
     /// Matrix inversion is computationally expensive and numerically less stable than directly
     /// solving a system. When possible, use the Solve method instead of calculating the inverse.
     /// </remarks>
-    public Matrix<T> Invert()
-    {
-        return MatrixHelper<T>.InvertUsingDecomposition(this);
-    }
+    // Uses default implementation from base class (MatrixDecompositionBase.Invert)
 }
