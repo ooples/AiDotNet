@@ -43,12 +43,20 @@ public class InMemoryCommunicationBackend<T> : CommunicationBackendBase<T>
 {
     private readonly int _rank;
     private readonly int _worldSize;
+    private readonly INumericOperations<T> _numOps;
+    private readonly string _environmentId;
+    private bool _isInitialized;
 
     // Shared state for simulating collective operations
+    // Environment-isolated: Each environment (e.g., test, training session) has separate state
     // In a real implementation, this would be handled by the MPI backend
     private static readonly object _globalLock = new object();
     private static readonly Dictionary<string, List<Vector<T>>> _sharedBuffers = new();
     private static readonly Dictionary<string, int> _barrierCounters = new();
+    private static readonly Dictionary<string, int> _barrierGenerations = new();
+    private static readonly Dictionary<string, int> _operationCounters = new();
+    private const int BarrierTimeoutMs = 30000; // 30 seconds
+
 
     /// <inheritdoc/>
     public override int Rank => _rank;
@@ -81,8 +89,9 @@ public class InMemoryCommunicationBackend<T> : CommunicationBackendBase<T>
     /// </remarks>
     /// <param name="rank">The rank (ID) of this simulated process (0-based)</param>
     /// <param name="worldSize">The total number of simulated processes</param>
+    /// <param name="environmentId">Optional environment ID for isolation (defaults to "default" for backwards compatibility)</param>
     /// <exception cref="ArgumentException">Thrown if rank or worldSize are invalid</exception>
-    public InMemoryCommunicationBackend(int rank, int worldSize)
+    public InMemoryCommunicationBackend(int rank, int worldSize, string environmentId = "default")
     {
         if (rank < 0 || rank >= worldSize)
         {
@@ -98,8 +107,44 @@ public class InMemoryCommunicationBackend<T> : CommunicationBackendBase<T>
                 nameof(worldSize));
         }
 
+        if (string.IsNullOrWhiteSpace(environmentId))
+        {
+            throw new ArgumentException("Environment ID cannot be null or empty.", nameof(environmentId));
+        }
+
         _rank = rank;
         _worldSize = worldSize;
+        _environmentId = environmentId;
+        _numOps = MathHelper.GetNumericOperations<T>();
+        _isInitialized = false;
+
+        // Initialize environment-specific counters
+        lock (_globalLock)
+        {
+            // Use ContainsKey check for .NET Framework 4.62 compatibility (TryAdd was added in .NET Core 2.0)
+            if (!_barrierGenerations.ContainsKey(_environmentId))
+            {
+                _barrierGenerations[_environmentId] = 0;
+            }
+            if (!_operationCounters.ContainsKey(_environmentId))
+            {
+                _operationCounters[_environmentId] = 0;
+            }
+        }
+    }
+
+    /// <inheritdoc/>
+    protected override void OnInitialize()
+    {
+        lock (_globalLock)
+        {
+            if (_isInitialized)
+            {
+                return;
+            }
+
+            _isInitialized = true;
+        }
     }
 
     /// <inheritdoc/>
@@ -107,10 +152,54 @@ public class InMemoryCommunicationBackend<T> : CommunicationBackendBase<T>
     {
         lock (_globalLock)
         {
-            // Clear any remaining shared state
-            _sharedBuffers.Clear();
-            _barrierCounters.Clear();
+            if (!_isInitialized)
+            {
+                return;
+            }
+
+            // Clear only this environment's shared state
+            ClearEnvironmentState(_environmentId);
+
+            _isInitialized = false;
         }
+    }
+
+    /// <summary>
+    /// Clears all shared state for a specific environment.
+    /// Useful for test cleanup and isolation.
+    /// </summary>
+    /// <param name="environmentId">The environment ID to clear</param>
+    public static void ClearEnvironment(string environmentId)
+    {
+        if (string.IsNullOrWhiteSpace(environmentId))
+        {
+            return;
+        }
+
+        lock (_globalLock)
+        {
+            ClearEnvironmentState(environmentId);
+        }
+    }
+
+    private static void ClearEnvironmentState(string environmentId)
+    {
+        // Remove all keys that belong to this environment
+        var buffersToRemove = _sharedBuffers.Keys.Where(k => k.StartsWith($"{environmentId}_")).ToList();
+        foreach (var key in buffersToRemove)
+        {
+            _sharedBuffers.Remove(key);
+        }
+
+        var barriersToRemove = _barrierCounters.Keys.Where(k => k.StartsWith($"{environmentId}_")).ToList();
+        foreach (var key in barriersToRemove)
+        {
+            _barrierCounters.Remove(key);
+        }
+
+        // Reset environment counters
+        _barrierGenerations[environmentId] = 0;
+        _operationCounters[environmentId] = 0;
     }
 
     /// <inheritdoc/>
@@ -120,7 +209,11 @@ public class InMemoryCommunicationBackend<T> : CommunicationBackendBase<T>
 
         lock (_globalLock)
         {
-            string barrierId = $"barrier_{DateTime.UtcNow.Ticks}";
+            // Use shared barrier generation counter so all ranks synchronize on same key
+            int currentGeneration = _barrierGenerations[_environmentId];
+
+            // Use environment-prefixed barrier ID
+            string barrierId = $"{_environmentId}_barrier_{currentGeneration}";
 
             if (!_barrierCounters.ContainsKey(barrierId))
             {
@@ -129,18 +222,25 @@ public class InMemoryCommunicationBackend<T> : CommunicationBackendBase<T>
 
             _barrierCounters[barrierId]++;
 
+            var startTime = DateTime.UtcNow;
+
             // Wait until all processes have reached the barrier
             while (_barrierCounters[barrierId] < _worldSize)
             {
                 Monitor.Wait(_globalLock, 10);
+                if ((DateTime.UtcNow - startTime).TotalMilliseconds > BarrierTimeoutMs)
+                {
+                    throw new TimeoutException($"Barrier timeout after {BarrierTimeoutMs}ms. Only {_barrierCounters[barrierId]} of {_worldSize} processes reached the barrier.");
+                }
             }
 
             Monitor.PulseAll(_globalLock);
 
-            // Cleanup
+            // Cleanup - rank 0 removes key and increments generation for next barrier
             if (_rank == 0)
             {
                 _barrierCounters.Remove(barrierId);
+                _barrierGenerations[_environmentId]++;
             }
         }
     }
@@ -165,10 +265,14 @@ public class InMemoryCommunicationBackend<T> : CommunicationBackendBase<T>
             return;
         }
 
-        string bufferId = $"allreduce_{Guid.NewGuid()}";
-
         lock (_globalLock)
         {
+            // Use shared operation counter so all ranks target same buffer key
+            int currentCounter = _operationCounters[_environmentId];
+
+            // Use environment-prefixed buffer ID
+            string bufferId = $"{_environmentId}_allreduce_{currentCounter}";
+
             // Initialize shared buffer
             if (!_sharedBuffers.ContainsKey(bufferId))
             {
@@ -178,10 +282,16 @@ public class InMemoryCommunicationBackend<T> : CommunicationBackendBase<T>
             // Contribute local data
             _sharedBuffers[bufferId].Add(data.Clone());
 
+            var startTime = DateTime.UtcNow;
+
             // Wait until all processes have contributed
             while (_sharedBuffers[bufferId].Count < _worldSize)
             {
                 Monitor.Wait(_globalLock, 10);
+                if ((DateTime.UtcNow - startTime).TotalMilliseconds > BarrierTimeoutMs)
+                {
+                    throw new TimeoutException($"AllReduce timeout after {BarrierTimeoutMs}ms. Only {_sharedBuffers[bufferId].Count} of {_worldSize} processes contributed.");
+                }
             }
 
             Monitor.PulseAll(_globalLock);
@@ -196,10 +306,11 @@ public class InMemoryCommunicationBackend<T> : CommunicationBackendBase<T>
                 data[i] = result[i];
             }
 
-            // Cleanup (rank 0 cleans up)
+            // Cleanup - rank 0 removes key and increments counter for next operation
             if (_rank == 0)
             {
                 _sharedBuffers.Remove(bufferId);
+                _operationCounters[_environmentId]++;
             }
         }
     }
@@ -220,10 +331,14 @@ public class InMemoryCommunicationBackend<T> : CommunicationBackendBase<T>
             return sendData.Clone();
         }
 
-        string bufferId = $"allgather_{Guid.NewGuid()}";
-
         lock (_globalLock)
         {
+            // Use shared operation counter so all ranks target same buffer key
+            int currentCounter = _operationCounters[_environmentId];
+
+            // Use environment-prefixed buffer ID
+            string bufferId = $"{_environmentId}_allgather_{currentCounter}";
+
             // Initialize shared buffer
             if (!_sharedBuffers.ContainsKey(bufferId))
             {
@@ -234,14 +349,14 @@ public class InMemoryCommunicationBackend<T> : CommunicationBackendBase<T>
             _sharedBuffers[bufferId][_rank] = sendData.Clone();
 
             // Wait until all processes have contributed
-            int contributedCount = 0;
-            while (contributedCount < _worldSize)
+            while (true)
             {
-                contributedCount = _sharedBuffers[bufferId].Count(v => v != null);
-                if (contributedCount < _worldSize)
+                int contributedCount = _sharedBuffers[bufferId].Count(v => v != null);
+                if (contributedCount >= _worldSize)
                 {
-                    Monitor.Wait(_globalLock, 10);
+                    break;
                 }
+                Monitor.Wait(_globalLock, 10);
             }
 
             Monitor.PulseAll(_globalLock);
@@ -259,10 +374,11 @@ public class InMemoryCommunicationBackend<T> : CommunicationBackendBase<T>
                 offset += data.Length;
             }
 
-            // Cleanup
+            // Cleanup - rank 0 removes key and increments counter for next operation
             if (_rank == 0)
             {
                 _sharedBuffers.Remove(bufferId);
+                _operationCounters[_environmentId]++;
             }
 
             return new Vector<T>(result);
@@ -285,11 +401,15 @@ public class InMemoryCommunicationBackend<T> : CommunicationBackendBase<T>
             return data?.Clone() ?? throw new ArgumentNullException(nameof(data));
         }
 
-        string bufferId = $"broadcast_{Guid.NewGuid()}";
-
         lock (_globalLock)
         {
+            // Use shared operation counter so all ranks target same buffer key
+            int currentCounter = _operationCounters[_environmentId];
+
+            // Use environment-prefixed buffer ID
+            string bufferId = $"{_environmentId}_broadcast_{currentCounter}";
             Vector<T> result;
+            List<Vector<T>>? buffer;
 
             // Root process stores the data
             if (_rank == root)
@@ -302,7 +422,7 @@ public class InMemoryCommunicationBackend<T> : CommunicationBackendBase<T>
             }
 
             // Wait for root to store data
-            while (!_sharedBuffers.ContainsKey(bufferId))
+            while (!_sharedBuffers.TryGetValue(bufferId, out buffer))
             {
                 Monitor.Wait(_globalLock, 10);
             }
@@ -310,12 +430,13 @@ public class InMemoryCommunicationBackend<T> : CommunicationBackendBase<T>
             Monitor.PulseAll(_globalLock);
 
             // All processes retrieve the data
-            result = _sharedBuffers[bufferId][0].Clone();
+            result = buffer[0].Clone();
 
-            // Cleanup
+            // Cleanup - rank 0 removes key and increments counter for next operation
             if (_rank == 0)
             {
                 _sharedBuffers.Remove(bufferId);
+                _operationCounters[_environmentId]++;
             }
 
             return result;
@@ -338,10 +459,14 @@ public class InMemoryCommunicationBackend<T> : CommunicationBackendBase<T>
             return sendData?.Clone() ?? throw new ArgumentNullException(nameof(sendData));
         }
 
-        string bufferId = $"scatter_{Guid.NewGuid()}";
-
         lock (_globalLock)
         {
+            // Use shared operation counter so all ranks target same buffer key
+            int currentCounter = _operationCounters[_environmentId];
+
+            // Use environment-prefixed buffer ID
+            string bufferId = $"{_environmentId}_scatter_{currentCounter}";
+
             // Root process splits and stores the data
             if (_rank == root)
             {
@@ -367,8 +492,10 @@ public class InMemoryCommunicationBackend<T> : CommunicationBackendBase<T>
                 }
             }
 
+            List<Vector<T>>? buffer;
+
             // Wait for root to split data
-            while (!_sharedBuffers.ContainsKey(bufferId))
+            while (!_sharedBuffers.TryGetValue(bufferId, out buffer))
             {
                 Monitor.Wait(_globalLock, 10);
             }
@@ -376,12 +503,13 @@ public class InMemoryCommunicationBackend<T> : CommunicationBackendBase<T>
             Monitor.PulseAll(_globalLock);
 
             // Each process retrieves its chunk
-            var result = _sharedBuffers[bufferId][_rank].Clone();
+            var result = buffer[_rank].Clone();
 
-            // Cleanup
+            // Cleanup - rank 0 removes key and increments counter for next operation
             if (_rank == 0)
             {
                 _sharedBuffers.Remove(bufferId);
+                _operationCounters[_environmentId]++;
             }
 
             return result;
@@ -448,6 +576,8 @@ public class InMemoryCommunicationBackend<T> : CommunicationBackendBase<T>
             }
 
             // Apply averaging if needed
+            // Average operation: sum all vectors then divide by count
+            // This is mathematically correct: (v0 + v1 + ... + vn-1) / n
             if (operation == ReductionOperation.Average)
             {
                 var count = NumOps.FromDouble(vectors.Count);

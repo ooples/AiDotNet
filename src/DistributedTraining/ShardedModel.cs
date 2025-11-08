@@ -82,6 +82,9 @@ public class ShardedModel<T, TInput, TOutput> : ShardedModelBase<T, TInput, TOut
         // Update local shard
         UpdateLocalShardFromFull(updatedParams);
 
+        // Invalidate cache immediately after local shard changes
+        InvalidateCache();
+
         // Synchronize gradients if auto-sync is enabled
         if (Config.AutoSyncGradients)
         {
@@ -166,6 +169,14 @@ public class ShardedModel<T, TInput, TOutput> : ShardedModelBase<T, TInput, TOut
                 $"but current configuration has {WorldSize} processes.");
         }
 
+        // Validate rank matches - different rank could indicate configuration mismatch
+        if (savedRank != Rank)
+        {
+            throw new InvalidOperationException(
+                $"Rank mismatch. Model was saved on rank {savedRank}, " +
+                $"but is being loaded on rank {Rank}. This could indicate a configuration error.");
+        }
+
         // Read wrapped model
         int modelDataLength = reader.ReadInt32();
         byte[] modelData = reader.ReadBytes(modelDataLength);
@@ -178,26 +189,42 @@ public class ShardedModel<T, TInput, TOutput> : ShardedModelBase<T, TInput, TOut
     /// <inheritdoc/>
     public override void SaveModel(string filePath)
     {
-        // Only rank 0 saves to avoid conflicts
-        if (Rank == 0)
-        {
-            var data = Serialize();
-            File.WriteAllBytes(filePath, data);
-        }
-
-        // Wait for rank 0 to finish writing
+        // Barrier before rank check to prevent deadlock if rank 0 fails
         Config.CommunicationBackend.Barrier();
+
+        try
+        {
+            // Only rank 0 saves to avoid file write conflicts
+            if (Rank == 0)
+            {
+                var data = Serialize();
+                File.WriteAllBytes(filePath, data);
+            }
+        }
+        finally
+        {
+            // Ensure all processes reach this barrier even if rank 0 fails
+            Config.CommunicationBackend.Barrier();
+        }
     }
 
     /// <inheritdoc/>
     public override void LoadModel(string filePath)
     {
-        // All processes read the same file
-        var data = File.ReadAllBytes(filePath);
-        Deserialize(data);
-
-        // Ensure all processes finish loading
+        // Barrier before loading to ensure all processes start together
         Config.CommunicationBackend.Barrier();
+
+        try
+        {
+            // All processes read the same file (read-only, no conflicts)
+            var data = File.ReadAllBytes(filePath);
+            Deserialize(data);
+        }
+        finally
+        {
+            // Ensure all processes finish loading before proceeding
+            Config.CommunicationBackend.Barrier();
+        }
     }
 
     /// <inheritdoc/>
@@ -205,5 +232,36 @@ public class ShardedModel<T, TInput, TOutput> : ShardedModelBase<T, TInput, TOut
     {
         var clonedWrappedModel = WrappedModel.Clone();
         return new ShardedModel<T, TInput, TOutput>(clonedWrappedModel, Config);
+    }
+
+    /// <inheritdoc/>
+    public Dictionary<string, T> GetFeatureImportance()
+    {
+        return WrappedModel.GetFeatureImportance();
+    }
+
+    /// <inheritdoc/>
+    public IFullModel<T, TInput, TOutput> DeepCopy()
+    {
+        var deepCopiedWrappedModel = WrappedModel.DeepCopy();
+        return new ShardedModel<T, TInput, TOutput>(deepCopiedWrappedModel, Config);
+    }
+
+    /// <inheritdoc/>
+    public IEnumerable<int> GetActiveFeatureIndices()
+    {
+        return WrappedModel.GetActiveFeatureIndices();
+    }
+
+    /// <inheritdoc/>
+    public void SetActiveFeatureIndices(IEnumerable<int> featureIndices)
+    {
+        WrappedModel.SetActiveFeatureIndices(featureIndices);
+    }
+
+    /// <inheritdoc/>
+    public bool IsFeatureUsed(int featureIndex)
+    {
+        return WrappedModel.IsFeatureUsed(featureIndex);
     }
 }

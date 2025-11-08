@@ -77,17 +77,13 @@ public class ShardedOptimizer<T, TInput, TOutput> : ShardedOptimizerBase<T, TInp
         // Ensure all processes start together
         Config.CommunicationBackend.Barrier();
 
-        // If the model is a sharded model, it will handle gradient synchronization
-        // Otherwise, we need to handle it ourselves
-        bool modelHandlesSync = inputData.Model is IShardedModel<T, TInput, TOutput>;
-
         // Perform optimization on the wrapped optimizer
         var result = WrappedOptimizer.Optimize(inputData);
 
-        // If model doesn't handle synchronization and auto-sync is enabled, sync parameters
-        if (!modelHandlesSync && Config.AutoSyncGradients)
+        // Synchronize parameters across all processes if auto-sync is enabled
+        if (Config.AutoSyncGradients && result.BestSolution != null)
         {
-            SynchronizeParameters(result.BestModel);
+            SynchronizeParameters(result.BestSolution);
         }
 
         // Synchronize optimizer state if needed
@@ -117,6 +113,34 @@ public class ShardedOptimizer<T, TInput, TOutput> : ShardedOptimizerBase<T, TInp
         // 3. A generic state serialization mechanism
 
         // For the MVP, we assume stateless or that the wrapped optimizer handles its own state
+    }
+
+    /// <inheritdoc/>
+    public bool ShouldEarlyStop()
+    {
+        // Delegate to wrapped optimizer
+        bool localDecision = WrappedOptimizer.ShouldEarlyStop();
+
+        // In distributed training, we need consensus on early stopping
+        // Using Max operation: if ANY process wants to stop, all processes stop
+        // This prevents stragglers and ensures synchronized termination
+
+        // Create a vector with the local decision (1 for stop, 0 for continue)
+        var decision = new Vector<T>(new[] { localDecision ? MathHelper.GetNumericOperations<T>().One : MathHelper.GetNumericOperations<T>().Zero });
+
+        // Get the maximum across all processes
+        // If any process returns 1 (stop), the max will be 1
+        Config.CommunicationBackend.AllReduce(decision, ReductionOperation.Max);
+
+        // Check if the result indicates stopping
+        var numOps = MathHelper.GetNumericOperations<T>();
+        return !numOps.Equals(decision[0], numOps.Zero);
+    }
+
+    /// <inheritdoc/>
+    public OptimizationAlgorithmOptions<T, TInput, TOutput> GetOptions()
+    {
+        return WrappedOptimizer.GetOptions();
     }
 
     /// <inheritdoc/>
@@ -160,9 +184,58 @@ public class ShardedOptimizer<T, TInput, TOutput> : ShardedOptimizerBase<T, TInp
                 $"but current configuration has {WorldSize} processes.");
         }
 
+        // Validate rank matches - different rank could indicate configuration mismatch
+        if (savedRank != Rank)
+        {
+            throw new InvalidOperationException(
+                $"Rank mismatch. Optimizer was saved on rank {savedRank}, " +
+                $"but is being loaded on rank {Rank}. This could indicate a configuration error.");
+        }
+
         // Read wrapped optimizer
         int optimizerDataLength = reader.ReadInt32();
         byte[] optimizerData = reader.ReadBytes(optimizerDataLength);
         WrappedOptimizer.Deserialize(optimizerData);
+    }
+
+    /// <inheritdoc/>
+    public void SaveModel(string filePath)
+    {
+        // Barrier before rank check to prevent deadlock if rank 0 fails
+        Config.CommunicationBackend.Barrier();
+
+        try
+        {
+            // Only rank 0 saves to avoid file write conflicts
+            if (Rank == 0)
+            {
+                var data = Serialize();
+                File.WriteAllBytes(filePath, data);
+            }
+        }
+        finally
+        {
+            // Ensure all processes reach this barrier even if rank 0 fails
+            Config.CommunicationBackend.Barrier();
+        }
+    }
+
+    /// <inheritdoc/>
+    public void LoadModel(string filePath)
+    {
+        // Barrier before loading to ensure all processes start together
+        Config.CommunicationBackend.Barrier();
+
+        try
+        {
+            // All processes read the same file (read-only, no conflicts)
+            var data = File.ReadAllBytes(filePath);
+            Deserialize(data);
+        }
+        finally
+        {
+            // Ensure all processes finish loading before proceeding
+            Config.CommunicationBackend.Barrier();
+        }
     }
 }

@@ -9,14 +9,17 @@
 # your program on multiple machines at once and helps them communicate.
 #
 # Usage:
-#   .\launch-distributed-training.ps1 -NumProcesses <num> -Program <path> [-ProgramArgs <args>]
+#   .\launch-distributed-training.ps1 -NumProcesses <num> -Program <path> [additional args...]
 #
 # Examples:
 #   # Run on 4 GPUs locally
 #   .\launch-distributed-training.ps1 -NumProcesses 4 -Program ".\MyTrainingApp.exe"
 #
 #   # Run on 8 GPUs with additional arguments
-#   .\launch-distributed-training.ps1 -NumProcesses 8 -Program ".\MyTrainingApp.exe" -ProgramArgs "--epochs 100 --lr 0.001"
+#   .\launch-distributed-training.ps1 -NumProcesses 8 -Program ".\MyTrainingApp.exe" --epochs 100 --lr 0.001
+#
+#   # Run with config file containing spaces in path
+#   .\launch-distributed-training.ps1 -NumProcesses 8 -Program ".\MyTrainingApp.exe" --config "My Config.json"
 #
 #   # Run across 2 machines with 4 GPUs each
 #   .\launch-distributed-training.ps1 -NumProcesses 8 -Program ".\MyTrainingApp.exe" -Hosts "machine1,machine2"
@@ -29,11 +32,14 @@ param(
     [Parameter(Mandatory=$true, HelpMessage="Path to your training program executable")]
     [string]$Program,
 
-    [Parameter(Mandatory=$false, HelpMessage="Additional arguments to pass to your program")]
-    [string]$ProgramArgs = "",
-
     [Parameter(Mandatory=$false, HelpMessage="Comma-separated list of host machines")]
-    [string]$Hosts = ""
+    [string]$Hosts = "",
+
+    [Parameter(
+        Mandatory = $false,
+        HelpMessage = "Additional arguments to pass to your program",
+        ValueFromRemainingArguments = $true)]
+    [string[]]$ProgramArgs = @()
 )
 
 # Display header
@@ -46,8 +52,8 @@ Write-Host ""
 Write-Host "Configuration:" -ForegroundColor Yellow
 Write-Host "  Number of processes: $NumProcesses"
 Write-Host "  Program: $Program"
-if ($ProgramArgs) {
-    Write-Host "  Program arguments: $ProgramArgs"
+if ($ProgramArgs.Count -gt 0) {
+    Write-Host "  Program arguments: $($ProgramArgs -join ' ')"
 }
 if ($Hosts) {
     Write-Host "  Hosts: $Hosts"
@@ -100,9 +106,8 @@ if ($Hosts) {
 $mpiArgsList += $Program
 
 # Add program arguments if specified
-if ($ProgramArgs) {
-    # Split program args and add them
-    $mpiArgsList += $ProgramArgs.Split(" ")
+if ($ProgramArgs.Count -gt 0) {
+    $mpiArgsList += $ProgramArgs
 }
 
 # Display command
