@@ -425,10 +425,10 @@ Format your response as a numbered list:
         {
             double score = node.EvaluationScore;
 
-            if (allDocuments.ContainsKey(doc.Id))
+            if (allDocuments.TryGetValue(doc.Id, out var existing))
             {
                 // Keep the higher score
-                if (score > allDocuments[doc.Id].maxScore)
+                if (score > existing.maxScore)
                 {
                     allDocuments[doc.Id] = (doc, score);
                 }

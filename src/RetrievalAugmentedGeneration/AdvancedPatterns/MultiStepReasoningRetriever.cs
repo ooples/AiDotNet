@@ -579,7 +579,7 @@ TOOL_CALLS: [if yes, list as 'toolname:input' separated by newlines]";
 
     private ToolInvocation ExecuteTool(string toolName, string input)
     {
-        if (!_tools.ContainsKey(toolName))
+        if (!_tools.TryGetValue(toolName, out var tool))
         {
             return new ToolInvocation
             {
@@ -592,7 +592,7 @@ TOOL_CALLS: [if yes, list as 'toolname:input' separated by newlines]";
 
         try
         {
-            var output = _tools[toolName](input);
+            var output = tool(input);
             return new ToolInvocation
             {
                 ToolName = toolName,

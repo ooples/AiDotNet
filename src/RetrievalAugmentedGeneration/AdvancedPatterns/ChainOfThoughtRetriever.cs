@@ -261,10 +261,9 @@ public class ChainOfThoughtRetriever<T>
 
                 foreach (var doc in docs)
                 {
-                    if (allDocuments.ContainsKey(doc.Id))
+                    if (allDocuments.TryGetValue(doc.Id, out var existing))
                     {
                         // Document found in multiple paths - increase frequency
-                        var existing = allDocuments[doc.Id];
                         allDocuments[doc.Id] = (existing.doc, existing.frequency + 1);
                     }
                     else
