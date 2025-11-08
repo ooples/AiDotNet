@@ -28,6 +28,48 @@ namespace AiDotNet.DistributedTraining;
 /// // Clean up when done
 /// CommunicationManager.Shutdown();
 /// </code>
+///
+/// IMPORTANT - Thread Safety and Testing Limitations:
+/// This class uses STATIC MUTABLE STATE which has the following implications:
+///
+/// 1. SINGLE GLOBAL INSTANCE: Only ONE backend can be active per process at a time.
+///    Multiple training sessions in the same process will share the same backend instance.
+///
+/// 2. PARALLEL TEST EXECUTION: Tests that use this class CANNOT run in parallel.
+///    Use [Collection] attributes in xUnit or similar mechanisms to enforce sequential execution.
+///
+/// 3. TEST ISOLATION: Always call Shutdown() in test cleanup to reset state.
+///    For better isolation in tests, use InMemoryCommunicationBackend with unique environment IDs
+///    and inject the backend directly instead of using this static manager.
+///
+/// 4. CONCURRENT INITIALIZATION: Attempting to Initialize() from multiple threads concurrently
+///    is protected by locks, but may result in exceptions if already initialized.
+///
+/// Recommended Test Pattern:
+/// <code>
+/// // Option 1: Use environment isolation (recommended for parallel tests)
+/// var backend = new InMemoryCommunicationBackend&lt;double&gt;(rank: 0, worldSize: 4, environmentId: "test-123");
+/// // Use backend directly, don't call CommunicationManager.Initialize()
+///
+/// // Option 2: Sequential tests with proper cleanup
+/// [Collection("DistributedTraining")] // Force sequential execution
+/// public class MyDistributedTests
+/// {
+///     [Fact]
+///     public void MyTest()
+///     {
+///         try
+///         {
+///             CommunicationManager.Initialize(...);
+///             // Test code
+///         }
+///         finally
+///         {
+///             CommunicationManager.Shutdown(); // CRITICAL: Always cleanup
+///         }
+///     }
+/// }
+/// </code>
 /// </summary>
 public static class CommunicationManager
 {
