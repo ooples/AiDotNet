@@ -1,5 +1,6 @@
 using AiDotNet.Interfaces;
 using System.Data;
+using System.Globalization;
 
 namespace AiDotNet.Tools;
 
@@ -55,8 +56,8 @@ public class CalculatorTool : ITool
             // Clean up the input to handle common mathematical notations
             string processedInput = PreprocessExpression(input);
 
-            // Use DataTable.Compute to evaluate the expression
-            using (var dataTable = new DataTable())
+            // Use DataTable.Compute to evaluate the expression with invariant culture
+            using (var dataTable = new DataTable { Locale = CultureInfo.InvariantCulture })
             {
                 var result = dataTable.Compute(processedInput, string.Empty);
 
@@ -70,11 +71,12 @@ public class CalculatorTool : ITool
                 if (result is double doubleResult)
                 {
                     // Remove unnecessary decimal places for whole numbers
-                    if (doubleResult == Math.Floor(doubleResult))
+                    const double epsilon = 1e-9;
+                    if (Math.Abs(doubleResult - Math.Floor(doubleResult)) < epsilon)
                     {
-                        return ((long)doubleResult).ToString();
+                        return ((long)doubleResult).ToString(CultureInfo.InvariantCulture);
                     }
-                    return doubleResult.ToString("G");
+                    return doubleResult.ToString("G", CultureInfo.InvariantCulture);
                 }
 
                 return result.ToString() ?? "Error: Could not convert result to string.";

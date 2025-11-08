@@ -102,12 +102,9 @@ public class SearchTool : ITool
         }
 
         // Try to find a partial match (if the query contains any of our known topics)
-        foreach (var kvp in _mockResults)
+        foreach (var kvp in _mockResults.Where(kvp => query.IndexOf(kvp.Key, StringComparison.OrdinalIgnoreCase) >= 0))
         {
-            if (query.Contains(kvp.Key, StringComparison.OrdinalIgnoreCase))
-            {
-                return kvp.Value;
-            }
+            return kvp.Value;
         }
 
         // No match found - return a generic response

@@ -89,11 +89,23 @@ public class Agent<T> : AgentBase<T>
             {
                 llmResponse = await ChatModel.GenerateResponseAsync(prompt);
             }
-            catch (Exception ex)
+            catch (System.Net.Http.HttpRequestException ex)
             {
                 string errorMsg = $"Error communicating with chat model: {ex.Message}";
                 AppendToScratchpad($"ERROR: {errorMsg}");
                 return $"I encountered an error while thinking: {ex.Message}";
+            }
+            catch (System.IO.IOException ex)
+            {
+                string errorMsg = $"IO error communicating with chat model: {ex.Message}";
+                AppendToScratchpad($"ERROR: {errorMsg}");
+                return $"I encountered an IO error while thinking: {ex.Message}";
+            }
+            catch (TaskCanceledException ex)
+            {
+                string errorMsg = $"Timeout communicating with chat model: {ex.Message}";
+                AppendToScratchpad($"ERROR: {errorMsg}");
+                return $"I encountered a timeout while thinking: {ex.Message}";
             }
 
             AppendToScratchpad($"LLM Response: {llmResponse}\n");
@@ -246,7 +258,7 @@ Respond now with your next step in JSON format:";
                 }
             }
         }
-        catch (JsonException)
+        catch (System.Text.Json.JsonException)
         {
             // Fallback: try to extract information using regex if JSON parsing fails
             response = ParseWithRegex(llmResponse);
@@ -279,8 +291,8 @@ Respond now with your next step in JSON format:";
             return jsonMatch.Groups[1].Value;
         }
 
-        // Try to find JSON object without code blocks
-        var jsonObjectMatch = Regex.Match(response, @"\{[\s\S]*\}", RegexOptions.Multiline);
+        // Try to find JSON object without code blocks (non-greedy)
+        var jsonObjectMatch = Regex.Match(response, @"\{[\s\S]*?\}", RegexOptions.Multiline);
         if (jsonObjectMatch.Success)
         {
             return jsonObjectMatch.Value;
@@ -313,28 +325,28 @@ Respond now with your next step in JSON format:";
         var parsed = new ParsedResponse();
 
         // Try to extract thought
-        var thoughtMatch = Regex.Match(response, @"(?:thought|Thought):\s*(.+?)(?=\n|$)", RegexOptions.IgnoreCase | RegexOptions.Multiline);
+        var thoughtMatch = Regex.Match(response, @"thought:\s*(.+?)(?=\n|$)", RegexOptions.IgnoreCase | RegexOptions.Multiline);
         if (thoughtMatch.Success)
         {
             parsed.Thought = thoughtMatch.Groups[1].Value.Trim();
         }
 
         // Try to extract action
-        var actionMatch = Regex.Match(response, @"(?:action|Action):\s*(.+?)(?=\n|$)", RegexOptions.IgnoreCase | RegexOptions.Multiline);
+        var actionMatch = Regex.Match(response, @"action:\s*(.+?)(?=\n|$)", RegexOptions.IgnoreCase | RegexOptions.Multiline);
         if (actionMatch.Success)
         {
             parsed.Action = actionMatch.Groups[1].Value.Trim();
         }
 
         // Try to extract action input
-        var actionInputMatch = Regex.Match(response, @"(?:action[_ ]input|Action[_ ]Input):\s*(.+?)(?=\n|$)", RegexOptions.IgnoreCase | RegexOptions.Multiline);
+        var actionInputMatch = Regex.Match(response, @"action[_ ]input:\s*(.+?)(?=\n|$)", RegexOptions.IgnoreCase | RegexOptions.Multiline);
         if (actionInputMatch.Success)
         {
             parsed.ActionInput = actionInputMatch.Groups[1].Value.Trim();
         }
 
         // Try to extract final answer
-        var finalAnswerMatch = Regex.Match(response, @"(?:final[_ ]answer|Final[_ ]Answer):\s*(.+?)(?=\n|$)", RegexOptions.IgnoreCase | RegexOptions.Multiline);
+        var finalAnswerMatch = Regex.Match(response, @"final[_ ]answer:\s*(.+?)(?=\n|$)", RegexOptions.IgnoreCase | RegexOptions.Multiline);
         if (finalAnswerMatch.Success)
         {
             parsed.FinalAnswer = finalAnswerMatch.Groups[1].Value.Trim();
@@ -371,6 +383,10 @@ Respond now with your next step in JSON format:";
         }
         catch (Exception ex)
         {
+            // Rethrow critical exceptions
+            if (ex is OutOfMemoryException || ex is StackOverflowException || ex is System.Threading.ThreadAbortException)
+                throw;
+
             return $"Error executing tool '{toolName}': {ex.Message}";
         }
     }
