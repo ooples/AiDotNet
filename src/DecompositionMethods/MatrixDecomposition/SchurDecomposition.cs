@@ -21,7 +21,7 @@ public class SchurDecomposition<T> : MatrixDecompositionBase<T>
     /// <b>For Beginners:</b> This is the triangular matrix that has all its non-zero elements on or above the diagonal.
     /// It's easier to work with than the original matrix for many calculations.
     /// </remarks>
-    public Matrix<T> SchurMatrix { get; private set; };
+    public Matrix<T> SchurMatrix { get; private set; }
 
     /// <summary>
     /// Gets the unitary matrix (U) from the decomposition.
@@ -30,7 +30,7 @@ public class SchurDecomposition<T> : MatrixDecompositionBase<T>
     /// <b>For Beginners:</b> A unitary matrix preserves the length of vectors and the angles between them.
     /// When you multiply a vector by a unitary matrix, the result has the same length as the original vector.
     /// </remarks>
-    public Matrix<T> UnitaryMatrix { get; private set; };
+    public Matrix<T> UnitaryMatrix { get; private set; }
 
     private readonly SchurAlgorithmType _algorithm;
 

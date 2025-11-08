@@ -25,12 +25,12 @@ public class TridiagonalDecomposition<T> : MatrixDecompositionBase<T>
     /// This property makes orthogonal matrices very useful in many calculations.
     /// </para>
     /// </remarks>
-    public Matrix<T> QMatrix { get; private set; };
+    public Matrix<T> QMatrix { get; private set; }
 
     /// <summary>
     /// Gets the tridiagonal matrix T in the decomposition A = Q*T*Q^T.
     /// </summary>
-    public Matrix<T> TMatrix { get; private set; };
+    public Matrix<T> TMatrix { get; private set; }
 
     private readonly TridiagonalAlgorithmType _algorithm;
 

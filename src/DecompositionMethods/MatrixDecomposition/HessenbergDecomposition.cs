@@ -21,7 +21,7 @@ public class HessenbergDecomposition<T> : MatrixDecompositionBase<T>
     /// A Hessenberg matrix has zeros in all positions below the first subdiagonal.
     /// This simplified form makes many matrix operations more efficient.
     /// </remarks>
-    public Matrix<T> HessenbergMatrix { get; private set; };
+    public Matrix<T> HessenbergMatrix { get; private set; }
 
     private readonly HessenbergAlgorithmType _algorithm;
 

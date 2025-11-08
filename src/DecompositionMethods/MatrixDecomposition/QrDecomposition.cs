@@ -22,7 +22,7 @@ public class QrDecomposition<T> : MatrixDecompositionBase<T>
     /// (orthogonal) and each column has a length of 1. This makes it useful for many calculations.
     /// </para>
     /// </remarks>
-    public Matrix<T> Q { get; private set; };
+    public Matrix<T> Q { get; private set; }
 
     /// <summary>
     /// Gets the upper triangular matrix R from the decomposition.
@@ -33,7 +33,7 @@ public class QrDecomposition<T> : MatrixDecompositionBase<T>
     /// and zeros below the diagonal. This structure makes solving equations much easier.
     /// </para>
     /// </remarks>
-    public Matrix<T> R { get; private set; };
+    public Matrix<T> R { get; private set; }
 
     private readonly QrAlgorithmType _algorithm;
 

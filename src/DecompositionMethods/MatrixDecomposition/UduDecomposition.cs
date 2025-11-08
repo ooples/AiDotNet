@@ -24,7 +24,7 @@ public class UduDecomposition<T> : MatrixDecompositionBase<T>
     /// (the diagonal from top-left to bottom-right). All values below this diagonal are zero.
     /// </para>
     /// </remarks>
-    public Matrix<T> U { get; private set; };
+    public Matrix<T> U { get; private set; }
 
     /// <summary>
     /// Gets the diagonal matrix D represented as a vector of its diagonal elements.
@@ -35,7 +35,7 @@ public class UduDecomposition<T> : MatrixDecompositionBase<T>
     /// We store it as a vector to save memory since all other values are zero.
     /// </para>
     /// </remarks>
-    public Vector<T> D { get; private set; };
+    public Vector<T> D { get; private set; }
 
     private readonly UduAlgorithmType _algorithm;
 
