@@ -101,6 +101,7 @@ public class NmfDecomposition<T> : MatrixDecompositionBase<T>
 
         _maxIterations = maxIterations;
         _tolerance = tolerance;
+        Decompose();
     }
 
     /// <summary>

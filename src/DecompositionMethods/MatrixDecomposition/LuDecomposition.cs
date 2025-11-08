@@ -42,6 +42,8 @@ public class LuDecomposition<T> : MatrixDecompositionBase<T>
         : base(matrix)
     {
         _algorithm = luAlgorithm;
+    
+        Decompose();
     }
 
     /// <summary>

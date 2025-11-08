@@ -59,7 +59,6 @@ public abstract class MatrixDecompositionBase<T> : IMatrixDecomposition<T>
     {
         A = matrix ?? throw new ArgumentNullException(nameof(matrix));
         NumOps = MathHelper.GetNumericOperations<T>();
-        Decompose();
     }
 
     /// <summary>

@@ -47,7 +47,7 @@ public class SvdDecomposition<T> : MatrixDecompositionBase<T>
     /// </remarks>
     public Matrix<T> Vt { get; private set; } = null!;
 
-    private readonly SvdAlgorithmType _algorithm;
+    private readonly SvdAlgorithmType _algorithm = SvdAlgorithmType.GolubReinsch;
 
     /// <summary>
     /// Initializes a new instance of the SVD decomposition for the specified matrix.
@@ -58,6 +58,8 @@ public class SvdDecomposition<T> : MatrixDecompositionBase<T>
         : base(matrix)
     {
         _algorithm = svdAlgorithm;
+    
+        Decompose();
     }
 
     /// <summary>

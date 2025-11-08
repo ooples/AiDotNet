@@ -118,6 +118,7 @@ public class IcaDecomposition<T> : MatrixDecompositionBase<T>
 
         _maxIterations = maxIterations;
         _tolerance = tolerance;
+        Decompose();
     }
 
     /// <summary>
