@@ -45,7 +45,7 @@ fi
 NUM_PROCESSES=$1
 PROGRAM=$2
 shift 2
-PROGRAM_ARGS="$@"
+PROGRAM_ARGS=("$@")
 
 echo "======================================"
 echo "AiDotNet Distributed Training Launcher"
@@ -54,7 +54,11 @@ echo ""
 echo "Configuration:"
 echo "  Number of processes: $NUM_PROCESSES"
 echo "  Program: $PROGRAM"
-echo "  Program arguments: $PROGRAM_ARGS"
+if [ "${#PROGRAM_ARGS[@]}" -gt 0 ]; then
+    echo "  Program arguments: ${PROGRAM_ARGS[*]}"
+else
+    echo "  Program arguments: (none)"
+fi
 echo ""
 
 # Check if mpiexec/mpirun is available
@@ -95,7 +99,7 @@ fi
 
 # Launch distributed training
 echo "Launching distributed training..."
-echo "Command: $MPI_CMD -n $NUM_PROCESSES $PROGRAM $PROGRAM_ARGS"
+echo "Command: $MPI_CMD -n $NUM_PROCESSES $PROGRAM ${PROGRAM_ARGS[*]}"
 echo ""
 echo "======================================"
 echo ""
@@ -103,7 +107,7 @@ echo ""
 # Execute MPI command
 # -n: Number of processes
 # The program and its arguments follow
-$MPI_CMD -n $NUM_PROCESSES $PROGRAM $PROGRAM_ARGS
+"$MPI_CMD" -n "$NUM_PROCESSES" "$PROGRAM" "${PROGRAM_ARGS[@]}"
 
 # Capture exit code
 EXIT_CODE=$?
