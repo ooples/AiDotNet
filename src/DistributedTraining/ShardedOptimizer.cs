@@ -169,8 +169,8 @@ public class ShardedOptimizer<T, TInput, TOutput> : IShardedOptimizer<T, TInput,
         bool localDecision = _wrappedOptimizer.ShouldEarlyStop();
 
         // In distributed training, we need consensus on early stopping
-        // All processes should agree to stop, otherwise some might continue while others stop
-        // For now, we'll use a simple approach: if any process wants to stop, all stop
+        // Using Max operation: if ANY process wants to stop, all processes stop
+        // This prevents stragglers and ensures synchronized termination
 
         // Create a vector with the local decision (1 for stop, 0 for continue)
         var decision = new Vector<T>(new[] { localDecision ? MathHelper.GetNumericOperations<T>().One : MathHelper.GetNumericOperations<T>().Zero });
