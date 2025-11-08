@@ -1,6 +1,5 @@
 using AiDotNet.Interfaces;
 using AiDotNet.RetrievalAugmentedGeneration.Models;
-using AiDotNet.RetrievalAugmentedGeneration.Generators;
 using AiDotNet.RetrievalAugmentedGeneration.Retrievers;
 using System;
 using System.Collections.Generic;
@@ -39,30 +38,8 @@ namespace AiDotNet.RetrievalAugmentedGeneration.AdvancedPatterns;
 /// - You want to avoid hallucinations or unsupported claims
 /// - You need transparent, verifiable reasoning chains
 /// </para>
-/// <para><b>Example Usage:</b>
-/// <code>
-/// var generator = new StubGenerator&lt;double&gt;();
-/// var baseRetriever = new DenseRetriever&lt;double&gt;(embeddingModel, documentStore);
-///
-/// var verifiedRetriever = new VerifiedReasoningRetriever&lt;double&gt;(
-///     generator,
-///     baseRetriever,
-///     verificationThreshold: 0.7,  // Minimum score to accept a step
-///     maxRefinementAttempts: 2      // Try to refine weak steps up to 2 times
-/// );
-///
-/// var result = verifiedRetriever.RetrieveWithVerification(
-///     "What are the safety considerations for gene therapy?",
-///     topK: 10
-/// );
-///
-/// // result.Documents: Retrieved documents
-/// // result.VerifiedSteps: List of reasoning steps with their verification scores
-/// // result.RefinementHistory: Shows how steps were refined
-/// </code>
-/// </para>
 /// </remarks>
-public class VerifiedReasoningRetriever<T>
+public class VerifiedReasoningRetriever<T> : RetrieverBase<T>
 {
     private readonly IGenerator<T> _generator;
     private readonly RetrieverBase<T> _baseRetriever;
@@ -70,84 +47,19 @@ public class VerifiedReasoningRetriever<T>
     private readonly int _maxRefinementAttempts;
 
     /// <summary>
-    /// Represents a reasoning step with verification information.
-    /// </summary>
-    public class VerifiedReasoningStep
-    {
-        /// <summary>
-        /// The reasoning statement.
-        /// </summary>
-        public string Statement { get; set; } = string.Empty;
-
-        /// <summary>
-        /// Documents supporting this reasoning step.
-        /// </summary>
-        public List<Document<T>> SupportingDocuments { get; set; } = new List<Document<T>>();
-
-        /// <summary>
-        /// Verification score (0-1, higher is better).
-        /// </summary>
-        public double VerificationScore { get; set; }
-
-        /// <summary>
-        /// Whether this step passed verification.
-        /// </summary>
-        public bool IsVerified { get; set; }
-
-        /// <summary>
-        /// Critique feedback from the critic model.
-        /// </summary>
-        public string CritiqueFeedback { get; set; } = string.Empty;
-
-        /// <summary>
-        /// Number of refinement attempts for this step.
-        /// </summary>
-        public int RefinementAttempts { get; set; }
-
-        /// <summary>
-        /// Original statement before refinement (if any).
-        /// </summary>
-        public string? OriginalStatement { get; set; }
-    }
-
-    /// <summary>
-    /// Result of verified reasoning retrieval.
-    /// </summary>
-    public class VerifiedReasoningResult
-    {
-        /// <summary>
-        /// Retrieved documents from all verified steps.
-        /// </summary>
-        public IEnumerable<Document<T>> Documents { get; set; } = new List<Document<T>>();
-
-        /// <summary>
-        /// List of verified reasoning steps.
-        /// </summary>
-        public IReadOnlyList<VerifiedReasoningStep> VerifiedSteps { get; set; } = new List<VerifiedReasoningStep>();
-
-        /// <summary>
-        /// Average verification score across all steps.
-        /// </summary>
-        public double AverageVerificationScore { get; set; }
-
-        /// <summary>
-        /// Number of steps that required refinement.
-        /// </summary>
-        public int RefinedStepsCount { get; set; }
-    }
-
-    /// <summary>
     /// Initializes a new instance of the <see cref="VerifiedReasoningRetriever{T}"/> class.
     /// </summary>
     /// <param name="generator">The LLM generator for reasoning and critique.</param>
-    /// <param name="baseRetriever">The underlying retriever to use.</param>
+    /// <param name="baseRetriever">The underlying retriever to use for document retrieval.</param>
     /// <param name="verificationThreshold">Minimum verification score to accept a step (0-1, default: 0.7).</param>
     /// <param name="maxRefinementAttempts">Maximum attempts to refine a weak step (default: 2).</param>
+    /// <param name="defaultTopK">Default number of documents to retrieve (default: 5).</param>
     public VerifiedReasoningRetriever(
         IGenerator<T> generator,
         RetrieverBase<T> baseRetriever,
         double verificationThreshold = 0.7,
-        int maxRefinementAttempts = 2)
+        int maxRefinementAttempts = 2,
+        int defaultTopK = 5) : base(defaultTopK)
     {
         _generator = generator ?? throw new ArgumentNullException(nameof(generator));
         _baseRetriever = baseRetriever ?? throw new ArgumentNullException(nameof(baseRetriever));
@@ -163,13 +75,23 @@ public class VerifiedReasoningRetriever<T>
     }
 
     /// <summary>
+    /// Core retrieval logic using verified reasoning.
+    /// </summary>
+    protected override IEnumerable<Document<T>> RetrieveCore(string query, int topK, Dictionary<string, object> metadataFilters)
+    {
+        var result = RetrieveWithVerification(query, topK, metadataFilters);
+        return result.Documents;
+    }
+
+    /// <summary>
     /// Retrieves documents using verified reasoning with critic feedback.
+    /// Returns detailed verification results including reasoning steps and scores.
     /// </summary>
     /// <param name="query">The query to retrieve documents for.</param>
     /// <param name="topK">Maximum number of documents to return.</param>
     /// <param name="metadataFilters">Metadata filters to apply during retrieval.</param>
     /// <returns>Verified reasoning result with documents and verification details.</returns>
-    public VerifiedReasoningResult RetrieveWithVerification(
+    public VerifiedReasoningResult<T> RetrieveWithVerification(
         string query,
         int topK,
         Dictionary<string, object>? metadataFilters = null)
@@ -186,7 +108,7 @@ public class VerifiedReasoningRetriever<T>
         var reasoningSteps = GenerateReasoningChain(query);
 
         // Step 2: Verify and refine each step
-        var verifiedSteps = new List<VerifiedReasoningStep>();
+        var verifiedSteps = new List<VerifiedReasoningStep<T>>();
         int refinedCount = 0;
 
         foreach (var stepText in reasoningSteps)
@@ -213,7 +135,7 @@ public class VerifiedReasoningRetriever<T>
             .OrderByDescending(d => d.HasRelevanceScore ? d.RelevanceScore : default(T))
             .Take(topK);
 
-        return new VerifiedReasoningResult
+        return new VerifiedReasoningResult<T>
         {
             Documents = documents,
             VerifiedSteps = verifiedSteps.AsReadOnly(),
@@ -246,12 +168,12 @@ Step 3: [reasoning statement]";
     /// <summary>
     /// Verifies a reasoning step and refines it if necessary.
     /// </summary>
-    private VerifiedReasoningStep VerifyAndRefineStep(
+    private VerifiedReasoningStep<T> VerifyAndRefineStep(
         string statement,
         string originalQuery,
         Dictionary<string, object> metadataFilters)
     {
-        var step = new VerifiedReasoningStep
+        var step = new VerifiedReasoningStep<T>
         {
             Statement = statement,
             OriginalStatement = statement
