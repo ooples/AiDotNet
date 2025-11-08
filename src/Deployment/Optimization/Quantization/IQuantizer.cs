@@ -1,12 +1,17 @@
 using System.Collections.Generic;
+using AiDotNet.Interfaces;
+using AiDotNet.Deployment.Export;
 
 namespace AiDotNet.Deployment.Optimization.Quantization;
 
 /// <summary>
 /// Interface for model quantization strategies.
+/// Properly integrates with AiDotNet's IFullModel architecture.
 /// </summary>
 /// <typeparam name="T">The numeric type used in the model</typeparam>
-public interface IQuantizer<T> where T : struct
+/// <typeparam name="TInput">The input type for the model</typeparam>
+/// <typeparam name="TOutput">The output type for the model</typeparam>
+public interface IQuantizer<T, TInput, TOutput> where T : struct
 {
     /// <summary>
     /// Gets the quantization mode (Int8, Float16, etc.).
@@ -19,18 +24,18 @@ public interface IQuantizer<T> where T : struct
     int BitWidth { get; }
 
     /// <summary>
-    /// Quantizes the model parameters.
+    /// Quantizes the model parameters using IFullModel architecture.
     /// </summary>
-    /// <param name="model">The model to quantize</param>
+    /// <param name="model">The model to quantize (must implement IFullModel)</param>
     /// <param name="config">Quantization configuration</param>
-    /// <returns>The quantized model</returns>
-    object Quantize(object model, QuantizationConfiguration config);
+    /// <returns>A new quantized model instance</returns>
+    IFullModel<T, TInput, TOutput> Quantize(IFullModel<T, TInput, TOutput> model, QuantizationConfiguration config);
 
     /// <summary>
     /// Calibrates the quantizer using calibration data.
     /// </summary>
     /// <param name="calibrationData">Data samples for calibration</param>
-    void Calibrate(IEnumerable<T[]> calibrationData);
+    void Calibrate(IEnumerable<TInput> calibrationData);
 
     /// <summary>
     /// Gets the scale factor for a specific layer or parameter.
