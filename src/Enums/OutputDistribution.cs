@@ -1,4 +1,4 @@
-namespace AiDotNet.Normalizers;
+namespace AiDotNet.Enums;
 
 /// <summary>
 /// Specifies the target distribution for quantile transformation.

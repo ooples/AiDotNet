@@ -1,3 +1,5 @@
+using AiDotNet.Enums;
+
 namespace AiDotNet.Models;
 
 /// <summary>
@@ -73,7 +75,7 @@ public class NormalizationParameters<T>
         Min = Max = Mean = StdDev = Scale = Shift = Median = IQR = P = MaxAbs = _numOps.Zero;
         Bins = [];
         Quantiles = [];
-        OutputDistribution = Normalizers.OutputDistribution.Uniform;
+        OutputDistribution = OutputDistribution.Uniform;
     }
 
     /// <summary>
@@ -489,5 +491,5 @@ public class NormalizationParameters<T>
     /// - Good for algorithms that work best with normally-distributed data
     /// </para>
     /// </remarks>
-    public Normalizers.OutputDistribution OutputDistribution { get; set; }
+    public OutputDistribution OutputDistribution { get; set; }
 }
