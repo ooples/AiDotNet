@@ -38,6 +38,8 @@ public class InMemoryCommunicationBackend<T> : ICommunicationBackend<T> where T 
     private static readonly Dictionary<string, int> _barrierCounters = new();
     private static int _barrierGeneration = 0;
     private static int _operationCounter = 0;
+    private const int BarrierTimeoutMs = 30000; // 30 seconds
+
 
     /// <inheritdoc/>
     public int Rank => _rank;
@@ -127,10 +129,16 @@ public class InMemoryCommunicationBackend<T> : ICommunicationBackend<T> where T 
 
             _barrierCounters[barrierId]++;
 
+            var startTime = DateTime.UtcNow;
+
             // Wait until all processes have reached the barrier
             while (_barrierCounters[barrierId] < _worldSize)
             {
                 Monitor.Wait(_globalLock, 10);
+                if ((DateTime.UtcNow - startTime).TotalMilliseconds > BarrierTimeoutMs)
+                {
+                    throw new TimeoutException($"Barrier timeout after {BarrierTimeoutMs}ms. Only {_barrierCounters[barrierId]} of {_worldSize} processes reached the barrier.");
+                }
             }
 
             Monitor.PulseAll(_globalLock);
@@ -178,10 +186,16 @@ public class InMemoryCommunicationBackend<T> : ICommunicationBackend<T> where T 
             // Contribute local data
             _sharedBuffers[bufferId].Add(data.Clone());
 
+            var startTime = DateTime.UtcNow;
+
             // Wait until all processes have contributed
             while (_sharedBuffers[bufferId].Count < _worldSize)
             {
                 Monitor.Wait(_globalLock, 10);
+                if ((DateTime.UtcNow - startTime).TotalMilliseconds > BarrierTimeoutMs)
+                {
+                    throw new TimeoutException($"AllReduce timeout after {BarrierTimeoutMs}ms. Only {_sharedBuffers[bufferId].Count} of {_worldSize} processes contributed.");
+                }
             }
 
             Monitor.PulseAll(_globalLock);
