@@ -682,42 +682,248 @@ public class PredictionModelBuilder<T, TInput, TOutput> : IPredictionModelBuilde
 
         var convertedX = ConversionsHelper.ConvertToMatrix<T, TInput>(x);
         var convertedY = ConversionsHelper.ConvertToVector<T, TOutput>(y);
-        var dataSummary = $"{convertedX.Rows} samples, {convertedX.Columns} features";
 
-        // For now, simplified agent assistance - can be expanded based on options
-        var agent = new ChainOfThoughtAgent<T>(chatModel, new[] { new CalculatorTool() });
+        var nSamples = convertedX.Rows;
+        var nFeatures = convertedX.Columns;
 
-        // Model selection if not already configured
-        if (_agentOptions.EnableModelSelection && _model == null)
+        // Instantiate all specialized agent tools
+        var allTools = new ITool[]
         {
-            var modelAdvice = await agent.RunAsync(
-                $@"I have a dataset with {dataSummary}.
-                Recommend ONE specific model type from: SimpleRegression, MultipleRegression, PolynomialRegression, RidgeRegression, RandomForest, or NeuralNetworkRegression.
-                Respond with ONLY the model name, nothing else.");
+            new DataAnalysisTool(),
+            new ModelSelectionTool(),
+            new HyperparameterTool(),
+            new FeatureImportanceTool(),
+            new CrossValidationTool(),
+            new RegularizationTool()
+        };
 
-            // Parse the string response into ModelType enum
-            var modelName = modelAdvice.Trim();
-            if (Enum.TryParse<ModelType>(modelName, ignoreCase: true, out var modelType))
+        // Create agent with all specialized tools
+        var agent = new ChainOfThoughtAgent<T>(chatModel, allTools);
+
+        var reasoningTrace = new System.Text.StringBuilder();
+        reasoningTrace.AppendLine("=== AGENT ASSISTANCE ANALYSIS ===\n");
+
+        // 1. DATA ANALYSIS
+        if (_agentOptions.EnableDataAnalysis)
+        {
+            reasoningTrace.AppendLine("STEP 1: Analyzing dataset characteristics...\n");
+
+            // Calculate basic statistics for data analysis tool
+            var statistics = new System.Text.Json.Nodes.JsonObject();
+            for (int col = 0; col < nFeatures; col++)
             {
-                recommendation.SuggestedModelType = modelType;
-            }
-            else
-            {
-                // If parsing fails, try to match common patterns
-                recommendation.SuggestedModelType = modelName.ToLower() switch
+                var featureData = new List<double>();
+                for (int row = 0; row < nSamples; row++)
                 {
-                    "linear" or "linearregression" or "simpleregression" => ModelType.SimpleRegression,
-                    "multiple" or "multipleregression" => ModelType.MultipleRegression,
-                    "polynomial" or "polynomialregression" => ModelType.PolynomialRegression,
-                    "ridge" or "ridgeregression" => ModelType.SimpleRegression, // Fallback to simple regression
-                    "randomforest" or "random forest" => ModelType.RandomForest,
-                    "neuralnetwork" or "neural network" or "neuralnetworkregression" => ModelType.NeuralNetworkRegression,
-                    _ => null
+                    featureData.Add(Convert.ToDouble(convertedX[row, col]));
+                }
+
+                var mean = featureData.Average();
+                var variance = featureData.Select(x => Math.Pow(x - mean, 2)).Average();
+                var std = Math.Sqrt(variance);
+
+                statistics[$"feature_{col}"] = new System.Text.Json.Nodes.JsonObject
+                {
+                    ["mean"] = mean,
+                    ["std"] = std,
+                    ["min"] = featureData.Min(),
+                    ["max"] = featureData.Max(),
+                    ["missing_pct"] = 0.0  // Assume no missing values for now
                 };
             }
 
-            recommendation.ModelSelectionReasoning = agent.Scratchpad;
+            var dataAnalysisInput = new System.Text.Json.Nodes.JsonObject
+            {
+                ["dataset_info"] = new System.Text.Json.Nodes.JsonObject
+                {
+                    ["n_samples"] = nSamples,
+                    ["n_features"] = nFeatures,
+                    ["target_type"] = "continuous"  // Assume regression for now
+                },
+                ["statistics"] = statistics
+            }.ToJsonString();
+
+            var dataAnalysisResult = await agent.RunAsync(
+                $@"Use the DataAnalysisTool to analyze this dataset.
+
+                Input for DataAnalysisTool:
+                {dataAnalysisInput}
+
+                Provide comprehensive data analysis.");
+
+            recommendation.DataAnalysis = dataAnalysisResult;
+            reasoningTrace.AppendLine($"Data Analysis Results:\n{dataAnalysisResult}\n");
         }
+
+        // 2. MODEL SELECTION
+        if (_agentOptions.EnableModelSelection && _model == null)
+        {
+            reasoningTrace.AppendLine("STEP 2: Selecting optimal model type...\n");
+
+            var modelSelectionInput = new System.Text.Json.Nodes.JsonObject
+            {
+                ["problem_type"] = "regression",  // Assuming regression for now
+                ["n_samples"] = nSamples,
+                ["n_features"] = nFeatures,
+                ["is_linear"] = false,  // Conservative default
+                ["has_outliers"] = false,  // Would need analysis
+                ["has_missing_values"] = false,
+                ["requires_interpretability"] = false,
+                ["computational_constraints"] = "moderate"
+            }.ToJsonString();
+
+            var modelSelectionResult = await agent.RunAsync(
+                $@"Use the ModelSelectionTool to recommend the best model for this dataset.
+
+                Input for ModelSelectionTool:
+                {modelSelectionInput}
+
+                Based on the tool's recommendation, suggest ONE specific ModelType.");
+
+            recommendation.ModelSelectionReasoning = modelSelectionResult;
+
+            // Try to extract model type from agent response
+            var agentResponse = modelSelectionResult.ToLower();
+            recommendation.SuggestedModelType = agentResponse switch
+            {
+                var r when r.Contains("random forest") || r.Contains("randomforest") => ModelType.RandomForest,
+                var r when r.Contains("neural network") || r.Contains("neuralnetwork") => ModelType.NeuralNetworkRegression,
+                var r when r.Contains("polynomial") => ModelType.PolynomialRegression,
+                var r when r.Contains("ridge") => ModelType.SimpleRegression,
+                var r when r.Contains("multiple") => ModelType.MultipleRegression,
+                var r when r.Contains("simple") || r.Contains("linear") => ModelType.SimpleRegression,
+                _ => null
+            };
+
+            reasoningTrace.AppendLine($"Model Selection:\n{modelSelectionResult}\n");
+            if (recommendation.SuggestedModelType.HasValue)
+            {
+                reasoningTrace.AppendLine($"Selected Model: {recommendation.SuggestedModelType.Value}\n");
+            }
+        }
+
+        // 3. HYPERPARAMETER TUNING
+        if (_agentOptions.EnableHyperparameterTuning)
+        {
+            reasoningTrace.AppendLine("STEP 3: Recommending hyperparameter values...\n");
+
+            var modelTypeStr = recommendation.SuggestedModelType?.ToString() ?? _model?.GetType().Name ?? "RandomForest";
+
+            var hyperparameterInput = new System.Text.Json.Nodes.JsonObject
+            {
+                ["model_type"] = modelTypeStr,
+                ["n_samples"] = nSamples,
+                ["n_features"] = nFeatures,
+                ["problem_type"] = "regression",
+                ["data_complexity"] = "moderate"
+            }.ToJsonString();
+
+            var hyperparameterResult = await agent.RunAsync(
+                $@"Use the HyperparameterTool to suggest optimal hyperparameters.
+
+                Input for HyperparameterTool:
+                {hyperparameterInput}
+
+                Provide specific hyperparameter recommendations.");
+
+            recommendation.TuningReasoning = hyperparameterResult;
+            reasoningTrace.AppendLine($"Hyperparameter Recommendations:\n{hyperparameterResult}\n");
+
+            // Try to extract hyperparameters (simplified - could be enhanced)
+            recommendation.SuggestedHyperparameters = new Dictionary<string, object>
+            {
+                ["info"] = "See TuningReasoning for detailed hyperparameter recommendations"
+            };
+        }
+
+        // 4. FEATURE ANALYSIS
+        if (_agentOptions.EnableFeatureAnalysis)
+        {
+            reasoningTrace.AppendLine("STEP 4: Analyzing feature importance...\n");
+
+            // Build feature analysis input with mock correlations
+            var features = new System.Text.Json.Nodes.JsonObject();
+            for (int col = 0; col < Math.Min(nFeatures, 20); col++)  // Limit to first 20 features
+            {
+                features[$"feature_{col}"] = new System.Text.Json.Nodes.JsonObject
+                {
+                    ["target_correlation"] = 0.5,  // Placeholder
+                    ["importance_score"] = 0.1,  // Placeholder
+                    ["missing_pct"] = 0.0,
+                    ["correlations"] = new System.Text.Json.Nodes.JsonObject()
+                };
+            }
+
+            var featureAnalysisInput = new System.Text.Json.Nodes.JsonObject
+            {
+                ["features"] = features,
+                ["target_name"] = "target",
+                ["n_samples"] = nSamples
+            }.ToJsonString();
+
+            var featureAnalysisResult = await agent.RunAsync(
+                $@"Use the FeatureImportanceTool to analyze features and suggest improvements.
+
+                Input for FeatureImportanceTool:
+                {featureAnalysisInput}
+
+                Provide feature importance analysis and engineering suggestions.");
+
+            recommendation.FeatureRecommendations = featureAnalysisResult;
+            reasoningTrace.AppendLine($"Feature Analysis:\n{featureAnalysisResult}\n");
+        }
+
+        // 5. CROSS-VALIDATION STRATEGY (part of meta-learning advice)
+        if (_agentOptions.EnableMetaLearningAdvice)
+        {
+            reasoningTrace.AppendLine("STEP 5: Recommending validation strategy...\n");
+
+            var cvInput = new System.Text.Json.Nodes.JsonObject
+            {
+                ["n_samples"] = nSamples,
+                ["n_features"] = nFeatures,
+                ["problem_type"] = "regression",
+                ["is_time_series"] = false,
+                ["is_imbalanced"] = false,
+                ["has_groups"] = false,
+                ["computational_budget"] = "moderate"
+            }.ToJsonString();
+
+            var cvResult = await agent.RunAsync(
+                $@"Use the CrossValidationTool to recommend the best validation strategy.
+
+                Input for CrossValidationTool:
+                {cvInput}
+
+                Suggest optimal cross-validation approach.");
+
+            reasoningTrace.AppendLine($"Cross-Validation Strategy:\n{cvResult}\n");
+
+            // Regularization recommendations
+            var regularizationInput = new System.Text.Json.Nodes.JsonObject
+            {
+                ["model_type"] = recommendation.SuggestedModelType?.ToString() ?? "RandomForest",
+                ["n_samples"] = nSamples,
+                ["n_features"] = nFeatures,
+                ["training_score"] = 0.0,
+                ["validation_score"] = 0.0,
+                ["is_overfitting"] = false,
+                ["current_regularization"] = "none"
+            }.ToJsonString();
+
+            var regularizationResult = await agent.RunAsync(
+                $@"Use the RegularizationTool to recommend regularization techniques.
+
+                Input for RegularizationTool:
+                {regularizationInput}
+
+                Provide regularization recommendations for preventing overfitting.");
+
+            reasoningTrace.AppendLine($"Regularization Recommendations:\n{regularizationResult}\n");
+        }
+
+        // Store complete reasoning trace
+        recommendation.ReasoningTrace = reasoningTrace.ToString();
 
         return recommendation;
     }
