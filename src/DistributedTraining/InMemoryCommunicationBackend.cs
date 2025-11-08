@@ -236,14 +236,14 @@ public class InMemoryCommunicationBackend<T> : ICommunicationBackend<T> where T 
             _sharedBuffers[bufferId][_rank] = sendData.Clone();
 
             // Wait until all processes have contributed
-            int contributedCount = 0;
-            while (contributedCount < _worldSize)
+            while (true)
             {
-                contributedCount = _sharedBuffers[bufferId].Count(v => v != null);
-                if (contributedCount < _worldSize)
+                int contributedCount = _sharedBuffers[bufferId].Count(v => v != null);
+                if (contributedCount >= _worldSize)
                 {
-                    Monitor.Wait(_globalLock, 10);
+                    break;
                 }
+                Monitor.Wait(_globalLock, 10);
             }
 
             Monitor.PulseAll(_globalLock);

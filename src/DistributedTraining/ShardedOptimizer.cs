@@ -92,17 +92,13 @@ public class ShardedOptimizer<T, TInput, TOutput> : IShardedOptimizer<T, TInput,
         // Ensure all processes start together
         _config.CommunicationBackend.Barrier();
 
-        // If the model is a sharded model, it will handle gradient synchronization
-        // Otherwise, we need to handle it ourselves
-        bool modelHandlesSync = inputData.Model is IShardedModel<T, TInput, TOutput>;
-
         // Perform optimization on the wrapped optimizer
         var result = _wrappedOptimizer.Optimize(inputData);
 
-        // If model doesn't handle synchronization and auto-sync is enabled, sync parameters
-        if (!modelHandlesSync && _config.AutoSyncGradients)
+        // Synchronize parameters across all processes if auto-sync is enabled
+        if (_config.AutoSyncGradients && result.BestSolution != null)
         {
-            SynchronizeParameters(result.BestModel);
+            SynchronizeParameters(result.BestSolution);
         }
 
         // Synchronize optimizer state if needed
@@ -235,6 +231,14 @@ public class ShardedOptimizer<T, TInput, TOutput> : IShardedOptimizer<T, TInput,
                 $"but current configuration has {WorldSize} processes.");
         }
 
+        // Validate rank matches - different rank could indicate configuration mismatch
+        if (savedRank != Rank)
+        {
+            throw new InvalidOperationException(
+                $"Rank mismatch. Optimizer was saved on rank {savedRank}, " +
+                $"but is being loaded on rank {Rank}. This could indicate a configuration error.");
+        }
+
         // Read wrapped optimizer
         int optimizerDataLength = reader.ReadInt32();
         byte[] optimizerData = reader.ReadBytes(optimizerDataLength);
@@ -244,25 +248,41 @@ public class ShardedOptimizer<T, TInput, TOutput> : IShardedOptimizer<T, TInput,
     /// <inheritdoc/>
     public void SaveModel(string filePath)
     {
-        // Only rank 0 saves to avoid conflicts
-        if (Rank == 0)
-        {
-            var data = Serialize();
-            File.WriteAllBytes(filePath, data);
-        }
-
-        // Wait for rank 0 to finish writing
+        // Barrier before rank check to prevent deadlock if rank 0 fails
         _config.CommunicationBackend.Barrier();
+
+        try
+        {
+            // Only rank 0 saves to avoid file write conflicts
+            if (Rank == 0)
+            {
+                var data = Serialize();
+                File.WriteAllBytes(filePath, data);
+            }
+        }
+        finally
+        {
+            // Ensure all processes reach this barrier even if rank 0 fails
+            _config.CommunicationBackend.Barrier();
+        }
     }
 
     /// <inheritdoc/>
     public void LoadModel(string filePath)
     {
-        // All processes read the same file
-        var data = File.ReadAllBytes(filePath);
-        Deserialize(data);
-
-        // Ensure all processes finish loading
+        // Barrier before loading to ensure all processes start together
         _config.CommunicationBackend.Barrier();
+
+        try
+        {
+            // All processes read the same file (read-only, no conflicts)
+            var data = File.ReadAllBytes(filePath);
+            Deserialize(data);
+        }
+        finally
+        {
+            // Ensure all processes finish loading before proceeding
+            _config.CommunicationBackend.Barrier();
+        }
     }
 }

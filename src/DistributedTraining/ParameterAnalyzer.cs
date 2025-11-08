@@ -26,6 +26,27 @@ public class ParameterAnalyzer<T> where T : struct
     private readonly int _worldSize;
 
     /// <summary>
+    /// Threshold multiplier for merging remaining parameters into the last group.
+    /// If remaining parameters are less than minimum group size * this threshold,
+    /// they are merged with the last group to avoid creating a tiny final group.
+    /// </summary>
+    private const double REMAINING_PARAMS_MERGE_THRESHOLD = 1.5;
+
+    /// <summary>
+    /// Divisor for calculating base group size for distributed training.
+    /// Base group size = total parameters / (world size * this divisor).
+    /// This ensures each process gets multiple groups for better load balancing.
+    /// </summary>
+    private const int DISTRIBUTION_GROUP_DIVISOR = 4;
+
+    /// <summary>
+    /// Threshold divisor for merging small final groups.
+    /// Groups smaller than (base group size / this divisor) are merged with
+    /// the previous group to avoid inefficiently small parameter groups.
+    /// </summary>
+    private const int SMALL_GROUP_MERGE_DIVISOR = 2;
+
+    /// <summary>
     /// Represents a group of parameters that should be communicated together.
     ///
     /// For Beginners:
@@ -160,7 +181,7 @@ public class ParameterAnalyzer<T> where T : struct
 
             // If the remaining parameters are slightly larger than minimum,
             // make the last group slightly larger rather than creating a tiny final group
-            if (remainingParams > _minimumGroupSize && remainingParams < _minimumGroupSize * 1.5)
+            if (remainingParams > _minimumGroupSize && remainingParams < _minimumGroupSize * REMAINING_PARAMS_MERGE_THRESHOLD)
             {
                 groupSize = remainingParams;
             }
@@ -215,7 +236,7 @@ public class ParameterAnalyzer<T> where T : struct
         // 2. Divisible by world size (or close to it)
         // 3. An even division of total parameters
 
-        int baseGroupSize = Math.Max(_minimumGroupSize, totalParams / (_worldSize * 4));
+        int baseGroupSize = Math.Max(_minimumGroupSize, totalParams / (_worldSize * DISTRIBUTION_GROUP_DIVISOR));
 
         // Round to nearest multiple of world size for better alignment
         if (baseGroupSize > _worldSize)
@@ -232,7 +253,8 @@ public class ParameterAnalyzer<T> where T : struct
             int groupSize = Math.Min(baseGroupSize, remainingParams);
 
             // If this would be the last group and it's small, merge with previous
-            if (remainingParams - groupSize > 0 && remainingParams - groupSize < baseGroupSize / 2)
+            // Groups smaller than half the base group size are merged to avoid inefficiently small groups
+            if (remainingParams - groupSize > 0 && remainingParams - groupSize < baseGroupSize / SMALL_GROUP_MERGE_DIVISOR)
             {
                 groupSize = remainingParams;
             }
@@ -340,7 +362,7 @@ public class ParameterAnalyzer<T> where T : struct
         }
 
         // Check last group covers all parameters
-        var lastGroup = sortedGroups[^1];
+        var lastGroup = sortedGroups[sortedGroups.Count - 1];
         int lastEnd = lastGroup.StartIndex + lastGroup.Size;
 
         if (lastEnd != totalParameterCount)

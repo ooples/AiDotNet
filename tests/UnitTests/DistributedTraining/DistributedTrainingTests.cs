@@ -4,6 +4,7 @@ using AiDotNet.LinearAlgebra;
 using AiDotNet.Models;
 using AiDotNet.NumericOperations;
 using AiDotNet.Helpers;
+using AiDotNet.Interfaces;
 
 namespace AiDotNetTests.DistributedTraining;
 
@@ -75,11 +76,12 @@ public class DistributedTrainingTests
             new Vector<double>(new[] { 1.0, 2.0, 3.0 })
         };
 
-        // Act - Perform AllReduce on each "process"
-        for (int i = 0; i < 4; i++)
+        // Act - Perform AllReduce on each "process" concurrently to avoid deadlock
+        // InMemoryBackend requires all ranks to enter the collective concurrently
+        Parallel.For(0, 4, i =>
         {
             backends[i].AllReduce(data[i], ReductionOperation.Sum);
-        }
+        });
 
         // Assert - All processes should have the same summed result
         var expected = new[] { 4.0, 8.0, 12.0 };
@@ -129,11 +131,12 @@ public class DistributedTrainingTests
             new Vector<double>(new[] { 4.0, 8.0, 12.0 })
         };
 
-        // Act
-        for (int i = 0; i < 4; i++)
+        // Act - Perform AllReduce on each "process" concurrently to avoid deadlock
+        // InMemoryBackend requires all ranks to enter the collective concurrently
+        Parallel.For(0, 4, i =>
         {
             backends[i].AllReduce(data[i], ReductionOperation.Average);
-        }
+        });
 
         // Assert - Average of (1,2,3,4) = 2.5, (2,4,6,8) = 5.0, (3,6,9,12) = 7.5
         var expected = new[] { 2.5, 5.0, 7.5 };
@@ -183,12 +186,13 @@ public class DistributedTrainingTests
             new Vector<double>(new[] { 7.0, 8.0 })   // Process 3's shard
         };
 
-        // Act - Each process gathers all data
+        // Act - Each process gathers all data concurrently to avoid deadlock
+        // InMemoryBackend requires all ranks to enter the collective concurrently
         var gathered = new Vector<double>[4];
-        for (int i = 0; i < 4; i++)
+        Parallel.For(0, 4, i =>
         {
             gathered[i] = backends[i].AllGather(sendData[i]);
-        }
+        });
 
         // Assert - All processes should have the complete concatenated data
         var expected = new[] { 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0 };

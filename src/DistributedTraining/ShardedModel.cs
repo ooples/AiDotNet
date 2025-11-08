@@ -42,7 +42,7 @@ public class ShardedModel<T, TInput, TOutput> : IShardedModel<T, TInput, TOutput
     private readonly IFullModel<T, TInput, TOutput> _wrappedModel;
     private readonly IShardingConfiguration<T> _config;
     private readonly INumericOperations<T> _numOps;
-    private Vector<T> _localParameterShard;
+    private Vector<T> _localParameterShard = new Vector<T>(0);
     private Vector<T>? _cachedFullParameters;
     private int _shardStartIndex;
     private int _shardSize;
@@ -303,6 +303,14 @@ public class ShardedModel<T, TInput, TOutput> : IShardedModel<T, TInput, TOutput
                 $"but current configuration has {WorldSize} processes.");
         }
 
+        // Validate rank matches - different rank could indicate configuration mismatch
+        if (savedRank != Rank)
+        {
+            throw new InvalidOperationException(
+                $"Rank mismatch. Model was saved on rank {savedRank}, " +
+                $"but is being loaded on rank {Rank}. This could indicate a configuration error.");
+        }
+
         // Read wrapped model
         int modelDataLength = reader.ReadInt32();
         byte[] modelData = reader.ReadBytes(modelDataLength);
@@ -315,15 +323,42 @@ public class ShardedModel<T, TInput, TOutput> : IShardedModel<T, TInput, TOutput
     /// <inheritdoc/>
     public void SaveModel(string filePath)
     {
-        var data = Serialize();
-        File.WriteAllBytes(filePath, data);
+        // Barrier before rank check to prevent deadlock if rank 0 fails
+        _config.CommunicationBackend.Barrier();
+
+        try
+        {
+            // Only rank 0 saves to avoid file write conflicts
+            if (Rank == 0)
+            {
+                var data = Serialize();
+                File.WriteAllBytes(filePath, data);
+            }
+        }
+        finally
+        {
+            // Ensure all processes reach this barrier even if rank 0 fails
+            _config.CommunicationBackend.Barrier();
+        }
     }
 
     /// <inheritdoc/>
     public void LoadModel(string filePath)
     {
-        var data = File.ReadAllBytes(filePath);
-        Deserialize(data);
+        // Barrier before loading to ensure all processes start together
+        _config.CommunicationBackend.Barrier();
+
+        try
+        {
+            // All processes read the same file (read-only, no conflicts)
+            var data = File.ReadAllBytes(filePath);
+            Deserialize(data);
+        }
+        finally
+        {
+            // Ensure all processes finish loading before proceeding
+            _config.CommunicationBackend.Barrier();
+        }
     }
 
     /// <inheritdoc/>
@@ -337,18 +372,6 @@ public class ShardedModel<T, TInput, TOutput> : IShardedModel<T, TInput, TOutput
     public Dictionary<string, T> GetFeatureImportance()
     {
         return _wrappedModel.GetFeatureImportance();
-    }
-
-    /// <inheritdoc/>
-    public List<string>? GetFeatureNames()
-    {
-        return _wrappedModel.GetFeatureNames();
-    }
-
-    /// <inheritdoc/>
-    public void SetFeatureNames(List<string>? featureNames)
-    {
-        _wrappedModel.SetFeatureNames(featureNames);
     }
 
     /// <inheritdoc/>

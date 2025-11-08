@@ -76,7 +76,7 @@ public static class CommunicationManager
             if (_isInitialized)
             {
                 throw new InvalidOperationException(
-                    "CommunicationManager is already initialized. Call Shutdown() first.");
+                    "CommunicationManager is already initialized. Call Shutdown() first, or check IsInitialized before calling Initialize().");
             }
 
             // Initialize the backend
@@ -95,7 +95,8 @@ public static class CommunicationManager
             {
                 throw new NotSupportedException(
                     $"Type {typeof(T).Name} is not supported for distributed communication. " +
-                    "Use float or double.");
+                    "Only float and double are supported because of MPI type mapping constraints. " +
+                    "Please use float or double for distributed operations.");
             }
 
             _isInitialized = true;
@@ -289,7 +290,7 @@ public static class CommunicationManager
             if (!_isInitialized)
             {
                 throw new InvalidOperationException(
-                    "CommunicationManager has not been initialized. Call Initialize() first.");
+                    "CommunicationManager has not been initialized. Call Initialize() with a communication backend first, or check IsInitialized before using distributed operations.");
             }
 
             if (typeof(T) == typeof(float))
