@@ -16,44 +16,26 @@ namespace AiDotNet.FeatureSelectors;
 /// (they're highly correlated), you only need to keep one of them to make good predictions.
 /// </para>
 /// </remarks>
-public class CorrelationFeatureSelector<T, TInput> : IFeatureSelector<T, TInput>
+public class CorrelationFeatureSelector<T, TInput> : FeatureSelectorBase<T, TInput>
 {
     /// <summary>
     /// The correlation threshold above which features are considered highly correlated.
     /// </summary>
     /// <remarks>
-    /// <b>For Beginners:</b> This value determines how similar two features need to be before one is 
+    /// <b>For Beginners:</b> This value determines how similar two features need to be before one is
     /// removed. A higher threshold means features need to be more similar to be considered redundant.
     /// The default value is 0.5.
     /// </remarks>
     private readonly T _threshold;
-    
-    /// <summary>
-    /// Provides operations for numeric calculations with type T.
-    /// </summary>
-    /// <remarks>
-    /// <b>For Beginners:</b> This is a helper object that knows how to perform math operations 
-    /// on the specific number type you're using (like float or double).
-    /// </remarks>
-    private readonly INumericOperations<T> _numOps;
-
-    /// <summary>
-    /// The strategy to use for extracting features from higher-dimensional tensors.
-    /// </summary>
-    private readonly FeatureExtractionStrategy _higherDimensionStrategy = FeatureExtractionStrategy.Mean;
-
-    /// <summary>
-    /// Weights to apply when using the WeightedSum feature extraction strategy.
-    /// </summary>
-    private readonly Dictionary<int, T> _dimensionWeights = [];
 
     /// <summary>
     /// Initializes a new instance of the CorrelationFeatureSelector class.
     /// </summary>
     /// <param name="threshold">Optional correlation threshold value. If not provided, a default value of 0.5 is used.</param>
+    /// <param name="higherDimensionStrategy">Strategy to use for extracting features from higher-dimensional tensors.</param>
     /// <remarks>
     /// <para>
-    /// <b>For Beginners:</b> This constructor creates a new feature selector with either a custom threshold 
+    /// <b>For Beginners:</b> This constructor creates a new feature selector with either a custom threshold
     /// or the default threshold of 0.5.
     /// </para>
     /// <para>
@@ -64,22 +46,23 @@ public class CorrelationFeatureSelector<T, TInput> : IFeatureSelector<T, TInput>
     /// </list>
     /// </para>
     /// <para>
-    /// A common threshold value is 0.5, which means features with a correlation above 0.5 (or below -0.5) 
+    /// A common threshold value is 0.5, which means features with a correlation above 0.5 (or below -0.5)
     /// are considered highly correlated.
     /// </para>
     /// </remarks>
     public CorrelationFeatureSelector(double threshold = 0.5, FeatureExtractionStrategy higherDimensionStrategy = FeatureExtractionStrategy.Mean)
+        : base(higherDimensionStrategy)
     {
-        _numOps = MathHelper.GetNumericOperations<T>();
-        _higherDimensionStrategy = higherDimensionStrategy;
-        _threshold = _numOps.FromDouble(threshold);
+        _threshold = NumOps.FromDouble(threshold);
     }
 
     /// <summary>
-    /// Selects independent features by eliminating highly correlated ones.
+    /// Determines which features to select by eliminating highly correlated ones.
     /// </summary>
     /// <param name="allFeatures">The input data containing all available features.</param>
-    /// <returns>A filtered dataset containing only the selected independent features.</returns>
+    /// <param name="numSamples">The number of samples in the dataset.</param>
+    /// <param name="numFeatures">The total number of features in the dataset.</param>
+    /// <returns>A list of indices representing the selected features.</returns>
     /// <remarks>
     /// <para>
     /// This method uses a correlation-based approach to identify and select features that are
@@ -88,60 +71,55 @@ public class CorrelationFeatureSelector<T, TInput> : IFeatureSelector<T, TInput>
     /// already selected. This helps reduce redundancy and multicollinearity in the feature set.
     /// </para>
     /// <para><b>For Beginners:</b> This method removes duplicate or redundant information from your data.
-    /// 
+    ///
     /// Imagine you're collecting data about houses and include both:
     /// - Square footage of the house
     /// - Number of rooms
     /// - Price
-    /// 
+    ///
     /// Square footage and number of rooms are often highly correlated (bigger houses tend to have
     /// more rooms). This method would detect this relationship and might keep only one of these
     /// features, reducing redundancy while preserving the most important information.
-    /// 
+    ///
     /// By eliminating redundant features:
     /// - Your model trains faster
     /// - You reduce the risk of overfitting (the model becoming too focused on specific patterns)
     /// - The model becomes easier to interpret and explain
-    /// 
+    ///
     /// The _threshold setting controls how strict this filtering is - higher values allow more
     /// features to be included, while lower values result in more features being removed.
     /// </para>
     /// </remarks>
-    public TInput SelectFeatures(TInput allFeatures)
+    protected override List<int> SelectFeatureIndices(TInput allFeatures, int numSamples, int numFeatures)
     {
-        // Get dimensions using the helper methods
-        int numSamples = InputHelper<T, TInput>.GetBatchSize(allFeatures);
-        int numFeatures = InputHelper<T, TInput>.GetInputSize(allFeatures);
-    
         // Track which features to keep
         var selectedFeatureIndices = new List<int>();
-    
+
         // Process each feature to determine if it should be kept
         for (int i = 0; i < numFeatures; i++)
         {
             bool isIndependent = true;
-            var featureI = FeatureSelectorHelper<T, TInput>.ExtractFeatureVector(allFeatures, i, numSamples, _higherDimensionStrategy, _dimensionWeights);
-        
+            var featureI = ExtractFeatureVector(allFeatures, i, numSamples);
+
             // Check correlation with already selected features
             foreach (int j in selectedFeatureIndices)
             {
-                var featureJ = FeatureSelectorHelper<T, TInput>.ExtractFeatureVector(allFeatures, j, numSamples, _higherDimensionStrategy, _dimensionWeights);
+                var featureJ = ExtractFeatureVector(allFeatures, j, numSamples);
                 var correlation = StatisticsHelper<T>.CalculatePearsonCorrelation(featureI, featureJ);
-            
-                if (_numOps.GreaterThan(_numOps.Abs(correlation), _threshold))
+
+                if (NumOps.GreaterThan(NumOps.Abs(correlation), _threshold))
                 {
                     isIndependent = false;
                     break;
                 }
             }
-        
+
             if (isIndependent)
             {
                 selectedFeatureIndices.Add(i);
             }
         }
-    
-        // Create result with only the selected features
-        return FeatureSelectorHelper<T, TInput>.CreateFilteredData(allFeatures, selectedFeatureIndices);
+
+        return selectedFeatureIndices;
     }
 }

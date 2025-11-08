@@ -351,4 +351,110 @@ public interface IPredictionModelBuilder<T, TInput, TOutput>
     /// <param name="loraConfiguration">The LoRA configuration implementation to use.</param>
     /// <returns>The builder instance for method chaining.</returns>
     IPredictionModelBuilder<T, TInput, TOutput> ConfigureLoRA(ILoRAConfiguration<T> loraConfiguration);
+
+    /// <summary>
+    /// Configures the retrieval-augmented generation (RAG) components for use during model inference.
+    /// </summary>
+    /// <remarks>
+    /// RAG enhances text generation by retrieving relevant documents from a knowledge base
+    /// and using them as context for generating grounded, factual answers.
+    ///
+    /// <b>For Beginners:</b> RAG is like giving your AI access to a library before answering questions.
+    /// Instead of relying only on what it learned during training, it can:
+    /// 1. Search a document collection for relevant information
+    /// 2. Read the relevant documents
+    /// 3. Generate an answer based on those documents
+    /// 4. Cite its sources
+    ///
+    /// This makes answers more accurate, up-to-date, and traceable to source materials.
+    /// 
+    /// RAG operations (GenerateAnswer, RetrieveDocuments) are performed during inference via PredictionModelResult,
+    /// not during model building.
+    /// </remarks>
+    /// <param name="retriever">Optional retriever for finding relevant documents. If not provided, RAG won't be available.</param>
+    /// <param name="reranker">Optional reranker for improving document ranking quality. Default provided if retriever is set.</param>
+    /// <param name="generator">Optional generator for producing grounded answers. Default provided if retriever is set.</param>
+    /// <param name="queryProcessors">Optional query processors for improving search quality.</param>
+    /// <returns>The builder instance for method chaining.</returns>
+    IPredictionModelBuilder<T, TInput, TOutput> ConfigureRetrievalAugmentedGeneration(
+        IRetriever<T>? retriever = null,
+        IReranker<T>? reranker = null,
+        IGenerator<T>? generator = null,
+        IEnumerable<IQueryProcessor>? queryProcessors = null);
+
+    /// <summary>
+    /// Configures a meta-learning algorithm (MAML, Reptile, SEAL) for training models that can quickly adapt to new tasks.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> Meta-learning trains models to quickly learn new tasks from just a few examples.
+    /// If you configure this, Build() will do meta-training instead of regular training.
+    ///
+    /// Only configure this if you need few-shot learning capabilities. For standard machine learning,
+    /// just use ConfigureModel() and Build() as usual.
+    /// </para>
+    /// </remarks>
+    /// <param name="metaLearner">The meta-learning algorithm to use (e.g., ReptileTrainer with its episodic data loader).</param>
+    /// <returns>The builder instance for method chaining.</returns>
+    IPredictionModelBuilder<T, TInput, TOutput> ConfigureMetaLearning(IMetaLearner<T, TInput, TOutput> metaLearner);
+
+    /// <summary>
+    /// Configures the model evaluator component for comprehensive model evaluation and cross-validation.
+    /// </summary>
+    /// <remarks>
+    /// A model evaluator provides methods to evaluate model performance on different datasets and
+    /// perform cross-validation to assess generalization.
+    ///
+    /// <b>For Beginners:</b> The model evaluator helps you understand how well your model performs.
+    /// If you configure both a model evaluator and cross-validator (via ConfigureCrossValidation),
+    /// cross-validation will automatically run during Build() and the results will be included
+    /// in your trained model.
+    /// </remarks>
+    /// <param name="evaluator">The model evaluator implementation to use.</param>
+    /// <returns>The builder instance for method chaining.</returns>
+    IPredictionModelBuilder<T, TInput, TOutput> ConfigureModelEvaluator(IModelEvaluator<T, TInput, TOutput> evaluator);
+
+    /// <summary>
+    /// Configures the cross-validation strategy for automatic model evaluation during training.
+    /// </summary>
+    /// <remarks>
+    /// A cross-validator determines how data should be split into folds for cross-validation.
+    /// Different strategies (K-Fold, Leave-One-Out, Stratified, Time Series, etc.) are appropriate
+    /// for different types of data and problems.
+    ///
+    /// <b>For Beginners:</b> Cross-validation tests how well your model will perform on new data
+    /// by training and testing it multiple times on different subsets of your training data.
+    /// If you configure both a cross-validator and model evaluator (via ConfigureModelEvaluator),
+    /// cross-validation will automatically run during Build() and the results will be included
+    /// in your trained model.
+    ///
+    /// Common strategies:
+    /// - StandardCrossValidator (K-Fold): General purpose, splits data into K equal parts
+    /// - LeaveOneOutCrossValidator: For small datasets, uses each sample once as test
+    /// - StratifiedKFoldCrossValidator: For classification, maintains class proportions
+    /// - TimeSeriesCrossValidator: For sequential data, respects temporal ordering
+    /// </remarks>
+    /// <param name="crossValidator">The cross-validation strategy to use.</param>
+    /// <returns>The builder instance for method chaining.</returns>
+    IPredictionModelBuilder<T, TInput, TOutput> ConfigureCrossValidation(ICrossValidator<T, TInput, TOutput> crossValidator);
+
+    /// <summary>
+    /// Builds a meta-trained model that can quickly adapt to new tasks.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// This method is used when you've configured a meta-learner using ConfigureMetaLearning().
+    /// It performs meta-training across many tasks to create a model that can rapidly adapt
+    /// to new tasks with just a few examples.
+    /// </para>
+    /// <para>
+    /// <b>For Beginners:</b> Use this method when you've configured meta-learning.
+    /// Unlike Build(x, y) which trains on one dataset, this trains your model to be good
+    /// at learning NEW tasks quickly. The training data comes from the episodic data loader
+    /// you configured in your meta-learner.
+    /// </para>
+    /// </remarks>
+    /// <returns>A meta-trained model with rapid adaptation capabilities.</returns>
+    /// <exception cref="InvalidOperationException">Thrown if ConfigureMetaLearning has not been called.</exception>
+    PredictionModelResult<T, TInput, TOutput> Build();
 }

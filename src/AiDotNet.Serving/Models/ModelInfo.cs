@@ -1,0 +1,81 @@
+namespace AiDotNet.Serving.Models;
+
+/// <summary>
+/// Information about a loaded model.
+/// </summary>
+public class ModelInfo
+{
+    /// <summary>
+    /// Gets or sets the unique name of the model.
+    /// </summary>
+    public string Name { get; set; } = string.Empty;
+
+    /// <summary>
+    /// Gets or sets the numeric type used by the model.
+    /// </summary>
+    public string NumericType { get; set; } = string.Empty;
+
+    /// <summary>
+    /// Gets or sets the expected number of input features.
+    /// </summary>
+    public int InputDimension { get; set; }
+
+    /// <summary>
+    /// Gets or sets the number of output dimensions.
+    /// </summary>
+    public int OutputDimension { get; set; }
+
+    /// <summary>
+    /// Gets or sets the timestamp when the model was loaded.
+    /// </summary>
+    public DateTime LoadedAt { get; set; }
+
+    /// <summary>
+    /// Gets or sets the file path from which the model was loaded (if applicable).
+    /// </summary>
+    public string? SourcePath { get; set; }
+}
+
+/// <summary>
+/// Request to load a new model.
+/// </summary>
+public class LoadModelRequest
+{
+    /// <summary>
+    /// Gets or sets the unique name for the model.
+    /// </summary>
+    public string Name { get; set; } = string.Empty;
+
+    /// <summary>
+    /// Gets or sets the file path to the serialized model.
+    /// </summary>
+    public string Path { get; set; } = string.Empty;
+
+    /// <summary>
+    /// Gets or sets the numeric type used by the model.
+    /// Supported values: "double", "float", "decimal"
+    /// Default is "double".
+    /// </summary>
+    public string NumericType { get; set; } = "double";
+}
+
+/// <summary>
+/// Response after loading a model.
+/// </summary>
+public class LoadModelResponse
+{
+    /// <summary>
+    /// Gets or sets whether the model was loaded successfully.
+    /// </summary>
+    public bool Success { get; set; }
+
+    /// <summary>
+    /// Gets or sets the error message if loading failed.
+    /// </summary>
+    public string? Error { get; set; }
+
+    /// <summary>
+    /// Gets or sets information about the loaded model.
+    /// </summary>
+    public ModelInfo? ModelInfo { get; set; }
+}
