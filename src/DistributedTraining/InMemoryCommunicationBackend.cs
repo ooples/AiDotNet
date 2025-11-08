@@ -293,6 +293,7 @@ public class InMemoryCommunicationBackend<T> : ICommunicationBackend<T> where T 
             // Use shared operation counter so all ranks target same buffer key
             string bufferId = $"broadcast_{_operationCounter}";
             Vector<T> result;
+            List<Vector<T>> buffer;
 
             // Root process stores the data
             if (_rank == root)
@@ -305,7 +306,7 @@ public class InMemoryCommunicationBackend<T> : ICommunicationBackend<T> where T 
             }
 
             // Wait for root to store data
-            while (!_sharedBuffers.ContainsKey(bufferId))
+            while (!_sharedBuffers.TryGetValue(bufferId, out buffer))
             {
                 Monitor.Wait(_globalLock, 10);
             }
@@ -313,7 +314,7 @@ public class InMemoryCommunicationBackend<T> : ICommunicationBackend<T> where T 
             Monitor.PulseAll(_globalLock);
 
             // All processes retrieve the data
-            result = _sharedBuffers[bufferId][0].Clone();
+            result = buffer[0].Clone();
 
             // Cleanup - rank 0 removes key and increments counter for next operation
             if (_rank == 0)
@@ -372,8 +373,10 @@ public class InMemoryCommunicationBackend<T> : ICommunicationBackend<T> where T 
                 }
             }
 
+            List<Vector<T>> buffer;
+
             // Wait for root to split data
-            while (!_sharedBuffers.ContainsKey(bufferId))
+            while (!_sharedBuffers.TryGetValue(bufferId, out buffer))
             {
                 Monitor.Wait(_globalLock, 10);
             }
@@ -381,7 +384,7 @@ public class InMemoryCommunicationBackend<T> : ICommunicationBackend<T> where T 
             Monitor.PulseAll(_globalLock);
 
             // Each process retrieves its chunk
-            var result = _sharedBuffers[bufferId][_rank].Clone();
+            var result = buffer[_rank].Clone();
 
             // Cleanup - rank 0 removes key and increments counter for next operation
             if (_rank == 0)
