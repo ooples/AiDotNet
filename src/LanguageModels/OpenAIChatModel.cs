@@ -1,0 +1,322 @@
+using AiDotNet.Interfaces;
+using System.Net.Http;
+using System.Net.Http.Headers;
+using System.Text;
+using System.Text.Json;
+using System.Text.Json.Serialization;
+
+namespace AiDotNet.LanguageModels;
+
+/// <summary>
+/// Implementation of IChatModel for OpenAI's GPT models (GPT-3.5-turbo, GPT-4, GPT-4-turbo).
+/// Supports the Chat Completions API with configurable parameters.
+/// </summary>
+/// <typeparam name="T">The numeric type used for model parameters and operations (e.g., double, float).</typeparam>
+/// <remarks>
+/// For Beginners:
+/// This class lets you use OpenAI's GPT models (like ChatGPT) in your code.
+///
+/// What you need:
+/// - An OpenAI API key (get one at platform.openai.com)
+/// - Internet connection (calls OpenAI's cloud API)
+/// - Some budget (API calls cost money, but it's very affordable for testing)
+///
+/// Supported models:
+/// - gpt-3.5-turbo: Fast, cheap, good for most tasks ($0.0005/1K tokens)
+/// - gpt-4: Most capable, slower, more expensive ($0.03/1K tokens)
+/// - gpt-4-turbo: Fast GPT-4, lower cost ($0.01/1K tokens)
+/// - gpt-4o: Optimized multimodal model
+///
+/// Example usage:
+/// <code>
+/// var model = new OpenAIChatModel&lt;double&gt;("your-api-key-here");
+///
+/// // Simple question
+/// string answer = await model.GenerateAsync("What is machine learning?");
+///
+/// // With custom settings
+/// var customModel = new OpenAIChatModel&lt;double&gt;(
+///     apiKey: "your-api-key",
+///     modelName: "gpt-4",
+///     temperature: 0.7,  // More creative
+///     maxTokens: 500     // Longer responses
+/// );
+/// </code>
+///
+/// Cost-saving tips:
+/// - Use gpt-3.5-turbo for simple tasks
+/// - Set maxTokens to limit response length
+/// - Cache responses when appropriate
+/// - Monitor usage at platform.openai.com/usage
+/// </remarks>
+public class OpenAIChatModel<T> : ChatModelBase<T>
+{
+    private readonly string _apiKey;
+    private readonly string _endpoint;
+    private readonly double _temperature;
+    private readonly int _maxTokens;
+    private readonly double _topP;
+    private readonly double _frequencyPenalty;
+    private readonly double _presencePenalty;
+
+    private static readonly JsonSerializerOptions JsonOptions = new()
+    {
+        PropertyNamingPolicy = JsonNamingPolicy.SnakeCaseLower,
+        DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull,
+        WriteIndented = false
+    };
+
+    /// <summary>
+    /// Initializes a new instance of the <see cref="OpenAIChatModel{T}"/> class.
+    /// </summary>
+    /// <param name="apiKey">Your OpenAI API key.</param>
+    /// <param name="modelName">The model to use (default: gpt-3.5-turbo).</param>
+    /// <param name="temperature">Controls randomness (0.0 = deterministic, 2.0 = very creative). Default: 0.7.</param>
+    /// <param name="maxTokens">Maximum tokens to generate. Default: 2048.</param>
+    /// <param name="topP">Nucleus sampling parameter (0.0-1.0). Default: 1.0.</param>
+    /// <param name="frequencyPenalty">Penalize frequent tokens (-2.0 to 2.0). Default: 0.0.</param>
+    /// <param name="presencePenalty">Penalize tokens based on presence (-2.0 to 2.0). Default: 0.0.</param>
+    /// <param name="httpClient">Optional HTTP client.</param>
+    /// <param name="endpoint">Optional custom API endpoint (for Azure OpenAI or proxies).</param>
+    /// <remarks>
+    /// For Beginners:
+    ///
+    /// **Required parameter:**
+    /// - apiKey: Your secret key from OpenAI (keep this safe!)
+    ///
+    /// **Model selection:**
+    /// - "gpt-3.5-turbo": Fast, cheap, good enough for most tasks
+    /// - "gpt-4": Smarter, better at complex reasoning
+    /// - "gpt-4-turbo": Fast GPT-4 variant
+    /// - "gpt-4o": Latest optimized model
+    ///
+    /// **Temperature (creativity control):**
+    /// - 0.0: Very focused, deterministic, same answer every time
+    /// - 0.7: Balanced (default for most use cases)
+    /// - 1.5+: Very creative, more varied, but might be less accurate
+    ///
+    /// **MaxTokens (response length):**
+    /// - 100: Short answer (1-2 sentences)
+    /// - 500: Medium answer (1-2 paragraphs)
+    /// - 2048: Long answer (1-2 pages)
+    /// - Note: More tokens = higher cost
+    ///
+    /// **Advanced parameters** (usually leave as defaults):
+    /// - topP: Alternative to temperature for controlling randomness
+    /// - frequencyPenalty: Reduce repetitive text
+    /// - presencePenalty: Encourage topic diversity
+    /// </remarks>
+    public OpenAIChatModel(
+        string apiKey,
+        string modelName = "gpt-3.5-turbo",
+        double temperature = 0.7,
+        int maxTokens = 2048,
+        double topP = 1.0,
+        double frequencyPenalty = 0.0,
+        double presencePenalty = 0.0,
+        HttpClient? httpClient = null,
+        string? endpoint = null)
+        : base(httpClient, GetMaxContextTokens(modelName), maxTokens)
+    {
+        ValidateApiKey(apiKey);
+
+        if (temperature < 0 || temperature > 2)
+        {
+            throw new ArgumentException("Temperature must be between 0 and 2.", nameof(temperature));
+        }
+
+        if (topP < 0 || topP > 1)
+        {
+            throw new ArgumentException("TopP must be between 0 and 1.", nameof(topP));
+        }
+
+        if (frequencyPenalty < -2 || frequencyPenalty > 2)
+        {
+            throw new ArgumentException("Frequency penalty must be between -2 and 2.", nameof(frequencyPenalty));
+        }
+
+        if (presencePenalty < -2 || presencePenalty > 2)
+        {
+            throw new ArgumentException("Presence penalty must be between -2 and 2.", nameof(presencePenalty));
+        }
+
+        _apiKey = apiKey;
+        _endpoint = endpoint ?? "https://api.openai.com/v1/chat/completions";
+        _temperature = temperature;
+        _maxTokens = maxTokens;
+        _topP = topP;
+        _frequencyPenalty = frequencyPenalty;
+        _presencePenalty = presencePenalty;
+
+        ModelName = modelName;
+        MaxGenerationTokens = maxTokens;
+
+        // Set authorization header
+        HttpClient.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", _apiKey);
+    }
+
+    /// <inheritdoc/>
+    protected override async Task<string> GenerateAsyncCore(string prompt)
+    {
+        // Build the request
+        var request = new OpenAIRequest
+        {
+            Model = ModelName,
+            Messages = new[]
+            {
+                new OpenAIMessage
+                {
+                    Role = "user",
+                    Content = prompt
+                }
+            },
+            Temperature = _temperature,
+            MaxTokens = _maxTokens,
+            TopP = _topP,
+            FrequencyPenalty = _frequencyPenalty,
+            PresencePenalty = _presencePenalty
+        };
+
+        var jsonContent = JsonSerializer.Serialize(request, JsonOptions);
+        var content = new StringContent(jsonContent, Encoding.UTF8, "application/json");
+
+        // Make the API call
+        var response = await HttpClient.PostAsync(_endpoint, content);
+
+        // Check for errors
+        if (!response.IsSuccessStatusCode)
+        {
+            var errorContent = await response.Content.ReadAsStringAsync();
+            throw new HttpRequestException(
+                $"OpenAI API request failed with status {response.StatusCode}: {errorContent}",
+                null,
+                response.StatusCode);
+        }
+
+        // Parse the response
+        var responseContent = await response.Content.ReadAsStringAsync();
+        var openAIResponse = JsonSerializer.Deserialize<OpenAIResponse>(responseContent, JsonOptions);
+
+        if (openAIResponse?.Choices == null || openAIResponse.Choices.Length == 0)
+        {
+            throw new InvalidOperationException("OpenAI API returned no choices in response.");
+        }
+
+        var message = openAIResponse.Choices[0]?.Message?.Content;
+        if (string.IsNullOrEmpty(message))
+        {
+            throw new InvalidOperationException("OpenAI API returned empty message content.");
+        }
+
+        return message;
+    }
+
+    /// <summary>
+    /// Gets the maximum context window size for a given model.
+    /// </summary>
+    /// <param name="modelName">The model name.</param>
+    /// <returns>The maximum context tokens for the model.</returns>
+    private static int GetMaxContextTokens(string modelName)
+    {
+        return modelName.ToLowerInvariant() switch
+        {
+            "gpt-3.5-turbo" => 4096,
+            "gpt-3.5-turbo-16k" => 16384,
+            "gpt-4" => 8192,
+            "gpt-4-32k" => 32768,
+            "gpt-4-turbo" => 128000,
+            "gpt-4-turbo-preview" => 128000,
+            "gpt-4o" => 128000,
+            "gpt-4o-mini" => 128000,
+            _ => 4096 // Default fallback
+        };
+    }
+
+    #region OpenAI API Models
+
+    /// <summary>
+    /// Represents an OpenAI Chat Completions API request.
+    /// </summary>
+    private class OpenAIRequest
+    {
+        [JsonPropertyName("model")]
+        public string Model { get; set; } = "";
+
+        [JsonPropertyName("messages")]
+        public OpenAIMessage[] Messages { get; set; } = Array.Empty<OpenAIMessage>();
+
+        [JsonPropertyName("temperature")]
+        public double Temperature { get; set; }
+
+        [JsonPropertyName("max_tokens")]
+        public int MaxTokens { get; set; }
+
+        [JsonPropertyName("top_p")]
+        public double TopP { get; set; }
+
+        [JsonPropertyName("frequency_penalty")]
+        public double FrequencyPenalty { get; set; }
+
+        [JsonPropertyName("presence_penalty")]
+        public double PresencePenalty { get; set; }
+    }
+
+    /// <summary>
+    /// Represents a message in the OpenAI Chat Completions API.
+    /// </summary>
+    private class OpenAIMessage
+    {
+        [JsonPropertyName("role")]
+        public string Role { get; set; } = "";
+
+        [JsonPropertyName("content")]
+        public string Content { get; set; } = "";
+    }
+
+    /// <summary>
+    /// Represents an OpenAI Chat Completions API response.
+    /// </summary>
+    private class OpenAIResponse
+    {
+        [JsonPropertyName("id")]
+        public string? Id { get; set; }
+
+        [JsonPropertyName("choices")]
+        public OpenAIChoice[]? Choices { get; set; }
+
+        [JsonPropertyName("usage")]
+        public OpenAIUsage? Usage { get; set; }
+    }
+
+    /// <summary>
+    /// Represents a choice in the OpenAI API response.
+    /// </summary>
+    private class OpenAIChoice
+    {
+        [JsonPropertyName("index")]
+        public int Index { get; set; }
+
+        [JsonPropertyName("message")]
+        public OpenAIMessage? Message { get; set; }
+
+        [JsonPropertyName("finish_reason")]
+        public string? FinishReason { get; set; }
+    }
+
+    /// <summary>
+    /// Represents token usage information in the OpenAI API response.
+    /// </summary>
+    private class OpenAIUsage
+    {
+        [JsonPropertyName("prompt_tokens")]
+        public int PromptTokens { get; set; }
+
+        [JsonPropertyName("completion_tokens")]
+        public int CompletionTokens { get; set; }
+
+        [JsonPropertyName("total_tokens")]
+        public int TotalTokens { get; set; }
+    }
+
+    #endregion
+}

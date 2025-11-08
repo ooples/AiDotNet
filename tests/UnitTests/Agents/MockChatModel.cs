@@ -26,6 +26,12 @@ public class MockChatModel<T> : IChatModel<T>
     /// <inheritdoc/>
     public string ModelName { get; set; }
 
+    /// <inheritdoc/>
+    public int MaxContextTokens { get; set; } = 4096;
+
+    /// <inheritdoc/>
+    public int MaxGenerationTokens { get; set; } = 2048;
+
     /// <summary>
     /// Gets the list of all prompts that were sent to this mock model.
     /// Useful for verifying that the agent is sending the correct prompts.
@@ -33,7 +39,7 @@ public class MockChatModel<T> : IChatModel<T>
     public IReadOnlyList<string> ReceivedPrompts => _receivedPrompts.AsReadOnly();
 
     /// <inheritdoc/>
-    public Task<string> GenerateResponseAsync(string prompt)
+    public Task<string> GenerateAsync(string prompt)
     {
         _receivedPrompts.Add(prompt);
 
@@ -46,6 +52,19 @@ public class MockChatModel<T> : IChatModel<T>
 
         var response = _responses.Dequeue();
         return Task.FromResult(response);
+    }
+
+    /// <inheritdoc/>
+    public string Generate(string prompt)
+    {
+        return GenerateAsync(prompt).GetAwaiter().GetResult();
+    }
+
+    /// <inheritdoc/>
+    public Task<string> GenerateResponseAsync(string prompt)
+    {
+        // Alias for GenerateAsync
+        return GenerateAsync(prompt);
     }
 
     /// <summary>
