@@ -4,6 +4,7 @@ using AiDotNet.Data.Abstractions;
 using AiDotNet.Interfaces;
 using AiDotNet.Interpretability;
 using AiDotNet.Serialization;
+using AiDotNet.Agents;
 
 namespace AiDotNet.Models.Results;
 
@@ -274,6 +275,46 @@ public class PredictionModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
     /// </para>
     /// </remarks>
     internal ILoRAConfiguration<T>? LoRAConfiguration { get; private set; }
+
+    /// <summary>
+    /// Gets or sets the agent configuration used during model building.
+    /// </summary>
+    /// <value>Agent configuration containing API keys and settings, or null if agent assistance wasn't used.</value>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> If you enabled agent assistance during model building with WithAgentAssistance(),
+    /// this property stores the configuration. The API key is stored here so you can use AskAsync() on the trained
+    /// model without providing the key again.
+    ///
+    /// Note: API keys are NOT serialized when saving the model to disk for security reasons.
+    /// </para>
+    /// </remarks>
+    [JsonIgnore]
+    public AgentConfiguration<T>? AgentConfig { get; set; }
+
+    /// <summary>
+    /// Gets or sets the agent's recommendations made during model building.
+    /// </summary>
+    /// <value>Agent recommendations including suggested models and reasoning, or null if agent assistance wasn't used.</value>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> If you used agent assistance during building, this contains all the recommendations
+    /// the agent made, such as:
+    /// - Which model type to use (e.g., "RidgeRegression")
+    /// - Why that model was chosen
+    /// - Suggested hyperparameter values
+    ///
+    /// You can examine these recommendations to understand why the agent made certain choices.
+    ///
+    /// Example:
+    /// <code>
+    /// if (result.AgentRecommendation != null)
+    /// {
+    ///     Console.WriteLine($"Agent selected: {result.AgentRecommendation.SuggestedModelType}");
+    ///     Console.WriteLine($"Reasoning: {result.AgentRecommendation.ModelSelectionReasoning}");
+    /// }
+    /// </code>
+    /// </para>
+    /// </remarks>
+    public AgentRecommendation<T, TInput, TOutput>? AgentRecommendation { get; set; }
 
     /// <summary>
     /// Initializes a new instance of the PredictionModelResult class with the specified model, optimization results, and normalization information.
