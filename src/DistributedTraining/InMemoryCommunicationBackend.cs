@@ -307,7 +307,7 @@ public class InMemoryCommunicationBackend<T> : ICommunicationBackend<T> where T 
             // Use shared operation counter so all ranks target same buffer key
             string bufferId = $"broadcast_{_operationCounter}";
             Vector<T> result;
-            List<Vector<T>> buffer;
+            List<Vector<T>>? buffer;
 
             // Root process stores the data
             if (_rank == root)
@@ -387,7 +387,7 @@ public class InMemoryCommunicationBackend<T> : ICommunicationBackend<T> where T 
                 }
             }
 
-            List<Vector<T>> buffer;
+            List<Vector<T>>? buffer;
 
             // Wait for root to split data
             while (!_sharedBuffers.TryGetValue(bufferId, out buffer))
