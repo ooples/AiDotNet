@@ -8,6 +8,9 @@ namespace AiDotNet.Serving.Padding;
 /// </summary>
 public class BucketPaddingStrategy : IPaddingStrategy
 {
+    private static readonly Lazy<object> _one = new Lazy<object>(() => 1);
+    private static readonly Lazy<object> _zero = new Lazy<object>(() => 0);
+
     private readonly int[] _bucketSizes;
 
     /// <summary>
@@ -31,10 +34,9 @@ public class BucketPaddingStrategy : IPaddingStrategy
     /// <returns>The bucket size</returns>
     private int GetBucketSize(int length)
     {
-        foreach (var bucketSize in _bucketSizes)
+        foreach (var bucketSize in _bucketSizes.Where(bucketSize => length <= bucketSize))
         {
-            if (length <= bucketSize)
-                return bucketSize;
+            return bucketSize;
         }
 
         // If larger than all buckets, return the next power of 2
@@ -56,6 +58,9 @@ public class BucketPaddingStrategy : IPaddingStrategy
         // Create attention mask (1 for actual data, 0 for padding)
         attentionMask = new Matrix<T>(batchSize, paddedLength);
 
+        var one = (T)Convert.ChangeType(_one.Value, typeof(T));
+        var zero = (T)Convert.ChangeType(_zero.Value, typeof(T));
+
         for (int i = 0; i < batchSize; i++)
         {
             var vector = vectors[i];
@@ -64,12 +69,12 @@ public class BucketPaddingStrategy : IPaddingStrategy
                 if (j < vector.Length)
                 {
                     paddedMatrix[i, j] = vector[j];
-                    attentionMask[i, j] = (T)Convert.ChangeType(1, typeof(T));
+                    attentionMask[i, j] = one;
                 }
                 else
                 {
                     paddedMatrix[i, j] = default(T)!;
-                    attentionMask[i, j] = (T)Convert.ChangeType(0, typeof(T));
+                    attentionMask[i, j] = zero;
                 }
             }
         }

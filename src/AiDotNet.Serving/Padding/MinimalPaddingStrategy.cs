@@ -8,6 +8,9 @@ namespace AiDotNet.Serving.Padding;
 /// </summary>
 public class MinimalPaddingStrategy : IPaddingStrategy
 {
+    private static readonly Lazy<object> _one = new Lazy<object>(() => 1);
+    private static readonly Lazy<object> _zero = new Lazy<object>(() => 0);
+
     public string Name => "Minimal";
 
     public Matrix<T> PadBatch<T>(Vector<T>[] vectors, out Matrix<T>? attentionMask)
@@ -24,6 +27,9 @@ public class MinimalPaddingStrategy : IPaddingStrategy
         // Create attention mask (1 for actual data, 0 for padding)
         attentionMask = new Matrix<T>(batchSize, maxLength);
 
+        var one = (T)Convert.ChangeType(_one.Value, typeof(T));
+        var zero = (T)Convert.ChangeType(_zero.Value, typeof(T));
+
         for (int i = 0; i < batchSize; i++)
         {
             var vector = vectors[i];
@@ -32,12 +38,12 @@ public class MinimalPaddingStrategy : IPaddingStrategy
                 if (j < vector.Length)
                 {
                     paddedMatrix[i, j] = vector[j];
-                    attentionMask[i, j] = (T)Convert.ChangeType(1, typeof(T));
+                    attentionMask[i, j] = one;
                 }
                 else
                 {
                     paddedMatrix[i, j] = default(T)!;
-                    attentionMask[i, j] = (T)Convert.ChangeType(0, typeof(T));
+                    attentionMask[i, j] = zero;
                 }
             }
         }
