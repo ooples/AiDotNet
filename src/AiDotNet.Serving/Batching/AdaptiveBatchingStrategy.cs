@@ -16,6 +16,10 @@ public class AdaptiveBatchingStrategy : IBatchingStrategy
     private double _recentAverageLatency;
     private readonly object _lock = new();
 
+    // Constants for batch size adaptation
+    private const double SmoothingFactor = 0.3;
+    private const int BatchSizeAdjustmentStep = 5;
+
     /// <summary>
     /// Initializes a new instance of the AdaptiveBatchingStrategy.
     /// </summary>
@@ -23,7 +27,7 @@ public class AdaptiveBatchingStrategy : IBatchingStrategy
     /// <param name="maxBatchSize">Maximum batch size</param>
     /// <param name="maxWaitMs">Maximum wait time before processing</param>
     /// <param name="targetLatencyMs">Target latency in milliseconds</param>
-    /// <param name="latencyToleranceFactor">Tolerance factor for latency (e.g., 2.0 means p99 should be &lt; 2x p50)</param>
+    /// <param name="latencyToleranceFactor">Tolerance factor for latency (e.g., 2.0 means p99 should be < 2x p50)</param>
     public AdaptiveBatchingStrategy(
         int minBatchSize,
         int maxBatchSize,
@@ -75,19 +79,18 @@ public class AdaptiveBatchingStrategy : IBatchingStrategy
         lock (_lock)
         {
             // Exponential moving average of latency
-            const double alpha = 0.3; // Smoothing factor
-            _recentAverageLatency = alpha * latencyMs + (1 - alpha) * _recentAverageLatency;
+            _recentAverageLatency = SmoothingFactor * latencyMs + (1 - SmoothingFactor) * _recentAverageLatency;
 
             // Adapt batch size based on latency
             if (_recentAverageLatency < _targetLatencyMs)
             {
                 // Latency is good, try increasing batch size
-                _currentOptimalBatchSize = Math.Min(_currentOptimalBatchSize + 5, _maxBatchSize);
+                _currentOptimalBatchSize = Math.Min(_currentOptimalBatchSize + BatchSizeAdjustmentStep, _maxBatchSize);
             }
             else if (_recentAverageLatency > _targetLatencyMs * _latencyToleranceFactor)
             {
                 // Latency is too high, decrease batch size
-                _currentOptimalBatchSize = Math.Max(_currentOptimalBatchSize - 5, _minBatchSize);
+                _currentOptimalBatchSize = Math.Max(_currentOptimalBatchSize - BatchSizeAdjustmentStep, _minBatchSize);
             }
             // Otherwise, keep current batch size
         }
