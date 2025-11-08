@@ -247,9 +247,9 @@ public class NmfDecomposition<T> : MatrixDecompositionBase<T>
     /// between two matrices - it's the square root of the sum of all squared differences between corresponding elements.
     /// </para>
     /// </remarks>
-    private T ComputeReconstructionError(Matrix<T> V, Matrix<T> W, Matrix<T> H)
+    private T ComputeReconstructionError(Matrix<T> V, Matrix<T> basisMatrix, Matrix<T> activationMatrix)
     {
-        Matrix<T> WH = W.Multiply(H);
+        Matrix<T> WH = basisMatrix.Multiply(activationMatrix);
         T sumSquaredError = NumOps.Zero;
 
         for (int i = 0; i < V.Rows; i++)
