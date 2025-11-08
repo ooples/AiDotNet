@@ -14,7 +14,7 @@ namespace AiDotNet.DecompositionMethods.MatrixDecomposition;
 /// <typeparam name="T">The numeric type used in the matrix (e.g., double, float).</typeparam>
 public class HessenbergDecomposition<T> : IMatrixDecomposition<T>
 {
-    private readonly INumericOperations<T> _numOps;
+    private readonly INumericOperations<T> NumOps;
 
     /// <summary>
     /// Gets the resulting Hessenberg matrix after decomposition.
@@ -48,7 +48,7 @@ public class HessenbergDecomposition<T> : IMatrixDecomposition<T>
     /// </remarks>
     public HessenbergDecomposition(Matrix<T> matrix, HessenbergAlgorithmType algorithm = HessenbergAlgorithmType.Householder)
     {
-        _numOps = MathHelper.GetNumericOperations<T>();
+        NumOps = MathHelper.GetNumericOperations<T>();
         A = matrix;
         HessenbergMatrix = Decompose(matrix, algorithm);
     }
@@ -168,14 +168,14 @@ public class HessenbergDecomposition<T> : IMatrixDecomposition<T>
         {
             for (int i = k + 2; i < n; i++)
             {
-                if (!_numOps.Equals(H[i, k], _numOps.Zero))
+                if (!NumOps.Equals(H[i, k], NumOps.Zero))
                 {
-                    T factor = _numOps.Divide(H[i, k], H[k + 1, k]);
+                    T factor = NumOps.Divide(H[i, k], H[k + 1, k]);
                     for (int j = k; j < n; j++)
                     {
-                        H[i, j] = _numOps.Subtract(H[i, j], _numOps.Multiply(factor, H[k + 1, j]));
+                        H[i, j] = NumOps.Subtract(H[i, j], NumOps.Multiply(factor, H[k + 1, j]));
                     }
-                    H[i, k] = _numOps.Zero;
+                    H[i, k] = NumOps.Zero;
                 }
             }
         }
@@ -214,7 +214,7 @@ public class HessenbergDecomposition<T> : IMatrixDecomposition<T>
                 MatrixHelper<T>.ApplyGivensRotation(Q, c, s, k, k + 1, 0, n);
             }
 
-            if (MatrixHelper<T>.IsUpperHessenberg(H, _numOps.FromDouble(1e-10)))
+            if (MatrixHelper<T>.IsUpperHessenberg(H, NumOps.FromDouble(1e-10)))
             {
                 break;
             }
@@ -246,7 +246,7 @@ public class HessenbergDecomposition<T> : IMatrixDecomposition<T>
         var H = new Matrix<T>(n, n);
         var v = new Vector<T>(n)
         {
-            [0] = _numOps.One
+            [0] = NumOps.One
         };
 
         for (int j = 0; j < n; j++)
@@ -292,26 +292,26 @@ public class HessenbergDecomposition<T> : IMatrixDecomposition<T>
         // Forward substitution
         for (int i = 0; i < n; i++)
         {
-            var sum = _numOps.Zero;
+            var sum = NumOps.Zero;
             for (int j = Math.Max(0, i - 1); j < i; j++)
             {
-                sum = _numOps.Add(sum, _numOps.Multiply(HessenbergMatrix[i, j], y[j]));
+                sum = NumOps.Add(sum, NumOps.Multiply(HessenbergMatrix[i, j], y[j]));
             }
 
-            y[i] = _numOps.Divide(_numOps.Subtract(b[i], sum), HessenbergMatrix[i, i]);
+            y[i] = NumOps.Divide(NumOps.Subtract(b[i], sum), HessenbergMatrix[i, i]);
         }
 
         // Backward substitution
         var x = new Vector<T>(n);
         for (int i = n - 1; i >= 0; i--)
         {
-            var sum = _numOps.Zero;
+            var sum = NumOps.Zero;
             for (int j = i + 1; j < n; j++)
             {
-                sum = _numOps.Add(sum, _numOps.Multiply(HessenbergMatrix[i, j], x[j]));
+                sum = NumOps.Add(sum, NumOps.Multiply(HessenbergMatrix[i, j], x[j]));
             }
 
-            x[i] = _numOps.Subtract(y[i], sum);
+            x[i] = NumOps.Subtract(y[i], sum);
         }
 
         return x;

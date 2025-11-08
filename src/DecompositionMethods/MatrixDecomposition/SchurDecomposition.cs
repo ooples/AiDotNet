@@ -40,7 +40,7 @@ public class SchurDecomposition<T> : IMatrixDecomposition<T>
     /// <summary>
     /// Provides operations for the numeric type being used.
     /// </summary>
-    private readonly INumericOperations<T> _numOps;
+    private readonly INumericOperations<T> NumOps;
 
     /// <summary>
     /// Initializes a new instance of the SchurDecomposition class.
@@ -50,7 +50,7 @@ public class SchurDecomposition<T> : IMatrixDecomposition<T>
     public SchurDecomposition(Matrix<T> matrix, SchurAlgorithmType algorithm = SchurAlgorithmType.Francis)
     {
         A = matrix;
-        _numOps = MathHelper.GetNumericOperations<T>();
+        NumOps = MathHelper.GetNumericOperations<T>();
         (SchurMatrix, UnitaryMatrix) = Decompose(matrix, algorithm);
     }
 
@@ -91,7 +91,7 @@ public class SchurDecomposition<T> : IMatrixDecomposition<T>
         Matrix<T> S = H.Clone();
 
         const int maxIterations = 100;
-        T tolerance = _numOps.FromDouble(1e-10);
+        T tolerance = NumOps.FromDouble(1e-10);
 
         for (int iter = 0; iter < maxIterations; iter++)
         {
@@ -126,14 +126,14 @@ public class SchurDecomposition<T> : IMatrixDecomposition<T>
         Matrix<T> U = Matrix<T>.CreateIdentity(n);
 
         const int maxIterations = 100;
-        T tolerance = _numOps.FromDouble(1e-10);
+        T tolerance = NumOps.FromDouble(1e-10);
 
         for (int iter = 0; iter < maxIterations; iter++)
         {
             for (int i = 0; i < n - 1; i++)
             {
-                T s = _numOps.Add(H[n - 2, n - 2], H[n - 1, n - 1]);
-                T t = _numOps.Subtract(_numOps.Multiply(H[n - 2, n - 2], H[n - 1, n - 1]), _numOps.Multiply(H[n - 2, n - 1], H[n - 1, n - 2]));
+                T s = NumOps.Add(H[n - 2, n - 2], H[n - 1, n - 1]);
+                T t = NumOps.Subtract(NumOps.Multiply(H[n - 2, n - 2], H[n - 1, n - 1]), NumOps.Multiply(H[n - 2, n - 1], H[n - 1, n - 2]));
 
                 Matrix<T> Q = ComputeFrancisQRStep(H, s, t);
                 H = Q.Transpose().Multiply(H).Multiply(Q);
@@ -157,7 +157,7 @@ public class SchurDecomposition<T> : IMatrixDecomposition<T>
     private Matrix<T> ComputeFrancisQRStep(Matrix<T> H, T s, T t)
     {
         int n = H.Rows;
-        T x = _numOps.Subtract(_numOps.Subtract(H[0, 0], s), _numOps.Divide(_numOps.Multiply(H[0, 1], H[1, 0]), _numOps.Subtract(H[1, 1], s)));
+        T x = NumOps.Subtract(NumOps.Subtract(H[0, 0], s), NumOps.Divide(NumOps.Multiply(H[0, 1], H[1, 0]), NumOps.Subtract(H[1, 1], s)));
         T y = H[1, 0];
 
         for (int k = 0; k < n - 1; k++)
@@ -194,7 +194,7 @@ public class SchurDecomposition<T> : IMatrixDecomposition<T>
         Matrix<T> U = Matrix<T>.CreateIdentity(n);
 
         const int maxIterations = 100;
-        T tolerance = _numOps.FromDouble(1e-10);
+        T tolerance = NumOps.FromDouble(1e-10);
 
         for (int iter = 0; iter < maxIterations; iter++)
         {
@@ -223,7 +223,7 @@ public class SchurDecomposition<T> : IMatrixDecomposition<T>
         int n = H.Rows;
         T x = H[start, start];
         T y = H[start + 1, start];
-        T z = start + 2 < n ? H[start + 2, start] : _numOps.Zero;
+        T z = start + 2 < n ? H[start + 2, start] : NumOps.Zero;
 
         for (int k = start; k < n - 1; k++)
         {
@@ -234,7 +234,7 @@ public class SchurDecomposition<T> : IMatrixDecomposition<T>
             {
                 x = H[k + 1, k];
                 y = H[k + 2, k];
-                z = k + 3 < n ? H[k + 3, k] : _numOps.Zero;
+                z = k + 3 < n ? H[k + 3, k] : NumOps.Zero;
             }
         }
 
@@ -258,24 +258,24 @@ public class SchurDecomposition<T> : IMatrixDecomposition<T>
     /// </remarks>
     private Matrix<T> ComputeHouseholderReflection(T x, T y, T? z = default)
     {
-        int n = _numOps.Equals(z ?? _numOps.Zero, _numOps.Zero) ? 2 : 3;
+        int n = NumOps.Equals(z ?? NumOps.Zero, NumOps.Zero) ? 2 : 3;
         Vector<T> v = new(n)
         {
             [0] = x,
             [1] = y
         };
-        if (n == 3) v[2] = z ?? _numOps.Zero;
+        if (n == 3) v[2] = z ?? NumOps.Zero;
 
-        T alpha = _numOps.Sqrt(v.DotProduct(v));
-        if (_numOps.Equals(alpha, _numOps.Zero)) return Matrix<T>.CreateIdentity(n);
+        T alpha = NumOps.Sqrt(v.DotProduct(v));
+        if (NumOps.Equals(alpha, NumOps.Zero)) return Matrix<T>.CreateIdentity(n);
 
-        v[0] = _numOps.Add(v[0], _numOps.Multiply(_numOps.SignOrZero(x), alpha));
-        T beta = _numOps.Sqrt(_numOps.Multiply(_numOps.FromDouble(2), v.DotProduct(v)));
+        v[0] = NumOps.Add(v[0], NumOps.Multiply(NumOps.SignOrZero(x), alpha));
+        T beta = NumOps.Sqrt(NumOps.Multiply(NumOps.FromDouble(2), v.DotProduct(v)));
 
-        if (_numOps.Equals(beta, _numOps.Zero)) return Matrix<T>.CreateIdentity(n);
+        if (NumOps.Equals(beta, NumOps.Zero)) return Matrix<T>.CreateIdentity(n);
 
         v = v.Divide(beta);
-        return Matrix<T>.CreateIdentity(n).Subtract(v.OuterProduct(v).Multiply(_numOps.FromDouble(2)));
+        return Matrix<T>.CreateIdentity(n).Subtract(v.OuterProduct(v).Multiply(NumOps.FromDouble(2)));
     }
 
     /// <summary>

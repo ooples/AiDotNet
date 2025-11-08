@@ -15,7 +15,7 @@ namespace AiDotNet.DecompositionMethods.MatrixDecomposition;
 /// </remarks>
 public class UduDecomposition<T> : IMatrixDecomposition<T>
 {
-    private readonly INumericOperations<T> _numOps;
+    private readonly INumericOperations<T> NumOps;
 
     /// <summary>
     /// Gets the original matrix being decomposed.
@@ -65,7 +65,7 @@ public class UduDecomposition<T> : IMatrixDecomposition<T>
         var n = A.Rows;
         U = new Matrix<T>(n, n);
         D = new Vector<T>(n);
-        _numOps = MathHelper.GetNumericOperations<T>();
+        NumOps = MathHelper.GetNumericOperations<T>();
 
         Decompose(algorithm);
     }
@@ -108,23 +108,23 @@ public class UduDecomposition<T> : IMatrixDecomposition<T>
 
         for (int j = 0; j < n; j++)
         {
-            T sum = _numOps.Zero;
+            T sum = NumOps.Zero;
             for (int k = 0; k < j; k++)
             {
-                sum = _numOps.Add(sum, _numOps.Multiply(_numOps.Multiply(U[k, j], U[k, j]), D[k]));
+                sum = NumOps.Add(sum, NumOps.Multiply(NumOps.Multiply(U[k, j], U[k, j]), D[k]));
             }
-            D[j] = _numOps.Subtract(A[j, j], sum);
+            D[j] = NumOps.Subtract(A[j, j], sum);
 
-            U[j, j] = _numOps.One;
+            U[j, j] = NumOps.One;
 
             for (int i = j + 1; i < n; i++)
             {
-                sum = _numOps.Zero;
+                sum = NumOps.Zero;
                 for (int k = 0; k < j; k++)
                 {
-                    sum = _numOps.Add(sum, _numOps.Multiply(_numOps.Multiply(U[k, i], U[k, j]), D[k]));
+                    sum = NumOps.Add(sum, NumOps.Multiply(NumOps.Multiply(U[k, i], U[k, j]), D[k]));
                 }
-                U[j, i] = _numOps.Divide(_numOps.Subtract(A[j, i], sum), D[j]);
+                U[j, i] = NumOps.Divide(NumOps.Subtract(A[j, i], sum), D[j]);
             }
         }
     }
@@ -147,23 +147,23 @@ public class UduDecomposition<T> : IMatrixDecomposition<T>
 
         for (int i = 0; i < n; i++)
         {
-            T sum = _numOps.Zero;
+            T sum = NumOps.Zero;
             for (int k = 0; k < i; k++)
             {
-                sum = _numOps.Add(sum, _numOps.Multiply(_numOps.Multiply(U[k, i], U[k, i]), D[k]));
+                sum = NumOps.Add(sum, NumOps.Multiply(NumOps.Multiply(U[k, i], U[k, i]), D[k]));
             }
-            D[i] = _numOps.Subtract(A[i, i], sum);
+            D[i] = NumOps.Subtract(A[i, i], sum);
 
-            U[i, i] = _numOps.One;
+            U[i, i] = NumOps.One;
 
             for (int j = i + 1; j < n; j++)
             {
-                sum = _numOps.Zero;
+                sum = NumOps.Zero;
                 for (int k = 0; k < i; k++)
                 {
-                    sum = _numOps.Add(sum, _numOps.Multiply(_numOps.Multiply(U[k, i], U[k, j]), D[k]));
+                    sum = NumOps.Add(sum, NumOps.Multiply(NumOps.Multiply(U[k, i], U[k, j]), D[k]));
                 }
-                U[i, j] = _numOps.Divide(_numOps.Subtract(A[i, j], sum), D[i]);
+                U[i, j] = NumOps.Divide(NumOps.Subtract(A[i, j], sum), D[i]);
             }
         }
     }
@@ -192,30 +192,30 @@ public class UduDecomposition<T> : IMatrixDecomposition<T>
         Vector<T> y = new Vector<T>(b.Length);
         for (int i = 0; i < b.Length; i++)
         {
-            T sum = _numOps.Zero;
+            T sum = NumOps.Zero;
             for (int j = 0; j < i; j++)
             {
-                sum = _numOps.Add(sum, _numOps.Multiply(U[j, i], y[j]));
+                sum = NumOps.Add(sum, NumOps.Multiply(U[j, i], y[j]));
             }
-            y[i] = _numOps.Subtract(b[i], sum);
+            y[i] = NumOps.Subtract(b[i], sum);
         }
 
         // Diagonal scaling
         for (int i = 0; i < b.Length; i++)
         {
-            y[i] = _numOps.Divide(y[i], D[i]);
+            y[i] = NumOps.Divide(y[i], D[i]);
         }
 
         // Backward substitution
         Vector<T> x = new Vector<T>(b.Length);
         for (int i = b.Length - 1; i >= 0; i--)
         {
-            T sum = _numOps.Zero;
+            T sum = NumOps.Zero;
             for (int j = i + 1; j < b.Length; j++)
             {
-                sum = _numOps.Add(sum, _numOps.Multiply(U[i, j], x[j]));
+                sum = NumOps.Add(sum, NumOps.Multiply(U[i, j], x[j]));
             }
-            x[i] = _numOps.Subtract(y[i], sum);
+            x[i] = NumOps.Subtract(y[i], sum);
         }
 
         return x;
@@ -241,7 +241,7 @@ public class UduDecomposition<T> : IMatrixDecomposition<T>
         for (int i = 0; i < n; i++)
         {
             Vector<T> ei = new Vector<T>(n);
-            ei[i] = _numOps.One;
+            ei[i] = NumOps.One;
             Vector<T> column = Solve(ei);
             for (int j = 0; j < n; j++)
             {

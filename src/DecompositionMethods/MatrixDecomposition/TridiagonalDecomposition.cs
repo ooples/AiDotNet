@@ -15,7 +15,7 @@ namespace AiDotNet.DecompositionMethods.MatrixDecomposition;
 /// </remarks>
 public class TridiagonalDecomposition<T> : IMatrixDecomposition<T>
 {
-    private readonly INumericOperations<T> _numOps;
+    private readonly INumericOperations<T> NumOps;
 
     /// <summary>
     /// Gets the original matrix being decomposed.
@@ -47,7 +47,7 @@ public class TridiagonalDecomposition<T> : IMatrixDecomposition<T>
     public TridiagonalDecomposition(Matrix<T> matrix, TridiagonalAlgorithmType algorithm = TridiagonalAlgorithmType.Householder)
     {
         A = matrix;
-        _numOps = MathHelper.GetNumericOperations<T>();
+        NumOps = MathHelper.GetNumericOperations<T>();
         QMatrix = new Matrix<T>(matrix.Rows, matrix.Columns);
         TMatrix = new Matrix<T>(matrix.Rows, matrix.Columns);
         Decompose(algorithm);
@@ -95,7 +95,7 @@ public class TridiagonalDecomposition<T> : IMatrixDecomposition<T>
         for (int k = 0; k < n - 2; k++)
         {
             Vector<T> x = TMatrix.GetColumn(k).GetSubVector(k + 1, n - k - 1);
-            T alpha = _numOps.Multiply(_numOps.SignOrZero(x[0]), x.Norm());
+            T alpha = NumOps.Multiply(NumOps.SignOrZero(x[0]), x.Norm());
             Vector<T> u = x.Subtract(Vector<T>.CreateDefault(x.Length, alpha).SetValue(0, x[0]));
             u = u.Divide(u.Norm());
 
@@ -104,7 +104,7 @@ public class TridiagonalDecomposition<T> : IMatrixDecomposition<T>
             {
                 for (int j = k + 1; j < n; j++)
                 {
-                    P[i, j] = _numOps.Subtract(P[i, j], _numOps.Multiply(_numOps.FromDouble(2), _numOps.Multiply(u[i - k - 1], u[j - k - 1])));
+                    P[i, j] = NumOps.Subtract(P[i, j], NumOps.Multiply(NumOps.FromDouble(2), NumOps.Multiply(u[i - k - 1], u[j - k - 1])));
                 }
             }
 
@@ -133,22 +133,22 @@ public class TridiagonalDecomposition<T> : IMatrixDecomposition<T>
         {
             for (int j = i + 2; j < n; j++)
             {
-                if (!_numOps.Equals(TMatrix[j, i], _numOps.Zero))
+                if (!NumOps.Equals(TMatrix[j, i], NumOps.Zero))
                 {
                     // Calculate Givens rotation
                     T a = TMatrix[i + 1, i];
                     T b = TMatrix[j, i];
-                    T r = _numOps.Sqrt(_numOps.Add(_numOps.Multiply(a, a), _numOps.Multiply(b, b)));
-                    T c = _numOps.Divide(a, r);
-                    T s = _numOps.Divide(b, r);
+                    T r = NumOps.Sqrt(NumOps.Add(NumOps.Multiply(a, a), NumOps.Multiply(b, b)));
+                    T c = NumOps.Divide(a, r);
+                    T s = NumOps.Divide(b, r);
 
                     // Apply Givens rotation to TMatrix
                     for (int k = i; k < n; k++)
                     {
                         T temp1 = TMatrix[i + 1, k];
                         T temp2 = TMatrix[j, k];
-                        TMatrix[i + 1, k] = _numOps.Add(_numOps.Multiply(c, temp1), _numOps.Multiply(s, temp2));
-                        TMatrix[j, k] = _numOps.Subtract(_numOps.Multiply(_numOps.Negate(s), temp1), _numOps.Multiply(c, temp2));
+                        TMatrix[i + 1, k] = NumOps.Add(NumOps.Multiply(c, temp1), NumOps.Multiply(s, temp2));
+                        TMatrix[j, k] = NumOps.Subtract(NumOps.Multiply(NumOps.Negate(s), temp1), NumOps.Multiply(c, temp2));
                     }
 
                     // Update QMatrix
@@ -156,8 +156,8 @@ public class TridiagonalDecomposition<T> : IMatrixDecomposition<T>
                     {
                         T temp1 = QMatrix[k, i + 1];
                         T temp2 = QMatrix[k, j];
-                        QMatrix[k, i + 1] = _numOps.Add(_numOps.Multiply(c, temp1), _numOps.Multiply(s, temp2));
-                        QMatrix[k, j] = _numOps.Subtract(_numOps.Multiply(_numOps.Negate(s), temp1), _numOps.Multiply(c, temp2));
+                        QMatrix[k, i + 1] = NumOps.Add(NumOps.Multiply(c, temp1), NumOps.Multiply(s, temp2));
+                        QMatrix[k, j] = NumOps.Subtract(NumOps.Multiply(NumOps.Negate(s), temp1), NumOps.Multiply(c, temp2));
                     }
                 }
             }
@@ -170,7 +170,7 @@ public class TridiagonalDecomposition<T> : IMatrixDecomposition<T>
             {
                 if (Math.Abs(i - j) > 1)
                 {
-                    TMatrix[i, j] = _numOps.Zero;
+                    TMatrix[i, j] = NumOps.Zero;
                 }
             }
         }
@@ -194,7 +194,7 @@ public class TridiagonalDecomposition<T> : IMatrixDecomposition<T>
         TMatrix = new Matrix<T>(n, n);
 
         Vector<T> v = new Vector<T>(n);
-        v[0] = _numOps.One;
+        v[0] = NumOps.One;
         Vector<T> w = A.Multiply(v);
         T alpha = w.DotProduct(v);
         w = w.Subtract(v.Multiply(alpha));
@@ -205,7 +205,7 @@ public class TridiagonalDecomposition<T> : IMatrixDecomposition<T>
 
         for (int j = 1; j < n; j++)
         {
-            if (_numOps.Equals(beta, _numOps.Zero))
+            if (NumOps.Equals(beta, NumOps.Zero))
             {
                 break; // Early termination if beta becomes zero
             }
@@ -284,16 +284,16 @@ public class TridiagonalDecomposition<T> : IMatrixDecomposition<T>
         x[0] = b[0];
         for (int i = 1; i < n; i++)
         {
-            temp[i] = _numOps.Divide(TMatrix[i, i - 1], d[i - 1]);
-            d[i] = _numOps.Subtract(TMatrix[i, i], _numOps.Multiply(temp[i], TMatrix[i - 1, i]));
-            x[i] = _numOps.Subtract(b[i], _numOps.Multiply(temp[i], x[i - 1]));
+            temp[i] = NumOps.Divide(TMatrix[i, i - 1], d[i - 1]);
+            d[i] = NumOps.Subtract(TMatrix[i, i], NumOps.Multiply(temp[i], TMatrix[i - 1, i]));
+            x[i] = NumOps.Subtract(b[i], NumOps.Multiply(temp[i], x[i - 1]));
         }
 
         // Back substitution
-        x[n - 1] = _numOps.Divide(x[n - 1], d[n - 1]);
+        x[n - 1] = NumOps.Divide(x[n - 1], d[n - 1]);
         for (int i = n - 2; i >= 0; i--)
         {
-            x[i] = _numOps.Divide(_numOps.Subtract(x[i], _numOps.Multiply(TMatrix[i, i + 1], x[i + 1])), d[i]);
+            x[i] = NumOps.Divide(NumOps.Subtract(x[i], NumOps.Multiply(TMatrix[i, i + 1], x[i + 1])), d[i]);
         }
 
         return x;

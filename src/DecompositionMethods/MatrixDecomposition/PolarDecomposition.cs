@@ -18,7 +18,7 @@ namespace AiDotNet.DecompositionMethods.MatrixDecomposition;
 /// </remarks>
 public class PolarDecomposition<T> : IMatrixDecomposition<T>
 {
-    private readonly INumericOperations<T> _numOps;
+    private readonly INumericOperations<T> NumOps;
 
     /// <summary>
     /// Gets the original matrix being decomposed.
@@ -55,7 +55,7 @@ public class PolarDecomposition<T> : IMatrixDecomposition<T>
     public PolarDecomposition(Matrix<T> matrix, PolarAlgorithmType algorithm = PolarAlgorithmType.SVD)
     {
         A = matrix;
-        _numOps = MathHelper.GetNumericOperations<T>();
+        NumOps = MathHelper.GetNumericOperations<T>();
         U = new Matrix<T>(matrix.Rows, matrix.Columns);
         P = new Matrix<T>(matrix.Rows, matrix.Columns);
         Decompose(algorithm);
@@ -144,7 +144,7 @@ public class PolarDecomposition<T> : IMatrixDecomposition<T>
     {
         Matrix<T> X = A.Clone();
         Matrix<T> Y = Matrix<T>.CreateIdentity(A.Rows);
-        T tolerance = _numOps.FromDouble(1e-12);
+        T tolerance = NumOps.FromDouble(1e-12);
         int maxIterations = 100;
 
         for (int i = 0; i < maxIterations; i++)
@@ -158,13 +158,13 @@ public class PolarDecomposition<T> : IMatrixDecomposition<T>
                 throw new InvalidOperationException("Matrix became singular during Newton-Schulz iteration.");
             }
 
-            Matrix<T> nextX = X.Multiply(_numOps.FromDouble(0.5)).Add(Y.Transpose().Multiply(_numOps.FromDouble(0.5)));
-            Matrix<T> nextY = Y.Multiply(_numOps.FromDouble(0.5)).Add(XtX.Inverse().Multiply(X.Transpose()).Multiply(_numOps.FromDouble(0.5)));
+            Matrix<T> nextX = X.Multiply(NumOps.FromDouble(0.5)).Add(Y.Transpose().Multiply(NumOps.FromDouble(0.5)));
+            Matrix<T> nextY = Y.Multiply(NumOps.FromDouble(0.5)).Add(XtX.Inverse().Multiply(X.Transpose()).Multiply(NumOps.FromDouble(0.5)));
 
             T errorX = nextX.Subtract(X).FrobeniusNorm();
             T errorY = nextY.Subtract(Y).FrobeniusNorm();
 
-            if (_numOps.LessThan(errorX, tolerance) && _numOps.LessThan(errorY, tolerance))
+            if (NumOps.LessThan(errorX, tolerance) && NumOps.LessThan(errorY, tolerance))
             {
                 break;
             }
@@ -173,7 +173,7 @@ public class PolarDecomposition<T> : IMatrixDecomposition<T>
             Y = nextY;
 
             // Check for divergence
-            if (_numOps.GreaterThan(errorX, _numOps.FromDouble(1e6)) || _numOps.GreaterThan(errorY, _numOps.FromDouble(1e6)))
+            if (NumOps.GreaterThan(errorX, NumOps.FromDouble(1e6)) || NumOps.GreaterThan(errorY, NumOps.FromDouble(1e6)))
             {
                 throw new InvalidOperationException("Newton-Schulz iteration diverged.");
             }
@@ -204,7 +204,7 @@ public class PolarDecomposition<T> : IMatrixDecomposition<T>
     private void DecomposeHalleyIteration()
     {
         Matrix<T> X = A.Clone();
-        T tolerance = _numOps.FromDouble(1e-12);
+        T tolerance = NumOps.FromDouble(1e-12);
         int maxIterations = 100;
 
         for (int i = 0; i < maxIterations; i++)
@@ -216,12 +216,12 @@ public class PolarDecomposition<T> : IMatrixDecomposition<T>
 
             Matrix<T> Y = X.Inverse();
             Matrix<T> Z = Y.Transpose();
-            Matrix<T> nextX = X.Multiply(_numOps.FromDouble(3)).Add(Z).Multiply(_numOps.FromDouble(0.25))
-                .Add(X.Multiply(_numOps.FromDouble(3)).Multiply(Y).Multiply(Z).Multiply(_numOps.FromDouble(0.25)));
+            Matrix<T> nextX = X.Multiply(NumOps.FromDouble(3)).Add(Z).Multiply(NumOps.FromDouble(0.25))
+                .Add(X.Multiply(NumOps.FromDouble(3)).Multiply(Y).Multiply(Z).Multiply(NumOps.FromDouble(0.25)));
 
             T error = nextX.Subtract(X).FrobeniusNorm();
 
-            if (_numOps.LessThan(error, tolerance))
+            if (NumOps.LessThan(error, tolerance))
             {
                 break;
             }
@@ -229,7 +229,7 @@ public class PolarDecomposition<T> : IMatrixDecomposition<T>
             X = nextX;
 
             // Check for divergence
-            if (_numOps.GreaterThan(error, _numOps.FromDouble(1e6)))
+            if (NumOps.GreaterThan(error, NumOps.FromDouble(1e6)))
             {
                 throw new InvalidOperationException("Halley iteration diverged.");
             }
@@ -259,7 +259,7 @@ public class PolarDecomposition<T> : IMatrixDecomposition<T>
     private void DecomposeQRIteration()
     {
         Matrix<T> X = A.Clone();
-        T tolerance = _numOps.FromDouble(1e-12);
+        T tolerance = NumOps.FromDouble(1e-12);
         int maxIterations = 100;
 
         for (int i = 0; i < maxIterations; i++)
@@ -268,11 +268,11 @@ public class PolarDecomposition<T> : IMatrixDecomposition<T>
             Matrix<T> Q = qr.Q;
             Matrix<T> R = qr.R;
 
-            Matrix<T> nextX = Q.Multiply(R.Add(R.Transpose())).Multiply(_numOps.FromDouble(0.5));
+            Matrix<T> nextX = Q.Multiply(R.Add(R.Transpose())).Multiply(NumOps.FromDouble(0.5));
 
             T error = nextX.Subtract(X).FrobeniusNorm();
 
-            if (_numOps.LessThan(error, tolerance))
+            if (NumOps.LessThan(error, tolerance))
             {
                 break;
             }
@@ -280,7 +280,7 @@ public class PolarDecomposition<T> : IMatrixDecomposition<T>
             X = nextX;
 
             // Check for divergence
-            if (_numOps.GreaterThan(error, _numOps.FromDouble(1e6)))
+            if (NumOps.GreaterThan(error, NumOps.FromDouble(1e6)))
             {
                 throw new InvalidOperationException("QR iteration diverged.");
             }
@@ -317,11 +317,11 @@ public class PolarDecomposition<T> : IMatrixDecomposition<T>
 
         if (scalingFactor > 0)
         {
-            X = X.Multiply(_numOps.FromDouble(Math.Pow(2, -scalingFactor)));
+            X = X.Multiply(NumOps.FromDouble(Math.Pow(2, -scalingFactor)));
         }
 
         Matrix<T> Y = Matrix<T>.CreateIdentity(A.Rows);
-        T tolerance = _numOps.FromDouble(1e-12);
+        T tolerance = NumOps.FromDouble(1e-12);
         int maxIterations = 20;
 
         for (int i = 0; i < maxIterations; i++)
@@ -332,18 +332,18 @@ public class PolarDecomposition<T> : IMatrixDecomposition<T>
             }
 
             Matrix<T> Z = X.Subtract(Y.Inverse());
-            Y = Y.Add(Y.Multiply(Z).Multiply(_numOps.FromDouble(0.5)));
-            X = X.Subtract(Z.Multiply(X).Multiply(_numOps.FromDouble(0.5)));
+            Y = Y.Add(Y.Multiply(Z).Multiply(NumOps.FromDouble(0.5)));
+            X = X.Subtract(Z.Multiply(X).Multiply(NumOps.FromDouble(0.5)));
 
             T error = Z.FrobeniusNorm();
 
-            if (_numOps.LessThan(error, tolerance))
+            if (NumOps.LessThan(error, tolerance))
             {
                 break;
             }
 
             // Check for divergence
-            if (_numOps.GreaterThan(error, _numOps.FromDouble(1e6)))
+            if (NumOps.GreaterThan(error, NumOps.FromDouble(1e6)))
             {
                 throw new InvalidOperationException("Scaling and Squaring iteration diverged.");
             }
