@@ -109,7 +109,7 @@ public class NmfDecomposition<T> : MatrixDecompositionBase<T>
     /// </summary>
     protected override void Decompose()
     {
-        (W, H) = ComputeNmf(A, Components, _maxIterations, _tolerance);
+        (this.W, this.H) = ComputeNmf(A, Components, _maxIterations, _tolerance);
     }
 
     /// <summary>
@@ -149,8 +149,8 @@ public class NmfDecomposition<T> : MatrixDecompositionBase<T>
         }
 
         // Initialize W and H with small random positive values
-        Matrix<T> W = InitializeRandomMatrix(m, k);
-        Matrix<T> H = InitializeRandomMatrix(k, n);
+        Matrix<T> tempW = InitializeRandomMatrix(m, k);
+        Matrix<T> tempH = InitializeRandomMatrix(k, n);
 
         T previousError = NumOps.FromDouble(double.MaxValue);
         T toleranceT = NumOps.FromDouble(tolerance);
@@ -162,7 +162,7 @@ public class NmfDecomposition<T> : MatrixDecompositionBase<T>
             Matrix<T> WT = W.Transpose();
             Matrix<T> WTV = WT.Multiply(V);
             Matrix<T> WTW = WT.Multiply(W);
-            Matrix<T> WTWH = WTW.Multiply(H);
+            Matrix<T> WTWH = WTW.Multiply(tempH);
 
             for (int i = 0; i < k; i++)
             {
@@ -178,7 +178,7 @@ public class NmfDecomposition<T> : MatrixDecompositionBase<T>
             // Update W: W = W .* (V × H^T) ./ (W × H × H^T + epsilon)
             Matrix<T> HT = H.Transpose();
             Matrix<T> VHT = V.Multiply(HT);
-            Matrix<T> WH = W.Multiply(H);
+            Matrix<T> WH = tempW.Multiply(tempH);
             Matrix<T> WHHT = WH.Multiply(HT);
 
             for (int i = 0; i < m; i++)
@@ -195,7 +195,7 @@ public class NmfDecomposition<T> : MatrixDecompositionBase<T>
             // Check for convergence
             if (iteration % 10 == 0)
             {
-                T error = ComputeReconstructionError(V, W, H);
+                T error = ComputeReconstructionError(V, W, tempH);
                 T errorChange = NumOps.Abs(NumOps.Subtract(previousError, error));
 
                 if (NumOps.LessThan(errorChange, toleranceT))
@@ -207,7 +207,7 @@ public class NmfDecomposition<T> : MatrixDecompositionBase<T>
             }
         }
 
-        return (W, H);
+        return (tempW, tempH);
     }
 
     /// <summary>
@@ -287,7 +287,7 @@ public class NmfDecomposition<T> : MatrixDecompositionBase<T>
         // First solve W × y = b for y using least squares
         // Then solve H × x = y for x using least squares
 
-        // Solve W × y = b using least squares: y = (W^T × W)^(-1) × W^T × b
+        // Solve W × y = b using least squares: y = (W^T × tempW)^(-1) × W^T × b
         Matrix<T> WT = W.Transpose();
         Matrix<T> WTW = WT.Multiply(W);
         Vector<T> WTb = WT.Multiply(b);
@@ -295,12 +295,12 @@ public class NmfDecomposition<T> : MatrixDecompositionBase<T>
         // Use simple Gaussian elimination for small systems
         Vector<T> y = SolveLinearSystem(WTW, WTb);
 
-        // Solve H × x = y using least squares: x = H^T × (H × H^T)^(-1) × y
+        // Solve H × x = y using least squares: x = (H^T × H)^(-1) × H^T × y
         Matrix<T> HT = H.Transpose();
-        Matrix<T> HHT = H.Multiply(HT);
+        Matrix<T> HTH = HT.Multiply(H);
         Vector<T> HTy = HT.Multiply(y);
 
-        Vector<T> x = SolveLinearSystem(HHT.Transpose(), HTy);
+        Vector<T> x = SolveLinearSystem(HTH, HTy);
 
         return x;
     }
@@ -404,7 +404,7 @@ public class NmfDecomposition<T> : MatrixDecompositionBase<T>
     /// </remarks>
     public override Matrix<T> Invert()
     {
-        // A ≈ W × H, so A^+ ≈ H^T × (H × H^T)^(-1) × (W^T × W)^(-1) × W^T
+        // A ≈ W × H, so A^+ ≈ H^T × (H × H^T)^(-1) × (W^T × tempW)^(-1) × W^T
         // This is a simplified pseudo-inverse based on the NMF factorization
 
         Matrix<T> WT = W.Transpose();

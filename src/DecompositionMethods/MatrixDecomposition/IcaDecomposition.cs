@@ -499,10 +499,10 @@ public class IcaDecomposition<T> : MatrixDecompositionBase<T>
     /// </remarks>
     public override Vector<T> Solve(Vector<T> b)
     {
-        if (b.Length != A.Rows)
+        if (b.Length != A.Columns)
         {
             throw new ArgumentException(
-                $"Input vector dimension ({b.Length}) must match matrix rows ({A.Rows}).");
+                $"Input vector dimension ({b.Length}) must match matrix columns ({A.Columns}).");
         }
 
         // Use the mixing matrix to solve: A × x = b
@@ -510,7 +510,7 @@ public class IcaDecomposition<T> : MatrixDecompositionBase<T>
 
         // Center b
         Vector<T> bCentered = new Vector<T>(b.Length);
-        for (int i = 0; i < b.Length && i < Mean.Length; i++)
+        for (int i = 0; i < b.Length; i++)
         {
             bCentered[i] = NumOps.Subtract(b[i], Mean[i]);
         }
