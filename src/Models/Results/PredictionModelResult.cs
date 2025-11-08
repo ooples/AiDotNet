@@ -228,6 +228,40 @@ public class PredictionModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
     internal MetaTrainingResult<T>? MetaTrainingResult { get; private set; }
 
     /// <summary>
+    /// Gets or sets the results from cross-validation.
+    /// </summary>
+    /// <value>Cross-validation results containing fold-by-fold performance metrics and aggregated statistics, or null if cross-validation was not performed.</value>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> If cross-validation was configured during model building, this contains
+    /// detailed information about how the model performed across different subsets of the training data.
+    /// This helps you understand:
+    /// - How consistently the model performs across different data splits
+    /// - Whether the model is overfitting or underfitting
+    /// - The typical performance you can expect on new, unseen data
+    ///
+    /// The results include:
+    /// - Performance metrics for each fold (R², RMSE, MAE, etc.)
+    /// - Aggregated statistics across all folds (mean, standard deviation)
+    /// - Feature importance scores averaged across folds
+    /// - Timing information for training and evaluation
+    ///
+    /// If this is null, cross-validation was not performed, and you should rely on the
+    /// OptimizationResult for performance metrics instead.
+    ///
+    /// Example usage:
+    /// <code>
+    /// if (result.CrossValidationResult != null)
+    /// {
+    ///     var avgR2 = result.CrossValidationResult.R2Stats.Mean;
+    ///     var r2StdDev = result.CrossValidationResult.R2Stats.StandardDeviation;
+    ///     Console.WriteLine($"R² = {avgR2} ± {r2StdDev}");
+    /// }
+    /// </code>
+    /// </para>
+    /// </remarks>
+    public CrossValidationResult<T, TInput, TOutput>? CrossValidationResult { get; internal set; }
+
+    /// <summary>
     /// Gets or sets the LoRA configuration for parameter-efficient fine-tuning.
     /// </summary>
     /// <value>LoRA configuration for adaptation, or null if not configured.</value>
@@ -293,6 +327,7 @@ public class PredictionModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
     /// <param name="ragGenerator">Optional generator for RAG functionality during inference.</param>
     /// <param name="queryProcessors">Optional query processors for RAG query preprocessing.</param>
     /// <param name="loraConfiguration">Optional LoRA configuration for parameter-efficient fine-tuning.</param>
+    /// <param name="crossValidationResult">Optional cross-validation results from training.</param>
     public PredictionModelResult(OptimizationResult<T, TInput, TOutput> optimizationResult,
         NormalizationInfo<T, TInput, TOutput> normalizationInfo,
         IBiasDetector<T>? biasDetector = null,
@@ -301,7 +336,8 @@ public class PredictionModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
         IReranker<T>? ragReranker = null,
         IGenerator<T>? ragGenerator = null,
         IEnumerable<IQueryProcessor>? queryProcessors = null,
-        ILoRAConfiguration<T>? loraConfiguration = null)
+        ILoRAConfiguration<T>? loraConfiguration = null,
+        CrossValidationResult<T, TInput, TOutput>? crossValidationResult = null)
     {
         Model = optimizationResult.BestSolution;
         OptimizationResult = optimizationResult;
@@ -314,6 +350,7 @@ public class PredictionModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
         RagGenerator = ragGenerator;
         QueryProcessors = queryProcessors;
         LoRAConfiguration = loraConfiguration;
+        CrossValidationResult = crossValidationResult;
     }
 
     /// <summary>
