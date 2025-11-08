@@ -6,7 +6,7 @@ namespace AiDotNet.DecompositionMethods.MatrixDecomposition;
 /// <remarks>
 /// <para>
 /// <b>For Beginners:</b> Matrix decomposition is like factoring a number, but for matrices.
-/// Just as we can break down 12 into 3 × 4, we can break down complex matrices into simpler
+/// Just as we can break down 12 into 3 * 4, we can break down complex matrices into simpler
 /// matrices that are easier to work with. Different decomposition methods have different strengths
 /// and are used for different purposes in machine learning and numerical computing.
 /// </para>
@@ -106,7 +106,7 @@ public abstract class MatrixDecompositionBase<T> : IMatrixDecomposition<T>
     /// <remarks>
     /// <para>
     /// <b>For Beginners:</b> The inverse of a matrix is like the reciprocal of a number.
-    /// Just as 5 × (1/5) = 1, a matrix multiplied by its inverse gives the identity matrix
+    /// Just as 5 * (1/5) = 1, a matrix multiplied by its inverse gives the identity matrix
     /// (which is like the number 1 in matrix form).
     /// </para>
     /// <para>

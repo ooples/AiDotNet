@@ -32,7 +32,7 @@ public class IcaDecomposition<T> : MatrixDecompositionBase<T>
     /// <remarks>
     /// <para>
     /// <b>For Beginners:</b> The unmixing matrix W transforms the mixed signals back into
-    /// independent source signals. If X represents your mixed signals, then S = W × X gives
+    /// independent source signals. If X represents your mixed signals, then S = W * X gives
     /// you the separated independent components.
     /// </para>
     /// <para>
@@ -49,7 +49,7 @@ public class IcaDecomposition<T> : MatrixDecompositionBase<T>
     /// <para>
     /// <b>For Beginners:</b> The mixing matrix A represents how the original independent sources
     /// were combined to create the observed mixed signals. If S represents independent sources,
-    /// then X = A × S gives you the mixed observations.
+    /// then X = A * S gives you the mixed observations.
     /// </para>
     /// <para>
     /// This is essentially the "recipe" of how the sources were mixed together.
@@ -90,7 +90,7 @@ public class IcaDecomposition<T> : MatrixDecompositionBase<T>
     /// <summary>
     /// Initializes a new instance of the ICA decomposition for the specified matrix.
     /// </summary>
-    /// <param name="matrix">The matrix to decompose (observations × features).</param>
+    /// <param name="matrix">The matrix to decompose (observations * features).</param>
     /// <param name="components">The number of independent components to extract. If null, uses all components.</param>
     /// <param name="maxIterations">Maximum number of iterations for the FastICA algorithm.</param>
     /// <param name="tolerance">Convergence tolerance.</param>
@@ -134,7 +134,7 @@ public class IcaDecomposition<T> : MatrixDecompositionBase<T>
     /// <summary>
     /// Computes Independent Component Analysis using the FastICA algorithm.
     /// </summary>
-    /// <param name="X">The input matrix (observations × features).</param>
+    /// <param name="X">The input matrix (observations * features).</param>
     /// <param name="numComponents">Number of independent components to extract.</param>
     /// <param name="maxIterations">Maximum iterations.</param>
     /// <param name="tolerance">Convergence tolerance.</param>
@@ -174,7 +174,7 @@ public class IcaDecomposition<T> : MatrixDecompositionBase<T>
         // Compute mixing matrix A (pseudo-inverse of W)
         Matrix<T> mixingMatrix = ComputeMixingMatrix(W, K);
 
-        // Compute independent components S = W × K^T × (X - mean)^T
+        // Compute independent components S = W * K^T * (X - mean)^T
         Matrix<T> S = W.Multiply(XWhitened.Transpose());
 
         return (W, mixingMatrix, S, mean, K);
@@ -249,7 +249,7 @@ public class IcaDecomposition<T> : MatrixDecompositionBase<T>
     {
         int m = X.Rows;
 
-        // Compute covariance matrix C = (1/m) × X^T × X
+        // Compute covariance matrix C = (1/m) * X^T * X
         Matrix<T> XT = X.Transpose();
         Matrix<T> C = XT.Multiply(X);
         T scale = NumOps.FromDouble(1.0 / m);
@@ -278,7 +278,7 @@ public class IcaDecomposition<T> : MatrixDecompositionBase<T>
             }
         }
 
-        // Compute whitening matrix K = D^(-1/2) × E
+        // Compute whitening matrix K = D^(-1/2) * E
         Matrix<T> K = new Matrix<T>(numComponents, C.Rows);
         for (int i = 0; i < numComponents; i++)
         {
@@ -298,7 +298,7 @@ public class IcaDecomposition<T> : MatrixDecompositionBase<T>
             }
         }
 
-        // Whiten the data: XWhitened = K × X^T
+        // Whiten the data: XWhitened = K * X^T
         Matrix<T> XWhitened = K.Multiply(XT).Transpose();
 
         return (XWhitened, K);
@@ -342,7 +342,7 @@ public class IcaDecomposition<T> : MatrixDecompositionBase<T>
             {
                 Vector<T> wOld = w.Clone();
 
-                // Compute w = E{x × g(w^T × x)} - E{g'(w^T × x)} × w
+                // Compute w = E{x * g(w^T * x)} - E{g'(w^T * x)} * w
                 // where g(u) = tanh(u) is the non-linearity function
                 Vector<T> wNew = new Vector<T>(n);
                 T invM = NumOps.FromDouble(1.0 / m);
@@ -359,7 +359,7 @@ public class IcaDecomposition<T> : MatrixDecompositionBase<T>
 
                         // g(u) = tanh(u)
                         T g = Tanh(wtx);
-                        // g'(u) = 1 - tanh²(u)
+                        // g'(u) = 1 - tanh^2(u)
                         T gPrime = NumOps.Subtract(NumOps.One, NumOps.Multiply(g, g));
 
                         sum1 = NumOps.Add(sum1, NumOps.Multiply(x[j], g));
@@ -475,7 +475,7 @@ public class IcaDecomposition<T> : MatrixDecompositionBase<T>
     /// <returns>Mixing matrix.</returns>
     private Matrix<T> ComputeMixingMatrix(Matrix<T> W, Matrix<T> K)
     {
-        // A = (W × K)^(-1) = K^(-1) × W^(-1)
+        // A = (W * K)^(-1) = K^(-1) * W^(-1)
         // For simplicity, use the transpose as an approximation
         Matrix<T> WK = W.Multiply(K);
         return WK.Transpose();
@@ -489,7 +489,7 @@ public class IcaDecomposition<T> : MatrixDecompositionBase<T>
     /// <remarks>
     /// <para>
     /// <b>For Beginners:</b> This method finds an approximate solution to Ax = b using the ICA factorization.
-    /// Since ICA provides a separation A ≈ mixing_matrix × unmixing_matrix, we can use this to solve
+    /// Since ICA provides a separation A ~= mixing_matrix * unmixing_matrix, we can use this to solve
     /// the linear system, though it's not the primary purpose of ICA.
     /// </para>
     /// <para>
@@ -505,8 +505,8 @@ public class IcaDecomposition<T> : MatrixDecompositionBase<T>
                 $"Input vector dimension ({b.Length}) must match matrix columns ({A.Columns}).");
         }
 
-        // Use the mixing matrix to solve: A × x = b
-        // We approximate: x ≈ unmixing_matrix × whitening_matrix^T × (b - mean)
+        // Use the mixing matrix to solve: A * x = b
+        // We approximate: x ~= unmixing_matrix * whitening_matrix^T * (b - mean)
 
         // Center b
         Vector<T> bCentered = new Vector<T>(b.Length);

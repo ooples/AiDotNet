@@ -7,7 +7,7 @@ namespace AiDotNet.DecompositionMethods.MatrixDecomposition;
 /// <remarks>
 /// <para>
 /// <b>For Beginners:</b> NMF is a way to break down a matrix containing only non-negative values
-/// (zero or positive numbers) into two simpler matrices W and H, where V ≈ W × H.
+/// (zero or positive numbers) into two simpler matrices W and H, where V ~= W * H.
 /// Think of it like finding hidden patterns or features in your data.
 /// </para>
 /// <para>
@@ -115,7 +115,7 @@ public class NmfDecomposition<T> : MatrixDecompositionBase<T>
     /// <summary>
     /// Computes the Non-negative Matrix Factorization using multiplicative update rules.
     /// </summary>
-    /// <param name="V">The input matrix to factorize (V ≈ W × H).</param>
+    /// <param name="V">The input matrix to factorize (V ~= W * H).</param>
     /// <param name="k">Number of components.</param>
     /// <param name="maxIterations">Maximum iterations.</param>
     /// <param name="tolerance">Convergence tolerance.</param>
@@ -123,7 +123,7 @@ public class NmfDecomposition<T> : MatrixDecompositionBase<T>
     /// <remarks>
     /// <para>
     /// <b>For Beginners:</b> This method uses an iterative algorithm called "multiplicative update rules."
-    /// It starts with random guesses for W and H, then repeatedly improves them until the product W × H
+    /// It starts with random guesses for W and H, then repeatedly improves them until the product W * H
     /// closely approximates the original matrix V.
     /// </para>
     /// <para>
@@ -158,7 +158,7 @@ public class NmfDecomposition<T> : MatrixDecompositionBase<T>
 
         for (int iteration = 0; iteration < maxIterations; iteration++)
         {
-            // Update H: H = H .* (W^T × V) ./ (W^T × W × H + epsilon)
+            // Update H: H = H .* (W^T * V) ./ (W^T * W * H + epsilon)
             Matrix<T> WT = W.Transpose();
             Matrix<T> WTV = WT.Multiply(V);
             Matrix<T> WTW = WT.Multiply(W);
@@ -175,7 +175,7 @@ public class NmfDecomposition<T> : MatrixDecompositionBase<T>
                 }
             }
 
-            // Update W: W = W .* (V × H^T) ./ (W × H × H^T + epsilon)
+            // Update W: W = W .* (V * H^T) ./ (W * H * H^T + epsilon)
             Matrix<T> HT = H.Transpose();
             Matrix<T> VHT = V.Multiply(HT);
             Matrix<T> WH = tempW.Multiply(tempH);
@@ -234,7 +234,7 @@ public class NmfDecomposition<T> : MatrixDecompositionBase<T>
     }
 
     /// <summary>
-    /// Computes the Frobenius norm of the reconstruction error ||V - W × H||.
+    /// Computes the Frobenius norm of the reconstruction error ||V - W * H||.
     /// </summary>
     /// <param name="V">Original matrix.</param>
     /// <param name="W">Basis matrix.</param>
@@ -242,7 +242,7 @@ public class NmfDecomposition<T> : MatrixDecompositionBase<T>
     /// <returns>The reconstruction error.</returns>
     /// <remarks>
     /// <para>
-    /// <b>For Beginners:</b> The reconstruction error measures how well W × H approximates the original matrix V.
+    /// <b>For Beginners:</b> The reconstruction error measures how well W * H approximates the original matrix V.
     /// A smaller error means a better approximation. The Frobenius norm is like calculating the "distance"
     /// between two matrices - it's the square root of the sum of all squared differences between corresponding elements.
     /// </para>
@@ -272,9 +272,9 @@ public class NmfDecomposition<T> : MatrixDecompositionBase<T>
     /// <remarks>
     /// <para>
     /// <b>For Beginners:</b> This method finds an approximate solution to Ax = b using the NMF factorization.
-    /// Since NMF provides an approximation A ≈ W × H, we solve the system in two steps:
-    /// 1. Solve W × y = b for y (using least squares)
-    /// 2. Solve H × x = y for x (using least squares)
+    /// Since NMF provides an approximation A ~= W * H, we solve the system in two steps:
+    /// 1. Solve W * y = b for y (using least squares)
+    /// 2. Solve H * x = y for x (using least squares)
     /// </para>
     /// <para>
     /// Note that this gives an approximate solution since NMF itself is an approximation.
@@ -283,11 +283,11 @@ public class NmfDecomposition<T> : MatrixDecompositionBase<T>
     /// </remarks>
     public override Vector<T> Solve(Vector<T> b)
     {
-        // Since A ≈ W × H, we solve W × H × x = b
-        // First solve W × y = b for y using least squares
-        // Then solve H × x = y for x using least squares
+        // Since A ~= W * H, we solve W * H * x = b
+        // First solve W * y = b for y using least squares
+        // Then solve H * x = y for x using least squares
 
-        // Solve W × y = b using least squares: y = (W^T × tempW)^(-1) × W^T × b
+        // Solve W * y = b using least squares: y = (W^T * tempW)^(-1) * W^T * b
         Matrix<T> WT = W.Transpose();
         Matrix<T> WTW = WT.Multiply(W);
         Vector<T> WTb = WT.Multiply(b);
@@ -295,7 +295,7 @@ public class NmfDecomposition<T> : MatrixDecompositionBase<T>
         // Use simple Gaussian elimination for small systems
         Vector<T> y = SolveLinearSystem(WTW, WTb);
 
-        // Solve H × x = y using least squares: x = (H^T × H)^(-1) × H^T × y
+        // Solve H * x = y using least squares: x = (H^T * H)^(-1) * H^T * y
         Matrix<T> HT = H.Transpose();
         Matrix<T> HTH = HT.Multiply(H);
         Vector<T> HTy = HT.Multiply(y);
@@ -394,7 +394,7 @@ public class NmfDecomposition<T> : MatrixDecompositionBase<T>
     /// <remarks>
     /// <para>
     /// <b>For Beginners:</b> This method computes an approximation of the matrix inverse using the NMF factorization.
-    /// Since A ≈ W × H, the pseudo-inverse is approximated as A^+ ≈ H^+ × W^+, where ^+ denotes the pseudo-inverse.
+    /// Since A ~= W * H, the pseudo-inverse is approximated as A^+ ~= H^+ * W^+, where ^+ denotes the pseudo-inverse.
     /// </para>
     /// <para>
     /// Note that this is an approximation. For exact matrix inversion, consider using other decomposition
@@ -404,13 +404,13 @@ public class NmfDecomposition<T> : MatrixDecompositionBase<T>
     /// </remarks>
     public override Matrix<T> Invert()
     {
-        // A ≈ W × H, so A^+ ≈ H^T × (H × H^T)^(-1) × (W^T × tempW)^(-1) × W^T
+        // A ~= W * H, so A^+ ~= H^T * (H * H^T)^(-1) * (W^T * tempW)^(-1) * W^T
         // This is a simplified pseudo-inverse based on the NMF factorization
 
         Matrix<T> WT = W.Transpose();
         Matrix<T> HT = H.Transpose();
 
-        // For simplicity, use H^T × W^T as an approximation
+        // For simplicity, use H^T * W^T as an approximation
         // This gives a rough inverse that satisfies the interface requirement
         return HT.Multiply(WT);
     }
@@ -418,7 +418,7 @@ public class NmfDecomposition<T> : MatrixDecompositionBase<T>
     /// <summary>
     /// Reconstructs the original matrix from the factorization.
     /// </summary>
-    /// <returns>The reconstructed matrix W × H.</returns>
+    /// <returns>The reconstructed matrix W * H.</returns>
     /// <remarks>
     /// <para>
     /// <b>For Beginners:</b> This method multiplies W and H back together to reconstruct an approximation
