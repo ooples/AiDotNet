@@ -404,28 +404,50 @@ public class QuantileTransformer<T, TInput, TOutput> : NormalizerBase<T, TInput,
         }
 
         // Binary search for the position
-        for (int i = 0; i < quantiles.Count - 1; i++)
+        int left = 0;
+        int right = quantiles.Count - 2; // We want quantiles[i] < value <= quantiles[i+1]
+        while (left <= right)
         {
-            if (NumOps.LessThanOrEqual(value, quantiles[i + 1]))
+            int mid = left + (right - left) / 2;
+            if (NumOps.LessThanOrEqual(value, quantiles[mid + 1]))
             {
-                lowerIndex = i;
-                upperIndex = i + 1;
-                break;
+                if (NumOps.GreaterThan(value, quantiles[mid]))
+                {
+                    lowerIndex = mid;
+                    upperIndex = mid + 1;
+                    break;
+                }
+                else
+                {
+                    right = mid - 1;
+                }
+            }
+            else
+            {
+                left = mid + 1;
             }
         }
 
-        // Linear interpolation
+        // Linear interpolation with division-by-zero protection
         T lowerValue = quantiles[lowerIndex];
         T upperValue = quantiles[upperIndex];
-        T fraction = NumOps.Divide(
-            NumOps.Subtract(value, lowerValue),
-            NumOps.Subtract(upperValue, lowerValue)
-        );
-
-        // Calculate percentile
         T lowerPercentile = NumOps.FromDouble((double)lowerIndex / (quantiles.Count - 1));
         T upperPercentile = NumOps.FromDouble((double)upperIndex / (quantiles.Count - 1));
-        T percentile = NumOps.Add(lowerPercentile, NumOps.Multiply(fraction, NumOps.Subtract(upperPercentile, lowerPercentile)));
+
+        T percentile;
+        if (NumOps.Equals(upperValue, lowerValue))
+        {
+            // If quantile values are equal (duplicate values in data), return the midpoint percentile
+            percentile = NumOps.Divide(NumOps.Add(lowerPercentile, upperPercentile), NumOps.FromDouble(2.0));
+        }
+        else
+        {
+            T fraction = NumOps.Divide(
+                NumOps.Subtract(value, lowerValue),
+                NumOps.Subtract(upperValue, lowerValue)
+            );
+            percentile = NumOps.Add(lowerPercentile, NumOps.Multiply(fraction, NumOps.Subtract(upperPercentile, lowerPercentile)));
+        }
 
         // Map to output distribution
         if (_outputDistribution == "uniform")
