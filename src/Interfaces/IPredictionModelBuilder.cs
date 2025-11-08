@@ -1,4 +1,6 @@
 using AiDotNet.Models.Results;
+using AiDotNet.Enums;
+using AiDotNet.Models;
 
 namespace AiDotNet.Interfaces;
 
@@ -402,8 +404,8 @@ public interface IPredictionModelBuilder<T, TInput, TOutput>
     /// <returns>The builder instance for method chaining.</returns>
     IPredictionModelBuilder<T, TInput, TOutput> ConfigureAgentAssistance(
         string? apiKey = null,
-        AiDotNet.Enums.LLMProvider provider = AiDotNet.Enums.LLMProvider.OpenAI,
-        AiDotNet.Models.AgentAssistanceOptions? options = null,
+        LLMProvider provider = LLMProvider.OpenAI,
+        AgentAssistanceOptions? options = null,
         string? azureEndpoint = null,
         string? azureDeployment = null);
 
