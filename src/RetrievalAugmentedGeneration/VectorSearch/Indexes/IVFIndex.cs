@@ -93,15 +93,13 @@ namespace AiDotNet.RetrievalAugmentedGeneration.VectorSearch.Indexes
 
             // Search within those clusters
             var scores = new List<(string Id, T Score)>();
-            foreach (var clusterId in nearestClusters)
+            foreach (var clusterId in nearestClusters.Where(c => _clusters.ContainsKey(c)))
             {
-                if (_clusters.TryGetValue(clusterId, out var vectorIds))
+                var vectorIds = _clusters[clusterId];
+                foreach (var id in vectorIds)
                 {
-                    foreach (var id in vectorIds)
-                    {
-                        var score = _metric.Calculate(query, _vectors[id]);
-                        scores.Add((id, score));
-                    }
+                    var score = _metric.Calculate(query, _vectors[id]);
+                    scores.Add((id, score));
                 }
             }
 

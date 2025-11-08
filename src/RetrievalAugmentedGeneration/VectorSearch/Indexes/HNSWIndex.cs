@@ -63,21 +63,18 @@ namespace AiDotNet.RetrievalAugmentedGeneration.VectorSearch.Indexes
             if (_vectors.Count > 1)
             {
                 var neighbors = FindNearestNeighbors(vector, Math.Min(_maxConnections, _vectors.Count - 1));
-                foreach (var neighbor in neighbors)
+                foreach (var neighbor in neighbors.Where(n => n.Id != id))
                 {
-                    if (neighbor.Id != id)
+                    // Add bidirectional edge
+                    _graph[id].Add(neighbor.Id);
+                    if (!_graph[neighbor.Id].Contains(id))
                     {
-                        // Add bidirectional edge
-                        _graph[id].Add(neighbor.Id);
-                        if (!_graph[neighbor.Id].Contains(id))
-                        {
-                            _graph[neighbor.Id].Add(id);
+                        _graph[neighbor.Id].Add(id);
 
-                            // Prune if too many connections
-                            if (_graph[neighbor.Id].Count > _maxConnections)
-                            {
-                                PruneConnections(neighbor.Id);
-                            }
+                        // Prune if too many connections
+                        if (_graph[neighbor.Id].Count > _maxConnections)
+                        {
+                            PruneConnections(neighbor.Id);
                         }
                     }
                 }
