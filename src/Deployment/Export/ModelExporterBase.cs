@@ -4,9 +4,12 @@ namespace AiDotNet.Deployment.Export;
 
 /// <summary>
 /// Abstract base class for model exporters that provides common functionality.
+/// Properly integrates with IFullModel architecture.
 /// </summary>
 /// <typeparam name="T">The numeric type used in the model</typeparam>
-public abstract class ModelExporterBase<T> : IModelExporter<T> where T : struct
+/// <typeparam name="TInput">The input type for the model</typeparam>
+/// <typeparam name="TOutput">The output type for the model</typeparam>
+public abstract class ModelExporterBase<T, TInput, TOutput> : IModelExporter<T, TInput, TOutput> where T : struct
 {
     /// <inheritdoc/>
     public abstract string ExportFormat { get; }
@@ -15,7 +18,7 @@ public abstract class ModelExporterBase<T> : IModelExporter<T> where T : struct
     public abstract string FileExtension { get; }
 
     /// <inheritdoc/>
-    public virtual void Export(object model, string outputPath, ExportConfiguration config)
+    public virtual void Export(IFullModel<T, TInput, TOutput> model, string outputPath, ExportConfiguration config)
     {
         if (model == null)
             throw new ArgumentNullException(nameof(model));
@@ -51,16 +54,16 @@ public abstract class ModelExporterBase<T> : IModelExporter<T> where T : struct
     }
 
     /// <inheritdoc/>
-    public abstract byte[] ExportToBytes(object model, ExportConfiguration config);
+    public abstract byte[] ExportToBytes(IFullModel<T, TInput, TOutput> model, ExportConfiguration config);
 
     /// <inheritdoc/>
-    public virtual bool CanExport(object model)
+    public virtual bool CanExport(IFullModel<T, TInput, TOutput> model)
     {
         return GetValidationErrors(model).Count == 0;
     }
 
     /// <inheritdoc/>
-    public virtual IReadOnlyList<string> GetValidationErrors(object model)
+    public virtual IReadOnlyList<string> GetValidationErrors(IFullModel<T, TInput, TOutput> model)
     {
         var errors = new List<string>();
 
@@ -70,11 +73,8 @@ public abstract class ModelExporterBase<T> : IModelExporter<T> where T : struct
             return errors;
         }
 
-        // Check if model implements IModelSerializer
-        if (model is not IModelSerializer)
-        {
-            errors.Add($"Model does not implement IModelSerializer interface");
-        }
+        // IFullModel already extends IModelSerializer, so no need to check
+        // All models using this exporter are guaranteed to be serializable
 
         return errors;
     }
@@ -101,22 +101,20 @@ public abstract class ModelExporterBase<T> : IModelExporter<T> where T : struct
     /// <summary>
     /// Gets the input shape from the model or configuration.
     /// </summary>
-    protected int[] GetInputShape(object model, ExportConfiguration config)
+    protected int[] GetInputShape(IFullModel<T, TInput, TOutput> model, ExportConfiguration config)
     {
         if (config.InputShape != null && config.InputShape.Length > 0)
         {
             return config.InputShape;
         }
 
-        // Try to infer from model
-        if (model is IParameterizable<T> paramModel)
+        // Try to infer from model parameters
+        // IFullModel extends IParameterizable, so we can directly access GetParameters
+        var parameters = model.GetParameters();
+        if (parameters != null && parameters.Length > 0)
         {
-            var parameters = paramModel.GetParameters();
-            if (parameters != null && parameters.Length > 0)
-            {
-                // Assume first parameter represents input shape
-                return new[] { parameters.Length };
-            }
+            // Assume first parameter represents input shape
+            return new[] { parameters.Length };
         }
 
         throw new InvalidOperationException(

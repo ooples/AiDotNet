@@ -1,19 +1,23 @@
 using AiDotNet.Deployment.Export;
 using AiDotNet.Deployment.Export.Onnx;
+using AiDotNet.Interfaces;
 
 namespace AiDotNet.Deployment.Mobile.TensorFlowLite;
 
 /// <summary>
 /// Exports models to TensorFlow Lite format for mobile deployment.
+/// Properly integrates with IFullModel architecture.
 /// </summary>
 /// <typeparam name="T">The numeric type used in the model</typeparam>
-public class TFLiteExporter<T> : ModelExporterBase<T> where T : struct
+/// <typeparam name="TInput">The input type for the model</typeparam>
+/// <typeparam name="TOutput">The output type for the model</typeparam>
+public class TFLiteExporter<T, TInput, TOutput> : ModelExporterBase<T, TInput, TOutput> where T : struct
 {
-    private readonly OnnxModelExporter<T> _onnxExporter;
+    private readonly OnnxModelExporter<T, TInput, TOutput> _onnxExporter;
 
     public TFLiteExporter()
     {
-        _onnxExporter = new OnnxModelExporter<T>();
+        _onnxExporter = new OnnxModelExporter<T, TInput, TOutput>();
     }
 
     /// <inheritdoc/>
@@ -23,7 +27,7 @@ public class TFLiteExporter<T> : ModelExporterBase<T> where T : struct
     public override string FileExtension => ".tflite";
 
     /// <inheritdoc/>
-    public override byte[] ExportToBytes(object model, ExportConfiguration config)
+    public override byte[] ExportToBytes(IFullModel<T, TInput, TOutput> model, ExportConfiguration config)
     {
         if (model == null)
             throw new ArgumentNullException(nameof(model));
@@ -40,7 +44,7 @@ public class TFLiteExporter<T> : ModelExporterBase<T> where T : struct
     /// <summary>
     /// Exports model directly to TFLite file with specific configuration.
     /// </summary>
-    public void ExportToTFLite(object model, string outputPath, TFLiteConfiguration config)
+    public void ExportToTFLite(IFullModel<T, TInput, TOutput> model, string outputPath, TFLiteConfiguration config)
     {
         if (model == null)
             throw new ArgumentNullException(nameof(model));

@@ -8,9 +8,12 @@ namespace AiDotNet.Deployment.Export.Onnx;
 
 /// <summary>
 /// Exports AiDotNet models to ONNX format for cross-platform deployment.
+/// Properly integrates with IFullModel architecture.
 /// </summary>
 /// <typeparam name="T">The numeric type used in the model</typeparam>
-public class OnnxModelExporter<T> : ModelExporterBase<T> where T : struct
+/// <typeparam name="TInput">The input type for the model</typeparam>
+/// <typeparam name="TOutput">The output type for the model</typeparam>
+public class OnnxModelExporter<T, TInput, TOutput> : ModelExporterBase<T, TInput, TOutput> where T : struct
 {
     /// <inheritdoc/>
     public override string ExportFormat => "ONNX";
@@ -19,12 +22,13 @@ public class OnnxModelExporter<T> : ModelExporterBase<T> where T : struct
     public override string FileExtension => ".onnx";
 
     /// <inheritdoc/>
-    public override byte[] ExportToBytes(object model, ExportConfiguration config)
+    public override byte[] ExportToBytes(IFullModel<T, TInput, TOutput> model, ExportConfiguration config)
     {
         if (model == null)
             throw new ArgumentNullException(nameof(model));
 
         // Build ONNX graph based on model type
+        // IFullModel can be cast to more specific types for specialized export logic
         var onnxGraph = model switch
         {
             INeuralNetworkModel<T> neuralNetwork => BuildNeuralNetworkGraph(neuralNetwork, config),
@@ -37,7 +41,7 @@ public class OnnxModelExporter<T> : ModelExporterBase<T> where T : struct
     }
 
     /// <inheritdoc/>
-    public override IReadOnlyList<string> GetValidationErrors(object model)
+    public override IReadOnlyList<string> GetValidationErrors(IFullModel<T, TInput, TOutput> model)
     {
         var errors = new List<string>();
 
@@ -130,7 +134,14 @@ public class OnnxModelExporter<T> : ModelExporterBase<T> where T : struct
             OpsetVersion = config.OpsetVersion
         };
 
-        var inputShape = GetInputShapeWithBatch(model, config);
+        // IModel extends IFullModel which extends IParameterizable
+        // We need to cast to access GetParameters - IModel doesn't directly expose this
+        if (model is not IFullModel<T, T[], T[]> fullModel)
+        {
+            throw new InvalidOperationException("Model must implement IFullModel to be exported");
+        }
+
+        var inputShape = GetInputShapeWithBatch(fullModel, config);
 
         graph.Inputs.Add(new OnnxNode
         {
@@ -140,30 +151,27 @@ public class OnnxModelExporter<T> : ModelExporterBase<T> where T : struct
         });
 
         // Add MatMul operation for linear model
-        if (model is IParameterizable<T> paramModel)
+        var parameters = fullModel.GetParameters();
+
+        graph.Operations.Add(new OnnxOperation
         {
-            var parameters = paramModel.GetParameters();
+            Type = "MatMul",
+            Inputs = new List<string> { "input", "weights" },
+            Outputs = new List<string> { "matmul_output" },
+            Attributes = new Dictionary<string, object>()
+        });
 
-            graph.Operations.Add(new OnnxOperation
-            {
-                Type = "MatMul",
-                Inputs = new List<string> { "input", "weights" },
-                Outputs = new List<string> { "matmul_output" },
-                Attributes = new Dictionary<string, object>()
-            });
+        // Add bias if available
+        graph.Operations.Add(new OnnxOperation
+        {
+            Type = "Add",
+            Inputs = new List<string> { "matmul_output", "bias" },
+            Outputs = new List<string> { "output" },
+            Attributes = new Dictionary<string, object>()
+        });
 
-            // Add bias if available
-            graph.Operations.Add(new OnnxOperation
-            {
-                Type = "Add",
-                Inputs = new List<string> { "matmul_output", "bias" },
-                Outputs = new List<string> { "output" },
-                Attributes = new Dictionary<string, object>()
-            });
-
-            // Store weights as initializers
-            graph.Initializers.Add("weights", parameters);
-        }
+        // Store weights as initializers
+        graph.Initializers.Add("weights", parameters);
 
         graph.Outputs.Add(new OnnxNode
         {
@@ -396,15 +404,34 @@ public class OnnxModelExporter<T> : ModelExporterBase<T> where T : struct
         return unsupported;
     }
 
-    private int[] GetInputShapeWithBatch(object model, ExportConfiguration config)
+    private int[] GetInputShapeWithBatch<TModelInput, TModelOutput>(IFullModel<T, TModelInput, TModelOutput> model, ExportConfiguration config)
     {
-        var shape = GetInputShape(model, config);
+        // Get input shape from config or infer from model
+        if (config.InputShape != null && config.InputShape.Length > 0)
+        {
+            var shape = config.InputShape;
 
-        // Use -1 for dynamic batch dimension if enabled, otherwise use batch size
-        return (config.UseDynamicShapes
-            ? new[] { -1 }.Concat(shape)
-            : new[] { config.BatchSize }.Concat(shape)
-        ).ToArray();
+            // Use -1 for dynamic batch dimension if enabled, otherwise use batch size
+            return (config.UseDynamicShapes
+                ? new[] { -1 }.Concat(shape)
+                : new[] { config.BatchSize }.Concat(shape)
+            ).ToArray();
+        }
+
+        // Try to infer from model parameters
+        var parameters = model.GetParameters();
+        if (parameters != null && parameters.Length > 0)
+        {
+            var shape = new[] { parameters.Length };
+
+            return (config.UseDynamicShapes
+                ? new[] { -1 }.Concat(shape)
+                : new[] { config.BatchSize }.Concat(shape)
+            ).ToArray();
+        }
+
+        throw new InvalidOperationException(
+            "Could not determine input shape. Please specify InputShape in ExportConfiguration.");
     }
 
     private string GetOnnxDataType<TData>() where TData : struct
