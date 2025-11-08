@@ -73,7 +73,7 @@ public class NormalizationParameters<T>
         Min = Max = Mean = StdDev = Scale = Shift = Median = IQR = P = MaxAbs = _numOps.Zero;
         Bins = [];
         Quantiles = [];
-        OutputDistribution = "uniform";
+        OutputDistribution = Normalizers.OutputDistribution.Uniform;
     }
 
     /// <summary>
@@ -464,7 +464,7 @@ public class NormalizationParameters<T>
     /// <summary>
     /// Gets or sets the target output distribution for quantile transformation.
     /// </summary>
-    /// <value>A string indicating either "uniform" or "normal" distribution.</value>
+    /// <value>An OutputDistribution enum indicating either Uniform or Normal distribution.</value>
     /// <remarks>
     /// <para>
     /// This property specifies whether the QuantileTransformer should map data to a uniform distribution
@@ -474,7 +474,7 @@ public class NormalizationParameters<T>
     /// <para><b>For Beginners:</b> This specifies what shape you want your data to have after transformation.
     ///
     /// The output distribution:
-    /// - Can be "uniform" (flat distribution) or "normal" (bell curve)
+    /// - Can be Uniform (flat distribution) or Normal (bell curve)
     /// - Affects how values are redistributed
     /// - Depends on what your machine learning algorithm expects
     ///
@@ -489,5 +489,5 @@ public class NormalizationParameters<T>
     /// - Good for algorithms that work best with normally-distributed data
     /// </para>
     /// </remarks>
-    public string OutputDistribution { get; set; }
+    public Normalizers.OutputDistribution OutputDistribution { get; set; }
 }
