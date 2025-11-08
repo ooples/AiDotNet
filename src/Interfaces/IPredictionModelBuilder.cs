@@ -489,4 +489,60 @@ public interface IPredictionModelBuilder<T, TInput, TOutput>
     /// <returns>A meta-trained model with rapid adaptation capabilities.</returns>
     /// <exception cref="InvalidOperationException">Thrown if ConfigureMetaLearning has not been called.</exception>
     PredictionModelResult<T, TInput, TOutput> Build();
+
+    /// <summary>
+    /// Asynchronously builds a meta-trained model that can quickly adapt to new tasks.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// This method is used when you've configured a meta-learner using ConfigureMetaLearning().
+    /// It performs meta-training across many tasks to create a model that can rapidly adapt
+    /// to new tasks with just a few examples. This is the async version for use with agent assistance.
+    /// </para>
+    /// <para>
+    /// <b>For Beginners:</b> Use this method when you've configured meta-learning and agent assistance.
+    /// Unlike BuildAsync(x, y) which trains on one dataset, this trains your model to be good
+    /// at learning NEW tasks quickly. The training data comes from the episodic data loader
+    /// you configured in your meta-learner.
+    /// </para>
+    /// </remarks>
+    /// <returns>A task that represents the asynchronous operation, containing the meta-trained model.</returns>
+    /// <exception cref="InvalidOperationException">Thrown if ConfigureMetaLearning has not been called.</exception>
+    Task<PredictionModelResult<T, TInput, TOutput>> BuildAsync();
+
+    /// <summary>
+    /// Asynchronously builds a predictive model using the provided input features and output values.
+    /// If agent assistance is enabled, the agent will help with model selection and hyperparameter tuning.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// This method trains your AI model on your specific dataset. It can leverage agent assistance
+    /// to help select appropriate models and tune hyperparameters based on your data characteristics.
+    /// </para>
+    /// <para>
+    /// <b>For Beginners:</b> This method trains your AI model using the data you provide.
+    /// It's the async version that works with agent assistance features.
+    /// </para>
+    /// <para>
+    /// Example with agent assistance:
+    /// <code>
+    /// var agentConfig = new AgentConfiguration&lt;double&gt;
+    /// {
+    ///     ApiKey = "sk-...",
+    ///     Provider = LLMProvider.OpenAI,
+    ///     IsEnabled = true
+    /// };
+    ///
+    /// var result = await new PredictionModelBuilder&lt;double, Matrix&lt;double&gt;, Vector&lt;double&gt;&gt;()
+    ///     .ConfigureAgentAssistance(agentConfig)
+    ///     .BuildAsync(housingData, prices);
+    /// </code>
+    /// </para>
+    /// </remarks>
+    /// <param name="x">Matrix of input features (required).</param>
+    /// <param name="y">Vector of output values (required).</param>
+    /// <returns>A task that represents the asynchronous operation, containing the trained model.</returns>
+    /// <exception cref="ArgumentException">Thrown when the number of rows in the features matrix doesn't match the length of the output vector.</exception>
+    /// <exception cref="InvalidOperationException">Thrown when no model has been specified for regular training.</exception>
+    Task<PredictionModelResult<T, TInput, TOutput>> BuildAsync(TInput x, TOutput y);
 }

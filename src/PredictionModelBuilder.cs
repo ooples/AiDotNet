@@ -206,72 +206,89 @@ public class PredictionModelBuilder<T, TInput, TOutput> : IPredictionModelBuilde
     }
 
     /// <summary>
+    /// Builds a predictive model using meta-learning.
+    /// Requires ConfigureMetaLearning() to be called first.
+    /// </summary>
+    /// <returns>A task that represents the asynchronous operation, containing the trained meta-learning model.</returns>
+    /// <exception cref="InvalidOperationException">Thrown when ConfigureMetaLearning() hasn't been called.</exception>
+    /// <remarks>
+    /// <b>For Beginners:</b> This overload is for meta-learning, where the model learns to quickly adapt to new tasks.
+    /// Use this when you've configured a meta-learner via ConfigureMetaLearning().
+    ///
+    /// **Meta-Learning**:
+    /// - Trains a model that can quickly adapt to new tasks
+    /// - Uses episodic data from the meta-learner configuration
+    /// - No need to provide x and y - they're in the meta-learner config
+    ///
+    /// Example:
+    /// <code>
+    /// var result = await new PredictionModelBuilder&lt;double, Matrix&lt;double&gt;, Vector&lt;double&gt;&gt;()
+    ///     .ConfigureMetaLearning(metaLearner)
+    ///     .BuildAsync();
+    /// </code>
+    /// </remarks>
+    public async Task<PredictionModelResult<T, TInput, TOutput>> BuildAsync()
+    {
+        // META-LEARNING PATH - requires ConfigureMetaLearning() to be called first
+        if (_metaLearner == null)
+            throw new InvalidOperationException(
+                "BuildAsync() without parameters requires ConfigureMetaLearning() to be called first. " +
+                "For regular training, use BuildAsync(x, y) with your input and output data.");
+
+        // Perform meta-training using parameters from config (specified during meta-learner construction)
+        var metaResult = _metaLearner.Train();
+
+        // Create PredictionModelResult with meta-learning constructor
+        var result = new PredictionModelResult<T, TInput, TOutput>(
+            metaLearner: _metaLearner,
+            metaResult: metaResult,
+            loraConfiguration: _loraConfiguration,
+            biasDetector: _biasDetector,
+            fairnessEvaluator: _fairnessEvaluator,
+            ragRetriever: _ragRetriever,
+            ragReranker: _ragReranker,
+            ragGenerator: _ragGenerator,
+            queryProcessors: _queryProcessors,
+            agentConfig: _agentConfig);
+
+        return result;
+    }
+
+    /// <summary>
     /// Builds a predictive model using the provided input features and output values.
-    /// Supports both regular training and meta-learning based on configuration.
     /// If agent assistance is enabled, the agent will help with model selection and hyperparameter tuning.
     /// </summary>
-    /// <param name="x">Optional matrix of input features. Required for regular training, not needed for meta-learning.</param>
-    /// <param name="y">Optional vector of output values. Required for regular training, not needed for meta-learning.</param>
+    /// <param name="x">Matrix of input features (required).</param>
+    /// <param name="y">Vector of output values (required).</param>
     /// <returns>A task that represents the asynchronous operation, containing the trained model.</returns>
-    /// <exception cref="ArgumentNullException">Thrown when input features or output values are null for regular training.</exception>
     /// <exception cref="ArgumentException">Thrown when the number of rows in the features matrix doesn't match the length of the output vector.</exception>
     /// <exception cref="InvalidOperationException">Thrown when no model has been specified for regular training.</exception>
     /// <remarks>
-    /// <b>For Beginners:</b> This method trains your AI model. It handles two different training modes:
+    /// <b>For Beginners:</b> This method trains your AI model on your specific dataset.
     ///
-    /// **Regular Training** (when you provide x and y):
+    /// **Regular Training**:
     /// - Trains on your specific dataset
     /// - Learns patterns from your examples
     /// - Can use agent assistance to select models and tune hyperparameters
     ///
-    /// **Meta-Learning** (when ConfigureMetaLearning() was called):
-    /// - Trains a model that can quickly adapt to new tasks
-    /// - Uses episodic data from the meta-learner configuration
-    /// - Don't provide x and y for meta-learning
-    ///
     /// Example with agent assistance:
     /// <code>
+    /// var agentConfig = new AgentConfiguration&lt;double&gt;
+    /// {
+    ///     ApiKey = "sk-...",
+    ///     Provider = LLMProvider.OpenAI,
+    ///     IsEnabled = true
+    /// };
+    ///
     /// var result = await new PredictionModelBuilder&lt;double, Matrix&lt;double&gt;, Vector&lt;double&gt;&gt;()
-    ///     .ConfigureAgentAssistance(apiKey: "sk-...")
+    ///     .ConfigureAgentAssistance(agentConfig)
     ///     .BuildAsync(housingData, prices);
     /// </code>
     /// </remarks>
-    public async Task<PredictionModelResult<T, TInput, TOutput>> BuildAsync(TInput? x = default, TOutput? y = default)
+    public async Task<PredictionModelResult<T, TInput, TOutput>> BuildAsync(TInput x, TOutput y)
     {
-        // Check if this is meta-learning or regular training
-        if (_metaLearner != null)
-        {
-            // META-LEARNING PATH
-            // Perform meta-training using parameters from config (specified during meta-learner construction)
-            var metaResult = _metaLearner.Train();
-
-            // Create PredictionModelResult with meta-learning constructor
-            var result = new PredictionModelResult<T, TInput, TOutput>(
-                metaLearner: _metaLearner,
-                metaResult: metaResult,
-                loraConfiguration: _loraConfiguration,
-                biasDetector: _biasDetector,
-                fairnessEvaluator: _fairnessEvaluator,
-                ragRetriever: _ragRetriever,
-                ragReranker: _ragReranker,
-                ragGenerator: _ragGenerator,
-                queryProcessors: _queryProcessors);
-
-            // Store agent config if enabled
-            if (_agentConfig != null)
-            {
-                result.AgentConfig = _agentConfig;
-            }
-
-            return result;
-        }
-
         // REGULAR TRAINING PATH
-        // Validate inputs for regular training
-        if (x == null)
-            throw new ArgumentNullException(nameof(x), "Input features matrix can't be null for regular training");
-        if (y == null)
-            throw new ArgumentNullException(nameof(y), "Output vector can't be null for regular training");
+        // Convert and validate inputs
 
         var convertedX = ConversionsHelper.ConvertToMatrix<T, TInput>(x);
         var convertedY = ConversionsHelper.ConvertToVector<T, TOutput>(y);
@@ -338,14 +355,9 @@ public class PredictionModelBuilder<T, TInput, TOutput> : IPredictionModelBuilde
             _ragGenerator,
             _queryProcessors,
             _loraConfiguration,
-            cvResults);
-
-        // Store agent config and recommendations
-        if (_agentConfig != null)
-        {
-            finalResult.AgentConfig = _agentConfig;
-            finalResult.AgentRecommendation = agentRecommendation;
-        }
+            cvResults,
+            _agentConfig,
+            agentRecommendation);
 
         return finalResult;
     }
@@ -577,11 +589,7 @@ public class PredictionModelBuilder<T, TInput, TOutput> : IPredictionModelBuilde
     /// <summary>
     /// Enables AI agent assistance during the model building process.
     /// </summary>
-    /// <param name="apiKey">Optional API key for LLM provider. If not provided, uses environment variables or global config.</param>
-    /// <param name="provider">Optional LLM provider to use (OpenAI, Anthropic, Azure). Default is OpenAI.</param>
-    /// <param name="options">Optional customization of what the agent helps with. If not provided, uses sensible defaults.</param>
-    /// <param name="azureEndpoint">Optional Azure endpoint if using Azure OpenAI.</param>
-    /// <param name="azureDeployment">Optional Azure deployment name if using Azure OpenAI.</param>
+    /// <param name="configuration">The agent configuration containing API key, provider, and assistance options.</param>
     /// <returns>This builder instance for method chaining.</returns>
     /// <remarks>
     /// <b>For Beginners:</b> This enables an AI agent to help you during model building.
@@ -595,42 +603,40 @@ public class PredictionModelBuilder<T, TInput, TOutput> : IPredictionModelBuilde
     ///
     /// Example with defaults:
     /// <code>
+    /// var agentConfig = new AgentConfiguration&lt;double&gt;
+    /// {
+    ///     ApiKey = "sk-...",
+    ///     Provider = LLMProvider.OpenAI,
+    ///     IsEnabled = true
+    /// };
+    ///
     /// var result = await new PredictionModelBuilder&lt;double, Matrix&lt;double&gt;, Vector&lt;double&gt;&gt;()
-    ///     .ConfigureAgentAssistance(apiKey: "sk-...")
+    ///     .ConfigureAgentAssistance(agentConfig)
     ///     .BuildAsync(data, labels);
     /// </code>
     ///
     /// Example with customization:
     /// <code>
+    /// var agentConfig = new AgentConfiguration&lt;double&gt;
+    /// {
+    ///     ApiKey = "sk-...",
+    ///     Provider = LLMProvider.OpenAI,
+    ///     IsEnabled = true,
+    ///     AssistanceOptions = AgentAssistanceOptions.Create()
+    ///         .EnableModelSelection()
+    ///         .EnableHyperparameterTuning()
+    ///         .DisableFeatureAnalysis()
+    /// };
+    ///
     /// var result = await new PredictionModelBuilder&lt;double, Matrix&lt;double&gt;, Vector&lt;double&gt;&gt;()
-    ///     .ConfigureAgentAssistance(
-    ///         apiKey: "sk-...",
-    ///         options: AgentAssistanceOptions.Create()
-    ///             .EnableModelSelection()
-    ///             .EnableHyperparameterTuning()
-    ///             .DisableFeatureAnalysis()
-    ///     )
+    ///     .ConfigureAgentAssistance(agentConfig)
     ///     .BuildAsync(data, labels);
     /// </code>
     /// </remarks>
-    public IPredictionModelBuilder<T, TInput, TOutput> ConfigureAgentAssistance(
-        string? apiKey = null,
-        LLMProvider provider = LLMProvider.OpenAI,
-        AgentAssistanceOptions? options = null,
-        string? azureEndpoint = null,
-        string? azureDeployment = null)
+    public IPredictionModelBuilder<T, TInput, TOutput> ConfigureAgentAssistance(AgentConfiguration<T> configuration)
     {
-        _agentConfig = new AgentConfiguration<T>
-        {
-            ApiKey = apiKey,
-            Provider = provider,
-            IsEnabled = true,
-            AzureEndpoint = azureEndpoint,
-            AzureDeployment = azureDeployment
-        };
-
-        _agentOptions = options ?? AgentAssistanceOptions.Default;
-
+        _agentConfig = configuration;
+        _agentOptions = configuration.AssistanceOptions ?? AgentAssistanceOptions.Default;
         return this;
     }
 

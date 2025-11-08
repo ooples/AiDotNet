@@ -413,6 +413,7 @@ public class PredictionModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
     /// <param name="ragReranker">Optional reranker for RAG functionality during inference.</param>
     /// <param name="ragGenerator">Optional generator for RAG functionality during inference.</param>
     /// <param name="queryProcessors">Optional query processors for RAG query preprocessing.</param>
+    /// <param name="agentConfig">Optional agent configuration for AI assistance during inference.</param>
     /// <remarks>
     /// <para>
     /// This constructor is used when a model has been trained using meta-learning (e.g., MAML, Reptile, SEAL).
@@ -436,6 +437,7 @@ public class PredictionModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
     /// - The meta-learner itself (for adaptation)
     /// - Training history (loss curves, performance metrics)
     /// - Optional LoRA configuration (for efficient adaptation)
+    /// - Optional agent configuration (for AI assistance)
     /// </para>
     /// </remarks>
     public PredictionModelResult(
@@ -447,7 +449,8 @@ public class PredictionModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
         IRetriever<T>? ragRetriever = null,
         IReranker<T>? ragReranker = null,
         IGenerator<T>? ragGenerator = null,
-        IEnumerable<IQueryProcessor>? queryProcessors = null)
+        IEnumerable<IQueryProcessor>? queryProcessors = null,
+        AgentConfiguration<T>? agentConfig = null)
     {
         Model = metaLearner.BaseModel;
         MetaLearner = metaLearner;
@@ -460,6 +463,7 @@ public class PredictionModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
         RagReranker = ragReranker;
         RagGenerator = ragGenerator;
         QueryProcessors = queryProcessors;
+        AgentConfig = agentConfig;
 
         // Create placeholder OptimizationResult and NormalizationInfo for consistency
         OptimizationResult = new OptimizationResult<T, TInput, TOutput>();
