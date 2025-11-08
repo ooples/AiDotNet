@@ -28,7 +28,7 @@ public class LqDecomposition<T> : MatrixDecompositionBase<T>
     /// </summary>
     /// <remarks>
     /// <b>For Beginners:</b> An orthogonal matrix has columns that are perpendicular to each other
-    /// and have unit length. This means Q^T � Q = I (the identity matrix).
+    /// and have unit length. This means Q^T * Q = I (the identity matrix).
     /// </remarks>
     public Matrix<T> Q { get; private set; } = new Matrix<T>(0, 0);
 
@@ -69,7 +69,7 @@ public class LqDecomposition<T> : MatrixDecompositionBase<T>
     /// It uses the LQ decomposition to solve this in two steps:
     ///
     /// 1. Forward substitution: Solve Ly = b for y
-    /// 2. Multiply by Q^T: x = Q^T � y
+    /// 2. Multiply by Q^T: x = Q^T * y
     ///
     /// This approach is more efficient than directly inverting the matrix A.
     /// </remarks>

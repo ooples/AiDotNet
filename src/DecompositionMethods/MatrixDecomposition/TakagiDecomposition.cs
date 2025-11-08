@@ -271,7 +271,7 @@ public class TakagiDecomposition<T> : MatrixDecompositionBase<T>
     /// <remarks>
     /// <para>
     /// <b>For Beginners:</b> The magnitude of a complex number is its distance from zero in the complex plane.
-    /// It's calculated using the Pythagorean theorem: sqrt(real� + imaginary�).
+    /// It's calculated using the Pythagorean theorem: sqrt(real* + imaginary*).
     /// </para>
     /// </remarks>
     private T CalculateMagnitude(Complex<T> complex)

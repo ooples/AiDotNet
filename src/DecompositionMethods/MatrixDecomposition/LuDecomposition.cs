@@ -410,7 +410,7 @@ public class LuDecomposition<T> : MatrixDecompositionBase<T>
     /// </para>
     /// <para>
     /// <b>For Beginners:</b> Crout's method is a way to break down a complex matrix into simpler parts.
-    /// Think of it like factoring a number (e.g., 12 = 3 � 4). Here, we're factoring a matrix into 
+    /// Think of it like factoring a number (e.g., 12 = 3 * 4). Here, we're factoring a matrix into 
     /// two triangular matrices - one with values only below the diagonal (L) and one with values 
     /// only above the diagonal and 1's on the diagonal itself (U). This makes solving equations much easier.
     /// </para>

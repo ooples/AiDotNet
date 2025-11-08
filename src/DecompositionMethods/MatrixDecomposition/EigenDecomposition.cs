@@ -230,7 +230,7 @@ public class EigenDecomposition<T> : MatrixDecompositionBase<T>
     /// It works by transforming the problem into the eigenvector basis, where the system
     /// becomes diagonal and easy to solve, then transforming back to the original basis.
     ///
-    /// The solution is computed as: x = V * D?� * V^T * b
+    /// The solution is computed as: x = V * D^(-1) * V^T * b
     /// where V is the matrix of eigenvectors, D is a diagonal matrix of eigenvalues,
     /// and V^T is the transpose of V.
     /// </remarks>
@@ -247,7 +247,7 @@ public class EigenDecomposition<T> : MatrixDecompositionBase<T>
     /// </summary>
     /// <remarks>
     /// This method uses the eigenvalue decomposition to compute the inverse of the matrix.
-    /// The inverse is calculated as: A?� = V * D?� * V^T
+    /// The inverse is calculated as: A^(-1) = V * D^(-1) * V^T
     /// where V is the matrix of eigenvectors, D is a diagonal matrix of eigenvalues,
     /// and V^T is the transpose of V.
     ///

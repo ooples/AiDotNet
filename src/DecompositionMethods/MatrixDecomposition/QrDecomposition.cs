@@ -68,7 +68,7 @@ public class QrDecomposition<T> : MatrixDecompositionBase<T>
     /// Solves the linear system Ax = b using the QR decomposition.
     /// </summary>
     /// <param name="b">The right-hand side vector.</param>
-    /// <returns>The solution vector x such that Ax � b.</returns>
+    /// <returns>The solution vector x such that Ax * b.</returns>
     /// <remarks>
     /// <para>
     /// <b>For Beginners:</b> This method solves equations of the form Ax = b, where A is a matrix, and x and b are vectors.

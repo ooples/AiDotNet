@@ -7,7 +7,7 @@ namespace AiDotNet.DecompositionMethods.MatrixDecomposition;
 /// <remarks>
 /// <para>
 /// <b>For Beginners:</b> Schur decomposition breaks down a complex matrix into simpler parts that are easier to work with.
-/// It's like factoring a number (e.g., 12 = 3 � 4), but for matrices. The decomposition produces two matrices:
+/// It's like factoring a number (e.g., 12 = 3 * 4), but for matrices. The decomposition produces two matrices:
 /// a unitary matrix (which preserves lengths and angles) and an upper triangular matrix (which has zeros below the diagonal).
 /// This makes many calculations much simpler.
 /// </para>
@@ -306,7 +306,7 @@ public class SchurDecomposition<T> : MatrixDecompositionBase<T>
     /// <remarks>
     /// <para>
     /// <b>For Beginners:</b> The inverse of a matrix is like the reciprocal of a number. Just as 1/x is the reciprocal of x,
-    /// the inverse of a matrix A (written as A?�) is a matrix that, when multiplied by A, gives the identity matrix.
+    /// the inverse of a matrix A (written as A^(-1)) is a matrix that, when multiplied by A, gives the identity matrix.
     /// </para>
     /// <para>
     /// This method uses the Schur decomposition to find the inverse more efficiently than direct methods.

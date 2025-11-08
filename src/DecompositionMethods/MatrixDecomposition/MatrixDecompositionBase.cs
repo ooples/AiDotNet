@@ -111,9 +111,9 @@ public abstract class MatrixDecompositionBase<T> : IMatrixDecomposition<T>
     /// </para>
     /// <para>
     /// For example, if matrix A represents a transformation (like rotating or scaling),
-    /// then A⁻¹ represents the opposite transformation that "undoes" the original:
-    /// - If A rotates data clockwise, A⁻¹ rotates it counterclockwise
-    /// - If A scales data up by 2x, A⁻¹ scales it down by 1/2
+    /// then A-¹ represents the opposite transformation that "undoes" the original:
+    /// - If A rotates data clockwise, A-¹ rotates it counterclockwise
+    /// - If A scales data up by 2x, A-¹ scales it down by 1/2
     /// </para>
     /// <para>
     /// This default implementation uses the decomposition to compute the inverse efficiently.

@@ -306,7 +306,7 @@ public class TridiagonalDecomposition<T> : MatrixDecompositionBase<T>
     /// <remarks>
     /// <para>
     /// <b>For Beginners:</b> The inverse of a matrix is like the reciprocal of a number. Just as 1/3 is the
-    /// reciprocal of 3 (because 3 � 1/3 = 1), the inverse of a matrix A is another matrix that,
+    /// reciprocal of 3 (because 3 * 1/3 = 1), the inverse of a matrix A is another matrix that,
     /// when multiplied by A, gives the identity matrix (the matrix equivalent of the number 1).
     /// Finding the inverse is useful for solving multiple systems of equations with the same coefficient matrix.
     /// </para>

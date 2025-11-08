@@ -366,7 +366,7 @@ public class PolarDecomposition<T> : MatrixDecompositionBase<T>
     /// Solves the linear system Ax = b using the polar decomposition.
     /// </summary>
     /// <param name="b">The right-hand side vector.</param>
-    /// <returns>The solution vector x such that Ax � b.</returns>
+    /// <returns>The solution vector x such that Ax * b.</returns>
     /// <remarks>
     /// <para>
     /// This method solves the system by first solving Px = b, then computing y = U^T * x.
@@ -397,7 +397,7 @@ public class PolarDecomposition<T> : MatrixDecompositionBase<T>
     /// </para>
     /// <para>
     /// <b>For Beginners:</b> The inverse of a matrix is like the reciprocal of a number - when you multiply
-    /// a matrix by its inverse, you get the identity matrix (similar to how 5 � 1/5 = 1). This method
+    /// a matrix by its inverse, you get the identity matrix (similar to how 5 * 1/5 = 1). This method
     /// finds the inverse by using the special properties of the polar decomposition, which makes the
     /// calculation more reliable than directly inverting the original matrix.
     /// </para>

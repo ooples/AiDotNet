@@ -325,10 +325,10 @@ public class HessenbergDecomposition<T> : MatrixDecompositionBase<T>
     /// </summary>
     /// <returns>The inverse of the original matrix.</returns>
     /// <remarks>
-    /// Matrix inversion finds a matrix A?� such that A � A?� = I (identity matrix).
+    /// Matrix inversion finds a matrix A^(-1) such that A * A^(-1) = I (identity matrix).
     ///
     /// <b>For Beginners:</b> The inverse of a matrix is like the reciprocal of a number.
-    /// Just as 5 � (1/5) = 1, a matrix multiplied by its inverse gives the identity matrix.
+    /// Just as 5 * (1/5) = 1, a matrix multiplied by its inverse gives the identity matrix.
     ///
     /// This method uses the MatrixHelper class to efficiently compute the inverse
     /// based on the Hessenberg decomposition, which is generally faster than
