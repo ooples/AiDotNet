@@ -132,7 +132,7 @@ public class Agent<T> : AgentBase<T>
                 AppendToScratchpad($"Action: {parsedResponse.Action}");
                 AppendToScratchpad($"Action Input: {parsedResponse.ActionInput ?? ""}");
 
-                string observation = ExecuteTool(parsedResponse.Action, parsedResponse.ActionInput ?? "");
+                string observation = ExecuteTool(parsedResponse.Action!, parsedResponse.ActionInput ?? "");
                 AppendToScratchpad($"Observation: {observation}\n");
             }
             else if (!parsedResponse.HasFinalAnswer)
