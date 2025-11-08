@@ -14,7 +14,7 @@ public class CholeskyDecomposition<T> : MatrixDecompositionBase<T>
     /// <summary>
     /// Gets the lower triangular matrix L from the decomposition A = L * L^T.
     /// </summary>
-    public Matrix<T> L { get; private set; }
+    public Matrix<T> L { get; private set; } = new Matrix<T>(0, 0);
 
     private readonly CholeskyAlgorithmType _algorithm;
 

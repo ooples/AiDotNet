@@ -19,13 +19,7 @@ namespace AiDotNet.DecompositionMethods.MatrixDecomposition;
 /// </remarks>
 public class NormalDecomposition<T> : MatrixDecompositionBase<T>
 {
-    /// <summary>
-    /// Gets the original matrix used in the decomposition.
-    /// </summary>
-    /// <remarks>
-    /// <b>For Beginners:</b> This is your original set of equations or data points that you're trying to solve.
-    /// </remarks>
-    public Matrix<T> A { get; private set; }
+    // A property is inherited from MatrixDecompositionBase<T>
     
     /// <summary>
     /// The product of A-transpose and A, forming a square, symmetric matrix.
@@ -59,11 +53,19 @@ public class NormalDecomposition<T> : MatrixDecompositionBase<T>
     /// solving quick and accurate.
     /// </para>
     /// </remarks>
-    public NormalDecomposition(Matrix<T> matrix)
+    public NormalDecomposition(Matrix<T> matrix) : base(matrix)
     {
-        A = matrix;
         _aTA = A.Transpose().Multiply(A);
         _choleskyDecomposition = new CholeskyDecomposition<T>(_aTA);
+    }
+
+    /// <summary>
+    /// Decomposition is performed in the constructor via Cholesky decomposition.
+    /// </summary>
+    protected override void Decompose()
+    {
+        // Normal equation decomposition is handled in the constructor
+        // by computing A^T*A and creating a Cholesky decomposition
     }
 
     /// <summary>

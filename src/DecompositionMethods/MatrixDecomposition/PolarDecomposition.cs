@@ -25,7 +25,7 @@ public class PolarDecomposition<T> : MatrixDecompositionBase<T>
     /// <b>For Beginners:</b> This matrix represents the rotation/reflection part of the transformation.
     /// It preserves angles and distances when applied to vectors.
     /// </remarks>
-    public Matrix<T> U { get; private set; }
+    public Matrix<T> U { get; private set; } = new Matrix<T>(0, 0);
 
     /// <summary>
     /// Gets the positive semi-definite factor of the decomposition.
@@ -34,7 +34,7 @@ public class PolarDecomposition<T> : MatrixDecompositionBase<T>
     /// <b>For Beginners:</b> This matrix represents the stretching/scaling part of the transformation.
     /// It may change the length of vectors but in a symmetric way.
     /// </remarks>
-    public Matrix<T> P { get; private set; }
+    public Matrix<T> P { get; private set; } = new Matrix<T>(0, 0);
 
     private readonly PolarAlgorithmType _algorithm;
 

@@ -24,7 +24,7 @@ public class GramSchmidtDecomposition<T> : MatrixDecompositionBase<T>
     /// Each column has a length (norm) of 1, making it an "orthonormal" matrix.
     /// This property makes Q useful for transforming vectors while preserving their length.
     /// </remarks>
-    public Matrix<T> Q { get; private set; }
+    public Matrix<T> Q { get; private set; } = new Matrix<T>(0, 0);
 
     /// <summary>
     /// Gets the upper triangular matrix R from the decomposition.
@@ -33,7 +33,7 @@ public class GramSchmidtDecomposition<T> : MatrixDecompositionBase<T>
     /// The R matrix is upper triangular, meaning it only has non-zero values on and above the diagonal.
     /// This structure makes it easy to solve systems of equations through back-substitution.
     /// </remarks>
-    public Matrix<T> R { get; private set; }
+    public Matrix<T> R { get; private set; } = new Matrix<T>(0, 0);
 
     private readonly GramSchmidtAlgorithmType _algorithm;
 

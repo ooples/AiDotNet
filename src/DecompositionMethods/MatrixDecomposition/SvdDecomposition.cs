@@ -22,7 +22,7 @@ public class SvdDecomposition<T> : MatrixDecompositionBase<T>
     /// It contains information about patterns in the rows of your original data.
     /// </para>
     /// </remarks>
-    public Matrix<T> U { get; private set; }
+    public Matrix<T> U { get; private set; } = new Matrix<T>(0, 0);
 
     /// <summary>
     /// Gets the singular values vector.
@@ -34,7 +34,7 @@ public class SvdDecomposition<T> : MatrixDecompositionBase<T>
     /// and are typically arranged in descending order.
     /// </para>
     /// </remarks>
-    public Vector<T> S { get; private set; }
+    public Vector<T> S { get; private set; } = new Vector<T>(0);
 
     /// <summary>
     /// Gets the transposed right singular vectors matrix.
@@ -45,7 +45,7 @@ public class SvdDecomposition<T> : MatrixDecompositionBase<T>
     /// It contains information about patterns in the columns of your original data.
     /// </para>
     /// </remarks>
-    public Matrix<T> Vt { get; private set; }
+    public Matrix<T> Vt { get; private set; } = new Matrix<T>(0, 0);
 
     private readonly SvdAlgorithmType _algorithm = SvdAlgorithmType.GolubReinsch;
 

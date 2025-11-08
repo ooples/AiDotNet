@@ -20,7 +20,7 @@ public class TakagiDecomposition<T> : MatrixDecompositionBase<T>
     /// <b>For Beginners:</b> Singular values represent the "strength" or "importance" of different dimensions in your data.
     /// Larger singular values indicate more important patterns in the data.
     /// </remarks>
-    public Matrix<T> SigmaMatrix { get; private set; }
+    public Matrix<T> SigmaMatrix { get; private set; } = new Matrix<T>(0, 0);
 
     /// <summary>
     /// Gets the unitary matrix used in the decomposition.
@@ -29,7 +29,7 @@ public class TakagiDecomposition<T> : MatrixDecompositionBase<T>
     /// <b>For Beginners:</b> A unitary matrix preserves lengths and angles when multiplied with vectors.
     /// It's like rotating or reflecting data without changing its fundamental structure.
     /// </remarks>
-    public Matrix<Complex<T>> UnitaryMatrix { get; private set; }
+    public Matrix<Complex<T>> UnitaryMatrix { get; private set; } = new Matrix<Complex<T>>(0, 0);
 
     private readonly TakagiAlgorithmType _algorithm;
 

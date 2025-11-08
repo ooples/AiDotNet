@@ -42,7 +42,7 @@ public class NmfDecomposition<T> : MatrixDecompositionBase<T>
     /// - The values show how much each document relates to each topic
     /// </para>
     /// </remarks>
-    public Matrix<T> W { get; private set; }
+    public Matrix<T> W { get; private set; } = new Matrix<T>(0, 0);
 
     /// <summary>
     /// Gets the coefficient matrix H (weights/encodings).
@@ -60,7 +60,7 @@ public class NmfDecomposition<T> : MatrixDecompositionBase<T>
     /// - The values show how important each word is to each topic
     /// </para>
     /// </remarks>
-    public Matrix<T> H { get; private set; }
+    public Matrix<T> H { get; private set; } = new Matrix<T>(0, 0);
 
     /// <summary>
     /// Gets the number of components (features) used in the factorization.

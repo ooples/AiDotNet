@@ -15,58 +15,59 @@ public class ComplexMatrixDecomposition<T> : MatrixDecompositionBase<Complex<T>>
     /// The underlying real-valued matrix decomposition.
     /// </summary>
     private readonly IMatrixDecomposition<T> _baseDecomposition;
-    
+
     /// <summary>
     /// Operations for the numeric type T (like addition, multiplication, etc.).
     /// </summary>
-    private readonly INumericOperations<T> _ops;
+    private readonly INumericOperations<T> _realOps;
 
     /// <summary>
     /// Creates a new complex matrix decomposition by wrapping a real-valued decomposition.
     /// </summary>
     /// <param name="baseDecomposition">The real-valued matrix decomposition to wrap.</param>
     public ComplexMatrixDecomposition(IMatrixDecomposition<T> baseDecomposition)
+        : base(ConvertToComplexMatrix(baseDecomposition.A, MathHelper.GetNumericOperations<T>()))
     {
         _baseDecomposition = baseDecomposition;
-        _ops = MathHelper.GetNumericOperations<T>();
+        _realOps = MathHelper.GetNumericOperations<T>();
     }
 
     /// <summary>
-    /// Gets the original matrix that was decomposed, converted to complex form.
+    /// Converts a real-valued matrix to a complex matrix with zero imaginary parts.
     /// </summary>
-    /// <remarks>
-    /// This property returns the original matrix from the base decomposition,
-    /// but converted to a complex matrix where all values have zero imaginary parts.
-    /// </remarks>
-    public Matrix<Complex<T>> A
+    private static Matrix<Complex<T>> ConvertToComplexMatrix(Matrix<T> realMatrix, INumericOperations<T> ops)
     {
-        get
+        var complexMatrix = new Matrix<Complex<T>>(realMatrix.Rows, realMatrix.Columns);
+        for (int i = 0; i < realMatrix.Rows; i++)
         {
-            var baseA = _baseDecomposition.A;
-            var complexA = new Matrix<Complex<T>>(baseA.Rows, baseA.Columns);
-
-            for (int i = 0; i < baseA.Rows; i++)
+            for (int j = 0; j < realMatrix.Columns; j++)
             {
-                for (int j = 0; j < baseA.Columns; j++)
-                {
-                    complexA[i, j] = new Complex<T>(baseA[i, j], _ops.Zero);
-                }
+                complexMatrix[i, j] = new Complex<T>(realMatrix[i, j], ops.Zero);
             }
-
-            return complexA;
         }
+        return complexMatrix;
     }
+
+    /// <summary>
+    /// Decomposition is handled by the wrapped base decomposition.
+    /// </summary>
+    protected override void Decompose()
+    {
+        // Decomposition is performed by the wrapped _baseDecomposition
+    }
+
+    // A property is inherited from MatrixDecompositionBase<Complex<T>>
 
     /// <summary>
     /// Calculates the inverse of the original matrix.
     /// </summary>
     /// <remarks>
-    /// The inverse of a matrix A is another matrix A?� such that A � A?� = I, 
+    /// The inverse of a matrix A is another matrix A^-1 such that A * A^-1 = I,
     /// where I is the identity matrix. This method uses the base decomposition
     /// to calculate the inverse and then converts it to complex form.
     /// </remarks>
     /// <returns>The inverse of the original matrix as a complex matrix.</returns>
-    public Matrix<Complex<T>> Invert()
+    public override Matrix<Complex<T>> Invert()
     {
         var baseInverse = _baseDecomposition.Invert();
         var complexInverse = new Matrix<Complex<T>>(baseInverse.Rows, baseInverse.Columns);
@@ -75,7 +76,7 @@ public class ComplexMatrixDecomposition<T> : MatrixDecompositionBase<Complex<T>>
         {
             for (int j = 0; j < baseInverse.Columns; j++)
             {
-                complexInverse[i, j] = new Complex<T>(baseInverse[i, j], _ops.Zero);
+                complexInverse[i, j] = new Complex<T>(baseInverse[i, j], _realOps.Zero);
             }
         }
 
@@ -88,13 +89,13 @@ public class ComplexMatrixDecomposition<T> : MatrixDecompositionBase<Complex<T>>
     /// <remarks>
     /// This method extracts the real parts of the input vector b, solves the system
     /// using the base decomposition, and then converts the solution back to complex form.
-    /// 
+    ///
     /// Note: This implementation only works correctly when the input vector b has zero
     /// imaginary parts. For fully complex systems, a different implementation would be needed.
     /// </remarks>
     /// <param name="b">The right-hand side vector of the equation Ax = b.</param>
     /// <returns>The solution vector x that satisfies Ax = b.</returns>
-    public Vector<Complex<T>> Solve(Vector<Complex<T>> b)
+    public override Vector<Complex<T>> Solve(Vector<Complex<T>> b)
     {
         // Extract real parts of b
         var realB = new Vector<T>(b.Length);
@@ -110,7 +111,7 @@ public class ComplexMatrixDecomposition<T> : MatrixDecompositionBase<Complex<T>>
         var complexSolution = new Vector<Complex<T>>(realSolution.Length);
         for (int i = 0; i < realSolution.Length; i++)
         {
-            complexSolution[i] = new Complex<T>(realSolution[i], _ops.Zero);
+            complexSolution[i] = new Complex<T>(realSolution[i], _realOps.Zero);
         }
 
         return complexSolution;
