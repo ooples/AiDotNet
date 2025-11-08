@@ -6,6 +6,26 @@ namespace AiDotNet.DecompositionMethods.MatrixDecomposition;
 /// Implements LU decomposition for matrices, which factorizes a matrix into a product of lower and upper triangular matrices.
 /// </summary>
 /// <typeparam name="T">The numeric data type used for calculations (typically double or float).</typeparam>
+/// <remarks>
+/// <para>
+/// LU decomposition factors a matrix A into the product of a lower triangular matrix L and an upper
+/// triangular matrix U, often with row permutations represented by a permutation matrix P (P*A = L*U).
+/// This decomposition is fundamental in numerical linear algebra and is used for solving linear systems,
+/// computing determinants, and matrix inversion.
+/// </para>
+/// <para>
+/// <b>For Beginners:</b> LU decomposition breaks a matrix into two simpler triangular matrices:
+/// L (lower triangular, with values only on and below the diagonal) and U (upper triangular, with
+/// values only on and above the diagonal). Think of it like factoring a number into simpler parts,
+/// but for matrices. This makes solving equations much faster.
+/// </para>
+/// <para>
+/// Real-world applications:
+/// - Solving systems of linear equations efficiently
+/// - Computing matrix determinants
+/// - Finding matrix inverses in numerical algorithms
+/// </para>
+/// </remarks>
 public class LuDecomposition<T> : MatrixDecompositionBase<T>
 {
     /// <summary>
@@ -35,8 +55,15 @@ public class LuDecomposition<T> : MatrixDecompositionBase<T>
     /// <param name="matrix">The matrix to decompose.</param>
     /// <param name="luAlgorithm">The algorithm to use for LU decomposition. Defaults to partial pivoting.</param>
     /// <remarks>
+    /// <para>
     /// LU decomposition factorizes a matrix A into the product of a lower triangular matrix L and an upper triangular matrix U,
     /// possibly with row permutations (P*A = L*U). This is useful for solving linear systems and calculating determinants.
+    /// </para>
+    /// <para>
+    /// <b>For Beginners:</b> This constructor takes your input matrix and immediately breaks it down into
+    /// the L and U components using the specified algorithm. Different algorithms have different trade-offs
+    /// in terms of speed and numerical stability.
+    /// </para>
     /// </remarks>
     public LuDecomposition(Matrix<T> matrix, LuAlgorithmType luAlgorithm = LuAlgorithmType.PartialPivoting)
         : base(matrix)

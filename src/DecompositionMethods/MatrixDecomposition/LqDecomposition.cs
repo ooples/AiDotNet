@@ -5,12 +5,24 @@ namespace AiDotNet.DecompositionMethods.MatrixDecomposition;
 /// </summary>
 /// <typeparam name="T">The numeric type used in the matrix (e.g., double, float).</typeparam>
 /// <remarks>
-/// <b>For Beginners:</b> LQ decomposition breaks down a matrix A into two components: A = LQ where:
-/// - L is a lower triangular matrix (values only on and below the diagonal)
-/// - Q is an orthogonal matrix (its columns are perpendicular to each other)
-/// 
+/// <para>
+/// LQ decomposition factors a matrix A into the product A = LQ, where L is a lower triangular matrix
+/// and Q is an orthogonal matrix. This decomposition is the transpose version of QR decomposition and
+/// is particularly useful when working with matrices that have more columns than rows.
+/// </para>
+/// <para>
+/// <b>For Beginners:</b> LQ decomposition breaks down a matrix A into two components:
+/// L (a lower triangular matrix with values only on and below the diagonal) and
+/// Q (an orthogonal matrix with columns that are perpendicular to each other).
 /// This decomposition is useful for solving linear systems, least squares problems,
 /// and other numerical linear algebra tasks.
+/// </para>
+/// <para>
+/// Real-world applications:
+/// - Solving underdetermined systems of equations
+/// - Least squares problems with wide matrices
+/// - Numerical stability in various computations
+/// </para>
 /// </remarks>
 public class LqDecomposition<T> : MatrixDecompositionBase<T>
 {

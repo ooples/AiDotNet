@@ -5,15 +5,35 @@ namespace AiDotNet.DecompositionMethods.MatrixDecomposition;
 /// </summary>
 /// <typeparam name="T">The numeric type used in the matrix (e.g., double, float).</typeparam>
 /// <remarks>
+/// <para>
 /// The Cholesky decomposition breaks down a symmetric positive definite matrix into
 /// the product of a lower triangular matrix and its transpose (A = L * L^T).
 /// This is useful for solving linear systems and matrix inversion more efficiently.
+/// </para>
+/// <para>
+/// <b>For Beginners:</b> Cholesky decomposition is like taking the square root of a matrix.
+/// Just as 25 = 5 × 5, this method breaks down special matrices into L × L^T, where L is
+/// a simpler triangular matrix. This makes complex calculations much faster and more accurate.
+/// </para>
+/// <para>
+/// Real-world applications:
+/// - Solving systems of linear equations in scientific computing
+/// - Covariance matrix decomposition in statistics and machine learning
+/// - Efficient simulation of correlated random variables
+/// </para>
 /// </remarks>
 public class CholeskyDecomposition<T> : MatrixDecompositionBase<T>
 {
     /// <summary>
     /// Gets the lower triangular matrix L from the decomposition A = L * L^T.
     /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> The L matrix has zeros above the main diagonal and contains
+    /// all the information needed to reconstruct your original matrix. Think of it as
+    /// one of the "building blocks" that combine to recreate the original matrix.
+    /// </para>
+    /// </remarks>
     public Matrix<T> L { get; private set; } = new Matrix<T>(0, 0);
 
     private readonly CholeskyAlgorithmType _algorithm;
@@ -27,9 +47,16 @@ public class CholeskyDecomposition<T> : MatrixDecompositionBase<T>
     /// Thrown when the matrix is not square, not symmetric, or not positive definite.
     /// </exception>
     /// <remarks>
+    /// <para>
     /// A positive definite matrix has all positive eigenvalues, which means it has a unique
     /// Cholesky decomposition. In practical terms, for most matrices you encounter in data
     /// science, this means the matrix must be symmetric with positive values on the diagonal.
+    /// </para>
+    /// <para>
+    /// <b>For Beginners:</b> This constructor checks that your matrix meets the requirements
+    /// (symmetric and positive definite) and then breaks it down using the selected algorithm.
+    /// Different algorithms may have different performance characteristics depending on your matrix.
+    /// </para>
     /// </remarks>
     public CholeskyDecomposition(Matrix<T> matrix, CholeskyAlgorithmType algorithm = CholeskyAlgorithmType.Crout)
         : base(matrix)
@@ -53,9 +80,16 @@ public class CholeskyDecomposition<T> : MatrixDecompositionBase<T>
     /// <param name="b">The right-hand side vector of the equation Ax = b.</param>
     /// <returns>The solution vector x.</returns>
     /// <remarks>
+    /// <para>
     /// This method solves the system in two steps:
     /// 1. Forward substitution to solve Ly = b
     /// 2. Back substitution to solve L^Tx = y
+    /// </para>
+    /// <para>
+    /// <b>For Beginners:</b> This solves equations of the form Ax = b, where A is your matrix,
+    /// b is known, and x is what you're finding. It uses the decomposition to solve this
+    /// efficiently in two simple steps, much faster than directly solving the original equation.
+    /// </para>
     /// </remarks>
     public override Vector<T> Solve(Vector<T> b)
     {
@@ -147,8 +181,15 @@ public class CholeskyDecomposition<T> : MatrixDecompositionBase<T>
     /// Thrown when the matrix is not square or not positive definite.
     /// </exception>
     /// <remarks>
+    /// <para>
     /// The Crout algorithm computes the decomposition column by column, which can be
     /// more efficient for certain matrix structures.
+    /// </para>
+    /// <para>
+    /// <b>For Beginners:</b> The Crout method processes the matrix one column at a time,
+    /// building up the solution gradually. It's like solving a puzzle by completing
+    /// one vertical section before moving to the next.
+    /// </para>
     /// </remarks>
     private Matrix<T> ComputeCholeskyCrout(Matrix<T> matrix)
     {
@@ -197,8 +238,15 @@ public class CholeskyDecomposition<T> : MatrixDecompositionBase<T>
     /// Thrown when the matrix is not square or not positive definite.
     /// </exception>
     /// <remarks>
+    /// <para>
     /// The Banachiewicz algorithm computes the decomposition row by row, which can be
     /// more efficient for certain matrix structures.
+    /// </para>
+    /// <para>
+    /// <b>For Beginners:</b> The Banachiewicz method processes the matrix one row at a time,
+    /// building up the solution gradually. It's like solving a puzzle by completing
+    /// one horizontal section before moving to the next.
+    /// </para>
     /// </remarks>
     private Matrix<T> ComputeCholeskyBanachiewicz(Matrix<T> matrix)
     {
@@ -239,7 +287,7 @@ public class CholeskyDecomposition<T> : MatrixDecompositionBase<T>
         return L;
     }
 
-        /// <summary>
+    /// <summary>
     /// Computes the LDL' decomposition and converts it to Cholesky form.
     /// </summary>
     /// <param name="matrix">The matrix to decompose.</param>
@@ -248,8 +296,15 @@ public class CholeskyDecomposition<T> : MatrixDecompositionBase<T>
     /// Thrown when the matrix is not square or not positive definite.
     /// </exception>
     /// <remarks>
+    /// <para>
     /// The LDL' decomposition is a variant of Cholesky that avoids square roots until the final step.
     /// This can be more numerically stable for certain matrices.
+    /// </para>
+    /// <para>
+    /// <b>For Beginners:</b> This method avoids calculating square roots until the very end,
+    /// which can give more accurate results for certain matrices. It's like doing all the
+    /// easy arithmetic first and saving the complicated square root calculations for last.
+    /// </para>
     /// </remarks>
     private Matrix<T> ComputeCholeskyLDL(Matrix<T> matrix)
     {
@@ -303,8 +358,15 @@ public class CholeskyDecomposition<T> : MatrixDecompositionBase<T>
     /// Thrown when the matrix is not square or not positive definite.
     /// </exception>
     /// <remarks>
+    /// <para>
     /// The block Cholesky algorithm divides the matrix into blocks to improve cache efficiency
     /// and potentially leverage parallel processing for large matrices.
+    /// </para>
+    /// <para>
+    /// <b>For Beginners:</b> This method breaks large matrices into smaller chunks (blocks)
+    /// that fit better in your computer's memory cache, making it much faster for big matrices.
+    /// Think of it like eating a large meal by breaking it into smaller, manageable bites.
+    /// </para>
     /// </remarks>
     private Matrix<T> ComputeBlockCholesky(Matrix<T> matrix)
     {

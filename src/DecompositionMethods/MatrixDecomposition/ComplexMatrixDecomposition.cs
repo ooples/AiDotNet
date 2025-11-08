@@ -3,12 +3,25 @@ namespace AiDotNet.DecompositionMethods.MatrixDecomposition;
 /// <summary>
 /// A wrapper class that adapts a real-valued matrix decomposition to work with complex numbers.
 /// </summary>
+/// <typeparam name="T">The numeric data type used for the real and imaginary parts (e.g., float, double).</typeparam>
 /// <remarks>
+/// <para>
 /// This class allows you to use existing matrix decomposition algorithms with complex numbers
 /// by wrapping a real-valued decomposition. Note that this implementation only works with
 /// matrices that have real values (the imaginary parts are all zero).
+/// </para>
+/// <para>
+/// <b>For Beginners:</b> This is a wrapper that lets you apply regular matrix decomposition methods
+/// to complex numbers. Complex numbers have both real and imaginary parts (like 3 + 4i), but this
+/// implementation currently works best when the imaginary parts are zero.
+/// </para>
+/// <para>
+/// Real-world applications:
+/// - Transitioning between real and complex number computations
+/// - Testing complex-valued algorithms with real-valued data
+/// - Quantum mechanics simulations with real-valued initial conditions
+/// </para>
 /// </remarks>
-/// <typeparam name="T">The numeric data type used for the real and imaginary parts (e.g., float, double).</typeparam>
 public class ComplexMatrixDecomposition<T> : MatrixDecompositionBase<Complex<T>>
 {
     /// <summary>

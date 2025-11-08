@@ -6,9 +6,20 @@ namespace AiDotNet.DecompositionMethods.MatrixDecomposition;
 /// <typeparam name="T">The numeric type used in the matrix (e.g., double, float).</typeparam>
 /// <remarks>
 /// <para>
+/// QR decomposition factors a matrix A into the product of an orthogonal matrix Q and an upper triangular
+/// matrix R. This decomposition is widely used in solving linear systems, computing eigenvalues, and least
+/// squares problems. Multiple algorithms are available, each with different performance characteristics.
+/// </para>
+/// <para>
 /// <b>For Beginners:</b> QR decomposition breaks down a matrix into two parts - Q (which has perpendicular columns with length 1)
 /// and R (which is triangular with zeros below the diagonal). This is useful for solving equations and other matrix operations.
 /// Think of it like factoring a number into its prime components, but for matrices.
+/// </para>
+/// <para>
+/// Real-world applications:
+/// - Solving systems of linear equations
+/// - Computing eigenvalues and eigenvectors
+/// - Least squares regression in statistics
 /// </para>
 /// </remarks>
 public class QrDecomposition<T> : MatrixDecompositionBase<T>

@@ -6,9 +6,20 @@ namespace AiDotNet.DecompositionMethods.MatrixDecomposition;
 /// <typeparam name="T">The numeric type used in the matrix.</typeparam>
 /// <remarks>
 /// <para>
+/// Singular Value Decomposition (SVD) factors a matrix A into the product A = U * S * V^T, where U and V
+/// are orthogonal matrices and S is a diagonal matrix containing singular values. SVD is one of the most
+/// important matrix decompositions with applications across many fields of science and engineering.
+/// </para>
+/// <para>
 /// <b>For Beginners:</b> SVD is a way to break down a matrix into three simpler matrices (U, S, and V^T).
 /// Think of it like factoring a number, but for matrices. This decomposition is useful for data
 /// compression, noise reduction, and solving systems of equations.
+/// </para>
+/// <para>
+/// Real-world applications:
+/// - Data compression and dimensionality reduction (PCA)
+/// - Image compression and denoising
+/// - Recommender systems (collaborative filtering)
 /// </para>
 /// </remarks>
 public class SvdDecomposition<T> : MatrixDecompositionBase<T>

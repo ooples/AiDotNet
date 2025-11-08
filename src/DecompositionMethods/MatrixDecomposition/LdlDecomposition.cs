@@ -6,12 +6,24 @@ namespace AiDotNet.DecompositionMethods.MatrixDecomposition;
 /// </summary>
 /// <typeparam name="T">The numeric type used in the matrix (e.g., double, float).</typeparam>
 /// <remarks>
+/// <para>
+/// LDL decomposition factors a symmetric matrix A into the product A = LDL^T, where L is a lower
+/// triangular matrix with ones on the diagonal, and D is a diagonal matrix. This decomposition is
+/// particularly useful for symmetric matrices and avoids computing square roots, making it more
+/// numerically stable than Cholesky decomposition in some cases.
+/// </para>
+/// <para>
 /// <b>For Beginners:</b> LDL decomposition breaks down a symmetric matrix into simpler parts:
-/// - L: A lower triangular matrix (has values only on and below the diagonal)
-/// - D: A diagonal matrix (has values only on the diagonal)
-/// 
-/// This decomposition is useful for solving linear systems, calculating determinants,
-/// and inverting matrices more efficiently than working with the original matrix.
+/// L (a lower triangular matrix with values only on and below the diagonal) and D (a diagonal matrix
+/// with values only on the diagonal). This decomposition is useful for solving linear systems,
+/// calculating determinants, and inverting matrices more efficiently than working with the original matrix.
+/// </para>
+/// <para>
+/// Real-world applications:
+/// - Solving systems of linear equations in optimization
+/// - Covariance matrix analysis in statistics
+/// - Kalman filtering in signal processing
+/// </para>
 /// </remarks>
 public class LdlDecomposition<T> : MatrixDecompositionBase<T>
 {

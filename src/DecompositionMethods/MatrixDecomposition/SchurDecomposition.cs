@@ -6,10 +6,21 @@ namespace AiDotNet.DecompositionMethods.MatrixDecomposition;
 /// <typeparam name="T">The numeric type used in the matrix.</typeparam>
 /// <remarks>
 /// <para>
+/// Schur decomposition factors a matrix A into the product A = USU*, where U is a unitary matrix
+/// and S is an upper triangular matrix. This decomposition is particularly useful for computing
+/// eigenvalues and for analyzing the properties of linear transformations.
+/// </para>
+/// <para>
 /// <b>For Beginners:</b> Schur decomposition breaks down a complex matrix into simpler parts that are easier to work with.
 /// It's like factoring a number (e.g., 12 = 3 * 4), but for matrices. The decomposition produces two matrices:
 /// a unitary matrix (which preserves lengths and angles) and an upper triangular matrix (which has zeros below the diagonal).
 /// This makes many calculations much simpler.
+/// </para>
+/// <para>
+/// Real-world applications:
+/// - Computing eigenvalues and eigenvectors efficiently
+/// - Solving differential equations in engineering
+/// - Control theory and system stability analysis
 /// </para>
 /// </remarks>
 public class SchurDecomposition<T> : MatrixDecompositionBase<T>
@@ -18,8 +29,10 @@ public class SchurDecomposition<T> : MatrixDecompositionBase<T>
     /// Gets the upper triangular Schur matrix (S) from the decomposition.
     /// </summary>
     /// <remarks>
+    /// <para>
     /// <b>For Beginners:</b> This is the triangular matrix that has all its non-zero elements on or above the diagonal.
     /// It's easier to work with than the original matrix for many calculations.
+    /// </para>
     /// </remarks>
     public Matrix<T> SchurMatrix { get; private set; } = new Matrix<T>(0, 0);
 
@@ -27,8 +40,10 @@ public class SchurDecomposition<T> : MatrixDecompositionBase<T>
     /// Gets the unitary matrix (U) from the decomposition.
     /// </summary>
     /// <remarks>
+    /// <para>
     /// <b>For Beginners:</b> A unitary matrix preserves the length of vectors and the angles between them.
     /// When you multiply a vector by a unitary matrix, the result has the same length as the original vector.
+    /// </para>
     /// </remarks>
     public Matrix<T> UnitaryMatrix { get; private set; } = new Matrix<T>(0, 0);
 

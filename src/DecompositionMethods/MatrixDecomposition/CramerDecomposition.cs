@@ -3,13 +3,27 @@ namespace AiDotNet.DecompositionMethods.MatrixDecomposition;
 /// <summary>
 /// Implements Cramer's rule for solving systems of linear equations and matrix inversion.
 /// </summary>
+/// <typeparam name="T">The numeric data type used in calculations (e.g., float, double).</typeparam>
 /// <remarks>
+/// <para>
 /// Cramer's rule is a method for solving systems of linear equations using determinants.
 /// It works by replacing columns in the coefficient matrix with the solution vector
 /// and calculating ratios of determinants. This method is primarily educational and not
 /// recommended for large matrices due to its computational complexity.
+/// </para>
+/// <para>
+/// <b>For Beginners:</b> Cramer's Rule is a formula-based method for solving systems of equations.
+/// It uses determinants (a special number calculated from a matrix) to find the solution directly.
+/// Think of it like using a formula to solve a math problem rather than using step-by-step algebra.
+/// While elegant, it becomes slow for large matrices.
+/// </para>
+/// <para>
+/// Real-world applications:
+/// - Solving small systems of equations (2x2 or 3x3) in engineering
+/// - Teaching linear algebra concepts
+/// - Theoretical analysis and mathematical proofs
+/// </para>
 /// </remarks>
-/// <typeparam name="T">The numeric data type used in calculations (e.g., float, double).</typeparam>
 public class CramerDecomposition<T> : MatrixDecompositionBase<T>
 {
     /// <summary>

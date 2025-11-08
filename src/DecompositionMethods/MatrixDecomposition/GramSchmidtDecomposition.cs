@@ -3,17 +3,26 @@ namespace AiDotNet.DecompositionMethods.MatrixDecomposition;
 /// <summary>
 /// Implements the Gram-Schmidt orthogonalization process to decompose a matrix into an orthogonal matrix Q and an upper triangular matrix R.
 /// </summary>
+/// <typeparam name="T">The numeric data type used in calculations (e.g., float, double).</typeparam>
 /// <remarks>
+/// <para>
 /// The Gram-Schmidt process transforms a set of vectors into a set of orthogonal vectors (vectors that are perpendicular to each other).
 /// This decomposition is useful for solving linear systems, computing least squares solutions, and other numerical applications.
-/// 
-/// In simple terms, this class takes a matrix and breaks it down into two special matrices:
-/// - Q: A matrix with perpendicular columns (orthogonal matrix)
-/// - R: An upper triangular matrix (only has values on and above the diagonal)
-/// 
-/// Together, these matrices can be multiplied to get back the original matrix: A = Q * R
+/// The result is a QR factorization where A = Q * R.
+/// </para>
+/// <para>
+/// <b>For Beginners:</b> This class takes a matrix and breaks it down into two special matrices:
+/// Q (a matrix with perpendicular columns) and R (an upper triangular matrix with values only on and above the diagonal).
+/// Think of it like organizing a messy set of vectors into a neat, perpendicular coordinate system.
+/// Together, these matrices can be multiplied to get back the original matrix: A = Q * R.
+/// </para>
+/// <para>
+/// Real-world applications:
+/// - Solving systems of linear equations
+/// - Computing least squares solutions in regression analysis
+/// - Numerical stability improvements in various algorithms
+/// </para>
 /// </remarks>
-/// <typeparam name="T">The numeric data type used in calculations (e.g., float, double).</typeparam>
 public class GramSchmidtDecomposition<T> : MatrixDecompositionBase<T>
 {
     /// <summary>

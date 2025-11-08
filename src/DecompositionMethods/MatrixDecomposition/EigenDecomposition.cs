@@ -3,12 +3,25 @@ namespace AiDotNet.DecompositionMethods.MatrixDecomposition;
 /// <summary>
 /// Performs eigenvalue decomposition of a matrix, breaking it down into its eigenvalues and eigenvectors.
 /// </summary>
+/// <typeparam name="T">The numeric data type used in calculations (e.g., float, double).</typeparam>
 /// <remarks>
+/// <para>
 /// Eigenvalue decomposition is a way to factorize a square matrix into a set of eigenvectors and eigenvalues.
 /// This is useful in many applications including principal component analysis, vibration analysis,
 /// and solving systems of differential equations.
+/// </para>
+/// <para>
+/// <b>For Beginners:</b> Eigenvalue decomposition finds special directions (eigenvectors) in which a matrix
+/// acts like simple scaling. When you multiply the matrix by an eigenvector, you get the same vector back
+/// but scaled by a number (the eigenvalue). Think of it like finding the "natural directions" of a transformation.
+/// </para>
+/// <para>
+/// Real-world applications:
+/// - Principal Component Analysis (PCA) for data dimensionality reduction
+/// - Vibration analysis in mechanical engineering
+/// - Google's PageRank algorithm
+/// </para>
 /// </remarks>
-/// <typeparam name="T">The numeric data type used in calculations (e.g., float, double).</typeparam>
 public class EigenDecomposition<T> : MatrixDecompositionBase<T>
 {
     /// <summary>
