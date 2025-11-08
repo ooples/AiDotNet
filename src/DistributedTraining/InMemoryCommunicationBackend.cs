@@ -36,6 +36,8 @@ public class InMemoryCommunicationBackend<T> : ICommunicationBackend<T> where T 
     private static readonly object _globalLock = new object();
     private static readonly Dictionary<string, List<Vector<T>>> _sharedBuffers = new();
     private static readonly Dictionary<string, int> _barrierCounters = new();
+    private static int _barrierGeneration = 0;
+    private static int _operationCounter = 0;
 
     /// <inheritdoc/>
     public int Rank => _rank;
@@ -115,7 +117,8 @@ public class InMemoryCommunicationBackend<T> : ICommunicationBackend<T> where T 
 
         lock (_globalLock)
         {
-            string barrierId = $"barrier_{DateTime.UtcNow.Ticks}";
+            // Use shared barrier generation counter so all ranks synchronize on same key
+            string barrierId = $"barrier_{_barrierGeneration}";
 
             if (!_barrierCounters.ContainsKey(barrierId))
             {
@@ -132,10 +135,11 @@ public class InMemoryCommunicationBackend<T> : ICommunicationBackend<T> where T 
 
             Monitor.PulseAll(_globalLock);
 
-            // Cleanup
+            // Cleanup - rank 0 removes key and increments generation for next barrier
             if (_rank == 0)
             {
                 _barrierCounters.Remove(barrierId);
+                _barrierGeneration++;
             }
         }
     }
@@ -160,10 +164,11 @@ public class InMemoryCommunicationBackend<T> : ICommunicationBackend<T> where T 
             return;
         }
 
-        string bufferId = $"allreduce_{Guid.NewGuid()}";
-
         lock (_globalLock)
         {
+            // Use shared operation counter so all ranks target same buffer key
+            string bufferId = $"allreduce_{_operationCounter}";
+
             // Initialize shared buffer
             if (!_sharedBuffers.ContainsKey(bufferId))
             {
@@ -191,10 +196,11 @@ public class InMemoryCommunicationBackend<T> : ICommunicationBackend<T> where T 
                 data[i] = result[i];
             }
 
-            // Cleanup (rank 0 cleans up)
+            // Cleanup - rank 0 removes key and increments counter for next operation
             if (_rank == 0)
             {
                 _sharedBuffers.Remove(bufferId);
+                _operationCounter++;
             }
         }
     }
@@ -215,10 +221,11 @@ public class InMemoryCommunicationBackend<T> : ICommunicationBackend<T> where T 
             return sendData.Clone();
         }
 
-        string bufferId = $"allgather_{Guid.NewGuid()}";
-
         lock (_globalLock)
         {
+            // Use shared operation counter so all ranks target same buffer key
+            string bufferId = $"allgather_{_operationCounter}";
+
             // Initialize shared buffer
             if (!_sharedBuffers.ContainsKey(bufferId))
             {
@@ -254,10 +261,11 @@ public class InMemoryCommunicationBackend<T> : ICommunicationBackend<T> where T 
                 offset += data.Length;
             }
 
-            // Cleanup
+            // Cleanup - rank 0 removes key and increments counter for next operation
             if (_rank == 0)
             {
                 _sharedBuffers.Remove(bufferId);
+                _operationCounter++;
             }
 
             return new Vector<T>(result);
@@ -280,10 +288,10 @@ public class InMemoryCommunicationBackend<T> : ICommunicationBackend<T> where T 
             return data?.Clone() ?? throw new ArgumentNullException(nameof(data));
         }
 
-        string bufferId = $"broadcast_{Guid.NewGuid()}";
-
         lock (_globalLock)
         {
+            // Use shared operation counter so all ranks target same buffer key
+            string bufferId = $"broadcast_{_operationCounter}";
             Vector<T> result;
 
             // Root process stores the data
@@ -307,10 +315,11 @@ public class InMemoryCommunicationBackend<T> : ICommunicationBackend<T> where T 
             // All processes retrieve the data
             result = _sharedBuffers[bufferId][0].Clone();
 
-            // Cleanup
+            // Cleanup - rank 0 removes key and increments counter for next operation
             if (_rank == 0)
             {
                 _sharedBuffers.Remove(bufferId);
+                _operationCounter++;
             }
 
             return result;
@@ -333,10 +342,11 @@ public class InMemoryCommunicationBackend<T> : ICommunicationBackend<T> where T 
             return sendData?.Clone() ?? throw new ArgumentNullException(nameof(sendData));
         }
 
-        string bufferId = $"scatter_{Guid.NewGuid()}";
-
         lock (_globalLock)
         {
+            // Use shared operation counter so all ranks target same buffer key
+            string bufferId = $"scatter_{_operationCounter}";
+
             // Root process splits and stores the data
             if (_rank == root)
             {
@@ -373,10 +383,11 @@ public class InMemoryCommunicationBackend<T> : ICommunicationBackend<T> where T 
             // Each process retrieves its chunk
             var result = _sharedBuffers[bufferId][_rank].Clone();
 
-            // Cleanup
+            // Cleanup - rank 0 removes key and increments counter for next operation
             if (_rank == 0)
             {
                 _sharedBuffers.Remove(bufferId);
+                _operationCounter++;
             }
 
             return result;
