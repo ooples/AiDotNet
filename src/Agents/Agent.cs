@@ -115,9 +115,10 @@ public class Agent<T> : AgentBase<T>
 
             if (parsedResponse.HasFinalAnswer)
             {
+                string finalAnswer = parsedResponse.FinalAnswer ?? "No answer provided.";
                 AppendToScratchpad($"\n=== Final Answer ===");
-                AppendToScratchpad(parsedResponse.FinalAnswer!);
-                return parsedResponse.FinalAnswer!;
+                AppendToScratchpad(finalAnswer);
+                return finalAnswer;
             }
 
             // Record the thought
@@ -127,12 +128,14 @@ public class Agent<T> : AgentBase<T>
             }
 
             // Execute the action if specified
-            if (!string.IsNullOrWhiteSpace(parsedResponse.Action))
+            // Explicit null check for net462 compatibility with nullable reference types
+            if (parsedResponse.Action is not null && !string.IsNullOrWhiteSpace(parsedResponse.Action))
             {
-                AppendToScratchpad($"Action: {parsedResponse.Action}");
+                string action = parsedResponse.Action;
+                AppendToScratchpad($"Action: {action}");
                 AppendToScratchpad($"Action Input: {parsedResponse.ActionInput ?? ""}");
 
-                string observation = ExecuteTool(parsedResponse.Action!, parsedResponse.ActionInput ?? "");
+                string observation = ExecuteTool(action, parsedResponse.ActionInput ?? "");
                 AppendToScratchpad($"Observation: {observation}\n");
             }
             else if (!parsedResponse.HasFinalAnswer)
