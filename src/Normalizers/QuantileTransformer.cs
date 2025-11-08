@@ -103,7 +103,12 @@ public class QuantileTransformer<T, TInput, TOutput> : NormalizerBase<T, TInput,
         {
             // Compute quantiles from the data
             var sortedData = vector.ToArray();
-            Array.Sort(sortedData, (a, b) => NumOps.Compare(a, b));
+            Array.Sort(sortedData, (a, b) =>
+            {
+                if (NumOps.LessThan(a, b)) return -1;
+                if (NumOps.GreaterThan(a, b)) return 1;
+                return 0;
+            });
 
             var quantiles = new List<T>();
             for (int i = 0; i < _nQuantiles; i++)
@@ -136,7 +141,12 @@ public class QuantileTransformer<T, TInput, TOutput> : NormalizerBase<T, TInput,
 
             // Compute quantiles from the data
             var sortedData = flattenedTensor.ToArray();
-            Array.Sort(sortedData, (a, b) => NumOps.Compare(a, b));
+            Array.Sort(sortedData, (a, b) =>
+            {
+                if (NumOps.LessThan(a, b)) return -1;
+                if (NumOps.GreaterThan(a, b)) return 1;
+                return 0;
+            });
 
             var quantiles = new List<T>();
             for (int i = 0; i < _nQuantiles; i++)
@@ -200,7 +210,12 @@ public class QuantileTransformer<T, TInput, TOutput> : NormalizerBase<T, TInput,
 
                 // Compute quantiles from the column
                 var sortedData = column.ToArray();
-                Array.Sort(sortedData, (a, b) => NumOps.Compare(a, b));
+                Array.Sort(sortedData, (a, b) =>
+                {
+                    if (NumOps.LessThan(a, b)) return -1;
+                    if (NumOps.GreaterThan(a, b)) return 1;
+                    return 0;
+                });
 
                 var quantiles = new List<T>();
                 for (int j = 0; j < _nQuantiles; j++)
@@ -254,7 +269,12 @@ public class QuantileTransformer<T, TInput, TOutput> : NormalizerBase<T, TInput,
 
                 // Compute quantiles from the column
                 var sortedData = column.ToArray();
-                Array.Sort(sortedData, (a, b) => NumOps.Compare(a, b));
+                Array.Sort(sortedData, (a, b) =>
+                {
+                    if (NumOps.LessThan(a, b)) return -1;
+                    if (NumOps.GreaterThan(a, b)) return 1;
+                    return 0;
+                });
 
                 var quantiles = new List<T>();
                 for (int j = 0; j < _nQuantiles; j++)
@@ -394,11 +414,11 @@ public class QuantileTransformer<T, TInput, TOutput> : NormalizerBase<T, TInput,
         int upperIndex = quantiles.Count - 1;
 
         // Handle values outside the range
-        if (NumOps.LessThanOrEqual(value, quantiles[0]))
+        if (NumOps.LessThanOrEquals(value, quantiles[0]))
         {
             return _outputDistribution == "uniform" ? NumOps.Zero : NumOps.FromDouble(-8.0); // Approximate -infinity for normal
         }
-        if (NumOps.GreaterThanOrEqual(value, quantiles[quantiles.Count - 1]))
+        if (NumOps.GreaterThanOrEquals(value, quantiles[quantiles.Count - 1]))
         {
             return _outputDistribution == "uniform" ? NumOps.One : NumOps.FromDouble(8.0); // Approximate infinity for normal
         }
@@ -409,7 +429,7 @@ public class QuantileTransformer<T, TInput, TOutput> : NormalizerBase<T, TInput,
         while (left <= right)
         {
             int mid = left + (right - left) / 2;
-            if (NumOps.LessThanOrEqual(value, quantiles[mid + 1]))
+            if (NumOps.LessThanOrEquals(value, quantiles[mid + 1]))
             {
                 if (NumOps.GreaterThan(value, quantiles[mid]))
                 {
@@ -485,7 +505,7 @@ public class QuantileTransformer<T, TInput, TOutput> : NormalizerBase<T, TInput,
             percentile = NumOps.One;
 
         // Map percentile back to original value using quantiles
-        double percentileDouble = NumOps.ToDouble(percentile);
+        double percentileDouble = Convert.ToDouble((object)percentile!);
         double position = percentileDouble * (quantiles.Count - 1);
         int lowerIndex = (int)Math.Floor(position);
         int upperIndex = Math.Min(lowerIndex + 1, quantiles.Count - 1);
@@ -507,7 +527,7 @@ public class QuantileTransformer<T, TInput, TOutput> : NormalizerBase<T, TInput,
     /// </summary>
     private T InverseNormalCDF(T p)
     {
-        double pDouble = NumOps.ToDouble(p);
+        double pDouble = Convert.ToDouble((object)p!);
 
         // Clamp to valid range
         if (pDouble <= 0.0) return NumOps.FromDouble(-8.0);
@@ -599,7 +619,7 @@ public class QuantileTransformer<T, TInput, TOutput> : NormalizerBase<T, TInput,
     /// </summary>
     private T NormalCDF(T x)
     {
-        double xDouble = NumOps.ToDouble(x);
+        double xDouble = Convert.ToDouble((object)x!);
         // CDF(x) = 0.5 * (1 + erf(x / sqrt(2)))
         double result = 0.5 * (1.0 + Erf(xDouble / Math.Sqrt(2.0)));
         return NumOps.FromDouble(result);
