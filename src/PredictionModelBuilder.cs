@@ -230,7 +230,7 @@ public class PredictionModelBuilder<T, TInput, TOutput> : IPredictionModelBuilde
     /// Example with agent assistance:
     /// <code>
     /// var result = await new PredictionModelBuilder&lt;double, Matrix&lt;double&gt;, Vector&lt;double&gt;&gt;()
-    ///     .WithAgentAssistance(apiKey: "sk-...")
+    ///     .ConfigureAgentAssistance(apiKey: "sk-...")
     ///     .BuildAsync(housingData, prices);
     /// </code>
     /// </remarks>
@@ -594,14 +594,14 @@ public class PredictionModelBuilder<T, TInput, TOutput> : IPredictionModelBuilde
     /// Example with defaults:
     /// <code>
     /// var result = await new PredictionModelBuilder&lt;double, Matrix&lt;double&gt;, Vector&lt;double&gt;&gt;()
-    ///     .WithAgentAssistance(apiKey: "sk-...")
+    ///     .ConfigureAgentAssistance(apiKey: "sk-...")
     ///     .BuildAsync(data, labels);
     /// </code>
     ///
     /// Example with customization:
     /// <code>
     /// var result = await new PredictionModelBuilder&lt;double, Matrix&lt;double&gt;, Vector&lt;double&gt;&gt;()
-    ///     .WithAgentAssistance(
+    ///     .ConfigureAgentAssistance(
     ///         apiKey: "sk-...",
     ///         options: AgentAssistanceOptions.Create()
     ///             .EnableModelSelection()
@@ -611,7 +611,7 @@ public class PredictionModelBuilder<T, TInput, TOutput> : IPredictionModelBuilde
     ///     .BuildAsync(data, labels);
     /// </code>
     /// </remarks>
-    public IPredictionModelBuilder<T, TInput, TOutput> WithAgentAssistance(
+    public IPredictionModelBuilder<T, TInput, TOutput> ConfigureAgentAssistance(
         string? apiKey = null,
         LLMProvider provider = LLMProvider.OpenAI,
         AgentAssistanceOptions? options = null,
@@ -634,18 +634,18 @@ public class PredictionModelBuilder<T, TInput, TOutput> : IPredictionModelBuilde
 
     /// <summary>
     /// Asks the agent a question about your model building process.
-    /// Only available after calling WithAgentAssistance().
+    /// Only available after calling ConfigureAgentAssistance().
     /// </summary>
     /// <param name="question">Natural language question to ask the agent.</param>
     /// <returns>The agent's answer based on your current configuration.</returns>
-    /// <exception cref="InvalidOperationException">Thrown if WithAgentAssistance() hasn't been called.</exception>
+    /// <exception cref="InvalidOperationException">Thrown if ConfigureAgentAssistance() hasn't been called.</exception>
     /// <remarks>
     /// <b>For Beginners:</b> Use this to get AI-powered advice during model building.
     ///
     /// Example:
     /// <code>
     /// var builder = new PredictionModelBuilder&lt;double, Matrix&lt;double&gt;, Vector&lt;double&gt;&gt;()
-    ///     .WithAgentAssistance(apiKey: "sk-...");
+    ///     .ConfigureAgentAssistance(apiKey: "sk-...");
     ///
     /// var advice = await builder.AskAgentAsync(
     ///     "Should I use Ridge or Lasso regression for my dataset with 50 features?");
@@ -657,7 +657,7 @@ public class PredictionModelBuilder<T, TInput, TOutput> : IPredictionModelBuilde
         if (_agentConfig == null || !_agentConfig.IsEnabled)
         {
             throw new InvalidOperationException(
-                "Agent assistance not enabled. Call WithAgentAssistance() first.");
+                "Agent assistance not enabled. Call ConfigureAgentAssistance() first.");
         }
 
         // Create a simple agent
@@ -690,10 +690,30 @@ public class PredictionModelBuilder<T, TInput, TOutput> : IPredictionModelBuilde
         {
             var modelAdvice = await agent.RunAsync(
                 $@"I have a dataset with {dataSummary}.
-                Recommend ONE specific model type from: LinearRegression, RidgeRegression, LassoRegression, RandomForest, or NeuralNetwork.
+                Recommend ONE specific model type from: SimpleRegression, MultipleRegression, PolynomialRegression, RidgeRegression, RandomForest, or NeuralNetworkRegression.
                 Respond with ONLY the model name, nothing else.");
 
-            recommendation.SuggestedModelType = modelAdvice.Trim();
+            // Parse the string response into ModelType enum
+            var modelName = modelAdvice.Trim();
+            if (Enum.TryParse<ModelType>(modelName, ignoreCase: true, out var modelType))
+            {
+                recommendation.SuggestedModelType = modelType;
+            }
+            else
+            {
+                // If parsing fails, try to match common patterns
+                recommendation.SuggestedModelType = modelName.ToLower() switch
+                {
+                    "linear" or "linearregression" or "simpleregression" => ModelType.SimpleRegression,
+                    "multiple" or "multipleregression" => ModelType.MultipleRegression,
+                    "polynomial" or "polynomialregression" => ModelType.PolynomialRegression,
+                    "ridge" or "ridgeregression" => ModelType.SimpleRegression, // Fallback to simple regression
+                    "randomforest" or "random forest" => ModelType.RandomForest,
+                    "neuralnetwork" or "neural network" or "neuralnetworkregression" => ModelType.NeuralNetworkRegression,
+                    _ => null
+                };
+            }
+
             recommendation.ModelSelectionReasoning = agent.Scratchpad;
         }
 
@@ -703,7 +723,7 @@ public class PredictionModelBuilder<T, TInput, TOutput> : IPredictionModelBuilde
     private void ApplyAgentRecommendations(AgentRecommendation<T, TInput, TOutput> recommendation)
     {
         // Only apply if user hasn't explicitly configured
-        if (_model == null && !string.IsNullOrWhiteSpace(recommendation.SuggestedModelType))
+        if (_model == null && recommendation.SuggestedModelType.HasValue)
         {
             // Agent recommended a model - we'll let the user know in the recommendation
             // but won't auto-create the model instance to avoid reflection complexity
