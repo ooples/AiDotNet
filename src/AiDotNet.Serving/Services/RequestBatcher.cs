@@ -28,7 +28,7 @@ public class RequestBatcher : IRequestBatcher, IDisposable
     private readonly IModelRepository _modelRepository;
     private readonly ILogger<RequestBatcher> _logger;
     private readonly ServingOptions _options;
-    private readonly PriorityRequestQueue<BatchRequest> _priorityQueue;
+    private readonly PriorityRequestQueue<BatchRequest>? _priorityQueue;
     private readonly ConcurrentQueue<BatchRequest> _requestQueue = new();
     private readonly Timer _batchTimer;
     private readonly SemaphoreSlim _processingSemaphore = new(1, 1);
@@ -60,8 +60,11 @@ public class RequestBatcher : IRequestBatcher, IDisposable
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
         _options = options?.Value ?? throw new ArgumentNullException(nameof(options));
 
-        // Initialize priority queue if enabled
-        _priorityQueue = new PriorityRequestQueue<BatchRequest>(_options.MaxQueueSize);
+        // Initialize priority queue only if enabled
+        if (_options.EnablePriorityScheduling)
+        {
+            _priorityQueue = new PriorityRequestQueue<BatchRequest>(_options.MaxQueueSize);
+        }
 
         // Initialize batching strategy
         _batchingStrategy = CreateBatchingStrategy();
@@ -94,7 +97,13 @@ public class RequestBatcher : IRequestBatcher, IDisposable
             "timeout" => new TimeoutBatchingStrategy(_options.BatchingWindowMs, _options.MaxBatchSize),
             "size" => new SizeBatchingStrategy(_options.MaxBatchSize, _options.BatchingWindowMs),
             "bucket" => new BucketBatchingStrategy(_options.BucketSizes, _options.MaxBatchSize, _options.BatchingWindowMs),
-            "adaptive" or _ => new AdaptiveBatchingStrategy(
+            "adaptive" => new AdaptiveBatchingStrategy(
+                _options.MinBatchSize,
+                _options.MaxBatchSize,
+                _options.BatchingWindowMs,
+                _options.TargetLatencyMs,
+                _options.LatencyToleranceFactor),
+            _ => new AdaptiveBatchingStrategy(
                 _options.MinBatchSize,
                 _options.MaxBatchSize,
                 _options.BatchingWindowMs,
@@ -112,7 +121,8 @@ public class RequestBatcher : IRequestBatcher, IDisposable
         {
             "bucket" => new BucketPaddingStrategy(_options.BucketSizes),
             "fixed" => new FixedSizePaddingStrategy(_options.FixedPaddingSize),
-            "minimal" or _ => new MinimalPaddingStrategy()
+            "minimal" => new MinimalPaddingStrategy(),
+            _ => new MinimalPaddingStrategy()
         };
     }
 
@@ -139,14 +149,21 @@ public class RequestBatcher : IRequestBatcher, IDisposable
         };
 
         // Use priority queue if enabled, otherwise use regular queue
-        if (_options.EnablePriorityScheduling)
+        if (_options.EnablePriorityScheduling && _priorityQueue != null)
         {
-            if (!_priorityQueue.TryEnqueue(request, priority))
+            lock (_timeLock)
             {
-                // Queue is full - backpressure handling
-                tcs.SetException(new InvalidOperationException("Request queue is full. Please try again later."));
-                _logger.LogWarning("Request rejected due to backpressure. Queue size: {QueueSize}", _priorityQueue.Count);
-                return tcs.Task;
+                if (!_priorityQueue.TryEnqueue(request, priority))
+                {
+                    // Queue is full - backpressure handling
+                    tcs.SetException(new InvalidOperationException("Request queue is full. Please try again later."));
+                    _logger.LogWarning("Request rejected due to backpressure. Queue size: {QueueSize}", _priorityQueue.Count);
+                    return tcs.Task;
+                }
+
+                // Track oldest request time
+                if (request.EnqueueTime < _oldestRequestTime)
+                    _oldestRequestTime = request.EnqueueTime;
             }
         }
         else
@@ -159,17 +176,17 @@ public class RequestBatcher : IRequestBatcher, IDisposable
                 return tcs.Task;
             }
 
-            _requestQueue.Enqueue(request);
+            lock (_timeLock)
+            {
+                _requestQueue.Enqueue(request);
+
+                // Track oldest request time
+                if (request.EnqueueTime < _oldestRequestTime)
+                    _oldestRequestTime = request.EnqueueTime;
+            }
         }
 
         Interlocked.Increment(ref _totalRequests);
-
-        // Track oldest request time
-        lock (_timeLock)
-        {
-            if (request.EnqueueTime < _oldestRequestTime)
-                _oldestRequestTime = request.EnqueueTime;
-        }
 
         return tcs.Task;
     }
@@ -201,7 +218,9 @@ public class RequestBatcher : IRequestBatcher, IDisposable
     /// </summary>
     private void ProcessBatches()
     {
-        var queueDepth = _options.EnablePriorityScheduling ? _priorityQueue.Count : _requestQueue.Count;
+        var queueDepth = _options.EnablePriorityScheduling && _priorityQueue != null
+            ? _priorityQueue.Count
+            : _requestQueue.Count;
 
         if (queueDepth == 0)
         {
@@ -225,7 +244,9 @@ public class RequestBatcher : IRequestBatcher, IDisposable
         }
 
         // Check if we should process a batch based on the strategy
-        var averageLatency = _performanceMetrics.GetAverageLatency();
+        var averageLatency = _options.EnablePerformanceMetrics
+            ? _performanceMetrics.GetAverageLatency()
+            : double.NaN;
         if (!_batchingStrategy.ShouldProcessBatch(queueDepth, timeInQueueMs, averageLatency, queueDepth))
         {
             return;
@@ -236,7 +257,7 @@ public class RequestBatcher : IRequestBatcher, IDisposable
 
         // Collect pending requests
         var requests = new List<BatchRequest>();
-        if (_options.EnablePriorityScheduling)
+        if (_options.EnablePriorityScheduling && _priorityQueue != null)
         {
             while (requests.Count < optimalBatchSize && _priorityQueue.TryDequeue(out var request))
             {
@@ -394,7 +415,13 @@ public class RequestBatcher : IRequestBatcher, IDisposable
             if (_options.EnablePerformanceMetrics)
             {
                 _performanceMetrics.RecordBatch(batchSize, latencyMs);
-                // Note: Padding metrics would be recorded here if padding was used
+
+                // Record padding metrics: calculate actual vs total elements
+                // For now, assuming minimal padding (no padding overhead in current implementation)
+                var actualElements = batchSize * inputDim;
+                var totalElements = batchSize * inputDim;
+                var paddingElements = totalElements - actualElements;
+                _performanceMetrics.RecordBatchUtilization(actualElements, paddingElements);
             }
 
             // Update batching strategy with performance feedback
@@ -468,7 +495,9 @@ public class RequestBatcher : IRequestBatcher, IDisposable
     /// </summary>
     public Dictionary<string, object> GetStatistics()
     {
-        var queueDepth = _options.EnablePriorityScheduling ? _priorityQueue.Count : _requestQueue.Count;
+        var queueDepth = _options.EnablePriorityScheduling && _priorityQueue != null
+            ? _priorityQueue.Count
+            : _requestQueue.Count;
 
         var stats = new Dictionary<string, object>
         {
@@ -481,7 +510,7 @@ public class RequestBatcher : IRequestBatcher, IDisposable
         };
 
         // Add priority queue stats if enabled
-        if (_options.EnablePriorityScheduling)
+        if (_options.EnablePriorityScheduling && _priorityQueue != null)
         {
             var priorityCounts = _priorityQueue.GetPriorityCounts();
             stats["priorityQueues"] = priorityCounts;
