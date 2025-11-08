@@ -96,6 +96,7 @@ public class PerformanceMetrics
 
     /// <summary>
     /// Calculates the specified percentile from latency samples.
+    /// Uses reservoir sampling for large sample sets to improve performance.
     /// </summary>
     /// <param name="percentile">Percentile to calculate (0-100)</param>
     /// <returns>The latency at the specified percentile</returns>
@@ -104,9 +105,38 @@ public class PerformanceMetrics
         if (percentile < 0 || percentile > 100)
             throw new ArgumentException("Percentile must be between 0 and 100", nameof(percentile));
 
-        var samples = _latencySamples.ToArray();
-        if (samples.Length == 0)
+        var allSamples = _latencySamples.ToArray();
+        if (allSamples.Length == 0)
             return 0.0;
+
+        // For large sample sizes, use reservoir sampling to reduce sorting cost
+        const int maxSortSize = 1000;
+        double[] samples;
+
+        if (allSamples.Length <= maxSortSize)
+        {
+            samples = allSamples;
+        }
+        else
+        {
+            // Reservoir sampling: randomly select maxSortSize samples
+            samples = new double[maxSortSize];
+            var random = new Random();
+
+            for (int i = 0; i < maxSortSize; i++)
+            {
+                samples[i] = allSamples[i];
+            }
+
+            for (int i = maxSortSize; i < allSamples.Length; i++)
+            {
+                int j = random.Next(i + 1);
+                if (j < maxSortSize)
+                {
+                    samples[j] = allSamples[i];
+                }
+            }
+        }
 
         Array.Sort(samples);
         int index = (int)Math.Ceiling(percentile / 100.0 * samples.Length) - 1;
