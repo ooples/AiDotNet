@@ -94,8 +94,10 @@ public class CalculatorTool : ITool
         {
             return "Error: Division by zero is not allowed.";
         }
-        catch (Exception ex)
+        catch (Exception ex) when (ex is not SyntaxErrorException and not EvaluateException and not DivideByZeroException)
         {
+            // Final safety net for truly unexpected exceptions (e.g., OutOfMemoryException, StackOverflowException, etc.)
+            // This is intentionally generic to gracefully handle edge cases not covered by specific handlers
             return $"Error: An unexpected error occurred during calculation. {ex.Message}";
         }
     }
