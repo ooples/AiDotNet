@@ -202,12 +202,9 @@ public class VerifiedReasoningRetriever<T>
         var allDocuments = new Dictionary<string, Document<T>>();
         foreach (var step in verifiedSteps.Where(s => s.IsVerified))
         {
-            foreach (var doc in step.SupportingDocuments)
+            foreach (var doc in step.SupportingDocuments.Where(d => !allDocuments.ContainsKey(d.Id)))
             {
-                if (!allDocuments.ContainsKey(doc.Id))
-                {
-                    allDocuments[doc.Id] = doc;
-                }
+                allDocuments[doc.Id] = doc;
             }
         }
 

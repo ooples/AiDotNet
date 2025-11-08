@@ -195,12 +195,9 @@ public class MultiStepReasoningRetriever<T>
             stepResults.Add(stepResult);
 
             // Accumulate documents
-            foreach (var doc in stepResult.Documents)
+            foreach (var doc in stepResult.Documents.Where(d => !allDocuments.ContainsKey(d.Id)))
             {
-                if (!allDocuments.ContainsKey(doc.Id))
-                {
-                    allDocuments[doc.Id] = doc;
-                }
+                allDocuments[doc.Id] = doc;
             }
 
             // Update accumulated knowledge
@@ -452,7 +449,7 @@ public class ToolAugmentedReasoningRetriever<T>
                 if (invocation.Success && !string.IsNullOrWhiteSpace(invocation.Output))
                 {
                     var toolDocs = _baseRetriever.Retrieve(invocation.Output, topK: 3, metadataFilters).ToList();
-                    foreach (var doc in toolDocs)
+                    foreach (var doc in toolDocs.Where(d => !allDocuments.ContainsKey(d.Id)))
                     {
                         allDocuments[doc.Id] = doc;
                     }
@@ -566,21 +563,16 @@ TOOL_CALLS: [if yes, list as 'toolname:input' separated by newlines]";
 
     private List<(string toolName, string input)> ParseToolCalls(string response)
     {
-        var calls = new List<(string, string)>();
         var section = ExtractSection(response, "TOOL_CALLS:");
 
         if (string.IsNullOrWhiteSpace(section))
-            return calls;
+            return new List<(string, string)>();
 
-        var lines = section.Split('\n', StringSplitOptions.RemoveEmptyEntries);
-        foreach (var line in lines)
-        {
-            var parts = line.Split(':', 2);
-            if (parts.Length == 2)
-            {
-                calls.Add((parts[0].Trim(), parts[1].Trim()));
-            }
-        }
+        var calls = section.Split('\n', StringSplitOptions.RemoveEmptyEntries)
+            .Select(line => line.Split(':', 2))
+            .Where(parts => parts.Length == 2)
+            .Select(parts => (parts[0].Trim(), parts[1].Trim()))
+            .ToList();
 
         return calls;
     }

@@ -250,22 +250,21 @@ public class TreeOfThoughtsRetriever<T>
     /// </summary>
     private void ExpandBestFirst(ThoughtNode root, Dictionary<string, object> metadataFilters)
     {
-        // Priority queue based on evaluation score
-        var priorityQueue = new SortedSet<(double score, ThoughtNode node, int id)>(
-            Comparer<(double score, ThoughtNode node, int id)>.Create((a, b) =>
+        // Priority queue based on evaluation score (max-heap via negated scores)
+        var priorityQueue = new PriorityQueue<ThoughtNode, (double score, int id)>(
+            Comparer<(double score, int id)>.Create((a, b) =>
             {
-                var scoreComparison = b.score.CompareTo(a.score); // Higher score first
+                var scoreComparison = a.score.CompareTo(b.score); // Lower (negated) score first = higher original score first
                 return scoreComparison != 0 ? scoreComparison : a.id.CompareTo(b.id); // Use id for tie-breaking
             })
         );
 
         int nodeIdCounter = 0;
-        priorityQueue.Add((1.0, root, nodeIdCounter++)); // Start with root (score 1.0)
+        priorityQueue.Enqueue(root, (-1.0, nodeIdCounter++)); // Start with root (negated score -1.0 for max-heap)
 
         while (priorityQueue.Count > 0)
         {
-            var (_, node, _) = priorityQueue.Min;
-            priorityQueue.Remove(priorityQueue.Min);
+            var node = priorityQueue.Dequeue();
 
             if (node.Depth >= _maxDepth)
                 continue;
@@ -276,7 +275,7 @@ public class TreeOfThoughtsRetriever<T>
             {
                 EvaluateAndRetrieve(child, metadataFilters);
                 node.Children.Add(child);
-                priorityQueue.Add((child.EvaluationScore, child, nodeIdCounter++));
+                priorityQueue.Enqueue(child, (-child.EvaluationScore, nodeIdCounter++)); // Negate for max-heap
             }
         }
     }
@@ -379,13 +378,14 @@ Format your response as a numbered list:
         if (chain.Count == 0)
             return string.Empty;
 
-        var context = "Question: " + chain[0];
+        var sb = new System.Text.StringBuilder();
+        sb.Append("Question: ").Append(chain[0]);
         for (int i = 1; i < chain.Count; i++)
         {
-            context += $"\nStep {i}: {chain[i]}";
+            sb.Append($"\nStep {i}: {chain[i]}");
         }
 
-        return context;
+        return sb.ToString();
     }
 
     /// <summary>

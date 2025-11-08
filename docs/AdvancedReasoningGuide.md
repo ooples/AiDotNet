@@ -347,6 +347,8 @@ Patterns can be combined for enhanced capabilities:
 ```csharp
 // Replace StubGenerator with real LLM
 var generator = new OpenAIGenerator<double>(apiKey, model: "gpt-4");
+// Note: OpenAIGenerator and AnthropicGenerator are placeholder examples
+// Use actual LLM integration libraries like Azure.AI.OpenAI or Anthropic SDK
 // or
 var generator = new AnthropicGenerator<double>(apiKey, model: "claude-3-opus");
 ```
@@ -355,6 +357,8 @@ var generator = new AnthropicGenerator<double>(apiKey, model: "claude-3-opus");
 ```csharp
 // Implement caching for repeated queries
 var cache = new RedisReasoningCache<double>(redisConnection);
+// Note: RedisReasoningCache is a placeholder example
+// Use actual caching libraries like StackExchange.Redis or Microsoft.Extensions.Caching
 // Check cache before expensive reasoning operations
 ```
 
