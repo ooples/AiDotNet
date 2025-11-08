@@ -1,14 +1,7 @@
 namespace AiDotNet.DecompositionMethods.MatrixDecomposition;
 
-public class BidiagonalDecomposition<T> : IMatrixDecomposition<T>
+public class BidiagonalDecomposition<T> : MatrixDecompositionBase<T>
 {
-    private readonly INumericOperations<T> _numOps;
-
-    /// <summary>
-    /// Gets the original matrix that was decomposed.
-    /// </summary>
-    public Matrix<T> A { get; }
-
     /// <summary>
     /// Gets the left orthogonal matrix in the decomposition.
     /// In simpler terms, this matrix helps transform the original matrix's columns.
@@ -28,6 +21,8 @@ public class BidiagonalDecomposition<T> : IMatrixDecomposition<T>
     /// </summary>
     public Matrix<T> V { get; private set; }
 
+    private BidiagonalAlgorithmType _algorithm;
+
     /// <summary>
     /// Creates a new bidiagonal decomposition of the specified matrix.
     /// </summary>
@@ -38,13 +33,20 @@ public class BidiagonalDecomposition<T> : IMatrixDecomposition<T>
     /// where A = U*B*V^T. This makes many matrix operations easier to perform.
     /// </remarks>
     public BidiagonalDecomposition(Matrix<T> matrix, BidiagonalAlgorithmType algorithm = BidiagonalAlgorithmType.Householder)
+        : base(matrix)
     {
-        A = matrix;
-        _numOps = MathHelper.GetNumericOperations<T>();
+        _algorithm = algorithm;
         U = new Matrix<T>(matrix.Rows, matrix.Rows);
         B = new Matrix<T>(matrix.Columns, matrix.Columns);
         V = new Matrix<T>(matrix.Columns, matrix.Columns);
-        Decompose(algorithm);
+    }
+
+    /// <summary>
+    /// Performs the bidiagonal decomposition.
+    /// </summary>
+    protected override void Decompose()
+    {
+        ComputeDecomposition(_algorithm);
     }
 
     /// <summary>
@@ -57,6 +59,17 @@ public class BidiagonalDecomposition<T> : IMatrixDecomposition<T>
     /// Householder is generally the most stable and commonly used method.
     /// </remarks>
     public void Decompose(BidiagonalAlgorithmType algorithm = BidiagonalAlgorithmType.Householder)
+    {
+        _algorithm = algorithm;
+        ComputeDecomposition(algorithm);
+    }
+
+    /// <summary>
+    /// Performs the actual decomposition computation using the specified algorithm.
+    /// </summary>
+    /// <param name="algorithm">The algorithm to use for decomposition.</param>
+    /// <exception cref="ArgumentException">Thrown when an unsupported algorithm is specified.</exception>
+    private void ComputeDecomposition(BidiagonalAlgorithmType algorithm)
     {
         switch (algorithm)
         {
@@ -96,7 +109,7 @@ public class BidiagonalDecomposition<T> : IMatrixDecomposition<T>
             Vector<T> v = HouseholderVector(x);
 
             // Apply Householder reflection to B
-            Matrix<T> P = Matrix<T>.CreateIdentity(m - k).Subtract(v.OuterProduct(v).Multiply(_numOps.FromDouble(2)));
+            Matrix<T> P = Matrix<T>.CreateIdentity(m - k).Subtract(v.OuterProduct(v).Multiply(NumOps.FromDouble(2)));
             Matrix<T> subB = B.GetSubMatrix(k, k, m - k, n - k);
             B.SetSubMatrix(k, k, P.Multiply(subB));
 
@@ -111,7 +124,7 @@ public class BidiagonalDecomposition<T> : IMatrixDecomposition<T>
                 v = HouseholderVector(x);
 
                 // Apply Householder reflection to B
-                P = Matrix<T>.CreateIdentity(n - k - 1).Subtract(v.OuterProduct(v).Multiply(_numOps.FromDouble(2)));
+                P = Matrix<T>.CreateIdentity(n - k - 1).Subtract(v.OuterProduct(v).Multiply(NumOps.FromDouble(2)));
                 subB = B.GetSubMatrix(k, k + 1, m - k, n - k - 1);
                 B.SetSubMatrix(k, k + 1, subB.Multiply(P));
 
@@ -177,7 +190,7 @@ public class BidiagonalDecomposition<T> : IMatrixDecomposition<T>
         Random rand = new();
         for (int i = 0; i < n; i++)
         {
-            v[i] = _numOps.FromDouble(rand.NextDouble());
+            v[i] = NumOps.FromDouble(rand.NextDouble());
         }
         v = v.Divide(v.Norm());
 
@@ -209,7 +222,7 @@ public class BidiagonalDecomposition<T> : IMatrixDecomposition<T>
     /// This method uses the decomposition to efficiently solve the system without
     /// directly inverting the matrix, which is more numerically stable.
     /// </remarks>
-    public Vector<T> Solve(Vector<T> b)
+    public override Vector<T> Solve(Vector<T> b)
     {
         if (b.Length != A.Rows)
             throw new ArgumentException("Vector b must have the same length as the number of rows in matrix A.");
@@ -228,7 +241,7 @@ public class BidiagonalDecomposition<T> : IMatrixDecomposition<T>
     /// Matrix inversion is computationally expensive and can be numerically unstable.
     /// When possible, use the Solve method instead of explicitly computing the inverse.
     /// </remarks>
-    public Matrix<T> Invert()
+    public override Matrix<T> Invert()
     {
         int n = A.Columns;
         Matrix<T> inverse = new Matrix<T>(n, n);
@@ -236,7 +249,7 @@ public class BidiagonalDecomposition<T> : IMatrixDecomposition<T>
         for (int i = 0; i < n; i++)
         {
             Vector<T> ei = new Vector<T>(n);
-            ei[i] = _numOps.One;
+            ei[i] = NumOps.One;
             inverse.SetColumn(i, Solve(ei));
         }
 
@@ -256,7 +269,7 @@ public class BidiagonalDecomposition<T> : IMatrixDecomposition<T>
     {
         T norm = x.Norm();
         Vector<T> v = x.Clone();
-        v[0] = _numOps.Add(v[0], _numOps.Multiply(_numOps.SignOrZero(x[0]), norm));
+        v[0] = NumOps.Add(v[0], NumOps.Multiply(NumOps.SignOrZero(x[0]), norm));
 
         return v.Divide(v.Norm());
     }
@@ -279,9 +292,9 @@ public class BidiagonalDecomposition<T> : IMatrixDecomposition<T>
     {
         T a = M[i, j];
         T b = M[k, l];
-        T r = _numOps.Sqrt(_numOps.Add(_numOps.Multiply(a, a), _numOps.Multiply(b, b)));
-        T c = _numOps.Divide(a, r);
-        T s = _numOps.Divide(b, r);
+        T r = NumOps.Sqrt(NumOps.Add(NumOps.Multiply(a, a), NumOps.Multiply(b, b)));
+        T c = NumOps.Divide(a, r);
+        T s = NumOps.Divide(b, r);
 
         if (isLeft)
         {
@@ -289,16 +302,16 @@ public class BidiagonalDecomposition<T> : IMatrixDecomposition<T>
             {
                 T temp1 = M[i, j2];
                 T temp2 = M[k, j2];
-                M[i, j2] = _numOps.Add(_numOps.Multiply(c, temp1), _numOps.Multiply(s, temp2));
-                M[k, j2] = _numOps.Subtract(_numOps.Multiply(_numOps.Negate(s), temp1), _numOps.Multiply(c, temp2));
+                M[i, j2] = NumOps.Add(NumOps.Multiply(c, temp1), NumOps.Multiply(s, temp2));
+                M[k, j2] = NumOps.Subtract(NumOps.Multiply(NumOps.Negate(s), temp1), NumOps.Multiply(c, temp2));
             }
 
             for (int i2 = 0; i2 < Q.Rows; i2++)
             {
                 T temp1 = Q[i2, i];
                 T temp2 = Q[i2, k];
-                Q[i2, i] = _numOps.Add(_numOps.Multiply(c, temp1), _numOps.Multiply(s, temp2));
-                Q[i2, k] = _numOps.Subtract(_numOps.Multiply(_numOps.Negate(s), temp1), _numOps.Multiply(c, temp2));
+                Q[i2, i] = NumOps.Add(NumOps.Multiply(c, temp1), NumOps.Multiply(s, temp2));
+                Q[i2, k] = NumOps.Subtract(NumOps.Multiply(NumOps.Negate(s), temp1), NumOps.Multiply(c, temp2));
             }
         }
         else
@@ -307,16 +320,16 @@ public class BidiagonalDecomposition<T> : IMatrixDecomposition<T>
             {
                 T temp1 = M[i2, j];
                 T temp2 = M[i2, l];
-                M[i2, j] = _numOps.Add(_numOps.Multiply(c, temp1), _numOps.Multiply(s, temp2));
-                M[i2, l] = _numOps.Subtract(_numOps.Multiply(_numOps.Negate(s), temp1), _numOps.Multiply(c, temp2));
+                M[i2, j] = NumOps.Add(NumOps.Multiply(c, temp1), NumOps.Multiply(s, temp2));
+                M[i2, l] = NumOps.Subtract(NumOps.Multiply(NumOps.Negate(s), temp1), NumOps.Multiply(c, temp2));
             }
 
             for (int j2 = 0; j2 < Q.Columns; j2++)
             {
                 T temp1 = Q[j, j2];
                 T temp2 = Q[l, j2];
-                Q[j, j2] = _numOps.Add(_numOps.Multiply(c, temp1), _numOps.Multiply(s, temp2));
-                Q[l, j2] = _numOps.Subtract(_numOps.Multiply(_numOps.Negate(s), temp1), _numOps.Multiply(c, temp2));
+                Q[j, j2] = NumOps.Add(NumOps.Multiply(c, temp1), NumOps.Multiply(s, temp2));
+                Q[l, j2] = NumOps.Subtract(NumOps.Multiply(NumOps.Negate(s), temp1), NumOps.Multiply(c, temp2));
             }
         }
     }
@@ -340,8 +353,8 @@ public class BidiagonalDecomposition<T> : IMatrixDecomposition<T>
         {
             T sum = y[i];
             if (i < n - 1)
-                sum = _numOps.Subtract(sum, _numOps.Multiply(B[i, i + 1], x[i + 1]));
-            x[i] = _numOps.Divide(sum, B[i, i]);
+                sum = NumOps.Subtract(sum, NumOps.Multiply(B[i, i + 1], x[i + 1]));
+            x[i] = NumOps.Divide(sum, B[i, i]);
         }
 
         return x;

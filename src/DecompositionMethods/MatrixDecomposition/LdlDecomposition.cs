@@ -13,18 +13,8 @@ namespace AiDotNet.DecompositionMethods.MatrixDecomposition;
 /// This decomposition is useful for solving linear systems, calculating determinants,
 /// and inverting matrices more efficiently than working with the original matrix.
 /// </remarks>
-public class LdlDecomposition<T> : IMatrixDecomposition<T>
+public class LdlDecomposition<T> : MatrixDecompositionBase<T>
 {
-    /// <summary>
-    /// Provides operations for the numeric type T (addition, multiplication, etc.)
-    /// </summary>
-    private readonly INumericOperations<T> _numOps;
-
-    /// <summary>
-    /// The original matrix being decomposed.
-    /// </summary>
-    public Matrix<T> A { get; }
-    
     /// <summary>
     /// The lower triangular matrix L from the decomposition.
     /// </summary>
@@ -33,7 +23,7 @@ public class LdlDecomposition<T> : IMatrixDecomposition<T>
     /// The diagonal elements are all set to 1.
     /// </remarks>
     public Matrix<T> L { get; private set; }
-    
+
     /// <summary>
     /// The diagonal matrix D from the decomposition, stored as a vector of the diagonal elements.
     /// </summary>
@@ -42,6 +32,8 @@ public class LdlDecomposition<T> : IMatrixDecomposition<T>
     /// we just store the diagonal values in a vector for efficiency.
     /// </remarks>
     public Vector<T> D { get; private set; }
+
+    private LdlAlgorithmType _algorithm;
 
     /// <summary>
     /// Initializes a new instance of the LDL decomposition for the specified matrix.
@@ -54,16 +46,23 @@ public class LdlDecomposition<T> : IMatrixDecomposition<T>
     /// the decomposition using the specified algorithm.
     /// </remarks>
     public LdlDecomposition(Matrix<T> matrix, LdlAlgorithmType algorithm = LdlAlgorithmType.Cholesky)
+        : base(matrix)
     {
         if (!matrix.IsSquareMatrix())
             throw new ArgumentException("Matrix must be square for LDL decomposition.");
 
-        _numOps = MathHelper.GetNumericOperations<T>();
-        A = matrix;
+        _algorithm = algorithm;
         int n = A.Rows;
         L = new Matrix<T>(n, n);
         D = new Vector<T>(n);
-        Decompose(algorithm);
+    }
+
+    /// <summary>
+    /// Performs the LDL decomposition.
+    /// </summary>
+    protected override void Decompose()
+    {
+        ComputeDecomposition(_algorithm);
     }
 
     /// <summary>
@@ -77,6 +76,17 @@ public class LdlDecomposition<T> : IMatrixDecomposition<T>
     /// types of matrices.
     /// </remarks>
     public void Decompose(LdlAlgorithmType algorithm = LdlAlgorithmType.Cholesky)
+    {
+        _algorithm = algorithm;
+        ComputeDecomposition(algorithm);
+    }
+
+    /// <summary>
+    /// Performs the actual decomposition computation using the specified algorithm.
+    /// </summary>
+    /// <param name="algorithm">The algorithm to use for decomposition.</param>
+    /// <exception cref="ArgumentException">Thrown when an unsupported algorithm is specified.</exception>
+    private void ComputeDecomposition(LdlAlgorithmType algorithm)
     {
         switch (algorithm)
         {
@@ -111,24 +121,24 @@ public class LdlDecomposition<T> : IMatrixDecomposition<T>
 
         for (int j = 0; j < n; j++)
         {
-            T sum = _numOps.Zero;
+            T sum = NumOps.Zero;
             for (int k = 0; k < j; k++)
             {
-                sum = _numOps.Add(sum, _numOps.Multiply(_numOps.Multiply(L[j, k], L[j, k]), D[k]));
+                sum = NumOps.Add(sum, NumOps.Multiply(NumOps.Multiply(L[j, k], L[j, k]), D[k]));
             }
-            D[j] = _numOps.Subtract(A[j, j], sum);
+            D[j] = NumOps.Subtract(A[j, j], sum);
 
-            L[j, j] = _numOps.One;
+            L[j, j] = NumOps.One;
 
             for (int i = j + 1; i < n; i++)
             {
-                sum = _numOps.Zero;
+                sum = NumOps.Zero;
                 for (int k = 0; k < j; k++)
                 {
-                    sum = _numOps.Add(sum, _numOps.Multiply(_numOps.Multiply(L[i, k], L[j, k]), D[k]));
+                    sum = NumOps.Add(sum, NumOps.Multiply(NumOps.Multiply(L[i, k], L[j, k]), D[k]));
                 }
 
-                L[i, j] = _numOps.Divide(_numOps.Subtract(A[i, j], sum), D[j]);
+                L[i, j] = NumOps.Divide(NumOps.Subtract(A[i, j], sum), D[j]);
             }
         }
     }
@@ -151,24 +161,24 @@ public class LdlDecomposition<T> : IMatrixDecomposition<T>
 
         for (int j = 0; j < n; j++)
         {
-            T sum = _numOps.Zero;
+            T sum = NumOps.Zero;
             for (int k = 0; k < j; k++)
             {
-                sum = _numOps.Add(sum, _numOps.Multiply(_numOps.Multiply(L[j, k], L[j, k]), D[k]));
+                sum = NumOps.Add(sum, NumOps.Multiply(NumOps.Multiply(L[j, k], L[j, k]), D[k]));
             }
 
-            D[j] = _numOps.Subtract(A[j, j], sum);
-            L[j, j] = _numOps.One;
+            D[j] = NumOps.Subtract(A[j, j], sum);
+            L[j, j] = NumOps.One;
 
             for (int i = j + 1; i < n; i++)
             {
-                sum = _numOps.Zero;
+                sum = NumOps.Zero;
                 for (int k = 0; k < j; k++)
                 {
-                    sum = _numOps.Add(sum, _numOps.Multiply(_numOps.Multiply(L[i, k], L[j, k]), D[k]));
+                    sum = NumOps.Add(sum, NumOps.Multiply(NumOps.Multiply(L[i, k], L[j, k]), D[k]));
                 }
 
-                L[i, j] = _numOps.Divide(_numOps.Subtract(A[i, j], sum), D[j]);
+                L[i, j] = NumOps.Divide(NumOps.Subtract(A[i, j], sum), D[j]);
             }
         }
     }
@@ -182,14 +192,14 @@ public class LdlDecomposition<T> : IMatrixDecomposition<T>
     /// <remarks>
     /// <b>For Beginners:</b> This method finds the values of x that satisfy the equation Ax = b.
     /// It uses the LDL decomposition to solve this in three steps:
-    /// 
+    ///
     /// 1. Forward substitution: Solve Ly = b for y
     /// 2. Diagonal scaling: Solve Dz = y for z
     /// 3. Backward substitution: Solve L^T x = z for x
-    /// 
+    ///
     /// This approach is much more efficient than directly inverting the matrix A.
     /// </remarks>
-    public Vector<T> Solve(Vector<T> b)
+    public override Vector<T> Solve(Vector<T> b)
     {
         if (b.Length != A.Rows)
             throw new ArgumentException("Vector b must have the same length as the number of rows in matrix A.");
@@ -198,30 +208,30 @@ public class LdlDecomposition<T> : IMatrixDecomposition<T>
         Vector<T> y = new(b.Length);
         for (int i = 0; i < b.Length; i++)
         {
-            T sum = _numOps.Zero;
+            T sum = NumOps.Zero;
             for (int j = 0; j < i; j++)
             {
-                sum = _numOps.Add(sum, _numOps.Multiply(L[i, j], y[j]));
+                sum = NumOps.Add(sum, NumOps.Multiply(L[i, j], y[j]));
             }
-            y[i] = _numOps.Subtract(b[i], sum);
+            y[i] = NumOps.Subtract(b[i], sum);
         }
 
         // Diagonal scaling
         for (int i = 0; i < b.Length; i++)
         {
-            y[i] = _numOps.Divide(y[i], D[i]);
+            y[i] = NumOps.Divide(y[i], D[i]);
         }
 
         // Backward substitution
         Vector<T> x = new Vector<T>(b.Length);
         for (int i = b.Length - 1; i >= 0; i--)
         {
-            T sum = _numOps.Zero;
+            T sum = NumOps.Zero;
             for (int j = i + 1; j < b.Length; j++)
             {
-                sum = _numOps.Add(sum, _numOps.Multiply(L[j, i], x[j]));
+                sum = NumOps.Add(sum, NumOps.Multiply(L[j, i], x[j]));
             }
-            x[i] = _numOps.Subtract(y[i], sum);
+            x[i] = NumOps.Subtract(y[i], sum);
         }
 
         return x;
@@ -232,18 +242,18 @@ public class LdlDecomposition<T> : IMatrixDecomposition<T>
     /// </summary>
     /// <returns>The inverse of the original matrix A.</returns>
     /// <remarks>
-    /// <b>For Beginners:</b> The inverse of a matrix A is another matrix A?¹ such that when multiplied 
-    /// together, they give the identity matrix (A × A?¹ = I).
-    /// 
+    /// <b>For Beginners:</b> The inverse of a matrix A is another matrix A?ï¿½ such that when multiplied
+    /// together, they give the identity matrix (A ï¿½ A?ï¿½ = I).
+    ///
     /// This method computes the inverse by:
     /// 1. Creating a set of unit vectors (vectors with a single 1 and the rest 0s)
     /// 2. Solving the system Ax = e_i for each unit vector e_i
     /// 3. Combining these solutions as columns to form the inverse matrix
-    /// 
+    ///
     /// Using LDL decomposition for this process is more efficient and numerically stable
     /// than directly computing the inverse through other methods.
     /// </remarks>
-    public Matrix<T> Invert()
+    public override Matrix<T> Invert()
     {
         int n = A.Rows;
         Matrix<T> inverse = new(n, n);
@@ -252,7 +262,7 @@ public class LdlDecomposition<T> : IMatrixDecomposition<T>
         {
             Vector<T> ei = new(n)
             {
-                [i] = _numOps.One  // Fixed to use _numOps instead of NumOps
+                [i] = NumOps.One  // Fixed to use NumOps instead of NumOps
             };
             Vector<T> column = Solve(ei);
             for (int j = 0; j < n; j++)
