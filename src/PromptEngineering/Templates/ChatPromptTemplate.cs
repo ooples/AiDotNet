@@ -46,7 +46,7 @@ public class ChatPromptTemplate : PromptTemplateBase
     /// </summary>
     /// <param name="messageFormat">Format for each message (default: "{role}: {content}").</param>
     public ChatPromptTemplate(string? messageFormat = null)
-        : base("") // Empty template - we build it from messages
+        : base(" ") // Base class requires a non-empty template; we rebuild it immediately.
     {
         _messages = new List<ChatMessage>();
         _messageFormat = messageFormat ?? "{role}: {content}";

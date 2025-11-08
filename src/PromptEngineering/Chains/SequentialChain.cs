@@ -106,8 +106,8 @@ public class SequentialChain<TInput, TOutput> : ChainBase<TInput, TOutput>
             }
             else if (step.AsyncFunction != null)
             {
-                // Run async function synchronously (not ideal, but necessary for sync path)
-                current = step.AsyncFunction(current, CancellationToken.None).GetAwaiter().GetResult();
+                throw new InvalidOperationException(
+                    $"Step '{step.Name}' was registered as async. Use RunAsync when executing chains that include async steps.");
             }
             else
             {

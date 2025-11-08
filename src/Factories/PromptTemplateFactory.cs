@@ -65,12 +65,14 @@ public static class PromptTemplateFactory
     /// </summary>
     private static SimplePromptTemplate CreateSimpleTemplate(string? template)
     {
-        if (string.IsNullOrWhiteSpace(template))
+        var resolvedTemplate = template ?? throw new ArgumentException("Template string is required for Simple template type.", nameof(template));
+
+        if (string.IsNullOrWhiteSpace(resolvedTemplate))
         {
-            throw new ArgumentException("Template string is required for Simple template type.");
+            throw new ArgumentException("Template string is required for Simple template type.", nameof(template));
         }
 
-        return new SimplePromptTemplate(template);
+        return new SimplePromptTemplate(resolvedTemplate);
     }
 
     /// <summary>
@@ -81,9 +83,11 @@ public static class PromptTemplateFactory
         IFewShotExampleSelector<double>? exampleSelector,
         int exampleCount)
     {
-        if (string.IsNullOrWhiteSpace(template))
+        var resolvedTemplate = template ?? throw new ArgumentException("Template string is required for FewShot template type.", nameof(template));
+
+        if (string.IsNullOrWhiteSpace(resolvedTemplate))
         {
-            throw new ArgumentException("Template string is required for FewShot template type.");
+            throw new ArgumentException("Template string is required for FewShot template type.", nameof(template));
         }
 
         if (exampleSelector == null)
@@ -91,7 +95,7 @@ public static class PromptTemplateFactory
             throw new ArgumentException("Example selector is required for FewShot template type.");
         }
 
-        return new FewShotPromptTemplate(template, exampleSelector, exampleCount);
+        return new FewShotPromptTemplate(resolvedTemplate, exampleSelector, exampleCount);
     }
 
     /// <summary>
