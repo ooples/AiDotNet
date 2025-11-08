@@ -100,7 +100,7 @@ public class HuffmanEncodingCompression<T> : ModelCompressionBase<T>
         var encodedBits = EncodeWeights(roundedWeights, encodingTable);
 
         // Create metadata
-        var metadata = new HuffmanEncodingMetadata
+        var metadata = new HuffmanEncodingMetadata<T>
         {
             HuffmanTree = huffmanTree,
             EncodingTable = encodingTable,
@@ -132,7 +132,7 @@ public class HuffmanEncodingCompression<T> : ModelCompressionBase<T>
             throw new ArgumentNullException(nameof(compressedWeights));
         }
 
-        if (metadata is not HuffmanEncodingMetadata huffmanMetadata)
+        if (metadata is not HuffmanEncodingMetadata<T> huffmanMetadata)
         {
             throw new ArgumentException("Invalid metadata type for Huffman encoding.", nameof(metadata));
         }
@@ -159,7 +159,7 @@ public class HuffmanEncodingCompression<T> : ModelCompressionBase<T>
     /// </summary>
     public override long GetCompressedSize(T[] compressedWeights, object metadata)
     {
-        if (metadata is not HuffmanEncodingMetadata huffmanMetadata)
+        if (metadata is not HuffmanEncodingMetadata<T> huffmanMetadata)
         {
             throw new ArgumentException("Invalid metadata type.", nameof(metadata));
         }
@@ -196,9 +196,9 @@ public class HuffmanEncodingCompression<T> : ModelCompressionBase<T>
         var frequencies = new Dictionary<T, int>();
         foreach (var weight in weights)
         {
-            if (frequencies.ContainsKey(weight))
+            if (frequencies.TryGetValue(weight, out int count))
             {
-                frequencies[weight]++;
+                frequencies[weight] = count + 1;
             }
             else
             {
@@ -301,10 +301,7 @@ public class HuffmanEncodingCompression<T> : ModelCompressionBase<T>
         foreach (var weight in weights)
         {
             string code = encodingTable[weight];
-            foreach (char c in code)
-            {
-                bits.Add(c == '1');
-            }
+            bits.AddRange(code.Select(c => c == '1'));
         }
         return new BitArray(bits.ToArray());
     }
@@ -381,7 +378,7 @@ public class HuffmanNode<T>
 /// <summary>
 /// Metadata for Huffman encoding compression.
 /// </summary>
-public class HuffmanEncodingMetadata
+public class HuffmanEncodingMetadata<T>
 {
     public required HuffmanNode<T> HuffmanTree { get; init; }
     public required Dictionary<T, string> EncodingTable { get; init; }

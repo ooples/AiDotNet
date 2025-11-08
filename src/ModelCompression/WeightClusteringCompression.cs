@@ -106,7 +106,7 @@ public class WeightClusteringCompression<T> : ModelCompressionBase<T>
         var (clusterCenters, assignments) = PerformKMeansClustering(weights, effectiveClusters);
 
         // Create metadata
-        var metadata = new WeightClusteringMetadata
+        var metadata = new WeightClusteringMetadata<T>
         {
             ClusterCenters = clusterCenters,
             NumClusters = effectiveClusters,
@@ -136,7 +136,7 @@ public class WeightClusteringCompression<T> : ModelCompressionBase<T>
             throw new ArgumentNullException(nameof(compressedWeights));
         }
 
-        if (metadata is not WeightClusteringMetadata clusterMetadata)
+        if (metadata is not WeightClusteringMetadata<T> clusterMetadata)
         {
             throw new ArgumentException("Invalid metadata type for weight clustering.", nameof(metadata));
         }
@@ -159,7 +159,7 @@ public class WeightClusteringCompression<T> : ModelCompressionBase<T>
     /// <returns>The total size in bytes.</returns>
     public override long GetCompressedSize(T[] compressedWeights, object metadata)
     {
-        if (metadata is not WeightClusteringMetadata clusterMetadata)
+        if (metadata is not WeightClusteringMetadata<T> clusterMetadata)
         {
             throw new ArgumentException("Invalid metadata type.", nameof(metadata));
         }
@@ -329,7 +329,7 @@ public class WeightClusteringCompression<T> : ModelCompressionBase<T>
 /// <summary>
 /// Metadata for weight clustering compression.
 /// </summary>
-public class WeightClusteringMetadata
+public class WeightClusteringMetadata<T>
 {
     /// <summary>
     /// The cluster centers.

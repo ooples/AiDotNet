@@ -205,7 +205,7 @@ namespace AiDotNetTests.UnitTests.ModelCompression
             var weights = new double[] { 1.0, 2.0, 3.0, 4.0, 5.0 };
 
             // Act
-            var (compressedWeights, metadata) = compression.Compress(weights);
+            var (_, metadata) = compression.Compress(weights);
             var clusterMetadata = (WeightClusteringMetadata<double>)metadata;
 
             // Assert
@@ -213,7 +213,7 @@ namespace AiDotNetTests.UnitTests.ModelCompression
         }
 
         [Fact]
-        public void Compress_WithIdenticalWeights_CreatesOnecluster()
+        public void Compress_WithIdenticalWeights_CreatesOneCluster()
         {
             // Arrange
             var compression = new WeightClusteringCompression<double>(
@@ -263,8 +263,8 @@ namespace AiDotNetTests.UnitTests.ModelCompression
             var weights = new double[] { 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0 };
 
             // Act
-            var (compressed1, metadata1) = compression1.Compress(weights);
-            var (compressed2, metadata2) = compression2.Compress(weights);
+            var (compressed1, _) = compression1.Compress(weights);
+            var (compressed2, _) = compression2.Compress(weights);
 
             // Assert
             Assert.Equal(compressed1, compressed2);
