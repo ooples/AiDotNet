@@ -523,7 +523,13 @@ public class LuDecomposition<T> : MatrixDecompositionBase<T>
             {
                 sum = NumOps.Add(sum, NumOps.Multiply(L[i, j], y[j]));
             }
-            y[i] = NumOps.Subtract(b[i], sum);
+            T rhs = NumOps.Subtract(b[i], sum);
+            T diag = L[i, i];
+            if (NumOps.Equals(diag, NumOps.Zero))
+            {
+                throw new InvalidOperationException("Lower triangular factor is singular.");
+            }
+            y[i] = NumOps.Divide(rhs, diag);
         }
 
         return y;

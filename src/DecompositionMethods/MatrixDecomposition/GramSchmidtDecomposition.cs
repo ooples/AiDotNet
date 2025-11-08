@@ -52,6 +52,7 @@ public class GramSchmidtDecomposition<T> : MatrixDecompositionBase<T>
         : base(matrix)
     {
         _algorithm = algorithm;
+        Decompose();
     }
 
     /// <summary>

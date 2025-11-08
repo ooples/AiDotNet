@@ -263,7 +263,7 @@ public class LdlDecomposition<T> : MatrixDecompositionBase<T>
         {
             Vector<T> ei = new(n)
             {
-                [i] = NumOps.One  // Fixed to use NumOps instead of NumOps
+                [i] = NumOps.One
             };
             Vector<T> column = Solve(ei);
             for (int j = 0; j < n; j++)

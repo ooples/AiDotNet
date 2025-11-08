@@ -522,25 +522,8 @@ public class IcaDecomposition<T> : MatrixDecompositionBase<T>
         return x;
     }
 
-    /// <summary>
-    /// Computes the (pseudo)inverse of the matrix using ICA.
-    /// </summary>
-    /// <returns>The pseudo-inverse approximation.</returns>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> This method returns an approximation of the matrix inverse based on the
-    /// ICA factorization. The mixing matrix serves as an approximation of the inverse.
-    /// </para>
-    /// <para>
-    /// Note that ICA is primarily designed for source separation, not matrix inversion.
-    /// For accurate matrix inversion, use decomposition methods like LU or SVD.
-    /// </para>
-    /// </remarks>
-    public override Matrix<T> Invert()
-    {
-        // Return the mixing matrix as an approximation of the inverse
-        return MixingMatrix;
-    }
+    // Invert() is handled by the base class MatrixDecompositionBase.
+    // ICA is not designed for matrix inversion; use LU or SVD decomposition for that purpose.
 
     /// <summary>
     /// Transforms new data using the learned ICA model.

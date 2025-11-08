@@ -111,6 +111,7 @@ public class NormalDecomposition<T> : MatrixDecompositionBase<T>
     /// </remarks>
     public override Matrix<T> Invert()
     {
-        return _choleskyDecomposition.Invert();
+        var invAta = _choleskyDecomposition.Invert();
+        return invAta.Multiply(A.Transpose());
     }
 }
