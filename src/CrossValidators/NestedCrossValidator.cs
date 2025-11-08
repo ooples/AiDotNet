@@ -129,9 +129,11 @@ public class NestedCrossValidator<T, TInput, TOutput> : CrossValidatorBase<T, TI
 
         foreach (var outerFoldResult in outerResults.FoldResults)
         {
-            // Extract training data for this outer fold
+            // Extract training data for this outer fold using indices from FoldResult
             var validationActualVector = outerFoldResult.ActualValues;
-            var trainIndices = GetTrainingIndices(X, validationActualVector, y);
+            var trainIndices = outerFoldResult.TrainingIndices ?? throw new InvalidOperationException(
+                $"TrainingIndices not available for outer fold {outerFoldResult.FoldIndex}. " +
+                "Ensure the outer cross-validator populates TrainingIndices in FoldResult.");
             var outerTrainX = InputHelper<T, TInput>.GetBatch(X, trainIndices);
             var outerTrainY = InputHelper<T, TOutput>.GetBatch(y, trainIndices);
 
@@ -164,7 +166,9 @@ public class NestedCrossValidator<T, TInput, TOutput> : CrossValidatorBase<T, TI
 
             bestModel.SetParameters(optimizationResult.BestSolution.GetParameters());
 
-            var validationIndices = GetValidationIndices(X, validationActualVector, y);
+            var validationIndices = outerFoldResult.ValidationIndices ?? throw new InvalidOperationException(
+                $"ValidationIndices not available for outer fold {outerFoldResult.FoldIndex}. " +
+                "Ensure the outer cross-validator populates ValidationIndices in FoldResult.");
             var outerValidationX = InputHelper<T, TInput>.GetBatch(X, validationIndices);
             var validationPredictions = bestModel.Predict(outerValidationX);
 
@@ -189,7 +193,10 @@ public class NestedCrossValidator<T, TInput, TOutput> : CrossValidatorBase<T, TI
                 outerFoldResult.TrainingTime + innerResult.TotalTime,
                 outerFoldResult.EvaluationTime,
                 featureCount,
-                bestModel  // Pass the trained model for this fold
+                bestModel,  // Pass the trained model for this fold
+                null,  // clusteringMetrics
+                trainIndices,  // Pass the training indices from outer fold
+                validationIndices  // Pass the validation indices from outer fold
             );
 
             nestedResults.Add(adjustedFoldResult);
@@ -198,62 +205,5 @@ public class NestedCrossValidator<T, TInput, TOutput> : CrossValidatorBase<T, TI
 
         totalTimer.Stop();
         return new CrossValidationResult<T, TInput, TOutput>(nestedResults, totalTimer.Elapsed);
-    }
-
-    /// <summary>
-    /// Gets the indices of the training set based on the validation set.
-    /// </summary>
-    /// <param name="X">The input data.</param>
-    /// <param name="validationSet">The validation set vector.</param>
-    /// <param name="y">The target data.</param>
-    /// <returns>An array of indices representing the training set.</returns>
-    /// <remarks>
-    /// <para>
-    /// This method determines the training set indices by excluding the validation set indices from the full dataset.
-    /// </para>
-    /// <para><b>For Beginners:</b> This method figures out which data points should be used for training.
-    ///
-    /// What it does:
-    /// - Looks at all the data points
-    /// - Removes the ones that are used for validation
-    /// - Returns the remaining ones, which will be used for training
-    ///
-    /// It's like separating your study materials into what you'll use for practice (training)
-    /// and what you'll use for the final test (validation).
-    /// </para>
-    /// </remarks>
-    private int[] GetTrainingIndices(TInput X, Vector<T> validationSet, TOutput y)
-    {
-        var batchSize = InputHelper<T, TInput>.GetBatchSize(X);
-        return [.. Enumerable.Range(0, batchSize).Except(GetValidationIndices(X, validationSet, y))];
-    }
-
-    /// <summary>
-    /// Gets the indices of the validation set.
-    /// </summary>
-    /// <param name="X">The input data.</param>
-    /// <param name="validationSet">The validation set vector.</param>
-    /// <param name="y">The target data.</param>
-    /// <returns>An array of indices representing the validation set.</returns>
-    /// <remarks>
-    /// <para>
-    /// This method determines the validation set indices by finding which elements of y are present in the validationSet.
-    /// </para>
-    /// <para><b>For Beginners:</b> This method identifies which data points should be used for validation.
-    ///
-    /// What it does:
-    /// - Looks at all the data points
-    /// - Checks which ones match the values in the validation set
-    /// - Returns the indices of those matching points
-    ///
-    /// It's like picking out specific questions from your study materials to use as a practice test,
-    /// helping you gauge how well you've learned the material.
-    /// </para>
-    /// </remarks>
-    private int[] GetValidationIndices(TInput X, Vector<T> validationSet, TOutput y)
-    {
-        var batchSize = InputHelper<T, TInput>.GetBatchSize(X);
-        var yVector = ConversionsHelper.ConvertToVector<T, TOutput>(y);
-        return [.. Enumerable.Range(0, batchSize).Where(i => validationSet.Contains(yVector[i]))];
     }
 }

@@ -204,7 +204,10 @@ public abstract class CrossValidatorBase<T, TInput, TOutput> : ICrossValidator<T
                 trainingTime,
                 evaluationTime,
                 featureCount,
-                foldModel  // Pass the trained model for this fold
+                foldModel,  // Pass the trained model for this fold
+                null,  // clusteringMetrics
+                trainIndices,  // Pass the training indices for this fold
+                validationIndices  // Pass the validation indices for this fold
             );
 
             foldResults.Add(foldResult);

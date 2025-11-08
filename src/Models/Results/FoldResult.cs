@@ -99,6 +99,41 @@ public class FoldResult<T, TInput, TOutput>
     public ClusteringMetrics<T>? ClusteringMetrics { get; }
 
     /// <summary>
+    /// Gets the indices of the training samples in this fold.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> These are the row indices from the original dataset that were used
+    /// for training the model in this fold. For example, if this contains [0, 1, 5, 6], it means
+    /// rows 0, 1, 5, and 6 from the original data were used for training.
+    /// </para>
+    /// <para>
+    /// This is especially useful for:
+    /// - Nested cross-validation where you need to extract subsets based on indices
+    /// - Debugging to verify correct data splits
+    /// - Advanced techniques like stratified sampling verification
+    /// </para>
+    /// </remarks>
+    public int[]? TrainingIndices { get; }
+
+    /// <summary>
+    /// Gets the indices of the validation samples in this fold.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> These are the row indices from the original dataset that were held out
+    /// for validation in this fold. For example, if this contains [2, 3, 4], it means rows 2, 3, and 4
+    /// from the original data were used for validation (testing).
+    /// </para>
+    /// <para>
+    /// This ensures you can accurately reconstruct which samples were used for validation, even when
+    /// the target values contain duplicates. This prevents data leakage and ensures correct nested
+    /// cross-validation.
+    /// </para>
+    /// </remarks>
+    public int[]? ValidationIndices { get; }
+
+    /// <summary>
     /// Creates a new instance of the FoldResult class.
     /// </summary>
     /// <param name="foldIndex">The index of this fold.</param>
@@ -112,6 +147,8 @@ public class FoldResult<T, TInput, TOutput>
     /// <param name="featureCount">The number of features used in the model.</param>
     /// <param name="model">Optional trained model instance for this fold.</param>
     /// <param name="clusteringMetrics">Optional clustering quality metrics for this fold.</param>
+    /// <param name="trainingIndices">Optional array of indices for training samples in this fold.</param>
+    /// <param name="validationIndices">Optional array of indices for validation samples in this fold.</param>
     /// <remarks>
     /// <para>
     /// <b>For Beginners:</b> This constructor creates a complete report of how well your model
@@ -131,7 +168,9 @@ public class FoldResult<T, TInput, TOutput>
         TimeSpan? evaluationTime = null,
         int featureCount = 0,
         IFullModel<T, TInput, TOutput>? model = null,
-        ClusteringMetrics<T>? clusteringMetrics = null)
+        ClusteringMetrics<T>? clusteringMetrics = null,
+        int[]? trainingIndices = null,
+        int[]? validationIndices = null)
     {
         FoldIndex = foldIndex;
         ActualValues = validationActual;
@@ -165,5 +204,7 @@ public class FoldResult<T, TInput, TOutput>
         EvaluationTime = evaluationTime ?? TimeSpan.Zero;
         Model = model;
         ClusteringMetrics = clusteringMetrics;
+        TrainingIndices = trainingIndices;
+        ValidationIndices = validationIndices;
     }
 }
