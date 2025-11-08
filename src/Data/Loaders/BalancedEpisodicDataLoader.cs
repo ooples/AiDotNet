@@ -66,7 +66,7 @@ namespace AiDotNet.Data.Loaders;
 /// }
 /// </code>
 /// </example>
-public class BalancedEpisodicDataLoader<T> : EpisodicDataLoaderBase<T>
+public class BalancedEpisodicDataLoader<T, TInput, TOutput> : EpisodicDataLoaderBase<T, TInput, TOutput>
 {
     private readonly Dictionary<int, int> _classUsageCount;
 
@@ -135,7 +135,7 @@ public class BalancedEpisodicDataLoader<T> : EpisodicDataLoaderBase<T>
     /// leading to more balanced meta-learning training.
     /// </para>
     /// </remarks>
-    protected override MetaLearningTask<T> GetNextTaskCore()
+    protected override MetaLearningTask<T, TInput, TOutput> GetNextTaskCore()
     {
         // Step 1: Calculate selection weights based on usage (inverse weighting)
         // Classes used less get higher weights
@@ -237,53 +237,5 @@ public class BalancedEpisodicDataLoader<T> : EpisodicDataLoaderBase<T>
         }
 
         return selected.ToArray();
-    }
-
-    /// <summary>
-    /// Builds a MetaLearningTask from lists of examples and labels.
-    /// </summary>
-    private MetaLearningTask<T> BuildMetaLearningTask(
-        List<Vector<T>> supportExamples,
-        List<T> supportLabels,
-        List<Vector<T>> queryExamples,
-        List<T> queryLabels)
-    {
-        int numFeatures = DatasetX.Columns;
-        int supportSize = NWay * KShot;
-        int querySize = NWay * QueryShots;
-
-        // Build support set tensors
-        var supportSetX = new Tensor<T>(new[] { supportSize, numFeatures });
-        var supportSetY = new Tensor<T>(new[] { supportSize });
-
-        for (int i = 0; i < supportSize; i++)
-        {
-            for (int j = 0; j < numFeatures; j++)
-            {
-                supportSetX[new[] { i, j }] = supportExamples[i][j];
-            }
-            supportSetY[new[] { i }] = supportLabels[i];
-        }
-
-        // Build query set tensors
-        var querySetX = new Tensor<T>(new[] { querySize, numFeatures });
-        var querySetY = new Tensor<T>(new[] { querySize });
-
-        for (int i = 0; i < querySize; i++)
-        {
-            for (int j = 0; j < numFeatures; j++)
-            {
-                querySetX[new[] { i, j }] = queryExamples[i][j];
-            }
-            querySetY[new[] { i }] = queryLabels[i];
-        }
-
-        return new MetaLearningTask<T>
-        {
-            SupportSetX = supportSetX,
-            SupportSetY = supportSetY,
-            QuerySetX = querySetX,
-            QuerySetY = querySetY
-        };
     }
 }

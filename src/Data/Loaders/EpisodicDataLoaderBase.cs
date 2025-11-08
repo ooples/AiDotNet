@@ -9,6 +9,8 @@ namespace AiDotNet.Data.Loaders;
 /// Provides a base implementation for episodic data loaders with common functionality for N-way K-shot meta-learning.
 /// </summary>
 /// <typeparam name="T">The numeric data type used for calculations (e.g., float, double).</typeparam>
+/// <typeparam name="TInput">The input data type for tasks (e.g., Matrix&lt;T&gt;, Tensor&lt;T&gt;, double[]).</typeparam>
+/// <typeparam name="TOutput">The output data type for tasks (e.g., Vector&lt;T&gt;, Tensor&lt;T&gt;, double[]).</typeparam>
 /// <remarks>
 /// <para>
 /// This abstract class implements the IEpisodicDataLoader interface and provides common functionality
@@ -29,7 +31,7 @@ namespace AiDotNet.Data.Loaders;
 /// - Providing protected access to the dataset and configuration
 /// </para>
 /// </remarks>
-public abstract class EpisodicDataLoaderBase<T> : IEpisodicDataLoader<T>
+public abstract class EpisodicDataLoaderBase<T, TInput, TOutput> : IEpisodicDataLoader<T, TInput, TOutput>
 {
     /// <summary>
     /// The feature matrix containing all examples.
@@ -139,7 +141,7 @@ public abstract class EpisodicDataLoaderBase<T> : IEpisodicDataLoader<T>
     /// which contains the specific sampling strategy.
     /// </para>
     /// </remarks>
-    public MetaLearningTask<T> GetNextTask()
+    public MetaLearningTask<T, TInput, TOutput> GetNextTask()
     {
         return GetNextTaskCore();
     }
@@ -166,7 +168,7 @@ public abstract class EpisodicDataLoaderBase<T> : IEpisodicDataLoader<T>
     /// 4. Build and return a MetaLearningTask
     /// </para>
     /// </remarks>
-    protected abstract MetaLearningTask<T> GetNextTaskCore();
+    protected abstract MetaLearningTask<T, TInput, TOutput> GetNextTaskCore();
 
     /// <summary>
     /// Validates the dataset inputs.
@@ -264,5 +266,97 @@ public abstract class EpisodicDataLoaderBase<T> : IEpisodicDataLoader<T>
                 string.Join(", ", insufficientClasses),
                 nameof(nWay));
         }
+    }
+
+    /// <summary>
+    /// Builds a MetaLearningTask from lists of examples and labels.
+    /// </summary>
+    protected MetaLearningTask<T, TInput, TOutput> BuildMetaLearningTask(
+        List<Vector<T>> supportExamples,
+        List<T> supportLabels,
+        List<Vector<T>> queryExamples,
+        List<T> queryLabels)
+    {
+        // Build matrices from examples
+        int numFeatures = DatasetX.Columns;
+        var supportMatrix = new Matrix<T>(supportExamples.Count, numFeatures);
+        var supportVector = new Vector<T>(supportLabels.Count);
+
+        for (int i = 0; i < supportExamples.Count; i++)
+        {
+            for (int j = 0; j < numFeatures; j++)
+            {
+                supportMatrix[i, j] = supportExamples[i][j];
+            }
+            supportVector[i] = supportLabels[i];
+        }
+
+        var queryMatrix = new Matrix<T>(queryExamples.Count, numFeatures);
+        var queryVector = new Vector<T>(queryLabels.Count);
+
+        for (int i = 0; i < queryExamples.Count; i++)
+        {
+            for (int j = 0; j < numFeatures; j++)
+            {
+                queryMatrix[i, j] = queryExamples[i][j];
+            }
+            queryVector[i] = queryLabels[i];
+        }
+
+        // Convert to TInput/TOutput using type checking
+        TInput supportX = ConvertMatrixToInput(supportMatrix);
+        TOutput supportY = ConvertVectorToOutput(supportVector);
+        TInput queryX = ConvertMatrixToInput(queryMatrix);
+        TOutput queryY = ConvertVectorToOutput(queryVector);
+
+        return new MetaLearningTask<T, TInput, TOutput>
+        {
+            SupportSetX = supportX,
+            SupportSetY = supportY,
+            QuerySetX = queryX,
+            QuerySetY = queryY
+        };
+    }
+
+    /// <summary>
+    /// Converts a Matrix to TInput type using the same pattern as ConversionsHelper.
+    /// </summary>
+    private static TInput ConvertMatrixToInput(Matrix<T> matrix)
+    {
+        if (typeof(TInput) == typeof(Matrix<T>))
+        {
+            return (TInput)(object)matrix;
+        }
+
+        if (typeof(TInput) == typeof(Tensor<T>))
+        {
+            // Use Tensor.FromMatrix for efficient conversion
+            return (TInput)(object)Tensor<T>.FromMatrix(matrix);
+        }
+
+        throw new NotSupportedException(
+            $"Conversion from Matrix<T> to {typeof(TInput).Name} is not supported. " +
+            $"Supported types: Matrix<T>, Tensor<T>");
+    }
+
+    /// <summary>
+    /// Converts a Vector to TOutput type using the same pattern as ConversionsHelper.
+    /// </summary>
+    private static TOutput ConvertVectorToOutput(Vector<T> vector)
+    {
+        if (typeof(TOutput) == typeof(Vector<T>))
+        {
+            return (TOutput)(object)vector;
+        }
+
+        if (typeof(TOutput) == typeof(Tensor<T>))
+        {
+            // Use Tensor.FromVector for efficient conversion
+            return (TOutput)(object)Tensor<T>.FromVector(vector);
+        }
+
+        throw new NotSupportedException(
+            $"Conversion from Vector<T> to {typeof(TOutput).Name} is not supported. " +
+            $"Supported types: Vector<T>, Tensor<T>");
     }
 }
