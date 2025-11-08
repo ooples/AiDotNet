@@ -1,6 +1,8 @@
 using Newtonsoft.Json;
+using Newtonsoft.Json.Linq;
 using AiDotNet.Interfaces;
 using Newtonsoft.Json;
+using Newtonsoft.Json.Linq;
 using System.Text.RegularExpressions;
 
 namespace AiDotNet.Agents;
@@ -446,51 +448,28 @@ Final answer:";
 
         try
         {
-            using (JsonDocument doc = JsonDocument.Parse(jsonContent))
+            var root = JObject.Parse(jsonContent);
+
+            if (root["steps"] is JArray stepsArray)
             {
-                var root = doc.RootElement;
-
-                if (root.TryGetProperty("steps", out var stepsArray))
+                foreach (var stepElement in stepsArray)
                 {
-                    if (stepsArray.ValueKind == JsonValueKind.Array)
+                    var step = new PlanStep
                     {
-                        foreach (var stepElement in stepsArray.EnumerateArray())
-                        {
-                            var step = new PlanStep();
+                        Description = stepElement["description"]?.Value<string>() ?? "",
+                        Tool = stepElement["tool"]?.Value<string>() ?? "",
+                        Input = stepElement["input"]?.Value<string>() ?? "",
+                        IsFinalStep = stepElement["is_final_step"]?.Value<bool>() ?? false
+                    };
 
-                            if (stepElement.TryGetProperty("description", out var desc))
-                            {
-                                step.Description = desc.GetString() ?? "";
-                            }
-
-                            if (stepElement.TryGetProperty("tool", out var tool))
-                            {
-                                step.Tool = tool.GetString() ?? "";
-                            }
-
-                            if (stepElement.TryGetProperty("input", out var input))
-                            {
-                                step.Input = input.GetString() ?? "";
-                            }
-
-                            if (stepElement.TryGetProperty("is_final_step", out var isFinal))
-                            {
-                                if (isFinal.ValueKind == JsonValueKind.True || isFinal.ValueKind == JsonValueKind.False)
-                                {
-                                    step.IsFinalStep = isFinal.GetBoolean();
-                                }
-                            }
-
-                            if (!string.IsNullOrWhiteSpace(step.Description))
-                            {
-                                plan.Steps.Add(step);
-                            }
-                        }
+                    if (!string.IsNullOrWhiteSpace(step.Description))
+                    {
+                        plan.Steps.Add(step);
                     }
                 }
             }
         }
-        catch (JsonException)
+        catch (Newtonsoft.Json.JsonException)
         {
             // Fallback: try to parse with regex
             plan = ParsePlanWithRegex(response);

@@ -1,6 +1,8 @@
 using Newtonsoft.Json;
+using Newtonsoft.Json.Linq;
 using AiDotNet.Interfaces;
 using Newtonsoft.Json;
+using Newtonsoft.Json.Linq;
 using System.Text.RegularExpressions;
 
 namespace AiDotNet.Agents;
@@ -330,70 +332,51 @@ Final answer:";
 
         try
         {
-            using (JsonDocument doc = JsonDocument.Parse(jsonContent))
+            var root = JObject.Parse(jsonContent);
+
+            // Parse reasoning steps
+            if (root["reasoning_steps"] is JArray steps)
             {
-                var root = doc.RootElement;
-
-                // Parse reasoning steps
-                if (root.TryGetProperty("reasoning_steps", out var steps))
+                foreach (var step in steps)
                 {
-                    if (steps.ValueKind == JsonValueKind.Array)
+                    var stepText = step.Value<string>();
+                    if (!string.IsNullOrWhiteSpace(stepText))
                     {
-                        foreach (var step in steps.EnumerateArray())
-                        {
-                            var stepText = step.GetString();
-                            if (!string.IsNullOrWhiteSpace(stepText))
-                            {
-                                result.ReasoningSteps.Add(stepText);
-                            }
-                        }
-                    }
-                }
-
-                // Parse tool calls
-                if (root.TryGetProperty("tool_calls", out var tools))
-                {
-                    if (tools.ValueKind == JsonValueKind.Array)
-                    {
-                        foreach (var tool in tools.EnumerateArray())
-                        {
-                            string? toolName = null;
-                            string? toolInput = null;
-
-                            if (tool.TryGetProperty("tool_name", out var tn))
-                            {
-                                toolName = tn.GetString();
-                            }
-
-                            if (tool.TryGetProperty("tool_input", out var ti))
-                            {
-                                toolInput = ti.GetString();
-                            }
-
-                            if (!string.IsNullOrWhiteSpace(toolName))
-                            {
-                                result.ToolCalls.Add(new ToolCall
-                                {
-                                    ToolName = toolName,
-                                    Input = toolInput ?? ""
-                                });
-                            }
-                        }
-                    }
-                }
-
-                // Parse final answer
-                if (root.TryGetProperty("final_answer", out var answer))
-                {
-                    var answerText = answer.GetString();
-                    if (!string.IsNullOrWhiteSpace(answerText))
-                    {
-                        result.FinalAnswer = answerText;
+                        result.ReasoningSteps.Add(stepText);
                     }
                 }
             }
+
+            // Parse tool calls
+            if (root["tool_calls"] is JArray tools)
+            {
+                foreach (var tool in tools)
+                {
+                    string? toolName = tool["tool_name"]?.Value<string>();
+                    string? toolInput = tool["tool_input"]?.Value<string>();
+
+                    if (!string.IsNullOrWhiteSpace(toolName))
+                    {
+                        result.ToolCalls.Add(new ToolCall
+                        {
+                            ToolName = toolName,
+                            Input = toolInput ?? ""
+                        });
+                    }
+                }
+            }
+
+            // Parse final answer
+            if (root["final_answer"] != null)
+            {
+                var answerText = root["final_answer"]?.Value<string>();
+                if (!string.IsNullOrWhiteSpace(answerText))
+                {
+                    result.FinalAnswer = answerText;
+                }
+            }
         }
-        catch (JsonException)
+        catch (Newtonsoft.Json.JsonException)
         {
             // Fallback: try to extract with regex
             result = ParseWithRegex(response);

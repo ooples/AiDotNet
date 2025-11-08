@@ -1,6 +1,8 @@
 using Newtonsoft.Json;
+using Newtonsoft.Json.Linq;
 using AiDotNet.Interfaces;
 using Newtonsoft.Json;
+using Newtonsoft.Json.Linq;
 using System.Text.RegularExpressions;
 
 namespace AiDotNet.Agents;
@@ -232,37 +234,34 @@ Respond now with your next step in JSON format:";
 
         try
         {
-            using (JsonDocument doc = JsonDocument.Parse(jsonContent))
+            var root = JObject.Parse(jsonContent);
+
+            if (root["thought"] != null)
             {
-                var root = doc.RootElement;
+                response.Thought = root["thought"]?.Value<string>();
+            }
 
-                if (root.TryGetProperty("thought", out var thought))
-                {
-                    response.Thought = thought.GetString();
-                }
+            if (root["action"] != null)
+            {
+                response.Action = root["action"]?.Value<string>();
+            }
 
-                if (root.TryGetProperty("action", out var action))
-                {
-                    response.Action = action.GetString();
-                }
+            if (root["action_input"] != null)
+            {
+                response.ActionInput = root["action_input"]?.Value<string>();
+            }
 
-                if (root.TryGetProperty("action_input", out var actionInput))
+            if (root["final_answer"] != null)
+            {
+                var finalAnswerStr = root["final_answer"]?.Value<string>();
+                if (!string.IsNullOrWhiteSpace(finalAnswerStr))
                 {
-                    response.ActionInput = actionInput.GetString();
-                }
-
-                if (root.TryGetProperty("final_answer", out var finalAnswer))
-                {
-                    var finalAnswerStr = finalAnswer.GetString();
-                    if (!string.IsNullOrWhiteSpace(finalAnswerStr))
-                    {
-                        response.FinalAnswer = finalAnswerStr;
-                        response.HasFinalAnswer = true;
-                    }
+                    response.FinalAnswer = finalAnswerStr;
+                    response.HasFinalAnswer = true;
                 }
             }
         }
-        catch (System.Text.Json.JsonException)
+        catch (Newtonsoft.Json.JsonException)
         {
             // Fallback: try to extract information using regex if JSON parsing fails
             response = ParseWithRegex(llmResponse);
