@@ -146,16 +146,24 @@ public class ShardedModel<T, TInput, TOutput> : IShardedModel<T, TInput, TOutput
     /// <inheritdoc/>
     public void SynchronizeGradients()
     {
-        // Get gradients from wrapped model
-        // Note: This assumes the model exposes gradients somehow.
-        // For now, we'll just synchronize the local parameter shard
-        // In a real implementation, gradients would be tracked separately
+        // Gather full parameters from all shards since shard sizes differ when
+        // ParameterCount % WorldSize != 0 (cannot AllReduce different-sized vectors)
+        var fullParameters = GatherFullParameters();
 
-        // Perform AllReduce with average operation
-        _config.CommunicationBackend.AllReduce(_localParameterShard, ReductionOperation.Average);
+        // AllReduce the full parameter vector to average across all ranks
+        // This ensures all ranks end up with the same averaged parameters
+        _config.CommunicationBackend.AllReduce(fullParameters, ReductionOperation.Average);
 
-        // Invalidate cached full parameters
-        _cachedFullParameters = null;
+        // Update local shard from the reduced parameters
+        var shardData = new T[_shardSize];
+        Array.Copy(fullParameters.ToArray(), _shardStartIndex, shardData, 0, _shardSize);
+        _localParameterShard = new Vector<T>(shardData);
+
+        // Update cache with synchronized parameters
+        _cachedFullParameters = fullParameters;
+
+        // Update wrapped model with synchronized parameters
+        _wrappedModel.SetParameters(fullParameters);
     }
 
     /// <inheritdoc/>
