@@ -7,12 +7,12 @@ namespace AiDotNet.DecompositionMethods.MatrixDecomposition;
 /// <remarks>
 /// <para>
 /// <b>For Beginners:</b> Schur decomposition breaks down a complex matrix into simpler parts that are easier to work with.
-/// It's like factoring a number (e.g., 12 = 3 × 4), but for matrices. The decomposition produces two matrices:
+/// It's like factoring a number (e.g., 12 = 3 ï¿½ 4), but for matrices. The decomposition produces two matrices:
 /// a unitary matrix (which preserves lengths and angles) and an upper triangular matrix (which has zeros below the diagonal).
 /// This makes many calculations much simpler.
 /// </para>
 /// </remarks>
-public class SchurDecomposition<T> : IMatrixDecomposition<T>
+public class SchurDecomposition<T> : MatrixDecompositionBase<T>
 {
     /// <summary>
     /// Gets the upper triangular Schur matrix (S) from the decomposition.
@@ -21,8 +21,8 @@ public class SchurDecomposition<T> : IMatrixDecomposition<T>
     /// <b>For Beginners:</b> This is the triangular matrix that has all its non-zero elements on or above the diagonal.
     /// It's easier to work with than the original matrix for many calculations.
     /// </remarks>
-    public Matrix<T> SchurMatrix { get; private set; }
-    
+    public Matrix<T> SchurMatrix { get; private set; };
+
     /// <summary>
     /// Gets the unitary matrix (U) from the decomposition.
     /// </summary>
@@ -30,17 +30,9 @@ public class SchurDecomposition<T> : IMatrixDecomposition<T>
     /// <b>For Beginners:</b> A unitary matrix preserves the length of vectors and the angles between them.
     /// When you multiply a vector by a unitary matrix, the result has the same length as the original vector.
     /// </remarks>
-    public Matrix<T> UnitaryMatrix { get; private set; }
-    
-    /// <summary>
-    /// Gets the original matrix that was decomposed.
-    /// </summary>
-    public Matrix<T> A { get; private set; }
+    public Matrix<T> UnitaryMatrix { get; private set; };
 
-    /// <summary>
-    /// Provides operations for the numeric type being used.
-    /// </summary>
-    private readonly INumericOperations<T> NumOps;
+    private readonly SchurAlgorithmType _algorithm;
 
     /// <summary>
     /// Initializes a new instance of the SchurDecomposition class.
@@ -48,19 +40,26 @@ public class SchurDecomposition<T> : IMatrixDecomposition<T>
     /// <param name="matrix">The matrix to decompose.</param>
     /// <param name="algorithm">The algorithm to use for the decomposition.</param>
     public SchurDecomposition(Matrix<T> matrix, SchurAlgorithmType algorithm = SchurAlgorithmType.Francis)
+        : base(matrix)
     {
-        A = matrix;
-        NumOps = MathHelper.GetNumericOperations<T>();
-        (SchurMatrix, UnitaryMatrix) = Decompose(matrix, algorithm);
+        _algorithm = algorithm;
     }
 
     /// <summary>
-    /// Selects and applies the appropriate decomposition algorithm.
+    /// Performs the Schur decomposition.
+    /// </summary>
+    protected override void Decompose()
+    {
+        (SchurMatrix, UnitaryMatrix) = ComputeDecomposition(A, _algorithm);
+    }
+
+    /// <summary>
+    /// Computes the Schur decomposition using the specified algorithm.
     /// </summary>
     /// <param name="matrix">The matrix to decompose.</param>
     /// <param name="algorithm">The algorithm to use.</param>
     /// <returns>A tuple containing the Schur matrix and the unitary matrix.</returns>
-    private (Matrix<T> S, Matrix<T> U) Decompose(Matrix<T> matrix, SchurAlgorithmType algorithm)
+    private (Matrix<T> S, Matrix<T> U) ComputeDecomposition(Matrix<T> matrix, SchurAlgorithmType algorithm)
     {
         return algorithm switch
         {
@@ -294,7 +293,7 @@ public class SchurDecomposition<T> : IMatrixDecomposition<T>
     /// backward substitution (solving from bottom to top) to find the answer efficiently.
     /// </para>
     /// </remarks>
-    public Vector<T> Solve(Vector<T> b)
+    public override Vector<T> Solve(Vector<T> b)
     {
         var y = UnitaryMatrix.ForwardSubstitution(b);
         return SchurMatrix.BackwardSubstitution(y);
@@ -307,7 +306,7 @@ public class SchurDecomposition<T> : IMatrixDecomposition<T>
     /// <remarks>
     /// <para>
     /// <b>For Beginners:</b> The inverse of a matrix is like the reciprocal of a number. Just as 1/x is the reciprocal of x,
-    /// the inverse of a matrix A (written as A?¹) is a matrix that, when multiplied by A, gives the identity matrix.
+    /// the inverse of a matrix A (written as A?ï¿½) is a matrix that, when multiplied by A, gives the identity matrix.
     /// </para>
     /// <para>
     /// This method uses the Schur decomposition to find the inverse more efficiently than direct methods.
@@ -315,7 +314,7 @@ public class SchurDecomposition<T> : IMatrixDecomposition<T>
     /// combines them to get the inverse of the original matrix.
     /// </para>
     /// </remarks>
-    public Matrix<T> Invert()
+    public override Matrix<T> Invert()
     {
         var invU = UnitaryMatrix.Transpose();
         var invS = SchurMatrix.InvertUpperTriangularMatrix();
