@@ -172,12 +172,12 @@ public class IcaDecomposition<T> : MatrixDecompositionBase<T>
         Matrix<T> W = FastIcaAlgorithm(XWhitened, numComponents, maxIterations, tolerance);
 
         // Compute mixing matrix A (pseudo-inverse of W)
-        Matrix<T> A = ComputeMixingMatrix(W, K);
+        Matrix<T> mixingMatrix = ComputeMixingMatrix(W, K);
 
         // Compute independent components S = W × K^T × (X - mean)^T
         Matrix<T> S = W.Multiply(XWhitened.Transpose());
 
-        return (W, A, S, mean, K);
+        return (W, mixingMatrix, S, mean, K);
     }
 
     /// <summary>
@@ -499,6 +499,12 @@ public class IcaDecomposition<T> : MatrixDecompositionBase<T>
     /// </remarks>
     public override Vector<T> Solve(Vector<T> b)
     {
+        if (b.Length != A.Rows)
+        {
+            throw new ArgumentException(
+                $"Input vector dimension ({b.Length}) must match matrix rows ({A.Rows}).");
+        }
+
         // Use the mixing matrix to solve: A × x = b
         // We approximate: x ≈ unmixing_matrix × whitening_matrix^T × (b - mean)
 
@@ -554,6 +560,12 @@ public class IcaDecomposition<T> : MatrixDecompositionBase<T>
     /// </remarks>
     public Matrix<T> Transform(Matrix<T> X)
     {
+        if (X.Columns != A.Columns)
+        {
+            throw new ArgumentException(
+                $"Input matrix columns ({X.Columns}) must match original matrix columns ({A.Columns}).");
+        }
+
         // Center the data
         Matrix<T> XCentered = CenterData(X, Mean);
 

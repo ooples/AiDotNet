@@ -481,7 +481,13 @@ public class SvdDecomposition<T> : MatrixDecompositionBase<T>
         // Extract singular values
         for (int i = 0; i < l; i++)
         {
-            S[i] = NumOps.Sqrt(NumOps.Add(NumOps.Multiply(A[i, i], A[i, i]), NumOps.Multiply(A[i, i + 1], A[i, i + 1])));
+            // Guard against out of range access when i == l-1
+            T offDiag = NumOps.Zero;
+            if (i + 1 < A.Columns)
+            {
+                offDiag = NumOps.Multiply(A[i, i + 1], A[i, i + 1]);
+            }
+            S[i] = NumOps.Sqrt(NumOps.Add(NumOps.Multiply(A[i, i], A[i, i]), offDiag));
         }
 
         // Sort singular values in descending order
