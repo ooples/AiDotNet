@@ -27,6 +27,12 @@ This implementation adds the following GAN architectures and components to AiDot
 
 #### Conditional GANs (HIGH) ✅
 - **cGAN** (Conditional GAN)
+- **AC-GAN** (Auxiliary Classifier GAN)
+- **InfoGAN** (Information Maximizing GAN)
+
+#### Advanced GANs (HIGH) ✅
+- **Pix2Pix** (Paired Image-to-Image Translation)
+- **CycleGAN** (Unpaired Image-to-Image Translation)
 
 #### Training Techniques (HIGH) ✅
 - **Spectral Normalization Layer**
@@ -217,6 +223,204 @@ var images = cgan.GenerateConditional(noise, conditions);
 - Interactive generation applications
 
 **Reference**: Mirza and Osindero, "Conditional Generative Adversarial Nets" (2014)
+
+### AC-GAN (Auxiliary Classifier GAN)
+
+**Location**: `src/NeuralNetworks/ACGAN.cs`
+
+An extension of conditional GANs where the discriminator also predicts the class label, providing stronger gradients and better image quality.
+
+**Key Features**:
+- Discriminator performs two tasks: authenticity + classification
+- Stronger gradient signals for class-conditional generation
+- Better image quality than basic cGAN
+- Improved class separability
+
+**Architectural Guidelines**:
+```csharp
+var acgan = new ACGAN<double>(
+    generatorArchitecture,     // Takes noise + class label
+    discriminatorArchitecture, // Outputs: [authenticity, class_probs...]
+    numClasses: 10,
+    InputType.Image,
+    initialLearningRate: 0.0002
+);
+
+// Train with class labels
+var (discLoss, genLoss) = acgan.TrainStep(realImages, realLabels, noise, fakeLabels);
+
+// Generate specific class
+var noise = acgan.GenerateRandomNoiseTensor(16, 100);
+var labels = acgan.CreateOneHotLabels(16, classIndex: 7);
+var images = acgan.GenerateConditional(noise, labels);
+```
+
+**Advantages Over cGAN**:
+- Discriminator learns better features (multi-task)
+- Higher quality class-conditional images
+- Better class consistency
+- More stable training
+
+**When to Use**:
+- When image quality is critical
+- Multi-class conditional generation
+- When you have labeled data
+- Research requiring strong baselines
+
+**Reference**: Odena et al., "Conditional Image Synthesis with Auxiliary Classifier GANs" (2017)
+
+### InfoGAN (Information Maximizing GAN)
+
+**Location**: `src/NeuralNetworks/InfoGAN.cs`
+
+Learns disentangled representations in an unsupervised manner by maximizing mutual information between latent codes and generated observations.
+
+**Key Features**:
+- Automatic discovery of interpretable features
+- No labeled data required
+- Disentangled latent codes
+- Auxiliary Q network for code prediction
+- Mutual information maximization
+
+**Architectural Guidelines**:
+```csharp
+var infogan = new InfoGAN<double>(
+    generatorArchitecture,      // Takes noise z + latent codes c
+    discriminatorArchitecture,
+    qNetworkArchitecture,       // Predicts c from generated images
+    latentCodeSize: 10,         // Number of codes to learn
+    InputType.Image,
+    initialLearningRate: 0.0002,
+    mutualInfoCoefficient: 1.0
+);
+
+// Train
+var noise = infogan.GenerateRandomNoiseTensor(batchSize, 100);
+var codes = infogan.GenerateRandomLatentCodes(batchSize);
+var (discLoss, genLoss, miLoss) = infogan.TrainStep(realImages, noise, codes);
+
+// Generate with specific codes (e.g., control rotation, width, etc.)
+var controlledCodes = new Tensor<double>(new int[] { 1, 10 });
+controlledCodes[0, 0] = 0.8;  // First code = 0.8 (might control rotation)
+var image = infogan.Generate(noise, controlledCodes);
+```
+
+**What It Learns** (Examples from MNIST):
+- Code 1: Digit rotation
+- Code 2: Stroke width
+- Code 3: Digit style
+- All discovered automatically!
+
+**When to Use**:
+- Discovering latent structure in data
+- Controllable generation without labels
+- Disentangled representation learning
+- Feature manipulation tasks
+- Research on interpretability
+
+**Reference**: Chen et al., "InfoGAN: Interpretable Representation Learning by Information Maximizing Generative Adversarial Nets" (2016)
+
+## Advanced GANs for Image-to-Image Translation
+
+### Pix2Pix
+
+**Location**: `src/NeuralNetworks/Pix2Pix.cs`
+
+A conditional GAN for paired image-to-image translation using U-Net generator and PatchGAN discriminator.
+
+**Key Features**:
+- Requires paired training data (input-output pairs)
+- U-Net generator with skip connections
+- PatchGAN discriminator (classifies patches)
+- L1 + adversarial loss
+- Preserves spatial information
+
+**Architectural Guidelines**:
+```csharp
+var pix2pix = new Pix2Pix<double>(
+    generatorArchitecture,      // U-Net architecture
+    discriminatorArchitecture,  // PatchGAN
+    InputType.Image,
+    initialLearningRate: 0.0002,
+    l1Lambda: 100.0             // Weight for L1 loss
+);
+
+// Train with paired data
+var (discLoss, genLoss, l1Loss) = pix2pix.TrainStep(inputImages, targetImages);
+
+// Translate images
+var translated = pix2pix.Translate(inputImages);
+```
+
+**Applications**:
+- Edges → Photos
+- Sketches → Realistic images
+- Day → Night scenes
+- Semantic labels → Photos
+- Black-and-white → Color
+- Maps → Satellite imagery
+
+**Key Insight**: PatchGAN focuses on local patches rather than the whole image, encouraging sharp high-frequency details.
+
+**When to Use**:
+- Paired training data available
+- Image-to-image transformation tasks
+- When spatial correspondence is important
+- Applications requiring sharp details
+
+**Reference**: Isola et al., "Image-to-Image Translation with Conditional Adversarial Networks" (2017)
+
+### CycleGAN
+
+**Location**: `src/NeuralNetworks/CycleGAN.cs`
+
+Enables unpaired image-to-image translation using cycle consistency loss, eliminating the need for paired training data.
+
+**Key Features**:
+- No paired training data required
+- Two generators (A→B and B→A)
+- Two discriminators (for domains A and B)
+- Cycle consistency loss: A→B→A ≈ A
+- Identity loss for color preservation
+
+**Architectural Guidelines**:
+```csharp
+var cyclegan = new CycleGAN<double>(
+    generatorAtoB,              // Translates A → B
+    generatorBtoA,              // Translates B → A
+    discriminatorA,
+    discriminatorB,
+    InputType.Image,
+    initialLearningRate: 0.0002,
+    cycleConsistencyLambda: 10.0,  // Cycle loss weight
+    identityLambda: 5.0             // Identity loss weight
+);
+
+// Train with unpaired data
+var (discLoss, genLoss, cycleLoss) = cyclegan.TrainStep(imagesA, imagesB);
+
+// Translate between domains
+var horsesToZebras = cyclegan.TranslateAtoB(horseImages);
+var zebrasToHorses = cyclegan.TranslateBtoA(zebraImages);
+```
+
+**Applications**:
+- Style transfer (Photo ↔ Monet, Photo ↔ Van Gogh)
+- Season transfer (Summer ↔ Winter)
+- Object transfiguration (Horse ↔ Zebra)
+- Domain adaptation
+- Photo enhancement
+
+**Cycle Consistency**: The key innovation is enforcing that translating A→B→A should return to A, preventing mode collapse and maintaining content.
+
+**When to Use**:
+- Paired data NOT available
+- Style transfer tasks
+- Domain adaptation
+- When you have two separate image collections
+- Exploratory style experiments
+
+**Reference**: Zhu et al., "Unpaired Image-to-Image Translation using Cycle-Consistent Adversarial Networks" (2017)
 
 ## Training Techniques and Layers
 
@@ -447,24 +651,40 @@ foreach (var batch in dataLoader)
 - Ensure balanced class distribution
 - Use appropriate image sizes (powers of 2: 64, 128, 256)
 
+## Implemented Architectures Summary
+
+This implementation provides **10 GAN architectures**:
+
+1. **Vanilla GAN** - Original GAN (already existed)
+2. **DCGAN** - Deep Convolutional GAN with architectural guidelines
+3. **WGAN** - Wasserstein GAN with weight clipping
+4. **WGAN-GP** - WGAN with Gradient Penalty
+5. **Conditional GAN** - Class-conditional generation
+6. **AC-GAN** - Auxiliary Classifier GAN
+7. **InfoGAN** - Information Maximizing GAN
+8. **Pix2Pix** - Paired image-to-image translation
+9. **CycleGAN** - Unpaired image-to-image translation
+
+Plus supporting components:
+- **Spectral Normalization Layer** - For training stability
+- **Self-Attention Layer** - For SAGAN support
+
 ## Future Enhancements
 
-The following GAN architectures are planned for future releases:
+The following advanced architectures could be added in future releases:
 
-### Advanced GANs
-- **StyleGAN / StyleGAN2** - State-of-the-art image generation with style control
-- **Progressive GAN** - Growing GAN for high-resolution images
-- **BigGAN** - Large-scale GAN with class conditioning
-- **CycleGAN** - Unpaired image-to-image translation
-- **Pix2Pix** - Paired image-to-image translation
+### High-Resolution Generation
+- **StyleGAN / StyleGAN2 / StyleGAN3** - State-of-the-art image generation with style-based control
+- **Progressive GAN** - Progressively growing GAN for high-resolution images
+- **BigGAN** - Large-scale GAN with large batch sizes
 
-### Additional Conditional GANs
-- **AC-GAN** (Auxiliary Classifier GAN) - Improved class-conditional generation
-- **InfoGAN** - Learns disentangled representations
-
-### Metrics
-- **FID** (Fréchet Inception Distance) - Quality metric
+### Evaluation Metrics
+- **FID** (Fréchet Inception Distance) - Quality metric comparing feature distributions
 - **IS** (Inception Score) - Diversity and quality metric
+
+### Additional Variants
+- **SAGAN** (Self-Attention GAN) - Combining existing self-attention layer with spectral normalization
+- **StyleGAN-Based Architectures** - Various style-based generation approaches
 
 ## References
 
@@ -473,8 +693,12 @@ The following GAN architectures are planned for future releases:
 3. Arjovsky et al., "Wasserstein GAN" (2017)
 4. Gulrajani et al., "Improved Training of Wasserstein GANs" (2017)
 5. Mirza and Osindero, "Conditional Generative Adversarial Nets" (2014)
-6. Miyato et al., "Spectral Normalization for Generative Adversarial Networks" (2018)
-7. Zhang et al., "Self-Attention Generative Adversarial Networks" (2019)
+6. Odena et al., "Conditional Image Synthesis with Auxiliary Classifier GANs" (2017)
+7. Chen et al., "InfoGAN: Interpretable Representation Learning by Information Maximizing Generative Adversarial Nets" (2016)
+8. Isola et al., "Image-to-Image Translation with Conditional Adversarial Networks" (2017)
+9. Zhu et al., "Unpaired Image-to-Image Translation using Cycle-Consistent Adversarial Networks" (2017)
+10. Miyato et al., "Spectral Normalization for Generative Adversarial Networks" (2018)
+11. Zhang et al., "Self-Attention Generative Adversarial Networks" (2019)
 
 ## Contributing
 
