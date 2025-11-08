@@ -177,7 +177,7 @@ public class VerifiedReasoningRetriever<T>
         if (string.IsNullOrWhiteSpace(query))
             throw new ArgumentException("Query cannot be null or whitespace", nameof(query));
 
-        if (topK <= 0)
+        if (topK < 1)
             throw new ArgumentOutOfRangeException(nameof(topK), "topK must be positive");
 
         metadataFilters ??= new Dictionary<string, object>();
@@ -295,7 +295,7 @@ Step 3: [reasoning statement]";
         string originalQuery)
     {
         var docsContext = supportingDocs.Count > 0
-            ? string.Join("\n\n", supportingDocs.Select((d, i) => $"[{i + 1}] {d.Content.Substring(0, Math.Min(200, d.Content.Length))}..."))
+            ? string.Join("\n\n", supportingDocs.Select((d, i) => $"[{i + 1}] {d.Content[..Math.Min(200, d.Content.Length)]}..."))
             : "No supporting documents found.";
 
         var criticPrompt = $@"You are a critical evaluator of reasoning steps.

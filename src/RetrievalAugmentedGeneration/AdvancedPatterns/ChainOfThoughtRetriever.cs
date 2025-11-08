@@ -165,7 +165,7 @@ public class ChainOfThoughtRetriever<T>
         if (string.IsNullOrWhiteSpace(query))
             throw new ArgumentException("Query cannot be null or whitespace", nameof(query));
 
-        if (topK <= 0)
+        if (topK < 1)
             throw new ArgumentOutOfRangeException(nameof(topK), "topK must be positive");
 
         // Step 1: Generate reasoning steps using LLM
@@ -234,10 +234,10 @@ public class ChainOfThoughtRetriever<T>
         if (string.IsNullOrWhiteSpace(query))
             throw new ArgumentException("Query cannot be null or whitespace", nameof(query));
 
-        if (topK <= 0)
+        if (topK < 1)
             throw new ArgumentOutOfRangeException(nameof(topK), "topK must be positive");
 
-        if (numPaths <= 0)
+        if (numPaths < 1)
             throw new ArgumentOutOfRangeException(nameof(numPaths), "numPaths must be positive");
 
         metadataFilters ??= new Dictionary<string, object>();
