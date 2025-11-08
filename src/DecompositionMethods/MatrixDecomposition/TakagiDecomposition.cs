@@ -46,6 +46,8 @@ public class TakagiDecomposition<T> : MatrixDecompositionBase<T>
         : base(matrix)
     {
         _algorithm = algorithm;
+
+        Decompose();
     }
 
     /// <summary>

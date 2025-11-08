@@ -1,24 +1,62 @@
 namespace AiDotNet.DecompositionMethods.MatrixDecomposition;
 
+/// <summary>
+/// Implements the Bidiagonal Decomposition of a matrix, which factors a matrix into U*B*V^T,
+/// where U and V are orthogonal matrices and B is a bidiagonal matrix.
+/// </summary>
+/// <typeparam name="T">The numeric type used in the matrix (e.g., double, float).</typeparam>
+/// <remarks>
+/// <para>
+/// Bidiagonal decomposition transforms a matrix A into the form A = U*B*V^T, where:
+/// - U is an orthogonal matrix (left singular vectors)
+/// - B is a bidiagonal matrix (non-zero elements only on main diagonal and superdiagonal)
+/// - V^T is the transpose of an orthogonal matrix (right singular vectors)
+/// </para>
+/// <para>
+/// <b>For Beginners:</b> Bidiagonal decomposition is like organizing a complex matrix into a simpler form
+/// that's easier to work with. Think of it like arranging books on a shelf: instead of having them scattered,
+/// you organize them so most spaces are empty (zeros) and important information (non-zero values) is concentrated
+/// in just two lines. This makes many calculations much faster and more efficient, especially when computing
+/// singular values or solving systems of equations.
+/// </para>
+/// <para>
+/// Common applications include:
+/// <list type="bullet">
+/// <item>Computing Singular Value Decomposition (SVD)</item>
+/// <item>Solving least squares problems</item>
+/// <item>Computing eigenvalues of symmetric matrices</item>
+/// <item>Data compression and dimensionality reduction</item>
+/// </list>
+/// </para>
+/// </remarks>
 public class BidiagonalDecomposition<T> : MatrixDecompositionBase<T>
 {
     /// <summary>
     /// Gets the left orthogonal matrix in the decomposition.
-    /// In simpler terms, this matrix helps transform the original matrix's columns.
     /// </summary>
+    /// <remarks>
+    /// <b>For Beginners:</b> This matrix helps transform the original matrix's columns.
+    /// It represents how the original data is rotated or reflected in the column space.
+    /// </remarks>
     public Matrix<T> U { get; private set; }
 
     /// <summary>
     /// Gets the bidiagonal matrix in the decomposition.
-    /// A bidiagonal matrix is a special matrix where non-zero values appear only on the main diagonal
-    /// and the diagonal immediately above it (called the superdiagonal).
     /// </summary>
+    /// <remarks>
+    /// <b>For Beginners:</b> A bidiagonal matrix is a special matrix where non-zero values appear only
+    /// on the main diagonal and the diagonal immediately above it (called the superdiagonal).
+    /// All other elements are zero, making computations much more efficient.
+    /// </remarks>
     public Matrix<T> B { get; private set; }
 
     /// <summary>
     /// Gets the right orthogonal matrix in the decomposition.
-    /// In simpler terms, this matrix helps transform the original matrix's rows.
     /// </summary>
+    /// <remarks>
+    /// <b>For Beginners:</b> This matrix helps transform the original matrix's rows.
+    /// It represents how the original data is rotated or reflected in the row space.
+    /// </remarks>
     public Matrix<T> V { get; private set; }
 
     private BidiagonalAlgorithmType _algorithm;
@@ -29,8 +67,15 @@ public class BidiagonalDecomposition<T> : MatrixDecompositionBase<T>
     /// <param name="matrix">The matrix to decompose.</param>
     /// <param name="algorithm">The algorithm to use for decomposition (default is Householder).</param>
     /// <remarks>
+    /// <para>
     /// Bidiagonal decomposition breaks down a matrix A into three simpler matrices: U, B, and V,
     /// where A = U*B*V^T. This makes many matrix operations easier to perform.
+    /// </para>
+    /// <para>
+    /// <b>For Beginners:</b> This constructor takes your original matrix and breaks it down into simpler
+    /// components using the specified algorithm. The Householder algorithm (default) is generally the most
+    /// stable and efficient method for most matrices.
+    /// </para>
     /// </remarks>
     public BidiagonalDecomposition(Matrix<T> matrix, BidiagonalAlgorithmType algorithm = BidiagonalAlgorithmType.Householder)
         : base(matrix)
@@ -220,8 +265,15 @@ public class BidiagonalDecomposition<T> : MatrixDecompositionBase<T>
     /// <returns>The solution vector x.</returns>
     /// <exception cref="ArgumentException">Thrown when the length of vector b doesn't match the number of rows in matrix A.</exception>
     /// <remarks>
+    /// <para>
     /// This method uses the decomposition to efficiently solve the system without
     /// directly inverting the matrix, which is more numerically stable.
+    /// </para>
+    /// <para>
+    /// <b>For Beginners:</b> This finds the values of x that satisfy Ax = b. Using the bidiagonal
+    /// decomposition makes this much faster than directly solving the original equation, especially
+    /// for large matrices. It's like solving a puzzle by first organizing the pieces into groups.
+    /// </para>
     /// </remarks>
     public override Vector<T> Solve(Vector<T> b)
     {
@@ -239,8 +291,15 @@ public class BidiagonalDecomposition<T> : MatrixDecompositionBase<T>
     /// </summary>
     /// <returns>The inverse matrix of A.</returns>
     /// <remarks>
+    /// <para>
     /// Matrix inversion is computationally expensive and can be numerically unstable.
     /// When possible, use the Solve method instead of explicitly computing the inverse.
+    /// </para>
+    /// <para>
+    /// <b>For Beginners:</b> The inverse of a matrix is like the reciprocal of a number.
+    /// Just as 5 * (1/5) = 1, a matrix multiplied by its inverse gives the identity matrix.
+    /// However, computing the inverse is expensive, so it's usually better to use Solve() instead.
+    /// </para>
     /// </remarks>
     public override Matrix<T> Invert()
     {
@@ -263,8 +322,15 @@ public class BidiagonalDecomposition<T> : MatrixDecompositionBase<T>
     /// <param name="x">The input vector.</param>
     /// <returns>A Householder vector that can be used to create a reflection matrix.</returns>
     /// <remarks>
+    /// <para>
     /// A Householder reflection is a transformation that reflects a vector across a plane.
     /// It's used to zero out specific elements in a matrix during decomposition.
+    /// </para>
+    /// <para>
+    /// <b>For Beginners:</b> Think of a Householder reflection like holding up a mirror to a vector.
+    /// The reflection helps us systematically create zeros in the matrix, simplifying its structure
+    /// step by step during the decomposition process.
+    /// </para>
     /// </remarks>
     private Vector<T> HouseholderVector(Vector<T> x)
     {
@@ -275,7 +341,7 @@ public class BidiagonalDecomposition<T> : MatrixDecompositionBase<T>
         return v.Divide(v.Norm());
     }
 
-        /// <summary>
+    /// <summary>
     /// Applies a Givens rotation to the specified matrices.
     /// </summary>
     /// <param name="M">The matrix to which the rotation is applied.</param>
@@ -286,8 +352,15 @@ public class BidiagonalDecomposition<T> : MatrixDecompositionBase<T>
     /// <param name="l">The second column/row index for the rotation.</param>
     /// <param name="isLeft">If true, applies a left rotation (row operation); otherwise, applies a right rotation (column operation).</param>
     /// <remarks>
+    /// <para>
     /// A Givens rotation is a simple rotation in a plane spanned by two coordinate axes.
     /// It's used to selectively zero out specific elements in a matrix during decomposition.
+    /// </para>
+    /// <para>
+    /// <b>For Beginners:</b> A Givens rotation is like turning a dial to make specific values become zero.
+    /// It's precise and only affects two rows or columns at a time, making it useful for sparse matrices
+    /// or when you need to zero out specific elements without disturbing others.
+    /// </para>
     /// </remarks>
     private void GivensRotation(Matrix<T> M, Matrix<T> Q, int i, int k, int j, int l, bool isLeft)
     {

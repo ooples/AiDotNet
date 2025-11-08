@@ -43,6 +43,8 @@ public class SchurDecomposition<T> : MatrixDecompositionBase<T>
         : base(matrix)
     {
         _algorithm = algorithm;
+
+        Decompose();
     }
 
     /// <summary>

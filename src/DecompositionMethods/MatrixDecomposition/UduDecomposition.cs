@@ -59,6 +59,8 @@ public class UduDecomposition<T> : MatrixDecompositionBase<T>
             throw new ArgumentException("Matrix must be square for UDU decomposition.");
 
         _algorithm = algorithm;
+
+        Decompose();
     }
 
     /// <summary>
