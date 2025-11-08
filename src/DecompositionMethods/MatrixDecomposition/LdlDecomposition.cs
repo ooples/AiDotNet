@@ -243,8 +243,8 @@ public class LdlDecomposition<T> : MatrixDecompositionBase<T>
     /// </summary>
     /// <returns>The inverse of the original matrix A.</returns>
     /// <remarks>
-    /// <b>For Beginners:</b> The inverse of a matrix A is another matrix A^(-1) such that when multiplied
-    /// together, they give the identity matrix (A * A^(-1) = I).
+    /// <b>For Beginners:</b> The inverse of a matrix A is another matrix A⁻¹ such that when multiplied
+    /// together, they give the identity matrix (A * A⁻¹ = I).
     ///
     /// This method computes the inverse by:
     /// 1. Creating a set of unit vectors (vectors with a single 1 and the rest 0s)

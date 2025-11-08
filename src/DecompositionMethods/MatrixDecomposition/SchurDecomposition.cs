@@ -306,7 +306,7 @@ public class SchurDecomposition<T> : MatrixDecompositionBase<T>
     /// <remarks>
     /// <para>
     /// <b>For Beginners:</b> The inverse of a matrix is like the reciprocal of a number. Just as 1/x is the reciprocal of x,
-    /// the inverse of a matrix A (written as A^(-1)) is a matrix that, when multiplied by A, gives the identity matrix.
+    /// the inverse of a matrix A (written as A⁻¹) is a matrix that, when multiplied by A, gives the identity matrix.
     /// </para>
     /// <para>
     /// This method uses the Schur decomposition to find the inverse more efficiently than direct methods.

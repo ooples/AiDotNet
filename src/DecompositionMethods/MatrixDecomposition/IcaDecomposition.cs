@@ -359,7 +359,7 @@ public class IcaDecomposition<T> : MatrixDecompositionBase<T>
 
                         // g(u) = tanh(u)
                         T g = Tanh(wtx);
-                        // g'(u) = 1 - tanh^2(u)
+                        // g'(u) = 1 - tanh²(u)
                         T gPrime = NumOps.Subtract(NumOps.One, NumOps.Multiply(g, g));
 
                         sum1 = NumOps.Add(sum1, NumOps.Multiply(x[j], g));
@@ -475,7 +475,7 @@ public class IcaDecomposition<T> : MatrixDecompositionBase<T>
     /// <returns>Mixing matrix.</returns>
     private Matrix<T> ComputeMixingMatrix(Matrix<T> W, Matrix<T> K)
     {
-        // A = (W * K)^(-1) = K^(-1) * W^(-1)
+        // A = (W * K)⁻¹ = K⁻¹ * W⁻¹
         // For simplicity, use the transpose as an approximation
         Matrix<T> WK = W.Multiply(K);
         return WK.Transpose();

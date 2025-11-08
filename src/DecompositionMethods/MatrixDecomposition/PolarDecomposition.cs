@@ -390,10 +390,10 @@ public class PolarDecomposition<T> : MatrixDecompositionBase<T>
     /// <summary>
     /// Computes the inverse of the original matrix A using its polar decomposition.
     /// </summary>
-    /// <returns>The inverse matrix A^(-1).</returns>
+    /// <returns>The inverse matrix A⁻¹.</returns>
     /// <remarks>
     /// <para>
-    /// Since A = UP, the inverse is A^(-1) = P^(-1) * U^T.
+    /// Since A = UP, the inverse is A⁻¹ = P⁻¹ * U^T.
     /// </para>
     /// <para>
     /// <b>For Beginners:</b> The inverse of a matrix is like the reciprocal of a number - when you multiply

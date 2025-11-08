@@ -287,7 +287,7 @@ public class NmfDecomposition<T> : MatrixDecompositionBase<T>
         // First solve W * y = b for y using least squares
         // Then solve H * x = y for x using least squares
 
-        // Solve W * y = b using least squares: y = (W^T * tempW)^(-1) * W^T * b
+        // Solve W * y = b using least squares: y = (W^T * tempW)⁻¹ * W^T * b
         Matrix<T> WT = W.Transpose();
         Matrix<T> WTW = WT.Multiply(W);
         Vector<T> WTb = WT.Multiply(b);
@@ -295,7 +295,7 @@ public class NmfDecomposition<T> : MatrixDecompositionBase<T>
         // Use simple Gaussian elimination for small systems
         Vector<T> y = SolveLinearSystem(WTW, WTb);
 
-        // Solve H * x = y using least squares: x = (H^T * H)^(-1) * H^T * y
+        // Solve H * x = y using least squares: x = (H^T * H)⁻¹ * H^T * y
         Matrix<T> HT = H.Transpose();
         Matrix<T> HTH = HT.Multiply(H);
         Vector<T> HTy = HT.Multiply(y);
