@@ -1,9 +1,9 @@
 using AiDotNet.Interfaces;
+using Newtonsoft.Json;
+using Newtonsoft.Json.Serialization;
 using System.Net.Http;
 using System.Net.Http.Headers;
 using System.Text;
-using System.Text.Json;
-using System.Text.Json.Serialization;
 
 namespace AiDotNet.LanguageModels;
 
@@ -62,11 +62,11 @@ public class AzureOpenAIChatModel<T> : ChatModelBase<T>
     private readonly double _frequencyPenalty;
     private readonly double _presencePenalty;
 
-    private static readonly JsonSerializerOptions JsonOptions = new()
+    private static readonly JsonSerializerSettings JsonOptions = new()
     {
-        PropertyNamingPolicy = JsonNamingPolicy.SnakeCaseLower,
-        DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull,
-        WriteIndented = false
+        ContractResolver = new DefaultContractResolver { NamingStrategy = new SnakeCaseNamingStrategy() },
+        NullValueHandling = NullValueHandling.Ignore,
+        Formatting = Formatting.None
     };
 
     /// <summary>
@@ -202,7 +202,7 @@ public class AzureOpenAIChatModel<T> : ChatModelBase<T>
             PresencePenalty = _presencePenalty
         };
 
-        var jsonContent = JsonSerializer.Serialize(request, JsonOptions);
+        var jsonContent = JsonConvert.SerializeObject(request, JsonOptions);
         var content = new StringContent(jsonContent, Encoding.UTF8, "application/json");
 
         // Make the API call
@@ -220,7 +220,7 @@ public class AzureOpenAIChatModel<T> : ChatModelBase<T>
 
         // Parse the response (same format as OpenAI)
         var responseContent = await response.Content.ReadAsStringAsync();
-        var azureResponse = JsonSerializer.Deserialize<AzureOpenAIResponse>(responseContent, JsonOptions);
+        var azureResponse = JsonConvert.DeserializeObject<AzureOpenAIResponse>(responseContent, JsonOptions);
 
         if (azureResponse?.Choices == null || azureResponse.Choices.Length == 0)
         {
@@ -243,22 +243,22 @@ public class AzureOpenAIChatModel<T> : ChatModelBase<T>
     /// </summary>
     private class AzureOpenAIRequest
     {
-        [JsonPropertyName("messages")]
+        [JsonProperty("messages")]
         public AzureOpenAIMessage[] Messages { get; set; } = Array.Empty<AzureOpenAIMessage>();
 
-        [JsonPropertyName("temperature")]
+        [JsonProperty("temperature")]
         public double Temperature { get; set; }
 
-        [JsonPropertyName("max_tokens")]
+        [JsonProperty("max_tokens")]
         public int MaxTokens { get; set; }
 
-        [JsonPropertyName("top_p")]
+        [JsonProperty("top_p")]
         public double TopP { get; set; }
 
-        [JsonPropertyName("frequency_penalty")]
+        [JsonProperty("frequency_penalty")]
         public double FrequencyPenalty { get; set; }
 
-        [JsonPropertyName("presence_penalty")]
+        [JsonProperty("presence_penalty")]
         public double PresencePenalty { get; set; }
     }
 
@@ -267,10 +267,10 @@ public class AzureOpenAIChatModel<T> : ChatModelBase<T>
     /// </summary>
     private class AzureOpenAIMessage
     {
-        [JsonPropertyName("role")]
+        [JsonProperty("role")]
         public string Role { get; set; } = "";
 
-        [JsonPropertyName("content")]
+        [JsonProperty("content")]
         public string Content { get; set; } = "";
     }
 
@@ -279,13 +279,13 @@ public class AzureOpenAIChatModel<T> : ChatModelBase<T>
     /// </summary>
     private class AzureOpenAIResponse
     {
-        [JsonPropertyName("id")]
+        [JsonProperty("id")]
         public string? Id { get; set; }
 
-        [JsonPropertyName("choices")]
+        [JsonProperty("choices")]
         public AzureOpenAIChoice[]? Choices { get; set; }
 
-        [JsonPropertyName("usage")]
+        [JsonProperty("usage")]
         public AzureOpenAIUsage? Usage { get; set; }
     }
 
@@ -294,13 +294,13 @@ public class AzureOpenAIChatModel<T> : ChatModelBase<T>
     /// </summary>
     private class AzureOpenAIChoice
     {
-        [JsonPropertyName("index")]
+        [JsonProperty("index")]
         public int Index { get; set; }
 
-        [JsonPropertyName("message")]
+        [JsonProperty("message")]
         public AzureOpenAIMessage? Message { get; set; }
 
-        [JsonPropertyName("finish_reason")]
+        [JsonProperty("finish_reason")]
         public string? FinishReason { get; set; }
     }
 
@@ -309,13 +309,13 @@ public class AzureOpenAIChatModel<T> : ChatModelBase<T>
     /// </summary>
     private class AzureOpenAIUsage
     {
-        [JsonPropertyName("prompt_tokens")]
+        [JsonProperty("prompt_tokens")]
         public int PromptTokens { get; set; }
 
-        [JsonPropertyName("completion_tokens")]
+        [JsonProperty("completion_tokens")]
         public int CompletionTokens { get; set; }
 
-        [JsonPropertyName("total_tokens")]
+        [JsonProperty("total_tokens")]
         public int TotalTokens { get; set; }
     }
 

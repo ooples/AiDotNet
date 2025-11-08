@@ -1,7 +1,7 @@
+using Newtonsoft.Json;
 using AiDotNet.Interfaces;
+using Newtonsoft.Json;
 using System.Net.Http;
-using System.Text.Json;
-using System.Text.Json.Serialization;
 
 namespace AiDotNet.Tools;
 
@@ -167,7 +167,7 @@ public class WebSearchTool : ITool
         }
 
         var content = await response.Content.ReadAsStringAsync();
-        var searchResponse = JsonSerializer.Deserialize<BingSearchResponse>(content);
+        var searchResponse = JsonConvert.DeserializeObject<BingSearchResponse>(content);
 
         if (searchResponse?.WebPages?.Value == null || searchResponse.WebPages.Value.Length == 0)
         {
@@ -193,7 +193,7 @@ public class WebSearchTool : ITool
         }
 
         var content = await response.Content.ReadAsStringAsync();
-        var searchResponse = JsonSerializer.Deserialize<SerpAPIResponse>(content);
+        var searchResponse = JsonConvert.DeserializeObject<SerpAPIResponse>(content);
 
         if (searchResponse?.OrganicResults == null || searchResponse.OrganicResults.Length == 0)
         {
@@ -250,44 +250,44 @@ public class WebSearchTool : ITool
     // Bing API models
     private class BingSearchResponse
     {
-        [JsonPropertyName("webPages")]
+        [JsonProperty("webPages")]
         public BingWebPages? WebPages { get; set; }
     }
 
     private class BingWebPages
     {
-        [JsonPropertyName("value")]
+        [JsonProperty("value")]
         public BingWebPage[]? Value { get; set; }
     }
 
     private class BingWebPage
     {
-        [JsonPropertyName("name")]
+        [JsonProperty("name")]
         public string Name { get; set; } = "";
 
-        [JsonPropertyName("url")]
+        [JsonProperty("url")]
         public string Url { get; set; } = "";
 
-        [JsonPropertyName("snippet")]
+        [JsonProperty("snippet")]
         public string Snippet { get; set; } = "";
     }
 
     // SerpAPI models
     private class SerpAPIResponse
     {
-        [JsonPropertyName("organic_results")]
+        [JsonProperty("organic_results")]
         public SerpAPIResult[]? OrganicResults { get; set; }
     }
 
     private class SerpAPIResult
     {
-        [JsonPropertyName("title")]
+        [JsonProperty("title")]
         public string Title { get; set; } = "";
 
-        [JsonPropertyName("link")]
+        [JsonProperty("link")]
         public string Link { get; set; } = "";
 
-        [JsonPropertyName("snippet")]
+        [JsonProperty("snippet")]
         public string Snippet { get; set; } = "";
     }
 

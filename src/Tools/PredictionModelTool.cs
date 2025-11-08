@@ -1,7 +1,9 @@
+using Newtonsoft.Json;
 using AiDotNet.Interfaces;
+using Newtonsoft.Json;
 using AiDotNet.Models.Results;
+using Newtonsoft.Json;
 using AiDotNet.LinearAlgebra;
-using System.Text.Json;
 
 namespace AiDotNet.Tools;
 
@@ -293,12 +295,7 @@ public class PredictionModelTool<T, TInput, TOutput> : ITool
             input =>
             {
                 // Parse JSON array to Vector
-                var options = new JsonSerializerOptions
-                {
-                    PropertyNameCaseInsensitive = true
-                };
-
-                var array = JsonSerializer.Deserialize<T[]>(input, options);
+                var array = JsonConvert.DeserializeObject<T[]>(input);
                 if (array == null || array.Length == 0)
                 {
                     throw new ArgumentException("Input must be a non-empty JSON array of numbers.");
@@ -341,12 +338,7 @@ public class PredictionModelTool<T, TInput, TOutput> : ITool
             input =>
             {
                 // Parse JSON 2D array to Matrix
-                var options = new JsonSerializerOptions
-                {
-                    PropertyNameCaseInsensitive = true
-                };
-
-                var array = JsonSerializer.Deserialize<T[][]>(input, options);
+                var array = JsonConvert.DeserializeObject<T[][]>(input);
                 if (array == null || array.Length == 0)
                 {
                     throw new ArgumentException("Input must be a non-empty 2D JSON array.");

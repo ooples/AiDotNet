@@ -1,5 +1,5 @@
+using Newtonsoft.Json;
 using AiDotNet.Interfaces;
-using System.Text.Json;
 
 namespace AiDotNet.Tools;
 

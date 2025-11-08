@@ -1,5 +1,6 @@
+using Newtonsoft.Json;
 using AiDotNet.Interfaces;
-using System.Text.Json;
+using Newtonsoft.Json;
 using System.Text.RegularExpressions;
 
 namespace AiDotNet.Agents;

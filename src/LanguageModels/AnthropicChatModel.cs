@@ -1,9 +1,9 @@
 using AiDotNet.Interfaces;
+using Newtonsoft.Json;
+using Newtonsoft.Json.Serialization;
 using System.Net.Http;
 using System.Net.Http.Headers;
 using System.Text;
-using System.Text.Json;
-using System.Text.Json.Serialization;
 
 namespace AiDotNet.LanguageModels;
 
@@ -64,11 +64,11 @@ public class AnthropicChatModel<T> : ChatModelBase<T>
     private readonly double _topP;
     private readonly int _topK;
 
-    private static readonly JsonSerializerOptions JsonOptions = new()
+    private static readonly JsonSerializerSettings JsonOptions = new()
     {
-        PropertyNamingPolicy = JsonNamingPolicy.SnakeCaseLower,
-        DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull,
-        WriteIndented = false
+        ContractResolver = new DefaultContractResolver { NamingStrategy = new SnakeCaseNamingStrategy() },
+        NullValueHandling = NullValueHandling.Ignore,
+        Formatting = Formatting.None
     };
 
     /// <summary>
@@ -179,7 +179,7 @@ public class AnthropicChatModel<T> : ChatModelBase<T>
             TopK = _topK > 0 ? _topK : null
         };
 
-        var jsonContent = JsonSerializer.Serialize(request, JsonOptions);
+        var jsonContent = JsonConvert.SerializeObject(request, JsonOptions);
         var content = new StringContent(jsonContent, Encoding.UTF8, "application/json");
 
         // Make the API call
@@ -197,7 +197,7 @@ public class AnthropicChatModel<T> : ChatModelBase<T>
 
         // Parse the response
         var responseContent = await response.Content.ReadAsStringAsync();
-        var anthropicResponse = JsonSerializer.Deserialize<AnthropicResponse>(responseContent, JsonOptions);
+        var anthropicResponse = JsonConvert.DeserializeObject<AnthropicResponse>(responseContent, JsonOptions);
 
         if (anthropicResponse?.Content == null || anthropicResponse.Content.Length == 0)
         {
@@ -245,22 +245,22 @@ public class AnthropicChatModel<T> : ChatModelBase<T>
     /// </summary>
     private class AnthropicRequest
     {
-        [JsonPropertyName("model")]
+        [JsonProperty("model")]
         public string Model { get; set; } = "";
 
-        [JsonPropertyName("messages")]
+        [JsonProperty("messages")]
         public AnthropicMessage[] Messages { get; set; } = Array.Empty<AnthropicMessage>();
 
-        [JsonPropertyName("max_tokens")]
+        [JsonProperty("max_tokens")]
         public int MaxTokens { get; set; }
 
-        [JsonPropertyName("temperature")]
+        [JsonProperty("temperature")]
         public double Temperature { get; set; }
 
-        [JsonPropertyName("top_p")]
+        [JsonProperty("top_p")]
         public double TopP { get; set; }
 
-        [JsonPropertyName("top_k")]
+        [JsonProperty("top_k")]
         public int? TopK { get; set; }
     }
 
@@ -269,10 +269,10 @@ public class AnthropicChatModel<T> : ChatModelBase<T>
     /// </summary>
     private class AnthropicMessage
     {
-        [JsonPropertyName("role")]
+        [JsonProperty("role")]
         public string Role { get; set; } = "";
 
-        [JsonPropertyName("content")]
+        [JsonProperty("content")]
         public string Content { get; set; } = "";
     }
 
@@ -281,25 +281,25 @@ public class AnthropicChatModel<T> : ChatModelBase<T>
     /// </summary>
     private class AnthropicResponse
     {
-        [JsonPropertyName("id")]
+        [JsonProperty("id")]
         public string? Id { get; set; }
 
-        [JsonPropertyName("type")]
+        [JsonProperty("type")]
         public string? Type { get; set; }
 
-        [JsonPropertyName("role")]
+        [JsonProperty("role")]
         public string? Role { get; set; }
 
-        [JsonPropertyName("content")]
+        [JsonProperty("content")]
         public AnthropicContent[]? Content { get; set; }
 
-        [JsonPropertyName("model")]
+        [JsonProperty("model")]
         public string? Model { get; set; }
 
-        [JsonPropertyName("stop_reason")]
+        [JsonProperty("stop_reason")]
         public string? StopReason { get; set; }
 
-        [JsonPropertyName("usage")]
+        [JsonProperty("usage")]
         public AnthropicUsage? Usage { get; set; }
     }
 
@@ -308,10 +308,10 @@ public class AnthropicChatModel<T> : ChatModelBase<T>
     /// </summary>
     private class AnthropicContent
     {
-        [JsonPropertyName("type")]
+        [JsonProperty("type")]
         public string? Type { get; set; }
 
-        [JsonPropertyName("text")]
+        [JsonProperty("text")]
         public string? Text { get; set; }
     }
 
@@ -320,10 +320,10 @@ public class AnthropicChatModel<T> : ChatModelBase<T>
     /// </summary>
     private class AnthropicUsage
     {
-        [JsonPropertyName("input_tokens")]
+        [JsonProperty("input_tokens")]
         public int InputTokens { get; set; }
 
-        [JsonPropertyName("output_tokens")]
+        [JsonProperty("output_tokens")]
         public int OutputTokens { get; set; }
     }
 
