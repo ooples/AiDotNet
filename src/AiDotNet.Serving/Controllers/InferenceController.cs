@@ -215,4 +215,18 @@ public class InferenceController : ControllerBase
         var stats = _requestBatcher.GetStatistics();
         return Ok(stats);
     }
+
+    /// <summary>
+    /// Gets detailed performance metrics including latency percentiles, throughput,
+    /// batch utilization, and queue depth monitoring.
+    /// </summary>
+    /// <returns>Detailed performance metrics</returns>
+    /// <response code="200">Returns detailed performance metrics</response>
+    [HttpGet("metrics")]
+    [ProducesResponseType(typeof(Dictionary<string, object>), StatusCodes.Status200OK)]
+    public ActionResult<Dictionary<string, object>> GetPerformanceMetrics()
+    {
+        var metrics = _requestBatcher.GetPerformanceMetrics();
+        return Ok(metrics);
+    }
 }
