@@ -233,7 +233,8 @@ namespace AiDotNetTests.UnitTests.Normalizers
         {
             // Arrange
             var scaler = new MaxAbsScaler<double, Matrix<double>, Tensor<double>>();
-            var data = new Tensor<double>(new[] { 4 }, new double[] { 10.0, 20.0, 50.0, 100.0 });
+            var dataVector = Vector<double>.FromArray(new double[] { 10.0, 20.0, 50.0, 100.0 });
+            var data = new Tensor<double>(new[] { 4 }, dataVector);
 
             // Act
             var (normalized, parameters) = scaler.NormalizeOutput(data);

@@ -245,7 +245,8 @@ namespace AiDotNetTests.UnitTests.Normalizers
         {
             // Arrange
             var transformer = new QuantileTransformer<double, Matrix<double>, Tensor<double>>(OutputDistribution.Uniform, 100);
-            var data = new Tensor<double>(new[] { 5 }, new double[] { 1.0, 2.0, 3.0, 4.0, 5.0 });
+            var dataVector = Vector<double>.FromArray(new double[] { 1.0, 2.0, 3.0, 4.0, 5.0 });
+            var data = new Tensor<double>(new[] { 5 }, dataVector);
 
             // Act
             var (normalized, parameters) = transformer.NormalizeOutput(data);

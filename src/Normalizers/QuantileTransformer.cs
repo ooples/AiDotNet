@@ -408,6 +408,16 @@ public class QuantileTransformer<T, TInput, TOutput> : NormalizerBase<T, TInput,
         int lowerIndex = 0;
         int upperIndex = quantiles.Count - 1;
 
+        // Degenerate distribution: all quantiles collapse to the same value (constant feature)
+        // Map to midpoint to avoid skewing to extreme tails
+        if (NumOps.Equals(quantiles[0], quantiles[quantiles.Count - 1]))
+        {
+            T midpoint = NumOps.FromDouble(0.5);
+            return _outputDistribution == OutputDistribution.Uniform
+                ? midpoint
+                : InverseNormalCDF(midpoint);
+        }
+
         // Handle values outside the range
         if (NumOps.LessThanOrEquals(value, quantiles[0]))
         {
