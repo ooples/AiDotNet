@@ -3,6 +3,7 @@ namespace AiDotNet.Interfaces;
 /// <summary>
 /// Defines an interface for chat-based language models that can generate responses to prompts.
 /// This interface abstracts the underlying implementation, allowing agents to work with different LLM providers.
+/// Extends ILanguageModel to provide unified language model capabilities across the AiDotNet ecosystem.
 /// </summary>
 /// <typeparam name="T">The numeric type used for model parameters and operations (e.g., double, float).</typeparam>
 /// <remarks>
@@ -15,17 +16,31 @@ namespace AiDotNet.Interfaces;
 /// (like OpenAI's GPT, Anthropic's Claude, or local models) without changing the agent code.
 /// The generic type parameter T allows the model to work with different numeric precision levels.
 ///
+/// This interface extends ILanguageModel, which means it inherits:
+/// - GenerateAsync() - Primary async method for text generation
+/// - Generate() - Sync version for simple scripts
+/// - ModelName - Model identifier
+/// - MaxContextTokens - Context window size
+/// - MaxGenerationTokens - Maximum response length
+///
 /// Example usage:
 /// <code>
 /// IChatModel&lt;double&gt; model = new OpenAIChatModel&lt;double&gt;(apiKey);
-/// string response = await model.GenerateResponseAsync("What is 2 + 2?");
-/// // response might be: "2 + 2 equals 4."
+///
+/// // Using the base ILanguageModel method
+/// string response1 = await model.GenerateAsync("What is 2 + 2?");
+///
+/// // Using the IChatModel alias method (same as GenerateAsync)
+/// string response2 = await model.GenerateResponseAsync("What is 2 + 2?");
+///
+/// // Both produce: "2 + 2 equals 4."
 /// </code>
 /// </remarks>
-public interface IChatModel<T>
+public interface IChatModel<T> : ILanguageModel<T>
 {
     /// <summary>
     /// Generates a text response to the given prompt asynchronously.
+    /// This is an alias for GenerateAsync() provided for backward compatibility and clarity in chat contexts.
     /// </summary>
     /// <param name="prompt">The input text prompt to send to the language model.
     /// This can be a question, instruction, or any text that requires a response.</param>
@@ -35,6 +50,9 @@ public interface IChatModel<T>
     /// For Beginners:
     /// This method is the core of how we communicate with a language model. You give it a prompt
     /// (what you want to ask or tell the model), and it generates a response.
+    ///
+    /// This method is identical to GenerateAsync() from ILanguageModel - it's provided as an
+    /// alias because "GenerateResponseAsync" is clearer in chat/agent contexts.
     ///
     /// The method is asynchronous (uses async/await) because communicating with language models
     /// can take time, especially when calling external APIs. This prevents your application from
@@ -48,22 +66,11 @@ public interface IChatModel<T>
     /// </code>
     ///
     /// Implementation notes for developers:
+    /// - Most implementations just call GenerateAsync() internally
     /// - Handle API errors gracefully and return meaningful error messages
     /// - Consider implementing retry logic for transient failures
     /// - Respect rate limits and timeouts
     /// - Sanitize sensitive information from logs
     /// </remarks>
     Task<string> GenerateResponseAsync(string prompt);
-
-    /// <summary>
-    /// Gets the name or identifier of the chat model.
-    /// </summary>
-    /// <value>A string representing the model's name (e.g., "gpt-4", "claude-2", "local-llama-7b").</value>
-    /// <remarks>
-    /// For Beginners:
-    /// This property helps identify which language model is being used. Different models have
-    /// different capabilities, costs, and performance characteristics. Knowing which model
-    /// you're using is important for debugging and optimization.
-    /// </remarks>
-    string ModelName { get; }
 }
