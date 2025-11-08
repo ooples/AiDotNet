@@ -251,21 +251,23 @@ public class TreeOfThoughtsRetriever<T>
     /// </summary>
     private void ExpandBestFirst(ThoughtNode root, Dictionary<string, object> metadataFilters)
     {
-        // Priority queue based on evaluation score (max-heap via negated scores)
-        var priorityQueue = new PriorityQueue<ThoughtNode, (double score, int id)>(
-            Comparer<(double score, int id)>.Create((a, b) =>
-            {
-                var scoreComparison = a.score.CompareTo(b.score); // Lower (negated) score first = higher original score first
-                return scoreComparison != 0 ? scoreComparison : a.id.CompareTo(b.id); // Use id for tie-breaking
-            })
-        );
-
+        // Use a list to simulate priority queue (compatible with .NET Framework)
+        // Sort by score descending (highest score first), with node ID for tie-breaking
+        var nodesToExplore = new List<(ThoughtNode node, double score, int id)>();
         int nodeIdCounter = 0;
-        priorityQueue.Enqueue(root, (-1.0, nodeIdCounter++)); // Start with root (negated score -1.0 for max-heap)
+        nodesToExplore.Add((root, 1.0, nodeIdCounter++)); // Start with root
 
-        while (priorityQueue.Count > 0)
+        while (nodesToExplore.Count > 0)
         {
-            var node = priorityQueue.Dequeue();
+            // Sort to get highest-priority node (highest score first)
+            nodesToExplore.Sort((a, b) =>
+            {
+                var scoreComparison = b.score.CompareTo(a.score); // Descending order
+                return scoreComparison != 0 ? scoreComparison : a.id.CompareTo(b.id);
+            });
+
+            var (node, _, _) = nodesToExplore[0];
+            nodesToExplore.RemoveAt(0);
 
             if (node.Depth >= _maxDepth)
                 continue;
@@ -276,7 +278,7 @@ public class TreeOfThoughtsRetriever<T>
             {
                 EvaluateAndRetrieve(child, metadataFilters);
                 node.Children.Add(child);
-                priorityQueue.Enqueue(child, (-child.EvaluationScore, nodeIdCounter++)); // Negate for max-heap
+                nodesToExplore.Add((child, child.EvaluationScore, nodeIdCounter++));
             }
         }
     }
