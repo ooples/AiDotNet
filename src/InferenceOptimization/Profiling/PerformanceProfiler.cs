@@ -1,0 +1,187 @@
+using System;
+using System.Collections.Concurrent;
+using System.Diagnostics;
+using System.Linq;
+
+namespace AiDotNet.InferenceOptimization.Profiling
+{
+    /// <summary>
+    /// Thread-safe performance profiler for tracking operation timings and statistics
+    /// </summary>
+    public sealed class PerformanceProfiler
+    {
+        private static readonly Lazy<PerformanceProfiler> _instance =
+            new Lazy<PerformanceProfiler>(() => new PerformanceProfiler());
+
+        private readonly ConcurrentDictionary<string, OperationStats> _stats;
+        private readonly ConcurrentStack<ProfileScope> _scopeStack;
+
+        /// <summary>
+        /// Gets the singleton instance of the profiler
+        /// </summary>
+        public static PerformanceProfiler Instance => _instance.Value;
+
+        /// <summary>
+        /// Enable or disable profiling (disabled by default for production)
+        /// </summary>
+        public bool Enabled { get; set; }
+
+        private PerformanceProfiler()
+        {
+            _stats = new ConcurrentDictionary<string, OperationStats>();
+            _scopeStack = new ConcurrentStack<ProfileScope>();
+            Enabled = false;
+        }
+
+        /// <summary>
+        /// Starts profiling an operation
+        /// </summary>
+        public IDisposable Profile(string operationName)
+        {
+            if (!Enabled)
+                return DisposableHelper.Empty;
+
+            return new ProfileScope(this, operationName);
+        }
+
+        /// <summary>
+        /// Records a completed operation
+        /// </summary>
+        internal void RecordOperation(string operationName, long elapsedTicks, long memoryBytes = 0)
+        {
+            if (!Enabled)
+                return;
+
+            _stats.AddOrUpdate(
+                operationName,
+                _ => new OperationStats
+                {
+                    OperationName = operationName,
+                    CallCount = 1,
+                    TotalTicks = elapsedTicks,
+                    MinTicks = elapsedTicks,
+                    MaxTicks = elapsedTicks,
+                    TotalMemoryBytes = memoryBytes
+                },
+                (_, existing) =>
+                {
+                    existing.CallCount++;
+                    existing.TotalTicks += elapsedTicks;
+                    existing.MinTicks = Math.Min(existing.MinTicks, elapsedTicks);
+                    existing.MaxTicks = Math.Max(existing.MaxTicks, elapsedTicks);
+                    existing.TotalMemoryBytes += memoryBytes;
+                    return existing;
+                });
+        }
+
+        /// <summary>
+        /// Gets statistics for a specific operation
+        /// </summary>
+        public OperationStats GetStats(string operationName)
+        {
+            return _stats.TryGetValue(operationName, out var stats) ? stats : null;
+        }
+
+        /// <summary>
+        /// Gets all recorded statistics
+        /// </summary>
+        public OperationStats[] GetAllStats()
+        {
+            return _stats.Values.OrderByDescending(s => s.TotalMilliseconds).ToArray();
+        }
+
+        /// <summary>
+        /// Clears all statistics
+        /// </summary>
+        public void Clear()
+        {
+            _stats.Clear();
+        }
+
+        /// <summary>
+        /// Generates a performance report
+        /// </summary>
+        public string GenerateReport()
+        {
+            var stats = GetAllStats();
+            if (stats.Length == 0)
+                return "No profiling data available.";
+
+            var report = new System.Text.StringBuilder();
+            report.AppendLine("=== Performance Profile Report ===");
+            report.AppendLine();
+            report.AppendLine($"{"Operation",-40} {"Calls",10} {"Total (ms)",12} {"Avg (ms)",12} {"Min (ms)",12} {"Max (ms)",12} {"Memory (MB)",12}");
+            report.AppendLine(new string('-', 120));
+
+            foreach (var stat in stats)
+            {
+                report.AppendLine($"{stat.OperationName,-40} {stat.CallCount,10} {stat.TotalMilliseconds,12:F3} " +
+                                $"{stat.AverageMilliseconds,12:F3} {stat.MinMilliseconds,12:F3} " +
+                                $"{stat.MaxMilliseconds,12:F3} {stat.TotalMemoryMB,12:F2}");
+            }
+
+            report.AppendLine();
+            report.AppendLine($"Total operations: {stats.Length}");
+            report.AppendLine($"Total time: {stats.Sum(s => s.TotalMilliseconds):F3} ms");
+
+            return report.ToString();
+        }
+
+        private class ProfileScope : IDisposable
+        {
+            private readonly PerformanceProfiler _profiler;
+            private readonly string _operationName;
+            private readonly Stopwatch _stopwatch;
+            private readonly long _startMemory;
+
+            public ProfileScope(PerformanceProfiler profiler, string operationName)
+            {
+                _profiler = profiler;
+                _operationName = operationName;
+                _startMemory = GC.GetTotalMemory(false);
+                _stopwatch = Stopwatch.StartNew();
+            }
+
+            public void Dispose()
+            {
+                _stopwatch.Stop();
+                long endMemory = GC.GetTotalMemory(false);
+                long memoryDelta = endMemory - _startMemory;
+
+                _profiler.RecordOperation(_operationName, _stopwatch.ElapsedTicks, memoryDelta);
+            }
+        }
+
+        private static class DisposableHelper
+        {
+            public static readonly IDisposable Empty = new EmptyDisposable();
+
+            private class EmptyDisposable : IDisposable
+            {
+                public void Dispose() { }
+            }
+        }
+    }
+
+    /// <summary>
+    /// Statistics for a profiled operation
+    /// </summary>
+    public class OperationStats
+    {
+        public string OperationName { get; set; }
+        public long CallCount { get; set; }
+        public long TotalTicks { get; set; }
+        public long MinTicks { get; set; }
+        public long MaxTicks { get; set; }
+        public long TotalMemoryBytes { get; set; }
+
+        public double TotalMilliseconds => TotalTicks * 1000.0 / Stopwatch.Frequency;
+        public double AverageMilliseconds => TotalMilliseconds / CallCount;
+        public double MinMilliseconds => MinTicks * 1000.0 / Stopwatch.Frequency;
+        public double MaxMilliseconds => MaxTicks * 1000.0 / Stopwatch.Frequency;
+        public double TotalMemoryMB => TotalMemoryBytes / (1024.0 * 1024.0);
+        public double AverageMemoryMB => TotalMemoryMB / CallCount;
+
+        public double ThroughputOpsPerSecond => CallCount / (TotalMilliseconds / 1000.0);
+    }
+}
