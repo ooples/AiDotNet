@@ -1,6 +1,6 @@
+using AiDotNet.Enums;
 using AiDotNet.Interfaces;
 using AiDotNet.RetrievalAugmentedGeneration.Models;
-using AiDotNet.RetrievalAugmentedGeneration.Generators;
 using AiDotNet.RetrievalAugmentedGeneration.Retrievers;
 using System;
 using System.Collections.Generic;
@@ -41,88 +41,51 @@ namespace AiDotNet.RetrievalAugmentedGeneration.AdvancedPatterns;
 /// <para><b>Example Usage:</b>
 /// <code>
 /// var generator = new StubGenerator&lt;double&gt;();
-/// var baseRetriever = new DenseRetriever&lt;double&gt;(embeddingModel, documentStore);
+/// var embeddingModel = new SentenceTransformerEmbedding&lt;double&gt;();
+/// var documentStore = new InMemoryDocumentStore&lt;double&gt;();
 ///
 /// // Create tree-of-thoughts retriever
 /// var totRetriever = new TreeOfThoughtsRetriever&lt;double&gt;(
 ///     generator,
-///     baseRetriever,
+///     embeddingModel,
+///     documentStore,
 ///     maxDepth: 3,           // Explore 3 levels deep
-///     branchingFactor: 3     // Generate 3 alternatives at each level
+///     branchingFactor: 3,    // Generate 3 alternatives at each level
+///     searchStrategy: TreeSearchStrategy.BestFirst
 /// );
 ///
-/// // Retrieve using breadth-first search
+/// // Retrieve documents
 /// var documents = totRetriever.Retrieve(
 ///     "What are the applications of quantum computing?",
-///     topK: 15,
-///     searchStrategy: TreeSearchStrategy.BreadthFirst
-/// );
-///
-/// // Retrieve using best-first search (prioritizes highest-scored paths)
-/// var documentsBestFirst = totRetriever.Retrieve(
-///     "What are the applications of quantum computing?",
-///     topK: 15,
-///     searchStrategy: TreeSearchStrategy.BestFirst
+///     topK: 15
 /// );
 /// </code>
 /// </para>
 /// </remarks>
-public class TreeOfThoughtsRetriever<T>
+public class TreeOfThoughtsRetriever<T> : RetrieverBase<T>
 {
     private readonly IGenerator<T> _generator;
     private readonly RetrieverBase<T> _baseRetriever;
     private readonly int _maxDepth;
     private readonly int _branchingFactor;
-
-    /// <summary>
-    /// Represents a node in the reasoning tree.
-    /// </summary>
-    private class ThoughtNode
-    {
-        public string Thought { get; set; } = string.Empty;
-        public List<ThoughtNode> Children { get; set; } = new List<ThoughtNode>();
-        public double EvaluationScore { get; set; }
-        public List<Document<T>> RetrievedDocuments { get; set; } = new List<Document<T>>();
-        public int Depth { get; set; }
-        public ThoughtNode? Parent { get; set; }
-    }
-
-    /// <summary>
-    /// Tree search strategies for exploring the reasoning space.
-    /// </summary>
-    public enum TreeSearchStrategy
-    {
-        /// <summary>
-        /// Explores all nodes at each depth level before going deeper.
-        /// Good for comprehensive shallow exploration.
-        /// </summary>
-        BreadthFirst,
-
-        /// <summary>
-        /// Explores one branch fully before backtracking.
-        /// Good for deep reasoning along specific paths.
-        /// </summary>
-        DepthFirst,
-
-        /// <summary>
-        /// Always explores the highest-scored node next.
-        /// Good for efficient exploration of promising paths.
-        /// </summary>
-        BestFirst
-    }
+    private readonly TreeSearchStrategy _searchStrategy;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="TreeOfThoughtsRetriever{T}"/> class.
     /// </summary>
     /// <param name="generator">The LLM generator for reasoning.</param>
-    /// <param name="baseRetriever">The underlying retriever to use.</param>
+    /// <param name="baseRetriever">The underlying retriever to use for document retrieval.</param>
     /// <param name="maxDepth">Maximum depth of the reasoning tree (default: 3).</param>
     /// <param name="branchingFactor">Number of alternative thoughts at each level (default: 3).</param>
+    /// <param name="searchStrategy">Tree search strategy to use (default: BestFirst).</param>
+    /// <param name="defaultTopK">Default number of documents to retrieve (default: 5).</param>
     public TreeOfThoughtsRetriever(
         IGenerator<T> generator,
         RetrieverBase<T> baseRetriever,
         int maxDepth = 3,
-        int branchingFactor = 3)
+        int branchingFactor = 3,
+        TreeSearchStrategy searchStrategy = TreeSearchStrategy.BestFirst,
+        int defaultTopK = 5) : base(defaultTopK)
     {
         _generator = generator ?? throw new ArgumentNullException(nameof(generator));
         _baseRetriever = baseRetriever ?? throw new ArgumentNullException(nameof(baseRetriever));
@@ -135,34 +98,18 @@ public class TreeOfThoughtsRetriever<T>
 
         _maxDepth = maxDepth;
         _branchingFactor = branchingFactor;
+        _searchStrategy = searchStrategy;
     }
 
     /// <summary>
-    /// Retrieves documents using tree-of-thoughts reasoning.
+    /// Core retrieval logic using tree-of-thoughts reasoning.
     /// </summary>
-    /// <param name="query">The query to retrieve documents for.</param>
-    /// <param name="topK">Maximum number of documents to return.</param>
-    /// <param name="searchStrategy">The tree search strategy to use.</param>
-    /// <param name="metadataFilters">Metadata filters to apply during retrieval.</param>
-    /// <returns>Retrieved documents from exploring the reasoning tree.</returns>
-    public IEnumerable<Document<T>> Retrieve(
-        string query,
-        int topK,
-        TreeSearchStrategy searchStrategy = TreeSearchStrategy.BestFirst,
-        Dictionary<string, object>? metadataFilters = null)
+    protected override IEnumerable<Document<T>> RetrieveCore(string query, int topK, Dictionary<string, object> metadataFilters)
     {
-        if (string.IsNullOrWhiteSpace(query))
-            throw new ArgumentException("Query cannot be null or whitespace", nameof(query));
-
-        if (topK < 1)
-            throw new ArgumentOutOfRangeException(nameof(topK), "topK must be positive");
-
-        metadataFilters ??= new Dictionary<string, object>();
-
         // Build the reasoning tree
-        var rootNode = new ThoughtNode { Thought = query, Depth = 0 };
+        var rootNode = new ThoughtNode<T> { Thought = query, Depth = 0 };
         EvaluateAndRetrieve(rootNode, metadataFilters);
-        ExpandTree(rootNode, searchStrategy, metadataFilters);
+        ExpandTree(rootNode, _searchStrategy, metadataFilters);
 
         // Collect all documents from the tree
         var allDocuments = new Dictionary<string, (Document<T> doc, double maxScore)>();
@@ -178,7 +125,7 @@ public class TreeOfThoughtsRetriever<T>
     /// <summary>
     /// Expands the reasoning tree using the specified search strategy.
     /// </summary>
-    private void ExpandTree(ThoughtNode root, TreeSearchStrategy strategy, Dictionary<string, object> metadataFilters)
+    private void ExpandTree(ThoughtNode<T> root, TreeSearchStrategy strategy, Dictionary<string, object> metadataFilters)
     {
         switch (strategy)
         {
@@ -197,9 +144,9 @@ public class TreeOfThoughtsRetriever<T>
     /// <summary>
     /// Breadth-first tree expansion: explores all nodes at each level.
     /// </summary>
-    private void ExpandBreadthFirst(ThoughtNode root, Dictionary<string, object> metadataFilters)
+    private void ExpandBreadthFirst(ThoughtNode<T> root, Dictionary<string, object> metadataFilters)
     {
-        var queue = new Queue<ThoughtNode>();
+        var queue = new Queue<ThoughtNode<T>>();
         queue.Enqueue(root);
 
         while (queue.Count > 0)
@@ -223,9 +170,9 @@ public class TreeOfThoughtsRetriever<T>
     /// <summary>
     /// Depth-first tree expansion: explores one branch fully before backtracking.
     /// </summary>
-    private void ExpandDepthFirst(ThoughtNode root, Dictionary<string, object> metadataFilters)
+    private void ExpandDepthFirst(ThoughtNode<T> root, Dictionary<string, object> metadataFilters)
     {
-        var stack = new Stack<ThoughtNode>();
+        var stack = new Stack<ThoughtNode<T>>();
         stack.Push(root);
 
         while (stack.Count > 0)
@@ -237,7 +184,7 @@ public class TreeOfThoughtsRetriever<T>
 
             // Generate and evaluate child thoughts
             var children = GenerateChildThoughts(node);
-            foreach (var child in children.Reverse<ThoughtNode>()) // Reverse to maintain left-to-right order
+            foreach (var child in children.Reverse<ThoughtNode<T>>()) // Reverse to maintain left-to-right order
             {
                 EvaluateAndRetrieve(child, metadataFilters);
                 node.Children.Add(child);
@@ -249,11 +196,11 @@ public class TreeOfThoughtsRetriever<T>
     /// <summary>
     /// Best-first tree expansion: always explores the highest-scored node next.
     /// </summary>
-    private void ExpandBestFirst(ThoughtNode root, Dictionary<string, object> metadataFilters)
+    private void ExpandBestFirst(ThoughtNode<T> root, Dictionary<string, object> metadataFilters)
     {
         // Use a list to simulate priority queue (compatible with .NET Framework)
         // Sort by score descending (highest score first), with node ID for tie-breaking
-        var nodesToExplore = new List<(ThoughtNode node, double score, int id)>();
+        var nodesToExplore = new List<(ThoughtNode<T> node, double score, int id)>();
         int nodeIdCounter = 0;
         nodesToExplore.Add((root, 1.0, nodeIdCounter++)); // Start with root
 
@@ -286,9 +233,9 @@ public class TreeOfThoughtsRetriever<T>
     /// <summary>
     /// Generates alternative child thoughts for a given node.
     /// </summary>
-    private List<ThoughtNode> GenerateChildThoughts(ThoughtNode parent)
+    private List<ThoughtNode<T>> GenerateChildThoughts(ThoughtNode<T> parent)
     {
-        var children = new List<ThoughtNode>();
+        var children = new List<ThoughtNode<T>>();
 
         // Build context from parent chain
         var context = BuildThoughtContext(parent);
@@ -308,7 +255,7 @@ Format your response as a numbered list:
 
         foreach (var thought in thoughts.Take(_branchingFactor))
         {
-            children.Add(new ThoughtNode
+            children.Add(new ThoughtNode<T>
             {
                 Thought = thought,
                 Depth = parent.Depth + 1,
@@ -322,7 +269,7 @@ Format your response as a numbered list:
     /// <summary>
     /// Evaluates a thought node and retrieves relevant documents.
     /// </summary>
-    private void EvaluateAndRetrieve(ThoughtNode node, Dictionary<string, object> metadataFilters)
+    private void EvaluateAndRetrieve(ThoughtNode<T> node, Dictionary<string, object> metadataFilters)
     {
         // Retrieve documents for this thought
         var documents = _baseRetriever.Retrieve(node.Thought, topK: 5, metadataFilters).ToList();
@@ -335,7 +282,7 @@ Format your response as a numbered list:
     /// <summary>
     /// Evaluates the quality of a thought based on retrieved documents and coherence.
     /// </summary>
-    private double EvaluateThought(ThoughtNode node)
+    private double EvaluateThought(ThoughtNode<T> node)
     {
         // Evaluation criteria:
         // 1. Number of relevant documents found (0-1 normalized)
@@ -367,7 +314,7 @@ Format your response as a numbered list:
     /// <summary>
     /// Builds a context string from the parent chain of thoughts.
     /// </summary>
-    private string BuildThoughtContext(ThoughtNode node)
+    private string BuildThoughtContext(ThoughtNode<T> node)
     {
         var chain = new List<string>();
         var current = node;
@@ -421,7 +368,7 @@ Format your response as a numbered list:
     /// <summary>
     /// Collects all documents from the tree, keeping track of the best score for each.
     /// </summary>
-    private void CollectDocuments(ThoughtNode node, Dictionary<string, (Document<T> doc, double maxScore)> allDocuments)
+    private void CollectDocuments(ThoughtNode<T> node, Dictionary<string, (Document<T> doc, double maxScore)> allDocuments)
     {
         // Add documents from this node
         foreach (var doc in node.RetrievedDocuments)
