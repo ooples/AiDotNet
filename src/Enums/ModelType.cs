@@ -779,6 +779,11 @@ public enum ModelType
     /// </summary>
     Pix2Pix,
 
+    /// <summary>
+    /// A Self-Attention GAN that uses attention mechanisms for modeling long-range dependencies.
+    /// </summary>
+    SAGAN,
+
     NeuralTuringMachine,
 
     NEAT,

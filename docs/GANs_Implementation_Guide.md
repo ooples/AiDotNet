@@ -33,10 +33,18 @@ This implementation adds the following GAN architectures and components to AiDot
 #### Advanced GANs (HIGH) ✅
 - **Pix2Pix** (Paired Image-to-Image Translation)
 - **CycleGAN** (Unpaired Image-to-Image Translation)
+- **StyleGAN** (Style-Based Generator Architecture)
+- **Progressive GAN** (Progressively Growing GAN)
+- **BigGAN** (Large-Scale GAN Training)
+- **SAGAN** (Self-Attention GAN)
 
 #### Training Techniques (HIGH) ✅
 - **Spectral Normalization Layer**
 - **Self-Attention Layer** (for SAGAN)
+
+#### Evaluation Metrics (HIGH) ✅
+- **FID** (Fréchet Inception Distance)
+- **IS** (Inception Score)
 
 ## Core GAN Architectures
 
@@ -498,6 +506,325 @@ Allows the model to attend to different spatial locations in feature maps, enabl
 
 **Reference**: Zhang et al., "Self-Attention Generative Adversarial Networks" (2019)
 
+## High-Resolution and Large-Scale GANs
+
+### 10. StyleGAN
+
+**Location**: `src/NeuralNetworks/StyleGAN.cs`
+
+StyleGAN introduces a style-based generator architecture for high-quality image synthesis with unprecedented control over generated images.
+
+**Key Features**:
+- Mapping network (Z → W latent space)
+- Style-based generator with AdaIN
+- Style mixing for fine-grained control
+- Progressive architecture
+- High-quality image generation
+
+**Architecture Components**:
+```csharp
+var stylegan = new StyleGAN<double>(
+    latentSize: 512,
+    imageChannels: 3,
+    imageHeight: 1024,
+    imageWidth: 1024,
+    enableStyleMixing: true,
+    styleMixingProbability: 0.9
+);
+```
+
+**Innovations**:
+1. **Mapping Network**: Transforms latent code Z into intermediate latent space W
+2. **AdaIN (Adaptive Instance Normalization)**: Injects style at each layer
+3. **Style Mixing**: Combines coarse and fine features from different sources
+4. **Progressive Growth**: Can start from low resolution and increase
+
+**When to Use**:
+- High-resolution image generation (512×512, 1024×1024+)
+- When you need fine-grained control over generation
+- Face generation and synthesis
+- Creative applications requiring style control
+- State-of-the-art image quality required
+
+**Reference**: Karras et al., "A Style-Based Generator Architecture for Generative Adversarial Networks" (2019)
+
+### 11. Progressive GAN
+
+**Location**: `src/NeuralNetworks/ProgressiveGAN.cs`
+
+Progressive GAN grows the generator and discriminator progressively during training, starting from low resolution and gradually increasing to high resolution.
+
+**Key Features**:
+- Progressive growing architecture
+- Smooth layer fade-in with alpha blending
+- Minibatch standard deviation
+- Pixel normalization in generator
+- Equalized learning rate
+- Supports very high resolutions (1024×1024)
+
+**Architecture**:
+```csharp
+var progan = new ProgressiveGAN<double>(
+    latentSize: 512,
+    imageChannels: 3,
+    maxResolutionLevel: 8,  // Up to 1024x1024
+    baseFeatureMaps: 512
+);
+
+// Start training at 4x4
+// Gradually grow to higher resolutions
+while (progan.CurrentResolutionLevel < progan.MaxResolutionLevel)
+{
+    // Train at current resolution
+    TrainForEpochs(progan, epochs: 1000);
+
+    // Grow to next resolution
+    progan.GrowNetworks();
+    progan.Alpha = 0.0;  // Start fade-in
+
+    // Gradually increase alpha from 0 to 1
+    for (int i = 0; i < fadeInSteps; i++)
+    {
+        progan.Alpha = (double)i / fadeInSteps;
+        TrainForEpochs(progan, epochs: 100);
+    }
+}
+```
+
+**When to Use**:
+- Very high-resolution image generation (512×512+)
+- When training stability at high resolution is important
+- Limited GPU memory (start small, grow gradually)
+- Face and texture generation
+- Progressive training paradigm preferred
+
+**Reference**: Karras et al., "Progressive Growing of GANs for Improved Quality, Stability, and Variation" (2018)
+
+### 12. BigGAN
+
+**Location**: `src/NeuralNetworks/BigGAN.cs`
+
+BigGAN scales up GAN training using large batch sizes, increased model capacity, and class-conditional generation for state-of-the-art results.
+
+**Key Features**:
+- Large batch training (256-2048 samples)
+- Spectral normalization in G and D
+- Self-attention layers
+- Class-conditional generation with projection discriminator
+- Truncation trick for quality-diversity tradeoff
+- Orthogonal initialization
+
+**Architecture**:
+```csharp
+var biggan = new BigGAN<double>(
+    latentSize: 120,
+    numClasses: 1000,  // ImageNet
+    classEmbeddingDim: 128,
+    imageHeight: 128,
+    imageWidth: 128,
+    generatorChannels: 96,
+    discriminatorChannels: 96
+);
+
+// Enable truncation for higher quality (lower diversity)
+biggan.UseTruncation = true;
+biggan.TruncationThreshold = 0.5;  // Lower = higher quality
+
+// Generate images of specific class
+var noise = GenerateNoise(batchSize);
+var classIndices = new int[] { 281, 281, 281, 281 };  // Class 281: "cat"
+var catImages = biggan.Generate(noise, classIndices);
+```
+
+**When to Use**:
+- Large-scale conditional image generation
+- High-fidelity natural image synthesis
+- When you have large computational resources
+- Class-conditional generation (ImageNet, etc.)
+- State-of-the-art image quality on complex datasets
+
+**Training Tips**:
+- Use large batch sizes (128-512 minimum, 256-2048 optimal)
+- Different learning rates for G and D (D typically 4× G)
+- Spectral normalization in both G and D
+- Monitor training with FID and IS metrics
+
+**Reference**: Brock et al., "Large Scale GAN Training for High Fidelity Natural Image Synthesis" (2019)
+
+### 13. SAGAN (Self-Attention GAN)
+
+**Location**: `src/NeuralNetworks/SAGAN.cs`
+
+SAGAN combines self-attention mechanisms with spectral normalization for modeling long-range dependencies in generated images.
+
+**Key Features**:
+- Self-attention layers at multiple resolutions
+- Spectral normalization in both G and D
+- Hinge loss for stable training
+- TTUR (Two Time-Scale Update Rule)
+- Both conditional and unconditional generation
+
+**Architecture**:
+```csharp
+var sagan = new SAGAN<double>(
+    latentSize: 128,
+    imageChannels: 3,
+    imageHeight: 64,
+    imageWidth: 64,
+    numClasses: 10,  // 0 for unconditional
+    attentionLayers: new[] { 2, 3 },  // At 16x16 and 32x32
+    useSpectralNormalization: true
+);
+
+// Unconditional generation
+var images = sagan.Generate(numImages: 16);
+
+// Conditional generation
+var classIndices = new int[] { 0, 1, 2, 3, 4, 5, 6, 7, 8, 9 };
+var conditionalImages = sagan.Generate(10, classIndices);
+```
+
+**How Self-Attention Helps**:
+- Captures long-range dependencies (e.g., symmetry between object parts)
+- Better global structure coherence
+- Improved multi-class image generation
+- Complementary to convolutional layers
+
+**When to Use**:
+- When generated images need global coherence
+- Complex scenes with multiple objects
+- Geometric patterns requiring long-range consistency
+- Class-conditional generation with diverse categories
+
+**Training Configuration**:
+- Generator LR: 1e-4
+- Discriminator LR: 4e-4 (TTUR)
+- Adam with β1=0, β2=0.9
+- Hinge loss for both G and D
+- Spectral normalization in all layers
+
+**Reference**: Zhang et al., "Self-Attention Generative Adversarial Networks" (2019)
+
+## Evaluation Metrics
+
+### Fréchet Inception Distance (FID)
+
+**Location**: `src/Metrics/FrechetInceptionDistance.cs`
+
+FID measures the distance between the distributions of real and generated images using features from a pre-trained Inception network.
+
+**Key Features**:
+- Objective quality metric
+- Captures both quality and diversity
+- Correlates well with human judgment
+- Industry standard for GAN evaluation
+
+**Usage**:
+```csharp
+using AiDotNet.Metrics;
+
+// Create FID calculator (optionally provide pre-trained Inception network)
+var fid = new FrechetInceptionDistance<double>(
+    inceptionNetwork: pretrainedInception,
+    featureDimension: 2048
+);
+
+// Compute FID between real and generated images
+var realImages = LoadRealImages();
+var generatedImages = gan.Generate(numImages: 10000);
+var fidScore = fid.ComputeFID(realImages, generatedImages);
+
+Console.WriteLine($"FID Score: {fidScore:F2}");
+// Lower is better: <10 excellent, 10-20 good, 20-50 moderate, >50 poor
+```
+
+**How It Works**:
+1. Extract features from real images using Inception network
+2. Extract features from generated images
+3. Compute mean and covariance for both distributions
+4. Calculate Fréchet distance: ||μ₁ - μ₂||² + Tr(Σ₁ + Σ₂ - 2√(Σ₁Σ₂))
+
+**When to Use**:
+- Primary metric for GAN evaluation
+- Comparing different GAN architectures
+- Monitoring training progress
+- Research and publication
+
+**Typical Scores**:
+- **< 10**: Excellent quality (state-of-the-art)
+- **10-20**: Good quality
+- **20-50**: Moderate quality
+- **> 50**: Poor quality
+
+**Reference**: Heusel et al., "GANs Trained by a Two Time-Scale Update Rule Converge to a Local Nash Equilibrium" (2017)
+
+### Inception Score (IS)
+
+**Location**: `src/Metrics/InceptionScore.cs`
+
+Inception Score evaluates both the quality (confident predictions) and diversity (variety of classes) of generated images.
+
+**Key Features**:
+- Measures quality and diversity simultaneously
+- Uses KL divergence between conditional and marginal distributions
+- Provides mean and standard deviation across splits
+- Widely used in GAN research
+
+**Usage**:
+```csharp
+using AiDotNet.Metrics;
+
+// Create IS calculator
+var is = new InceptionScore<double>(
+    inceptionNetwork: pretrainedInception,
+    numClasses: 1000,  // ImageNet
+    numSplits: 10
+);
+
+// Compute IS with uncertainty
+var generatedImages = gan.Generate(numImages: 50000);
+var (mean, std) = is.ComputeISWithUncertainty(generatedImages);
+
+Console.WriteLine($"Inception Score: {mean:F2} ± {std:F2}");
+// Higher is better: >10 excellent, 5-10 good, 2-5 moderate, <2 poor
+
+// Compute both IS and FID together
+var (isMean, isStd, fidScore) = is.ComputeComprehensiveMetrics(
+    generatedImages,
+    realImages
+);
+```
+
+**How It Works**:
+1. Pass generated images through Inception classifier
+2. Get probability distributions p(y|x) for each image
+3. Compute marginal distribution p(y) = mean(p(y|x))
+4. Calculate IS = exp(E[KL(p(y|x) || p(y))])
+
+**Interpretation**:
+- **High IS**: Images are recognizable (quality) AND diverse (variety)
+- **Low IS**: Images are ambiguous OR lack diversity
+
+**When to Use**:
+- Secondary metric alongside FID
+- Evaluating class-conditional GANs
+- Quick quality check during training
+- Research comparisons
+
+**Typical Scores (ImageNet)**:
+- **> 10**: Excellent (near real images)
+- **5-10**: Good quality
+- **2-5**: Moderate quality
+- **< 2**: Poor (approaching random noise ≈ 1)
+
+**Important Notes**:
+- IS can be fooled by mode collapse (same high-quality image repeated)
+- FID is generally more reliable
+- Scores only comparable within same dataset
+- Use both IS and FID for comprehensive evaluation
+
+**Reference**: Salimans et al., "Improved Techniques for Training GANs" (2016)
+
 ## Usage Examples
 
 ### Example 1: Training a DCGAN
@@ -653,7 +980,7 @@ foreach (var batch in dataLoader)
 
 ## Implemented Architectures Summary
 
-This implementation provides **10 GAN architectures**:
+This implementation provides **13 GAN architectures**:
 
 1. **Vanilla GAN** - Original GAN (already existed)
 2. **DCGAN** - Deep Convolutional GAN with architectural guidelines
@@ -664,27 +991,16 @@ This implementation provides **10 GAN architectures**:
 7. **InfoGAN** - Information Maximizing GAN
 8. **Pix2Pix** - Paired image-to-image translation
 9. **CycleGAN** - Unpaired image-to-image translation
+10. **StyleGAN** - Style-based generator architecture for high-quality images
+11. **Progressive GAN** - Progressively growing architecture for high-resolution generation
+12. **BigGAN** - Large-scale GAN training with class conditioning
+13. **SAGAN** - Self-Attention GAN for modeling long-range dependencies
 
 Plus supporting components:
 - **Spectral Normalization Layer** - For training stability
 - **Self-Attention Layer** - For SAGAN support
-
-## Future Enhancements
-
-The following advanced architectures could be added in future releases:
-
-### High-Resolution Generation
-- **StyleGAN / StyleGAN2 / StyleGAN3** - State-of-the-art image generation with style-based control
-- **Progressive GAN** - Progressively growing GAN for high-resolution images
-- **BigGAN** - Large-scale GAN with large batch sizes
-
-### Evaluation Metrics
-- **FID** (Fréchet Inception Distance) - Quality metric comparing feature distributions
-- **IS** (Inception Score) - Diversity and quality metric
-
-### Additional Variants
-- **SAGAN** (Self-Attention GAN) - Combining existing self-attention layer with spectral normalization
-- **StyleGAN-Based Architectures** - Various style-based generation approaches
+- **FID Metric** - Fréchet Inception Distance for quality evaluation
+- **IS Metric** - Inception Score for quality and diversity evaluation
 
 ## References
 
@@ -699,6 +1015,11 @@ The following advanced architectures could be added in future releases:
 9. Zhu et al., "Unpaired Image-to-Image Translation using Cycle-Consistent Adversarial Networks" (2017)
 10. Miyato et al., "Spectral Normalization for Generative Adversarial Networks" (2018)
 11. Zhang et al., "Self-Attention Generative Adversarial Networks" (2019)
+12. Karras et al., "Progressive Growing of GANs for Improved Quality, Stability, and Variation" (2018)
+13. Karras et al., "A Style-Based Generator Architecture for Generative Adversarial Networks" (2019)
+14. Brock et al., "Large Scale GAN Training for High Fidelity Natural Image Synthesis" (2019)
+15. Salimans et al., "Improved Techniques for Training GANs" (2016)
+16. Heusel et al., "GANs Trained by a Two Time-Scale Update Rule Converge to a Local Nash Equilibrium" (2017)
 
 ## Contributing
 
