@@ -19,7 +19,7 @@ public class EigenDecomposition<T> : MatrixDecompositionBase<T>
     /// result in a vector that points in the same direction but may be scaled.
     /// Each eigenvector corresponds to an eigenvalue in the EigenValues property.
     /// </remarks>
-    public Matrix<T> EigenVectors { get; private set; }
+    public Matrix<T> EigenVectors { get; private set; } = null!;
 
     /// <summary>
     /// Gets the eigenvalues of the decomposed matrix.
@@ -29,7 +29,7 @@ public class EigenDecomposition<T> : MatrixDecompositionBase<T>
     /// the result is the same as scaling the eigenvector by this value.
     /// Each eigenvalue corresponds to an eigenvector in the EigenVectors property.
     /// </remarks>
-    public Vector<T> EigenValues { get; private set; }
+    public Vector<T> EigenValues { get; private set; } = null!;
 
     private readonly EigenAlgorithmType _algorithm;
 

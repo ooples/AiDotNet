@@ -40,7 +40,7 @@ public class IcaDecomposition<T> : MatrixDecompositionBase<T>
     /// headphones filter out background noise.
     /// </para>
     /// </remarks>
-    public Matrix<T> UnmixingMatrix { get; private set; }
+    public Matrix<T> UnmixingMatrix { get; private set; } = null!;
 
     /// <summary>
     /// Gets the mixing matrix (inverse of unmixing matrix).
@@ -55,7 +55,7 @@ public class IcaDecomposition<T> : MatrixDecompositionBase<T>
     /// This is essentially the "recipe" of how the sources were mixed together.
     /// </para>
     /// </remarks>
-    public Matrix<T> MixingMatrix { get; private set; }
+    public Matrix<T> MixingMatrix { get; private set; } = null!;
 
     /// <summary>
     /// Gets the independent components (separated sources).
@@ -71,17 +71,17 @@ public class IcaDecomposition<T> : MatrixDecompositionBase<T>
     /// - Each column represents a time sample
     /// </para>
     /// </remarks>
-    public Matrix<T> IndependentComponents { get; private set; }
+    public Matrix<T> IndependentComponents { get; private set; } = null!;
 
     /// <summary>
     /// Gets the mean vector used for centering the data.
     /// </summary>
-    public Vector<T> Mean { get; private set; }
+    public Vector<T> Mean { get; private set; } = null!;
 
     /// <summary>
     /// Gets the whitening matrix used in the preprocessing step.
     /// </summary>
-    public Matrix<T> WhiteningMatrix { get; private set; }
+    public Matrix<T> WhiteningMatrix { get; private set; } = null!;
 
     private readonly int _numComponents;
     private readonly int _maxIterations;
