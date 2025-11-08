@@ -193,9 +193,12 @@ public class ShardedModel<T, TInput, TOutput> : IShardedModel<T, TInput, TOutput
             fullParams = GatherFullParameters();
             _wrappedModel.SetParameters(fullParams);
         }
-
-        // Invalidate cache
-        _cachedFullParameters = null;
+        else
+        {
+            // Invalidate cache only when not auto-syncing
+            // When auto-sync is enabled, cache remains valid after synchronization
+            _cachedFullParameters = null;
+        }
     }
 
     /// <inheritdoc/>
