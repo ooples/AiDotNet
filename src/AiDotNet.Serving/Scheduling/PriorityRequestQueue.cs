@@ -90,23 +90,20 @@ public class PriorityRequestQueue<T>
                 if (queue.IsEmpty)
                     continue;
 
-                // Check if we've exceeded the fairness quota for this priority
+                // Check if we've exceeded the fairness quota for this priority and try to dequeue
                 int weight = _fairnessWeights[priorityIndex];
-                if (_dequeueCounts[priorityIndex] < weight)
+                if (_dequeueCounts[priorityIndex] < weight && queue.TryDequeue(out item))
                 {
-                    if (queue.TryDequeue(out item))
+                    _dequeueCounts[priorityIndex]++;
+                    _totalCount--;
+
+                    // Reset counts when we complete a full cycle
+                    if (_dequeueCounts.Sum() >= _fairnessWeights.Sum())
                     {
-                        _dequeueCounts[priorityIndex]++;
-                        _totalCount--;
-
-                        // Reset counts when we complete a full cycle
-                        if (_dequeueCounts.Sum() >= _fairnessWeights.Sum())
-                        {
-                            Array.Clear(_dequeueCounts, 0, _dequeueCounts.Length);
-                        }
-
-                        return true;
+                        Array.Clear(_dequeueCounts, 0, _dequeueCounts.Length);
                     }
+
+                    return true;
                 }
             }
 
