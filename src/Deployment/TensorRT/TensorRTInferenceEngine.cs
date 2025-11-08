@@ -227,13 +227,3 @@ public class TensorRTInferenceEngine<T> : IDisposable where T : struct
         public void SetLastUsedTime(DateTime value) => Interlocked.Exchange(ref _lastUsedTimeTicks, value.Ticks);
     }
 }
-
-/// <summary>
-/// Statistics for TensorRT inference engine.
-/// </summary>
-public class InferenceStatistics
-{
-    public int NumStreams { get; set; }
-    public int AvailableStreams { get; set; }
-    public int ActiveStreams { get; set; }
-}

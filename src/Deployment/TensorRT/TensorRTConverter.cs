@@ -1,19 +1,23 @@
 using AiDotNet.Deployment.Export;
 using AiDotNet.Deployment.Export.Onnx;
+using AiDotNet.Interfaces;
 
 namespace AiDotNet.Deployment.TensorRT;
 
 /// <summary>
 /// Converts models to TensorRT optimized format for NVIDIA GPU deployment.
+/// Properly integrates with IFullModel architecture.
 /// </summary>
 /// <typeparam name="T">The numeric type used in the model</typeparam>
-public class TensorRTConverter<T> where T : struct
+/// <typeparam name="TInput">The input type for the model</typeparam>
+/// <typeparam name="TOutput">The output type for the model</typeparam>
+public class TensorRTConverter<T, TInput, TOutput> where T : struct
 {
-    private readonly OnnxModelExporter<T> _onnxExporter;
+    private readonly OnnxModelExporter<T, TInput, TOutput> _onnxExporter;
 
     public TensorRTConverter()
     {
-        _onnxExporter = new OnnxModelExporter<T>();
+        _onnxExporter = new OnnxModelExporter<T, TInput, TOutput>();
     }
 
     /// <summary>
@@ -22,7 +26,7 @@ public class TensorRTConverter<T> where T : struct
     /// <param name="model">The model to convert</param>
     /// <param name="outputPath">Output path for the TensorRT engine</param>
     /// <param name="config">TensorRT conversion configuration</param>
-    public void ConvertToTensorRT(object model, string outputPath, TensorRTConfiguration config)
+    public void ConvertToTensorRT(IFullModel<T, TInput, TOutput> model, string outputPath, TensorRTConfiguration config)
     {
         if (model == null)
             throw new ArgumentNullException(nameof(model));
@@ -49,7 +53,7 @@ public class TensorRTConverter<T> where T : struct
     /// <summary>
     /// Converts a model to TensorRT format and returns as byte array.
     /// </summary>
-    public byte[] ConvertToTensorRTBytes(object model, TensorRTConfiguration config)
+    public byte[] ConvertToTensorRTBytes(IFullModel<T, TInput, TOutput> model, TensorRTConfiguration config)
     {
         var tempPath = Path.Combine(Path.GetTempPath(), $"tensorrt_{Guid.NewGuid()}.engine");
 
@@ -182,31 +186,4 @@ public class TensorRTConverter<T> where T : struct
             }
         }
     }
-}
-
-/// <summary>
-/// Internal class for building TensorRT engines.
-/// </summary>
-internal class TensorRTEngineBuilder
-{
-    public int MaxBatchSize { get; set; }
-    public long MaxWorkspaceSize { get; set; }
-    public bool UseFp16 { get; set; }
-    public bool UseInt8 { get; set; }
-    public bool StrictTypeConstraints { get; set; }
-    public bool EnableDynamicShapes { get; set; }
-    public int DeviceId { get; set; }
-    public int? DlaCore { get; set; }
-    public List<OptimizationProfile>? OptimizationProfiles { get; set; }
-}
-
-/// <summary>
-/// Represents a TensorRT optimization profile for dynamic shapes.
-/// </summary>
-public class OptimizationProfile
-{
-    public string? InputName { get; set; }
-    public int[]? MinShape { get; set; }
-    public int[]? OptimalShape { get; set; }
-    public int[]? MaxShape { get; set; }
 }
