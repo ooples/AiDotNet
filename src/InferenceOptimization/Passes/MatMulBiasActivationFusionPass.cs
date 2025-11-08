@@ -1,0 +1,211 @@
+using AiDotNet.Enums;
+using AiDotNet.InferenceOptimization.Core;
+
+namespace AiDotNet.InferenceOptimization.Passes;
+
+/// <summary>
+/// Fuses MatMul + Bias + Activation (ReLU, GELU, etc.) into a single operation.
+/// This is the most common pattern in transformer feed-forward networks and MLPs.
+/// </summary>
+/// <typeparam name="T">The numeric type (double, float, decimal)</typeparam>
+public class MatMulBiasActivationFusionPass<T> : OptimizationPassBase<T> where T : struct
+{
+    public override OptimizationPassType PassType => OptimizationPassType.MatMulBiasActivationFusion;
+    public override string Name => "MatMul + Bias + Activation Fusion";
+
+    private static readonly HashSet<OperationType> SupportedActivations = new()
+    {
+        OperationType.ReLU,
+        OperationType.GELU,
+        OperationType.LeakyReLU,
+        OperationType.Tanh,
+        OperationType.Sigmoid,
+        OperationType.Swish,
+        OperationType.Mish
+    };
+
+    public override bool Apply(IComputationGraph<T> graph)
+    {
+        bool modified = false;
+
+        // Look for already fused MatMulBias nodes followed by activation
+        foreach (var fusedNode in graph.Nodes.Where(n =>
+            n.OperationType == OperationType.FusedMatMulBias && !n.IsFused).ToList())
+        {
+            if (fusedNode.Outputs.Count == 1)
+            {
+                var activationNode = fusedNode.Outputs[0];
+
+                if (SupportedActivations.Contains(activationNode.OperationType) &&
+                    activationNode.Inputs.Count == 1)
+                {
+                    FuseMatMulBiasActivation(graph, fusedNode, activationNode);
+                    modified = true;
+                }
+            }
+        }
+
+        // Also look for unfused MatMul -> Add -> Activation
+        foreach (var matmulNode in graph.Nodes.Where(n =>
+            (n.OperationType == OperationType.MatMul ||
+             n.OperationType == OperationType.Dense ||
+             n.OperationType == OperationType.FullyConnected) && !n.IsFused).ToList())
+        {
+            if (matmulNode.Outputs.Count == 1)
+            {
+                var addNode = matmulNode.Outputs[0];
+
+                if (addNode.OperationType == OperationType.Add &&
+                    addNode.Inputs.Count == 2 &&
+                    addNode.Outputs.Count == 1)
+                {
+                    var activationNode = addNode.Outputs[0];
+
+                    if (SupportedActivations.Contains(activationNode.OperationType) &&
+                        activationNode.Inputs.Count == 1)
+                    {
+                        // Check if Add has a constant bias
+                        var biasNode = addNode.Inputs.FirstOrDefault(n => n != matmulNode);
+
+                        if (biasNode != null && biasNode.OperationType == OperationType.Constant)
+                        {
+                            FuseMatMulBiasActivationFromScratch(
+                                graph,
+                                matmulNode,
+                                addNode,
+                                biasNode,
+                                activationNode);
+                            modified = true;
+                        }
+                    }
+                }
+            }
+        }
+
+        return modified;
+    }
+
+    private void FuseMatMulBiasActivation(
+        IComputationGraph<T> graph,
+        ComputationNode<T> fusedMatMulBias,
+        ComputationNode<T> activation)
+    {
+        // Determine the fused operation type based on activation
+        var fusedType = activation.OperationType switch
+        {
+            OperationType.ReLU => OperationType.FusedMatMulBiasReLU,
+            OperationType.GELU => OperationType.FusedMatMulBiasGELU,
+            _ => OperationType.FusedMatMulBias
+        };
+
+        // Create new fused node
+        var newFusedNode = new ComputationNode<T>
+        {
+            OperationType = fusedType,
+            Name = $"{fusedMatMulBias.Name}_{activation.OperationType.ToString().ToLower()}",
+            OutputShape = activation.OutputShape,
+            IsFused = true,
+            CanOperateInPlace = true,
+            FusedFrom = new List<ComputationNode<T>> { fusedMatMulBias, activation }
+        };
+
+        // Copy all parameters from fused MatMulBias
+        foreach (var param in fusedMatMulBias.Parameters)
+        {
+            newFusedNode.Parameters[param.Key] = param.Value;
+        }
+
+        // Copy activation parameters if any
+        foreach (var param in activation.Parameters)
+        {
+            newFusedNode.Parameters[$"activation_{param.Key}"] = param.Value;
+        }
+
+        // Connect inputs
+        foreach (var input in fusedMatMulBias.Inputs)
+        {
+            newFusedNode.AddInput(input);
+            input.Outputs.Remove(fusedMatMulBias);
+        }
+
+        // Connect outputs
+        foreach (var output in activation.Outputs)
+        {
+            output.ReplaceInput(activation, newFusedNode);
+        }
+
+        // Add new fused node and remove old ones
+        graph.AddNode(newFusedNode);
+        graph.RemoveNode(fusedMatMulBias);
+        graph.RemoveNode(activation);
+    }
+
+    private void FuseMatMulBiasActivationFromScratch(
+        IComputationGraph<T> graph,
+        ComputationNode<T> matmul,
+        ComputationNode<T> add,
+        ComputationNode<T> bias,
+        ComputationNode<T> activation)
+    {
+        var fusedType = activation.OperationType switch
+        {
+            OperationType.ReLU => OperationType.FusedMatMulBiasReLU,
+            OperationType.GELU => OperationType.FusedMatMulBiasGELU,
+            _ => OperationType.FusedMatMulBias
+        };
+
+        var fusedNode = new ComputationNode<T>
+        {
+            OperationType = fusedType,
+            Name = $"{matmul.Name}_fused",
+            OutputShape = activation.OutputShape,
+            IsFused = true,
+            CanOperateInPlace = true,
+            FusedFrom = new List<ComputationNode<T>> { matmul, add, activation }
+        };
+
+        // Copy matmul parameters
+        foreach (var param in matmul.Parameters)
+        {
+            fusedNode.Parameters[param.Key] = param.Value;
+        }
+
+        // Add bias
+        fusedNode.Parameters["bias"] = bias.ConstantValue!;
+
+        // Copy activation parameters
+        foreach (var param in activation.Parameters)
+        {
+            fusedNode.Parameters[$"activation_{param.Key}"] = param.Value;
+        }
+
+        // Connect inputs
+        foreach (var input in matmul.Inputs)
+        {
+            fusedNode.AddInput(input);
+            input.Outputs.Remove(matmul);
+        }
+
+        // Connect outputs
+        foreach (var output in activation.Outputs)
+        {
+            output.ReplaceInput(activation, fusedNode);
+        }
+
+        // Add fused node and remove originals
+        graph.AddNode(fusedNode);
+        graph.RemoveNode(matmul);
+        graph.RemoveNode(add);
+        graph.RemoveNode(bias);
+        graph.RemoveNode(activation);
+    }
+
+    public override bool CanApply(IComputationGraph<T> graph)
+    {
+        return base.CanApply(graph) &&
+               graph.Nodes.Any(n => n.OperationType == OperationType.MatMul ||
+                                   n.OperationType == OperationType.Dense ||
+                                   n.OperationType == OperationType.FullyConnected ||
+                                   n.OperationType == OperationType.FusedMatMulBias);
+    }
+}
