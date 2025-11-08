@@ -46,6 +46,7 @@ public class PredictionModelBuilder<T, TInput, TOutput> : IPredictionModelBuilde
     private IGenerator<T>? _ragGenerator;
     private IEnumerable<IQueryProcessor>? _queryProcessors;
     private IMetaLearner<T, TInput, TOutput>? _metaLearner;
+    private IDistributedTrainingConfiguration<T>? _distributedTrainingConfiguration;
 
     /// <summary>
     /// Configures which features (input variables) should be used in the model.
@@ -266,6 +267,23 @@ public class PredictionModelBuilder<T, TInput, TOutput> : IPredictionModelBuilde
         var outlierRemoval = _outlierRemoval ?? new NoOutlierRemoval<T, TInput, TOutput>();
         var dataPreprocessor = _dataPreprocessor ?? new DefaultDataPreprocessor<T, TInput, TOutput>(normalizer, featureSelector, outlierRemoval);
 
+        // Wrap model and optimizer for distributed training if configured
+        IFullModel<T, TInput, TOutput> model = _model;
+        IOptimizer<T, TInput, TOutput> finalOptimizer = optimizer;
+
+        if (_distributedTrainingConfiguration != null && _distributedTrainingConfiguration.IsEnabled)
+        {
+            // Wrap model with ShardedModel
+            model = new DistributedTraining.ShardedModel<T, TInput, TOutput>(
+                _model,
+                _distributedTrainingConfiguration.ShardingConfiguration);
+
+            // Wrap optimizer with ShardedOptimizer
+            finalOptimizer = new DistributedTraining.ShardedOptimizer<T, TInput, TOutput>(
+                optimizer,
+                _distributedTrainingConfiguration.ShardingConfiguration);
+        }
+
         // Preprocess the data
         var (preprocessedX, preprocessedY, normInfo) = dataPreprocessor.PreprocessData(x, y);
 
@@ -273,7 +291,7 @@ public class PredictionModelBuilder<T, TInput, TOutput> : IPredictionModelBuilde
         var (XTrain, yTrain, XVal, yVal, XTest, yTest) = dataPreprocessor.SplitData(preprocessedX, preprocessedY);
 
         // Optimize the model
-        var optimizationResult = optimizer.Optimize(OptimizerHelper<T, TInput, TOutput>.CreateOptimizationInputData(XTrain, yTrain, XVal, yVal, XTest, yTest));
+        var optimizationResult = finalOptimizer.Optimize(OptimizerHelper<T, TInput, TOutput>.CreateOptimizationInputData(XTrain, yTrain, XVal, yVal, XTest, yTest));
 
         return new PredictionModelResult<T, TInput, TOutput>(
             optimizationResult,
@@ -473,6 +491,35 @@ public class PredictionModelBuilder<T, TInput, TOutput> : IPredictionModelBuilde
     public IPredictionModelBuilder<T, TInput, TOutput> ConfigureMetaLearning(IMetaLearner<T, TInput, TOutput> metaLearner)
     {
         _metaLearner = metaLearner;
+        return this;
+    }
+
+    /// <summary>
+    /// Configures distributed training for the model and optimizer.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// When distributed training is configured, the Build() method will automatically wrap
+    /// the model and optimizer with ShardedModel and ShardedOptimizer respectively.
+    /// This enables training across multiple GPUs or machines with automatic parameter
+    /// sharding and gradient synchronization.
+    /// </para>
+    /// <para>
+    /// <b>For Beginners:</b> This enables distributed training across multiple GPUs or machines.
+    ///
+    /// When you configure this, the builder automatically handles all the complexity:
+    /// - Your model gets split across GPUs (parameter sharding)
+    /// - Gradients are synchronized automatically
+    /// - Training is coordinated across all processes
+    ///
+    /// You just train as normal - the distributed magic happens behind the scenes!
+    /// </para>
+    /// </remarks>
+    /// <param name="configuration">The distributed training configuration</param>
+    /// <returns>This builder instance for method chaining</returns>
+    public IPredictionModelBuilder<T, TInput, TOutput> ConfigureDistributedTraining(IDistributedTrainingConfiguration<T> configuration)
+    {
+        _distributedTrainingConfiguration = configuration;
         return this;
     }
 }

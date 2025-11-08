@@ -1,35 +1,48 @@
 using AiDotNet.LinearAlgebra;
-using AiDotNet.NumericOperations;
-using AiDotNet.Helpers;
 
 namespace AiDotNet.DistributedTraining;
 
 /// <summary>
-/// A simple in-memory implementation of distributed communication for testing and single-machine scenarios.
-/// This backend simulates multiple processes by using shared memory and locks.
+/// Provides an in-memory implementation of distributed communication for testing and single-machine scenarios.
+/// </summary>
+/// <remarks>
+/// <para>
+/// This backend simulates multiple processes by using shared memory and locks. It's perfect for testing
+/// distributed code without needing actual MPI infrastructure or multiple machines. All "processes" run
+/// within the same application instance, using static shared memory to simulate cross-process communication.
+/// </para>
+/// <para><b>For Beginners:</b> This is a "fake" distributed system that runs on a single machine.
 ///
-/// For Beginners:
-/// This is a "fake" distributed system that runs on a single machine.
 /// It's perfect for testing your distributed code without needing multiple GPUs or machines.
-/// Think of it as a practice mode - it simulates distributed behavior but everything
-/// runs in one process.
+/// Think of it as a practice mode - it simulates distributed behavior but everything runs
+/// in one process.
+///
+/// Use this when:
+/// - Testing distributed code locally
+/// - Debugging distributed training logic
+/// - Running unit tests
+/// - Learning how distributed training works
+///
+/// For production with actual multiple GPUs/machines, use an MPI-based backend instead.
 ///
 /// Example:
 /// <code>
 /// // Create a simulated distributed environment with 4 "processes"
 /// var backend = new InMemoryCommunicationBackend&lt;double&gt;(rank: 0, worldSize: 4);
-/// CommunicationManager.Initialize(backend);
-/// </code>
+/// backend.Initialize();
 ///
-/// Note: For production distributed training, you would use an MPI-based backend instead.
-/// </summary>
+/// // Now you can test distributed operations locally
+/// var data = new Vector&lt;double&gt;(new[] { 1.0, 2.0, 3.0 });
+/// backend.AllReduce(data, ReductionOperation.Sum);
+/// // data now contains the sum from all 4 simulated processes
+/// </code>
+/// </para>
+/// </remarks>
 /// <typeparam name="T">The numeric type for operations</typeparam>
-public class InMemoryCommunicationBackend<T> : ICommunicationBackend<T> where T : struct
+public class InMemoryCommunicationBackend<T> : CommunicationBackendBase<T>
 {
     private readonly int _rank;
     private readonly int _worldSize;
-    private readonly INumericOperations<T> _numOps;
-    private bool _isInitialized;
 
     // Shared state for simulating collective operations
     // In a real implementation, this would be handled by the MPI backend
@@ -38,21 +51,34 @@ public class InMemoryCommunicationBackend<T> : ICommunicationBackend<T> where T 
     private static readonly Dictionary<string, int> _barrierCounters = new();
 
     /// <inheritdoc/>
-    public int Rank => _rank;
+    public override int Rank => _rank;
 
     /// <inheritdoc/>
-    public int WorldSize => _worldSize;
-
-    /// <inheritdoc/>
-    public bool IsInitialized => _isInitialized;
+    public override int WorldSize => _worldSize;
 
     /// <summary>
     /// Creates a new in-memory communication backend.
-    ///
-    /// For Beginners:
-    /// You create one of these for each simulated "process". If you want to simulate
-    /// 4 GPUs, you create 4 instances with ranks 0, 1, 2, 3, all with worldSize=4.
     /// </summary>
+    /// <remarks>
+    /// <para>
+    /// You create one of these for each simulated "process". If you want to simulate 4 GPUs,
+    /// you create 4 instances with ranks 0, 1, 2, 3, all with worldSize=4.
+    /// </para>
+    /// <para><b>For Beginners:</b> This creates one simulated process in your fake distributed system.
+    ///
+    /// Parameters:
+    /// - rank: The ID of this process (0-based). Each process needs a unique rank.
+    /// - worldSize: How many processes total are in your simulated system.
+    ///
+    /// Example: To simulate 4 GPUs, create 4 backends:
+    /// <code>
+    /// var process0 = new InMemoryCommunicationBackend&lt;double&gt;(rank: 0, worldSize: 4);
+    /// var process1 = new InMemoryCommunicationBackend&lt;double&gt;(rank: 1, worldSize: 4);
+    /// var process2 = new InMemoryCommunicationBackend&lt;double&gt;(rank: 2, worldSize: 4);
+    /// var process3 = new InMemoryCommunicationBackend&lt;double&gt;(rank: 3, worldSize: 4);
+    /// </code>
+    /// </para>
+    /// </remarks>
     /// <param name="rank">The rank (ID) of this simulated process (0-based)</param>
     /// <param name="worldSize">The total number of simulated processes</param>
     /// <exception cref="ArgumentException">Thrown if rank or worldSize are invalid</exception>
@@ -61,55 +87,34 @@ public class InMemoryCommunicationBackend<T> : ICommunicationBackend<T> where T 
         if (rank < 0 || rank >= worldSize)
         {
             throw new ArgumentException(
-                $"Invalid rank {rank}. Must be between 0 and {worldSize - 1}.");
+                $"Invalid rank {rank}. Must be between 0 and {worldSize - 1}.",
+                nameof(rank));
         }
 
         if (worldSize <= 0)
         {
             throw new ArgumentException(
-                $"Invalid worldSize {worldSize}. Must be positive.");
+                $"Invalid worldSize {worldSize}. Must be positive.",
+                nameof(worldSize));
         }
 
         _rank = rank;
         _worldSize = worldSize;
-        _numOps = MathHelper.GetNumericOperations<T>();
-        _isInitialized = false;
     }
 
     /// <inheritdoc/>
-    public void Initialize()
+    protected override void OnShutdown()
     {
         lock (_globalLock)
         {
-            if (_isInitialized)
-            {
-                return;
-            }
-
-            _isInitialized = true;
-        }
-    }
-
-    /// <inheritdoc/>
-    public void Shutdown()
-    {
-        lock (_globalLock)
-        {
-            if (!_isInitialized)
-            {
-                return;
-            }
-
             // Clear any remaining shared state
             _sharedBuffers.Clear();
             _barrierCounters.Clear();
-
-            _isInitialized = false;
         }
     }
 
     /// <inheritdoc/>
-    public void Barrier()
+    public override void Barrier()
     {
         EnsureInitialized();
 
@@ -141,7 +146,7 @@ public class InMemoryCommunicationBackend<T> : ICommunicationBackend<T> where T 
     }
 
     /// <inheritdoc/>
-    public void AllReduce(Vector<T> data, ReductionOperation operation)
+    public override void AllReduce(Vector<T> data, ReductionOperation operation)
     {
         EnsureInitialized();
 
@@ -200,7 +205,7 @@ public class InMemoryCommunicationBackend<T> : ICommunicationBackend<T> where T 
     }
 
     /// <inheritdoc/>
-    public Vector<T> AllGather(Vector<T> sendData)
+    public override Vector<T> AllGather(Vector<T> sendData)
     {
         EnsureInitialized();
 
@@ -265,7 +270,7 @@ public class InMemoryCommunicationBackend<T> : ICommunicationBackend<T> where T 
     }
 
     /// <inheritdoc/>
-    public Vector<T> Broadcast(Vector<T> data, int root = 0)
+    public override Vector<T> Broadcast(Vector<T> data, int root = 0)
     {
         EnsureInitialized();
 
@@ -318,7 +323,7 @@ public class InMemoryCommunicationBackend<T> : ICommunicationBackend<T> where T 
     }
 
     /// <inheritdoc/>
-    public Vector<T> Scatter(Vector<T> sendData, int root = 0)
+    public override Vector<T> Scatter(Vector<T> sendData, int root = 0)
     {
         EnsureInitialized();
 
@@ -384,7 +389,7 @@ public class InMemoryCommunicationBackend<T> : ICommunicationBackend<T> where T 
     }
 
     /// <inheritdoc/>
-    public Vector<T> ReduceScatter(Vector<T> data, ReductionOperation operation)
+    public override Vector<T> ReduceScatter(Vector<T> data, ReductionOperation operation)
     {
         EnsureInitialized();
 
@@ -439,46 +444,19 @@ public class InMemoryCommunicationBackend<T> : ICommunicationBackend<T> where T 
 
             for (int j = 1; j < vectors.Count; j++)
             {
-                value = ApplyOperation(value, vectors[j][i], operation);
+                value = ApplyReductionOperation(value, vectors[j][i], operation);
             }
 
             // Apply averaging if needed
             if (operation == ReductionOperation.Average)
             {
-                var count = _numOps.FromDouble(vectors.Count);
-                value = _numOps.Divide(value, count);
+                var count = NumOps.FromDouble(vectors.Count);
+                value = NumOps.Divide(value, count);
             }
 
             result[i] = value;
         }
 
         return new Vector<T>(result);
-    }
-
-    /// <summary>
-    /// Applies the reduction operation to two values.
-    /// </summary>
-    private T ApplyOperation(T a, T b, ReductionOperation operation)
-    {
-        return operation switch
-        {
-            ReductionOperation.Sum or ReductionOperation.Average => _numOps.Add(a, b),
-            ReductionOperation.Product => _numOps.Multiply(a, b),
-            ReductionOperation.Min => _numOps.LessThan(a, b) ? a : b,
-            ReductionOperation.Max => _numOps.GreaterThan(a, b) ? a : b,
-            _ => throw new NotSupportedException($"Operation {operation} is not supported.")
-        };
-    }
-
-    /// <summary>
-    /// Ensures the backend is initialized before operations.
-    /// </summary>
-    private void EnsureInitialized()
-    {
-        if (!_isInitialized)
-        {
-            throw new InvalidOperationException(
-                "Communication backend is not initialized. Call Initialize() first.");
-        }
     }
 }

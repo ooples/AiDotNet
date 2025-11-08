@@ -4,13 +4,17 @@ namespace AiDotNet.DistributedTraining;
 
 /// <summary>
 /// Central manager for distributed communication operations.
+/// </summary>
+/// <remarks>
+/// <para>
 /// Provides a static API for collective communication in distributed training scenarios.
-///
-/// For Beginners:
+/// </para>
+/// <para><b>For Beginners:</b>
 /// This is your main entry point for distributed training communication.
 /// It's a "wrapper" that makes it easy to communicate between different processes/GPUs
 /// without worrying about the underlying implementation details.
-///
+/// </para>
+/// <para>
 /// Example usage:
 /// <code>
 /// // Initialize communication (do this once at startup)
@@ -28,7 +32,8 @@ namespace AiDotNet.DistributedTraining;
 /// // Clean up when done
 /// CommunicationManager.Shutdown();
 /// </code>
-/// </summary>
+/// </para>
+/// </remarks>
 public static class CommunicationManager
 {
     private static readonly object _lock = new object();
@@ -52,19 +57,23 @@ public static class CommunicationManager
 
     /// <summary>
     /// Initializes the communication manager with the specified backend.
+    /// </summary>
+    /// <remarks>
+    /// <para>
     /// This must be called before any other operations.
-    ///
-    /// For Beginners:
+    /// </para>
+    /// <para><b>For Beginners:</b>
     /// This sets up the communication system. You need to provide a "backend"
     /// which is the actual implementation that does the communication.
     /// For testing, use InMemoryCommunicationBackend. For real distributed training,
     /// you would use an MPI backend.
-    /// </summary>
+    /// </para>
+    /// </remarks>
     /// <typeparam name="T">The numeric type (float or double)</typeparam>
     /// <param name="backend">The communication backend to use</param>
     /// <exception cref="ArgumentNullException">Thrown if backend is null</exception>
     /// <exception cref="InvalidOperationException">Thrown if already initialized</exception>
-    public static void Initialize<T>(ICommunicationBackend<T> backend) where T : struct
+    public static void Initialize<T>(ICommunicationBackend<T> backend)
     {
         if (backend == null)
         {
@@ -104,12 +113,16 @@ public static class CommunicationManager
 
     /// <summary>
     /// Shuts down the communication manager and releases all resources.
+    /// </summary>
+    /// <remarks>
+    /// <para>
     /// Should be called when distributed training is complete.
-    ///
-    /// For Beginners:
+    /// </para>
+    /// <para><b>For Beginners:</b>
     /// This is cleanup - call it when you're done with distributed training
     /// to free up resources and properly close connections.
-    /// </summary>
+    /// </para>
+    /// </remarks>
     public static void Shutdown()
     {
         lock (_lock)
@@ -130,15 +143,17 @@ public static class CommunicationManager
 
     /// <summary>
     /// Gets the rank (ID) of the current process.
-    ///
-    /// For Beginners:
+    /// </summary>
+    /// <remarks>
+    /// <para><b>For Beginners:</b>
     /// This tells you which process you are. If you're running on 4 GPUs,
     /// one will be rank 0, one will be rank 1, etc.
-    /// </summary>
+    /// </para>
+    /// </remarks>
     /// <typeparam name="T">The numeric type</typeparam>
     /// <returns>The rank of the current process (0-based index)</returns>
     /// <exception cref="InvalidOperationException">Thrown if not initialized</exception>
-    public static int GetRank<T>() where T : struct
+    public static int GetRank<T>()
     {
         var backend = GetBackend<T>();
         return backend.Rank;
@@ -146,14 +161,16 @@ public static class CommunicationManager
 
     /// <summary>
     /// Gets the total number of processes in the distributed group.
-    ///
-    /// For Beginners:
-    /// This tells you how many processes (or GPUs) are working together total.
     /// </summary>
+    /// <remarks>
+    /// <para><b>For Beginners:</b>
+    /// This tells you how many processes (or GPUs) are working together total.
+    /// </para>
+    /// </remarks>
     /// <typeparam name="T">The numeric type</typeparam>
     /// <returns>The total number of processes</returns>
     /// <exception cref="InvalidOperationException">Thrown if not initialized</exception>
-    public static int GetWorldSize<T>() where T : struct
+    public static int GetWorldSize<T>()
     {
         var backend = GetBackend<T>();
         return backend.WorldSize;
@@ -161,15 +178,17 @@ public static class CommunicationManager
 
     /// <summary>
     /// Blocks until all processes reach this synchronization point.
-    ///
-    /// For Beginners:
+    /// </summary>
+    /// <remarks>
+    /// <para><b>For Beginners:</b>
     /// This is a "wait for everyone" checkpoint. All processes must reach
     /// this point before any can continue. Useful for making sure everyone
     /// is ready before starting the next step.
-    /// </summary>
+    /// </para>
+    /// </remarks>
     /// <typeparam name="T">The numeric type</typeparam>
     /// <exception cref="InvalidOperationException">Thrown if not initialized</exception>
-    public static void Barrier<T>() where T : struct
+    public static void Barrier<T>()
     {
         var backend = GetBackend<T>();
         backend.Barrier();
@@ -178,18 +197,20 @@ public static class CommunicationManager
     /// <summary>
     /// Performs an AllReduce operation - combines data from all processes and
     /// distributes the result to all processes.
-    ///
-    /// For Beginners:
+    /// </summary>
+    /// <remarks>
+    /// <para><b>For Beginners:</b>
     /// This is the key operation for distributed training. It combines values
     /// from all processes (like adding gradients from all GPUs) and gives
     /// everyone the result. After this, everyone has the same combined data.
-    /// </summary>
+    /// </para>
+    /// </remarks>
     /// <typeparam name="T">The numeric type</typeparam>
     /// <param name="data">The data to reduce (will be modified to contain the result)</param>
     /// <param name="operation">How to combine the data (Sum, Average, Max, etc.)</param>
     /// <exception cref="InvalidOperationException">Thrown if not initialized</exception>
     /// <exception cref="ArgumentNullException">Thrown if data is null</exception>
-    public static void AllReduce<T>(Vector<T> data, ReductionOperation operation) where T : struct
+    public static void AllReduce<T>(Vector<T> data, ReductionOperation operation)
     {
         if (data == null)
         {
@@ -202,18 +223,20 @@ public static class CommunicationManager
 
     /// <summary>
     /// Gathers data from all processes and returns the concatenated result.
-    ///
-    /// For Beginners:
+    /// </summary>
+    /// <remarks>
+    /// <para><b>For Beginners:</b>
     /// This collects data from all processes and combines it into one big array.
     /// Everyone gets the full combined result. Useful when you need to see
     /// all the pieces together (like reconstructing full parameters from shards).
-    /// </summary>
+    /// </para>
+    /// </remarks>
     /// <typeparam name="T">The numeric type</typeparam>
     /// <param name="sendData">The local data to contribute</param>
     /// <returns>The concatenated data from all processes</returns>
     /// <exception cref="InvalidOperationException">Thrown if not initialized</exception>
     /// <exception cref="ArgumentNullException">Thrown if sendData is null</exception>
-    public static Vector<T> AllGather<T>(Vector<T> sendData) where T : struct
+    public static Vector<T> AllGather<T>(Vector<T> sendData)
     {
         if (sendData == null)
         {
@@ -226,17 +249,19 @@ public static class CommunicationManager
 
     /// <summary>
     /// Broadcasts data from one process (root) to all other processes.
-    ///
-    /// For Beginners:
+    /// </summary>
+    /// <remarks>
+    /// <para><b>For Beginners:</b>
     /// One process (the root) sends data to everyone else. Everyone ends up
     /// with the same data. Useful for distributing initial parameters or settings.
-    /// </summary>
+    /// </para>
+    /// </remarks>
     /// <typeparam name="T">The numeric type</typeparam>
     /// <param name="data">The data to broadcast (only meaningful on root)</param>
     /// <param name="root">Which process is broadcasting (default: 0)</param>
     /// <returns>The broadcast data</returns>
     /// <exception cref="InvalidOperationException">Thrown if not initialized</exception>
-    public static Vector<T> Broadcast<T>(Vector<T> data, int root = 0) where T : struct
+    public static Vector<T> Broadcast<T>(Vector<T> data, int root = 0)
     {
         var backend = GetBackend<T>();
         return backend.Broadcast(data, root);
@@ -244,17 +269,19 @@ public static class CommunicationManager
 
     /// <summary>
     /// Scatters different chunks of data from root to each process.
-    ///
-    /// For Beginners:
+    /// </summary>
+    /// <remarks>
+    /// <para><b>For Beginners:</b>
     /// The root process splits data into chunks and gives each process
     /// a different chunk. This is how we distribute work across processes.
-    /// </summary>
+    /// </para>
+    /// </remarks>
     /// <typeparam name="T">The numeric type</typeparam>
     /// <param name="sendData">The data to scatter (only used on root)</param>
     /// <param name="root">Which process is scattering (default: 0)</param>
     /// <returns>The chunk received by this process</returns>
     /// <exception cref="InvalidOperationException">Thrown if not initialized</exception>
-    public static Vector<T> Scatter<T>(Vector<T> sendData, int root = 0) where T : struct
+    public static Vector<T> Scatter<T>(Vector<T> sendData, int root = 0)
     {
         var backend = GetBackend<T>();
         return backend.Scatter(sendData, root);
@@ -262,18 +289,20 @@ public static class CommunicationManager
 
     /// <summary>
     /// Performs a reduce-scatter operation - combines data and distributes chunks.
-    ///
-    /// For Beginners:
+    /// </summary>
+    /// <remarks>
+    /// <para><b>For Beginners:</b>
     /// This is a combined operation that's more efficient than doing
     /// AllReduce followed by Scatter. It reduces the data and immediately
     /// gives each process only their chunk of the result.
-    /// </summary>
+    /// </para>
+    /// </remarks>
     /// <typeparam name="T">The numeric type</typeparam>
     /// <param name="data">The data to reduce and scatter</param>
     /// <param name="operation">How to combine the data</param>
     /// <returns>The reduced chunk for this process</returns>
     /// <exception cref="InvalidOperationException">Thrown if not initialized</exception>
-    public static Vector<T> ReduceScatter<T>(Vector<T> data, ReductionOperation operation) where T : struct
+    public static Vector<T> ReduceScatter<T>(Vector<T> data, ReductionOperation operation)
     {
         var backend = GetBackend<T>();
         return backend.ReduceScatter(data, operation);
@@ -282,7 +311,7 @@ public static class CommunicationManager
     /// <summary>
     /// Gets the appropriate backend for the specified type.
     /// </summary>
-    private static ICommunicationBackend<T> GetBackend<T>() where T : struct
+    private static ICommunicationBackend<T> GetBackend<T>()
     {
         lock (_lock)
         {

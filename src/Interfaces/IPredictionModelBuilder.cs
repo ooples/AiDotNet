@@ -399,6 +399,57 @@ public interface IPredictionModelBuilder<T, TInput, TOutput>
     IPredictionModelBuilder<T, TInput, TOutput> ConfigureMetaLearning(IMetaLearner<T, TInput, TOutput> metaLearner);
 
     /// <summary>
+    /// Configures distributed training to enable training across multiple GPUs or machines.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// When distributed training is configured, the builder automatically wraps the model and optimizer
+    /// with their distributed counterparts (ShardedModel and ShardedOptimizer). This enables:
+    /// - Training models too large to fit on a single GPU
+    /// - Faster training by distributing work across multiple processes
+    /// - Automatic gradient synchronization and parameter sharding
+    /// </para>
+    /// <para><b>For Beginners:</b> This enables your model to train across multiple GPUs or computers.
+    ///
+    /// When you configure this, the framework automatically:
+    /// - Splits your model parameters across GPUs
+    /// - Coordinates training across all processes
+    /// - Synchronizes gradients so all GPUs learn together
+    ///
+    /// You train your model exactly the same way - the distributed magic happens automatically!
+    ///
+    /// Example:
+    /// <code>
+    /// // Create communication backend (defines how GPUs talk to each other)
+    /// var backend = new InMemoryCommunicationBackend&lt;double&gt;(rank: 0, worldSize: 4);
+    /// var distributedConfig = new DistributedTrainingConfiguration&lt;double&gt;(backend);
+    ///
+    /// // Build with distributed training
+    /// var result = new PredictionModelBuilder&lt;double, Matrix&lt;double&gt;, Vector&lt;double&gt;&gt;()
+    ///     .ConfigureModel(myModel)
+    ///     .ConfigureOptimizer(myOptimizer)
+    ///     .ConfigureDistributedTraining(distributedConfig)  // Enable distributed training!
+    ///     .Build(xTrain, yTrain);
+    ///
+    /// // Model now trains across 4 GPUs automatically!
+    /// </code>
+    ///
+    /// Use this when:
+    /// - Your model is too large for one GPU
+    /// - You want faster training with multiple GPUs
+    /// - You have access to multiple machines or GPUs
+    ///
+    /// Don't use this when:
+    /// - Your model fits comfortably on one GPU
+    /// - You only have one GPU
+    /// - The communication overhead would outweigh the benefits
+    /// </para>
+    /// </remarks>
+    /// <param name="configuration">The distributed training configuration</param>
+    /// <returns>The builder instance for method chaining.</returns>
+    IPredictionModelBuilder<T, TInput, TOutput> ConfigureDistributedTraining(IDistributedTrainingConfiguration<T> configuration);
+
+    /// <summary>
     /// Builds a meta-trained model that can quickly adapt to new tasks.
     /// </summary>
     /// <remarks>

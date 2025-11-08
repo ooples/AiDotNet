@@ -4,12 +4,14 @@ namespace AiDotNet.DistributedTraining;
 
 /// <summary>
 /// Provides extension methods for easily enabling distributed training on models and optimizers.
-///
-/// For Beginners:
+/// </summary>
+/// <remarks>
+/// <para><b>For Beginners:</b>
 /// Extension methods allow you to add new functionality to existing classes without modifying them.
 /// These extensions add a simple .AsDistributed() method to models and optimizers,
 /// making it incredibly easy to enable distributed training with just one line of code!
-///
+/// </para>
+/// <para>
 /// Example:
 /// <code>
 /// // Original model
@@ -21,26 +23,31 @@ namespace AiDotNet.DistributedTraining;
 /// // That's it! Now train as usual
 /// distributedModel.Train(inputs, outputs);
 /// </code>
-/// </summary>
+/// </para>
+/// </remarks>
 public static class DistributedExtensions
 {
     /// <summary>
     /// Wraps a model with distributed training capabilities using the specified communication backend.
-    ///
-    /// For Beginners:
+    /// </summary>
+    /// <remarks>
+    /// <para><b>For Beginners:</b>
     /// This is the "magic" method that makes any model distributed. Just call:
     /// myModel.AsDistributed(backend)
-    ///
+    /// </para>
+    /// <para>
     /// What it does:
     /// 1. Creates a configuration for distributed training
     /// 2. Wraps your model in a ShardedModel
     /// 3. Returns the distributed version of your model
-    ///
+    /// </para>
+    /// <para>
     /// The distributed model works exactly like the original, but automatically:
     /// - Shards parameters across processes
     /// - Synchronizes gradients during training
     /// - Coordinates with other processes
-    /// </summary>
+    /// </para>
+    /// </remarks>
     /// <typeparam name="T">The numeric type</typeparam>
     /// <typeparam name="TInput">The input type for the model</typeparam>
     /// <typeparam name="TOutput">The output type for the model</typeparam>
@@ -51,7 +58,6 @@ public static class DistributedExtensions
     public static IShardedModel<T, TInput, TOutput> AsDistributed<T, TInput, TOutput>(
         this IFullModel<T, TInput, TOutput> model,
         ICommunicationBackend<T> communicationBackend)
-        where T : struct
     {
         if (model == null)
         {
@@ -71,11 +77,13 @@ public static class DistributedExtensions
 
     /// <summary>
     /// Wraps a model with distributed training capabilities using a custom configuration.
-    ///
-    /// For Beginners:
+    /// </summary>
+    /// <remarks>
+    /// <para><b>For Beginners:</b>
     /// This is the same as the basic AsDistributed(), but lets you customize settings.
     /// Use this when you need more control over how distributed training works.
-    ///
+    /// </para>
+    /// <para>
     /// Example:
     /// <code>
     /// var config = new ShardingConfiguration&lt;double&gt;(backend)
@@ -86,7 +94,8 @@ public static class DistributedExtensions
     /// };
     /// var distributedModel = myModel.AsDistributed(config);
     /// </code>
-    /// </summary>
+    /// </para>
+    /// </remarks>
     /// <typeparam name="T">The numeric type</typeparam>
     /// <typeparam name="TInput">The input type for the model</typeparam>
     /// <typeparam name="TOutput">The output type for the model</typeparam>
@@ -97,7 +106,6 @@ public static class DistributedExtensions
     public static IShardedModel<T, TInput, TOutput> AsDistributed<T, TInput, TOutput>(
         this IFullModel<T, TInput, TOutput> model,
         IShardingConfiguration<T> configuration)
-        where T : struct
     {
         if (model == null)
         {
@@ -114,19 +122,23 @@ public static class DistributedExtensions
 
     /// <summary>
     /// Wraps an optimizer with distributed training capabilities.
-    ///
-    /// For Beginners:
+    /// </summary>
+    /// <remarks>
+    /// <para><b>For Beginners:</b>
     /// Just like models, optimizers can be made distributed with one line:
     /// myOptimizer.AsDistributed(backend)
-    ///
+    /// </para>
+    /// <para>
     /// What it does:
     /// 1. Creates a configuration for distributed training
     /// 2. Wraps your optimizer in a ShardedOptimizer
     /// 3. Returns the distributed version
-    ///
+    /// </para>
+    /// <para>
     /// The distributed optimizer coordinates optimization across all processes,
     /// ensuring they stay synchronized.
-    /// </summary>
+    /// </para>
+    /// </remarks>
     /// <typeparam name="T">The numeric type</typeparam>
     /// <typeparam name="TInput">The input type for the model</typeparam>
     /// <typeparam name="TOutput">The output type for the model</typeparam>
@@ -137,7 +149,6 @@ public static class DistributedExtensions
     public static IShardedOptimizer<T, TInput, TOutput> AsDistributed<T, TInput, TOutput>(
         this IOptimizer<T, TInput, TOutput> optimizer,
         ICommunicationBackend<T> communicationBackend)
-        where T : struct
     {
         if (optimizer == null)
         {
@@ -157,16 +168,19 @@ public static class DistributedExtensions
 
     /// <summary>
     /// Wraps an optimizer with distributed training capabilities using a custom configuration.
-    ///
-    /// For Beginners:
+    /// </summary>
+    /// <remarks>
+    /// <para><b>For Beginners:</b>
     /// Same as the basic AsDistributed() for optimizers, but with custom settings.
-    ///
+    /// </para>
+    /// <para>
     /// Example:
     /// <code>
     /// var config = ShardingConfiguration&lt;double&gt;.CreateForLowBandwidth(backend);
     /// var distributedOptimizer = myOptimizer.AsDistributed(config);
     /// </code>
-    /// </summary>
+    /// </para>
+    /// </remarks>
     /// <typeparam name="T">The numeric type</typeparam>
     /// <typeparam name="TInput">The input type for the model</typeparam>
     /// <typeparam name="TOutput">The output type for the model</typeparam>
@@ -177,7 +191,6 @@ public static class DistributedExtensions
     public static IShardedOptimizer<T, TInput, TOutput> AsDistributed<T, TInput, TOutput>(
         this IOptimizer<T, TInput, TOutput> optimizer,
         IShardingConfiguration<T> configuration)
-        where T : struct
     {
         if (optimizer == null)
         {
@@ -194,11 +207,13 @@ public static class DistributedExtensions
 
     /// <summary>
     /// Creates a distributed model with optimized settings for high-bandwidth networks.
-    ///
-    /// For Beginners:
+    /// </summary>
+    /// <remarks>
+    /// <para><b>For Beginners:</b>
     /// Use this when your GPUs are connected with fast connections (like NVLink).
     /// It automatically configures settings optimized for high-speed networks.
-    /// </summary>
+    /// </para>
+    /// </remarks>
     /// <typeparam name="T">The numeric type</typeparam>
     /// <typeparam name="TInput">The input type for the model</typeparam>
     /// <typeparam name="TOutput">The output type for the model</typeparam>
@@ -208,7 +223,6 @@ public static class DistributedExtensions
     public static IShardedModel<T, TInput, TOutput> AsDistributedForHighBandwidth<T, TInput, TOutput>(
         this IFullModel<T, TInput, TOutput> model,
         ICommunicationBackend<T> communicationBackend)
-        where T : struct
     {
         var config = ShardingConfiguration<T>.CreateForHighBandwidth(communicationBackend);
         return model.AsDistributed(config);
@@ -216,11 +230,13 @@ public static class DistributedExtensions
 
     /// <summary>
     /// Creates a distributed model with optimized settings for low-bandwidth networks.
-    ///
-    /// For Beginners:
+    /// </summary>
+    /// <remarks>
+    /// <para><b>For Beginners:</b>
     /// Use this when your machines are connected over slower networks (like ethernet).
     /// It automatically configures settings to minimize network traffic.
-    /// </summary>
+    /// </para>
+    /// </remarks>
     /// <typeparam name="T">The numeric type</typeparam>
     /// <typeparam name="TInput">The input type for the model</typeparam>
     /// <typeparam name="TOutput">The output type for the model</typeparam>
@@ -230,7 +246,6 @@ public static class DistributedExtensions
     public static IShardedModel<T, TInput, TOutput> AsDistributedForLowBandwidth<T, TInput, TOutput>(
         this IFullModel<T, TInput, TOutput> model,
         ICommunicationBackend<T> communicationBackend)
-        where T : struct
     {
         var config = ShardingConfiguration<T>.CreateForLowBandwidth(communicationBackend);
         return model.AsDistributed(config);

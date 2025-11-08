@@ -5,33 +5,39 @@ namespace AiDotNet.DistributedTraining;
 
 /// <summary>
 /// Analyzes model parameters and creates optimized groupings for distributed communication.
-///
-/// For Beginners:
+/// </summary>
+/// <remarks>
+/// <para><b>For Beginners:</b>
 /// Think of ParameterAnalyzer as a smart packing assistant. When shipping items, you don't
 /// want to send thousands of tiny packages - it's inefficient! Instead, you group small
 /// items together into larger boxes.
-///
+/// </para>
+/// <para>
 /// Similarly, when communicating parameters across GPUs:
 /// - Sending many small parameter arrays is slow (lots of communication overhead)
 /// - Grouping small parameters together reduces the number of messages
 /// - This analyzer figures out the best way to group parameters for efficiency
-///
+/// </para>
+/// <para>
 /// For example, instead of sending 1000 separate bias vectors (each with 1 parameter),
 /// we might group them into 10 larger chunks (each with 100 parameters).
-/// </summary>
+/// </para>
+/// </remarks>
 /// <typeparam name="T">The numeric type</typeparam>
-public class ParameterAnalyzer<T> where T : struct
+public class ParameterAnalyzer<T>
 {
     private readonly int _minimumGroupSize;
     private readonly int _worldSize;
 
     /// <summary>
     /// Represents a group of parameters that should be communicated together.
-    ///
-    /// For Beginners:
+    /// </summary>
+    /// <remarks>
+    /// <para><b>For Beginners:</b>
     /// This is like a shipping box that contains multiple items. Each ParameterGroup
     /// represents a chunk of parameters that will be sent together in one communication.
-    /// </summary>
+    /// </para>
+    /// </remarks>
     public class ParameterGroup
     {
         /// <summary>
@@ -51,23 +57,27 @@ public class ParameterAnalyzer<T> where T : struct
 
         /// <summary>
         /// Indicates whether this group was created by merging smaller groups.
-        ///
-        /// For Beginners:
+        /// </summary>
+        /// <remarks>
+        /// <para><b>For Beginners:</b>
         /// True if this group contains multiple small parameter arrays that were
         /// combined for efficiency. False if it represents a single large parameter array.
-        /// </summary>
+        /// </para>
+        /// </remarks>
         public bool IsMerged { get; set; }
     }
 
     /// <summary>
     /// Creates a new parameter analyzer with the specified settings.
-    ///
-    /// For Beginners:
+    /// </summary>
+    /// <remarks>
+    /// <para><b>For Beginners:</b>
     /// This creates the analyzer that will figure out how to group parameters.
     /// You tell it:
     /// - minimumGroupSize: The smallest acceptable group size (smaller groups get merged)
     /// - worldSize: How many processes are sharing the work (affects optimal group sizes)
-    /// </summary>
+    /// </para>
+    /// </remarks>
     /// <param name="minimumGroupSize">Minimum size for a parameter group (smaller groups will be merged)</param>
     /// <param name="worldSize">Number of processes in the distributed group</param>
     public ParameterAnalyzer(int minimumGroupSize = 1024, int worldSize = 1)
@@ -88,17 +98,20 @@ public class ParameterAnalyzer<T> where T : struct
 
     /// <summary>
     /// Analyzes a model's parameters and creates optimized groupings.
-    ///
-    /// For Beginners:
+    /// </summary>
+    /// <remarks>
+    /// <para><b>For Beginners:</b>
     /// This method looks at all the parameters in your model and decides how to
     /// group them for efficient communication. It returns a list of ParameterGroups,
     /// each representing parameters that should be sent together.
-    ///
+    /// </para>
+    /// <para>
     /// The analyzer:
     /// 1. Identifies natural parameter boundaries (e.g., weights vs biases)
     /// 2. Merges small groups that are below the minimum size
     /// 3. Ensures groups are aligned with process boundaries for even distribution
-    /// </summary>
+    /// </para>
+    /// </remarks>
     /// <typeparam name="TInput">The input type of the model</typeparam>
     /// <typeparam name="TOutput">The output type of the model</typeparam>
     /// <param name="model">The model to analyze</param>
@@ -116,16 +129,19 @@ public class ParameterAnalyzer<T> where T : struct
 
     /// <summary>
     /// Analyzes a parameter vector and creates optimized groupings.
-    ///
-    /// For Beginners:
+    /// </summary>
+    /// <remarks>
+    /// <para><b>For Beginners:</b>
     /// This is the core analysis method. It takes a long list of parameters
     /// and intelligently groups them for efficient communication.
-    ///
+    /// </para>
+    /// <para>
     /// Strategy:
     /// 1. Start with natural boundaries (we assume every N parameters belong together)
     /// 2. Merge groups that are too small
     /// 3. Align group boundaries to make distribution across processes easier
-    /// </summary>
+    /// </para>
+    /// </remarks>
     /// <param name="parameters">The parameter vector to analyze</param>
     /// <returns>A list of optimized parameter groups</returns>
     public List<ParameterGroup> AnalyzeParameters(Vector<T> parameters)
@@ -183,15 +199,18 @@ public class ParameterAnalyzer<T> where T : struct
 
     /// <summary>
     /// Analyzes parameters and creates groups optimized for even distribution across processes.
-    ///
-    /// For Beginners:
+    /// </summary>
+    /// <remarks>
+    /// <para><b>For Beginners:</b>
     /// When distributing work across multiple processes, we want each process to get
     /// roughly the same amount of work. This method creates groups that divide evenly.
-    ///
+    /// </para>
+    /// <para>
     /// For example, if you have 10,000 parameters and 4 processes:
     /// - Each process should get ~2,500 parameters
     /// - We create groups sized to divide evenly by 4
-    /// </summary>
+    /// </para>
+    /// </remarks>
     /// <param name="parameters">The parameter vector to analyze</param>
     /// <returns>A list of parameter groups optimized for distribution</returns>
     public List<ParameterGroup> AnalyzeForDistribution(Vector<T> parameters)
@@ -254,11 +273,13 @@ public class ParameterAnalyzer<T> where T : struct
 
     /// <summary>
     /// Calculates statistics about parameter distribution for a model.
-    ///
-    /// For Beginners:
+    /// </summary>
+    /// <remarks>
+    /// <para><b>For Beginners:</b>
     /// This gives you information about how parameters would be distributed,
     /// helping you understand the efficiency of the grouping strategy.
-    /// </summary>
+    /// </para>
+    /// </remarks>
     /// <param name="groups">The parameter groups to analyze</param>
     /// <returns>A dictionary of statistics (e.g., "TotalGroups", "AverageGroupSize")</returns>
     public Dictionary<string, double> CalculateDistributionStats(List<ParameterGroup> groups)
@@ -290,13 +311,15 @@ public class ParameterAnalyzer<T> where T : struct
 
     /// <summary>
     /// Validates that parameter groups cover all parameters without gaps or overlaps.
-    ///
-    /// For Beginners:
+    /// </summary>
+    /// <remarks>
+    /// <para><b>For Beginners:</b>
     /// This is a safety check to make sure our grouping is correct. It verifies:
     /// - Every parameter is in exactly one group
     /// - Groups don't overlap
     /// - There are no gaps between groups
-    /// </summary>
+    /// </para>
+    /// </remarks>
     /// <param name="groups">The parameter groups to validate</param>
     /// <param name="totalParameterCount">The total number of parameters</param>
     /// <returns>True if grouping is valid, false otherwise</returns>
