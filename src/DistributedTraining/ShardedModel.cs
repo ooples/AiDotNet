@@ -184,6 +184,9 @@ public class ShardedModel<T, TInput, TOutput> : IShardedModel<T, TInput, TOutput
         Array.Copy(updatedParams.ToArray(), _shardStartIndex, shardData, 0, _shardSize);
         _localParameterShard = new Vector<T>(shardData);
 
+        // Invalidate cache immediately after local shard changes
+        _cachedFullParameters = null;
+
         // Synchronize gradients if auto-sync is enabled
         if (_config.AutoSyncGradients)
         {
@@ -192,12 +195,6 @@ public class ShardedModel<T, TInput, TOutput> : IShardedModel<T, TInput, TOutput
             // Apply synchronized parameters back to the model
             fullParams = GatherFullParameters();
             _wrappedModel.SetParameters(fullParams);
-        }
-        else
-        {
-            // Invalidate cache only when not auto-syncing
-            // When auto-sync is enabled, cache remains valid after synchronization
-            _cachedFullParameters = null;
         }
     }
 
