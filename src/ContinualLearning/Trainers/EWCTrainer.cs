@@ -21,7 +21,7 @@ namespace AiDotNet.ContinualLearning.Trainers;
 /// var model = new MyNeuralNetwork();
 /// var lossFunction = new CrossEntropyLoss();
 /// var config = new ContinualLearnerConfig&lt;double&gt;();
-/// var ewcStrategy = new ElasticWeightConsolidation&lt;double, Matrix, Vector&gt;(lossFunction, lambda: 1000);
+/// var ewcStrategy = new ElasticWeightConsolidation&lt;double, Matrix, Vector&gt;(lossFunction, 1000);
 /// var trainer = new EWCTrainer(model, lossFunction, config, ewcStrategy);
 ///
 /// // Learn tasks sequentially

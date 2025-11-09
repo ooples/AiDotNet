@@ -143,7 +143,7 @@ public class GradientEpisodicMemory<T, TInput, TOutput> : IContinualLearningStra
     /// <summary>
     /// Stores examples from a task in the episodic memory.
     /// </summary>
-    public void StoreTaskExamples(IDataset<T, TInput, TOutput> taskData, int taskId)
+    public void StoreTaskExamples(IDataset<T, TInput, TOutput> taskData)
     {
         _memoryBuffer.AddTaskExamples(taskData, _memorySize);
     }
@@ -170,7 +170,7 @@ public class GradientEpisodicMemory<T, TInput, TOutput> : IContinualLearningStra
     /// <remarks>
     /// <para><b>For Implementers:</b> This solves the quadratic program:
     /// minimize: ||g' - g||^2
-    /// subject to: g' · g_k ≥ 0 for all k in violations
+    /// subject to: g' · g_k ≥ margin for all k in violations
     /// </para>
     ///
     /// <para>This can be solved using:
@@ -190,11 +190,7 @@ public class GradientEpisodicMemory<T, TInput, TOutput> : IContinualLearningStra
         // Simplified projection: average current gradient with task gradients
         // This is an approximation; the full solution requires solving a QP
 
-        var projected = new T[gradient.Length];
-        for (int i = 0; i < gradient.Length; i++)
-        {
-            projected[i] = gradient[i];
-        }
+        var projected = gradient.ToArray().Select(x => x).ToArray();
 
         // For each violated constraint, adjust the gradient
         foreach (int k in violations)
@@ -209,11 +205,11 @@ public class GradientEpisodicMemory<T, TInput, TOutput> : IContinualLearningStra
                 T normSq = ComputeDotProduct(taskGrad, taskGrad);
                 T factor = NumOps.Divide(dotProduct, normSq);
 
-                for (int i = 0; i < projected.Length; i++)
+                projected = projected.Select((value, i) =>
                 {
                     var adjustment = NumOps.Multiply(factor, taskGrad[i]);
-                    projected[i] = NumOps.Subtract(projected[i], adjustment);
-                }
+                    return NumOps.Subtract(value, adjustment);
+                }).ToArray();
             }
         }
 
