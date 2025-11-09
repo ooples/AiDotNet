@@ -1,5 +1,6 @@
 using AiDotNet.Interfaces;
 using AiDotNet.Helpers;
+using AiDotNet.LinearAlgebra;
 
 namespace AiDotNet.ModelCompression;
 
@@ -79,7 +80,7 @@ public abstract class ModelCompressionBase<T> : IModelCompressionStrategy<T>
     /// </summary>
     /// <param name="weights">The original model weights to compress.</param>
     /// <returns>A tuple containing the compressed weights and compression metadata.</returns>
-    public abstract (T[] compressedWeights, object metadata) Compress(T[] weights);
+    public abstract (Vector<T> compressedWeights, object metadata) Compress(Vector<T> weights);
 
     /// <summary>
     /// Decompresses the compressed weights back to their original form.
@@ -87,7 +88,7 @@ public abstract class ModelCompressionBase<T> : IModelCompressionStrategy<T>
     /// <param name="compressedWeights">The compressed weights.</param>
     /// <param name="metadata">The metadata needed for decompression.</param>
     /// <returns>The decompressed weights.</returns>
-    public abstract T[] Decompress(T[] compressedWeights, object metadata);
+    public abstract Vector<T> Decompress(Vector<T> compressedWeights, object metadata);
 
     /// <summary>
     /// Calculates the compression ratio achieved.
@@ -123,7 +124,7 @@ public abstract class ModelCompressionBase<T> : IModelCompressionStrategy<T>
     /// <param name="compressedWeights">The compressed weights.</param>
     /// <param name="metadata">The compression metadata.</param>
     /// <returns>The total size in bytes.</returns>
-    public abstract long GetCompressedSize(T[] compressedWeights, object metadata);
+    public abstract long GetCompressedSize(Vector<T> compressedWeights, object metadata);
 
     /// <summary>
     /// Gets the size in bytes of a value of type T.
