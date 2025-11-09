@@ -2,6 +2,7 @@ using AiDotNet.ActiveLearning.Interfaces;
 using AiDotNet.Data.Abstractions;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
+using AiDotNet.LinearAlgebra;
 
 namespace AiDotNet.ActiveLearning.QueryStrategies;
 
@@ -93,12 +94,15 @@ public class CoreSetSelection<T, TInput, TOutput> : IQueryStrategy<T, TInput, TO
     /// <inheritdoc/>
     public T[] ScoreExamples(IFullModel<T, TInput, TOutput> model, IDataset<T, TInput, TOutput> unlabeledData)
     {
-        // For core-set, scoring is based on distance to labeled set
-        // This requires access to labeled data, which isn't passed here
-        // In practice, this would be computed during SelectBatch
+        if (unlabeledData == null)
+            throw new ArgumentNullException(nameof(unlabeledData));
 
-        int numExamples = 100; // Placeholder
-        return Enumerable.Repeat(NumOps.Zero, numExamples).ToArray();
+        // For core-set, scoring is based on distance to labeled set
+        // Without labeled data context, return uniform scores
+        // SelectBatch will perform the actual distance-based selection
+
+        int numExamples = unlabeledData.Count;
+        return Enumerable.Repeat(NumOps.FromDouble(1.0), numExamples).ToArray();
     }
 
     /// <inheritdoc/>
@@ -128,25 +132,47 @@ public class CoreSetSelection<T, TInput, TOutput> : IQueryStrategy<T, TInput, TO
     /// </remarks>
     private int[] SelectKCenter(IFullModel<T, TInput, TOutput> model, IDataset<T, TInput, TOutput> unlabeledData, int k)
     {
-        // In a full implementation:
-        // 1. Extract features for all unlabeled examples
-        // 2. Maintain set of "centers" (initially = labeled examples)
-        // 3. Greedily add k examples that are farthest from current centers
+        if (unlabeledData == null)
+            throw new ArgumentNullException(nameof(unlabeledData));
 
-        // Placeholder implementation
+        int numExamples = unlabeledData.Count;
+
+        // Extract features for all unlabeled examples
+        var features = new List<Vector<T>>();
+        for (int i = 0; i < numExamples; i++)
+        {
+            var input = unlabeledData.GetInput(i);
+            var feat = ExtractFeatures(model, input);
+            features.Add(feat);
+        }
+
+        // Start with empty centers (simplified - would use labeled set in practice)
+        var centers = new List<Vector<T>>();
         var selected = new List<int>();
-        var random = new Random(42);
-
-        int numExamples = 100; // Would get from dataset
         var available = Enumerable.Range(0, numExamples).ToList();
 
-        // Simplified: select diverse examples using random sampling
-        // Real implementation would use distance-based selection
-        for (int i = 0; i < Math.Min(k, available.Count); i++)
+        // Greedy k-center: select examples farthest from current centers
+        for (int i = 0; i < Math.Min(k, numExamples); i++)
         {
-            int idx = random.Next(available.Count);
-            selected.Add(available[idx]);
-            available.RemoveAt(idx);
+            int farthestIdx = -1;
+            T maxDist = NumOps.FromDouble(double.MinValue);
+
+            foreach (int idx in available)
+            {
+                T dist = MinDistanceToCenters(features[idx], centers);
+                if (Convert.ToDouble(dist) > Convert.ToDouble(maxDist))
+                {
+                    maxDist = dist;
+                    farthestIdx = idx;
+                }
+            }
+
+            if (farthestIdx >= 0)
+            {
+                selected.Add(farthestIdx);
+                centers.Add(features[farthestIdx]);
+                available.Remove(farthestIdx);
+            }
         }
 
         return selected.ToArray();
