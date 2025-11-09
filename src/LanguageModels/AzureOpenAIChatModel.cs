@@ -212,10 +212,15 @@ public class AzureOpenAIChatModel<T> : ChatModelBase<T>
         if (!response.IsSuccessStatusCode)
         {
             var errorContent = await response.Content.ReadAsStringAsync();
+#if NET5_0_OR_GREATER
             throw new HttpRequestException(
                 $"Azure OpenAI API request failed with status {response.StatusCode}: {errorContent}",
                 null,
                 response.StatusCode);
+#else
+            throw new HttpRequestException(
+                $"Azure OpenAI API request failed with status {response.StatusCode}: {errorContent}");
+#endif
         }
 
         // Parse the response (same format as OpenAI)
@@ -227,13 +232,13 @@ public class AzureOpenAIChatModel<T> : ChatModelBase<T>
             throw new InvalidOperationException("Azure OpenAI API returned no choices in response.");
         }
 
-        var message = azureResponse.Choices[0]?.Message?.Content;
-        if (string.IsNullOrEmpty(message))
+        var choice = azureResponse.Choices[0];
+        if (choice?.Message?.Content == null || choice.Message.Content.Length == 0)
         {
             throw new InvalidOperationException("Azure OpenAI API returned empty message content.");
         }
 
-        return message;
+        return choice.Message.Content;
     }
 
     #region Azure OpenAI API Models

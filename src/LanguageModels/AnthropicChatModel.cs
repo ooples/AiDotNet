@@ -189,10 +189,15 @@ public class AnthropicChatModel<T> : ChatModelBase<T>
         if (!response.IsSuccessStatusCode)
         {
             var errorContent = await response.Content.ReadAsStringAsync();
+#if NET5_0_OR_GREATER
             throw new HttpRequestException(
                 $"Anthropic API request failed with status {response.StatusCode}: {errorContent}",
                 null,
                 response.StatusCode);
+#else
+            throw new HttpRequestException(
+                $"Anthropic API request failed with status {response.StatusCode}: {errorContent}");
+#endif
         }
 
         // Parse the response

@@ -267,6 +267,7 @@ public abstract class ChatModelBase<T> : IChatModel<T>
     /// </remarks>
     protected virtual bool IsRetryable(HttpRequestException ex)
     {
+#if NET5_0_OR_GREATER
         // Retry on network errors or server errors (5xx)
         if (ex.StatusCode == null)
         {
@@ -281,6 +282,11 @@ public abstract class ChatModelBase<T> : IChatModel<T>
         // - 500+ (Server Errors)
         // - 408 (Request Timeout)
         return statusCode == 429 || statusCode >= 500 || statusCode == 408;
+#else
+        // For .NET Framework, assume network errors are retryable
+        // since HttpRequestException doesn't expose StatusCode
+        return true;
+#endif
     }
 
     /// <summary>

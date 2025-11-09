@@ -338,7 +338,7 @@ Final answer:";
                 foreach (var step in steps)
                 {
                     var stepText = step.Value<string>();
-                    if (!string.IsNullOrWhiteSpace(stepText))
+                    if (stepText != null && stepText.Trim().Length > 0)
                     {
                         result.ReasoningSteps.Add(stepText);
                     }
@@ -353,7 +353,7 @@ Final answer:";
                     string? toolName = tool["tool_name"]?.Value<string>();
                     string? toolInput = tool["tool_input"]?.Value<string>();
 
-                    if (!string.IsNullOrWhiteSpace(toolName))
+                    if (toolName != null && toolName.Trim().Length > 0)
                     {
                         result.ToolCalls.Add(new ToolCall
                         {

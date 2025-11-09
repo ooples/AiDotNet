@@ -138,8 +138,8 @@ public class VectorSearchTool<T> : ITool
     /// </remarks>
     private (string query, int topK) ParseInput(string input)
     {
-        var parts = input.Split('|', 2, StringSplitOptions.TrimEntries);
-        var query = parts[0];
+        var parts = input.Split(new[] { '|' }, 2, StringSplitOptions.RemoveEmptyEntries);
+        var query = parts[0].Trim();
         var topK = _defaultTopK;
 
         if (parts.Length > 1)
@@ -187,9 +187,10 @@ public class VectorSearchTool<T> : ITool
                 result.AppendLine($"    Metadata: {metadata}");
             }
 
-            if (doc.Score.HasValue)
+            if (doc.HasRelevanceScore && doc.RelevanceScore != null)
             {
-                result.AppendLine($"    Relevance: {doc.Score.Value:F3}");
+                var scoreValue = Convert.ToDouble((object)doc.RelevanceScore);
+                result.AppendLine($"    Relevance: {scoreValue:F3}");
             }
 
             result.AppendLine();

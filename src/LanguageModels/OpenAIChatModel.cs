@@ -190,10 +190,15 @@ public class OpenAIChatModel<T> : ChatModelBase<T>
         if (!response.IsSuccessStatusCode)
         {
             var errorContent = await response.Content.ReadAsStringAsync();
+#if NET5_0_OR_GREATER
             throw new HttpRequestException(
                 $"OpenAI API request failed with status {response.StatusCode}: {errorContent}",
                 null,
                 response.StatusCode);
+#else
+            throw new HttpRequestException(
+                $"OpenAI API request failed with status {response.StatusCode}: {errorContent}");
+#endif
         }
 
         // Parse the response
@@ -205,13 +210,13 @@ public class OpenAIChatModel<T> : ChatModelBase<T>
             throw new InvalidOperationException("OpenAI API returned no choices in response.");
         }
 
-        var message = openAIResponse.Choices[0]?.Message?.Content;
-        if (string.IsNullOrEmpty(message))
+        var choice = openAIResponse.Choices[0];
+        if (choice?.Message?.Content == null || choice.Message.Content.Length == 0)
         {
             throw new InvalidOperationException("OpenAI API returned empty message content.");
         }
 
-        return message;
+        return choice.Message.Content;
     }
 
     /// <summary>

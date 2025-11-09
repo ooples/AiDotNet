@@ -215,7 +215,15 @@ public class PredictionModelTool<T, TInput, TOutput> : ITool
         var values = new List<string>();
         for (int i = 0; i < Math.Min(vector.Length, 10); i++)
         {
-            values.Add(vector[i].ToString() ?? "null");
+            string? valueStr = vector[i]?.ToString();
+            if (valueStr != null)
+            {
+                values.Add(valueStr);
+            }
+            else
+            {
+                values.Add("0");
+            }
         }
 
         if (vector.Length > 10)
@@ -242,7 +250,15 @@ public class PredictionModelTool<T, TInput, TOutput> : ITool
             var row = new List<string>();
             for (int j = 0; j < colsToShow; j++)
             {
-                row.Add(matrix[i, j].ToString() ?? "null");
+                string? valueStr = matrix[i, j]?.ToString();
+                if (valueStr != null)
+                {
+                    row.Add(valueStr);
+                }
+                else
+                {
+                    row.Add("0");
+                }
             }
 
             if (matrix.Columns > colsToShow)
