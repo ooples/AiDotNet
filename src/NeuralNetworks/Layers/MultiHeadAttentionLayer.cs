@@ -58,7 +58,7 @@ public class MultiHeadAttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     /// Higher values encourage more distributed attention.
     /// </para>
     /// </remarks>
-    public T AuxiliaryLossWeight { get; set; } = NumOps.FromDouble(0.005);
+    public T AuxiliaryLossWeight { get; set; }
 
     /// <summary>
     /// Gets or sets the weight for head diversity penalty.
@@ -72,10 +72,10 @@ public class MultiHeadAttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     /// - 0.015-0.02: Strong diversity
     /// </para>
     /// </remarks>
-    public T HeadDiversityWeight { get; set; } = NumOps.FromDouble(0.01);
+    public T HeadDiversityWeight { get; set; }
 
-    private T _lastEntropyLoss = NumOps.Zero;
-    private T _lastDiversityLoss = NumOps.Zero;
+    private T _lastEntropyLoss;
+    private T _lastDiversityLoss;
     private List<Tensor<T>>? _lastHeadOutputs = null;
 
     /// <summary>
@@ -229,6 +229,12 @@ public class MultiHeadAttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         {
             _outputBias[i] = NumOps.Zero;
         }
+
+        // Initialize auxiliary loss fields after NumOps is available
+        AuxiliaryLossWeight = NumOps.FromDouble(0.005);
+        HeadDiversityWeight = NumOps.FromDouble(0.01);
+        _lastEntropyLoss = NumOps.Zero;
+        _lastDiversityLoss = NumOps.Zero;
     }
 
     /// <summary>
@@ -338,7 +344,7 @@ public class MultiHeadAttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
 
             if (pairCount > 0)
             {
-                diversityPenalty = NumOps.Divide(diversityPenalty, NumOps.FromInt32(pairCount));
+                diversityPenalty = NumOps.Divide(diversityPenalty, NumOps.FromDouble(pairCount));
             }
 
             _lastDiversityLoss = diversityPenalty;
