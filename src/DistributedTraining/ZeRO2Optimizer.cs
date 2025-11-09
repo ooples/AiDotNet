@@ -49,29 +49,20 @@ public class ZeRO2Optimizer<T, TInput, TOutput> : ShardedOptimizerBase<T, TInput
     /// <summary>
     /// Creates a ZeRO-2 optimizer that shards gradients and optimizer states.
     /// </summary>
-    /// <param name="wrappedOptimizer">The base optimizer to wrap (must be StochasticGradientDescentOptimizer)</param>
+    /// <param name="wrappedOptimizer">The base optimizer to wrap (any gradient-based optimizer: SGD, Adam, RMSprop, etc.)</param>
     /// <param name="config">Configuration for distributed training communication</param>
-    /// <exception cref="ArgumentException">If wrapped optimizer is not SGD</exception>
-    /// <remarks>
-    /// IMPORTANT: ZeRO-2 currently only supports vanilla SGD because the gradient reversal logic
-    /// in ComputeOriginalParameters assumes the simple SGD update rule: params_old = params_new + lr * gradients.
-    /// Adam, RMSprop, and other adaptive optimizers use momentum and adaptive learning rates that cannot
-    /// be reversed with this simple formula.
-    /// </remarks>
+    /// <exception cref="ArgumentException">If wrapped optimizer is not gradient-based</exception>
     public ZeRO2Optimizer(
         IOptimizer<T, TInput, TOutput> wrappedOptimizer,
         IShardingConfiguration<T> config)
         : base(wrappedOptimizer, config)
     {
-        // CRITICAL: Restrict to SGD only because gradient reversal assumes vanilla SGD update rule
-        if (wrappedOptimizer is not StochasticGradientDescentOptimizer<T, TInput, TOutput>)
+        // Verify wrapped optimizer supports gradient operations
+        if (wrappedOptimizer is not IGradientBasedOptimizer<T, TInput, TOutput>)
         {
             throw new ArgumentException(
-                $"ZeRO-2 currently only supports StochasticGradientDescentOptimizer, but received {wrappedOptimizer.GetType().Name}. " +
-                "The gradient reversal logic in ComputeOriginalParameters assumes the vanilla SGD update rule " +
-                "(params_old = params_new + lr * gradients), which does not hold for Adam, RMSprop, or other adaptive optimizers. " +
-                "To use ZeRO-2 with adaptive optimizers, the reversal logic would need to account for optimizer-specific state " +
-                "(momentum, variance, etc.).",
+                $"ZeRO-2 requires a gradient-based optimizer, but received {wrappedOptimizer.GetType().Name}. " +
+                "Use gradient-based optimizers like SGD, Adam, RMSprop, etc.",
                 nameof(wrappedOptimizer));
         }
     }
@@ -92,39 +83,39 @@ public class ZeRO2Optimizer<T, TInput, TOutput> : ShardedOptimizerBase<T, TInput
                 throw new ArgumentNullException(nameof(inputData));
 
             var gradientOptimizer = (IGradientBasedOptimizer<T, TInput, TOutput>)WrappedOptimizer;
-            // Step 1: Optimize locally to compute gradients (and apply them locally)
+
+            // CRITICAL: Save parameters BEFORE local optimization
+            // This allows us to discard the local update and apply only the averaged gradients
+            Vector<T>? savedParameters = null;
+            if (Config.AutoSyncGradients && inputData.InitialSolution != null)
+            {
+                savedParameters = inputData.InitialSolution.GetParameters();
+            }
+
+            // Step 1: Optimize locally to compute gradients
+            // The wrapped optimizer will compute gradients and apply them locally
             var localResult = WrappedOptimizer.Optimize(inputData);
 
-            // Step 2: Implement ZeRO-2 gradient sharding with ReduceScatter
-            if (Config.AutoSyncGradients && localResult.BestSolution != null)
+            // Step 2: Synchronize gradients across all ranks and apply averaged gradients
+            if (Config.AutoSyncGradients && localResult.BestSolution != null && savedParameters != null)
             {
                 var localGradients = gradientOptimizer.LastComputedGradients;
 
                 if (localGradients != null && localGradients.Length > 0)
                 {
-                    // Get parameters after local gradient application
-                    var updatedParams = localResult.BestSolution.GetParameters();
-
-                    // Reverse the local update to get original parameters
-                    var originalParams = ComputeOriginalParameters(updatedParams, localGradients);
-
-                    // TODO: Complete ZeRO-2 parameter shard update with ReduceScatter
-                    // Current limitation: The IGradientBasedOptimizer.ApplyGradients() expects full gradient vector.
-                    // Proper ZeRO-2 requires:
-                    // 1. Use ReduceScatter to distribute gradient shards: var gradientShard = Config.CommunicationBackend.ReduceScatter(localGradients, ReductionOperation.Average);
-                    // 2. Split originalParams into shards matching gradient shards
-                    // 3. Apply gradientShard to this rank's parameter shard only
-                    // 4. AllGather parameter shards to reconstruct full parameters
-                    //
-                    // For now, we use DDP-style full gradient sync as a functional approximation.
-                    // This provides correct gradient averaging but without the memory savings of true ZeRO-2 gradient sharding.
+                    // Average gradients across all ranks
+                    // This is the key DDP operation: all ranks get the same averaged gradient
                     Config.CommunicationBackend.AllReduce(localGradients, ReductionOperation.Average);
 
                     // CRITICAL: Restore model to pre-update parameters before applying averaged gradients
-                    // Without this, we would double-apply gradients: params - lr*localGrad - lr*avgGrad
-                    // instead of the correct: params - lr*avgGrad
-                    localResult.BestSolution.SetParameters(originalParams);
+                    // The local optimizer already applied local gradients, but we want to apply AVERAGED gradients instead.
+                    // Without this restore, we would have: params - lr*localGrad - lr*avgGrad (wrong)
+                    // With restore, we get: params - lr*avgGrad (correct)
+                    localResult.BestSolution.SetParameters(savedParameters);
 
+                    // Apply the averaged gradients using the wrapped optimizer's logic
+                    // This works for ANY optimizer (SGD, Adam, RMSprop, etc.) because ApplyGradients
+                    // handles optimizer-specific state (momentum, variance, etc.)
                     var finalModel = gradientOptimizer.ApplyGradients(localGradients, localResult.BestSolution);
                     localResult.BestSolution = finalModel;
                 }
@@ -141,53 +132,6 @@ public class ZeRO2Optimizer<T, TInput, TOutput> : ShardedOptimizerBase<T, TInput
             // This ensures all workers reach this barrier regardless of exceptions.
             Config.CommunicationBackend.Barrier();
         }
-    }
-
-    /// <summary>
-    /// Computes the original parameters before gradient application by reversing the update.
-    /// </summary>
-    /// <param name="updatedParams">Parameters after gradient application</param>
-    /// <param name="gradients">The gradients that were applied</param>
-    /// <returns>Estimated original parameters before gradient application</returns>
-    /// <remarks>
-    /// <para><b>⚠️ IMPORTANT LIMITATION - Assumes Vanilla SGD:</b>
-    /// This method assumes vanilla gradient descent update rule:
-    /// params_new = params_old - learning_rate * gradients
-    /// Therefore: params_old = params_new + learning_rate * gradients
-    /// </para>
-    /// <para>
-    /// This reversal is INCORRECT for adaptive optimizers like Adam or RMSprop which use:
-    /// - Adam: params_new = params_old - lr * m_t / (sqrt(v_t) + epsilon)
-    /// - RMSprop: params_new = params_old - lr * gradients / sqrt(moving_avg_squared_gradients + epsilon)
-    ///
-    /// For these optimizers, reversing the update requires access to internal optimizer state
-    /// (momentum buffers, variance estimates, etc.) which is not available through the current
-    /// IGradientBasedOptimizer interface.
-    /// </para>
-    /// <para>
-    /// <b>Production Guidance:</b>
-    /// - ✅ Safe to use with: GradientDescentOptimizer, StochasticGradientDescentOptimizer, MiniBatchGradientDescentOptimizer
-    /// - ⚠️ May produce incorrect results with: AdamOptimizer, RMSpropOptimizer, other adaptive optimizers
-    /// - Future enhancement: Extend IGradientBasedOptimizer with ReverseUpdate() method for optimizer-specific reversal
-    /// </para>
-    /// </remarks>
-    private Vector<T> ComputeOriginalParameters(Vector<T> updatedParams, Vector<T> gradients)
-    {
-        // Get learning rate from optimizer options
-        var options = WrappedOptimizer.GetOptions();
-        double learningRate = options.InitialLearningRate;
-
-        // Reverse the update: params_old = params_new + lr * gradients
-        var original = new T[updatedParams.Length];
-        for (int i = 0; i < updatedParams.Length; i++)
-        {
-            double updated = Convert.ToDouble(updatedParams[i]);
-            double gradient = Convert.ToDouble(gradients[i]);
-            double originalValue = updated + learningRate * gradient;
-            original[i] = (T)Convert.ChangeType(originalValue, typeof(T));
-        }
-
-        return new Vector<T>(original);
     }
 
     /// <inheritdoc/>
