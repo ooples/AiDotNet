@@ -170,12 +170,35 @@ public class HybridShardedModel<T, TInput, TOutput> : ShardedModelBase<T, TInput
     /// <inheritdoc/>
     public override void SynchronizeGradients()
     {
-        // In 3D parallelism, synchronization happens in multiple steps:
-        // 1. AllReduce within tensor-parallel group (sum partial gradients)
-        // 2. AllReduce within data-parallel group (average across data replicas)
-        // 3. Pipeline parallel stages handle their own gradients
+        // In 3D parallelism (hybrid sharding), LocalShard contains the pipeline/tensor slice for this rank.
+        // AllReduce across the full world averages together shards from DIFFERENT pipeline/tensor coordinates,
+        // immediately corrupting the parameters.
+        //
+        // Correct synchronization requires:
+        // 1. AllReduce within tensor-parallel group (sum partial gradients from same pipeline stage)
+        // 2. AllReduce within data-parallel group (average gradients across data replicas that share same pipeline/tensor position)
+        // 3. Pipeline parallel stages handle their own gradient accumulation
 
-        // For this framework implementation, we use simplified synchronization
+        // Guard against full-world AllReduce when data-parallel size > 1
+        if (_dataParallelSize > 1)
+        {
+            throw new NotSupportedException(
+                "HybridShardedModel needs subgroup AllReduce over the data-parallel replica set; " +
+                "reducing across the full world corrupts tensor/pipeline shards. " +
+                "Implement subgroup-aware collectives that sync only within the data-parallel group (ranks sharing same pipeline/tensor position), " +
+                "or use a data-parallel subgroup communicator for correct gradient averaging.");
+        }
+
+        // Single data-parallel replica mode (no data parallelism)
+        // In this case, AllReduce is a no-op or only syncs within tensor/pipeline groups
+        if (_dataParallelSize <= 1)
+        {
+            // No data-parallel sync needed
+            CachedFullParameters = null;
+            return;
+        }
+
+        // This code path should not be reached due to the guard above, but kept for completeness
         Config.CommunicationBackend.AllReduce(LocalShard, ReductionOperation.Average);
 
         CachedFullParameters = null;
