@@ -91,10 +91,29 @@ if [ ! -f "$PROGRAM" ]; then
     exit 1
 fi
 
-# Make program executable if it isn't
+# Check if program is executable
 if [ ! -x "$PROGRAM" ]; then
-    echo "Warning: Program is not executable. Making it executable..."
+    # Validate the file exists and is a regular file
+    if [ ! -f "$PROGRAM" ]; then
+        echo "Error: Program file does not exist or is not a regular file: $PROGRAM"
+        exit 1
+    fi
+
+    # Validate we can modify the file
+    if [ ! -w "$PROGRAM" ]; then
+        echo "Error: No write permission to make program executable: $PROGRAM"
+        echo "Run: chmod +x \"$PROGRAM\" manually with appropriate permissions"
+        exit 1
+    fi
+
+    echo "Warning: Program is not executable."
+    echo "Making it executable: chmod +x \"$PROGRAM\""
     chmod +x "$PROGRAM"
+
+    if [ $? -ne 0 ]; then
+        echo "Error: Failed to make program executable"
+        exit 1
+    fi
 fi
 
 # Launch distributed training
