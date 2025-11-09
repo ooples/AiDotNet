@@ -268,6 +268,26 @@ public class InMemoryCommunicationBackend<T> : CommunicationBackendBase<T>
     }
 
     /// <inheritdoc/>
+    /// <summary>
+    /// Performs an AllReduce operation, combining data from all processes.
+    /// </summary>
+    /// <remarks>
+    /// <para><b>IMPORTANT - In-Place Modification:</b>
+    /// This method modifies the `data` parameter IN-PLACE. Unlike other collective operations
+    /// (Broadcast, AllGather, Scatter, ReduceScatter) which return new vectors, AllReduce
+    /// follows the standard MPI convention of modifying the input vector directly.
+    /// </para>
+    /// <para>
+    /// This design choice:
+    /// - Matches standard MPI AllReduce behavior (in-place modification)
+    /// - Reduces memory allocations for large gradient vectors
+    /// - Is consistent with ICommunicationBackend interface contract
+    /// </para>
+    /// <para><b>Thread Safety:</b>
+    /// The implementation clones data before storing in shared buffers to prevent
+    /// race conditions during the synchronization phase.
+    /// </para>
+    /// </remarks>
     public override void AllReduce(Vector<T> data, ReductionOperation operation)
     {
         EnsureInitialized();
@@ -277,13 +297,11 @@ public class InMemoryCommunicationBackend<T> : CommunicationBackendBase<T>
             throw new ArgumentNullException(nameof(data));
         }
 
-        // For single process, no communication needed
+        // For single process, no communication needed - data is already the "reduced" result
+        // (e.g., Average of one value is itself, Sum of one value is itself)
         if (_worldSize == 1)
         {
-            if (operation == ReductionOperation.Average)
-            {
-                // Already averaged (only one value)
-            }
+            // No modification needed - data already contains the correct result
             return;
         }
 
@@ -408,6 +426,22 @@ public class InMemoryCommunicationBackend<T> : CommunicationBackendBase<T>
     }
 
     /// <inheritdoc/>
+    /// <summary>
+    /// Broadcasts data from the root process to all other processes.
+    /// </summary>
+    /// <remarks>
+    /// <para><b>IMPORTANT - Returns New Vector (No In-Place Modification):</b>
+    /// Unlike AllReduce which modifies the input in-place, Broadcast returns a NEW vector
+    /// and does NOT modify the `data` parameter. The input `data` is only meaningful on the
+    /// root process and is ignored on non-root processes.
+    /// </para>
+    /// <para>
+    /// This design:
+    /// - Follows standard MPI Broadcast semantics (returns broadcasted data)
+    /// - Prevents unintended side effects on non-root processes
+    /// - Is consistent with ICommunicationBackend interface contract
+    /// </para>
+    /// </remarks>
     public override Vector<T> Broadcast(Vector<T> data, int root = 0)
     {
         EnsureInitialized();
@@ -417,7 +451,7 @@ public class InMemoryCommunicationBackend<T> : CommunicationBackendBase<T>
             throw new ArgumentException($"Invalid root {root}. Must be between 0 and {_worldSize - 1}.");
         }
 
-        // For single process, just return a copy
+        // For single process, return a clone (maintains consistency with multi-process behavior)
         if (_worldSize == 1)
         {
             return data?.Clone() ?? throw new ArgumentNullException(nameof(data));
