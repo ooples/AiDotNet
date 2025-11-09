@@ -777,9 +777,11 @@ public class InMemoryCommunicationBackend<T> : CommunicationBackendBase<T>
             // Average operation: First accumulates using Sum (via ApplyReductionOperation which treats
             // Average same as Sum per CommunicationBackendBase.cs:296), then divides by the count of
             // vectors to compute the mean.
-            // This is mathematically correct: (v0 + v1 + ... + vn-1) / n
-            // The accumulation uses Sum logic (addition) followed by division,
-            // which is the standard and efficient way to compute an average.
+            // AVERAGE OPERATION CLARIFICATION:
+            // This is mathematically correct: average = (v0 + v1 + ... + vn-1) / n
+            // Implementation: First accumulate using Sum logic (lines above), then divide by count.
+            // This is the standard and most efficient way to compute element-wise averages.
+            // The division applies to the accumulated sum, not to each element before summing.
             if (operation == ReductionOperation.Average)
             {
                 // CRITICAL: Ensure we use the proper numeric type conversion for division
