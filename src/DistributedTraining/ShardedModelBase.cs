@@ -316,18 +316,6 @@ public abstract class ShardedModelBase<T, TInput, TOutput> : IShardedModel<T, TI
     }
 
     /// <inheritdoc/>
-    public virtual List<string>? GetFeatureNames()
-    {
-        return WrappedModel.GetFeatureNames();
-    }
-
-    /// <inheritdoc/>
-    public virtual void SetFeatureNames(List<string>? featureNames)
-    {
-        WrappedModel.SetFeatureNames(featureNames);
-    }
-
-    /// <inheritdoc/>
     public virtual IEnumerable<int> GetActiveFeatureIndices()
     {
         return WrappedModel.GetActiveFeatureIndices();

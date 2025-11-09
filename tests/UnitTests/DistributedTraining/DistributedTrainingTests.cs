@@ -230,7 +230,7 @@ public class DistributedTrainingTests
         backend.Initialize();
 
         var config = new ShardingConfiguration<double>(backend);
-        var shardedModel = new ShardedModel<double, Matrix<double>, Vector<double>>(model, config);
+        var shardedModel = new FSDPModel<double, Matrix<double>, Vector<double>>(model, config);
 
         // Assert - With 8 parameters and 4 processes, each should get 2 parameters
         Assert.Equal(0, shardedModel.Rank);
@@ -333,7 +333,7 @@ public class DistributedTrainingTests
         backend.Initialize();
 
         var config = new ShardingConfiguration<double>(backend);
-        var distributedModel = new ShardedModel<double, Matrix<double>, Vector<double>>(
+        var distributedModel = new FSDPModel<double, Matrix<double>, Vector<double>>(
             distributedModelBase, config);
 
         // Act - Get parameters from both

@@ -188,7 +188,7 @@ public class NCCLCommunicationBackend<T> : CommunicationBackendBase<T>
         // NCCL doesn't have a native barrier operation
         // Standard practice: perform a dummy AllReduce
         var dummy = new Vector<T>(new T[1]);
-        dummy[0] = NumOps.FromInt(0);
+        dummy[0] = NumOps.FromDouble(0);
         AllReduce(dummy, ReductionOperation.Sum);
     }
 

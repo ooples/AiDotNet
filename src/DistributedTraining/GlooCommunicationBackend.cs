@@ -113,6 +113,9 @@ public class GlooCommunicationBackend<T> : CommunicationBackendBase<T>
             Console.WriteLine("This provides full functionality without external dependencies.");
 
             // For true multi-process TCP communication, you would initialize TCP connections here
+            // Initialize empty dictionary (actual TCP setup requires host addresses/ports)
+            _tcpConnections = new Dictionary<int, TcpClient>();
+
             // For single-process mode, we skip TCP setup
             if (_worldSize == 1)
             {
@@ -400,7 +403,7 @@ public class GlooCommunicationBackend<T> : CommunicationBackendBase<T>
         {
             for (int i = 0; i < chunk.Length; i++)
             {
-                chunk[i] = NumOps.Divide(chunk[i], NumOps.FromInt(_worldSize));
+                chunk[i] = NumOps.Divide(chunk[i], NumOps.FromDouble(_worldSize));
             }
         }
 

@@ -117,7 +117,8 @@ public static class DistributedExtensions
             throw new ArgumentNullException(nameof(configuration));
         }
 
-        return new ShardedModel<T, TInput, TOutput>(model, configuration);
+        // Default to FSDP model for generic sharding
+        return new FSDPModel<T, TInput, TOutput>(model, configuration);
     }
 
     /// <summary>
@@ -202,7 +203,8 @@ public static class DistributedExtensions
             throw new ArgumentNullException(nameof(configuration));
         }
 
-        return new ShardedOptimizer<T, TInput, TOutput>(optimizer, configuration);
+        // Default to FSDP optimizer for generic sharding
+        return new FSDPOptimizer<T, TInput, TOutput>(optimizer, configuration);
     }
 
     /// <summary>

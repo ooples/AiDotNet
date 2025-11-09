@@ -198,7 +198,7 @@ public class MPICommunicationBackend<T> : CommunicationBackendBase<T>
                     {
                         for (int i = 0; i < result.Length; i++)
                         {
-                            result[i] = NumOps.Divide(result[i], NumOps.FromInt(_worldSize));
+                            result[i] = NumOps.Divide(result[i], NumOps.FromDouble(_worldSize));
                         }
                     }
 
@@ -389,7 +389,7 @@ public class MPICommunicationBackend<T> : CommunicationBackendBase<T>
                     {
                         for (int i = 0; i < result.Length; i++)
                         {
-                            result[i] = NumOps.Divide(result[i], NumOps.FromInt(_worldSize));
+                            result[i] = NumOps.Divide(result[i], NumOps.FromDouble(_worldSize));
                         }
                     }
 
