@@ -392,14 +392,11 @@ public class MixtureOfExpertsNeuralNetwork<T> : NeuralNetworkBase<T>
 
         // Calculate auxiliary losses from layers that support them (e.g., load balancing loss)
         T auxiliaryLoss = NumOps.Zero;
-        foreach (var layer in Layers)
+        foreach (var auxLayer in Layers.OfType<IAuxiliaryLossLayer<T>>().Where(l => l.UseAuxiliaryLoss))
         {
-            if (layer is IAuxiliaryLossLayer<T> auxLayer && auxLayer.UseAuxiliaryLoss)
-            {
-                var layerAuxLoss = auxLayer.ComputeAuxiliaryLoss();
-                var weightedAuxLoss = NumOps.Multiply(layerAuxLoss, auxLayer.AuxiliaryLossWeight);
-                auxiliaryLoss = NumOps.Add(auxiliaryLoss, weightedAuxLoss);
-            }
+            var layerAuxLoss = auxLayer.ComputeAuxiliaryLoss();
+            var weightedAuxLoss = NumOps.Multiply(layerAuxLoss, auxLayer.AuxiliaryLossWeight);
+            auxiliaryLoss = NumOps.Add(auxiliaryLoss, weightedAuxLoss);
         }
 
         // Combine primary and auxiliary losses

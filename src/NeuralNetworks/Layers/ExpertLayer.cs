@@ -251,12 +251,9 @@ public class ExpertLayer<T> : LayerBase<T>
     /// </remarks>
     public override void UpdateParameters(T learningRate)
     {
-        foreach (var layer in _layers)
+        foreach (var layer in _layers.Where(l => l.SupportsTraining))
         {
-            if (layer.SupportsTraining)
-            {
-                layer.UpdateParameters(learningRate);
-            }
+            layer.UpdateParameters(learningRate);
         }
     }
 
@@ -290,12 +287,9 @@ public class ExpertLayer<T> : LayerBase<T>
     {
         var allParameters = new List<T>();
 
-        foreach (var layer in _layers)
+        foreach (var layer in _layers.Where(l => l.ParameterCount > 0))
         {
-            if (layer.ParameterCount > 0)
-            {
-                allParameters.AddRange(layer.GetParameters().ToArray());
-            }
+            allParameters.AddRange(layer.GetParameters().ToArray());
         }
 
         return new Vector<T>(allParameters.ToArray());
@@ -340,21 +334,18 @@ public class ExpertLayer<T> : LayerBase<T>
         }
 
         int offset = 0;
-        foreach (var layer in _layers)
+        foreach (var layer in _layers.Where(l => l.ParameterCount > 0))
         {
-            if (layer.ParameterCount > 0)
+            var layerParamCount = layer.ParameterCount;
+            var layerParams = new List<T>();
+
+            for (int i = 0; i < layerParamCount; i++)
             {
-                var layerParamCount = layer.ParameterCount;
-                var layerParams = new List<T>();
-
-                for (int i = 0; i < layerParamCount; i++)
-                {
-                    layerParams.Add(parameters[offset + i]);
-                }
-
-                layer.SetParameters(new Vector<T>(layerParams.ToArray()));
-                offset += layerParamCount;
+                layerParams.Add(parameters[offset + i]);
             }
+
+            layer.SetParameters(new Vector<T>(layerParams.ToArray()));
+            offset += layerParamCount;
         }
     }
 

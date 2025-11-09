@@ -100,10 +100,11 @@ public class ExpertTests
         Assert.Equal(1, output.Shape[0]);
         Assert.Equal(2, output.Shape[1]);
         // Verify output is not all zeros (layers are processing)
+        const float epsilon = 1e-6f;
         bool hasNonZero = false;
         for (int i = 0; i < output.Length; i++)
         {
-            if (output[i] != 0.0f)
+            if (Math.Abs(output[i]) > epsilon)
             {
                 hasNonZero = true;
                 break;
@@ -169,10 +170,11 @@ public class ExpertTests
         // Assert
         Assert.Equal(initialParams.Length, updatedParams.Length);
         // At least one parameter should have changed
+        const float epsilon = 1e-6f;
         bool hasChanged = false;
         for (int i = 0; i < initialParams.Length; i++)
         {
-            if (initialParams[i] != updatedParams[i])
+            if (MathF.Abs(initialParams[i] - updatedParams[i]) > epsilon)
             {
                 hasChanged = true;
                 break;
@@ -301,10 +303,11 @@ public class ExpertTests
         Assert.NotNull(clone);
         Assert.IsType<Expert<float>>(clone);
         // Parameters should be different after updating original
+        const float epsilon = 1e-6f;
         bool hasDifference = false;
         for (int i = 0; i < originalParams.Length; i++)
         {
-            if (originalParams[i] != clonedParams[i])
+            if (MathF.Abs(originalParams[i] - clonedParams[i]) > epsilon)
             {
                 hasDifference = true;
                 break;

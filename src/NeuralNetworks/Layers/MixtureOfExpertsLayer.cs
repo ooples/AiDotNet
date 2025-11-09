@@ -670,12 +670,9 @@ public class MixtureOfExpertsLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         }
 
         // Update all expert parameters
-        foreach (var expert in _experts)
+        foreach (var expert in _experts.Where(e => e.SupportsTraining))
         {
-            if (expert.SupportsTraining)
-            {
-                expert.UpdateParameters(learningRate);
-            }
+            expert.UpdateParameters(learningRate);
         }
     }
 
@@ -713,12 +710,9 @@ public class MixtureOfExpertsLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         }
 
         // Add expert parameters
-        foreach (var expert in _experts)
+        foreach (var expert in _experts.Where(e => e.ParameterCount > 0))
         {
-            if (expert.ParameterCount > 0)
-            {
-                allParameters.AddRange(expert.GetParameters().ToArray());
-            }
+            allParameters.AddRange(expert.GetParameters().ToArray());
         }
 
         return new Vector<T>(allParameters.ToArray());
@@ -774,18 +768,15 @@ public class MixtureOfExpertsLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         }
 
         // Set expert parameters
-        foreach (var expert in _experts)
+        foreach (var expert in _experts.Where(e => e.ParameterCount > 0))
         {
-            if (expert.ParameterCount > 0)
+            var expertParams = new List<T>();
+            for (int i = 0; i < expert.ParameterCount; i++)
             {
-                var expertParams = new List<T>();
-                for (int i = 0; i < expert.ParameterCount; i++)
-                {
-                    expertParams.Add(parameters[offset + i]);
-                }
-                expert.SetParameters(new Vector<T>(expertParams.ToArray()));
-                offset += expert.ParameterCount;
+                expertParams.Add(parameters[offset + i]);
             }
+            expert.SetParameters(new Vector<T>(expertParams.ToArray()));
+            offset += expert.ParameterCount;
         }
     }
 
