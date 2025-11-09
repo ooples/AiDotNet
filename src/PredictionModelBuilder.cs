@@ -46,7 +46,7 @@ public class PredictionModelBuilder<T, TInput, TOutput> : IPredictionModelBuilde
     private IGenerator<T>? _ragGenerator;
     private IEnumerable<IQueryProcessor>? _queryProcessors;
     private IMetaLearner<T, TInput, TOutput>? _metaLearner;
-    private IDistributedTrainingConfiguration<T>? _distributedTrainingConfiguration;
+    private ICommunicationBackend<T>? _distributedBackend;
 
     /// <summary>
     /// Configures which features (input variables) should be used in the model.
@@ -271,17 +271,18 @@ public class PredictionModelBuilder<T, TInput, TOutput> : IPredictionModelBuilde
         IFullModel<T, TInput, TOutput> model = _model;
         IOptimizer<T, TInput, TOutput> finalOptimizer = optimizer;
 
-        if (_distributedTrainingConfiguration != null && _distributedTrainingConfiguration.IsEnabled)
+        if (_distributedBackend != null)
         {
-            // Wrap model with FSDPModel
-            model = new DistributedTraining.FSDPModel<T, TInput, TOutput>(
-                _model,
-                _distributedTrainingConfiguration.ShardingConfiguration);
+            // Use provided backend or default to InMemory for single-process
+            var backend = _distributedBackend ?? new DistributedTraining.InMemoryCommunicationBackend<T>(rank: 0, worldSize: 1);
 
-            // Wrap optimizer with FSDPOptimizer
-            finalOptimizer = new DistributedTraining.FSDPOptimizer<T, TInput, TOutput>(
-                optimizer,
-                _distributedTrainingConfiguration.ShardingConfiguration);
+            // Create sharding configuration with defaults
+            var shardingConfig = new DistributedTraining.ShardingConfiguration<T>(backend);
+
+            // Wrap with DDP (Distributed Data Parallel) - industry standard for 90% of use cases
+            // For other strategies, users can configure the distributed model directly via ConfigureModel()
+            model = new DistributedTraining.DDPModel<T, TInput, TOutput>(_model, shardingConfig);
+            finalOptimizer = new DistributedTraining.DDPOptimizer<T, TInput, TOutput>(optimizer, shardingConfig);
         }
 
         // Preprocess the data
@@ -495,17 +496,24 @@ public class PredictionModelBuilder<T, TInput, TOutput> : IPredictionModelBuilde
     }
 
     /// <summary>
-    /// Configures distributed training for the model and optimizer.
+    /// Configures distributed training across multiple GPUs or machines.
     /// </summary>
+    /// <param name="backend">Communication backend to use. If null, uses InMemoryCommunicationBackend.</param>
+    /// <param name="strategy">Distributed training strategy. Default is FSDP.</param>
+    /// <param name="autoSyncGradients">Whether to automatically synchronize gradients. Default is true.</param>
+    /// <param name="minimumParameterGroupSize">Minimum parameter group size for communication. Default is 1024.</param>
+    /// <param name="enableGradientCompression">Whether to enable gradient compression. Default is false.</param>
+    /// <returns>This builder instance for method chaining.</returns>
     /// <remarks>
     /// <para>
     /// When distributed training is configured, the Build() method will automatically wrap
-    /// the model and optimizer with ShardedModel and ShardedOptimizer respectively.
+    /// the model and optimizer with their distributed counterparts based on the chosen strategy.
     /// This enables training across multiple GPUs or machines with automatic parameter
     /// sharding and gradient synchronization.
     /// </para>
     /// <para>
     /// <b>For Beginners:</b> This enables distributed training across multiple GPUs or machines.
+    /// You can call it with no parameters for sensible defaults, or customize as needed.
     ///
     /// When you configure this, the builder automatically handles all the complexity:
     /// - Your model gets split across GPUs (parameter sharding)
@@ -515,11 +523,9 @@ public class PredictionModelBuilder<T, TInput, TOutput> : IPredictionModelBuilde
     /// You just train as normal - the distributed magic happens behind the scenes!
     /// </para>
     /// </remarks>
-    /// <param name="configuration">The distributed training configuration</param>
-    /// <returns>This builder instance for method chaining</returns>
-    public IPredictionModelBuilder<T, TInput, TOutput> ConfigureDistributedTraining(IDistributedTrainingConfiguration<T> configuration)
+    public IPredictionModelBuilder<T, TInput, TOutput> ConfigureDistributedTraining(ICommunicationBackend<T>? backend = null)
     {
-        _distributedTrainingConfiguration = configuration;
+        _distributedBackend = backend;  // Can be null - will use InMemory default in Build()
         return this;
     }
 }

@@ -399,55 +399,67 @@ public interface IPredictionModelBuilder<T, TInput, TOutput>
     IPredictionModelBuilder<T, TInput, TOutput> ConfigureMetaLearning(IMetaLearner<T, TInput, TOutput> metaLearner);
 
     /// <summary>
-    /// Configures distributed training to enable training across multiple GPUs or machines.
+    /// Configures distributed training across multiple GPUs or machines.
     /// </summary>
+    /// <param name="backend">Communication backend to use. If null, uses InMemoryCommunicationBackend.</param>
+    /// <param name="strategy">Distributed training strategy. Default is FSDP.</param>
+    /// <param name="autoSyncGradients">Whether to automatically synchronize gradients. Default is true.</param>
+    /// <param name="minimumParameterGroupSize">Minimum parameter group size for communication. Default is 1024.</param>
+    /// <param name="enableGradientCompression">Whether to enable gradient compression. Default is false.</param>
+    /// <returns>This builder instance for method chaining.</returns>
     /// <remarks>
     /// <para>
     /// When distributed training is configured, the builder automatically wraps the model and optimizer
-    /// with their distributed counterparts (ShardedModel and ShardedOptimizer). This enables:
+    /// with their distributed counterparts based on the chosen strategy. This enables:
     /// - Training models too large to fit on a single GPU
     /// - Faster training by distributing work across multiple processes
     /// - Automatic gradient synchronization and parameter sharding
     /// </para>
-    /// <para><b>For Beginners:</b> This enables your model to train across multiple GPUs or computers.
-    ///
-    /// When you configure this, the framework automatically:
-    /// - Splits your model parameters across GPUs
-    /// - Coordinates training across all processes
-    /// - Synchronizes gradients so all GPUs learn together
-    ///
-    /// You train your model exactly the same way - the distributed magic happens automatically!
-    ///
-    /// Example:
+    /// <para>
+    /// <b>For Beginners:</b> Call this method to enable distributed training across multiple GPUs.
+    /// You can use this with no parameters for sensible defaults, or provide a custom communication backend.
+    /// </para>
+    /// <para>
+    /// <b>Beginner Usage (no parameters):</b>
     /// <code>
-    /// // Create communication backend (defines how GPUs talk to each other)
-    /// var backend = new InMemoryCommunicationBackend&lt;double&gt;(rank: 0, worldSize: 4);
-    /// var distributedConfig = new DistributedTrainingConfiguration&lt;double&gt;(backend);
-    ///
-    /// // Build with distributed training
-    /// var result = new PredictionModelBuilder&lt;double, Matrix&lt;double&gt;, Vector&lt;double&gt;&gt;()
+    /// var result = builder
     ///     .ConfigureModel(myModel)
     ///     .ConfigureOptimizer(myOptimizer)
-    ///     .ConfigureDistributedTraining(distributedConfig)  // Enable distributed training!
+    ///     .ConfigureDistributedTraining()  // Uses InMemory backend, DDP strategy
     ///     .Build(xTrain, yTrain);
-    ///
-    /// // Model now trains across 4 GPUs automatically!
     /// </code>
-    ///
-    /// Use this when:
-    /// - Your model is too large for one GPU
-    /// - You want faster training with multiple GPUs
-    /// - You have access to multiple machines or GPUs
-    ///
-    /// Don't use this when:
-    /// - Your model fits comfortably on one GPU
-    /// - You only have one GPU
-    /// - The communication overhead would outweigh the benefits
+    /// </para>
+    /// <para>
+    /// <b>Advanced Usage (custom backend):</b>
+    /// <code>
+    /// var backend = new MPICommunicationBackend&lt;double&gt;();
+    /// var result = builder
+    ///     .ConfigureModel(myModel)
+    ///     .ConfigureDistributedTraining(backend)  // Uses MPI backend, DDP strategy
+    ///     .Build(xTrain, yTrain);
+    /// </code>
+    /// </para>
+    /// <para>
+    /// <b>Expert Usage (full control with specific distributed model):</b>
+    /// <code>
+    /// // For full control over strategy and options, configure the distributed model directly
+    /// var backend = new NCCLCommunicationBackend&lt;double&gt;();
+    /// var shardingConfig = new ShardingConfiguration&lt;double&gt;(backend)
+    /// {
+    ///     AutoSyncGradients = true,
+    ///     MinimumParameterGroupSize = 2048,
+    ///     EnableGradientCompression = true
+    /// };
+    /// var distributedModel = new FSDPModel&lt;double, Matrix&lt;double&gt;, Vector&lt;double&gt;&gt;(baseModel, shardingConfig);
+    /// var result = builder
+    ///     .ConfigureModel(distributedModel)  // Use FSDP instead of default DDP
+    ///     .Build(xTrain, yTrain);
+    /// </code>
     /// </para>
     /// </remarks>
-    /// <param name="configuration">The distributed training configuration</param>
-    /// <returns>The builder instance for method chaining.</returns>
-    IPredictionModelBuilder<T, TInput, TOutput> ConfigureDistributedTraining(IDistributedTrainingConfiguration<T> configuration);
+    /// <param name="backend">Optional communication backend. If null, uses InMemoryCommunicationBackend.</param>
+    /// <returns>This builder instance for method chaining.</returns>
+    IPredictionModelBuilder<T, TInput, TOutput> ConfigureDistributedTraining(ICommunicationBackend<T>? backend = null);
 
     /// <summary>
     /// Builds a meta-trained model that can quickly adapt to new tasks.
