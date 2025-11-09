@@ -93,20 +93,34 @@ public class FSDPModel<T, TInput, TOutput> : ShardedModelBase<T, TInput, TOutput
         // Train the wrapped model
         WrappedModel.Train(input, expectedOutput);
 
-        // Get updated parameters
+        // Get updated parameters - CRITICAL: Each rank now has DIFFERENT parameters from training on different data
         var updatedParams = WrappedModel.GetParameters();
-
-        // Update local shard (this already invalidates cache via UpdateLocalShardFromFull)
-        UpdateLocalShardFromFull(updatedParams);
 
         // Synchronize gradients if auto-sync is enabled
         if (Config.AutoSyncGradients)
         {
-            SynchronizeGradients();
+            // CRITICAL FIX: Average the full parameter vectors BEFORE extracting shards
+            // Without this, we would extract shards from different parameter vectors,
+            // creating a "frankenstein" vector that doesn't represent proper averaging.
+            //
+            // Correct flow:
+            // 1. Each rank has updatedParams from training on different data
+            // 2. AllReduce averages these full parameter vectors: avg = (P₀ + P₁ + ...) / worldSize
+            // 3. Extract local shards from the AVERAGED parameters
+            // 4. All ranks now have consistent shards from the same averaged parameter vector
+            Config.CommunicationBackend.AllReduce(updatedParams, ReductionOperation.Average);
 
-            // Apply synchronized parameters back to the model
-            fullParams = GatherFullParameters();
-            WrappedModel.SetParameters(fullParams);
+            // Update local shard from averaged parameters (invalidates cache)
+            UpdateLocalShardFromFull(updatedParams);
+
+            // Apply averaged parameters back to the model for consistency
+            WrappedModel.SetParameters(updatedParams);
+        }
+        else
+        {
+            // No auto-sync: just update local shard from this rank's parameters
+            // Update local shard (this already invalidates cache via UpdateLocalShardFromFull)
+            UpdateLocalShardFromFull(updatedParams);
         }
         // Note: Cache is already invalidated by UpdateLocalShardFromFull.
         // If AutoSyncGradients is false, subsequent predictions can benefit from
