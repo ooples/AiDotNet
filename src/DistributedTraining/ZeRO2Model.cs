@@ -85,9 +85,29 @@ public class ZeRO2Model<T, TInput, TOutput> : ShardedModelBase<T, TInput, TOutpu
     /// </summary>
     public override void SynchronizeGradients()
     {
-        // Use ReduceScatter to reduce gradients and distribute shards
-        // Each process will receive only its portion of the reduced gradients
-        _gradientShard = Config.CommunicationBackend.ReduceScatter(LocalShard, ReductionOperation.Average);
+        var totalParams = LocalShard.Length;
+        var remainder = totalParams % WorldSize;
+
+        // Pad to satisfy ReduceScatter's divisibility requirement
+        Vector<T> reduceInput = LocalShard;
+        if (remainder != 0)
+        {
+            var paddedLength = totalParams + (WorldSize - remainder);
+            var padded = new T[paddedLength];
+            Array.Copy(LocalShard.ToArray(), padded, totalParams);
+            // Padding elements remain at default(T) which is typically 0
+            reduceInput = new Vector<T>(padded);
+        }
+
+        // Perform ReduceScatter on padded data
+        var reducedChunk = Config.CommunicationBackend.ReduceScatter(reduceInput, ReductionOperation.Average);
+
+        // Trim padding so each rank keeps only its logical shard
+        // Distribute remainder elements to first 'remainder' ranks
+        var shardLength = totalParams / WorldSize + (Rank < remainder ? 1 : 0);
+        var shardData = new T[shardLength];
+        Array.Copy(reducedChunk.ToArray(), 0, shardData, 0, shardLength);
+        _gradientShard = new Vector<T>(shardData);
 
         CachedFullParameters = null;
     }
