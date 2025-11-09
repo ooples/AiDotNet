@@ -6,6 +6,21 @@ namespace AiDotNet.DistributedTraining;
 /// Provides an in-memory implementation of distributed communication for testing and single-machine scenarios.
 /// </summary>
 /// <remarks>
+/// <para><b>⚠️ WARNING - Static Shared State:</b>
+/// This implementation uses STATIC shared dictionaries to simulate cross-process communication.
+/// This design has important implications:
+/// </para>
+/// <list type="bullet">
+/// <item>All instances in the same process share the SAME static state</item>
+/// <item>Unit tests using this backend CANNOT run in parallel without isolation via environmentId</item>
+/// <item>Multiple training sessions in the same process can interfere unless using unique environmentIds</item>
+/// <item>NOT suitable for production multi-process scenarios - use MPI/NCCL backends instead</item>
+/// </list>
+/// <para>
+/// The static state includes: _sharedBuffers, _barrierCounters, _barrierGenerations, _operationCounters, _messageQueues.
+/// These are namespaced by environmentId to enable concurrent independent sessions, but tests must ensure
+/// unique environmentIds or run serially.
+/// </para>
 /// <para>
 /// This backend simulates multiple processes by using shared memory and locks. It's perfect for testing
 /// distributed code without needing actual MPI infrastructure or multiple machines. All "processes" run
