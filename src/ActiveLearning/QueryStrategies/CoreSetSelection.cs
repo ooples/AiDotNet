@@ -291,8 +291,9 @@ public class CoreSetSelection<T, TInput, TOutput> : IQueryStrategy<T, TInput, TO
         if (_featureExtractor != null)
             return _featureExtractor(input);
 
-        // Default: use model parameters as proxy (not ideal, but simple)
-        // In practice, would use intermediate layer activations
-        return model.GetParameters();
+        // Default: use model prediction as feature representation
+        // This gives each input a unique feature vector based on model output
+        var prediction = model.Predict(input);
+        return ConversionsHelper.ConvertToVector<T, TOutput>(prediction);
     }
 }
