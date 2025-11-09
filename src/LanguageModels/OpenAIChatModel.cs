@@ -153,16 +153,13 @@ public class OpenAIChatModel<T> : ChatModelBase<T>
 
         ModelName = modelName;
         MaxGenerationTokens = maxTokens;
-
-        // Set authorization header
-        HttpClient.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", _apiKey);
     }
 
     /// <inheritdoc/>
     protected override async Task<string> GenerateAsyncCore(string prompt)
     {
         // Build the request
-        var request = new OpenAIRequest
+        var requestPayload = new OpenAIRequest
         {
             Model = ModelName,
             Messages = new[]
@@ -180,11 +177,18 @@ public class OpenAIChatModel<T> : ChatModelBase<T>
             PresencePenalty = _presencePenalty
         };
 
-        var jsonContent = JsonConvert.SerializeObject(request, JsonSettings);
+        var jsonContent = JsonConvert.SerializeObject(requestPayload, JsonSettings);
         var content = new StringContent(jsonContent, Encoding.UTF8, "application/json");
 
+        // Create request message with scoped headers
+        var request = new HttpRequestMessage(HttpMethod.Post, _endpoint)
+        {
+            Content = content
+        };
+        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", _apiKey);
+
         // Make the API call
-        var response = await HttpClient.PostAsync(_endpoint, content);
+        var response = await HttpClient.SendAsync(request);
 
         // Check for errors
         if (!response.IsSuccessStatusCode)

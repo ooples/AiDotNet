@@ -152,17 +152,13 @@ public class AnthropicChatModel<T> : ChatModelBase<T>
 
         ModelName = modelName;
         MaxGenerationTokens = maxTokens;
-
-        // Set required headers
-        HttpClient.DefaultRequestHeaders.Add("x-api-key", _apiKey);
-        HttpClient.DefaultRequestHeaders.Add("anthropic-version", "2023-06-01");
     }
 
     /// <inheritdoc/>
     protected override async Task<string> GenerateAsyncCore(string prompt)
     {
         // Build the request
-        var request = new AnthropicRequest
+        var requestPayload = new AnthropicRequest
         {
             Model = ModelName,
             Messages = new[]
@@ -179,11 +175,19 @@ public class AnthropicChatModel<T> : ChatModelBase<T>
             TopK = _topK > 0 ? _topK : null
         };
 
-        var jsonContent = JsonConvert.SerializeObject(request, JsonOptions);
+        var jsonContent = JsonConvert.SerializeObject(requestPayload, JsonOptions);
         var content = new StringContent(jsonContent, Encoding.UTF8, "application/json");
 
+        // Create request message with scoped headers
+        var request = new HttpRequestMessage(HttpMethod.Post, _endpoint)
+        {
+            Content = content
+        };
+        request.Headers.Add("x-api-key", _apiKey);
+        request.Headers.Add("anthropic-version", "2023-06-01");
+
         // Make the API call
-        var response = await HttpClient.PostAsync(_endpoint, content);
+        var response = await HttpClient.SendAsync(request);
 
         // Check for errors
         if (!response.IsSuccessStatusCode)

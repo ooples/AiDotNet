@@ -173,9 +173,6 @@ public class AzureOpenAIChatModel<T> : ChatModelBase<T>
 
         ModelName = $"azure-{deploymentName}";
         MaxGenerationTokens = maxTokens;
-
-        // Set authorization header
-        HttpClient.DefaultRequestHeaders.Add("api-key", _apiKey);
     }
 
     /// <inheritdoc/>
@@ -185,7 +182,7 @@ public class AzureOpenAIChatModel<T> : ChatModelBase<T>
         var url = $"{_endpoint}/openai/deployments/{_deploymentName}/chat/completions?api-version={_apiVersion}";
 
         // Build the request (same format as OpenAI)
-        var request = new AzureOpenAIRequest
+        var requestPayload = new AzureOpenAIRequest
         {
             Messages = new[]
             {
@@ -202,11 +199,18 @@ public class AzureOpenAIChatModel<T> : ChatModelBase<T>
             PresencePenalty = _presencePenalty
         };
 
-        var jsonContent = JsonConvert.SerializeObject(request, JsonOptions);
+        var jsonContent = JsonConvert.SerializeObject(requestPayload, JsonOptions);
         var content = new StringContent(jsonContent, Encoding.UTF8, "application/json");
 
+        // Create request message with scoped headers
+        var request = new HttpRequestMessage(HttpMethod.Post, url)
+        {
+            Content = content
+        };
+        request.Headers.Add("api-key", _apiKey);
+
         // Make the API call
-        var response = await HttpClient.PostAsync(url, content);
+        var response = await HttpClient.SendAsync(request);
 
         // Check for errors
         if (!response.IsSuccessStatusCode)
