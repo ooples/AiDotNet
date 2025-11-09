@@ -43,6 +43,17 @@ public abstract class GradientBasedOptimizerBase<T, TInput, TOutput> : Optimizer
     protected Vector<T> _previousGradient;
 
     /// <summary>
+    /// The gradients computed during the last optimization step.
+    /// </summary>
+    /// <remarks>
+    /// This field stores the gradients calculated in the most recent call to CalculateGradient().
+    /// It enables external access to gradients for features like gradient clipping, distributed
+    /// training (true DDP), debugging, and visualization.
+    /// Returns Vector&lt;T&gt;.Empty() if no gradients have been computed yet.
+    /// </remarks>
+    protected Vector<T> _lastComputedGradients;
+
+    /// <summary>
     /// A cache for storing and retrieving gradients to improve performance.
     /// </summary>
     protected IGradientCache<T> GradientCache;
@@ -84,9 +95,34 @@ public abstract class GradientBasedOptimizerBase<T, TInput, TOutput> : Optimizer
         _currentLearningRate = GradientOptions.InitialLearningRate;
         _currentMomentum = GradientOptions.InitialMomentum;
         _previousGradient = Vector<T>.Empty();
+        _lastComputedGradients = Vector<T>.Empty();
         LossFunction = options.LossFunction;
         GradientCache = options.GradientCache;
         Regularization = options.Regularization;
+    }
+
+    /// <inheritdoc/>
+    public virtual Vector<T> LastComputedGradients => _lastComputedGradients;
+
+    /// <inheritdoc/>
+    public virtual IFullModel<T, TInput, TOutput> ApplyGradients(Vector<T> gradients, IFullModel<T, TInput, TOutput> model)
+    {
+        if (gradients == null)
+            throw new ArgumentNullException(nameof(gradients));
+        if (model == null)
+            throw new ArgumentNullException(nameof(model));
+
+        var parameters = model.GetParameters();
+        if (gradients.Length != parameters.Length)
+        {
+            throw new ArgumentException(
+                $"Gradient size ({gradients.Length}) must match model parameter count ({parameters.Length})",
+                nameof(gradients));
+        }
+
+        // Use the existing UpdateSolution method which applies gradients with
+        // optimizer-specific logic (learning rate, momentum, Adam state, etc.)
+        return UpdateSolution(model, gradients);
     }
 
     /// <summary>
@@ -138,6 +174,7 @@ public abstract class GradientBasedOptimizerBase<T, TInput, TOutput> : Optimizer
         var cachedGradient = GradientCache.GetCachedGradient(cacheKey);
         if (cachedGradient != null)
         {
+            _lastComputedGradients = cachedGradient.Parameters;
             return cachedGradient.Parameters;
         }
 
@@ -168,6 +205,9 @@ public abstract class GradientBasedOptimizerBase<T, TInput, TOutput> : Optimizer
 
         var gradientModel = new GradientModel<T>(gradient);
         GradientCache.CacheGradient(cacheKey, gradientModel);
+
+        // Store for external access (enables gradient clipping, true DDP, debugging, etc.)
+        _lastComputedGradients = gradient;
 
         return gradient;
     }
@@ -283,7 +323,10 @@ public abstract class GradientBasedOptimizerBase<T, TInput, TOutput> : Optimizer
         {
             gradient[i] = NumOps.Divide(gradient[i], NumOps.FromDouble(batchIndices.Length));
         }
-    
+
+        // Store for external access (enables gradient clipping, true DDP, debugging, etc.)
+        _lastComputedGradients = gradient;
+
         return gradient;
     }
 

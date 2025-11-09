@@ -146,4 +146,51 @@ public interface IGradientBasedOptimizer<T, TInput, TOutput> : IOptimizer<T, TIn
     /// momentum or adaptive learning rates.
     /// </remarks>
     void UpdateParameters(List<ILayer<T>> layers);
+
+    /// <summary>
+    /// Gets the gradients computed during the last optimization step.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// This property provides access to the gradients (partial derivatives) calculated
+    /// during the most recent optimization. Essential for distributed training, gradient clipping,
+    /// and debugging.
+    /// </para>
+    /// <para><b>For Beginners:</b> Gradients are "directions" showing how to adjust each parameter
+    /// to improve the model. This property lets you see those directions after optimization runs.
+    /// </para>
+    /// <para><b>Industry Standard:</b>
+    /// PyTorch, TensorFlow, and JAX all expose gradients for features like gradient clipping,
+    /// true Distributed Data Parallel (DDP), and gradient compression.
+    /// </para>
+    /// </remarks>
+    /// <value>
+    /// Vector of gradients for each parameter. Returns empty vector if no optimization performed yet.
+    /// </value>
+    Vector<T> LastComputedGradients { get; }
+
+    /// <summary>
+    /// Applies pre-computed gradients to a model's parameters.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Allows applying externally-computed or modified gradients (averaged, compressed, clipped, etc.)
+    /// to update model parameters. Essential for production distributed training.
+    /// </para>
+    /// <para><b>For Beginners:</b> This takes pre-calculated "directions" (gradients) and uses them
+    /// to update the model. Like having a GPS tell you which way to go, this method moves you there.
+    /// </para>
+    /// <para><b>Production Use Cases:</b>
+    /// - **True DDP**: Average gradients across GPUs, then apply
+    /// - **Gradient Compression**: Compress, sync, decompress, then apply
+    /// - **Federated Learning**: Average gradients from clients before applying
+    /// - **Gradient Clipping**: Clip gradients to prevent exploding, then apply
+    /// </para>
+    /// </remarks>
+    /// <param name="gradients">Gradients to apply (must match model parameter count)</param>
+    /// <param name="model">Model whose parameters should be updated</param>
+    /// <returns>Model with updated parameters</returns>
+    /// <exception cref="ArgumentNullException">If gradients or model is null</exception>
+    /// <exception cref="ArgumentException">If gradient size doesn't match parameters</exception>
+    IFullModel<T, TInput, TOutput> ApplyGradients(Vector<T> gradients, IFullModel<T, TInput, TOutput> model);
 }

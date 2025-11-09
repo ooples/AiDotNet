@@ -176,6 +176,51 @@ public abstract class ShardedOptimizerBase<T, TInput, TOutput> : IShardedOptimiz
         return WrappedOptimizer.GetOptions();
     }
 
+    /// <summary>
+    /// Gets the gradients computed during the last optimization step.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Sharded optimizers delegate gradient access to the wrapped optimizer.
+    /// If the wrapped optimizer is gradient-based, this will return the actual computed gradients.
+    /// Otherwise, it returns an empty vector.
+    /// </para>
+    /// </remarks>
+    public virtual Vector<T> LastComputedGradients
+    {
+        get
+        {
+            var gradientOptimizer = WrappedOptimizer as IGradientBasedOptimizer<T, TInput, TOutput>;
+            return gradientOptimizer?.LastComputedGradients ?? Vector<T>.Empty();
+        }
+    }
+
+    /// <summary>
+    /// Applies pre-computed gradients to a model's parameters.
+    /// </summary>
+    /// <param name="gradients">The gradients to apply</param>
+    /// <param name="model">The model to update</param>
+    /// <returns>The updated model</returns>
+    /// <remarks>
+    /// <para>
+    /// Sharded optimizers delegate gradient application to the wrapped optimizer.
+    /// If the wrapped optimizer is gradient-based, this will apply the gradients.
+    /// Otherwise, throws NotSupportedException.
+    /// </para>
+    /// </remarks>
+    /// <exception cref="NotSupportedException">If the wrapped optimizer is not gradient-based</exception>
+    public virtual IFullModel<T, TInput, TOutput> ApplyGradients(Vector<T> gradients, IFullModel<T, TInput, TOutput> model)
+    {
+        var gradientOptimizer = WrappedOptimizer as IGradientBasedOptimizer<T, TInput, TOutput>;
+        if (gradientOptimizer == null)
+        {
+            throw new NotSupportedException(
+                $"ApplyGradients requires a gradient-based optimizer, but wrapped optimizer {WrappedOptimizer.GetType().Name} does not implement IGradientBasedOptimizer.");
+        }
+
+        return gradientOptimizer.ApplyGradients(gradients, model);
+    }
+
     /// <inheritdoc/>
     public abstract byte[] Serialize();
 
