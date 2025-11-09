@@ -1,3 +1,4 @@
+using AiDotNet.Enums;
 using AiDotNet.Interfaces;
 
 namespace AiDotNet.Deployment.Optimization.Quantization;
@@ -13,7 +14,7 @@ public class Int8Quantizer<T> : IQuantizer<T> where T : struct
     private bool _isCalibrated = false;
 
     /// <inheritdoc/>
-    public Optimization.Quantization.QuantizationMode Mode => Optimization.Quantization.QuantizationMode.Int8;
+    public QuantizationMode Mode => QuantizationMode.Int8;
 
     /// <inheritdoc/>
     public int BitWidth => 8;

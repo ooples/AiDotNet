@@ -1,3 +1,4 @@
+using AiDotNet.Enums;
 using AiDotNet.Interfaces;
 
 namespace AiDotNet.Deployment.Optimization.Quantization;
@@ -9,7 +10,7 @@ namespace AiDotNet.Deployment.Optimization.Quantization;
 public class Float16Quantizer<T> : IQuantizer<T> where T : struct
 {
     /// <inheritdoc/>
-    public Optimization.Quantization.QuantizationMode Mode => Optimization.Quantization.QuantizationMode.Float16;
+    public QuantizationMode Mode => QuantizationMode.Float16;
 
     /// <inheritdoc/>
     public int BitWidth => 16;

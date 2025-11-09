@@ -1,3 +1,4 @@
+using AiDotNet.Enums;
 using System.Collections.Generic;
 
 namespace AiDotNet.Deployment.Optimization.Quantization;
