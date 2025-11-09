@@ -57,16 +57,24 @@ public class ZeRO2Optimizer<T, TInput, TOutput> : ShardedOptimizerBase<T, TInput
         // Optimize on local data
         var result = WrappedOptimizer.Optimize(inputData);
 
-        // In ZeRO-2, we use ReduceScatter to reduce gradients and distribute shards
-        // Each process receives only its portion of the reduced gradients
+        // TODO: Implement ZeRO-2 gradient sharding
+        // In ZeRO-2, we need to:
+        // 1. Intercept gradients during backpropagation (before optimizer.Optimize() completes)
+        // 2. Perform ReduceScatter to reduce gradients across processes and distribute shards
+        //    var reducedGradientShard = Config.CommunicationBackend.ReduceScatter(gradients, ReductionOperation.Average);
+        // 3. Map reducedGradientShard back to local parameter shard indices
+        // 4. Apply gradient shard to update only local parameter shard and optimizer state
+        // 5. Ensure optimizer momentum/exponential average states are updated for the shard
+        // 6. Verify shard indices, sizes, and shapes match expected partitioning
+        //
+        // Current limitation: This framework's IOptimizer.Optimize() abstraction is a black box
+        // that doesn't expose intermediate gradients. Proper ZeRO-2 implementation requires
+        // either extending IOptimizer to expose gradients or integrating gradient hooks.
+        //
+        // For now, we synchronize parameters like ZeRO-1 (optimizer state is still sharded)
         if (Config.AutoSyncGradients && result.BestSolution != null)
         {
-            // Instead of AllReduce, use ReduceScatter for gradient sharding
-            var parameters = result.BestSolution.GetParameters();
-            var reducedShard = Config.CommunicationBackend.ReduceScatter(parameters, ReductionOperation.Average);
-
-            // Each process now has only its shard of gradients
-            // Update would use only this shard (requires optimizer state integration)
+            SynchronizeParameters(result.BestSolution);
         }
 
         SynchronizeOptimizerState();
