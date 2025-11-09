@@ -106,12 +106,18 @@ if [ ! -x "$PROGRAM" ]; then
         exit 1
     fi
 
-    echo "Warning: Program is not executable."
-    echo "Making it executable: chmod +x \"$PROGRAM\""
-    chmod +x "$PROGRAM"
-
-    if [ $? -ne 0 ]; then
-        echo "Error: Failed to make program executable"
+    echo "Warning: Program '$PROGRAM' is not executable."
+    read -p "Make it executable? (y/N): " -n 1 -r
+    echo
+    if [[ $REPLY =~ ^[Yy]$ ]]; then
+        chmod +x "$PROGRAM"
+        if [ $? -ne 0 ]; then
+            echo "Error: Failed to make program executable"
+            exit 1
+        fi
+        echo "Made executable."
+    else
+        echo "Error: Program must be executable to run."
         exit 1
     fi
 fi
