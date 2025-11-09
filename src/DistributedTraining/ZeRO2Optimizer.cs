@@ -49,20 +49,29 @@ public class ZeRO2Optimizer<T, TInput, TOutput> : ShardedOptimizerBase<T, TInput
     /// <summary>
     /// Creates a ZeRO-2 optimizer that shards gradients and optimizer states.
     /// </summary>
-    /// <param name="wrappedOptimizer">The base optimizer to wrap (must be gradient-based: SGD, Adam, etc.)</param>
+    /// <param name="wrappedOptimizer">The base optimizer to wrap (must be StochasticGradientDescentOptimizer)</param>
     /// <param name="config">Configuration for distributed training communication</param>
-    /// <exception cref="ArgumentException">If wrapped optimizer is not gradient-based</exception>
+    /// <exception cref="ArgumentException">If wrapped optimizer is not SGD</exception>
+    /// <remarks>
+    /// IMPORTANT: ZeRO-2 currently only supports vanilla SGD because the gradient reversal logic
+    /// in ComputeOriginalParameters assumes the simple SGD update rule: params_old = params_new + lr * gradients.
+    /// Adam, RMSprop, and other adaptive optimizers use momentum and adaptive learning rates that cannot
+    /// be reversed with this simple formula.
+    /// </remarks>
     public ZeRO2Optimizer(
         IOptimizer<T, TInput, TOutput> wrappedOptimizer,
         IShardingConfiguration<T> config)
         : base(wrappedOptimizer, config)
     {
-        // Verify wrapped optimizer supports gradient operations
-        if (wrappedOptimizer is not IGradientBasedOptimizer<T, TInput, TOutput>)
+        // CRITICAL: Restrict to SGD only because gradient reversal assumes vanilla SGD update rule
+        if (wrappedOptimizer is not StochasticGradientDescentOptimizer<T, TInput, TOutput>)
         {
             throw new ArgumentException(
-                $"ZeRO-2 requires a gradient-based optimizer, but received {wrappedOptimizer.GetType().Name}. " +
-                "Use gradient-based optimizers like SGD, Adam, RMSprop, etc.",
+                $"ZeRO-2 currently only supports StochasticGradientDescentOptimizer, but received {wrappedOptimizer.GetType().Name}. " +
+                "The gradient reversal logic in ComputeOriginalParameters assumes the vanilla SGD update rule " +
+                "(params_old = params_new + lr * gradients), which does not hold for Adam, RMSprop, or other adaptive optimizers. " +
+                "To use ZeRO-2 with adaptive optimizers, the reversal logic would need to account for optimizer-specific state " +
+                "(momentum, variance, etc.).",
                 nameof(wrappedOptimizer));
         }
     }
