@@ -165,7 +165,7 @@ namespace AiDotNetTests.UnitTests.RAG.Embeddings
         {
             // Arrange
             var model = new MultiModalEmbeddingModel<double>("test-model-path.onnx", true, 512);
-            var nonExistentPath = "/non/existent/image.jpg";
+            var nonExistentPath = Path.Combine("non", "existent", "image.jpg");
 
             // Act & Assert
             Assert.Throws<FileNotFoundException>(() => model.EmbedImage(nonExistentPath));
