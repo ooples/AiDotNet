@@ -135,10 +135,11 @@ public class MixtureOfExpertsLayerTests
         var output = moe.Forward(input);
 
         // Assert
+        const float epsilon = 1e-6f;
         bool hasNonZero = false;
         for (int i = 0; i < output.Length; i++)
         {
-            if (output[i] != 0.0f)
+            if (Math.Abs(output[i]) > epsilon)
             {
                 hasNonZero = true;
                 break;
