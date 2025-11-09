@@ -105,6 +105,26 @@ public abstract class GradientBasedOptimizerBase<T, TInput, TOutput> : Optimizer
     public virtual Vector<T> LastComputedGradients => _lastComputedGradients;
 
     /// <inheritdoc/>
+    /// <remarks>
+    /// <para><b>⚠️ CRITICAL for Distributed Training:</b>
+    /// The model parameter passed to this method MUST be at pre-update state (original parameters
+    /// before any gradient application). This method applies gradients via UpdateSolution which
+    /// extracts parameters from the model and subtracts: params_new = params_old - lr * gradients.
+    /// </para>
+    /// <para>
+    /// If the model already contains locally-updated parameters (e.g., after calling WrappedOptimizer.Optimize
+    /// in DDP flow), passing it directly will cause double-stepping:
+    /// params_final = (params_old - lr*g_local) - lr*g_avg = params_old - lr*g_local - lr*g_avg (WRONG!)
+    /// </para>
+    /// <para>
+    /// Correct pattern for distributed optimizers:
+    /// 1. Call WrappedOptimizer.Optimize() → produces locally-updated model
+    /// 2. Compute originalParams = ComputeOriginalParameters(updatedParams, localGradients)
+    /// 3. Synchronize gradients (AllReduce/ReduceScatter)
+    /// 4. model.SetParameters(originalParams) ← CRITICAL: Restore pre-update state
+    /// 5. Call ApplyGradients(averagedGradients, model) → now produces correct result
+    /// </para>
+    /// </remarks>
     public virtual IFullModel<T, TInput, TOutput> ApplyGradients(Vector<T> gradients, IFullModel<T, TInput, TOutput> model)
     {
         if (gradients == null)
@@ -122,6 +142,10 @@ public abstract class GradientBasedOptimizerBase<T, TInput, TOutput> : Optimizer
 
         // Use the existing UpdateSolution method which applies gradients with
         // optimizer-specific logic (learning rate, momentum, Adam state, etc.)
+        //
+        // IMPORTANT: UpdateSolution extracts parameters from the model and applies gradients.
+        // For correct behavior in distributed training, the model must be at pre-update state
+        // (see remarks above for detailed explanation and correct usage pattern).
         return UpdateSolution(model, gradients);
     }
 
