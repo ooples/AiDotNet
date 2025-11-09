@@ -29,8 +29,16 @@ public class TrainingResult<T>
     /// <summary>
     /// Initializes a new instance of the TrainingResult class.
     /// </summary>
+    /// <param name="finalLoss">The final training loss.</param>
+    /// <param name="finalAccuracy">The final training accuracy.</param>
+    /// <param name="trainingTime">The time taken for training.</param>
+    /// <param name="lossHistory">The history of loss values during training.</param>
+    /// <exception cref="ArgumentNullException">Thrown when lossHistory is null.</exception>
     public TrainingResult(T finalLoss, T finalAccuracy, TimeSpan trainingTime, Vector<T> lossHistory)
     {
+        if (lossHistory == null)
+            throw new ArgumentNullException(nameof(lossHistory));
+
         FinalLoss = finalLoss;
         FinalAccuracy = finalAccuracy;
         TrainingTime = trainingTime;

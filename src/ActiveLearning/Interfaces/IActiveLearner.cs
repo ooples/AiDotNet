@@ -1,6 +1,7 @@
 using AiDotNet.ActiveLearning.Results;
 using AiDotNet.Data.Abstractions;
 using AiDotNet.Interfaces;
+using AiDotNet.LinearAlgebra;
 
 namespace AiDotNet.ActiveLearning.Interfaces;
 
@@ -76,8 +77,8 @@ public interface IActiveLearner<T, TInput, TOutput>
     /// </summary>
     /// <param name="unlabeledPool">The pool of unlabeled data.</param>
     /// <param name="batchSize">Number of examples to select.</param>
-    /// <returns>Indices of selected examples in the unlabeled pool.</returns>
-    int[] SelectExamples(IDataset<T, TInput, TOutput> unlabeledPool, int batchSize);
+    /// <returns>Vector of indices of selected examples in the unlabeled pool.</returns>
+    Vector<int> SelectExamples(IDataset<T, TInput, TOutput> unlabeledPool, int batchSize);
 
     /// <summary>
     /// Trains the model on the current labeled dataset.

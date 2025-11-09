@@ -3,6 +3,7 @@ using AiDotNet.ActiveLearning.Results;
 using AiDotNet.Data.Abstractions;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
+using AiDotNet.LinearAlgebra;
 
 namespace AiDotNet.ActiveLearning.Strategies;
 
@@ -75,8 +76,12 @@ public class ActiveLearner<T, TInput, TOutput> : IActiveLearner<T, TInput, TOutp
         // Add initial labeled data if provided
         if (initialLabeledData != null)
         {
-            // Would iterate through dataset and add to _labeledData
-            // Placeholder for now
+            for (int i = 0; i < initialLabeledData.Count; i++)
+            {
+                var input = initialLabeledData.GetInput(i);
+                var output = initialLabeledData.GetOutput(i);
+                _labeledData.Add((input, output));
+            }
         }
     }
 
@@ -96,18 +101,22 @@ public class ActiveLearner<T, TInput, TOutput> : IActiveLearner<T, TInput, TOutp
         var startTime = System.Diagnostics.Stopwatch.StartNew();
 
         // Step 1: Select informative examples
-        var selectedIndices = _queryStrategy.SelectBatch(_model, unlabeledPool, batchSize);
+        var selectedIndices = _queryStrategy.SelectBatch(_model, unlabeledPool, batchSize, null);
 
         // Step 2: Get labels from oracle
         var selectedExamples = new List<(TInput Input, TOutput Output)>();
 
-        // In full implementation, retrieve examples from unlabeledPool using indices
-        // and get labels from oracle
-        // Placeholder for now
+        for (int i = 0; i < selectedIndices.Length; i++)
+        {
+            int index = selectedIndices[i];
+            var input = unlabeledPool.GetInput(index);
+            var label = oracle(input);
+            selectedExamples.Add((input, label));
+        }
 
         // Step 3: Add to labeled dataset
         _labeledData.AddRange(selectedExamples);
-        _totalQueries += batchSize;
+        _totalQueries += selectedExamples.Count;
 
         // Step 4: Train model on updated labeled data
         var trainResult = Train();
@@ -128,9 +137,9 @@ public class ActiveLearner<T, TInput, TOutput> : IActiveLearner<T, TInput, TOutp
     }
 
     /// <inheritdoc/>
-    public int[] SelectExamples(IDataset<T, TInput, TOutput> unlabeledPool, int batchSize)
+    public Vector<int> SelectExamples(IDataset<T, TInput, TOutput> unlabeledPool, int batchSize)
     {
-        return _queryStrategy.SelectBatch(_model, unlabeledPool, batchSize);
+        return _queryStrategy.SelectBatch(_model, unlabeledPool, batchSize, null);
     }
 
     /// <inheritdoc/>
