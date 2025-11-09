@@ -56,6 +56,11 @@ public class ExpertLayer<T> : LayerBase<T>
     private readonly List<ILayer<T>> _layers;
 
     /// <summary>
+    /// Stores the pre-activation output for use in backpropagation.
+    /// </summary>
+    private Tensor<T>? _lastPreActivationOutput;
+
+    /// <summary>
     /// Gets a value indicating whether this expert supports training through backpropagation.
     /// </summary>
     /// <value>
@@ -181,6 +186,9 @@ public class ExpertLayer<T> : LayerBase<T>
             output = layer.Forward(output);
         }
 
+        // Store pre-activation output for backpropagation
+        _lastPreActivationOutput = output;
+
         // Apply the expert's activation function if specified
         return ApplyActivation(output);
     }
@@ -213,7 +221,13 @@ public class ExpertLayer<T> : LayerBase<T>
     public override Tensor<T> Backward(Tensor<T> outputGradient)
     {
         // Apply the derivative of the expert's activation function
-        var gradient = ApplyActivationDerivative(outputGradient, outputGradient);
+        // Use the stored pre-activation output from the forward pass
+        if (_lastPreActivationOutput == null)
+        {
+            throw new InvalidOperationException("Forward pass must be called before Backward pass.");
+        }
+
+        var gradient = ApplyActivationDerivative(_lastPreActivationOutput, outputGradient);
 
         // Backpropagate through layers in reverse order
         for (int i = _layers.Count - 1; i >= 0; i--)
