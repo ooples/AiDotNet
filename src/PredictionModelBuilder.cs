@@ -47,6 +47,8 @@ public class PredictionModelBuilder<T, TInput, TOutput> : IPredictionModelBuilde
     private IEnumerable<IQueryProcessor>? _queryProcessors;
     private IMetaLearner<T, TInput, TOutput>? _metaLearner;
     private ICommunicationBackend<T>? _distributedBackend;
+    private DistributedTraining.DistributedStrategy _distributedStrategy = DistributedTraining.DistributedStrategy.DDP;
+    private IShardingConfiguration<T>? _distributedConfiguration;
 
     /// <summary>
     /// Configures which features (input variables) should be used in the model.
@@ -271,18 +273,52 @@ public class PredictionModelBuilder<T, TInput, TOutput> : IPredictionModelBuilde
         IFullModel<T, TInput, TOutput> model = _model;
         IOptimizer<T, TInput, TOutput> finalOptimizer = optimizer;
 
-        if (_distributedBackend != null)
+        // Enable distributed training if backend or configuration was explicitly provided
+        if (_distributedBackend != null || _distributedConfiguration != null)
         {
             // Use provided backend or default to InMemory for single-process
             var backend = _distributedBackend ?? new DistributedTraining.InMemoryCommunicationBackend<T>(rank: 0, worldSize: 1);
 
-            // Create sharding configuration with defaults
-            var shardingConfig = new DistributedTraining.ShardingConfiguration<T>(backend);
+            // Use provided configuration or create default from backend
+            var shardingConfig = _distributedConfiguration ?? new DistributedTraining.ShardingConfiguration<T>(backend);
 
-            // Wrap with DDP (Distributed Data Parallel) - industry standard for 90% of use cases
-            // For other strategies, users can configure the distributed model directly via ConfigureModel()
-            model = new DistributedTraining.DDPModel<T, TInput, TOutput>(_model, shardingConfig);
-            finalOptimizer = new DistributedTraining.DDPOptimizer<T, TInput, TOutput>(optimizer, shardingConfig);
+            // Switch on strategy to create appropriate model/optimizer pair
+            (model, finalOptimizer) = _distributedStrategy switch
+            {
+                DistributedTraining.DistributedStrategy.DDP => (
+                    new DistributedTraining.DDPModel<T, TInput, TOutput>(_model, shardingConfig),
+                    new DistributedTraining.DDPOptimizer<T, TInput, TOutput>(optimizer, shardingConfig)
+                ),
+                DistributedTraining.DistributedStrategy.FSDP => (
+                    new DistributedTraining.FSDPModel<T, TInput, TOutput>(_model, shardingConfig),
+                    new DistributedTraining.FSDPOptimizer<T, TInput, TOutput>(optimizer, shardingConfig)
+                ),
+                DistributedTraining.DistributedStrategy.ZeRO1 => (
+                    new DistributedTraining.ZeRO1Model<T, TInput, TOutput>(_model, shardingConfig),
+                    new DistributedTraining.ZeRO1Optimizer<T, TInput, TOutput>(optimizer, shardingConfig)
+                ),
+                DistributedTraining.DistributedStrategy.ZeRO2 => (
+                    new DistributedTraining.ZeRO2Model<T, TInput, TOutput>(_model, shardingConfig),
+                    new DistributedTraining.ZeRO2Optimizer<T, TInput, TOutput>(optimizer, shardingConfig)
+                ),
+                DistributedTraining.DistributedStrategy.ZeRO3 => (
+                    new DistributedTraining.ZeRO3Model<T, TInput, TOutput>(_model, shardingConfig),
+                    new DistributedTraining.ZeRO3Optimizer<T, TInput, TOutput>(optimizer, shardingConfig)
+                ),
+                DistributedTraining.DistributedStrategy.PipelineParallel => (
+                    new DistributedTraining.PipelineParallelModel<T, TInput, TOutput>(_model, shardingConfig),
+                    new DistributedTraining.PipelineParallelOptimizer<T, TInput, TOutput>(optimizer, shardingConfig)
+                ),
+                DistributedTraining.DistributedStrategy.TensorParallel => (
+                    new DistributedTraining.TensorParallelModel<T, TInput, TOutput>(_model, shardingConfig),
+                    new DistributedTraining.TensorParallelOptimizer<T, TInput, TOutput>(optimizer, shardingConfig)
+                ),
+                DistributedTraining.DistributedStrategy.Hybrid => (
+                    new DistributedTraining.HybridShardedModel<T, TInput, TOutput>(_model, shardingConfig),
+                    new DistributedTraining.HybridShardedOptimizer<T, TInput, TOutput>(optimizer, shardingConfig)
+                ),
+                _ => throw new InvalidOperationException($"Unsupported distributed strategy: {_distributedStrategy}")
+            };
         }
 
         // Preprocess the data
@@ -523,9 +559,14 @@ public class PredictionModelBuilder<T, TInput, TOutput> : IPredictionModelBuilde
     /// You just train as normal - the distributed magic happens behind the scenes!
     /// </para>
     /// </remarks>
-    public IPredictionModelBuilder<T, TInput, TOutput> ConfigureDistributedTraining(ICommunicationBackend<T>? backend = null)
+    public IPredictionModelBuilder<T, TInput, TOutput> ConfigureDistributedTraining(
+        ICommunicationBackend<T>? backend = null,
+        DistributedTraining.DistributedStrategy strategy = DistributedTraining.DistributedStrategy.DDP,
+        IShardingConfiguration<T>? configuration = null)
     {
-        _distributedBackend = backend;  // Can be null - will use InMemory default in Build()
+        _distributedBackend = backend;
+        _distributedStrategy = strategy;
+        _distributedConfiguration = configuration;
         return this;
     }
 }

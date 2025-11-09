@@ -417,49 +417,65 @@ public interface IPredictionModelBuilder<T, TInput, TOutput>
     /// </para>
     /// <para>
     /// <b>For Beginners:</b> Call this method to enable distributed training across multiple GPUs.
-    /// You can use this with no parameters for sensible defaults, or provide a custom communication backend.
+    /// You can use it with no parameters for sensible defaults, or customize each aspect.
     /// </para>
     /// <para>
     /// <b>Beginner Usage (no parameters):</b>
     /// <code>
     /// var result = builder
     ///     .ConfigureModel(myModel)
-    ///     .ConfigureOptimizer(myOptimizer)
-    ///     .ConfigureDistributedTraining()  // Uses InMemory backend, DDP strategy
+    ///     .ConfigureDistributedTraining()  // InMemory backend, DDP strategy
     ///     .Build(xTrain, yTrain);
     /// </code>
     /// </para>
     /// <para>
-    /// <b>Advanced Usage (custom backend):</b>
+    /// <b>Intermediate Usage (specify backend):</b>
     /// <code>
     /// var backend = new MPICommunicationBackend&lt;double&gt;();
     /// var result = builder
     ///     .ConfigureModel(myModel)
-    ///     .ConfigureDistributedTraining(backend)  // Uses MPI backend, DDP strategy
+    ///     .ConfigureDistributedTraining(backend)  // MPI backend, DDP strategy
     ///     .Build(xTrain, yTrain);
     /// </code>
     /// </para>
     /// <para>
-    /// <b>Expert Usage (full control with specific distributed model):</b>
+    /// <b>Advanced Usage (specify strategy):</b>
     /// <code>
-    /// // For full control over strategy and options, configure the distributed model directly
+    /// var result = builder
+    ///     .ConfigureModel(myModel)
+    ///     .ConfigureDistributedTraining(
+    ///         backend: new NCCLCommunicationBackend&lt;double&gt;(),
+    ///         strategy: DistributedStrategy.FSDP)  // Use FSDP instead of DDP
+    ///     .Build(xTrain, yTrain);
+    /// </code>
+    /// </para>
+    /// <para>
+    /// <b>Expert Usage (full control):</b>
+    /// <code>
     /// var backend = new NCCLCommunicationBackend&lt;double&gt;();
-    /// var shardingConfig = new ShardingConfiguration&lt;double&gt;(backend)
+    /// var config = new ShardingConfiguration&lt;double&gt;(backend)
     /// {
     ///     AutoSyncGradients = true,
     ///     MinimumParameterGroupSize = 2048,
     ///     EnableGradientCompression = true
     /// };
-    /// var distributedModel = new FSDPModel&lt;double, Matrix&lt;double&gt;, Vector&lt;double&gt;&gt;(baseModel, shardingConfig);
     /// var result = builder
-    ///     .ConfigureModel(distributedModel)  // Use FSDP instead of default DDP
+    ///     .ConfigureDistributedTraining(
+    ///         backend: backend,
+    ///         strategy: DistributedStrategy.ZeRO2,
+    ///         configuration: config)  // Full control over all options
     ///     .Build(xTrain, yTrain);
     /// </code>
     /// </para>
     /// </remarks>
-    /// <param name="backend">Optional communication backend. If null, uses InMemoryCommunicationBackend.</param>
+    /// <param name="backend">Communication backend. If null, uses InMemoryCommunicationBackend.</param>
+    /// <param name="strategy">Distributed training strategy. Default is DDP (most common).</param>
+    /// <param name="configuration">Sharding configuration. If null, created from backend with defaults.</param>
     /// <returns>This builder instance for method chaining.</returns>
-    IPredictionModelBuilder<T, TInput, TOutput> ConfigureDistributedTraining(ICommunicationBackend<T>? backend = null);
+    IPredictionModelBuilder<T, TInput, TOutput> ConfigureDistributedTraining(
+        ICommunicationBackend<T>? backend = null,
+        DistributedStrategy strategy = DistributedStrategy.DDP,
+        IShardingConfiguration<T>? configuration = null);
 
     /// <summary>
     /// Builds a meta-trained model that can quickly adapt to new tasks.
