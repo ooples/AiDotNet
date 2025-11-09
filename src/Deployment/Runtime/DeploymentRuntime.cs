@@ -366,9 +366,14 @@ public class DeploymentRuntime<T> where T : struct
             finally
             {
                 // Dispose input tensors to avoid native memory leaks
-                foreach (var input in inputs)
+                // Note: NamedOnnxValue in ONNX Runtime 1.x may not implement IDisposable
+                // For newer versions that do, this prevents memory leaks
+                foreach (var inputValue in inputs)
                 {
-                    input.Dispose();
+                    if (inputValue is IDisposable disposable)
+                    {
+                        disposable.Dispose();
+                    }
                 }
             }
         });

@@ -133,14 +133,19 @@ public class TensorRTConfiguration
     /// <summary>
     /// Creates a configuration optimized for high throughput.
     /// </summary>
-    public static TensorRTConfiguration ForHighThroughput(int batchSize = 64)
+    /// <param name="batchSize">Maximum batch size</param>
+    /// <param name="calibrationDataPath">Optional path to calibration data for INT8 quantization. If provided, INT8 will be enabled.</param>
+    public static TensorRTConfiguration ForHighThroughput(int batchSize = 64, string? calibrationDataPath = null)
     {
+        var useInt8 = !string.IsNullOrEmpty(calibrationDataPath);
+
         return new TensorRTConfiguration
         {
             MaxBatchSize = batchSize,
             MaxWorkspaceSize = 8L << 30, // 8 GB
             UseFp16 = true,
-            UseInt8 = true,
+            UseInt8 = useInt8,
+            CalibrationDataPath = calibrationDataPath,
             EnableMultiStream = true,
             NumStreams = 8,
             EnableCudaGraphs = false, // CUDA graphs work better with fixed batch sizes
