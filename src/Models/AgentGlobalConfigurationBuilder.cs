@@ -284,9 +284,9 @@ public class AgentGlobalConfigurationBuilder
     /// </remarks>
     internal void Apply()
     {
-        foreach (var (provider, key) in _keys)
+        foreach (var kvp in _keys)
         {
-            AgentGlobalConfiguration.SetApiKey(provider, key);
+            AgentGlobalConfiguration.SetApiKey(kvp.Key, kvp.Value);
         }
         AgentGlobalConfiguration.DefaultProvider = _defaultProvider;
     }

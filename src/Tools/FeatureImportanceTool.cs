@@ -91,7 +91,8 @@ public class FeatureImportanceTool : ToolBase
         try
         {
             var root = JObject.Parse(input);
-            if (!root.TryGetProperty("features", out JsonElement featuresElem))
+            var featuresObj = root["features"] as JObject;
+            if (featuresObj == null)
             {
                 return "Error: Missing 'features' property in input JSON.";
             }
@@ -101,24 +102,34 @@ public class FeatureImportanceTool : ToolBase
             analysis.AppendLine("=== FEATURE IMPORTANCE & ENGINEERING ANALYSIS ===\n");
             // Parse all features
             var features = new List<FeatureInfo>();
-            foreach (JsonProperty featureProp in featuresElem.EnumerateObject())
+            foreach (var featureProp in featuresObj)
             {
                 var feature = new FeatureInfo
                 {
-                    Name = featureProp.Name
+                    Name = featureProp.Key
                 };
-                JsonElement stats = featureProp.Value;
-                if (stats.TryGetProperty("target_correlation", out JsonElement corrElem))
-                    feature.TargetCorrelation = Math.Abs(corrElem.GetDouble());
-                if (stats.TryGetProperty("importance_score", out JsonElement impElem))
-                    feature.ImportanceScore = impElem.GetDouble();
-                if (stats.TryGetProperty("missing_pct", out JsonElement missingElem))
-                    feature.MissingPct = missingElem.GetDouble();
-                if (stats.TryGetProperty("correlations", out JsonElement correlsElem))
+                var stats = featureProp.Value as JObject;
+                if (stats != null)
                 {
-                    foreach (JsonProperty corrProp in correlsElem.EnumerateObject())
+                    var targetCorr = stats["target_correlation"];
+                    if (targetCorr != null)
+                        feature.TargetCorrelation = Math.Abs(targetCorr.Value<double>());
+                    var importanceScore = stats["importance_score"];
+                    if (importanceScore != null)
+                        feature.ImportanceScore = importanceScore.Value<double>();
+                    var missingPct = stats["missing_pct"];
+                    if (missingPct != null)
+                        feature.MissingPct = missingPct.Value<double>();
+                    var correlsObj = stats["correlations"] as JObject;
+                    if (correlsObj != null)
                     {
-                        feature.Correlations[corrProp.Name] = Math.Abs(corrProp.Value.GetDouble());
+                        foreach (var corrProp in correlsObj)
+                        {
+                            if (corrProp.Value != null)
+                            {
+                                feature.Correlations[corrProp.Key] = Math.Abs(corrProp.Value.Value<double>());
+                            }
+                        }
                     }
                 }
                 features.Add(feature);
@@ -172,8 +183,10 @@ public class FeatureImportanceTool : ToolBase
             var highCorrelations = new List<(string Feature1, string Feature2, double Correlation)>();
             foreach (var feature in features)
             {
-                foreach (var (otherFeature, correlation) in feature.Correlations)
+                foreach (var kvp in feature.Correlations)
                 {
+                    string otherFeature = kvp.Key;
+                    double correlation = kvp.Value;
                     if (correlation > 0.7 && otherFeature != targetName)
                     {
                         // Avoid duplicates by only adding if feature1 < feature2 alphabetically

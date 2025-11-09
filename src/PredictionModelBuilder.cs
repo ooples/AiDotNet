@@ -227,7 +227,7 @@ public class PredictionModelBuilder<T, TInput, TOutput> : IPredictionModelBuilde
     ///     .BuildAsync();
     /// </code>
     /// </remarks>
-    public async Task<PredictionModelResult<T, TInput, TOutput>> BuildAsync()
+    public Task<PredictionModelResult<T, TInput, TOutput>> BuildAsync()
     {
         // META-LEARNING PATH - requires ConfigureMetaLearning() to be called first
         if (_metaLearner == null)
@@ -251,7 +251,7 @@ public class PredictionModelBuilder<T, TInput, TOutput> : IPredictionModelBuilde
             queryProcessors: _queryProcessors,
             agentConfig: _agentConfig);
 
-        return result;
+        return Task.FromResult(result);
     }
 
     /// <summary>

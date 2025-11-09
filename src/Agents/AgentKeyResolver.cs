@@ -143,7 +143,7 @@ public static class AgentKeyResolver
         LLMProvider provider = LLMProvider.OpenAI)
     {
         // 1. Explicit parameter takes highest priority
-        if (!string.IsNullOrWhiteSpace(explicitKey))
+        if (explicitKey != null && !string.IsNullOrWhiteSpace(explicitKey))
             return explicitKey;
 
         // 2. Check stored config from build phase
