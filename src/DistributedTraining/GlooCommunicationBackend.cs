@@ -40,8 +40,16 @@ namespace AiDotNet.DistributedTraining;
 /// </para>
 /// <para><b>Graceful Degradation:</b>
 /// If Gloo library is not available, this backend provides a production-ready TCP-based
-/// implementation of collective operations using industry-standard ring algorithms.
-/// This fallback provides full functionality without external dependencies.
+/// implementation of collective operations using industry-standard ring algorithms
+/// (ring-allreduce, ring-allgather, ring-reduce-scatter). This fallback provides full
+/// multi-process functionality without external dependencies.
+///
+/// The TCP implementation features:
+/// - Automatic TCP connection initialization with retry logic and handshakes
+/// - Ring-based collective operations for optimal bandwidth utilization
+/// - Proper error handling, validation, and timeout mechanisms
+/// - Environment-based rendezvous (AIDOTNET_MASTER_ADDR, AIDOTNET_MASTER_PORT)
+/// - Support for arbitrary world sizes and fault-tolerant connection establishment
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric type for operations</typeparam>
