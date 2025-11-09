@@ -429,6 +429,12 @@ public class InMemoryCommunicationBackend<T> : CommunicationBackendBase<T>
 
             Monitor.PulseAll(_globalLock);
 
+            // Guard against null (should never happen after successful TryGetValue)
+            if (buffer == null || buffer.Count == 0)
+            {
+                throw new InvalidOperationException("Broadcast buffer is null or empty after synchronization.");
+            }
+
             // All processes retrieve the data
             result = buffer[0].Clone();
 
@@ -501,6 +507,12 @@ public class InMemoryCommunicationBackend<T> : CommunicationBackendBase<T>
             }
 
             Monitor.PulseAll(_globalLock);
+
+            // Guard against null (should never happen after successful TryGetValue)
+            if (buffer == null || buffer.Count <= _rank)
+            {
+                throw new InvalidOperationException($"Scatter buffer is null or missing data for rank {_rank} after synchronization.");
+            }
 
             // Each process retrieves its chunk
             var result = buffer[_rank].Clone();
