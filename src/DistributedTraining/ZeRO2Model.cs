@@ -81,11 +81,14 @@ public class ZeRO2Model<T, TInput, TOutput> : ShardedModelBase<T, TInput, TOutpu
         ShardSize = fullParameters.Length;
         LocalShard = new Vector<T>(fullParameters.ToArray());
 
-        // Calculate gradient shard size
+        // Calculate gradient shard size to align with ReduceScatter chunk boundaries
+        // Using ceiling division ensures chunks align: (34, 34, 32) instead of (34, 33, 33)
+        // This prevents misalignment where ReduceScatter chunks don't match logical shard boundaries
         int totalParams = fullParameters.Length;
-        int baseShardSize = totalParams / WorldSize;
-        int remainder = totalParams % WorldSize;
-        int gradShardSize = baseShardSize + (Rank < remainder ? 1 : 0);
+        int chunkSize = (totalParams + WorldSize - 1) / WorldSize;  // Ceiling division
+        int shardStart = Rank * chunkSize;
+        int shardEnd = Math.Min((Rank + 1) * chunkSize, totalParams);
+        int gradShardSize = shardEnd - shardStart;
 
         _gradientShard = new Vector<T>(new T[gradShardSize]);
         CachedFullParameters = null;
@@ -97,13 +100,15 @@ public class ZeRO2Model<T, TInput, TOutput> : ShardedModelBase<T, TInput, TOutpu
     public override void SynchronizeGradients()
     {
         var totalParams = LocalShard.Length;
-        var remainder = totalParams % WorldSize;
+
+        // Calculate chunk size using ceiling division to align with ReduceScatter boundaries
+        int chunkSize = (totalParams + WorldSize - 1) / WorldSize;
+        var paddedLength = chunkSize * WorldSize;
 
         // Pad to satisfy ReduceScatter's divisibility requirement
         Vector<T> reduceInput = LocalShard;
-        if (remainder != 0)
+        if (paddedLength > totalParams)
         {
-            var paddedLength = totalParams + (WorldSize - remainder);
             var padded = new T[paddedLength];
             Array.Copy(LocalShard.ToArray(), padded, totalParams);
             // Padding elements remain at default(T) which is typically 0
@@ -113,9 +118,15 @@ public class ZeRO2Model<T, TInput, TOutput> : ShardedModelBase<T, TInput, TOutpu
         // Perform ReduceScatter on padded data
         var reducedChunk = Config.CommunicationBackend.ReduceScatter(reduceInput, ReductionOperation.Average);
 
-        // Trim padding so each rank keeps only its logical shard
-        // Distribute remainder elements to first 'remainder' ranks
-        var shardLength = totalParams / WorldSize + (Rank < remainder ? 1 : 0);
+        // Calculate this rank's shard boundaries in the original (non-padded) parameter space
+        // This ensures proper alignment: each rank gets chunkSize elements except the last rank
+        // which gets whatever remains. For example, with 100 params and 3 ranks:
+        // Rank 0: [0:34) = 34 elements, Rank 1: [34:68) = 34 elements, Rank 2: [68:100) = 32 elements
+        int shardStart = Rank * chunkSize;
+        int shardEnd = Math.Min((Rank + 1) * chunkSize, totalParams);
+        int shardLength = shardEnd - shardStart;
+
+        // Extract the logical shard from the received chunk (trimming any padding)
         var shardData = new T[shardLength];
         Array.Copy(reducedChunk.ToArray(), 0, shardData, 0, shardLength);
         _gradientShard = new Vector<T>(shardData);
