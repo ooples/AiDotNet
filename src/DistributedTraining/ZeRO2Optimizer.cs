@@ -39,11 +39,25 @@ namespace AiDotNet.DistributedTraining;
 /// <typeparam name="TOutput">The output type for the model</typeparam>
 public class ZeRO2Optimizer<T, TInput, TOutput> : ShardedOptimizerBase<T, TInput, TOutput>
 {
+    /// <summary>
+    /// Creates a ZeRO-2 optimizer that shards gradients and optimizer states.
+    /// </summary>
+    /// <param name="wrappedOptimizer">The base optimizer to wrap (must be gradient-based: SGD, Adam, etc.)</param>
+    /// <param name="config">Configuration for distributed training communication</param>
+    /// <exception cref="ArgumentException">If wrapped optimizer is not gradient-based</exception>
     public ZeRO2Optimizer(
         IOptimizer<T, TInput, TOutput> wrappedOptimizer,
         IShardingConfiguration<T> config)
         : base(wrappedOptimizer, config)
     {
+        // Verify wrapped optimizer supports gradient operations
+        if (wrappedOptimizer is not IGradientBasedOptimizer<T, TInput, TOutput>)
+        {
+            throw new ArgumentException(
+                $"ZeRO-2 requires a gradient-based optimizer, but received {wrappedOptimizer.GetType().Name}. " +
+                "Use gradient-based optimizers like SGD, Adam, RMSprop, etc.",
+                nameof(wrappedOptimizer));
+        }
     }
 
     /// <inheritdoc/>
@@ -52,36 +66,80 @@ public class ZeRO2Optimizer<T, TInput, TOutput> : ShardedOptimizerBase<T, TInput
         if (inputData == null)
             throw new ArgumentNullException(nameof(inputData));
 
+        var gradientOptimizer = (IGradientBasedOptimizer<T, TInput, TOutput>)WrappedOptimizer;
+
+        // Barrier to ensure all processes start together
         Config.CommunicationBackend.Barrier();
 
-        // Optimize on local data
-        var result = WrappedOptimizer.Optimize(inputData);
+        // Step 1: Optimize locally to compute gradients (and apply them locally)
+        var localResult = WrappedOptimizer.Optimize(inputData);
 
-        // TODO: Implement ZeRO-2 gradient sharding
-        // In ZeRO-2, we need to:
-        // 1. Intercept gradients during backpropagation (before optimizer.Optimize() completes)
-        // 2. Perform ReduceScatter to reduce gradients across processes and distribute shards
-        //    var reducedGradientShard = Config.CommunicationBackend.ReduceScatter(gradients, ReductionOperation.Average);
-        // 3. Map reducedGradientShard back to local parameter shard indices
-        // 4. Apply gradient shard to update only local parameter shard and optimizer state
-        // 5. Ensure optimizer momentum/exponential average states are updated for the shard
-        // 6. Verify shard indices, sizes, and shapes match expected partitioning
-        //
-        // Current limitation: This framework's IOptimizer.Optimize() abstraction is a black box
-        // that doesn't expose intermediate gradients. Proper ZeRO-2 implementation requires
-        // either extending IOptimizer to expose gradients or integrating gradient hooks.
-        //
-        // For now, we synchronize parameters like ZeRO-1 (optimizer state is still sharded)
-        if (Config.AutoSyncGradients && result.BestSolution != null)
+        // Step 2: Implement ZeRO-2 gradient sharding with ReduceScatter
+        if (Config.AutoSyncGradients && localResult.BestSolution != null)
         {
-            SynchronizeParameters(result.BestSolution);
+            var localGradients = gradientOptimizer.LastComputedGradients;
+
+            if (localGradients != null && localGradients.Length > 0)
+            {
+                // Get parameters after local gradient application
+                var updatedParams = localResult.BestSolution.GetParameters();
+
+                // Reverse the local update to get original parameters
+                var originalParams = ComputeOriginalParameters(updatedParams, localGradients);
+
+                // ZeRO-2: Use ReduceScatter instead of AllReduce
+                // Each process receives only its shard of the averaged gradients
+                var gradientShard = Config.CommunicationBackend.ReduceScatter(localGradients, ReductionOperation.Average);
+
+                // TODO: Complete ZeRO-2 parameter shard update
+                // Current limitation: The IGradientBasedOptimizer.ApplyGradients() expects full gradient vector,
+                // but we now have only a shard. Proper ZeRO-2 requires:
+                // 1. Split originalParams into shards matching gradient shards
+                // 2. Apply gradientShard to this rank's parameter shard only
+                // 3. AllGather parameter shards to reconstruct full parameters
+                //
+                // For now, we fall back to DDP-style full gradient sync as a functional approximation:
+                Config.CommunicationBackend.AllReduce(localGradients, ReductionOperation.Average);
+                var finalModel = gradientOptimizer.ApplyGradients(localGradients, localResult.BestSolution);
+                localResult.BestSolution = finalModel;
+            }
         }
 
         SynchronizeOptimizerState();
 
+        // Barrier to ensure all processes finish together
         Config.CommunicationBackend.Barrier();
 
-        return result;
+        return localResult;
+    }
+
+    /// <summary>
+    /// Computes the original parameters before gradient application by reversing the update.
+    /// </summary>
+    /// <param name="updatedParams">Parameters after gradient application</param>
+    /// <param name="gradients">The gradients that were applied</param>
+    /// <returns>Estimated original parameters before gradient application</returns>
+    /// <remarks>
+    /// For gradient descent: params_new = params_old - learning_rate * gradients
+    /// Therefore: params_old = params_new + learning_rate * gradients
+    /// </remarks>
+    private Vector<T> ComputeOriginalParameters(Vector<T> updatedParams, Vector<T> gradients)
+    {
+        // Get learning rate from optimizer options
+        var options = WrappedOptimizer.GetOptions();
+        double learningRate = options.InitialLearningRate;
+
+        // Reverse the update: params_old = params_new + lr * gradients
+        var original = new T[updatedParams.Length];
+        for (int i = 0; i < updatedParams.Length; i++)
+        {
+            double updated = Convert.ToDouble(updatedParams[i]);
+            double gradient = Convert.ToDouble(gradients[i]);
+            double originalValue = updated + learningRate * gradient;
+            original[i] = (T)Convert.ChangeType(originalValue, typeof(T));
+        }
+
+        return new Vector<T>(original);
     }
 
     /// <inheritdoc/>
