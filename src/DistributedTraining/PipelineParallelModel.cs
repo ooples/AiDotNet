@@ -112,7 +112,10 @@ public class PipelineParallelModel<T, TInput, TOutput> : ShardedModelBase<T, TIn
         // Pipeline parallel training with proper inter-stage communication
         // Strategy: Convert activations to Vector<T> for communication between stages
 
-        WrappedModel.SetParameters(LocalShard);
+        // Gather full parameters before training
+        // LocalShard only contains this stage's chunk, but WrappedModel expects full parameter vector
+        var fullParams = GatherFullParameters();
+        WrappedModel.SetParameters(fullParams);
 
         // Determine actual input for this stage
         TInput stageInput = input;
@@ -132,7 +135,10 @@ public class PipelineParallelModel<T, TInput, TOutput> : ShardedModelBase<T, TIn
         // Train this stage with the received (or original) input
         WrappedModel.Train(stageInput, expectedOutput);
         var stageOutput = WrappedModel.Predict(stageInput);
-        LocalShard = WrappedModel.GetParameters();
+
+        // Get updated full parameters and extract this stage's shard
+        var updatedParams = WrappedModel.GetParameters();
+        UpdateLocalShardFromFull(updatedParams);
 
         // FORWARD PASS: Send activations to next stage
         if (_stageId < _numStages - 1)
