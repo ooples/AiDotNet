@@ -3,24 +3,28 @@ namespace AiDotNet.DecompositionMethods.MatrixDecomposition;
 /// <summary>
 /// Implements the Gram-Schmidt orthogonalization process to decompose a matrix into an orthogonal matrix Q and an upper triangular matrix R.
 /// </summary>
+/// <typeparam name="T">The numeric data type used in calculations (e.g., float, double).</typeparam>
 /// <remarks>
+/// <para>
 /// The Gram-Schmidt process transforms a set of vectors into a set of orthogonal vectors (vectors that are perpendicular to each other).
 /// This decomposition is useful for solving linear systems, computing least squares solutions, and other numerical applications.
-/// 
-/// In simple terms, this class takes a matrix and breaks it down into two special matrices:
-/// - Q: A matrix with perpendicular columns (orthogonal matrix)
-/// - R: An upper triangular matrix (only has values on and above the diagonal)
-/// 
-/// Together, these matrices can be multiplied to get back the original matrix: A = Q * R
+/// The result is a QR factorization where A = Q * R.
+/// </para>
+/// <para>
+/// <b>For Beginners:</b> This class takes a matrix and breaks it down into two special matrices:
+/// Q (a matrix with perpendicular columns) and R (an upper triangular matrix with values only on and above the diagonal).
+/// Think of it like organizing a messy set of vectors into a neat, perpendicular coordinate system.
+/// Together, these matrices can be multiplied to get back the original matrix: A = Q * R.
+/// </para>
+/// <para>
+/// Real-world applications:
+/// - Solving systems of linear equations
+/// - Computing least squares solutions in regression analysis
+/// - Numerical stability improvements in various algorithms
+/// </para>
 /// </remarks>
-/// <typeparam name="T">The numeric data type used in calculations (e.g., float, double).</typeparam>
-public class GramSchmidtDecomposition<T> : IMatrixDecomposition<T>
+public class GramSchmidtDecomposition<T> : MatrixDecompositionBase<T>
 {
-    /// <summary>
-    /// Operations for performing numeric calculations with type T.
-    /// </summary>
-    private readonly INumericOperations<T> _numOps;
-
     /// <summary>
     /// Gets the orthogonal matrix Q from the decomposition.
     /// </summary>
@@ -29,7 +33,7 @@ public class GramSchmidtDecomposition<T> : IMatrixDecomposition<T>
     /// Each column has a length (norm) of 1, making it an "orthonormal" matrix.
     /// This property makes Q useful for transforming vectors while preserving their length.
     /// </remarks>
-    public Matrix<T> Q { get; private set; }
+    public Matrix<T> Q { get; private set; } = new Matrix<T>(0, 0);
 
     /// <summary>
     /// Gets the upper triangular matrix R from the decomposition.
@@ -38,12 +42,9 @@ public class GramSchmidtDecomposition<T> : IMatrixDecomposition<T>
     /// The R matrix is upper triangular, meaning it only has non-zero values on and above the diagonal.
     /// This structure makes it easy to solve systems of equations through back-substitution.
     /// </remarks>
-    public Matrix<T> R { get; private set; }
+    public Matrix<T> R { get; private set; } = new Matrix<T>(0, 0);
 
-    /// <summary>
-    /// Gets the original matrix that was decomposed.
-    /// </summary>
-    public Matrix<T> A { get; private set; }
+    private readonly GramSchmidtAlgorithmType _algorithm;
 
     /// <summary>
     /// Creates a new Gram-Schmidt decomposition for the specified matrix.
@@ -57,10 +58,18 @@ public class GramSchmidtDecomposition<T> : IMatrixDecomposition<T>
     /// - Modified: An improved version with better numerical stability for most applications
     /// </remarks>
     public GramSchmidtDecomposition(Matrix<T> matrix, GramSchmidtAlgorithmType algorithm = GramSchmidtAlgorithmType.Classical)
+        : base(matrix)
     {
-        _numOps = MathHelper.GetNumericOperations<T>();
-        A = matrix;
-        (Q, R) = Decompose(matrix, algorithm);
+        _algorithm = algorithm;
+        Decompose();
+    }
+
+    /// <summary>
+    /// Performs the Gram-Schmidt decomposition.
+    /// </summary>
+    protected override void Decompose()
+    {
+        (Q, R) = ComputeDecomposition(A, _algorithm);
     }
 
     /// <summary>
@@ -70,7 +79,7 @@ public class GramSchmidtDecomposition<T> : IMatrixDecomposition<T>
     /// <param name="algorithm">The type of Gram-Schmidt algorithm to use.</param>
     /// <returns>A tuple containing the Q and R matrices.</returns>
     /// <exception cref="ArgumentException">Thrown when an unsupported algorithm type is specified.</exception>
-    private (Matrix<T> Q, Matrix<T> R) Decompose(Matrix<T> matrix, GramSchmidtAlgorithmType algorithm)
+    private (Matrix<T> Q, Matrix<T> R) ComputeDecomposition(Matrix<T> matrix, GramSchmidtAlgorithmType algorithm)
     {
         return algorithm switch
         {
@@ -186,10 +195,10 @@ public class GramSchmidtDecomposition<T> : IMatrixDecomposition<T>
     ///    (This works because Q is orthogonal, so Q^T * Q = I)
     /// 2. Then, it solves Rx = y using back-substitution
     ///    (This is efficient because R is upper triangular)
-    /// 
+    ///
     /// The result is the solution vector x that satisfies Ax = b.
     /// </remarks>
-    public Vector<T> Solve(Vector<T> b)
+    public override Vector<T> Solve(Vector<T> b)
     {
         // Solve Qy = b by computing y = Q^T * b
         var y = Q.Transpose().Multiply(b);
@@ -224,14 +233,14 @@ public class GramSchmidtDecomposition<T> : IMatrixDecomposition<T>
         for (int i = n - 1; i >= 0; i--)
         {
             // Calculate the sum of known terms
-            var sum = _numOps.Zero;
+            var sum = NumOps.Zero;
             for (int j = i + 1; j < n; j++)
             {
-                sum = _numOps.Add(sum, _numOps.Multiply(R[i, j], x[j]));
+                sum = NumOps.Add(sum, NumOps.Multiply(R[i, j], x[j]));
             }
             
             // Solve for the current variable
-            x[i] = _numOps.Divide(_numOps.Subtract(y[i], sum), R[i, i]);
+            x[i] = NumOps.Divide(NumOps.Subtract(y[i], sum), R[i, i]);
         }
 
         return x;
@@ -246,16 +255,16 @@ public class GramSchmidtDecomposition<T> : IMatrixDecomposition<T>
     /// - A is the original matrix
     /// - I is the identity matrix
     /// - X is the inverse of A
-    /// 
+    ///
     /// The process works by:
     /// 1. Creating an identity matrix of the same size as A
     /// 2. Solving the system AX = I for each column of X separately
     /// 3. Combining the solution vectors to form the complete inverse matrix
-    /// 
+    ///
     /// The inverse exists only if A is square and has full rank (all columns are linearly independent).
     /// Using QR decomposition for matrix inversion is numerically stable compared to some other methods.
     /// </remarks>
-    public Matrix<T> Invert()
+    public override Matrix<T> Invert()
     {
         int n = A.Rows;
         var identity = Matrix<T>.CreateIdentity(n);

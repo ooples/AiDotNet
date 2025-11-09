@@ -1,13 +1,17 @@
 using AiDotNet.Enums;
 using AiDotNet.Interfaces;
+using AiDotNet.Deployment.Export;
 
 namespace AiDotNet.Deployment.Optimization.Quantization;
 
 /// <summary>
 /// INT8 quantizer for model optimization.
+/// Properly integrates with IFullModel architecture.
 /// </summary>
 /// <typeparam name="T">The numeric type used in the model</typeparam>
-public class Int8Quantizer<T> : IQuantizer<T> where T : struct
+/// <typeparam name="TInput">The input type for the model</typeparam>
+/// <typeparam name="TOutput">The output type for the model</typeparam>
+public class Int8Quantizer<T, TInput, TOutput> : IQuantizer<T, TInput, TOutput> where T : struct
 {
     private readonly Dictionary<string, double> _scaleFactors = new();
     private readonly Dictionary<string, int> _zeroPoints = new();
@@ -20,7 +24,7 @@ public class Int8Quantizer<T> : IQuantizer<T> where T : struct
     public int BitWidth => 8;
 
     /// <inheritdoc/>
-    public object Quantize(object model, QuantizationConfiguration config)
+    public IFullModel<T, TInput, TOutput> Quantize(IFullModel<T, TInput, TOutput> model, QuantizationConfiguration config)
     {
         if (model == null)
             throw new ArgumentNullException(nameof(model));
@@ -31,58 +35,99 @@ public class Int8Quantizer<T> : IQuantizer<T> where T : struct
                 "Quantizer must be calibrated before quantizing. Call Calibrate() with sample data first.");
         }
 
-        // Clone the model to avoid modifying the original
-        var quantizedModel = CloneModel(model);
+        // Get current parameters via IParameterizable<T, TInput, TOutput>
+        var parameters = model.GetParameters();
 
-        // Quantize parameters
-        if (model is IParameterizable<T> paramModel)
-        {
-            var parameters = paramModel.GetParameters();
-            var quantizedParams = QuantizeParameters(parameters, config);
+        // Quantize the parameters
+        var quantizedParams = QuantizeParameters(parameters, config);
 
-            if (quantizedModel is IParameterizable<T> quantizedParamModel)
-            {
-                quantizedParamModel.SetParameters(quantizedParams);
-            }
-        }
+        // Create new model with quantized parameters using WithParameters
+        var quantizedModel = model.WithParameters(quantizedParams);
 
         return quantizedModel;
     }
 
     /// <inheritdoc/>
-    public void Calibrate(IEnumerable<T[]> calibrationData)
+    public void Calibrate(IFullModel<T, TInput, TOutput> model, IEnumerable<TInput> calibrationData)
     {
+        if (model == null)
+            throw new ArgumentNullException(nameof(model));
         if (calibrationData == null || !calibrationData.Any())
             throw new ArgumentException("Calibration data cannot be null or empty", nameof(calibrationData));
 
-        // Collect statistics from calibration data
-        var samples = calibrationData.ToList();
+        // Collect parameter statistics
+        var parameters = model.GetParameters();
+        var paramValues = new List<double>();
 
-        // Find min and max values across all samples
-        double globalMin = double.MaxValue;
-        double globalMax = double.MinValue;
-
-        foreach (var sample in samples)
+        for (int i = 0; i < parameters.Length; i++)
         {
-            foreach (var value in sample)
+            paramValues.Add(Convert.ToDouble(parameters[i]));
+        }
+
+        // Compute scale and zero point using MinMax method
+        double min = paramValues.Min();
+        double max = paramValues.Max();
+
+        // Ensure min and max are different
+        if (Math.Abs(max - min) < 1e-10)
+        {
+            min = min - 0.1;
+            max = max + 0.1;
+        }
+
+        // For symmetric quantization (INT8: -128 to 127)
+        double absMax = Math.Max(Math.Abs(min), Math.Abs(max));
+        double scale = absMax / 127.0;
+
+        // Prevent zero scale
+        scale = Math.Max(scale, 1e-6);
+
+        _scaleFactors["global"] = scale;
+        _zeroPoints["global"] = 0; // Symmetric quantization
+
+        // If model supports inference (IModel interface), collect activation statistics
+        if (model is IModel<TInput, TOutput, object> inferenceModel)
+        {
+            var activations = new List<double>();
+            int samplesProcessed = 0;
+
+            foreach (var sample in calibrationData.Take(100)) // Limit calibration samples
             {
-                var doubleValue = Convert.ToDouble(value);
-                if (doubleValue < globalMin) globalMin = doubleValue;
-                if (doubleValue > globalMax) globalMax = doubleValue;
+                try
+                {
+                    var output = inferenceModel.Predict(sample);
+
+                    // If output is an array type, collect statistics from it
+                    if (output is T[] outputArray)
+                    {
+                        foreach (var val in outputArray)
+                        {
+                            activations.Add(Convert.ToDouble(val));
+                        }
+                    }
+
+                    samplesProcessed++;
+                }
+                catch
+                {
+                    // Skip samples that fail inference
+                    continue;
+                }
+            }
+
+            // Compute activation statistics if we collected any
+            if (activations.Count > 0)
+            {
+                double actMin = activations.Min();
+                double actMax = activations.Max();
+                double actAbsMax = Math.Max(Math.Abs(actMin), Math.Abs(actMax));
+                double actScale = actAbsMax / 127.0;
+
+                // Use average of parameter and activation scales
+                _scaleFactors["global"] = (scale + Math.Max(actScale, 1e-6)) / 2.0;
             }
         }
 
-        // Calculate scale factor and zero point for symmetric quantization
-        var absMax = Math.Max(Math.Abs(globalMin), Math.Abs(globalMax));
-        var scaleFactor = absMax / 127.0; // INT8 range: -128 to 127
-
-        // Prevent zero scale when all calibration values are zero or very small
-        if (scaleFactor < 1e-10)
-            scaleFactor = 1.0;
-
-        // Store calibration results
-        _scaleFactors["global"] = scaleFactor;
-        _zeroPoints["global"] = 0; // Symmetric quantization uses zero point of 0
         _isCalibrated = true;
     }
 
@@ -104,12 +149,12 @@ public class Int8Quantizer<T> : IQuantizer<T> where T : struct
         return _zeroPoints.GetValueOrDefault("global", 0);
     }
 
-    private T[] QuantizeParameters(T[] parameters, QuantizationConfiguration config)
+    private Vector<T> QuantizeParameters(Vector<T> parameters, QuantizationConfiguration config)
     {
         var scaleFactor = _scaleFactors.GetValueOrDefault("global", 1.0);
         var zeroPoint = _zeroPoints.GetValueOrDefault("global", 0);
 
-        var quantized = new T[parameters.Length];
+        var quantizedValues = new T[parameters.Length];
 
         for (int i = 0; i < parameters.Length; i++)
         {
@@ -124,33 +169,9 @@ public class Int8Quantizer<T> : IQuantizer<T> where T : struct
             // Dequantize back to original type for storage
             var dequantizedValue = (quantizedValue - zeroPoint) * scaleFactor;
 
-            quantized[i] = (T)Convert.ChangeType(dequantizedValue, typeof(T));
+            quantizedValues[i] = (T)Convert.ChangeType(dequantizedValue, typeof(T));
         }
 
-        return quantized;
-    }
-
-    private object CloneModel(object model)
-    {
-        // If model implements ICloneable, use it
-        if (model is ICloneable cloneable)
-        {
-            return cloneable.Clone();
-        }
-
-        // If model implements IModelSerializer, use serialization for cloning
-        if (model is IModelSerializer serializer)
-        {
-            var data = serializer.Serialize();
-            var clone = Activator.CreateInstance(model.GetType());
-
-            if (clone is IModelSerializer cloneSerializer)
-            {
-                cloneSerializer.Deserialize(data);
-                return clone;
-            }
-        }
-
-        throw new NotSupportedException($"Model type {model.GetType().Name} does not support cloning");
+        return new Vector<T>(quantizedValues);
     }
 }

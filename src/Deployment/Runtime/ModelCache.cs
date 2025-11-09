@@ -209,15 +209,3 @@ internal class CacheEntry<T> where T : struct
         set => Interlocked.Exchange(ref LastAccessedTicks, value.Ticks);
     }
 }
-
-/// <summary>
-/// Statistics for the model cache.
-/// </summary>
-public class CacheStatistics
-{
-    public int TotalEntries { get; set; }
-    public long TotalAccessCount { get; set; }
-    public double AverageAccessCount { get; set; }
-    public TimeSpan OldestEntryAge { get; set; }
-    public TimeSpan NewestEntryAge { get; set; }
-}

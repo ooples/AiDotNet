@@ -1,13 +1,17 @@
 using AiDotNet.Enums;
 using AiDotNet.Interfaces;
+using AiDotNet.Deployment.Export;
 
 namespace AiDotNet.Deployment.Optimization.Quantization;
 
 /// <summary>
 /// FP16 (half-precision) quantizer for model optimization.
+/// Properly integrates with IFullModel architecture.
 /// </summary>
 /// <typeparam name="T">The numeric type used in the model</typeparam>
-public class Float16Quantizer<T> : IQuantizer<T> where T : struct
+/// <typeparam name="TInput">The input type for the model</typeparam>
+/// <typeparam name="TOutput">The output type for the model</typeparam>
+public class Float16Quantizer<T, TInput, TOutput> : IQuantizer<T, TInput, TOutput> where T : struct
 {
     /// <inheritdoc/>
     public QuantizationMode Mode => QuantizationMode.Float16;
@@ -16,33 +20,27 @@ public class Float16Quantizer<T> : IQuantizer<T> where T : struct
     public int BitWidth => 16;
 
     /// <inheritdoc/>
-    public object Quantize(object model, QuantizationConfiguration config)
+    public IFullModel<T, TInput, TOutput> Quantize(IFullModel<T, TInput, TOutput> model, QuantizationConfiguration config)
     {
         if (model == null)
             throw new ArgumentNullException(nameof(model));
 
-        // Clone the model
-        var quantizedModel = CloneModel(model);
+        // Get current parameters via IParameterizable<T, TInput, TOutput>
+        var parameters = model.GetParameters();
 
-        // Quantize parameters to FP16
-        if (model is IParameterizable<T> paramModel)
-        {
-            var parameters = paramModel.GetParameters();
-            var quantizedParams = QuantizeParametersToFp16(parameters);
+        // Quantize to FP16 and back
+        var quantizedParams = QuantizeParametersToFp16(parameters);
 
-            if (quantizedModel is IParameterizable<T> quantizedParamModel)
-            {
-                quantizedParamModel.SetParameters(quantizedParams);
-            }
-        }
+        // Create new model with quantized parameters using WithParameters
+        var quantizedModel = model.WithParameters(quantizedParams);
 
         return quantizedModel;
     }
 
     /// <inheritdoc/>
-    public void Calibrate(IEnumerable<T[]> calibrationData)
+    public void Calibrate(IFullModel<T, TInput, TOutput> model, IEnumerable<TInput> calibrationData)
     {
-        // FP16 quantization doesn't require calibration
+        // FP16 quantization doesn't require calibration as it's a direct type conversion
         // This is a no-op
     }
 
@@ -60,9 +58,9 @@ public class Float16Quantizer<T> : IQuantizer<T> where T : struct
         return 0;
     }
 
-    private T[] QuantizeParametersToFp16(T[] parameters)
+    private Vector<T> QuantizeParametersToFp16(Vector<T> parameters)
     {
-        var quantized = new T[parameters.Length];
+        var quantizedValues = new T[parameters.Length];
 
         for (int i = 0; i < parameters.Length; i++)
         {
@@ -72,10 +70,10 @@ public class Float16Quantizer<T> : IQuantizer<T> where T : struct
             var fp16Value = ConvertToFloat16(value);
             var fp32Value = ConvertFromFloat16(fp16Value);
 
-            quantized[i] = (T)Convert.ChangeType(fp32Value, typeof(T));
+            quantizedValues[i] = (T)Convert.ChangeType(fp32Value, typeof(T));
         }
 
-        return quantized;
+        return new Vector<T>(quantizedValues);
     }
 
     private ushort ConvertToFloat16(double value)
@@ -157,27 +155,5 @@ public class Float16Quantizer<T> : IQuantizer<T> where T : struct
         // Combine into FP32
         var bits = (sign << 31) | (fp32Exponent << 23) | fp32Mantissa;
         return BitConverter.Int32BitsToSingle(bits);
-    }
-
-    private object CloneModel(object model)
-    {
-        if (model is ICloneable cloneable)
-        {
-            return cloneable.Clone();
-        }
-
-        if (model is IModelSerializer serializer)
-        {
-            var data = serializer.Serialize();
-            var clone = Activator.CreateInstance(model.GetType());
-
-            if (clone is IModelSerializer cloneSerializer)
-            {
-                cloneSerializer.Deserialize(data);
-                return clone;
-            }
-        }
-
-        throw new NotSupportedException($"Model type {model.GetType().Name} does not support cloning");
     }
 }

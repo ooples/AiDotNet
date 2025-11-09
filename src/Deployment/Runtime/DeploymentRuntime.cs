@@ -1,5 +1,7 @@
 using System.Collections.Concurrent;
 using System.Diagnostics;
+using Microsoft.ML.OnnxRuntime;
+using Microsoft.ML.OnnxRuntime.Tensors;
 
 namespace AiDotNet.Deployment.Runtime;
 
@@ -14,6 +16,7 @@ public class DeploymentRuntime<T> where T : struct
     private readonly ConcurrentDictionary<string, ABTestConfig> _abTests;
     private readonly TelemetryCollector _telemetry;
     private readonly ModelCache<T> _cache;
+    private readonly ConcurrentDictionary<string, InferenceSession> _sessions;
 
     public DeploymentRuntime(RuntimeConfiguration config)
     {
@@ -22,6 +25,7 @@ public class DeploymentRuntime<T> where T : struct
         _abTests = new ConcurrentDictionary<string, ABTestConfig>();
         _telemetry = new TelemetryCollector(config.EnableTelemetry);
         _cache = new ModelCache<T>(config.EnableCaching);
+        _sessions = new ConcurrentDictionary<string, InferenceSession>();
     }
 
     /// <summary>
@@ -66,7 +70,7 @@ public class DeploymentRuntime<T> where T : struct
     /// <param name="modelName">Name of the model</param>
     /// <param name="version">Version identifier</param>
     /// <param name="numIterations">Number of warm-up iterations (default: 10)</param>
-    public void WarmUpModel(string modelName, string version, int numIterations = 10)
+    public async Task WarmUpModelAsync(string modelName, string version, int numIterations = 10)
     {
         var key = GetModelKey(modelName, version);
         if (!_models.TryGetValue(key, out var modelVersion))
@@ -74,12 +78,14 @@ public class DeploymentRuntime<T> where T : struct
 
         var stopwatch = Stopwatch.StartNew();
 
+        // Get or create inference session to determine input shape
+        var session = GetOrCreateSession(key, modelVersion.ModelPath);
+        var dummyInput = CreateDummyInput(session);
+
         // Run warm-up iterations with dummy input
         for (int i = 0; i < numIterations; i++)
         {
-            // Simulate inference with dummy data
-            // In production, this would use CreateDummyInput() and call actual inference
-            Thread.Sleep(1);
+            await PerformInferenceAsync(modelVersion, dummyInput);
         }
 
         stopwatch.Stop();
@@ -255,20 +261,227 @@ public class DeploymentRuntime<T> where T : struct
 
     private string GetModelKey(string modelName, string version) => $"{modelName}:{version}";
 
-    private T[] CreateDummyInput()
+    private InferenceSession GetOrCreateSession(string key, string modelPath)
     {
-        // Create dummy input for warm-up
-        return new T[224 * 224 * 3]; // Example: standard image input
+        return _sessions.GetOrAdd(key, _ =>
+        {
+            var sessionOptions = new SessionOptions();
+
+            // Configure session based on runtime configuration
+            if (_config.EnableGpuAcceleration)
+            {
+                // Try to use GPU acceleration if available
+                try
+                {
+                    sessionOptions.AppendExecutionProvider_CUDA(0);
+                }
+                catch
+                {
+                    // Fall back to CPU if CUDA is not available
+                }
+            }
+
+            sessionOptions.GraphOptimizationLevel = GraphOptimizationLevel.ORT_ENABLE_ALL;
+
+            return new InferenceSession(modelPath, sessionOptions);
+        });
+    }
+
+    private T[] CreateDummyInput(InferenceSession session)
+    {
+        // Get input metadata to determine shape
+        var inputMeta = session.InputMetadata.First();
+        var shape = inputMeta.Value.Dimensions;
+
+        // Calculate total size (skip batch dimension if dynamic)
+        int totalSize = 1;
+        foreach (var dim in shape)
+        {
+            if (dim > 0) // Skip dynamic dimensions (-1)
+                totalSize *= dim;
+        }
+
+        // Default to 224x224x3 if shape is fully dynamic
+        if (totalSize <= 1)
+            totalSize = 224 * 224 * 3;
+
+        return new T[totalSize];
     }
 
     private async Task<T[]> PerformInferenceAsync(ModelVersion<T> modelVersion, T[] input)
     {
-        // Placeholder for actual inference
-        // In production, this would load and execute the model
-        await Task.Delay(10); // Simulate inference time
+        return await Task.Run(() =>
+        {
+            var key = GetModelKey(modelVersion.Name, modelVersion.Version);
+            var session = GetOrCreateSession(key, modelVersion.ModelPath);
 
-        var output = new T[1000]; // Example output size
-        return output;
+            // Get input metadata
+            var inputMeta = session.InputMetadata.First();
+            var inputName = inputMeta.Key;
+            var inputShape = CalculateInputShape(session, input.Length);
+
+            // Create input tensor based on type T
+            var inputs = new List<NamedOnnxValue>();
+
+            if (typeof(T) == typeof(float))
+            {
+                var floatInput = ConvertToFloatArray(input);
+                var tensor = new DenseTensor<float>(floatInput, inputShape);
+                inputs.Add(NamedOnnxValue.CreateFromTensor(inputName, tensor));
+            }
+            else if (typeof(T) == typeof(double))
+            {
+                var doubleInput = ConvertToDoubleArray(input);
+                var tensor = new DenseTensor<double>(doubleInput, inputShape);
+                inputs.Add(NamedOnnxValue.CreateFromTensor(inputName, tensor));
+            }
+            else if (typeof(T) == typeof(int))
+            {
+                var intInput = ConvertToIntArray(input);
+                var tensor = new DenseTensor<int>(intInput, inputShape);
+                inputs.Add(NamedOnnxValue.CreateFromTensor(inputName, tensor));
+            }
+            else if (typeof(T) == typeof(long))
+            {
+                var longInput = ConvertToLongArray(input);
+                var tensor = new DenseTensor<long>(longInput, inputShape);
+                inputs.Add(NamedOnnxValue.CreateFromTensor(inputName, tensor));
+            }
+            else
+            {
+                throw new NotSupportedException($"Type {typeof(T).Name} is not supported for ONNX inference. Supported types: float, double, int, long");
+            }
+
+            // Run inference
+            using var results = session.Run(inputs);
+
+            // Extract output (first output tensor)
+            var outputTensor = results.First().Value;
+            return ConvertOutputToT(outputTensor);
+        });
+    }
+
+    private int[] CalculateInputShape(InferenceSession session, int inputLength)
+    {
+        var inputMeta = session.InputMetadata.First();
+        var shape = inputMeta.Value.Dimensions.ToArray();
+
+        // Replace dynamic dimensions with calculated values
+        for (int i = 0; i < shape.Length; i++)
+        {
+            if (shape[i] <= 0) // Dynamic dimension
+            {
+                if (i == 0)
+                {
+                    // Batch dimension - default to 1
+                    shape[i] = 1;
+                }
+                else
+                {
+                    // Calculate based on remaining input length
+                    var remainingDims = shape.Skip(i).Count(d => d > 0);
+                    var knownSize = shape.Where(d => d > 0).Aggregate(1, (a, b) => a * b);
+                    shape[i] = remainingDims > 0 ? inputLength / knownSize : inputLength;
+                }
+            }
+        }
+
+        return shape;
+    }
+
+    private float[] ConvertToFloatArray(T[] input)
+    {
+        if (typeof(T) == typeof(float))
+            return (float[])(object)input;
+
+        var result = new float[input.Length];
+        for (int i = 0; i < input.Length; i++)
+            result[i] = Convert.ToSingle(input[i]);
+        return result;
+    }
+
+    private double[] ConvertToDoubleArray(T[] input)
+    {
+        if (typeof(T) == typeof(double))
+            return (double[])(object)input;
+
+        var result = new double[input.Length];
+        for (int i = 0; i < input.Length; i++)
+            result[i] = Convert.ToDouble(input[i]);
+        return result;
+    }
+
+    private int[] ConvertToIntArray(T[] input)
+    {
+        if (typeof(T) == typeof(int))
+            return (int[])(object)input;
+
+        var result = new int[input.Length];
+        for (int i = 0; i < input.Length; i++)
+            result[i] = Convert.ToInt32(input[i]);
+        return result;
+    }
+
+    private long[] ConvertToLongArray(T[] input)
+    {
+        if (typeof(T) == typeof(long))
+            return (long[])(object)input;
+
+        var result = new long[input.Length];
+        for (int i = 0; i < input.Length; i++)
+            result[i] = Convert.ToInt64(input[i]);
+        return result;
+    }
+
+    private T[] ConvertOutputToT(object outputTensor)
+    {
+        // Handle different tensor types
+        if (outputTensor is Tensor<float> floatTensor)
+        {
+            var flatArray = floatTensor.ToArray();
+            if (typeof(T) == typeof(float))
+                return (T[])(object)flatArray;
+
+            var result = new T[flatArray.Length];
+            for (int i = 0; i < flatArray.Length; i++)
+                result[i] = (T)Convert.ChangeType(flatArray[i], typeof(T));
+            return result;
+        }
+        else if (outputTensor is Tensor<double> doubleTensor)
+        {
+            var flatArray = doubleTensor.ToArray();
+            if (typeof(T) == typeof(double))
+                return (T[])(object)flatArray;
+
+            var result = new T[flatArray.Length];
+            for (int i = 0; i < flatArray.Length; i++)
+                result[i] = (T)Convert.ChangeType(flatArray[i], typeof(T));
+            return result;
+        }
+        else if (outputTensor is Tensor<int> intTensor)
+        {
+            var flatArray = intTensor.ToArray();
+            if (typeof(T) == typeof(int))
+                return (T[])(object)flatArray;
+
+            var result = new T[flatArray.Length];
+            for (int i = 0; i < flatArray.Length; i++)
+                result[i] = (T)Convert.ChangeType(flatArray[i], typeof(T));
+            return result;
+        }
+        else if (outputTensor is Tensor<long> longTensor)
+        {
+            var flatArray = longTensor.ToArray();
+            if (typeof(T) == typeof(long))
+                return (T[])(object)flatArray;
+
+            var result = new T[flatArray.Length];
+            for (int i = 0; i < flatArray.Length; i++)
+                result[i] = (T)Convert.ChangeType(flatArray[i], typeof(T));
+            return result;
+        }
+
+        throw new NotSupportedException($"Output tensor type {outputTensor.GetType().Name} is not supported");
     }
 }
 

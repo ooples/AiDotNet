@@ -48,8 +48,10 @@
 	<ItemGroup>
 	  <PackageReference Include="Azure.Search.Documents" Version="11.7.0" />
 	  <PackageReference Include="Elastic.Clients.Elasticsearch" Version="9.2.1" />
+	  <PackageReference Include="Google.Protobuf" Version="3.28.3" />
 	  <PackageReference Include="Microsoft.CSharp" Version="4.7.0" />
 	  <PackageReference Include="Microsoft.Data.Sqlite" Version="8.0.0" />
+	  <PackageReference Include="Microsoft.ML.OnnxRuntime" Version="1.20.1" />
 	  <PackageReference Include="Newtonsoft.Json" Version="13.0.4" />
 	  <PackageReference Include="Pinecone.Client" Version="4.0.2" />
 	  <PackageReference Include="StackExchange.Redis" Version="2.9.32" />
@@ -68,6 +70,13 @@
 	  <Folder Include="Validation\" />
 	  <Folder Include="WindowFunctions\" />
 	  <Folder Include="WaveletFunctions\" />
+	</ItemGroup>
+
+	<!-- Exclude the AiDotNet.Serving project files from this project -->
+	<ItemGroup>
+	  <Compile Remove="AiDotNet.Serving\**\*.cs" />
+	  <EmbeddedResource Remove="AiDotNet.Serving\**\*" />
+	  <None Remove="AiDotNet.Serving\**\*" />
 	</ItemGroup>
 
 </Project>

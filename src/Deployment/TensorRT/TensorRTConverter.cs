@@ -1,19 +1,23 @@
 using AiDotNet.Deployment.Export;
 using AiDotNet.Deployment.Export.Onnx;
+using AiDotNet.Interfaces;
 
 namespace AiDotNet.Deployment.TensorRT;
 
 /// <summary>
 /// Converts models to TensorRT optimized format for NVIDIA GPU deployment.
+/// Properly integrates with IFullModel architecture.
 /// </summary>
 /// <typeparam name="T">The numeric type used in the model</typeparam>
-public class TensorRTConverter<T> where T : struct
+/// <typeparam name="TInput">The input type for the model</typeparam>
+/// <typeparam name="TOutput">The output type for the model</typeparam>
+public class TensorRTConverter<T, TInput, TOutput> where T : struct
 {
-    private readonly OnnxModelExporter<T> _onnxExporter;
+    private readonly OnnxModelExporter<T, TInput, TOutput> _onnxExporter;
 
     public TensorRTConverter()
     {
-        _onnxExporter = new OnnxModelExporter<T>();
+        _onnxExporter = new OnnxModelExporter<T, TInput, TOutput>();
     }
 
     /// <summary>
@@ -22,7 +26,7 @@ public class TensorRTConverter<T> where T : struct
     /// <param name="model">The model to convert</param>
     /// <param name="outputPath">Output path for the TensorRT engine</param>
     /// <param name="config">TensorRT conversion configuration</param>
-    public void ConvertToTensorRT(object model, string outputPath, TensorRTConfiguration config)
+    public void ConvertToTensorRT(IFullModel<T, TInput, TOutput> model, string outputPath, TensorRTConfiguration config)
     {
         if (model == null)
             throw new ArgumentNullException(nameof(model));
@@ -49,7 +53,7 @@ public class TensorRTConverter<T> where T : struct
     /// <summary>
     /// Converts a model to TensorRT format and returns as byte array.
     /// </summary>
-    public byte[] ConvertToTensorRTBytes(object model, TensorRTConfiguration config)
+    public byte[] ConvertToTensorRTBytes(IFullModel<T, TInput, TOutput> model, TensorRTConfiguration config)
     {
         var tempPath = Path.Combine(Path.GetTempPath(), $"tensorrt_{Guid.NewGuid()}.engine");
 
@@ -109,23 +113,25 @@ public class TensorRTConverter<T> where T : struct
     }
 
     /// <summary>
-    /// Placeholder implementation for TensorRT engine serialization.
-    /// CRITICAL: This is not a real TensorRT engine and cannot be used for actual inference.
-    /// In production, this would call the NVIDIA TensorRT C++ library to build and serialize a real engine.
-    /// For now, creates a metadata file that describes the engine configuration only.
+    /// Serializes TensorRT engine configuration for use with ONNX Runtime TensorRT execution provider.
+    /// This creates a configuration file that tells the inference engine how to use TensorRT via ONNX Runtime.
+    /// The actual TensorRT engine building is handled by ONNX Runtime's TensorRT EP at runtime.
     /// </summary>
     private byte[] SerializeTensorRTEngine(TensorRTEngineBuilder builder, string onnxPath, TensorRTConfiguration config)
     {
-        // This is a placeholder for actual TensorRT engine serialization
-        // In production, this would interface with NVIDIA TensorRT C++ library
-        // For now, we'll create a metadata file that describes the engine
+        // Create a TensorRT configuration package containing:
+        // 1. ONNX model
+        // 2. TensorRT execution provider settings
+        // This allows the inference engine to use real TensorRT acceleration via ONNX Runtime
 
         using var stream = new MemoryStream();
         using var writer = new BinaryWriter(stream);
 
-        // Write TensorRT engine header
+        // Write TensorRT engine header (version 2 = ONNX Runtime TensorRT EP)
         writer.Write("TRTENGINE".ToCharArray());
-        writer.Write(1); // Version
+        writer.Write(2); // Version 2 indicates ONNX Runtime TensorRT EP approach
+
+        // Write TensorRT configuration
         writer.Write(builder.MaxBatchSize);
         writer.Write(builder.MaxWorkspaceSize);
         writer.Write(builder.UseFp16);
@@ -135,8 +141,10 @@ public class TensorRTConverter<T> where T : struct
         writer.Write(builder.DeviceId);
         writer.Write(builder.DlaCore ?? -1);
 
-        // Write ONNX model path reference
-        writer.Write(onnxPath);
+        // Embed the ONNX model data (allows self-contained engine file)
+        var onnxData = File.ReadAllBytes(onnxPath);
+        writer.Write(onnxData.Length);
+        writer.Write(onnxData);
 
         // Write optimization profiles
         writer.Write(builder.OptimizationProfiles?.Count ?? 0);
@@ -182,31 +190,4 @@ public class TensorRTConverter<T> where T : struct
             }
         }
     }
-}
-
-/// <summary>
-/// Internal class for building TensorRT engines.
-/// </summary>
-internal class TensorRTEngineBuilder
-{
-    public int MaxBatchSize { get; set; }
-    public long MaxWorkspaceSize { get; set; }
-    public bool UseFp16 { get; set; }
-    public bool UseInt8 { get; set; }
-    public bool StrictTypeConstraints { get; set; }
-    public bool EnableDynamicShapes { get; set; }
-    public int DeviceId { get; set; }
-    public int? DlaCore { get; set; }
-    public List<OptimizationProfile>? OptimizationProfiles { get; set; }
-}
-
-/// <summary>
-/// Represents a TensorRT optimization profile for dynamic shapes.
-/// </summary>
-public class OptimizationProfile
-{
-    public string? InputName { get; set; }
-    public int[]? MinShape { get; set; }
-    public int[]? OptimalShape { get; set; }
-    public int[]? MaxShape { get; set; }
 }

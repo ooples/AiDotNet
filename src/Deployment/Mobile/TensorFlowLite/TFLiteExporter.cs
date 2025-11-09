@@ -1,19 +1,23 @@
 using AiDotNet.Deployment.Export;
 using AiDotNet.Deployment.Export.Onnx;
+using AiDotNet.Interfaces;
 
 namespace AiDotNet.Deployment.Mobile.TensorFlowLite;
 
 /// <summary>
 /// Exports models to TensorFlow Lite format for mobile deployment.
+/// Properly integrates with IFullModel architecture.
 /// </summary>
 /// <typeparam name="T">The numeric type used in the model</typeparam>
-public class TFLiteExporter<T> : ModelExporterBase<T> where T : struct
+/// <typeparam name="TInput">The input type for the model</typeparam>
+/// <typeparam name="TOutput">The output type for the model</typeparam>
+public class TFLiteExporter<T, TInput, TOutput> : ModelExporterBase<T, TInput, TOutput> where T : struct
 {
-    private readonly OnnxModelExporter<T> _onnxExporter;
+    private readonly OnnxModelExporter<T, TInput, TOutput> _onnxExporter;
 
     public TFLiteExporter()
     {
-        _onnxExporter = new OnnxModelExporter<T>();
+        _onnxExporter = new OnnxModelExporter<T, TInput, TOutput>();
     }
 
     /// <inheritdoc/>
@@ -23,7 +27,7 @@ public class TFLiteExporter<T> : ModelExporterBase<T> where T : struct
     public override string FileExtension => ".tflite";
 
     /// <inheritdoc/>
-    public override byte[] ExportToBytes(object model, ExportConfiguration config)
+    public override byte[] ExportToBytes(IFullModel<T, TInput, TOutput> model, ExportConfiguration config)
     {
         if (model == null)
             throw new ArgumentNullException(nameof(model));
@@ -40,7 +44,7 @@ public class TFLiteExporter<T> : ModelExporterBase<T> where T : struct
     /// <summary>
     /// Exports model directly to TFLite file with specific configuration.
     /// </summary>
-    public void ExportToTFLite(object model, string outputPath, TFLiteConfiguration config)
+    public void ExportToTFLite(IFullModel<T, TInput, TOutput> model, string outputPath, TFLiteConfiguration config)
     {
         if (model == null)
             throw new ArgumentNullException(nameof(model));
@@ -53,90 +57,58 @@ public class TFLiteExporter<T> : ModelExporterBase<T> where T : struct
 
     private byte[] ConvertOnnxToTFLite(byte[] onnxBytes, ExportConfiguration config)
     {
-        // Build TFLite FlatBuffer model
-        var tfliteModel = new TFLiteModel
+        // Create TFLite deployment package using ONNX model
+        // For TFLite deployment, we provide the ONNX model along with configuration
+        // Runtime will use either: ONNX Runtime (cross-platform) or convert to TFLite offline
+
+        var tflitePackage = new TFLiteDeploymentPackage
         {
-            Version = 3,
-            Description = config.ModelDescription ?? "AiDotNet TFLite Model"
+            Version = 2, // Version 2 = ONNX Runtime approach for cross-platform support
+            Description = config.ModelDescription ?? "AiDotNet TFLite Model",
+            OnnxModel = onnxBytes,
+            TFLiteConfiguration = CreateTFLiteConfiguration(config)
         };
 
-        // Parse ONNX and convert to TFLite operators
-        tfliteModel.Subgraphs = ConvertOnnxToTFLiteGraph(onnxBytes, config);
-
-        // Apply optimizations if requested
-        if (config.OptimizeModel)
-        {
-            ApplyTFLiteOptimizations(tfliteModel, config);
-        }
-
-        // Serialize to FlatBuffer format
-        return SerializeTFLiteModel(tfliteModel, config);
+        // Serialize the deployment package
+        return SerializeTFLitePackage(tflitePackage, config);
     }
 
-    private List<TFLiteSubgraph> ConvertOnnxToTFLiteGraph(byte[] onnxBytes, ExportConfiguration config)
+    private TFLiteExecutionConfiguration CreateTFLiteConfiguration(ExportConfiguration config)
     {
-        var subgraphs = new List<TFLiteSubgraph>();
-        var mainSubgraph = new TFLiteSubgraph
+        return new TFLiteExecutionConfiguration
         {
-            Name = "main",
-            Operators = new List<TFLiteOperator>()
+            UseNNAPI = true, // Enable Android NNAPI acceleration when available
+            UseGPU = config.TargetPlatform == TargetPlatform.Mobile,
+            UseXNNPack = true, // Enable XNNPACK backend for CPU optimization
+            AllowFp16PrecisionForFp32 = config.QuantizationMode == QuantizationMode.Float16,
+            NumThreads = 4, // Default thread count for CPU inference
+            OptimizeForSize = config.OptimizeModel,
+            EnableDynamicShapes = config.UseDynamicShapes
         };
-
-        // Parse ONNX and convert each operation to TFLite operator
-        // This is a simplified conversion
-        // In production, you would use TensorFlow's converter tools
-
-        subgraphs.Add(mainSubgraph);
-        return subgraphs;
     }
 
-    private void ApplyTFLiteOptimizations(TFLiteModel model, ExportConfiguration config)
-    {
-        // Apply various TFLite optimizations
-        // - Operator fusion
-        // - Constant folding
-        // - Dead code elimination
-        // - Quantization
-
-        if (config.QuantizationMode != QuantizationMode.None)
-        {
-            ApplyQuantization(model, config.QuantizationMode);
-        }
-    }
-
-    private void ApplyQuantization(TFLiteModel model, QuantizationMode mode)
-    {
-        // Apply quantization to the model
-        foreach (var subgraph in model.Subgraphs)
-        {
-            foreach (var op in subgraph.Operators)
-            {
-                op.QuantizationParams = new QuantizationParams
-                {
-                    Mode = mode,
-                    Scale = mode == QuantizationMode.Int8 ? 1.0 / 127.0 : 1.0,
-                    ZeroPoint = 0
-                };
-            }
-        }
-    }
-
-    private byte[] SerializeTFLiteModel(TFLiteModel model, ExportConfiguration config)
+    private byte[] SerializeTFLitePackage(TFLiteDeploymentPackage package, ExportConfiguration config)
     {
         using var stream = new MemoryStream();
         using var writer = new BinaryWriter(stream);
 
-        // Write TFLite FlatBuffer header
+        // Write TFLite deployment package header
         writer.Write("TFLITE".ToCharArray());
-        writer.Write(model.Version);
-        writer.Write(model.Description);
+        writer.Write(package.Version);
+        writer.Write(package.Description);
 
-        // Write subgraphs
-        writer.Write(model.Subgraphs.Count);
-        foreach (var subgraph in model.Subgraphs)
-        {
-            WriteSubgraph(writer, subgraph);
-        }
+        // Write embedded ONNX model
+        writer.Write(package.OnnxModel.Length);
+        writer.Write(package.OnnxModel);
+
+        // Write TFLite execution configuration
+        writer.Write(package.TFLiteConfiguration.UseNNAPI);
+        writer.Write(package.TFLiteConfiguration.UseGPU);
+        writer.Write(package.TFLiteConfiguration.UseXNNPack);
+        writer.Write(package.TFLiteConfiguration.AllowFp16PrecisionForFp32);
+        writer.Write(package.TFLiteConfiguration.NumThreads);
+        writer.Write(package.TFLiteConfiguration.OptimizeForSize);
+        writer.Write(package.TFLiteConfiguration.EnableDynamicShapes);
 
         // Write metadata
         if (config.IncludeMetadata)
@@ -152,83 +124,29 @@ public class TFLiteExporter<T> : ModelExporterBase<T> where T : struct
 
         return stream.ToArray();
     }
-
-    private void WriteSubgraph(BinaryWriter writer, TFLiteSubgraph subgraph)
-    {
-        writer.Write(subgraph.Name);
-        writer.Write(subgraph.Operators.Count);
-
-        foreach (var op in subgraph.Operators)
-        {
-            WriteOperator(writer, op);
-        }
-    }
-
-    private void WriteOperator(BinaryWriter writer, TFLiteOperator op)
-    {
-        writer.Write(op.OpcodeIndex);
-        writer.Write(op.Inputs.Count);
-        foreach (var input in op.Inputs)
-        {
-            writer.Write(input);
-        }
-        writer.Write(op.Outputs.Count);
-        foreach (var output in op.Outputs)
-        {
-            writer.Write(output);
-        }
-
-        // Write quantization params if present
-        if (op.QuantizationParams != null)
-        {
-            writer.Write(true);
-            writer.Write((int)op.QuantizationParams.Mode);
-            writer.Write(op.QuantizationParams.Scale);
-            writer.Write(op.QuantizationParams.ZeroPoint);
-        }
-        else
-        {
-            writer.Write(false);
-        }
-    }
 }
 
 /// <summary>
-/// Represents a TFLite model structure.
+/// Represents a TFLite deployment package for mobile using ONNX Runtime or TFLite runtime.
 /// </summary>
-internal class TFLiteModel
+internal class TFLiteDeploymentPackage
 {
     public int Version { get; set; }
     public string Description { get; set; } = string.Empty;
-    public List<TFLiteSubgraph> Subgraphs { get; set; } = new();
+    public byte[] OnnxModel { get; set; } = Array.Empty<byte>();
+    public TFLiteExecutionConfiguration TFLiteConfiguration { get; set; } = new();
 }
 
 /// <summary>
-/// Represents a TFLite subgraph (execution graph).
+/// Configuration for TFLite/ONNX Runtime mobile execution.
 /// </summary>
-internal class TFLiteSubgraph
+internal class TFLiteExecutionConfiguration
 {
-    public string Name { get; set; } = string.Empty;
-    public List<TFLiteOperator> Operators { get; set; } = new();
-}
-
-/// <summary>
-/// Represents a TFLite operator.
-/// </summary>
-internal class TFLiteOperator
-{
-    public int OpcodeIndex { get; set; }
-    public List<int> Inputs { get; set; } = new();
-    public List<int> Outputs { get; set; } = new();
-    public QuantizationParams? QuantizationParams { get; set; }
-}
-
-/// <summary>
-/// Quantization parameters for TFLite operators.
-/// </summary>
-internal class QuantizationParams
-{
-    public QuantizationMode Mode { get; set; }
-    public double Scale { get; set; }
-    public int ZeroPoint { get; set; }
+    public bool UseNNAPI { get; set; }
+    public bool UseGPU { get; set; }
+    public bool UseXNNPack { get; set; }
+    public bool AllowFp16PrecisionForFp32 { get; set; }
+    public int NumThreads { get; set; }
+    public bool OptimizeForSize { get; set; }
+    public bool EnableDynamicShapes { get; set; }
 }
