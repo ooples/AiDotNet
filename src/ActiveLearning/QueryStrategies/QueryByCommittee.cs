@@ -2,6 +2,7 @@ using AiDotNet.ActiveLearning.Interfaces;
 using AiDotNet.Data.Abstractions;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
+using AiDotNet.LinearAlgebra;
 
 namespace AiDotNet.ActiveLearning.QueryStrategies;
 
@@ -110,55 +111,67 @@ public class QueryByCommittee<T, TInput, TOutput> : IQueryStrategy<T, TInput, TO
     public string Name => $"QueryByCommittee-{_measure}";
 
     /// <inheritdoc/>
-    public T[] ScoreExamples(IFullModel<T, TInput, TOutput> model, IDataset<T, TInput, TOutput> unlabeledData)
+    public Vector<T> ScoreExamples(
+        IFullModel<T, TInput, TOutput> model,
+        IDataset<T, TInput, TOutput> unlabeledData,
+        IDataset<T, TInput, TOutput>? labeledData = null)
     {
+        if (unlabeledData == null)
+            throw new ArgumentNullException(nameof(unlabeledData));
+
         if (_committee.Count == 0)
         {
-            // If committee hasn't been initialized, we can't compute disagreement
-            // Return zeros or throw exception
-            int numExamples = 100; // Placeholder
-            return Enumerable.Repeat(NumOps.Zero, numExamples).ToArray();
+            throw new InvalidOperationException(
+                "Committee has not been initialized. Use SetCommittee() to provide trained models before scoring examples.");
         }
 
-        // In a full implementation:
-        // 1. Get predictions from all committee members for each example
-        // 2. Compute disagreement using the specified measure
-
-        int numExamples = 100; // Placeholder
+        int numExamples = unlabeledData.Count;
         var scores = new T[numExamples];
 
         for (int i = 0; i < numExamples; i++)
         {
-            // Collect predictions from all committee members
-            // var predictions = _committee.Select(m => m.Predict(example_i)).ToList();
+            var input = unlabeledData.GetInput(i);
 
-            // Compute disagreement score
+            // Collect predictions from all committee members
+            var predictions = new List<Vector<T>>();
+            foreach (var member in _committee)
+            {
+                var prediction = member.Predict(input);
+                var probabilities = ConversionsHelper.ConvertToVector<T, TOutput>(prediction);
+                predictions.Add(probabilities);
+            }
+
+            // Compute disagreement score based on measure
             scores[i] = _measure switch
             {
-                DisagreementMeasure.VoteEntropy => ComputeVoteEntropy(null!),
-                DisagreementMeasure.ConsensusEntropy => ComputeConsensusEntropy(null!),
-                DisagreementMeasure.KLDivergence => ComputeKLDivergence(null!),
+                DisagreementMeasure.VoteEntropy => ComputeVoteEntropy(predictions),
+                DisagreementMeasure.ConsensusEntropy => ComputeConsensusEntropy(predictions),
+                DisagreementMeasure.KLDivergence => ComputeKLDivergence(predictions),
                 _ => NumOps.Zero
             };
         }
 
-        return scores;
+        return new Vector<T>(scores);
     }
 
     /// <inheritdoc/>
-    public int[] SelectBatch(IFullModel<T, TInput, TOutput> model, IDataset<T, TInput, TOutput> unlabeledData, int k)
+    public Vector<int> SelectBatch(
+        IFullModel<T, TInput, TOutput> model,
+        IDataset<T, TInput, TOutput> unlabeledData,
+        int k,
+        IDataset<T, TInput, TOutput>? labeledData = null)
     {
-        var scores = ScoreExamples(model, unlabeledData);
+        var scores = ScoreExamples(model, unlabeledData, labeledData);
 
         // Select top-k examples with highest disagreement
-        var indexedScores = scores
+        var indexedScores = scores.ToArray()
             .Select((score, index) => (Score: Convert.ToDouble(score), Index: index))
             .OrderByDescending(x => x.Score)
             .Take(k)
             .Select(x => x.Index)
             .ToArray();
 
-        return indexedScores;
+        return new Vector<int>(indexedScores);
     }
 
     /// <summary>

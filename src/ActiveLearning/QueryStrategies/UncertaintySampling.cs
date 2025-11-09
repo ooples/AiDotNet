@@ -102,7 +102,7 @@ public class UncertaintySampling<T, TInput, TOutput> : IQueryStrategy<T, TInput,
 
             // Convert prediction to probability vector
             // For classification, predictions should be probability distributions
-            var probabilities = ConvertToVector(prediction);
+            var probabilities = ConversionsHelper.ConvertToVector<T, TOutput>(prediction);
 
             // Compute uncertainty score based on measure
             scores[i] = _measure switch
@@ -115,35 +115,6 @@ public class UncertaintySampling<T, TInput, TOutput> : IQueryStrategy<T, TInput,
         }
 
         return new Vector<T>(scores);
-    }
-
-    /// <summary>
-    /// Converts model output to a probability vector.
-    /// </summary>
-    private Vector<T> ConvertToVector(TOutput output)
-    {
-        if (output is Vector<T> vector)
-        {
-            return vector;
-        }
-
-        // For other types, try to extract as array
-        if (output is T[] array)
-        {
-            return new Vector<T>(array);
-        }
-
-        // For scalar output (binary classification), create 2-element vector
-        if (output is T scalar)
-        {
-            var one = NumOps.FromDouble(1.0);
-            var complement = NumOps.Subtract(one, scalar);
-            return new Vector<T>(new[] { complement, scalar });
-        }
-
-        throw new InvalidOperationException(
-            $"Cannot convert output type {typeof(TOutput).Name} to Vector<T>. " +
-            "For uncertainty sampling, model outputs should be probability vectors.");
     }
 
     /// <inheritdoc/>
