@@ -118,7 +118,18 @@ public class ElasticOptimizer<T, TInput, TOutput> : ShardedOptimizerBase<T, TInp
         // Check for world size changes (workers joined/left)
         if (DetectWorldSizeChange())
         {
-            HandleWorkerChange();
+            try
+            {
+                HandleWorkerChange();
+            }
+            catch (InvalidOperationException ex)
+            {
+                // CRITICAL: Reach barrier even on validation failure to unblock other processes
+                // Otherwise, other workers waiting at the barrier will deadlock indefinitely
+                Config.CommunicationBackend.Barrier();
+                throw new InvalidOperationException(
+                    $"Worker change validation failed: {ex.Message}. All workers have been synchronized.", ex);
+            }
         }
 
         // Barrier with current worker set
