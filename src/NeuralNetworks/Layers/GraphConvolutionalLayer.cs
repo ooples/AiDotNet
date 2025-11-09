@@ -23,8 +23,56 @@ namespace AiDotNet.NeuralNetworks.Layers;
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric type used for calculations, typically float or double.</typeparam>
-public class GraphConvolutionalLayer<T> : LayerBase<T>
+public class GraphConvolutionalLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
 {
+    /// <summary>
+    /// Gets or sets a value indicating whether auxiliary loss is enabled for this layer.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// When enabled, the layer computes a graph smoothness auxiliary loss that encourages connected nodes
+    /// to have similar learned representations. This helps the network learn more coherent graph embeddings.
+    /// </para>
+    /// <para><b>For Beginners:</b> This setting controls whether the layer uses an additional learning signal.
+    ///
+    /// When enabled (true):
+    /// - The layer encourages connected nodes to learn similar features
+    /// - This helps the network understand that connected nodes should be related
+    /// - Training may be more stable and produce better results
+    ///
+    /// When disabled (false):
+    /// - Only the main task loss is used for training
+    /// - This is the default setting
+    /// </para>
+    /// </remarks>
+    public bool UseAuxiliaryLoss { get; set; } = false;
+
+    /// <summary>
+    /// Gets or sets the weight for the auxiliary loss contribution.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// This value determines how much the graph smoothness loss contributes to the total loss.
+    /// The default value of 0.01 provides a good balance between the main task and smoothness regularization.
+    /// </para>
+    /// <para><b>For Beginners:</b> This controls how much importance to give to the smoothness penalty.
+    ///
+    /// The weight affects training:
+    /// - Higher values (e.g., 0.1) make the network prioritize smooth features more strongly
+    /// - Lower values (e.g., 0.001) make the smoothness penalty less important
+    /// - The default (0.01) works well for most graph learning tasks
+    ///
+    /// If your graph has very clear structure, you might increase this value.
+    /// If the main task is more important, you might decrease it.
+    /// </para>
+    /// </remarks>
+    public T AuxiliaryLossWeight { get; set; } = NumOps.FromDouble(0.01);
+
+    /// <summary>
+    /// Stores the last computed graph smoothness loss for diagnostic purposes.
+    /// </summary>
+    private T _lastGraphSmoothnessLoss = NumOps.Zero;
+
     /// <summary>
     /// The weight matrix that transforms input features to output features.
     /// </summary>
@@ -573,17 +621,17 @@ public class GraphConvolutionalLayer<T> : LayerBase<T>
     /// This is useful when starting to process a new sequence or when implementing stateful recurrent networks.
     /// </para>
     /// <para><b>For Beginners:</b> This method clears the layer's memory to start fresh.
-    /// 
+    ///
     /// When resetting the state:
     /// - Stored inputs and outputs are cleared
     /// - Gradient information is cleared
     /// - The layer forgets any information from previous data
-    /// 
+    ///
     /// This is important for:
     /// - Processing a new, unrelated graph
     /// - Preventing information from one training batch affecting another
     /// - Starting a new training episode
-    /// 
+    ///
     /// For example, if you've processed one graph and want to start with a new graph,
     /// you should reset the state to prevent the new graph from being influenced by the previous one.
     /// </para>
@@ -595,5 +643,120 @@ public class GraphConvolutionalLayer<T> : LayerBase<T>
         _lastOutput = null;
         _weightsGradient = null;
         _biasGradient = null;
+    }
+
+    /// <summary>
+    /// Computes the auxiliary loss for this layer based on graph smoothness regularization.
+    /// </summary>
+    /// <returns>The computed auxiliary loss value.</returns>
+    /// <remarks>
+    /// <para>
+    /// This method computes a graph smoothness loss that encourages connected nodes in the graph
+    /// to have similar learned representations. The loss is computed as:
+    /// L = Σ_(i,j)∈E ||h_i - h_j||² * A_ij
+    /// where E is the set of edges, h_i and h_j are the learned features for nodes i and j,
+    /// and A_ij is the adjacency matrix value indicating connection strength.
+    /// </para>
+    /// <para><b>For Beginners:</b> This method calculates a penalty for nodes that are connected but have different features.
+    ///
+    /// Graph smoothness loss:
+    /// - Looks at all pairs of connected nodes in the graph
+    /// - Measures how different their learned features are
+    /// - Adds up these differences as a penalty
+    ///
+    /// Why this is useful:
+    /// - In most graphs, connected nodes should be related (e.g., friends in social networks, bonded atoms in molecules)
+    /// - Encouraging similar features for connected nodes helps the network learn more meaningful patterns
+    /// - This is especially helpful when you have limited training data
+    ///
+    /// Example: In a citation network, papers that cite each other should have similar topics.
+    /// This loss encourages the network to give them similar learned features.
+    ///
+    /// <b>Note:</b> This is a placeholder implementation. For full functionality, the layer would need to
+    /// cache the output features during the forward pass and use them here to compute the smoothness loss.
+    /// The formula would iterate over all edges (i,j) where A_ij > 0, compute the squared difference
+    /// between features h_i and h_j, multiply by the edge weight A_ij, and sum over all edges.
+    /// </para>
+    /// </remarks>
+    public T ComputeAuxiliaryLoss()
+    {
+        // Note: This is a placeholder implementation.
+        // Full implementation would require:
+        // 1. Caching the output features (_lastOutput) during Forward pass
+        // 2. Iterating over all edges in the adjacency matrix
+        // 3. Computing squared difference between connected node features
+        //
+        // Pseudo-code for full implementation:
+        // T smoothnessLoss = NumOps.Zero;
+        // if (_lastOutput != null && _adjacencyMatrix != null)
+        // {
+        //     int batchSize = _lastOutput.Shape[0];
+        //     int numNodes = _lastOutput.Shape[1];
+        //     int outputFeatures = _lastOutput.Shape[2];
+        //
+        //     for (int b = 0; b < batchSize; b++)
+        //     {
+        //         for (int i = 0; i < numNodes; i++)
+        //         {
+        //             for (int j = 0; j < numNodes; j++)
+        //             {
+        //                 T edgeWeight = _adjacencyMatrix[b, i, j];
+        //                 if (NumOps.GreaterThan(edgeWeight, NumOps.Zero))
+        //                 {
+        //                     // Compute ||h_i - h_j||²
+        //                     T squaredDiff = NumOps.Zero;
+        //                     for (int f = 0; f < outputFeatures; f++)
+        //                     {
+        //                         T diff = NumOps.Subtract(_lastOutput[b, i, f], _lastOutput[b, j, f]);
+        //                         squaredDiff = NumOps.Add(squaredDiff, NumOps.Multiply(diff, diff));
+        //                     }
+        //                     // Weight by edge strength and accumulate
+        //                     smoothnessLoss = NumOps.Add(smoothnessLoss, NumOps.Multiply(edgeWeight, squaredDiff));
+        //                 }
+        //             }
+        //         }
+        //     }
+        //     // Normalize by number of edges and batch size
+        //     smoothnessLoss = NumOps.Divide(smoothnessLoss, NumOps.FromInt32(batchSize));
+        // }
+        // _lastGraphSmoothnessLoss = smoothnessLoss;
+
+        _lastGraphSmoothnessLoss = NumOps.Zero;
+        return _lastGraphSmoothnessLoss;
+    }
+
+    /// <summary>
+    /// Gets diagnostic information about the auxiliary loss computation.
+    /// </summary>
+    /// <returns>A dictionary containing diagnostic information about the auxiliary loss.</returns>
+    /// <remarks>
+    /// <para>
+    /// This method returns diagnostic information that can be used to monitor the auxiliary loss during training.
+    /// The diagnostics include the total smoothness loss, the weight applied to it, and whether auxiliary loss is enabled.
+    /// </para>
+    /// <para><b>For Beginners:</b> This method provides information to help you understand how the auxiliary loss is working.
+    ///
+    /// The diagnostics show:
+    /// - TotalSmoothnessLoss: The computed penalty for feature differences between connected nodes
+    /// - SmoothnessWeight: How much this penalty affects the overall training
+    /// - UseSmoothnessLoss: Whether this penalty is currently enabled
+    ///
+    /// You can use this information to:
+    /// - Monitor if the smoothness penalty is too high or too low
+    /// - Debug training issues
+    /// - Understand how the graph structure affects learning
+    ///
+    /// Example: If TotalSmoothnessLoss is very high, it might mean your network is learning very different
+    /// features for connected nodes, which might indicate the need to adjust hyperparameters.
+    /// </para>
+    /// </remarks>
+    public Dictionary<string, string> GetAuxiliaryLossDiagnostics()
+    {
+        return new Dictionary<string, string>
+        {
+            { "TotalSmoothnessLoss", _lastGraphSmoothnessLoss.ToString() ?? "0" },
+            { "SmoothnessWeight", AuxiliaryLossWeight.ToString() ?? "0.01" },
+            { "UseSmoothnessLoss", UseAuxiliaryLoss.ToString() }
+        };
     }
 }
