@@ -725,6 +725,10 @@ public class PredictionModelBuilder<T, TInput, TOutput> : IPredictionModelBuilde
             reasoningTrace.AppendLine("STEP 1: Analyzing dataset characteristics...\n");
 
             // Calculate basic statistics for data analysis tool
+            // Note: Convert.ToDouble is used here because statistical calculations (mean, std, etc.)
+            // require floating-point arithmetic. This is a known limitation where the generic type T
+            // is converted to double for agent analysis purposes only. The actual model training
+            // continues to use the generic type T throughout.
             var statistics = new Newtonsoft.Json.Linq.JObject();
             for (int col = 0; col < nFeatures; col++)
             {
@@ -946,13 +950,33 @@ public class PredictionModelBuilder<T, TInput, TOutput> : IPredictionModelBuilde
 
     private void ApplyAgentRecommendations(AgentRecommendation<T, TInput, TOutput> recommendation)
     {
-        // Only apply if user hasn't explicitly configured
+        // Apply agent recommendations where possible
         if (_model == null && recommendation.SuggestedModelType.HasValue)
         {
-            // Agent recommended a model - we'll let the user know in the recommendation
-            // but won't auto-create the model instance to avoid reflection complexity
-            // The user will see the recommendation in result.AgentRecommendation
+            // Agent recommended a model type
+            // Note: Auto-creation of model instances is not implemented to avoid the complexity
+            // of a model factory with correct constructor parameters for all ~80+ model types.
+            // Instead, the recommendation is available in result.AgentRecommendation for the user
+            // to review and manually configure using the builder's UseModel() method.
+
+            Console.WriteLine($"\n=== AGENT RECOMMENDATION ===");
+            Console.WriteLine($"The AI agent recommends using: {recommendation.SuggestedModelType.Value}");
+
+            var reasoning = recommendation.ModelSelectionReasoning ?? string.Empty;
+            if (reasoning.Length > 0)
+            {
+                var maxLength = Math.Min(200, reasoning.Length);
+                Console.WriteLine($"Reason: {reasoning.Substring(0, maxLength)}...");
+            }
+
+            Console.WriteLine($"\nTo use this recommendation, configure your builder:");
+            Console.WriteLine($"  builder.UseModel(/* create {recommendation.SuggestedModelType.Value} instance */);");
+            Console.WriteLine($"\nFull recommendation details available in result.AgentRecommendation");
+            Console.WriteLine("===========================\n");
         }
+
+        // Note: Hyperparameter recommendations are currently stored in recommendation.SuggestedHyperparameters
+        // but not auto-applied. Future enhancement: Apply hyperparameters to compatible models.
     }
 
     private IChatModel<T> CreateChatModel(AgentConfiguration<T> config)
