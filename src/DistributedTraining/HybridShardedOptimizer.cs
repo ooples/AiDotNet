@@ -90,21 +90,35 @@ public class HybridShardedOptimizer<T, TInput, TOutput> : ShardedOptimizerBase<T
         // 2. Tensor: synchronization within tensor-parallel group
         // 3. Data: synchronization across data-parallel replicas
 
-        var result = WrappedOptimizer.Optimize(inputData);
-
-        if (Config.AutoSyncGradients && result.BestSolution != null)
+        try
         {
-            // Synchronization order matters:
-            // 1. First sync within tensor-parallel group (sum partial results)
-            // 2. Then sync across data-parallel replicas (average gradients)
-            // 3. Pipeline stages handle their own gradient accumulation
+            var result = WrappedOptimizer.Optimize(inputData);
 
-            SynchronizeParameters(result.BestSolution);
+            if (Config.AutoSyncGradients && result.BestSolution != null)
+            {
+                // NOTE: SynchronizeParameters() from base class performs full-world AllReduce,
+                // which is incorrect for 3D parallelism. Proper implementation requires:
+                // 1. First sync within tensor-parallel group (AllReduce for sum partial results)
+                // 2. Then sync across data-parallel replicas (AllReduce for average gradients)
+                // 3. Pipeline stages handle their own gradient accumulation
+                //
+                // For now, this is a framework placeholder. Full implementation needs:
+                // - Subgroup communicators for each parallelism dimension
+                // - Gradient-specific synchronization (not parameter synchronization)
+                // - Proper handling of optimizer states per dimension
+
+                // TODO: Replace with proper subgroup-aware gradient synchronization
+                // SynchronizeParameters(result.BestSolution);
+            }
+
+            return result;
         }
-
-        Config.CommunicationBackend.Barrier();
-
-        return result;
+        finally
+        {
+            // Ensure barrier always executes to prevent deadlock,
+            // even if WrappedOptimizer.Optimize throws an exception
+            Config.CommunicationBackend.Barrier();
+        }
     }
 
     /// <inheritdoc/>
