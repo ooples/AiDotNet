@@ -181,14 +181,14 @@ public class OpenAIChatModel<T> : ChatModelBase<T>
         var content = new StringContent(jsonContent, Encoding.UTF8, "application/json");
 
         // Create request message with scoped headers
-        var request = new HttpRequestMessage(HttpMethod.Post, _endpoint)
+        using var request = new HttpRequestMessage(HttpMethod.Post, _endpoint)
         {
             Content = content
         };
         request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", _apiKey);
 
         // Make the API call
-        var response = await HttpClient.SendAsync(request);
+        using var response = await HttpClient.SendAsync(request);
 
         // Check for errors
         if (!response.IsSuccessStatusCode)

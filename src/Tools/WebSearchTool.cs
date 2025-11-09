@@ -155,10 +155,10 @@ public class WebSearchTool : ITool
     {
         var url = $"https://api.bing.microsoft.com/v7.0/search?q={Uri.EscapeDataString(query)}&count={_defaultResultCount}&mkt={_market}";
 
-        var request = new HttpRequestMessage(HttpMethod.Get, url);
+        using var request = new HttpRequestMessage(HttpMethod.Get, url);
         request.Headers.Add("Ocp-Apim-Subscription-Key", _apiKey);
 
-        var response = await _httpClient.SendAsync(request).ConfigureAwait(false);
+        using var response = await _httpClient.SendAsync(request).ConfigureAwait(false);
 
         if (!response.IsSuccessStatusCode)
         {
@@ -184,7 +184,7 @@ public class WebSearchTool : ITool
     {
         var url = $"https://serpapi.com/search.json?q={Uri.EscapeDataString(query)}&num={_defaultResultCount}&api_key={_apiKey}&engine=google";
 
-        var response = await _httpClient.GetAsync(url).ConfigureAwait(false);
+        using var response = await _httpClient.GetAsync(url).ConfigureAwait(false);
 
         if (!response.IsSuccessStatusCode)
         {

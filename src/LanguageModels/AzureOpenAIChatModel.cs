@@ -203,14 +203,14 @@ public class AzureOpenAIChatModel<T> : ChatModelBase<T>
         var content = new StringContent(jsonContent, Encoding.UTF8, "application/json");
 
         // Create request message with scoped headers
-        var request = new HttpRequestMessage(HttpMethod.Post, url)
+        using var request = new HttpRequestMessage(HttpMethod.Post, url)
         {
             Content = content
         };
         request.Headers.Add("api-key", _apiKey);
 
         // Make the API call
-        var response = await HttpClient.SendAsync(request);
+        using var response = await HttpClient.SendAsync(request);
 
         // Check for errors
         if (!response.IsSuccessStatusCode)

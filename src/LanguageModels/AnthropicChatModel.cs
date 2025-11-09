@@ -179,7 +179,7 @@ public class AnthropicChatModel<T> : ChatModelBase<T>
         var content = new StringContent(jsonContent, Encoding.UTF8, "application/json");
 
         // Create request message with scoped headers
-        var request = new HttpRequestMessage(HttpMethod.Post, _endpoint)
+        using var request = new HttpRequestMessage(HttpMethod.Post, _endpoint)
         {
             Content = content
         };
@@ -187,7 +187,7 @@ public class AnthropicChatModel<T> : ChatModelBase<T>
         request.Headers.Add("anthropic-version", "2023-06-01");
 
         // Make the API call
-        var response = await HttpClient.SendAsync(request);
+        using var response = await HttpClient.SendAsync(request);
 
         // Check for errors
         if (!response.IsSuccessStatusCode)
