@@ -329,35 +329,43 @@ public class InMemoryCommunicationBackend<T> : CommunicationBackendBase<T>
             // Contribute local data
             _sharedBuffers[bufferId].Add(data.Clone());
 
-            var startTime = DateTime.UtcNow;
-
-            // Wait until all processes have contributed
-            while (_sharedBuffers[bufferId].Count < _worldSize)
+            try
             {
-                Monitor.Wait(_globalLock, 10);
-                if ((DateTime.UtcNow - startTime).TotalMilliseconds > BarrierTimeoutMs)
+                var startTime = DateTime.UtcNow;
+
+                // Wait until all processes have contributed
+                while (_sharedBuffers[bufferId].Count < _worldSize)
                 {
-                    throw new TimeoutException($"AllReduce timeout after {BarrierTimeoutMs}ms. Only {_sharedBuffers[bufferId].Count} of {_worldSize} processes contributed.");
+                    Monitor.Wait(_globalLock, 10);
+                    if ((DateTime.UtcNow - startTime).TotalMilliseconds > BarrierTimeoutMs)
+                    {
+                        throw new TimeoutException($"AllReduce timeout after {BarrierTimeoutMs}ms. Only {_sharedBuffers[bufferId].Count} of {_worldSize} processes contributed.");
+                    }
+                }
+
+                // Perform reduction
+                var allData = _sharedBuffers[bufferId];
+                var result = PerformReduction(allData, operation);
+
+                // Copy result back to input data
+                for (int i = 0; i < data.Length; i++)
+                {
+                    data[i] = result[i];
                 }
             }
-
-            Monitor.PulseAll(_globalLock);
-
-            // Perform reduction
-            var allData = _sharedBuffers[bufferId];
-            var result = PerformReduction(allData, operation);
-
-            // Copy result back to input data
-            for (int i = 0; i < data.Length; i++)
+            finally
             {
-                data[i] = result[i];
-            }
+                // CRITICAL: PulseAll must happen even on timeout to wake other waiting processes
+                // Without this, a timeout in one process causes deadlock in others waiting at Monitor.Wait
+                Monitor.PulseAll(_globalLock);
 
-            // Cleanup - rank 0 removes key and increments counter for next operation
-            if (_rank == 0)
-            {
-                _sharedBuffers.Remove(bufferId);
-                _operationCounters[_environmentId]++;
+                // Cleanup - rank 0 removes key and increments counter for next operation
+                // This must happen even on timeout to prevent memory leaks
+                if (_rank == 0)
+                {
+                    _sharedBuffers.Remove(bufferId);
+                    _operationCounters[_environmentId]++;
+                }
             }
         }
     }
