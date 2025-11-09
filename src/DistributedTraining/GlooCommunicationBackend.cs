@@ -48,7 +48,6 @@ public class GlooCommunicationBackend<T> : CommunicationBackendBase<T>
 {
     private readonly int _rank;
     private readonly int _worldSize;
-    private readonly string _transportType;
     private bool _useNativeTCP;
     private Dictionary<int, TcpClient>? _tcpConnections;
     private TcpListener? _tcpListener;
@@ -59,12 +58,14 @@ public class GlooCommunicationBackend<T> : CommunicationBackendBase<T>
     /// </summary>
     /// <param name="rank">This process's rank</param>
     /// <param name="worldSize">Total number of processes</param>
-    /// <param name="transportType">Transport type: "tcp" or "ibverbs" (default: "tcp")</param>
-    public GlooCommunicationBackend(int rank = 0, int worldSize = 1, string transportType = "tcp")
+    /// <remarks>
+    /// Transport type selection (TCP vs InfiniBand) is not yet implemented.
+    /// Currently defaults to TCP-based communication when Gloo library is unavailable.
+    /// </remarks>
+    public GlooCommunicationBackend(int rank = 0, int worldSize = 1)
     {
         _rank = rank;
         _worldSize = worldSize;
-        _transportType = transportType;
         _useNativeTCP = false;
     }
 
