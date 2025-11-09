@@ -87,18 +87,16 @@ public class ZeRO2Optimizer<T, TInput, TOutput> : ShardedOptimizerBase<T, TInput
                 // Reverse the local update to get original parameters
                 var originalParams = ComputeOriginalParameters(updatedParams, localGradients);
 
-                // ZeRO-2: Use ReduceScatter instead of AllReduce
-                // Each process receives only its shard of the averaged gradients
-                var gradientShard = Config.CommunicationBackend.ReduceScatter(localGradients, ReductionOperation.Average);
-
-                // TODO: Complete ZeRO-2 parameter shard update
-                // Current limitation: The IGradientBasedOptimizer.ApplyGradients() expects full gradient vector,
-                // but we now have only a shard. Proper ZeRO-2 requires:
-                // 1. Split originalParams into shards matching gradient shards
-                // 2. Apply gradientShard to this rank's parameter shard only
-                // 3. AllGather parameter shards to reconstruct full parameters
+                // TODO: Complete ZeRO-2 parameter shard update with ReduceScatter
+                // Current limitation: The IGradientBasedOptimizer.ApplyGradients() expects full gradient vector.
+                // Proper ZeRO-2 requires:
+                // 1. Use ReduceScatter to distribute gradient shards: var gradientShard = Config.CommunicationBackend.ReduceScatter(localGradients, ReductionOperation.Average);
+                // 2. Split originalParams into shards matching gradient shards
+                // 3. Apply gradientShard to this rank's parameter shard only
+                // 4. AllGather parameter shards to reconstruct full parameters
                 //
-                // For now, we fall back to DDP-style full gradient sync as a functional approximation:
+                // For now, we use DDP-style full gradient sync as a functional approximation.
+                // This provides correct gradient averaging but without the memory savings of true ZeRO-2 gradient sharding.
                 Config.CommunicationBackend.AllReduce(localGradients, ReductionOperation.Average);
                 var finalModel = gradientOptimizer.ApplyGradients(localGradients, localResult.BestSolution);
                 localResult.BestSolution = finalModel;
