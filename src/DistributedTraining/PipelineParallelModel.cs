@@ -136,7 +136,11 @@ public class PipelineParallelModel<T, TInput, TOutput> : ShardedModelBase<T, TIn
         // FORWARD PASS: Receive activations from previous stage
         if (_stageId > 0)
         {
-            int activationSize = InputHelper<T, TInput>.GetInputSize(input);
+            // Protocol: First receive 1-element size header, then receive activations
+            // This prevents size mismatches when stage output size differs from input size
+            Vector<T> sizeHeader = Config.CommunicationBackend.Receive(_stageId - 1, count: 1, tag: 0);
+            int activationSize = NumOps.ToInt32(sizeHeader[0]);
+
             Vector<T> receivedActivations = Config.CommunicationBackend.Receive(_stageId - 1, activationSize, tag: 0);
             stageInput = ConversionsHelper.ConvertVectorToInput<T, TInput>(receivedActivations, input);
         }
@@ -162,6 +166,11 @@ public class PipelineParallelModel<T, TInput, TOutput> : ShardedModelBase<T, TIn
         if (_stageId < _numStages - 1)
         {
             Vector<T> activationsToSend = ConversionsHelper.ConvertToVector<T, TOutput>(stageOutput);
+
+            // Protocol: First send 1-element size header, then send activations
+            // This allows receiver to know the exact size of incoming activations
+            var sizeHeader = new Vector<T>(new[] { NumOps.FromDouble(activationsToSend.Length) });
+            Config.CommunicationBackend.Send(sizeHeader, _stageId + 1, tag: 0);
             Config.CommunicationBackend.Send(activationsToSend, _stageId + 1, tag: 0);
         }
 
@@ -220,8 +229,11 @@ public class PipelineParallelModel<T, TInput, TOutput> : ShardedModelBase<T, TIn
         // FORWARD PASS: Receive activations from previous stage
         if (_stageId > 0)
         {
-            // Non-first stages receive activations from previous stage
-            int activationSize = InputHelper<T, TInput>.GetInputSize(input);
+            // Protocol: First receive 1-element size header, then receive activations
+            // This prevents size mismatches when stage output size differs from input size
+            Vector<T> sizeHeader = Config.CommunicationBackend.Receive(_stageId - 1, count: 1, tag: 10);
+            int activationSize = NumOps.ToInt32(sizeHeader[0]);
+
             Vector<T> receivedActivations = Config.CommunicationBackend.Receive(_stageId - 1, activationSize, tag: 10);
 
             // Convert received vector back to TInput for this stage using reference input for shape
@@ -236,6 +248,11 @@ public class PipelineParallelModel<T, TInput, TOutput> : ShardedModelBase<T, TIn
         {
             // Non-last stages send their output to next stage
             Vector<T> activationsToSend = ConversionsHelper.ConvertToVector<T, TOutput>(stageOutput);
+
+            // Protocol: First send 1-element size header, then send activations
+            // This allows receiver to know the exact size of incoming activations
+            var sizeHeader = new Vector<T>(new[] { NumOps.FromDouble(activationsToSend.Length) });
+            Config.CommunicationBackend.Send(sizeHeader, _stageId + 1, tag: 10);
             Config.CommunicationBackend.Send(activationsToSend, _stageId + 1, tag: 10);
 
             // Intermediate stages must still return a value
