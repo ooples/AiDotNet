@@ -1,4 +1,5 @@
 using AiDotNet.Enums;
+using Newtonsoft.Json;
 
 namespace AiDotNet.Models;
 
@@ -63,6 +64,7 @@ public class AgentConfiguration<T>
     /// services in production applications.
     /// </para>
     /// </remarks>
+    [JsonIgnore]
     public string? ApiKey { get; set; }
 
     /// <summary>
