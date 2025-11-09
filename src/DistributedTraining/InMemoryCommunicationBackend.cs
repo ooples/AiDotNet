@@ -74,6 +74,12 @@ public class InMemoryCommunicationBackend<T> : CommunicationBackendBase<T>
     // - Clean separation between different distributed training contexts
     //
     // In a real implementation, this would be handled by the MPI backend's process isolation.
+    //
+    // NOTE ON THREAD SAFETY AND CONCURRENT SESSIONS:
+    // These static dictionaries ARE safe for concurrent training sessions because all keys
+    // include the unique _environmentId prefix (see line 61). Different training sessions
+    // get different environment IDs, so they operate on completely separate dictionary entries.
+    // The _globalLock ensures thread-safe access to the shared dictionaries.
     private static readonly object _globalLock = new object();
     private static readonly Dictionary<string, List<Vector<T>>> _sharedBuffers = new();
     private static readonly Dictionary<string, int> _barrierCounters = new();
