@@ -19,7 +19,7 @@ namespace AiDotNet.ContinualLearning.Trainers;
 /// <para><b>For Algorithm Implementers:</b> To create a new continual learning algorithm:
 /// 1. Extend this base class
 /// 2. Implement the LearnTask method with your algorithm-specific training logic
-/// 3. Provide a strategy that implements ComputeRegularizationLoss if your algorithm uses regularization
+/// 3. Pass an IContinualLearningStrategy implementation that handles your algorithm's specific regularization logic
 /// 4. All shared functionality (evaluation, memory management) is handled automatically
 /// </para>
 /// </remarks>
