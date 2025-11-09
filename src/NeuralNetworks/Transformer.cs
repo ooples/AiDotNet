@@ -33,8 +33,55 @@ namespace AiDotNet.NeuralNetworks;
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The data type used for calculations (typically float or double).</typeparam>
-public class Transformer<T> : NeuralNetworkBase<T>
+public class Transformer<T> : NeuralNetworkBase<T>, IAuxiliaryLossLayer<T>
 {
+    /// <summary>
+    /// Gets or sets whether auxiliary loss (attention regularization) should be used during training.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Attention regularization aggregates auxiliary losses from all MultiHeadAttentionLayers in the network.
+    /// This includes both entropy regularization and head diversity penalties.
+    /// </para>
+    /// <para><b>For Beginners:</b> This controls attention quality across the entire Transformer.
+    ///
+    /// When enabled, the Transformer:
+    /// - Collects regularization from all attention layers
+    /// - Prevents attention collapse across the network
+    /// - Encourages diverse attention patterns at all levels
+    ///
+    /// This is especially important for:
+    /// - Deep transformers (many layers)
+    /// - Models with many attention heads
+    /// - Tasks requiring robust attention patterns
+    ///
+    /// The auxiliary loss helps maintain attention quality throughout training.
+    /// </para>
+    /// </remarks>
+    public bool UseAuxiliaryLoss { get; set; } = false;
+
+    /// <summary>
+    /// Gets or sets the weight for the attention regularization auxiliary loss.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// This weight controls how much network-level attention regularization contributes to the total loss.
+    /// Typical values range from 0.001 to 0.01.
+    /// </para>
+    /// <para><b>For Beginners:</b> This controls how much to encourage good attention throughout the network.
+    ///
+    /// Common values:
+    /// - 0.005 (default): Balanced network-level regularization
+    /// - 0.001-0.003: Light regularization
+    /// - 0.008-0.01: Strong regularization
+    ///
+    /// Higher values enforce stronger attention quality constraints.
+    /// </para>
+    /// </remarks>
+    public T AuxiliaryLossWeight { get; set; } = NumOps.FromDouble(0.005);
+
+    private T _lastAttentionRegularizationLoss = NumOps.Zero;
+
     /// <summary>
     /// The configuration settings for this Transformer network.
     /// </summary>
@@ -211,6 +258,113 @@ public class Transformer<T> : NeuralNetworkBase<T>
     }
 
     /// <summary>
+    /// Computes the auxiliary loss for attention regularization across all attention layers.
+    /// </summary>
+    /// <returns>The computed attention regularization auxiliary loss.</returns>
+    /// <remarks>
+    /// <para>
+    /// This method aggregates auxiliary losses from all MultiHeadAttentionLayers in the Transformer.
+    /// It collects both entropy regularization and head diversity penalties from each attention layer.
+    /// Formula: L = (1/N) * Σ_layers auxloss_i where N = number of attention layers
+    /// </para>
+    /// <para><b>For Beginners:</b> This calculates network-wide attention quality.
+    ///
+    /// Transformer attention regularization works by:
+    /// 1. Finding all attention layers in the network
+    /// 2. Computing auxiliary loss for each layer (if enabled)
+    /// 3. Averaging these losses across all layers
+    /// 4. Returning the network-level regularization penalty
+    ///
+    /// This helps because:
+    /// - Maintains attention quality throughout the entire network
+    /// - Prevents attention collapse at any level
+    /// - Encourages diverse attention patterns across all layers
+    /// - Improves interpretability and robustness
+    ///
+    /// The auxiliary loss is added to the main task loss during training.
+    /// </para>
+    /// </remarks>
+    public T ComputeAuxiliaryLoss()
+    {
+        if (!UseAuxiliaryLoss)
+        {
+            _lastAttentionRegularizationLoss = NumOps.Zero;
+            return NumOps.Zero;
+        }
+
+        T totalAuxLoss = NumOps.Zero;
+        int attentionLayerCount = 0;
+
+        // Aggregate auxiliary losses from all attention layers
+        foreach (var layer in Layers)
+        {
+            if (layer is IAuxiliaryLossLayer<T> auxLayer && auxLayer.UseAuxiliaryLoss)
+            {
+                T layerAuxLoss = auxLayer.ComputeAuxiliaryLoss();
+                totalAuxLoss = NumOps.Add(totalAuxLoss, layerAuxLoss);
+                attentionLayerCount++;
+            }
+        }
+
+        // Average over all attention layers
+        if (attentionLayerCount > 0)
+        {
+            totalAuxLoss = NumOps.Divide(totalAuxLoss, NumOps.FromInt32(attentionLayerCount));
+        }
+
+        _lastAttentionRegularizationLoss = totalAuxLoss;
+        return totalAuxLoss;
+    }
+
+    /// <summary>
+    /// Gets diagnostic information about the attention regularization auxiliary loss.
+    /// </summary>
+    /// <returns>A dictionary containing diagnostic information about network-level attention regularization.</returns>
+    /// <remarks>
+    /// <para>
+    /// This method returns detailed diagnostics about attention regularization across the Transformer,
+    /// including aggregated losses, layer counts, and configuration parameters.
+    /// This information is useful for monitoring training progress and debugging attention issues.
+    /// </para>
+    /// <para><b>For Beginners:</b> This provides information about how attention works across the network.
+    ///
+    /// The diagnostics include:
+    /// - Total attention regularization loss (averaged across layers)
+    /// - Weight applied to the regularization
+    /// - Number of attention layers with regularization enabled
+    /// - Whether network-level regularization is enabled
+    ///
+    /// This helps you:
+    /// - Monitor attention quality throughout the network
+    /// - Debug issues with attention collapse
+    /// - Understand the impact of regularization at the network level
+    /// - Track which layers are contributing to regularization
+    ///
+    /// You can use this information to adjust regularization settings for better training results.
+    /// </para>
+    /// </remarks>
+    public Dictionary<string, string> GetAuxiliaryLossDiagnostics()
+    {
+        var diagnostics = new Dictionary<string, string>
+        {
+            { "TotalAttentionRegularizationLoss", _lastAttentionRegularizationLoss.ToString() ?? "0" },
+            { "AttentionRegularizationWeight", AuxiliaryLossWeight.ToString() ?? "0.005" },
+            { "UseAttentionRegularization", UseAuxiliaryLoss.ToString() }
+        };
+
+        // Count attention layers with regularization enabled
+        int attentionLayerCount = Layers.OfType<IAuxiliaryLossLayer<T>>()
+            .Count(l => l.UseAuxiliaryLoss);
+        diagnostics["AttentionLayersWithRegularization"] = attentionLayerCount.ToString();
+
+        // Total attention layers
+        int totalAttentionLayers = Layers.OfType<MultiHeadAttentionLayer<T>>().Count();
+        diagnostics["TotalAttentionLayers"] = totalAttentionLayers.ToString();
+
+        return diagnostics;
+    }
+
+    /// <summary>
     /// Updates the parameters of all layers in the Transformer network.
     /// </summary>
     /// <param name="parameters">A vector containing all parameters for the network.</param>
@@ -333,8 +487,16 @@ public class Transformer<T> : NeuralNetworkBase<T>
         var flattenedPredictions = prediction.ToVector();
         var flattenedOutput = expectedOutput.ToVector();
 
-        // Calculate and store the loss
+        // Calculate main loss
         LastLoss = LossFunction.CalculateLoss(flattenedPredictions, flattenedOutput);
+
+        // Add auxiliary loss if enabled
+        if (UseAuxiliaryLoss)
+        {
+            T auxLoss = ComputeAuxiliaryLoss();
+            T weightedAuxLoss = NumOps.Multiply(AuxiliaryLossWeight, auxLoss);
+            LastLoss = NumOps.Add(LastLoss, weightedAuxLoss);
+        }
 
         // Backward pass
         var outputGradients = LossFunction.CalculateDerivative(flattenedPredictions, flattenedOutput);

@@ -248,6 +248,178 @@ public class MultiHeadAttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     }
 
     /// <summary>
+    /// Computes the auxiliary loss for attention regularization (entropy + head diversity).
+    /// </summary>
+    /// <returns>The computed attention regularization auxiliary loss.</returns>
+    /// <remarks>
+    /// <para>
+    /// This method computes two types of regularization:
+    /// 1. Attention Entropy: Encourages attention to be distributed (not too peaked)
+    /// 2. Head Diversity: Encourages different heads to learn different patterns
+    /// Formula: L = entropy_weight * Σ_heads H(attention) + diversity_weight * Σ_pairs CosineSim(head_i, head_j)
+    /// </para>
+    /// <para><b>For Beginners:</b> This calculates penalties to improve attention quality.
+    ///
+    /// Attention regularization works by:
+    /// 1. Measuring attention entropy for each head (prevents over-focusing)
+    /// 2. Measuring similarity between different heads (prevents redundancy)
+    /// 3. Combining these into a single auxiliary loss
+    ///
+    /// This helps because:
+    /// - Prevents attention from collapsing to single positions
+    /// - Ensures different heads specialize in different patterns
+    /// - Improves model robustness and interpretability
+    ///
+    /// The auxiliary loss is minimized during training alongside the main task loss.
+    /// </para>
+    /// </remarks>
+    public T ComputeAuxiliaryLoss()
+    {
+        if (!UseAuxiliaryLoss || _lastAttentionScores == null)
+        {
+            _lastEntropyLoss = NumOps.Zero;
+            _lastDiversityLoss = NumOps.Zero;
+            return NumOps.Zero;
+        }
+
+        T totalLoss = NumOps.Zero;
+
+        // 1. Compute entropy regularization per head
+        // H = -Σ(p * log(p)) for attention weights
+        // We want to maximize entropy (minimize -H), so we negate
+        T totalEntropy = NumOps.Zero;
+        int sequenceLength = _lastAttentionScores.Shape[1];
+
+        for (int h = 0; h < _headCount; h++)
+        {
+            T headEntropy = NumOps.Zero;
+            for (int i = 0; i < sequenceLength; i++)
+            {
+                for (int j = 0; j < sequenceLength; j++)
+                {
+                    // Get attention weight for this head
+                    int flatIndex = h * sequenceLength * sequenceLength + i * sequenceLength + j;
+                    T attnWeight = _lastAttentionScores.GetFlatIndex(flatIndex);
+
+                    // Skip zero or very small values to avoid log(0)
+                    if (NumOps.LessThan(attnWeight, NumOps.FromDouble(1e-10)))
+                        continue;
+
+                    // H = -Σ(p * log(p))
+                    T logWeight = NumOps.Log(attnWeight);
+                    T term = NumOps.Multiply(attnWeight, logWeight);
+                    headEntropy = NumOps.Subtract(headEntropy, term);
+                }
+            }
+            // We want to maximize entropy, so minimize -entropy
+            totalEntropy = NumOps.Subtract(totalEntropy, headEntropy);
+        }
+
+        _lastEntropyLoss = totalEntropy;
+        totalLoss = NumOps.Add(totalLoss, NumOps.Multiply(AuxiliaryLossWeight, totalEntropy));
+
+        // 2. Compute head diversity penalty
+        // Penalize high cosine similarity between head outputs
+        if (_lastHeadOutputs != null && _lastHeadOutputs.Count == _headCount)
+        {
+            T diversityPenalty = NumOps.Zero;
+            int pairCount = 0;
+
+            for (int i = 0; i < _headCount; i++)
+            {
+                for (int j = i + 1; j < _headCount; j++)
+                {
+                    // Compute cosine similarity between head outputs
+                    T similarity = ComputeCosineSimilarity(_lastHeadOutputs[i], _lastHeadOutputs[j]);
+                    diversityPenalty = NumOps.Add(diversityPenalty, similarity);
+                    pairCount++;
+                }
+            }
+
+            if (pairCount > 0)
+            {
+                diversityPenalty = NumOps.Divide(diversityPenalty, NumOps.FromInt32(pairCount));
+            }
+
+            _lastDiversityLoss = diversityPenalty;
+            totalLoss = NumOps.Add(totalLoss, NumOps.Multiply(HeadDiversityWeight, diversityPenalty));
+        }
+
+        return totalLoss;
+    }
+
+    /// <summary>
+    /// Computes cosine similarity between two tensors.
+    /// </summary>
+    private T ComputeCosineSimilarity(Tensor<T> a, Tensor<T> b)
+    {
+        var vecA = a.ToVector();
+        var vecB = b.ToVector();
+
+        T dotProduct = NumOps.Zero;
+        T normA = NumOps.Zero;
+        T normB = NumOps.Zero;
+
+        for (int i = 0; i < vecA.Length; i++)
+        {
+            dotProduct = NumOps.Add(dotProduct, NumOps.Multiply(vecA[i], vecB[i]));
+            normA = NumOps.Add(normA, NumOps.Multiply(vecA[i], vecA[i]));
+            normB = NumOps.Add(normB, NumOps.Multiply(vecB[i], vecB[i]));
+        }
+
+        normA = NumOps.Sqrt(normA);
+        normB = NumOps.Sqrt(normB);
+
+        T denominator = NumOps.Multiply(normA, normB);
+        if (NumOps.Equals(denominator, NumOps.Zero))
+            return NumOps.Zero;
+
+        return NumOps.Divide(dotProduct, denominator);
+    }
+
+    /// <summary>
+    /// Gets diagnostic information about the attention regularization auxiliary loss.
+    /// </summary>
+    /// <returns>A dictionary containing diagnostic information about attention regularization.</returns>
+    /// <remarks>
+    /// <para>
+    /// This method returns detailed diagnostics about attention regularization, including
+    /// entropy loss, diversity loss, and configuration parameters.
+    /// This information is useful for monitoring training progress and debugging.
+    /// </para>
+    /// <para><b>For Beginners:</b> This provides information about how attention regularization is working.
+    ///
+    /// The diagnostics include:
+    /// - Total entropy loss (how distributed attention patterns are)
+    /// - Total diversity loss (how different heads are from each other)
+    /// - Weights applied to each loss component
+    /// - Whether regularization is enabled
+    /// - Number of attention heads
+    ///
+    /// This helps you:
+    /// - Monitor if attention is becoming too sharp or redundant
+    /// - Debug issues with head specialization
+    /// - Understand the impact of regularization on learning
+    ///
+    /// You can use this information to adjust regularization weights for better results.
+    /// </para>
+    /// </remarks>
+    public Dictionary<string, string> GetAuxiliaryLossDiagnostics()
+    {
+        return new Dictionary<string, string>
+        {
+            { "TotalEntropyLoss", _lastEntropyLoss.ToString() ?? "0" },
+            { "TotalDiversityLoss", _lastDiversityLoss.ToString() ?? "0" },
+            { "EntropyWeight", AuxiliaryLossWeight.ToString() ?? "0.005" },
+            { "DiversityWeight", HeadDiversityWeight.ToString() ?? "0.01" },
+            { "UseAttentionRegularization", UseAuxiliaryLoss.ToString() },
+            { "NumberOfHeads", _headCount.ToString() },
+            { "AttentionScoresCached", (_lastAttentionScores != null).ToString() },
+            { "HeadOutputsCached", (_lastHeadOutputs != null).ToString() }
+        };
+    }
+
+    /// <summary>
     /// Performs the forward pass of the multi-head attention layer.
     /// </summary>
     /// <param name="input">The input tensor.</param>
