@@ -1,5 +1,6 @@
 using System;
 using AiDotNet.ModelCompression;
+using AiDotNet.LinearAlgebra;
 using Xunit;
 
 namespace AiDotNetTests.UnitTests.ModelCompression
@@ -46,7 +47,7 @@ namespace AiDotNetTests.UnitTests.ModelCompression
             // Arrange
             var compression = new WeightClusteringCompression<double>(
                 numClusters: 4, randomSeed: 42);
-            var weights = new double[] { 1.0, 1.1, 2.0, 2.1, 3.0, 3.1, 4.0, 4.1 };
+            var weights = new Vector<double>(new double[] { 1.0, 1.1, 2.0, 2.1, 3.0, 3.1, 4.0, 4.1 });
 
             // Act
             var (compressedWeights, metadata) = compression.Compress(weights);
@@ -65,7 +66,7 @@ namespace AiDotNetTests.UnitTests.ModelCompression
             var compression = new WeightClusteringCompression<double>();
 
             // Act & Assert
-            Assert.Throws<ArgumentException>(() => compression.Compress(null!));
+            Assert.Throws<ArgumentNullException>(() => compression.Compress(null!));
         }
 
         [Fact]
@@ -75,7 +76,7 @@ namespace AiDotNetTests.UnitTests.ModelCompression
             var compression = new WeightClusteringCompression<double>();
 
             // Act & Assert
-            Assert.Throws<ArgumentException>(() => compression.Compress(Array.Empty<double>()));
+            Assert.Throws<ArgumentException>(() => compression.Compress(new Vector<double>(Array.Empty<double>())));
         }
 
         [Fact]
@@ -84,7 +85,7 @@ namespace AiDotNetTests.UnitTests.ModelCompression
             // Arrange
             var compression = new WeightClusteringCompression<double>(
                 numClusters: 3, randomSeed: 42);
-            var weights = new double[] { 1.0, 1.0, 5.0, 5.0, 10.0, 10.0 };
+            var weights = new Vector<double>(new double[] { 1.0, 1.0, 5.0, 5.0, 10.0, 10.0 });
 
             // Act
             var (_, metadata) = compression.Compress(weights);
@@ -102,7 +103,7 @@ namespace AiDotNetTests.UnitTests.ModelCompression
             // Arrange
             var compression = new WeightClusteringCompression<double>(
                 numClusters: 4, randomSeed: 42);
-            var originalWeights = new double[] { 1.0, 1.1, 2.0, 2.1, 3.0, 3.1, 4.0, 4.1 };
+            var originalWeights = new Vector<double>(new double[] { 1.0, 1.1, 2.0, 2.1, 3.0, 3.1, 4.0, 4.1 });
 
             // Act
             var (compressedWeights, metadata) = compression.Compress(originalWeights);
@@ -123,12 +124,10 @@ namespace AiDotNetTests.UnitTests.ModelCompression
         {
             // Arrange
             var compression = new WeightClusteringCompression<double>();
-            var metadata = new WeightClusteringMetadata<double>
-            {
-                ClusterCenters = new double[] { 1.0, 2.0 },
-                NumClusters = 2,
-                OriginalLength = 10
-            };
+            var metadata = new WeightClusteringMetadata<double>(
+                new double[] { 1.0, 2.0 },
+                2,
+                10);
 
             // Act & Assert
             Assert.Throws<ArgumentNullException>(() =>
@@ -140,7 +139,7 @@ namespace AiDotNetTests.UnitTests.ModelCompression
         {
             // Arrange
             var compression = new WeightClusteringCompression<double>();
-            var compressedWeights = new double[] { 0.0, 1.0 };
+            var compressedWeights = new Vector<double>(new double[] { 0.0, 1.0 });
 
             // Act & Assert
             Assert.Throws<ArgumentException>(() =>
@@ -158,9 +157,10 @@ namespace AiDotNetTests.UnitTests.ModelCompression
             {
                 weights[i] = i / 100.0;
             }
+            var weightsVector = new Vector<double>(weights);
 
             // Act
-            var (compressedWeights, metadata) = compression.Compress(weights);
+            var (compressedWeights, metadata) = compression.Compress(weightsVector);
             var compressedSize = compression.GetCompressedSize(compressedWeights, metadata);
             var originalSize = weights.Length * sizeof(double);
 
@@ -202,7 +202,7 @@ namespace AiDotNetTests.UnitTests.ModelCompression
             // Arrange
             var compression = new WeightClusteringCompression<double>(
                 numClusters: 100, randomSeed: 42);
-            var weights = new double[] { 1.0, 2.0, 3.0, 4.0, 5.0 };
+            var weights = new Vector<double>(new double[] { 1.0, 2.0, 3.0, 4.0, 5.0 });
 
             // Act
             var (_, metadata) = compression.Compress(weights);
@@ -218,7 +218,7 @@ namespace AiDotNetTests.UnitTests.ModelCompression
             // Arrange
             var compression = new WeightClusteringCompression<double>(
                 numClusters: 10, randomSeed: 42);
-            var weights = new double[] { 5.0, 5.0, 5.0, 5.0, 5.0 };
+            var weights = new Vector<double>(new double[] { 5.0, 5.0, 5.0, 5.0, 5.0 });
 
             // Act
             var (compressedWeights, metadata) = compression.Compress(weights);
@@ -238,7 +238,7 @@ namespace AiDotNetTests.UnitTests.ModelCompression
             // Arrange
             var compression = new WeightClusteringCompression<float>(
                 numClusters: 4, randomSeed: 42);
-            var weights = new float[] { 1.0f, 1.1f, 2.0f, 2.1f, 3.0f, 3.1f };
+            var weights = new Vector<float>(new float[] { 1.0f, 1.1f, 2.0f, 2.1f, 3.0f, 3.1f });
 
             // Act
             var (compressedWeights, metadata) = compression.Compress(weights);
@@ -260,14 +260,18 @@ namespace AiDotNetTests.UnitTests.ModelCompression
                 numClusters: 4, randomSeed: 42);
             var compression2 = new WeightClusteringCompression<double>(
                 numClusters: 4, randomSeed: 42);
-            var weights = new double[] { 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0 };
+            var weights = new Vector<double>(new double[] { 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0 });
 
             // Act
             var (compressed1, _) = compression1.Compress(weights);
             var (compressed2, _) = compression2.Compress(weights);
 
             // Assert
-            Assert.Equal(compressed1, compressed2);
+            Assert.Equal(compressed1.Length, compressed2.Length);
+            for (int i = 0; i < compressed1.Length; i++)
+            {
+                Assert.Equal(compressed1[i], compressed2[i]);
+            }
         }
 
         [Fact]
@@ -282,9 +286,10 @@ namespace AiDotNetTests.UnitTests.ModelCompression
             {
                 weights[i] = random.NextDouble() * 10.0;
             }
+            var weightsVector = new Vector<double>(weights);
 
             // Act
-            var (compressedWeights, metadata) = compression.Compress(weights);
+            var (compressedWeights, metadata) = compression.Compress(weightsVector);
             var originalSize = weights.Length * sizeof(double);
             var compressedSize = compression.GetCompressedSize(compressedWeights, metadata);
             var ratio = compression.CalculateCompressionRatio(originalSize, compressedSize);
