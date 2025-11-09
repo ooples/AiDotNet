@@ -102,6 +102,14 @@ public class ChainOfThoughtAgent<T> : AgentBase<T>
     }
 
     /// <inheritdoc/>
+    /// <remarks>
+    /// Note: For ChainOfThoughtAgent, the maxIterations parameter controls the maximum number
+    /// of reasoning steps the LLM should generate (not iteration cycles). The agent makes
+    /// one initial LLM call and at most one refinement call if tools are used. The parameter
+    /// is used to: (1) guide the LLM on how many reasoning steps to include, and (2) truncate
+    /// the response if too many steps are generated. This differs from iterative agents like
+    /// ReAct which loop multiple times.
+    /// </remarks>
     public override async Task<string> RunAsync(string query, int maxIterations = 5)
     {
         ValidateMaxIterations(maxIterations);

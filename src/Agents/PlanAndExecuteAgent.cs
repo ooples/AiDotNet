@@ -116,6 +116,13 @@ public class PlanAndExecuteAgent<T> : AgentBase<T>
     }
 
     /// <inheritdoc/>
+    /// <remarks>
+    /// Note: For PlanAndExecuteAgent, the maxIterations parameter limits the number of plan
+    /// revisions (not the number of steps in the plan). The agent will execute all steps in
+    /// the plan, but if errors occur and plan revision is enabled, it can only revise the plan
+    /// up to maxIterations times. This prevents infinite revision loops while allowing plans
+    /// with legitimately many steps to complete.
+    /// </remarks>
     public override async Task<string> RunAsync(string query, int maxIterations = 10)
     {
         ValidateMaxIterations(maxIterations);
@@ -147,7 +154,9 @@ public class PlanAndExecuteAgent<T> : AgentBase<T>
         // Phase 2: Execute the plan
         AppendToScratchpad("=== EXECUTION PHASE ===");
 
-        for (int stepIndex = 0; stepIndex < plan.Steps.Count && stepIndex < maxIterations; stepIndex++)
+        int revisionCount = 0; // Track number of plan revisions to enforce maxIterations limit
+
+        for (int stepIndex = 0; stepIndex < plan.Steps.Count; stepIndex++)
         {
             var step = plan.Steps[stepIndex];
             AppendToScratchpad($"Step {stepIndex + 1}/{plan.Steps.Count}: {step.Description}");
@@ -175,14 +184,15 @@ public class PlanAndExecuteAgent<T> : AgentBase<T>
                 AppendToScratchpad($"Error executing step: {ex.Message}");
 
                 // If plan revision is allowed, try to create a new plan
-                if (_allowPlanRevision && stepIndex < maxIterations - 1)
+                if (_allowPlanRevision && revisionCount < maxIterations)
                 {
-                    AppendToScratchpad("Attempting to revise plan...");
+                    AppendToScratchpad($"Attempting to revise plan (revision {revisionCount + 1}/{maxIterations})...");
                     var revisedPlan = await RevisePlanAsync(query, plan, stepIndex);
 
                     if (revisedPlan.Steps.Count > 0)
                     {
                         plan = revisedPlan;
+                        revisionCount++; // Increment revision counter
                         AppendToScratchpad("Plan revised:");
                         for (int i = 0; i < plan.Steps.Count; i++)
                         {
@@ -198,6 +208,11 @@ public class PlanAndExecuteAgent<T> : AgentBase<T>
                     {
                         return $"I encountered an error at step {stepIndex + 1} and was unable to revise the plan: {ex.Message}";
                     }
+                }
+                else if (_allowPlanRevision && revisionCount >= maxIterations)
+                {
+                    AppendToScratchpad($"Maximum revisions ({maxIterations}) reached. Cannot revise plan further.");
+                    return $"I encountered an error at step {stepIndex + 1} and reached the maximum number of plan revisions ({maxIterations}): {ex.Message}";
                 }
                 else
                 {
