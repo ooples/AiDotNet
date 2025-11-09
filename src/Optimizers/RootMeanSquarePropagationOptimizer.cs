@@ -453,4 +453,67 @@ public class RootMeanSquarePropagationOptimizer<T, TInput, TOutput> : GradientBa
         _options = JsonConvert.DeserializeObject<RootMeanSquarePropagationOptimizerOptions<T, TInput, TOutput>>(reader.ReadString())
             ?? throw new InvalidOperationException("Failed to deserialize _options.");
     }
+
+    /// <summary>
+    /// Reverses an RMSprop gradient update to recover original parameters.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// For RMSprop, the forward update is:
+    /// 1. _squaredGradient[i] = decay * _squaredGradient[i] + (1 - decay) * gradient[i]^2
+    /// 2. update = learning_rate * gradient[i] / (sqrt(_squaredGradient[i]) + epsilon)
+    /// 3. params_new = params_old - update
+    ///
+    /// To reverse: params_old = params_new + update
+    ///
+    /// This requires access to the current squared gradient state and the applied gradients
+    /// to recalculate the adaptive update that was applied.
+    /// </para>
+    /// <para><b>For Beginners:</b>
+    /// This is like retracing the hiker's steps. Given where the hiker ended up (updated parameters)
+    /// and the terrain steepness history (squared gradients), we can calculate the exact step size
+    /// that was used and determine where the hiker started from.
+    /// </para>
+    /// </remarks>
+    /// <param name="updatedParameters">Parameters after gradient application</param>
+    /// <param name="appliedGradients">The gradients that were applied</param>
+    /// <returns>Original parameters before the gradient update</returns>
+    /// <exception cref="ArgumentNullException">If parameters or gradients are null</exception>
+    /// <exception cref="ArgumentException">If parameter and gradient sizes do not match</exception>
+    public override Vector<T> ReverseUpdate(Vector<T> updatedParameters, Vector<T> appliedGradients)
+    {
+        if (updatedParameters == null)
+            throw new ArgumentNullException(nameof(updatedParameters));
+        if (appliedGradients == null)
+            throw new ArgumentNullException(nameof(appliedGradients));
+
+        if (updatedParameters.Length != appliedGradients.Length)
+        {
+            throw new ArgumentException(
+                $"Updated parameters size ({updatedParameters.Length}) must match applied gradients size ({appliedGradients.Length})",
+                nameof(appliedGradients));
+        }
+
+        // If squared gradients are not initialized, fall back to vanilla SGD reversal
+        if (_squaredGradient == null || _squaredGradient.Length != updatedParameters.Length)
+        {
+            return base.ReverseUpdate(updatedParameters, appliedGradients);
+        }
+
+        // Reverse RMSprop update: params_old = params_new + update
+        // Where update = learning_rate * gradient / (sqrt(squared_gradient) + epsilon)
+        var original = new T[updatedParameters.Length];
+        for (int i = 0; i < updatedParameters.Length; i++)
+        {
+            // Recalculate the adaptive update that was applied
+            T numerator = NumOps.Multiply(CurrentLearningRate, appliedGradients[i]);
+            T denominator = NumOps.Add(NumOps.Sqrt(_squaredGradient[i]), NumOps.FromDouble(_options.Epsilon));
+            T update = NumOps.Divide(numerator, denominator);
+
+            // Reverse the update: params_old = params_new + update
+            original[i] = NumOps.Add(updatedParameters[i], update);
+        }
+
+        return new Vector<T>(original);
+    }
 }
