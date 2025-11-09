@@ -148,6 +148,13 @@ public class ChainOfThoughtAgent<T> : AgentBase<T>
         // Step 2: Parse the chain of thought
         var parsed = ParseChainOfThought(llmResponse);
 
+        // Enforce maxIterations limit on reasoning steps
+        if (parsed.ReasoningSteps.Count > maxIterations)
+        {
+            AppendToScratchpad($"WARNING: LLM generated {parsed.ReasoningSteps.Count} steps, truncating to {maxIterations}.");
+            parsed.ReasoningSteps = parsed.ReasoningSteps.Take(maxIterations).ToList();
+        }
+
         // Step 3: Record the reasoning steps
         if (parsed.ReasoningSteps.Count > 0)
         {
