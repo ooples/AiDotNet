@@ -52,6 +52,7 @@ public static class AgentGlobalConfiguration
 {
     private static readonly Dictionary<LLMProvider, string> _apiKeys = new();
     private static readonly object _lock = new object();
+    private static LLMProvider _defaultProvider = LLMProvider.OpenAI;
 
     /// <summary>
     /// Gets a read-only dictionary of configured API keys indexed by LLM provider.
@@ -143,7 +144,23 @@ public static class AgentGlobalConfiguration
     /// Choose your default based on which provider you've configured and prefer to use most often.
     /// </para>
     /// </remarks>
-    public static LLMProvider DefaultProvider { get; set; } = LLMProvider.OpenAI;
+    public static LLMProvider DefaultProvider
+    {
+        get
+        {
+            lock (_lock)
+            {
+                return _defaultProvider;
+            }
+        }
+        set
+        {
+            lock (_lock)
+            {
+                _defaultProvider = value;
+            }
+        }
+    }
 
     /// <summary>
     /// Configures global agent settings using a fluent builder pattern.
