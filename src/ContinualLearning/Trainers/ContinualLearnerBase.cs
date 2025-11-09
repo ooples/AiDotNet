@@ -5,6 +5,7 @@ using AiDotNet.ContinualLearning.Results;
 using AiDotNet.Data.Abstractions;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
+using Newtonsoft.Json.Linq;
 
 namespace AiDotNet.ContinualLearning.Trainers;
 
@@ -108,11 +109,11 @@ public abstract class ContinualLearnerBase<T, TInput, TOutput> : IContinualLearn
         {
             for (int i = 0; i < _tasksLearned - 1; i++)
             {
-                if (_initialAccuracies.ContainsKey(i))
+                if (_initialAccuracies.TryGetValue(i, out var initialAcc))
                 {
                     backwardTransfer = NumOps.Add(
                         backwardTransfer,
-                        NumOps.Subtract(accuracies[i], _initialAccuracies[i]));
+                        NumOps.Subtract(accuracies[i], initialAcc));
                 }
             }
             backwardTransfer = NumOps.Divide(
@@ -160,12 +161,12 @@ public abstract class ContinualLearnerBase<T, TInput, TOutput> : IContinualLearn
 
         // Save metadata
         var metadataPath = Path.Combine(directoryPath, "metadata.json");
-        var metadata = new
+        var metadata = new JObject
         {
-            TasksLearned = _tasksLearned,
-            MemorySize = Configuration.MemorySize
+            ["TasksLearned"] = _tasksLearned,
+            ["MemorySize"] = Configuration.MemorySize
         };
-        File.WriteAllText(metadataPath, System.Text.Json.JsonSerializer.Serialize(metadata));
+        File.WriteAllText(metadataPath, metadata.ToString());
     }
 
     /// <inheritdoc/>
@@ -184,8 +185,12 @@ public abstract class ContinualLearnerBase<T, TInput, TOutput> : IContinualLearn
         if (File.Exists(metadataPath))
         {
             var json = File.ReadAllText(metadataPath);
-            var metadata = System.Text.Json.JsonSerializer.Deserialize<Dictionary<string, object>>(json);
-            // Restore state as needed
+            var metadata = JObject.Parse(json);
+
+            if (metadata != null && metadata.TryGetValue("TasksLearned", out var tasksLearnedToken))
+            {
+                _tasksLearned = tasksLearnedToken.Value<int>();
+            }
         }
     }
 
