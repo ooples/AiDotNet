@@ -57,26 +57,33 @@ public class PipelineParallelOptimizer<T, TInput, TOutput> : ShardedOptimizerBas
 
         Config.CommunicationBackend.Barrier();
 
-        // Pipeline parallel optimization requires:
-        // 1. Process micro-batches through the pipeline
-        // 2. Accumulate gradients across micro-batches
-        // 3. Update parameters once all micro-batches complete
-        // 4. Synchronize across pipeline stages if using data parallelism
-
-        // For this framework implementation, we provide simplified pattern
-        var result = WrappedOptimizer.Optimize(inputData);
-
-        // Each stage updates its own parameters
-        if (Config.AutoSyncGradients && result.BestSolution != null)
+        try
         {
-            // In pure pipeline parallelism, no cross-stage parameter sync needed
-            // (each stage owns different parameters)
-            // If combined with data parallelism, would sync within data-parallel group
+            // Pipeline parallel optimization requires:
+            // 1. Process micro-batches through the pipeline
+            // 2. Accumulate gradients across micro-batches
+            // 3. Update parameters once all micro-batches complete
+            // 4. Synchronize across pipeline stages if using data parallelism
+
+            // For this framework implementation, we provide simplified pattern
+            var result = WrappedOptimizer.Optimize(inputData);
+
+            // Each stage updates its own parameters
+            if (Config.AutoSyncGradients && result.BestSolution != null)
+            {
+                // In pure pipeline parallelism, no cross-stage parameter sync needed
+                // (each stage owns different parameters)
+                // If combined with data parallelism, would sync within data-parallel group
+            }
+
+            return result;
         }
-
-        Config.CommunicationBackend.Barrier();
-
-        return result;
+        finally
+        {
+            // CRITICAL: Ensure barrier always executes to prevent deadlock,
+            // even if WrappedOptimizer.Optimize throws an exception during pipeline execution
+            Config.CommunicationBackend.Barrier();
+        }
     }
 
     /// <inheritdoc/>
