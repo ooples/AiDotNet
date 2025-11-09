@@ -1,4 +1,6 @@
 using AiDotNet.Models.Results;
+using AiDotNet.Enums;
+using AiDotNet.Models;
 
 namespace AiDotNet.Interfaces;
 
@@ -188,23 +190,6 @@ public interface IPredictionModelBuilder<T, TInput, TOutput>
     IPredictionModelBuilder<T, TInput, TOutput> ConfigureOutlierRemoval(IOutlierRemoval<T, TInput, TOutput> outlierRemoval);
 
     /// <summary>
-    /// Builds a predictive model using the configured components and training data.
-    /// </summary>
-    /// <remarks>
-    /// This method takes the input features and target values and creates a trained model
-    /// ready to make predictions.
-    /// 
-    /// <b>For Beginners:</b> After configuring all the components of your model, this method actually 
-    /// creates and trains the model using your data. It's like pressing "Start" after setting up 
-    /// all your preferences. The model will learn patterns from your training data so it can make 
-    /// predictions later.
-    /// </remarks>
-    /// <param name="x">The input features matrix, where each row is a data point and each column is a feature.</param>
-    /// <param name="y">The target values vector that the model will learn to predict.</param>
-    /// <returns>A trained predictive model ready to make predictions.</returns>
-    PredictionModelResult<T, TInput, TOutput> Build(TInput x, TOutput y);
-
-    /// <summary>
     /// Uses a trained model to make predictions on new data.
     /// </summary>
     /// <remarks>
@@ -383,6 +368,36 @@ public interface IPredictionModelBuilder<T, TInput, TOutput>
         IEnumerable<IQueryProcessor>? queryProcessors = null);
 
     /// <summary>
+    /// Configures AI agent assistance during model building and inference.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> Agent assistance adds AI-powered help during model creation.
+    /// The agent can analyze your data, suggest which model type to use, recommend hyperparameters,
+    /// and provide insights about feature importance.
+    ///
+    /// The configuration is stored securely and will be reused during inference if you call AskAsync() on the trained model.
+    /// </para>
+    /// <para>
+    /// Example usage:
+    /// <code>
+    /// var agentConfig = new AgentConfiguration&lt;double&gt;
+    /// {
+    ///     ApiKey = "sk-...",
+    ///     Provider = LLMProvider.OpenAI,
+    ///     IsEnabled = true
+    /// };
+    ///
+    /// var builder = new PredictionModelBuilder&lt;double, Matrix&lt;double&gt;, Vector&lt;double&gt;&gt;()
+    ///     .ConfigureAgentAssistance(agentConfig);
+    /// </code>
+    /// </para>
+    /// </remarks>
+    /// <param name="configuration">The agent configuration containing API keys, provider settings, and options.</param>
+    /// <returns>The builder instance for method chaining.</returns>
+    IPredictionModelBuilder<T, TInput, TOutput> ConfigureAgentAssistance(AgentConfiguration<T> configuration);
+
+    /// <summary>
     /// Configures a meta-learning algorithm (MAML, Reptile, SEAL) for training models that can quickly adapt to new tasks.
     /// </summary>
     /// <remarks>
@@ -399,7 +414,47 @@ public interface IPredictionModelBuilder<T, TInput, TOutput>
     IPredictionModelBuilder<T, TInput, TOutput> ConfigureMetaLearning(IMetaLearner<T, TInput, TOutput> metaLearner);
 
     /// <summary>
-    /// Builds a meta-trained model that can quickly adapt to new tasks.
+    /// Configures the model evaluator component for comprehensive model evaluation and cross-validation.
+    /// </summary>
+    /// <remarks>
+    /// A model evaluator provides methods to evaluate model performance on different datasets and
+    /// perform cross-validation to assess generalization.
+    ///
+    /// <b>For Beginners:</b> The model evaluator helps you understand how well your model performs.
+    /// If you configure both a model evaluator and cross-validator (via ConfigureCrossValidation),
+    /// cross-validation will automatically run during Build() and the results will be included
+    /// in your trained model.
+    /// </remarks>
+    /// <param name="evaluator">The model evaluator implementation to use.</param>
+    /// <returns>The builder instance for method chaining.</returns>
+    IPredictionModelBuilder<T, TInput, TOutput> ConfigureModelEvaluator(IModelEvaluator<T, TInput, TOutput> evaluator);
+
+    /// <summary>
+    /// Configures the cross-validation strategy for automatic model evaluation during training.
+    /// </summary>
+    /// <remarks>
+    /// A cross-validator determines how data should be split into folds for cross-validation.
+    /// Different strategies (K-Fold, Leave-One-Out, Stratified, Time Series, etc.) are appropriate
+    /// for different types of data and problems.
+    ///
+    /// <b>For Beginners:</b> Cross-validation tests how well your model will perform on new data
+    /// by training and testing it multiple times on different subsets of your training data.
+    /// If you configure both a cross-validator and model evaluator (via ConfigureModelEvaluator),
+    /// cross-validation will automatically run during Build() and the results will be included
+    /// in your trained model.
+    ///
+    /// Common strategies:
+    /// - StandardCrossValidator (K-Fold): General purpose, splits data into K equal parts
+    /// - LeaveOneOutCrossValidator: For small datasets, uses each sample once as test
+    /// - StratifiedKFoldCrossValidator: For classification, maintains class proportions
+    /// - TimeSeriesCrossValidator: For sequential data, respects temporal ordering
+    /// </remarks>
+    /// <param name="crossValidator">The cross-validation strategy to use.</param>
+    /// <returns>The builder instance for method chaining.</returns>
+    IPredictionModelBuilder<T, TInput, TOutput> ConfigureCrossValidation(ICrossValidator<T, TInput, TOutput> crossValidator);
+
+    /// <summary>
+    /// Asynchronously builds a meta-trained model that can quickly adapt to new tasks.
     /// </summary>
     /// <remarks>
     /// <para>
@@ -408,13 +463,49 @@ public interface IPredictionModelBuilder<T, TInput, TOutput>
     /// to new tasks with just a few examples.
     /// </para>
     /// <para>
-    /// <b>For Beginners:</b> Use this method when you've configured meta-learning.
-    /// Unlike Build(x, y) which trains on one dataset, this trains your model to be good
+    /// <b>For Beginners:</b> Use this method when you've configured meta-learning and agent assistance.
+    /// Unlike BuildAsync(x, y) which trains on one dataset, this trains your model to be good
     /// at learning NEW tasks quickly. The training data comes from the episodic data loader
     /// you configured in your meta-learner.
     /// </para>
     /// </remarks>
-    /// <returns>A meta-trained model with rapid adaptation capabilities.</returns>
+    /// <returns>A task that represents the asynchronous operation, containing the meta-trained model.</returns>
     /// <exception cref="InvalidOperationException">Thrown if ConfigureMetaLearning has not been called.</exception>
-    PredictionModelResult<T, TInput, TOutput> Build();
+    Task<PredictionModelResult<T, TInput, TOutput>> BuildAsync();
+
+    /// <summary>
+    /// Asynchronously builds a predictive model using the provided input features and output values.
+    /// If agent assistance is enabled, the agent will help with model selection and hyperparameter tuning.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// This method trains your AI model on your specific dataset. It can leverage agent assistance
+    /// to help select appropriate models and tune hyperparameters based on your data characteristics.
+    /// </para>
+    /// <para>
+    /// <b>For Beginners:</b> This method trains your AI model using the data you provide.
+    /// It's the async version that works with agent assistance features.
+    /// </para>
+    /// <para>
+    /// Example with agent assistance:
+    /// <code>
+    /// var agentConfig = new AgentConfiguration&lt;double&gt;
+    /// {
+    ///     ApiKey = "sk-...",
+    ///     Provider = LLMProvider.OpenAI,
+    ///     IsEnabled = true
+    /// };
+    ///
+    /// var result = await new PredictionModelBuilder&lt;double, Matrix&lt;double&gt;, Vector&lt;double&gt;&gt;()
+    ///     .ConfigureAgentAssistance(agentConfig)
+    ///     .BuildAsync(housingData, prices);
+    /// </code>
+    /// </para>
+    /// </remarks>
+    /// <param name="x">Matrix of input features (required).</param>
+    /// <param name="y">Vector of output values (required).</param>
+    /// <returns>A task that represents the asynchronous operation, containing the trained model.</returns>
+    /// <exception cref="ArgumentException">Thrown when the number of rows in the features matrix doesn't match the length of the output vector.</exception>
+    /// <exception cref="InvalidOperationException">Thrown when no model has been specified for regular training.</exception>
+    Task<PredictionModelResult<T, TInput, TOutput>> BuildAsync(TInput x, TOutput y);
 }

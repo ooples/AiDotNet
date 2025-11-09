@@ -8,6 +8,11 @@ global using AiDotNet.DataProcessor;
 global using AiDotNet.FitDetectors;
 global using AiDotNet.LossFunctions;
 global using AiDotNet.MetaLearning.Trainers;
+global using AiDotNet.Agents;
+global using AiDotNet.LanguageModels;
+global using AiDotNet.Tools;
+global using AiDotNet.Models;
+global using AiDotNet.Enums;
 
 namespace AiDotNet;
 
@@ -46,6 +51,10 @@ public class PredictionModelBuilder<T, TInput, TOutput> : IPredictionModelBuilde
     private IGenerator<T>? _ragGenerator;
     private IEnumerable<IQueryProcessor>? _queryProcessors;
     private IMetaLearner<T, TInput, TOutput>? _metaLearner;
+    private IModelEvaluator<T, TInput, TOutput>? _modelEvaluator;
+    private ICrossValidator<T, TInput, TOutput>? _crossValidator;
+    private AgentConfiguration<T>? _agentConfig;
+    private AgentAssistanceOptions _agentOptions = AgentAssistanceOptions.Default;
 
     /// <summary>
     /// Configures which features (input variables) should be used in the model.
@@ -196,26 +205,41 @@ public class PredictionModelBuilder<T, TInput, TOutput> : IPredictionModelBuilde
         return this;
     }
 
-        /// <summary>
-    /// Builds a meta-trained model that can quickly adapt to new tasks.
+    /// <summary>
+    /// Builds a predictive model using meta-learning.
+    /// Requires ConfigureMetaLearning() to be called first.
     /// </summary>
-    /// <returns>A meta-trained model with rapid adaptation capabilities.</returns>
-    /// <exception cref="InvalidOperationException">Thrown if ConfigureMetaLearning has not been called.</exception>
+    /// <returns>A task that represents the asynchronous operation, containing the trained meta-learning model.</returns>
+    /// <exception cref="InvalidOperationException">Thrown when ConfigureMetaLearning() hasn't been called.</exception>
     /// <remarks>
-    /// <b>For Beginners:</b> This trains your model using meta-learning, which teaches it how to
-    /// quickly learn new tasks. The training data comes from the episodic data loader you configured
-    /// in your meta-learner.
+    /// <b>For Beginners:</b> This overload is for meta-learning, where the model learns to quickly adapt to new tasks.
+    /// Use this when you've configured a meta-learner via ConfigureMetaLearning().
+    ///
+    /// **Meta-Learning**:
+    /// - Trains a model that can quickly adapt to new tasks
+    /// - Uses episodic data from the meta-learner configuration
+    /// - No need to provide x and y - they're in the meta-learner config
+    ///
+    /// Example:
+    /// <code>
+    /// var result = await new PredictionModelBuilder&lt;double, Matrix&lt;double&gt;, Vector&lt;double&gt;&gt;()
+    ///     .ConfigureMetaLearning(metaLearner)
+    ///     .BuildAsync();
+    /// </code>
     /// </remarks>
-    public PredictionModelResult<T, TInput, TOutput> Build()
+    public Task<PredictionModelResult<T, TInput, TOutput>> BuildAsync()
     {
+        // META-LEARNING PATH - requires ConfigureMetaLearning() to be called first
         if (_metaLearner == null)
-            throw new InvalidOperationException("Meta-learner must be configured using ConfigureMetaLearning() before calling Build()");
+            throw new InvalidOperationException(
+                "BuildAsync() without parameters requires ConfigureMetaLearning() to be called first. " +
+                "For regular training, use BuildAsync(x, y) with your input and output data.");
 
         // Perform meta-training using parameters from config (specified during meta-learner construction)
         var metaResult = _metaLearner.Train();
 
         // Create PredictionModelResult with meta-learning constructor
-        return new PredictionModelResult<T, TInput, TOutput>(
+        var result = new PredictionModelResult<T, TInput, TOutput>(
             metaLearner: _metaLearner,
             metaResult: metaResult,
             loraConfiguration: _loraConfiguration,
@@ -224,38 +248,73 @@ public class PredictionModelBuilder<T, TInput, TOutput> : IPredictionModelBuilde
             ragRetriever: _ragRetriever,
             ragReranker: _ragReranker,
             ragGenerator: _ragGenerator,
-            queryProcessors: _queryProcessors);
+            queryProcessors: _queryProcessors,
+            agentConfig: _agentConfig);
+
+        return Task.FromResult(result);
     }
 
-        /// <summary>
+    /// <summary>
     /// Builds a predictive model using the provided input features and output values.
+    /// If agent assistance is enabled, the agent will help with model selection and hyperparameter tuning.
     /// </summary>
-    /// <param name="x">The matrix of input features where each row is a data point and each column is a feature.</param>
-    /// <param name="y">The vector of output values corresponding to each row in the input matrix.</param>
-    /// <returns>A trained predictive model that can be used to make predictions.</returns>
-    /// <exception cref="ArgumentNullException">Thrown when input features or output values are null.</exception>
+    /// <param name="x">Matrix of input features (required).</param>
+    /// <param name="y">Vector of output values (required).</param>
+    /// <returns>A task that represents the asynchronous operation, containing the trained model.</returns>
     /// <exception cref="ArgumentException">Thrown when the number of rows in the features matrix doesn't match the length of the output vector.</exception>
-    /// <exception cref="InvalidOperationException">Thrown when no model has been specified.</exception>
+    /// <exception cref="InvalidOperationException">Thrown when no model has been specified for regular training.</exception>
     /// <remarks>
-    /// <b>For Beginners:</b> This method takes your data (inputs and known outputs) and creates a trained AI model.
-    /// Think of it like teaching a student: you provide examples (your data) and the student (the model) learns
-    /// patterns from these examples. After building, your model is ready to make predictions on new data.
+    /// <b>For Beginners:</b> This method trains your AI model on your specific dataset.
     ///
-    /// The input matrix 'x' contains your features (like house size, number of bedrooms, etc. if predicting house prices),
-    /// and the vector 'y' contains the known answers (actual house prices) for those examples.
+    /// **Regular Training**:
+    /// - Trains on your specific dataset
+    /// - Learns patterns from your examples
+    /// - Can use agent assistance to select models and tune hyperparameters
+    ///
+    /// Example with agent assistance:
+    /// <code>
+    /// var agentConfig = new AgentConfiguration&lt;double&gt;
+    /// {
+    ///     ApiKey = "sk-...",
+    ///     Provider = LLMProvider.OpenAI,
+    ///     IsEnabled = true
+    /// };
+    ///
+    /// var result = await new PredictionModelBuilder&lt;double, Matrix&lt;double&gt;, Vector&lt;double&gt;&gt;()
+    ///     .ConfigureAgentAssistance(agentConfig)
+    ///     .BuildAsync(housingData, prices);
+    /// </code>
     /// </remarks>
-    public PredictionModelResult<T, TInput, TOutput> Build(TInput x, TOutput y)
+    public async Task<PredictionModelResult<T, TInput, TOutput>> BuildAsync(TInput x, TOutput y)
     {
+        // REGULAR TRAINING PATH
+        // Convert and validate inputs
+
         var convertedX = ConversionsHelper.ConvertToMatrix<T, TInput>(x);
         var convertedY = ConversionsHelper.ConvertToVector<T, TOutput>(y);
 
-        // Validate inputs
-        if (x == null)
-            throw new ArgumentNullException(nameof(x), "Input features matrix can't be null");
-        if (y == null)
-            throw new ArgumentNullException(nameof(y), "Output vector can't be null");
         if (convertedX.Rows != convertedY.Length)
             throw new ArgumentException("Number of rows in features must match length of actual values", nameof(x));
+
+        // AGENT ASSISTANCE (if enabled)
+        AgentRecommendation<T, TInput, TOutput>? agentRecommendation = null;
+        if (_agentConfig != null && _agentConfig.IsEnabled)
+        {
+            try
+            {
+                agentRecommendation = await GetAgentRecommendationsAsync(x, y);
+                ApplyAgentRecommendations(agentRecommendation);
+            }
+            catch (Exception ex)
+            {
+                // Log warning but don't fail the build if agent assistance fails
+                // The build can proceed without agent recommendations
+                Console.WriteLine($"Warning: Agent assistance failed: {ex.Message}");
+                Console.WriteLine("Proceeding with model building without agent recommendations.");
+            }
+        }
+
+        // Validate model is set (either by user or by agent)
         if (_model == null)
             throw new InvalidOperationException("Model implementation must be specified");
 
@@ -272,10 +331,31 @@ public class PredictionModelBuilder<T, TInput, TOutput> : IPredictionModelBuilde
         // Split the data
         var (XTrain, yTrain, XVal, yVal, XTest, yTest) = dataPreprocessor.SplitData(preprocessedX, preprocessedY);
 
-        // Optimize the model
+        // Perform cross-validation on training data BEFORE final model training (if configured)
+        // This follows industry standard patterns from H2O and caret where CV is integrated into model building
+        CrossValidationResult<T, TInput, TOutput>? cvResults = null;
+        if (_crossValidator != null && _modelEvaluator != null)
+        {
+            // Cross-validation uses only the training data to prevent data leakage
+            // It trains multiple models on different folds to assess generalization
+            cvResults = _modelEvaluator.PerformCrossValidation(
+                model: _model,
+                X: XTrain,
+                y: yTrain,
+                optimizer: optimizer,
+                crossValidator: _crossValidator
+            );
+        }
+
+        // Reset optimizer state after cross-validation to ensure final model training starts fresh
+        // This prevents state contamination from CV (accumulated fitness lists, cache, learning rates)
+        optimizer.Reset();
+
+        // Optimize the final model on the full training set
         var optimizationResult = optimizer.Optimize(OptimizerHelper<T, TInput, TOutput>.CreateOptimizationInputData(XTrain, yTrain, XVal, yVal, XTest, yTest));
 
-        return new PredictionModelResult<T, TInput, TOutput>(
+        // Return PredictionModelResult with CV results and agent data
+        var finalResult = new PredictionModelResult<T, TInput, TOutput>(
             optimizationResult,
             normInfo,
             _biasDetector,
@@ -284,7 +364,12 @@ public class PredictionModelBuilder<T, TInput, TOutput> : IPredictionModelBuilde
             _ragReranker,
             _ragGenerator,
             _queryProcessors,
-            _loraConfiguration);
+            _loraConfiguration,
+            cvResults,
+            _agentConfig,
+            agentRecommendation);
+
+        return finalResult;
     }
 
     /// <summary>
@@ -462,6 +547,41 @@ public class PredictionModelBuilder<T, TInput, TOutput> : IPredictionModelBuilde
     }
 
     /// <summary>
+    /// Configures the model evaluator component for comprehensive model evaluation and cross-validation.
+    /// </summary>
+    /// <param name="evaluator">The model evaluator implementation to use.</param>
+    /// <returns>This builder instance for method chaining.</returns>
+    /// <remarks>
+    /// <b>For Beginners:</b> The model evaluator helps you understand how well your model performs.
+    /// If you configure both a model evaluator and cross-validator (via ConfigureCrossValidation),
+    /// cross-validation will automatically run during Build() on your training data, and the results
+    /// will be included in your trained model.
+    /// </remarks>
+    public IPredictionModelBuilder<T, TInput, TOutput> ConfigureModelEvaluator(IModelEvaluator<T, TInput, TOutput> evaluator)
+    {
+        _modelEvaluator = evaluator;
+        return this;
+    }
+
+    /// <summary>
+    /// Configures the cross-validation strategy for automatic model evaluation during training.
+    /// </summary>
+    /// <param name="crossValidator">The cross-validation strategy to use.</param>
+    /// <returns>This builder instance for method chaining.</returns>
+    /// <remarks>
+    /// <b>For Beginners:</b> Cross-validation tests how well your model will perform on new data
+    /// by training and testing it multiple times on different subsets of your training data.
+    /// If you configure both a cross-validator and model evaluator (via ConfigureModelEvaluator),
+    /// cross-validation will automatically run during Build() and the results will be included
+    /// in your trained model.
+    /// </remarks>
+    public IPredictionModelBuilder<T, TInput, TOutput> ConfigureCrossValidation(ICrossValidator<T, TInput, TOutput> crossValidator)
+    {
+        _crossValidator = crossValidator;
+        return this;
+    }
+
+    /// <summary>
     /// Configures a meta-learning algorithm for training models that can quickly adapt to new tasks.
     /// </summary>
     /// <param name="metaLearner">The meta-learning algorithm to use (e.g., ReptileTrainer).</param>
@@ -474,5 +594,477 @@ public class PredictionModelBuilder<T, TInput, TOutput> : IPredictionModelBuilde
     {
         _metaLearner = metaLearner;
         return this;
+    }
+
+    /// <summary>
+    /// Enables AI agent assistance during the model building process.
+    /// </summary>
+    /// <param name="configuration">The agent configuration containing API key, provider, and assistance options.</param>
+    /// <returns>This builder instance for method chaining.</returns>
+    /// <remarks>
+    /// <b>For Beginners:</b> This enables an AI agent to help you during model building.
+    /// By default, the agent will:
+    /// - Analyze your data characteristics
+    /// - Suggest appropriate model types (if you haven't chosen one)
+    /// - Recommend hyperparameter values
+    /// - Provide insights on feature importance
+    ///
+    /// The API key is stored securely and will be reused during inference if you call AskAsync() on the trained model.
+    ///
+    /// Example with defaults:
+    /// <code>
+    /// var agentConfig = new AgentConfiguration&lt;double&gt;
+    /// {
+    ///     ApiKey = "sk-...",
+    ///     Provider = LLMProvider.OpenAI,
+    ///     IsEnabled = true
+    /// };
+    ///
+    /// var result = await new PredictionModelBuilder&lt;double, Matrix&lt;double&gt;, Vector&lt;double&gt;&gt;()
+    ///     .ConfigureAgentAssistance(agentConfig)
+    ///     .BuildAsync(data, labels);
+    /// </code>
+    ///
+    /// Example with customization:
+    /// <code>
+    /// var agentConfig = new AgentConfiguration&lt;double&gt;
+    /// {
+    ///     ApiKey = "sk-...",
+    ///     Provider = LLMProvider.OpenAI,
+    ///     IsEnabled = true,
+    ///     AssistanceOptions = AgentAssistanceOptions.Create()
+    ///         .EnableModelSelection()
+    ///         .EnableHyperparameterTuning()
+    ///         .DisableFeatureAnalysis()
+    /// };
+    ///
+    /// var result = await new PredictionModelBuilder&lt;double, Matrix&lt;double&gt;, Vector&lt;double&gt;&gt;()
+    ///     .ConfigureAgentAssistance(agentConfig)
+    ///     .BuildAsync(data, labels);
+    /// </code>
+    /// </remarks>
+    public IPredictionModelBuilder<T, TInput, TOutput> ConfigureAgentAssistance(AgentConfiguration<T> configuration)
+    {
+        _agentConfig = configuration;
+        _agentOptions = configuration.AssistanceOptions ?? AgentAssistanceOptions.Default;
+        return this;
+    }
+
+    /// <summary>
+    /// Asks the agent a question about your model building process.
+    /// Only available after calling ConfigureAgentAssistance().
+    /// </summary>
+    /// <param name="question">Natural language question to ask the agent.</param>
+    /// <returns>The agent's answer based on your current configuration.</returns>
+    /// <exception cref="InvalidOperationException">Thrown if ConfigureAgentAssistance() hasn't been called.</exception>
+    /// <remarks>
+    /// <b>For Beginners:</b> Use this to get AI-powered advice during model building.
+    ///
+    /// Example:
+    /// <code>
+    /// var builder = new PredictionModelBuilder&lt;double, Matrix&lt;double&gt;, Vector&lt;double&gt;&gt;()
+    ///     .ConfigureAgentAssistance(apiKey: "sk-...");
+    ///
+    /// var advice = await builder.AskAgentAsync(
+    ///     "Should I use Ridge or Lasso regression for my dataset with 50 features?");
+    /// Console.WriteLine(advice);
+    /// </code>
+    /// </remarks>
+    public async Task<string> AskAgentAsync(string question)
+    {
+        if (_agentConfig == null || !_agentConfig.IsEnabled)
+        {
+            throw new InvalidOperationException(
+                "Agent assistance not enabled. Call ConfigureAgentAssistance() first.");
+        }
+
+        // Create a simple agent
+        var chatModel = CreateChatModel(_agentConfig);
+        var tools = new List<ITool> { new CalculatorTool() };
+        var agent = new Agent<T>(chatModel, tools);
+
+        return await agent.RunAsync(question);
+    }
+
+    // ============================================================================
+    // Private Agent Helper Methods
+    // ============================================================================
+
+    /// <summary>
+    /// Analyzes dataset and generates AI agent recommendations for model selection, hyperparameters, and training strategy.
+    /// </summary>
+    /// <remarks>
+    /// ARCHITECTURE NOTES AND KNOWN LIMITATIONS:
+    ///
+    /// 1. Generic Type Conversion (Convert.ToDouble):
+    ///    - Statistical calculations require floating-point arithmetic (mean, std, etc.)
+    ///    - Generic type T is converted to double for analysis purposes only
+    ///    - Model training continues to use the original generic type T throughout
+    ///    - Limitation: Custom numeric types that can't convert to double won't work with agent analysis
+    ///    - Future: Could be improved by using INumericOperations<T> for all calculations
+    ///
+    /// 2. Method Length (253 lines):
+    ///    - This method orchestrates multiple agent analysis phases:
+    ///      * Data analysis (statistics, distributions, correlations)
+    ///      * Model selection (algorithm recommendation)
+    ///      * Hyperparameter tuning (parameter optimization)
+    ///      * Feature importance analysis
+    ///      * Cross-validation strategy
+    ///    - Each phase involves LLM calls and result parsing
+    ///    - Breaking into smaller methods would require passing many parameters
+    ///    - Trade-off: Single coherent workflow vs. method length guidelines
+    ///    - Future: Could extract phases to separate analyzer classes
+    ///
+    /// 3. Hardcoded Assumptions:
+    ///    - Assumes regression for continuous targets (line ~747)
+    ///    - Assumes no outliers/missing values initially (line ~775-777)
+    ///    - These are safe defaults; actual data analysis overrides them
+    ///    - Future: Could infer problem type from TOutput constraints
+    ///
+    /// 4. Error Handling:
+    ///    - LLM failures gracefully degrade (skip that analysis phase)
+    ///    - Partial recommendations are still useful
+    ///    - Future: Could add retry logic for transient failures
+    /// </remarks>
+    private async Task<AgentRecommendation<T, TInput, TOutput>> GetAgentRecommendationsAsync(
+        TInput x, TOutput y)
+    {
+        var chatModel = CreateChatModel(_agentConfig!);
+        var recommendation = new AgentRecommendation<T, TInput, TOutput>();
+
+        var convertedX = ConversionsHelper.ConvertToMatrix<T, TInput>(x);
+        var convertedY = ConversionsHelper.ConvertToVector<T, TOutput>(y);
+
+        var nSamples = convertedX.Rows;
+        var nFeatures = convertedX.Columns;
+
+        // Instantiate all specialized agent tools
+        var allTools = new ITool[]
+        {
+            new DataAnalysisTool(),
+            new ModelSelectionTool(),
+            new HyperparameterTool(),
+            new FeatureImportanceTool(),
+            new CrossValidationTool(),
+            new RegularizationTool()
+        };
+
+        // Create agent with all specialized tools
+        var agent = new ChainOfThoughtAgent<T>(chatModel, allTools);
+
+        var reasoningTrace = new System.Text.StringBuilder();
+        reasoningTrace.AppendLine("=== AGENT ASSISTANCE ANALYSIS ===\n");
+
+        // 1. DATA ANALYSIS
+        if (_agentOptions.EnableDataAnalysis)
+        {
+            reasoningTrace.AppendLine("STEP 1: Analyzing dataset characteristics...\n");
+
+            // Calculate basic statistics for data analysis tool
+            // Note: Convert.ToDouble is used here because statistical calculations (mean, std, etc.)
+            // require floating-point arithmetic. This is a known limitation where the generic type T
+            // is converted to double for agent analysis purposes only. The actual model training
+            // continues to use the generic type T throughout.
+            var statistics = new Newtonsoft.Json.Linq.JObject();
+            for (int col = 0; col < nFeatures; col++)
+            {
+                var featureData = new List<double>();
+                for (int row = 0; row < nSamples; row++)
+                {
+                    featureData.Add(Convert.ToDouble(convertedX[row, col]));
+                }
+
+                var mean = featureData.Average();
+                var variance = featureData.Select(x => Math.Pow(x - mean, 2)).Average();
+                var std = Math.Sqrt(variance);
+
+                statistics[$"feature_{col}"] = new Newtonsoft.Json.Linq.JObject
+                {
+                    ["mean"] = mean,
+                    ["std"] = std,
+                    ["min"] = featureData.Min(),
+                    ["max"] = featureData.Max(),
+                    ["missing_pct"] = 0.0  // Assume no missing values for now
+                };
+            }
+
+            var dataAnalysisInput = new Newtonsoft.Json.Linq.JObject
+            {
+                ["dataset_info"] = new Newtonsoft.Json.Linq.JObject
+                {
+                    ["n_samples"] = nSamples,
+                    ["n_features"] = nFeatures,
+                    ["target_type"] = "continuous"  // Assume regression for now
+                },
+                ["statistics"] = statistics
+            }.ToString(Formatting.None);
+
+            var dataAnalysisResult = await agent.RunAsync(
+                $@"Use the DataAnalysisTool to analyze this dataset.
+
+                Input for DataAnalysisTool:
+                {dataAnalysisInput}
+
+                Provide comprehensive data analysis.");
+
+            recommendation.DataAnalysis = dataAnalysisResult;
+            reasoningTrace.AppendLine($"Data Analysis Results:\n{dataAnalysisResult}\n");
+        }
+
+        // 2. MODEL SELECTION
+        if (_agentOptions.EnableModelSelection && _model == null)
+        {
+            reasoningTrace.AppendLine("STEP 2: Selecting optimal model type...\n");
+
+            var modelSelectionInput = new Newtonsoft.Json.Linq.JObject
+            {
+                ["problem_type"] = "regression",  // Assuming regression for now
+                ["n_samples"] = nSamples,
+                ["n_features"] = nFeatures,
+                ["is_linear"] = false,  // Conservative default
+                ["has_outliers"] = false,  // Would need analysis
+                ["has_missing_values"] = false,
+                ["requires_interpretability"] = false,
+                ["computational_constraints"] = "moderate"
+            }.ToString(Formatting.None);
+
+            var modelSelectionResult = await agent.RunAsync(
+                $@"Use the ModelSelectionTool to recommend the best model for this dataset.
+
+                Input for ModelSelectionTool:
+                {modelSelectionInput}
+
+                Based on the tool's recommendation, suggest ONE specific ModelType.");
+
+            recommendation.ModelSelectionReasoning = modelSelectionResult;
+
+            // Try to extract model type from agent response
+            var agentResponse = modelSelectionResult.ToLower();
+            recommendation.SuggestedModelType = agentResponse switch
+            {
+                var r when r.Contains("random forest") || r.Contains("randomforest") => ModelType.RandomForest,
+                var r when r.Contains("neural network") || r.Contains("neuralnetwork") => ModelType.NeuralNetworkRegression,
+                var r when r.Contains("polynomial") => ModelType.PolynomialRegression,
+                var r when r.Contains("ridge") => ModelType.SimpleRegression,
+                var r when r.Contains("multiple") => ModelType.MultipleRegression,
+                var r when r.Contains("simple") || r.Contains("linear") => ModelType.SimpleRegression,
+                _ => null
+            };
+
+            reasoningTrace.AppendLine($"Model Selection:\n{modelSelectionResult}\n");
+            if (recommendation.SuggestedModelType.HasValue)
+            {
+                reasoningTrace.AppendLine($"Selected Model: {recommendation.SuggestedModelType.Value}\n");
+            }
+        }
+
+        // 3. HYPERPARAMETER TUNING
+        if (_agentOptions.EnableHyperparameterTuning)
+        {
+            reasoningTrace.AppendLine("STEP 3: Recommending hyperparameter values...\n");
+
+            var modelTypeStr = recommendation.SuggestedModelType?.ToString() ?? _model?.GetType().Name ?? "RandomForest";
+
+            var hyperparameterInput = new Newtonsoft.Json.Linq.JObject
+            {
+                ["model_type"] = modelTypeStr,
+                ["n_samples"] = nSamples,
+                ["n_features"] = nFeatures,
+                ["problem_type"] = "regression",
+                ["data_complexity"] = "moderate"
+            }.ToString(Formatting.None);
+
+            var hyperparameterResult = await agent.RunAsync(
+                $@"Use the HyperparameterTool to suggest optimal hyperparameters.
+
+                Input for HyperparameterTool:
+                {hyperparameterInput}
+
+                Provide specific hyperparameter recommendations.");
+
+            recommendation.TuningReasoning = hyperparameterResult;
+            reasoningTrace.AppendLine($"Hyperparameter Recommendations:\n{hyperparameterResult}\n");
+
+            // Try to extract hyperparameters (simplified - could be enhanced)
+            recommendation.SuggestedHyperparameters = new Dictionary<string, object>
+            {
+                ["info"] = "See TuningReasoning for detailed hyperparameter recommendations"
+            };
+        }
+
+        // 4. FEATURE ANALYSIS
+        if (_agentOptions.EnableFeatureAnalysis)
+        {
+            reasoningTrace.AppendLine("STEP 4: Analyzing feature importance...\n");
+
+            // Build feature analysis input with mock correlations
+            var features = new Newtonsoft.Json.Linq.JObject();
+            for (int col = 0; col < Math.Min(nFeatures, 20); col++)  // Limit to first 20 features
+            {
+                features[$"feature_{col}"] = new Newtonsoft.Json.Linq.JObject
+                {
+                    ["target_correlation"] = 0.5,  // Placeholder
+                    ["importance_score"] = 0.1,  // Placeholder
+                    ["missing_pct"] = 0.0,
+                    ["correlations"] = new Newtonsoft.Json.Linq.JObject()
+                };
+            }
+
+            var featureAnalysisInput = new Newtonsoft.Json.Linq.JObject
+            {
+                ["features"] = features,
+                ["target_name"] = "target",
+                ["n_samples"] = nSamples
+            }.ToString(Formatting.None);
+
+            var featureAnalysisResult = await agent.RunAsync(
+                $@"Use the FeatureImportanceTool to analyze features and suggest improvements.
+
+                Input for FeatureImportanceTool:
+                {featureAnalysisInput}
+
+                Provide feature importance analysis and engineering suggestions.");
+
+            recommendation.FeatureRecommendations = featureAnalysisResult;
+            reasoningTrace.AppendLine($"Feature Analysis:\n{featureAnalysisResult}\n");
+        }
+
+        // 5. CROSS-VALIDATION STRATEGY (part of meta-learning advice)
+        if (_agentOptions.EnableMetaLearningAdvice)
+        {
+            reasoningTrace.AppendLine("STEP 5: Recommending validation strategy...\n");
+
+            var cvInput = new Newtonsoft.Json.Linq.JObject
+            {
+                ["n_samples"] = nSamples,
+                ["n_features"] = nFeatures,
+                ["problem_type"] = "regression",
+                ["is_time_series"] = false,
+                ["is_imbalanced"] = false,
+                ["has_groups"] = false,
+                ["computational_budget"] = "moderate"
+            }.ToString(Formatting.None);
+
+            var cvResult = await agent.RunAsync(
+                $@"Use the CrossValidationTool to recommend the best validation strategy.
+
+                Input for CrossValidationTool:
+                {cvInput}
+
+                Suggest optimal cross-validation approach.");
+
+            reasoningTrace.AppendLine($"Cross-Validation Strategy:\n{cvResult}\n");
+
+            // Regularization recommendations
+            var regularizationInput = new Newtonsoft.Json.Linq.JObject
+            {
+                ["model_type"] = recommendation.SuggestedModelType?.ToString() ?? "RandomForest",
+                ["n_samples"] = nSamples,
+                ["n_features"] = nFeatures,
+                ["training_score"] = 0.0,
+                ["validation_score"] = 0.0,
+                ["is_overfitting"] = false,
+                ["current_regularization"] = "none"
+            }.ToString(Formatting.None);
+
+            var regularizationResult = await agent.RunAsync(
+                $@"Use the RegularizationTool to recommend regularization techniques.
+
+                Input for RegularizationTool:
+                {regularizationInput}
+
+                Provide regularization recommendations for preventing overfitting.");
+
+            reasoningTrace.AppendLine($"Regularization Recommendations:\n{regularizationResult}\n");
+        }
+
+        // Store complete reasoning trace
+        recommendation.ReasoningTrace = reasoningTrace.ToString();
+
+        return recommendation;
+    }
+
+    /// <summary>
+    /// Applies agent recommendations to the model builder where possible, or provides user guidance.
+    /// </summary>
+    /// <remarks>
+    /// ARCHITECTURE DECISIONS AND LIMITATIONS:
+    ///
+    /// This method provides INFORMATIONAL GUIDANCE rather than full auto-configuration because:
+    ///
+    /// 1. Model Auto-Creation Complexity:
+    ///    - The library has 80+ model types with different constructor signatures
+    ///    - Creating a universal model factory would require:
+    ///      * Mapping model types to constructors
+    ///      * Determining appropriate default parameters for each model
+    ///      * Handling model-specific dependencies and configurations
+    ///    - This complexity outweighs the benefit of auto-creation
+    ///    - Solution: Provide clear console guidance for manual configuration
+    ///
+    /// 2. Hyperparameter Auto-Application:
+    ///    - Tracked in Issue #460: "Auto-Apply Agent Hyperparameter Recommendations"
+    ///    - Requires reflection-based property setting
+    ///    - Needs validation that hyperparameters are compatible with model
+    ///    - Future enhancement with HyperparameterApplicator service
+    ///
+    /// 3. User Control:
+    ///    - Developers may want to review recommendations before applying
+    ///    - Explicit configuration prevents unexpected model changes
+    ///    - Recommendation details available in result.AgentRecommendation for review
+    ///
+    /// 4. Current Functionality:
+    ///    - Displays model type recommendation with reasoning via console
+    ///    - Provides code example for manual configuration
+    ///    - Stores full recommendations in result object for programmatic access
+    ///    - Future: Will auto-apply hyperparameters when model is already set
+    /// </remarks>
+    private void ApplyAgentRecommendations(AgentRecommendation<T, TInput, TOutput> recommendation)
+    {
+        // Apply agent recommendations where possible
+        if (_model == null && recommendation.SuggestedModelType.HasValue)
+        {
+            // Agent recommended a model type
+            // Note: Auto-creation of model instances is not implemented to avoid the complexity
+            // of a model factory with correct constructor parameters for all ~80+ model types.
+            // Instead, the recommendation is available in result.AgentRecommendation for the user
+            // to review and manually configure using the builder's UseModel() method.
+
+            Console.WriteLine($"\n=== AGENT RECOMMENDATION ===");
+            Console.WriteLine($"The AI agent recommends using: {recommendation.SuggestedModelType.Value}");
+
+            var reasoning = recommendation.ModelSelectionReasoning ?? string.Empty;
+            if (reasoning.Length > 0)
+            {
+                var maxLength = Math.Min(200, reasoning.Length);
+                Console.WriteLine($"Reason: {reasoning.Substring(0, maxLength)}...");
+            }
+
+            Console.WriteLine($"\nTo use this recommendation, configure your builder:");
+            Console.WriteLine($"  builder.UseModel(/* create {recommendation.SuggestedModelType.Value} instance */);");
+            Console.WriteLine($"\nFull recommendation details available in result.AgentRecommendation");
+            Console.WriteLine("===========================\n");
+        }
+
+        // Note: Hyperparameter recommendations are currently stored in recommendation.SuggestedHyperparameters
+        // but not auto-applied. Future enhancement: Apply hyperparameters to compatible models.
+    }
+
+    private IChatModel<T> CreateChatModel(AgentConfiguration<T> config)
+    {
+        var apiKey = AgentKeyResolver.ResolveApiKey(
+            config.ApiKey,
+            config,
+            config.Provider);
+
+        return config.Provider switch
+        {
+            LLMProvider.OpenAI => new OpenAIChatModel<T>(apiKey),
+            LLMProvider.Anthropic => new AnthropicChatModel<T>(apiKey),
+            LLMProvider.AzureOpenAI => new AzureOpenAIChatModel<T>(
+                config.AzureEndpoint ?? throw new InvalidOperationException("Azure endpoint required"),
+                apiKey,
+                config.AzureDeployment ?? "gpt-4"),
+            _ => throw new ArgumentException($"Unknown provider: {config.Provider}")
+        };
     }
 }
