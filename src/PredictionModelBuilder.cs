@@ -288,36 +288,36 @@ public class PredictionModelBuilder<T, TInput, TOutput> : IPredictionModelBuilde
             (model, finalOptimizer) = _distributedStrategy switch
             {
                 DistributedStrategy.DDP => (
-                    new DistributedTraining.DDPModel<T, TInput, TOutput>(_model, shardingConfig),
-                    new DistributedTraining.DDPOptimizer<T, TInput, TOutput>(optimizer, shardingConfig)
+                    (IFullModel<T, TInput, TOutput>)new DistributedTraining.DDPModel<T, TInput, TOutput>(_model, shardingConfig),
+                    (IOptimizer<T, TInput, TOutput>)new DistributedTraining.DDPOptimizer<T, TInput, TOutput>(optimizer, shardingConfig)
                 ),
                 DistributedStrategy.FSDP => (
-                    new DistributedTraining.FSDPModel<T, TInput, TOutput>(_model, shardingConfig),
-                    new DistributedTraining.FSDPOptimizer<T, TInput, TOutput>(optimizer, shardingConfig)
+                    (IFullModel<T, TInput, TOutput>)new DistributedTraining.FSDPModel<T, TInput, TOutput>(_model, shardingConfig),
+                    (IOptimizer<T, TInput, TOutput>)new DistributedTraining.FSDPOptimizer<T, TInput, TOutput>(optimizer, shardingConfig)
                 ),
                 DistributedStrategy.ZeRO1 => (
-                    new DistributedTraining.ZeRO1Model<T, TInput, TOutput>(_model, shardingConfig),
-                    new DistributedTraining.ZeRO1Optimizer<T, TInput, TOutput>(optimizer, shardingConfig)
+                    (IFullModel<T, TInput, TOutput>)new DistributedTraining.ZeRO1Model<T, TInput, TOutput>(_model, shardingConfig),
+                    (IOptimizer<T, TInput, TOutput>)new DistributedTraining.ZeRO1Optimizer<T, TInput, TOutput>(optimizer, shardingConfig)
                 ),
                 DistributedStrategy.ZeRO2 => (
-                    new DistributedTraining.ZeRO2Model<T, TInput, TOutput>(_model, shardingConfig),
-                    new DistributedTraining.ZeRO2Optimizer<T, TInput, TOutput>(optimizer, shardingConfig)
+                    (IFullModel<T, TInput, TOutput>)new DistributedTraining.ZeRO2Model<T, TInput, TOutput>(_model, shardingConfig),
+                    (IOptimizer<T, TInput, TOutput>)new DistributedTraining.ZeRO2Optimizer<T, TInput, TOutput>(optimizer, shardingConfig)
                 ),
                 DistributedStrategy.ZeRO3 => (
-                    new DistributedTraining.ZeRO3Model<T, TInput, TOutput>(_model, shardingConfig),
-                    new DistributedTraining.ZeRO3Optimizer<T, TInput, TOutput>(optimizer, shardingConfig)
+                    (IFullModel<T, TInput, TOutput>)new DistributedTraining.ZeRO3Model<T, TInput, TOutput>(_model, shardingConfig),
+                    (IOptimizer<T, TInput, TOutput>)new DistributedTraining.ZeRO3Optimizer<T, TInput, TOutput>(optimizer, shardingConfig)
                 ),
                 DistributedStrategy.PipelineParallel => (
-                    new DistributedTraining.PipelineParallelModel<T, TInput, TOutput>(_model, shardingConfig),
-                    new DistributedTraining.PipelineParallelOptimizer<T, TInput, TOutput>(optimizer, shardingConfig)
+                    (IFullModel<T, TInput, TOutput>)new DistributedTraining.PipelineParallelModel<T, TInput, TOutput>(_model, shardingConfig),
+                    (IOptimizer<T, TInput, TOutput>)new DistributedTraining.PipelineParallelOptimizer<T, TInput, TOutput>(optimizer, shardingConfig)
                 ),
                 DistributedStrategy.TensorParallel => (
-                    new DistributedTraining.TensorParallelModel<T, TInput, TOutput>(_model, shardingConfig),
-                    new DistributedTraining.TensorParallelOptimizer<T, TInput, TOutput>(optimizer, shardingConfig)
+                    (IFullModel<T, TInput, TOutput>)new DistributedTraining.TensorParallelModel<T, TInput, TOutput>(_model, shardingConfig),
+                    (IOptimizer<T, TInput, TOutput>)new DistributedTraining.TensorParallelOptimizer<T, TInput, TOutput>(optimizer, shardingConfig)
                 ),
                 DistributedStrategy.Hybrid => (
-                    new DistributedTraining.HybridShardedModel<T, TInput, TOutput>(_model, shardingConfig),
-                    new DistributedTraining.HybridShardedOptimizer<T, TInput, TOutput>(optimizer, shardingConfig)
+                    (IFullModel<T, TInput, TOutput>)new DistributedTraining.HybridShardedModel<T, TInput, TOutput>(_model, shardingConfig),
+                    (IOptimizer<T, TInput, TOutput>)new DistributedTraining.HybridShardedOptimizer<T, TInput, TOutput>(optimizer, shardingConfig)
                 ),
                 _ => throw new InvalidOperationException($"Unsupported distributed strategy: {_distributedStrategy}")
             };
