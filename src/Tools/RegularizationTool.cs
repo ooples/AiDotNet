@@ -1,8 +1,6 @@
 using AiDotNet.Interfaces;
-using System.Text.Json;
-
+using Newtonsoft.Json.Linq;
 namespace AiDotNet.Tools;
-
 /// <summary>
 /// A specialized tool that recommends optimal regularization techniques to prevent overfitting based on
 /// dataset characteristics, model type, and observed training behavior.
@@ -74,7 +72,6 @@ public class RegularizationTool : ToolBase
 {
     /// <inheritdoc/>
     public override string Name => "RegularizationTool";
-
     /// <inheritdoc/>
     public override string Description =>
         "Recommends regularization techniques to prevent overfitting. " +
@@ -82,15 +79,12 @@ public class RegularizationTool : ToolBase
         "\"n_features\": number, \"training_score\": number, \"validation_score\": number, " +
         "\"is_overfitting\": boolean, \"current_regularization\": \"string\" }. " +
         "Returns recommended regularization techniques with parameters and implementation guidance.";
-
     /// <inheritdoc/>
     protected override string ExecuteCore(string input)
     {
         try
         {
-            using JsonDocument document = JsonDocument.Parse(input);
-            JsonElement root = document.RootElement;
-
+            var root = JObject.Parse(input);
             // Extract parameters
             string modelType = TryGetString(root, "model_type", "Unknown");
             int nSamples = TryGetInt(root, "n_samples", 1000);
@@ -99,14 +93,11 @@ public class RegularizationTool : ToolBase
             double validationScore = TryGetDouble(root, "validation_score", 0.0);
             bool isOverfitting = TryGetBool(root, "is_overfitting", false);
             string currentRegularization = TryGetString(root, "current_regularization", "none");
-
             var recommendations = new System.Text.StringBuilder();
             recommendations.AppendLine("=== REGULARIZATION RECOMMENDATIONS ===\n");
-
             // Calculate performance gap
             double performanceGap = trainingScore - validationScore;
             bool significantGap = Math.Abs(performanceGap) > 0.1;
-
             // Assess overfitting severity
             if (isOverfitting || significantGap)
             {
@@ -117,7 +108,6 @@ public class RegularizationTool : ToolBase
                     recommendations.AppendLine($"  Validation Score: {validationScore:P1}");
                     recommendations.AppendLine($"  Performance Gap: {performanceGap:P1}");
                 }
-
                 if (performanceGap > 0.2)
                 {
                     recommendations.AppendLine("  **Severity: HIGH** - Model is heavily overfitting");
@@ -130,17 +120,14 @@ public class RegularizationTool : ToolBase
                 {
                     recommendations.AppendLine("  **Severity: MILD** - Minor overfitting");
                 }
-
                 recommendations.AppendLine();
             }
-
             // Analyze data characteristics
             double samplesPerFeature = (double)nSamples / nFeatures;
             recommendations.AppendLine("**Dataset Characteristics:**");
             recommendations.AppendLine($"  • Samples: {nSamples:N0}");
             recommendations.AppendLine($"  • Features: {nFeatures}");
             recommendations.AppendLine($"  • Samples per feature: {samplesPerFeature:F1}");
-
             if (samplesPerFeature < 10)
             {
                 recommendations.AppendLine("  • ⚠️ **HIGH DIMENSIONALITY**: Very few samples per feature - high overfitting risk");
@@ -153,15 +140,11 @@ public class RegularizationTool : ToolBase
             {
                 recommendations.AppendLine("  • **GOOD RATIO**: Sufficient samples per feature");
             }
-
             recommendations.AppendLine($"  • Current regularization: {currentRegularization}");
             recommendations.AppendLine();
-
             // Generate recommendations based on model type
             recommendations.AppendLine("**Recommended Regularization Techniques:**\n");
-
             var techniques = new List<(int Priority, string Technique, string Description, string Implementation)>();
-
             switch (modelType.ToLowerInvariant().Replace(" ", ""))
             {
                 case "neuralnetwork":
@@ -169,37 +152,30 @@ public class RegularizationTool : ToolBase
                 case "mlp":
                     GenerateNeuralNetworkRegularization(techniques, nSamples, nFeatures, performanceGap);
                     break;
-
                 case "linearregression":
                 case "logisticregression":
                     GenerateLinearModelRegularization(techniques, nSamples, nFeatures, samplesPerFeature);
                     break;
-
                 case "randomforest":
                     GenerateRandomForestRegularization(techniques, nSamples, nFeatures, performanceGap);
                     break;
-
                 case "gradientboosting":
                 case "xgboost":
                 case "lightgbm":
                     GenerateGradientBoostingRegularization(techniques, nSamples, performanceGap);
                     break;
-
                 case "svm":
                 case "supportvectormachine":
                     GenerateSVMRegularization(techniques, nSamples, nFeatures);
                     break;
-
                 case "decisiontree":
                     GenerateDecisionTreeRegularization(techniques, nSamples);
                     break;
-
                 default:
                     // Generic recommendations
                     GenerateGenericRegularization(techniques, nSamples, nFeatures, samplesPerFeature);
                     break;
             }
-
             // Sort by priority and output
             foreach (var (priority, technique, description, implementation) in techniques.OrderBy(t => t.Priority))
             {
@@ -208,7 +184,6 @@ public class RegularizationTool : ToolBase
                 recommendations.AppendLine($"   Implementation: {implementation}");
                 recommendations.AppendLine();
             }
-
             // General advice
             recommendations.AppendLine("**General Regularization Strategies:**");
             recommendations.AppendLine("  • Start with mild regularization and gradually increase if needed");
@@ -216,7 +191,6 @@ public class RegularizationTool : ToolBase
             recommendations.AppendLine("  • Combine multiple techniques for best results (e.g., L2 + Dropout + Early Stopping)");
             recommendations.AppendLine("  • Use cross-validation to tune regularization strength");
             recommendations.AppendLine("  • Early stopping is almost always beneficial - use it!");
-
             if (nSamples < 1000)
             {
                 recommendations.AppendLine();
@@ -226,7 +200,6 @@ public class RegularizationTool : ToolBase
                 recommendations.AppendLine("  • Try data augmentation to artificially increase dataset size");
                 recommendations.AppendLine("  • Reduce feature count through feature selection");
             }
-
             return recommendations.ToString();
         }
         catch (JsonException)
@@ -238,31 +211,25 @@ public class RegularizationTool : ToolBase
             throw; // Let base class handle generic errors
         }
     }
-
     private void GenerateNeuralNetworkRegularization(
         List<(int, string, string, string)> techniques,
         int nSamples, int nFeatures, double gap)
     {
         int priority = 1;
-
         techniques.Add((priority++, "Dropout Regularization",
             "Randomly drops neurons during training, forcing network to learn robust features. " +
             $"Recommended rate: {(gap > 0.2 ? "0.5 (aggressive)" : gap > 0.1 ? "0.3-0.4 (moderate)" : "0.2-0.3 (mild)")}",
             "Add Dropout layers after each hidden layer. In Keras: model.add(Dropout(0.3))"));
-
         techniques.Add((priority++, "L2 Regularization (Weight Decay)",
             $"Penalizes large weights, preventing any single connection from dominating. " +
             $"Recommended alpha: {(nSamples < 1000 ? "0.01-0.1" : "0.001-0.01")}",
             "Add kernel_regularizer to dense layers. In Keras: Dense(units, kernel_regularizer=l2(0.01))"));
-
         techniques.Add((priority++, "Early Stopping",
             "Monitors validation loss and stops training when it stops improving, preventing overfitting to training data.",
             "Use EarlyStopping callback with patience=10-20 epochs. Monitor validation loss."));
-
         techniques.Add((priority++, "Batch Normalization",
             "Normalizes layer inputs, has mild regularization effect and stabilizes training.",
             "Add BatchNormalization layers after dense layers but before activation."));
-
         if (nSamples < 10000)
         {
             techniques.Add((priority++, "Data Augmentation",
@@ -270,11 +237,9 @@ public class RegularizationTool : ToolBase
                 "Apply random transformations to training samples.",
                 "For images: rotation, flipping, cropping. For tabular: add noise, mixup, SMOTE."));
         }
-
         techniques.Add((priority++, "Learning Rate Scheduling",
             "Reduces learning rate as training progresses, helps convergence and regularization.",
             "Use ReduceLROnPlateau or exponential decay. Start with lr=0.001, reduce by factor of 10."));
-
         if (gap > 0.15)
         {
             techniques.Add((priority++, "Reduce Model Capacity",
@@ -282,29 +247,24 @@ public class RegularizationTool : ToolBase
                 "Reduce neurons per layer by 25-50% or remove one hidden layer."));
         }
     }
-
     private void GenerateLinearModelRegularization(
         List<(int, string, string, string)> techniques,
         int nSamples, int nFeatures, double samplesPerFeature)
     {
         int priority = 1;
-
         if (samplesPerFeature < 10)
         {
             techniques.Add((priority++, "L1 Regularization (Lasso)",
                 $"Performs automatic feature selection by pushing some coefficients to zero. " +
                 $"Critical with {nFeatures} features and {nSamples} samples (ratio: {samplesPerFeature:F1}).",
                 "Use Lasso regression with alpha=1.0 to 0.001. Use LassoCV for automatic alpha selection."));
-
             techniques.Add((priority++, "Elastic Net",
                 "Combines L1 and L2 regularization, balances feature selection with weight shrinkage.",
                 "Use ElasticNet with l1_ratio=0.5 (equal mix). Tune both alpha and l1_ratio."));
         }
-
         techniques.Add((priority++, "L2 Regularization (Ridge)",
             "Shrinks all coefficients, particularly effective when features are correlated.",
             $"Use Ridge regression with alpha={( samplesPerFeature < 50 ? "10.0 to 0.1" : "1.0 to 0.001")}. Use RidgeCV for CV-based selection."));
-
         if (nFeatures > 20)
         {
             techniques.Add((priority++, "Feature Selection",
@@ -312,29 +272,23 @@ public class RegularizationTool : ToolBase
                 "Use SelectKBest, Recursive Feature Elimination, or L1-based feature selection."));
         }
     }
-
     private void GenerateRandomForestRegularization(
         List<(int, string, string, string)> techniques,
         int nSamples, int nFeatures, double gap)
     {
         int priority = 1;
-
         techniques.Add((priority++, "Increase min_samples_split",
             "Require more samples before splitting nodes, creates more conservative trees.",
             $"Set min_samples_split={Math.Max(10, nSamples / 100)}. Current default is likely too low."));
-
         techniques.Add((priority++, "Limit max_depth",
             $"Prevents trees from becoming too complex and memorizing noise. {(gap > 0.15 ? "Critical" : "Recommended")}.",
             $"Set max_depth={(gap > 0.2 ? "10-12" : gap > 0.1 ? "15-20" : "20-25")}. Try progressively lower values."));
-
         techniques.Add((priority++, "Increase min_samples_leaf",
             "Requires minimum samples in leaf nodes, smooths predictions and reduces overfitting.",
             $"Set min_samples_leaf={Math.Max(5, nSamples / 200)}."));
-
         techniques.Add((priority++, "Reduce max_features",
             "Limits features considered for each split, increases tree diversity.",
             "Use max_features='sqrt' or 'log2' instead of 'auto' or None."));
-
         if (gap > 0.15)
         {
             techniques.Add((priority++, "Reduce n_estimators",
@@ -342,33 +296,26 @@ public class RegularizationTool : ToolBase
                 "Reduce from current value by 30-50%. Monitor validation performance."));
         }
     }
-
     private void GenerateGradientBoostingRegularization(
         List<(int, string, string, string)> techniques,
         int nSamples, double gap)
     {
         int priority = 1;
-
         techniques.Add((priority++, "Reduce Learning Rate",
             "Lower learning rate makes model learn more slowly, reducing overfitting. Key parameter for boosting.",
             $"Reduce learning_rate to {(gap > 0.2 ? "0.01" : "0.05")}. Compensate by increasing n_estimators."));
-
         techniques.Add((priority++, "Subsample Training Data",
             "Use only a fraction of training samples for each tree, similar to bagging.",
             "Set subsample=0.7 or 0.8 (use 70-80% of data per iteration)."));
-
         techniques.Add((priority++, "Limit Tree Depth",
             "Shallow trees work well with boosting. Prevent individual trees from overfitting.",
             $"Set max_depth={(gap > 0.15 ? "3" : "5")}. Boosting works best with shallow trees (3-7 depth)."));
-
         techniques.Add((priority++, "Early Stopping",
             "Stop boosting when validation error stops decreasing. Built-in regularization.",
             "Use early_stopping_rounds=50 with validation set. Monitors validation metric."));
-
         techniques.Add((priority++, "Column Subsampling",
             "Use only subset of features for each tree (XGBoost/LightGBM specific).",
             "Set colsample_bytree=0.8 and/or colsample_bylevel=0.8."));
-
         if (nSamples < 5000)
         {
             techniques.Add((priority++, "Minimum Child Weight",
@@ -376,21 +323,17 @@ public class RegularizationTool : ToolBase
                 "Set min_child_weight=5 to 20 depending on dataset size."));
         }
     }
-
     private void GenerateSVMRegularization(
         List<(int, string, string, string)> techniques,
         int nSamples, int nFeatures)
     {
         int priority = 1;
-
         techniques.Add((priority++, "Reduce C Parameter",
             "Lower C = stronger regularization. Controls trade-off between margin and training error.",
             $"Try C values: {(nSamples < 1000 ? "0.1, 1.0, 10" : "1.0, 10, 100")}. Use GridSearchCV."));
-
         techniques.Add((priority++, "Adjust Gamma (RBF Kernel)",
             "Controls influence of single training example. Lower gamma = smoother decision boundary.",
             "Use gamma='scale' (default) or try smaller values like 0.001, 0.01."));
-
         if (nFeatures > nSamples)
         {
             techniques.Add((priority++, "Switch to Linear Kernel",
@@ -398,51 +341,41 @@ public class RegularizationTool : ToolBase
                 "Use kernel='linear' instead of 'rbf'. Faster and less prone to overfitting."));
         }
     }
-
     private void GenerateDecisionTreeRegularization(
         List<(int, string, string, string)> techniques,
         int nSamples)
     {
         int priority = 1;
-
         techniques.Add((priority++, "Limit max_depth",
             "Most important regularization for decision trees. Prevents overly deep trees.",
             $"Set max_depth={Math.Max(3, Math.Min(15, nSamples / 50))}. Try values 5-15."));
-
         techniques.Add((priority++, "Increase min_samples_split",
             "Require more samples before considering a split.",
             $"Set min_samples_split={Math.Max(10, nSamples / 50)}."));
-
         techniques.Add((priority++, "Increase min_samples_leaf",
             "Require minimum samples in leaf nodes.",
             $"Set min_samples_leaf={Math.Max(5, nSamples / 100)}."));
-
         techniques.Add((priority++, "Pruning via ccp_alpha",
             "Cost complexity pruning removes subtrees that don't improve validation performance.",
             "Use ccp_alpha > 0 (try 0.01, 0.1, 1.0). Higher values = more aggressive pruning."));
     }
-
     private void GenerateGenericRegularization(
         List<(int, string, string, string)> techniques,
         int nSamples, int nFeatures, double samplesPerFeature)
     {
         int priority = 1;
-
         techniques.Add((priority++, "Cross-Validation",
             "Use cross-validation to detect overfitting and tune hyperparameters.",
             "Use 5-fold or 10-fold cross-validation to evaluate model performance."));
-
         if (samplesPerFeature < 20)
         {
             techniques.Add((priority++, "Feature Selection",
                 $"Reduce features ({nFeatures}) to improve sample-to-feature ratio ({samplesPerFeature:F1}).",
                 "Use feature importance, correlation analysis, or recursive feature elimination."));
         }
-
         techniques.Add((priority++, "Ensemble Methods",
             "Combine predictions from multiple models to reduce overfitting.",
             "Use bagging, boosting, or model stacking/blending."));
-
         if (nSamples < 5000)
         {
             techniques.Add((priority++, "Collect More Data",
@@ -450,7 +383,6 @@ public class RegularizationTool : ToolBase
                 "Collect additional training examples if possible. Data often more valuable than better algorithms."));
         }
     }
-
     /// <inheritdoc/>
     protected override string GetJsonErrorMessage(JsonException ex)
     {

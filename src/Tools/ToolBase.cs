@@ -1,5 +1,6 @@
 using AiDotNet.Interfaces;
-using System.Text.Json;
+using Newtonsoft.Json;
+using Newtonsoft.Json.Linq;
 
 namespace AiDotNet.Tools;
 
@@ -71,9 +72,13 @@ public abstract class ToolBase : ITool
             // Delegate to derived class for actual execution
             return ExecuteCore(input);
         }
-        catch (JsonException ex)
+        catch (JsonReaderException ex)
         {
             return GetJsonErrorMessage(ex);
+        }
+        catch (JsonSerializationException ex)
+        {
+            return GetJsonErrorMessage(new JsonReaderException(ex.Message, ex));
         }
         catch (Exception ex)
         {
@@ -100,10 +105,10 @@ public abstract class ToolBase : ITool
     /// protected override string ExecuteCore(string input)
     /// {
     ///     // Parse JSON input
-    ///     using JsonDocument doc = JsonDocument.Parse(input);
+    ///     var json = JObject.Parse(input);
     ///
     ///     // Extract what you need
-    ///     string value = doc.RootElement.GetProperty("some_field").GetString();
+    ///     string value = json["some_field"]?.ToString() ?? "";
     ///
     ///     // Do your tool's work
     ///     string result = ProcessData(value);
@@ -153,7 +158,7 @@ public abstract class ToolBase : ITool
     /// <summary>
     /// Gets the error message to return when JSON parsing fails.
     /// </summary>
-    /// <param name="ex">The JsonException that occurred.</param>
+    /// <param name="ex">The JsonReaderException that occurred.</param>
     /// <returns>A formatted error message explaining the JSON parsing failure.</returns>
     /// <remarks>
     /// <para>
@@ -164,7 +169,7 @@ public abstract class ToolBase : ITool
     ///
     /// You can override this to show the expected JSON format for your specific tool:
     /// <code>
-    /// protected override string GetJsonErrorMessage(JsonException ex)
+    /// protected override string GetJsonErrorMessage(JsonReaderException ex)
     /// {
     ///     return $"Error: Invalid JSON format. {ex.Message}\n" +
     ///            "Expected format: { \"expression\": \"2 + 2\" }";
@@ -174,7 +179,7 @@ public abstract class ToolBase : ITool
     /// This helps users understand exactly what JSON structure your tool expects.
     /// </para>
     /// </remarks>
-    protected virtual string GetJsonErrorMessage(JsonException ex)
+    protected virtual string GetJsonErrorMessage(JsonReaderException ex)
     {
         return $"Error: Invalid JSON format. {ex.Message}\n" +
                "Please ensure input is valid JSON.";
@@ -219,47 +224,45 @@ public abstract class ToolBase : ITool
     }
 
     /// <summary>
-    /// Helper method to safely try to get a property from a JsonElement.
+    /// Helper method to safely try to get a property from a JToken.
     /// </summary>
-    /// <param name="element">The JsonElement to query.</param>
+    /// <param name="token">The JToken to query.</param>
     /// <param name="propertyName">The name of the property to retrieve.</param>
     /// <param name="defaultValue">The default value to return if the property doesn't exist or cannot be converted.</param>
     /// <returns>The property value as a string, or the default value if not found.</returns>
     /// <remarks>
     /// <para>
     /// This utility method simplifies JSON property access by handling missing properties gracefully.
-    /// It eliminates the need for repetitive TryGetProperty calls in derived classes.
+    /// It eliminates the need for repetitive null checks in derived classes.
     /// </para>
     /// <para><b>For Beginners:</b> This helps you safely read values from JSON without crashing if they're missing.
     ///
     /// Instead of this verbose code:
     /// <code>
     /// string value;
-    /// if (element.TryGetProperty("name", out JsonElement nameElem))
-    ///     value = nameElem.GetString() ?? "default";
+    /// if (token[propertyName] != null)
+    ///     value = token[propertyName].ToString();
     /// else
     ///     value = "default";
     /// </code>
     ///
     /// You can write this:
     /// <code>
-    /// string value = TryGetString(element, "name", "default");
+    /// string value = TryGetString(token, "name", "default");
     /// </code>
     ///
     /// Much cleaner and handles all the edge cases for you!
     /// </para>
     /// </remarks>
-    protected static string TryGetString(JsonElement element, string propertyName, string defaultValue = "")
+    protected static string TryGetString(JToken token, string propertyName, string defaultValue = "")
     {
-        return element.TryGetProperty(propertyName, out JsonElement prop)
-            ? prop.GetString() ?? defaultValue
-            : defaultValue;
+        return token[propertyName]?.ToString() ?? defaultValue;
     }
 
     /// <summary>
-    /// Helper method to safely try to get an integer property from a JsonElement.
+    /// Helper method to safely try to get an integer property from a JToken.
     /// </summary>
-    /// <param name="element">The JsonElement to query.</param>
+    /// <param name="token">The JToken to query.</param>
     /// <param name="propertyName">The name of the property to retrieve.</param>
     /// <param name="defaultValue">The default value to return if the property doesn't exist or cannot be converted.</param>
     /// <returns>The property value as an integer, or the default value if not found.</returns>
@@ -268,23 +271,21 @@ public abstract class ToolBase : ITool
     ///
     /// Example:
     /// <code>
-    /// int count = TryGetInt(element, "n_samples", 1000);
+    /// int count = TryGetInt(token, "n_samples", 1000);
     /// // If JSON has "n_samples": 5000, count will be 5000
     /// // If "n_samples" is missing or invalid, count will be 1000
     /// </code>
     /// </para>
     /// </remarks>
-    protected static int TryGetInt(JsonElement element, string propertyName, int defaultValue = 0)
+    protected static int TryGetInt(JToken token, string propertyName, int defaultValue = 0)
     {
-        return element.TryGetProperty(propertyName, out JsonElement prop) && prop.TryGetInt32(out int value)
-            ? value
-            : defaultValue;
+        return token[propertyName]?.ToObject<int>() ?? defaultValue;
     }
 
     /// <summary>
-    /// Helper method to safely try to get a double property from a JsonElement.
+    /// Helper method to safely try to get a double property from a JToken.
     /// </summary>
-    /// <param name="element">The JsonElement to query.</param>
+    /// <param name="token">The JToken to query.</param>
     /// <param name="propertyName">The name of the property to retrieve.</param>
     /// <param name="defaultValue">The default value to return if the property doesn't exist or cannot be converted.</param>
     /// <returns>The property value as a double, or the default value if not found.</returns>
@@ -293,21 +294,19 @@ public abstract class ToolBase : ITool
     ///
     /// Example:
     /// <code>
-    /// double rate = TryGetDouble(element, "learning_rate", 0.01);
+    /// double rate = TryGetDouble(token, "learning_rate", 0.01);
     /// </code>
     /// </para>
     /// </remarks>
-    protected static double TryGetDouble(JsonElement element, string propertyName, double defaultValue = 0.0)
+    protected static double TryGetDouble(JToken token, string propertyName, double defaultValue = 0.0)
     {
-        return element.TryGetProperty(propertyName, out JsonElement prop) && prop.TryGetDouble(out double value)
-            ? value
-            : defaultValue;
+        return token[propertyName]?.ToObject<double>() ?? defaultValue;
     }
 
     /// <summary>
-    /// Helper method to safely try to get a boolean property from a JsonElement.
+    /// Helper method to safely try to get a boolean property from a JToken.
     /// </summary>
-    /// <param name="element">The JsonElement to query.</param>
+    /// <param name="token">The JToken to query.</param>
     /// <param name="propertyName">The name of the property to retrieve.</param>
     /// <param name="defaultValue">The default value to return if the property doesn't exist or cannot be converted.</param>
     /// <returns>The property value as a boolean, or the default value if not found.</returns>
@@ -316,16 +315,12 @@ public abstract class ToolBase : ITool
     ///
     /// Example:
     /// <code>
-    /// bool isEnabled = TryGetBool(element, "is_enabled", false);
+    /// bool isEnabled = TryGetBool(token, "is_enabled", false);
     /// </code>
     /// </para>
     /// </remarks>
-    protected static bool TryGetBool(JsonElement element, string propertyName, bool defaultValue = false)
+    protected static bool TryGetBool(JToken token, string propertyName, bool defaultValue = false)
     {
-        return element.TryGetProperty(propertyName, out JsonElement prop) && prop.ValueKind == JsonValueKind.True
-            ? true
-            : element.TryGetProperty(propertyName, out prop) && prop.ValueKind == JsonValueKind.False
-                ? false
-                : defaultValue;
+        return token[propertyName]?.ToObject<bool>() ?? defaultValue;
     }
 }

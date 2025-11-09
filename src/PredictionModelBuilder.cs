@@ -715,7 +715,7 @@ public class PredictionModelBuilder<T, TInput, TOutput> : IPredictionModelBuilde
             reasoningTrace.AppendLine("STEP 1: Analyzing dataset characteristics...\n");
 
             // Calculate basic statistics for data analysis tool
-            var statistics = new System.Text.Json.Nodes.JsonObject();
+            var statistics = new Newtonsoft.Json.Linq.JObject();
             for (int col = 0; col < nFeatures; col++)
             {
                 var featureData = new List<double>();
@@ -728,7 +728,7 @@ public class PredictionModelBuilder<T, TInput, TOutput> : IPredictionModelBuilde
                 var variance = featureData.Select(x => Math.Pow(x - mean, 2)).Average();
                 var std = Math.Sqrt(variance);
 
-                statistics[$"feature_{col}"] = new System.Text.Json.Nodes.JsonObject
+                statistics[$"feature_{col}"] = new Newtonsoft.Json.Linq.JObject
                 {
                     ["mean"] = mean,
                     ["std"] = std,
@@ -738,16 +738,16 @@ public class PredictionModelBuilder<T, TInput, TOutput> : IPredictionModelBuilde
                 };
             }
 
-            var dataAnalysisInput = new System.Text.Json.Nodes.JsonObject
+            var dataAnalysisInput = new Newtonsoft.Json.Linq.JObject
             {
-                ["dataset_info"] = new System.Text.Json.Nodes.JsonObject
+                ["dataset_info"] = new Newtonsoft.Json.Linq.JObject
                 {
                     ["n_samples"] = nSamples,
                     ["n_features"] = nFeatures,
                     ["target_type"] = "continuous"  // Assume regression for now
                 },
                 ["statistics"] = statistics
-            }.ToJsonString();
+            }.ToString(Formatting.None);
 
             var dataAnalysisResult = await agent.RunAsync(
                 $@"Use the DataAnalysisTool to analyze this dataset.
@@ -766,7 +766,7 @@ public class PredictionModelBuilder<T, TInput, TOutput> : IPredictionModelBuilde
         {
             reasoningTrace.AppendLine("STEP 2: Selecting optimal model type...\n");
 
-            var modelSelectionInput = new System.Text.Json.Nodes.JsonObject
+            var modelSelectionInput = new Newtonsoft.Json.Linq.JObject
             {
                 ["problem_type"] = "regression",  // Assuming regression for now
                 ["n_samples"] = nSamples,
@@ -776,7 +776,7 @@ public class PredictionModelBuilder<T, TInput, TOutput> : IPredictionModelBuilde
                 ["has_missing_values"] = false,
                 ["requires_interpretability"] = false,
                 ["computational_constraints"] = "moderate"
-            }.ToJsonString();
+            }.ToString(Formatting.None);
 
             var modelSelectionResult = await agent.RunAsync(
                 $@"Use the ModelSelectionTool to recommend the best model for this dataset.
@@ -815,14 +815,14 @@ public class PredictionModelBuilder<T, TInput, TOutput> : IPredictionModelBuilde
 
             var modelTypeStr = recommendation.SuggestedModelType?.ToString() ?? _model?.GetType().Name ?? "RandomForest";
 
-            var hyperparameterInput = new System.Text.Json.Nodes.JsonObject
+            var hyperparameterInput = new Newtonsoft.Json.Linq.JObject
             {
                 ["model_type"] = modelTypeStr,
                 ["n_samples"] = nSamples,
                 ["n_features"] = nFeatures,
                 ["problem_type"] = "regression",
                 ["data_complexity"] = "moderate"
-            }.ToJsonString();
+            }.ToString(Formatting.None);
 
             var hyperparameterResult = await agent.RunAsync(
                 $@"Use the HyperparameterTool to suggest optimal hyperparameters.
@@ -848,24 +848,24 @@ public class PredictionModelBuilder<T, TInput, TOutput> : IPredictionModelBuilde
             reasoningTrace.AppendLine("STEP 4: Analyzing feature importance...\n");
 
             // Build feature analysis input with mock correlations
-            var features = new System.Text.Json.Nodes.JsonObject();
+            var features = new Newtonsoft.Json.Linq.JObject();
             for (int col = 0; col < Math.Min(nFeatures, 20); col++)  // Limit to first 20 features
             {
-                features[$"feature_{col}"] = new System.Text.Json.Nodes.JsonObject
+                features[$"feature_{col}"] = new Newtonsoft.Json.Linq.JObject
                 {
                     ["target_correlation"] = 0.5,  // Placeholder
                     ["importance_score"] = 0.1,  // Placeholder
                     ["missing_pct"] = 0.0,
-                    ["correlations"] = new System.Text.Json.Nodes.JsonObject()
+                    ["correlations"] = new Newtonsoft.Json.Linq.JObject()
                 };
             }
 
-            var featureAnalysisInput = new System.Text.Json.Nodes.JsonObject
+            var featureAnalysisInput = new Newtonsoft.Json.Linq.JObject
             {
                 ["features"] = features,
                 ["target_name"] = "target",
                 ["n_samples"] = nSamples
-            }.ToJsonString();
+            }.ToString(Formatting.None);
 
             var featureAnalysisResult = await agent.RunAsync(
                 $@"Use the FeatureImportanceTool to analyze features and suggest improvements.
@@ -884,7 +884,7 @@ public class PredictionModelBuilder<T, TInput, TOutput> : IPredictionModelBuilde
         {
             reasoningTrace.AppendLine("STEP 5: Recommending validation strategy...\n");
 
-            var cvInput = new System.Text.Json.Nodes.JsonObject
+            var cvInput = new Newtonsoft.Json.Linq.JObject
             {
                 ["n_samples"] = nSamples,
                 ["n_features"] = nFeatures,
@@ -893,7 +893,7 @@ public class PredictionModelBuilder<T, TInput, TOutput> : IPredictionModelBuilde
                 ["is_imbalanced"] = false,
                 ["has_groups"] = false,
                 ["computational_budget"] = "moderate"
-            }.ToJsonString();
+            }.ToString(Formatting.None);
 
             var cvResult = await agent.RunAsync(
                 $@"Use the CrossValidationTool to recommend the best validation strategy.
@@ -906,7 +906,7 @@ public class PredictionModelBuilder<T, TInput, TOutput> : IPredictionModelBuilde
             reasoningTrace.AppendLine($"Cross-Validation Strategy:\n{cvResult}\n");
 
             // Regularization recommendations
-            var regularizationInput = new System.Text.Json.Nodes.JsonObject
+            var regularizationInput = new Newtonsoft.Json.Linq.JObject
             {
                 ["model_type"] = recommendation.SuggestedModelType?.ToString() ?? "RandomForest",
                 ["n_samples"] = nSamples,
@@ -915,7 +915,7 @@ public class PredictionModelBuilder<T, TInput, TOutput> : IPredictionModelBuilde
                 ["validation_score"] = 0.0,
                 ["is_overfitting"] = false,
                 ["current_regularization"] = "none"
-            }.ToJsonString();
+            }.ToString(Formatting.None);
 
             var regularizationResult = await agent.RunAsync(
                 $@"Use the RegularizationTool to recommend regularization techniques.

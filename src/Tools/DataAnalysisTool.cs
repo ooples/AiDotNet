@@ -1,5 +1,5 @@
 using AiDotNet.Interfaces;
-using System.Text.Json;
+using Newtonsoft.Json.Linq;
 
 namespace AiDotNet.Tools;
 
@@ -80,11 +80,11 @@ public class DataAnalysisTool : ToolBase
         try
         {
             // Parse the input JSON
-            using JsonDocument document = JsonDocument.Parse(input);
-            JsonElement root = document.RootElement;
+            var root = JObject.Parse(input);
 
             // Extract dataset information
-            if (!root.TryGetProperty("dataset_info", out JsonElement datasetInfo))
+            var datasetInfo = root["dataset_info"];
+            if (datasetInfo == null)
             {
                 return "Error: Missing 'dataset_info' property in input JSON.";
             }
@@ -127,7 +127,8 @@ public class DataAnalysisTool : ToolBase
             analysis.AppendLine();
 
             // Feature statistics analysis
-            if (root.TryGetProperty("statistics", out JsonElement statistics))
+            var statistics = root["statistics"] as JObject;
+            if (statistics != null)
             {
                 analysis.AppendLine("**Feature-Level Analysis:**");
 
@@ -135,48 +136,43 @@ public class DataAnalysisTool : ToolBase
                 var skewedFeatures = new List<string>();
                 var outlierFeatures = new List<string>();
 
-                foreach (JsonProperty feature in statistics.EnumerateObject())
+                foreach (var feature in statistics.Properties())
                 {
                     string featureName = feature.Name;
-                    JsonElement stats = feature.Value;
+                    var stats = feature.Value as JObject;
+                    if (stats == null) continue;
 
                     // Missing values check
-                    if (stats.TryGetProperty("missing_pct", out JsonElement missingElem))
+                    double? missingPct = stats["missing_pct"]?.ToObject<double>();
+                    if (missingPct.HasValue && missingPct.Value > 0)
                     {
-                        double missingPct = missingElem.GetDouble();
-                        if (missingPct > 0)
-                        {
-                            missingFeatures.Add($"{featureName} ({missingPct:P1})");
+                        missingFeatures.Add($"{featureName} ({missingPct:P1})");
 
-                            if (missingPct > 0.3)
-                            {
-                                analysis.AppendLine($"- ⚠️ CRITICAL: '{featureName}' has {missingPct:P1} missing values!");
-                                analysis.AppendLine($"  Recommendation: Consider removing this feature or using advanced imputation techniques.");
-                            }
-                            else if (missingPct > 0.05)
-                            {
-                                analysis.AppendLine($"- ⚠️ WARNING: '{featureName}' has {missingPct:P1} missing values.");
-                                analysis.AppendLine($"  Recommendation: Apply imputation (mean/median for numeric, mode for categorical).");
-                            }
+                        if (missingPct.Value > 0.3)
+                        {
+                            analysis.AppendLine($"- ⚠️ CRITICAL: '{featureName}' has {missingPct:P1} missing values!");
+                            analysis.AppendLine($"  Recommendation: Consider removing this feature or using advanced imputation techniques.");
+                        }
+                        else if (missingPct.Value > 0.05)
+                        {
+                            analysis.AppendLine($"- ⚠️ WARNING: '{featureName}' has {missingPct:P1} missing values.");
+                            analysis.AppendLine($"  Recommendation: Apply imputation (mean/median for numeric, mode for categorical).");
                         }
                     }
 
                     // Skewness and outlier detection (simple heuristic)
-                    if (stats.TryGetProperty("mean", out JsonElement meanElem) &&
-                        stats.TryGetProperty("std", out JsonElement stdElem) &&
-                        stats.TryGetProperty("min", out JsonElement minElem) &&
-                        stats.TryGetProperty("max", out JsonElement maxElem))
+                    double? mean = stats["mean"]?.ToObject<double>();
+                    double? std = stats["std"]?.ToObject<double>();
+                    double? min = stats["min"]?.ToObject<double>();
+                    double? max = stats["max"]?.ToObject<double>();
+
+                    if (mean.HasValue && std.HasValue && min.HasValue && max.HasValue)
                     {
-                        double mean = meanElem.GetDouble();
-                        double std = stdElem.GetDouble();
-                        double min = minElem.GetDouble();
-                        double max = maxElem.GetDouble();
-
                         // Check for potential outliers (values beyond 3 standard deviations)
-                        double lowerBound = mean - 3 * std;
-                        double upperBound = mean + 3 * std;
+                        double lowerBound = mean.Value - 3 * std.Value;
+                        double upperBound = mean.Value + 3 * std.Value;
 
-                        if (min < lowerBound || max > upperBound)
+                        if (min.Value < lowerBound || max.Value > upperBound)
                         {
                             outlierFeatures.Add(featureName);
                             analysis.AppendLine($"- NOTICE: '{featureName}' may contain outliers (range: {min:F2} to {max:F2}, mean: {mean:F2}, std: {std:F2}).");
@@ -185,10 +181,10 @@ public class DataAnalysisTool : ToolBase
 
                         // Check for skewness (simple heuristic: if median << mean or median >> mean)
                         // Since we don't have median, use a rough approximation
-                        double range = max - min;
+                        double range = max.Value - min.Value;
                         if (range > 0)
                         {
-                            double normalizedMean = (mean - min) / range;
+                            double normalizedMean = (mean.Value - min.Value) / range;
                             if (normalizedMean < 0.3 || normalizedMean > 0.7)
                             {
                                 skewedFeatures.Add(featureName);

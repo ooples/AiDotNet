@@ -1,8 +1,6 @@
 using AiDotNet.Interfaces;
-using System.Text.Json;
-
+using Newtonsoft.Json.Linq;
 namespace AiDotNet.Tools;
-
 /// <summary>
 /// A specialized tool that analyzes feature importance, identifies redundant features, detects multicollinearity,
 /// and suggests feature engineering improvements to enhance model performance.
@@ -80,7 +78,6 @@ public class FeatureImportanceTool : ToolBase
 {
     /// <inheritdoc/>
     public override string Name => "FeatureImportanceTool";
-
     /// <inheritdoc/>
     public override string Description =>
         "Analyzes feature importance, detects redundancy, and suggests feature engineering improvements. " +
@@ -88,26 +85,20 @@ public class FeatureImportanceTool : ToolBase
         "\"importance_score\": number, \"missing_pct\": number, \"correlations\": { \"other_feature\": number } } }, " +
         "\"target_name\": \"string\", \"n_samples\": number }. " +
         "Returns importance rankings, redundancy detection, multicollinearity warnings, and feature engineering suggestions.";
-
     /// <inheritdoc/>
     protected override string ExecuteCore(string input)
     {
         try
         {
-            using JsonDocument document = JsonDocument.Parse(input);
-            JsonElement root = document.RootElement;
-
+            var root = JObject.Parse(input);
             if (!root.TryGetProperty("features", out JsonElement featuresElem))
             {
                 return "Error: Missing 'features' property in input JSON.";
             }
-
             string targetName = TryGetString(root, "target_name", "target");
             int nSamples = TryGetInt(root, "n_samples", 1000);
-
             var analysis = new System.Text.StringBuilder();
             analysis.AppendLine("=== FEATURE IMPORTANCE & ENGINEERING ANALYSIS ===\n");
-
             // Parse all features
             var features = new List<FeatureInfo>();
             foreach (JsonProperty featureProp in featuresElem.EnumerateObject())
@@ -116,18 +107,13 @@ public class FeatureImportanceTool : ToolBase
                 {
                     Name = featureProp.Name
                 };
-
                 JsonElement stats = featureProp.Value;
-
                 if (stats.TryGetProperty("target_correlation", out JsonElement corrElem))
                     feature.TargetCorrelation = Math.Abs(corrElem.GetDouble());
-
                 if (stats.TryGetProperty("importance_score", out JsonElement impElem))
                     feature.ImportanceScore = impElem.GetDouble();
-
                 if (stats.TryGetProperty("missing_pct", out JsonElement missingElem))
                     feature.MissingPct = missingElem.GetDouble();
-
                 if (stats.TryGetProperty("correlations", out JsonElement correlsElem))
                 {
                     foreach (JsonProperty corrProp in correlsElem.EnumerateObject())
@@ -135,21 +121,16 @@ public class FeatureImportanceTool : ToolBase
                         feature.Correlations[corrProp.Name] = Math.Abs(corrProp.Value.GetDouble());
                     }
                 }
-
                 features.Add(feature);
             }
-
             // Sort by importance
             var sortedByImportance = features.OrderByDescending(f => f.ImportanceScore).ToList();
-
             // Categorize features
             var highImportance = sortedByImportance.Where(f => f.ImportanceScore > 0.15).ToList();
             var moderateImportance = sortedByImportance.Where(f => f.ImportanceScore > 0.05 && f.ImportanceScore <= 0.15).ToList();
             var lowImportance = sortedByImportance.Where(f => f.ImportanceScore <= 0.05).ToList();
-
             // === IMPORTANCE RANKINGS ===
             analysis.AppendLine("**Feature Importance Rankings:**\n");
-
             if (highImportance.Count > 0)
             {
                 analysis.AppendLine("**HIGH IMPORTANCE** (Essential features - definitely keep):");
@@ -164,7 +145,6 @@ public class FeatureImportanceTool : ToolBase
                     analysis.AppendLine();
                 }
             }
-
             if (moderateImportance.Count > 0)
             {
                 analysis.AppendLine("**MODERATE IMPORTANCE** (Useful features - likely keep):");
@@ -176,7 +156,6 @@ public class FeatureImportanceTool : ToolBase
                     analysis.AppendLine();
                 }
             }
-
             if (lowImportance.Count > 0)
             {
                 analysis.AppendLine("**LOW IMPORTANCE** (Consider removing to reduce noise and complexity):");
@@ -188,10 +167,8 @@ public class FeatureImportanceTool : ToolBase
                     analysis.AppendLine();
                 }
             }
-
             // === MULTICOLLINEARITY DETECTION ===
             analysis.AppendLine("**Multicollinearity Analysis:**\n");
-
             var highCorrelations = new List<(string Feature1, string Feature2, double Correlation)>();
             foreach (var feature in features)
             {
@@ -207,18 +184,15 @@ public class FeatureImportanceTool : ToolBase
                     }
                 }
             }
-
             if (highCorrelations.Count > 0)
             {
                 analysis.AppendLine("⚠️ **HIGH CORRELATION DETECTED** (May cause multicollinearity issues):\n");
                 foreach (var (f1, f2, corr) in highCorrelations.OrderByDescending(x => x.Correlation))
                 {
                     analysis.AppendLine($"  • **{f1}** ↔ **{f2}** (correlation: {corr:F3})");
-
                     // Find importance of each
                     var feat1 = features.First(f => f.Name == f1);
                     var feat2 = features.First(f => f.Name == f2);
-
                     if (feat1.ImportanceScore > feat2.ImportanceScore * 1.5)
                     {
                         analysis.AppendLine($"    → Recommendation: Keep '{f1}' (importance: {feat1.ImportanceScore:P1}), " +
@@ -235,7 +209,6 @@ public class FeatureImportanceTool : ToolBase
                     }
                     analysis.AppendLine();
                 }
-
                 analysis.AppendLine("**What is multicollinearity?** When features are highly correlated, they provide");
                 analysis.AppendLine("redundant information. This can make models unstable and coefficients unreliable.");
                 analysis.AppendLine("Solution: Remove one feature, combine them, or use dimensionality reduction.\n");
@@ -244,35 +217,28 @@ public class FeatureImportanceTool : ToolBase
             {
                 analysis.AppendLine("✓ No significant multicollinearity detected (all feature correlations < 0.7)\n");
             }
-
             // === FEATURE ENGINEERING SUGGESTIONS ===
             analysis.AppendLine("**Feature Engineering Suggestions:**\n");
-
             var suggestions = new List<string>();
-
             // Suggest removing low importance features
             if (lowImportance.Count > 0)
             {
                 suggestions.Add($"**Remove low-importance features:** {string.Join(", ", lowImportance.Select(f => f.Name))}");
                 suggestions.Add($"  Benefit: Reduces noise, prevents overfitting, speeds up training");
             }
-
             // Suggest interaction features for highly correlated important features
             foreach (var (f1, f2, corr) in highCorrelations)
             {
                 var feat1 = features.First(f => f.Name == f1);
                 var feat2 = features.First(f => f.Name == f2);
-
                 if (feat1.ImportanceScore > 0.1 && feat2.ImportanceScore > 0.1)
                 {
                     suggestions.Add($"**Create interaction feature:** '{f1}_x_{f2}' = {f1} * {f2}");
                     suggestions.Add($"  Benefit: May capture non-linear interactions between correlated features");
-
                     suggestions.Add($"**Create ratio feature:** '{f1}_per_{f2}' = {f1} / {f2}");
                     suggestions.Add($"  Benefit: Normalizes one feature by another, often reveals hidden patterns");
                 }
             }
-
             // Suggest polynomial features for highly important features
             if (highImportance.Count > 0 && highImportance.Count <= 3)
             {
@@ -285,14 +251,12 @@ public class FeatureImportanceTool : ToolBase
                     }
                 }
             }
-
             // Suggest dimensionality reduction if many features
             if (features.Count > 20)
             {
                 suggestions.Add("**Consider dimensionality reduction:** PCA, t-SNE, or feature selection algorithms");
                 suggestions.Add($"  Benefit: Reduce {features.Count} features while retaining most information");
             }
-
             // Suggest binning/discretization for specific patterns
             var highSkewFeatures = features.Where(f => f.ImportanceScore > 0.1 && f.Correlations.Values.Any(c => c > 0.8)).ToList();
             if (highSkewFeatures.Count > 0)
@@ -303,7 +267,6 @@ public class FeatureImportanceTool : ToolBase
                     suggestions.Add("  Benefit: Handle skewness and outliers in important features");
                 }
             }
-
             if (suggestions.Count > 0)
             {
                 foreach (var suggestion in suggestions)
@@ -315,9 +278,7 @@ public class FeatureImportanceTool : ToolBase
             {
                 analysis.AppendLine("  • Current feature set looks reasonable - focus on model selection and tuning");
             }
-
             analysis.AppendLine();
-
             // === SUMMARY ===
             analysis.AppendLine("**Summary:**");
             analysis.AppendLine($"  • Total features analyzed: {features.Count}");
@@ -331,7 +292,6 @@ public class FeatureImportanceTool : ToolBase
             analysis.AppendLine("  2. Address multicollinearity (remove redundant features or create combinations)");
             analysis.AppendLine("  3. Try suggested feature engineering techniques");
             analysis.AppendLine("  4. Re-evaluate feature importance after changes");
-
             return analysis.ToString();
         }
         catch (JsonException)
@@ -343,14 +303,12 @@ public class FeatureImportanceTool : ToolBase
             throw; // Let base class handle generic errors
         }
     }
-
     /// <inheritdoc/>
     protected override string GetJsonErrorMessage(JsonException ex)
     {
         return $"Error: Invalid JSON format. {ex.Message}\n" +
                "Expected format: { \"features\": { \"feature_name\": { \"target_correlation\": number, ... } }, ... }";
     }
-
     private class FeatureInfo
     {
         public string Name { get; set; } = string.Empty;
