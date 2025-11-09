@@ -192,17 +192,16 @@ public abstract class GradientBasedOptimizerBase<T, TInput, TOutput> : Optimizer
                 nameof(appliedGradients));
         }
 
-        // Get learning rate from options
-        double learningRate = GradientOptions.InitialLearningRate;
+        // Use current learning rate (may differ from initial due to decay/scheduling)
+        var lr = NumOps.FromDouble(_currentLearningRate);
 
         // Reverse the SGD update: params_old = params_new + lr * gradients
         var original = new T[updatedParameters.Length];
         for (int i = 0; i < updatedParameters.Length; i++)
         {
-            double updated = Convert.ToDouble(updatedParameters[i]);
-            double gradient = Convert.ToDouble(appliedGradients[i]);
-            double originalValue = updated + learningRate * gradient;
-            original[i] = (T)Convert.ChangeType(originalValue, typeof(T));
+            // Use NumOps for all arithmetic to maintain precision and type safety
+            var lrTimesGradient = NumOps.Multiply(lr, appliedGradients[i]);
+            original[i] = NumOps.Add(updatedParameters[i], lrTimesGradient);
         }
 
         return new Vector<T>(original);

@@ -84,6 +84,16 @@ public class AdaDeltaOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<
     private Vector<T>? _accumulatedSquaredUpdates;
 
     /// <summary>
+    /// Stores the pre-update snapshot of accumulated squared gradients for accurate reverse updates.
+    /// </summary>
+    private Vector<T>? _previousAccumulatedSquaredGradients;
+
+    /// <summary>
+    /// Stores the pre-update snapshot of accumulated squared updates for accurate reverse updates.
+    /// </summary>
+    private Vector<T>? _previousAccumulatedSquaredUpdates;
+
+    /// <summary>
     /// Initializes a new instance of the <see cref="AdaDeltaOptimizer{T}"/> class.
     /// </summary>
     /// <param name="model">The model to optimize.</param>
@@ -283,6 +293,21 @@ public class AdaDeltaOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<
         {
             _accumulatedSquaredGradients = new Vector<T>(parameters.Length);
             _accumulatedSquaredUpdates = new Vector<T>(parameters.Length);
+            _previousAccumulatedSquaredGradients = new Vector<T>(parameters.Length);
+            _previousAccumulatedSquaredUpdates = new Vector<T>(parameters.Length);
+        }
+
+        // Save pre-update state for accurate reverse updates
+        if (_previousAccumulatedSquaredGradients == null || _previousAccumulatedSquaredUpdates == null)
+        {
+            _previousAccumulatedSquaredGradients = new Vector<T>(parameters.Length);
+            _previousAccumulatedSquaredUpdates = new Vector<T>(parameters.Length);
+        }
+
+        for (int i = 0; i < parameters.Length; i++)
+        {
+            _previousAccumulatedSquaredGradients[i] = _accumulatedSquaredGradients[i];
+            _previousAccumulatedSquaredUpdates[i] = _accumulatedSquaredUpdates[i];
         }
 
         var updatedParams = new Vector<T>(parameters.Length);
@@ -346,8 +371,8 @@ public class AdaDeltaOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<
                 nameof(appliedGradients));
         }
 
-        if (_accumulatedSquaredGradients == null || _accumulatedSquaredUpdates == null ||
-            _accumulatedSquaredGradients.Length != updatedParameters.Length)
+        if (_previousAccumulatedSquaredGradients == null || _previousAccumulatedSquaredUpdates == null ||
+            _previousAccumulatedSquaredGradients.Length != updatedParameters.Length)
         {
             throw new InvalidOperationException(
                 "AdaDelta optimizer state is not initialized. ReverseUpdate must be called after UpdateParameters.");
@@ -357,10 +382,17 @@ public class AdaDeltaOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<
 
         for (int i = 0; i < updatedParameters.Length; i++)
         {
-            // Recalculate the update that was applied
+            // First update the previous accumulated squared gradients to match what UpdateParameters would have computed
+            var accGradAtUpdateTime = NumOps.Add(
+                NumOps.Multiply(NumOps.FromDouble(_options.Rho), _previousAccumulatedSquaredGradients[i]),
+                NumOps.Multiply(NumOps.FromDouble(1 - _options.Rho), NumOps.Multiply(appliedGradients[i], appliedGradients[i]))
+            );
+
+            // Recalculate the update that was applied using PRE-update accumulated squared updates
+            // but POST-update accumulated squared gradients (as UpdateParameters does)
             var update = NumOps.Multiply(
-                NumOps.Sqrt(NumOps.Add(_accumulatedSquaredUpdates[i], NumOps.FromDouble(_options.Epsilon))),
-                NumOps.Divide(appliedGradients[i], NumOps.Sqrt(NumOps.Add(_accumulatedSquaredGradients[i], NumOps.FromDouble(_options.Epsilon))))
+                NumOps.Sqrt(NumOps.Add(_previousAccumulatedSquaredUpdates[i], NumOps.FromDouble(_options.Epsilon))),
+                NumOps.Divide(appliedGradients[i], NumOps.Sqrt(NumOps.Add(accGradAtUpdateTime, NumOps.FromDouble(_options.Epsilon))))
             );
 
             // Reverse: original = updated + update
