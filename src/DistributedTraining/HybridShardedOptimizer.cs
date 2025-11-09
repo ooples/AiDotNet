@@ -107,17 +107,47 @@ public class HybridShardedOptimizer<T, TInput, TOutput> : ShardedOptimizerBase<T
     }
 
     /// <summary>
-    /// Performs AllReduce within a subgroup of ranks using point-to-point Send/Receive.
+    /// Performs AllReduce within a subgroup of ranks.
     /// </summary>
     /// <remarks>
-    /// This implements subgroup AllReduce by having the first rank in the group collect
-    /// all data, perform the reduction, and send the result back to all group members.
+    /// This implements subgroup AllReduce using one of two strategies:
+    /// 1. Point-to-point (Send/Receive): Efficient but requires P2P support (MPI, Gloo TCP)
+    /// 2. Global collective fallback: Works with any backend (NCCL, Gloo) but less efficient
+    ///
+    /// The fallback uses global AllReduce with masking: ranks outside the subgroup contribute zeros,
+    /// then all ranks receive the result but only subgroup members use it.
     /// </remarks>
     private void SubgroupAllReduce(Vector<T> data, List<int> groupRanks, ReductionOperation operation)
     {
         if (groupRanks.Count == 1)
         {
             // Single rank in group - no communication needed
+            return;
+        }
+
+        // Check if this rank is in the subgroup
+        bool inGroup = groupRanks.Contains(Rank);
+
+        // Try point-to-point approach first (efficient)
+        try
+        {
+            SubgroupAllReduceP2P(data, groupRanks, operation, inGroup);
+        }
+        catch (NotSupportedException)
+        {
+            // Fallback to global collective approach (works with any backend)
+            SubgroupAllReduceGlobal(data, groupRanks, operation, inGroup);
+        }
+    }
+
+    /// <summary>
+    /// Implements subgroup AllReduce using point-to-point Send/Receive (efficient).
+    /// </summary>
+    private void SubgroupAllReduceP2P(Vector<T> data, List<int> groupRanks, ReductionOperation operation, bool inGroup)
+    {
+        if (!inGroup)
+        {
+            // This rank is not in the subgroup - no participation needed
             return;
         }
 
@@ -165,6 +195,53 @@ public class HybridShardedOptimizer<T, TInput, TOutput> : ShardedOptimizerBase<T
             {
                 data[i] = result[i];
             }
+        }
+    }
+
+    /// <summary>
+    /// Implements subgroup AllReduce using global collective operations (fallback for NCCL, Gloo).
+    /// </summary>
+    /// <remarks>
+    /// This fallback works by:
+    /// 1. Ranks outside subgroup zero their data
+    /// 2. Global AllReduce across all ranks (Sum operation)
+    /// 3. For Average operation, divide by subgroup size (not world size)
+    /// 4. All ranks receive result, but only subgroup members use it
+    ///
+    /// This is less efficient than P2P (communicates across all ranks) but works with any backend.
+    /// </remarks>
+    private void SubgroupAllReduceGlobal(Vector<T> data, List<int> groupRanks, ReductionOperation operation, bool inGroup)
+    {
+        var workingData = data.Clone();
+
+        // Ranks outside the subgroup contribute zeros
+        if (!inGroup)
+        {
+            for (int i = 0; i < workingData.Length; i++)
+            {
+                workingData[i] = NumOps.FromDouble(0);
+            }
+        }
+
+        // Perform global AllReduce with Sum operation
+        // (we'll handle Average separately by dividing by subgroup size, not world size)
+        var globalOp = (operation == ReductionOperation.Average) ? ReductionOperation.Sum : operation;
+        Config.CommunicationBackend.AllReduce(workingData, globalOp);
+
+        // For Average, divide by subgroup size (not world size)
+        if (operation == ReductionOperation.Average)
+        {
+            var groupSize = NumOps.FromDouble(groupRanks.Count);
+            for (int i = 0; i < workingData.Length; i++)
+            {
+                workingData[i] = NumOps.Divide(workingData[i], groupSize);
+            }
+        }
+
+        // Copy result back to data (all ranks get the result, but only subgroup members will use it)
+        for (int i = 0; i < data.Length; i++)
+        {
+            data[i] = workingData[i];
         }
     }
 
