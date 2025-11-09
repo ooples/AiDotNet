@@ -1,8 +1,6 @@
 using Newtonsoft.Json;
 using AiDotNet.Interfaces;
-using Newtonsoft.Json;
 using AiDotNet.Models.Results;
-using Newtonsoft.Json;
 using AiDotNet.LinearAlgebra;
 
 namespace AiDotNet.Tools;
