@@ -115,8 +115,13 @@ public class DDPOptimizer<T, TInput, TOutput> : ShardedOptimizerBase<T, TInput, 
                 // Average gradients across all workers (true DDP)
                 Config.CommunicationBackend.AllReduce(localGradients, ReductionOperation.Average);
 
+                // CRITICAL: Restore model to pre-update parameters before applying averaged gradients
+                // Without this, we would double-apply gradients: params - lr*localGrad - lr*avgGrad
+                // instead of the correct: params - lr*avgGrad
+                localResult.BestSolution.SetParameters(originalParams);
+
                 // Apply averaged gradients to original parameters
-                // This ensures all workers apply the same averaged gradients
+                // This ensures all workers apply the same averaged gradients starting from the same point
                 var finalModel = gradientOptimizer.ApplyGradients(localGradients, localResult.BestSolution);
 
                 // Update result with model using averaged gradients
