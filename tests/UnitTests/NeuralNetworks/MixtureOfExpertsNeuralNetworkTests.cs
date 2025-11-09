@@ -271,7 +271,7 @@ public class MixtureOfExpertsNeuralNetworkTests
         // Assert
         Assert.NotNull(newInstance);
         Assert.NotSame(model, newInstance);
-        Assert.Equal(model.Architecture.TaskType, newInstance.Architecture.TaskType);
+        Assert.Equal(model.Architecture.TaskType, newInstance!.Architecture.TaskType);
     }
 
     [Fact]

@@ -603,8 +603,6 @@ public class MixtureOfExpertsLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
             throw new InvalidOperationException("Forward pass must be called before backward pass.");
         }
 
-        int batchSize = _lastInput.Shape[0];
-
         // Step 1: Apply activation derivative
         var activationGradient = ApplyActivationDerivative(_lastInput, outputGradient);
 
@@ -1139,15 +1137,9 @@ public class MixtureOfExpertsLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
                 var weight = _lastRoutingWeights[b, i];
 
                 // Count token assignment
-                bool isActive = false;
-                if (_topK > 0)
-                {
-                    isActive = IsExpertActive(b, i);
-                }
-                else
-                {
-                    isActive = NumOps.GreaterThan(weight, NumOps.FromDouble(0.01));
-                }
+                bool isActive = _topK > 0
+                    ? IsExpertActive(b, i)
+                    : NumOps.GreaterThan(weight, NumOps.FromDouble(0.01));
 
                 if (isActive)
                 {
@@ -1532,21 +1524,15 @@ public class MixtureOfExpertsLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
 
                 for (int j = 0; j < numExperts; j++)
                 {
-                    T jacobian;
-                    if (i == j)
-                    {
-                        // Diagonal: weight_i * (1 - weight_i)
-                        jacobian = NumOps.Multiply(
+                    // Diagonal: weight_i * (1 - weight_i)
+                    // Off-diagonal: -weight_i * weight_j
+                    T jacobian = (i == j)
+                        ? NumOps.Multiply(
                             routingWeights[b, i],
-                            NumOps.Subtract(NumOps.One, routingWeights[b, i]));
-                    }
-                    else
-                    {
-                        // Off-diagonal: -weight_i * weight_j
-                        jacobian = NumOps.Negate(NumOps.Multiply(
+                            NumOps.Subtract(NumOps.One, routingWeights[b, i]))
+                        : NumOps.Negate(NumOps.Multiply(
                             routingWeights[b, i],
                             routingWeights[b, j]));
-                    }
 
                     logitGrad = NumOps.Add(logitGrad,
                         NumOps.Multiply(weightGradients[b, j], jacobian));

@@ -56,12 +56,12 @@ public class MixtureOfExpertsNeuralNetwork<T> : NeuralNetworkBase<T>
     /// <summary>
     /// The loss function used to calculate the error between predicted and expected outputs.
     /// </summary>
-    private ILossFunction<T> _lossFunction;
+    private readonly ILossFunction<T> _lossFunction;
 
     /// <summary>
     /// The optimization algorithm used to update the network's parameters during training.
     /// </summary>
-    private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> _optimizer;
+    private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> _optimizer;
 
     /// <summary>
     /// The core Mixture-of-Experts layer.
@@ -407,7 +407,7 @@ public class MixtureOfExpertsNeuralNetwork<T> : NeuralNetworkBase<T>
         var outputGradientTensor = Tensor<T>.FromVector(outputGradient);
 
         // Backpropagation
-        var inputGradient = Backward(outputGradientTensor);
+        Backward(outputGradientTensor);
 
         // Update parameters using the optimizer
         _optimizer.UpdateParameters(Layers);
@@ -536,11 +536,11 @@ public class MixtureOfExpertsNeuralNetwork<T> : NeuralNetworkBase<T>
         _options.UseLoadBalancing = reader.ReadBoolean();
         _options.LoadBalancingWeight = reader.ReadDouble();
 
-        // Read optimizer type
-        string optimizerType = reader.ReadString();
+        // Read optimizer type (not used after reading)
+        reader.ReadString();
 
-        // Read loss function type
-        string lossFunctionType = reader.ReadString();
+        // Read loss function type (not used after reading)
+        reader.ReadString();
     }
 
     /// <summary>

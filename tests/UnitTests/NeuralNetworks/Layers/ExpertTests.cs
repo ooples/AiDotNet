@@ -213,7 +213,6 @@ public class ExpertTests
             new DenseLayer<float>(3, 2, new ReLUActivation<float>())
         };
         var expert = new Expert<float>(layers, new[] { 5 }, new[] { 2 });
-        var originalParams = expert.GetParameters();
 
         // Create new parameters (all zeros)
         var newParams = new Vector<float>(new float[expert.ParameterCount]);
