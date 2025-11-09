@@ -135,7 +135,7 @@ public class FSDPOptimizer<T, TInput, TOutput> : ShardedOptimizerBase<T, TInput,
     }
 
     /// <inheritdoc/>
-    public bool ShouldEarlyStop()
+    public override bool ShouldEarlyStop()
     {
         // Delegate to wrapped optimizer
         bool localDecision = WrappedOptimizer.ShouldEarlyStop();
@@ -157,7 +157,7 @@ public class FSDPOptimizer<T, TInput, TOutput> : ShardedOptimizerBase<T, TInput,
     }
 
     /// <inheritdoc/>
-    public OptimizationAlgorithmOptions<T, TInput, TOutput> GetOptions()
+    public override OptimizationAlgorithmOptions<T, TInput, TOutput> GetOptions()
     {
         return WrappedOptimizer.GetOptions();
     }
@@ -218,7 +218,7 @@ public class FSDPOptimizer<T, TInput, TOutput> : ShardedOptimizerBase<T, TInput,
     }
 
     /// <inheritdoc/>
-    public void SaveModel(string filePath)
+    public override void SaveModel(string filePath)
     {
         // Barrier before rank check to prevent deadlock if rank 0 fails
         Config.CommunicationBackend.Barrier();
@@ -240,7 +240,7 @@ public class FSDPOptimizer<T, TInput, TOutput> : ShardedOptimizerBase<T, TInput,
     }
 
     /// <inheritdoc/>
-    public void LoadModel(string filePath)
+    public override void LoadModel(string filePath)
     {
         // Barrier before loading to ensure all processes start together
         Config.CommunicationBackend.Barrier();

@@ -118,4 +118,79 @@ public class HybridShardedOptimizer<T, TInput, TOutput> : ShardedOptimizerBase<T
         // Full implementation would use process groups for each dimension
         // Framework placeholder
     }
+
+    /// <inheritdoc/>
+    public override byte[] Serialize()
+    {
+        using var ms = new MemoryStream();
+        using var writer = new BinaryWriter(ms);
+
+        // Serialize hybrid-specific configuration
+        writer.Write(_pipelineParallelSize);
+        writer.Write(_tensorParallelSize);
+        writer.Write(_dataParallelSize);
+
+        // Serialize sharding configuration info
+        writer.Write(WorldSize);
+        writer.Write(Rank);
+        writer.Write(Config.AutoSyncGradients);
+        writer.Write(Config.MinimumParameterGroupSize);
+        writer.Write(Config.EnableGradientCompression);
+
+        // Serialize wrapped optimizer
+        var optimizerData = WrappedOptimizer.Serialize();
+        writer.Write(optimizerData.Length);
+        writer.Write(optimizerData);
+
+        return ms.ToArray();
+    }
+
+    /// <inheritdoc/>
+    public override void Deserialize(byte[] data)
+    {
+        using var ms = new MemoryStream(data);
+        using var reader = new BinaryReader(ms);
+
+        // Read hybrid-specific configuration
+        int savedPipelineParallelSize = reader.ReadInt32();
+        int savedTensorParallelSize = reader.ReadInt32();
+        int savedDataParallelSize = reader.ReadInt32();
+
+        // Read sharding configuration (for validation)
+        int savedWorldSize = reader.ReadInt32();
+        int savedRank = reader.ReadInt32();
+        reader.ReadBoolean(); // AutoSyncGradients
+        reader.ReadInt32(); // MinimumParameterGroupSize
+        reader.ReadBoolean(); // EnableGradientCompression
+
+        if (savedWorldSize != WorldSize)
+        {
+            throw new InvalidOperationException(
+                $"World size mismatch. Optimizer was saved with {savedWorldSize} processes, " +
+                $"but current configuration has {WorldSize} processes.");
+        }
+
+        if (savedRank != Rank)
+        {
+            throw new InvalidOperationException(
+                $"Rank mismatch. Optimizer was saved on rank {savedRank}, " +
+                $"but is being loaded on rank {Rank}. This could indicate a configuration error.");
+        }
+
+        if (savedPipelineParallelSize != _pipelineParallelSize ||
+            savedTensorParallelSize != _tensorParallelSize ||
+            savedDataParallelSize != _dataParallelSize)
+        {
+            throw new InvalidOperationException(
+                $"Hybrid parallelism configuration mismatch. Optimizer was saved with " +
+                $"pipeline={savedPipelineParallelSize}, tensor={savedTensorParallelSize}, data={savedDataParallelSize}, " +
+                $"but current configuration has pipeline={_pipelineParallelSize}, " +
+                $"tensor={_tensorParallelSize}, data={_dataParallelSize}.");
+        }
+
+        // Read wrapped optimizer
+        int optimizerDataLength = reader.ReadInt32();
+        byte[] optimizerData = reader.ReadBytes(optimizerDataLength);
+        WrappedOptimizer.Deserialize(optimizerData);
+    }
 }

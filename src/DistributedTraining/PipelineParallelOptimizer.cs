@@ -86,4 +86,71 @@ public class PipelineParallelOptimizer<T, TInput, TOutput> : ShardedOptimizerBas
         // No synchronization needed across stages
         // If using pipeline + data parallelism, would sync within data-parallel groups
     }
+
+    /// <inheritdoc/>
+    public override byte[] Serialize()
+    {
+        using var ms = new MemoryStream();
+        using var writer = new BinaryWriter(ms);
+
+        // Serialize pipeline-specific configuration
+        writer.Write(_numMicroBatches);
+
+        // Serialize sharding configuration info
+        writer.Write(WorldSize);
+        writer.Write(Rank);
+        writer.Write(Config.AutoSyncGradients);
+        writer.Write(Config.MinimumParameterGroupSize);
+        writer.Write(Config.EnableGradientCompression);
+
+        // Serialize wrapped optimizer
+        var optimizerData = WrappedOptimizer.Serialize();
+        writer.Write(optimizerData.Length);
+        writer.Write(optimizerData);
+
+        return ms.ToArray();
+    }
+
+    /// <inheritdoc/>
+    public override void Deserialize(byte[] data)
+    {
+        using var ms = new MemoryStream(data);
+        using var reader = new BinaryReader(ms);
+
+        // Read pipeline-specific configuration
+        int savedNumMicroBatches = reader.ReadInt32();
+
+        // Read sharding configuration (for validation)
+        int savedWorldSize = reader.ReadInt32();
+        int savedRank = reader.ReadInt32();
+        reader.ReadBoolean(); // AutoSyncGradients
+        reader.ReadInt32(); // MinimumParameterGroupSize
+        reader.ReadBoolean(); // EnableGradientCompression
+
+        if (savedWorldSize != WorldSize)
+        {
+            throw new InvalidOperationException(
+                $"World size mismatch. Optimizer was saved with {savedWorldSize} processes, " +
+                $"but current configuration has {WorldSize} processes.");
+        }
+
+        if (savedRank != Rank)
+        {
+            throw new InvalidOperationException(
+                $"Rank mismatch. Optimizer was saved on rank {savedRank}, " +
+                $"but is being loaded on rank {Rank}. This could indicate a configuration error.");
+        }
+
+        if (savedNumMicroBatches != _numMicroBatches)
+        {
+            throw new InvalidOperationException(
+                $"Pipeline configuration mismatch. Optimizer was saved with {savedNumMicroBatches} micro-batches, " +
+                $"but current configuration has {_numMicroBatches} micro-batches.");
+        }
+
+        // Read wrapped optimizer
+        int optimizerDataLength = reader.ReadInt32();
+        byte[] optimizerData = reader.ReadBytes(optimizerDataLength);
+        WrappedOptimizer.Deserialize(optimizerData);
+    }
 }

@@ -192,4 +192,79 @@ public class GradientCompressionOptimizer<T, TInput, TOutput> : ShardedOptimizer
         // Delegate to wrapped optimizer
         // Optimizer state typically not compressed (infrequent communication)
     }
+
+    /// <inheritdoc/>
+    public override byte[] Serialize()
+    {
+        using var ms = new MemoryStream();
+        using var writer = new BinaryWriter(ms);
+
+        // Serialize compression-specific configuration
+        writer.Write(_compressionRatio);
+        writer.Write(_useQuantization);
+        writer.Write(_useSparsification);
+
+        // Serialize sharding configuration info
+        writer.Write(WorldSize);
+        writer.Write(Rank);
+        writer.Write(Config.AutoSyncGradients);
+        writer.Write(Config.MinimumParameterGroupSize);
+        writer.Write(Config.EnableGradientCompression);
+
+        // Serialize wrapped optimizer
+        var optimizerData = WrappedOptimizer.Serialize();
+        writer.Write(optimizerData.Length);
+        writer.Write(optimizerData);
+
+        return ms.ToArray();
+    }
+
+    /// <inheritdoc/>
+    public override void Deserialize(byte[] data)
+    {
+        using var ms = new MemoryStream(data);
+        using var reader = new BinaryReader(ms);
+
+        // Read compression-specific configuration
+        double savedCompressionRatio = reader.ReadDouble();
+        bool savedUseQuantization = reader.ReadBoolean();
+        bool savedUseSparsification = reader.ReadBoolean();
+
+        // Read sharding configuration (for validation)
+        int savedWorldSize = reader.ReadInt32();
+        int savedRank = reader.ReadInt32();
+        reader.ReadBoolean(); // AutoSyncGradients
+        reader.ReadInt32(); // MinimumParameterGroupSize
+        reader.ReadBoolean(); // EnableGradientCompression
+
+        if (savedWorldSize != WorldSize)
+        {
+            throw new InvalidOperationException(
+                $"World size mismatch. Optimizer was saved with {savedWorldSize} processes, " +
+                $"but current configuration has {WorldSize} processes.");
+        }
+
+        if (savedRank != Rank)
+        {
+            throw new InvalidOperationException(
+                $"Rank mismatch. Optimizer was saved on rank {savedRank}, " +
+                $"but is being loaded on rank {Rank}. This could indicate a configuration error.");
+        }
+
+        if (Math.Abs(savedCompressionRatio - _compressionRatio) > 1e-6 ||
+            savedUseQuantization != _useQuantization ||
+            savedUseSparsification != _useSparsification)
+        {
+            throw new InvalidOperationException(
+                $"Compression configuration mismatch. Optimizer was saved with compressionRatio={savedCompressionRatio}, " +
+                $"useQuantization={savedUseQuantization}, useSparsification={savedUseSparsification}, " +
+                $"but current configuration has compressionRatio={_compressionRatio}, " +
+                $"useQuantization={_useQuantization}, useSparsification={_useSparsification}.");
+        }
+
+        // Read wrapped optimizer
+        int optimizerDataLength = reader.ReadInt32();
+        byte[] optimizerData = reader.ReadBytes(optimizerDataLength);
+        WrappedOptimizer.Deserialize(optimizerData);
+    }
 }

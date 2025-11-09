@@ -253,7 +253,7 @@ public class FSDPModel<T, TInput, TOutput> : ShardedModelBase<T, TInput, TOutput
     }
 
     /// <inheritdoc/>
-    public Dictionary<string, T> GetFeatureImportance()
+    public override Dictionary<string, T> GetFeatureImportance()
     {
         return WrappedModel.GetFeatureImportance();
     }
@@ -266,19 +266,19 @@ public class FSDPModel<T, TInput, TOutput> : ShardedModelBase<T, TInput, TOutput
     }
 
     /// <inheritdoc/>
-    public IEnumerable<int> GetActiveFeatureIndices()
+    public override IEnumerable<int> GetActiveFeatureIndices()
     {
         return WrappedModel.GetActiveFeatureIndices();
     }
 
     /// <inheritdoc/>
-    public void SetActiveFeatureIndices(IEnumerable<int> featureIndices)
+    public override void SetActiveFeatureIndices(IEnumerable<int> featureIndices)
     {
         WrappedModel.SetActiveFeatureIndices(featureIndices);
     }
 
     /// <inheritdoc/>
-    public bool IsFeatureUsed(int featureIndex)
+    public override bool IsFeatureUsed(int featureIndex)
     {
         return WrappedModel.IsFeatureUsed(featureIndex);
     }
