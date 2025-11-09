@@ -263,12 +263,12 @@ public class InMemoryCommunicationBackend<T> : CommunicationBackendBase<T>
 
             _barrierCounters[barrierId]++;
 
+            var startTime = DateTime.UtcNow;
+
             try
             {
-                var startTime = DateTime.UtcNow;
-
                 // Wait until all processes have reached the barrier
-                while (_barrierCounters[barrierId] < _worldSize)
+                while (_barrierCounters.ContainsKey(barrierId) && _barrierCounters[barrierId] < _worldSize)
                 {
                     Monitor.Wait(_globalLock, 10);
                     if ((DateTime.UtcNow - startTime).TotalMilliseconds > BarrierTimeoutMs)
@@ -277,14 +277,21 @@ public class InMemoryCommunicationBackend<T> : CommunicationBackendBase<T>
                     }
                 }
 
+                // Cleanup happens AFTER all ranks pass the barrier check but BEFORE releasing the lock
+                // This ensures all ranks see the final counter value before it's removed
+                if (_rank == 0 && _barrierCounters.ContainsKey(barrierId))
+                {
+                    _barrierCounters.Remove(barrierId);
+                    _barrierGenerations[_environmentId]++;
+                }
+
                 Monitor.PulseAll(_globalLock);
             }
             finally
             {
-                // Cleanup - rank 0 removes key and increments generation for next barrier
-                // CRITICAL: This must happen even on timeout to prevent memory leaks
-                // If timeout occurs, this ensures the barrier counter is cleaned up
-                if (_rank == 0)
+                // Cleanup in finally for timeout case - ensures cleanup even on exception
+                // Check if cleanup already happened in normal flow
+                if (_rank == 0 && _barrierCounters.ContainsKey(barrierId))
                 {
                     _barrierCounters.Remove(barrierId);
                     _barrierGenerations[_environmentId]++;
@@ -348,12 +355,12 @@ public class InMemoryCommunicationBackend<T> : CommunicationBackendBase<T>
             // Contribute local data
             _sharedBuffers[bufferId].Add(data.Clone());
 
+            var startTime = DateTime.UtcNow;
+
             try
             {
-                var startTime = DateTime.UtcNow;
-
                 // Wait until all processes have contributed
-                while (_sharedBuffers[bufferId].Count < _worldSize)
+                while (_sharedBuffers.ContainsKey(bufferId) && _sharedBuffers[bufferId].Count < _worldSize)
                 {
                     Monitor.Wait(_globalLock, 10);
                     if ((DateTime.UtcNow - startTime).TotalMilliseconds > BarrierTimeoutMs)
@@ -363,24 +370,35 @@ public class InMemoryCommunicationBackend<T> : CommunicationBackendBase<T>
                 }
 
                 // Perform reduction
-                var allData = _sharedBuffers[bufferId];
-                var result = PerformReduction(allData, operation);
-
-                // Copy result back to input data
-                for (int i = 0; i < data.Length; i++)
+                if (_sharedBuffers.ContainsKey(bufferId))
                 {
-                    data[i] = result[i];
+                    var allData = _sharedBuffers[bufferId];
+                    var result = PerformReduction(allData, operation);
+
+                    // Copy result back to input data
+                    for (int i = 0; i < data.Length; i++)
+                    {
+                        data[i] = result[i];
+                    }
                 }
-            }
-            finally
-            {
+
+                // Cleanup happens AFTER all ranks pass the check but BEFORE releasing the lock
+                // This ensures all ranks see the final buffer state before it's removed
+                if (_rank == 0 && _sharedBuffers.ContainsKey(bufferId))
+                {
+                    _sharedBuffers.Remove(bufferId);
+                    _operationCounters[_environmentId]++;
+                }
+
                 // CRITICAL: PulseAll must happen even on timeout to wake other waiting processes
                 // Without this, a timeout in one process causes deadlock in others waiting at Monitor.Wait
                 Monitor.PulseAll(_globalLock);
-
-                // Cleanup - rank 0 removes key and increments counter for next operation
-                // This must happen even on timeout to prevent memory leaks
-                if (_rank == 0)
+            }
+            finally
+            {
+                // Cleanup in finally for timeout case - ensures cleanup even on exception
+                // Check if cleanup already happened in normal flow
+                if (_rank == 0 && _sharedBuffers.ContainsKey(bufferId))
                 {
                     _sharedBuffers.Remove(bufferId);
                     _operationCounters[_environmentId]++;
@@ -528,12 +546,12 @@ public class InMemoryCommunicationBackend<T> : CommunicationBackendBase<T>
                 _sharedBuffers[bufferId] = new List<Vector<T>> { data.Clone() };
             }
 
+            var startTime = DateTime.UtcNow;
+
             try
             {
-                var startTime = DateTime.UtcNow;
-
                 // Wait for root to store data
-                while (!_sharedBuffers.TryGetValue(bufferId, out buffer))
+                while (!_sharedBuffers.ContainsKey(bufferId))
                 {
                     Monitor.Wait(_globalLock, 10);
                     if ((DateTime.UtcNow - startTime).TotalMilliseconds > BarrierTimeoutMs)
@@ -542,26 +560,42 @@ public class InMemoryCommunicationBackend<T> : CommunicationBackendBase<T>
                     }
                 }
 
-                // Guard against null (should never happen after successful TryGetValue)
-                if (buffer == null || buffer.Count == 0)
+                // Retrieve the broadcasted data
+                if (_sharedBuffers.ContainsKey(bufferId))
                 {
-                    throw new InvalidOperationException("Broadcast buffer is null or empty after synchronization.");
+                    buffer = _sharedBuffers[bufferId];
+                    if (buffer != null && buffer.Count > 0)
+                    {
+                        result = buffer[0].Clone();
+                    }
+                    else
+                    {
+                        throw new InvalidOperationException("Broadcast buffer is null or empty after synchronization.");
+                    }
+                }
+                else
+                {
+                    throw new InvalidOperationException("Broadcast buffer was removed before data could be retrieved.");
                 }
 
-                // All processes retrieve the data
-                result = buffer[0].Clone();
+                // Cleanup happens AFTER all ranks retrieve data but BEFORE releasing lock
+                // CRITICAL: Root rank (not hardcoded rank 0) must clean up
+                if (_rank == root && _sharedBuffers.ContainsKey(bufferId))
+                {
+                    _sharedBuffers.Remove(bufferId);
+                    _operationCounters[_environmentId]++;
+                }
+
+                // CRITICAL: PulseAll must happen even on timeout to wake other waiting processes
+                Monitor.PulseAll(_globalLock);
 
                 return result;
             }
             finally
             {
-                // CRITICAL: PulseAll must happen even on timeout to wake other waiting processes
-                // Without this, a timeout in one process causes deadlock in others waiting at Monitor.Wait
-                Monitor.PulseAll(_globalLock);
-
-                // Cleanup - rank 0 removes key and increments counter for next operation
-                // This must happen even on timeout to prevent memory leaks
-                if (_rank == 0)
+                // Cleanup in finally for timeout case - ensures cleanup even on exception
+                // CRITICAL: Root rank (not hardcoded rank 0) must clean up
+                if (_rank == root && _sharedBuffers.ContainsKey(bufferId))
                 {
                     _sharedBuffers.Remove(bufferId);
                     _operationCounters[_environmentId]++;
@@ -620,13 +654,12 @@ public class InMemoryCommunicationBackend<T> : CommunicationBackendBase<T>
             }
 
             List<Vector<T>>? buffer;
+            var startTime = DateTime.UtcNow;
 
             try
             {
-                var startTime = DateTime.UtcNow;
-
                 // Wait for root to split data
-                while (!_sharedBuffers.TryGetValue(bufferId, out buffer))
+                while (!_sharedBuffers.ContainsKey(bufferId))
                 {
                     Monitor.Wait(_globalLock, 10);
                     if ((DateTime.UtcNow - startTime).TotalMilliseconds > BarrierTimeoutMs)
@@ -635,26 +668,39 @@ public class InMemoryCommunicationBackend<T> : CommunicationBackendBase<T>
                     }
                 }
 
-                // Guard against null (should never happen after successful TryGetValue)
-                if (buffer == null || buffer.Count <= _rank)
+                // Retrieve scattered chunk
+                if (_sharedBuffers.ContainsKey(bufferId))
                 {
-                    throw new InvalidOperationException($"Scatter buffer is null or missing data for rank {_rank} after synchronization.");
+                    buffer = _sharedBuffers[bufferId];
+                    if (buffer == null || buffer.Count <= _rank)
+                    {
+                        throw new InvalidOperationException($"Scatter buffer is null or missing data for rank {_rank} after synchronization.");
+                    }
+                    var result = buffer[_rank].Clone();
+
+                    // Cleanup happens AFTER all ranks retrieve data but BEFORE releasing lock
+                    // CRITICAL: Root rank (not hardcoded rank 0) must clean up
+                    if (_rank == root && _sharedBuffers.ContainsKey(bufferId))
+                    {
+                        _sharedBuffers.Remove(bufferId);
+                        _operationCounters[_environmentId]++;
+                    }
+
+                    // CRITICAL: PulseAll must happen even on timeout to wake other waiting processes
+                    Monitor.PulseAll(_globalLock);
+
+                    return result;
                 }
-
-                // Each process retrieves its chunk
-                var result = buffer[_rank].Clone();
-
-                return result;
+                else
+                {
+                    throw new InvalidOperationException("Scatter buffer was removed before data could be retrieved.");
+                }
             }
             finally
             {
-                // CRITICAL: PulseAll must happen even on timeout to wake other waiting processes
-                // Without this, a timeout in one process causes deadlock in others waiting at Monitor.Wait
-                Monitor.PulseAll(_globalLock);
-
-                // Cleanup - rank 0 removes key and increments counter for next operation
-                // This must happen even on timeout to prevent memory leaks
-                if (_rank == 0)
+                // Cleanup in finally for timeout case - ensures cleanup even on exception
+                // CRITICAL: Root rank (not hardcoded rank 0) must clean up
+                if (_rank == root && _sharedBuffers.ContainsKey(bufferId))
                 {
                     _sharedBuffers.Remove(bufferId);
                     _operationCounters[_environmentId]++;
