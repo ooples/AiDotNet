@@ -164,12 +164,24 @@ public class DataPoint<T, TInput, TOutput>
 /// </summary>
 public static class DatasetExtensions
 {
+    /// <summary>
+    /// Converts a dataset to an enumerable of DataPoint objects.
+    /// </summary>
+    /// <param name="dataset">The dataset to convert.</param>
+    /// <param name="taskId">Optional task ID to assign to all data points (default: 0).</param>
+    /// <returns>Enumerable of DataPoint objects containing inputs, outputs, and task IDs.</returns>
     public static IEnumerable<DataPoint<T, TInput, TOutput>> GetAllDataPoints<T, TInput, TOutput>(
-        this IDataset<T, TInput, TOutput> dataset)
+        this IDataset<T, TInput, TOutput> dataset,
+        int taskId = 0)
     {
-        // This is a placeholder - actual implementation depends on IDataset interface
-        // For now, we'll return an empty enumerable
-        // In practice, this should iterate through the dataset and yield DataPoint objects
-        yield break;
+        if (dataset == null)
+            throw new ArgumentNullException(nameof(dataset));
+
+        for (int i = 0; i < dataset.Count; i++)
+        {
+            var input = dataset.GetInput(i);
+            var output = dataset.GetOutput(i);
+            yield return new DataPoint<T, TInput, TOutput>(input, output, taskId);
+        }
     }
 }
