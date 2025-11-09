@@ -4,6 +4,7 @@ using System.Net;
 using System.Net.Sockets;
 using System.Collections.Generic;
 using System.Threading;
+using System.IO;
 using AiDotNet.LinearAlgebra;
 
 namespace AiDotNet.DistributedTraining;
@@ -78,56 +79,192 @@ public class GlooCommunicationBackend<T> : CommunicationBackendBase<T>
     /// <inheritdoc/>
     protected override void OnInitialize()
     {
-        // Try to check for Gloo library via reflection
+        _tcpConnections = new Dictionary<int, TcpClient>();
+
+        // Single-process mode: No communication infrastructure needed
+        if (_worldSize == 1)
+        {
+            _useNativeTCP = false;
+            Console.WriteLine("GlooCommunicationBackend: Single-process mode (worldSize=1).");
+            return;
+        }
+
+        // Multi-process mode: Try Gloo library first, fallback to TCP
+        bool glooAvailable = false;
         try
         {
             var glooType = Type.GetType("Gloo.Context, GlooSharp");
             if (glooType != null)
             {
-                Console.WriteLine("Gloo library detected. Using native Gloo for communication.");
+                glooAvailable = true;
                 _useNativeTCP = false;
+                Console.WriteLine($"GlooCommunicationBackend: Gloo library detected for {_worldSize} processes.");
 
-                // Note: Full Gloo initialization would require:
-                // 1. Creating transport device (TCP or ibverbs)
-                // 2. Creating rendezvous store
-                // 3. Connecting full mesh between all ranks
-                // This requires additional infrastructure
+                // TODO: Full Gloo initialization requires:
+                // 1. Creating transport device (TCP or ibverbs): device = new TcpDevice()
+                // 2. Creating rendezvous store: store = new FileStore() or RedisStore()
+                // 3. Creating Gloo context: context = new Context(rank, size)
+                // 4. Connecting to all other ranks via rendezvous
 
-                Console.WriteLine("WARNING: Native Gloo initialization requires additional setup.");
-                Console.WriteLine("Falling back to TCP-based collective operations.");
-                _useNativeTCP = true;
-            }
-            else
-            {
-                _useNativeTCP = true;
+                throw new NotImplementedException(
+                    "GlooCommunicationBackend with Gloo library support is not yet fully implemented.\n\n" +
+                    "Full Gloo initialization requires:\n" +
+                    "- GlooSharp P/Invoke bindings for Gloo C++ library\n" +
+                    "- Rendezvous infrastructure (file-based or Redis)\n" +
+                    "- Transport device configuration (TCP or InfiniBand)\n\n" +
+                    "Using TCP fallback instead.");
             }
         }
-        catch (Exception ex)
+        catch (TypeLoadException)
         {
-            Console.WriteLine($"Gloo library not available: {ex.Message}");
+            glooAvailable = false;
+        }
+
+        // Fallback to native TCP implementation
+        if (!glooAvailable)
+        {
             _useNativeTCP = true;
+            Console.WriteLine($"GlooCommunicationBackend: Using TCP fallback for {_worldSize} processes.");
+            InitializeTCPConnections();
         }
+    }
 
-        if (_useNativeTCP)
+    /// <summary>
+    /// Initializes TCP connections between all ranks.
+    /// </summary>
+    /// <remarks>
+    /// Uses environment variables for rendezvous:
+    /// - AIDOTNET_MASTER_ADDR: IP address of rank 0
+    /// - AIDOTNET_MASTER_PORT: Base port for rank 0
+    /// Each rank listens on MASTER_PORT + rank
+    /// </remarks>
+    private void InitializeTCPConnections()
+    {
+        string? masterAddr = Environment.GetEnvironmentVariable("AIDOTNET_MASTER_ADDR");
+        string? masterPortStr = Environment.GetEnvironmentVariable("AIDOTNET_MASTER_PORT");
+
+        if (string.IsNullOrEmpty(masterAddr) || string.IsNullOrEmpty(masterPortStr))
         {
-            Console.WriteLine("Using production-ready TCP-based collective operations with ring algorithm.");
-            Console.WriteLine("This provides full functionality without external dependencies.");
+            throw new InvalidOperationException(
+                "GlooCommunicationBackend TCP mode requires environment variables:\n" +
+                "- AIDOTNET_MASTER_ADDR: IP address of rank 0 (e.g., 192.168.1.10 or localhost)\n" +
+                "- AIDOTNET_MASTER_PORT: Base port number (e.g., 29500)\n" +
+                "Each rank will use port = MASTER_PORT + rank");
+        }
 
-            // For true multi-process TCP communication, you would initialize TCP connections here
-            // Initialize empty dictionary (actual TCP setup requires host addresses/ports)
-            _tcpConnections = new Dictionary<int, TcpClient>();
+        if (!int.TryParse(masterPortStr, out int basePort))
+        {
+            throw new InvalidOperationException($"Invalid AIDOTNET_MASTER_PORT: {masterPortStr}");
+        }
 
-            // For single-process mode, we skip TCP setup
-            if (_worldSize == 1)
+        // Start TCP listener on this rank's port
+        int myPort = basePort + _rank;
+        _tcpListener = new TcpListener(IPAddress.Any, myPort);
+        _tcpListener.Start();
+        Console.WriteLine($"Rank {_rank}: TCP listener started on port {myPort}");
+
+        // Connect to all ranks with lower rank numbers (they are already listening)
+        for (int otherRank = 0; otherRank < _rank; otherRank++)
+        {
+            ConnectToRank(otherRank, masterAddr, basePort);
+        }
+
+        // Accept connections from all ranks with higher rank numbers
+        for (int otherRank = _rank + 1; otherRank < _worldSize; otherRank++)
+        {
+            AcceptConnectionFromRank(otherRank);
+        }
+
+        Console.WriteLine($"Rank {_rank}: All TCP connections established ({_tcpConnections?.Count ?? 0} peers)");
+    }
+
+    /// <summary>
+    /// Connects to a specific rank (active connection).
+    /// </summary>
+    private void ConnectToRank(int targetRank, string masterAddr, int basePort)
+    {
+        int targetPort = basePort + targetRank;
+        int maxRetries = 10;
+        int retryDelayMs = 1000;
+
+        for (int attempt = 0; attempt < maxRetries; attempt++)
+        {
+            try
             {
-                Console.WriteLine("Single-process mode: TCP communication not required.");
+                var client = new TcpClient();
+                client.Connect(masterAddr, targetPort);
+
+                // Send handshake: my rank
+                using (var stream = client.GetStream())
+                using (var writer = new BinaryWriter(stream))
+                {
+                    writer.Write(_rank);
+                    writer.Flush();
+                }
+
+                lock (_connectionLock)
+                {
+                    if (_tcpConnections != null)
+                    {
+                        _tcpConnections[targetRank] = client;
+                    }
+                }
+
+                Console.WriteLine($"Rank {_rank}: Connected to rank {targetRank} at {masterAddr}:{targetPort}");
+                return;
             }
-            else
+            catch (SocketException)
             {
-                Console.WriteLine("Multi-process TCP mode requires network configuration (host addresses, ports).");
-                Console.WriteLine("Currently operating in single-process fallback mode.");
+                if (attempt < maxRetries - 1)
+                {
+                    Thread.Sleep(retryDelayMs);
+                }
+                else
+                {
+                    throw new InvalidOperationException(
+                        $"Rank {_rank}: Failed to connect to rank {targetRank} at {masterAddr}:{targetPort} after {maxRetries} attempts");
+                }
             }
         }
+    }
+
+    /// <summary>
+    /// Accepts connection from a specific rank (passive connection).
+    /// </summary>
+    private void AcceptConnectionFromRank(int expectedRank)
+    {
+        if (_tcpListener == null)
+        {
+            throw new InvalidOperationException("TCP listener not initialized");
+        }
+
+        // Accept incoming connection
+        var client = _tcpListener.AcceptTcpClient();
+
+        // Read handshake to verify rank
+        int receivedRank;
+        using (var stream = client.GetStream())
+        using (var reader = new BinaryReader(stream))
+        {
+            receivedRank = reader.ReadInt32();
+        }
+
+        if (receivedRank != expectedRank)
+        {
+            client.Close();
+            throw new InvalidOperationException(
+                $"Rank {_rank}: Expected connection from rank {expectedRank}, but received from rank {receivedRank}");
+        }
+
+        lock (_connectionLock)
+        {
+            if (_tcpConnections != null)
+            {
+                _tcpConnections[receivedRank] = client;
+            }
+        }
+
+        Console.WriteLine($"Rank {_rank}: Accepted connection from rank {receivedRank}");
     }
 
     /// <inheritdoc/>
@@ -177,8 +314,32 @@ public class GlooCommunicationBackend<T> : CommunicationBackendBase<T>
             return;
         }
 
-        // For multi-process, would implement TCP-based barrier
-        // In single-process mode, this is a no-op
+        if (!_useNativeTCP)
+        {
+            throw new InvalidOperationException("Barrier requires TCP mode to be initialized");
+        }
+
+        // Simple all-to-all barrier implementation
+        // Each rank sends a signal to all other ranks and waits for signals from all
+        var signal = new[] { NumOps.One };
+
+        // Send signal to all other ranks
+        for (int otherRank = 0; otherRank < _worldSize; otherRank++)
+        {
+            if (otherRank != _rank)
+            {
+                SendData(otherRank, signal);
+            }
+        }
+
+        // Receive signal from all other ranks
+        for (int otherRank = 0; otherRank < _worldSize; otherRank++)
+        {
+            if (otherRank != _rank)
+            {
+                ReceiveData(otherRank, 1);
+            }
+        }
     }
 
     /// <inheritdoc/>
@@ -189,18 +350,15 @@ public class GlooCommunicationBackend<T> : CommunicationBackendBase<T>
 
         if (_worldSize == 1)
         {
-            // Single-process: data already contains the result
-            if (operation == ReductionOperation.Average)
-            {
-                // Already averaged (only one value)
-            }
+            // Single-process: data already contains the result (no-op)
             return;
         }
 
-        // For multi-process, would implement ring-based AllReduce
-        // Ring AllReduce algorithm:
-        // 1. ReduceScatter phase: Each rank sends/receives chunks in a ring pattern
-        // 2. AllGather phase: Gather the reduced results
+        if (!_useNativeTCP)
+        {
+            throw new InvalidOperationException("AllReduce requires TCP mode to be initialized");
+        }
+
         PerformRingAllReduce(data, operation);
     }
 
@@ -212,11 +370,14 @@ public class GlooCommunicationBackend<T> : CommunicationBackendBase<T>
 
         if (_worldSize == 1)
         {
-            // Single-process: return a copy
             return sendData.Clone();
         }
 
-        // For multi-process, would implement ring-based AllGather
+        if (!_useNativeTCP)
+        {
+            throw new InvalidOperationException("AllGather requires TCP mode to be initialized");
+        }
+
         return PerformRingAllGather(sendData);
     }
 
@@ -229,11 +390,14 @@ public class GlooCommunicationBackend<T> : CommunicationBackendBase<T>
 
         if (_worldSize == 1)
         {
-            // Single-process: return a copy
             return data.Clone();
         }
 
-        // For multi-process, would implement tree-based broadcast
+        if (!_useNativeTCP)
+        {
+            throw new InvalidOperationException("Broadcast requires TCP mode to be initialized");
+        }
+
         return PerformTreeBroadcast(data, root);
     }
 
@@ -253,7 +417,11 @@ public class GlooCommunicationBackend<T> : CommunicationBackendBase<T>
             return new Vector<T>(Array.Empty<T>());
         }
 
-        // For multi-process, would implement tree-based scatter
+        if (!_useNativeTCP)
+        {
+            throw new InvalidOperationException("Scatter requires TCP mode to be initialized");
+        }
+
         return PerformTreeScatter(sendData, root);
     }
 
@@ -271,11 +439,14 @@ public class GlooCommunicationBackend<T> : CommunicationBackendBase<T>
 
         if (_worldSize == 1)
         {
-            // Single-process: return a copy
             return data.Clone();
         }
 
-        // For multi-process, would implement ring-based reduce-scatter
+        if (!_useNativeTCP)
+        {
+            throw new InvalidOperationException("ReduceScatter requires TCP mode to be initialized");
+        }
+
         return PerformRingReduceScatter(data, operation);
     }
 
@@ -301,18 +472,92 @@ public class GlooCommunicationBackend<T> : CommunicationBackendBase<T>
             return;
         }
 
-        // In single-process simulation, we can't actually communicate
-        // In production with TCP, this would:
-        // 1. Divide data into _worldSize chunks
-        // 2. For each of (_worldSize - 1) iterations:
-        //    - Send chunk[i] to next rank
-        //    - Receive chunk from previous rank
-        //    - Reduce received chunk with local chunk
-        // 3. For each of (_worldSize - 1) iterations:
-        //    - Send reduced chunk to next rank
-        //    - Receive reduced chunk from previous rank
+        int chunkSize = (data.Length + _worldSize - 1) / _worldSize; // Ceiling division
+        int nextRank = (_rank + 1) % _worldSize;
+        int prevRank = (_rank - 1 + _worldSize) % _worldSize;
 
-        // For single-process mode, data is already the result
+        var dataArray = data.ToArray();
+
+        // Phase 1: ReduceScatter - reduce chunks in ring pattern
+        for (int step = 0; step < _worldSize - 1; step++)
+        {
+            int sendChunkIdx = (_rank - step + _worldSize) % _worldSize;
+            int recvChunkIdx = (_rank - step - 1 + _worldSize) % _worldSize;
+
+            int sendStart = sendChunkIdx * chunkSize;
+            int sendCount = Math.Min(chunkSize, data.Length - sendStart);
+            int recvStart = recvChunkIdx * chunkSize;
+            int recvCount = Math.Min(chunkSize, data.Length - recvStart);
+
+            // Extract send chunk
+            var sendChunk = new T[sendCount];
+            Array.Copy(dataArray, sendStart, sendChunk, 0, sendCount);
+
+            // Send and receive simultaneously
+            var sendTask = System.Threading.Tasks.Task.Run(() => SendData(nextRank, sendChunk));
+            var recvChunk = ReceiveData(prevRank, recvCount);
+            sendTask.Wait();
+
+            // Reduce received chunk with local chunk
+            for (int i = 0; i < recvCount; i++)
+            {
+                dataArray[recvStart + i] = PerformReduction(dataArray[recvStart + i], recvChunk[i], operation);
+            }
+        }
+
+        // Phase 2: AllGather - distribute reduced chunks in ring pattern
+        for (int step = 0; step < _worldSize - 1; step++)
+        {
+            int sendChunkIdx = (_rank - step + 1 + _worldSize) % _worldSize;
+            int recvChunkIdx = (_rank - step + _worldSize) % _worldSize;
+
+            int sendStart = sendChunkIdx * chunkSize;
+            int sendCount = Math.Min(chunkSize, data.Length - sendStart);
+            int recvStart = recvChunkIdx * chunkSize;
+            int recvCount = Math.Min(chunkSize, data.Length - recvStart);
+
+            // Extract send chunk
+            var sendChunk = new T[sendCount];
+            Array.Copy(dataArray, sendStart, sendChunk, 0, sendCount);
+
+            // Send and receive simultaneously
+            var sendTask = System.Threading.Tasks.Task.Run(() => SendData(nextRank, sendChunk));
+            var recvChunk = ReceiveData(prevRank, recvCount);
+            sendTask.Wait();
+
+            // Copy received chunk to local data
+            Array.Copy(recvChunk, 0, dataArray, recvStart, recvCount);
+        }
+
+        // Apply averaging if needed (after all reductions complete)
+        if (operation == ReductionOperation.Average)
+        {
+            for (int i = 0; i < dataArray.Length; i++)
+            {
+                dataArray[i] = NumOps.Divide(dataArray[i], NumOps.FromDouble(_worldSize));
+            }
+        }
+
+        // Update original vector with reduced data
+        for (int i = 0; i < dataArray.Length; i++)
+        {
+            data[i] = dataArray[i];
+        }
+    }
+
+    /// <summary>
+    /// Performs a reduction operation on two values.
+    /// </summary>
+    private T PerformReduction(T a, T b, ReductionOperation operation)
+    {
+        return operation switch
+        {
+            ReductionOperation.Sum or ReductionOperation.Average => NumOps.Add(a, b),
+            ReductionOperation.Max => NumOps.GreaterThan(a, b) ? a : b,
+            ReductionOperation.Min => NumOps.LessThan(a, b) ? a : b,
+            ReductionOperation.Product => NumOps.Multiply(a, b),
+            _ => throw new ArgumentException($"Unsupported reduction operation: {operation}")
+        };
     }
 
     /// <summary>
@@ -325,9 +570,36 @@ public class GlooCommunicationBackend<T> : CommunicationBackendBase<T>
             return sendData.Clone();
         }
 
-        // In production, this would perform ring-based AllGather
-        // For single-process mode, return copy
-        return sendData.Clone();
+        int chunkSize = sendData.Length;
+        int nextRank = (_rank + 1) % _worldSize;
+        int prevRank = (_rank - 1 + _worldSize) % _worldSize;
+
+        // Result buffer to hold data from all ranks
+        var result = new T[chunkSize * _worldSize];
+
+        // Copy local data to result buffer
+        Array.Copy(sendData.ToArray(), 0, result, _rank * chunkSize, chunkSize);
+
+        // Ring AllGather: each rank receives chunk from previous rank and forwards it
+        for (int step = 0; step < _worldSize - 1; step++)
+        {
+            int sendChunkIdx = (_rank - step + _worldSize) % _worldSize;
+            int recvChunkIdx = (_rank - step - 1 + _worldSize) % _worldSize;
+
+            // Extract send chunk from result buffer
+            var sendChunk = new T[chunkSize];
+            Array.Copy(result, sendChunkIdx * chunkSize, sendChunk, 0, chunkSize);
+
+            // Send and receive simultaneously
+            var sendTask = System.Threading.Tasks.Task.Run(() => SendData(nextRank, sendChunk));
+            var recvChunk = ReceiveData(prevRank, chunkSize);
+            sendTask.Wait();
+
+            // Copy received chunk to result buffer
+            Array.Copy(recvChunk, 0, result, recvChunkIdx * chunkSize, chunkSize);
+        }
+
+        return new Vector<T>(result);
     }
 
     /// <summary>
@@ -344,9 +616,36 @@ public class GlooCommunicationBackend<T> : CommunicationBackendBase<T>
             return data.Clone();
         }
 
-        // In production, this would use a binary tree broadcast pattern
-        // For single-process mode, return copy
-        return data.Clone();
+        var dataArray = data.ToArray();
+
+        // Adjust ranks relative to root for binary tree calculation
+        int relativeRank = (_rank - root + _worldSize) % _worldSize;
+
+        // If not root, receive data from parent
+        if (relativeRank != 0)
+        {
+            int parentRelative = (relativeRank - 1) / 2;
+            int parentAbsolute = (parentRelative + root) % _worldSize;
+            dataArray = ReceiveData(parentAbsolute, data.Length);
+        }
+
+        // Send data to children in binary tree
+        int leftChildRelative = 2 * relativeRank + 1;
+        int rightChildRelative = 2 * relativeRank + 2;
+
+        if (leftChildRelative < _worldSize)
+        {
+            int leftChildAbsolute = (leftChildRelative + root) % _worldSize;
+            SendData(leftChildAbsolute, dataArray);
+        }
+
+        if (rightChildRelative < _worldSize)
+        {
+            int rightChildAbsolute = (rightChildRelative + root) % _worldSize;
+            SendData(rightChildAbsolute, dataArray);
+        }
+
+        return new Vector<T>(dataArray);
     }
 
     /// <summary>
@@ -354,6 +653,19 @@ public class GlooCommunicationBackend<T> : CommunicationBackendBase<T>
     /// </summary>
     private Vector<T> PerformTreeScatter(Vector<T> sendData, int root)
     {
+        if (_worldSize == 1)
+        {
+            if (Rank == root)
+            {
+                ValidateData(sendData, nameof(sendData));
+                return sendData.Clone();
+            }
+            return new Vector<T>(Array.Empty<T>());
+        }
+
+        int chunkSize;
+        T[]? myChunk = null;
+
         if (Rank == root)
         {
             ValidateData(sendData, nameof(sendData));
@@ -364,19 +676,57 @@ public class GlooCommunicationBackend<T> : CommunicationBackendBase<T>
                     $"Data length {sendData.Length} must be divisible by world size {_worldSize}.");
             }
 
-            if (_worldSize == 1)
-            {
-                return sendData.Clone();
-            }
+            chunkSize = sendData.Length / _worldSize;
+            var dataArray = sendData.ToArray();
 
-            // In single-process mode, return the chunk for this rank
-            int chunkSize = sendData.Length / _worldSize;
-            var chunk = new T[chunkSize];
-            Array.Copy(sendData.ToArray(), Rank * chunkSize, chunk, 0, chunkSize);
-            return new Vector<T>(chunk);
+            // Root keeps its own chunk
+            myChunk = new T[chunkSize];
+            Array.Copy(dataArray, root * chunkSize, myChunk, 0, chunkSize);
+
+            // Send chunks to other ranks using binary tree pattern
+            ScatterTreeSend(dataArray, chunkSize, root, 0, _worldSize);
+        }
+        else
+        {
+            // Non-root ranks receive their chunk
+            int relativeRank = (_rank - root + _worldSize) % _worldSize;
+            int parentRelative = (relativeRank - 1) / 2;
+            int parentAbsolute = (parentRelative + root) % _worldSize;
+
+            // Receive chunk count first, then data
+            chunkSize = ReceiveData(parentAbsolute, 1)[0] != null ?
+                        Convert.ToInt32(ReceiveData(parentAbsolute, 1)[0]) : 0;
+            myChunk = ReceiveData(parentAbsolute, chunkSize);
         }
 
-        return new Vector<T>(Array.Empty<T>());
+        return new Vector<T>(myChunk ?? Array.Empty<T>());
+    }
+
+    /// <summary>
+    /// Recursive helper for tree-based scatter send.
+    /// </summary>
+    private void ScatterTreeSend(T[] allData, int chunkSize, int root, int treeRank, int treeSize)
+    {
+        int leftChildRelative = 2 * treeRank + 1;
+        int rightChildRelative = 2 * treeRank + 2;
+
+        if (leftChildRelative < treeSize)
+        {
+            int leftChildAbsolute = (leftChildRelative + root) % _worldSize;
+            var leftChunk = new T[chunkSize];
+            Array.Copy(allData, leftChildAbsolute * chunkSize, leftChunk, 0, chunkSize);
+            SendData(leftChildAbsolute, new[] { (T)Convert.ChangeType(chunkSize, typeof(T)) });
+            SendData(leftChildAbsolute, leftChunk);
+        }
+
+        if (rightChildRelative < treeSize)
+        {
+            int rightChildAbsolute = (rightChildRelative + root) % _worldSize;
+            var rightChunk = new T[chunkSize];
+            Array.Copy(allData, rightChildAbsolute * chunkSize, rightChunk, 0, chunkSize);
+            SendData(rightChildAbsolute, new[] { (T)Convert.ChangeType(chunkSize, typeof(T)) });
+            SendData(rightChildAbsolute, rightChunk);
+        }
     }
 
     /// <summary>
@@ -393,31 +743,58 @@ public class GlooCommunicationBackend<T> : CommunicationBackendBase<T>
             return data.Clone();
         }
 
-        // In production, this would perform ring-based reduce-scatter
-        // For single-process mode, return appropriate chunk
         int chunkSize = data.Length / _worldSize;
-        var chunk = new T[chunkSize];
-        Array.Copy(data.ToArray(), Rank * chunkSize, chunk, 0, chunkSize);
+        int nextRank = (_rank + 1) % _worldSize;
+        int prevRank = (_rank - 1 + _worldSize) % _worldSize;
+
+        var dataArray = data.ToArray();
+
+        // ReduceScatter phase: reduce chunks in ring pattern
+        for (int step = 0; step < _worldSize - 1; step++)
+        {
+            int sendChunkIdx = (_rank - step + _worldSize) % _worldSize;
+            int recvChunkIdx = (_rank - step - 1 + _worldSize) % _worldSize;
+
+            int sendStart = sendChunkIdx * chunkSize;
+            int sendCount = Math.Min(chunkSize, data.Length - sendStart);
+            int recvStart = recvChunkIdx * chunkSize;
+            int recvCount = Math.Min(chunkSize, data.Length - recvStart);
+
+            // Extract send chunk
+            var sendChunk = new T[sendCount];
+            Array.Copy(dataArray, sendStart, sendChunk, 0, sendCount);
+
+            // Send and receive simultaneously
+            var sendTask = System.Threading.Tasks.Task.Run(() => SendData(nextRank, sendChunk));
+            var recvChunk = ReceiveData(prevRank, recvCount);
+            sendTask.Wait();
+
+            // Reduce received chunk with local chunk
+            for (int i = 0; i < recvCount; i++)
+            {
+                dataArray[recvStart + i] = PerformReduction(dataArray[recvStart + i], recvChunk[i], operation);
+            }
+        }
+
+        // Extract this rank's reduced chunk
+        var myChunk = new T[chunkSize];
+        Array.Copy(dataArray, _rank * chunkSize, myChunk, 0, chunkSize);
 
         // Apply averaging if needed
         if (operation == ReductionOperation.Average)
         {
-            for (int i = 0; i < chunk.Length; i++)
+            for (int i = 0; i < myChunk.Length; i++)
             {
-                chunk[i] = NumOps.Divide(chunk[i], NumOps.FromDouble(_worldSize));
+                myChunk[i] = NumOps.Divide(myChunk[i], NumOps.FromDouble(_worldSize));
             }
         }
 
-        return new Vector<T>(chunk);
+        return new Vector<T>(myChunk);
     }
 
     /// <summary>
     /// Sends data to a specific rank via TCP.
     /// </summary>
-    /// <remarks>
-    /// This would be used in a full multi-process TCP implementation.
-    /// Requires TCP connections to be established during initialization.
-    /// </remarks>
     private void SendData(int destRank, T[] data)
     {
         if (_tcpConnections == null || !_tcpConnections.ContainsKey(destRank))
@@ -425,17 +802,29 @@ public class GlooCommunicationBackend<T> : CommunicationBackendBase<T>
             throw new InvalidOperationException($"No TCP connection to rank {destRank}");
         }
 
-        // In production, serialize and send data via TCP
-        // Implementation would use NetworkStream.Write with proper serialization
+        lock (_connectionLock)
+        {
+            var client = _tcpConnections[destRank];
+            using (var stream = client.GetStream())
+            using (var writer = new BinaryWriter(stream))
+            {
+                // Send length header
+                writer.Write(data.Length);
+
+                // Send data elements
+                foreach (var element in data)
+                {
+                    double value = Convert.ToDouble(element);
+                    writer.Write(value);
+                }
+                writer.Flush();
+            }
+        }
     }
 
     /// <summary>
     /// Receives data from a specific rank via TCP.
     /// </summary>
-    /// <remarks>
-    /// This would be used in a full multi-process TCP implementation.
-    /// Requires TCP connections to be established during initialization.
-    /// </remarks>
     private T[] ReceiveData(int sourceRank, int expectedLength)
     {
         if (_tcpConnections == null || !_tcpConnections.ContainsKey(sourceRank))
@@ -443,8 +832,29 @@ public class GlooCommunicationBackend<T> : CommunicationBackendBase<T>
             throw new InvalidOperationException($"No TCP connection to rank {sourceRank}");
         }
 
-        // In production, receive and deserialize data via TCP
-        // Implementation would use NetworkStream.Read with proper deserialization
-        return new T[expectedLength];
+        lock (_connectionLock)
+        {
+            var client = _tcpConnections[sourceRank];
+            using (var stream = client.GetStream())
+            using (var reader = new BinaryReader(stream))
+            {
+                // Read length header
+                int length = reader.ReadInt32();
+                if (length != expectedLength)
+                {
+                    throw new InvalidOperationException(
+                        $"Rank {_rank}: Expected {expectedLength} elements from rank {sourceRank}, but received {length}");
+                }
+
+                // Read data elements
+                var result = new T[length];
+                for (int i = 0; i < length; i++)
+                {
+                    double value = reader.ReadDouble();
+                    result[i] = (T)Convert.ChangeType(value, typeof(T));
+                }
+                return result;
+            }
+        }
     }
 }
