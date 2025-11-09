@@ -48,8 +48,18 @@ public class InMemoryCommunicationBackend<T> : CommunicationBackendBase<T>
     private bool _isInitialized;
 
     // Shared state for simulating collective operations
-    // Environment-isolated: Each environment (e.g., test, training session) has separate state
-    // In a real implementation, this would be handled by the MPI backend
+    //
+    // IMPORTANT: While these dictionaries are static (shared across all InMemoryCommunicationBackend instances),
+    // they are NAMESPACED by _environmentId to enable concurrent, independent distributed training sessions
+    // within the same process. Each session uses a unique _environmentId prefix in all dictionary keys
+    // (e.g., "{environmentId}_allreduce_{counter}", "{environmentId}_barrier_{generation}").
+    //
+    // This design allows:
+    // - Multiple unit tests running in parallel without interference
+    // - Multiple concurrent training sessions with isolated communication
+    // - Clean separation between different distributed training contexts
+    //
+    // In a real implementation, this would be handled by the MPI backend's process isolation.
     private static readonly object _globalLock = new object();
     private static readonly Dictionary<string, List<Vector<T>>> _sharedBuffers = new();
     private static readonly Dictionary<string, int> _barrierCounters = new();
@@ -685,8 +695,11 @@ public class InMemoryCommunicationBackend<T> : CommunicationBackendBase<T>
             }
 
             // Apply averaging if needed
-            // Average operation: sum all vectors then divide by count
+            // Average operation: First accumulates using Sum (lines 682-685),
+            // then divides by the count of vectors to compute the mean.
             // This is mathematically correct: (v0 + v1 + ... + vn-1) / n
+            // The accumulation uses Sum logic (addition) followed by division,
+            // which is the standard and efficient way to compute an average.
             if (operation == ReductionOperation.Average)
             {
                 var count = NumOps.FromDouble(vectors.Count);
