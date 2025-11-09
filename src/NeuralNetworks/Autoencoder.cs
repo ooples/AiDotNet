@@ -134,7 +134,7 @@ public class Autoencoder<T> : NeuralNetworkBase<T>, IAuxiliaryLossLayer<T>
     /// Target sparsity parameter (desired average activation level).
     /// Default is 0.05 (5% of neurons should be active on average).
     /// </summary>
-    private T _sparsityParameter = NumOps.FromDouble(0.05);
+    private T _sparsityParameter = default(T);
 
     /// <summary>
     /// Stores the last encoder activations for auxiliary loss computation.
@@ -144,12 +144,12 @@ public class Autoencoder<T> : NeuralNetworkBase<T>, IAuxiliaryLossLayer<T>
     /// <summary>
     /// Stores the last computed sparsity loss for diagnostics.
     /// </summary>
-    private T _lastSparsityLoss = NumOps.Zero;
+    private T _lastSparsityLoss = default(T);
 
     /// <summary>
     /// Stores the average activation level for diagnostics.
     /// </summary>
-    private T _averageActivation = NumOps.Zero;
+    private T _averageActivation = default(T);
 
     /// <summary>
     /// Gets or sets whether to use auxiliary loss (sparsity penalty) during training.
@@ -161,7 +161,7 @@ public class Autoencoder<T> : NeuralNetworkBase<T>, IAuxiliaryLossLayer<T>
     /// Gets or sets the weight for the sparsity penalty.
     /// Default is 0.001. Typical range: 0.0001 to 0.01.
     /// </summary>
-    public T AuxiliaryLossWeight { get; set; } = NumOps.FromDouble(0.001);
+    public T AuxiliaryLossWeight { get; set; } = default(T);
 
     /// <summary>
     /// Initializes a new instance of the <see cref="Autoencoder{T}"/> class.
@@ -195,6 +195,12 @@ public class Autoencoder<T> : NeuralNetworkBase<T>, IAuxiliaryLossLayer<T>
         _epochs = epochs;
         _batchSize = batchSize;
         _lossFunction = lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(architecture.TaskType);
+
+        // Initialize fields that require NumOps (must be done in constructor, not field initializers)
+        _sparsityParameter = NumOps.FromDouble(0.05);
+        _lastSparsityLoss = NumOps.Zero;
+        _averageActivation = NumOps.Zero;
+        AuxiliaryLossWeight = NumOps.FromDouble(0.001);
 
         InitializeLayers();
     }
@@ -509,7 +515,7 @@ public class Autoencoder<T> : NeuralNetworkBase<T>, IAuxiliaryLossLayer<T>
             sumActivation = NumOps.Add(sumActivation, _lastEncoderActivations[i]);
         }
 
-        _averageActivation = NumOps.Divide(sumActivation, NumOps.FromInt32(totalElements));
+        _averageActivation = NumOps.Divide(sumActivation, NumOps.FromDouble(totalElements));
 
         // Compute KL divergence: KL(ρ || ρ̂) = ρ * log(ρ/ρ̂) + (1-ρ) * log((1-ρ)/(1-ρ̂))
         T epsilon = NumOps.FromDouble(1e-10); // Small value to prevent log(0)
