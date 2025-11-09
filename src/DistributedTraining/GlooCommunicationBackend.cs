@@ -331,7 +331,7 @@ public class GlooCommunicationBackend<T> : CommunicationBackendBase<T>
 
         // Simple all-to-all barrier implementation
         // Each rank sends a signal to all other ranks and waits for signals from all
-        var signal = new[] { NumOps.One };
+        var signal = new Vector<T>(new[] { NumOps.One });
 
         // Send signal to all other ranks
         for (int otherRank = 0; otherRank < _worldSize; otherRank++)
@@ -504,7 +504,7 @@ public class GlooCommunicationBackend<T> : CommunicationBackendBase<T>
             Array.Copy(dataArray, sendStart, sendChunk, 0, sendCount);
 
             // Send and receive simultaneously
-            var sendTask = System.Threading.Tasks.Task.Run(() => SendData(nextRank, sendChunk));
+            var sendTask = System.Threading.Tasks.Task.Run(() => SendData(nextRank, new Vector<T>(sendChunk)));
             var recvChunk = ReceiveData(prevRank, recvCount);
             sendTask.Wait();
 
@@ -531,7 +531,7 @@ public class GlooCommunicationBackend<T> : CommunicationBackendBase<T>
             Array.Copy(dataArray, sendStart, sendChunk, 0, sendCount);
 
             // Send and receive simultaneously
-            var sendTask = System.Threading.Tasks.Task.Run(() => SendData(nextRank, sendChunk));
+            var sendTask = System.Threading.Tasks.Task.Run(() => SendData(nextRank, new Vector<T>(sendChunk)));
             var recvChunk = ReceiveData(prevRank, recvCount);
             sendTask.Wait();
 
@@ -601,7 +601,7 @@ public class GlooCommunicationBackend<T> : CommunicationBackendBase<T>
             Array.Copy(result, sendChunkIdx * chunkSize, sendChunk, 0, chunkSize);
 
             // Send and receive simultaneously
-            var sendTask = System.Threading.Tasks.Task.Run(() => SendData(nextRank, sendChunk));
+            var sendTask = System.Threading.Tasks.Task.Run(() => SendData(nextRank, new Vector<T>(sendChunk)));
             var recvChunk = ReceiveData(prevRank, chunkSize);
             sendTask.Wait();
 
@@ -646,13 +646,13 @@ public class GlooCommunicationBackend<T> : CommunicationBackendBase<T>
         if (leftChildRelative < _worldSize)
         {
             int leftChildAbsolute = (leftChildRelative + root) % _worldSize;
-            SendData(leftChildAbsolute, dataArray);
+            SendData(leftChildAbsolute, new Vector<T>(dataArray));
         }
 
         if (rightChildRelative < _worldSize)
         {
             int rightChildAbsolute = (rightChildRelative + root) % _worldSize;
-            SendData(rightChildAbsolute, dataArray);
+            SendData(rightChildAbsolute, new Vector<T>(dataArray));
         }
 
         return new Vector<T>(dataArray);
@@ -724,18 +724,20 @@ public class GlooCommunicationBackend<T> : CommunicationBackendBase<T>
         if (leftChildRelative < treeSize)
         {
             int leftChildAbsolute = (leftChildRelative + root) % _worldSize;
-            var leftChunk = new T[chunkSize];
-            Array.Copy(allData, leftChildAbsolute * chunkSize, leftChunk, 0, chunkSize);
-            SendData(leftChildAbsolute, new[] { (T)Convert.ChangeType(chunkSize, typeof(T)) });
+            var leftChunkArray = new T[chunkSize];
+            Array.Copy(allData, leftChildAbsolute * chunkSize, leftChunkArray, 0, chunkSize);
+            var leftChunk = new Vector<T>(leftChunkArray);
+            SendData(leftChildAbsolute, new Vector<T>(new[] { (T)Convert.ChangeType(chunkSize, typeof(T)) }));
             SendData(leftChildAbsolute, leftChunk);
         }
 
         if (rightChildRelative < treeSize)
         {
             int rightChildAbsolute = (rightChildRelative + root) % _worldSize;
-            var rightChunk = new T[chunkSize];
-            Array.Copy(allData, rightChildAbsolute * chunkSize, rightChunk, 0, chunkSize);
-            SendData(rightChildAbsolute, new[] { (T)Convert.ChangeType(chunkSize, typeof(T)) });
+            var rightChunkArray = new T[chunkSize];
+            Array.Copy(allData, rightChildAbsolute * chunkSize, rightChunkArray, 0, chunkSize);
+            var rightChunk = new Vector<T>(rightChunkArray);
+            SendData(rightChildAbsolute, new Vector<T>(new[] { (T)Convert.ChangeType(chunkSize, typeof(T)) }));
             SendData(rightChildAbsolute, rightChunk);
         }
     }
@@ -776,7 +778,7 @@ public class GlooCommunicationBackend<T> : CommunicationBackendBase<T>
             Array.Copy(dataArray, sendStart, sendChunk, 0, sendCount);
 
             // Send and receive simultaneously
-            var sendTask = System.Threading.Tasks.Task.Run(() => SendData(nextRank, sendChunk));
+            var sendTask = System.Threading.Tasks.Task.Run(() => SendData(nextRank, new Vector<T>(sendChunk)));
             var recvChunk = ReceiveData(prevRank, recvCount);
             sendTask.Wait();
 
