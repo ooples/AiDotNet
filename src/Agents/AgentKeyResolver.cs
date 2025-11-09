@@ -147,7 +147,7 @@ public static class AgentKeyResolver
             return explicitKey;
 
         // 2. Check stored config from build phase
-        if (storedConfig?.ApiKey != null)
+        if (storedConfig?.ApiKey != null && !string.IsNullOrWhiteSpace(storedConfig.ApiKey))
             return storedConfig.ApiKey;
 
         // 3. Check global configuration
