@@ -537,10 +537,8 @@ public class PredictionModelBuilder<T, TInput, TOutput> : IPredictionModelBuilde
     /// Configures distributed training across multiple GPUs or machines.
     /// </summary>
     /// <param name="backend">Communication backend to use. If null, uses InMemoryCommunicationBackend.</param>
-    /// <param name="strategy">Distributed training strategy. Default is FSDP.</param>
-    /// <param name="autoSyncGradients">Whether to automatically synchronize gradients. Default is true.</param>
-    /// <param name="minimumParameterGroupSize">Minimum parameter group size for communication. Default is 1024.</param>
-    /// <param name="enableGradientCompression">Whether to enable gradient compression. Default is false.</param>
+    /// <param name="strategy">Distributed training strategy. Default is DDP.</param>
+    /// <param name="configuration">Optional sharding configuration for advanced settings like gradient compression, parameter grouping, etc.</param>
     /// <returns>This builder instance for method chaining.</returns>
     /// <remarks>
     /// <para>

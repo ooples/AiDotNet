@@ -12,7 +12,7 @@ CommunicationBackendBase<T> (abstract)
 ├── InMemoryCommunicationBackend<T> (for testing)
 ├── MPICommunicationBackend<T> (MPI.NET for production)
 ├── NCCLCommunicationBackend<T> (NVIDIA GPUs)
-└── GlooComm unicationBackend<T> (CPU-based)
+└── GlooCommunicationBackend<T> (CPU-based)
 
 IShardedModel<T, TInput, TOutput>
     ↓
