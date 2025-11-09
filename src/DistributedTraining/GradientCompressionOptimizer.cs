@@ -143,6 +143,11 @@ public class GradientCompressionOptimizer<T, TInput, TOutput> : ShardedOptimizer
             // Step 6: Decompress to get averaged gradients
             var averagedGradients = DecompressGradients(compressedGradients, localGradients.Length);
 
+            // CRITICAL: Restore model to pre-update parameters before applying averaged gradients
+            // Without this, we would double-apply gradients: params - lr*localGrad - lr*avgGrad
+            // instead of the correct: params - lr*avgGrad
+            localResult.BestSolution.SetParameters(originalParams);
+
             // Step 7: Apply averaged compressed gradients to original parameters
             // This ensures all ranks converge using compressed gradients
             var finalModel = gradientOptimizer.ApplyGradients(averagedGradients, localResult.BestSolution);
