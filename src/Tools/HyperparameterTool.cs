@@ -1,6 +1,7 @@
 using AiDotNet.Interfaces;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
+using System.Linq;
 namespace AiDotNet.Tools;
 /// <summary>
 /// A specialized tool that suggests optimal hyperparameter values and ranges for machine learning models
@@ -72,81 +73,83 @@ public class HyperparameterTool : ToolBase
     /// <inheritdoc/>
     protected override string ExecuteCore(string input)
     {
-        try
+        var root = JObject.Parse(input);
+        // Extract parameters
+        string modelType = TryGetString(root, "model_type", "RandomForest");
+        int nSamples = TryGetInt(root, "n_samples", 1000);
+        int nFeatures = TryGetInt(root, "n_features", 10);
+        string problemType = TryGetString(root, "problem_type", "regression");
+        string dataComplexity = TryGetString(root, "data_complexity", "moderate");
+
+        // Validate input parameters
+        if (nSamples <= 0)
+            return "Error: n_samples must be a positive integer.";
+        if (nFeatures <= 0)
+            return "Error: n_features must be a positive integer.";
+        if (string.IsNullOrWhiteSpace(problemType))
+            return "Error: problem_type cannot be empty.";
+        if (!new[] { "regression", "classification", "clustering", "timeseries" }.Contains(problemType.ToLowerInvariant()))
+            return $"Warning: Unexpected problem_type '{problemType}'. Expected: regression, classification, clustering, or timeseries.";
+        if (!new[] { "low", "moderate", "high" }.Contains(dataComplexity.ToLowerInvariant()))
+            return $"Warning: Unexpected data_complexity '{dataComplexity}'. Expected: low, moderate, or high.";
+
+        var recommendations = new System.Text.StringBuilder();
+        recommendations.AppendLine("=== HYPERPARAMETER RECOMMENDATIONS ===\n");
+        recommendations.AppendLine($"**Model Type:** {modelType}");
+        recommendations.AppendLine($"**Dataset:** {nSamples:N0} samples × {nFeatures} features");
+        recommendations.AppendLine($"**Problem:** {problemType}");
+        recommendations.AppendLine($"**Data Complexity:** {dataComplexity}\n");
+        // Generate recommendations based on model type
+        switch (modelType.ToLowerInvariant().Replace(" ", ""))
         {
-            var root = JObject.Parse(input);
-            // Extract parameters
-            string modelType = TryGetString(root, "model_type", "RandomForest");
-            int nSamples = TryGetInt(root, "n_samples", 1000);
-            int nFeatures = TryGetInt(root, "n_features", 10);
-            string problemType = TryGetString(root, "problem_type", "regression");
-            string dataComplexity = TryGetString(root, "data_complexity", "moderate");
-            var recommendations = new System.Text.StringBuilder();
-            recommendations.AppendLine("=== HYPERPARAMETER RECOMMENDATIONS ===\n");
-            recommendations.AppendLine($"**Model Type:** {modelType}");
-            recommendations.AppendLine($"**Dataset:** {nSamples:N0} samples × {nFeatures} features");
-            recommendations.AppendLine($"**Problem:** {problemType}");
-            recommendations.AppendLine($"**Data Complexity:** {dataComplexity}\n");
-            // Generate recommendations based on model type
-            switch (modelType.ToLowerInvariant().Replace(" ", ""))
-            {
-                case "randomforest":
-                case "randomforestregression":
-                case "randomforestclassification":
-                    GenerateRandomForestRecommendations(recommendations, nSamples, nFeatures, dataComplexity);
-                    break;
-                case "gradientboosting":
-                case "xgboost":
-                case "lightgbm":
-                case "catboost":
-                    GenerateGradientBoostingRecommendations(recommendations, nSamples, nFeatures, dataComplexity, modelType);
-                    break;
-                case "neuralnetwork":
-                case "deeplearning":
-                case "mlp":
-                    GenerateNeuralNetworkRecommendations(recommendations, nSamples, nFeatures, dataComplexity, problemType);
-                    break;
-                case "svm":
-                case "supportvectormachine":
-                case "svr":
-                case "svc":
-                    GenerateSVMRecommendations(recommendations, nSamples, nFeatures, dataComplexity);
-                    break;
-                case "linearregression":
-                case "logisticregression":
-                case "ridge":
-                case "lasso":
-                case "elasticnet":
-                    GenerateLinearModelRecommendations(recommendations, nSamples, nFeatures, modelType);
-                    break;
-                case "decisiontree":
-                case "cart":
-                    GenerateDecisionTreeRecommendations(recommendations, nSamples, nFeatures, dataComplexity);
-                    break;
-                case "knn":
-                case "knearestneighbors":
-                    GenerateKNNRecommendations(recommendations, nSamples, nFeatures);
-                    break;
-                default:
-                    return $"Model type '{modelType}' not recognized. Supported models: RandomForest, GradientBoosting, " +
-                           "NeuralNetwork, SVM, LinearRegression, LogisticRegression, DecisionTree, KNN.";
-            }
-            recommendations.AppendLine("\n**General Tuning Advice:**");
-            recommendations.AppendLine("  • Start with recommended values");
-            recommendations.AppendLine("  • Use cross-validation to evaluate different settings");
-            recommendations.AppendLine("  • Try grid search or random search within suggested ranges");
-            recommendations.AppendLine("  • Monitor for overfitting: if training score >> validation score, increase regularization");
-            recommendations.AppendLine("  • Consider automated hyperparameter optimization (Optuna, Hyperopt) for extensive tuning");
-            return recommendations.ToString();
+            case "randomforest":
+            case "randomforestregression":
+            case "randomforestclassification":
+                GenerateRandomForestRecommendations(recommendations, nSamples, nFeatures, dataComplexity);
+                break;
+            case "gradientboosting":
+            case "xgboost":
+            case "lightgbm":
+            case "catboost":
+                GenerateGradientBoostingRecommendations(recommendations, nSamples, nFeatures, dataComplexity, modelType);
+                break;
+            case "neuralnetwork":
+            case "deeplearning":
+            case "mlp":
+                GenerateNeuralNetworkRecommendations(recommendations, nSamples, nFeatures, dataComplexity, problemType);
+                break;
+            case "svm":
+            case "supportvectormachine":
+            case "svr":
+            case "svc":
+                GenerateSVMRecommendations(recommendations, nSamples, nFeatures, dataComplexity);
+                break;
+            case "linearregression":
+            case "logisticregression":
+            case "ridge":
+            case "lasso":
+            case "elasticnet":
+                GenerateLinearModelRecommendations(recommendations, nSamples, nFeatures, modelType);
+                break;
+            case "decisiontree":
+            case "cart":
+                GenerateDecisionTreeRecommendations(recommendations, nSamples, nFeatures, dataComplexity);
+                break;
+            case "knn":
+            case "knearestneighbors":
+                GenerateKNNRecommendations(recommendations, nSamples, nFeatures);
+                break;
+            default:
+                return $"Model type '{modelType}' not recognized. Supported models: RandomForest, GradientBoosting, " +
+                       "NeuralNetwork, SVM, LinearRegression, LogisticRegression, DecisionTree, KNN.";
         }
-        catch (JsonReaderException)
-        {
-            throw; // Let base class handle JSON errors
-        }
-        catch (Exception)
-        {
-            throw; // Let base class handle generic errors
-        }
+        recommendations.AppendLine("\n**General Tuning Advice:**");
+        recommendations.AppendLine("  • Start with recommended values");
+        recommendations.AppendLine("  • Use cross-validation to evaluate different settings");
+        recommendations.AppendLine("  • Try grid search or random search within suggested ranges");
+        recommendations.AppendLine("  • Monitor for overfitting: if training score >> validation score, increase regularization");
+        recommendations.AppendLine("  • Consider automated hyperparameter optimization (Optuna, Hyperopt) for extensive tuning");
+        return recommendations.ToString();
     }
     /// <inheritdoc/>
     protected override string GetJsonErrorMessage(JsonReaderException ex)

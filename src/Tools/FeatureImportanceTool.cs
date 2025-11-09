@@ -205,8 +205,16 @@ public class FeatureImportanceTool : ToolBase
                 {
                     analysis.AppendLine($"  • **{f1}** ↔ **{f2}** (correlation: {corr:F3})");
                     // Find importance of each
-                    var feat1 = features.First(f => f.Name == f1);
-                    var feat2 = features.First(f => f.Name == f2);
+                    var feat1 = features.FirstOrDefault(f => f.Name == f1);
+                    var feat2 = features.FirstOrDefault(f => f.Name == f2);
+
+                    if (feat1 == null || feat2 == null)
+                    {
+                        analysis.AppendLine($"    → Warning: Could not find feature importance data for comparison");
+                        analysis.AppendLine();
+                        continue;
+                    }
+
                     if (feat1.ImportanceScore > feat2.ImportanceScore * 1.5)
                     {
                         analysis.AppendLine($"    → Recommendation: Keep '{f1}' (importance: {feat1.ImportanceScore:P1}), " +
