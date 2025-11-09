@@ -33,6 +33,13 @@ namespace AiDotNet.DistributedTraining;
 /// - Complexity: Moderate - gradient and state sharding
 /// - Best for: Large models with significant gradient memory
 /// </para>
+/// <para><b>⚠️ IMPORTANT - Optimizer Compatibility:</b>
+/// This implementation's ComputeOriginalParameters method assumes vanilla gradient descent
+/// (SGD) update rules. It may produce INCORRECT results when wrapping adaptive optimizers
+/// like Adam or RMSprop. For production use, wrap only vanilla SGD optimizers
+/// (GradientDescentOptimizer, StochasticGradientDescentOptimizer, etc.). See
+/// ComputeOriginalParameters documentation for details.
+/// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric type</typeparam>
 /// <typeparam name="TInput">The input type for the model</typeparam>
@@ -124,8 +131,26 @@ public class ZeRO2Optimizer<T, TInput, TOutput> : ShardedOptimizerBase<T, TInput
     /// <param name="gradients">The gradients that were applied</param>
     /// <returns>Estimated original parameters before gradient application</returns>
     /// <remarks>
-    /// For gradient descent: params_new = params_old - learning_rate * gradients
+    /// <para><b>⚠️ IMPORTANT LIMITATION - Assumes Vanilla SGD:</b>
+    /// This method assumes vanilla gradient descent update rule:
+    /// params_new = params_old - learning_rate * gradients
     /// Therefore: params_old = params_new + learning_rate * gradients
+    /// </para>
+    /// <para>
+    /// This reversal is INCORRECT for adaptive optimizers like Adam or RMSprop which use:
+    /// - Adam: params_new = params_old - lr * m_t / (sqrt(v_t) + epsilon)
+    /// - RMSprop: params_new = params_old - lr * gradients / sqrt(moving_avg_squared_gradients + epsilon)
+    ///
+    /// For these optimizers, reversing the update requires access to internal optimizer state
+    /// (momentum buffers, variance estimates, etc.) which is not available through the current
+    /// IGradientBasedOptimizer interface.
+    /// </para>
+    /// <para>
+    /// <b>Production Guidance:</b>
+    /// - ✅ Safe to use with: GradientDescentOptimizer, StochasticGradientDescentOptimizer, MiniBatchGradientDescentOptimizer
+    /// - ⚠️ May produce incorrect results with: AdamOptimizer, RMSpropOptimizer, other adaptive optimizers
+    /// - Future enhancement: Extend IGradientBasedOptimizer with ReverseUpdate() method for optimizer-specific reversal
+    /// </para>
     /// </remarks>
     private Vector<T> ComputeOriginalParameters(Vector<T> updatedParams, Vector<T> gradients)
     {
