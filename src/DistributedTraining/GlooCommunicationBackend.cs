@@ -681,8 +681,9 @@ public class GlooCommunicationBackend<T> : CommunicationBackendBase<T>
             int parentAbsolute = (parentRelative + root) % _worldSize;
 
             // Receive chunk count first, then data
-            chunkSize = ReceiveData(parentAbsolute, 1)[0] != null ?
-                        Convert.ToInt32(ReceiveData(parentAbsolute, 1)[0]) : 0;
+            // IMPORTANT: Read chunk size ONCE and store it - don't call ReceiveData twice!
+            var chunkSizeData = ReceiveData(parentAbsolute, 1);
+            chunkSize = chunkSizeData[0] != null ? Convert.ToInt32(chunkSizeData[0]) : 0;
             myChunk = ReceiveData(parentAbsolute, chunkSize);
         }
 
