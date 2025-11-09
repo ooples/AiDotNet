@@ -65,6 +65,7 @@ namespace AiDotNet.DistributedTraining;
 public class TensorParallelModel<T, TInput, TOutput> : ShardedModelBase<T, TInput, TOutput>
 {
     private readonly int _tensorParallelSize;
+    private readonly List<int> _tensorParallelGroup;
 
     /// <summary>
     /// Creates a new Tensor Parallel model.
@@ -77,6 +78,13 @@ public class TensorParallelModel<T, TInput, TOutput> : ShardedModelBase<T, TInpu
         : base(wrappedModel, config)
     {
         _tensorParallelSize = WorldSize;
+
+        // Build tensor-parallel group (all ranks in this world are in the same TP group)
+        _tensorParallelGroup = new List<int>();
+        for (int i = 0; i < WorldSize; i++)
+        {
+            _tensorParallelGroup.Add(i);
+        }
     }
 
     /// <summary>
@@ -105,35 +113,192 @@ public class TensorParallelModel<T, TInput, TOutput> : ShardedModelBase<T, TInpu
     }
 
     /// <summary>
+    /// Performs AllReduce within the tensor-parallel subgroup.
+    /// </summary>
+    private void SubgroupAllReduce(Vector<T> data, ReductionOperation operation)
+    {
+        if (_tensorParallelGroup.Count == 1)
+        {
+            // Single rank in group - no communication needed
+            return;
+        }
+
+        // Check if this rank is in the subgroup
+        bool inGroup = _tensorParallelGroup.Contains(Rank);
+
+        // Try point-to-point approach first (efficient)
+        try
+        {
+            SubgroupAllReduceP2P(data, operation, inGroup);
+        }
+        catch (NotSupportedException)
+        {
+            // Fallback to global collective approach (works with any backend)
+            SubgroupAllReduceGlobal(data, operation, inGroup);
+        }
+    }
+
+    /// <summary>
+    /// Implements subgroup AllReduce using point-to-point Send/Receive (efficient).
+    /// </summary>
+    private void SubgroupAllReduceP2P(Vector<T> data, ReductionOperation operation, bool inGroup)
+    {
+        if (!inGroup)
+        {
+            // This rank is not in the subgroup - no participation needed
+            return;
+        }
+
+        int groupRoot = _tensorParallelGroup[0];
+        bool isGroupRoot = (Rank == groupRoot);
+
+        if (isGroupRoot)
+        {
+            // Root collects from all other ranks in group
+            var allData = new List<Vector<T>> { data.Clone() };
+
+            for (int i = 1; i < _tensorParallelGroup.Count; i++)
+            {
+                int sourceRank = _tensorParallelGroup[i];
+                var receivedData = Config.CommunicationBackend.Receive(sourceRank, data.Length, tag: 0);
+                allData.Add(receivedData);
+            }
+
+            // Perform reduction on collected data
+            var result = PerformReduction(allData, operation);
+
+            // Copy result back to data
+            for (int i = 0; i < data.Length; i++)
+            {
+                data[i] = result[i];
+            }
+
+            // Send result back to all other ranks in group
+            for (int i = 1; i < _tensorParallelGroup.Count; i++)
+            {
+                int destRank = _tensorParallelGroup[i];
+                Config.CommunicationBackend.Send(data, destRank, tag: 0);
+            }
+        }
+        else
+        {
+            // Non-root sends data to root
+            Config.CommunicationBackend.Send(data, groupRoot, tag: 0);
+
+            // Receive result from root
+            var result = Config.CommunicationBackend.Receive(groupRoot, data.Length, tag: 0);
+
+            // Copy result back to data
+            for (int i = 0; i < data.Length; i++)
+            {
+                data[i] = result[i];
+            }
+        }
+    }
+
+    /// <summary>
+    /// Implements subgroup AllReduce using global collective operations (fallback for NCCL, Gloo).
+    /// </summary>
+    private void SubgroupAllReduceGlobal(Vector<T> data, ReductionOperation operation, bool inGroup)
+    {
+        var workingData = data.Clone();
+
+        // Ranks outside the subgroup contribute zeros
+        if (!inGroup)
+        {
+            for (int i = 0; i < workingData.Length; i++)
+            {
+                workingData[i] = NumOps.FromDouble(0);
+            }
+        }
+
+        // Perform global AllReduce with Sum operation
+        var globalOp = (operation == ReductionOperation.Average) ? ReductionOperation.Sum : operation;
+        Config.CommunicationBackend.AllReduce(workingData, globalOp);
+
+        // For Average, divide by subgroup size (not world size)
+        if (operation == ReductionOperation.Average)
+        {
+            var groupSize = NumOps.FromDouble(_tensorParallelGroup.Count);
+            for (int i = 0; i < workingData.Length; i++)
+            {
+                workingData[i] = NumOps.Divide(workingData[i], groupSize);
+            }
+        }
+
+        // Copy result back to data
+        for (int i = 0; i < data.Length; i++)
+        {
+            data[i] = workingData[i];
+        }
+    }
+
+    /// <summary>
+    /// Performs the actual reduction operation on a list of vectors.
+    /// </summary>
+    private Vector<T> PerformReduction(List<Vector<T>> vectors, ReductionOperation operation)
+    {
+        if (vectors.Count == 0)
+            throw new ArgumentException("Cannot reduce empty vector list");
+
+        int length = vectors[0].Length;
+        var result = new T[length];
+
+        for (int i = 0; i < length; i++)
+        {
+            T value = vectors[0][i];
+
+            for (int j = 1; j < vectors.Count; j++)
+            {
+                switch (operation)
+                {
+                    case ReductionOperation.Sum:
+                        value = NumOps.Add(value, vectors[j][i]);
+                        break;
+                    case ReductionOperation.Average:
+                        value = NumOps.Add(value, vectors[j][i]);
+                        break;
+                    case ReductionOperation.Max:
+                        if (NumOps.GreaterThan(vectors[j][i], value))
+                            value = vectors[j][i];
+                        break;
+                    case ReductionOperation.Min:
+                        if (NumOps.LessThan(vectors[j][i], value))
+                            value = vectors[j][i];
+                        break;
+                    case ReductionOperation.Product:
+                        value = NumOps.Multiply(value, vectors[j][i]);
+                        break;
+                }
+            }
+
+            // For Average, divide by count
+            if (operation == ReductionOperation.Average)
+            {
+                var count = NumOps.FromDouble(vectors.Count);
+                value = NumOps.Divide(value, count);
+            }
+
+            result[i] = value;
+        }
+
+        return new Vector<T>(result);
+    }
+
+    /// <summary>
     /// Synchronizes tensor-parallel computation results.
     /// </summary>
     /// <remarks>
     /// In tensor parallelism, different layers require different synchronization patterns:
     /// - Column-parallel layers: AllReduce after computation
     /// - Row-parallel layers: AllGather before computation
-    /// This simplified implementation uses AllReduce.
+    /// This implementation uses subgroup AllReduce within the tensor-parallel group.
     /// </remarks>
     public override void SynchronizeGradients()
     {
-        // In tensor parallelism, each rank holds a disjoint slice of parameters.
-        // AllReduce across the full world would sum unrelated indices and corrupt the shards.
-        // We need subgroup-aware collectives that sync only within the tensor-parallel group.
-        //
-        // For column-parallel layers: AllReduce within tensor-parallel group
-        // For row-parallel layers: Different synchronization pattern
-        // For combined data+tensor parallel: AllReduce within data-parallel subgroup
-
-        if (_tensorParallelSize > 1)
-        {
-            throw new NotSupportedException(
-                "TensorParallelModel requires subgroup gradient synchronization; " +
-                "AllReduce over the full world corrupts the shard. " +
-                "Implement subgroup-aware collectives that synchronize only within the tensor-parallel group, " +
-                "or use a data-parallel subgroup communicator for combined data+tensor parallel setups.");
-        }
-
-        // Single-process mode or pure data-parallel mode (no tensor parallelism)
-        Config.CommunicationBackend.AllReduce(LocalShard, ReductionOperation.Sum);
+        // Tensor parallel synchronization uses Sum operation (not Average)
+        // because each rank computes partial results that need to be summed
+        SubgroupAllReduce(LocalShard, ReductionOperation.Sum);
 
         CachedFullParameters = null;
     }
@@ -161,11 +326,8 @@ public class TensorParallelModel<T, TInput, TOutput> : ShardedModelBase<T, TInpu
         UpdateLocalShardFromFull(updatedParams);
         InvalidateCache();
 
-        // Synchronize across tensor-parallel group
-        // Only call SynchronizeGradients if it won't throw (i.e., single-rank mode)
-        // For multi-rank tensor parallelism, parameters are already synchronized via
-        // GatherFullParameters/UpdateLocalShardFromFull pattern above
-        if (Config.AutoSyncGradients && _tensorParallelSize == 1)
+        // Synchronize across tensor-parallel group using subgroup AllReduce
+        if (Config.AutoSyncGradients)
         {
             SynchronizeGradients();
         }
