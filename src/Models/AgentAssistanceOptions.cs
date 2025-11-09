@@ -320,4 +320,17 @@ public class AgentAssistanceOptions
     /// </para>
     /// </remarks>
     public static AgentAssistanceOptionsBuilder Create() => new AgentAssistanceOptionsBuilder();
+
+    /// <summary>
+    /// Creates a deep copy of this options instance.
+    /// </summary>
+    /// <returns>A new AgentAssistanceOptions instance with the same property values.</returns>
+    internal AgentAssistanceOptions Clone() => new AgentAssistanceOptions
+    {
+        EnableDataAnalysis = this.EnableDataAnalysis,
+        EnableModelSelection = this.EnableModelSelection,
+        EnableHyperparameterTuning = this.EnableHyperparameterTuning,
+        EnableFeatureAnalysis = this.EnableFeatureAnalysis,
+        EnableMetaLearningAdvice = this.EnableMetaLearningAdvice
+    };
 }

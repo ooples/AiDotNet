@@ -328,9 +328,10 @@ public class AgentAssistanceOptionsBuilder
     /// </code>
     ///
     /// The returned options object is then passed to ConfigureAgentAssistance() in your model builder.
+    /// Returns a fresh copy to prevent external mutation of builder state.
     /// </para>
     /// </remarks>
-    public AgentAssistanceOptions Build() => _options;
+    public AgentAssistanceOptions Build() => _options.Clone();
 
     /// <summary>
     /// Implicitly converts the builder to an AgentAssistanceOptions instance.
@@ -357,8 +358,9 @@ public class AgentAssistanceOptionsBuilder
     /// </code>
     ///
     /// C# automatically calls this conversion when needed, making your code slightly cleaner.
+    /// Returns a fresh copy to prevent external mutation of builder state.
     /// </para>
     /// </remarks>
     public static implicit operator AgentAssistanceOptions(AgentAssistanceOptionsBuilder builder)
-        => builder._options;
+        => builder._options.Clone();
 }
