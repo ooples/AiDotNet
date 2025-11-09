@@ -1,3 +1,5 @@
+using AiDotNet.LinearAlgebra;
+
 namespace AiDotNet.ModelCompression;
 
 /// <summary>
@@ -46,6 +48,7 @@ public class HybridHuffmanClusteringCompression<T> : ModelCompressionBase<T>
 {
     private readonly WeightClusteringCompression<T> _clusteringCompression;
     private readonly HuffmanEncodingCompression<T> _huffmanCompression;
+    private readonly object _lockObject = new object();
 
     /// <summary>
     /// Initializes a new instance of the HybridHuffmanClusteringCompression class.
@@ -93,27 +96,31 @@ public class HybridHuffmanClusteringCompression<T> : ModelCompressionBase<T>
     /// </summary>
     /// <param name="weights">The original model weights.</param>
     /// <returns>Compressed weights and hybrid metadata.</returns>
-    public override (T[] compressedWeights, object metadata) Compress(T[] weights)
+    public override (Vector<T> compressedWeights, object metadata) Compress(Vector<T> weights)
     {
-        if (weights == null || weights.Length == 0)
+        if (weights == null)
         {
-            throw new ArgumentException("Weights cannot be null or empty.", nameof(weights));
+            throw new ArgumentNullException(nameof(weights));
         }
 
-        // Stage 1: Apply weight clustering
-        var (clusteredWeights, clusteringMetadata) = _clusteringCompression.Compress(weights);
-
-        // Stage 2: Apply Huffman encoding to cluster indices
-        var (huffmanWeights, huffmanMetadata) = _huffmanCompression.Compress(clusteredWeights);
-
-        // Combine metadata
-        var hybridMetadata = new HybridCompressionMetadata
+        if (weights.Length == 0)
         {
-            ClusteringMetadata = clusteringMetadata,
-            HuffmanMetadata = huffmanMetadata
-        };
+            throw new ArgumentException("Weights cannot be empty.", nameof(weights));
+        }
 
-        return (huffmanWeights, hybridMetadata);
+        lock (_lockObject)
+        {
+            // Stage 1: Apply weight clustering
+            var (clusteredWeights, clusteringMetadata) = _clusteringCompression.Compress(weights);
+
+            // Stage 2: Apply Huffman encoding to cluster indices
+            var (huffmanWeights, huffmanMetadata) = _huffmanCompression.Compress(clusteredWeights);
+
+            // Combine metadata
+            var hybridMetadata = new HybridCompressionMetadata(clusteringMetadata, huffmanMetadata);
+
+            return (huffmanWeights, hybridMetadata);
+        }
     }
 
     /// <summary>
@@ -122,35 +129,55 @@ public class HybridHuffmanClusteringCompression<T> : ModelCompressionBase<T>
     /// <param name="compressedWeights">The compressed weights.</param>
     /// <param name="metadata">The hybrid compression metadata.</param>
     /// <returns>The decompressed weights.</returns>
-    public override T[] Decompress(T[] compressedWeights, object metadata)
+    public override Vector<T> Decompress(Vector<T> compressedWeights, object metadata)
     {
         if (compressedWeights == null)
         {
             throw new ArgumentNullException(nameof(compressedWeights));
         }
 
-        if (metadata is not HybridCompressionMetadata hybridMetadata)
+        if (metadata == null)
+        {
+            throw new ArgumentNullException(nameof(metadata));
+        }
+
+        var hybridMetadata = metadata as HybridCompressionMetadata;
+        if (hybridMetadata == null)
         {
             throw new ArgumentException("Invalid metadata type for hybrid compression.", nameof(metadata));
         }
 
-        // Stage 1: Decompress Huffman encoding to get cluster indices
-        var clusterIndices = _huffmanCompression.Decompress(
-            compressedWeights, hybridMetadata.HuffmanMetadata);
+        lock (_lockObject)
+        {
+            // Stage 1: Decompress Huffman encoding to get cluster indices
+            var clusterIndices = _huffmanCompression.Decompress(
+                compressedWeights, hybridMetadata.HuffmanMetadata);
 
-        // Stage 2: Decompress clustering to get original weights
-        var originalWeights = _clusteringCompression.Decompress(
-            clusterIndices, hybridMetadata.ClusteringMetadata);
+            // Stage 2: Decompress clustering to get original weights
+            var originalWeights = _clusteringCompression.Decompress(
+                clusterIndices, hybridMetadata.ClusteringMetadata);
 
-        return originalWeights;
+            return originalWeights;
+        }
     }
 
     /// <summary>
     /// Gets the total compressed size from both compression stages.
     /// </summary>
-    public override long GetCompressedSize(T[] compressedWeights, object metadata)
+    public override long GetCompressedSize(Vector<T> compressedWeights, object metadata)
     {
-        if (metadata is not HybridCompressionMetadata hybridMetadata)
+        if (compressedWeights == null)
+        {
+            throw new ArgumentNullException(nameof(compressedWeights));
+        }
+
+        if (metadata == null)
+        {
+            throw new ArgumentNullException(nameof(metadata));
+        }
+
+        var hybridMetadata = metadata as HybridCompressionMetadata;
+        if (hybridMetadata == null)
         {
             throw new ArgumentException("Invalid metadata type.", nameof(metadata));
         }
@@ -160,8 +187,8 @@ public class HybridHuffmanClusteringCompression<T> : ModelCompressionBase<T>
             compressedWeights, hybridMetadata.HuffmanMetadata);
 
         // Size from clustering metadata (cluster centers)
-        // We need to estimate this since we don't have the intermediate representation
-        if (hybridMetadata.ClusteringMetadata is WeightClusteringMetadata clusterMetadata)
+        var clusterMetadata = hybridMetadata.ClusteringMetadata as WeightClusteringMetadata<T>;
+        if (clusterMetadata != null)
         {
             long clusterCentersSize = clusterMetadata.NumClusters * GetElementSize();
             return huffmanSize + clusterCentersSize;
@@ -177,12 +204,33 @@ public class HybridHuffmanClusteringCompression<T> : ModelCompressionBase<T>
 public class HybridCompressionMetadata
 {
     /// <summary>
-    /// Metadata from the clustering stage.
+    /// Initializes a new instance of the HybridCompressionMetadata class.
     /// </summary>
-    public required object ClusteringMetadata { get; init; }
+    /// <param name="clusteringMetadata">Metadata from the clustering stage.</param>
+    /// <param name="huffmanMetadata">Metadata from the Huffman encoding stage.</param>
+    public HybridCompressionMetadata(object clusteringMetadata, object huffmanMetadata)
+    {
+        if (clusteringMetadata == null)
+        {
+            throw new ArgumentNullException(nameof(clusteringMetadata));
+        }
+
+        if (huffmanMetadata == null)
+        {
+            throw new ArgumentNullException(nameof(huffmanMetadata));
+        }
+
+        ClusteringMetadata = clusteringMetadata;
+        HuffmanMetadata = huffmanMetadata;
+    }
 
     /// <summary>
-    /// Metadata from the Huffman encoding stage.
+    /// Gets the metadata from the clustering stage.
     /// </summary>
-    public required object HuffmanMetadata { get; init; }
+    public object ClusteringMetadata { get; private set; }
+
+    /// <summary>
+    /// Gets the metadata from the Huffman encoding stage.
+    /// </summary>
+    public object HuffmanMetadata { get; private set; }
 }

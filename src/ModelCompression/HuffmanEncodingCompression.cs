@@ -1,5 +1,6 @@
 using System.Collections;
 using AiDotNet.Helpers;
+using AiDotNet.LinearAlgebra;
 
 namespace AiDotNet.ModelCompression;
 
@@ -40,6 +41,7 @@ namespace AiDotNet.ModelCompression;
 public class HuffmanEncodingCompression<T> : ModelCompressionBase<T>
 {
     private readonly int _precision;
+    private readonly object _lockObject = new object();
 
     /// <summary>
     /// Initializes a new instance of the HuffmanEncodingCompression class.
@@ -77,46 +79,61 @@ public class HuffmanEncodingCompression<T> : ModelCompressionBase<T>
     /// </summary>
     /// <param name="weights">The original model weights.</param>
     /// <returns>Compressed weights and metadata containing the Huffman tree and encoding table.</returns>
-    public override (T[] compressedWeights, object metadata) Compress(T[] weights)
+    public override (Vector<T> compressedWeights, object metadata) Compress(Vector<T> weights)
     {
-        if (weights == null || weights.Length == 0)
+        if (weights == null)
         {
-            throw new ArgumentException("Weights cannot be null or empty.", nameof(weights));
+            throw new ArgumentNullException(nameof(weights));
         }
 
-        // Round weights to specified precision to reduce unique values
-        var roundedWeights = weights.Select(w => RoundToPrecision(w)).ToArray();
-
-        // Build frequency table
-        var frequencies = BuildFrequencyTable(roundedWeights);
-
-        // Build Huffman tree
-        var huffmanTree = BuildHuffmanTree(frequencies);
-
-        // Generate encoding table
-        var encodingTable = GenerateEncodingTable(huffmanTree);
-
-        // Encode the weights
-        var encodedBits = EncodeWeights(roundedWeights, encodingTable);
-
-        // Create metadata
-        var metadata = new HuffmanEncodingMetadata<T>
+        if (weights.Length == 0)
         {
-            HuffmanTree = huffmanTree,
-            EncodingTable = encodingTable,
-            OriginalLength = weights.Length,
-            BitLength = encodedBits.Count
-        };
-
-        // Convert BitArray to byte array and then to T[] for storage
-        var compressedBytes = ConvertBitArrayToBytes(encodedBits);
-        var compressedWeights = new T[compressedBytes.Length];
-        for (int i = 0; i < compressedBytes.Length; i++)
-        {
-            compressedWeights[i] = NumOps.FromDouble(compressedBytes[i]);
+            throw new ArgumentException("Weights cannot be empty.", nameof(weights));
         }
 
-        return (compressedWeights, metadata);
+        lock (_lockObject)
+        {
+            // Round weights to specified precision to reduce unique values
+            var roundedWeights = new T[weights.Length];
+            for (int i = 0; i < weights.Length; i++)
+            {
+                roundedWeights[i] = RoundToPrecision(weights[i]);
+            }
+
+            // Build frequency table
+            var frequencies = BuildFrequencyTable(roundedWeights);
+
+            if (frequencies.Count == 0)
+            {
+                throw new InvalidOperationException("No valid weights to compress.");
+            }
+
+            // Build Huffman tree
+            var huffmanTree = BuildHuffmanTree(frequencies);
+
+            // Generate encoding table
+            var encodingTable = GenerateEncodingTable(huffmanTree);
+
+            // Encode the weights
+            var encodedBits = EncodeWeights(roundedWeights, encodingTable);
+
+            // Create metadata
+            var metadata = new HuffmanEncodingMetadata<T>(
+                huffmanTree,
+                encodingTable,
+                weights.Length,
+                encodedBits.Count);
+
+            // Convert BitArray to byte array and then to Vector<T> for storage
+            var compressedBytes = ConvertBitArrayToBytes(encodedBits);
+            var compressedArray = new T[compressedBytes.Length];
+            for (int i = 0; i < compressedBytes.Length; i++)
+            {
+                compressedArray[i] = NumOps.FromDouble(compressedBytes[i]);
+            }
+
+            return (new Vector<T>(compressedArray), metadata);
+        }
     }
 
     /// <summary>
@@ -125,41 +142,66 @@ public class HuffmanEncodingCompression<T> : ModelCompressionBase<T>
     /// <param name="compressedWeights">The compressed weights (encoded as bytes).</param>
     /// <param name="metadata">The metadata containing the Huffman tree.</param>
     /// <returns>The decompressed weights.</returns>
-    public override T[] Decompress(T[] compressedWeights, object metadata)
+    public override Vector<T> Decompress(Vector<T> compressedWeights, object metadata)
     {
         if (compressedWeights == null)
         {
             throw new ArgumentNullException(nameof(compressedWeights));
         }
 
-        if (metadata is not HuffmanEncodingMetadata<T> huffmanMetadata)
+        if (metadata == null)
+        {
+            throw new ArgumentNullException(nameof(metadata));
+        }
+
+        var huffmanMetadata = metadata as HuffmanEncodingMetadata<T>;
+        if (huffmanMetadata == null)
         {
             throw new ArgumentException("Invalid metadata type for Huffman encoding.", nameof(metadata));
         }
 
-        // Convert T[] back to byte array
-        var compressedBytes = new byte[compressedWeights.Length];
-        for (int i = 0; i < compressedWeights.Length; i++)
+        lock (_lockObject)
         {
-            compressedBytes[i] = (byte)NumOps.ToDouble(compressedWeights[i]);
+            // Convert Vector<T> back to byte array
+            var compressedBytes = new byte[compressedWeights.Length];
+            for (int i = 0; i < compressedWeights.Length; i++)
+            {
+                double value = NumOps.ToDouble(compressedWeights[i]);
+                if (value < 0 || value > 255)
+                {
+                    throw new InvalidOperationException($"Invalid compressed byte value {value} at position {i}.");
+                }
+                compressedBytes[i] = (byte)value;
+            }
+
+            // Convert bytes to BitArray
+            var encodedBits = new BitArray(compressedBytes);
+
+            // Decode the weights
+            var decodedArray = DecodeWeights(encodedBits, huffmanMetadata.HuffmanTree,
+                huffmanMetadata.OriginalLength, huffmanMetadata.BitLength);
+
+            return new Vector<T>(decodedArray);
         }
-
-        // Convert bytes to BitArray
-        var encodedBits = new BitArray(compressedBytes);
-
-        // Decode the weights
-        var decodedWeights = DecodeWeights(encodedBits, huffmanMetadata.HuffmanTree,
-            huffmanMetadata.OriginalLength, huffmanMetadata.BitLength);
-
-        return decodedWeights;
     }
 
     /// <summary>
     /// Gets the compressed size including the Huffman tree and encoded bits.
     /// </summary>
-    public override long GetCompressedSize(T[] compressedWeights, object metadata)
+    public override long GetCompressedSize(Vector<T> compressedWeights, object metadata)
     {
-        if (metadata is not HuffmanEncodingMetadata<T> huffmanMetadata)
+        if (compressedWeights == null)
+        {
+            throw new ArgumentNullException(nameof(compressedWeights));
+        }
+
+        if (metadata == null)
+        {
+            throw new ArgumentNullException(nameof(metadata));
+        }
+
+        var huffmanMetadata = metadata as HuffmanEncodingMetadata<T>;
+        if (huffmanMetadata == null)
         {
             throw new ArgumentException("Invalid metadata type.", nameof(metadata));
         }
@@ -168,7 +210,6 @@ public class HuffmanEncodingCompression<T> : ModelCompressionBase<T>
         long encodedBitsSize = compressedWeights.Length;
 
         // Size of Huffman tree (approximate - depends on tree structure)
-        // Each unique value + frequency + tree structure
         long treeSize = EstimateHuffmanTreeSize(huffmanMetadata.HuffmanTree);
 
         // Metadata overhead
@@ -236,35 +277,42 @@ public class HuffmanEncodingCompression<T> : ModelCompressionBase<T>
         int nodeIdCounter = 0;
         foreach (var kvp in frequencies)
         {
-            priorityQueue.Add(new HuffmanNode<T>
-            {
-                Value = kvp.Key,
-                Frequency = kvp.Frequency,
-                IsLeaf = true,
-                Id = nodeIdCounter++
-            });
+            priorityQueue.Add(new HuffmanNode<T>(kvp.Key, kvp.Value, true, nodeIdCounter++, null, null));
         }
 
         while (priorityQueue.Count > 1)
         {
-            var left = priorityQueue.Min!;
+            var left = priorityQueue.Min;
+            if (left == null)
+            {
+                throw new InvalidOperationException("Priority queue minimum is null.");
+            }
             priorityQueue.Remove(left);
-            var right = priorityQueue.Min!;
+
+            var right = priorityQueue.Min;
+            if (right == null)
+            {
+                throw new InvalidOperationException("Priority queue minimum is null.");
+            }
             priorityQueue.Remove(right);
 
-            var parent = new HuffmanNode<T>
-            {
-                Frequency = left.Frequency + right.Frequency,
-                Left = left,
-                Right = right,
-                IsLeaf = false,
-                Id = nodeIdCounter++
-            };
+            var parent = new HuffmanNode<T>(
+                default(T),
+                left.Frequency + right.Frequency,
+                false,
+                nodeIdCounter++,
+                left,
+                right);
 
             priorityQueue.Add(parent);
         }
 
-        return priorityQueue.Min!;
+        var result = priorityQueue.Min;
+        if (result == null)
+        {
+            throw new InvalidOperationException("Failed to build Huffman tree.");
+        }
+        return result;
     }
 
     /// <summary>
@@ -277,7 +325,7 @@ public class HuffmanEncodingCompression<T> : ModelCompressionBase<T>
         return encodingTable;
     }
 
-    private void GenerateEncodingTableRecursive(HuffmanNode<T>? node, string code, Dictionary<T, string> table)
+    private void GenerateEncodingTableRecursive(HuffmanNode<T> node, string code, Dictionary<T, string> table)
     {
         if (node == null) return;
 
@@ -287,8 +335,14 @@ public class HuffmanEncodingCompression<T> : ModelCompressionBase<T>
         }
         else
         {
-            GenerateEncodingTableRecursive(node.Left, code + "0", table);
-            GenerateEncodingTableRecursive(node.Right, code + "1", table);
+            if (node.Left != null)
+            {
+                GenerateEncodingTableRecursive(node.Left, code + "0", table);
+            }
+            if (node.Right != null)
+            {
+                GenerateEncodingTableRecursive(node.Right, code + "1", table);
+            }
         }
     }
 
@@ -300,8 +354,14 @@ public class HuffmanEncodingCompression<T> : ModelCompressionBase<T>
         var bits = new List<bool>();
         foreach (var weight in weights)
         {
-            string code = encodingTable[weight];
-            bits.AddRange(code.Select(c => c == '1'));
+            if (!encodingTable.TryGetValue(weight, out string code))
+            {
+                throw new InvalidOperationException($"Weight value {weight} not found in encoding table.");
+            }
+            foreach (char c in code)
+            {
+                bits.Add(c == '1');
+            }
         }
         return new BitArray(bits.ToArray());
     }
@@ -316,13 +376,33 @@ public class HuffmanEncodingCompression<T> : ModelCompressionBase<T>
 
         for (int i = 0; i < bitLength && decodedWeights.Count < originalLength; i++)
         {
-            currentNode = encodedBits[i] ? currentNode.Right! : currentNode.Left!;
-
-            if (currentNode.IsLeaf && currentNode.Value != null)
+            if (currentNode == null)
             {
+                throw new InvalidOperationException("Huffman tree node is null during decoding.");
+            }
+
+            currentNode = encodedBits[i] ? currentNode.Right : currentNode.Left;
+
+            if (currentNode == null)
+            {
+                throw new InvalidOperationException("Invalid Huffman tree structure during decoding.");
+            }
+
+            if (currentNode.IsLeaf)
+            {
+                if (currentNode.Value == null)
+                {
+                    throw new InvalidOperationException("Leaf node has null value.");
+                }
                 decodedWeights.Add(currentNode.Value);
                 currentNode = huffmanTree;
             }
+        }
+
+        if (decodedWeights.Count != originalLength)
+        {
+            throw new InvalidOperationException(
+                $"Decoded {decodedWeights.Count} weights but expected {originalLength}.");
         }
 
         return decodedWeights.ToArray();
@@ -354,8 +434,14 @@ public class HuffmanEncodingCompression<T> : ModelCompressionBase<T>
         }
         else
         {
-            size += EstimateHuffmanTreeSize(root.Left!);
-            size += EstimateHuffmanTreeSize(root.Right!);
+            if (root.Left != null)
+            {
+                size += EstimateHuffmanTreeSize(root.Left);
+            }
+            if (root.Right != null)
+            {
+                size += EstimateHuffmanTreeSize(root.Right);
+            }
         }
 
         return size;
@@ -365,23 +451,126 @@ public class HuffmanEncodingCompression<T> : ModelCompressionBase<T>
 /// <summary>
 /// Represents a node in the Huffman tree.
 /// </summary>
+/// <typeparam name="T">The numeric type.</typeparam>
 public class HuffmanNode<T>
 {
-    public T? Value { get; init; }
-    public int Frequency { get; init; }
-    public bool IsLeaf { get; init; }
-    public HuffmanNode<T>? Left { get; init; }
-    public HuffmanNode<T>? Right { get; init; }
-    public int Id { get; init; } // For stable sorting
+    /// <summary>
+    /// Initializes a new instance of the HuffmanNode class.
+    /// </summary>
+    /// <param name="value">The value stored in this node (for leaf nodes).</param>
+    /// <param name="frequency">The frequency of this value.</param>
+    /// <param name="isLeaf">Whether this is a leaf node.</param>
+    /// <param name="id">Unique identifier for stable sorting.</param>
+    /// <param name="left">Left child node.</param>
+    /// <param name="right">Right child node.</param>
+    public HuffmanNode(T value, int frequency, bool isLeaf, int id, HuffmanNode<T> left, HuffmanNode<T> right)
+    {
+        if (frequency < 0)
+        {
+            throw new ArgumentException("Frequency cannot be negative.", nameof(frequency));
+        }
+
+        Value = value;
+        Frequency = frequency;
+        IsLeaf = isLeaf;
+        Id = id;
+        Left = left;
+        Right = right;
+    }
+
+    /// <summary>
+    /// Gets the value stored in this node (for leaf nodes).
+    /// </summary>
+    public T Value { get; private set; }
+
+    /// <summary>
+    /// Gets the frequency of this value or subtree.
+    /// </summary>
+    public int Frequency { get; private set; }
+
+    /// <summary>
+    /// Gets a value indicating whether this is a leaf node.
+    /// </summary>
+    public bool IsLeaf { get; private set; }
+
+    /// <summary>
+    /// Gets the unique identifier for stable sorting.
+    /// </summary>
+    public int Id { get; private set; }
+
+    /// <summary>
+    /// Gets the left child node.
+    /// </summary>
+    public HuffmanNode<T> Left { get; private set; }
+
+    /// <summary>
+    /// Gets the right child node.
+    /// </summary>
+    public HuffmanNode<T> Right { get; private set; }
 }
 
 /// <summary>
 /// Metadata for Huffman encoding compression.
 /// </summary>
+/// <typeparam name="T">The numeric type.</typeparam>
 public class HuffmanEncodingMetadata<T>
 {
-    public required HuffmanNode<T> HuffmanTree { get; init; }
-    public required Dictionary<T, string> EncodingTable { get; init; }
-    public required int OriginalLength { get; init; }
-    public required int BitLength { get; init; }
+    /// <summary>
+    /// Initializes a new instance of the HuffmanEncodingMetadata class.
+    /// </summary>
+    /// <param name="huffmanTree">The Huffman tree used for encoding.</param>
+    /// <param name="encodingTable">The encoding table mapping values to codes.</param>
+    /// <param name="originalLength">The original length of the weights vector.</param>
+    /// <param name="bitLength">The length of the encoded bit stream.</param>
+    public HuffmanEncodingMetadata(
+        HuffmanNode<T> huffmanTree,
+        Dictionary<T, string> encodingTable,
+        int originalLength,
+        int bitLength)
+    {
+        if (huffmanTree == null)
+        {
+            throw new ArgumentNullException(nameof(huffmanTree));
+        }
+
+        if (encodingTable == null)
+        {
+            throw new ArgumentNullException(nameof(encodingTable));
+        }
+
+        if (originalLength <= 0)
+        {
+            throw new ArgumentException("Original length must be positive.", nameof(originalLength));
+        }
+
+        if (bitLength < 0)
+        {
+            throw new ArgumentException("Bit length cannot be negative.", nameof(bitLength));
+        }
+
+        HuffmanTree = huffmanTree;
+        EncodingTable = encodingTable;
+        OriginalLength = originalLength;
+        BitLength = bitLength;
+    }
+
+    /// <summary>
+    /// Gets the Huffman tree used for encoding.
+    /// </summary>
+    public HuffmanNode<T> HuffmanTree { get; private set; }
+
+    /// <summary>
+    /// Gets the encoding table mapping values to codes.
+    /// </summary>
+    public Dictionary<T, string> EncodingTable { get; private set; }
+
+    /// <summary>
+    /// Gets the original length of the weights vector.
+    /// </summary>
+    public int OriginalLength { get; private set; }
+
+    /// <summary>
+    /// Gets the length of the encoded bit stream.
+    /// </summary>
+    public int BitLength { get; private set; }
 }
