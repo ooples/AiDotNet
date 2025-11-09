@@ -198,8 +198,12 @@ public abstract class GradientBasedOptimizerBase<T, TInput, TOutput> : Optimizer
         var cachedGradient = GradientCache.GetCachedGradient(cacheKey);
         if (cachedGradient != null)
         {
-            _lastComputedGradients = cachedGradient.Parameters;
-            return cachedGradient.Parameters;
+            // CRITICAL: Clone the cached gradient to prevent external modifications from corrupting the cache.
+            // If we return the cached vector directly, callers could modify it (e.g., during AllReduce operations),
+            // which would corrupt the cache for future calls with the same key.
+            var clonedGradient = new Vector<T>(cachedGradient.Parameters.ToArray());
+            _lastComputedGradients = clonedGradient;
+            return clonedGradient;
         }
 
         TOutput predictions = solution.Predict(X);
