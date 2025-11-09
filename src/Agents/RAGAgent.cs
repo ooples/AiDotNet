@@ -164,9 +164,15 @@ public class RAGAgent<T> : AgentBase<T>
     }
 
     /// <inheritdoc/>
+    /// <remarks>
+    /// Note: The maxIterations parameter is not used by RAGAgent as it executes a single-pass
+    /// retrieval-augmentation-generation pipeline rather than an iterative reasoning loop.
+    /// The parameter is retained for API compatibility with the base AgentBase class.
+    /// </remarks>
     public override async Task<string> RunAsync(string query, int maxIterations = 3)
     {
-        ValidateMaxIterations(maxIterations);
+        // Note: maxIterations is not used in RAG agents (no iteration loop)
+        // Parameter kept for base class API compatibility
 
         if (string.IsNullOrWhiteSpace(query))
         {

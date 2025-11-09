@@ -189,6 +189,10 @@ public class PlanAndExecuteAgent<T> : AgentBase<T>
                             AppendToScratchpad($"  {i + 1}. {plan.Steps[i].Description}");
                         }
                         AppendToScratchpad("");
+
+                        // Restart from the beginning of the new plan
+                        stepIndex = -1; // Will be incremented to 0 at the start of next iteration
+                        continue;
                     }
                     else
                     {

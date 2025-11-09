@@ -138,6 +138,13 @@ public class VectorSearchTool<T> : ITool
     private (string query, int topK) ParseInput(string input)
     {
         var parts = input.Split(new[] { '|' }, 2, StringSplitOptions.RemoveEmptyEntries);
+
+        // Guard against malformed input (e.g., just "|" or only delimiters)
+        if (parts.Length == 0 || string.IsNullOrWhiteSpace(parts[0]))
+        {
+            throw new ArgumentException("Search query cannot be empty or consist only of delimiters.", nameof(input));
+        }
+
         var query = parts[0].Trim();
         var topK = _defaultTopK;
 
