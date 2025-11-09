@@ -461,7 +461,7 @@ public class MixtureOfExpertsBuilder<T>
     /// Creates a single expert network based on the configured settings.
     /// </summary>
     /// <returns>An expert layer containing the configured architecture.</returns>
-    private Expert<T> CreateExpert()
+    private ExpertLayer<T> CreateExpert()
     {
         var layers = new List<ILayer<T>>();
 
@@ -477,6 +477,6 @@ public class MixtureOfExpertsBuilder<T>
             layers.Add(new DenseLayer<T>(_inputDim, _outputDim, _expertActivation));
         }
 
-        return new Expert<T>(layers, new[] { _inputDim }, new[] { _outputDim });
+        return new ExpertLayer<T>(layers, new[] { _inputDim }, new[] { _outputDim });
     }
 }

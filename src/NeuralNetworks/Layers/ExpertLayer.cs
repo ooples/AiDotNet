@@ -30,7 +30,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
 /// since only a subset of experts are activated for each input.
 /// </para>
 /// </remarks>
-public class Expert<T> : LayerBase<T>
+public class ExpertLayer<T> : LayerBase<T>
 {
     /// <summary>
     /// The sequence of layers that make up this expert.
@@ -103,7 +103,7 @@ public class Expert<T> : LayerBase<T>
     public override int ParameterCount => _layers.Sum(l => l.ParameterCount);
 
     /// <summary>
-    /// Initializes a new instance of the <see cref="Expert{T}"/> class with the specified layers.
+    /// Initializes a new instance of the <see cref="ExpertLayer{T}"/> class with the specified layers.
     /// </summary>
     /// <param name="layers">The sequence of layers that make up this expert.</param>
     /// <param name="inputShape">The shape of the input tensor.</param>
@@ -131,11 +131,11 @@ public class Expert<T> : LayerBase<T>
     ///     new DenseLayer&lt;float&gt;(100, 50, new ReLUActivation&lt;float&gt;()),
     ///     new DenseLayer&lt;float&gt;(50, 25, new ReLUActivation&lt;float&gt;())
     /// };
-    /// var expert = new Expert&lt;float&gt;(layers, new[] { 100 }, new[] { 25 });
+    /// var expert = new ExpertLayer&lt;float&gt;(layers, new[] { 100 }, new[] { 25 });
     /// </code>
     /// </para>
     /// </remarks>
-    public Expert(List<ILayer<T>> layers, int[] inputShape, int[] outputShape, IActivationFunction<T>? activationFunction = null)
+    public ExpertLayer(List<ILayer<T>> layers, int[] inputShape, int[] outputShape, IActivationFunction<T>? activationFunction = null)
         : base(inputShape, outputShape, activationFunction ?? new IdentityActivation<T>())
     {
         if (layers == null || layers.Count == 0)

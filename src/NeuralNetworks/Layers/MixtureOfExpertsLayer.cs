@@ -383,7 +383,7 @@ public class MixtureOfExpertsLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     ///         new DenseLayer&lt;float&gt;(128, 256, new ReLUActivation&lt;float&gt;()),
     ///         new DenseLayer&lt;float&gt;(256, 128, new ReLUActivation&lt;float&gt;())
     ///     };
-    ///     experts.Add(new Expert&lt;float&gt;(expertLayers, new[] { 128 }, new[] { 128 }));
+    ///     experts.Add(new ExpertLayer&lt;float&gt;(expertLayers, new[] { 128 }, new[] { 128 }));
     /// }
     ///
     /// // Create router that outputs 4 scores (one per expert)
