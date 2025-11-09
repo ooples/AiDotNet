@@ -93,6 +93,9 @@ public class HyperparameterTool : ToolBase
         if (!new[] { "low", "moderate", "high" }.Contains(dataComplexity.ToLowerInvariant()))
             return $"Warning: Unexpected data_complexity '{dataComplexity}'. Expected: low, moderate, or high.";
 
+        // Normalize dataComplexity to lowercase for consistent handling in helper methods
+        dataComplexity = dataComplexity.ToLowerInvariant();
+
         var recommendations = new System.Text.StringBuilder();
         recommendations.AppendLine("=== HYPERPARAMETER RECOMMENDATIONS ===\n");
         recommendations.AppendLine($"**Model Type:** {modelType}");

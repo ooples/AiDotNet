@@ -305,7 +305,6 @@ public class DataAnalysisTool : ToolBase
 
                     int maxCount = classCounts.Values.Max();
                     int minCount = classCounts.Values.Min();
-                    double imbalanceRatio = (double)maxCount / minCount;
 
                     foreach (var kvp in classCounts.OrderByDescending(x => x.Value))
                     {
@@ -315,22 +314,35 @@ public class DataAnalysisTool : ToolBase
 
                     analysis.AppendLine();
 
-                    if (imbalanceRatio >= 10.0)
+                    // Guard against division by zero if a class has 0 samples
+                    if (minCount == 0)
                     {
-                        analysis.AppendLine($"⚠️ **SEVERE CLASS IMBALANCE** (ratio: {imbalanceRatio:F1}:1)");
-                        analysis.AppendLine("  → Recommendation: Use SMOTE, class weights, or undersampling/oversampling techniques");
-                        analysis.AppendLine("  → Consider using stratified cross-validation");
-                        analysis.AppendLine("  → Evaluation metrics: Use F1-score, precision, recall instead of accuracy");
-                    }
-                    else if (imbalanceRatio >= 3.0)
-                    {
-                        analysis.AppendLine($"⚠️ **MODERATE CLASS IMBALANCE** (ratio: {imbalanceRatio:F1}:1)");
-                        analysis.AppendLine("  → Recommendation: Consider using class weights in your model");
-                        analysis.AppendLine("  → Use stratified cross-validation");
+                        analysis.AppendLine("⚠️ **CRITICAL: One or more classes have 0 samples!**");
+                        analysis.AppendLine("  → This indicates a data issue - all classes must have at least one sample");
+                        analysis.AppendLine("  → Remove classes with 0 samples before training");
                     }
                     else
                     {
-                        analysis.AppendLine($"✓ Classes are reasonably balanced (ratio: {imbalanceRatio:F1}:1)");
+                        // Calculate and analyze imbalance ratio
+                        double imbalanceRatio = (double)maxCount / minCount;
+
+                        if (imbalanceRatio >= 10.0)
+                        {
+                            analysis.AppendLine($"⚠️ **SEVERE CLASS IMBALANCE** (ratio: {imbalanceRatio:F1}:1)");
+                            analysis.AppendLine("  → Recommendation: Use SMOTE, class weights, or undersampling/oversampling techniques");
+                            analysis.AppendLine("  → Consider using stratified cross-validation");
+                            analysis.AppendLine("  → Evaluation metrics: Use F1-score, precision, recall instead of accuracy");
+                        }
+                        else if (imbalanceRatio >= 3.0)
+                        {
+                            analysis.AppendLine($"⚠️ **MODERATE CLASS IMBALANCE** (ratio: {imbalanceRatio:F1}:1)");
+                            analysis.AppendLine("  → Recommendation: Consider using class weights in your model");
+                            analysis.AppendLine("  → Use stratified cross-validation");
+                        }
+                        else
+                        {
+                            analysis.AppendLine($"✓ Classes are reasonably balanced (ratio: {imbalanceRatio:F1}:1)");
+                        }
                     }
 
                     analysis.AppendLine();
