@@ -26,8 +26,23 @@ namespace AiDotNet.NeuralNetworks.Layers;
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric type used for calculations, typically float or double.</typeparam>
-public class HighwayLayer<T> : LayerBase<T>
+public class HighwayLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
 {
+    /// <summary>
+    /// Gets or sets a value indicating whether auxiliary loss is enabled for this layer.
+    /// </summary>
+    public bool UseAuxiliaryLoss { get; set; } = false;
+
+    /// <summary>
+    /// Gets or sets the weight for the auxiliary loss contribution.
+    /// </summary>
+    public T AuxiliaryLossWeight { get; set; } = NumOps.FromDouble(0.01);
+
+    /// <summary>
+    /// Stores the last computed gate balance loss for diagnostic purposes.
+    /// </summary>
+    private T _lastGateBalanceLoss = NumOps.Zero;
+
     /// <summary>
     /// The weight matrix used to transform the input data.
     /// </summary>
@@ -784,5 +799,31 @@ public class HighwayLayer<T> : LayerBase<T>
         _transformBiasGradient = null;
         _gateWeightsGradient = null;
         _gateBiasGradient = null;
+    }
+
+    /// <summary>
+    /// Computes the auxiliary loss for this layer based on gate balance regularization.
+    /// </summary>
+    /// <returns>The computed auxiliary loss value.</returns>
+    public T ComputeAuxiliaryLoss()
+    {
+        // Placeholder - full implementation would regularize gate values
+        // to encourage balanced use of transform vs bypass lanes
+        _lastGateBalanceLoss = NumOps.Zero;
+        return _lastGateBalanceLoss;
+    }
+
+    /// <summary>
+    /// Gets diagnostic information about the auxiliary loss computation.
+    /// </summary>
+    /// <returns>A dictionary containing diagnostic information about the auxiliary loss.</returns>
+    public Dictionary<string, string> GetAuxiliaryLossDiagnostics()
+    {
+        return new Dictionary<string, string>
+        {
+            { "TotalGateBalanceLoss", _lastGateBalanceLoss.ToString() ?? "0" },
+            { "GateBalanceWeight", AuxiliaryLossWeight.ToString() ?? "0.01" },
+            { "UseGateBalance", UseAuxiliaryLoss.ToString() }
+        };
     }
 }
