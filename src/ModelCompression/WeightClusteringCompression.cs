@@ -1,4 +1,6 @@
+using System;
 using AiDotNet.Helpers;
+using AiDotNet.LinearAlgebra;
 
 namespace AiDotNet.ModelCompression;
 
@@ -92,11 +94,16 @@ public class WeightClusteringCompression<T> : ModelCompressionBase<T>
     /// </summary>
     /// <param name="weights">The original model weights.</param>
     /// <returns>Compressed weights and metadata containing cluster centers and assignments.</returns>
-    public override (T[] compressedWeights, object metadata) Compress(T[] weights)
+    public override (Vector<T> compressedWeights, object metadata) Compress(Vector<T> weights)
     {
-        if (weights == null || weights.Length == 0)
+        if (weights == null)
         {
-            throw new ArgumentException("Weights cannot be null or empty.", nameof(weights));
+            throw new ArgumentNullException(nameof(weights));
+        }
+
+        if (weights.Length == 0)
+        {
+            throw new ArgumentException("Weights cannot be empty.", nameof(weights));
         }
 
         // Adjust number of clusters if we have fewer weights
@@ -106,21 +113,19 @@ public class WeightClusteringCompression<T> : ModelCompressionBase<T>
         var (clusterCenters, assignments) = PerformKMeansClustering(weights, effectiveClusters);
 
         // Create metadata
-        var metadata = new WeightClusteringMetadata<T>
-        {
-            ClusterCenters = clusterCenters,
-            NumClusters = effectiveClusters,
-            OriginalLength = weights.Length
-        };
+        var metadata = new WeightClusteringMetadata<T>(
+            clusterCenters: clusterCenters,
+            numClusters: effectiveClusters,
+            originalLength: weights.Length);
 
         // Compressed weights are the cluster assignments (as indices)
-        var compressedWeights = new T[assignments.Length];
+        var compressedArray = new T[assignments.Length];
         for (int i = 0; i < assignments.Length; i++)
         {
-            compressedWeights[i] = NumOps.FromDouble(assignments[i]);
+            compressedArray[i] = NumOps.FromDouble(assignments[i]);
         }
 
-        return (compressedWeights, metadata);
+        return (new Vector<T>(compressedArray), metadata);
     }
 
     /// <summary>
@@ -129,26 +134,27 @@ public class WeightClusteringCompression<T> : ModelCompressionBase<T>
     /// <param name="compressedWeights">The compressed weights (cluster assignments).</param>
     /// <param name="metadata">The metadata containing cluster centers.</param>
     /// <returns>The decompressed weights.</returns>
-    public override T[] Decompress(T[] compressedWeights, object metadata)
+    public override Vector<T> Decompress(Vector<T> compressedWeights, object metadata)
     {
         if (compressedWeights == null)
         {
             throw new ArgumentNullException(nameof(compressedWeights));
         }
 
-        if (metadata is not WeightClusteringMetadata<T> clusterMetadata)
+        var clusterMetadata = metadata as WeightClusteringMetadata<T>;
+        if (clusterMetadata == null)
         {
             throw new ArgumentException("Invalid metadata type for weight clustering.", nameof(metadata));
         }
 
-        var decompressedWeights = new T[compressedWeights.Length];
+        var decompressedArray = new T[compressedWeights.Length];
         for (int i = 0; i < compressedWeights.Length; i++)
         {
             int clusterIndex = (int)NumOps.ToDouble(compressedWeights[i]);
-            decompressedWeights[i] = clusterMetadata.ClusterCenters[clusterIndex];
+            decompressedArray[i] = clusterMetadata.ClusterCenters[clusterIndex];
         }
 
-        return decompressedWeights;
+        return new Vector<T>(decompressedArray);
     }
 
     /// <summary>
@@ -157,9 +163,10 @@ public class WeightClusteringCompression<T> : ModelCompressionBase<T>
     /// <param name="compressedWeights">The compressed weights.</param>
     /// <param name="metadata">The compression metadata.</param>
     /// <returns>The total size in bytes.</returns>
-    public override long GetCompressedSize(T[] compressedWeights, object metadata)
+    public override long GetCompressedSize(Vector<T> compressedWeights, object metadata)
     {
-        if (metadata is not WeightClusteringMetadata<T> clusterMetadata)
+        var clusterMetadata = metadata as WeightClusteringMetadata<T>;
+        if (clusterMetadata == null)
         {
             throw new ArgumentException("Invalid metadata type.", nameof(metadata));
         }
@@ -198,7 +205,7 @@ public class WeightClusteringCompression<T> : ModelCompressionBase<T>
     /// - Repeat until groups stabilize
     /// </para>
     /// </remarks>
-    private (T[] clusterCenters, int[] assignments) PerformKMeansClustering(T[] weights, int k)
+    private (T[] clusterCenters, int[] assignments) PerformKMeansClustering(Vector<T> weights, int k)
     {
         // Initialize cluster centers using k-means++ for better initial placement
         var clusterCenters = InitializeClusterCentersKMeansPlusPlus(weights, k);
@@ -247,7 +254,7 @@ public class WeightClusteringCompression<T> : ModelCompressionBase<T>
     /// <summary>
     /// Initializes cluster centers using the K-means++ algorithm for better initial placement.
     /// </summary>
-    private T[] InitializeClusterCentersKMeansPlusPlus(T[] weights, int k)
+    private T[] InitializeClusterCentersKMeansPlusPlus(Vector<T> weights, int k)
     {
         var centers = new T[k];
         var distances = new double[weights.Length];
@@ -312,7 +319,7 @@ public class WeightClusteringCompression<T> : ModelCompressionBase<T>
     /// <summary>
     /// Calculates the total inertia (sum of squared distances to cluster centers).
     /// </summary>
-    private double CalculateInertia(T[] weights, T[] clusterCenters, int[] assignments)
+    private double CalculateInertia(Vector<T> weights, T[] clusterCenters, int[] assignments)
     {
         double inertia = 0;
         for (int i = 0; i < weights.Length; i++)
@@ -332,17 +339,45 @@ public class WeightClusteringCompression<T> : ModelCompressionBase<T>
 public class WeightClusteringMetadata<T>
 {
     /// <summary>
-    /// The cluster centers.
+    /// Initializes a new instance of the WeightClusteringMetadata class.
     /// </summary>
-    public required T[] ClusterCenters { get; init; }
+    /// <param name="clusterCenters">The cluster centers.</param>
+    /// <param name="numClusters">The number of clusters.</param>
+    /// <param name="originalLength">The original length of the weights array.</param>
+    public WeightClusteringMetadata(T[] clusterCenters, int numClusters, int originalLength)
+    {
+        if (clusterCenters == null)
+        {
+            throw new ArgumentNullException(nameof(clusterCenters));
+        }
+
+        if (numClusters <= 0)
+        {
+            throw new ArgumentException("Number of clusters must be positive.", nameof(numClusters));
+        }
+
+        if (originalLength < 0)
+        {
+            throw new ArgumentException("Original length cannot be negative.", nameof(originalLength));
+        }
+
+        ClusterCenters = clusterCenters;
+        NumClusters = numClusters;
+        OriginalLength = originalLength;
+    }
 
     /// <summary>
-    /// The number of clusters.
+    /// Gets the cluster centers.
     /// </summary>
-    public required int NumClusters { get; init; }
+    public T[] ClusterCenters { get; private set; }
 
     /// <summary>
-    /// The original length of the weights array.
+    /// Gets the number of clusters.
     /// </summary>
-    public required int OriginalLength { get; init; }
+    public int NumClusters { get; private set; }
+
+    /// <summary>
+    /// Gets the original length of the weights array.
+    /// </summary>
+    public int OriginalLength { get; private set; }
 }
