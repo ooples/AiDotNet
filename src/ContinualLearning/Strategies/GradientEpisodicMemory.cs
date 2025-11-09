@@ -25,8 +25,8 @@ namespace AiDotNet.ContinualLearning.Strategies;
 /// - When training on a new task:
 ///   1. Compute gradient g for the new task
 ///   2. Compute gradients g_k for each previous task using stored examples
-///   3. If g would increase loss on any previous task (i.e., g · g_k &lt; 0):
-///      - Project g to the nearest gradient that satisfies g' · g_k ≥ 0 for all k
+///   3. If g would increase loss on any previous task (i.e., g · g_k &lt; margin):
+///      - Project g to the nearest gradient that satisfies g' · g_k ≥ margin for all k
 ///   4. Use the projected gradient for the update
 /// </para>
 ///
