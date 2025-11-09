@@ -43,7 +43,6 @@ public class InMemoryCommunicationBackend<T> : CommunicationBackendBase<T>
 {
     private readonly int _rank;
     private readonly int _worldSize;
-    private readonly INumericOperations<T> _numOps;
     private readonly string _environmentId;
     private bool _isInitialized;
 
@@ -131,7 +130,6 @@ public class InMemoryCommunicationBackend<T> : CommunicationBackendBase<T>
         _rank = rank;
         _worldSize = worldSize;
         _environmentId = environmentId;
-        _numOps = MathHelper.GetNumericOperations<T>();
         _isInitialized = false;
 
         // Initialize environment-specific counters
@@ -744,13 +742,16 @@ public class InMemoryCommunicationBackend<T> : CommunicationBackendBase<T>
             }
 
             // Apply averaging if needed
-            // Average operation: First accumulates using Sum (lines 682-685),
-            // then divides by the count of vectors to compute the mean.
+            // Average operation: First accumulates using Sum (via ApplyReductionOperation which treats
+            // Average same as Sum per CommunicationBackendBase.cs:296), then divides by the count of
+            // vectors to compute the mean.
             // This is mathematically correct: (v0 + v1 + ... + vn-1) / n
             // The accumulation uses Sum logic (addition) followed by division,
             // which is the standard and efficient way to compute an average.
             if (operation == ReductionOperation.Average)
             {
+                // CRITICAL: Ensure we use the proper numeric type conversion for division
+                // vectors.Count is int, must convert to T to ensure type-safe division
                 var count = NumOps.FromDouble(vectors.Count);
                 value = NumOps.Divide(value, count);
             }
