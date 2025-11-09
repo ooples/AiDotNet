@@ -5,7 +5,7 @@ namespace AiDotNetTestConsole;
 
 class Program
 {
-    static void Main(string[] args)
+    static async Task Main(string[] args)
     {
         Console.WriteLine("AiDotNet Examples");
         Console.WriteLine("================");
@@ -34,15 +34,15 @@ class Program
                     break;
                 case 2:
                     var regExample = new RegressionExample();
-                    regExample.RunExample();
+                    await regExample.RunExample();
                     break;
                 case 3:
                     var tsExample = new TimeSeriesExample();
-                    tsExample.RunExample();
+                    await tsExample.RunExample();
                     break;
                 case 4:
                     var enhancedRegExample = new EnhancedRegressionExample();
-                    enhancedRegExample.RunExample();
+                    await enhancedRegExample.RunExample();
                     break;
                 case 5:
                     var enhancedNNExample = new EnhancedNeuralNetworkExample();
@@ -50,7 +50,7 @@ class Program
                     break;
                 case 6:
                     var enhancedTSExample = new EnhancedTimeSeriesExample();
-                    enhancedTSExample.RunExample();
+                    await enhancedTSExample.RunExample();
                     break;
                 default:
                     Console.WriteLine("Invalid choice. Please select a number between 0 and 6.");
