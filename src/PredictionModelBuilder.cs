@@ -255,6 +255,19 @@ public class PredictionModelBuilder<T, TInput, TOutput> : IPredictionModelBuilde
     }
 
     /// <summary>
+    /// Builds a meta-trained model that can quickly adapt to new tasks (synchronous version).
+    /// </summary>
+    /// <returns>A meta-trained model with rapid adaptation capabilities.</returns>
+    /// <exception cref="InvalidOperationException">Thrown if ConfigureMetaLearning has not been called.</exception>
+    /// <remarks>
+    /// This is the synchronous wrapper for BuildAsync(). It blocks until the asynchronous operation completes.
+    /// </remarks>
+    public PredictionModelResult<T, TInput, TOutput> Build()
+    {
+        return BuildAsync().GetAwaiter().GetResult();
+    }
+
+    /// <summary>
     /// Builds a predictive model using the provided input features and output values.
     /// If agent assistance is enabled, the agent will help with model selection and hyperparameter tuning.
     /// </summary>
@@ -360,6 +373,22 @@ public class PredictionModelBuilder<T, TInput, TOutput> : IPredictionModelBuilde
             agentRecommendation);
 
         return finalResult;
+    }
+
+    /// <summary>
+    /// Builds a predictive model using the provided input features and output values (synchronous version).
+    /// </summary>
+    /// <param name="x">Matrix of input features (required).</param>
+    /// <param name="y">Vector of output values (required).</param>
+    /// <returns>A trained predictive model.</returns>
+    /// <exception cref="ArgumentException">Thrown when the number of rows in the features matrix doesn't match the length of the output vector.</exception>
+    /// <exception cref="InvalidOperationException">Thrown when no model has been specified for regular training.</exception>
+    /// <remarks>
+    /// This is the synchronous wrapper for BuildAsync(TInput x, TOutput y). It blocks until the asynchronous operation completes.
+    /// </remarks>
+    public PredictionModelResult<T, TInput, TOutput> Build(TInput x, TOutput y)
+    {
+        return BuildAsync(x, y).GetAwaiter().GetResult();
     }
 
     /// <summary>
