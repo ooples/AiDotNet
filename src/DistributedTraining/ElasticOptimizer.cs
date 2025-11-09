@@ -259,19 +259,12 @@ public class ElasticOptimizer<T, TInput, TOutput> : ShardedOptimizerBase<T, TInp
         reader.ReadInt32(); // MinimumParameterGroupSize
         reader.ReadBoolean(); // EnableGradientCompression
 
-        if (savedWorldSize != WorldSize)
-        {
-            throw new InvalidOperationException(
-                $"World size mismatch. Optimizer was saved with {savedWorldSize} processes, " +
-                $"but current configuration has {WorldSize} processes.");
-        }
-
-        if (savedRank != Rank)
-        {
-            throw new InvalidOperationException(
-                $"Rank mismatch. Optimizer was saved on rank {savedRank}, " +
-                $"but is being loaded on rank {Rank}. This could indicate a configuration error.");
-        }
+        // IMPORTANT: In elastic training, world size and rank CAN change between save/load.
+        // This is expected behavior when workers are added/removed. Do NOT validate equality.
+        // The optimizer will handle re-sharding automatically via HandleWorkerChange().
+        //
+        // We DO validate that elastic bounds (min/max workers) match, as these define the
+        // allowable range and should be consistent across elastic configuration changes.
 
         if (savedMinWorkers != _minWorkers || savedMaxWorkers != _maxWorkers)
         {
