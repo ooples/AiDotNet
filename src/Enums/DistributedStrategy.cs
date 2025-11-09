@@ -1,4 +1,4 @@
-namespace AiDotNet.DistributedTraining;
+namespace AiDotNet.Enums;
 
 /// <summary>
 /// Defines the distributed training strategy to use.

@@ -41,12 +41,20 @@ public abstract class ShardedOptimizerBase<T, TInput, TOutput> : IShardedOptimiz
     /// <summary>
     /// The wrapped optimizer that this sharded optimizer delegates to.
     /// </summary>
-    protected readonly IOptimizer<T, TInput, TOutput> WrappedOptimizer;
+    private readonly IOptimizer<T, TInput, TOutput> _wrappedOptimizer;
 
     /// <summary>
     /// The sharding configuration containing communication backend and settings.
     /// </summary>
     protected readonly IShardingConfiguration<T> Config;
+
+    /// <inheritdoc/>
+    public IOptimizer<T, TInput, TOutput> WrappedOptimizer => _wrappedOptimizer;
+
+    /// <summary>
+    /// Protected access to wrapped optimizer for derived classes.
+    /// </summary>
+    protected IOptimizer<T, TInput, TOutput> WrappedOptimizerInternal => _wrappedOptimizer;
 
     /// <inheritdoc/>
     public int Rank => Config.CommunicationBackend.Rank;
@@ -84,7 +92,7 @@ public abstract class ShardedOptimizerBase<T, TInput, TOutput> : IShardedOptimiz
         IOptimizer<T, TInput, TOutput> wrappedOptimizer,
         IShardingConfiguration<T> config)
     {
-        this.WrappedOptimizer = wrappedOptimizer ?? throw new ArgumentNullException(nameof(wrappedOptimizer));
+        _wrappedOptimizer = wrappedOptimizer ?? throw new ArgumentNullException(nameof(wrappedOptimizer));
         Config = config ?? throw new ArgumentNullException(nameof(config));
         NumOps = MathHelper.GetNumericOperations<T>();
 

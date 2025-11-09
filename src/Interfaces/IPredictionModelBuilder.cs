@@ -1,4 +1,6 @@
 using AiDotNet.Models.Results;
+using AiDotNet.DistributedTraining;
+using AiDotNet.Enums;
 
 namespace AiDotNet.Interfaces;
 

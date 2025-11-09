@@ -5,6 +5,47 @@ using AiDotNet.LinearAlgebra;
 
 namespace AiDotNet.DistributedTraining;
 
+// NCCL data types (must be outside generic type for P/Invoke)
+internal enum ncclDataType_t
+{
+    ncclInt8 = 0, ncclChar = 0,
+    ncclUint8 = 1,
+    ncclInt32 = 2, ncclInt = 2,
+    ncclUint32 = 3,
+    ncclInt64 = 4,
+    ncclUint64 = 5,
+    ncclFloat16 = 6, ncclHalf = 6,
+    ncclFloat32 = 7, ncclFloat = 7,
+    ncclFloat64 = 8, ncclDouble = 8,
+    ncclBfloat16 = 9,
+    ncclNumTypes = 10
+}
+
+// NCCL reduction operations
+internal enum ncclRedOp_t
+{
+    ncclSum = 0,
+    ncclProd = 1,
+    ncclMax = 2,
+    ncclMin = 3,
+    ncclAvg = 4,
+    ncclNumOps = 5
+}
+
+// NCCL result codes
+internal enum ncclResult_t
+{
+    ncclSuccess = 0,
+    ncclUnhandledCudaError = 1,
+    ncclSystemError = 2,
+    ncclInternalError = 3,
+    ncclInvalidArgument = 4,
+    ncclInvalidUsage = 5,
+    ncclRemoteError = 6,
+    ncclInProgress = 7,
+    ncclNumResults = 8
+}
+
 /// <summary>
 /// NVIDIA NCCL-based communication backend for GPU-to-GPU communication.
 /// </summary>
@@ -42,54 +83,6 @@ namespace AiDotNet.DistributedTraining;
 /// <typeparam name="T">The numeric type for operations</typeparam>
 public class NCCLCommunicationBackend<T> : CommunicationBackendBase<T>
 {
-    // NCCL P/Invoke declarations
-    private const string NcclLibrary = "nccl";
-
-    // NCCL data types
-    private enum ncclDataType_t
-    {
-        ncclInt8 = 0, ncclChar = 0,
-        ncclUint8 = 1,
-        ncclInt32 = 2, ncclInt = 2,
-        ncclUint32 = 3,
-        ncclInt64 = 4,
-        ncclUint64 = 5,
-        ncclFloat16 = 6, ncclHalf = 6,
-        ncclFloat32 = 7, ncclFloat = 7,
-        ncclFloat64 = 8, ncclDouble = 8,
-        ncclBfloat16 = 9,
-        ncclNumTypes = 10
-    }
-
-    // NCCL reduction operations
-    private enum ncclRedOp_t
-    {
-        ncclSum = 0,
-        ncclProd = 1,
-        ncclMax = 2,
-        ncclMin = 3,
-        ncclAvg = 4,
-        ncclNumOps = 5
-    }
-
-    // NCCL result codes
-    private enum ncclResult_t
-    {
-        ncclSuccess = 0,
-        ncclUnhandledCudaError = 1,
-        ncclSystemError = 2,
-        ncclInternalError = 3,
-        ncclInvalidArgument = 4,
-        ncclInvalidUsage = 5,
-        ncclRemoteError = 6,
-        ncclInProgress = 7,
-        ncclNumResults = 8
-    }
-
-    // NCCL P/Invoke methods (will fail gracefully if library not found)
-    [DllImport(NcclLibrary, CallingConvention = CallingConvention.Cdecl)]
-    private static extern ncclResult_t ncclGetVersion(out int version);
-
     private readonly int _rank;
     private readonly int _worldSize;
     private readonly int _deviceId;
@@ -124,7 +117,7 @@ public class NCCLCommunicationBackend<T> : CommunicationBackendBase<T>
         try
         {
             // Check if NCCL library is available
-            ncclResult_t result = ncclGetVersion(out int version);
+            ncclResult_t result = NcclNativeMethods.ncclGetVersion(out int version);
 
             if (result == ncclResult_t.ncclSuccess)
             {
@@ -404,4 +397,15 @@ public class NCCLCommunicationBackend<T> : CommunicationBackendBase<T>
             _ => throw new NotSupportedException($"Operation {operation} is not supported.")
         };
     }
+}
+
+/// <summary>
+/// NCCL P/Invoke methods (DllImport not allowed in generic types, so this must be outside)
+/// </summary>
+internal static class NcclNativeMethods
+{
+    private const string NcclLibrary = "nccl";
+
+    [DllImport(NcclLibrary, CallingConvention = CallingConvention.Cdecl)]
+    internal static extern ncclResult_t ncclGetVersion(out int version);
 }

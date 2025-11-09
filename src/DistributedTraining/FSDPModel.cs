@@ -259,7 +259,7 @@ public class FSDPModel<T, TInput, TOutput> : ShardedModelBase<T, TInput, TOutput
     }
 
     /// <inheritdoc/>
-    public IFullModel<T, TInput, TOutput> DeepCopy()
+    public override IFullModel<T, TInput, TOutput> DeepCopy()
     {
         var deepCopiedWrappedModel = WrappedModel.DeepCopy();
         return new FSDPModel<T, TInput, TOutput>(deepCopiedWrappedModel, Config);

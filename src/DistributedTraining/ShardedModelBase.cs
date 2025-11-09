@@ -42,7 +42,7 @@ public abstract class ShardedModelBase<T, TInput, TOutput> : IShardedModel<T, TI
     /// <summary>
     /// The wrapped model that this sharded model delegates to.
     /// </summary>
-    protected readonly IFullModel<T, TInput, TOutput> WrappedModel;
+    private readonly IFullModel<T, TInput, TOutput> _wrappedModel;
 
     /// <summary>
     /// The sharding configuration containing communication backend and settings.
@@ -68,6 +68,14 @@ public abstract class ShardedModelBase<T, TInput, TOutput> : IShardedModel<T, TI
     /// Size of this process's parameter shard.
     /// </summary>
     protected int ShardSize;
+
+    /// <inheritdoc/>
+    public IFullModel<T, TInput, TOutput> WrappedModel => _wrappedModel;
+
+    /// <summary>
+    /// Protected access to wrapped model for derived classes.
+    /// </summary>
+    protected IFullModel<T, TInput, TOutput> WrappedModelInternal => _wrappedModel;
 
     /// <inheritdoc/>
     public int Rank => Config.CommunicationBackend.Rank;
@@ -109,7 +117,7 @@ public abstract class ShardedModelBase<T, TInput, TOutput> : IShardedModel<T, TI
     /// <exception cref="ArgumentNullException">Thrown if model or config is null</exception>
     protected ShardedModelBase(IFullModel<T, TInput, TOutput> wrappedModel, IShardingConfiguration<T> config)
     {
-        this.WrappedModel = wrappedModel ?? throw new ArgumentNullException(nameof(wrappedModel));
+        _wrappedModel = wrappedModel ?? throw new ArgumentNullException(nameof(wrappedModel));
         Config = config ?? throw new ArgumentNullException(nameof(config));
         NumOps = MathHelper.GetNumericOperations<T>();
 
@@ -294,6 +302,12 @@ public abstract class ShardedModelBase<T, TInput, TOutput> : IShardedModel<T, TI
 
     /// <inheritdoc/>
     public abstract IFullModel<T, TInput, TOutput> Clone();
+
+    /// <inheritdoc/>
+    public virtual IFullModel<T, TInput, TOutput> DeepCopy()
+    {
+        return Clone();
+    }
 
     /// <inheritdoc/>
     public virtual Dictionary<string, T> GetFeatureImportance()

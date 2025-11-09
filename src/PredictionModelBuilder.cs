@@ -8,6 +8,8 @@ global using AiDotNet.DataProcessor;
 global using AiDotNet.FitDetectors;
 global using AiDotNet.LossFunctions;
 global using AiDotNet.MetaLearning.Trainers;
+global using AiDotNet.DistributedTraining;
+global using AiDotNet.Enums;
 
 namespace AiDotNet;
 
@@ -47,7 +49,7 @@ public class PredictionModelBuilder<T, TInput, TOutput> : IPredictionModelBuilde
     private IEnumerable<IQueryProcessor>? _queryProcessors;
     private IMetaLearner<T, TInput, TOutput>? _metaLearner;
     private ICommunicationBackend<T>? _distributedBackend;
-    private DistributedTraining.DistributedStrategy _distributedStrategy = DistributedTraining.DistributedStrategy.DDP;
+    private DistributedStrategy _distributedStrategy = DistributedStrategy.DDP;
     private IShardingConfiguration<T>? _distributedConfiguration;
 
     /// <summary>
@@ -285,35 +287,35 @@ public class PredictionModelBuilder<T, TInput, TOutput> : IPredictionModelBuilde
             // Switch on strategy to create appropriate model/optimizer pair
             (model, finalOptimizer) = _distributedStrategy switch
             {
-                DistributedTraining.DistributedStrategy.DDP => (
+                DistributedStrategy.DDP => (
                     new DistributedTraining.DDPModel<T, TInput, TOutput>(_model, shardingConfig),
                     new DistributedTraining.DDPOptimizer<T, TInput, TOutput>(optimizer, shardingConfig)
                 ),
-                DistributedTraining.DistributedStrategy.FSDP => (
+                DistributedStrategy.FSDP => (
                     new DistributedTraining.FSDPModel<T, TInput, TOutput>(_model, shardingConfig),
                     new DistributedTraining.FSDPOptimizer<T, TInput, TOutput>(optimizer, shardingConfig)
                 ),
-                DistributedTraining.DistributedStrategy.ZeRO1 => (
+                DistributedStrategy.ZeRO1 => (
                     new DistributedTraining.ZeRO1Model<T, TInput, TOutput>(_model, shardingConfig),
                     new DistributedTraining.ZeRO1Optimizer<T, TInput, TOutput>(optimizer, shardingConfig)
                 ),
-                DistributedTraining.DistributedStrategy.ZeRO2 => (
+                DistributedStrategy.ZeRO2 => (
                     new DistributedTraining.ZeRO2Model<T, TInput, TOutput>(_model, shardingConfig),
                     new DistributedTraining.ZeRO2Optimizer<T, TInput, TOutput>(optimizer, shardingConfig)
                 ),
-                DistributedTraining.DistributedStrategy.ZeRO3 => (
+                DistributedStrategy.ZeRO3 => (
                     new DistributedTraining.ZeRO3Model<T, TInput, TOutput>(_model, shardingConfig),
                     new DistributedTraining.ZeRO3Optimizer<T, TInput, TOutput>(optimizer, shardingConfig)
                 ),
-                DistributedTraining.DistributedStrategy.PipelineParallel => (
+                DistributedStrategy.PipelineParallel => (
                     new DistributedTraining.PipelineParallelModel<T, TInput, TOutput>(_model, shardingConfig),
                     new DistributedTraining.PipelineParallelOptimizer<T, TInput, TOutput>(optimizer, shardingConfig)
                 ),
-                DistributedTraining.DistributedStrategy.TensorParallel => (
+                DistributedStrategy.TensorParallel => (
                     new DistributedTraining.TensorParallelModel<T, TInput, TOutput>(_model, shardingConfig),
                     new DistributedTraining.TensorParallelOptimizer<T, TInput, TOutput>(optimizer, shardingConfig)
                 ),
-                DistributedTraining.DistributedStrategy.Hybrid => (
+                DistributedStrategy.Hybrid => (
                     new DistributedTraining.HybridShardedModel<T, TInput, TOutput>(_model, shardingConfig),
                     new DistributedTraining.HybridShardedOptimizer<T, TInput, TOutput>(optimizer, shardingConfig)
                 ),
@@ -561,7 +563,7 @@ public class PredictionModelBuilder<T, TInput, TOutput> : IPredictionModelBuilde
     /// </remarks>
     public IPredictionModelBuilder<T, TInput, TOutput> ConfigureDistributedTraining(
         ICommunicationBackend<T>? backend = null,
-        DistributedTraining.DistributedStrategy strategy = DistributedTraining.DistributedStrategy.DDP,
+        DistributedStrategy strategy = DistributedStrategy.DDP,
         IShardingConfiguration<T>? configuration = null)
     {
         _distributedBackend = backend;
