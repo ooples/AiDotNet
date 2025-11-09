@@ -1,5 +1,6 @@
 using System;
 using AiDotNet.ModelCompression;
+using AiDotNet.LinearAlgebra;
 using Xunit;
 
 namespace AiDotNetTests.UnitTests.ModelCompression
@@ -29,7 +30,7 @@ namespace AiDotNetTests.UnitTests.ModelCompression
         {
             // Arrange
             var compression = new HuffmanEncodingCompression<double>(precision: 2);
-            var weights = new double[] { 1.11, 1.12, 1.11, 2.22, 2.22, 2.22, 3.33 };
+            var weights = new Vector<double>(new double[] { 1.11, 1.12, 1.11, 2.22, 2.22, 2.22, 3.33 });
 
             // Act
             var (compressedWeights, metadata) = compression.Compress(weights);
@@ -57,7 +58,7 @@ namespace AiDotNetTests.UnitTests.ModelCompression
             var compression = new HuffmanEncodingCompression<double>();
 
             // Act & Assert
-            Assert.Throws<ArgumentException>(() => compression.Compress(Array.Empty<double>()));
+            Assert.Throws<ArgumentException>(() => compression.Compress(new Vector<double>(Array.Empty<double>())));
         }
 
         [Fact]
@@ -65,7 +66,7 @@ namespace AiDotNetTests.UnitTests.ModelCompression
         {
             // Arrange
             var compression = new HuffmanEncodingCompression<double>(precision: 2);
-            var originalWeights = new double[] { 1.11, 1.12, 1.11, 2.22, 2.22, 2.22, 3.33 };
+            var originalWeights = new Vector<double>(new double[] { 1.11, 1.12, 1.11, 2.22, 2.22, 2.22, 3.33 });
 
             // Act
             var (compressedWeights, metadata) = compression.Compress(originalWeights);
@@ -86,19 +87,18 @@ namespace AiDotNetTests.UnitTests.ModelCompression
         {
             // Arrange
             var compression = new HuffmanEncodingCompression<double>();
-            var metadata = new HuffmanEncodingMetadata<double>
-            {
-                HuffmanTree = new HuffmanNode<double>
-                {
-                    Value = 1.0,
-                    Frequency = 1,
-                    IsLeaf = true,
-                    Id = 0
-                },
-                EncodingTable = new System.Collections.Generic.Dictionary<double, string>(),
-                OriginalLength = 10,
-                BitLength = 10
-            };
+            var huffmanTree = new HuffmanNode<double>(
+                value: 1.0,
+                frequency: 1,
+                isLeaf: true,
+                id: 0,
+                left: null,
+                right: null);
+            var metadata = new HuffmanEncodingMetadata<double>(
+                huffmanTree: huffmanTree,
+                encodingTable: new System.Collections.Generic.Dictionary<double, string>(),
+                originalLength: 10,
+                bitLength: 10);
 
             // Act & Assert
             Assert.Throws<ArgumentNullException>(() =>
@@ -110,7 +110,7 @@ namespace AiDotNetTests.UnitTests.ModelCompression
         {
             // Arrange
             var compression = new HuffmanEncodingCompression<double>();
-            var compressedWeights = new double[] { 0.0, 1.0 };
+            var compressedWeights = new Vector<double>(new double[] { 0.0, 1.0 });
 
             // Act & Assert
             Assert.Throws<ArgumentException>(() =>
@@ -123,14 +123,15 @@ namespace AiDotNetTests.UnitTests.ModelCompression
             // Arrange
             var compression = new HuffmanEncodingCompression<double>(precision: 1);
             // Create weights with highly skewed frequency distribution
-            var weights = new double[1000];
-            for (int i = 0; i < 900; i++) weights[i] = 1.0; // 90% are 1.0
-            for (int i = 900; i < 990; i++) weights[i] = 2.0; // 9% are 2.0
-            for (int i = 990; i < 1000; i++) weights[i] = 3.0; // 1% are 3.0
+            var weightsArray = new double[1000];
+            for (int i = 0; i < 900; i++) weightsArray[i] = 1.0; // 90% are 1.0
+            for (int i = 900; i < 990; i++) weightsArray[i] = 2.0; // 9% are 2.0
+            for (int i = 990; i < 1000; i++) weightsArray[i] = 3.0; // 1% are 3.0
+            var weights = new Vector<double>(weightsArray);
 
             // Act
             var (compressedWeights, metadata) = compression.Compress(weights);
-            var originalSize = weights.Length * sizeof(double);
+            var originalSize = weightsArray.Length * sizeof(double);
             var compressedSize = compression.GetCompressedSize(compressedWeights, metadata);
 
             // Assert
@@ -143,7 +144,7 @@ namespace AiDotNetTests.UnitTests.ModelCompression
         {
             // Arrange
             var compression = new HuffmanEncodingCompression<double>(precision: 2);
-            var weights = new double[] { 1.0, 1.0, 2.0, 2.0, 3.0 };
+            var weights = new Vector<double>(new double[] { 1.0, 1.0, 2.0, 2.0, 3.0 });
 
             // Act
             var (compressedWeights, metadata) = compression.Compress(weights);
@@ -158,7 +159,7 @@ namespace AiDotNetTests.UnitTests.ModelCompression
         {
             // Arrange
             var compression = new HuffmanEncodingCompression<float>(precision: 2);
-            var weights = new float[] { 1.1f, 1.1f, 2.2f, 2.2f, 3.3f };
+            var weights = new Vector<float>(new float[] { 1.1f, 1.1f, 2.2f, 2.2f, 3.3f });
 
             // Act
             var (compressedWeights, metadata) = compression.Compress(weights);
@@ -178,7 +179,7 @@ namespace AiDotNetTests.UnitTests.ModelCompression
             // Arrange
             var compression1 = new HuffmanEncodingCompression<double>(precision: 1);
             var compression2 = new HuffmanEncodingCompression<double>(precision: 4);
-            var weights = new double[] { 1.12345, 2.23456, 3.34567, 4.45678 };
+            var weights = new Vector<double>(new double[] { 1.12345, 2.23456, 3.34567, 4.45678 });
 
             // Act
             var (_, metadata1) = compression1.Compress(weights);
@@ -196,7 +197,7 @@ namespace AiDotNetTests.UnitTests.ModelCompression
         {
             // Arrange
             var compression = new HuffmanEncodingCompression<double>(precision: 3);
-            var weights = new double[] { 1.123456, 2.234567, 3.345678, 1.123456 };
+            var weights = new Vector<double>(new double[] { 1.123456, 2.234567, 3.345678, 1.123456 });
 
             // Act
             var (compressedWeights, metadata) = compression.Compress(weights);
@@ -231,7 +232,7 @@ namespace AiDotNetTests.UnitTests.ModelCompression
         {
             // Arrange
             var compression = new HuffmanEncodingCompression<double>(precision: 1);
-            var weights = new double[] { 5.0, 5.0, 5.0, 5.0 };
+            var weights = new Vector<double>(new double[] { 5.0, 5.0, 5.0, 5.0 });
 
             // Act
             var (compressedWeights, metadata) = compression.Compress(weights);
