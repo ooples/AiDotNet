@@ -181,12 +181,13 @@ public class GlooCommunicationBackend<T> : CommunicationBackendBase<T>
                 client.Connect(masterAddr, targetPort);
 
                 // Send handshake: my rank
-                using (var stream = client.GetStream())
-                using (var writer = new BinaryWriter(stream))
-                {
-                    writer.Write(_rank);
-                    writer.Flush();
-                }
+                // IMPORTANT: Do NOT use 'using' here - disposing the stream closes the socket!
+                // We need to keep the connection open for future communication.
+                var stream = client.GetStream();
+                var writer = new BinaryWriter(stream);
+                writer.Write(_rank);
+                writer.Flush();
+                // Leave stream and writer open - they'll be cleaned up when TcpClient is disposed
 
                 lock (_connectionLock)
                 {
@@ -228,12 +229,12 @@ public class GlooCommunicationBackend<T> : CommunicationBackendBase<T>
         var client = _tcpListener.AcceptTcpClient();
 
         // Read handshake to verify rank
-        int receivedRank;
-        using (var stream = client.GetStream())
-        using (var reader = new BinaryReader(stream))
-        {
-            receivedRank = reader.ReadInt32();
-        }
+        // IMPORTANT: Do NOT use 'using' here - disposing the stream closes the socket!
+        // We need to keep the connection open for future communication.
+        var stream = client.GetStream();
+        var reader = new BinaryReader(stream);
+        int receivedRank = reader.ReadInt32();
+        // Leave stream and reader open - they'll be cleaned up when TcpClient is disposed
 
         if (receivedRank != expectedRank)
         {
