@@ -245,11 +245,42 @@ public class DeploymentRuntime<T> where T : struct
     {
         if (version.Equals("latest", StringComparison.OrdinalIgnoreCase))
         {
-            // Find latest version
-            var latestVersion = _models.Keys
+            // Find latest version using semantic version comparison
+            var versions = _models.Keys
                 .Where(k => k.StartsWith($"{modelName}:"))
                 .Select(k => k.Split(':')[1])
-                .OrderByDescending(v => v)
+                .ToList();
+
+            if (!versions.Any())
+                throw new InvalidOperationException($"No versions found for model {modelName}");
+
+            // Sort by semantic version: parse version numbers and compare numerically
+            var latestVersion = versions
+                .OrderByDescending(v =>
+                {
+                    // Strip 'v' prefix and split/prerelease suffix
+                    var sanitized = v.TrimStart('v').Split('-', '+')[0];
+
+                    // Try to parse as System.Version
+                    if (Version.TryParse(sanitized, out var parsed))
+                    {
+                        return parsed;
+                    }
+
+                    // Fallback: try parsing major.minor.patch manually
+                    var parts = sanitized.Split('.');
+                    if (parts.Length >= 2)
+                    {
+                        // Build version from available parts (pad with zeros if needed)
+                        var major = int.TryParse(parts[0], out var maj) ? maj : 0;
+                        var minor = int.TryParse(parts[1], out var min) ? min : 0;
+                        var patch = parts.Length > 2 && int.TryParse(parts[2], out var pat) ? pat : 0;
+                        return new Version(major, minor, patch);
+                    }
+
+                    // Last resort: use version 0.0 for unparseable versions
+                    return new Version(0, 0);
+                })
                 .FirstOrDefault();
 
             if (latestVersion == null)
