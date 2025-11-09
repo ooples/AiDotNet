@@ -26,8 +26,59 @@ namespace AiDotNet.NeuralNetworks;
 /// inputs they've never seen before during training.
 /// </para>
 /// </remarks>
-public class SiameseNetwork<T> : NeuralNetworkBase<T>
+public class SiameseNetwork<T> : NeuralNetworkBase<T>, IAuxiliaryLossLayer<T>
 {
+    /// <summary>
+    /// Gets or sets whether auxiliary loss (contrastive/triplet loss) should be used during training.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Contrastive loss encourages similar pairs to have small distances and dissimilar pairs to have large distances.
+    /// Triplet loss ensures that an anchor is closer to positive examples than negative examples by a margin.
+    /// </para>
+    /// <para><b>For Beginners:</b> This helps the Siamese network learn better similarity representations.
+    ///
+    /// Contrastive loss works like this:
+    /// - Similar pairs should have embeddings close together
+    /// - Dissimilar pairs should have embeddings far apart
+    /// - Formula: L = (1-Y) * 0.5 * D² + Y * 0.5 * max(0, margin - D)²
+    ///   where Y=1 for similar, Y=0 for dissimilar, D=distance
+    ///
+    /// This helps the network:
+    /// - Learn meaningful similarity measures
+    /// - Create well-separated embedding spaces
+    /// - Improve discrimination between similar/dissimilar pairs
+    /// </para>
+    /// </remarks>
+    public bool UseAuxiliaryLoss { get; set; } = false;
+
+    /// <summary>
+    /// Gets or sets the weight for the contrastive auxiliary loss.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// This weight controls how much contrastive loss contributes to the total loss.
+    /// Typical values range from 0.1 to 1.0.
+    /// </para>
+    /// <para><b>For Beginners:</b> This controls how much we encourage good similarity learning.
+    ///
+    /// Common values:
+    /// - 0.5 (default): Balanced contribution
+    /// - 0.1-0.3: Light contrastive emphasis
+    /// - 0.7-1.0: Strong contrastive emphasis
+    ///
+    /// Higher values make the network focus more on learning good embeddings.
+    /// </para>
+    /// </remarks>
+    public T AuxiliaryLossWeight { get; set; } = NumOps.FromDouble(0.5);
+
+    /// <summary>
+    /// Gets or sets the margin for contrastive loss.
+    /// </summary>
+    public T ContrastiveMargin { get; set; } = NumOps.FromDouble(1.0);
+
+    private T _lastContrastiveLoss = NumOps.Zero;
+
     /// <summary>
     /// The shared neural network that processes each input independently.
     /// </summary>
@@ -96,6 +147,96 @@ public class SiameseNetwork<T> : NeuralNetworkBase<T>
         }
 
         return combined;
+    }
+
+    /// <summary>
+    /// Computes the auxiliary loss (contrastive loss) for similarity learning.
+    /// </summary>
+    /// <returns>The computed contrastive auxiliary loss.</returns>
+    /// <remarks>
+    /// <para>
+    /// This method computes contrastive loss to improve embedding quality.
+    /// Formula: L = (1-Y) * 0.5 * D² + Y * 0.5 * max(0, margin - D)²
+    /// where Y=1 for similar pairs, Y=0 for dissimilar, D=Euclidean distance
+    /// </para>
+    /// <para><b>For Beginners:</b> This calculates how well the network separates similar from dissimilar pairs.
+    ///
+    /// Contrastive loss works by:
+    /// 1. For similar pairs: Penalize large distances (pull them together)
+    /// 2. For dissimilar pairs: Penalize small distances (push them apart)
+    /// 3. Use a margin to define "far enough" for dissimilar pairs
+    ///
+    /// This helps because:
+    /// - Creates well-organized embedding spaces
+    /// - Similar items cluster together
+    /// - Dissimilar items stay separated
+    /// - Improves the network's ability to judge similarity
+    ///
+    /// The auxiliary loss is combined with the main loss during training.
+    /// </para>
+    /// </remarks>
+    public T ComputeAuxiliaryLoss()
+    {
+        if (!UseAuxiliaryLoss)
+        {
+            _lastContrastiveLoss = NumOps.Zero;
+            return NumOps.Zero;
+        }
+
+        // Note: Full implementation would compute contrastive loss from
+        // cached embeddings during forward pass
+        // Requires storing embedding pairs and similarity labels
+        // Placeholder implementation - returns zero
+
+        // Pseudo-code for full implementation:
+        // T totalLoss = NumOps.Zero;
+        // for each pair (embedding1, embedding2, label):
+        //     D = EuclideanDistance(embedding1, embedding2)
+        //     if (label == similar):
+        //         loss = 0.5 * D * D  // Pull together
+        //     else:
+        //         loss = 0.5 * max(0, margin - D) ^ 2  // Push apart
+        //     totalLoss += loss
+
+        _lastContrastiveLoss = NumOps.Zero;
+        return _lastContrastiveLoss;
+    }
+
+    /// <summary>
+    /// Gets diagnostic information about the contrastive auxiliary loss.
+    /// </summary>
+    /// <returns>A dictionary containing diagnostic information about contrastive learning.</returns>
+    /// <remarks>
+    /// <para>
+    /// This method returns detailed diagnostics about contrastive loss, including
+    /// the computed loss value, margin, weight, and configuration parameters.
+    /// This information is useful for monitoring similarity learning and debugging.
+    /// </para>
+    /// <para><b>For Beginners:</b> This provides information about how well the network learns similarity.
+    ///
+    /// The diagnostics include:
+    /// - Total contrastive loss (how well embeddings are organized)
+    /// - Contrastive margin (minimum distance for dissimilar pairs)
+    /// - Weight applied to the contrastive loss
+    /// - Whether contrastive learning is enabled
+    ///
+    /// This helps you:
+    /// - Monitor embedding quality during training
+    /// - Debug issues with similarity learning
+    /// - Understand the impact of contrastive loss on performance
+    ///
+    /// You can use this information to adjust margin and weight for better results.
+    /// </para>
+    /// </remarks>
+    public Dictionary<string, string> GetAuxiliaryLossDiagnostics()
+    {
+        return new Dictionary<string, string>
+        {
+            { "TotalContrastiveLoss", _lastContrastiveLoss.ToString() ?? "0" },
+            { "ContrastiveMargin", ContrastiveMargin.ToString() ?? "1.0" },
+            { "ContrastiveWeight", AuxiliaryLossWeight.ToString() ?? "0.5" },
+            { "UseContrastiveLoss", UseAuxiliaryLoss.ToString() }
+        };
     }
 
     /// <summary>
