@@ -235,7 +235,7 @@ public class GradientEpisodicMemory<T, TInput, TOutput> : IContinualLearningStra
         // Simplified projection: average current gradient with task gradients
         // This is an approximation; the full solution requires solving a QP
 
-        var projected = gradient.ToArray().Select(x => x).ToArray();
+        var projected = gradient.ToArray();
 
         // For each violated constraint, adjust the gradient
         foreach (int k in violations)

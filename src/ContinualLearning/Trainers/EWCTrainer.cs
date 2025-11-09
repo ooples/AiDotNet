@@ -91,7 +91,7 @@ public class EWCTrainer<T, TInput, TOutput> : ContinualLearnerBase<T, TInput, TO
         MemoryBuffer.AddTaskExamples(taskData, samplesPerTask);
 
         // Evaluate performance
-        var finalLoss = lossHistory[^1];
+        var finalLoss = lossHistory[lossHistory.Count - 1];
         var finalAccuracy = NumOps.FromDouble(0.8); // Placeholder
 
         // Compute average accuracy on previous tasks

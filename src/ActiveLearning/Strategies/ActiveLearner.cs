@@ -163,7 +163,7 @@ public class ActiveLearner<T, TInput, TOutput> : IActiveLearner<T, TInput, TOutp
         startTime.Stop();
 
         return new TrainingResult<T>(
-            finalLoss: lossHistory[^1],
+            finalLoss: lossHistory[lossHistory.Count - 1],
             finalAccuracy: NumOps.FromDouble(0.85), // Placeholder
             trainingTime: startTime.Elapsed,
             lossHistory: new Vector<T>(lossHistory.ToArray()));
