@@ -243,6 +243,15 @@ public class AdaMaxOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T,
     protected override IFullModel<T, TInput, TOutput> UpdateSolution(IFullModel<T, TInput, TOutput> currentSolution, Vector<T> gradient)
     {
         var parameters = currentSolution.GetParameters();
+
+        // Initialize state vectors if needed
+        if (_m == null || _u == null || _m.Length != parameters.Length)
+        {
+            _m = new Vector<T>(parameters.Length);
+            _u = new Vector<T>(parameters.Length);
+            _t = 0;
+        }
+
         var newCoefficients = new Vector<T>(parameters.Length);
         var beta1 = NumOps.FromDouble(_options.Beta1);
         var oneMinusBeta1 = NumOps.FromDouble(1 - _options.Beta1);
@@ -251,10 +260,10 @@ public class AdaMaxOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T,
         for (int i = 0; i < parameters.Length; i++)
         {
             // Update biased first moment estimate
-            _m![i] = NumOps.Add(NumOps.Multiply(beta1, _m[i]), NumOps.Multiply(oneMinusBeta1, gradient[i]));
+            _m[i] = NumOps.Add(NumOps.Multiply(beta1, _m[i]), NumOps.Multiply(oneMinusBeta1, gradient[i]));
 
             // Update the exponentially weighted infinity norm
-            _u![i] = MathHelper.Max(NumOps.Multiply(beta2, _u[i]), NumOps.Abs(gradient[i]));
+            _u[i] = MathHelper.Max(NumOps.Multiply(beta2, _u[i]), NumOps.Abs(gradient[i]));
 
             // Compute the learning rate
             var alpha = NumOps.Divide(CurrentLearningRate, NumOps.FromDouble(1 - Math.Pow(_options.Beta1, _t)));
@@ -284,7 +293,7 @@ public class AdaMaxOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T,
     /// </remarks>
     public override Vector<T> UpdateParameters(Vector<T> parameters, Vector<T> gradient)
     {
-        if (_m == null || _m.Length != parameters.Length)
+        if (_m == null || _u == null || _m.Length != parameters.Length)
         {
             _m = new Vector<T>(parameters.Length);
             _u = new Vector<T>(parameters.Length);

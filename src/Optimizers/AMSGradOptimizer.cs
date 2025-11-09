@@ -187,7 +187,7 @@ public class AMSGradOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T
     /// </remarks>
     public override Vector<T> UpdateParameters(Vector<T> parameters, Vector<T> gradient)
     {
-        if (_m == null || _m.Length != parameters.Length)
+        if (_m == null || _v == null || _vHat == null || _m.Length != parameters.Length)
         {
             _m = new Vector<T>(parameters.Length);
             _v = new Vector<T>(parameters.Length);

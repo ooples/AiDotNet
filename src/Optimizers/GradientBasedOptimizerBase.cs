@@ -193,7 +193,7 @@ public abstract class GradientBasedOptimizerBase<T, TInput, TOutput> : Optimizer
         }
 
         // Get learning rate from options
-        double learningRate = _options.InitialLearningRate;
+        double learningRate = GradientOptions.InitialLearningRate;
 
         // Reverse the SGD update: params_old = params_new + lr * gradients
         var original = new T[updatedParameters.Length];
