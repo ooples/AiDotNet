@@ -690,6 +690,42 @@ public class PredictionModelBuilder<T, TInput, TOutput> : IPredictionModelBuilde
     // Private Agent Helper Methods
     // ============================================================================
 
+    /// <summary>
+    /// Analyzes dataset and generates AI agent recommendations for model selection, hyperparameters, and training strategy.
+    /// </summary>
+    /// <remarks>
+    /// ARCHITECTURE NOTES AND KNOWN LIMITATIONS:
+    ///
+    /// 1. Generic Type Conversion (Convert.ToDouble):
+    ///    - Statistical calculations require floating-point arithmetic (mean, std, etc.)
+    ///    - Generic type T is converted to double for analysis purposes only
+    ///    - Model training continues to use the original generic type T throughout
+    ///    - Limitation: Custom numeric types that can't convert to double won't work with agent analysis
+    ///    - Future: Could be improved by using INumericOperations<T> for all calculations
+    ///
+    /// 2. Method Length (253 lines):
+    ///    - This method orchestrates multiple agent analysis phases:
+    ///      * Data analysis (statistics, distributions, correlations)
+    ///      * Model selection (algorithm recommendation)
+    ///      * Hyperparameter tuning (parameter optimization)
+    ///      * Feature importance analysis
+    ///      * Cross-validation strategy
+    ///    - Each phase involves LLM calls and result parsing
+    ///    - Breaking into smaller methods would require passing many parameters
+    ///    - Trade-off: Single coherent workflow vs. method length guidelines
+    ///    - Future: Could extract phases to separate analyzer classes
+    ///
+    /// 3. Hardcoded Assumptions:
+    ///    - Assumes regression for continuous targets (line ~747)
+    ///    - Assumes no outliers/missing values initially (line ~775-777)
+    ///    - These are safe defaults; actual data analysis overrides them
+    ///    - Future: Could infer problem type from TOutput constraints
+    ///
+    /// 4. Error Handling:
+    ///    - LLM failures gracefully degrade (skip that analysis phase)
+    ///    - Partial recommendations are still useful
+    ///    - Future: Could add retry logic for transient failures
+    /// </remarks>
     private async Task<AgentRecommendation<T, TInput, TOutput>> GetAgentRecommendationsAsync(
         TInput x, TOutput y)
     {
@@ -948,6 +984,40 @@ public class PredictionModelBuilder<T, TInput, TOutput> : IPredictionModelBuilde
         return recommendation;
     }
 
+    /// <summary>
+    /// Applies agent recommendations to the model builder where possible, or provides user guidance.
+    /// </summary>
+    /// <remarks>
+    /// ARCHITECTURE DECISIONS AND LIMITATIONS:
+    ///
+    /// This method provides INFORMATIONAL GUIDANCE rather than full auto-configuration because:
+    ///
+    /// 1. Model Auto-Creation Complexity:
+    ///    - The library has 80+ model types with different constructor signatures
+    ///    - Creating a universal model factory would require:
+    ///      * Mapping model types to constructors
+    ///      * Determining appropriate default parameters for each model
+    ///      * Handling model-specific dependencies and configurations
+    ///    - This complexity outweighs the benefit of auto-creation
+    ///    - Solution: Provide clear console guidance for manual configuration
+    ///
+    /// 2. Hyperparameter Auto-Application:
+    ///    - Tracked in Issue #460: "Auto-Apply Agent Hyperparameter Recommendations"
+    ///    - Requires reflection-based property setting
+    ///    - Needs validation that hyperparameters are compatible with model
+    ///    - Future enhancement with HyperparameterApplicator service
+    ///
+    /// 3. User Control:
+    ///    - Developers may want to review recommendations before applying
+    ///    - Explicit configuration prevents unexpected model changes
+    ///    - Recommendation details available in result.AgentRecommendation for review
+    ///
+    /// 4. Current Functionality:
+    ///    - Displays model type recommendation with reasoning via console
+    ///    - Provides code example for manual configuration
+    ///    - Stores full recommendations in result object for programmatic access
+    ///    - Future: Will auto-apply hyperparameters when model is already set
+    /// </remarks>
     private void ApplyAgentRecommendations(AgentRecommendation<T, TInput, TOutput> recommendation)
     {
         // Apply agent recommendations where possible
