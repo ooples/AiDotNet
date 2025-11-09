@@ -44,8 +44,7 @@ internal static class OnnxProto
         // Field 2: opset_import (required)
         writer.WriteTag(2, WireFormat.WireType.LengthDelimited);
         var opsetBytes = CreateOpsetImport(graph.OpsetVersion);
-        writer.WriteLength(opsetBytes.Length);
-        writer.WriteRawBytes(opsetBytes);
+        writer.WriteBytes(ByteString.CopyFrom(opsetBytes));
 
         // Field 3: producer_name
         writer.WriteTag(3, WireFormat.WireType.LengthDelimited);
@@ -58,8 +57,7 @@ internal static class OnnxProto
         // Field 7: graph (required)
         writer.WriteTag(7, WireFormat.WireType.LengthDelimited);
         var graphBytes = CreateGraphProto(graph, config);
-        writer.WriteLength(graphBytes.Length);
-        writer.WriteRawBytes(graphBytes);
+        writer.WriteBytes(ByteString.CopyFrom(graphBytes));
 
         // Field 8: model_version
         if (!string.IsNullOrEmpty(config.ModelVersion))
@@ -102,8 +100,7 @@ internal static class OnnxProto
         {
             writer.WriteTag(1, WireFormat.WireType.LengthDelimited);
             var nodeBytes = CreateNodeProto(operation);
-            writer.WriteLength(nodeBytes.Length);
-            writer.WriteRawBytes(nodeBytes);
+            writer.WriteBytes(ByteString.CopyFrom(nodeBytes));
         }
 
         // Field 2: name
@@ -111,12 +108,13 @@ internal static class OnnxProto
         writer.WriteString(graph.Name);
 
         // Field 5: initializer (repeated) - for weights
-        foreach (var (name, data) in graph.Initializers)
+        foreach (var kvp in graph.Initializers)
         {
+            var name = kvp.Key;
+            var data = kvp.Value;
             writer.WriteTag(5, WireFormat.WireType.LengthDelimited);
             var tensorBytes = CreateTensorProto(name, data);
-            writer.WriteLength(tensorBytes.Length);
-            writer.WriteRawBytes(tensorBytes);
+            writer.WriteBytes(ByteString.CopyFrom(tensorBytes));
         }
 
         // Field 11: input (repeated)
@@ -124,8 +122,7 @@ internal static class OnnxProto
         {
             writer.WriteTag(11, WireFormat.WireType.LengthDelimited);
             var valueInfoBytes = CreateValueInfoProto(input);
-            writer.WriteLength(valueInfoBytes.Length);
-            writer.WriteRawBytes(valueInfoBytes);
+            writer.WriteBytes(ByteString.CopyFrom(valueInfoBytes));
         }
 
         // Field 12: output (repeated)
@@ -133,8 +130,7 @@ internal static class OnnxProto
         {
             writer.WriteTag(12, WireFormat.WireType.LengthDelimited);
             var valueInfoBytes = CreateValueInfoProto(output);
-            writer.WriteLength(valueInfoBytes.Length);
-            writer.WriteRawBytes(valueInfoBytes);
+            writer.WriteBytes(ByteString.CopyFrom(valueInfoBytes));
         }
 
         writer.Flush();
@@ -179,12 +175,13 @@ internal static class OnnxProto
         }
 
         // Field 6: attribute (repeated)
-        foreach (var (name, value) in operation.Attributes)
+        foreach (var kvp in operation.Attributes)
         {
+            var name = kvp.Key;
+            var value = kvp.Value;
             writer.WriteTag(6, WireFormat.WireType.LengthDelimited);
             var attrBytes = CreateAttributeProto(name, value);
-            writer.WriteLength(attrBytes.Length);
-            writer.WriteRawBytes(attrBytes);
+            writer.WriteBytes(ByteString.CopyFrom(attrBytes));
         }
 
         writer.Flush();
@@ -254,8 +251,7 @@ internal static class OnnxProto
         // Field 2: type
         writer.WriteTag(2, WireFormat.WireType.LengthDelimited);
         var typeBytes = CreateTypeProto(node);
-        writer.WriteLength(typeBytes.Length);
-        writer.WriteRawBytes(typeBytes);
+        writer.WriteBytes(ByteString.CopyFrom(typeBytes));
 
         writer.Flush();
         return stream.ToArray();
@@ -269,8 +265,7 @@ internal static class OnnxProto
         // Field 1: tensor_type
         writer.WriteTag(1, WireFormat.WireType.LengthDelimited);
         var tensorTypeBytes = CreateTensorTypeProto(node);
-        writer.WriteLength(tensorTypeBytes.Length);
-        writer.WriteRawBytes(tensorTypeBytes);
+        writer.WriteBytes(ByteString.CopyFrom(tensorTypeBytes));
 
         writer.Flush();
         return stream.ToArray();
@@ -290,8 +285,7 @@ internal static class OnnxProto
         {
             writer.WriteTag(2, WireFormat.WireType.LengthDelimited);
             var shapeBytes = CreateTensorShapeProto(node.Shape);
-            writer.WriteLength(shapeBytes.Length);
-            writer.WriteRawBytes(shapeBytes);
+            writer.WriteBytes(ByteString.CopyFrom(shapeBytes));
         }
 
         writer.Flush();
@@ -307,8 +301,7 @@ internal static class OnnxProto
         {
             writer.WriteTag(1, WireFormat.WireType.LengthDelimited); // dim (repeated)
             var dimBytes = CreateDimensionProto(dim);
-            writer.WriteLength(dimBytes.Length);
-            writer.WriteRawBytes(dimBytes);
+            writer.WriteBytes(ByteString.CopyFrom(dimBytes));
         }
 
         writer.Flush();
@@ -326,6 +319,25 @@ internal static class OnnxProto
 
         writer.Flush();
         return stream.ToArray();
+    }
+
+    private static byte[] CreateTensorProto(string name, object data)
+    {
+        // Runtime type dispatch for object initializers
+        return data switch
+        {
+            Vector<float> floatVec => CreateTensorProto(name, floatVec),
+            Vector<double> doubleVec => CreateTensorProto(name, doubleVec),
+            Vector<int> intVec => CreateTensorProto(name, intVec),
+            Vector<long> longVec => CreateTensorProto(name, longVec),
+            Vector<sbyte> sbyteVec => CreateTensorProto(name, sbyteVec),
+            Vector<short> shortVec => CreateTensorProto(name, shortVec),
+            Vector<byte> byteVec => CreateTensorProto(name, byteVec),
+            Vector<ushort> ushortVec => CreateTensorProto(name, ushortVec),
+            Vector<uint> uintVec => CreateTensorProto(name, uintVec),
+            Vector<ulong> ulongVec => CreateTensorProto(name, ulongVec),
+            _ => throw new NotSupportedException($"Unsupported tensor data type: {data.GetType().Name}")
+        };
     }
 
     private static byte[] CreateTensorProto<T>(string name, Vector<T> data) where T : struct

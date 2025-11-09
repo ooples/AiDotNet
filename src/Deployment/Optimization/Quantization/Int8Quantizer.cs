@@ -1,6 +1,7 @@
 using AiDotNet.Enums;
 using AiDotNet.Interfaces;
 using AiDotNet.Deployment.Export;
+using AiDotNet.Helpers;
 
 namespace AiDotNet.Deployment.Optimization.Quantization;
 
@@ -137,7 +138,7 @@ public class Int8Quantizer<T, TInput, TOutput> : IQuantizer<T, TInput, TOutput> 
         if (_scaleFactors.TryGetValue(layerName, out var scale))
             return scale;
 
-        return _scaleFactors.GetValueOrDefault("global", 1.0);
+        return (_scaleFactors.TryGetValue("global", out var sf1) ? sf1 : 1.0);
     }
 
     /// <inheritdoc/>
@@ -146,13 +147,13 @@ public class Int8Quantizer<T, TInput, TOutput> : IQuantizer<T, TInput, TOutput> 
         if (_zeroPoints.TryGetValue(layerName, out var zeroPoint))
             return zeroPoint;
 
-        return _zeroPoints.GetValueOrDefault("global", 0);
+        return (_zeroPoints.TryGetValue("global", out var zp1) ? zp1 : 0);
     }
 
     private Vector<T> QuantizeParameters(Vector<T> parameters, QuantizationConfiguration config)
     {
-        var scaleFactor = _scaleFactors.GetValueOrDefault("global", 1.0);
-        var zeroPoint = _zeroPoints.GetValueOrDefault("global", 0);
+        var scaleFactor = (_scaleFactors.TryGetValue("global", out var sf1) ? sf1 : 1.0);
+        var zeroPoint = (_zeroPoints.TryGetValue("global", out var zp1) ? zp1 : 0);
 
         var quantizedValues = new T[parameters.Length];
 
@@ -164,7 +165,7 @@ public class Int8Quantizer<T, TInput, TOutput> : IQuantizer<T, TInput, TOutput> 
             var quantizedValue = Math.Round(value / scaleFactor) + zeroPoint;
 
             // Clamp to INT8 range
-            quantizedValue = Math.Clamp(quantizedValue, -128, 127);
+            quantizedValue = MathHelper.Clamp(quantizedValue, -128, 127);
 
             // Dequantize back to original type for storage
             var dequantizedValue = (quantizedValue - zeroPoint) * scaleFactor;

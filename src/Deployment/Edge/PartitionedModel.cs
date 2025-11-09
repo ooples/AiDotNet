@@ -1,18 +1,23 @@
+using AiDotNet.Interfaces;
+
 namespace AiDotNet.Deployment.Edge;
 
 /// <summary>
 /// Represents a model partitioned for cloud+edge deployment.
 /// </summary>
-public class PartitionedModel
+/// <typeparam name="T">The numeric type used in the model</typeparam>
+/// <typeparam name="TInput">The input type for the model</typeparam>
+/// <typeparam name="TOutput">The output type for the model</typeparam>
+public class PartitionedModel<T, TInput, TOutput> where T : struct
 {
     /// <summary>Gets or sets the original model.</summary>
-    public object? OriginalModel { get; set; }
+    public IFullModel<T, TInput, TOutput>? OriginalModel { get; set; }
 
     /// <summary>Gets or sets the model part for edge execution.</summary>
-    public object? EdgeModel { get; set; }
+    public IFullModel<T, TInput, TOutput>? EdgeModel { get; set; }
 
     /// <summary>Gets or sets the model part for cloud execution.</summary>
-    public object? CloudModel { get; set; }
+    public IFullModel<T, TInput, TOutput>? CloudModel { get; set; }
 
     /// <summary>Gets or sets the partition strategy used.</summary>
     public PartitionStrategy PartitionStrategy { get; set; }

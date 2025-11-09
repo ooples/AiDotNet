@@ -189,7 +189,7 @@ public class ModelCache<T> where T : struct
         var hashBytes = sha256.ComputeHash(bytes);
 
         // Convert to hex string
-        return Convert.ToHexString(hashBytes);
+        return BitConverter.ToString(hashBytes).Replace("-", "");
     }
 }
 

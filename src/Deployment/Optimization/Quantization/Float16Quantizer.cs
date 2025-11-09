@@ -82,7 +82,8 @@ public class Float16Quantizer<T, TInput, TOutput> : IQuantizer<T, TInput, TOutpu
         var floatValue = (float)value;
 
         // Get the bits
-        var bits = BitConverter.SingleToInt32Bits(floatValue);
+        var bytes = BitConverter.GetBytes(floatValue);
+        var bits = BitConverter.ToInt32(bytes, 0);
 
         // Extract sign, exponent, and mantissa
         var sign = (bits >> 31) & 0x1;
@@ -154,6 +155,7 @@ public class Float16Quantizer<T, TInput, TOutput> : IQuantizer<T, TInput, TOutpu
 
         // Combine into FP32
         var bits = (sign << 31) | (fp32Exponent << 23) | fp32Mantissa;
-        return BitConverter.Int32BitsToSingle(bits);
+        var bytes = BitConverter.GetBytes(bits);
+        return BitConverter.ToSingle(bytes, 0);
     }
 }

@@ -161,7 +161,8 @@ public class TelemetryCollector
     /// </summary>
     public void Clear()
     {
-        _events.Clear();
+        // .NET Framework 462 doesn't have ConcurrentBag.Clear()
+        while (_events.TryTake(out _)) { }
         _metrics.Clear();
     }
 

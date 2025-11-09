@@ -375,7 +375,7 @@ public class TensorRTInferenceEngine<T> : IDisposable where T : struct
     private T[] ConvertOutputToT(object outputTensor)
     {
         // Handle different tensor types
-        if (outputTensor is Tensor<float> floatTensor)
+        if (outputTensor is Microsoft.ML.OnnxRuntime.Tensors.Tensor<float> floatTensor)
         {
             var flatArray = floatTensor.ToArray();
             if (typeof(T) == typeof(float))
@@ -386,7 +386,7 @@ public class TensorRTInferenceEngine<T> : IDisposable where T : struct
                 result[i] = (T)Convert.ChangeType(flatArray[i], typeof(T));
             return result;
         }
-        else if (outputTensor is Tensor<double> doubleTensor)
+        else if (outputTensor is Microsoft.ML.OnnxRuntime.Tensors.Tensor<double> doubleTensor)
         {
             var flatArray = doubleTensor.ToArray();
             if (typeof(T) == typeof(double))
@@ -397,7 +397,7 @@ public class TensorRTInferenceEngine<T> : IDisposable where T : struct
                 result[i] = (T)Convert.ChangeType(flatArray[i], typeof(T));
             return result;
         }
-        else if (outputTensor is Tensor<int> intTensor)
+        else if (outputTensor is Microsoft.ML.OnnxRuntime.Tensors.Tensor<int> intTensor)
         {
             var flatArray = intTensor.ToArray();
             if (typeof(T) == typeof(int))
@@ -408,7 +408,7 @@ public class TensorRTInferenceEngine<T> : IDisposable where T : struct
                 result[i] = (T)Convert.ChangeType(flatArray[i], typeof(T));
             return result;
         }
-        else if (outputTensor is Tensor<long> longTensor)
+        else if (outputTensor is Microsoft.ML.OnnxRuntime.Tensors.Tensor<long> longTensor)
         {
             var flatArray = longTensor.ToArray();
             if (typeof(T) == typeof(long))

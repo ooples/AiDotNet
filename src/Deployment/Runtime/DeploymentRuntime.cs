@@ -17,6 +17,7 @@ public class DeploymentRuntime<T> where T : struct
     private readonly TelemetryCollector _telemetry;
     private readonly ModelCache<T> _cache;
     private readonly ConcurrentDictionary<string, InferenceSession> _sessions;
+    private readonly Random _random;
 
     public DeploymentRuntime(RuntimeConfiguration config)
     {
@@ -26,6 +27,7 @@ public class DeploymentRuntime<T> where T : struct
         _telemetry = new TelemetryCollector(config.EnableTelemetry);
         _cache = new ModelCache<T>(config.EnableCaching);
         _sessions = new ConcurrentDictionary<string, InferenceSession>();
+        _random = new Random();
     }
 
     /// <summary>
@@ -201,8 +203,8 @@ public class DeploymentRuntime<T> where T : struct
             throw new InvalidOperationException($"A/B test {testName} not configured");
 
         // Select version based on traffic split
-        var random = Random.Shared.NextDouble();
-        var selectedVersion = random < abTest.TrafficSplit ? abTest.VersionA : abTest.VersionB;
+        var randomValue = _random.NextDouble();
+        var selectedVersion = randomValue < abTest.TrafficSplit ? abTest.VersionA : abTest.VersionB;
 
         var output = await InferAsync(abTest.ModelName, selectedVersion, input);
 
@@ -436,7 +438,7 @@ public class DeploymentRuntime<T> where T : struct
     private T[] ConvertOutputToT(object outputTensor)
     {
         // Handle different tensor types
-        if (outputTensor is Tensor<float> floatTensor)
+        if (outputTensor is Microsoft.ML.OnnxRuntime.Tensors.Tensor<float> floatTensor)
         {
             var flatArray = floatTensor.ToArray();
             if (typeof(T) == typeof(float))
@@ -447,7 +449,7 @@ public class DeploymentRuntime<T> where T : struct
                 result[i] = (T)Convert.ChangeType(flatArray[i], typeof(T));
             return result;
         }
-        else if (outputTensor is Tensor<double> doubleTensor)
+        else if (outputTensor is Microsoft.ML.OnnxRuntime.Tensors.Tensor<double> doubleTensor)
         {
             var flatArray = doubleTensor.ToArray();
             if (typeof(T) == typeof(double))
@@ -458,7 +460,7 @@ public class DeploymentRuntime<T> where T : struct
                 result[i] = (T)Convert.ChangeType(flatArray[i], typeof(T));
             return result;
         }
-        else if (outputTensor is Tensor<int> intTensor)
+        else if (outputTensor is Microsoft.ML.OnnxRuntime.Tensors.Tensor<int> intTensor)
         {
             var flatArray = intTensor.ToArray();
             if (typeof(T) == typeof(int))
@@ -469,7 +471,7 @@ public class DeploymentRuntime<T> where T : struct
                 result[i] = (T)Convert.ChangeType(flatArray[i], typeof(T));
             return result;
         }
-        else if (outputTensor is Tensor<long> longTensor)
+        else if (outputTensor is Microsoft.ML.OnnxRuntime.Tensors.Tensor<long> longTensor)
         {
             var flatArray = longTensor.ToArray();
             if (typeof(T) == typeof(long))

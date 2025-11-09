@@ -119,7 +119,7 @@ public class OnnxModelExporter<T, TInput, TOutput> : ModelExporterBase<T, TInput
         // Rename last layer output to match graph output
         if (graph.Operations.Count > 0)
         {
-            var lastOp = graph.Operations[^1];
+            var lastOp = graph.Operations[graph.Operations.Count - 1];
             lastOp.Outputs[0] = "output";
         }
 

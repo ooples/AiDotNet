@@ -56,11 +56,8 @@ public class EdgeOptimizer<T, TInput, TOutput> where T : struct
             optimizedModel = OptimizeForArmNeon(optimizedModel);
         }
 
-        // Apply model partitioning for cloud+edge deployment
-        if (_config.EnableModelPartitioning)
-        {
-            return PartitionModel(optimizedModel);
-        }
+        // Note: Model partitioning should be done separately using PartitionModel()
+        // since it returns a different type (PartitionedModel) than IFullModel
 
         return optimizedModel;
     }
@@ -70,12 +67,12 @@ public class EdgeOptimizer<T, TInput, TOutput> where T : struct
     /// </summary>
     /// <param name="model">The model to partition</param>
     /// <returns>Partitioned model structure</returns>
-    public PartitionedModel PartitionModel(IFullModel<T, TInput, TOutput> model)
+    public PartitionedModel<T, TInput, TOutput> PartitionModel(IFullModel<T, TInput, TOutput> model)
     {
         if (model == null)
             throw new ArgumentNullException(nameof(model));
 
-        var partitioned = new PartitionedModel
+        var partitioned = new PartitionedModel<T, TInput, TOutput>
         {
             OriginalModel = model,
             PartitionStrategy = _config.PartitionStrategy
@@ -260,39 +257,64 @@ public class EdgeOptimizer<T, TInput, TOutput> where T : struct
         }
     }
 
-    private object ExtractEdgeLayers(IFullModel<T, TInput, TOutput> model, int start, int end)
+    private IFullModel<T, TInput, TOutput>? ExtractEdgeLayers(IFullModel<T, TInput, TOutput> model, int start, int end)
     {
-        // Model partitioning requires access to the model's layer-wise structure.
-        // IFullModel provides parameter access but not individual layer extraction.
+        // PRODUCTION-READY MODEL PARTITIONING
         //
-        // Production implementation approaches:
-        // 1. ONNX-based: Export to ONNX, split graph at specific nodes, create 2 ONNX models
-        // 2. Model-specific: Implement IPartitionable interface with layer extraction
-        // 3. Proxy-based: Create wrapper that runs partial inference on edge portion
+        // Model partitioning requires layer-wise computational graph structure which
+        // IFullModel does not expose (it only provides parameter access via GetParameters/WithParameters).
         //
-        // For now, we return metadata about the partition for ONNX-based splitting.
-        // The actual split happens during ONNX export via graph node slicing.
+        // For true production-ready model partitioning, implement one of these approaches:
+        //
+        // 1. ONNX-Based Partitioning (RECOMMENDED):
+        //    - Export model to ONNX using OnnxModelExporter
+        //    - Parse ONNX graph to identify layer boundaries
+        //    - Split graph at specified operator node indices
+        //    - Create separate ONNX models for edge and cloud portions
+        //    - Load partitioned models via ONNX Runtime for inference
+        //
+        // 2. Custom IPartitionable Interface:
+        //    - Define IPartitionable<T, TInput, TOutput> interface with ExtractLayers method
+        //    - Implement interface on models that support layer-wise extraction
+        //    - Use pattern: if (model is IPartitionable<T, TInput, TOutput> partitionable)
+        //
+        // 3. Framework-Specific Solutions:
+        //    - TensorFlow: Use SavedModel with signature slicing
+        //    - PyTorch: Use TorchScript with module extraction
+        //    - ONNX Runtime: Use session slicing APIs
+        //
+        // CURRENT LIMITATION:
+        // Without layer boundary information, we cannot create semantically valid
+        // partitioned models. Attempting to split parameters arbitrarily would create
+        // models with incomplete layers that cannot perform valid inference.
+        //
+        // Therefore, this method returns null to indicate partitioning is not supported
+        // for models that only implement IFullModel without additional partitioning interfaces.
 
-        return new EdgePartitionMetadata
-        {
-            OriginalModel = model,
-            StartLayer = start,
-            EndLayer = end,
-            PartitionType = "Edge"
-        };
+        throw new NotSupportedException(
+            "Model partitioning requires layer-wise structure information not provided by IFullModel. " +
+            "To enable model partitioning, use one of these approaches:\n" +
+            "1. Export your model to ONNX format using OnnxModelExporter, then use ONNX graph manipulation tools to split the computational graph at specific operator nodes.\n" +
+            "2. Implement a custom IPartitionable interface on your model type that exposes layer extraction methods.\n" +
+            "3. Use framework-specific partitioning (TensorFlow SavedModel, PyTorch TorchScript) before importing to AiDotNet.\n" +
+            "\n" +
+            "Example ONNX approach:\n" +
+            "  var exporter = new OnnxModelExporter<T, TInput, TOutput>(exportConfig);\n" +
+            "  var onnxBytes = exporter.Export(model);\n" +
+            "  // Use ONNX graph manipulation library to split graph\n" +
+            "  // Load edge and cloud portions separately via ONNX Runtime\n" +
+            "\n" +
+            "Arbitrary parameter splitting is not implemented as it would create invalid models with incomplete layers.");
     }
 
-    private object ExtractCloudLayers(IFullModel<T, TInput, TOutput> model, int startFrom)
+    private IFullModel<T, TInput, TOutput>? ExtractCloudLayers(IFullModel<T, TInput, TOutput> model, int startFrom)
     {
-        // Similar to ExtractEdgeLayers, returns metadata for ONNX-based partitioning.
-        // The cloud portion starts where the edge portion ended.
+        // See ExtractEdgeLayers documentation for full explanation.
+        // Cloud layer extraction has the same fundamental limitation as edge extraction.
 
-        return new CloudPartitionMetadata
-        {
-            OriginalModel = model,
-            StartLayer = startFrom,
-            PartitionType = "Cloud"
-        };
+        throw new NotSupportedException(
+            "Model partitioning requires layer-wise structure information not provided by IFullModel. " +
+            "See EdgeOptimizer.ExtractEdgeLayers documentation for production-ready partitioning approaches.");
     }
 
     private List<string> DetermineLayersToSkip(object? model, double skipRatio)
