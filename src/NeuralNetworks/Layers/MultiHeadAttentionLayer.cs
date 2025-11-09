@@ -12,8 +12,72 @@ namespace AiDotNet.NeuralNetworks.Layers;
 /// several friends for advice on a decision - each person might notice different important factors.
 /// </para>
 /// </remarks>
-public class MultiHeadAttentionLayer<T> : LayerBase<T>
+public class MultiHeadAttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
 {
+    /// <summary>
+    /// Gets or sets whether auxiliary loss (attention regularization) should be used during training.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Attention regularization includes entropy regularization per head and head diversity penalties.
+    /// This prevents attention collapse and encourages heads to learn different patterns.
+    /// </para>
+    /// <para><b>For Beginners:</b> This helps ensure attention heads learn diverse patterns.
+    ///
+    /// Multi-head attention works best when each head specializes in different aspects:
+    /// - Without regularization: Heads might learn redundant patterns
+    /// - With regularization: Each head focuses on unique relationships
+    ///
+    /// Two types of regularization:
+    /// 1. Entropy: Prevents attention from being too sharp (focused on one position)
+    /// 2. Diversity: Prevents heads from being too similar to each other
+    ///
+    /// This helps the model:
+    /// - Learn more robust representations
+    /// - Utilize all attention heads effectively
+    /// - Improve generalization to new data
+    /// </para>
+    /// </remarks>
+    public bool UseAuxiliaryLoss { get; set; } = false;
+
+    /// <summary>
+    /// Gets or sets the weight for the attention entropy auxiliary loss.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// This weight controls how much attention entropy regularization contributes to the total loss.
+    /// Typical values range from 0.001 to 0.01.
+    /// </para>
+    /// <para><b>For Beginners:</b> This controls how much we encourage diverse attention patterns.
+    ///
+    /// Common values:
+    /// - 0.005 (default): Balanced entropy regularization
+    /// - 0.001-0.003: Light regularization
+    /// - 0.008-0.01: Strong regularization
+    ///
+    /// Higher values encourage more distributed attention.
+    /// </para>
+    /// </remarks>
+    public T AuxiliaryLossWeight { get; set; } = NumOps.FromDouble(0.005);
+
+    /// <summary>
+    /// Gets or sets the weight for head diversity penalty.
+    /// </summary>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> This encourages different heads to learn different patterns.
+    ///
+    /// Common values:
+    /// - 0.01 (default): Moderate diversity encouragement
+    /// - 0.005-0.008: Light diversity
+    /// - 0.015-0.02: Strong diversity
+    /// </para>
+    /// </remarks>
+    public T HeadDiversityWeight { get; set; } = NumOps.FromDouble(0.01);
+
+    private T _lastEntropyLoss = NumOps.Zero;
+    private T _lastDiversityLoss = NumOps.Zero;
+    private List<Tensor<T>>? _lastHeadOutputs = null;
+
     /// <summary>
     /// Weights used to transform input into query representations.
     /// </summary>
