@@ -162,7 +162,10 @@ public class TensorParallelModel<T, TInput, TOutput> : ShardedModelBase<T, TInpu
         InvalidateCache();
 
         // Synchronize across tensor-parallel group
-        if (Config.AutoSyncGradients)
+        // Only call SynchronizeGradients if it won't throw (i.e., single-rank mode)
+        // For multi-rank tensor parallelism, parameters are already synchronized via
+        // GatherFullParameters/UpdateLocalShardFromFull pattern above
+        if (Config.AutoSyncGradients && _tensorParallelSize == 1)
         {
             SynchronizeGradients();
         }
