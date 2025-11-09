@@ -198,10 +198,6 @@ public class HybridShardedModel<T, TInput, TOutput> : ShardedModelBase<T, TInput
             return;
         }
 
-        // This code path should not be reached due to the guard above, but kept for completeness
-        Config.CommunicationBackend.AllReduce(LocalShard, ReductionOperation.Average);
-
-        CachedFullParameters = null;
     }
 
     /// <inheritdoc/>
@@ -299,6 +295,12 @@ public class HybridShardedModel<T, TInput, TOutput> : ShardedModelBase<T, TInput
             throw new InvalidOperationException($"World size mismatch: {savedWorldSize} vs {WorldSize}");
         if (savedRank != Rank)
             throw new InvalidOperationException($"Rank mismatch: {savedRank} vs {Rank}");
+        if (savedPP != _pipelineParallelSize)
+            throw new InvalidOperationException($"Pipeline parallel size mismatch: saved model used {savedPP} pipeline stages, but current instance configured with {_pipelineParallelSize}");
+        if (savedTP != _tensorParallelSize)
+            throw new InvalidOperationException($"Tensor parallel size mismatch: saved model used {savedTP} tensor parallel groups, but current instance configured with {_tensorParallelSize}");
+        if (savedDP != _dataParallelSize)
+            throw new InvalidOperationException($"Data parallel size mismatch: saved model used {savedDP} data parallel replicas, but current instance configured with {_dataParallelSize}");
 
         int modelDataLength = reader.ReadInt32();
         byte[] modelData = reader.ReadBytes(modelDataLength);
