@@ -96,11 +96,8 @@ public class FSDPModel<T, TInput, TOutput> : ShardedModelBase<T, TInput, TOutput
         // Get updated parameters
         var updatedParams = WrappedModel.GetParameters();
 
-        // Update local shard
+        // Update local shard (this already invalidates cache via UpdateLocalShardFromFull)
         UpdateLocalShardFromFull(updatedParams);
-
-        // Invalidate cache immediately after local shard changes
-        InvalidateCache();
 
         // Synchronize gradients if auto-sync is enabled
         if (Config.AutoSyncGradients)
@@ -111,6 +108,9 @@ public class FSDPModel<T, TInput, TOutput> : ShardedModelBase<T, TInput, TOutput
             fullParams = GatherFullParameters();
             WrappedModel.SetParameters(fullParams);
         }
+        // Note: Cache is already invalidated by UpdateLocalShardFromFull.
+        // If AutoSyncGradients is false, subsequent predictions can benefit from
+        // cached full parameters without repeated gathering.
     }
 
     /// <inheritdoc/>

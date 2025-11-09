@@ -139,9 +139,6 @@ public class DDPModel<T, TInput, TOutput> : ShardedModelBase<T, TInput, TOutput>
         // Get updated parameters (includes gradients)
         LocalShard = WrappedModel.GetParameters();
 
-        // Invalidate cache
-        InvalidateCache();
-
         // Synchronize gradients if auto-sync is enabled
         if (Config.AutoSyncGradients)
         {
@@ -149,7 +146,12 @@ public class DDPModel<T, TInput, TOutput> : ShardedModelBase<T, TInput, TOutput>
 
             // Apply synchronized parameters back to the model
             WrappedModel.SetParameters(LocalShard);
+
+            // Invalidate cache after synchronization since parameters changed across processes
+            InvalidateCache();
         }
+        // Note: Cache is not invalidated if AutoSyncGradients is false, allowing
+        // multiple predictions to benefit from cached full parameters
     }
 
     /// <inheritdoc/>

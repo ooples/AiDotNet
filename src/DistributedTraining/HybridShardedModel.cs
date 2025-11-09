@@ -217,13 +217,16 @@ public class HybridShardedModel<T, TInput, TOutput> : ShardedModelBase<T, TInput
         WrappedModel.SetParameters(fullParams);
         WrappedModel.Train(input, expectedOutput);
         var updatedParams = WrappedModel.GetParameters();
+
+        // Update local shard (this already invalidates cache via UpdateLocalShardFromFull)
         UpdateLocalShardFromFull(updatedParams);
-        InvalidateCache();
 
         if (Config.AutoSyncGradients)
         {
             SynchronizeGradients();
         }
+        // Note: Cache is already invalidated by UpdateLocalShardFromFull.
+        // If AutoSyncGradients is false, subsequent predictions benefit from cached parameters.
     }
 
     /// <inheritdoc/>

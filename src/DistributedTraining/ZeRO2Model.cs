@@ -119,7 +119,6 @@ public class ZeRO2Model<T, TInput, TOutput> : ShardedModelBase<T, TInput, TOutpu
         WrappedModel.SetParameters(LocalShard);
         WrappedModel.Train(input, expectedOutput);
         LocalShard = WrappedModel.GetParameters();
-        InvalidateCache();
 
         if (Config.AutoSyncGradients)
         {
@@ -127,7 +126,10 @@ public class ZeRO2Model<T, TInput, TOutput> : ShardedModelBase<T, TInput, TOutpu
             // After ReduceScatter, we have sharded gradients in _gradientShard
             // For next forward pass, we need to AllGather parameters
             // (This is simplified - full implementation would handle this more carefully)
+            // Cache invalidated by SynchronizeGradients
         }
+        // Note: Cache not invalidated if AutoSyncGradients is false,
+        // allowing multiple predictions to benefit from cached full parameters
     }
 
     /// <inheritdoc/>

@@ -97,13 +97,15 @@ public class ZeRO1Model<T, TInput, TOutput> : ShardedModelBase<T, TInput, TOutpu
         WrappedModel.SetParameters(LocalShard);
         WrappedModel.Train(input, expectedOutput);
         LocalShard = WrappedModel.GetParameters();
-        InvalidateCache();
 
         if (Config.AutoSyncGradients)
         {
             SynchronizeGradients();
             WrappedModel.SetParameters(LocalShard);
+            // Cache invalidated by SynchronizeGradients
         }
+        // Note: Cache not invalidated if AutoSyncGradients is false,
+        // allowing multiple predictions to benefit from cached full parameters
     }
 
     /// <inheritdoc/>
