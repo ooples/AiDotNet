@@ -128,43 +128,49 @@ public class GradientCompressionOptimizer<T, TInput, TOutput> : ShardedOptimizer
 
         Config.CommunicationBackend.Barrier();
 
-        // CRITICAL: Save parameters BEFORE local optimization
-        // This allows us to apply averaged compressed gradients from the correct starting point
-        Vector<T>? savedParameters = null;
-        if (Config.AutoSyncGradients && inputData.InitialSolution != null)
+        try
         {
-            savedParameters = inputData.InitialSolution.GetParameters();
+            // CRITICAL: Save parameters BEFORE local optimization
+            // This allows us to apply averaged compressed gradients from the correct starting point
+            Vector<T>? savedParameters = null;
+            if (Config.AutoSyncGradients && inputData.InitialSolution != null)
+            {
+                savedParameters = inputData.InitialSolution.GetParameters();
+            }
+
+            // Step 1: Optimize locally to compute gradients and get locally-updated model
+            var localResult = WrappedOptimizer.Optimize(inputData);
+
+            // Step 2: Get the gradients that were computed during optimization
+            var localGradients = gradientOptimizer.LastComputedGradients;
+
+            if (Config.AutoSyncGradients && localResult.BestSolution != null && savedParameters != null && localGradients != null && localGradients.Length > 0)
+            {
+                // Step 3: Compress local gradients
+                var compressedGradients = CompressGradients(localGradients);
+
+                // Step 4: Synchronize compressed gradients across all ranks and average them
+                Config.CommunicationBackend.AllReduce(compressedGradients, ReductionOperation.Average);
+
+                // Step 5: Decompress to get averaged gradients
+                var averagedGradients = DecompressGradients(compressedGradients, localGradients.Length);
+
+                // Step 6: Apply averaged compressed gradients using the safe 3-parameter overload
+                // This explicitly passes savedParameters (pre-update state) to prevent double-stepping
+                // Works correctly with ANY optimizer (SGD, Adam, RMSprop, etc.)
+                var finalModel = gradientOptimizer.ApplyGradients(savedParameters, averagedGradients, localResult.BestSolution);
+
+                // Step 7: Return result with model updated using averaged compressed gradients
+                localResult.BestSolution = finalModel;
+            }
+
+            return localResult;
         }
-
-        // Step 1: Optimize locally to compute gradients and get locally-updated model
-        var localResult = WrappedOptimizer.Optimize(inputData);
-
-        // Step 2: Get the gradients that were computed during optimization
-        var localGradients = gradientOptimizer.LastComputedGradients;
-
-        if (Config.AutoSyncGradients && localResult.BestSolution != null && savedParameters != null && localGradients != null && localGradients.Length > 0)
+        finally
         {
-            // Step 3: Compress local gradients
-            var compressedGradients = CompressGradients(localGradients);
-
-            // Step 4: Synchronize compressed gradients across all ranks and average them
-            Config.CommunicationBackend.AllReduce(compressedGradients, ReductionOperation.Average);
-
-            // Step 5: Decompress to get averaged gradients
-            var averagedGradients = DecompressGradients(compressedGradients, localGradients.Length);
-
-            // Step 6: Apply averaged compressed gradients using the safe 3-parameter overload
-            // This explicitly passes savedParameters (pre-update state) to prevent double-stepping
-            // Works correctly with ANY optimizer (SGD, Adam, RMSprop, etc.)
-            var finalModel = gradientOptimizer.ApplyGradients(savedParameters, averagedGradients, localResult.BestSolution);
-
-            // Step 7: Return result with model updated using averaged compressed gradients
-            localResult.BestSolution = finalModel;
+            // Barrier to ensure all processes finish together (always runs even if exception thrown)
+            Config.CommunicationBackend.Barrier();
         }
-
-        Config.CommunicationBackend.Barrier();
-
-        return localResult;
     }
 
     /// <summary>

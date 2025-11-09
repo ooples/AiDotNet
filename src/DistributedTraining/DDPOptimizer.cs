@@ -102,42 +102,47 @@ public class DDPOptimizer<T, TInput, TOutput> : ShardedOptimizerBase<T, TInput, 
         // Barrier to ensure all processes start together
         Config.CommunicationBackend.Barrier();
 
-        // CRITICAL: Save parameters BEFORE local optimization
-        // This allows us to apply averaged gradients from the correct starting point
-        Vector<T>? savedParameters = null;
-        if (Config.AutoSyncGradients && inputData.InitialSolution != null)
+        try
         {
-            savedParameters = inputData.InitialSolution.GetParameters();
-        }
-
-        // Step 1: Optimize locally to compute gradients (and apply them locally)
-        var localResult = WrappedOptimizer.Optimize(inputData);
-
-        // Step 2: Synchronize gradients across all workers
-        if (Config.AutoSyncGradients && localResult.BestSolution != null && savedParameters != null)
-        {
-            var localGradients = gradientOptimizer.LastComputedGradients;
-
-            if (localGradients != null && localGradients.Length > 0)
+            // CRITICAL: Save parameters BEFORE local optimization
+            // This allows us to apply averaged gradients from the correct starting point
+            Vector<T>? savedParameters = null;
+            if (Config.AutoSyncGradients && inputData.InitialSolution != null)
             {
-                // Average gradients across all workers (true DDP)
-                Config.CommunicationBackend.AllReduce(localGradients, ReductionOperation.Average);
-
-                // Apply averaged gradients using the safe 3-parameter overload
-                // This explicitly passes savedParameters (pre-update state) to prevent double-stepping
-                // Works correctly with ANY optimizer (SGD, Adam, RMSprop, etc.) because we're starting
-                // from the original parameters, not the locally-updated ones
-                var finalModel = gradientOptimizer.ApplyGradients(savedParameters, localGradients, localResult.BestSolution);
-
-                // Update result with model using averaged gradients
-                localResult.BestSolution = finalModel;
+                savedParameters = inputData.InitialSolution.GetParameters();
             }
+
+            // Step 1: Optimize locally to compute gradients (and apply them locally)
+            var localResult = WrappedOptimizer.Optimize(inputData);
+
+            // Step 2: Synchronize gradients across all workers
+            if (Config.AutoSyncGradients && localResult.BestSolution != null && savedParameters != null)
+            {
+                var localGradients = gradientOptimizer.LastComputedGradients;
+
+                if (localGradients != null && localGradients.Length > 0)
+                {
+                    // Average gradients across all workers (true DDP)
+                    Config.CommunicationBackend.AllReduce(localGradients, ReductionOperation.Average);
+
+                    // Apply averaged gradients using the safe 3-parameter overload
+                    // This explicitly passes savedParameters (pre-update state) to prevent double-stepping
+                    // Works correctly with ANY optimizer (SGD, Adam, RMSprop, etc.) because we're starting
+                    // from the original parameters, not the locally-updated ones
+                    var finalModel = gradientOptimizer.ApplyGradients(savedParameters, localGradients, localResult.BestSolution);
+
+                    // Update result with model using averaged gradients
+                    localResult.BestSolution = finalModel;
+                }
+            }
+
+            return localResult;
         }
-
-        // Barrier to ensure all processes finish together
-        Config.CommunicationBackend.Barrier();
-
-        return localResult;
+        finally
+        {
+            // Barrier to ensure all processes finish together (always runs even if exception thrown)
+            Config.CommunicationBackend.Barrier();
+        }
     }
 
     /// <inheritdoc/>
