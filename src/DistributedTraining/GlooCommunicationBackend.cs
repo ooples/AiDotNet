@@ -827,7 +827,7 @@ public class GlooCommunicationBackend<T> : CommunicationBackendBase<T>
         }
 
         // Send with tag: tag + length + data
-        SendDataWithTag(destinationRank, data.ToArray(), tag);
+        SendDataWithTag(destinationRank, data, tag);
     }
 
     /// <inheritdoc/>
@@ -858,103 +858,102 @@ public class GlooCommunicationBackend<T> : CommunicationBackendBase<T>
         }
 
         // Receive with tag: tag + length + data
-        var receivedData = ReceiveDataWithTag(sourceRank, count, tag);
-        return new Vector<T>(receivedData);
+        return ReceiveDataWithTag(sourceRank, count, tag);
     }
 
     /// <summary>
     /// Sends data to a specific rank via TCP with message tag.
     /// </summary>
-    private void SendDataWithTag(int destRank, T[] data, int tag)
+    private void SendDataWithTag(int destRank, Vector<T> data, int tag)
     {
         if (_tcpConnections == null || !_tcpConnections.ContainsKey(destRank))
         {
-            throw new InvalidOperationException($"No TCP connection to rank {destRank}");
+            throw new InvalidOperationException(
+                $"No TCP connection to rank {destRank}. Ensure Initialize() was called and connections were established.");
         }
 
         lock (_connectionLock)
         {
             var client = _tcpConnections[destRank];
-            using (var stream = client.GetStream())
-            using (var writer = new BinaryWriter(stream))
+            var stream = client.GetStream();
+            var writer = new BinaryWriter(stream);
+
+            // Send tag
+            writer.Write(tag);
+
+            // Send length header
+            writer.Write(data.Length);
+
+            // Send data elements
+            for (int i = 0; i < data.Length; i++)
             {
-                // Send tag
-                writer.Write(tag);
-
-                // Send length header
-                writer.Write(data.Length);
-
-                // Send data elements
-                foreach (var element in data)
-                {
-                    double value = Convert.ToDouble(element);
-                    writer.Write(value);
-                }
-                writer.Flush();
+                double value = Convert.ToDouble(data[i]);
+                writer.Write(value);
             }
+            writer.Flush();
+            // Leave stream and writer open - they're reused for the connection lifetime
         }
     }
 
     /// <summary>
     /// Receives data from a specific rank via TCP with message tag.
     /// </summary>
-    private T[] ReceiveDataWithTag(int sourceRank, int expectedLength, int expectedTag)
+    private Vector<T> ReceiveDataWithTag(int sourceRank, int expectedLength, int expectedTag)
     {
         if (_tcpConnections == null || !_tcpConnections.ContainsKey(sourceRank))
         {
-            throw new InvalidOperationException($"No TCP connection to rank {sourceRank}");
+            throw new InvalidOperationException(
+                $"No TCP connection to rank {sourceRank}. Ensure Initialize() was called and connections were established.");
         }
 
         lock (_connectionLock)
         {
             var client = _tcpConnections[sourceRank];
-            using (var stream = client.GetStream())
-            using (var reader = new BinaryReader(stream))
+            var stream = client.GetStream();
+            var reader = new BinaryReader(stream);
+
+            // Read tag
+            int receivedTag = reader.ReadInt32();
+            if (receivedTag != expectedTag)
             {
-                // Read tag
-                int receivedTag = reader.ReadInt32();
-                if (receivedTag != expectedTag)
-                {
-                    throw new InvalidOperationException(
-                        $"Rank {_rank}: Expected tag {expectedTag} from rank {sourceRank}, but received tag {receivedTag}");
-                }
-
-                // Read length header
-                int length = reader.ReadInt32();
-                if (length != expectedLength)
-                {
-                    throw new InvalidOperationException(
-                        $"Rank {_rank}: Expected {expectedLength} elements from rank {sourceRank}, but received {length}");
-                }
-
-                // Read data elements
-                var result = new T[length];
-                for (int i = 0; i < length; i++)
-                {
-                    double value = reader.ReadDouble();
-                    result[i] = (T)Convert.ChangeType(value, typeof(T));
-                }
-                return result;
+                throw new InvalidOperationException(
+                    $"Rank {_rank}: Expected tag {expectedTag} from rank {sourceRank}, but received tag {receivedTag}");
             }
+
+            // Read length header
+            int length = reader.ReadInt32();
+            if (length != expectedLength)
+            {
+                throw new InvalidOperationException(
+                    $"Rank {_rank}: Expected {expectedLength} elements from rank {sourceRank}, but received {length}");
+            }
+
+            // Read data elements into Vector
+            var result = new T[length];
+            for (int i = 0; i < length; i++)
+            {
+                double value = reader.ReadDouble();
+                result[i] = (T)Convert.ChangeType(value, typeof(T));
+            }
+            // Leave stream and reader open - they're reused for the connection lifetime
+            return new Vector<T>(result);
         }
     }
 
     /// <summary>
     /// Sends data to a specific rank via TCP.
     /// </summary>
-    private void SendData(int destRank, T[] data)
+    private void SendData(int destRank, Vector<T> data)
     {
         if (_tcpConnections == null || !_tcpConnections.ContainsKey(destRank))
         {
-            throw new InvalidOperationException($"No TCP connection to rank {destRank}");
+            throw new InvalidOperationException(
+                $"No TCP connection to rank {destRank}. Ensure Initialize() was called and connections were established.");
         }
 
         lock (_connectionLock)
         {
             var client = _tcpConnections[destRank];
-            // IMPORTANT: Do NOT use 'using' here - disposing the stream closes the socket!
-            // This method is called repeatedly during collective operations.
-            // Streams are reused for the lifetime of the connection.
             var stream = client.GetStream();
             var writer = new BinaryWriter(stream);
 
@@ -962,32 +961,30 @@ public class GlooCommunicationBackend<T> : CommunicationBackendBase<T>
             writer.Write(data.Length);
 
             // Send data elements
-            foreach (var element in data)
+            for (int i = 0; i < data.Length; i++)
             {
-                double value = Convert.ToDouble(element);
+                double value = Convert.ToDouble(data[i]);
                 writer.Write(value);
             }
             writer.Flush();
-            // Leave stream and writer open - they'll be cleaned up when TcpClient is disposed
+            // Leave stream and writer open - they're reused for the connection lifetime
         }
     }
 
     /// <summary>
     /// Receives data from a specific rank via TCP.
     /// </summary>
-    private T[] ReceiveData(int sourceRank, int expectedLength)
+    private Vector<T> ReceiveData(int sourceRank, int expectedLength)
     {
         if (_tcpConnections == null || !_tcpConnections.ContainsKey(sourceRank))
         {
-            throw new InvalidOperationException($"No TCP connection to rank {sourceRank}");
+            throw new InvalidOperationException(
+                $"No TCP connection to rank {sourceRank}. Ensure Initialize() was called and connections were established.");
         }
 
         lock (_connectionLock)
         {
             var client = _tcpConnections[sourceRank];
-            // IMPORTANT: Do NOT use 'using' here - disposing the stream closes the socket!
-            // This method is called repeatedly during collective operations.
-            // Streams are reused for the lifetime of the connection.
             var stream = client.GetStream();
             var reader = new BinaryReader(stream);
 
@@ -999,15 +996,15 @@ public class GlooCommunicationBackend<T> : CommunicationBackendBase<T>
                     $"Rank {_rank}: Expected {expectedLength} elements from rank {sourceRank}, but received {length}");
             }
 
-            // Read data elements
+            // Read data elements into Vector
             var result = new T[length];
             for (int i = 0; i < length; i++)
             {
                 double value = reader.ReadDouble();
                 result[i] = (T)Convert.ChangeType(value, typeof(T));
             }
-            return result;
-            // Leave stream and reader open - they'll be cleaned up when TcpClient is disposed
+            // Leave stream and reader open - they're reused for the connection lifetime
+            return new Vector<T>(result);
         }
     }
 }
