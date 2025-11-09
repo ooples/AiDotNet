@@ -83,6 +83,12 @@ public class ZeRO2Optimizer<T, TInput, TOutput> : ShardedOptimizerBase<T, TInput
 
             var gradientOptimizer = (IGradientBasedOptimizer<T, TInput, TOutput>)WrappedOptimizer;
 
+            // Populate InitialSolution from wrapped optimizer's model if not already set
+            if (inputData.InitialSolution == null && WrappedOptimizer is OptimizerBase<T, TInput, TOutput> baseOptimizer && baseOptimizer.Model != null)
+            {
+                inputData.InitialSolution = baseOptimizer.Model.Clone();
+            }
+
             // CRITICAL: Save parameters BEFORE local optimization
             Vector<T>? savedParameters = null;
             if (Config.AutoSyncGradients && inputData.InitialSolution != null)

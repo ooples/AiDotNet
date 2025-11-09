@@ -120,6 +120,12 @@ public class GradientCompressionOptimizer<T, TInput, TOutput> : ShardedOptimizer
                 $"GradientCompressionOptimizer requires a gradient-based optimizer, but received {WrappedOptimizer.GetType().Name}");
         }
 
+        // Populate InitialSolution from wrapped optimizer's model if not already set
+        if (inputData.InitialSolution == null && WrappedOptimizer is OptimizerBase<T, TInput, TOutput> baseOptimizer && baseOptimizer.Model != null)
+        {
+            inputData.InitialSolution = baseOptimizer.Model.Clone();
+        }
+
         Config.CommunicationBackend.Barrier();
 
         // CRITICAL: Save parameters BEFORE local optimization

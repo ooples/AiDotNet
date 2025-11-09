@@ -93,6 +93,12 @@ public class DDPOptimizer<T, TInput, TOutput> : ShardedOptimizerBase<T, TInput, 
 
         var gradientOptimizer = (IGradientBasedOptimizer<T, TInput, TOutput>)WrappedOptimizer;
 
+        // Populate InitialSolution from wrapped optimizer's model if not already set
+        if (inputData.InitialSolution == null && WrappedOptimizer is OptimizerBase<T, TInput, TOutput> baseOptimizer && baseOptimizer.Model != null)
+        {
+            inputData.InitialSolution = baseOptimizer.Model.Clone();
+        }
+
         // Barrier to ensure all processes start together
         Config.CommunicationBackend.Barrier();
 

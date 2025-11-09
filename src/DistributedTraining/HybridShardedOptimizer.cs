@@ -242,6 +242,12 @@ public class HybridShardedOptimizer<T, TInput, TOutput> : ShardedOptimizerBase<T
                     $"Received {WrappedOptimizer.GetType().Name} which does not implement IGradientBasedOptimizer.");
             }
 
+            // Populate InitialSolution from wrapped optimizer's model if not already set
+            if (inputData.InitialSolution == null && WrappedOptimizer is OptimizerBase<T, TInput, TOutput> baseOptimizer && baseOptimizer.Model != null)
+            {
+                inputData.InitialSolution = baseOptimizer.Model.Clone();
+            }
+
             // CRITICAL: Save parameters BEFORE local optimization
             // This allows us to discard the local update and apply only the synchronized gradients
             Vector<T>? savedParameters = null;
