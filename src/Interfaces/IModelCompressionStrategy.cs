@@ -1,3 +1,5 @@
+using AiDotNet.LinearAlgebra;
+
 namespace AiDotNet.Interfaces;
 
 /// <summary>
@@ -39,7 +41,7 @@ public interface IModelCompressionStrategy<T>
     /// For example, if you have 1 million weight values, compression might reduce them to 100,000 values
     /// plus some additional information about how to reconstruct the original values when needed.
     /// </remarks>
-    (T[] compressedWeights, object metadata) Compress(T[] weights);
+    (Vector<T> compressedWeights, object metadata) Compress(Vector<T> weights);
 
     /// <summary>
     /// Decompresses the compressed weights back to their original form.
@@ -62,7 +64,7 @@ public interface IModelCompressionStrategy<T>
     /// - Huffman trees (for Huffman encoding)
     /// - Scaling factors (for quantization)
     /// </remarks>
-    T[] Decompress(T[] compressedWeights, object metadata);
+    Vector<T> Decompress(Vector<T> compressedWeights, object metadata);
 
     /// <summary>
     /// Calculates the compression ratio achieved.
@@ -102,5 +104,5 @@ public interface IModelCompressionStrategy<T>
     ///
     /// This gives you an accurate picture of the actual memory savings you'll achieve.
     /// </remarks>
-    long GetCompressedSize(T[] compressedWeights, object metadata);
+    long GetCompressedSize(Vector<T> compressedWeights, object metadata);
 }
