@@ -63,15 +63,15 @@ public class GradientEpisodicMemory<T, TInput, TOutput> : IContinualLearningStra
     /// </summary>
     /// <param name="lossFunction">The loss function to use.</param>
     /// <param name="memorySize">Number of examples to store per task.</param>
-    /// <param name="margin">Margin for constraint violations (epsilon in the paper).</param>
+    /// <param name="margin">Margin for constraint violations (epsilon in the paper). Default is 0.0.</param>
     public GradientEpisodicMemory(
         ILossFunction<T> lossFunction,
         int memorySize = 256,
-        T? margin = null)
+        double margin = 0.0)
     {
         _lossFunction = lossFunction ?? throw new ArgumentNullException(nameof(lossFunction));
         _memorySize = memorySize;
-        _margin = margin ?? NumOps.FromDouble(0.0);
+        _margin = NumOps.FromDouble(margin);
         _taskGradients = new List<Vector<T>>();
         _memoryBuffer = new ExperienceReplayBuffer<T, TInput, TOutput>(memorySize * 10); // Total memory
     }

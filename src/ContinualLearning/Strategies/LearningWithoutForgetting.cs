@@ -50,16 +50,16 @@ public class LearningWithoutForgetting<T, TInput, TOutput> : IContinualLearningS
     /// Initializes a new LwF strategy.
     /// </summary>
     /// <param name="lossFunction">The loss function to use.</param>
-    /// <param name="distillationTemperature">Temperature for softening probability distributions (higher = softer).</param>
-    /// <param name="distillationWeight">Weight for the distillation loss relative to task loss.</param>
+    /// <param name="distillationTemperature">Temperature for softening probability distributions (higher = softer). Default is 2.0.</param>
+    /// <param name="distillationWeight">Weight for the distillation loss relative to task loss. Default is 1.0.</param>
     public LearningWithoutForgetting(
         ILossFunction<T> lossFunction,
-        T? distillationTemperature = null,
-        T? distillationWeight = null)
+        double distillationTemperature = 2.0,
+        double distillationWeight = 1.0)
     {
         _lossFunction = lossFunction ?? throw new ArgumentNullException(nameof(lossFunction));
-        _distillationTemperature = distillationTemperature ?? NumOps.FromDouble(2.0);
-        _distillationWeight = distillationWeight ?? NumOps.FromDouble(1.0);
+        _distillationTemperature = NumOps.FromDouble(distillationTemperature);
+        _distillationWeight = NumOps.FromDouble(distillationWeight);
     }
 
     /// <inheritdoc/>
