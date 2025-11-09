@@ -70,9 +70,6 @@ public abstract class ShardedModelBase<T, TInput, TOutput> : IShardedModel<T, TI
     protected int ShardSize;
 
     /// <inheritdoc/>
-    public IFullModel<T, TInput, TOutput> WrappedModel => this.WrappedModel;
-
-    /// <inheritdoc/>
     public int Rank => Config.CommunicationBackend.Rank;
 
     /// <inheritdoc/>

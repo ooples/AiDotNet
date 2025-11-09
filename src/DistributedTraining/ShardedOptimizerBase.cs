@@ -49,9 +49,6 @@ public abstract class ShardedOptimizerBase<T, TInput, TOutput> : IShardedOptimiz
     protected readonly IShardingConfiguration<T> Config;
 
     /// <inheritdoc/>
-    public IOptimizer<T, TInput, TOutput> WrappedOptimizer => this.WrappedOptimizer;
-
-    /// <inheritdoc/>
     public int Rank => Config.CommunicationBackend.Rank;
 
     /// <inheritdoc/>
