@@ -170,4 +170,33 @@ public interface IGradientBasedOptimizer<T, TInput, TOutput> : IOptimizer<T, TIn
     /// <exception cref="ArgumentNullException">If gradients or model is null</exception>
     /// <exception cref="ArgumentException">If gradient size doesn't match parameters</exception>
     IFullModel<T, TInput, TOutput> ApplyGradients(Vector<T> gradients, IFullModel<T, TInput, TOutput> model);
+
+    /// <summary>
+    /// Reverses a gradient update to recover original parameters before the update was applied.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// This method computes the original parameters given updated parameters and the gradients
+    /// that were applied. Each optimizer implements this differently based on its update rule.
+    /// </para>
+    /// <para><b>For Beginners:</b> This is like "undo" for a gradient update. Given where you are now
+    /// (updated parameters) and the directions you took (gradients), it calculates where you started.
+    /// </para>
+    /// <para><b>Optimizer-Specific Behavior:</b>
+    /// - **SGD**: params_old = params_new + learning_rate * gradients
+    /// - **Adam**: Requires reversing momentum and adaptive learning rate adjustments
+    /// - **RMSprop**: Requires reversing adaptive learning rate based on gradient history
+    /// </para>
+    /// <para><b>Production Use Cases:</b>
+    /// - **Distributed Training**: Reverse local updates before applying synchronized gradients
+    /// - **Checkpointing**: Recover previous parameter states
+    /// - **Debugging**: Validate gradient application correctness
+    /// </para>
+    /// </remarks>
+    /// <param name="updatedParameters">Parameters after gradient application</param>
+    /// <param name="appliedGradients">The gradients that were applied to produce updated parameters</param>
+    /// <returns>Original parameters before the gradient update</returns>
+    /// <exception cref="ArgumentNullException">If parameters or gradients are null</exception>
+    /// <exception cref="ArgumentException">If parameter and gradient sizes don't match</exception>
+    Vector<T> ReverseUpdate(Vector<T> updatedParameters, Vector<T> appliedGradients);
 }

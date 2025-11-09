@@ -150,6 +150,56 @@ public abstract class GradientBasedOptimizerBase<T, TInput, TOutput> : Optimizer
     }
 
     /// <summary>
+    /// Reverses a gradient update to recover original parameters.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// This base implementation uses the vanilla SGD reversal formula:
+    /// params_old = params_new + learning_rate * gradients
+    /// </para>
+    /// <para>
+    /// <b>For Adaptive Optimizers (Adam, RMSprop, etc.):</b>
+    /// This method should be overridden to account for optimizer-specific state.
+    /// The base implementation is only accurate for vanilla SGD.
+    /// </para>
+    /// <para><b>For Beginners:</b> This calculates where the parameters were before
+    /// a gradient update was applied. Think of it like rewinding a step you took.
+    /// </para>
+    /// </remarks>
+    /// <param name="updatedParameters">Parameters after gradient application</param>
+    /// <param name="appliedGradients">The gradients that were applied</param>
+    /// <returns>Estimated original parameters</returns>
+    public virtual Vector<T> ReverseUpdate(Vector<T> updatedParameters, Vector<T> appliedGradients)
+    {
+        if (updatedParameters == null)
+            throw new ArgumentNullException(nameof(updatedParameters));
+        if (appliedGradients == null)
+            throw new ArgumentNullException(nameof(appliedGradients));
+
+        if (updatedParameters.Length != appliedGradients.Length)
+        {
+            throw new ArgumentException(
+                $"Updated parameters size ({updatedParameters.Length}) must match applied gradients size ({appliedGradients.Length})",
+                nameof(appliedGradients));
+        }
+
+        // Get learning rate from options
+        double learningRate = _options.InitialLearningRate;
+
+        // Reverse the SGD update: params_old = params_new + lr * gradients
+        var original = new T[updatedParameters.Length];
+        for (int i = 0; i < updatedParameters.Length; i++)
+        {
+            double updated = Convert.ToDouble(updatedParameters[i]);
+            double gradient = Convert.ToDouble(appliedGradients[i]);
+            double originalValue = updated + learningRate * gradient;
+            original[i] = (T)Convert.ChangeType(originalValue, typeof(T));
+        }
+
+        return new Vector<T>(original);
+    }
+
+    /// <summary>
     /// Creates a regularization technique based on the provided options.
     /// </summary>
     /// <remarks>
