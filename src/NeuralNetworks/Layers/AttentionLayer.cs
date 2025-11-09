@@ -26,7 +26,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric type used for calculations (e.g., float, double).</typeparam>
-public class AttentionLayer<T> : LayerBase<T>
+public class AttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
 {
     /// <summary>
     /// The weight tensor for the query transformation.
@@ -89,6 +89,23 @@ public class AttentionLayer<T> : LayerBase<T>
     /// The last attention weights computed by the layer.
     /// </summary>
     private Tensor<T>? _lastAttentionWeights;
+
+    /// <summary>
+    /// Stores the last computed attention entropy for diagnostics.
+    /// </summary>
+    private T _lastAttentionEntropy = NumOps.Zero;
+
+    /// <summary>
+    /// Gets or sets whether to use auxiliary loss (attention entropy regularization) during training.
+    /// Default is false. Enable to prevent attention collapse.
+    /// </summary>
+    public bool UseAuxiliaryLoss { get; set; } = false;
+
+    /// <summary>
+    /// Gets or sets the weight for attention entropy regularization.
+    /// Default is 0.01. Higher values encourage more uniform attention distributions.
+    /// </summary>
+    public T AuxiliaryLossWeight { get; set; } = NumOps.FromDouble(0.01);
 
     /// <summary>
     /// Gets the total number of trainable parameters in the layer.
@@ -556,6 +573,121 @@ public class AttentionLayer<T> : LayerBase<T>
     }
 
     /// <summary>
+    /// Computes the auxiliary loss for the AttentionLayer, which is attention entropy regularization.
+    /// </summary>
+    /// <returns>The attention entropy loss value.</returns>
+    /// <remarks>
+    /// <para>
+    /// Attention entropy regularization prevents attention collapse by encouraging diverse attention patterns.
+    /// It computes the entropy of the attention distribution: H = -Σ(p * log(p))
+    /// Lower entropy means more focused (peaky) attention, higher entropy means more distributed attention.
+    /// We negate the entropy to create a loss that penalizes low entropy (collapsed attention).
+    /// </para>
+    /// <para><b>For Beginners:</b> This calculates a penalty when attention becomes too focused on just one or two positions.
+    ///
+    /// Attention entropy regularization:
+    /// - Measures how "spread out" the attention weights are
+    /// - Penalizes attention that collapses to a single position
+    /// - Encourages the model to consider multiple relevant parts of the input
+    /// - Prevents the model from ignoring potentially important information
+    ///
+    /// Why this is important:
+    /// - Prevents attention heads from becoming redundant or degenerate
+    /// - Improves model robustness and generalization
+    /// - Encourages learning diverse attention patterns
+    /// - Helps prevent overfitting to specific positions
+    ///
+    /// Think of it like ensuring a student reads the entire textbook rather than just memorizing one page.
+    /// </para>
+    /// </remarks>
+    public T ComputeAuxiliaryLoss()
+    {
+        if (!UseAuxiliaryLoss || _lastAttentionWeights == null)
+        {
+            return NumOps.Zero;
+        }
+
+        // Compute entropy of attention weights: H = -Σ(p * log(p))
+        T entropy = NumOps.Zero;
+        T epsilon = NumOps.FromDouble(1e-10); // Small value to prevent log(0)
+
+        for (int i = 0; i < _lastAttentionWeights.Length; i++)
+        {
+            T p = _lastAttentionWeights[i];
+
+            // Clamp to prevent numerical issues
+            if (NumOps.GreaterThan(p, epsilon))
+            {
+                // H = -Σ(p * log(p))
+                T logP = NumOps.Log(p);
+                T term = NumOps.Multiply(p, logP);
+                entropy = NumOps.Subtract(entropy, term);
+            }
+        }
+
+        // Average entropy over all attention weights
+        entropy = NumOps.Divide(entropy, NumOps.FromInt32(_lastAttentionWeights.Length));
+
+        // Store for diagnostics
+        _lastAttentionEntropy = entropy;
+
+        // Return negative entropy as loss (we want to maximize entropy, so minimize -entropy)
+        return NumOps.Negate(entropy);
+    }
+
+    /// <summary>
+    /// Gets diagnostic information about the attention regularization.
+    /// </summary>
+    /// <returns>A dictionary containing diagnostic information about attention patterns.</returns>
+    /// <remarks>
+    /// <para>
+    /// This method provides insights into attention behavior, including:
+    /// - Attention entropy (measure of distribution spread)
+    /// - Whether regularization is enabled
+    /// - Regularization weight
+    /// </para>
+    /// <para><b>For Beginners:</b> This gives you information to monitor attention pattern health.
+    ///
+    /// The diagnostics include:
+    /// - Attention Entropy: How spread out the attention is (higher = more distributed)
+    /// - Entropy Weight: How much the regularization influences training
+    /// - Use Auxiliary Loss: Whether regularization is enabled
+    ///
+    /// These values help you:
+    /// - Detect attention collapse (very low entropy)
+    /// - Monitor attention diversity during training
+    /// - Tune the entropy regularization weight
+    /// - Ensure attention heads are learning different patterns
+    /// </para>
+    /// </remarks>
+    public Dictionary<string, string> GetAuxiliaryLossDiagnostics()
+    {
+        var diagnostics = new Dictionary<string, string>
+        {
+            { "AttentionEntropy", _lastAttentionEntropy.ToString() ?? "0" },
+            { "EntropyWeight", AuxiliaryLossWeight.ToString() ?? "0.01" },
+            { "UseAuxiliaryLoss", UseAuxiliaryLoss.ToString() }
+        };
+
+        // Add attention weight statistics if available
+        if (_lastAttentionWeights != null)
+        {
+            // Calculate max attention weight (indicates peakiness)
+            T maxWeight = NumOps.Zero;
+            for (int i = 0; i < _lastAttentionWeights.Length; i++)
+            {
+                if (NumOps.GreaterThan(_lastAttentionWeights[i], maxWeight))
+                {
+                    maxWeight = _lastAttentionWeights[i];
+                }
+            }
+            diagnostics["MaxAttentionWeight"] = maxWeight.ToString() ?? "0";
+        }
+
+        return diagnostics;
+    }
+
+    /// <summary>
     /// Resets the state of the attention layer.
     /// </summary>
     /// <remarks>
@@ -564,7 +696,7 @@ public class AttentionLayer<T> : LayerBase<T>
     /// and attention weights, effectively preparing the layer for a new sequence or episode.
     /// </para>
     /// <para><b>For Beginners:</b> This is like clearing the layer's short-term memory.
-    /// 
+    ///
     /// In attention mechanisms, sometimes we want to start fresh, forgetting any previous inputs.
     /// This is especially useful when starting a new sequence or when you don't want the layer
     /// to consider past information anymore.
