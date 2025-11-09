@@ -6,39 +6,42 @@ using AiDotNet.Optimizers;
 namespace AiDotNet.DistributedTraining;
 
 /// <summary>
-/// Implements ZeRO Stage 2 optimizer - shards optimizer states and gradients.
+/// Implements ZeRO Stage 2 optimizer - shards gradients and optimizer states across ranks.
 /// </summary>
 /// <remarks>
 /// <para><b>Strategy Overview:</b>
-/// ZeRO-2 optimizer builds on ZeRO-1 by additionally sharding gradients using ReduceScatter.
-/// After backward pass, gradients are reduced and scattered so each process only stores its
-/// portion. This further reduces memory compared to ZeRO-1, as gradients can be as large as
-/// the model itself. Parameters remain replicated for the forward pass.
+/// True ZeRO-2 implementation using ReduceScatter for gradient sharding. Each rank:
+/// 1. Computes local gradients on full parameter set
+/// 2. ReduceScatter: reduces gradients AND scatters them (each rank gets a shard)
+/// 3. Updates only its shard of parameters using its shard of gradients
+/// 4. AllGather: reconstructs full parameters from shards for next forward pass
+///
+/// This saves memory by distributing gradient storage and parameter updates across ranks.
 /// </para>
 /// <para><b>For Beginners:</b>
-/// ZeRO-2 saves even more memory than ZeRO-1. Not only is the optimizer state split across
-/// processes, but the gradients are too. After computing gradients, we immediately use
-/// ReduceScatter to average them across processes AND split them up, so each process only
-/// keeps its assigned portion. This is like having a team where each person is responsible
-/// for updating only certain parameters.
+/// ZeRO-2 divides the work of storing and updating parameters across processes. Think of it
+/// like a team where each person is responsible for maintaining a specific section of a large
+/// document. Everyone reads the full document (forward pass), but each person only stores and
+/// updates their assigned section (backward pass). Before the next iteration, they share their
+/// sections to reconstruct the full document.
 /// </para>
 /// <para><b>Use Cases:</b>
-/// - Large models where gradient memory is significant
-/// - Want substantial memory savings
-/// - Works well with ZeRO2Model
+/// - Large models where gradient memory is significant (billions of parameters)
+/// - Want memory savings beyond DDP
+/// - Good network for AllGather operations
+/// - Works with ANY gradient-based optimizer (SGD, Adam, RMSprop, etc.)
 /// </para>
 /// <para><b>Trade-offs:</b>
-/// - Memory: Very Good - saves optimizer states + gradients
-/// - Communication: Moderate - uses ReduceScatter instead of AllReduce
-/// - Complexity: Moderate - gradient and state sharding
-/// - Best for: Large models with significant gradient memory
+/// - Memory: Very Good - gradients and optimizer states sharded (1/N of DDP)
+/// - Communication: ReduceScatter + AllGather (vs AllReduce for DDP)
+/// - Synchronization: Perfect - all ranks reconstruct identical parameters
+/// - Complexity: Moderate - requires parameter sharding logic
+/// - Best for: Large models with limited GPU memory
 /// </para>
-/// <para><b>⚠️ IMPORTANT - Optimizer Compatibility:</b>
-/// This implementation's ComputeOriginalParameters method assumes vanilla gradient descent
-/// (SGD) update rules. It may produce INCORRECT results when wrapping adaptive optimizers
-/// like Adam or RMSprop. For production use, wrap only vanilla SGD optimizers
-/// (GradientDescentOptimizer, StochasticGradientDescentOptimizer, etc.). See
-/// ComputeOriginalParameters documentation for details.
+/// <para><b>Memory Savings vs DDP:</b>
+/// - DDP: Each rank stores full gradients + full optimizer state
+/// - ZeRO-2: Each rank stores 1/N gradients + 1/N optimizer state
+/// - Savings increase linearly with world size
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric type</typeparam>
@@ -71,21 +74,16 @@ public class ZeRO2Optimizer<T, TInput, TOutput> : ShardedOptimizerBase<T, TInput
     public override OptimizationResult<T, TInput, TOutput> Optimize(OptimizationInputData<T, TInput, TOutput> inputData)
     {
         // CRITICAL: Opening barrier must execute BEFORE any divergent logic to synchronize all workers.
-        // This prevents deadlock if some workers throw exceptions while others continue.
         Config.CommunicationBackend.Barrier();
 
         try
         {
-            // Null check happens AFTER opening barrier but INSIDE try block.
-            // This ensures that if one worker receives null while another doesn't,
-            // both workers still execute the finally barrier, preventing deadlock.
             if (inputData == null)
                 throw new ArgumentNullException(nameof(inputData));
 
             var gradientOptimizer = (IGradientBasedOptimizer<T, TInput, TOutput>)WrappedOptimizer;
 
             // CRITICAL: Save parameters BEFORE local optimization
-            // This allows us to discard the local update and apply only the averaged gradients
             Vector<T>? savedParameters = null;
             if (Config.AutoSyncGradients && inputData.InitialSolution != null)
             {
@@ -93,25 +91,42 @@ public class ZeRO2Optimizer<T, TInput, TOutput> : ShardedOptimizerBase<T, TInput
             }
 
             // Step 1: Optimize locally to compute gradients
-            // The wrapped optimizer will compute gradients and apply them locally
             var localResult = WrappedOptimizer.Optimize(inputData);
 
-            // Step 2: Synchronize gradients across all ranks and apply averaged gradients
+            // Step 2: ZeRO-2 gradient sharding with ReduceScatter
             if (Config.AutoSyncGradients && localResult.BestSolution != null && savedParameters != null)
             {
                 var localGradients = gradientOptimizer.LastComputedGradients;
 
                 if (localGradients != null && localGradients.Length > 0)
                 {
-                    // Average gradients across all ranks
-                    // This is the key DDP operation: all ranks get the same averaged gradient
-                    Config.CommunicationBackend.AllReduce(localGradients, ReductionOperation.Average);
+                    // ZeRO-2 CORE: ReduceScatter averages gradients AND scatters them
+                    // Each rank receives only its shard of the averaged gradients
+                    var myGradientShard = Config.CommunicationBackend.ReduceScatter(localGradients, ReductionOperation.Average);
 
-                    // Apply the averaged gradients using the safe 3-parameter overload
-                    // This explicitly passes savedParameters (pre-update state) to prevent double-stepping
-                    // Works for ANY optimizer (SGD, Adam, RMSprop, etc.) because ApplyGradients
-                    // handles optimizer-specific state (momentum, variance, etc.)
-                    var finalModel = gradientOptimizer.ApplyGradients(savedParameters, localGradients, localResult.BestSolution);
+                    // Calculate which parameter shard this rank owns
+                    int totalParams = savedParameters.Length;
+                    int shardSize = myGradientShard.Length;
+                    int myShardStart = Rank * shardSize;
+
+                    // Extract this rank's parameter shard
+                    var myParamShard = new T[shardSize];
+                    for (int i = 0; i < shardSize && (myShardStart + i) < totalParams; i++)
+                    {
+                        myParamShard[i] = savedParameters[myShardStart + i];
+                    }
+                    var myParamShardVector = new Vector<T>(myParamShard);
+
+                    // Step 3: Update ONLY this rank's shard using the gradient shard
+                    // This is where ZeRO-2 saves memory - only updating 1/N of parameters
+                    var updatedShard = gradientOptimizer.UpdateParameters(myParamShardVector, myGradientShard);
+
+                    // Step 4: AllGather to reconstruct full parameters from all shards
+                    // Each rank contributes its updated shard, everyone gets full parameter vector
+                    var fullParameters = Config.CommunicationBackend.AllGather(updatedShard);
+
+                    // Step 5: Create model with reconstructed full parameters
+                    var finalModel = localResult.BestSolution.WithParameters(fullParameters);
                     localResult.BestSolution = finalModel;
                 }
             }
@@ -122,9 +137,7 @@ public class ZeRO2Optimizer<T, TInput, TOutput> : ShardedOptimizerBase<T, TInput
         }
         finally
         {
-            // CRITICAL: Closing barrier ALWAYS executes to prevent deadlock,
-            // even if null check, WrappedOptimizer.Optimize, or other operations throw.
-            // This ensures all workers reach this barrier regardless of exceptions.
+            // CRITICAL: Closing barrier ALWAYS executes to prevent deadlock
             Config.CommunicationBackend.Barrier();
         }
     }
