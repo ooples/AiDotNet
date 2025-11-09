@@ -284,8 +284,21 @@ public class PredictionModelBuilder<T, TInput, TOutput> : IPredictionModelBuilde
             // Use provided configuration or create default from backend
             var shardingConfig = _distributedConfiguration ?? new DistributedTraining.ShardingConfiguration<T>(backend);
 
-            // Switch on strategy to create appropriate model/optimizer pair
-            (model, finalOptimizer) = _distributedStrategy switch
+            // Check if model/optimizer are already sharded to avoid double-wrapping
+            bool isModelAlreadySharded = _model is DistributedTraining.IShardedModel<T, TInput, TOutput>;
+            bool isOptimizerAlreadySharded = optimizer is DistributedTraining.IShardedOptimizer<T, TInput, TOutput>;
+
+            // Only wrap if not already sharded
+            if (isModelAlreadySharded || isOptimizerAlreadySharded)
+            {
+                // Model or optimizer already sharded - skip wrapping to avoid double-wrapping
+                model = _model;
+                finalOptimizer = optimizer;
+            }
+            else
+            {
+                // Switch on strategy to create appropriate model/optimizer pair
+                (model, finalOptimizer) = _distributedStrategy switch
             {
                 DistributedStrategy.DDP => (
                     (IFullModel<T, TInput, TOutput>)new DistributedTraining.DDPModel<T, TInput, TOutput>(_model, shardingConfig),
@@ -321,6 +334,7 @@ public class PredictionModelBuilder<T, TInput, TOutput> : IPredictionModelBuilde
                 ),
                 _ => throw new InvalidOperationException($"Unsupported distributed strategy: {_distributedStrategy}")
             };
+            }
         }
 
         // Preprocess the data
