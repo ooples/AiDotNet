@@ -137,25 +137,33 @@ public class ZeRO2Model<T, TInput, TOutput> : ShardedModelBase<T, TInput, TOutpu
     /// <inheritdoc/>
     public override void Train(TInput input, TOutput expectedOutput)
     {
-        // Full parameters available locally
+        // IMPORTANT: ZeRO2Model is designed to be used WITH ZeRO2Optimizer, not standalone.
+        // The ZeRO-2 workflow requires separating gradient computation from parameter updates:
+        //   1. Forward + backward pass to compute gradients
+        //   2. ReduceScatter gradients (each rank gets a shard)
+        //   3. Update ONLY local parameter shard using gradient shard
+        //   4. AllGather updated shards to reconstruct full parameters
+        //
+        // However, IFullModel.Train() couples backward and optimizer steps, making true ZeRO-2
+        // impossible without API changes. Therefore, this method provides LIMITED functionality:
+
+        // Set full parameters and perform full training step
         WrappedModel.SetParameters(LocalShard);
         WrappedModel.Train(input, expectedOutput);
         LocalShard = WrappedModel.GetParameters();
 
         if (Config.AutoSyncGradients)
         {
+            // Synchronize gradients via ReduceScatter
+            // This populates _gradientShard for potential use by ZeRO2Optimizer
             SynchronizeGradients();
 
-            // After ReduceScatter, we have sharded gradients in _gradientShard
-            // When used with ZeRO2Optimizer, the optimizer will:
-            //   1. Access _gradientShard via the public property
-            //   2. Update only the corresponding parameter shard
-            //   3. The updated shard is reflected in the portion of LocalShard
-            //
-            // For correctness, we must AllGather parameter shards to reconstruct
-            // full parameters for the next forward pass (ensuring all ranks have
-            // synchronized parameters after optimizer updates)
-            LocalShard = AllGatherParameterShards();
+            // For standalone use (without ZeRO2Optimizer), we need to synchronize parameters
+            // Since all ranks performed full updates, we AllReduce to average them
+            // NOTE: This is NOT true ZeRO-2 semantics - use with ZeRO2Optimizer for proper ZeRO-2
+            var syncedParams = new Vector<T>(LocalShard.ToArray());
+            Config.CommunicationBackend.AllReduce(syncedParams, ReductionOperation.Average);
+            LocalShard = syncedParams;
             CachedFullParameters = null;
         }
     }
@@ -168,17 +176,30 @@ public class ZeRO2Model<T, TInput, TOutput> : ShardedModelBase<T, TInput, TOutpu
     /// we need to AllGather all shards to reconstruct the full parameter vector
     /// for the next forward pass. This ensures all ranks have identical synchronized
     /// parameters.
+    ///
+    /// This method is primarily used when integrating with ZeRO2Optimizer, where each rank
+    /// updates only its portion of the parameter vector. Proper AllGather collects these
+    /// disjoint updated shards and concatenates them to form the complete parameter vector.
     /// </remarks>
     /// <returns>Full parameter vector reconstructed from all ranks' shards</returns>
-    private Vector<T> AllGatherParameterShards()
+    public Vector<T> AllGatherParameterShards()
     {
-        // In this implementation, LocalShard contains full parameters (replicated),
-        // but after optimizer updates using gradient shards, portions of LocalShard
-        // are updated on each rank. AllGather averages these to get final parameters.
-        // This is equivalent to AllReducing with Average operation.
-        var gatheredParams = new Vector<T>(LocalShard.ToArray());
-        Config.CommunicationBackend.AllReduce(gatheredParams, ReductionOperation.Average);
-        return gatheredParams;
+        // Calculate this rank's shard boundaries (must match SynchronizeGradients logic)
+        int totalParams = LocalShard.Length;
+        int chunkSize = (totalParams + WorldSize - 1) / WorldSize;
+        int shardStart = Rank * chunkSize;
+        int shardEnd = Math.Min((Rank + 1) * chunkSize, totalParams);
+        int shardLength = shardEnd - shardStart;
+
+        // Extract this rank's parameter shard from LocalShard
+        var myParameterShard = new T[shardLength];
+        Array.Copy(LocalShard.ToArray(), shardStart, myParameterShard, 0, shardLength);
+        var myShardVector = new Vector<T>(myParameterShard);
+
+        // AllGather: Each rank contributes its shard, result is concatenation of all shards
+        var fullParameters = Config.CommunicationBackend.AllGather(myShardVector);
+
+        return fullParameters;
     }
 
     /// <inheritdoc/>
