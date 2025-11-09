@@ -77,10 +77,10 @@ public class SelfAttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     /// Higher values encourage sharper, more focused attention patterns.
     /// </para>
     /// </remarks>
-    public T AuxiliaryLossWeight { get; set; } = NumOps.FromDouble(0.005);
+    public T AuxiliaryLossWeight { get; set; }
 
-    private T _lastEntropyLoss = NumOps.Zero;
-    private T _lastSparsityLoss = NumOps.Zero;
+    private T _lastEntropyLoss;
+    private T _lastSparsityLoss;
 
     /// <summary>
     /// Matrix of weights for transforming input embeddings into query vectors.
@@ -816,8 +816,7 @@ public class SelfAttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
                 for (int j = 0; j < seqLen; j++)
                 {
                     // Get attention weight for this head and position
-                    int flatIndex = h * seqLen * seqLen + i * seqLen + j;
-                    T attnWeight = _lastAttentionScores.GetFlatIndex(flatIndex);
+                    T attnWeight = _lastAttentionScores[h, i, j];
 
                     // Skip zero or very small values to avoid log(0)
                     if (NumOps.LessThan(attnWeight, NumOps.FromDouble(1e-10)))
@@ -896,6 +895,11 @@ public class SelfAttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         }
 
         InitializeParameters();
+
+        // Initialize auxiliary loss fields after NumOps is available
+        AuxiliaryLossWeight = NumOps.FromDouble(0.005);
+        _lastEntropyLoss = NumOps.Zero;
+        _lastSparsityLoss = NumOps.Zero;
     }
 
     /// <summary>

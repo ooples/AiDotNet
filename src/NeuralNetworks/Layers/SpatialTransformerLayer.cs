@@ -38,12 +38,12 @@ public class SpatialTransformerLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     /// <summary>
     /// Gets or sets the weight for the auxiliary loss contribution.
     /// </summary>
-    public T AuxiliaryLossWeight { get; set; } = NumOps.FromDouble(0.01);
+    public T AuxiliaryLossWeight { get; set; }
 
     /// <summary>
     /// Stores the last computed transformation regularization loss for diagnostic purposes.
     /// </summary>
-    private T _lastTransformationLoss = NumOps.Zero;
+    private T _lastTransformationLoss;
 
     /// <summary>
     /// Weights for the first layer of the localization network.
@@ -437,6 +437,10 @@ public class SpatialTransformerLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         // Initialize the localization bias2 to represent identity transformation
         _localizationBias2[0] = NumOps.One;
         _localizationBias2[4] = NumOps.One;
+
+        // Initialize auxiliary loss fields after NumOps is available
+        AuxiliaryLossWeight = NumOps.FromDouble(0.01);
+        _lastTransformationLoss = NumOps.Zero;
     }
 
     /// <summary>
