@@ -7,6 +7,14 @@ namespace AiDotNet.DistributedTraining;
 /// </summary>
 /// <remarks>
 /// <para>
+/// <b>⚠️ WARNING - Static Mutable State:</b> This class uses static mutable state for managing
+/// communication backends. This design choice has important implications for concurrent usage:
+/// - Only ONE backend can be active per process
+/// - Unit tests using this class CANNOT run in parallel
+/// - Multiple training sessions in the same process share the same backend
+/// See detailed thread-safety notes below for proper usage patterns.
+/// </para>
+/// <para>
 /// Provides a static API for collective communication in distributed training scenarios.
 /// </para>
 /// <para><b>For Beginners:</b>
