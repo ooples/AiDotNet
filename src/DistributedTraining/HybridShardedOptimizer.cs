@@ -96,19 +96,30 @@ public class HybridShardedOptimizer<T, TInput, TOutput> : ShardedOptimizerBase<T
 
             if (Config.AutoSyncGradients && result.BestSolution != null)
             {
-                // NOTE: SynchronizeParameters() from base class performs full-world AllReduce,
-                // which is incorrect for 3D parallelism. Proper implementation requires:
+                // CRITICAL: HybridShardedOptimizer requires subgroup-aware gradient synchronization
+                // which is not yet implemented. The base class SynchronizeParameters() performs
+                // a full-world AllReduce that incorrectly averages parameters across ALL ranks,
+                // destroying the tensor/pipeline shard structure.
+                //
+                // Correct implementation requires:
                 // 1. First sync within tensor-parallel group (AllReduce for sum partial results)
                 // 2. Then sync across data-parallel replicas (AllReduce for average gradients)
                 // 3. Pipeline stages handle their own gradient accumulation
                 //
-                // For now, this is a framework placeholder. Full implementation needs:
-                // - Subgroup communicators for each parallelism dimension
+                // This needs:
+                // - Subgroup communicators for each parallelism dimension (tensor/data/pipeline groups)
                 // - Gradient-specific synchronization (not parameter synchronization)
                 // - Proper handling of optimizer states per dimension
+                //
+                // Without proper implementation, gradients remain unsynchronized or parameters
+                // get incorrectly averaged, breaking 3D parallel semantics.
 
-                // TODO: Replace with proper subgroup-aware gradient synchronization
-                // SynchronizeParameters(result.BestSolution);
+                throw new NotSupportedException(
+                    "HybridShardedOptimizer with AutoSyncGradients=true requires subgroup-aware " +
+                    "gradient synchronization that is not yet implemented. Proper 3D parallelism " +
+                    "needs separate communicators for tensor-parallel, data-parallel, and pipeline-parallel " +
+                    "groups. Use AutoSyncGradients=false and implement custom gradient synchronization, " +
+                    "or use a simpler parallelism strategy (DDP, FSDP, ZeRO-2) for production use.");
             }
 
             return result;
