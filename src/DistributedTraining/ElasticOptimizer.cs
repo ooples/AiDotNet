@@ -115,38 +115,40 @@ public class ElasticOptimizer<T, TInput, TOutput> : ShardedOptimizerBase<T, TInp
         if (inputData == null)
             throw new ArgumentNullException(nameof(inputData));
 
-        // Check for world size changes (workers joined/left)
-        if (DetectWorldSizeChange())
+        // CRITICAL: Opening barrier to synchronize all workers before any operations
+        // This ensures all workers start together, preventing barrier mismatches if
+        // some workers detect world size changes while others don't
+        Config.CommunicationBackend.Barrier();
+
+        try
         {
-            try
+            // Check for world size changes (workers joined/left)
+            if (DetectWorldSizeChange())
             {
                 HandleWorkerChange();
             }
-            catch (InvalidOperationException ex)
+
+            // Optimize with current workers
+            var result = WrappedOptimizer.Optimize(inputData);
+
+            // Synchronize parameters
+            if (Config.AutoSyncGradients && result.BestSolution != null)
             {
-                // CRITICAL: Reach barrier even on validation failure to unblock other processes
-                // Otherwise, other workers waiting at the barrier will deadlock indefinitely
-                Config.CommunicationBackend.Barrier();
-                throw new InvalidOperationException(
-                    $"Worker change validation failed: {ex.Message}. All workers have been synchronized.", ex);
+                SynchronizeParameters(result.BestSolution);
             }
+
+            return result;
         }
-
-        // Barrier with current worker set
-        Config.CommunicationBackend.Barrier();
-
-        // Optimize with current workers
-        var result = WrappedOptimizer.Optimize(inputData);
-
-        // Synchronize parameters
-        if (Config.AutoSyncGradients && result.BestSolution != null)
+        finally
         {
-            SynchronizeParameters(result.BestSolution);
+            // CRITICAL: Closing barrier ALWAYS executes to prevent deadlock.
+            // Even if HandleWorkerChange() or WrappedOptimizer.Optimize() throws on some workers,
+            // all workers reach this barrier before propagating the exception.
+            // This prevents the scenario where:
+            // - Worker A: HandleWorkerChange() throws, skips barriers, exits
+            // - Worker B: HandleWorkerChange() succeeds, waits at barrier forever
+            Config.CommunicationBackend.Barrier();
         }
-
-        Config.CommunicationBackend.Barrier();
-
-        return result;
     }
 
     /// <inheritdoc/>

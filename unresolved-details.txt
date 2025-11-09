@@ -1,0 +1,904 @@
+
+================================================================================
+ISSUE #1
+File: src/DistributedTraining/InMemoryCommunicationBackend.cs
+Line: 295
+Author: copilot-pull-request-reviewer
+Thread ID: PRRT_kwDOKSXUF85g9V9o
+================================================================================
+
+Potential deadlock: Similar to the Barrier method, this while loop could deadlock if not all processes reach this point. If one process fails or doesn't call AllReduce, the others will wait indefinitely. Consider adding a timeout or error handling mechanism.
+
+
+================================================================================
+ISSUE #2
+File: src/DistributedTraining/InMemoryCommunicationBackend.cs
+Line: 597
+Author: copilot-pull-request-reviewer
+Thread ID: PRRT_kwDOKSXUF85g9V9s
+================================================================================
+
+The Average operation applies division after the accumulation, but the accumulation is using Sum logic. This means the final division is done once on the total sum, dividing by vector count. However, the comment and operation name suggest this should average values. Verify this is the intended behavior - it appears correct but could use clarification in the comment.
+
+
+================================================================================
+ISSUE #3
+File: src/DistributedTraining/InMemoryCommunicationBackend.cs
+Line: 55
+Author: copilot-pull-request-reviewer
+Thread ID: PRRT_kwDOKSXUF85g9V9z
+================================================================================
+
+The static shared state (_sharedBuffers, _barrierCounters) is shared across all instances of InMemoryCommunicationBackend, which could cause issues if multiple independent distributed training sessions are running concurrently in the same process. Consider namespacing these by a session ID or making them instance-specific with a shared coordinator.
+
+
+================================================================================
+ISSUE #4
+File: scripts/launch-distributed-training.sh
+Line: 117
+Author: coderabbitai
+Thread ID: PRRT_kwDOKSXUF85hLkmL
+================================================================================
+
+_⚠️ Potential issue_ | _🟠 Major_
+
+**Automatically making files executable poses a security and correctness risk.**
+
+The script unconditionally runs `chmod +x` on any non-executable file without verifying it's actually meant to be an executable (e.g., it could be a data file or config accidentally passed). Consider either removing this auto-chmod feature or adding a user confirmation prompt.
+
+
+
+Apply this diff to prompt the user:
+
+```diff
+ # Make program executable if it isn't
+ if [ ! -x "$PROGRAM" ]; then
+-    echo "Warning: Program is not executable. Making it executable..."
+-    chmod +x "$PROGRAM"
++    echo "Warning: Program '$PROGRAM' is not executable."
++    read -p "Make it executable? (y/N): " -n 1 -r
++    echo
++    if [[ $REPLY =~ ^[Yy]$ ]]; then
++        chmod +x "$PROGRAM"
++        echo "Made executable."
++    else
++        echo "Error: Program must be executable to run."
++        exit 1
++    fi
+ fi
+```
+
+<!-- suggestion_start -->
+
+<details>
+<summary>📝 Committable suggestion</summary>
+
+> ‼️ **IMPORTANT**
+> Carefully review the code before committing. Ensure that it accurately replaces the highlighted code, contains no missing lines, and has no issues with indentation. Thoroughly test & benchmark the code to ensure it meets the requirements.
+
+```suggestion
+if [ ! -x "$PROGRAM" ]; then
+    echo "Warning: Program '$PROGRAM' is not executable."
+    read -p "Make it executable? (y/N): " -n 1 -r
+    echo
+    if [[ $REPLY =~ ^[Yy]$ ]]; then
+        chmod +x "$PROGRAM"
+        echo "Made executable."
+    else
+        echo "Error: Program must be executable to run."
+        exit 1
+    fi
+fi
+```
+
+</details>
+
+<!-- suggestion_end -->
+
+<!-- This is an auto-generated comment by CodeRabbit -->
+
+
+================================================================================
+ISSUE #5
+File: src/DistributedTraining/FSDPModel.cs
+Line: 113
+Author: coderabbitai
+Thread ID: PRRT_kwDOKSXUF85hMV2M
+================================================================================
+
+_⚠️ Potential issue_ | _🔴 Critical_
+
+**Stop averaging disjoint shards during sync**
+
+`SynchronizeGradients()` operates on `LocalShard`, which only contains the slice owned by this rank. Running an `AllReduce` over these slices mixes unrelated parameter indices from other ranks (and even fails when shard lengths differ), so the first sync corrupts the weights or throws. You need to reduce matching data across ranks—e.g. gather full gradients, all-reduce that full vector, then scatter back, or restructure to use `ReduceScatter` with consistent per-rank buffers. Until the reduction aligns identical parameter indices, distributed training will not produce correct results.
+
+<!-- fingerprinting:phantom:medusa:sabertoothed -->
+
+<!-- This is an auto-generated comment by CodeRabbit -->
+
+
+================================================================================
+ISSUE #6
+File: src/PredictionModelBuilder.cs
+Line: 324
+Author: coderabbitai
+Thread ID: PRRT_kwDOKSXUF85hMV2V
+================================================================================
+
+_⚠️ Potential issue_ | _🔴 Critical_
+
+**...**
+...
+
+...
+
+<details>
+<summary>🤖 Prompt for AI Agents</summary>
+
+```
+In src/PredictionModelBuilder.cs around lines 270 to 285, ensure wrapping uses
+the original _model and optimizer safely and only when required: add null-checks
+for optimizer before constructing a ShardedOptimizer, and avoid double-wrapping
+by only creating ShardedModel/ShardedOptimizer when the underlying
+_model/optimizer are not already sharded (or by unwrapping/inspecting types).
+Replace direct wrapping with logic that (1) verifies
+_distributedTrainingConfiguration != null && IsEnabled, (2) if _model is not
+already a DistributedTraining.ShardedModel create a new
+ShardedModel<T,...>(_model, ShardingConfiguration), and (3) if optimizer is
+non-null and not already a DistributedTraining.ShardedOptimizer create a new
+ShardedOptimizer<T,...>(optimizer, ShardingConfiguration); assign these to model
+and finalOptimizer.
+```
+
+</details>
+
+<!-- fingerprinting:phantom:medusa:sabertoothed -->
+
+<!-- This is an auto-generated comment by CodeRabbit -->
+
+
+================================================================================
+ISSUE #7
+File: src/DistributedTraining/ElasticOptimizer.cs
+Line: 125
+Author: coderabbitai
+Thread ID: PRRT_kwDOKSXUF85hMtLz
+================================================================================
+
+_⚠️ Potential issue_ | _🟠 Major_
+
+**Risk of deadlock if worker change validation fails.**
+
+If `HandleWorkerChange()` throws an `InvalidOperationException` (lines 173-174) due to out-of-bounds world size, this process never reaches the barrier on line 125. Other processes waiting at the barrier will deadlock indefinitely.
+
+
+
+Move validation before any distributed operation or handle exceptions gracefully:
+
+```diff
+     // Check for world size changes (workers joined/left)
+     if (DetectWorldSizeChange())
+     {
+-        HandleWorkerChange();
++        try
++        {
++            HandleWorkerChange();
++        }
++        catch (InvalidOperationException ex)
++        {
++            // Reach barrier even on validation failure to unblock other processes
++            Config.CommunicationBackend.Barrier();
++            throw new InvalidOperationException(
++                $"Worker change validation failed: {ex.Message}", ex);
++        }
+     }
+
+     // Barrier with current worker set
+     Config.CommunicationBackend.Barrier();
+```
+
+Alternatively, validate bounds before entering the critical section where other processes synchronize.
+
+<!-- suggestion_start -->
+
+<details>
+<summary>📝 Committable suggestion</summary>
+
+> ‼️ **IMPORTANT**
+> Carefully review the code before committing. Ensure that it accurately replaces the highlighted code, contains no missing lines, and has no issues with indentation. Thoroughly test & benchmark the code to ensure it meets the requirements.
+
+```suggestion
+        // Check for world size changes (workers joined/left)
+        if (DetectWorldSizeChange())
+        {
+            try
+            {
+                HandleWorkerChange();
+            }
+            catch (InvalidOperationException ex)
+            {
+                // Reach barrier even on validation failure to unblock other processes
+                Config.CommunicationBackend.Barrier();
+                throw new InvalidOperationException(
+                    $"Worker change validation failed: {ex.Message}", ex);
+            }
+        }
+
+        // Barrier with current worker set
+        Config.CommunicationBackend.Barrier();
+```
+
+</details>
+
+<!-- suggestion_end -->
+
+<!-- This is an auto-generated comment by CodeRabbit -->
+
+
+================================================================================
+ISSUE #8
+File: src/DistributedTraining/GlooCommunicationBackend.cs
+Line: 603
+Author: coderabbitai
+Thread ID: PRRT_kwDOKSXUF85hMtMA
+================================================================================
+
+_⚠️ Potential issue_ | _🔴 Critical_
+
+**Multi-process collective operations are non-functional stubs.**
+
+The helper methods `PerformRingAllReduce`, `PerformRingAllGather`, etc., only handle the single-process case (`_worldSize == 1`). For multi-process scenarios, they either return local copies or no-ops, which produces incorrect results for distributed training.
+
+Combined with the uninitialized TCP connections (see earlier comment), this backend will silently fail in multi-process mode by returning incorrect data rather than throwing an error.
+
+
+
+The class documentation (lines 41-43) claims "production-ready TCP-based implementation" as a "fallback" that "provides full functionality without external dependencies." This is misleading.
+
+**Recommended fix:** Update documentation to clearly state this is a single-process-only implementation:
+
+```diff
+ /// <para><b>Graceful Degradation:</b>
+-/// If Gloo library is not available, this backend provides a production-ready TCP-based
+-/// implementation of collective operations using industry-standard ring algorithms.
+-/// This fallback provides full functionality without external dependencies.
++/// This backend currently supports only single-process mode for testing and development.
++/// Multi-process distributed training requires native Gloo library or an alternative
++/// backend such as MPICommunicationBackend. TCP-based multi-process support is planned
++/// for future releases.
+ /// </para>
+```
+
+
+> Committable suggestion skipped: line range outside the PR's diff.
+
+<!-- This is an auto-generated comment by CodeRabbit -->
+
+
+================================================================================
+ISSUE #9
+File: src/DistributedTraining/GlooCommunicationBackend.cs
+Line: 859
+Author: coderabbitai
+Thread ID: PRRT_kwDOKSXUF85hMtMC
+================================================================================
+
+_🛠️ Refactor suggestion_ | _🟠 Major_
+
+**Mark TCP data transfer methods as not implemented.**
+
+The `SendData` and `ReceiveData` methods are placeholders that will always throw `InvalidOperationException` because `_tcpConnections` is never initialized. The current exception message is misleading—it suggests a connection should exist but wasn't found, when in fact TCP infrastructure is not implemented at all.
+
+
+
+Apply this diff to make the status clearer:
+
+```diff
+     private void SendData(int destRank, T[] data)
+     {
+-        if (_tcpConnections == null || !_tcpConnections.ContainsKey(destRank))
+-        {
+-            throw new InvalidOperationException($"No TCP connection to rank {destRank}");
+-        }
+-
+-        // In production, serialize and send data via TCP
+-        // Implementation would use NetworkStream.Write with proper serialization
++        throw new NotImplementedException(
++            "TCP-based data transfer is not yet implemented. " +
++            "This backend currently supports only single-process mode.");
+     }
+```
+
+```diff
+     private T[] ReceiveData(int sourceRank, int expectedLength)
+     {
+-        if (_tcpConnections == null || !_tcpConnections.ContainsKey(sourceRank))
+-        {
+-            throw new InvalidOperationException($"No TCP connection to rank {sourceRank}");
+-        }
+-
+-        // In production, receive and deserialize data via TCP
+-        // Implementation would use NetworkStream.Read with proper deserialization
+-        return new T[expectedLength];
++        throw new NotImplementedException(
++            "TCP-based data transfer is not yet implemented. " +
++            "This backend currently supports only single-process mode.");
+     }
+```
+
+<!-- suggestion_start -->
+
+<details>
+<summary>📝 Committable suggestion</summary>
+
+> ‼️ **IMPORTANT**
+> Carefully review the code before committing. Ensure that it accurately replaces the highlighted code, contains no missing lines, and has no issues with indentation. Thoroughly test & benchmark the code to ensure it meets the requirements.
+
+```suggestion
+    private void SendData(int destRank, T[] data)
+    {
+        throw new NotImplementedException(
+            "TCP-based data transfer is not yet implemented. " +
+            "This backend currently supports only single-process mode.");
+    }
+
+    /// <summary>
+    /// Receives data from a specific rank via TCP.
+    /// </summary>
+    /// <remarks>
+    /// This would be used in a full multi-process TCP implementation.
+    /// Requires TCP connections to be established during initialization.
+    /// </remarks>
+    private T[] ReceiveData(int sourceRank, int expectedLength)
+    {
+        throw new NotImplementedException(
+            "TCP-based data transfer is not yet implemented. " +
+            "This backend currently supports only single-process mode.");
+    }
+```
+
+</details>
+
+<!-- suggestion_end -->
+
+<details>
+<summary>🤖 Prompt for AI Agents</summary>
+
+```
+In src/DistributedTraining/GlooCommunicationBackend.cs around lines 417 to 445,
+the SendData and ReceiveData methods are placeholders that misleadingly throw
+InvalidOperationException about missing TCP connections; change them to clearly
+indicate the TCP transport is not implemented by throwing
+NotImplementedException (or an InvalidOperationException with an explicit
+message like "TCP data transfer not implemented in this backend") immediately
+(remove the _tcpConnections existence check), and update the XML doc comments to
+state these methods are intentionally unimplemented in this build so callers get
+an explicit, accurate error instead of a confusing connection-not-found message.
+```
+
+</details>
+
+<!-- This is an auto-generated comment by CodeRabbit -->
+
+
+================================================================================
+ISSUE #10
+File: src/DistributedTraining/HybridShardedModel.cs
+Line: 182
+Author: coderabbitai
+Thread ID: PRRT_kwDOKSXUF85hMtMQ
+================================================================================
+
+_⚠️ Potential issue_ | _🔴 Critical_
+
+**AllReduce must be limited to data-parallel replicas**
+
+In hybrid 3D sharding, `LocalShard` contains the pipeline/tensor slice owned by this rank. Reducing it across the full world averages together shards from *different* pipeline/tensor coordinates, immediately corrupting the parameters. We only want to synchronize gradients across the data-parallel replicas that share the same pipeline/tensor position. Please guard against `_dataParallelSize > 1` and move the collective to a subgroup; e.g.:
+
+```diff
+-        Config.CommunicationBackend.AllReduce(LocalShard, ReductionOperation.Average);
++        if (_dataParallelSize <= 1)
++        {
++            return;
++        }
++
++        throw new NotSupportedException(
++            "HybridShardedModel needs subgroup AllReduce over the data-parallel replica set; " +
++            "reducing across the full world corrupts tensor/pipeline shards.");
+```
+
+Once subgroup-aware collectives are available, replace the exception with the proper ReduceScatter/AllReduce confined to the data-parallel group. As written, this method produces wrong results on the first step.
+
+<!-- suggestion_start -->
+
+<details>
+<summary>📝 Committable suggestion</summary>
+
+> ‼️ **IMPORTANT**
+> Carefully review the code before committing. Ensure that it accurately replaces the highlighted code, contains no missing lines, and has no issues with indentation. Thoroughly test & benchmark the code to ensure it meets the requirements.
+
+```suggestion
+        // For this framework implementation, we use simplified synchronization
+        if (_dataParallelSize <= 1)
+        {
+            return;
+        }
+
+        throw new NotSupportedException(
+            "HybridShardedModel needs subgroup AllReduce over the data-parallel replica set; " +
+            "reducing across the full world corrupts tensor/pipeline shards.");
+```
+
+</details>
+
+<!-- suggestion_end -->
+
+<details>
+<summary>🤖 Prompt for AI Agents</summary>
+
+```
+In src/DistributedTraining/HybridShardedModel.cs around lines 178 to 182, the
+AllReduce is currently applied to LocalShard across the full world which
+averages shards from different pipeline/tensor coordinates and corrupts
+parameters; change the behavior so that when _dataParallelSize > 1 you perform
+the collective only over the data-parallel subgroup (i.e., use a subgroup
+communicator or API that confines the AllReduce/ReduceScatter to ranks that
+share the same pipeline/tensor position) and skip or raise a clear exception
+when subgroup collectives are not available; in short, guard the collective with
+a _dataParallelSize > 1 check and replace the global AllReduce with a
+subgroup-scoped ReduceScatter/AllReduce (or throw until subgroup support
+exists).
+```
+
+</details>
+
+<!-- fingerprinting:phantom:medusa:sabertoothed -->
+
+<!-- This is an auto-generated comment by CodeRabbit -->
+
+
+================================================================================
+ISSUE #11
+File: src/DistributedTraining/HybridShardedOptimizer.cs
+Line: 107
+Author: coderabbitai
+Thread ID: PRRT_kwDOKSXUF85hMtMT
+================================================================================
+
+_⚠️ Potential issue_ | _🟠 Major_
+
+**Ensure the post-step barrier always executes.**
+
+If `WrappedOptimizer.Optimize` throws on any rank, that rank skips the second barrier while the others block indefinitely, deadlocking the job. Wrap the optimize block in `try/finally` so the trailing barrier (or a corresponding abort) always runs. For example:
+
+```diff
+-        Config.CommunicationBackend.Barrier();
+-
+-        var result = WrappedOptimizer.Optimize(inputData);
+-        ...
+-
+-        Config.CommunicationBackend.Barrier();
+-
+-        return result;
++        Config.CommunicationBackend.Barrier();
++
++        try
++        {
++            var result = WrappedOptimizer.Optimize(inputData);
++            ...
++            return result;
++        }
++        finally
++        {
++            Config.CommunicationBackend.Barrier();
++        }
+```
+
+<!-- suggestion_start -->
+
+<details>
+<summary>📝 Committable suggestion</summary>
+
+> ‼️ **IMPORTANT**
+> Carefully review the code before committing. Ensure that it accurately replaces the highlighted code, contains no missing lines, and has no issues with indentation. Thoroughly test & benchmark the code to ensure it meets the requirements.
+
+```suggestion
+        Config.CommunicationBackend.Barrier();
+
+        // 3D parallel optimization requires careful coordination:
+        // 1. Pipeline: gradient accumulation across micro-batches
+        // 2. Tensor: synchronization within tensor-parallel group
+        // 3. Data: synchronization across data-parallel replicas
+
+        try
+        {
+            var result = WrappedOptimizer.Optimize(inputData);
+
+            if (Config.AutoSyncGradients && result.BestSolution != null)
+            {
+                // Synchronization order matters:
+                // 1. First sync within tensor-parallel group (sum partial results)
+                // 2. Then sync across data-parallel replicas (average gradients)
+                // 3. Pipeline stages handle their own gradient accumulation
+
+                SynchronizeParameters(result.BestSolution);
+            }
+
+            return result;
+        }
+        finally
+        {
+            Config.CommunicationBackend.Barrier();
+        }
+```
+
+</details>
+
+<!-- suggestion_end -->
+
+<details>
+<summary>🤖 Prompt for AI Agents</summary>
+
+```
+In src/DistributedTraining/HybridShardedOptimizer.cs around lines 86 to 107, the
+trailing Config.CommunicationBackend.Barrier() can be skipped if
+WrappedOptimizer.Optimize throws, causing deadlock; wrap the call to
+WrappedOptimizer.Optimize and the following conditional synchronization in a
+try/finally and place the final Barrier() (or a call to a safe abort/cleanup
+that itself performs the barrier) in the finally block so the barrier always
+executes regardless of exceptions; ensure any exceptions are rethrown after the
+finally so upstream error handling still sees them.
+```
+
+</details>
+
+<!-- fingerprinting:phantom:medusa:sabertoothed -->
+
+<!-- This is an auto-generated comment by CodeRabbit -->
+
+
+================================================================================
+ISSUE #12
+File: src/DistributedTraining/HybridShardedOptimizer.cs
+Line: 103
+Author: coderabbitai
+Thread ID: PRRT_kwDOKSXUF85hMtMV
+================================================================================
+
+_⚠️ Potential issue_ | _🔴 Critical_
+
+**Stop averaging parameters across all ranks.**
+
+Line 102 calls `SynchronizeParameters`, which in `ShardedOptimizerBase` performs a world-size AllReduce over the entire parameter vector (and becomes a no-op if the model already implements `IShardedModel`). That neither honors the tensor/data groups nor touches gradients at all, so gradients remain unsynchronized (or worse, fully averaged parameters overwrite the local shards), breaking the 3D parallel semantics you outlined. Replace this with explicit gradient synchronization per dimension—first reduce across the tensor-parallel group, then across the data-parallel group, using the `_tensorParallelSize` / `_dataParallelSize` information and the appropriate communication groups. Only touch parameters when the wrapped optimizer actually requires a parameter broadcast.
+
+<!-- fingerprinting:phantom:medusa:sabertoothed -->
+
+<!-- This is an auto-generated comment by CodeRabbit -->
+
+
+================================================================================
+ISSUE #13
+File: src/DistributedTraining/PipelineParallelModel.cs
+Line: 153
+Author: coderabbitai
+Thread ID: PRRT_kwDOKSXUF85hMtMe
+================================================================================
+
+_⚠️ Potential issue_ | _🟠 Major_
+
+**Local shard passed into full-model parameter setter**
+
+`LocalShard` only contains this stage’s contiguous chunk, but `IFullModel.SetParameters` expects the *entire* parameter vector. With the provided usage (wrapping a full model), this call either throws (length mismatch) or silently maps the shard to the wrong weights. On the later sync path we never reapply the other stages’ parameters, so every non-zero rank trains with truncated weights. Please gather/apply the full parameter vector, similar to the FSDP implementation, before trimming back to the local shard:
+
+```diff
+-            WrappedModel.SetParameters(LocalShard);
+-            WrappedModel.Train(input, expectedOutput);
+-            LocalShard = WrappedModel.GetParameters();
++            var fullParams = GatherFullParameters();
++            WrappedModel.SetParameters(fullParams);
++            WrappedModel.Train(input, expectedOutput);
++            var updatedParams = WrappedModel.GetParameters();
++            UpdateLocalShardFromFull(updatedParams);
+```
+
+Without this change pipeline stages beyond rank 0 can’t run correctly. Follow up by wiring the TODO activation flow, but first fix the parameter mapping so the basics work.
+
+
+
+> Committable suggestion skipped: line range outside the PR's diff.
+
+<!-- fingerprinting:phantom:medusa:sabertoothed -->
+
+<!-- This is an auto-generated comment by CodeRabbit -->
+
+
+================================================================================
+ISSUE #14
+File: src/DistributedTraining/TensorParallelModel.cs
+Line: 123
+Author: coderabbitai
+Thread ID: PRRT_kwDOKSXUF85hMtMh
+================================================================================
+
+_⚠️ Potential issue_ | _🔴 Critical_
+
+**AllReduce corrupts tensor-parallel shards**
+
+Each rank’s `LocalShard` holds a disjoint slice of the parameter vector. Calling `AllReduce` across the whole world sums unrelated indices, so after this line the shard contains other ranks’ parameters instead of its own. The result diverges immediately once `_tensorParallelSize > 1`. Please restrict synchronization to the data-parallel dimension (or skip it entirely for pure tensor parallel) instead of reducing across the full world. One minimal guard would be:
+
+```diff
+-        Config.CommunicationBackend.AllReduce(LocalShard, ReductionOperation.Sum);
++        if (_tensorParallelSize > 1)
++        {
++            throw new NotSupportedException("TensorParallelModel requires subgroup gradient sync; AllReduce over the full world corrupts the shard.");
++        }
++        Config.CommunicationBackend.AllReduce(LocalShard, ReductionOperation.Sum);
+```
+
+and then follow up by implementing subgroup-aware collectives per tensor-parallel group. Otherwise the current code corrupts the parameter shards on the first step.
+
+<!-- suggestion_start -->
+
+<details>
+<summary>📝 Committable suggestion</summary>
+
+> ‼️ **IMPORTANT**
+> Carefully review the code before committing. Ensure that it accurately replaces the highlighted code, contains no missing lines, and has no issues with indentation. Thoroughly test & benchmark the code to ensure it meets the requirements.
+
+```suggestion
+        // In tensor parallelism, we typically need to synchronize within tensor-parallel group
+        // For column-parallel layers: AllReduce gradients
+        // For row-parallel layers: Different synchronization pattern
+        if (_tensorParallelSize > 1)
+        {
+            throw new NotSupportedException("TensorParallelModel requires subgroup gradient sync; AllReduce over the full world corrupts the shard.");
+        }
+        Config.CommunicationBackend.AllReduce(LocalShard, ReductionOperation.Sum);
+
+        CachedFullParameters = null;
+```
+
+</details>
+
+<!-- suggestion_end -->
+
+<details>
+<summary>🤖 Prompt for AI Agents</summary>
+
+```
+In src/DistributedTraining/TensorParallelModel.cs around lines 118 to 123, the
+call Config.CommunicationBackend.AllReduce(LocalShard, ReductionOperation.Sum)
+is reducing across the full world and corrupts tensor-parallel shards; change
+the logic so AllReduce is only performed on the data-parallel communicator (or
+skipped entirely when running pure tensor-parallel) rather than the global
+world. Detect the tensor-parallel group size (e.g. _tensorParallelSize > 1) and:
+if in a combined data+tensor parallel run, call AllReduce using the
+data-parallel subgroup/communicator; if purely tensor-parallel, do not AllReduce
+the LocalShard (or use a tensor-parallel-aware collectives implementation such
+as a subgroup-aware AllReduce/ReduceScatter for column/row-parallel layers).
+Ensure CachedFullParameters handling remains correct after the conditional and
+add a TODO to implement proper subgroup collectives if missing.
+```
+
+</details>
+
+<!-- fingerprinting:phantom:medusa:sabertoothed -->
+
+<!-- This is an auto-generated comment by CodeRabbit -->
+
+
+================================================================================
+ISSUE #15
+File: src/DistributedTraining/ZeRO2Model.cs
+Line: 106
+Author: coderabbitai
+Thread ID: PRRT_kwDOKSXUF85hMtMl
+================================================================================
+
+_⚠️ Potential issue_ | _🔴 Critical_
+
+**Fix ReduceScatter precondition so ZeRO‑2 doesn’t crash on uneven sizes.**
+
+`LocalShard.Length` equals the full parameter count. Whenever that count isn’t divisible by `WorldSize`, `GlooCommunicationBackend.ReduceScatter` throws (`data.Length % _worldSize != 0`). This makes ZeRO‑2 unusable for most models. Pad the buffer before the call and trim the result back to the expected shard length for each rank.
+
+```diff
+     public override void SynchronizeGradients()
+     {
+-        // Use ReduceScatter to reduce gradients and distribute shards
+-        // Each process will receive only its portion of the reduced gradients
+-        _gradientShard = Config.CommunicationBackend.ReduceScatter(LocalShard, ReductionOperation.Average);
++        var totalParams = LocalShard.Length;
++        var remainder = totalParams % WorldSize;
++
++        // Pad to satisfy ReduceScatter’s divisibility requirement
++        Vector<T> reduceInput = LocalShard;
++        if (remainder != 0)
++        {
++            var paddedLength = totalParams + (WorldSize - remainder);
++            var padded = new T[paddedLength];
++            Array.Copy(LocalShard.ToArray(), padded, totalParams);
++            reduceInput = new Vector<T>(padded);
++        }
++
++        var reducedChunk = Config.CommunicationBackend.ReduceScatter(reduceInput, ReductionOperation.Average);
++
++        // Trim padding so each rank keeps only its logical shard
++        var shardLength = totalParams / WorldSize + (Rank < remainder ? 1 : 0);
++        var shardData = new T[shardLength];
++        Array.Copy(reducedChunk.ToArray(), 0, shardData, 0, shardLength);
++        _gradientShard = new Vector<T>(shardData);
+ 
+         CachedFullParameters = null;
+     }
+```
+
+<!-- suggestion_start -->
+
+<details>
+<summary>📝 Committable suggestion</summary>
+
+> ‼️ **IMPORTANT**
+> Carefully review the code before committing. Ensure that it accurately replaces the highlighted code, contains no missing lines, and has no issues with indentation. Thoroughly test & benchmark the code to ensure it meets the requirements.
+
+```suggestion
+    /// <summary>
+    /// Synchronizes gradients using ReduceScatter - each process gets its shard of reduced gradients.
+    /// </summary>
+    public override void SynchronizeGradients()
+    {
+        var totalParams = LocalShard.Length;
+        var remainder = totalParams % WorldSize;
+
+        // Pad to satisfy ReduceScatter's divisibility requirement
+        Vector<T> reduceInput = LocalShard;
+        if (remainder != 0)
+        {
+            var paddedLength = totalParams + (WorldSize - remainder);
+            var padded = new T[paddedLength];
+            Array.Copy(LocalShard.ToArray(), padded, totalParams);
+            reduceInput = new Vector<T>(padded);
+        }
+
+        var reducedChunk = Config.CommunicationBackend.ReduceScatter(reduceInput, ReductionOperation.Average);
+
+        // Trim padding so each rank keeps only its logical shard
+        var shardLength = totalParams / WorldSize + (Rank < remainder ? 1 : 0);
+        var shardData = new T[shardLength];
+        Array.Copy(reducedChunk.ToArray(), 0, shardData, 0, shardLength);
+        _gradientShard = new Vector<T>(shardData);
+
+        CachedFullParameters = null;
+    }
+```
+
+</details>
+
+<!-- suggestion_end -->
+
+<!-- fingerprinting:phantom:medusa:sabertoothed -->
+
+<!-- This is an auto-generated comment by CodeRabbit -->
+
+
+================================================================================
+ISSUE #16
+File: src/DistributedTraining/ZeRO2Optimizer.cs
+Line: 70
+Author: coderabbitai
+Thread ID: PRRT_kwDOKSXUF85hMtMt
+================================================================================
+
+_⚠️ Potential issue_ | _🔴 Critical_
+
+<details>
+<summary>🧩 Analysis chain</summary>
+
+**Unused ReduceScatter result suggests incomplete implementation.**
+
+Line 66 computes `reducedShard` via `ReduceScatter`, but this result is never used. The comment at line 69 indicates this requires "optimizer state integration." This creates dead code that performs communication without applying the results.
+
+
+
+
+Either:
+1. Apply the reduced shard to update parameters, or
+2. Add a TODO comment and consider removing the ReduceScatter call until the full implementation is ready (to avoid unnecessary communication overhead)
+
+```diff
+         // In ZeRO-2, we use ReduceScatter to reduce gradients and distribute shards
+         // Each process receives only its portion of the reduced gradients
+         if (Config.AutoSyncGradients && result.BestSolution != null)
+         {
+-            // Instead of AllReduce, use ReduceScatter for gradient sharding
+-            var parameters = result.BestSolution.GetParameters();
+-            var reducedShard = Config.CommunicationBackend.ReduceScatter(parameters, ReductionOperation.Average);
+-
+-            // Each process now has only its shard of gradients
+-            // Update would use only this shard (requires optimizer state integration)
++            // TODO: Implement ReduceScatter gradient sharding
++            // This requires deeper optimizer state integration:
++            // 1. var parameters = result.BestSolution.GetParameters();
++            // 2. var reducedShard = Config.CommunicationBackend.ReduceScatter(parameters, ReductionOperation.Average);
++            // 3. Apply reducedShard to update only local parameter shard
++            // 4. AllGather updated parameters for next forward pass
+         }
+```
+
+Please verify whether this placeholder implementation is intentional or if the ReduceScatter result should be applied.
+
+---
+
+I need to investigate the codebase to verify the review comment. Let me search for information about the unused variable and the broader context.
+
+---
+
+🏁 Script executed:
+
+```shell
+#!/bin/bash
+# First, find and inspect the ZeRO2Optimizer.cs file to verify the dead code issue
+fd "ZeRO2Optimizer.cs" --type f
+```
+
+Length of output: 41
+
+---
+
+🏁 Script executed:
+
+```shell
+#!/bin/bash
+# Search for references to reducedShard to confirm it's unused
+rg -n "reducedShard" --type cs -C 5
+```
+
+Length of output: 1068
+
+---
+
+🏁 Script executed:
+
+```shell
+#!/bin/bash
+# Inspect the full method context around lines 60-70
+fd "ZeRO2Optimizer.cs" --type f -x cat {} | head -100
+```
+
+Length of output: 3733
+
+---
+
+
+
+</details>
+
+**Remove the unused ReduceScatter call or complete the implementation.**
+
+The `reducedShard` variable is confirmed to be unused—it appears only once in the entire file (line 66 assignment) and is never referenced again. Since `ReduceScatter` is a distributed communication operation, executing it and discarding the results wastes network bandwidth unnecessarily.
+
+The placeholder comment in `SynchronizeOptimizerState()` confirms this is incomplete work-in-progress code. Either:
+1. Complete the implementation by applying `reducedShard` to update parameters locally, or
+2. Remove the ReduceScatter call and replace with a TODO comment documenting the required steps
+
+<details>
+<summary>🤖 Prompt for AI Agents</summary>
+
+```
+In src/DistributedTraining/ZeRO2Optimizer.cs around lines 60 to 70, the
+ReduceScatter result (reducedShard) is assigned but never used which wastes a
+distributed communication call; either complete the ZeRO-2 shard update or
+remove the call: to complete, replace the placeholder by mapping reducedShard
+back into the local parameter shard and invoke the optimizer state update method
+(e.g., apply/update gradients for the local shard, ensuring shard indices and
+sizes match and any optimizer momentum/exp avg state is updated and
+synchronized), or if not ready, remove the ReduceScatter call and replace it
+with a TODO comment that documents the intended steps (perform ReduceScatter to
+receive local gradient shard, apply that shard to local parameters and optimizer
+state, and handle shard indexing/shape checks) so no unnecessary network traffic
+occurs.
+```
+
+</details>
+
+<!-- This is an auto-generated comment by CodeRabbit -->
+

@@ -1,0 +1,24 @@
+UNRESOLVED COMMENTS (16 total):
+
+1. src/DistributedTraining/InMemoryCommunicationBackend.cs:295
+   ID: PRRT_kwDOKSXUF85g9V9o
+   Potential deadlock: Similar to the Barrier method, this while loop could deadlock if not all process
+
+2. src/DistributedTraining/InMemoryCommunicationBackend.cs:597
+   ID: PRRT_kwDOKSXUF85g9V9s
+   The Average operation applies division after the accumulation, but the accumulation is using Sum log
+
+3. src/DistributedTraining/InMemoryCommunicationBackend.cs:55
+   ID: PRRT_kwDOKSXUF85g9V9z
+   The static shared state (_sharedBuffers, _barrierCounters) is shared across all instances of InMemor
+
+4. scripts/launch-distributed-training.sh:117
+   ID: PRRT_kwDOKSXUF85hLkmL
+Traceback (most recent call last):
+  File "C:\Users\cheat\source\repos\worktrees\pr-393-1762565501\list-unresolved.py", line 22, in <module>
+    print(f"   {summary}")
+    ~~~~~^^^^^^^^^^^^^^^^^
+  File "C:\Program Files\WindowsApps\PythonSoftwareFoundation.Python.3.13_3.13.2544.0_x64__qbz5n2kfra8p0\Lib\encodings\cp1252.py", line 19, in encode
+    return codecs.charmap_encode(input,self.errors,encoding_table)[0]
+           ~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+UnicodeEncodeError: 'charmap' codec can't encode characters in position 4-5: character maps to <undefined>
