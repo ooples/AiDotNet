@@ -203,44 +203,57 @@ public class DefaultModelEvaluator<T, TInput, TOutput> : IModelEvaluator<T, TInp
     }
 
     /// <summary>
-    /// Performs cross-validation on the given model using the provided data and options.
+    /// Performs cross-validation on the given model using the provided data and optimizer.
     /// </summary>
     /// <param name="model">The model to evaluate.</param>
-    /// <param name="X">The feature matrix.</param>
-    /// <param name="y">The target vector.</param>
+    /// <param name="X">The input data.</param>
+    /// <param name="y">The output data.</param>
+    /// <param name="optimizer">The optimizer to use for training the model on each fold.</param>
     /// <param name="crossValidator">Optional custom cross-validator implementation.</param>
     /// <returns>A CrossValidationResult containing the evaluation metrics for each fold.</returns>
     /// <remarks>
     /// <para>
-    /// This method performs cross-validation to assess how well the model generalizes to unseen data. It splits the data into 
-    /// multiple subsets (folds), trains the model on a portion of the data, and evaluates it on the held-out portion. This process 
-    /// is repeated multiple times to get a robust estimate of the model's performance. The method allows for customization of the 
+    /// This method performs cross-validation to assess how well the model generalizes to unseen data. It splits the data into
+    /// multiple subsets (folds), trains the model on a portion of the data, and evaluates it on the held-out portion. This process
+    /// is repeated multiple times to get a robust estimate of the model's performance. The method allows for customization of the
     /// cross-validation process through options and even allows for a custom cross-validator implementation.
     /// </para>
     /// <para><b>For Beginners:</b> This method tests how well your model performs on different subsets of your data.
-    /// 
+    ///
     /// Cross-validation:
     /// - Splits your data into several parts (called folds)
     /// - Trains the model multiple times, each time using a different part as a test set
     /// - Helps understand how well the model will work on new, unseen data
-    /// 
+    ///
     /// This is useful for:
     /// - Getting a more reliable estimate of model performance
     /// - Detecting overfitting (when a model works well on training data but poorly on new data)
     /// - Comparing different models to see which one generalizes better
-    /// 
-    /// For example, in 5-fold cross-validation, your data is split into 5 parts. The model is trained 5 times, 
+    ///
+    /// For example, in 5-fold cross-validation, your data is split into 5 parts. The model is trained 5 times,
     /// each time using 4 parts for training and 1 for testing. The results are then averaged to get an overall performance score.
     /// </para>
     /// </remarks>
-    public CrossValidationResult<T> PerformCrossValidation(
-        IFullModel<T, Matrix<T>, Vector<T>> model,
-        Matrix<T> X,
-        Vector<T> y,
-        ICrossValidator<T>? crossValidator = null)
+    public CrossValidationResult<T, TInput, TOutput> PerformCrossValidation(
+        IFullModel<T, TInput, TOutput> model,
+        TInput X,
+        TOutput y,
+        IOptimizer<T, TInput, TOutput> optimizer,
+        ICrossValidator<T, TInput, TOutput>? crossValidator = null)
     {
-        crossValidator ??= new StandardCrossValidator<T>();
+        // For Matrix/Vector types, provide a default StandardCrossValidator
+        if (crossValidator == null && typeof(TInput) == typeof(Matrix<T>) && typeof(TOutput) == typeof(Vector<T>))
+        {
+            crossValidator = new StandardCrossValidator<T, TInput, TOutput>() as ICrossValidator<T, TInput, TOutput>;
+        }
 
-        return crossValidator.Validate(model, X, y);
+        if (crossValidator == null)
+        {
+            throw new ArgumentNullException(nameof(crossValidator),
+                "Cross-validator must be provided when using custom input/output types (non-Matrix/Vector types). " +
+                "For Matrix<T>/Vector<T> types, a StandardCrossValidator is used by default.");
+        }
+
+        return crossValidator.Validate(model, X, y, optimizer);
     }
 }

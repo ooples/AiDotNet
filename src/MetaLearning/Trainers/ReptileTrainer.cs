@@ -68,7 +68,7 @@ namespace AiDotNet.MetaLearning.Trainers;
 /// - Comprehensive error handling and validation
 /// </para>
 /// </remarks>
-public class ReptileTrainer<T, TInput, TOutput> : ReptileTrainerBase<T, TInput, TOutput>
+public class ReptileTrainer<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOutput>
 {
     /// <summary>
     /// Initializes a new instance of the ReptileTrainer with a configuration object.
@@ -108,7 +108,7 @@ public class ReptileTrainer<T, TInput, TOutput> : ReptileTrainerBase<T, TInput, 
         ILossFunction<T> lossFunction,
         IEpisodicDataLoader<T, TInput, TOutput> dataLoader,
         IMetaLearnerConfig<T>? config = null)
-        : base(metaModel, lossFunction, dataLoader, config)
+        : base(metaModel, lossFunction, dataLoader, config ?? new ReptileTrainerConfig<T>())
     {
     }
 

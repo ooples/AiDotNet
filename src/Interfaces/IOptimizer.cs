@@ -77,11 +77,11 @@ public interface IOptimizer<T, TInput, TOutput> : IModelSerializer
     /// <remarks>
     /// These options control how the optimization algorithm behaves, including
     /// parameters like learning rate, maximum iterations, and convergence criteria.
-    /// 
+    ///
     /// <b>For Beginners:</b> This provides the "settings" or "rules" that the optimizer follows.
-    /// Just like a recipe has instructions (bake at 350�F for 30 minutes), an optimizer
+    /// Just like a recipe has instructions (bake at 350°F for 30 minutes), an optimizer
     /// has settings (learn at rate 0.01, stop after 1000 tries).
-    /// 
+    ///
     /// Common optimization options include:
     /// - Learning rate: How big of adjustments to make (step size)
     /// - Maximum iterations: How many attempts to make before giving up
@@ -90,4 +90,31 @@ public interface IOptimizer<T, TInput, TOutput> : IModelSerializer
     /// </remarks>
     /// <returns>The configuration options for the optimization algorithm.</returns>
     OptimizationAlgorithmOptions<T, TInput, TOutput> GetOptions();
+
+    /// <summary>
+    /// Resets the optimizer state to prepare for a fresh optimization run.
+    /// </summary>
+    /// <remarks>
+    /// This method clears accumulated state including:
+    /// - Model cache (prevents retrieving solutions from previous runs)
+    /// - Fitness history (accumulated scores from previous optimizations)
+    /// - Iteration history (logs from previous runs)
+    /// - Adaptive parameters (learning rate, momentum reset to initial values)
+    ///
+    /// <b>For Beginners:</b> Think of this like "clearing the whiteboard" before starting a new problem.
+    /// When you run optimization multiple times (like during cross-validation), you want each run
+    /// to start fresh without being influenced by previous runs. This method ensures that.
+    ///
+    /// When to call Reset():
+    /// - Before each cross-validation fold (ensures independent fold evaluations)
+    /// - Before training the final model after cross-validation
+    /// - Any time you want to reuse an optimizer for a completely new optimization task
+    ///
+    /// Why this matters:
+    /// - Prevents state contamination between independent training runs
+    /// - Ensures reproducible results regardless of how many times you've used the optimizer
+    /// - Avoids memory leaks from accumulated history
+    /// - Maintains correct adaptive learning rate dynamics
+    /// </remarks>
+    void Reset();
 }

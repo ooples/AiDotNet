@@ -21,21 +21,21 @@ namespace AiDotNet.RetrievalAugmentedGeneration.AdvancedPatterns;
 /// in which information should be gathered, leading to more comprehensive and relevant results.
 /// </para>
 /// <para><b>For Beginners:</b> Think of this like asking a research assistant to explain their thought process.
-/// 
+///
 /// Normal retriever:
 /// - Question: "How does photosynthesis impact climate change?"
 /// - Action: Search for documents about "photosynthesis" and "climate change"
-/// 
+///
 /// Chain-of-Thought retriever:
 /// - Question: "How does photosynthesis impact climate change?"
 /// - Reasoning: "First, I need to understand what photosynthesis is. Then, I need to know how it
 ///   relates to carbon dioxide. Finally, I need to connect CO2 to climate change."
-/// - Actions: 
+/// - Actions:
 ///   1. Search for "what is photosynthesis"
 ///   2. Search for "photosynthesis carbon dioxide absorption"
 ///   3. Search for "CO2 levels and climate change"
 /// - Result: More complete answer because we gathered all prerequisite knowledge
-/// 
+///
 /// This is especially useful for complex questions that require understanding multiple concepts
 /// in a specific order.
 /// </para>
@@ -43,19 +43,26 @@ namespace AiDotNet.RetrievalAugmentedGeneration.AdvancedPatterns;
 /// <code>
 /// // Create generator (StubGenerator for testing, or real LLM for production)
 /// var generator = new StubGenerator&lt;double&gt;();
-/// 
+///
 /// // Create base retriever
 /// var baseRetriever = new DenseRetriever&lt;double&gt;(embeddingModel, documentStore);
-/// 
+///
 /// // Create chain-of-thought retriever
 /// var cotRetriever = new ChainOfThoughtRetriever&lt;double&gt;(generator, baseRetriever);
-/// 
+///
 /// // Retrieve with reasoning
 /// var documents = cotRetriever.Retrieve(
 ///     "What are the economic impacts of renewable energy adoption?",
 ///     topK: 10
 /// );
-/// 
+///
+/// // With self-consistency (multiple reasoning paths)
+/// var documentsWithConsistency = cotRetriever.RetrieveWithSelfConsistency(
+///     "What are the economic impacts of renewable energy adoption?",
+///     topK: 10,
+///     numPaths: 3  // Generate 3 different reasoning paths and aggregate
+/// );
+///
 /// // The retriever will:
 /// // 1. Generate reasoning steps (costs, benefits, job creation, etc.)
 /// // 2. Retrieve documents for each reasoning step
@@ -66,7 +73,7 @@ namespace AiDotNet.RetrievalAugmentedGeneration.AdvancedPatterns;
 /// Current implementation uses IGenerator interface which can accept:
 /// - StubGenerator for development/testing
 /// - Real LLM (GPT-4, Claude, Gemini) for production
-/// 
+///
 /// To make production-ready:
 /// 1. Replace StubGenerator with real LLM generator
 /// 2. Optionally tune the reasoning prompt for your domain
@@ -78,6 +85,7 @@ namespace AiDotNet.RetrievalAugmentedGeneration.AdvancedPatterns;
 /// - Better coverage of prerequisite knowledge
 /// - Improved relevance through structured reasoning
 /// - Transparent reasoning process for debugging
+/// - Self-consistency improves robustness
 /// </para>
 /// <para><b>Limitations:</b>
 /// - Requires LLM access (costs/latency)
@@ -90,18 +98,22 @@ public class ChainOfThoughtRetriever<T>
 {
     private readonly IGenerator<T> _generator;
     private readonly RetrieverBase<T> _baseRetriever;
+    private readonly List<string> _fewShotExamples;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="ChainOfThoughtRetriever{T}"/> class.
     /// </summary>
     /// <param name="generator">The LLM generator for reasoning (use StubGenerator or real LLM).</param>
     /// <param name="baseRetriever">The underlying retriever to use.</param>
+    /// <param name="fewShotExamples">Optional few-shot examples for better reasoning quality.</param>
     public ChainOfThoughtRetriever(
         IGenerator<T> generator,
-        RetrieverBase<T> baseRetriever)
+        RetrieverBase<T> baseRetriever,
+        List<string>? fewShotExamples = null)
     {
         _generator = generator ?? throw new ArgumentNullException(nameof(generator));
         _baseRetriever = baseRetriever ?? throw new ArgumentNullException(nameof(baseRetriever));
+        _fewShotExamples = fewShotExamples ?? new List<string>();
     }
 
     /// <summary>
@@ -153,19 +165,11 @@ public class ChainOfThoughtRetriever<T>
         if (string.IsNullOrWhiteSpace(query))
             throw new ArgumentException("Query cannot be null or whitespace", nameof(query));
 
-        if (topK <= 0)
+        if (topK < 1)
             throw new ArgumentOutOfRangeException(nameof(topK), "topK must be positive");
 
         // Step 1: Generate reasoning steps using LLM
-        var reasoningPrompt = $@"Given the question: '{query}'
-
-Please break this question into a chain of thought reasoning steps:
-1. What are the key concepts to understand?
-2. What sub-questions need to be answered?
-3. In what order should information be gathered?
-
-Provide numbered reasoning steps.";
-
+        var reasoningPrompt = BuildReasoningPrompt(query, 0);
         var reasoningResponse = _generator.Generate(reasoningPrompt);
 
         // Step 2: Extract key concepts and sub-questions from reasoning
@@ -193,6 +197,143 @@ Provide numbered reasoning steps.";
         return allDocuments
             .OrderByDescending(d => d.HasRelevanceScore ? d.RelevanceScore : default(T))
             .Take(topK);
+    }
+
+    /// <summary>
+    /// Retrieves documents using self-consistency chain-of-thought reasoning.
+    /// Generates multiple reasoning paths and aggregates results for improved robustness.
+    /// </summary>
+    /// <param name="query">The query to retrieve documents for.</param>
+    /// <param name="topK">Maximum number of documents to return.</param>
+    /// <param name="numPaths">Number of different reasoning paths to generate (default: 3).</param>
+    /// <param name="metadataFilters">Metadata filters to apply during retrieval.</param>
+    /// <returns>Retrieved documents aggregated from multiple reasoning paths.</returns>
+    /// <remarks>
+    /// <para>
+    /// Self-consistency improves reasoning quality by generating multiple independent
+    /// reasoning chains and aggregating their results. This helps reduce the impact of
+    /// any single poor reasoning path and increases overall result diversity.
+    /// </para>
+    /// <para><b>For Beginners:</b> Instead of asking once, we ask the LLM to reason about
+    /// the question multiple times from different angles, then combine all the documents
+    /// we find. This gives us more comprehensive and reliable results.
+    ///
+    /// Example with numPaths=3:
+    /// - Path 1 might focus on technical aspects
+    /// - Path 2 might focus on practical applications
+    /// - Path 3 might focus on theoretical foundations
+    /// - Final result: Documents covering all three perspectives
+    /// </para>
+    /// </remarks>
+    public IEnumerable<Document<T>> RetrieveWithSelfConsistency(
+        string query,
+        int topK,
+        int numPaths = 3,
+        Dictionary<string, object>? metadataFilters = null)
+    {
+        if (string.IsNullOrWhiteSpace(query))
+            throw new ArgumentException("Query cannot be null or whitespace", nameof(query));
+
+        if (topK < 1)
+            throw new ArgumentOutOfRangeException(nameof(topK), "topK must be positive");
+
+        if (numPaths < 1)
+            throw new ArgumentOutOfRangeException(nameof(numPaths), "numPaths must be positive");
+
+        metadataFilters ??= new Dictionary<string, object>();
+
+        // Collect documents from multiple reasoning paths
+        var allDocuments = new Dictionary<string, (Document<T> doc, int frequency)>();
+
+        for (int i = 0; i < numPaths; i++)
+        {
+            // Generate reasoning with variation prompt
+            var reasoningPrompt = BuildReasoningPrompt(query, i);
+            var reasoningResponse = _generator.Generate(reasoningPrompt);
+
+            // Extract sub-queries from this reasoning path
+            var subQueries = ExtractSubQueries(reasoningResponse, query);
+
+            // Retrieve documents for each sub-query
+            foreach (var subQuery in subQueries.Take(3))
+            {
+                var docs = _baseRetriever.Retrieve(subQuery, topK: 5, metadataFilters);
+
+                foreach (var doc in docs)
+                {
+                    if (allDocuments.TryGetValue(doc.Id, out var existing))
+                    {
+                        // Document found in multiple paths - increase frequency
+                        allDocuments[doc.Id] = (existing.doc, existing.frequency + 1);
+                    }
+                    else
+                    {
+                        allDocuments[doc.Id] = (doc, 1);
+                    }
+                }
+            }
+        }
+
+        // Rank by: 1) frequency (how many paths found it), 2) relevance score
+        return allDocuments.Values
+            .OrderByDescending(item => item.frequency)
+            .ThenByDescending(item => item.doc.HasRelevanceScore ? item.doc.RelevanceScore : default(T))
+            .Select(item => item.doc)
+            .Take(topK);
+    }
+
+    /// <summary>
+    /// Builds a reasoning prompt with optional few-shot examples and variation for self-consistency.
+    /// </summary>
+    /// <param name="query">The user's query.</param>
+    /// <param name="variationIndex">Index for prompt variation (0 for standard, >0 for variations).</param>
+    /// <returns>Formatted reasoning prompt.</returns>
+    private string BuildReasoningPrompt(string query, int variationIndex = 0)
+    {
+        var promptBuilder = new System.Text.StringBuilder();
+
+        // Add few-shot examples if provided
+        if (_fewShotExamples.Count > 0)
+        {
+            promptBuilder.AppendLine("Here are some examples of breaking down complex questions:");
+            promptBuilder.AppendLine();
+            foreach (var example in _fewShotExamples)
+            {
+                promptBuilder.AppendLine(example);
+                promptBuilder.AppendLine();
+            }
+        }
+
+        promptBuilder.AppendLine($"Given the question: '{query}'");
+        promptBuilder.AppendLine();
+
+        // Vary the prompt slightly for self-consistency
+        if (variationIndex == 0)
+        {
+            promptBuilder.AppendLine(@"Please break this question into a chain of thought reasoning steps:
+1. What are the key concepts to understand?
+2. What sub-questions need to be answered?
+3. In what order should information be gathered?");
+        }
+        else if (variationIndex == 1)
+        {
+            promptBuilder.AppendLine(@"Analyze this question by identifying:
+1. What fundamental concepts are involved?
+2. What related topics should be explored?
+3. How do these concepts connect to answer the question?");
+        }
+        else
+        {
+            promptBuilder.AppendLine(@"Think about this question step by step:
+1. What background knowledge is needed?
+2. What are the main components of this question?
+3. What additional context would help answer this comprehensively?");
+        }
+
+        promptBuilder.AppendLine();
+        promptBuilder.AppendLine("Provide numbered reasoning steps.");
+
+        return promptBuilder.ToString();
     }
 
         /// <summary>
