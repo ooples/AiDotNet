@@ -45,7 +45,6 @@ public class LearningWithoutForgetting<T, TInput, TOutput> : IContinualLearningS
 
     // Store the teacher model's parameters from previous tasks
     private IFullModel<T, TInput, TOutput>? _teacherModel;
-    private readonly List<Vector<T>> _taskOutputs; // Stores outputs for each previous task
 
     /// <summary>
     /// Initializes a new LwF strategy.
@@ -61,7 +60,6 @@ public class LearningWithoutForgetting<T, TInput, TOutput> : IContinualLearningS
         _lossFunction = lossFunction ?? throw new ArgumentNullException(nameof(lossFunction));
         _distillationTemperature = distillationTemperature ?? NumOps.FromDouble(2.0);
         _distillationWeight = distillationWeight ?? NumOps.FromDouble(1.0);
-        _taskOutputs = new List<Vector<T>>();
     }
 
     /// <inheritdoc/>

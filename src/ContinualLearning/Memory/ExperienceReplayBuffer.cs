@@ -147,9 +147,9 @@ public class ExperienceReplayBuffer<T, TInput, TOutput>
 /// </summary>
 public class DataPoint<T, TInput, TOutput>
 {
-    public TInput Input { get; set; }
-    public TOutput Output { get; set; }
-    public int TaskId { get; set; }
+    public TInput Input { get; }
+    public TOutput Output { get; }
+    public int TaskId { get; }
 
     public DataPoint(TInput input, TOutput output, int taskId)
     {
