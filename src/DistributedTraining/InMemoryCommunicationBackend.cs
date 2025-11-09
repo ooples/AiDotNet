@@ -55,7 +55,13 @@ public class InMemoryCommunicationBackend<T> : CommunicationBackendBase<T>
     private static readonly Dictionary<string, int> _barrierCounters = new();
     private static readonly Dictionary<string, int> _barrierGenerations = new();
     private static readonly Dictionary<string, int> _operationCounters = new();
+
+    // Point-to-point message queues for Send/Receive operations
+    // Key format: "{environmentId}_msg_{sourceRank}_{destRank}_{tag}"
+    private static readonly Dictionary<string, Queue<Vector<T>>> _messageQueues = new();
+
     private const int BarrierTimeoutMs = 30000; // 30 seconds
+    private const int MessageTimeoutMs = 30000; // 30 seconds for point-to-point
 
 
     /// <inheritdoc/>
@@ -195,6 +201,12 @@ public class InMemoryCommunicationBackend<T> : CommunicationBackendBase<T>
         foreach (var key in barriersToRemove)
         {
             _barrierCounters.Remove(key);
+        }
+
+        var messagesToRemove = _messageQueues.Keys.Where(k => k.StartsWith($"{environmentId}_")).ToList();
+        foreach (var key in messagesToRemove)
+        {
+            _messageQueues.Remove(key);
         }
 
         // Reset environment counters
@@ -563,6 +575,91 @@ public class InMemoryCommunicationBackend<T> : CommunicationBackendBase<T>
         Array.Copy(reducedData.ToArray(), _rank * chunkSize, chunk, 0, chunkSize);
 
         return new Vector<T>(chunk);
+    }
+
+    /// <inheritdoc/>
+    public override void Send(Vector<T> data, int destinationRank, int tag = 0)
+    {
+        EnsureInitialized();
+        ValidateData(data, nameof(data));
+        ValidateRank(destinationRank, nameof(destinationRank));
+
+        if (tag < 0)
+        {
+            throw new ArgumentException("Tag must be non-negative.", nameof(tag));
+        }
+
+        lock (_globalLock)
+        {
+            // Message queue key: {environmentId}_msg_{sourceRank}_{destRank}_{tag}
+            string queueKey = $"{_environmentId}_msg_{_rank}_{destinationRank}_{tag}";
+
+            if (!_messageQueues.ContainsKey(queueKey))
+            {
+                _messageQueues[queueKey] = new Queue<Vector<T>>();
+            }
+
+            // Enqueue a clone of the data
+            _messageQueues[queueKey].Enqueue(data.Clone());
+
+            // Wake up any waiting receivers
+            Monitor.PulseAll(_globalLock);
+        }
+    }
+
+    /// <inheritdoc/>
+    public override Vector<T> Receive(int sourceRank, int count, int tag = 0)
+    {
+        EnsureInitialized();
+        ValidateRank(sourceRank, nameof(sourceRank));
+
+        if (count <= 0)
+        {
+            throw new ArgumentException("Count must be positive.", nameof(count));
+        }
+
+        if (tag < 0)
+        {
+            throw new ArgumentException("Tag must be non-negative.", nameof(tag));
+        }
+
+        lock (_globalLock)
+        {
+            // Message queue key: {environmentId}_msg_{sourceRank}_{destRank}_{tag}
+            string queueKey = $"{_environmentId}_msg_{sourceRank}_{_rank}_{tag}";
+
+            var startTime = DateTime.UtcNow;
+
+            // Wait for a message to arrive
+            while (!_messageQueues.ContainsKey(queueKey) || _messageQueues[queueKey].Count == 0)
+            {
+                Monitor.Wait(_globalLock, 10);
+
+                if ((DateTime.UtcNow - startTime).TotalMilliseconds > MessageTimeoutMs)
+                {
+                    throw new TimeoutException(
+                        $"Receive timeout after {MessageTimeoutMs}ms waiting for message from rank {sourceRank} with tag {tag}.");
+                }
+            }
+
+            // Dequeue the message
+            var message = _messageQueues[queueKey].Dequeue();
+
+            // Validate size matches expected count
+            if (message.Length != count)
+            {
+                throw new InvalidOperationException(
+                    $"Received message size {message.Length} does not match expected count {count}.");
+            }
+
+            // Cleanup empty queues
+            if (_messageQueues[queueKey].Count == 0)
+            {
+                _messageQueues.Remove(queueKey);
+            }
+
+            return message;
+        }
     }
 
     /// <summary>

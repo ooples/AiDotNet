@@ -296,6 +296,65 @@ public class NCCLCommunicationBackend<T> : CommunicationBackendBase<T>
         return PerformCPUReduceScatter(data, operation);
     }
 
+    /// <inheritdoc/>
+    public override void Send(Vector<T> data, int destinationRank, int tag = 0)
+    {
+        EnsureInitialized();
+        ValidateData(data, nameof(data));
+        ValidateRank(destinationRank, nameof(destinationRank));
+
+        // NCCL does not natively support point-to-point Send/Receive operations.
+        // NCCL is designed exclusively for collective communications (AllReduce, AllGather, etc.)
+        // and optimizes GPU-to-GPU transfers for those operations.
+        //
+        // For point-to-point communication in pipeline parallelism or other use cases:
+        // 1. Use GlooCommunicationBackend (supports both collective and point-to-point via TCP)
+        // 2. Use MPICommunicationBackend (MPI has native Send/Receive support)
+        // 3. Use NCCL for collective ops + separate backend for point-to-point
+        //
+        // Hybrid approach example:
+        //   var collectiveBackend = new NCCLCommunicationBackend<T>(rank, worldSize);
+        //   var p2pBackend = new GlooCommunicationBackend<T>(rank, worldSize);
+        //   // Use collectiveBackend for AllReduce, use p2pBackend for Send/Receive
+
+        throw new NotSupportedException(
+            "NCCL does not support point-to-point Send/Receive operations. " +
+            "NCCL is optimized exclusively for collective communications (AllReduce, AllGather, Broadcast, etc.). " +
+            "\n\n" +
+            "For point-to-point communication, please use one of these alternatives:\n" +
+            "1. GlooCommunicationBackend - supports both collective and point-to-point operations via TCP\n" +
+            "2. MPICommunicationBackend - MPI has native Send/Receive support\n" +
+            "3. Hybrid approach: Use NCCL for collective ops + Gloo/MPI for point-to-point\n" +
+            "\n" +
+            "For pipeline parallelism, we recommend GlooCommunicationBackend or MPICommunicationBackend.");
+    }
+
+    /// <inheritdoc/>
+    public override Vector<T> Receive(int sourceRank, int count, int tag = 0)
+    {
+        EnsureInitialized();
+        ValidateRank(sourceRank, nameof(sourceRank));
+
+        if (count <= 0)
+        {
+            throw new ArgumentException("Count must be positive.", nameof(count));
+        }
+
+        // NCCL does not natively support point-to-point Send/Receive operations.
+        // See Send() method documentation for alternatives.
+
+        throw new NotSupportedException(
+            "NCCL does not support point-to-point Send/Receive operations. " +
+            "NCCL is optimized exclusively for collective communications (AllReduce, AllGather, Broadcast, etc.). " +
+            "\n\n" +
+            "For point-to-point communication, please use one of these alternatives:\n" +
+            "1. GlooCommunicationBackend - supports both collective and point-to-point operations via TCP\n" +
+            "2. MPICommunicationBackend - MPI has native Send/Receive support\n" +
+            "3. Hybrid approach: Use NCCL for collective ops + Gloo/MPI for point-to-point\n" +
+            "\n" +
+            "For pipeline parallelism, we recommend GlooCommunicationBackend or MPICommunicationBackend.");
+    }
+
     /// <summary>
     /// Performs CPU-based AllReduce operation.
     /// </summary>

@@ -165,6 +165,62 @@ public interface ICommunicationBackend<T>
     /// <param name="operation">The reduction operation</param>
     /// <returns>The reduced chunk for this process</returns>
     Vector<T> ReduceScatter(Vector<T> data, ReductionOperation operation);
+
+    /// <summary>
+    /// Send operation - sends data from this process to a specific destination process.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// This is a point-to-point communication operation. Unlike collective operations
+    /// (AllReduce, Broadcast, etc.), only two processes are involved: sender and receiver.
+    /// </para>
+    /// <para><b>For Beginners:</b>
+    /// This is like sending a private message to one specific GPU. Unlike Broadcast
+    /// (which sends to everyone), Send only sends to one receiver.
+    ///
+    /// Use cases:
+    /// - Pipeline parallelism: sending activations from one stage to the next
+    /// - Ring-based algorithms: sending data to neighbor in a ring
+    /// - Custom communication patterns
+    /// </para>
+    /// <para><b>Important:</b>
+    /// Send must be matched with a corresponding Receive on the destination process.
+    /// The sender and receiver must agree on the message size, otherwise deadlock
+    /// or incorrect data transfer can occur.
+    /// </para>
+    /// </remarks>
+    /// <param name="data">The data to send</param>
+    /// <param name="destinationRank">The rank of the process to send to</param>
+    /// <param name="tag">Optional message tag to distinguish different messages (default=0)</param>
+    void Send(Vector<T> data, int destinationRank, int tag = 0);
+
+    /// <summary>
+    /// Receive operation - receives data from a specific source process.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// This is a point-to-point communication operation that blocks until data arrives.
+    /// </para>
+    /// <para><b>For Beginners:</b>
+    /// This is like waiting for a private message from a specific GPU. The process
+    /// will wait (block) until the message arrives.
+    ///
+    /// Use cases:
+    /// - Pipeline parallelism: receiving activations from previous stage
+    /// - Ring-based algorithms: receiving data from neighbor
+    /// - Custom communication patterns
+    /// </para>
+    /// <para><b>Important:</b>
+    /// Receive must be matched with a corresponding Send from the source process.
+    /// If the sender never sends, this will deadlock (hang forever). If the sizes
+    /// don't match, data corruption or errors can occur.
+    /// </para>
+    /// </remarks>
+    /// <param name="sourceRank">The rank of the process to receive from</param>
+    /// <param name="count">The expected number of elements to receive</param>
+    /// <param name="tag">Optional message tag to match with Send (default=0)</param>
+    /// <returns>The received data</returns>
+    Vector<T> Receive(int sourceRank, int count, int tag = 0);
 }
 
 /// <summary>

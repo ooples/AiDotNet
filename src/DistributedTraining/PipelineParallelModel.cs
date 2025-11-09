@@ -1,6 +1,7 @@
 using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
 using AiDotNet.Models;
+using AiDotNet.Helpers;
 
 namespace AiDotNet.DistributedTraining;
 
@@ -108,48 +109,71 @@ public class PipelineParallelModel<T, TInput, TOutput> : ShardedModelBase<T, TIn
     /// <inheritdoc/>
     public override void Train(TInput input, TOutput expectedOutput)
     {
-        // Pipeline parallel training requires:
-        // 1. Split batch into micro-batches
-        // 2. Forward pass: stage i receives activations from stage i-1, sends to stage i+1
-        // 3. Backward pass: stage i receives gradients from stage i+1, sends to stage i-1
-        // 4. Synchronize gradients across micro-batches
+        // Pipeline parallel training with proper inter-stage communication
+        // Strategy: Convert activations to Vector<T> for communication between stages
 
-        // For this production framework, we provide a simplified implementation
-        // that demonstrates the pattern. Full implementation would require
-        // model-specific micro-batch splitting and activation passing.
+        WrappedModel.SetParameters(LocalShard);
 
-        // Stage 0 starts with input
-        if (_stageId == 0)
+        // Determine actual input for this stage
+        TInput stageInput = input;
+
+        // FORWARD PASS: Receive activations from previous stage
+        if (_stageId > 0)
         {
-            // First stage processes input
-            WrappedModel.SetParameters(LocalShard);
-            WrappedModel.Train(input, expectedOutput);
-            LocalShard = WrappedModel.GetParameters();
+            // Non-first stages receive activations from previous stage
+            // Previous stage sends its output as Vector<T>
+            int activationSize = InputHelper<T, TInput>.GetInputSize(input);
+            Vector<T> receivedActivations = Config.CommunicationBackend.Receive(_stageId - 1, activationSize, tag: 0);
 
-            // TODO: Send activations to next stage
-            // In full implementation: send forward activations to rank+1
+            // Convert received vector back to TInput for this stage using reference input for shape
+            stageInput = ConversionsHelper.ConvertVectorToInput<T, TInput>(receivedActivations, input);
         }
-        else if (_stageId == _numStages - 1)
+
+        // Train this stage with the received (or original) input
+        WrappedModel.Train(stageInput, expectedOutput);
+        var stageOutput = WrappedModel.Predict(stageInput);
+        LocalShard = WrappedModel.GetParameters();
+
+        // FORWARD PASS: Send activations to next stage
+        if (_stageId < _numStages - 1)
         {
-            // Last stage
-            // TODO: Receive activations from previous stage
-            // In full implementation: receive from rank-1
-
-            WrappedModel.SetParameters(LocalShard);
-            WrappedModel.Train(input, expectedOutput);
-            LocalShard = WrappedModel.GetParameters();
-
-            // TODO: Send gradients backward to previous stage
+            // Non-last stages send their output to next stage
+            Vector<T> activationsToSend = ConversionsHelper.ConvertToVector<T, TOutput>(stageOutput);
+            Config.CommunicationBackend.Send(activationsToSend, _stageId + 1, tag: 0);
         }
-        else
-        {
-            // Middle stages
-            // TODO: Receive from rank-1, process, send to rank+1 (forward)
-            // TODO: Receive gradients from rank+1, process, send to rank-1 (backward)
 
-            WrappedModel.SetParameters(LocalShard);
-            WrappedModel.Train(input, expectedOutput);
-            LocalShard = WrappedModel.GetParameters();
+        // BACKWARD PASS: Gradient communication (simplified version)
+        // In full GPipe, we'd pass gradients backward through stages
+        // Here we synchronize parameter updates after forward pass completes
+        if (_stageId < _numStages - 1)
+        {
+            // Forward stages send updated parameters to next stage for gradient info
+            Config.CommunicationBackend.Send(LocalShard, _stageId + 1, tag: 1);
+
+            // Receive gradient contributions from next stage
+            Vector<T> gradientContribution = Config.CommunicationBackend.Receive(_stageId + 1, LocalShard.Length, tag: 2);
+
+            // Accumulate gradients
+            for (int i = 0; i < LocalShard.Length; i++)
+            {
+                LocalShard[i] = NumOps.Add(LocalShard[i], gradientContribution[i]);
+            }
+        }
+
+        if (_stageId > 0)
+        {
+            // Backward stages receive parameter updates from previous stage
+            Vector<T> prevParams = Config.CommunicationBackend.Receive(_stageId - 1, LocalShard.Length, tag: 1);
+
+            // Compute gradient contribution to send back
+            Vector<T> gradientToSend = new Vector<T>(LocalShard.Length);
+            for (int i = 0; i < LocalShard.Length; i++)
+            {
+                gradientToSend[i] = NumOps.Subtract(LocalShard[i], prevParams[i]);
+            }
+
+            // Send gradient contribution backward
+            Config.CommunicationBackend.Send(gradientToSend, _stageId - 1, tag: 2);
         }
 
         InvalidateCache();
@@ -165,26 +189,41 @@ public class PipelineParallelModel<T, TInput, TOutput> : ShardedModelBase<T, TIn
     public override TOutput Predict(TInput input)
     {
         // Pipeline forward pass for inference
-        // Similar to training forward, but simpler (no backward pass)
+        // Activations flow through stages sequentially
 
-        if (_stageId == 0)
+        WrappedModel.SetParameters(LocalShard);
+
+        // Determine actual input for this stage
+        TInput stageInput = input;
+
+        // FORWARD PASS: Receive activations from previous stage
+        if (_stageId > 0)
         {
-            WrappedModel.SetParameters(LocalShard);
-            return WrappedModel.Predict(input);
-            // TODO: Send activations to next stage, return dummy output
+            // Non-first stages receive activations from previous stage
+            int activationSize = InputHelper<T, TInput>.GetInputSize(input);
+            Vector<T> receivedActivations = Config.CommunicationBackend.Receive(_stageId - 1, activationSize, tag: 10);
+
+            // Convert received vector back to TInput for this stage using reference input for shape
+            stageInput = ConversionsHelper.ConvertVectorToInput<T, TInput>(receivedActivations, input);
         }
-        else if (_stageId == _numStages - 1)
+
+        // Process through this stage's layers
+        TOutput stageOutput = WrappedModel.Predict(stageInput);
+
+        // FORWARD PASS: Send activations to next stage
+        if (_stageId < _numStages - 1)
         {
-            // TODO: Receive activations from previous stage
-            WrappedModel.SetParameters(LocalShard);
-            return WrappedModel.Predict(input);
+            // Non-last stages send their output to next stage
+            Vector<T> activationsToSend = ConversionsHelper.ConvertToVector<T, TOutput>(stageOutput);
+            Config.CommunicationBackend.Send(activationsToSend, _stageId + 1, tag: 10);
+
+            // Intermediate stages must still return a value
+            // Return the stage output (caller should only use output from last stage)
+            return stageOutput;
         }
-        else
-        {
-            // TODO: Receive from previous, process, send to next
-            WrappedModel.SetParameters(LocalShard);
-            return WrappedModel.Predict(input);
-        }
+
+        // Last stage returns the final prediction
+        return stageOutput;
     }
 
     /// <inheritdoc/>

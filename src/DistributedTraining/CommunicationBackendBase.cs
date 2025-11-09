@@ -147,6 +147,12 @@ public abstract class CommunicationBackendBase<T> : ICommunicationBackend<T>
     /// <inheritdoc/>
     public abstract Vector<T> ReduceScatter(Vector<T> data, ReductionOperation operation);
 
+    /// <inheritdoc/>
+    public abstract void Send(Vector<T> data, int destinationRank, int tag = 0);
+
+    /// <inheritdoc/>
+    public abstract Vector<T> Receive(int sourceRank, int count, int tag = 0);
+
     /// <summary>
     /// Ensures the backend is initialized before performing operations.
     /// </summary>
@@ -196,6 +202,43 @@ public abstract class CommunicationBackendBase<T> : ICommunicationBackend<T>
             throw new ArgumentException(
                 $"Invalid root {root}. Must be between 0 and {WorldSize - 1}.",
                 nameof(root));
+        }
+    }
+
+    /// <summary>
+    /// Validates that a rank is within valid bounds.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// This method ensures that the specified rank is a valid process ID
+    /// (between 0 and WorldSize - 1) and different from the current process rank.
+    /// </para>
+    /// <para><b>For Beginners:</b> When sending or receiving from another process,
+    /// we need to make sure:
+    /// 1. That process actually exists (valid rank number)
+    /// 2. We're not trying to send/receive from ourselves (rank != Rank)
+    ///
+    /// For example, if you have 4 processes (ranks 0-3), rank 5 would be invalid.
+    /// Also, a process shouldn't send to itself.
+    /// </para>
+    /// </remarks>
+    /// <param name="rank">The rank to validate</param>
+    /// <param name="paramName">The parameter name for error messages</param>
+    /// <exception cref="ArgumentException">Thrown if rank is out of bounds or equals current rank</exception>
+    protected void ValidateRank(int rank, string paramName)
+    {
+        if (rank < 0 || rank >= WorldSize)
+        {
+            throw new ArgumentException(
+                $"Invalid rank {rank}. Must be between 0 and {WorldSize - 1}.",
+                paramName);
+        }
+
+        if (rank == Rank)
+        {
+            throw new ArgumentException(
+                $"Cannot send/receive to/from self (rank {rank}).",
+                paramName);
         }
     }
 

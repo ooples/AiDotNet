@@ -419,6 +419,91 @@ public class MPICommunicationBackend<T> : CommunicationBackendBase<T>
         }
     }
 
+    /// <inheritdoc/>
+    public override void Send(Vector<T> data, int destinationRank, int tag = 0)
+    {
+        EnsureInitialized();
+        ValidateData(data, nameof(data));
+        ValidateRank(destinationRank, nameof(destinationRank));
+
+        if (tag < 0)
+        {
+            throw new ArgumentException("Tag must be non-negative.", nameof(tag));
+        }
+
+        if (!_useMPI)
+        {
+            throw new InvalidOperationException("Cannot send in single-process mode.");
+        }
+
+        try
+        {
+            // Get the Send method: void Send<T>(T[] values, int dest, int tag)
+            var sendMethod = _mpiCommunicator?.GetType().GetMethod("Send",
+                new[] { typeof(T[]), typeof(int), typeof(int) });
+
+            if (sendMethod != null)
+            {
+                var array = data.ToArray();
+                sendMethod.Invoke(_mpiCommunicator, new object[] { array, destinationRank, tag });
+            }
+            else
+            {
+                throw new InvalidOperationException("MPI Send method not found.");
+            }
+        }
+        catch (Exception ex)
+        {
+            throw new InvalidOperationException($"MPI Send failed: {ex.Message}", ex);
+        }
+    }
+
+    /// <inheritdoc/>
+    public override Vector<T> Receive(int sourceRank, int count, int tag = 0)
+    {
+        EnsureInitialized();
+        ValidateRank(sourceRank, nameof(sourceRank));
+
+        if (count <= 0)
+        {
+            throw new ArgumentException("Count must be positive.", nameof(count));
+        }
+
+        if (tag < 0)
+        {
+            throw new ArgumentException("Tag must be non-negative.", nameof(tag));
+        }
+
+        if (!_useMPI)
+        {
+            throw new InvalidOperationException("Cannot receive in single-process mode.");
+        }
+
+        try
+        {
+            // Get the Receive method: void Receive<T>(int source, int tag, ref T[] values)
+            var receiveMethod = _mpiCommunicator?.GetType().GetMethod("Receive",
+                new[] { typeof(int), typeof(int), typeof(T[]).MakeByRefType() });
+
+            if (receiveMethod != null)
+            {
+                var array = new T[count];
+                var parameters = new object[] { sourceRank, tag, array };
+                receiveMethod.Invoke(_mpiCommunicator, parameters);
+
+                // Get the received array from parameters
+                array = (T[])parameters[2];
+                return new Vector<T>(array);
+            }
+
+            throw new InvalidOperationException("MPI Receive method not found.");
+        }
+        catch (Exception ex)
+        {
+            throw new InvalidOperationException($"MPI Receive failed: {ex.Message}", ex);
+        }
+    }
+
     /// <summary>
     /// Gets the MPI operation object for the specified reduction operation.
     /// </summary>

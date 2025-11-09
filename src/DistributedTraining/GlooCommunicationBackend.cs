@@ -792,6 +792,142 @@ public class GlooCommunicationBackend<T> : CommunicationBackendBase<T>
         return new Vector<T>(myChunk);
     }
 
+    /// <inheritdoc/>
+    public override void Send(Vector<T> data, int destinationRank, int tag = 0)
+    {
+        EnsureInitialized();
+        ValidateData(data, nameof(data));
+        ValidateRank(destinationRank, nameof(destinationRank));
+
+        if (tag < 0)
+        {
+            throw new ArgumentException("Tag must be non-negative.", nameof(tag));
+        }
+
+        // Single-process mode: cannot send to self
+        if (_worldSize == 1)
+        {
+            throw new InvalidOperationException("Cannot send in single-process mode.");
+        }
+
+        if (!_useNativeTCP)
+        {
+            throw new InvalidOperationException("Send requires TCP mode to be initialized");
+        }
+
+        // Send with tag: tag + length + data
+        SendDataWithTag(destinationRank, data.ToArray(), tag);
+    }
+
+    /// <inheritdoc/>
+    public override Vector<T> Receive(int sourceRank, int count, int tag = 0)
+    {
+        EnsureInitialized();
+        ValidateRank(sourceRank, nameof(sourceRank));
+
+        if (count <= 0)
+        {
+            throw new ArgumentException("Count must be positive.", nameof(count));
+        }
+
+        if (tag < 0)
+        {
+            throw new ArgumentException("Tag must be non-negative.", nameof(tag));
+        }
+
+        // Single-process mode: cannot receive from self
+        if (_worldSize == 1)
+        {
+            throw new InvalidOperationException("Cannot receive in single-process mode.");
+        }
+
+        if (!_useNativeTCP)
+        {
+            throw new InvalidOperationException("Receive requires TCP mode to be initialized");
+        }
+
+        // Receive with tag: tag + length + data
+        var receivedData = ReceiveDataWithTag(sourceRank, count, tag);
+        return new Vector<T>(receivedData);
+    }
+
+    /// <summary>
+    /// Sends data to a specific rank via TCP with message tag.
+    /// </summary>
+    private void SendDataWithTag(int destRank, T[] data, int tag)
+    {
+        if (_tcpConnections == null || !_tcpConnections.ContainsKey(destRank))
+        {
+            throw new InvalidOperationException($"No TCP connection to rank {destRank}");
+        }
+
+        lock (_connectionLock)
+        {
+            var client = _tcpConnections[destRank];
+            using (var stream = client.GetStream())
+            using (var writer = new BinaryWriter(stream))
+            {
+                // Send tag
+                writer.Write(tag);
+
+                // Send length header
+                writer.Write(data.Length);
+
+                // Send data elements
+                foreach (var element in data)
+                {
+                    double value = Convert.ToDouble(element);
+                    writer.Write(value);
+                }
+                writer.Flush();
+            }
+        }
+    }
+
+    /// <summary>
+    /// Receives data from a specific rank via TCP with message tag.
+    /// </summary>
+    private T[] ReceiveDataWithTag(int sourceRank, int expectedLength, int expectedTag)
+    {
+        if (_tcpConnections == null || !_tcpConnections.ContainsKey(sourceRank))
+        {
+            throw new InvalidOperationException($"No TCP connection to rank {sourceRank}");
+        }
+
+        lock (_connectionLock)
+        {
+            var client = _tcpConnections[sourceRank];
+            using (var stream = client.GetStream())
+            using (var reader = new BinaryReader(stream))
+            {
+                // Read tag
+                int receivedTag = reader.ReadInt32();
+                if (receivedTag != expectedTag)
+                {
+                    throw new InvalidOperationException(
+                        $"Rank {_rank}: Expected tag {expectedTag} from rank {sourceRank}, but received tag {receivedTag}");
+                }
+
+                // Read length header
+                int length = reader.ReadInt32();
+                if (length != expectedLength)
+                {
+                    throw new InvalidOperationException(
+                        $"Rank {_rank}: Expected {expectedLength} elements from rank {sourceRank}, but received {length}");
+                }
+
+                // Read data elements
+                var result = new T[length];
+                for (int i = 0; i < length; i++)
+                {
+                    double value = reader.ReadDouble();
+                    result[i] = (T)Convert.ChangeType(value, typeof(T));
+                }
+                return result;
+            }
+        }
+    }
+
     /// <summary>
     /// Sends data to a specific rank via TCP.
     /// </summary>

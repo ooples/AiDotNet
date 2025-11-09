@@ -331,4 +331,60 @@ public static class ConversionsHelper
 
         throw new InvalidOperationException($"Cannot convert {input.GetType().Name} to Tensor<{typeof(T).Name}>. Expected Matrix<T>, Vector<T>, or Tensor<T>.");
     }
+
+    /// <summary>
+    /// Converts a Vector to the generic TInput type (Vector, Matrix, or Tensor) using a reference input for shape information.
+    /// </summary>
+    /// <typeparam name="T">The numeric type for calculations.</typeparam>
+    /// <typeparam name="TInput">The target type (Vector&lt;T&gt;, Matrix&lt;T&gt;, or Tensor&lt;T&gt;).</typeparam>
+    /// <param name="vector">The vector to convert.</param>
+    /// <param name="referenceInput">A reference input providing shape information for Matrix or Tensor conversion.</param>
+    /// <returns>The vector converted to TInput type with the same shape as referenceInput.</returns>
+    /// <exception cref="InvalidOperationException">Thrown when conversion is not supported.</exception>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> This method converts a flat vector back to its original format (vector, matrix, or tensor)
+    /// by using a reference sample to determine the correct shape.</para>
+    ///
+    /// <para>Think of it like taking apart LEGO blocks into a line, then using the original picture to rebuild them
+    /// into the correct structure.</para>
+    /// </remarks>
+    public static TInput ConvertVectorToInput<T, TInput>(Vector<T> vector, TInput referenceInput)
+    {
+        if (typeof(TInput) == typeof(Vector<T>))
+        {
+            return (TInput)(object)vector;
+        }
+        else if (typeof(TInput) == typeof(Matrix<T>) && referenceInput is Matrix<T> refMatrix)
+        {
+            // Use reference matrix shape and built-in FromVector method
+            int rows = refMatrix.Rows;
+            int cols = refMatrix.Columns;
+
+            if (vector.Length != rows * cols)
+            {
+                throw new InvalidOperationException(
+                    $"Vector length {vector.Length} doesn't match reference matrix size {rows}x{cols} = {rows * cols}");
+            }
+
+            // Matrix.FromVector creates a column matrix - need to reshape to match reference
+            return (TInput)(object)TensorToMatrix(Tensor<T>.FromVector(vector, new[] { rows, cols }), rows, cols);
+        }
+        else if (typeof(TInput) == typeof(Tensor<T>) && referenceInput is Tensor<T> refTensor)
+        {
+            // Use reference tensor shape and built-in FromVector method with shape parameter
+            if (vector.Length != refTensor.Length)
+            {
+                throw new InvalidOperationException(
+                    $"Vector length {vector.Length} doesn't match reference tensor size {refTensor.Length}");
+            }
+
+            return (TInput)(object)Tensor<T>.FromVector(vector, refTensor.Shape);
+        }
+        else
+        {
+            throw new InvalidOperationException(
+                $"Cannot convert Vector<T> to {typeof(TInput).Name}. " +
+                "Supported types: Vector<T>, Matrix<T>, Tensor<T>.");
+        }
+    }
 }
