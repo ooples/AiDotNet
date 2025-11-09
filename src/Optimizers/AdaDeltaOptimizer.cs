@@ -242,30 +242,8 @@ public class AdaDeltaOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<
             _accumulatedSquaredUpdates = new Vector<T>(parameters.Length);
         }
 
-        var newCoefficients = new Vector<T>(parameters.Length);
-        for (int i = 0; i < parameters.Length; i++)
-        {
-            // Update accumulated squared gradients
-            _accumulatedSquaredGradients[i] = NumOps.Add(
-                NumOps.Multiply(NumOps.FromDouble(_options.Rho), _accumulatedSquaredGradients[i]),
-                NumOps.Multiply(NumOps.FromDouble(1 - _options.Rho), NumOps.Multiply(gradient[i], gradient[i]))
-            );
-
-            // Compute update
-            var update = NumOps.Multiply(
-                NumOps.Sqrt(NumOps.Add(_accumulatedSquaredUpdates[i], NumOps.FromDouble(_options.Epsilon))),
-                NumOps.Divide(gradient[i], NumOps.Sqrt(NumOps.Add(_accumulatedSquaredGradients[i], NumOps.FromDouble(_options.Epsilon))))
-            );
-
-            // Update accumulated squared updates
-            _accumulatedSquaredUpdates[i] = NumOps.Add(
-                NumOps.Multiply(NumOps.FromDouble(_options.Rho), _accumulatedSquaredUpdates[i]),
-                NumOps.Multiply(NumOps.FromDouble(1 - _options.Rho), NumOps.Multiply(update, update))
-            );
-
-            // Update coefficients
-            newCoefficients[i] = NumOps.Subtract(parameters[i], update);
-        }
+        // Use shared UpdateParameters method to eliminate duplication
+        var newCoefficients = UpdateParameters(parameters, gradient);
 
         return currentSolution.WithParameters(newCoefficients);
     }

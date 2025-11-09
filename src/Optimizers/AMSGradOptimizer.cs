@@ -142,30 +142,9 @@ public class AMSGradOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T
     protected override IFullModel<T, TInput, TOutput> UpdateSolution(IFullModel<T, TInput, TOutput> currentSolution, Vector<T> gradient)
     {
         var parameters = currentSolution.GetParameters();
-        var newCoefficients = new Vector<T>(parameters.Length);
-        var beta1 = NumOps.FromDouble(_options.Beta1);
-        var beta2 = NumOps.FromDouble(_options.Beta2);
-        var oneMinusBeta1 = NumOps.FromDouble(1 - _options.Beta1);
-        var oneMinusBeta2 = NumOps.FromDouble(1 - _options.Beta2);
 
-        for (int i = 0; i < parameters.Length; i++)
-        {
-            // Update biased first moment estimate
-            _m![i] = NumOps.Add(NumOps.Multiply(beta1, _m[i]), NumOps.Multiply(oneMinusBeta1, gradient[i]));
-
-            // Update biased second raw moment estimate
-            _v![i] = NumOps.Add(NumOps.Multiply(beta2, _v[i]), NumOps.Multiply(oneMinusBeta2, NumOps.Multiply(gradient[i], gradient[i])));
-
-            // Update maximum of second raw moment estimate
-            _vHat![i] = MathHelper.Max(_vHat[i], _v[i]);
-
-            // Compute bias-corrected first moment estimate
-            var mHat = NumOps.Divide(_m[i], NumOps.FromDouble(1 - Math.Pow(_options.Beta1, _t)));
-
-            // Update par
-            var update = NumOps.Divide(NumOps.Multiply(CurrentLearningRate, mHat), NumOps.Add(NumOps.Sqrt(_vHat[i]), NumOps.FromDouble(_options.Epsilon)));
-            newCoefficients[i] = NumOps.Subtract(parameters[i], update);
-        }
+        // Use shared UpdateParameters method to eliminate duplication
+        var newCoefficients = UpdateParameters(parameters, gradient);
 
         return currentSolution.WithParameters(newCoefficients);
     }

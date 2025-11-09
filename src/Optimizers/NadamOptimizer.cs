@@ -277,10 +277,10 @@ public class NadamOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, 
                 nameof(appliedGradients));
         }
 
-        if (_m == null || _v == null || _m.Length != updatedParameters.Length)
+        if (_m == null || _v == null || _m.Length != updatedParameters.Length || _t == 0)
         {
             throw new InvalidOperationException(
-                "Nadam optimizer state is not initialized. ReverseUpdate must be called after UpdateParameters.");
+                "Nadam optimizer state is not initialized or timestep is zero. ReverseUpdate must be called after UpdateParameters.");
         }
 
         var original = new T[updatedParameters.Length];

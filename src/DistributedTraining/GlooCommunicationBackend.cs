@@ -727,7 +727,7 @@ public class GlooCommunicationBackend<T> : CommunicationBackendBase<T>
             var leftChunkArray = new T[chunkSize];
             Array.Copy(allData, leftChildAbsolute * chunkSize, leftChunkArray, 0, chunkSize);
             var leftChunk = new Vector<T>(leftChunkArray);
-            SendData(leftChildAbsolute, new Vector<T>(new[] { (T)Convert.ChangeType(chunkSize, typeof(T)) }));
+            SendData(leftChildAbsolute, new Vector<T>(new[] { NumOps.FromInt32(chunkSize) }));
             SendData(leftChildAbsolute, leftChunk);
         }
 
@@ -737,7 +737,7 @@ public class GlooCommunicationBackend<T> : CommunicationBackendBase<T>
             var rightChunkArray = new T[chunkSize];
             Array.Copy(allData, rightChildAbsolute * chunkSize, rightChunkArray, 0, chunkSize);
             var rightChunk = new Vector<T>(rightChunkArray);
-            SendData(rightChildAbsolute, new Vector<T>(new[] { (T)Convert.ChangeType(chunkSize, typeof(T)) }));
+            SendData(rightChildAbsolute, new Vector<T>(new[] { NumOps.FromInt32(chunkSize) }));
             SendData(rightChildAbsolute, rightChunk);
         }
     }
@@ -935,7 +935,7 @@ public class GlooCommunicationBackend<T> : CommunicationBackendBase<T>
             for (int i = 0; i < length; i++)
             {
                 double value = reader.ReadDouble();
-                result[i] = (T)Convert.ChangeType(value, typeof(T));
+                result[i] = NumOps.FromDouble(value);
             }
             // Leave stream and reader open - they're reused for the connection lifetime
             return new Vector<T>(result);
@@ -1003,7 +1003,7 @@ public class GlooCommunicationBackend<T> : CommunicationBackendBase<T>
             for (int i = 0; i < length; i++)
             {
                 double value = reader.ReadDouble();
-                result[i] = (T)Convert.ChangeType(value, typeof(T));
+                result[i] = NumOps.FromDouble(value);
             }
             // Leave stream and reader open - they're reused for the connection lifetime
             return new Vector<T>(result);
