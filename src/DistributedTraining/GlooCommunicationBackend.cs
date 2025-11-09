@@ -156,9 +156,12 @@ public class GlooCommunicationBackend<T> : CommunicationBackendBase<T>
         }
 
         // Accept connections from all ranks with higher rank numbers
-        for (int otherRank = _rank + 1; otherRank < _worldSize; otherRank++)
+        // IMPORTANT: We cannot predict the order in which higher ranks will connect,
+        // so we accept ANY connection and verify the rank from the handshake.
+        int numExpectedConnections = _worldSize - _rank - 1;
+        for (int i = 0; i < numExpectedConnections; i++)
         {
-            AcceptConnectionFromRank(otherRank);
+            AcceptConnectionFromAnyRank();
         }
 
         Console.WriteLine($"Rank {_rank}: All TCP connections established ({_tcpConnections?.Count ?? 0} peers)");
@@ -216,19 +219,21 @@ public class GlooCommunicationBackend<T> : CommunicationBackendBase<T>
     }
 
     /// <summary>
-    /// Accepts connection from a specific rank (passive connection).
+    /// Accepts connection from any rank (passive connection).
+    /// The actual rank is determined from the handshake, not predetermined.
+    /// This avoids connection-order race conditions where ranks connect in unpredictable order.
     /// </summary>
-    private void AcceptConnectionFromRank(int expectedRank)
+    private void AcceptConnectionFromAnyRank()
     {
         if (_tcpListener == null)
         {
             throw new InvalidOperationException("TCP listener not initialized");
         }
 
-        // Accept incoming connection
+        // Accept incoming connection from ANY rank
         var client = _tcpListener.AcceptTcpClient();
 
-        // Read handshake to verify rank
+        // Read handshake to identify the connecting rank
         // IMPORTANT: Do NOT use 'using' here - disposing the stream closes the socket!
         // We need to keep the connection open for future communication.
         var stream = client.GetStream();
@@ -236,17 +241,35 @@ public class GlooCommunicationBackend<T> : CommunicationBackendBase<T>
         int receivedRank = reader.ReadInt32();
         // Leave stream and reader open - they'll be cleaned up when TcpClient is disposed
 
-        if (receivedRank != expectedRank)
+        // Verify the connecting rank is valid (should be a higher rank than us)
+        if (receivedRank <= _rank)
         {
             client.Close();
             throw new InvalidOperationException(
-                $"Rank {_rank}: Expected connection from rank {expectedRank}, but received from rank {receivedRank}");
+                $"Rank {_rank}: Received unexpected connection from rank {receivedRank}. " +
+                $"Expected connections only from ranks {_rank + 1} to {_worldSize - 1}.");
+        }
+
+        if (receivedRank >= _worldSize)
+        {
+            client.Close();
+            throw new InvalidOperationException(
+                $"Rank {_rank}: Received connection from invalid rank {receivedRank}. " +
+                $"World size is {_worldSize} (valid ranks: 0 to {_worldSize - 1}).");
         }
 
         lock (_connectionLock)
         {
             if (_tcpConnections != null)
             {
+                // Check if we already have a connection from this rank (duplicate connection)
+                if (_tcpConnections.ContainsKey(receivedRank))
+                {
+                    client.Close();
+                    throw new InvalidOperationException(
+                        $"Rank {_rank}: Duplicate connection attempt from rank {receivedRank}");
+                }
+
                 _tcpConnections[receivedRank] = client;
             }
         }
