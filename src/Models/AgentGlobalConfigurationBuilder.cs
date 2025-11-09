@@ -92,6 +92,11 @@ public class AgentGlobalConfigurationBuilder
     /// </remarks>
     public AgentGlobalConfigurationBuilder ConfigureOpenAI(string apiKey)
     {
+        if (string.IsNullOrWhiteSpace(apiKey))
+        {
+            throw new ArgumentException("OpenAI API key cannot be null or whitespace.", nameof(apiKey));
+        }
+
         _keys[LLMProvider.OpenAI] = apiKey;
         return this;
     }
@@ -140,6 +145,11 @@ public class AgentGlobalConfigurationBuilder
     /// </remarks>
     public AgentGlobalConfigurationBuilder ConfigureAnthropic(string apiKey)
     {
+        if (string.IsNullOrWhiteSpace(apiKey))
+        {
+            throw new ArgumentException("Anthropic API key cannot be null or whitespace.", nameof(apiKey));
+        }
+
         _keys[LLMProvider.Anthropic] = apiKey;
         return this;
     }
@@ -192,6 +202,11 @@ public class AgentGlobalConfigurationBuilder
     /// </remarks>
     public AgentGlobalConfigurationBuilder ConfigureAzureOpenAI(string apiKey)
     {
+        if (string.IsNullOrWhiteSpace(apiKey))
+        {
+            throw new ArgumentException("Azure OpenAI API key cannot be null or whitespace.", nameof(apiKey));
+        }
+
         _keys[LLMProvider.AzureOpenAI] = apiKey;
         return this;
     }
