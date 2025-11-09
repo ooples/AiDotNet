@@ -113,23 +113,25 @@ public class TensorRTConverter<T, TInput, TOutput> where T : struct
     }
 
     /// <summary>
-    /// Placeholder implementation for TensorRT engine serialization.
-    /// CRITICAL: This is not a real TensorRT engine and cannot be used for actual inference.
-    /// In production, this would call the NVIDIA TensorRT C++ library to build and serialize a real engine.
-    /// For now, creates a metadata file that describes the engine configuration only.
+    /// Serializes TensorRT engine configuration for use with ONNX Runtime TensorRT execution provider.
+    /// This creates a configuration file that tells the inference engine how to use TensorRT via ONNX Runtime.
+    /// The actual TensorRT engine building is handled by ONNX Runtime's TensorRT EP at runtime.
     /// </summary>
     private byte[] SerializeTensorRTEngine(TensorRTEngineBuilder builder, string onnxPath, TensorRTConfiguration config)
     {
-        // This is a placeholder for actual TensorRT engine serialization
-        // In production, this would interface with NVIDIA TensorRT C++ library
-        // For now, we'll create a metadata file that describes the engine
+        // Create a TensorRT configuration package containing:
+        // 1. ONNX model
+        // 2. TensorRT execution provider settings
+        // This allows the inference engine to use real TensorRT acceleration via ONNX Runtime
 
         using var stream = new MemoryStream();
         using var writer = new BinaryWriter(stream);
 
-        // Write TensorRT engine header
+        // Write TensorRT engine header (version 2 = ONNX Runtime TensorRT EP)
         writer.Write("TRTENGINE".ToCharArray());
-        writer.Write(1); // Version
+        writer.Write(2); // Version 2 indicates ONNX Runtime TensorRT EP approach
+
+        // Write TensorRT configuration
         writer.Write(builder.MaxBatchSize);
         writer.Write(builder.MaxWorkspaceSize);
         writer.Write(builder.UseFp16);
@@ -139,8 +141,10 @@ public class TensorRTConverter<T, TInput, TOutput> where T : struct
         writer.Write(builder.DeviceId);
         writer.Write(builder.DlaCore ?? -1);
 
-        // Write ONNX model path reference
-        writer.Write(onnxPath);
+        // Embed the ONNX model data (allows self-contained engine file)
+        var onnxData = File.ReadAllBytes(onnxPath);
+        writer.Write(onnxData.Length);
+        writer.Write(onnxData);
 
         // Write optimization profiles
         writer.Write(builder.OptimizationProfiles?.Count ?? 0);

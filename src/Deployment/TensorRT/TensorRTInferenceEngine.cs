@@ -1,4 +1,6 @@
 using System.Collections.Concurrent;
+using Microsoft.ML.OnnxRuntime;
+using Microsoft.ML.OnnxRuntime.Tensors;
 
 namespace AiDotNet.Deployment.TensorRT;
 
@@ -13,6 +15,8 @@ public class TensorRTInferenceEngine<T> : IDisposable where T : struct
     private readonly TensorRTConfiguration _config;
     private readonly SemaphoreSlim _streamSemaphore;
     private readonly ConcurrentDictionary<int, StreamContext> _streamContexts;
+    private InferenceSession? _session;
+    private TensorRTEngineMetadata? _metadata;
     private bool _isInitialized = false;
     private bool _disposed = false;
 
@@ -118,14 +122,83 @@ public class TensorRTInferenceEngine<T> : IDisposable where T : struct
         if (header != "TRTENGINE")
             throw new InvalidDataException("Invalid TensorRT engine file format");
 
-        reader.ReadInt32(); // version
-        reader.ReadInt32(); // maxBatchSize
-        reader.ReadInt64(); // maxWorkspaceSize
-        reader.ReadBoolean(); // useFp16
-        reader.ReadBoolean(); // useInt8
+        var version = reader.ReadInt32();
 
-        // Store engine properties for later use
-        // In production, this would load the actual TensorRT engine
+        // Read TensorRT configuration
+        _metadata = new TensorRTEngineMetadata
+        {
+            MaxBatchSize = reader.ReadInt32(),
+            MaxWorkspaceSize = reader.ReadInt64(),
+            UseFp16 = reader.ReadBoolean(),
+            UseInt8 = reader.ReadBoolean(),
+            StrictTypeConstraints = reader.ReadBoolean(),
+            EnableDynamicShapes = reader.ReadBoolean(),
+            DeviceId = reader.ReadInt32(),
+            DlaCore = reader.ReadInt32()
+        };
+
+        if (_metadata.DlaCore == -1)
+            _metadata.DlaCore = null;
+
+        // Extract embedded ONNX model (version 2+ embeds the model)
+        byte[] onnxModelData;
+        if (version >= 2)
+        {
+            var onnxDataLength = reader.ReadInt32();
+            onnxModelData = reader.ReadBytes(onnxDataLength);
+        }
+        else
+        {
+            // Version 1: read ONNX path and load from disk
+            var onnxPath = reader.ReadString();
+            if (!File.Exists(onnxPath))
+                throw new FileNotFoundException($"ONNX model not found: {onnxPath}");
+            onnxModelData = File.ReadAllBytes(onnxPath);
+        }
+
+        // Create ONNX Runtime session with TensorRT execution provider
+        var sessionOptions = new SessionOptions();
+        sessionOptions.GraphOptimizationLevel = GraphOptimizationLevel.ORT_ENABLE_ALL;
+
+        // Configure TensorRT execution provider
+        try
+        {
+            var trtOptions = new Dictionary<string, string>
+            {
+                ["device_id"] = _metadata.DeviceId.ToString(),
+                ["trt_max_workspace_size"] = _metadata.MaxWorkspaceSize.ToString(),
+                ["trt_fp16_enable"] = _metadata.UseFp16 ? "1" : "0",
+                ["trt_int8_enable"] = _metadata.UseInt8 ? "1" : "0"
+            };
+
+            if (_metadata.DlaCore.HasValue)
+            {
+                trtOptions["trt_dla_enable"] = "1";
+                trtOptions["trt_dla_core"] = _metadata.DlaCore.Value.ToString();
+            }
+
+            if (_config.EnableMultiStream)
+            {
+                trtOptions["trt_engine_cache_enable"] = "1";
+            }
+
+            sessionOptions.AppendExecutionProvider("TensorRT", trtOptions);
+        }
+        catch
+        {
+            // TensorRT not available, fall back to CUDA
+            try
+            {
+                sessionOptions.AppendExecutionProvider_CUDA(_metadata.DeviceId);
+            }
+            catch
+            {
+                // CUDA not available, fall back to CPU
+            }
+        }
+
+        // Create inference session from embedded ONNX model
+        _session = new InferenceSession(onnxModelData, sessionOptions);
     }
 
     private StreamContext CreateExecutionContext(int streamId)
@@ -146,23 +219,55 @@ public class TensorRTInferenceEngine<T> : IDisposable where T : struct
 
         try
         {
-            // Simulate inference execution
-            // In production, this would call TensorRT inference APIs
-            await Task.Run(() =>
+            if (_session == null)
+                throw new InvalidOperationException("Inference session not initialized");
+
+            return await Task.Run(() =>
             {
-                // Placeholder for actual TensorRT inference
-                // This would involve:
-                // 1. Copy input to GPU
-                // 2. Execute inference
-                // 3. Copy output from GPU
-                Thread.Sleep(1); // Simulate processing time
+                // Get input metadata
+                var inputMeta = _session.InputMetadata.First();
+                var inputName = inputMeta.Key;
+                var inputShape = CalculateInputShape(_session, input.Length);
+
+                // Create input tensor based on type T
+                var inputs = new List<NamedOnnxValue>();
+
+                if (typeof(T) == typeof(float))
+                {
+                    var floatInput = ConvertToFloatArray(input);
+                    var tensor = new DenseTensor<float>(floatInput, inputShape);
+                    inputs.Add(NamedOnnxValue.CreateFromTensor(inputName, tensor));
+                }
+                else if (typeof(T) == typeof(double))
+                {
+                    var doubleInput = ConvertToDoubleArray(input);
+                    var tensor = new DenseTensor<double>(doubleInput, inputShape);
+                    inputs.Add(NamedOnnxValue.CreateFromTensor(inputName, tensor));
+                }
+                else if (typeof(T) == typeof(int))
+                {
+                    var intInput = ConvertToIntArray(input);
+                    var tensor = new DenseTensor<int>(intInput, inputShape);
+                    inputs.Add(NamedOnnxValue.CreateFromTensor(inputName, tensor));
+                }
+                else if (typeof(T) == typeof(long))
+                {
+                    var longInput = ConvertToLongArray(input);
+                    var tensor = new DenseTensor<long>(longInput, inputShape);
+                    inputs.Add(NamedOnnxValue.CreateFromTensor(inputName, tensor));
+                }
+                else
+                {
+                    throw new NotSupportedException($"Type {typeof(T).Name} is not supported for TensorRT inference");
+                }
+
+                // Execute inference on GPU via TensorRT execution provider
+                using var results = _session.Run(inputs);
+
+                // Extract output tensor
+                var outputTensor = results.First().Value;
+                return ConvertOutputToT(outputTensor);
             });
-
-            // For now, return a dummy output of same size
-            var output = new T[input.Length];
-            Array.Copy(input, output, input.Length);
-
-            return output;
         }
         finally
         {
@@ -195,12 +300,136 @@ public class TensorRTInferenceEngine<T> : IDisposable where T : struct
         };
     }
 
+    private int[] CalculateInputShape(InferenceSession session, int inputLength)
+    {
+        var inputMeta = session.InputMetadata.First();
+        var shape = inputMeta.Value.Dimensions.ToArray();
+
+        // Replace dynamic dimensions with calculated values
+        for (int i = 0; i < shape.Length; i++)
+        {
+            if (shape[i] <= 0) // Dynamic dimension
+            {
+                if (i == 0)
+                {
+                    // Batch dimension - use from config or default to 1
+                    shape[i] = _metadata?.MaxBatchSize ?? 1;
+                }
+                else
+                {
+                    // Calculate based on remaining input length
+                    var remainingDims = shape.Skip(i).Count(d => d > 0);
+                    var knownSize = shape.Where(d => d > 0).Aggregate(1, (a, b) => a * b);
+                    shape[i] = remainingDims > 0 ? inputLength / knownSize : inputLength;
+                }
+            }
+        }
+
+        return shape;
+    }
+
+    private float[] ConvertToFloatArray(T[] input)
+    {
+        if (typeof(T) == typeof(float))
+            return (float[])(object)input;
+
+        var result = new float[input.Length];
+        for (int i = 0; i < input.Length; i++)
+            result[i] = Convert.ToSingle(input[i]);
+        return result;
+    }
+
+    private double[] ConvertToDoubleArray(T[] input)
+    {
+        if (typeof(T) == typeof(double))
+            return (double[])(object)input;
+
+        var result = new double[input.Length];
+        for (int i = 0; i < input.Length; i++)
+            result[i] = Convert.ToDouble(input[i]);
+        return result;
+    }
+
+    private int[] ConvertToIntArray(T[] input)
+    {
+        if (typeof(T) == typeof(int))
+            return (int[])(object)input;
+
+        var result = new int[input.Length];
+        for (int i = 0; i < input.Length; i++)
+            result[i] = Convert.ToInt32(input[i]);
+        return result;
+    }
+
+    private long[] ConvertToLongArray(T[] input)
+    {
+        if (typeof(T) == typeof(long))
+            return (long[])(object)input;
+
+        var result = new long[input.Length];
+        for (int i = 0; i < input.Length; i++)
+            result[i] = Convert.ToInt64(input[i]);
+        return result;
+    }
+
+    private T[] ConvertOutputToT(object outputTensor)
+    {
+        // Handle different tensor types
+        if (outputTensor is Tensor<float> floatTensor)
+        {
+            var flatArray = floatTensor.ToArray();
+            if (typeof(T) == typeof(float))
+                return (T[])(object)flatArray;
+
+            var result = new T[flatArray.Length];
+            for (int i = 0; i < flatArray.Length; i++)
+                result[i] = (T)Convert.ChangeType(flatArray[i], typeof(T));
+            return result;
+        }
+        else if (outputTensor is Tensor<double> doubleTensor)
+        {
+            var flatArray = doubleTensor.ToArray();
+            if (typeof(T) == typeof(double))
+                return (T[])(object)flatArray;
+
+            var result = new T[flatArray.Length];
+            for (int i = 0; i < flatArray.Length; i++)
+                result[i] = (T)Convert.ChangeType(flatArray[i], typeof(T));
+            return result;
+        }
+        else if (outputTensor is Tensor<int> intTensor)
+        {
+            var flatArray = intTensor.ToArray();
+            if (typeof(T) == typeof(int))
+                return (T[])(object)flatArray;
+
+            var result = new T[flatArray.Length];
+            for (int i = 0; i < flatArray.Length; i++)
+                result[i] = (T)Convert.ChangeType(flatArray[i], typeof(T));
+            return result;
+        }
+        else if (outputTensor is Tensor<long> longTensor)
+        {
+            var flatArray = longTensor.ToArray();
+            if (typeof(T) == typeof(long))
+                return (T[])(object)flatArray;
+
+            var result = new T[flatArray.Length];
+            for (int i = 0; i < flatArray.Length; i++)
+                result[i] = (T)Convert.ChangeType(flatArray[i], typeof(T));
+            return result;
+        }
+
+        throw new NotSupportedException($"Output tensor type {outputTensor.GetType().Name} is not supported");
+    }
+
     public void Dispose()
     {
         if (_disposed)
             return;
 
         // Cleanup resources
+        _session?.Dispose();
         _streamContexts.Clear();
         _streamSemaphore?.Dispose();
 
@@ -225,5 +454,20 @@ public class TensorRTInferenceEngine<T> : IDisposable where T : struct
         public DateTime GetLastUsedTime() => new DateTime(Interlocked.Read(ref _lastUsedTimeTicks), DateTimeKind.Utc);
 
         public void SetLastUsedTime(DateTime value) => Interlocked.Exchange(ref _lastUsedTimeTicks, value.Ticks);
+    }
+
+    /// <summary>
+    /// Metadata extracted from TensorRT engine file.
+    /// </summary>
+    private class TensorRTEngineMetadata
+    {
+        public int MaxBatchSize { get; set; }
+        public long MaxWorkspaceSize { get; set; }
+        public bool UseFp16 { get; set; }
+        public bool UseInt8 { get; set; }
+        public bool StrictTypeConstraints { get; set; }
+        public bool EnableDynamicShapes { get; set; }
+        public int DeviceId { get; set; }
+        public int? DlaCore { get; set; }
     }
 }
