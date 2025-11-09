@@ -1,3 +1,5 @@
+using AiDotNet.LinearAlgebra;
+
 namespace AiDotNet.ContinualLearning.Results;
 
 /// <summary>
