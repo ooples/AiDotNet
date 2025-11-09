@@ -112,16 +112,20 @@ public class ElasticOptimizer<T, TInput, TOutput> : ShardedOptimizerBase<T, TInp
     /// <inheritdoc/>
     public override OptimizationResult<T, TInput, TOutput> Optimize(OptimizationInputData<T, TInput, TOutput> inputData)
     {
-        if (inputData == null)
-            throw new ArgumentNullException(nameof(inputData));
-
-        // CRITICAL: Opening barrier to synchronize all workers before any operations
+        // CRITICAL: Opening barrier to synchronize all workers before any operations.
         // This ensures all workers start together, preventing barrier mismatches if
-        // some workers detect world size changes while others don't
+        // some workers detect world size changes while others don't.
+        // Must execute BEFORE any divergent logic (including null checks).
         Config.CommunicationBackend.Barrier();
 
         try
         {
+            // Null check happens AFTER opening barrier but INSIDE try block.
+            // This ensures that if one worker receives null while another doesn't,
+            // both workers still execute the finally barrier, preventing deadlock.
+            if (inputData == null)
+                throw new ArgumentNullException(nameof(inputData));
+
             // Check for world size changes (workers joined/left)
             if (DetectWorldSizeChange())
             {
@@ -142,11 +146,12 @@ public class ElasticOptimizer<T, TInput, TOutput> : ShardedOptimizerBase<T, TInp
         finally
         {
             // CRITICAL: Closing barrier ALWAYS executes to prevent deadlock.
-            // Even if HandleWorkerChange() or WrappedOptimizer.Optimize() throws on some workers,
+            // Even if null check, HandleWorkerChange(), or WrappedOptimizer.Optimize() throws,
             // all workers reach this barrier before propagating the exception.
             // This prevents the scenario where:
-            // - Worker A: HandleWorkerChange() throws, skips barriers, exits
-            // - Worker B: HandleWorkerChange() succeeds, waits at barrier forever
+            // - Worker A: Exception thrown, finally executes, waits at barrier
+            // - Worker B: No exception, finally executes, waits at barrier
+            // - Both workers synchronized at closing barrier despite exceptions
             Config.CommunicationBackend.Barrier();
         }
     }

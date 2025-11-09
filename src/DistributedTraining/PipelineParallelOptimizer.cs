@@ -52,13 +52,18 @@ public class PipelineParallelOptimizer<T, TInput, TOutput> : ShardedOptimizerBas
     /// <inheritdoc/>
     public override OptimizationResult<T, TInput, TOutput> Optimize(OptimizationInputData<T, TInput, TOutput> inputData)
     {
-        if (inputData == null)
-            throw new ArgumentNullException(nameof(inputData));
-
+        // CRITICAL: Opening barrier must execute BEFORE any divergent logic to synchronize all workers.
+        // This prevents deadlock if some workers throw exceptions while others continue.
         Config.CommunicationBackend.Barrier();
 
         try
         {
+            // Null check happens AFTER opening barrier but INSIDE try block.
+            // This ensures that if one worker receives null while another doesn't,
+            // both workers still execute the finally barrier, preventing deadlock.
+            if (inputData == null)
+                throw new ArgumentNullException(nameof(inputData));
+
             // Pipeline parallel optimization requires:
             // 1. Process micro-batches through the pipeline
             // 2. Accumulate gradients across micro-batches
@@ -80,8 +85,9 @@ public class PipelineParallelOptimizer<T, TInput, TOutput> : ShardedOptimizerBas
         }
         finally
         {
-            // CRITICAL: Ensure barrier always executes to prevent deadlock,
-            // even if WrappedOptimizer.Optimize throws an exception during pipeline execution
+            // CRITICAL: Closing barrier ALWAYS executes to prevent deadlock,
+            // even if null check, WrappedOptimizer.Optimize, or other operations throw.
+            // This ensures all workers reach this barrier regardless of exceptions.
             Config.CommunicationBackend.Barrier();
         }
     }
