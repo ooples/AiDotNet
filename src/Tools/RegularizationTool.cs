@@ -1,4 +1,5 @@
 using AiDotNet.Interfaces;
+using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 namespace AiDotNet.Tools;
 /// <summary>
@@ -202,7 +203,7 @@ public class RegularizationTool : ToolBase
             }
             return recommendations.ToString();
         }
-        catch (JsonException)
+        catch (JsonReaderException)
         {
             throw; // Let base class handle JSON errors
         }
@@ -384,7 +385,7 @@ public class RegularizationTool : ToolBase
         }
     }
     /// <inheritdoc/>
-    protected override string GetJsonErrorMessage(Newtonsoft.Json.JsonReaderException ex)
+    protected override string GetJsonErrorMessage(JsonReaderException ex)
     {
         return $"Error: Invalid JSON format. {ex.Message}\n" +
                "Expected format: { \"model_type\": \"string\", \"n_samples\": number, \"n_features\": number, " +

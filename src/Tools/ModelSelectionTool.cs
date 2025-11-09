@@ -1,4 +1,5 @@
 using AiDotNet.Interfaces;
+using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 namespace AiDotNet.Tools;
 /// <summary>
@@ -268,7 +269,7 @@ public class ModelSelectionTool : ToolBase
             recommendation.AppendLine("  4. Consider ensemble methods combining multiple models");
             return recommendation.ToString();
         }
-        catch (JsonException)
+        catch (JsonReaderException)
         {
             throw; // Let base class handle JSON errors
         }
@@ -278,7 +279,7 @@ public class ModelSelectionTool : ToolBase
         }
     }
     /// <inheritdoc/>
-    protected override string GetJsonErrorMessage(Newtonsoft.Json.JsonReaderException ex)
+    protected override string GetJsonErrorMessage(JsonReaderException ex)
     {
         return $"Error: Invalid JSON format. {ex.Message}\n" +
                "Expected format: { \"problem_type\": \"regression|classification\", \"n_samples\": number, " +

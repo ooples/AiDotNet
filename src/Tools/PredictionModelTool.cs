@@ -146,7 +146,7 @@ public class PredictionModelTool<T, TInput, TOutput> : ITool
             // Format the output
             return FormatPrediction(prediction);
         }
-        catch (JsonException ex)
+        catch (JsonReaderException ex)
         {
             return $"Error parsing input JSON: {ex.Message}. " +
                    "Please ensure input follows the expected format specified in the description.";

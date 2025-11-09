@@ -1,4 +1,5 @@
 using AiDotNet.Interfaces;
+using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 namespace AiDotNet.Tools;
 /// <summary>
@@ -138,7 +139,7 @@ public class HyperparameterTool : ToolBase
             recommendations.AppendLine("  • Consider automated hyperparameter optimization (Optuna, Hyperopt) for extensive tuning");
             return recommendations.ToString();
         }
-        catch (JsonException)
+        catch (JsonReaderException)
         {
             throw; // Let base class handle JSON errors
         }
@@ -148,7 +149,7 @@ public class HyperparameterTool : ToolBase
         }
     }
     /// <inheritdoc/>
-    protected override string GetJsonErrorMessage(Newtonsoft.Json.JsonReaderException ex)
+    protected override string GetJsonErrorMessage(JsonReaderException ex)
     {
         return $"Error: Invalid JSON format. {ex.Message}\n" +
                "Expected format: { \"model_type\": \"string\", \"n_samples\": number, \"n_features\": number, ... }";

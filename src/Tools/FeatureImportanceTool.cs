@@ -1,4 +1,5 @@
 using AiDotNet.Interfaces;
+using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 namespace AiDotNet.Tools;
 /// <summary>
@@ -307,7 +308,7 @@ public class FeatureImportanceTool : ToolBase
             analysis.AppendLine("  4. Re-evaluate feature importance after changes");
             return analysis.ToString();
         }
-        catch (JsonException)
+        catch (JsonReaderException)
         {
             throw; // Let base class handle JSON errors
         }
@@ -317,7 +318,7 @@ public class FeatureImportanceTool : ToolBase
         }
     }
     /// <inheritdoc/>
-    protected override string GetJsonErrorMessage(Newtonsoft.Json.JsonReaderException ex)
+    protected override string GetJsonErrorMessage(JsonReaderException ex)
     {
         return $"Error: Invalid JSON format. {ex.Message}\n" +
                "Expected format: { \"features\": { \"feature_name\": { \"target_correlation\": number, ... } }, ... }";

@@ -1,4 +1,5 @@
 using AiDotNet.Interfaces;
+using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 
 namespace AiDotNet.Tools;
@@ -242,7 +243,7 @@ public class DataAnalysisTool : ToolBase
 
             return analysis.ToString();
         }
-        catch (JsonException)
+        catch (JsonReaderException)
         {
             throw; // Let base class handle JSON errors
         }
@@ -253,7 +254,7 @@ public class DataAnalysisTool : ToolBase
     }
 
     /// <inheritdoc/>
-    protected override string GetJsonErrorMessage(Newtonsoft.Json.JsonReaderException ex)
+    protected override string GetJsonErrorMessage(JsonReaderException ex)
     {
         return $"Error: Invalid JSON format. {ex.Message}\n" +
                "Expected format: { \"dataset_info\": { \"n_samples\": number, \"n_features\": number, ... }, " +
