@@ -125,6 +125,36 @@ public class FSDPModel<T, TInput, TOutput> : ShardedModelBase<T, TInput, TOutput
     }
 
     /// <inheritdoc/>
+    /// <remarks>
+    /// <para><b>FSDP Gradient Synchronization:</b>
+    /// Unlike the base implementation which does AllReduce on LocalShard (which would mix disjoint
+    /// parameter indices from different ranks and corrupt weights), FSDP gradient synchronization works by:
+    /// 1. Gathering full parameters from all ranks (allGather operation)
+    /// 2. Performing AllReduce on the full parameter vector (synchronizing matching indices)
+    /// 3. Scattering the result back to local shards (each rank gets its portion)
+    ///
+    /// This ensures we reduce matching data across ranks rather than mixing unrelated parameter indices.
+    /// </para>
+    /// </remarks>
+    public override void SynchronizeGradients()
+    {
+        // Gather full parameters from all shards
+        // This ensures we have the complete parameter vector on each rank
+        var fullParams = GatherFullParameters();
+
+        // Perform AllReduce on the full parameter vector
+        // This synchronizes matching parameter indices across all ranks
+        Config.CommunicationBackend.AllReduce(fullParams, ReductionOperation.Average);
+
+        // Update local shard from the synchronized full parameters
+        // Each rank extracts its portion of the reduced parameters
+        UpdateLocalShardFromFull(fullParams);
+
+        // Invalidate cached full parameters to force re-gather on next access
+        CachedFullParameters = null;
+    }
+
+    /// <inheritdoc/>
     public override ModelMetadata<T> GetModelMetadata()
     {
         var metadata = WrappedModel.GetModelMetadata();
