@@ -1,5 +1,6 @@
 using AiDotNet.Data.Abstractions;
 using AiDotNet.Interfaces;
+using AiDotNet.LinearAlgebra;
 
 namespace AiDotNet.ActiveLearning.Interfaces;
 
@@ -39,8 +40,12 @@ public interface IQueryStrategy<T, TInput, TOutput>
     /// </summary>
     /// <param name="model">The current model.</param>
     /// <param name="unlabeledData">The pool of unlabeled examples.</param>
-    /// <returns>Array of scores (higher = more informative) for each example.</returns>
-    T[] ScoreExamples(IFullModel<T, TInput, TOutput> model, IDataset<T, TInput, TOutput> unlabeledData);
+    /// <param name="labeledData">Optional current labeled dataset (required for diversity-based strategies).</param>
+    /// <returns>Vector of scores (higher = more informative) for each example.</returns>
+    Vector<T> ScoreExamples(
+        IFullModel<T, TInput, TOutput> model,
+        IDataset<T, TInput, TOutput> unlabeledData,
+        IDataset<T, TInput, TOutput>? labeledData = null);
 
     /// <summary>
     /// Selects the top-k most informative examples.
@@ -48,8 +53,13 @@ public interface IQueryStrategy<T, TInput, TOutput>
     /// <param name="model">The current model.</param>
     /// <param name="unlabeledData">The pool of unlabeled examples.</param>
     /// <param name="k">Number of examples to select.</param>
-    /// <returns>Indices of selected examples in the unlabeled pool.</returns>
-    int[] SelectBatch(IFullModel<T, TInput, TOutput> model, IDataset<T, TInput, TOutput> unlabeledData, int k);
+    /// <param name="labeledData">Optional current labeled dataset (required for diversity-based strategies).</param>
+    /// <returns>Vector of indices of selected examples in the unlabeled pool.</returns>
+    Vector<int> SelectBatch(
+        IFullModel<T, TInput, TOutput> model,
+        IDataset<T, TInput, TOutput> unlabeledData,
+        int k,
+        IDataset<T, TInput, TOutput>? labeledData = null);
 
     /// <summary>
     /// Gets the name of this query strategy.

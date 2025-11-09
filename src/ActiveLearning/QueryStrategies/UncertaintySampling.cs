@@ -77,12 +77,17 @@ public class UncertaintySampling<T, TInput, TOutput> : IQueryStrategy<T, TInput,
     public string Name => $"UncertaintySampling-{_measure}";
 
     /// <inheritdoc/>
-    public T[] ScoreExamples(IFullModel<T, TInput, TOutput> model, IDataset<T, TInput, TOutput> unlabeledData)
+    public Vector<T> ScoreExamples(
+        IFullModel<T, TInput, TOutput> model,
+        IDataset<T, TInput, TOutput> unlabeledData,
+        IDataset<T, TInput, TOutput>? labeledData = null)
     {
         if (model == null)
             throw new ArgumentNullException(nameof(model));
         if (unlabeledData == null)
             throw new ArgumentNullException(nameof(unlabeledData));
+
+        // Uncertainty sampling doesn't require labeled data context
 
         int numExamples = unlabeledData.Count;
         var scores = new T[numExamples];
@@ -96,7 +101,6 @@ public class UncertaintySampling<T, TInput, TOutput> : IQueryStrategy<T, TInput,
             var prediction = model.Predict(input);
 
             // Convert prediction to probability vector
-            // This assumes TOutput can be converted to Vector<T>
             // For classification, predictions should be probability distributions
             var probabilities = ConvertToVector(prediction);
 
@@ -110,7 +114,7 @@ public class UncertaintySampling<T, TInput, TOutput> : IQueryStrategy<T, TInput,
             };
         }
 
-        return scores;
+        return new Vector<T>(scores);
     }
 
     /// <summary>
@@ -143,19 +147,23 @@ public class UncertaintySampling<T, TInput, TOutput> : IQueryStrategy<T, TInput,
     }
 
     /// <inheritdoc/>
-    public int[] SelectBatch(IFullModel<T, TInput, TOutput> model, IDataset<T, TInput, TOutput> unlabeledData, int k)
+    public Vector<int> SelectBatch(
+        IFullModel<T, TInput, TOutput> model,
+        IDataset<T, TInput, TOutput> unlabeledData,
+        int k,
+        IDataset<T, TInput, TOutput>? labeledData = null)
     {
-        var scores = ScoreExamples(model, unlabeledData);
+        var scores = ScoreExamples(model, unlabeledData, labeledData);
 
         // Select top-k examples with highest uncertainty scores
-        var indexedScores = scores
+        var indexedScores = scores.ToArray()
             .Select((score, index) => (Score: Convert.ToDouble(score), Index: index))
             .OrderByDescending(x => x.Score)
             .Take(k)
             .Select(x => x.Index)
             .ToArray();
 
-        return indexedScores;
+        return new Vector<int>(indexedScores);
     }
 
     /// <summary>

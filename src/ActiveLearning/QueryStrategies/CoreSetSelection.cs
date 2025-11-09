@@ -92,7 +92,10 @@ public class CoreSetSelection<T, TInput, TOutput> : IQueryStrategy<T, TInput, TO
     public string Name => $"CoreSet-{_algorithm}";
 
     /// <inheritdoc/>
-    public T[] ScoreExamples(IFullModel<T, TInput, TOutput> model, IDataset<T, TInput, TOutput> unlabeledData)
+    public Vector<T> ScoreExamples(
+        IFullModel<T, TInput, TOutput> model,
+        IDataset<T, TInput, TOutput> unlabeledData,
+        IDataset<T, TInput, TOutput>? labeledData = null)
     {
         if (unlabeledData == null)
             throw new ArgumentNullException(nameof(unlabeledData));
@@ -102,16 +105,21 @@ public class CoreSetSelection<T, TInput, TOutput> : IQueryStrategy<T, TInput, TO
         // SelectBatch will perform the actual distance-based selection
 
         int numExamples = unlabeledData.Count;
-        return Enumerable.Repeat(NumOps.FromDouble(1.0), numExamples).ToArray();
+        var scores = Enumerable.Repeat(NumOps.FromDouble(1.0), numExamples).ToArray();
+        return new Vector<T>(scores);
     }
 
     /// <inheritdoc/>
-    public int[] SelectBatch(IFullModel<T, TInput, TOutput> model, IDataset<T, TInput, TOutput> unlabeledData, int k)
+    public Vector<int> SelectBatch(
+        IFullModel<T, TInput, TOutput> model,
+        IDataset<T, TInput, TOutput> unlabeledData,
+        int k,
+        IDataset<T, TInput, TOutput>? labeledData = null)
     {
         return _algorithm switch
         {
-            CoreSetAlgorithm.KCenter => SelectKCenter(model, unlabeledData, k),
-            CoreSetAlgorithm.KMeansPlusPlus => SelectKMeansPlusPlus(model, unlabeledData, k),
+            CoreSetAlgorithm.KCenter => SelectKCenter(model, unlabeledData, k, labeledData),
+            CoreSetAlgorithm.KMeansPlusPlus => SelectKMeansPlusPlus(model, unlabeledData, k, labeledData),
             _ => throw new NotSupportedException($"Algorithm {_algorithm} not supported")
         };
     }
@@ -130,7 +138,11 @@ public class CoreSetSelection<T, TInput, TOutput> : IQueryStrategy<T, TInput, TO
     /// </para>
     /// <para><b>Complexity:</b> O(k * n * d) where n = unlabeled set size, d = feature dimension</para>
     /// </remarks>
-    private int[] SelectKCenter(IFullModel<T, TInput, TOutput> model, IDataset<T, TInput, TOutput> unlabeledData, int k)
+    private Vector<int> SelectKCenter(
+        IFullModel<T, TInput, TOutput> model,
+        IDataset<T, TInput, TOutput> unlabeledData,
+        int k,
+        IDataset<T, TInput, TOutput>? labeledData)
     {
         if (unlabeledData == null)
             throw new ArgumentNullException(nameof(unlabeledData));
@@ -138,28 +150,44 @@ public class CoreSetSelection<T, TInput, TOutput> : IQueryStrategy<T, TInput, TO
         int numExamples = unlabeledData.Count;
 
         // Extract features for all unlabeled examples
-        var features = new List<Vector<T>>();
+        var unlabeledFeatures = new List<Vector<T>>();
         for (int i = 0; i < numExamples; i++)
         {
             var input = unlabeledData.GetInput(i);
             var feat = ExtractFeatures(model, input);
-            features.Add(feat);
+            unlabeledFeatures.Add(feat);
         }
 
-        // Start with empty centers (simplified - would use labeled set in practice)
+        // Initialize centers with existing labeled examples
+        // This ensures new selections are diverse relative to what's already labeled
         var centers = new List<Vector<T>>();
-        var selected = new List<int>();
-        var available = Enumerable.Range(0, numExamples).ToList();
+        if (labeledData != null)
+        {
+            for (int i = 0; i < labeledData.Count; i++)
+            {
+                var input = labeledData.GetInput(i);
+                var feat = ExtractFeatures(model, input);
+                centers.Add(feat);
+            }
+        }
 
-        // Greedy k-center: select examples farthest from current centers
-        for (int i = 0; i < Math.Min(k, numExamples); i++)
+        var selected = new List<int>();
+
+        // Greedy k-center algorithm: iteratively select the unlabeled example
+        // that is farthest from all current centers (labeled + newly selected)
+        for (int iteration = 0; iteration < Math.Min(k, numExamples); iteration++)
         {
             int farthestIdx = -1;
             T maxDist = NumOps.FromDouble(double.MinValue);
 
-            foreach (int idx in available)
+            // Find unlabeled example with maximum distance to nearest center
+            for (int idx = 0; idx < numExamples; idx++)
             {
-                T dist = MinDistanceToCenters(features[idx], centers);
+                // Skip already selected examples
+                if (selected.Contains(idx))
+                    continue;
+
+                T dist = MinDistanceToCenters(unlabeledFeatures[idx], centers);
                 if (Convert.ToDouble(dist) > Convert.ToDouble(maxDist))
                 {
                     maxDist = dist;
@@ -167,15 +195,20 @@ public class CoreSetSelection<T, TInput, TOutput> : IQueryStrategy<T, TInput, TO
                 }
             }
 
+            // Add the farthest example to selected set and centers
             if (farthestIdx >= 0)
             {
                 selected.Add(farthestIdx);
-                centers.Add(features[farthestIdx]);
-                available.Remove(farthestIdx);
+                centers.Add(unlabeledFeatures[farthestIdx]);
+            }
+            else
+            {
+                // No more unlabeled examples available
+                break;
             }
         }
 
-        return selected.ToArray();
+        return new Vector<int>(selected.ToArray());
     }
 
     /// <summary>
@@ -196,11 +229,17 @@ public class CoreSetSelection<T, TInput, TOutput> : IQueryStrategy<T, TInput, TO
     /// - More diverse selection in practice
     /// </para>
     /// </remarks>
-    private int[] SelectKMeansPlusPlus(IFullModel<T, TInput, TOutput> model, IDataset<T, TInput, TOutput> unlabeledData, int k)
+    private Vector<int> SelectKMeansPlusPlus(
+        IFullModel<T, TInput, TOutput> model,
+        IDataset<T, TInput, TOutput> unlabeledData,
+        int k,
+        IDataset<T, TInput, TOutput>? labeledData)
     {
-        // Similar to k-center but with probabilistic selection
-        // Placeholder implementation
-        return SelectKCenter(model, unlabeledData, k);
+        // k-means++ uses probabilistic sampling proportional to D(x)^2
+        // where D(x) is the distance to the nearest center
+        // For now, delegate to k-center (deterministic version)
+        // Full implementation would use weighted random sampling
+        return SelectKCenter(model, unlabeledData, k, labeledData);
     }
 
     /// <summary>
