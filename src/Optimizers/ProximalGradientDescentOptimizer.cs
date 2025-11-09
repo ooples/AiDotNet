@@ -92,6 +92,11 @@ public class ProximalGradientDescentOptimizer<T, TInput, TOutput> : GradientBase
     private IRegularization<T, TInput, TOutput> _regularization;
 
     /// <summary>
+    /// Stores the pre-update parameters for approximate reverse updates.
+    /// </summary>
+    private Vector<T>? _previousParameters;
+
+    /// <summary>
     /// Initializes a new instance of the <see cref="ProximalGradientDescentOptimizer{T}"/> class with the specified options and components.
     /// </summary>
     /// <param name="model">The model to optimize.</param>
@@ -249,6 +254,16 @@ public class ProximalGradientDescentOptimizer<T, TInput, TOutput> : GradientBase
         var stepSize = CurrentLearningRate;
         var parameters = currentSolution.GetParameters();
 
+        // Save pre-update parameters for reverse updates
+        if (_previousParameters == null || _previousParameters.Length != parameters.Length)
+        {
+            _previousParameters = new Vector<T>(parameters.Length);
+        }
+        for (int i = 0; i < parameters.Length; i++)
+        {
+            _previousParameters[i] = parameters[i];
+        }
+
         var newCoefficients = new Vector<T>(parameters.Length);
         for (int i = 0; i < parameters.Length; i++)
         {
@@ -293,14 +308,19 @@ public class ProximalGradientDescentOptimizer<T, TInput, TOutput> : GradientBase
                 nameof(appliedGradients));
         }
 
-        var original = new T[updatedParameters.Length];
+        if (_previousParameters == null || _previousParameters.Length != updatedParameters.Length)
+        {
+            throw new InvalidOperationException(
+                "Proximal GD optimizer state is not initialized. ReverseUpdate must be called after UpdateSolution.");
+        }
 
+        // PGD's proximal operator (regularization) cannot be inverted.
+        // Return the pre-update parameters that were saved in UpdateSolution.
+        // This is the best we can do since the proximal operator is irreversible.
+        var original = new T[updatedParameters.Length];
         for (int i = 0; i < updatedParameters.Length; i++)
         {
-            // Reverse the gradient descent step: original = updated + lr * gradient
-            // Note: This reverses before regularization was applied
-            var gradientStep = NumOps.Multiply(CurrentLearningRate, appliedGradients[i]);
-            original[i] = NumOps.Add(updatedParameters[i], gradientStep);
+            original[i] = _previousParameters[i];
         }
 
         return new Vector<T>(original);

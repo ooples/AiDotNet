@@ -53,6 +53,21 @@ public class AdamOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, T
     private T _currentBeta2;
 
     /// <summary>
+    /// Stores the pre-update snapshot of first moment vector for accurate reverse updates.
+    /// </summary>
+    private Vector<T>? _previousM;
+
+    /// <summary>
+    /// Stores the pre-update snapshot of second moment vector for accurate reverse updates.
+    /// </summary>
+    private Vector<T>? _previousV;
+
+    /// <summary>
+    /// Stores the pre-update timestep for accurate reverse updates.
+    /// </summary>
+    private int _previousT;
+
+    /// <summary>
     /// Initializes a new instance of the AdamOptimizer class.
     /// </summary>
     /// <param name="model">The model to optimize.</param>
@@ -221,8 +236,24 @@ public class AdamOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, T
         {
             _m = new Vector<T>(parameters.Length);
             _v = new Vector<T>(parameters.Length);
+            _previousM = new Vector<T>(parameters.Length);
+            _previousV = new Vector<T>(parameters.Length);
             _t = 0;
         }
+
+        // Save pre-update state for accurate reverse updates
+        if (_previousM == null || _previousV == null)
+        {
+            _previousM = new Vector<T>(parameters.Length);
+            _previousV = new Vector<T>(parameters.Length);
+        }
+
+        for (int i = 0; i < parameters.Length; i++)
+        {
+            _previousM[i] = _m[i];
+            _previousV[i] = _v[i];
+        }
+        _previousT = _t;
 
         _t++;
 
@@ -347,8 +378,8 @@ public class AdamOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, T
                 nameof(appliedGradients));
         }
 
-        // Ensure moment buffers are initialized
-        if (_m == null || _v == null || _m.Length != updatedParameters.Length || _t == 0)
+        // Ensure previous moment buffers are initialized
+        if (_previousM == null || _previousV == null || _previousM.Length != updatedParameters.Length || _previousT == 0)
         {
             // If moments aren't initialized, fall back to SGD-style reversal
             // This shouldn't happen in normal usage but provides a safe fallback
@@ -358,16 +389,27 @@ public class AdamOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, T
         var original = new T[updatedParameters.Length];
         for (int i = 0; i < updatedParameters.Length; i++)
         {
-            // Compute bias-corrected moments (same as forward pass)
-            T mHat = NumOps.Divide(_m[i], NumOps.FromDouble(1 - Math.Pow(_options.Beta1, _t)));
-            T vHat = NumOps.Divide(_v[i], NumOps.FromDouble(1 - Math.Pow(_options.Beta2, _t)));
+            // First update the previous moments to match what UpdateParameters would have computed
+            var mAtUpdateTime = NumOps.Add(
+                NumOps.Multiply(_previousM[i], NumOps.FromDouble(_options.Beta1)),
+                NumOps.Multiply(appliedGradients[i], NumOps.FromDouble(1 - _options.Beta1))
+            );
 
-            // Compute the update that was applied
+            var vAtUpdateTime = NumOps.Add(
+                NumOps.Multiply(_previousV[i], NumOps.FromDouble(_options.Beta2)),
+                NumOps.Multiply(NumOps.Multiply(appliedGradients[i], appliedGradients[i]), NumOps.FromDouble(1 - _options.Beta2))
+            );
+
+            // Compute bias-corrected moments using the timestep that was active during update
+            T mHat = NumOps.Divide(mAtUpdateTime, NumOps.FromDouble(1 - Math.Pow(_options.Beta1, _previousT + 1)));
+            T vHat = NumOps.Divide(vAtUpdateTime, NumOps.FromDouble(1 - Math.Pow(_options.Beta2, _previousT + 1)));
+
+            // Compute the update that was applied using _currentLearningRate (not initial)
             T update = NumOps.Divide(
                 mHat,
                 NumOps.Add(NumOps.Sqrt(vHat), NumOps.FromDouble(_options.Epsilon))
             );
-            T scaledUpdate = NumOps.Multiply(update, NumOps.FromDouble(_options.LearningRate));
+            T scaledUpdate = NumOps.Multiply(update, _currentLearningRate);
 
             // Reverse: params_old = params_new + update
             original[i] = NumOps.Add(updatedParameters[i], scaledUpdate);
