@@ -37,9 +37,9 @@ public class Float16Quantizer<T, TInput, TOutput> : IQuantizer<T, TInput, TOutpu
     }
 
     /// <inheritdoc/>
-    public void Calibrate(IEnumerable<TInput> calibrationData)
+    public void Calibrate(IFullModel<T, TInput, TOutput> model, IEnumerable<TInput> calibrationData)
     {
-        // FP16 quantization doesn't require calibration
+        // FP16 quantization doesn't require calibration as it's a direct type conversion
         // This is a no-op
     }
 

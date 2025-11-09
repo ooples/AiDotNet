@@ -450,77 +450,7 @@ public class OnnxModelExporter<T, TInput, TOutput> : ModelExporterBase<T, TInput
 
     private byte[] SerializeOnnxGraph(OnnxGraph graph, ExportConfiguration config)
     {
-        // This is a simplified serialization
-        // In a real implementation, you would use the ONNX protobuf format
-        // For now, we'll create a basic binary representation
-
-        using var memoryStream = new MemoryStream();
-        using var writer = new BinaryWriter(memoryStream, Encoding.UTF8);
-
-        // Write header
-        writer.Write("ONNX".ToCharArray());
-        writer.Write(graph.OpsetVersion);
-        writer.Write(graph.Name);
-
-        // Write inputs
-        writer.Write(graph.Inputs.Count);
-        foreach (var input in graph.Inputs)
-        {
-            writer.Write(input.Name);
-            writer.Write(input.DataType);
-            writer.Write(input.Shape?.Length ?? 0);
-            if (input.Shape != null)
-            {
-                foreach (var dim in input.Shape)
-                {
-                    writer.Write(dim);
-                }
-            }
-        }
-
-        // Write operations
-        writer.Write(graph.Operations.Count);
-        foreach (var op in graph.Operations)
-        {
-            writer.Write(op.Type);
-            writer.Write(op.Inputs.Count);
-            foreach (var input in op.Inputs)
-            {
-                writer.Write(input);
-            }
-            writer.Write(op.Outputs.Count);
-            foreach (var output in op.Outputs)
-            {
-                writer.Write(output);
-            }
-            writer.Write(op.Attributes.Count);
-            foreach (var attr in op.Attributes)
-            {
-                writer.Write(attr.Key);
-                writer.Write(attr.Value?.ToString() ?? "");
-            }
-        }
-
-        // Write outputs
-        writer.Write(graph.Outputs.Count);
-        foreach (var output in graph.Outputs)
-        {
-            writer.Write(output.Name);
-            writer.Write(output.DataType);
-        }
-
-        // Write metadata if requested
-        if (config.IncludeMetadata)
-        {
-            writer.Write(true);
-            writer.Write(config.ModelVersion ?? "1.0");
-            writer.Write(config.ModelDescription ?? "");
-        }
-        else
-        {
-            writer.Write(false);
-        }
-
-        return memoryStream.ToArray();
+        // Serialize to proper ONNX protobuf format
+        return OnnxProto.CreateModelProto(graph, config);
     }
 }

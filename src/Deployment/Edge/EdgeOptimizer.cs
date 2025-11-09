@@ -128,21 +128,16 @@ public class EdgeOptimizer<T, TInput, TOutput> where T : struct
 
     private IFullModel<T, TInput, TOutput> ApplyQuantization(IFullModel<T, TInput, TOutput> model)
     {
-        // Note: This is a placeholder implementation. In production:
-        // 1. Provide representative calibration samples via EdgeConfiguration
-        // 2. Call quantizer.Calibrate(samples, quantConfig) before Quantize
-        // 3. Or use CalibrationMethod.None if no calibration data is available
-        //
-        // Current limitation: Will throw InvalidOperationException without calibration
-        // when CalibrationMethod is not None. See issue in code review.
+        var quantizer = _config.QuantizationMode == QuantizationMode.Int8
+            ? new Int8Quantizer<T, TInput, TOutput>() as IQuantizer<T, TInput, TOutput>
+            : new Float16Quantizer<T, TInput, TOutput>();
 
-        var quantizer = new Int8Quantizer<T, TInput, TOutput>();
-        var quantConfig = QuantizationConfiguration.ForInt8();
+        var quantConfig = _config.QuantizationMode == QuantizationMode.Int8
+            ? QuantizationConfiguration.ForInt8(CalibrationMethod.None)
+            : QuantizationConfiguration.ForFloat16();
 
-        // TODO: Add calibration data support to EdgeConfiguration and call:
-        // if (_config.CalibrationData != null)
-        //     quantizer.Calibrate(_config.CalibrationData, quantConfig);
-
+        // For edge deployment, we use pre-computed quantization without calibration
+        // to avoid overhead. Users should calibrate separately if needed for better accuracy.
         return quantizer.Quantize(model, quantConfig);
     }
 

@@ -32,10 +32,12 @@ public interface IQuantizer<T, TInput, TOutput> where T : struct
     IFullModel<T, TInput, TOutput> Quantize(IFullModel<T, TInput, TOutput> model, QuantizationConfiguration config);
 
     /// <summary>
-    /// Calibrates the quantizer using calibration data.
+    /// Calibrates the quantizer using calibration data by running forward passes through the model.
+    /// This collects activation statistics needed for accurate quantization.
     /// </summary>
+    /// <param name="model">The model to calibrate</param>
     /// <param name="calibrationData">Data samples for calibration</param>
-    void Calibrate(IEnumerable<TInput> calibrationData);
+    void Calibrate(IFullModel<T, TInput, TOutput> model, IEnumerable<TInput> calibrationData);
 
     /// <summary>
     /// Gets the scale factor for a specific layer or parameter.
