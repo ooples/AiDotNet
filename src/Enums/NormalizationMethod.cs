@@ -148,13 +148,42 @@ public enum NormalizationMethod
     /// </summary>
     /// <remarks>
     /// <para>
-    /// <b>For Beginners:</b> Robust Scaling is designed to handle data with outliers (extreme values that don't 
-    /// follow the pattern). Instead of using the minimum and maximum values (which can be skewed by outliers), 
-    /// it uses the median and quartiles. It's like saying "ignore the extremely tall and short people when 
-    /// standardizing heights." This is useful when your data contains unusual values that shouldn't influence 
+    /// <b>For Beginners:</b> Robust Scaling is designed to handle data with outliers (extreme values that don't
+    /// follow the pattern). Instead of using the minimum and maximum values (which can be skewed by outliers),
+    /// it uses the median and quartiles. It's like saying "ignore the extremely tall and short people when
+    /// standardizing heights." This is useful when your data contains unusual values that shouldn't influence
     /// the overall scaling.
     /// Formula: (x - median) / (Q3 - Q1) where Q1 is the 25th percentile and Q3 is the 75th percentile
     /// </para>
     /// </remarks>
-    RobustScaling
+    RobustScaling,
+
+    /// <summary>
+    /// Scales features to the range [-1, 1] by dividing by the maximum absolute value.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> MaxAbsScaler is like MinMax scaling, but instead of using both the minimum and
+    /// maximum values, it only uses the maximum absolute value (the largest value ignoring signs). This
+    /// method preserves zeros and the sign of values, which is important for sparse data where many values
+    /// are zero. For example, if your largest value is 100 and smallest is -50, everything gets divided by 100,
+    /// so results fall between -1 and 1.
+    /// Formula: x / max(|x|)
+    /// </para>
+    /// </remarks>
+    MaxAbsScaler,
+
+    /// <summary>
+    /// Transforms features to follow a uniform or normal distribution using quantiles.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> QuantileTransformer is a powerful technique that changes your data's distribution
+    /// to be either uniform (flat, where all ranges have equal numbers of values) or normal (bell-shaped).
+    /// It works by ranking values and mapping them to a target distribution. This is extremely effective at
+    /// handling outliers because it spreads them out across the distribution. Think of it as redistributing
+    /// your data so that it matches a desired pattern, regardless of the original distribution.
+    /// </para>
+    /// </remarks>
+    QuantileTransformer
 }
