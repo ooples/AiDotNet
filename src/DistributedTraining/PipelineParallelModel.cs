@@ -286,6 +286,8 @@ public class PipelineParallelModel<T, TInput, TOutput> : ShardedModelBase<T, TIn
             throw new InvalidOperationException($"World size mismatch: {savedWorldSize} vs {WorldSize}");
         if (savedRank != Rank)
             throw new InvalidOperationException($"Rank mismatch: {savedRank} vs {Rank}");
+        if (savedMicroBatchSize != _microBatchSize)
+            throw new InvalidOperationException($"Micro batch size mismatch: saved model was trained with {savedMicroBatchSize}, but current instance configured with {_microBatchSize}");
 
         int modelDataLength = reader.ReadInt32();
         byte[] modelData = reader.ReadBytes(modelDataLength);
