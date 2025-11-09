@@ -244,25 +244,32 @@ public class InMemoryCommunicationBackend<T> : CommunicationBackendBase<T>
 
             _barrierCounters[barrierId]++;
 
-            var startTime = DateTime.UtcNow;
-
-            // Wait until all processes have reached the barrier
-            while (_barrierCounters[barrierId] < _worldSize)
+            try
             {
-                Monitor.Wait(_globalLock, 10);
-                if ((DateTime.UtcNow - startTime).TotalMilliseconds > BarrierTimeoutMs)
+                var startTime = DateTime.UtcNow;
+
+                // Wait until all processes have reached the barrier
+                while (_barrierCounters[barrierId] < _worldSize)
                 {
-                    throw new TimeoutException($"Barrier timeout after {BarrierTimeoutMs}ms. Only {_barrierCounters[barrierId]} of {_worldSize} processes reached the barrier.");
+                    Monitor.Wait(_globalLock, 10);
+                    if ((DateTime.UtcNow - startTime).TotalMilliseconds > BarrierTimeoutMs)
+                    {
+                        throw new TimeoutException($"Barrier timeout after {BarrierTimeoutMs}ms. Only {_barrierCounters[barrierId]} of {_worldSize} processes reached the barrier.");
+                    }
                 }
+
+                Monitor.PulseAll(_globalLock);
             }
-
-            Monitor.PulseAll(_globalLock);
-
-            // Cleanup - rank 0 removes key and increments generation for next barrier
-            if (_rank == 0)
+            finally
             {
-                _barrierCounters.Remove(barrierId);
-                _barrierGenerations[_environmentId]++;
+                // Cleanup - rank 0 removes key and increments generation for next barrier
+                // CRITICAL: This must happen even on timeout to prevent memory leaks
+                // If timeout occurs, this ensures the barrier counter is cleaned up
+                if (_rank == 0)
+                {
+                    _barrierCounters.Remove(barrierId);
+                    _barrierGenerations[_environmentId]++;
+                }
             }
         }
     }
