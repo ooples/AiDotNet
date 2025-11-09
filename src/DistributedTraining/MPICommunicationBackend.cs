@@ -40,8 +40,8 @@ namespace AiDotNet.DistributedTraining;
 /// <typeparam name="T">The numeric type for operations</typeparam>
 public class MPICommunicationBackend<T> : CommunicationBackendBase<T>
 {
-    private readonly int _rank;
-    private readonly int _worldSize;
+    private int _rank;
+    private int _worldSize;
     private bool _useMPI;
     private object? _mpiCommunicator;
     private Type? _mpiEnvironmentType;
@@ -93,6 +93,20 @@ public class MPICommunicationBackend<T> : CommunicationBackendBase<T>
                         {
                             var worldProp = intracommunicatorType.GetProperty("World", BindingFlags.Public | BindingFlags.Static);
                             _mpiCommunicator = worldProp?.GetValue(null);
+
+                            // Query actual rank and world size from MPI communicator
+                            if (_mpiCommunicator != null)
+                            {
+                                var rankProp = _mpiCommunicator.GetType().GetProperty("Rank");
+                                var sizeProp = _mpiCommunicator.GetType().GetProperty("Size");
+
+                                if (rankProp != null && sizeProp != null)
+                                {
+                                    _rank = (int)(rankProp.GetValue(_mpiCommunicator) ?? _rank);
+                                    _worldSize = (int)(sizeProp.GetValue(_mpiCommunicator) ?? _worldSize);
+                                    Console.WriteLine($"MPI Communicator: Rank={_rank}, WorldSize={_worldSize}");
+                                }
+                            }
                         }
 
                         return;

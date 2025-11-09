@@ -148,6 +148,14 @@ public class NCCLCommunicationBackend<T> : CommunicationBackendBase<T>
 
         if (!_ncclAvailable)
         {
+            // For multi-rank distributed training, NCCL is required
+            if (_worldSize > 1)
+            {
+                throw new InvalidOperationException(
+                    $"NCCL library is required for multi-GPU training (worldSize={_worldSize}). " +
+                    "Please install NCCL library and CUDA toolkit, or use a different communication backend.");
+            }
+
             Console.WriteLine("WARNING: NCCL not available. Falling back to CPU-based collective operations.");
             Console.WriteLine("For production GPU training, install NCCL library and CUDA toolkit.");
         }
