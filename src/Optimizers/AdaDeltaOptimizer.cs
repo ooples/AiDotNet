@@ -252,7 +252,117 @@ public class AdaDeltaOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<
         return currentSolution.WithParameters(newCoefficients);
     }
 
-        /// <summary>
+    /// <summary>
+    /// Updates a vector of parameters using the AdaDelta optimization algorithm.
+    /// </summary>
+    /// <param name="parameters">The current parameter vector to be updated.</param>
+    /// <param name="gradient">The gradient vector corresponding to the parameters.</param>
+    /// <returns>The updated parameter vector.</returns>
+    /// <remarks>
+    /// <para>
+    /// This method implements the AdaDelta update rule by maintaining exponential moving averages of both
+    /// squared gradients and squared updates. This allows AdaDelta to adapt the learning rate without
+    /// requiring an explicit learning rate parameter.
+    /// </para>
+    /// <para><b>For Beginners:</b> AdaDelta automatically adjusts learning rates by remembering both
+    /// how gradients have changed (squared gradients) and how parameters have been updated (squared updates).
+    /// This makes it largely learning-rate-free, adapting automatically to the scale of the problem.
+    /// </para>
+    /// </remarks>
+    public override Vector<T> UpdateParameters(Vector<T> parameters, Vector<T> gradient)
+    {
+        if (_accumulatedSquaredGradients == null || _accumulatedSquaredGradients.Length != parameters.Length)
+        {
+            _accumulatedSquaredGradients = new Vector<T>(parameters.Length);
+            _accumulatedSquaredUpdates = new Vector<T>(parameters.Length);
+        }
+
+        var updatedParams = new Vector<T>(parameters.Length);
+
+        for (int i = 0; i < parameters.Length; i++)
+        {
+            // Update accumulated squared gradients
+            _accumulatedSquaredGradients[i] = NumOps.Add(
+                NumOps.Multiply(NumOps.FromDouble(_options.Rho), _accumulatedSquaredGradients[i]),
+                NumOps.Multiply(NumOps.FromDouble(1 - _options.Rho), NumOps.Multiply(gradient[i], gradient[i]))
+            );
+
+            // Compute update
+            var update = NumOps.Multiply(
+                NumOps.Sqrt(NumOps.Add(_accumulatedSquaredUpdates[i], NumOps.FromDouble(_options.Epsilon))),
+                NumOps.Divide(gradient[i], NumOps.Sqrt(NumOps.Add(_accumulatedSquaredGradients[i], NumOps.FromDouble(_options.Epsilon))))
+            );
+
+            // Update accumulated squared updates
+            _accumulatedSquaredUpdates[i] = NumOps.Add(
+                NumOps.Multiply(NumOps.FromDouble(_options.Rho), _accumulatedSquaredUpdates[i]),
+                NumOps.Multiply(NumOps.FromDouble(1 - _options.Rho), NumOps.Multiply(update, update))
+            );
+
+            // Update parameters
+            updatedParams[i] = NumOps.Subtract(parameters[i], update);
+        }
+
+        return updatedParams;
+    }
+
+    /// <summary>
+    /// Reverses an AdaDelta gradient update to recover original parameters.
+    /// </summary>
+    /// <param name="updatedParameters">Parameters after AdaDelta update</param>
+    /// <param name="appliedGradients">The gradients that were applied</param>
+    /// <returns>Original parameters before the update</returns>
+    /// <remarks>
+    /// <para>
+    /// AdaDelta's reverse update requires both accumulated squared gradients and accumulated squared updates
+    /// from the forward pass. This method must be called immediately after UpdateParameters while both states are fresh.
+    /// It recalculates the adaptive update that was applied based on the accumulated statistics.
+    /// </para>
+    /// <para><b>For Beginners:</b> This calculates where parameters were before an AdaDelta update.
+    /// AdaDelta uses two pieces of memory: one for gradient history and one for update history.
+    /// To reverse an update, we need both memories to reconstruct what step was taken. It's like
+    /// rewinding a dance where each move depends on previous moves and the music (gradients).
+    /// </para>
+    /// </remarks>
+    public override Vector<T> ReverseUpdate(Vector<T> updatedParameters, Vector<T> appliedGradients)
+    {
+        if (updatedParameters == null)
+            throw new ArgumentNullException(nameof(updatedParameters));
+        if (appliedGradients == null)
+            throw new ArgumentNullException(nameof(appliedGradients));
+
+        if (updatedParameters.Length != appliedGradients.Length)
+        {
+            throw new ArgumentException(
+                $"Updated parameters size ({updatedParameters.Length}) must match applied gradients size ({appliedGradients.Length})",
+                nameof(appliedGradients));
+        }
+
+        if (_accumulatedSquaredGradients == null || _accumulatedSquaredUpdates == null ||
+            _accumulatedSquaredGradients.Length != updatedParameters.Length)
+        {
+            throw new InvalidOperationException(
+                "AdaDelta optimizer state is not initialized. ReverseUpdate must be called after UpdateParameters.");
+        }
+
+        var original = new T[updatedParameters.Length];
+
+        for (int i = 0; i < updatedParameters.Length; i++)
+        {
+            // Recalculate the update that was applied
+            var update = NumOps.Multiply(
+                NumOps.Sqrt(NumOps.Add(_accumulatedSquaredUpdates[i], NumOps.FromDouble(_options.Epsilon))),
+                NumOps.Divide(appliedGradients[i], NumOps.Sqrt(NumOps.Add(_accumulatedSquaredGradients[i], NumOps.FromDouble(_options.Epsilon))))
+            );
+
+            // Reverse: original = updated + update
+            original[i] = NumOps.Add(updatedParameters[i], update);
+        }
+
+        return new Vector<T>(original);
+    }
+
+    /// <summary>
     /// Updates the adaptive parameters of the AdaDelta optimizer.
     /// </summary>
     /// <param name="currentStepData">The optimization step data for the current iteration.</param>

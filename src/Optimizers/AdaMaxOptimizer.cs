@@ -268,6 +268,110 @@ public class AdaMaxOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T,
     }
 
     /// <summary>
+    /// Updates a vector of parameters using the AdaMax optimization algorithm.
+    /// </summary>
+    /// <param name="parameters">The current parameter vector to be updated.</param>
+    /// <param name="gradient">The gradient vector corresponding to the parameters.</param>
+    /// <returns>The updated parameter vector.</returns>
+    /// <remarks>
+    /// <para>
+    /// AdaMax is a variant of Adam based on the infinity norm, which can be more stable than Adam for
+    /// some problems. It adapts the learning rate using the maximum absolute value of gradients.
+    /// </para>
+    /// <para><b>For Beginners:</b> AdaMax adjusts step sizes by tracking the largest gradient magnitude
+    /// seen so far for each parameter. This makes it robust to large, occasional gradient spikes.
+    /// </para>
+    /// </remarks>
+    public override Vector<T> UpdateParameters(Vector<T> parameters, Vector<T> gradient)
+    {
+        if (_m == null || _m.Length != parameters.Length)
+        {
+            _m = new Vector<T>(parameters.Length);
+            _u = new Vector<T>(parameters.Length);
+            _t = 0;
+        }
+
+        _t++;
+
+        var updatedParams = new Vector<T>(parameters.Length);
+        var beta1 = NumOps.FromDouble(_options.Beta1);
+        var oneMinusBeta1 = NumOps.FromDouble(1 - _options.Beta1);
+        var beta2 = NumOps.FromDouble(_options.Beta2);
+
+        for (int i = 0; i < parameters.Length; i++)
+        {
+            // Update biased first moment estimate
+            _m[i] = NumOps.Add(NumOps.Multiply(beta1, _m[i]), NumOps.Multiply(oneMinusBeta1, gradient[i]));
+
+            // Update the exponentially weighted infinity norm
+            _u[i] = MathHelper.Max(NumOps.Multiply(beta2, _u[i]), NumOps.Abs(gradient[i]));
+
+            // Compute the learning rate
+            var alpha = NumOps.Divide(CurrentLearningRate, NumOps.FromDouble(1 - Math.Pow(_options.Beta1, _t)));
+
+            // Update parameters
+            var update = NumOps.Divide(NumOps.Multiply(alpha, _m[i]), _u[i]);
+            updatedParams[i] = NumOps.Subtract(parameters[i], update);
+        }
+
+        return updatedParams;
+    }
+
+    /// <summary>
+    /// Reverses an AdaMax gradient update to recover original parameters.
+    /// </summary>
+    /// <param name="updatedParameters">Parameters after AdaMax update</param>
+    /// <param name="appliedGradients">The gradients that were applied</param>
+    /// <returns>Original parameters before the update</returns>
+    /// <remarks>
+    /// <para>
+    /// AdaMax's reverse update requires the optimizer's internal state (_m, _u, _t) from the forward pass.
+    /// This method must be called immediately after UpdateParameters while the state is fresh.
+    /// It recalculates the bias-corrected learning rate and the infinity-norm-scaled update.
+    /// </para>
+    /// <para><b>For Beginners:</b> This calculates where parameters were before an AdaMax update.
+    /// AdaMax uses the maximum gradient magnitude to scale updates, so we need to remember those
+    /// maximum values (_u) and the momentum (_m) to reverse the step accurately.
+    /// </para>
+    /// </remarks>
+    public override Vector<T> ReverseUpdate(Vector<T> updatedParameters, Vector<T> appliedGradients)
+    {
+        if (updatedParameters == null)
+            throw new ArgumentNullException(nameof(updatedParameters));
+        if (appliedGradients == null)
+            throw new ArgumentNullException(nameof(appliedGradients));
+
+        if (updatedParameters.Length != appliedGradients.Length)
+        {
+            throw new ArgumentException(
+                $"Updated parameters size ({updatedParameters.Length}) must match applied gradients size ({appliedGradients.Length})",
+                nameof(appliedGradients));
+        }
+
+        if (_m == null || _u == null || _m.Length != updatedParameters.Length)
+        {
+            throw new InvalidOperationException(
+                "AdaMax optimizer state is not initialized. ReverseUpdate must be called after UpdateParameters.");
+        }
+
+        var original = new T[updatedParameters.Length];
+
+        for (int i = 0; i < updatedParameters.Length; i++)
+        {
+            // Recalculate the learning rate
+            var alpha = NumOps.Divide(CurrentLearningRate, NumOps.FromDouble(1 - Math.Pow(_options.Beta1, _t)));
+
+            // Recalculate the update that was applied
+            var update = NumOps.Divide(NumOps.Multiply(alpha, _m[i]), _u[i]);
+
+            // Reverse: original = updated + update
+            original[i] = NumOps.Add(updatedParameters[i], update);
+        }
+
+        return new Vector<T>(original);
+    }
+
+    /// <summary>
     /// Updates the adaptive parameters of the optimizer based on the current and previous optimization steps.
     /// </summary>
     /// <param name="currentStepData">Data from the current optimization step.</param>

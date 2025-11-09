@@ -216,6 +216,95 @@ public class NesterovAcceleratedGradientOptimizer<T, TInput, TOutput> : Gradient
     }
 
     /// <summary>
+    /// Updates a vector of parameters using the Nesterov Accelerated Gradient algorithm.
+    /// </summary>
+    /// <param name="parameters">The current parameter vector to be updated.</param>
+    /// <param name="gradient">The gradient vector corresponding to the parameters.</param>
+    /// <returns>The updated parameter vector.</returns>
+    /// <remarks>
+    /// <para>
+    /// NAG uses a lookahead mechanism where it evaluates the gradient at a predicted future position,
+    /// then uses that gradient to update velocity. This lookahead gives NAG better convergence properties
+    /// than standard momentum.
+    /// </para>
+    /// <para><b>For Beginners:</b> NAG is like looking ahead while skiing - you peek at the slope
+    /// ahead before making your move, which helps you make smarter adjustments to your speed and direction.
+    /// </para>
+    /// </remarks>
+    public override Vector<T> UpdateParameters(Vector<T> parameters, Vector<T> gradient)
+    {
+        if (_velocity == null || _velocity.Length != parameters.Length)
+        {
+            _velocity = new Vector<T>(parameters.Length);
+        }
+
+        var updatedParams = new Vector<T>(parameters.Length);
+
+        // Update velocity: velocity = momentum * velocity + lr * gradient
+        // Note: In NAG, the gradient is evaluated at the lookahead position
+        for (int i = 0; i < parameters.Length; i++)
+        {
+            _velocity[i] = NumOps.Add(
+                NumOps.Multiply(CurrentMomentum, _velocity[i]),
+                NumOps.Multiply(CurrentLearningRate, gradient[i])
+            );
+
+            // Update parameters: params = params - velocity
+            updatedParams[i] = NumOps.Subtract(parameters[i], _velocity[i]);
+        }
+
+        return updatedParams;
+    }
+
+    /// <summary>
+    /// Reverses a Nesterov Accelerated Gradient update to recover original parameters.
+    /// </summary>
+    /// <param name="updatedParameters">Parameters after NAG update</param>
+    /// <param name="appliedGradients">The gradients that were applied</param>
+    /// <returns>Original parameters before the update</returns>
+    /// <remarks>
+    /// <para>
+    /// NAG's reverse update requires the optimizer's internal velocity state from the forward pass.
+    /// This method must be called immediately after UpdateParameters while the velocity is fresh.
+    /// NAG evaluates gradients at a lookahead position, but the reversal only needs the final velocity.
+    /// </para>
+    /// <para><b>For Beginners:</b> This calculates where parameters were before a NAG update.
+    /// NAG uses velocity (built from lookahead gradients) to update parameters. To reverse,
+    /// we just need to know what velocity was used to take the step.
+    /// </para>
+    /// </remarks>
+    public override Vector<T> ReverseUpdate(Vector<T> updatedParameters, Vector<T> appliedGradients)
+    {
+        if (updatedParameters == null)
+            throw new ArgumentNullException(nameof(updatedParameters));
+        if (appliedGradients == null)
+            throw new ArgumentNullException(nameof(appliedGradients));
+
+        if (updatedParameters.Length != appliedGradients.Length)
+        {
+            throw new ArgumentException(
+                $"Updated parameters size ({updatedParameters.Length}) must match applied gradients size ({appliedGradients.Length})",
+                nameof(appliedGradients));
+        }
+
+        if (_velocity == null || _velocity.Length != updatedParameters.Length)
+        {
+            throw new InvalidOperationException(
+                "NAG optimizer velocity is not initialized. ReverseUpdate must be called after UpdateParameters.");
+        }
+
+        var original = new T[updatedParameters.Length];
+
+        for (int i = 0; i < updatedParameters.Length; i++)
+        {
+            // Reverse the update: original = updated + velocity
+            original[i] = NumOps.Add(updatedParameters[i], _velocity[i]);
+        }
+
+        return new Vector<T>(original);
+    }
+
+    /// <summary>
     /// Updates the adaptive parameters of the NAG optimizer.
     /// </summary>
     /// <remarks>

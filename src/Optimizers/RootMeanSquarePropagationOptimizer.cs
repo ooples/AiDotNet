@@ -241,6 +241,60 @@ public class RootMeanSquarePropagationOptimizer<T, TInput, TOutput> : GradientBa
     }
 
     /// <summary>
+    /// Reverses an RMSProp gradient update to recover original parameters.
+    /// </summary>
+    /// <param name="updatedParameters">Parameters after RMSProp update</param>
+    /// <param name="appliedGradients">The gradients that were applied</param>
+    /// <returns>Original parameters before the update</returns>
+    /// <remarks>
+    /// <para>
+    /// RMSProp's reverse update requires the optimizer's internal state from the forward pass.
+    /// This method must be called immediately after UpdateParameters while _squaredGradient state is fresh.
+    /// It recalculates the adaptive learning rate for each parameter and reverses the scaled update.
+    /// </para>
+    /// <para><b>For Beginners:</b> This calculates where parameters were before an RMSProp update.
+    /// RMSProp adjusts the step size for each parameter based on recent gradient history (_squaredGradient).
+    /// To reverse the update, we need to know what adaptive step sizes were used. It's like retracing
+    /// your steps when you remember you took bigger steps on gentle slopes and smaller steps on steep slopes.
+    /// </para>
+    /// </remarks>
+    public override Vector<T> ReverseUpdate(Vector<T> updatedParameters, Vector<T> appliedGradients)
+    {
+        if (updatedParameters == null)
+            throw new ArgumentNullException(nameof(updatedParameters));
+        if (appliedGradients == null)
+            throw new ArgumentNullException(nameof(appliedGradients));
+
+        if (updatedParameters.Length != appliedGradients.Length)
+        {
+            throw new ArgumentException(
+                $"Updated parameters size ({updatedParameters.Length}) must match applied gradients size ({appliedGradients.Length})",
+                nameof(appliedGradients));
+        }
+
+        if (_squaredGradient == null || _squaredGradient.Length != updatedParameters.Length)
+        {
+            throw new InvalidOperationException(
+                "RMSProp optimizer state is not initialized. ReverseUpdate must be called after UpdateParameters.");
+        }
+
+        var original = new T[updatedParameters.Length];
+
+        for (int i = 0; i < updatedParameters.Length; i++)
+        {
+            // Recalculate the adaptive learning rate that was used
+            var adaptiveLearningRate = CurrentLearningRate;
+            var denominator = NumOps.Add(NumOps.Sqrt(_squaredGradient[i]), NumOps.FromDouble(_options.Epsilon));
+            var update = NumOps.Divide(NumOps.Multiply(adaptiveLearningRate, appliedGradients[i]), denominator);
+
+            // Reverse: original = updated + update
+            original[i] = NumOps.Add(updatedParameters[i], update);
+        }
+
+        return new Vector<T>(original);
+    }
+
+    /// <summary>
     /// Updates a solution model using the RMSProp algorithm.
     /// </summary>
     /// <param name="currentSolution">The current solution model to update.</param>

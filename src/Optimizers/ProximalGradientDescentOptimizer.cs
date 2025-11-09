@@ -263,6 +263,50 @@ public class ProximalGradientDescentOptimizer<T, TInput, TOutput> : GradientBase
     }
 
     /// <summary>
+    /// Reverses a Proximal Gradient Descent update to recover original parameters.
+    /// </summary>
+    /// <param name="updatedParameters">Parameters after PGD update</param>
+    /// <param name="appliedGradients">The gradients that were applied</param>
+    /// <returns>Original parameters before the update</returns>
+    /// <remarks>
+    /// <para>
+    /// PGD applies vanilla gradient descent followed by a proximal operator (regularization).
+    /// The reverse update undoes the gradient step. Note: The regularization cannot be perfectly
+    /// reversed since the proximal operator is generally not invertible.
+    /// </para>
+    /// <para><b>For Beginners:</b> This calculates where parameters were before a PGD update.
+    /// PGD takes a gradient step then applies regularization. We can reverse the gradient step
+    /// but the regularization effect remains, since regularization is one-way (like rounding numbers).
+    /// </para>
+    /// </remarks>
+    public override Vector<T> ReverseUpdate(Vector<T> updatedParameters, Vector<T> appliedGradients)
+    {
+        if (updatedParameters == null)
+            throw new ArgumentNullException(nameof(updatedParameters));
+        if (appliedGradients == null)
+            throw new ArgumentNullException(nameof(appliedGradients));
+
+        if (updatedParameters.Length != appliedGradients.Length)
+        {
+            throw new ArgumentException(
+                $"Updated parameters size ({updatedParameters.Length}) must match applied gradients size ({appliedGradients.Length})",
+                nameof(appliedGradients));
+        }
+
+        var original = new T[updatedParameters.Length];
+
+        for (int i = 0; i < updatedParameters.Length; i++)
+        {
+            // Reverse the gradient descent step: original = updated + lr * gradient
+            // Note: This reverses before regularization was applied
+            var gradientStep = NumOps.Multiply(CurrentLearningRate, appliedGradients[i]);
+            original[i] = NumOps.Add(updatedParameters[i], gradientStep);
+        }
+
+        return new Vector<T>(original);
+    }
+
+    /// <summary>
     /// Updates adaptive parameters based on optimization progress.
     /// </summary>
     /// <param name="currentStepData">The data from the current optimization step.</param>
