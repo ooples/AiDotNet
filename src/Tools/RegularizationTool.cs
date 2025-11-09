@@ -384,7 +384,7 @@ public class RegularizationTool : ToolBase
         }
     }
     /// <inheritdoc/>
-    protected override string GetJsonErrorMessage(JsonException ex)
+    protected override string GetJsonErrorMessage(Newtonsoft.Json.JsonReaderException ex)
     {
         return $"Error: Invalid JSON format. {ex.Message}\n" +
                "Expected format: { \"model_type\": \"string\", \"n_samples\": number, \"n_features\": number, " +

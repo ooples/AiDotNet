@@ -287,7 +287,7 @@ public class CrossValidationTool : ToolBase
         }
     }
     /// <inheritdoc/>
-    protected override string GetJsonErrorMessage(JsonException ex)
+    protected override string GetJsonErrorMessage(Newtonsoft.Json.JsonReaderException ex)
     {
         return $"Error: Invalid JSON format. {ex.Message}\n" +
                "Expected format: { \"n_samples\": number, \"problem_type\": \"regression|classification\", " +

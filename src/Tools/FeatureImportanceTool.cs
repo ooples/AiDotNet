@@ -304,7 +304,7 @@ public class FeatureImportanceTool : ToolBase
         }
     }
     /// <inheritdoc/>
-    protected override string GetJsonErrorMessage(JsonException ex)
+    protected override string GetJsonErrorMessage(Newtonsoft.Json.JsonReaderException ex)
     {
         return $"Error: Invalid JSON format. {ex.Message}\n" +
                "Expected format: { \"features\": { \"feature_name\": { \"target_correlation\": number, ... } }, ... }";

@@ -278,7 +278,7 @@ public class ModelSelectionTool : ToolBase
         }
     }
     /// <inheritdoc/>
-    protected override string GetJsonErrorMessage(JsonException ex)
+    protected override string GetJsonErrorMessage(Newtonsoft.Json.JsonReaderException ex)
     {
         return $"Error: Invalid JSON format. {ex.Message}\n" +
                "Expected format: { \"problem_type\": \"regression|classification\", \"n_samples\": number, " +

@@ -253,7 +253,7 @@ public class DataAnalysisTool : ToolBase
     }
 
     /// <inheritdoc/>
-    protected override string GetJsonErrorMessage(JsonException ex)
+    protected override string GetJsonErrorMessage(Newtonsoft.Json.JsonReaderException ex)
     {
         return $"Error: Invalid JSON format. {ex.Message}\n" +
                "Expected format: { \"dataset_info\": { \"n_samples\": number, \"n_features\": number, ... }, " +
