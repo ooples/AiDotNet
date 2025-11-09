@@ -929,20 +929,23 @@ public class GlooCommunicationBackend<T> : CommunicationBackendBase<T>
         lock (_connectionLock)
         {
             var client = _tcpConnections[destRank];
-            using (var stream = client.GetStream())
-            using (var writer = new BinaryWriter(stream))
-            {
-                // Send length header
-                writer.Write(data.Length);
+            // IMPORTANT: Do NOT use 'using' here - disposing the stream closes the socket!
+            // This method is called repeatedly during collective operations.
+            // Streams are reused for the lifetime of the connection.
+            var stream = client.GetStream();
+            var writer = new BinaryWriter(stream);
 
-                // Send data elements
-                foreach (var element in data)
-                {
-                    double value = Convert.ToDouble(element);
-                    writer.Write(value);
-                }
-                writer.Flush();
+            // Send length header
+            writer.Write(data.Length);
+
+            // Send data elements
+            foreach (var element in data)
+            {
+                double value = Convert.ToDouble(element);
+                writer.Write(value);
             }
+            writer.Flush();
+            // Leave stream and writer open - they'll be cleaned up when TcpClient is disposed
         }
     }
 
@@ -959,26 +962,29 @@ public class GlooCommunicationBackend<T> : CommunicationBackendBase<T>
         lock (_connectionLock)
         {
             var client = _tcpConnections[sourceRank];
-            using (var stream = client.GetStream())
-            using (var reader = new BinaryReader(stream))
-            {
-                // Read length header
-                int length = reader.ReadInt32();
-                if (length != expectedLength)
-                {
-                    throw new InvalidOperationException(
-                        $"Rank {_rank}: Expected {expectedLength} elements from rank {sourceRank}, but received {length}");
-                }
+            // IMPORTANT: Do NOT use 'using' here - disposing the stream closes the socket!
+            // This method is called repeatedly during collective operations.
+            // Streams are reused for the lifetime of the connection.
+            var stream = client.GetStream();
+            var reader = new BinaryReader(stream);
 
-                // Read data elements
-                var result = new T[length];
-                for (int i = 0; i < length; i++)
-                {
-                    double value = reader.ReadDouble();
-                    result[i] = (T)Convert.ChangeType(value, typeof(T));
-                }
-                return result;
+            // Read length header
+            int length = reader.ReadInt32();
+            if (length != expectedLength)
+            {
+                throw new InvalidOperationException(
+                    $"Rank {_rank}: Expected {expectedLength} elements from rank {sourceRank}, but received {length}");
             }
+
+            // Read data elements
+            var result = new T[length];
+            for (int i = 0; i < length; i++)
+            {
+                double value = reader.ReadDouble();
+                result[i] = (T)Convert.ChangeType(value, typeof(T));
+            }
+            return result;
+            // Leave stream and reader open - they'll be cleaned up when TcpClient is disposed
         }
     }
 }
