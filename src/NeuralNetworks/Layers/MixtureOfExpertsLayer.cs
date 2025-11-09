@@ -1159,16 +1159,16 @@ public class MixtureOfExpertsLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
                 : NumOps.Zero;
 
             // Add to diagnostics
-            diagnostics[$"expert_{i}_tokens"] = NumOps.ToDouble(tokenCount).ToString("F0");
-            diagnostics[$"expert_{i}_prob_mass"] = NumOps.ToDouble(probMass).ToString("F4");
-            diagnostics[$"expert_{i}_avg_weight"] = NumOps.ToDouble(avgWeights[i]).ToString("F4");
+            diagnostics[$"expert_{i}_tokens"] = Convert.ToDouble(tokenCount).ToString("F0");
+            diagnostics[$"expert_{i}_prob_mass"] = Convert.ToDouble(probMass).ToString("F4");
+            diagnostics[$"expert_{i}_avg_weight"] = Convert.ToDouble(avgWeights[i]).ToString("F4");
         }
 
         // Compute load balancing loss
         if (_useAuxiliaryLoss)
         {
             var loadBalanceLoss = ComputeAuxiliaryLoss();
-            diagnostics["load_balance_loss"] = NumOps.ToDouble(loadBalanceLoss).ToString("F6");
+            diagnostics["load_balance_loss"] = Convert.ToDouble(loadBalanceLoss).ToString("F6");
         }
 
         // Compute usage variance
@@ -1186,7 +1186,7 @@ public class MixtureOfExpertsLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
             variance = NumOps.Add(variance, NumOps.Multiply(diff, diff));
         }
         variance = NumOps.Divide(variance, NumOps.FromDouble(numExperts));
-        diagnostics["usage_variance"] = NumOps.ToDouble(variance).ToString("F6");
+        diagnostics["usage_variance"] = Convert.ToDouble(variance).ToString("F6");
 
         // Compute max/min ratio
         T maxTokens = tokenCounts[0];
@@ -1202,7 +1202,7 @@ public class MixtureOfExpertsLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         T maxMinRatio = NumOps.GreaterThan(minTokens, NumOps.Zero)
             ? NumOps.Divide(maxTokens, minTokens)
             : NumOps.FromDouble(double.PositiveInfinity);
-        diagnostics["max_min_ratio"] = NumOps.ToDouble(maxMinRatio).ToString("F4");
+        diagnostics["max_min_ratio"] = Convert.ToDouble(maxMinRatio).ToString("F4");
 
         diagnostics["num_experts"] = numExperts.ToString();
         diagnostics["batch_size"] = batchSize.ToString();
@@ -1676,15 +1676,16 @@ public class MixtureOfExpertsLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     /// </summary>
     private class NumericComparer : IComparer<T>
     {
+        private readonly INumericOperations<T> _ops = MathHelper.GetNumericOperations<T>();
+
         public int Compare(T? x, T? y)
         {
             if (x == null && y == null) return 0;
             if (x == null) return 1;
             if (y == null) return -1;
 
-            var ops = NumericOperationsProvider.GetOperations<T>();
-            if (ops.GreaterThan(x, y)) return -1;  // Descending order
-            if (ops.LessThan(x, y)) return 1;
+            if (_ops.GreaterThan(x, y)) return -1;  // Descending order
+            if (_ops.LessThan(x, y)) return 1;
             return 0;
         }
     }

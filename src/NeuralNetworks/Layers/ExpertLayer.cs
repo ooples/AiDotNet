@@ -425,6 +425,6 @@ public class ExpertLayer<T> : LayerBase<T>
             return l; // If not cloneable, use the same reference (not ideal but safe for most cases)
         }).ToList();
 
-        return new Expert<T>(clonedLayers, InputShape, OutputShape, ScalarActivation);
+        return new ExpertLayer<T>(clonedLayers, InputShape, OutputShape, ScalarActivation);
     }
 }

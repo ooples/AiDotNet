@@ -185,7 +185,6 @@ public class MixtureOfExpertsNeuralNetwork<T> : NeuralNetworkBase<T>
             .WithTopK(_options.TopK)
             .WithLoadBalancing(_options.UseLoadBalancing, _options.LoadBalancingWeight)
             .WithHiddenExpansion(_options.HiddenExpansion)
-            .WithRandomSeed(_options.RandomSeed)
             .Build();
 
         Layers.Add(_moeLayer);
@@ -196,7 +195,7 @@ public class MixtureOfExpertsNeuralNetwork<T> : NeuralNetworkBase<T>
             var outputLayer = new DenseLayer<T>(
                 _options.OutputDim,
                 Architecture.OutputSize,
-                NeuralNetworkHelper<T>.GetDefaultActivation(Architecture.TaskType)
+                NeuralNetworkHelper<T>.GetDefaultActivationFunction(Architecture.TaskType)
             );
             Layers.Add(outputLayer);
         }

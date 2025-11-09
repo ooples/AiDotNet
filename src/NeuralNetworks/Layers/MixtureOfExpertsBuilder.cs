@@ -187,6 +187,27 @@ public class MixtureOfExpertsBuilder<T>
     }
 
     /// <summary>
+    /// Sets the hidden dimension expansion factor for expert networks.
+    /// </summary>
+    /// <param name="expansion">The expansion factor (hidden dim = input dim * expansion).</param>
+    /// <returns>This builder instance for method chaining.</returns>
+    /// <remarks>
+    /// <para>
+    /// The actual expert hidden dimension will be calculated as InputDim * expansion.
+    /// Common values: 2-4 for moderate capacity, 4-8 for high capacity.
+    /// </para>
+    /// </remarks>
+    public MixtureOfExpertsBuilder<T> WithHiddenExpansion(int expansion)
+    {
+        if (expansion < 1)
+        {
+            throw new ArgumentException("Expansion factor must be at least 1.", nameof(expansion));
+        }
+        _expertHiddenDim = _inputDim * expansion;
+        return this;
+    }
+
+    /// <summary>
     /// Configures Top-K sparse routing.
     /// </summary>
     /// <param name="k">The number of top experts to activate per input (0 = use all experts).</param>
@@ -441,7 +462,7 @@ public class MixtureOfExpertsBuilder<T>
         }
 
         // Create router (output dimension = number of experts)
-        var router = new DenseLayer<T>(_inputDim, _numExperts, new IdentityActivation<T>());
+        var router = new DenseLayer<T>(_inputDim, _numExperts, (IActivationFunction<T>?)new IdentityActivation<T>());
 
         // Create MoE layer
         var moeLayer = new MixtureOfExpertsLayer<T>(
@@ -468,13 +489,13 @@ public class MixtureOfExpertsBuilder<T>
         if (_useIntermediateLayer)
         {
             // Two-layer expert: Input → Hidden → Output
-            layers.Add(new DenseLayer<T>(_inputDim, _expertHiddenDim, _expertActivation));
-            layers.Add(new DenseLayer<T>(_expertHiddenDim, _outputDim, new IdentityActivation<T>()));
+            layers.Add(new DenseLayer<T>(_inputDim, _expertHiddenDim, (IActivationFunction<T>?)_expertActivation));
+            layers.Add(new DenseLayer<T>(_expertHiddenDim, _outputDim, (IActivationFunction<T>?)new IdentityActivation<T>()));
         }
         else
         {
             // Single-layer expert: Input → Output
-            layers.Add(new DenseLayer<T>(_inputDim, _outputDim, _expertActivation));
+            layers.Add(new DenseLayer<T>(_inputDim, _outputDim, (IActivationFunction<T>?)_expertActivation));
         }
 
         return new ExpertLayer<T>(layers, new[] { _inputDim }, new[] { _outputDim });
