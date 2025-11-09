@@ -56,6 +56,17 @@ public class ZeRO2Model<T, TInput, TOutput> : ShardedModelBase<T, TInput, TOutpu
 {
     private Vector<T>? _gradientShard;
 
+    /// <summary>
+    /// Gets the local gradient shard for this rank after synchronization.
+    /// </summary>
+    /// <remarks>
+    /// In ZeRO-2, gradients are sharded via ReduceScatter so each rank only stores its portion.
+    /// This property exposes the local gradient shard to enable ZeRO2Optimizer to access
+    /// sharded gradients for local updates.
+    /// Returns null if SynchronizeGradients() has not been called yet.
+    /// </remarks>
+    public Vector<T>? GradientShard => _gradientShard;
+
     public ZeRO2Model(IFullModel<T, TInput, TOutput> wrappedModel, IShardingConfiguration<T> config)
         : base(wrappedModel, config)
     {
