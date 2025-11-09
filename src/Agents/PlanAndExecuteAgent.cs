@@ -399,6 +399,11 @@ Provide only the input value, no explanation:";
         {
             return tool.Execute(toolInput);
         }
+        catch (Exception ex) when (ex is System.Net.Http.HttpRequestException || ex is System.IO.IOException || ex is TaskCanceledException)
+        {
+            // Transient errors - rethrow to trigger plan revision if enabled
+            throw;
+        }
         catch (Exception ex)
         {
             // Rethrow critical exceptions
