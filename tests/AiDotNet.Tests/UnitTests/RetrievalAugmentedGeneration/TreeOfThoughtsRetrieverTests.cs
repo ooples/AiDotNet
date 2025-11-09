@@ -5,6 +5,7 @@ using AiDotNet.RetrievalAugmentedGeneration.AdvancedPatterns;
 using AiDotNet.RetrievalAugmentedGeneration.Generators;
 using AiDotNet.RetrievalAugmentedGeneration.Models;
 using AiDotNet.RetrievalAugmentedGeneration.Retrievers;
+using AiDotNet.Enums;
 using Xunit;
 
 namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
@@ -192,13 +193,12 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
                 generator,
                 mockRetriever,
                 maxDepth: 2,
-                branchingFactor: 2);
+                branchingFactor: 2, searchStrategy: TreeSearchStrategy.BreadthFirst);
 
             // Act
             var results = totRetriever.Retrieve(
                 "What are quantum computing applications?",
-                topK: 5,
-                TreeOfThoughtsRetriever<double>.TreeSearchStrategy.BreadthFirst);
+                topK: 5);
 
             // Assert
             Assert.NotNull(results);
@@ -217,13 +217,12 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
                 generator,
                 mockRetriever,
                 maxDepth: 2,
-                branchingFactor: 2);
+                branchingFactor: 2, searchStrategy: TreeSearchStrategy.DepthFirst);
 
             // Act
             var results = totRetriever.Retrieve(
                 "What are quantum computing applications?",
-                topK: 5,
-                TreeOfThoughtsRetriever<double>.TreeSearchStrategy.DepthFirst);
+                topK: 5);
 
             // Assert
             Assert.NotNull(results);
@@ -242,13 +241,12 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
                 generator,
                 mockRetriever,
                 maxDepth: 2,
-                branchingFactor: 2);
+                branchingFactor: 2, searchStrategy: TreeSearchStrategy.BestFirst);
 
             // Act
             var results = totRetriever.Retrieve(
                 "What are quantum computing applications?",
-                topK: 5,
-                TreeOfThoughtsRetriever<double>.TreeSearchStrategy.BestFirst);
+                topK: 5);
 
             // Assert
             Assert.NotNull(results);
@@ -263,15 +261,13 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
             // Arrange
             var generator = new StubGenerator<double>();
             var mockRetriever = CreateMockRetriever();
-            var totRetriever = new TreeOfThoughtsRetriever<double>(generator, mockRetriever);
+            var totRetriever = new TreeOfThoughtsRetriever<double>(generator, mockRetriever, searchStrategy: TreeSearchStrategy.BestFirst);
             var filters = new Dictionary<string, object> { { "domain", "quantum" } };
 
             // Act
             var results = totRetriever.Retrieve(
                 "Quantum computing applications",
-                topK: 5,
-                TreeOfThoughtsRetriever<double>.TreeSearchStrategy.BestFirst,
-                filters);
+                topK: 5, metadataFilters: filters);
 
             // Assert
             Assert.NotNull(results);

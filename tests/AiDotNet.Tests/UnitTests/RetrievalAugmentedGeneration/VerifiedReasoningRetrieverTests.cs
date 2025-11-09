@@ -293,7 +293,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
         public void VerifiedReasoningStep_HasAllRequiredProperties()
         {
             // Arrange
-            var step = new VerifiedReasoningRetriever<double>.VerifiedReasoningStep
+            var step = new VerifiedReasoningStep<double>
             {
                 Statement = "Test statement",
                 SupportingDocuments = new List<Document<double>>(),
@@ -318,10 +318,10 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
         public void VerifiedReasoningResult_HasAllRequiredProperties()
         {
             // Arrange
-            var result = new VerifiedReasoningRetriever<double>.VerifiedReasoningResult
+            var result = new VerifiedReasoningResult<double>
             {
                 Documents = new List<Document<double>>(),
-                VerifiedSteps = new List<VerifiedReasoningRetriever<double>.VerifiedReasoningStep>(),
+                VerifiedSteps = new List<VerifiedReasoningStep<double>>(),
                 AverageVerificationScore = 0.75,
                 RefinedStepsCount = 2
             };
