@@ -38,10 +38,21 @@ namespace AiDotNet.DistributedTraining;
 /// - Limitation: Pipeline "bubble" (idle time) reduces efficiency, typically ~12-25% for GPipe
 /// </para>
 /// <para><b>Implementation Note:</b>
-/// This is a production-ready framework implementation. Full pipeline parallelism requires
-/// model-specific layer partitioning logic. This implementation provides the infrastructure
-/// and demonstrates the pattern. For production use, extend this class with your specific
-/// layer assignment strategy.
+/// This implementation provides GPipe-style pipeline parallelism with gradient-based backward pass.
+/// The forward pass sends activations between adjacent stages, and the backward pass communicates
+/// gradients in the reverse direction. Gradients are accumulated across stages and applied to
+/// parameters after the backward pass completes.
+///
+/// Gradient Approximation: Since IFullModel.Train() combines gradient computation and parameter
+/// updates into a single operation, gradients are approximated as parameter differences
+/// (params_before - params_after). This captures the complete parameter update including learning
+/// rate and optimizer state. For access to raw gradients before optimizer application, extend
+/// this class or use an optimizer that exposes gradients via IGradientBasedOptimizer.
+///
+/// For production use with specific models, consider:
+/// 1. Model-specific layer partitioning strategies (e.g., balance compute load across stages)
+/// 2. Micro-batch scheduling to reduce pipeline bubbles
+/// 3. Activation checkpointing to reduce memory usage
 /// </para>
 /// <para>
 /// Example:
@@ -64,6 +75,7 @@ public class PipelineParallelModel<T, TInput, TOutput> : ShardedModelBase<T, TIn
     private readonly int _microBatchSize;
     private readonly int _stageId;
     private readonly int _numStages;
+    private Vector<T>? _accumulatedGradients;
 
     /// <summary>
     /// Creates a new Pipeline Parallel model.
@@ -80,6 +92,7 @@ public class PipelineParallelModel<T, TInput, TOutput> : ShardedModelBase<T, TIn
         _microBatchSize = microBatchSize;
         _stageId = Rank;
         _numStages = WorldSize;
+        _accumulatedGradients = null;
     }
 
     /// <summary>
@@ -109,13 +122,15 @@ public class PipelineParallelModel<T, TInput, TOutput> : ShardedModelBase<T, TIn
     /// <inheritdoc/>
     public override void Train(TInput input, TOutput expectedOutput)
     {
-        // Pipeline parallel training with proper inter-stage communication
-        // Strategy: Convert activations to Vector<T> for communication between stages
+        // GPipe-style pipeline parallel training with gradient-based backward pass
+        // Strategy: Forward pass sends activations, backward pass sends gradients
 
         // Gather full parameters before training
-        // LocalShard only contains this stage's chunk, but WrappedModel expects full parameter vector
         var fullParams = GatherFullParameters();
         WrappedModel.SetParameters(fullParams);
+
+        // Save parameters BEFORE training to compute gradients
+        var parametersBefore = new Vector<T>(fullParams.ToArray());
 
         // Determine actual input for this stage
         TInput stageInput = input;
@@ -123,68 +138,70 @@ public class PipelineParallelModel<T, TInput, TOutput> : ShardedModelBase<T, TIn
         // FORWARD PASS: Receive activations from previous stage
         if (_stageId > 0)
         {
-            // Non-first stages receive activations from previous stage
-            // Previous stage sends its output as Vector<T>
             int activationSize = InputHelper<T, TInput>.GetInputSize(input);
             Vector<T> receivedActivations = Config.CommunicationBackend.Receive(_stageId - 1, activationSize, tag: 0);
-
-            // Convert received vector back to TInput for this stage using reference input for shape
             stageInput = ConversionsHelper.ConvertVectorToInput<T, TInput>(receivedActivations, input);
         }
 
-        // Train this stage with the received (or original) input
+        // Train this stage (computes gradients and applies updates)
         WrappedModel.Train(stageInput, expectedOutput);
         var stageOutput = WrappedModel.Predict(stageInput);
 
-        // Get updated full parameters and extract this stage's shard
-        var updatedParams = WrappedModel.GetParameters();
-        UpdateLocalShardFromFull(updatedParams);
+        // Compute gradient as parameter difference
+        // NOTE: This is an approximation. True gradients would require access to
+        // the model's gradient computation before optimizer updates are applied.
+        var parametersAfter = WrappedModel.GetParameters();
+        var localGradients = new T[parametersBefore.Length];
+        for (int i = 0; i < parametersBefore.Length; i++)
+        {
+            // Gradient ≈ (params_before - params_after)
+            // This captures the parameter update, which includes learning rate and optimizer state
+            localGradients[i] = NumOps.Subtract(parametersBefore[i], parametersAfter[i]);
+        }
+        var gradientVector = new Vector<T>(localGradients);
 
         // FORWARD PASS: Send activations to next stage
         if (_stageId < _numStages - 1)
         {
-            // Non-last stages send their output to next stage
             Vector<T> activationsToSend = ConversionsHelper.ConvertToVector<T, TOutput>(stageOutput);
             Config.CommunicationBackend.Send(activationsToSend, _stageId + 1, tag: 0);
         }
 
-        // BACKWARD PASS: Gradient communication (simplified version)
-        // In full GPipe, we'd pass gradients backward through stages
-        // Here we synchronize parameter updates after forward pass completes
+        // BACKWARD PASS: Gradient communication
+        // Gradients flow backward through the pipeline (opposite direction of activations)
         if (_stageId < _numStages - 1)
         {
-            // Forward stages send updated parameters to next stage for gradient info
-            Config.CommunicationBackend.Send(LocalShard, _stageId + 1, tag: 1);
+            // Non-last stages receive gradient contributions from next stage
+            Vector<T> nextStageGradients = Config.CommunicationBackend.Receive(_stageId + 1, gradientVector.Length, tag: 1);
 
-            // Receive gradient contributions from next stage
-            Vector<T> gradientContribution = Config.CommunicationBackend.Receive(_stageId + 1, LocalShard.Length, tag: 2);
-
-            // Accumulate gradients
-            for (int i = 0; i < LocalShard.Length; i++)
+            // Accumulate gradients: local gradients + gradients from downstream stages
+            for (int i = 0; i < gradientVector.Length; i++)
             {
-                LocalShard[i] = NumOps.Add(LocalShard[i], gradientContribution[i]);
+                gradientVector[i] = NumOps.Add(gradientVector[i], nextStageGradients[i]);
             }
         }
 
         if (_stageId > 0)
         {
-            // Backward stages receive parameter updates from previous stage
-            Vector<T> prevParams = Config.CommunicationBackend.Receive(_stageId - 1, LocalShard.Length, tag: 1);
-
-            // Compute gradient contribution to send back
-            Vector<T> gradientToSend = new Vector<T>(LocalShard.Length);
-            for (int i = 0; i < LocalShard.Length; i++)
-            {
-                gradientToSend[i] = NumOps.Subtract(LocalShard[i], prevParams[i]);
-            }
-
-            // Send gradient contribution backward
-            Config.CommunicationBackend.Send(gradientToSend, _stageId - 1, tag: 2);
+            // Non-first stages send accumulated gradients to previous stage
+            Config.CommunicationBackend.Send(gradientVector, _stageId - 1, tag: 1);
         }
 
+        // Apply accumulated gradients to parameters
+        // Start from original parameters and apply accumulated gradient
+        var finalParameters = new T[parametersBefore.Length];
+        for (int i = 0; i < parametersBefore.Length; i++)
+        {
+            finalParameters[i] = NumOps.Subtract(parametersBefore[i], gradientVector[i]);
+        }
+        WrappedModel.SetParameters(new Vector<T>(finalParameters));
+
+        // Extract this stage's parameter shard
+        var updatedParams = WrappedModel.GetParameters();
+        UpdateLocalShardFromFull(updatedParams);
         InvalidateCache();
 
-        // Synchronize gradients within stage if needed
+        // Synchronize parameters across stages for consistency
         if (Config.AutoSyncGradients)
         {
             SynchronizeGradients();
