@@ -91,6 +91,24 @@ if (-not (Test-Path $Program)) {
     exit 1
 }
 
+# Security: Validate that Program is an executable file
+$ProgramItem = Get-Item -Path $Program -ErrorAction Stop
+$allowedExtensions = @('.exe', '.dll')
+if ($ProgramItem.Extension -notin $allowedExtensions) {
+    Write-Host "Error: Program must be an executable (.exe) or .NET assembly (.dll)" -ForegroundColor Red
+    Write-Host "  Received: $($ProgramItem.Extension)" -ForegroundColor Red
+    Write-Host ""
+    Write-Host "Security Note:" -ForegroundColor Yellow
+    Write-Host "  Only executable files (.exe) and .NET assemblies (.dll) are allowed"
+    Write-Host "  to prevent execution of potentially malicious scripts or documents."
+    exit 1
+}
+
+# Security: Resolve to absolute path to prevent path traversal attacks
+$Program = $ProgramItem.FullName
+Write-Host "Resolved program path: $Program" -ForegroundColor Green
+Write-Host ""
+
 # Build mpiexec command
 $mpiCommand = "mpiexec"
 $mpiArgsList = @(
