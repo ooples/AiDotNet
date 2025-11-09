@@ -416,8 +416,37 @@ public interface IPredictionModelBuilder<T, TInput, TOutput>
     /// - Automatic gradient synchronization and parameter sharding
     /// </para>
     /// <para>
+    /// <b>Important:</b> The strategy parameter controls BOTH the model and optimizer as a matched pair.
+    /// You cannot mix and match strategies between model and optimizer because they must be compatible:
+    /// </para>
+    /// <para>
+    /// - <b>DDP</b> → Uses DDPModel + DDPOptimizer (replicated parameters, AllReduce gradients)
+    /// </para>
+    /// <para>
+    /// - <b>FSDP</b> → Uses FSDPModel + FSDPOptimizer (fully sharded parameters)
+    /// </para>
+    /// <para>
+    /// - <b>ZeRO1/2/3</b> → Uses matching ZeRO models + optimizers (progressive sharding)
+    /// </para>
+    /// <para>
+    /// - <b>PipelineParallel</b> → Uses PipelineParallelModel + PipelineParallelOptimizer
+    /// </para>
+    /// <para>
+    /// - <b>TensorParallel</b> → Uses TensorParallelModel + TensorParallelOptimizer
+    /// </para>
+    /// <para>
+    /// - <b>Hybrid</b> → Uses HybridShardedModel + HybridShardedOptimizer (3D parallelism)
+    /// </para>
+    /// <para>
+    /// This design follows industry standards (PyTorch DDP/FSDP, DeepSpeed ZeRO, Megatron-LM) where
+    /// the distributed training strategy is a cohesive unit that applies to both model and optimizer.
+    /// Mixing strategies would cause incompatibilities - for example, a DDP model (replicated parameters)
+    /// cannot work with an FSDP optimizer (expects sharded parameters).
+    /// </para>
+    /// <para>
     /// <b>For Beginners:</b> Call this method to enable distributed training across multiple GPUs.
     /// You can use it with no parameters for sensible defaults, or customize each aspect.
+    /// The strategy you choose automatically configures both the model and optimizer to work together.
     /// </para>
     /// <para>
     /// <b>Beginner Usage (no parameters):</b>
