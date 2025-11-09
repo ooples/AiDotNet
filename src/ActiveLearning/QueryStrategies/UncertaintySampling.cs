@@ -2,6 +2,7 @@ using AiDotNet.ActiveLearning.Interfaces;
 using AiDotNet.Data.Abstractions;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
+using AiDotNet.LinearAlgebra;
 
 namespace AiDotNet.ActiveLearning.QueryStrategies;
 
@@ -83,28 +84,62 @@ public class UncertaintySampling<T, TInput, TOutput> : IQueryStrategy<T, TInput,
         if (unlabeledData == null)
             throw new ArgumentNullException(nameof(unlabeledData));
 
-        // In a full implementation, iterate through unlabeledData
-        // For now, return placeholder scores
-
-        int numExamples = 100; // Placeholder - would get from dataset
+        int numExamples = unlabeledData.Count;
         var scores = new T[numExamples];
 
         for (int i = 0; i < numExamples; i++)
         {
-            // Get predictions for example i
-            // var prediction = model.Predict(unlabeledData[i]);
+            // Get input for this example
+            var input = unlabeledData.GetInput(i);
+
+            // Get model prediction
+            var prediction = model.Predict(input);
+
+            // Convert prediction to probability vector
+            // This assumes TOutput can be converted to Vector<T>
+            // For classification, predictions should be probability distributions
+            var probabilities = ConvertToVector(prediction);
 
             // Compute uncertainty score based on measure
             scores[i] = _measure switch
             {
-                UncertaintyMeasure.LeastConfidence => ComputeLeastConfidence(null!),
-                UncertaintyMeasure.Margin => ComputeMargin(null!),
-                UncertaintyMeasure.Entropy => ComputeEntropy(null!),
+                UncertaintyMeasure.LeastConfidence => ComputeLeastConfidence(probabilities),
+                UncertaintyMeasure.Margin => ComputeMargin(probabilities),
+                UncertaintyMeasure.Entropy => ComputeEntropy(probabilities),
                 _ => NumOps.Zero
             };
         }
 
         return scores;
+    }
+
+    /// <summary>
+    /// Converts model output to a probability vector.
+    /// </summary>
+    private Vector<T> ConvertToVector(TOutput output)
+    {
+        if (output is Vector<T> vector)
+        {
+            return vector;
+        }
+
+        // For other types, try to extract as array
+        if (output is T[] array)
+        {
+            return new Vector<T>(array);
+        }
+
+        // For scalar output (binary classification), create 2-element vector
+        if (output is T scalar)
+        {
+            var one = NumOps.FromDouble(1.0);
+            var complement = NumOps.Subtract(one, scalar);
+            return new Vector<T>(new[] { complement, scalar });
+        }
+
+        throw new InvalidOperationException(
+            $"Cannot convert output type {typeof(TOutput).Name} to Vector<T>. " +
+            "For uncertainty sampling, model outputs should be probability vectors.");
     }
 
     /// <inheritdoc/>
