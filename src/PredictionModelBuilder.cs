@@ -300,8 +300,18 @@ public class PredictionModelBuilder<T, TInput, TOutput> : IPredictionModelBuilde
         AgentRecommendation<T, TInput, TOutput>? agentRecommendation = null;
         if (_agentConfig != null && _agentConfig.IsEnabled)
         {
-            agentRecommendation = await GetAgentRecommendationsAsync(x, y);
-            ApplyAgentRecommendations(agentRecommendation);
+            try
+            {
+                agentRecommendation = await GetAgentRecommendationsAsync(x, y);
+                ApplyAgentRecommendations(agentRecommendation);
+            }
+            catch (Exception ex)
+            {
+                // Log warning but don't fail the build if agent assistance fails
+                // The build can proceed without agent recommendations
+                Console.WriteLine($"Warning: Agent assistance failed: {ex.Message}");
+                Console.WriteLine("Proceeding with model building without agent recommendations.");
+            }
         }
 
         // Validate model is set (either by user or by agent)
