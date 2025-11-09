@@ -48,6 +48,11 @@ public class HybridShardedOptimizer<T, TInput, TOutput> : ShardedOptimizerBase<T
     private readonly int _pipelineParallelSize;
     private readonly int _tensorParallelSize;
     private readonly int _dataParallelSize;
+    private readonly int _pipelineRank;
+    private readonly int _tensorRank;
+    private readonly int _dataRank;
+    private readonly List<int> _tensorParallelGroup;
+    private readonly List<int> _dataParallelGroup;
 
     public HybridShardedOptimizer(
         IOptimizer<T, TInput, TOutput> wrappedOptimizer,
@@ -75,6 +80,144 @@ public class HybridShardedOptimizer<T, TInput, TOutput> : ShardedOptimizerBase<T
                 $"Pipeline ({_pipelineParallelSize}) × Tensor ({_tensorParallelSize}) × " +
                 $"Data ({_dataParallelSize}) must equal WorldSize ({WorldSize})");
         }
+
+        // Calculate this rank's position in the 3D grid
+        // Layout: rank = pipeline_rank * (tensor_size * data_size) + tensor_rank * data_size + data_rank
+        int tensorDataPlane = _tensorParallelSize * _dataParallelSize;
+        _pipelineRank = Rank / tensorDataPlane;
+        int remainder = Rank % tensorDataPlane;
+        _tensorRank = remainder / _dataParallelSize;
+        _dataRank = remainder % _dataParallelSize;
+
+        // Build tensor-parallel group: all ranks with same pipeline and data rank
+        _tensorParallelGroup = new List<int>();
+        for (int tp = 0; tp < _tensorParallelSize; tp++)
+        {
+            int groupRank = _pipelineRank * tensorDataPlane + tp * _dataParallelSize + _dataRank;
+            _tensorParallelGroup.Add(groupRank);
+        }
+
+        // Build data-parallel group: all ranks with same pipeline and tensor rank
+        _dataParallelGroup = new List<int>();
+        for (int dp = 0; dp < _dataParallelSize; dp++)
+        {
+            int groupRank = _pipelineRank * tensorDataPlane + _tensorRank * _dataParallelSize + dp;
+            _dataParallelGroup.Add(groupRank);
+        }
+    }
+
+    /// <summary>
+    /// Performs AllReduce within a subgroup of ranks using point-to-point Send/Receive.
+    /// </summary>
+    /// <remarks>
+    /// This implements subgroup AllReduce by having the first rank in the group collect
+    /// all data, perform the reduction, and send the result back to all group members.
+    /// </remarks>
+    private void SubgroupAllReduce(Vector<T> data, List<int> groupRanks, ReductionOperation operation)
+    {
+        if (groupRanks.Count == 1)
+        {
+            // Single rank in group - no communication needed
+            return;
+        }
+
+        int groupRoot = groupRanks[0];
+        bool isGroupRoot = (Rank == groupRoot);
+
+        if (isGroupRoot)
+        {
+            // Root collects from all other ranks in group
+            var allData = new List<Vector<T>> { data.Clone() };
+
+            for (int i = 1; i < groupRanks.Count; i++)
+            {
+                int sourceRank = groupRanks[i];
+                var receivedData = Config.CommunicationBackend.Receive(sourceRank, data.Length, tag: 0);
+                allData.Add(receivedData);
+            }
+
+            // Perform reduction on collected data
+            var result = PerformReduction(allData, operation);
+
+            // Copy result back to data
+            for (int i = 0; i < data.Length; i++)
+            {
+                data[i] = result[i];
+            }
+
+            // Send result back to all other ranks in group
+            for (int i = 1; i < groupRanks.Count; i++)
+            {
+                int destRank = groupRanks[i];
+                Config.CommunicationBackend.Send(data, destRank, tag: 0);
+            }
+        }
+        else
+        {
+            // Non-root sends data to root
+            Config.CommunicationBackend.Send(data, groupRoot, tag: 0);
+
+            // Receive result from root
+            var result = Config.CommunicationBackend.Receive(groupRoot, data.Length, tag: 0);
+
+            // Copy result back to data
+            for (int i = 0; i < data.Length; i++)
+            {
+                data[i] = result[i];
+            }
+        }
+    }
+
+    /// <summary>
+    /// Performs the actual reduction operation on a list of vectors.
+    /// </summary>
+    private Vector<T> PerformReduction(List<Vector<T>> vectors, ReductionOperation operation)
+    {
+        if (vectors.Count == 0)
+            throw new ArgumentException("Cannot reduce empty vector list");
+
+        int length = vectors[0].Length;
+        var result = new T[length];
+
+        for (int i = 0; i < length; i++)
+        {
+            T value = vectors[0][i];
+
+            for (int j = 1; j < vectors.Count; j++)
+            {
+                switch (operation)
+                {
+                    case ReductionOperation.Sum:
+                        value = NumOps.Add(value, vectors[j][i]);
+                        break;
+                    case ReductionOperation.Average:
+                        value = NumOps.Add(value, vectors[j][i]);
+                        break;
+                    case ReductionOperation.Max:
+                        if (NumOps.GreaterThan(vectors[j][i], value))
+                            value = vectors[j][i];
+                        break;
+                    case ReductionOperation.Min:
+                        if (NumOps.LessThan(vectors[j][i], value))
+                            value = vectors[j][i];
+                        break;
+                    case ReductionOperation.Product:
+                        value = NumOps.Multiply(value, vectors[j][i]);
+                        break;
+                }
+            }
+
+            // For Average, divide by count
+            if (operation == ReductionOperation.Average)
+            {
+                var count = NumOps.FromDouble(vectors.Count);
+                value = NumOps.Divide(value, count);
+            }
+
+            result[i] = value;
+        }
+
+        return new Vector<T>(result);
     }
 
     /// <inheritdoc/>
@@ -84,56 +227,76 @@ public class HybridShardedOptimizer<T, TInput, TOutput> : ShardedOptimizerBase<T
         // This prevents deadlock if some workers throw exceptions while others continue.
         Config.CommunicationBackend.Barrier();
 
-        // 3D parallel optimization requires careful coordination:
-        // 1. Pipeline: gradient accumulation across micro-batches
-        // 2. Tensor: synchronization within tensor-parallel group
-        // 3. Data: synchronization across data-parallel replicas
-
         try
         {
             // Null check happens AFTER opening barrier but INSIDE try block.
-            // This ensures that if one worker receives null while another doesn't,
-            // both workers still execute the finally barrier, preventing deadlock.
             if (inputData == null)
                 throw new ArgumentNullException(nameof(inputData));
 
-            var result = WrappedOptimizer.Optimize(inputData);
-
-            if (Config.AutoSyncGradients && result.BestSolution != null)
+            // Check if wrapped optimizer supports gradient operations
+            var gradientOptimizer = WrappedOptimizer as IGradientBasedOptimizer<T, TInput, TOutput>;
+            if (Config.AutoSyncGradients && gradientOptimizer == null)
             {
-                // CRITICAL: HybridShardedOptimizer requires subgroup-aware gradient synchronization
-                // which is not yet implemented. The base class SynchronizeParameters() performs
-                // a full-world AllReduce that incorrectly averages parameters across ALL ranks,
-                // destroying the tensor/pipeline shard structure.
-                //
-                // Correct implementation requires:
-                // 1. First sync within tensor-parallel group (AllReduce for sum partial results)
-                // 2. Then sync across data-parallel replicas (AllReduce for average gradients)
-                // 3. Pipeline stages handle their own gradient accumulation
-                //
-                // This needs:
-                // - Subgroup communicators for each parallelism dimension (tensor/data/pipeline groups)
-                // - Gradient-specific synchronization (not parameter synchronization)
-                // - Proper handling of optimizer states per dimension
-                //
-                // Without proper implementation, gradients remain unsynchronized or parameters
-                // get incorrectly averaged, breaking 3D parallel semantics.
-
-                throw new NotSupportedException(
-                    "HybridShardedOptimizer with AutoSyncGradients=true requires subgroup-aware " +
-                    "gradient synchronization that is not yet implemented. Proper 3D parallelism " +
-                    "needs separate communicators for tensor-parallel, data-parallel, and pipeline-parallel " +
-                    "groups. Use AutoSyncGradients=false and implement custom gradient synchronization, " +
-                    "or use a simpler parallelism strategy (DDP, FSDP, ZeRO-2) for production use.");
+                throw new InvalidOperationException(
+                    "HybridShardedOptimizer with AutoSyncGradients=true requires a gradient-based optimizer. " +
+                    $"Received {WrappedOptimizer.GetType().Name} which does not implement IGradientBasedOptimizer.");
             }
 
-            return result;
+            // CRITICAL: Save parameters BEFORE local optimization
+            // This allows us to discard the local update and apply only the synchronized gradients
+            Vector<T>? savedParameters = null;
+            if (Config.AutoSyncGradients && inputData.InitialSolution != null)
+            {
+                savedParameters = inputData.InitialSolution.GetParameters();
+            }
+
+            // Step 1: Optimize locally to compute gradients
+            var localResult = WrappedOptimizer.Optimize(inputData);
+
+            // Step 2: Synchronize gradients across 3D parallelism dimensions
+            if (Config.AutoSyncGradients && localResult.BestSolution != null && savedParameters != null && gradientOptimizer != null)
+            {
+                var localGradients = gradientOptimizer.LastComputedGradients;
+
+                if (localGradients != null && localGradients.Length > 0)
+                {
+                    // 3D parallelism gradient synchronization:
+                    // 1. First reduce within tensor-parallel group (sum partial tensor results)
+                    // 2. Then reduce across data-parallel replicas (average gradients)
+                    // 3. Pipeline stages handle their own gradient accumulation separately
+
+                    // Step 2a: Tensor-parallel reduction (SUM operation)
+                    // Tensor-parallel ranks have partial results that need to be summed
+                    if (_tensorParallelSize > 1)
+                    {
+                        SubgroupAllReduce(localGradients, _tensorParallelGroup, ReductionOperation.Sum);
+                    }
+
+                    // Step 2b: Data-parallel reduction (AVERAGE operation)
+                    // Data-parallel ranks have independent gradients that need to be averaged
+                    if (_dataParallelSize > 1)
+                    {
+                        SubgroupAllReduce(localGradients, _dataParallelGroup, ReductionOperation.Average);
+                    }
+
+                    // CRITICAL: Restore model to pre-update parameters before applying synchronized gradients
+                    // The local optimizer already applied local gradients, but we want to apply SYNCHRONIZED gradients instead.
+                    localResult.BestSolution.SetParameters(savedParameters);
+
+                    // Apply the synchronized gradients using the wrapped optimizer's logic
+                    // This works for ANY optimizer (SGD, Adam, RMSprop, etc.) because ApplyGradients
+                    // handles optimizer-specific state (momentum, variance, etc.)
+                    var finalModel = gradientOptimizer.ApplyGradients(localGradients, localResult.BestSolution);
+                    localResult.BestSolution = finalModel;
+                }
+            }
+
+            return localResult;
         }
         finally
         {
             // CRITICAL: Closing barrier ALWAYS executes to prevent deadlock,
             // even if null check, WrappedOptimizer.Optimize, or other operations throw.
-            // This ensures all workers reach this barrier regardless of exceptions.
             Config.CommunicationBackend.Barrier();
         }
     }
