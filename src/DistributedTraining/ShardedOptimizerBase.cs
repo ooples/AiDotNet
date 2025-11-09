@@ -222,6 +222,13 @@ public abstract class ShardedOptimizerBase<T, TInput, TOutput> : IShardedOptimiz
     }
 
     /// <inheritdoc/>
+    public virtual void Reset()
+    {
+        // Delegate reset to wrapped optimizer
+        WrappedOptimizer.Reset();
+    }
+
+    /// <inheritdoc/>
     public abstract byte[] Serialize();
 
     /// <inheritdoc/>

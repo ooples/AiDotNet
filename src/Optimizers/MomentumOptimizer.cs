@@ -248,53 +248,6 @@ public class MomentumOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<
         return updatedParams;
     }
 
-    /// <summary>
-    /// Reverses a Momentum gradient update to recover original parameters.
-    /// </summary>
-    /// <param name="updatedParameters">Parameters after Momentum update</param>
-    /// <param name="appliedGradients">The gradients that were applied</param>
-    /// <returns>Original parameters before the update</returns>
-    /// <remarks>
-    /// <para>
-    /// Momentum's reverse update requires the optimizer's internal velocity state from the forward pass.
-    /// This method must be called immediately after UpdateParameters while the velocity is fresh.
-    /// </para>
-    /// <para><b>For Beginners:</b> This calculates where parameters were before a Momentum update.
-    /// Momentum builds up speed (velocity) over time, so to reverse an update, we need to know
-    /// what velocity was used. It's like knowing how fast and in what direction the ball was
-    /// rolling to figure out where it came from.
-    /// </para>
-    /// </remarks>
-    public override Vector<T> ReverseUpdate(Vector<T> updatedParameters, Vector<T> appliedGradients)
-    {
-        if (updatedParameters == null)
-            throw new ArgumentNullException(nameof(updatedParameters));
-        if (appliedGradients == null)
-            throw new ArgumentNullException(nameof(appliedGradients));
-
-        if (updatedParameters.Length != appliedGradients.Length)
-        {
-            throw new ArgumentException(
-                $"Updated parameters size ({updatedParameters.Length}) must match applied gradients size ({appliedGradients.Length})",
-                nameof(appliedGradients));
-        }
-
-        if (_velocity == null || _velocity.Length != updatedParameters.Length)
-        {
-            throw new InvalidOperationException(
-                "Momentum optimizer velocity is not initialized. ReverseUpdate must be called after UpdateParameters.");
-        }
-
-        var original = new T[updatedParameters.Length];
-
-        for (int i = 0; i < updatedParameters.Length; i++)
-        {
-            // Reverse the update: original = updated + velocity
-            original[i] = NumOps.Add(updatedParameters[i], _velocity[i]);
-        }
-
-        return new Vector<T>(original);
-    }
 
     /// <summary>
     /// Updates the adaptive parameters of the optimizer based on the current and previous optimization steps.

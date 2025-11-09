@@ -52,16 +52,13 @@ public class PredictionModelBuilder<T, TInput, TOutput> : IPredictionModelBuilde
     private IGenerator<T>? _ragGenerator;
     private IEnumerable<IQueryProcessor>? _queryProcessors;
     private IMetaLearner<T, TInput, TOutput>? _metaLearner;
-<<<<<<< HEAD
     private ICommunicationBackend<T>? _distributedBackend;
     private DistributedStrategy _distributedStrategy = DistributedStrategy.DDP;
     private IShardingConfiguration<T>? _distributedConfiguration;
-=======
     private IModelEvaluator<T, TInput, TOutput>? _modelEvaluator;
     private ICrossValidator<T, TInput, TOutput>? _crossValidator;
     private AgentConfiguration<T>? _agentConfig;
     private AgentAssistanceOptions _agentOptions = AgentAssistanceOptions.Default;
->>>>>>> origin/master
 
     /// <summary>
     /// Configures which features (input variables) should be used in the model.
@@ -404,10 +401,6 @@ public class PredictionModelBuilder<T, TInput, TOutput> : IPredictionModelBuilde
         // Split the data
         var (XTrain, yTrain, XVal, yVal, XTest, yTest) = dataPreprocessor.SplitData(preprocessedX, preprocessedY);
 
-<<<<<<< HEAD
-        // Optimize the model
-        var optimizationResult = finalOptimizer.Optimize(OptimizerHelper<T, TInput, TOutput>.CreateOptimizationInputData(XTrain, yTrain, XVal, yVal, XTest, yTest));
-=======
         // Perform cross-validation on training data BEFORE final model training (if configured)
         // This follows industry standard patterns from H2O and caret where CV is integrated into model building
         CrossValidationResult<T, TInput, TOutput>? cvResults = null;
@@ -428,9 +421,8 @@ public class PredictionModelBuilder<T, TInput, TOutput> : IPredictionModelBuilde
         // This prevents state contamination from CV (accumulated fitness lists, cache, learning rates)
         optimizer.Reset();
 
-        // Optimize the final model on the full training set
-        var optimizationResult = optimizer.Optimize(OptimizerHelper<T, TInput, TOutput>.CreateOptimizationInputData(XTrain, yTrain, XVal, yVal, XTest, yTest));
->>>>>>> origin/master
+        // Optimize the final model on the full training set (using distributed optimizer if configured)
+        var optimizationResult = finalOptimizer.Optimize(OptimizerHelper<T, TInput, TOutput>.CreateOptimizationInputData(XTrain, yTrain, XVal, yVal, XTest, yTest));
 
         // Return PredictionModelResult with CV results and agent data
         var finalResult = new PredictionModelResult<T, TInput, TOutput>(
@@ -675,7 +667,6 @@ public class PredictionModelBuilder<T, TInput, TOutput> : IPredictionModelBuilde
     }
 
     /// <summary>
-<<<<<<< HEAD
     /// Configures distributed training across multiple GPUs or machines.
     /// </summary>
     /// <param name="backend">Communication backend to use. If null, uses InMemoryCommunicationBackend.</param>
@@ -711,7 +702,8 @@ public class PredictionModelBuilder<T, TInput, TOutput> : IPredictionModelBuilde
         _distributedConfiguration = configuration;
         return this;
     }
-=======
+
+    /// <summary>
     /// Enables AI agent assistance during the model building process.
     /// </summary>
     /// <param name="configuration">The agent configuration containing API key, provider, and assistance options.</param>
@@ -1182,5 +1174,4 @@ public class PredictionModelBuilder<T, TInput, TOutput> : IPredictionModelBuilde
             _ => throw new ArgumentException($"Unknown provider: {config.Provider}")
         };
     }
->>>>>>> origin/master
 }

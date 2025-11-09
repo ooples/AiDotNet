@@ -15,11 +15,11 @@
 #   # Run on 4 GPUs locally
 #   .\launch-distributed-training.ps1 -NumProcesses 4 -Program ".\MyTrainingApp.exe"
 #
-#   # Run on 8 GPUs with additional arguments
-#   .\launch-distributed-training.ps1 -NumProcesses 8 -Program ".\MyTrainingApp.exe" --epochs 100 --lr 0.001
+#   # Run on 8 GPUs with additional arguments (note: args after Program are passed to the app)
+#   .\launch-distributed-training.ps1 -NumProcesses 8 -Program ".\MyTrainingApp.exe" -- --epochs 100 --lr 0.001
 #
-#   # Run with config file containing spaces in path
-#   .\launch-distributed-training.ps1 -NumProcesses 8 -Program ".\MyTrainingApp.exe" --config "My Config.json"
+#   # Run with config file containing spaces in path (use -- separator)
+#   .\launch-distributed-training.ps1 -NumProcesses 8 -Program ".\MyTrainingApp.exe" -- --config "My Config.json"
 #
 #   # Run across 2 machines with 4 GPUs each
 #   .\launch-distributed-training.ps1 -NumProcesses 8 -Program ".\MyTrainingApp.exe" -Hosts "machine1,machine2"

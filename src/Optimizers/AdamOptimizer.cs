@@ -255,67 +255,6 @@ public class AdamOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, T
         return parameters;
     }
 
-    /// <summary>
-    /// Reverses an Adam gradient update to recover original parameters.
-    /// </summary>
-    /// <param name="updatedParameters">Parameters after Adam update</param>
-    /// <param name="appliedGradients">The gradients that were applied</param>
-    /// <returns>Original parameters before the update</returns>
-    /// <remarks>
-    /// <para>
-    /// Adam's reverse update requires the optimizer's internal state from the forward pass.
-    /// This method must be called immediately after UpdateParameters while state (_m, _v, _t) is fresh.
-    /// It reconstructs the bias-corrected moments (mHat, vHat) and reverses the adaptive update.
-    /// </para>
-    /// <para><b>For Beginners:</b> This calculates where parameters were before an Adam update.
-    /// Adam uses sophisticated momentum and adaptive learning rates, so reversing requires accessing
-    /// its internal memory (_m for momentum, _v for variance, _t for time step). Think of it like
-    /// undoing a smart adjustment by remembering exactly how that adjustment was calculated.
-    /// </para>
-    /// </remarks>
-    public override Vector<T> ReverseUpdate(Vector<T> updatedParameters, Vector<T> appliedGradients)
-    {
-        if (updatedParameters == null)
-            throw new ArgumentNullException(nameof(updatedParameters));
-        if (appliedGradients == null)
-            throw new ArgumentNullException(nameof(appliedGradients));
-
-        if (updatedParameters.Length != appliedGradients.Length)
-        {
-            throw new ArgumentException(
-                $"Updated parameters size ({updatedParameters.Length}) must match applied gradients size ({appliedGradients.Length})",
-                nameof(appliedGradients));
-        }
-
-        if (_m == null || _v == null || _m.Length != updatedParameters.Length)
-        {
-            throw new InvalidOperationException(
-                "Adam optimizer state is not initialized. ReverseUpdate must be called after UpdateParameters.");
-        }
-
-        var original = new T[updatedParameters.Length];
-
-        for (int i = 0; i < updatedParameters.Length; i++)
-        {
-            // Recalculate bias-corrected first and second moments using the current state
-            T mHat = NumOps.Divide(_m[i], NumOps.FromDouble(1 - Math.Pow(_options.Beta1, _t)));
-            T vHat = NumOps.Divide(_v[i], NumOps.FromDouble(1 - Math.Pow(_options.Beta2, _t)));
-
-            // Recalculate the update that was applied
-            T update = NumOps.Divide(
-                mHat,
-                NumOps.Add(NumOps.Sqrt(vHat), NumOps.FromDouble(_options.Epsilon))
-            );
-
-            // Reverse: original = updated + lr * update
-            original[i] = NumOps.Add(
-                updatedParameters[i],
-                NumOps.Multiply(update, NumOps.FromDouble(_options.LearningRate))
-            );
-        }
-
-        return new Vector<T>(original);
-    }
 
     /// <summary>
     /// Updates a matrix of parameters using the Adam optimization algorithm.

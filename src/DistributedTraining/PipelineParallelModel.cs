@@ -75,7 +75,6 @@ public class PipelineParallelModel<T, TInput, TOutput> : ShardedModelBase<T, TIn
     private readonly int _microBatchSize;
     private readonly int _stageId;
     private readonly int _numStages;
-    private Vector<T>? _accumulatedGradients;
 
     /// <summary>
     /// Creates a new Pipeline Parallel model.
@@ -92,7 +91,6 @@ public class PipelineParallelModel<T, TInput, TOutput> : ShardedModelBase<T, TIn
         _microBatchSize = microBatchSize;
         _stageId = Rank;
         _numStages = WorldSize;
-        _accumulatedGradients = null;
     }
 
     /// <summary>
