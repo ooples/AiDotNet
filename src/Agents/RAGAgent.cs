@@ -326,7 +326,16 @@ Refined query:";
         try
         {
             var refinedQuery = await ChatModel.GenerateResponseAsync(prompt);
-            return refinedQuery.Trim();
+            var trimmedQuery = refinedQuery?.Trim() ?? string.Empty;
+
+            // If LLM returned empty or whitespace, fall back to original query
+            if (string.IsNullOrWhiteSpace(trimmedQuery))
+            {
+                AppendToScratchpad("Refinement returned empty response, using original query.");
+                return query;
+            }
+
+            return trimmedQuery;
         }
         catch (Exception ex) when (ex is System.Net.Http.HttpRequestException || ex is System.IO.IOException || ex is TaskCanceledException)
         {
