@@ -115,9 +115,24 @@ public class TensorParallelModel<T, TInput, TOutput> : ShardedModelBase<T, TInpu
     /// </remarks>
     public override void SynchronizeGradients()
     {
-        // In tensor parallelism, we typically need to synchronize within tensor-parallel group
-        // For column-parallel layers: AllReduce gradients
+        // In tensor parallelism, each rank holds a disjoint slice of parameters.
+        // AllReduce across the full world would sum unrelated indices and corrupt the shards.
+        // We need subgroup-aware collectives that sync only within the tensor-parallel group.
+        //
+        // For column-parallel layers: AllReduce within tensor-parallel group
         // For row-parallel layers: Different synchronization pattern
+        // For combined data+tensor parallel: AllReduce within data-parallel subgroup
+
+        if (_tensorParallelSize > 1)
+        {
+            throw new NotSupportedException(
+                "TensorParallelModel requires subgroup gradient synchronization; " +
+                "AllReduce over the full world corrupts the shard. " +
+                "Implement subgroup-aware collectives that synchronize only within the tensor-parallel group, " +
+                "or use a data-parallel subgroup communicator for combined data+tensor parallel setups.");
+        }
+
+        // Single-process mode or pure data-parallel mode (no tensor parallelism)
         Config.CommunicationBackend.AllReduce(LocalShard, ReductionOperation.Sum);
 
         CachedFullParameters = null;
