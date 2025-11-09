@@ -96,6 +96,12 @@ public class RuntimeConfiguration
     public int InferenceTimeoutSeconds { get; set; } = 30;
 
     /// <summary>
+    /// Gets or sets whether to enable GPU acceleration for inference (default: true).
+    /// Falls back to CPU if GPU is not available.
+    /// </summary>
+    public bool EnableGpuAcceleration { get; set; } = true;
+
+    /// <summary>
     /// Creates a configuration for production deployment.
     /// </summary>
     public static RuntimeConfiguration ForProduction()
