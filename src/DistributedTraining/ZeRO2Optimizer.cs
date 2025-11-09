@@ -98,6 +98,12 @@ public class ZeRO2Optimizer<T, TInput, TOutput> : ShardedOptimizerBase<T, TInput
                 // For now, we use DDP-style full gradient sync as a functional approximation.
                 // This provides correct gradient averaging but without the memory savings of true ZeRO-2 gradient sharding.
                 Config.CommunicationBackend.AllReduce(localGradients, ReductionOperation.Average);
+
+                // CRITICAL: Restore model to pre-update parameters before applying averaged gradients
+                // Without this, we would double-apply gradients: params - lr*localGrad - lr*avgGrad
+                // instead of the correct: params - lr*avgGrad
+                localResult.BestSolution.SetParameters(originalParams);
+
                 var finalModel = gradientOptimizer.ApplyGradients(localGradients, localResult.BestSolution);
                 localResult.BestSolution = finalModel;
             }
