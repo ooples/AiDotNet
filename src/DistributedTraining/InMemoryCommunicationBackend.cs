@@ -416,40 +416,57 @@ public class InMemoryCommunicationBackend<T> : CommunicationBackendBase<T>
             // Contribute local data
             _sharedBuffers[bufferId][_rank] = sendData.Clone();
 
-            // Wait until all processes have contributed
-            while (true)
+            try
             {
-                int contributedCount = _sharedBuffers[bufferId].Count(v => v != null);
-                if (contributedCount >= _worldSize)
+                var startTime = DateTime.UtcNow;
+
+                // Wait until all processes have contributed
+                while (true)
                 {
-                    break;
+                    int contributedCount = _sharedBuffers[bufferId].Count(v => v != null);
+                    if (contributedCount >= _worldSize)
+                    {
+                        break;
+                    }
+
+                    Monitor.Wait(_globalLock, 10);
+
+                    if ((DateTime.UtcNow - startTime).TotalMilliseconds > BarrierTimeoutMs)
+                    {
+                        throw new TimeoutException(
+                            $"AllGather timeout after {BarrierTimeoutMs}ms. Only {contributedCount} of {_worldSize} processes contributed.");
+                    }
                 }
-                Monitor.Wait(_globalLock, 10);
+
+                // Concatenate all data
+                var allData = _sharedBuffers[bufferId];
+                int totalLength = allData.Sum(v => v.Length);
+                var result = new T[totalLength];
+                int offset = 0;
+
+                for (int i = 0; i < _worldSize; i++)
+                {
+                    var data = allData[i];
+                    Array.Copy(data.ToArray(), 0, result, offset, data.Length);
+                    offset += data.Length;
+                }
+
+                return new Vector<T>(result);
             }
-
-            Monitor.PulseAll(_globalLock);
-
-            // Concatenate all data
-            var allData = _sharedBuffers[bufferId];
-            int totalLength = allData.Sum(v => v.Length);
-            var result = new T[totalLength];
-            int offset = 0;
-
-            for (int i = 0; i < _worldSize; i++)
+            finally
             {
-                var data = allData[i];
-                Array.Copy(data.ToArray(), 0, result, offset, data.Length);
-                offset += data.Length;
-            }
+                // CRITICAL: PulseAll must happen even on timeout to wake other waiting processes
+                // Without this, a timeout in one process causes deadlock in others waiting at Monitor.Wait
+                Monitor.PulseAll(_globalLock);
 
-            // Cleanup - rank 0 removes key and increments counter for next operation
-            if (_rank == 0)
-            {
-                _sharedBuffers.Remove(bufferId);
-                _operationCounters[_environmentId]++;
+                // Cleanup - rank 0 removes key and increments counter for next operation
+                // This must happen even on timeout to prevent memory leaks
+                if (_rank == 0)
+                {
+                    _sharedBuffers.Remove(bufferId);
+                    _operationCounters[_environmentId]++;
+                }
             }
-
-            return new Vector<T>(result);
         }
     }
 
