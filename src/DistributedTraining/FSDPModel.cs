@@ -5,20 +5,37 @@ using AiDotNet.Models;
 namespace AiDotNet.DistributedTraining;
 
 /// <summary>
-/// Implements a distributed model wrapper that shards parameters across multiple processes.
+/// Implements FSDP (Fully Sharded Data Parallel) model wrapper that shards parameters across multiple processes.
 /// </summary>
 /// <remarks>
+/// <para><b>Strategy Overview:</b>
+/// FSDP (Fully Sharded Data Parallel) is PyTorch's implementation of the ZeRO-3 optimization strategy.
+/// It shards model parameters, gradients, and optimizer states across all processes, achieving maximum
+/// memory efficiency. Parameters are gathered just-in-time for forward/backward passes and then released.
+/// </para>
 /// <para><b>For Beginners:</b>
-/// This class wraps any existing model and makes it work across multiple GPUs or machines.
-/// It automatically handles:
-/// - Splitting parameters across processes (sharding)
-/// - Gathering parameters when needed for forward pass
+/// This class implements FSDP (Fully Sharded Data Parallel), which makes any model work across multiple GPUs or machines
+/// with maximum memory efficiency. It automatically handles:
+/// - Splitting ALL model components (parameters, gradients, optimizer states) across processes
+/// - Gathering parameters only when needed for forward/backward pass
+/// - Releasing parameters immediately after use to save memory
 /// - Averaging gradients across all processes during training
 /// </para>
 /// <para>
-/// Think of it like a team project where each person holds part of the solution.
-/// When you need the full solution, everyone shares their part (AllGather).
-/// When everyone learns something new, they share and average their learnings (AllReduce).
+/// Think of it like a team project where each person holds part of the solution, but unlike DDP,
+/// FSDP only shares the full model temporarily when absolutely needed, then immediately goes back
+/// to holding just their piece. This saves a lot of memory!
+/// </para>
+/// <para><b>Use Cases:</b>
+/// - Training very large models that don't fit in a single GPU's memory
+/// - Maximizing memory efficiency for multi-GPU training
+/// - Scaling to hundreds or thousands of GPUs
+/// </para>
+/// <para><b>Trade-offs:</b>
+/// - Memory: Excellent - shards everything (parameters + gradients + optimizer states)
+/// - Communication: Higher - requires AllGather for each forward/backward pass
+/// - Complexity: Moderate - automatic just-in-time parameter gathering
+/// - Best for: Very large models, memory-constrained scenarios
 /// </para>
 /// <para>
 /// Example:
@@ -26,42 +43,42 @@ namespace AiDotNet.DistributedTraining;
 /// // Original model
 /// var model = new NeuralNetworkModel&lt;double&gt;(...);
 ///
-/// // Wrap it for distributed training
+/// // Wrap it for FSDP distributed training
 /// var backend = new InMemoryCommunicationBackend&lt;double&gt;(rank: 0, worldSize: 4);
 /// var config = new ShardingConfiguration&lt;double&gt;(backend);
-/// var distributedModel = new ShardedModel&lt;double, Tensor&lt;double&gt;, Tensor&lt;double&gt;&gt;(model, config);
+/// var fsdpModel = new FSDPModel&lt;double, Tensor&lt;double&gt;, Tensor&lt;double&gt;&gt;(model, config);
 ///
-/// // Now train as usual - distributed magic happens automatically!
-/// distributedModel.Train(inputs, outputs);
+/// // Now train as usual - FSDP magic happens automatically!
+/// fsdpModel.Train(inputs, outputs);
 /// </code>
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric type</typeparam>
 /// <typeparam name="TInput">The input type for the model</typeparam>
 /// <typeparam name="TOutput">The output type for the model</typeparam>
-public class ShardedModel<T, TInput, TOutput> : ShardedModelBase<T, TInput, TOutput>
+public class FSDPModel<T, TInput, TOutput> : ShardedModelBase<T, TInput, TOutput>
 {
     /// <summary>
-    /// Creates a new sharded model wrapping an existing model.
+    /// Creates a new FSDP model wrapping an existing model.
     /// </summary>
     /// <remarks>
     /// <para><b>For Beginners:</b>
-    /// This constructor takes your existing model and makes it distributed.
+    /// This constructor takes your existing model and makes it distributed using FSDP strategy.
     /// You provide:
     /// 1. The model you want to make distributed
     /// 2. A configuration that tells us how to do the distribution
     /// </para>
     /// <para>
     /// The constructor automatically:
-    /// - Splits the model's parameters across all processes
+    /// - Splits the model's parameters across all processes (sharding)
     /// - Sets up communication channels
-    /// - Prepares everything for distributed training
+    /// - Prepares everything for FSDP distributed training
     /// </para>
     /// </remarks>
-    /// <param name="wrappedModel">The model to wrap with distributed capabilities</param>
+    /// <param name="wrappedModel">The model to wrap with FSDP capabilities</param>
     /// <param name="config">Configuration for sharding and communication</param>
     /// <exception cref="ArgumentNullException">Thrown if model or config is null</exception>
-    public ShardedModel(IFullModel<T, TInput, TOutput> wrappedModel, IShardingConfiguration<T> config)
+    public FSDPModel(IFullModel<T, TInput, TOutput> wrappedModel, IShardingConfiguration<T> config)
         : base(wrappedModel, config)
     {
     }
@@ -114,6 +131,7 @@ public class ShardedModel<T, TInput, TOutput> : ShardedModelBase<T, TInput, TOut
 
         // Add distributed training info
         metadata.SetProperty("IsDistributed", true);
+        metadata.SetProperty("Strategy", "FSDP");
         metadata.SetProperty("WorldSize", WorldSize);
         metadata.SetProperty("Rank", Rank);
         metadata.SetProperty("ShardSize", ShardSize);
@@ -125,7 +143,7 @@ public class ShardedModel<T, TInput, TOutput> : ShardedModelBase<T, TInput, TOut
     public override IFullModel<T, TInput, TOutput> WithParameters(Vector<T> parameters)
     {
         var newModel = WrappedModel.WithParameters(parameters);
-        return new ShardedModel<T, TInput, TOutput>(newModel, Config);
+        return new FSDPModel<T, TInput, TOutput>(newModel, Config);
     }
 
     /// <inheritdoc/>
@@ -231,7 +249,7 @@ public class ShardedModel<T, TInput, TOutput> : ShardedModelBase<T, TInput, TOut
     public override IFullModel<T, TInput, TOutput> Clone()
     {
         var clonedWrappedModel = WrappedModel.Clone();
-        return new ShardedModel<T, TInput, TOutput>(clonedWrappedModel, Config);
+        return new FSDPModel<T, TInput, TOutput>(clonedWrappedModel, Config);
     }
 
     /// <inheritdoc/>
@@ -244,7 +262,7 @@ public class ShardedModel<T, TInput, TOutput> : ShardedModelBase<T, TInput, TOut
     public IFullModel<T, TInput, TOutput> DeepCopy()
     {
         var deepCopiedWrappedModel = WrappedModel.DeepCopy();
-        return new ShardedModel<T, TInput, TOutput>(deepCopiedWrappedModel, Config);
+        return new FSDPModel<T, TInput, TOutput>(deepCopiedWrappedModel, Config);
     }
 
     /// <inheritdoc/>

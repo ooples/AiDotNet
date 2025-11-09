@@ -72,7 +72,7 @@ public static class DistributedExtensions
         // Create default configuration
         var config = new ShardingConfiguration<T>(communicationBackend);
 
-        return new ShardedModel<T, TInput, TOutput>(model, config);
+        return new FSDPModel<T, TInput, TOutput>(model, config);
     }
 
     /// <summary>
@@ -163,7 +163,7 @@ public static class DistributedExtensions
         // Create default configuration
         var config = new ShardingConfiguration<T>(communicationBackend);
 
-        return new ShardedOptimizer<T, TInput, TOutput>(optimizer, config);
+        return new FSDPOptimizer<T, TInput, TOutput>(optimizer, config);
     }
 
     /// <summary>

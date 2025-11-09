@@ -273,13 +273,13 @@ public class PredictionModelBuilder<T, TInput, TOutput> : IPredictionModelBuilde
 
         if (_distributedTrainingConfiguration != null && _distributedTrainingConfiguration.IsEnabled)
         {
-            // Wrap model with ShardedModel
-            model = new DistributedTraining.ShardedModel<T, TInput, TOutput>(
+            // Wrap model with FSDPModel
+            model = new DistributedTraining.FSDPModel<T, TInput, TOutput>(
                 _model,
                 _distributedTrainingConfiguration.ShardingConfiguration);
 
-            // Wrap optimizer with ShardedOptimizer
-            finalOptimizer = new DistributedTraining.ShardedOptimizer<T, TInput, TOutput>(
+            // Wrap optimizer with FSDPOptimizer
+            finalOptimizer = new DistributedTraining.FSDPOptimizer<T, TInput, TOutput>(
                 optimizer,
                 _distributedTrainingConfiguration.ShardingConfiguration);
         }

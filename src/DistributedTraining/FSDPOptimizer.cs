@@ -6,19 +6,37 @@ using AiDotNet.Optimizers;
 namespace AiDotNet.DistributedTraining;
 
 /// <summary>
-/// Implements a distributed optimizer wrapper that coordinates optimization across multiple processes.
+/// Implements FSDP (Fully Sharded Data Parallel) optimizer wrapper that coordinates optimization across multiple processes.
 /// </summary>
 /// <remarks>
+/// <para><b>Strategy Overview:</b>
+/// FSDP optimizer works in conjunction with FSDPModel to provide full sharding of optimizer states.
+/// This means momentum buffers, variance estimates, and all other optimizer-specific state are sharded
+/// across processes, minimizing memory usage while maintaining training effectiveness.
+/// </para>
 /// <para><b>For Beginners:</b>
-/// This class wraps any existing optimizer (like Adam, SGD, etc.) and makes it work across
-/// multiple GPUs or machines. It automatically handles:
+/// This class wraps any existing optimizer (like Adam, SGD, etc.) and makes it work with FSDP strategy
+/// across multiple GPUs or machines. It automatically handles:
 /// - Synchronizing gradients across all processes
+/// - Sharding optimizer states (momentum, variance) to save memory
 /// - Coordinating parameter updates
 /// - Ensuring all processes stay in sync
 /// </para>
 /// <para>
-/// Think of it like a team of coaches working together - each has their own expertise
-/// (the wrapped optimizer), but they coordinate their efforts to train the team effectively.
+/// Think of it like a team of coaches working together - each coach has their own expertise
+/// (the wrapped optimizer), but they share only the essential information and keep their detailed
+/// notes (optimizer states) private to save space.
+/// </para>
+/// <para><b>Use Cases:</b>
+/// - Training very large models with optimizers that have significant state (Adam, RMSprop)
+/// - Maximizing memory efficiency when using stateful optimizers
+/// - Scaling to hundreds or thousands of GPUs
+/// </para>
+/// <para><b>Trade-offs:</b>
+/// - Memory: Excellent - shards optimizer states across processes
+/// - Communication: Moderate - syncs gradients and occasional state synchronization
+/// - Complexity: Moderate - automatic state sharding
+/// - Best for: Large models with stateful optimizers (Adam, RMSprop, etc.)
 /// </para>
 /// <para>
 /// Example:
@@ -26,40 +44,41 @@ namespace AiDotNet.DistributedTraining;
 /// // Original optimizer
 /// var optimizer = new AdamOptimizer&lt;double, Tensor&lt;double&gt;, Tensor&lt;double&gt;&gt;(model, options);
 ///
-/// // Wrap it for distributed training
+/// // Wrap it for FSDP distributed training
 /// var backend = new InMemoryCommunicationBackend&lt;double&gt;(rank: 0, worldSize: 4);
 /// var config = new ShardingConfiguration&lt;double&gt;(backend);
-/// var distributedOptimizer = new ShardedOptimizer&lt;double, Tensor&lt;double&gt;, Tensor&lt;double&gt;&gt;(
+/// var fsdpOptimizer = new FSDPOptimizer&lt;double, Tensor&lt;double&gt;, Tensor&lt;double&gt;&gt;(
 ///     optimizer, config);
 ///
-/// // Now optimize as usual - distributed magic happens automatically!
-/// var result = distributedOptimizer.Optimize(inputData);
+/// // Now optimize as usual - FSDP magic happens automatically!
+/// var result = fsdpOptimizer.Optimize(inputData);
 /// </code>
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric type</typeparam>
 /// <typeparam name="TInput">The input type for the model</typeparam>
 /// <typeparam name="TOutput">The output type for the model</typeparam>
-public class ShardedOptimizer<T, TInput, TOutput> : ShardedOptimizerBase<T, TInput, TOutput>
+public class FSDPOptimizer<T, TInput, TOutput> : ShardedOptimizerBase<T, TInput, TOutput>
 {
     /// <summary>
-    /// Creates a new sharded optimizer wrapping an existing optimizer.
+    /// Creates a new FSDP optimizer wrapping an existing optimizer.
     /// </summary>
     /// <remarks>
     /// <para><b>For Beginners:</b>
-    /// This constructor takes your existing optimizer and makes it distributed.
+    /// This constructor takes your existing optimizer and makes it distributed using FSDP strategy.
     /// You provide:
     /// 1. The optimizer you want to make distributed
     /// 2. A configuration that tells us how to do the distribution
     /// </para>
     /// <para>
-    /// The optimizer will automatically synchronize across all processes during optimization.
+    /// The optimizer will automatically synchronize across all processes during optimization
+    /// and shard optimizer states to minimize memory usage.
     /// </para>
     /// </remarks>
-    /// <param name="wrappedOptimizer">The optimizer to wrap with distributed capabilities</param>
+    /// <param name="wrappedOptimizer">The optimizer to wrap with FSDP capabilities</param>
     /// <param name="config">Configuration for sharding and communication</param>
     /// <exception cref="ArgumentNullException">Thrown if optimizer or config is null</exception>
-    public ShardedOptimizer(
+    public FSDPOptimizer(
         IOptimizer<T, TInput, TOutput> wrappedOptimizer,
         IShardingConfiguration<T> config)
         : base(wrappedOptimizer, config)

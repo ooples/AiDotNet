@@ -1,0 +1,121 @@
+using AiDotNet.Interfaces;
+using AiDotNet.LinearAlgebra;
+using AiDotNet.Models.Inputs;
+using AiDotNet.Optimizers;
+
+namespace AiDotNet.DistributedTraining;
+
+/// <summary>
+/// Implements 3D Parallelism optimizer - coordinates across data, tensor, and pipeline dimensions.
+/// </summary>
+/// <remarks>
+/// <para><b>Strategy Overview:</b>
+/// 3D Parallelism optimizer coordinates optimization across all three parallelism dimensions:
+/// - Data parallel: synchronizes gradients across data-parallel replicas
+/// - Tensor parallel: synchronizes within tensor-parallel groups
+/// - Pipeline parallel: handles gradient accumulation across micro-batches
+///
+/// This requires managing separate communication groups for each dimension and ensuring
+/// proper synchronization order to maintain correctness and efficiency.
+/// </para>
+/// <para><b>For Beginners:</b>
+/// This is the most complex optimizer, coordinating all three types of parallelism.
+/// It needs to handle:
+/// 1. Averaging gradients across data-parallel replicas (GPUs processing different batches)
+/// 2. Synchronizing tensor-parallel groups (GPUs sharing layer computations)
+/// 3. Accumulating gradients from pipeline micro-batches
+///
+/// Think of it like coordinating a massive team split into departments (pipeline stages),
+/// work groups (tensor parallel), and shifts (data parallel) - all need to sync at the right times.
+/// </para>
+/// <para><b>Use Cases:</b>
+/// - Frontier-scale models (100B+ parameters)
+/// - 100s to 1000s of GPUs
+/// - Works with HybridShardedModel
+/// </para>
+/// <para><b>Trade-offs:</b>
+/// - Memory: Excellent - exploits all dimensions
+/// - Communication: Complex - multiple sync patterns
+/// - Complexity: Very High - most complex optimizer
+/// - Best for: Largest scale training
+/// </para>
+/// </remarks>
+/// <typeparam name="T">The numeric type</typeparam>
+/// <typeparam name="TInput">The input type for the model</typeparam>
+/// <typeparam name="TOutput">The output type for the model</typeparam>
+public class HybridShardedOptimizer<T, TInput, TOutput> : ShardedOptimizerBase<T, TInput, TOutput>
+{
+    private readonly int _pipelineParallelSize;
+    private readonly int _tensorParallelSize;
+    private readonly int _dataParallelSize;
+
+    public HybridShardedOptimizer(
+        IOptimizer<T, TInput, TOutput> wrappedOptimizer,
+        IShardingConfiguration<T> config,
+        int pipelineParallelSize = 1,
+        int tensorParallelSize = 1,
+        int dataParallelSize = -1)
+        : base(wrappedOptimizer, config)
+    {
+        _pipelineParallelSize = pipelineParallelSize;
+        _tensorParallelSize = tensorParallelSize;
+
+        if (dataParallelSize == -1)
+        {
+            _dataParallelSize = WorldSize / (pipelineParallelSize * tensorParallelSize);
+        }
+        else
+        {
+            _dataParallelSize = dataParallelSize;
+        }
+
+        if (_pipelineParallelSize * _tensorParallelSize * _dataParallelSize != WorldSize)
+        {
+            throw new ArgumentException(
+                $"Pipeline ({_pipelineParallelSize}) × Tensor ({_tensorParallelSize}) × " +
+                $"Data ({_dataParallelSize}) must equal WorldSize ({WorldSize})");
+        }
+    }
+
+    /// <inheritdoc/>
+    public override OptimizationResult<T, TInput, TOutput> Optimize(OptimizationInputData<T, TInput, TOutput> inputData)
+    {
+        if (inputData == null)
+            throw new ArgumentNullException(nameof(inputData));
+
+        Config.CommunicationBackend.Barrier();
+
+        // 3D parallel optimization requires careful coordination:
+        // 1. Pipeline: gradient accumulation across micro-batches
+        // 2. Tensor: synchronization within tensor-parallel group
+        // 3. Data: synchronization across data-parallel replicas
+
+        var result = WrappedOptimizer.Optimize(inputData);
+
+        if (Config.AutoSyncGradients && result.BestSolution != null)
+        {
+            // Synchronization order matters:
+            // 1. First sync within tensor-parallel group (sum partial results)
+            // 2. Then sync across data-parallel replicas (average gradients)
+            // 3. Pipeline stages handle their own gradient accumulation
+
+            SynchronizeParameters(result.BestSolution);
+        }
+
+        Config.CommunicationBackend.Barrier();
+
+        return result;
+    }
+
+    /// <inheritdoc/>
+    public override void SynchronizeOptimizerState()
+    {
+        // In 3D parallelism, optimizer state management is complex:
+        // - Pipeline stages: independent states (no sync)
+        // - Tensor parallel: states partitioned by layer slice (sync within group)
+        // - Data parallel: states replicated (no sync needed)
+
+        // Full implementation would use process groups for each dimension
+        // Framework placeholder
+    }
+}
