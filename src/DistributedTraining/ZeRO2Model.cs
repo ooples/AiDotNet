@@ -145,13 +145,40 @@ public class ZeRO2Model<T, TInput, TOutput> : ShardedModelBase<T, TInput, TOutpu
         if (Config.AutoSyncGradients)
         {
             SynchronizeGradients();
+
             // After ReduceScatter, we have sharded gradients in _gradientShard
-            // For next forward pass, we need to AllGather parameters
-            // (This is simplified - full implementation would handle this more carefully)
-            // Cache invalidated by SynchronizeGradients
+            // When used with ZeRO2Optimizer, the optimizer will:
+            //   1. Access _gradientShard via the public property
+            //   2. Update only the corresponding parameter shard
+            //   3. The updated shard is reflected in the portion of LocalShard
+            //
+            // For correctness, we must AllGather parameter shards to reconstruct
+            // full parameters for the next forward pass (ensuring all ranks have
+            // synchronized parameters after optimizer updates)
+            LocalShard = AllGatherParameterShards();
+            CachedFullParameters = null;
         }
-        // Note: Cache not invalidated if AutoSyncGradients is false,
-        // allowing multiple predictions to benefit from cached full parameters
+    }
+
+    /// <summary>
+    /// Reconstructs full parameters by gathering parameter shards from all ranks.
+    /// </summary>
+    /// <remarks>
+    /// In ZeRO-2, after the optimizer updates each rank's parameter shard,
+    /// we need to AllGather all shards to reconstruct the full parameter vector
+    /// for the next forward pass. This ensures all ranks have identical synchronized
+    /// parameters.
+    /// </remarks>
+    /// <returns>Full parameter vector reconstructed from all ranks' shards</returns>
+    private Vector<T> AllGatherParameterShards()
+    {
+        // In this implementation, LocalShard contains full parameters (replicated),
+        // but after optimizer updates using gradient shards, portions of LocalShard
+        // are updated on each rank. AllGather averages these to get final parameters.
+        // This is equivalent to AllReducing with Average operation.
+        var gatheredParams = new Vector<T>(LocalShard.ToArray());
+        Config.CommunicationBackend.AllReduce(gatheredParams, ReductionOperation.Average);
+        return gatheredParams;
     }
 
     /// <inheritdoc/>
