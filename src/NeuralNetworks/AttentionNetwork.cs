@@ -28,7 +28,7 @@ namespace AiDotNet.NeuralNetworks;
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric type used for calculations, typically float or double.</typeparam>
-public class AttentionNetwork<T> : NeuralNetworkBase<T>
+public class AttentionNetwork<T> : NeuralNetworkBase<T>, IAuxiliaryLossLayer<T>
 {
     /// <summary>
     /// The maximum length of sequences this network can process.
@@ -94,6 +94,23 @@ public class AttentionNetwork<T> : NeuralNetworkBase<T>
     /// </para>
     /// </remarks>
     private readonly ILossFunction<T> _lossFunction;
+
+    /// <summary>
+    /// Stores the last computed attention entropy loss for diagnostics.
+    /// </summary>
+    private T _lastAttentionEntropyLoss = NumOps.Zero;
+
+    /// <summary>
+    /// Gets or sets whether to use auxiliary loss (attention entropy regularization) during training.
+    /// Default is false. Enable to prevent attention collapse across attention layers.
+    /// </summary>
+    public bool UseAuxiliaryLoss { get; set; } = false;
+
+    /// <summary>
+    /// Gets or sets the weight for attention entropy regularization.
+    /// Default is 0.01. Controls the strength of entropy regularization across attention layers.
+    /// </summary>
+    public T AuxiliaryLossWeight { get; set; } = NumOps.FromDouble(0.01);
 
     /// <summary>
     /// Initializes a new instance of the <see cref="AttentionNetwork{T}"/> class.
@@ -387,6 +404,108 @@ public class AttentionNetwork<T> : NeuralNetworkBase<T>
     {
         _sequenceLength = reader.ReadInt32();
         _embeddingSize = reader.ReadInt32();
+    }
+
+    /// <summary>
+    /// Computes the auxiliary loss for the AttentionNetwork, which aggregates attention entropy losses from all attention layers.
+    /// </summary>
+    /// <returns>The total attention entropy loss value from all attention layers.</returns>
+    /// <remarks>
+    /// <para>
+    /// This method aggregates attention entropy regularization from all attention layers in the network.
+    /// It prevents attention collapse by encouraging diverse attention patterns across all layers.
+    /// The loss is computed by summing entropy regularization from each AttentionLayer that has it enabled.
+    /// </para>
+    /// <para><b>For Beginners:</b> This calculates penalties from all attention mechanisms to prevent them from becoming too focused.
+    ///
+    /// Attention entropy regularization:
+    /// - Collects regularization losses from all attention layers
+    /// - Prevents any attention layer from collapsing to single positions
+    /// - Encourages diverse attention patterns throughout the network
+    /// - Helps maintain robust and generalizable attention mechanisms
+    ///
+    /// Why this is important:
+    /// - Prevents attention heads from becoming redundant
+    /// - Ensures the network uses all its attention capacity effectively
+    /// - Improves model robustness and generalization
+    /// - Helps prevent overfitting to specific attention patterns
+    ///
+    /// Think of it like ensuring all team members (attention layers) contribute meaningfully
+    /// rather than everyone just following one person's lead.
+    /// </para>
+    /// </remarks>
+    public T ComputeAuxiliaryLoss()
+    {
+        if (!UseAuxiliaryLoss)
+        {
+            return NumOps.Zero;
+        }
+
+        // Aggregate entropy losses from all attention layers
+        T totalEntropyLoss = NumOps.Zero;
+        int attentionLayerCount = 0;
+
+        foreach (var layer in Layers)
+        {
+            if (layer is IAuxiliaryLossLayer<T> auxLayer && auxLayer.UseAuxiliaryLoss)
+            {
+                T layerAuxLoss = auxLayer.ComputeAuxiliaryLoss();
+                totalEntropyLoss = NumOps.Add(totalEntropyLoss, layerAuxLoss);
+                attentionLayerCount++;
+            }
+        }
+
+        // Average over all attention layers if any exist
+        if (attentionLayerCount > 0)
+        {
+            totalEntropyLoss = NumOps.Divide(totalEntropyLoss, NumOps.FromInt32(attentionLayerCount));
+        }
+
+        _lastAttentionEntropyLoss = totalEntropyLoss;
+        return totalEntropyLoss;
+    }
+
+    /// <summary>
+    /// Gets diagnostic information about the attention entropy regularization.
+    /// </summary>
+    /// <returns>A dictionary containing diagnostic information about attention patterns across all layers.</returns>
+    /// <remarks>
+    /// <para>
+    /// This method provides insights into attention behavior across all attention layers, including:
+    /// - Total attention entropy loss
+    /// - Number of attention layers with regularization enabled
+    /// - Regularization weight
+    /// </para>
+    /// <para><b>For Beginners:</b> This gives you information to monitor attention health across the entire network.
+    ///
+    /// The diagnostics include:
+    /// - Total Attention Entropy Loss: Aggregate entropy from all attention layers
+    /// - Attention Layers Count: How many layers contribute to regularization
+    /// - Entropy Weight: How much the regularization influences training
+    /// - Use Auxiliary Loss: Whether network-level regularization is enabled
+    ///
+    /// These values help you:
+    /// - Monitor attention collapse across the entire network
+    /// - Detect if attention patterns are becoming too focused
+    /// - Tune the entropy regularization weight
+    /// - Ensure all attention layers maintain diverse patterns
+    /// </para>
+    /// </remarks>
+    public Dictionary<string, string> GetAuxiliaryLossDiagnostics()
+    {
+        var diagnostics = new Dictionary<string, string>
+        {
+            { "TotalAttentionEntropyLoss", _lastAttentionEntropyLoss.ToString() ?? "0" },
+            { "EntropyWeight", AuxiliaryLossWeight.ToString() ?? "0.01" },
+            { "UseAuxiliaryLoss", UseAuxiliaryLoss.ToString() }
+        };
+
+        // Count attention layers with auxiliary loss enabled
+        int attentionLayerCount = Layers.OfType<IAuxiliaryLossLayer<T>>()
+            .Count(l => l.UseAuxiliaryLoss);
+        diagnostics["AttentionLayersWithRegularization"] = attentionLayerCount.ToString();
+
+        return diagnostics;
     }
 
     /// <summary>
