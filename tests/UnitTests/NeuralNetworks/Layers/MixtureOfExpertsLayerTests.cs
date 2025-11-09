@@ -248,10 +248,11 @@ public class MixtureOfExpertsLayerTests
         var updatedParams = moe.GetParameters();
 
         // Assert
+        const float epsilon = 1e-6f;
         bool hasChanged = false;
         for (int i = 0; i < initialParams.Length; i++)
         {
-            if (initialParams[i] != updatedParams[i])
+            if (Math.Abs(initialParams[i] - updatedParams[i]) > epsilon)
             {
                 hasChanged = true;
                 break;
@@ -419,10 +420,10 @@ public class MixtureOfExpertsLayerTests
         // Assert
         Assert.NotNull(diagnostics);
         Assert.True(diagnostics.Count > 0);
-        Assert.True(diagnostics.ContainsKey("num_experts"));
-        Assert.Equal("4", diagnostics["num_experts"]);
-        Assert.True(diagnostics.ContainsKey("batch_size"));
-        Assert.Equal("8", diagnostics["batch_size"]);
+        Assert.True(diagnostics.TryGetValue("num_experts", out var numExperts));
+        Assert.Equal("4", numExperts);
+        Assert.True(diagnostics.TryGetValue("batch_size", out var batchSize));
+        Assert.Equal("8", batchSize);
 
         // Check for per-expert statistics
         for (int i = 0; i < 4; i++)
@@ -626,8 +627,8 @@ public class MixtureOfExpertsLayerTests
 
         for (int i = 0; i < 3; i++)
         {
-            Assert.True(diagnostics.ContainsKey($"expert_{i}_prob_mass"));
-            float probMass = float.Parse(diagnostics[$"expert_{i}_prob_mass"]);
+            Assert.True(diagnostics.TryGetValue($"expert_{i}_prob_mass", out var probMassStr), $"Diagnostics should contain expert_{i}_prob_mass");
+            float probMass = float.Parse(probMassStr);
             Assert.True(probMass > 0.0f, $"Expert {i} should have non-zero probability mass in soft routing");
         }
     }
@@ -697,10 +698,11 @@ public class MixtureOfExpertsLayerTests
         Assert.IsType<MixtureOfExpertsLayer<float>>(clone);
 
         // Parameters should be different after updating original
+        const float epsilon = 1e-6f;
         bool hasDifference = false;
         for (int i = 0; i < originalParams.Length; i++)
         {
-            if (originalParams[i] != clonedParams[i])
+            if (Math.Abs(originalParams[i] - clonedParams[i]) > epsilon)
             {
                 hasDifference = true;
                 break;

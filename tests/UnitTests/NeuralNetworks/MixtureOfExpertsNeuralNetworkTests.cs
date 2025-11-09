@@ -236,12 +236,12 @@ public class MixtureOfExpertsNeuralNetworkTests
         // Assert
         Assert.NotNull(metadata);
         Assert.Equal(ModelType.MixtureOfExperts, metadata.ModelType);
-        Assert.True(metadata.AdditionalInfo.ContainsKey("NumExperts"));
-        Assert.Equal(8, metadata.AdditionalInfo["NumExperts"]);
-        Assert.True(metadata.AdditionalInfo.ContainsKey("TopK"));
-        Assert.Equal(2, metadata.AdditionalInfo["TopK"]);
-        Assert.True(metadata.AdditionalInfo.ContainsKey("UseLoadBalancing"));
-        Assert.Equal(true, metadata.AdditionalInfo["UseLoadBalancing"]);
+        Assert.True(metadata.AdditionalInfo.TryGetValue("NumExperts", out var numExperts));
+        Assert.Equal(8, numExperts);
+        Assert.True(metadata.AdditionalInfo.TryGetValue("TopK", out var topK));
+        Assert.Equal(2, topK);
+        Assert.True(metadata.AdditionalInfo.TryGetValue("UseLoadBalancing", out var useLoadBalancing));
+        Assert.Equal(true, useLoadBalancing);
     }
 
     [Fact]
