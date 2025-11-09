@@ -74,18 +74,22 @@ public class CoreSetSelection<T, TInput, TOutput> : IQueryStrategy<T, TInput, TO
 
     private readonly CoreSetAlgorithm _algorithm;
     private readonly Func<TInput, Vector<T>>? _featureExtractor;
+    private readonly Random _random;
 
     /// <summary>
     /// Initializes a new core-set selection strategy.
     /// </summary>
     /// <param name="algorithm">The core-set algorithm to use.</param>
     /// <param name="featureExtractor">Function to extract features from inputs (uses model embeddings if null).</param>
+    /// <param name="seed">Random seed for reproducibility (null for non-deterministic).</param>
     public CoreSetSelection(
         CoreSetAlgorithm algorithm = CoreSetAlgorithm.KCenter,
-        Func<TInput, Vector<T>>? featureExtractor = null)
+        Func<TInput, Vector<T>>? featureExtractor = null,
+        int? seed = null)
     {
         _algorithm = algorithm;
         _featureExtractor = featureExtractor;
+        _random = seed.HasValue ? new Random(seed.Value) : new Random();
     }
 
     /// <inheritdoc/>
@@ -235,11 +239,80 @@ public class CoreSetSelection<T, TInput, TOutput> : IQueryStrategy<T, TInput, TO
         int k,
         IDataset<T, TInput, TOutput>? labeledData)
     {
-        // k-means++ uses probabilistic sampling proportional to D(x)^2
-        // where D(x) is the distance to the nearest center
-        // For now, delegate to k-center (deterministic version)
-        // Full implementation would use weighted random sampling
-        return SelectKCenter(model, unlabeledData, k, labeledData);
+        // Extract features for all unlabeled examples
+        var unlabeledFeatures = new List<Vector<T>>();
+        for (int i = 0; i < unlabeledData.Count; i++)
+        {
+            var input = unlabeledData.GetInput(i);
+            unlabeledFeatures.Add(ExtractFeatures(model, input));
+        }
+
+        // Initialize centers with labeled data features
+        var centers = new List<Vector<T>>();
+        if (labeledData != null)
+        {
+            for (int i = 0; i < labeledData.Count; i++)
+            {
+                var input = labeledData.GetInput(i);
+                centers.Add(ExtractFeatures(model, input));
+            }
+        }
+
+        var selected = new List<int>();
+        var availableIndices = new HashSet<int>(Enumerable.Range(0, unlabeledData.Count));
+
+        // Select k examples using probabilistic sampling
+        for (int iteration = 0; iteration < k; iteration++)
+        {
+            if (availableIndices.Count == 0)
+                break;
+
+            // Compute D(x)^2 for each available unlabeled point
+            var distances = new List<double>();
+            var indices = new List<int>();
+
+            foreach (var idx in availableIndices)
+            {
+                var dist = MinDistanceToCenters(unlabeledFeatures[idx], centers);
+                var distSquared = Convert.ToDouble(dist) * Convert.ToDouble(dist);
+                distances.Add(distSquared);
+                indices.Add(idx);
+            }
+
+            // Sample proportional to distance squared
+            int selectedIdx = WeightedRandomSample(indices, distances);
+            selected.Add(selectedIdx);
+            centers.Add(unlabeledFeatures[selectedIdx]);
+            availableIndices.Remove(selectedIdx);
+        }
+
+        return new Vector<int>(selected.ToArray());
+    }
+
+    /// <summary>
+    /// Samples an index with probability proportional to weights.
+    /// </summary>
+    private int WeightedRandomSample(List<int> indices, List<double> weights)
+    {
+        double totalWeight = weights.Sum();
+        if (totalWeight == 0)
+        {
+            // All weights are zero, sample uniformly
+            return indices[_random.Next(indices.Count)];
+        }
+
+        double sample = _random.NextDouble() * totalWeight;
+        double cumulative = 0;
+
+        for (int i = 0; i < indices.Count; i++)
+        {
+            cumulative += weights[i];
+            if (sample <= cumulative)
+                return indices[i];
+        }
+
+        // Fallback (shouldn't reach here due to floating point precision)
+        return indices[indices.Count - 1];
     }
 
     /// <summary>
