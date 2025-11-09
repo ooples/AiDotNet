@@ -325,41 +325,52 @@ public class DeploymentRuntime<T> where T : struct
             // Create input tensor based on type T
             var inputs = new List<NamedOnnxValue>();
 
-            if (typeof(T) == typeof(float))
+            try
             {
-                var floatInput = ConvertToFloatArray(input);
-                var tensor = new DenseTensor<float>(floatInput, inputShape);
-                inputs.Add(NamedOnnxValue.CreateFromTensor(inputName, tensor));
-            }
-            else if (typeof(T) == typeof(double))
-            {
-                var doubleInput = ConvertToDoubleArray(input);
-                var tensor = new DenseTensor<double>(doubleInput, inputShape);
-                inputs.Add(NamedOnnxValue.CreateFromTensor(inputName, tensor));
-            }
-            else if (typeof(T) == typeof(int))
-            {
-                var intInput = ConvertToIntArray(input);
-                var tensor = new DenseTensor<int>(intInput, inputShape);
-                inputs.Add(NamedOnnxValue.CreateFromTensor(inputName, tensor));
-            }
-            else if (typeof(T) == typeof(long))
-            {
-                var longInput = ConvertToLongArray(input);
-                var tensor = new DenseTensor<long>(longInput, inputShape);
-                inputs.Add(NamedOnnxValue.CreateFromTensor(inputName, tensor));
-            }
-            else
-            {
-                throw new NotSupportedException($"Type {typeof(T).Name} is not supported for ONNX inference. Supported types: float, double, int, long");
-            }
+                if (typeof(T) == typeof(float))
+                {
+                    var floatInput = ConvertToFloatArray(input);
+                    var tensor = new DenseTensor<float>(floatInput, inputShape);
+                    inputs.Add(NamedOnnxValue.CreateFromTensor(inputName, tensor));
+                }
+                else if (typeof(T) == typeof(double))
+                {
+                    var doubleInput = ConvertToDoubleArray(input);
+                    var tensor = new DenseTensor<double>(doubleInput, inputShape);
+                    inputs.Add(NamedOnnxValue.CreateFromTensor(inputName, tensor));
+                }
+                else if (typeof(T) == typeof(int))
+                {
+                    var intInput = ConvertToIntArray(input);
+                    var tensor = new DenseTensor<int>(intInput, inputShape);
+                    inputs.Add(NamedOnnxValue.CreateFromTensor(inputName, tensor));
+                }
+                else if (typeof(T) == typeof(long))
+                {
+                    var longInput = ConvertToLongArray(input);
+                    var tensor = new DenseTensor<long>(longInput, inputShape);
+                    inputs.Add(NamedOnnxValue.CreateFromTensor(inputName, tensor));
+                }
+                else
+                {
+                    throw new NotSupportedException($"Type {typeof(T).Name} is not supported for ONNX inference. Supported types: float, double, int, long");
+                }
 
-            // Run inference
-            using var results = session.Run(inputs);
+                // Run inference
+                using var results = session.Run(inputs);
 
-            // Extract output (first output tensor)
-            var outputTensor = results.First().Value;
-            return ConvertOutputToT(outputTensor);
+                // Extract output (first output tensor)
+                var outputTensor = results.First().Value;
+                return ConvertOutputToT(outputTensor);
+            }
+            finally
+            {
+                // Dispose input tensors to avoid native memory leaks
+                foreach (var input in inputs)
+                {
+                    input.Dispose();
+                }
+            }
         });
     }
 

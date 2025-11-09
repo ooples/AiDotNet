@@ -108,15 +108,8 @@ public abstract class ModelExporterBase<T, TInput, TOutput> : IModelExporter<T, 
             return config.InputShape;
         }
 
-        // Try to infer from model parameters
-        // IFullModel extends IParameterizable, so we can directly access GetParameters
-        var parameters = model.GetParameters();
-        if (parameters != null && parameters.Length > 0)
-        {
-            // Assume first parameter represents input shape
-            return new[] { parameters.Length };
-        }
-
+        // Input shape must be explicitly provided in configuration
+        // Cannot reliably infer from parameter count as it represents total model parameters, not input dimensions
         throw new InvalidOperationException(
             "Could not determine input shape. Please specify InputShape in ExportConfiguration.");
     }
