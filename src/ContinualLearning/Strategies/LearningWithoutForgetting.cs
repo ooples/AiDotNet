@@ -79,22 +79,26 @@ public class LearningWithoutForgetting<T, TInput, TOutput> : IContinualLearningS
     }
 
     /// <inheritdoc/>
+    /// <remarks>
+    /// <para><b>LwF-Specific Behavior:</b> Unlike EWC which adds a regularization term based on parameter importance,
+    /// LwF computes distillation loss during training by comparing teacher and student outputs on actual data.</para>
+    ///
+    /// <para>The distillation loss is computed using <see cref="ComputeDistillationLoss(Vector{T}, Vector{T})"/>
+    /// when training batches are processed. This method returns zero because LwF's regularization happens
+    /// through the training loss function, not as a separate parameter-based regularization term.</para>
+    ///
+    /// <para>To use LwF properly:
+    /// 1. Call this method to get the parameter regularization (always zero for LwF)
+    /// 2. During training, call ComputeDistillationLoss(teacherOutput, studentOutput) for each batch
+    /// 3. Add both the task loss and distillation loss together: L_total = L_task + λ * L_distill
+    /// </para>
+    /// </remarks>
     public T ComputeRegularizationLoss(IFullModel<T, TInput, TOutput> model)
     {
-        // If no previous task, no distillation loss
-        if (_teacherModel == null)
-            return NumOps.Zero;
-
-        // In practice, this would compute the distillation loss:
-        // L_distill = KL(teacher_outputs || student_outputs)
-        // where outputs are softened with temperature T
-
-        // Placeholder: return zero
-        // In a full implementation, this would:
-        // 1. Get outputs from both teacher and student models
-        // 2. Apply temperature scaling
-        // 3. Compute KL divergence or similar distance metric
-
+        // LwF does not use parameter-based regularization like EWC.
+        // Instead, it uses knowledge distillation during training, which requires
+        // actual data to pass through both teacher and student models.
+        // Use ComputeDistillationLoss(teacherOutput, studentOutput) during training.
         return NumOps.Zero;
     }
 

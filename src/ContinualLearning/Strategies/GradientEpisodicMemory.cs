@@ -124,20 +124,65 @@ public class GradientEpisodicMemory<T, TInput, TOutput> : IContinualLearningStra
     }
 
     /// <inheritdoc/>
+    /// <remarks>
+    /// <para><b>GEM-Specific Implementation:</b> This method should store the average gradient
+    /// computed on examples from the completed task for future constraint checking.</para>
+    ///
+    /// <para><b>Current Limitation:</b> The IFullModel interface does not expose gradient
+    /// computation methods. To use GEM properly in production, you need to:
+    /// 1. Compute gradients during training using your optimizer/framework
+    /// 2. Call a separate method to store these gradients (see <see cref="StoreTaskGradient"/>)
+    /// </para>
+    ///
+    /// <para>This method currently stores a zero gradient as a placeholder to maintain
+    /// the task count. The gradient projection in <see cref="AdjustGradients"/> will still
+    /// function but without actual constraint enforcement until real gradients are provided.</para>
+    /// </remarks>
     public void FinalizeTask(IFullModel<T, TInput, TOutput> model)
     {
-        // In a full implementation, this would:
-        // 1. Compute the average gradient on the stored examples for this task
-        // 2. Store this gradient for future constraint checking
-
-        // Placeholder: store a dummy gradient
-        var dummyGradient = new Vector<T>(model.ParameterCount);
-        for (int i = 0; i < dummyGradient.Length; i++)
+        // Store a zero gradient placeholder to maintain task count.
+        // In practice, use StoreTaskGradient() during training to provide real gradients.
+        var zeroGradient = new Vector<T>(model.ParameterCount);
+        // Initialize to zero (default(T) for each element)
+        for (int i = 0; i < zeroGradient.Length; i++)
         {
-            dummyGradient[i] = NumOps.FromDouble(0.01);
+            zeroGradient[i] = NumOps.Zero;
         }
 
-        _taskGradients.Add(dummyGradient);
+        _taskGradients.Add(zeroGradient);
+    }
+
+    /// <summary>
+    /// Stores the reference gradient for a completed task.
+    /// </summary>
+    /// <param name="taskGradient">The average gradient on task examples.</param>
+    /// <remarks>
+    /// <para><b>For Production Use:</b> Call this method after computing the average gradient
+    /// on examples from a completed task. This gradient will be used as a constraint
+    /// in future tasks to prevent catastrophic forgetting.</para>
+    ///
+    /// <para>To compute the task gradient:
+    /// 1. Sample examples from the task (stored in episodic memory)
+    /// 2. Compute loss on these examples
+    /// 3. Compute gradients via backpropagation
+    /// 4. Average the gradients across examples
+    /// 5. Pass the result to this method
+    /// </para>
+    /// </remarks>
+    public void StoreTaskGradient(Vector<T> taskGradient)
+    {
+        if (taskGradient == null)
+            throw new ArgumentNullException(nameof(taskGradient));
+
+        // Replace the most recent placeholder gradient or add new one
+        if (_taskGradients.Count > 0)
+        {
+            _taskGradients[_taskGradients.Count - 1] = taskGradient;
+        }
+        else
+        {
+            _taskGradients.Add(taskGradient);
+        }
     }
 
     /// <summary>
