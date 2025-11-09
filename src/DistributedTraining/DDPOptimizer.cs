@@ -96,33 +96,32 @@ public class DDPOptimizer<T, TInput, TOutput> : ShardedOptimizerBase<T, TInput, 
         // Barrier to ensure all processes start together
         Config.CommunicationBackend.Barrier();
 
+        // CRITICAL: Save parameters BEFORE local optimization
+        // This allows us to apply averaged gradients from the correct starting point
+        Vector<T>? savedParameters = null;
+        if (Config.AutoSyncGradients && inputData.InitialSolution != null)
+        {
+            savedParameters = inputData.InitialSolution.GetParameters();
+        }
+
         // Step 1: Optimize locally to compute gradients (and apply them locally)
         var localResult = WrappedOptimizer.Optimize(inputData);
 
         // Step 2: Synchronize gradients across all workers
-        if (Config.AutoSyncGradients && localResult.BestSolution != null)
+        if (Config.AutoSyncGradients && localResult.BestSolution != null && savedParameters != null)
         {
             var localGradients = gradientOptimizer.LastComputedGradients;
 
             if (localGradients != null && localGradients.Length > 0)
             {
-                // Get parameters after local gradient application
-                var updatedParams = localResult.BestSolution.GetParameters();
-
-                // Reverse the local update to get original parameters
-                var originalParams = ComputeOriginalParameters(updatedParams, localGradients);
-
                 // Average gradients across all workers (true DDP)
                 Config.CommunicationBackend.AllReduce(localGradients, ReductionOperation.Average);
 
-                // CRITICAL: Restore model to pre-update parameters before applying averaged gradients
-                // Without this, we would double-apply gradients: params - lr*localGrad - lr*avgGrad
-                // instead of the correct: params - lr*avgGrad
-                localResult.BestSolution.SetParameters(originalParams);
-
-                // Apply averaged gradients to original parameters
-                // This ensures all workers apply the same averaged gradients starting from the same point
-                var finalModel = gradientOptimizer.ApplyGradients(localGradients, localResult.BestSolution);
+                // Apply averaged gradients using the safe 3-parameter overload
+                // This explicitly passes savedParameters (pre-update state) to prevent double-stepping
+                // Works correctly with ANY optimizer (SGD, Adam, RMSprop, etc.) because we're starting
+                // from the original parameters, not the locally-updated ones
+                var finalModel = gradientOptimizer.ApplyGradients(savedParameters, localGradients, localResult.BestSolution);
 
                 // Update result with model using averaged gradients
                 localResult.BestSolution = finalModel;
@@ -133,35 +132,6 @@ public class DDPOptimizer<T, TInput, TOutput> : ShardedOptimizerBase<T, TInput, 
         Config.CommunicationBackend.Barrier();
 
         return localResult;
-    }
-
-    /// <summary>
-    /// Computes the original parameters before gradient application by reversing the update.
-    /// </summary>
-    /// <param name="updatedParams">Parameters after gradient application</param>
-    /// <param name="gradients">The gradients that were applied</param>
-    /// <returns>Estimated original parameters before gradient application</returns>
-    /// <remarks>
-    /// For gradient descent: params_new = params_old - learning_rate * gradients
-    /// Therefore: params_old = params_new + learning_rate * gradients
-    /// </remarks>
-    private Vector<T> ComputeOriginalParameters(Vector<T> updatedParams, Vector<T> gradients)
-    {
-        // Get learning rate from optimizer options
-        var options = WrappedOptimizer.GetOptions();
-        double learningRate = options.InitialLearningRate;
-
-        // Reverse the update: params_old = params_new + lr * gradients
-        var original = new T[updatedParams.Length];
-        for (int i = 0; i < updatedParams.Length; i++)
-        {
-            double updated = Convert.ToDouble(updatedParams[i]);
-            double gradient = Convert.ToDouble(gradients[i]);
-            double originalValue = updated + learningRate * gradient;
-            original[i] = (T)Convert.ChangeType(originalValue, typeof(T));
-        }
-
-        return new Vector<T>(original);
     }
 
     /// <inheritdoc/>

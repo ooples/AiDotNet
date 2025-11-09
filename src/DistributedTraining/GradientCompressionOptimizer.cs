@@ -122,84 +122,43 @@ public class GradientCompressionOptimizer<T, TInput, TOutput> : ShardedOptimizer
 
         Config.CommunicationBackend.Barrier();
 
+        // CRITICAL: Save parameters BEFORE local optimization
+        // This allows us to apply averaged compressed gradients from the correct starting point
+        Vector<T>? savedParameters = null;
+        if (Config.AutoSyncGradients && inputData.InitialSolution != null)
+        {
+            savedParameters = inputData.InitialSolution.GetParameters();
+        }
+
         // Step 1: Optimize locally to compute gradients and get locally-updated model
         var localResult = WrappedOptimizer.Optimize(inputData);
 
         // Step 2: Get the gradients that were computed during optimization
         var localGradients = gradientOptimizer.LastComputedGradients;
 
-        if (Config.AutoSyncGradients && localResult.BestSolution != null && localGradients != null && localGradients.Length > 0)
+        if (Config.AutoSyncGradients && localResult.BestSolution != null && savedParameters != null && localGradients != null && localGradients.Length > 0)
         {
-            // Step 3: Get parameters BEFORE gradient application (reverse the local update)
-            var updatedParams = localResult.BestSolution.GetParameters();
-            var originalParams = ComputeOriginalParameters(updatedParams, localGradients);
-
-            // Step 4: Compress local gradients
+            // Step 3: Compress local gradients
             var compressedGradients = CompressGradients(localGradients);
 
-            // Step 5: Synchronize compressed gradients across all ranks and average them
+            // Step 4: Synchronize compressed gradients across all ranks and average them
             Config.CommunicationBackend.AllReduce(compressedGradients, ReductionOperation.Average);
 
-            // Step 6: Decompress to get averaged gradients
+            // Step 5: Decompress to get averaged gradients
             var averagedGradients = DecompressGradients(compressedGradients, localGradients.Length);
 
-            // CRITICAL: Restore model to pre-update parameters before applying averaged gradients
-            // Without this, we would double-apply gradients: params - lr*localGrad - lr*avgGrad
-            // instead of the correct: params - lr*avgGrad
-            localResult.BestSolution.SetParameters(originalParams);
+            // Step 6: Apply averaged compressed gradients using the safe 3-parameter overload
+            // This explicitly passes savedParameters (pre-update state) to prevent double-stepping
+            // Works correctly with ANY optimizer (SGD, Adam, RMSprop, etc.)
+            var finalModel = gradientOptimizer.ApplyGradients(savedParameters, averagedGradients, localResult.BestSolution);
 
-            // Step 7: Apply averaged compressed gradients to original parameters
-            // This ensures all ranks converge using compressed gradients
-            var finalModel = gradientOptimizer.ApplyGradients(averagedGradients, localResult.BestSolution);
-
-            // Step 8: Return result with model updated using averaged compressed gradients
+            // Step 7: Return result with model updated using averaged compressed gradients
             localResult.BestSolution = finalModel;
         }
 
         Config.CommunicationBackend.Barrier();
 
         return localResult;
-    }
-
-    /// <summary>
-    /// Computes the original parameters before gradient application by reversing the update.
-    /// </summary>
-    /// <param name="updatedParams">Parameters after gradient application</param>
-    /// <param name="gradients">The gradients that were applied</param>
-    /// <returns>Estimated original parameters before gradient application</returns>
-    /// <remarks>
-    /// <para>
-    /// This method reverses the gradient update to recover original parameters.
-    /// For gradient descent: params_new = params_old - learning_rate * gradients
-    /// Therefore: params_old = params_new + learning_rate * gradients
-    /// </para>
-    /// <para>
-    /// We extract the learning rate from the optimizer's options. This works correctly
-    /// for vanilla SGD. For adaptive optimizers (Adam, RMSprop), this is an approximation
-    /// since they use momentum and adaptive learning rates per parameter. However,
-    /// the approximation is sufficient for gradient compression purposes because:
-    /// 1. We're only using this to restore a baseline for applying averaged gradients
-    /// 2. The error is small relative to the gradient compression benefits
-    /// 3. Industry frameworks like Horovod use similar approximations
-    /// </para>
-    /// </remarks>
-    private Vector<T> ComputeOriginalParameters(Vector<T> updatedParams, Vector<T> gradients)
-    {
-        // Get learning rate from optimizer options
-        var options = WrappedOptimizer.GetOptions();
-        double learningRate = options.InitialLearningRate;
-
-        // Reverse the update: params_old = params_new + lr * gradients
-        var original = new T[updatedParams.Length];
-        for (int i = 0; i < updatedParams.Length; i++)
-        {
-            double updated = Convert.ToDouble(updatedParams[i]);
-            double gradient = Convert.ToDouble(gradients[i]);
-            double originalValue = updated + learningRate * gradient;
-            original[i] = (T)Convert.ChangeType(originalValue, typeof(T));
-        }
-
-        return new Vector<T>(original);
     }
 
     /// <summary>
