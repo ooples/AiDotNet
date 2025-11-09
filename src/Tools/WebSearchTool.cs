@@ -158,15 +158,15 @@ public class WebSearchTool : ITool
         var request = new HttpRequestMessage(HttpMethod.Get, url);
         request.Headers.Add("Ocp-Apim-Subscription-Key", _apiKey);
 
-        var response = await _httpClient.SendAsync(request);
+        var response = await _httpClient.SendAsync(request).ConfigureAwait(false);
 
         if (!response.IsSuccessStatusCode)
         {
-            var errorContent = await response.Content.ReadAsStringAsync();
+            var errorContent = await response.Content.ReadAsStringAsync().ConfigureAwait(false);
             throw new HttpRequestException($"Bing Search API error ({response.StatusCode}): {errorContent}");
         }
 
-        var content = await response.Content.ReadAsStringAsync();
+        var content = await response.Content.ReadAsStringAsync().ConfigureAwait(false);
         var searchResponse = JsonConvert.DeserializeObject<BingSearchResponse>(content);
 
         if (searchResponse?.WebPages?.Value == null || searchResponse.WebPages.Value.Length == 0)
@@ -184,15 +184,15 @@ public class WebSearchTool : ITool
     {
         var url = $"https://serpapi.com/search.json?q={Uri.EscapeDataString(query)}&num={_defaultResultCount}&api_key={_apiKey}&engine=google";
 
-        var response = await _httpClient.GetAsync(url);
+        var response = await _httpClient.GetAsync(url).ConfigureAwait(false);
 
         if (!response.IsSuccessStatusCode)
         {
-            var errorContent = await response.Content.ReadAsStringAsync();
+            var errorContent = await response.Content.ReadAsStringAsync().ConfigureAwait(false);
             throw new HttpRequestException($"SerpAPI error ({response.StatusCode}): {errorContent}");
         }
 
-        var content = await response.Content.ReadAsStringAsync();
+        var content = await response.Content.ReadAsStringAsync().ConfigureAwait(false);
         var searchResponse = JsonConvert.DeserializeObject<SerpAPIResponse>(content);
 
         if (searchResponse?.OrganicResults == null || searchResponse.OrganicResults.Length == 0)
