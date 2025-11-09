@@ -4,6 +4,8 @@ using AiDotNet.Data.Abstractions;
 using AiDotNet.Interfaces;
 using AiDotNet.Interpretability;
 using AiDotNet.Serialization;
+using AiDotNet.Agents;
+using AiDotNet.Models;
 
 namespace AiDotNet.Models.Results;
 
@@ -276,6 +278,46 @@ public class PredictionModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
     internal ILoRAConfiguration<T>? LoRAConfiguration { get; private set; }
 
     /// <summary>
+    /// Gets the agent configuration used during model building.
+    /// </summary>
+    /// <value>Agent configuration containing API keys and settings, or null if agent assistance wasn't used.</value>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> If you enabled agent assistance during model building with ConfigureAgentAssistance(),
+    /// this property stores the configuration. The API key is stored here so you can use AskAsync() on the trained
+    /// model without providing the key again.
+    ///
+    /// Note: API keys are NOT serialized when saving the model to disk for security reasons.
+    /// </para>
+    /// </remarks>
+    [JsonIgnore]
+    internal AgentConfiguration<T>? AgentConfig { get; private set; }
+
+    /// <summary>
+    /// Gets the agent's recommendations made during model building.
+    /// </summary>
+    /// <value>Agent recommendations including suggested models and reasoning, or null if agent assistance wasn't used.</value>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> If you used agent assistance during building, this contains all the recommendations
+    /// the agent made, such as:
+    /// - Which model type to use (e.g., "RidgeRegression")
+    /// - Why that model was chosen
+    /// - Suggested hyperparameter values
+    ///
+    /// You can examine these recommendations to understand why the agent made certain choices.
+    ///
+    /// Example:
+    /// <code>
+    /// if (result.AgentRecommendation != null)
+    /// {
+    ///     Console.WriteLine($"Agent selected: {result.AgentRecommendation.SuggestedModelType}");
+    ///     Console.WriteLine($"Reasoning: {result.AgentRecommendation.ModelSelectionReasoning}");
+    /// }
+    /// </code>
+    /// </para>
+    /// </remarks>
+    internal AgentRecommendation<T, TInput, TOutput>? AgentRecommendation { get; private set; }
+
+    /// <summary>
     /// Initializes a new instance of the PredictionModelResult class with the specified model, optimization results, and normalization information.
     /// </summary>
     /// <param name="model">The underlying model used for making predictions.</param>
@@ -328,6 +370,8 @@ public class PredictionModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
     /// <param name="queryProcessors">Optional query processors for RAG query preprocessing.</param>
     /// <param name="loraConfiguration">Optional LoRA configuration for parameter-efficient fine-tuning.</param>
     /// <param name="crossValidationResult">Optional cross-validation results from training.</param>
+    /// <param name="agentConfig">Optional agent configuration used during model building.</param>
+    /// <param name="agentRecommendation">Optional agent recommendations from model building.</param>
     public PredictionModelResult(OptimizationResult<T, TInput, TOutput> optimizationResult,
         NormalizationInfo<T, TInput, TOutput> normalizationInfo,
         IBiasDetector<T>? biasDetector = null,
@@ -337,7 +381,9 @@ public class PredictionModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
         IGenerator<T>? ragGenerator = null,
         IEnumerable<IQueryProcessor>? queryProcessors = null,
         ILoRAConfiguration<T>? loraConfiguration = null,
-        CrossValidationResult<T, TInput, TOutput>? crossValidationResult = null)
+        CrossValidationResult<T, TInput, TOutput>? crossValidationResult = null,
+        AgentConfiguration<T>? agentConfig = null,
+        AgentRecommendation<T, TInput, TOutput>? agentRecommendation = null)
     {
         Model = optimizationResult.BestSolution;
         OptimizationResult = optimizationResult;
@@ -351,6 +397,8 @@ public class PredictionModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
         QueryProcessors = queryProcessors;
         LoRAConfiguration = loraConfiguration;
         CrossValidationResult = crossValidationResult;
+        AgentConfig = agentConfig;
+        AgentRecommendation = agentRecommendation;
     }
 
     /// <summary>
@@ -365,6 +413,7 @@ public class PredictionModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
     /// <param name="ragReranker">Optional reranker for RAG functionality during inference.</param>
     /// <param name="ragGenerator">Optional generator for RAG functionality during inference.</param>
     /// <param name="queryProcessors">Optional query processors for RAG query preprocessing.</param>
+    /// <param name="agentConfig">Optional agent configuration for AI assistance during inference.</param>
     /// <remarks>
     /// <para>
     /// This constructor is used when a model has been trained using meta-learning (e.g., MAML, Reptile, SEAL).
@@ -388,6 +437,7 @@ public class PredictionModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
     /// - The meta-learner itself (for adaptation)
     /// - Training history (loss curves, performance metrics)
     /// - Optional LoRA configuration (for efficient adaptation)
+    /// - Optional agent configuration (for AI assistance)
     /// </para>
     /// </remarks>
     public PredictionModelResult(
@@ -399,7 +449,8 @@ public class PredictionModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
         IRetriever<T>? ragRetriever = null,
         IReranker<T>? ragReranker = null,
         IGenerator<T>? ragGenerator = null,
-        IEnumerable<IQueryProcessor>? queryProcessors = null)
+        IEnumerable<IQueryProcessor>? queryProcessors = null,
+        AgentConfiguration<T>? agentConfig = null)
     {
         Model = metaLearner.BaseModel;
         MetaLearner = metaLearner;
@@ -412,6 +463,7 @@ public class PredictionModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
         RagReranker = ragReranker;
         RagGenerator = ragGenerator;
         QueryProcessors = queryProcessors;
+        AgentConfig = agentConfig;
 
         // Create placeholder OptimizationResult and NormalizationInfo for consistency
         OptimizationResult = new OptimizationResult<T, TInput, TOutput>();

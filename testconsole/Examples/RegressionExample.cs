@@ -12,7 +12,7 @@ namespace AiDotNetTestConsole.Examples;
 /// </summary>
 public class RegressionExample
 {
-    public void RunExample()
+    public async Task RunExample()
     {
         Console.WriteLine("Multiple Regression Example - House Price Prediction");
         Console.WriteLine("==================================================\n");
@@ -71,10 +71,10 @@ public class RegressionExample
             };
 
             // Build a multiple regression model
-            var model = modelBuilder
+            var model = await modelBuilder
                 .ConfigureOptimizer(optimizer)
                 .ConfigureModel(new MultipleRegression<double>(regressionOptions))
-                .Build(houseFeatures, housePrices);
+                .BuildAsync(houseFeatures, housePrices);
 
             Console.WriteLine("Model trained successfully!");
 
