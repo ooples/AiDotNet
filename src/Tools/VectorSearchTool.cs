@@ -188,8 +188,11 @@ public class VectorSearchTool<T> : ITool
 
             if (doc.HasRelevanceScore && doc.RelevanceScore != null)
             {
-                var scoreValue = Convert.ToDouble((object)doc.RelevanceScore);
-                result.AppendLine($"    Relevance: {scoreValue:F3}");
+                // Format relevance score for display - supports any numeric type T
+                string scoreText = doc.RelevanceScore is IFormattable formattable
+                    ? formattable.ToString("F3", System.Globalization.CultureInfo.InvariantCulture)
+                    : doc.RelevanceScore.ToString() ?? "N/A";
+                result.AppendLine($"    Relevance: {scoreText}");
             }
 
             result.AppendLine();
