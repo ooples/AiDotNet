@@ -51,6 +51,7 @@ namespace AiDotNet.Agents;
 public static class AgentGlobalConfiguration
 {
     private static readonly Dictionary<LLMProvider, string> _apiKeys = new();
+    private static readonly object _lock = new object();
 
     /// <summary>
     /// Gets a read-only dictionary of configured API keys indexed by LLM provider.
@@ -85,7 +86,16 @@ public static class AgentGlobalConfiguration
     /// Never commit code that logs or exposes these values in production.
     /// </para>
     /// </remarks>
-    public static IReadOnlyDictionary<LLMProvider, string> ApiKeys => _apiKeys;
+    public static IReadOnlyDictionary<LLMProvider, string> ApiKeys
+    {
+        get
+        {
+            lock (_lock)
+            {
+                return new Dictionary<LLMProvider, string>(_apiKeys);
+            }
+        }
+    }
 
     /// <summary>
     /// Gets or sets the default LLM provider to use when one is not explicitly specified.
@@ -205,9 +215,13 @@ public static class AgentGlobalConfiguration
     /// <remarks>
     /// This internal method is called by the AgentGlobalConfigurationBuilder to store configured API keys.
     /// It is not intended for direct use - use the Configure() method with the fluent builder instead.
+    /// Thread-safe for concurrent access.
     /// </remarks>
     internal static void SetApiKey(LLMProvider provider, string apiKey)
     {
-        _apiKeys[provider] = apiKey;
+        lock (_lock)
+        {
+            _apiKeys[provider] = apiKey;
+        }
     }
 }
