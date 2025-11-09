@@ -107,16 +107,11 @@ public class ZeRO2Optimizer<T, TInput, TOutput> : ShardedOptimizerBase<T, TInput
                     // This is the key DDP operation: all ranks get the same averaged gradient
                     Config.CommunicationBackend.AllReduce(localGradients, ReductionOperation.Average);
 
-                    // CRITICAL: Restore model to pre-update parameters before applying averaged gradients
-                    // The local optimizer already applied local gradients, but we want to apply AVERAGED gradients instead.
-                    // Without this restore, we would have: params - lr*localGrad - lr*avgGrad (wrong)
-                    // With restore, we get: params - lr*avgGrad (correct)
-                    localResult.BestSolution.SetParameters(savedParameters);
-
-                    // Apply the averaged gradients using the wrapped optimizer's logic
-                    // This works for ANY optimizer (SGD, Adam, RMSprop, etc.) because ApplyGradients
+                    // Apply the averaged gradients using the safe 3-parameter overload
+                    // This explicitly passes savedParameters (pre-update state) to prevent double-stepping
+                    // Works for ANY optimizer (SGD, Adam, RMSprop, etc.) because ApplyGradients
                     // handles optimizer-specific state (momentum, variance, etc.)
-                    var finalModel = gradientOptimizer.ApplyGradients(localGradients, localResult.BestSolution);
+                    var finalModel = gradientOptimizer.ApplyGradients(savedParameters, localGradients, localResult.BestSolution);
                     localResult.BestSolution = finalModel;
                 }
             }

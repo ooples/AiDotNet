@@ -172,6 +172,33 @@ public interface IGradientBasedOptimizer<T, TInput, TOutput> : IOptimizer<T, TIn
     IFullModel<T, TInput, TOutput> ApplyGradients(Vector<T> gradients, IFullModel<T, TInput, TOutput> model);
 
     /// <summary>
+    /// Applies pre-computed gradients to explicit original parameters (double-step safe).
+    /// </summary>
+    /// <remarks>
+    /// <para><b>⚠️ RECOMMENDED for Distributed Training:</b>
+    /// This overload accepts originalParameters explicitly, making it impossible to accidentally
+    /// apply gradients twice. Use this in distributed optimizers where you need explicit control
+    /// over which parameter state to start from.
+    /// </para>
+    /// <para>
+    /// Prevents double-stepping bug:
+    /// - WRONG: ApplyGradients(g_avg, modelWithLocalUpdate) → double step!
+    /// - RIGHT: ApplyGradients(originalParams, g_avg, modelTemplate) → single step!
+    /// </para>
+    /// <para><b>Distributed Pattern:</b>
+    /// 1. Save originalParams before local optimization
+    /// 2. Run local optimization → get localGradients
+    /// 3. Synchronize gradients → get avgGradients
+    /// 4. Call ApplyGradients(originalParams, avgGradients, model) → correct result!
+    /// </para>
+    /// </remarks>
+    /// <param name="originalParameters">Pre-update parameters to start from</param>
+    /// <param name="gradients">Gradients to apply</param>
+    /// <param name="model">Model template (only used for structure, parameters ignored)</param>
+    /// <returns>New model with updated parameters</returns>
+    IFullModel<T, TInput, TOutput> ApplyGradients(Vector<T> originalParameters, Vector<T> gradients, IFullModel<T, TInput, TOutput> model);
+
+    /// <summary>
     /// Reverses a gradient update to recover original parameters before the update was applied.
     /// </summary>
     /// <remarks>

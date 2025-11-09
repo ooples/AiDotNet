@@ -106,47 +106,56 @@ public abstract class GradientBasedOptimizerBase<T, TInput, TOutput> : Optimizer
 
     /// <inheritdoc/>
     /// <remarks>
-    /// <para><b>⚠️ CRITICAL for Distributed Training:</b>
-    /// The model parameter passed to this method MUST be at pre-update state (original parameters
-    /// before any gradient application). This method applies gradients via UpdateSolution which
-    /// extracts parameters from the model and subtracts: params_new = params_old - lr * gradients.
-    /// </para>
-    /// <para>
-    /// If the model already contains locally-updated parameters (e.g., after calling WrappedOptimizer.Optimize
-    /// in DDP flow), passing it directly will cause double-stepping:
-    /// params_final = (params_old - lr*g_local) - lr*g_avg = params_old - lr*g_local - lr*g_avg (WRONG!)
-    /// </para>
-    /// <para>
-    /// Correct pattern for distributed optimizers:
-    /// 1. Call WrappedOptimizer.Optimize() → produces locally-updated model
-    /// 2. Compute originalParams = ComputeOriginalParameters(updatedParams, localGradients)
-    /// 3. Synchronize gradients (AllReduce/ReduceScatter)
-    /// 4. model.SetParameters(originalParams) ← CRITICAL: Restore pre-update state
-    /// 5. Call ApplyGradients(averagedGradients, model) → now produces correct result
+    /// <para><b>Note:</b> This overload extracts parameters from the model. For distributed training,
+    /// use the safer 3-parameter overload that accepts originalParameters explicitly to prevent
+    /// double-stepping bugs.
     /// </para>
     /// </remarks>
     public virtual IFullModel<T, TInput, TOutput> ApplyGradients(Vector<T> gradients, IFullModel<T, TInput, TOutput> model)
     {
+        if (model == null)
+            throw new ArgumentNullException(nameof(model));
+
+        // Delegate to the safe 3-parameter overload
+        var parameters = model.GetParameters();
+        return ApplyGradients(parameters, gradients, model);
+    }
+
+    /// <inheritdoc/>
+    /// <remarks>
+    /// <para><b>Production-Ready for Distributed Training:</b>
+    /// This overload prevents double-stepping by accepting originalParameters explicitly.
+    /// The model parameter is used only as a template for structure.
+    /// </para>
+    /// <para>
+    /// Correct implementation: applies gradients to originalParameters (not model.GetParameters()),
+    /// ensuring single-step behavior even if model contains post-update parameters.
+    /// </para>
+    /// </remarks>
+    public virtual IFullModel<T, TInput, TOutput> ApplyGradients(Vector<T> originalParameters, Vector<T> gradients, IFullModel<T, TInput, TOutput> model)
+    {
+        if (originalParameters == null)
+            throw new ArgumentNullException(nameof(originalParameters));
         if (gradients == null)
             throw new ArgumentNullException(nameof(gradients));
         if (model == null)
             throw new ArgumentNullException(nameof(model));
 
-        var parameters = model.GetParameters();
-        if (gradients.Length != parameters.Length)
+        if (gradients.Length != originalParameters.Length)
         {
             throw new ArgumentException(
-                $"Gradient size ({gradients.Length}) must match model parameter count ({parameters.Length})",
+                $"Gradient size ({gradients.Length}) must match original parameter count ({originalParameters.Length})",
                 nameof(gradients));
         }
 
-        // Use the existing UpdateSolution method which applies gradients with
-        // optimizer-specific logic (learning rate, momentum, Adam state, etc.)
+        // CRITICAL: Apply gradients to originalParameters (explicitly passed in),
+        // NOT to model.GetParameters(). This prevents double-stepping.
         //
-        // IMPORTANT: UpdateSolution extracts parameters from the model and applies gradients.
-        // For correct behavior in distributed training, the model must be at pre-update state
-        // (see remarks above for detailed explanation and correct usage pattern).
-        return UpdateSolution(model, gradients);
+        // UpdateParameters applies optimizer-specific logic: params_new = params_old - optimizer_update(gradients)
+        var updatedParameters = UpdateParameters(originalParameters, gradients);
+
+        // Create new model instance with updated parameters
+        return model.WithParameters(updatedParameters);
     }
 
     /// <summary>

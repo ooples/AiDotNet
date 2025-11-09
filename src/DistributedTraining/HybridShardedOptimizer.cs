@@ -279,14 +279,11 @@ public class HybridShardedOptimizer<T, TInput, TOutput> : ShardedOptimizerBase<T
                         SubgroupAllReduce(localGradients, _dataParallelGroup, ReductionOperation.Average);
                     }
 
-                    // CRITICAL: Restore model to pre-update parameters before applying synchronized gradients
-                    // The local optimizer already applied local gradients, but we want to apply SYNCHRONIZED gradients instead.
-                    localResult.BestSolution.SetParameters(savedParameters);
-
-                    // Apply the synchronized gradients using the wrapped optimizer's logic
-                    // This works for ANY optimizer (SGD, Adam, RMSprop, etc.) because ApplyGradients
+                    // Apply the synchronized gradients using the safe 3-parameter overload
+                    // This explicitly passes savedParameters (pre-update state) to prevent double-stepping
+                    // Works for ANY optimizer (SGD, Adam, RMSprop, etc.) because ApplyGradients
                     // handles optimizer-specific state (momentum, variance, etc.)
-                    var finalModel = gradientOptimizer.ApplyGradients(localGradients, localResult.BestSolution);
+                    var finalModel = gradientOptimizer.ApplyGradients(savedParameters, localGradients, localResult.BestSolution);
                     localResult.BestSolution = finalModel;
                 }
             }
