@@ -78,50 +78,56 @@ public class ZeRO2Optimizer<T, TInput, TOutput> : ShardedOptimizerBase<T, TInput
         // Barrier to ensure all processes start together
         Config.CommunicationBackend.Barrier();
 
-        // Step 1: Optimize locally to compute gradients (and apply them locally)
-        var localResult = WrappedOptimizer.Optimize(inputData);
-
-        // Step 2: Implement ZeRO-2 gradient sharding with ReduceScatter
-        if (Config.AutoSyncGradients && localResult.BestSolution != null)
+        try
         {
-            var localGradients = gradientOptimizer.LastComputedGradients;
+            // Step 1: Optimize locally to compute gradients (and apply them locally)
+            var localResult = WrappedOptimizer.Optimize(inputData);
 
-            if (localGradients != null && localGradients.Length > 0)
+            // Step 2: Implement ZeRO-2 gradient sharding with ReduceScatter
+            if (Config.AutoSyncGradients && localResult.BestSolution != null)
             {
-                // Get parameters after local gradient application
-                var updatedParams = localResult.BestSolution.GetParameters();
+                var localGradients = gradientOptimizer.LastComputedGradients;
 
-                // Reverse the local update to get original parameters
-                var originalParams = ComputeOriginalParameters(updatedParams, localGradients);
+                if (localGradients != null && localGradients.Length > 0)
+                {
+                    // Get parameters after local gradient application
+                    var updatedParams = localResult.BestSolution.GetParameters();
 
-                // TODO: Complete ZeRO-2 parameter shard update with ReduceScatter
-                // Current limitation: The IGradientBasedOptimizer.ApplyGradients() expects full gradient vector.
-                // Proper ZeRO-2 requires:
-                // 1. Use ReduceScatter to distribute gradient shards: var gradientShard = Config.CommunicationBackend.ReduceScatter(localGradients, ReductionOperation.Average);
-                // 2. Split originalParams into shards matching gradient shards
-                // 3. Apply gradientShard to this rank's parameter shard only
-                // 4. AllGather parameter shards to reconstruct full parameters
-                //
-                // For now, we use DDP-style full gradient sync as a functional approximation.
-                // This provides correct gradient averaging but without the memory savings of true ZeRO-2 gradient sharding.
-                Config.CommunicationBackend.AllReduce(localGradients, ReductionOperation.Average);
+                    // Reverse the local update to get original parameters
+                    var originalParams = ComputeOriginalParameters(updatedParams, localGradients);
 
-                // CRITICAL: Restore model to pre-update parameters before applying averaged gradients
-                // Without this, we would double-apply gradients: params - lr*localGrad - lr*avgGrad
-                // instead of the correct: params - lr*avgGrad
-                localResult.BestSolution.SetParameters(originalParams);
+                    // TODO: Complete ZeRO-2 parameter shard update with ReduceScatter
+                    // Current limitation: The IGradientBasedOptimizer.ApplyGradients() expects full gradient vector.
+                    // Proper ZeRO-2 requires:
+                    // 1. Use ReduceScatter to distribute gradient shards: var gradientShard = Config.CommunicationBackend.ReduceScatter(localGradients, ReductionOperation.Average);
+                    // 2. Split originalParams into shards matching gradient shards
+                    // 3. Apply gradientShard to this rank's parameter shard only
+                    // 4. AllGather parameter shards to reconstruct full parameters
+                    //
+                    // For now, we use DDP-style full gradient sync as a functional approximation.
+                    // This provides correct gradient averaging but without the memory savings of true ZeRO-2 gradient sharding.
+                    Config.CommunicationBackend.AllReduce(localGradients, ReductionOperation.Average);
 
-                var finalModel = gradientOptimizer.ApplyGradients(localGradients, localResult.BestSolution);
-                localResult.BestSolution = finalModel;
+                    // CRITICAL: Restore model to pre-update parameters before applying averaged gradients
+                    // Without this, we would double-apply gradients: params - lr*localGrad - lr*avgGrad
+                    // instead of the correct: params - lr*avgGrad
+                    localResult.BestSolution.SetParameters(originalParams);
+
+                    var finalModel = gradientOptimizer.ApplyGradients(localGradients, localResult.BestSolution);
+                    localResult.BestSolution = finalModel;
+                }
             }
+
+            SynchronizeOptimizerState();
+
+            return localResult;
         }
-
-        SynchronizeOptimizerState();
-
-        // Barrier to ensure all processes finish together
-        Config.CommunicationBackend.Barrier();
-
-        return localResult;
+        finally
+        {
+            // Ensure barrier always executes to prevent deadlock,
+            // even if WrappedOptimizer.Optimize throws an exception
+            Config.CommunicationBackend.Barrier();
+        }
     }
 
     /// <summary>
