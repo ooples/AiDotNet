@@ -53,7 +53,7 @@ public class ComputationNode<T>
     /// - How much to adjust it (larger gradient = bigger adjustment needed)
     /// </para>
     /// </remarks>
-    public Tensor<T> Gradient { get; set; }
+    public Tensor<T>? Gradient { get; set; }
 
     /// <summary>
     /// Gets or sets the parent nodes (inputs) that were used to compute this node's value.
@@ -96,7 +96,7 @@ public class ComputationNode<T>
     /// - For multiplication (c = a * b), it would multiply c's gradient by the other input's value
     /// </para>
     /// </remarks>
-    public Action<Tensor<T>> BackwardFunction { get; set; }
+    public Action<Tensor<T>>? BackwardFunction { get; set; }
 
     /// <summary>
     /// Gets or sets a value indicating whether this node requires gradient computation.
@@ -129,7 +129,7 @@ public class ComputationNode<T>
     /// Node names help with debugging and visualization of the computation graph.
     /// They're optional but recommended for important nodes like parameters.
     /// </remarks>
-    public string Name { get; set; }
+    public string? Name { get; set; }
 
     /// <summary>
     /// Initializes a new instance of the <see cref="ComputationNode{T}"/> class.
@@ -158,9 +158,9 @@ public class ComputationNode<T>
     public ComputationNode(
         Tensor<T> value,
         bool requiresGradient = false,
-        List<ComputationNode<T>> parents = null,
-        Action<Tensor<T>> backwardFunction = null,
-        string name = null)
+        List<ComputationNode<T>>? parents = null,
+        Action<Tensor<T>>? backwardFunction = null,
+        string? name = null)
     {
         Value = value;
         RequiresGradient = requiresGradient;

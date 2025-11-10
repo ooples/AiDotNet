@@ -48,13 +48,13 @@ public class GradientTape<T> : IDisposable
     /// as that only runs once for the type, not per-thread.
     /// </remarks>
     [ThreadStatic]
-    private static Stack<GradientTape<T>> _tapeStack;
+    private static Stack<GradientTape<T>>? _tapeStack;
 
     /// <summary>
     /// Gets the currently active tape for this thread, or null if no tape is active.
     /// </summary>
     /// <returns>The active GradientTape, or null if none exists.</returns>
-    public static GradientTape<T> Current
+    public static GradientTape<T>? Current
     {
         get
         {
