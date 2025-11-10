@@ -329,24 +329,45 @@ public class NeuralTuringMachine<T> : NeuralNetworkBase<T>, IAuxiliaryLossLayer<
             return NumOps.Zero;
         }
 
-        // Note: Full implementation would compute entropy of read/write weights
-        // This requires caching addressing weights during forward pass
-        // Placeholder implementation - returns zero
+        // Compute negative entropy over read and write addressing weights
+        // to encourage focused, sharp memory access patterns
+        T totalNegativeEntropy = NumOps.Zero;
+        T epsilon = NumOps.FromDouble(1e-10);  // For numerical stability
 
-        // Pseudo-code for full implementation:
-        // T totalEntropy = NumOps.Zero;
-        // foreach (readWeight in _readWeights)
-        // {
-        //     T entropy = ComputeEntropy(readWeight);
-        //     totalEntropy = NumOps.Subtract(totalEntropy, entropy); // Minimize -H
-        // }
-        // foreach (writeWeight in _writeWeights)
-        // {
-        //     T entropy = ComputeEntropy(writeWeight);
-        //     totalEntropy = NumOps.Subtract(totalEntropy, entropy);
-        // }
+        // Compute negative entropy for read weights
+        foreach (var readWeight in _readWeights)
+        {
+            T entropy = NumOps.Zero;
+            for (int i = 0; i < readWeight.Length; i++)
+            {
+                T p = readWeight[i];
+                // Entropy: H = -Σ(p * log(p))
+                // Add epsilon to avoid log(0)
+                T pWithEps = NumOps.Add(p, epsilon);
+                T logP = NumOps.Log(pWithEps);
+                T pLogP = NumOps.Multiply(p, logP);
+                entropy = NumOps.Add(entropy, pLogP);
+            }
+            // Negative entropy (we want to minimize this, encouraging sharp peaks)
+            totalNegativeEntropy = NumOps.Subtract(totalNegativeEntropy, entropy);
+        }
 
-        _lastMemoryUsageLoss = NumOps.Zero;
+        // Compute negative entropy for write weights
+        foreach (var writeWeight in _writeWeights)
+        {
+            T entropy = NumOps.Zero;
+            for (int i = 0; i < writeWeight.Length; i++)
+            {
+                T p = writeWeight[i];
+                T pWithEps = NumOps.Add(p, epsilon);
+                T logP = NumOps.Log(pWithEps);
+                T pLogP = NumOps.Multiply(p, logP);
+                entropy = NumOps.Add(entropy, pLogP);
+            }
+            totalNegativeEntropy = NumOps.Subtract(totalNegativeEntropy, entropy);
+        }
+
+        _lastMemoryUsageLoss = totalNegativeEntropy;
         return _lastMemoryUsageLoss;
     }
 
