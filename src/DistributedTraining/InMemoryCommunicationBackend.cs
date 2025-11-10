@@ -82,7 +82,9 @@ public class InMemoryCommunicationBackend<T> : CommunicationBackendBase<T>
     // The _globalLock ensures thread-safe access to the shared dictionaries.
     private static readonly object _globalLock = new object();
     private static readonly Dictionary<string, List<Vector<T>>> _sharedBuffers = new();
+    private static readonly Dictionary<string, int> _pendingConsumers = new();
     private static readonly Dictionary<string, int> _barrierCounters = new();
+    private static readonly Dictionary<string, int> _barrierReleaseCounts = new();
     private static readonly Dictionary<string, int> _barrierGenerations = new();
     private static readonly Dictionary<string, int> _operationCounters = new();
 
@@ -277,24 +279,24 @@ public class InMemoryCommunicationBackend<T> : CommunicationBackendBase<T>
                     }
                 }
 
-                // Cleanup happens AFTER all ranks pass the barrier check but BEFORE releasing the lock
-                // This ensures all ranks see the final counter value before it's removed
-                if (_rank == 0 && _barrierCounters.ContainsKey(barrierId))
-                {
-                    _barrierCounters.Remove(barrierId);
-                    _barrierGenerations[_environmentId]++;
-                }
-
                 Monitor.PulseAll(_globalLock);
             }
             finally
             {
-                // Cleanup in finally for timeout case - ensures cleanup even on exception
-                // Check if cleanup already happened in normal flow
-                if (_rank == 0 && _barrierCounters.ContainsKey(barrierId))
+                // Track how many ranks have exited the barrier
+                int released = _barrierReleaseCounts.TryGetValue(barrierId, out var current)
+                    ? current + 1
+                    : 1;
+                _barrierReleaseCounts[barrierId] = released;
+
+                // Only remove the barrier entries when ALL ranks have exited
+                // This prevents KeyNotFoundException when ranks wake up and re-check the while condition
+                if (released == _worldSize)
                 {
                     _barrierCounters.Remove(barrierId);
+                    _barrierReleaseCounts.Remove(barrierId);
                     _barrierGenerations[_environmentId]++;
+                    Monitor.PulseAll(_globalLock);
                 }
             }
         }
@@ -544,6 +546,7 @@ public class InMemoryCommunicationBackend<T> : CommunicationBackendBase<T>
                     throw new ArgumentNullException(nameof(data), "Data cannot be null on root process.");
                 }
                 _sharedBuffers[bufferId] = new List<Vector<T>> { data.Clone() };
+                _pendingConsumers[bufferId] = _worldSize;
             }
 
             var startTime = DateTime.UtcNow;
@@ -578,11 +581,12 @@ public class InMemoryCommunicationBackend<T> : CommunicationBackendBase<T>
                     throw new InvalidOperationException("Broadcast buffer was removed before data could be retrieved.");
                 }
 
-                // Cleanup happens AFTER all ranks retrieve data but BEFORE releasing lock
-                // CRITICAL: Root rank (not hardcoded rank 0) must clean up
-                if (_rank == root && _sharedBuffers.ContainsKey(bufferId))
+                // Decrement consumer count and clean up when all ranks have consumed
+                int remaining = --_pendingConsumers[bufferId];
+                if (remaining == 0)
                 {
                     _sharedBuffers.Remove(bufferId);
+                    _pendingConsumers.Remove(bufferId);
                     _operationCounters[_environmentId]++;
                 }
 
@@ -593,13 +597,7 @@ public class InMemoryCommunicationBackend<T> : CommunicationBackendBase<T>
             }
             finally
             {
-                // Cleanup in finally for timeout case - ensures cleanup even on exception
-                // CRITICAL: Root rank (not hardcoded rank 0) must clean up
-                if (_rank == root && _sharedBuffers.ContainsKey(bufferId))
-                {
-                    _sharedBuffers.Remove(bufferId);
-                    _operationCounters[_environmentId]++;
-                }
+                Monitor.PulseAll(_globalLock);
             }
         }
     }
@@ -651,6 +649,8 @@ public class InMemoryCommunicationBackend<T> : CommunicationBackendBase<T>
                     Array.Copy(sendData.ToArray(), i * chunkSize, chunk, 0, chunkSize);
                     _sharedBuffers[bufferId].Add(new Vector<T>(chunk));
                 }
+
+                _pendingConsumers[bufferId] = _worldSize;
             }
 
             List<Vector<T>>? buffer;
@@ -678,11 +678,12 @@ public class InMemoryCommunicationBackend<T> : CommunicationBackendBase<T>
                     }
                     var result = buffer[_rank].Clone();
 
-                    // Cleanup happens AFTER all ranks retrieve data but BEFORE releasing lock
-                    // CRITICAL: Root rank (not hardcoded rank 0) must clean up
-                    if (_rank == root && _sharedBuffers.ContainsKey(bufferId))
+                    // Decrement consumer count and clean up when all ranks have consumed
+                    int remaining = --_pendingConsumers[bufferId];
+                    if (remaining == 0)
                     {
                         _sharedBuffers.Remove(bufferId);
+                        _pendingConsumers.Remove(bufferId);
                         _operationCounters[_environmentId]++;
                     }
 
@@ -698,13 +699,7 @@ public class InMemoryCommunicationBackend<T> : CommunicationBackendBase<T>
             }
             finally
             {
-                // Cleanup in finally for timeout case - ensures cleanup even on exception
-                // CRITICAL: Root rank (not hardcoded rank 0) must clean up
-                if (_rank == root && _sharedBuffers.ContainsKey(bufferId))
-                {
-                    _sharedBuffers.Remove(bufferId);
-                    _operationCounters[_environmentId]++;
-                }
+                Monitor.PulseAll(_globalLock);
             }
         }
     }
