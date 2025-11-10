@@ -803,7 +803,7 @@ public abstract class RegressionBase<T> : IRegression<T>
         var errors = predictions.Subtract(target);
 
         // Compute gradients using MSE formula: (1/n) * X^T * errors
-        var n = NumOps.FromDouble(input.RowCount);
+        var n = NumOps.FromDouble(input.Rows);
         var gradCoefficients = input.Transpose().Multiply(errors).Divide(n);
 
         // Build full gradient vector (coefficients + intercept)

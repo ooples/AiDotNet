@@ -1064,12 +1064,7 @@ public abstract class NonLinearRegressionBase<T> : INonLinearRegression<T>
     /// </summary>
     private T ComputeLoss(Vector<T> predictions, Vector<T> targets, ILossFunction<T> lossFunction)
     {
-        T totalLoss = NumOps.Zero;
-        for (int i = 0; i < predictions.Length; i++)
-        {
-            totalLoss = NumOps.Add(totalLoss, lossFunction.ComputeLoss(predictions[i], targets[i]));
-        }
-        return NumOps.Divide(totalLoss, NumOps.FromDouble(predictions.Length));
+        return lossFunction.CalculateLoss(predictions, targets);
     }
 
     /// <inheritdoc/>
