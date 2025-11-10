@@ -791,15 +791,18 @@ public abstract class RegressionBase<T> : IRegression<T>
     /// </remarks>
     public virtual Vector<T> ComputeGradients(Matrix<T> input, Vector<T> target, ILossFunction<T>? lossFunction = null)
     {
-        var loss = lossFunction ?? DefaultLossFunction;
+        // Note: Linear regression uses closed-form least-squares solution (MSE-based).
+        // The lossFunction parameter is ignored because the gradient computation is specific
+        // to the MSE objective function: ∇L = (1/n) * X^T * (predictions - target)
+        // For custom loss functions, use NonLinearRegressionBase instead.
 
         // Make predictions
         var predictions = Predict(input);
 
-        // Compute prediction errors
+        // Compute prediction errors (MSE gradient component)
         var errors = predictions.Subtract(target);
 
-        // Compute gradients: (1/n) * X^T * errors
+        // Compute gradients using MSE formula: (1/n) * X^T * errors
         var n = NumOps.FromDouble(input.RowCount);
         var gradCoefficients = input.Transpose().Multiply(errors).Divide(n);
 
