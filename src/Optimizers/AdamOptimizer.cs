@@ -279,7 +279,7 @@ public class AdamOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, T
 
             parameters[i] = NumOps.Subtract(
                 parameters[i],
-                NumOps.Multiply(update, NumOps.FromDouble(_options.LearningRate))
+                NumOps.Multiply(update, _currentLearningRate)
             );
         }
 
@@ -338,7 +338,7 @@ public class AdamOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, T
 
                 updatedMatrix[i, j] = NumOps.Subtract(
                     parameters[i, j],
-                    NumOps.Multiply(update, NumOps.FromDouble(_options.LearningRate))
+                    NumOps.Multiply(update, _currentLearningRate)
                 );
 
                 index++;
