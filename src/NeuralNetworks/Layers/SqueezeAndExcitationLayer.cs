@@ -261,16 +261,62 @@ public class SqueezeAndExcitationLayer<T> : LayerBase<T>
     /// should be adjusted to reduce the loss. The value is null if no backward pass has been performed yet or after ResetState is called.
     /// </para>
     /// <para><b>For Beginners:</b> This shows how the second set of biases should change.
-    /// 
+    ///
     /// These gradients:
     /// - Help adjust the default attention given to each feature
     /// - Allow the network to learn which features are generally more important
     /// - Fine-tune the "excitation" part of the layer
-    /// 
+    ///
     /// Along with the other gradients, these help the network improve through training.
     /// </para>
     /// </remarks>
     private Vector<T>? _bias2Gradient;
+
+    /// <summary>
+    /// The attention weights from the most recent forward pass.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// This field stores the channel attention weights computed during the forward pass.
+    /// These weights represent the importance of each channel and are used to compute
+    /// auxiliary losses such as L1 sparsity regularization.
+    /// </para>
+    /// <para><b>For Beginners:</b> This stores how much attention each feature channel received.
+    ///
+    /// The attention weights:
+    /// - Are values between 0 and 1 (from the sigmoid activation)
+    /// - Indicate the importance of each channel
+    /// - Can be used for regularization to encourage sparsity
+    ///
+    /// Sparsity means encouraging the network to use only a few important channels
+    /// rather than spreading attention across all channels equally.
+    /// </para>
+    /// </remarks>
+    private Matrix<T>? _lastAttentionWeights;
+
+    /// <summary>
+    /// Gets or sets the weight for L1 sparsity regularization on attention weights.
+    /// </summary>
+    /// <value>
+    /// The weight to apply to the L1 sparsity loss. Default is 0.0001.
+    /// </value>
+    /// <remarks>
+    /// <para>
+    /// This property controls the strength of L1 sparsity regularization applied to
+    /// the channel attention weights. Higher values encourage more sparse attention
+    /// (fewer active channels), while lower values allow more distributed attention.
+    /// </para>
+    /// <para><b>For Beginners:</b> This controls how strongly to encourage sparse attention.
+    ///
+    /// Sparsity regularization:
+    /// - Encourages the network to focus on fewer, more important channels
+    /// - Helps prevent overfitting by reducing model complexity
+    /// - Can improve interpretability by making channel selection clearer
+    ///
+    /// Typical values range from 0.0001 to 0.01. Set to 0 to disable sparsity regularization.
+    /// </para>
+    /// </remarks>
+    public T SparsityWeight { get; set; } = NumOps.FromDouble(0.0001);
 
     /// <summary>
     /// The activation function applied after the first fully connected layer.
@@ -616,6 +662,9 @@ public class SqueezeAndExcitationLayer<T> : LayerBase<T>
         excitation1 = ApplyActivation(excitation1, isFirstActivation: true);
         var excitation2 = excitation1.Multiply(_weights2).AddVectorToEachRow(_bias2);
         var excitation = ApplyActivation(excitation2, isFirstActivation: false);
+
+        // Store attention weights for auxiliary loss computation
+        _lastAttentionWeights = excitation;
 
         // Scale the input
         var output = new Tensor<T>(input.Shape);
@@ -1129,6 +1178,62 @@ public class SqueezeAndExcitationLayer<T> : LayerBase<T>
     }
 
     /// <summary>
+    /// Computes the L1 sparsity regularization loss on channel attention weights.
+    /// </summary>
+    /// <returns>The L1 sparsity loss value.</returns>
+    /// <remarks>
+    /// <para>
+    /// This method computes L1 sparsity regularization on the channel attention weights
+    /// to encourage sparse attention patterns. Sparse attention means that only a few
+    /// channels should have high attention weights, which improves feature selection
+    /// and reduces overfitting. The loss is computed as the L1 norm (sum of absolute values)
+    /// of the attention weights, normalized by the number of channels.
+    /// </para>
+    /// <para><b>For Beginners:</b> This method encourages the layer to focus on fewer, more important channels.
+    ///
+    /// L1 sparsity regularization:
+    /// - Adds a penalty for using many channels with high attention
+    /// - Encourages the network to be selective about which features to use
+    /// - Helps prevent overfitting by simplifying the model
+    ///
+    /// The process:
+    /// 1. Take the absolute value of each attention weight
+    /// 2. Sum all these absolute values (L1 norm)
+    /// 3. Normalize by the number of channels for scale-invariance
+    ///
+    /// A higher loss means the network is spreading attention across many channels.
+    /// A lower loss means the network is focusing on just a few important channels.
+    ///
+    /// This loss is typically added to the main training loss with a small weight
+    /// (controlled by the SparsityWeight property) to gently encourage sparsity.
+    /// </para>
+    /// </remarks>
+    public T ComputeAuxiliaryLoss()
+    {
+        if (_lastAttentionWeights is null)
+        {
+            return NumOps.Zero;
+        }
+
+        // Compute L1 norm: sum of absolute values across all attention weights
+        T l1Norm = NumOps.Zero;
+        for (int b = 0; b < _lastAttentionWeights.Rows; b++)
+        {
+            for (int c = 0; c < _lastAttentionWeights.Columns; c++)
+            {
+                T absWeight = NumOps.Abs(_lastAttentionWeights[b, c]);
+                l1Norm = NumOps.Add(l1Norm, absWeight);
+            }
+        }
+
+        // Normalize by total number of elements for scale-invariance
+        T totalElements = NumOps.FromDouble(_lastAttentionWeights.Rows * _lastAttentionWeights.Columns);
+        T sparsityLoss = NumOps.Divide(l1Norm, totalElements);
+
+        return sparsityLoss;
+    }
+
+    /// <summary>
     /// Resets the internal state of the Squeeze-and-Excitation layer.
     /// </summary>
     /// <remarks>
@@ -1138,17 +1243,17 @@ public class SqueezeAndExcitationLayer<T> : LayerBase<T>
     /// a new input after training or when implementing stateful networks.
     /// </para>
     /// <para><b>For Beginners:</b> This method clears the layer's memory to start fresh.
-    /// 
+    ///
     /// When resetting the state:
     /// - Stored inputs and outputs are cleared
     /// - Calculated gradients are cleared
     /// - The layer forgets any information from previous inputs
-    /// 
+    ///
     /// This is important for:
     /// - Processing a new, unrelated input
     /// - Starting a new training epoch
     /// - Preventing information from one input affecting another
-    /// 
+    ///
     /// Think of it like wiping a whiteboard clean before starting a new problem.
     /// </para>
     /// </remarks>
@@ -1157,6 +1262,7 @@ public class SqueezeAndExcitationLayer<T> : LayerBase<T>
         // Clear cached values from forward and backward passes
         _lastInput = null;
         _lastOutput = null;
+        _lastAttentionWeights = null;
         _weights1Gradient = null;
         _bias1Gradient = null;
         _weights2Gradient = null;
