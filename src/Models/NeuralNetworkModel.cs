@@ -331,37 +331,51 @@ public class NeuralNetworkModel<T> : IFullModel<T, Tensor<T>, Tensor<T>>
         {
             throw new InvalidOperationException("This neural network does not support training.");
         }
-        
-        // Ensure the network is in training mode
-        Network.SetTrainingMode(true);
-        
-        // Convert tensors to the format expected by the network
-        Vector<T> inputVector = input.ToVector();
-        Vector<T> expectedOutputVector = expectedOutput.ToVector();
-        
-        // Forward pass with memory to store intermediate values for backpropagation
-        Tensor<T> outputTensor = Network.ForwardWithMemory(Tensor<T>.FromVector(inputVector));
-        Vector<T> outputVector = outputTensor.ToVector();
 
-        // Calculate error gradient
-        Vector<T> error = CalculateError(outputVector, expectedOutputVector);
+        // Save the current training mode to restore it after training
+        bool previousTrainingMode = _isTrainingMode;
 
-        // Backpropagate error
-        Network.Backpropagate(Tensor<T>.FromVector(error));
-        
-        // Update weights using the calculated gradients
-        Vector<T> gradients = Network.GetParameterGradients();
-        Vector<T> currentParams = Network.GetParameters();
-        Vector<T> newParams = new Vector<T>(currentParams.Length);
-        
-        for (int i = 0; i < currentParams.Length; i++)
+        try
         {
-            // Simple gradient descent: param = param - learningRate * gradient
-            T update = _numOps.Multiply(_learningRate, gradients[i]);
-            newParams[i] = _numOps.Subtract(currentParams[i], update);
+            // Ensure the network is in training mode
+            Network.SetTrainingMode(true);
+
+            // Convert tensors to the format expected by the network
+            Vector<T> inputVector = input.ToVector();
+            Vector<T> expectedOutputVector = expectedOutput.ToVector();
+
+            // Forward pass with memory to store intermediate values for backpropagation
+            Tensor<T> outputTensor = Network.ForwardWithMemory(Tensor<T>.FromVector(inputVector));
+            Vector<T> outputVector = outputTensor.ToVector();
+
+            // Calculate error gradient
+            Vector<T> error = CalculateError(outputVector, expectedOutputVector);
+
+            // Backpropagate error
+            Network.Backpropagate(Tensor<T>.FromVector(error));
+
+            // Update weights using the calculated gradients
+            Vector<T> gradients = Network.GetParameterGradients();
+            Vector<T> currentParams = Network.GetParameters();
+            Vector<T> newParams = new Vector<T>(currentParams.Length);
+
+            for (int i = 0; i < currentParams.Length; i++)
+            {
+                // Simple gradient descent: param = param - learningRate * gradient
+                T update = _numOps.Multiply(_learningRate, gradients[i]);
+                newParams[i] = _numOps.Subtract(currentParams[i], update);
+            }
+
+            Network.UpdateParameters(newParams);
         }
-        
-        Network.UpdateParameters(newParams);
+        finally
+        {
+            // Restore the original training mode
+            // This ensures that if the model was in inference mode before,
+            // it returns to inference mode after training, preventing
+            // dropout and batch normalization from being in the wrong state
+            SetTrainingMode(previousTrainingMode);
+        }
     }
 
     /// <summary>
