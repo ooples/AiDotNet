@@ -142,7 +142,11 @@ public class PipelineParallelModel<T, TInput, TOutput> : ShardedModelBase<T, TIn
             int activationSize = NumOps.ToInt32(sizeHeader[0]);
 
             Vector<T> receivedActivations = Config.CommunicationBackend.Receive(_stageId - 1, activationSize, tag: 0);
-            stageInput = ConversionsHelper.ConvertVectorToInput<T, TInput>(receivedActivations, input);
+
+            // For intermediate stages, convert received activations to TInput type WITHOUT using
+            // the original input as reference (which would have the wrong shape for non-first stages).
+            // Use ConversionsHelper to centralize conversion logic and avoid code duplication.
+            stageInput = ConversionsHelper.ConvertVectorToInputWithoutReference<T, TInput>(receivedActivations);
         }
 
         // Compute true gradients using the model's gradient computation
@@ -225,8 +229,10 @@ public class PipelineParallelModel<T, TInput, TOutput> : ShardedModelBase<T, TIn
 
             Vector<T> receivedActivations = Config.CommunicationBackend.Receive(_stageId - 1, activationSize, tag: 10);
 
-            // Convert received vector back to TInput for this stage using reference input for shape
-            stageInput = ConversionsHelper.ConvertVectorToInput<T, TInput>(receivedActivations, input);
+            // For intermediate stages, convert received activations to TInput type WITHOUT using
+            // the original input as reference (which would have the wrong shape for non-first stages).
+            // Use ConversionsHelper to centralize conversion logic and avoid code duplication.
+            stageInput = ConversionsHelper.ConvertVectorToInputWithoutReference<T, TInput>(receivedActivations);
         }
 
         // Process through this stage's layers
