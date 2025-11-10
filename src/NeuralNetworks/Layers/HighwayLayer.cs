@@ -811,11 +811,49 @@ public class HighwayLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     /// Computes the auxiliary loss for this layer based on gate balance regularization.
     /// </summary>
     /// <returns>The computed auxiliary loss value.</returns>
+    /// <remarks>
+    /// <para>
+    /// This method computes a gate-balance regularization loss that encourages the gates to maintain
+    /// a balanced value around 0.5, preventing degenerate gating where all gates collapse to 0 or 1.
+    /// The loss is computed as the squared deviation of the mean gate value from 0.5, averaged across
+    /// all dimensions and batch samples.
+    /// </para>
+    /// <para><b>For Beginners:</b> This prevents the highway layer from "cheating" by always using
+    /// only one lane (transform or bypass). By penalizing gates that drift too far from 0.5, we ensure
+    /// the network learns to use both lanes effectively, making the highway mechanism meaningful.
+    /// </para>
+    /// </remarks>
     public T ComputeAuxiliaryLoss()
     {
-        // Placeholder - full implementation would regularize gate values
-        // to encourage balanced use of transform vs bypass lanes
-        _lastGateBalanceLoss = NumOps.Zero;
+        if (!UseAuxiliaryLoss || _lastGateOutput == null)
+        {
+            _lastGateBalanceLoss = NumOps.Zero;
+            return _lastGateBalanceLoss;
+        }
+
+        // Compute mean gate value across batch and dimensions
+        int batchSize = _lastGateOutput.Shape[0];
+        int inputDimension = _lastGateOutput.Shape[1];
+        int totalElements = batchSize * inputDimension;
+
+        T sum = NumOps.Zero;
+        for (int b = 0; b < batchSize; b++)
+        {
+            for (int d = 0; d < inputDimension; d++)
+            {
+                T gateValue = _lastGateOutput[new int[] { b, d }];
+                sum = NumOps.Add(sum, gateValue);
+            }
+        }
+
+        T meanGate = NumOps.Divide(sum, NumOps.FromDouble(totalElements));
+
+        // Compute loss = (mean_gate - 0.5)^2 to encourage balanced gating
+        T targetGate = NumOps.FromDouble(0.5);
+        T deviation = NumOps.Subtract(meanGate, targetGate);
+        T loss = NumOps.Multiply(deviation, deviation);
+
+        _lastGateBalanceLoss = loss;
         return _lastGateBalanceLoss;
     }
 
