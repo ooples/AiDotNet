@@ -1525,11 +1525,11 @@ public class GenerativeAdversarialNetwork<T> : NeuralNetworkBase<T>, IAuxiliaryL
 
     /// <summary>
     /// Gets diagnostic information about this component's state and behavior.
-    /// Overrides <see cref="LayerBase{T}.GetDiagnostics"/> to include auxiliary loss diagnostics.
+    /// Provides GAN-specific auxiliary loss diagnostics.
     /// </summary>
     /// <returns>
-    /// A dictionary containing diagnostic metrics including both base layer diagnostics and
-    /// auxiliary loss diagnostics from <see cref="GetAuxiliaryLossDiagnostics"/>.
+    /// A dictionary containing diagnostic metrics including auxiliary loss diagnostics
+    /// from <see cref="GetAuxiliaryLossDiagnostics"/>.
     /// </returns>
     public Dictionary<string, string> GetDiagnostics()
     {
