@@ -674,20 +674,7 @@ public class InMemoryCommunicationBackend<T> : CommunicationBackendBase<T>
                     {
                         throw new InvalidOperationException($"Scatter buffer is null or missing data for rank {_rank} after synchronization.");
                     }
-                    var result = buffer[_rank].Clone();
-
-                    // Decrement consumer count and clean up when all ranks have consumed
-                    int remaining = --_pendingConsumers[bufferId];
-                    if (remaining == 0)
-                    {
-                        _sharedBuffers.Remove(bufferId);
-                        _pendingConsumers.Remove(bufferId);
-                        _operationCounters[_environmentId]++;
-                    }
-
-                    // CRITICAL: PulseAll must happen even on timeout to wake other waiting processes
-                    Monitor.PulseAll(_globalLock);
-
+                    result = buffer[_rank].Clone();
                     return result;
                 }
                 else
@@ -697,6 +684,20 @@ public class InMemoryCommunicationBackend<T> : CommunicationBackendBase<T>
             }
             finally
             {
+                // CRITICAL: Decrement consumer count even on exception to prevent buffer leaks
+                // This must happen in finally to ensure cleanup even if Clone() or other operations fail
+                if (_pendingConsumers.ContainsKey(bufferId))
+                {
+                    int remaining = --_pendingConsumers[bufferId];
+                    if (remaining == 0)
+                    {
+                        _sharedBuffers.Remove(bufferId);
+                        _pendingConsumers.Remove(bufferId);
+                        _operationCounters[_environmentId]++;
+                    }
+                }
+
+                // CRITICAL: PulseAll must happen even on timeout to wake other waiting processes
                 Monitor.PulseAll(_globalLock);
             }
         }
