@@ -46,10 +46,26 @@ namespace AiDotNet.AutoML
         private readonly List<FairnessMetric> _fairnessMetrics = new();
         private IModel<Tensor<T>, Tensor<T>, ModelMetadata<T>>? _baseModel;
 
+        /// <summary>
+        /// The default loss function used by this model for gradient computation.
+        /// </summary>
+        private readonly ILossFunction<T> _defaultLossFunction;
+
         public ModelType Type => ModelType.NeuralNetwork;
         public string[] FeatureNames { get; set; } = Array.Empty<string>();
         public int ParameterCount => _weights.Values.Sum(w => w.Length) +
                                       _architectureParams.Sum(a => a.Rows * a.Columns);
+
+        /// <summary>
+        /// Gets the default loss function used by this model for gradient computation.
+        /// </summary>
+        /// <remarks>
+        /// <para>
+        /// For SuperNet (Neural Architecture Search), the default loss function is Mean Squared Error (MSE),
+        /// which is used for computing both architecture and weight gradients.
+        /// </para>
+        /// </remarks>
+        public ILossFunction<T> DefaultLossFunction => _defaultLossFunction;
 
         /// <summary>
         /// Initializes a new SuperNet for differentiable architecture search.
@@ -88,6 +104,9 @@ namespace AiDotNet.AutoML
             // Initialize network weights
             _weights = new Dictionary<string, Vector<T>>();
             _weightGradients = new Dictionary<string, Vector<T>>();
+
+            // Initialize default loss function (MSE for SuperNet)
+            _defaultLossFunction = new MeanSquaredErrorLoss<T>();
         }
 
         /// <summary>
@@ -299,6 +318,121 @@ namespace AiDotNet.AutoML
         public Dictionary<string, Vector<T>> GetWeightGradients()
         {
             return _weightGradients;
+        }
+
+        /// <summary>
+        /// Computes gradients of the loss function with respect to model parameters WITHOUT updating parameters.
+        /// </summary>
+        /// <param name="input">The input tensor.</param>
+        /// <param name="target">The target/expected output tensor.</param>
+        /// <param name="lossFunction">The loss function to use. If null, uses the model's default loss function.</param>
+        /// <returns>A vector containing gradients with respect to all model parameters (both architecture and weights).</returns>
+        /// <exception cref="ArgumentNullException">If input or target is null.</exception>
+        /// <remarks>
+        /// <para>
+        /// For SuperNet, this computes gradients for weight parameters only (not architecture parameters).
+        /// Architecture parameters are updated separately in DARTS using validation data.
+        /// The method uses the existing BackwardWeights method and collects gradients from all layers.
+        /// </para>
+        /// <para><b>For Beginners:</b>
+        /// SuperNet has two types of parameters:
+        /// - Architecture parameters (α): which operations to use
+        /// - Weight parameters (w): the actual neural network weights
+        ///
+        /// This method computes gradients for the weight parameters based on training data.
+        /// In DARTS, architecture parameters are optimized separately on validation data.
+        /// </para>
+        /// </remarks>
+        public Vector<T> ComputeGradients(Tensor<T> input, Tensor<T> target, ILossFunction<T>? lossFunction = null)
+        {
+            if (input == null)
+                throw new ArgumentNullException(nameof(input));
+            if (target == null)
+                throw new ArgumentNullException(nameof(target));
+
+            // Use BackwardWeights to compute gradients for weight parameters
+            BackwardWeights(input, target);
+
+            // Collect all weight gradients into a single vector
+            var gradients = new List<T>();
+
+            // Add architecture parameter gradients (for consistency, though they're updated separately in DARTS)
+            foreach (var alphaGrad in _architectureGradients)
+            {
+                for (int i = 0; i < alphaGrad.Rows; i++)
+                    for (int j = 0; j < alphaGrad.Columns; j++)
+                        gradients.Add(alphaGrad[i, j]);
+            }
+
+            // Add weight gradients
+            foreach (var weightGrad in _weightGradients.Values)
+            {
+                for (int i = 0; i < weightGrad.Length; i++)
+                    gradients.Add(weightGrad[i]);
+            }
+
+            return new Vector<T>(gradients.ToArray());
+        }
+
+        /// <summary>
+        /// Applies pre-computed gradients to update the model parameters.
+        /// </summary>
+        /// <param name="gradients">The gradient vector to apply.</param>
+        /// <param name="learningRate">The learning rate for the update.</param>
+        /// <exception cref="ArgumentNullException">If gradients is null.</exception>
+        /// <exception cref="ArgumentException">If gradient vector length doesn't match parameter count.</exception>
+        /// <remarks>
+        /// <para>
+        /// Updates both architecture and weight parameters using: θ = θ - learningRate * gradients
+        /// </para>
+        /// <para><b>For Beginners:</b>
+        /// This method applies the gradient updates to both:
+        /// - Architecture parameters (which operations are selected)
+        /// - Weight parameters (the neural network weights)
+        ///
+        /// In DARTS, you typically call this with different learning rates for
+        /// architecture and weight parameters.
+        /// </para>
+        /// </remarks>
+        public void ApplyGradients(Vector<T> gradients, T learningRate)
+        {
+            if (gradients == null)
+                throw new ArgumentNullException(nameof(gradients));
+
+            var currentParams = GetParameters();
+
+            if (gradients.Length != currentParams.Length)
+            {
+                throw new ArgumentException(
+                    $"Gradient vector length ({gradients.Length}) must match parameter count ({currentParams.Length})",
+                    nameof(gradients));
+            }
+
+            int idx = 0;
+
+            // Update architecture parameters
+            foreach (var alpha in _architectureParams)
+            {
+                for (int i = 0; i < alpha.Rows; i++)
+                {
+                    for (int j = 0; j < alpha.Columns; j++)
+                    {
+                        T update = _ops.Multiply(learningRate, gradients[idx++]);
+                        alpha[i, j] = _ops.Subtract(alpha[i, j], update);
+                    }
+                }
+            }
+
+            // Update weights
+            foreach (var key in _weights.Keys.ToList())
+            {
+                var weight = _weights[key];
+                for (int i = 0; i < weight.Length; i++)
+                {
+                    T update = _ops.Multiply(learningRate, gradients[idx++]);
+                    weight[i] = _ops.Subtract(weight[i], update);
+                }
+            }
         }
 
         /// <summary>

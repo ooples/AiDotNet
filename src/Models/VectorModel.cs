@@ -90,6 +90,11 @@ public class VectorModel<T> : IFullModel<T, Matrix<T>, Vector<T>>, IInterpretabl
     private Dictionary<string, T>? _cachedFeatureImportance;
 
     /// <summary>
+    /// The default loss function used by this model for gradient computation.
+    /// </summary>
+    private readonly ILossFunction<T> _defaultLossFunction;
+
+    /// <summary>
     /// Initializes a new instance of the VectorModel class with the specified coefficients.
     /// </summary>
     /// <param name="coefficients">The vector of coefficients for the model.</param>
@@ -119,7 +124,19 @@ public class VectorModel<T> : IFullModel<T, Matrix<T>, Vector<T>>, IInterpretabl
     public VectorModel(Vector<T> coefficients)
     {
         Coefficients = coefficients ?? throw new ArgumentNullException(nameof(coefficients));
+        _defaultLossFunction = new MeanSquaredErrorLoss<T>();
     }
+
+    /// <summary>
+    /// Gets the default loss function used by this model for gradient computation.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// For VectorModel (linear regression), the default loss function is Mean Squared Error (MSE),
+    /// which is the standard loss function for regression problems.
+    /// </para>
+    /// </remarks>
+    public ILossFunction<T> DefaultLossFunction => _defaultLossFunction;
 
     /// <summary>
     /// Gets the number of features used by the model.
@@ -231,6 +248,106 @@ public class VectorModel<T> : IFullModel<T, Matrix<T>, Vector<T>>, IInterpretabl
         }
         
         return !_numOps.Equals(Coefficients[featureIndex], _numOps.Zero);
+    }
+
+    /// <summary>
+    /// Computes gradients of the loss function with respect to model parameters WITHOUT updating parameters.
+    /// </summary>
+    /// <param name="input">The input data matrix.</param>
+    /// <param name="target">The target/expected output vector.</param>
+    /// <param name="lossFunction">The loss function to use. If null, uses the model's default loss function.</param>
+    /// <returns>A vector containing gradients with respect to all model parameters (coefficients).</returns>
+    /// <exception cref="ArgumentNullException">If input or target is null.</exception>
+    /// <exception cref="ArgumentException">If input and target dimensions don't match.</exception>
+    /// <remarks>
+    /// <para>
+    /// This method computes the gradient of the loss function with respect to the model's coefficients.
+    /// For a linear model: y_pred = coefficients · x
+    /// The gradient is computed as: ∂L/∂coefficients = (1/n) * X^T * ∂L/∂y_pred
+    /// </para>
+    /// <para><b>For Beginners:</b>
+    /// This calculates how to adjust each coefficient to reduce the prediction error,
+    /// but it doesn't actually change the coefficients. This is useful for:
+    /// - Distributed training: average gradients from multiple machines before updating
+    /// - Custom optimization: use advanced optimizers like Adam or RMSprop
+    /// - Analysis: understand which coefficients need the most adjustment
+    /// </para>
+    /// </remarks>
+    public Vector<T> ComputeGradients(Matrix<T> input, Vector<T> target, ILossFunction<T>? lossFunction = null)
+    {
+        if (input == null)
+            throw new ArgumentNullException(nameof(input));
+        if (target == null)
+            throw new ArgumentNullException(nameof(target));
+        if (input.Rows != target.Length)
+            throw new ArgumentException($"Input rows ({input.Rows}) must match target length ({target.Length})");
+        if (input.Columns != Coefficients.Length)
+            throw new ArgumentException($"Input columns ({input.Columns}) must match coefficient count ({Coefficients.Length})");
+
+        var loss = lossFunction ?? DefaultLossFunction;
+
+        // Forward pass: compute predictions
+        var predictions = PredictInternal(input);
+
+        // Compute loss gradient w.r.t. predictions: ∂L/∂y_pred
+        var predictionGradient = loss.CalculateDerivative(predictions, target);
+
+        // Compute gradient w.r.t. coefficients: ∂L/∂coefficients = (1/n) * X^T * ∂L/∂y_pred
+        var gradients = new Vector<T>(Coefficients.Length);
+        for (int j = 0; j < Coefficients.Length; j++)
+        {
+            T sum = _numOps.Zero;
+            for (int i = 0; i < input.Rows; i++)
+            {
+                // gradient[j] += input[i,j] * predictionGradient[i]
+                sum = _numOps.Add(sum, _numOps.Multiply(input[i, j], predictionGradient[i]));
+            }
+            // Average over all samples
+            gradients[j] = _numOps.Divide(sum, _numOps.FromDouble(input.Rows));
+        }
+
+        return gradients;
+    }
+
+    /// <summary>
+    /// Applies pre-computed gradients to update the model parameters (coefficients).
+    /// </summary>
+    /// <param name="gradients">The gradient vector to apply.</param>
+    /// <param name="learningRate">The learning rate for the update.</param>
+    /// <exception cref="ArgumentNullException">If gradients is null.</exception>
+    /// <exception cref="ArgumentException">If gradient vector length doesn't match coefficient count.</exception>
+    /// <remarks>
+    /// <para>
+    /// Updates coefficients using: coefficients = coefficients - learningRate * gradients
+    /// </para>
+    /// <para><b>For Beginners:</b>
+    /// After computing gradients (seeing which direction to adjust each coefficient),
+    /// this method actually adjusts them. The learning rate controls how big of an adjustment to make.
+    ///
+    /// In distributed training, this applies the averaged gradients from multiple machines
+    /// to ensure all machines keep their models synchronized.
+    /// </para>
+    /// </remarks>
+    public void ApplyGradients(Vector<T> gradients, T learningRate)
+    {
+        if (gradients == null)
+            throw new ArgumentNullException(nameof(gradients));
+        if (gradients.Length != Coefficients.Length)
+        {
+            throw new ArgumentException(
+                $"Gradient vector length ({gradients.Length}) must match coefficient count ({Coefficients.Length})",
+                nameof(gradients));
+        }
+
+        // Apply gradient descent: coefficients = coefficients - learningRate * gradients
+        for (int i = 0; i < Coefficients.Length; i++)
+        {
+            T update = _numOps.Multiply(learningRate, gradients[i]);
+            Coefficients[i] = _numOps.Subtract(Coefficients[i], update);
+        }
+
+        // Invalidate cached feature importance since coefficients changed
+        _cachedFeatureImportance = null;
     }
 
     /// <summary>

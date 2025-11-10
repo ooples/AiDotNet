@@ -581,6 +581,78 @@ public class PredictionModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
     }
 
     /// <summary>
+    /// Gets the default loss function used by this model for gradient computation.
+    /// </summary>
+    /// <exception cref="InvalidOperationException">If Model is not initialized.</exception>
+    public ILossFunction<T> DefaultLossFunction
+    {
+        get
+        {
+            if (Model == null)
+            {
+                throw new InvalidOperationException("Model is not initialized.");
+            }
+            return Model.DefaultLossFunction;
+        }
+    }
+
+    /// <summary>
+    /// Computes gradients of the loss function with respect to model parameters WITHOUT updating parameters.
+    /// </summary>
+    /// <param name="input">The input data.</param>
+    /// <param name="target">The target/expected output.</param>
+    /// <param name="lossFunction">The loss function to use. If null, uses the model's default loss function.</param>
+    /// <returns>A vector containing gradients with respect to all model parameters.</returns>
+    /// <exception cref="InvalidOperationException">If Model is not initialized.</exception>
+    /// <remarks>
+    /// <para>
+    /// This method delegates to the underlying model's ComputeGradients implementation.
+    /// The normalization is NOT applied, as gradients should be computed on normalized data.
+    /// </para>
+    /// <para><b>For Beginners:</b>
+    /// This calculates which direction to adjust the model's parameters to reduce error,
+    /// without actually changing them. It delegates to the wrapped model.
+    /// </para>
+    /// </remarks>
+    public Vector<T> ComputeGradients(TInput input, TOutput target, ILossFunction<T>? lossFunction = null)
+    {
+        if (Model == null)
+        {
+            throw new InvalidOperationException("Model is not initialized.");
+        }
+
+        // For gradient computation, we work with normalized data
+        // The input should already be normalized if this is being used in a training context
+        return Model.ComputeGradients(input, target, lossFunction);
+    }
+
+    /// <summary>
+    /// Applies pre-computed gradients to update the model parameters.
+    /// </summary>
+    /// <param name="gradients">The gradient vector to apply.</param>
+    /// <param name="learningRate">The learning rate for the update.</param>
+    /// <exception cref="InvalidOperationException">If Model is not initialized.</exception>
+    /// <remarks>
+    /// <para>
+    /// This method delegates to the underlying model's ApplyGradients implementation.
+    /// Updates parameters using: θ = θ - learningRate * gradients
+    /// </para>
+    /// <para><b>For Beginners:</b>
+    /// After computing gradients, this method actually updates the model's parameters
+    /// by moving them in the direction that reduces error. It delegates to the wrapped model.
+    /// </para>
+    /// </remarks>
+    public void ApplyGradients(Vector<T> gradients, T learningRate)
+    {
+        if (Model == null)
+        {
+            throw new InvalidOperationException("Model is not initialized.");
+        }
+
+        Model.ApplyGradients(gradients, learningRate);
+    }
+
+    /// <summary>
     /// Training is not supported on PredictionModelResult. Use PredictionModelBuilder to create and train new models.
     /// </summary>
     /// <param name="input">Input training data (not used).</param>
