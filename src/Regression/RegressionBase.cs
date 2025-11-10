@@ -853,17 +853,18 @@ public abstract class RegressionBase<T> : IRegression<T>
             throw new ArgumentException($"Expected {ExpectedParameterCount} gradients, but got {gradients.Length}", nameof(gradients));
         }
 
-        // Update coefficients: w = w - lr * grad_w
-        for (int i = 0; i < Coefficients.Length; i++)
+        // Get current parameters
+        var currentParams = GetParameters();
+
+        // Apply gradient descent: params = params - learningRate * gradients
+        var newParams = new Vector<T>(currentParams.Length);
+        for (int i = 0; i < currentParams.Length; i++)
         {
-            Coefficients[i] = NumOps.Subtract(Coefficients[i], NumOps.Multiply(learningRate, gradients[i]));
+            newParams[i] = NumOps.Subtract(currentParams[i], NumOps.Multiply(learningRate, gradients[i]));
         }
 
-        // Update intercept if used: b = b - lr * grad_b
-        if (Options.UseIntercept)
-        {
-            Intercept = NumOps.Subtract(Intercept, NumOps.Multiply(learningRate, gradients[Coefficients.Length]));
-        }
+        // Use SetParameters to update all model state
+        SetParameters(newParams);
     }
 
     /// <summary>

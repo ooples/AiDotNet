@@ -1093,13 +1093,17 @@ public abstract class NonLinearRegressionBase<T> : INonLinearRegression<T>
             throw new ArgumentException($"Expected {ParameterCount} gradients, but got {gradients.Length}", nameof(gradients));
         }
 
-        // Update alphas (support vector weights)
-        for (int i = 0; i < Alphas.Length; i++)
+        // Get current parameters
+        var currentParams = GetParameters();
+
+        // Apply gradient descent: params = params - learningRate * gradients
+        var newParams = new Vector<T>(currentParams.Length);
+        for (int i = 0; i < currentParams.Length; i++)
         {
-            Alphas[i] = NumOps.Subtract(Alphas[i], NumOps.Multiply(learningRate, gradients[i]));
+            newParams[i] = NumOps.Subtract(currentParams[i], NumOps.Multiply(learningRate, gradients[i]));
         }
 
-        // Update bias term
-        B = NumOps.Subtract(B, NumOps.Multiply(learningRate, gradients[Alphas.Length]));
+        // Use SetParameters to update all model state
+        SetParameters(newParams);
     }
 }
