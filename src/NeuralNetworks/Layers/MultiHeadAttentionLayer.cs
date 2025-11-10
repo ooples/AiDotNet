@@ -497,6 +497,18 @@ public class MultiHeadAttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         _lastAttentionScores = attentionWeights;
 
         var attentionOutput = attentionWeights.Multiply(values);
+
+        // Cache per-head outputs for head diversity loss computation
+        // Shape before transpose: [batchSize, headCount, sequenceLength, headDimension]
+        _lastHeadOutputs = new List<Tensor<T>>(_headCount);
+        for (int h = 0; h < _headCount; h++)
+        {
+            // Extract output for head h: [batchSize, sequenceLength, headDimension]
+            var headOutput = attentionOutput.Slice(1, h, h + 1);  // Slice along head dimension
+            headOutput = headOutput.Reshape(batchSize, sequenceLength, _headDimension);
+            _lastHeadOutputs.Add(headOutput);
+        }
+
         attentionOutput = attentionOutput.Transpose([0, 2, 1, 3]).Reshape(batchSize, sequenceLength, embeddingDimension);
 
         var output = attentionOutput.Multiply(_outputWeights).Add(_outputBias);
@@ -755,6 +767,7 @@ public class MultiHeadAttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         _lastInput = null;
         _lastOutput = null;
         _lastAttentionScores = null;
+        _lastHeadOutputs = null;  // Clear per-head output cache
 
         _queryWeightsGradient = null;
         _keyWeightsGradient = null;
