@@ -278,11 +278,12 @@ public class InMemoryCommunicationBackend<T> : CommunicationBackendBase<T>
                         throw new TimeoutException($"Barrier timeout after {BarrierTimeoutMs}ms. Only {_barrierCounters[barrierId]} of {_worldSize} processes reached the barrier.");
                     }
                 }
-
-                Monitor.PulseAll(_globalLock);
             }
             finally
             {
+                // CRITICAL: Always wake other ranks (especially on timeout for fail-fast)
+                Monitor.PulseAll(_globalLock);
+
                 // Track how many ranks have exited the barrier
                 int released = _barrierReleaseCounts.TryGetValue(barrierId, out var current)
                     ? current + 1
@@ -296,7 +297,6 @@ public class InMemoryCommunicationBackend<T> : CommunicationBackendBase<T>
                     _barrierCounters.Remove(barrierId);
                     _barrierReleaseCounts.Remove(barrierId);
                     _barrierGenerations[_environmentId]++;
-                    Monitor.PulseAll(_globalLock);
                 }
             }
         }
@@ -391,13 +391,13 @@ public class InMemoryCommunicationBackend<T> : CommunicationBackendBase<T>
                     _sharedBuffers.Remove(bufferId);
                     _operationCounters[_environmentId]++;
                 }
-
-                // CRITICAL: PulseAll must happen even on timeout to wake other waiting processes
-                // Without this, a timeout in one process causes deadlock in others waiting at Monitor.Wait
-                Monitor.PulseAll(_globalLock);
             }
             finally
             {
+                // CRITICAL: PulseAll must happen even on timeout to wake other waiting processes
+                // Without this, a timeout in one process causes deadlock in others waiting at Monitor.Wait
+                Monitor.PulseAll(_globalLock);
+
                 // Cleanup in finally for timeout case - ensures cleanup even on exception
                 // Check if cleanup already happened in normal flow
                 if (_rank == 0 && _sharedBuffers.ContainsKey(bufferId))
@@ -581,22 +581,24 @@ public class InMemoryCommunicationBackend<T> : CommunicationBackendBase<T>
                     throw new InvalidOperationException("Broadcast buffer was removed before data could be retrieved.");
                 }
 
-                // Decrement consumer count and clean up when all ranks have consumed
-                int remaining = --_pendingConsumers[bufferId];
-                if (remaining == 0)
-                {
-                    _sharedBuffers.Remove(bufferId);
-                    _pendingConsumers.Remove(bufferId);
-                    _operationCounters[_environmentId]++;
-                }
-
-                // CRITICAL: PulseAll must happen even on timeout to wake other waiting processes
-                Monitor.PulseAll(_globalLock);
-
                 return result;
             }
             finally
             {
+                // CRITICAL: Decrement consumer count even on exception to prevent buffer leaks
+                // This must happen in finally to ensure cleanup even if Clone() or other operations fail
+                if (_pendingConsumers.ContainsKey(bufferId))
+                {
+                    int remaining = --_pendingConsumers[bufferId];
+                    if (remaining == 0)
+                    {
+                        _sharedBuffers.Remove(bufferId);
+                        _pendingConsumers.Remove(bufferId);
+                        _operationCounters[_environmentId]++;
+                    }
+                }
+
+                // CRITICAL: PulseAll must happen even on timeout to wake other waiting processes
                 Monitor.PulseAll(_globalLock);
             }
         }
