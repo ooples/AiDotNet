@@ -981,6 +981,65 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
     }
 
     /// <summary>
+    /// Computes gradients of the network output with respect to the network input using backpropagation.
+    /// </summary>
+    /// <param name="outputGradient">The gradient signal from the output (typically all ones for gradient computation).</param>
+    /// <returns>A tensor containing the gradients with respect to the network input.</returns>
+    /// <remarks>
+    /// <para>
+    /// This method performs a backward pass through all layers to compute how the output changes
+    /// with respect to the input. Unlike the standard backward pass which computes gradients for
+    /// parameters, this method computes gradients for the input itself.
+    /// </para>
+    /// <para>
+    /// This is essential for techniques like:
+    /// - Gradient-based input optimization
+    /// - Saliency maps and input attribution
+    /// - WGAN-GP gradient penalty computation
+    /// - Adversarial example generation
+    /// </para>
+    /// <para><b>For Beginners:</b> This calculates how sensitive the output is to changes in the input.
+    ///
+    /// Normally, backpropagation adjusts the network's internal parameters (weights and biases).
+    /// This method instead computes how the output would change if we modified the input data.
+    ///
+    /// Use cases:
+    /// - Understanding which input features matter most (interpretability)
+    /// - Generating adversarial examples (security research)
+    /// - Computing gradient penalties for training stability (WGAN-GP)
+    ///
+    /// The process:
+    /// 1. Assumes a forward pass has already been run (outputs are cached)
+    /// 2. Starts with a gradient signal at the output (how much we "care" about each output)
+    /// 3. Propagates this gradient backwards through each layer
+    /// 4. Returns the gradient with respect to the original input
+    /// </para>
+    /// </remarks>
+    public virtual Tensor<T> BackwardWithInputGradient(Tensor<T> outputGradient)
+    {
+        if (Layers.Count == 0)
+        {
+            throw new InvalidOperationException("Cannot compute input gradients for a network with no layers.");
+        }
+
+        // Start with the output gradient and propagate backwards through layers
+        var currentGradient = outputGradient;
+
+        // Iterate backwards through layers
+        for (int i = Layers.Count - 1; i >= 0; i--)
+        {
+            var layer = Layers[i];
+
+            // Each layer's Backward method takes the gradient from the next layer
+            // and returns the gradient to pass to the previous layer
+            currentGradient = layer.Backward(currentGradient);
+        }
+
+        // The final gradient is with respect to the network input
+        return currentGradient;
+    }
+
+    /// <summary>
     /// Saves the model to a file.
     /// </summary>
     /// <param name="filePath">The path where the model should be saved.</param>

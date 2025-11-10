@@ -1776,8 +1776,9 @@ public class GenerativeAdversarialNetwork<T> : NeuralNetworkBase<T>
             }
         }
 
-        // Compute gradients using numerical differentiation
-        var gradients = ComputeNumericalGradient(interpolated);
+        // Compute gradients using symbolic differentiation (autodiff)
+        // This is more accurate and efficient than numerical differentiation
+        var gradients = ComputeSymbolicGradient(interpolated);
 
         // Compute gradient penalty: lambda * mean((||gradient|| - 1)^2)
         T totalPenalty = NumOps.Zero;
@@ -1815,6 +1816,70 @@ public class GenerativeAdversarialNetwork<T> : NeuralNetworkBase<T>
     }
 
     /// <summary>
+    /// Computes gradients of discriminator output with respect to input using symbolic differentiation.
+    /// </summary>
+    /// <param name="input">The input tensor to compute gradients for.</param>
+    /// <returns>A tensor containing the gradients with respect to the input.</returns>
+    /// <remarks>
+    /// <para>
+    /// This method uses automatic differentiation (autodiff) to compute exact gradients by
+    /// running a backward pass through the discriminator network. This is more accurate and
+    /// efficient than numerical differentiation, and is the industry-standard approach used
+    /// in frameworks like TensorFlow and PyTorch.
+    /// </para>
+    /// <para>
+    /// The process:
+    /// 1. Run forward pass through discriminator to get output
+    /// 2. Create gradient signal with respect to output (typically all ones)
+    /// 3. Backpropagate through all layers to compute gradient with respect to input
+    /// 4. Return the accumulated input gradients
+    /// </para>
+    /// <para><b>For Beginners:</b> This computes how the output changes when the input changes, using calculus.
+    ///
+    /// Unlike numerical differentiation which approximates gradients by trying tiny changes,
+    /// symbolic differentiation uses the mathematical rules of calculus to compute exact derivatives.
+    ///
+    /// The process:
+    /// 1. Run the input through the discriminator to get an output
+    /// 2. Start with "how much we care about the output" (gradient = 1.0)
+    /// 3. Work backwards through each layer, computing how much each input affects the output
+    /// 4. This gives us the exact gradient without approximations
+    ///
+    /// Benefits over numerical differentiation:
+    /// - More accurate (no approximation error)
+    /// - Faster (only requires one forward and one backward pass)
+    /// - Uses less memory (doesn't need to perturb each input element)
+    /// - Industry standard approach used in modern deep learning frameworks
+    /// </para>
+    /// </remarks>
+    private Tensor<T> ComputeSymbolicGradient(Tensor<T> input)
+    {
+        // Store original training mode
+        bool originalMode = Discriminator.SupportsTraining;
+        Discriminator.SetTrainingMode(false); // Use inference mode for stable gradients
+
+        // Reset layer states to ensure clean forward pass
+        Discriminator.ResetState();
+
+        // Forward pass through discriminator
+        var output = Discriminator.Predict(input);
+
+        // Create gradient signal: we want d(output)/d(input)
+        // Start with gradient of 1.0 with respect to the output
+        var outputGradient = new Tensor<T>(output.Shape);
+        outputGradient.Fill(NumOps.One);
+
+        // Run backward pass through discriminator layers to compute input gradient
+        // The discriminator's Backward method will propagate gradients back to the input
+        var inputGradient = Discriminator.BackwardWithInputGradient(outputGradient);
+
+        // Restore original training mode
+        Discriminator.SetTrainingMode(originalMode);
+
+        return inputGradient;
+    }
+
+    /// <summary>
     /// Computes numerical gradients of discriminator output with respect to input using finite differences.
     /// </summary>
     /// <param name="input">The input tensor to compute gradients for.</param>
@@ -1830,6 +1895,11 @@ public class GenerativeAdversarialNetwork<T> : NeuralNetworkBase<T>
     /// is chosen to balance numerical accuracy and precision (1e-4 works well for
     /// typical neural network outputs).
     /// </para>
+    /// <para>
+    /// NOTE: This method is kept for backward compatibility and as a fallback.
+    /// For production use, prefer ComputeSymbolicGradient() which is more accurate
+    /// and efficient.
+    /// </para>
     /// <para><b>For Beginners:</b> This computes how the output changes when the input changes.
     ///
     /// The process:
@@ -1839,7 +1909,7 @@ public class GenerativeAdversarialNetwork<T> : NeuralNetworkBase<T>
     ///
     /// This is called "numerical differentiation" - we approximate the derivative
     /// by actually trying tiny changes rather than using calculus formulas.
-    /// It's accurate enough for gradient penalty computation.
+    /// It's accurate but slower than symbolic differentiation.
     /// </para>
     /// </remarks>
     private Tensor<T> ComputeNumericalGradient(Tensor<T> input)
