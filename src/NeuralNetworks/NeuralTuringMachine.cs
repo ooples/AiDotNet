@@ -333,6 +333,7 @@ public class NeuralTuringMachine<T> : NeuralNetworkBase<T>, IAuxiliaryLossLayer<
         // to encourage focused, sharp memory access patterns
         T totalNegativeEntropy = NumOps.Zero;
         T epsilon = NumOps.FromDouble(1e-10);  // For numerical stability
+        T oneMinusEpsilon = NumOps.Subtract(NumOps.One, epsilon);
 
         // Compute negative entropy for read weights
         foreach (var readWeight in _readWeights)
@@ -342,10 +343,10 @@ public class NeuralTuringMachine<T> : NeuralNetworkBase<T>, IAuxiliaryLossLayer<
             {
                 T p = readWeight[i];
                 // Entropy: H = -Σ(p * log(p))
-                // Add epsilon to avoid log(0)
-                T pWithEps = NumOps.Add(p, epsilon);
-                T logP = NumOps.Log(pWithEps);
-                T pLogP = NumOps.Multiply(p, logP);
+                // Clamp p to [epsilon, 1-epsilon] to avoid log(0) and log(>1)
+                T pClamped = MathHelper.Clamp(p, epsilon, oneMinusEpsilon);
+                T logP = NumOps.Log(pClamped);
+                T pLogP = NumOps.Multiply(pClamped, logP);
                 entropy = NumOps.Add(entropy, pLogP);
             }
             // Negative entropy (we want to minimize this, encouraging sharp peaks)
@@ -359,9 +360,10 @@ public class NeuralTuringMachine<T> : NeuralNetworkBase<T>, IAuxiliaryLossLayer<
             for (int i = 0; i < writeWeight.Length; i++)
             {
                 T p = writeWeight[i];
-                T pWithEps = NumOps.Add(p, epsilon);
-                T logP = NumOps.Log(pWithEps);
-                T pLogP = NumOps.Multiply(p, logP);
+                // Clamp p to [epsilon, 1-epsilon] to avoid log(0) and log(>1)
+                T pClamped = MathHelper.Clamp(p, epsilon, oneMinusEpsilon);
+                T logP = NumOps.Log(pClamped);
+                T pLogP = NumOps.Multiply(pClamped, logP);
                 entropy = NumOps.Add(entropy, pLogP);
             }
             totalNegativeEntropy = NumOps.Subtract(totalNegativeEntropy, entropy);

@@ -18,9 +18,9 @@ namespace AiDotNet.NeuralNetworks;
 /// - The encoder part takes your original data (like an image) and compresses it into a smaller representation
 /// - The middle layer (latent space) holds this compressed version of your data
 /// - The decoder part takes this compressed version and tries to recreate the original data
-/// 
+///
 /// For example, with images:
-/// - You might compress a 256�256 pixel image (65,536 values) into just 100 numbers
+/// - You might compress a 256x256 pixel image (65,536 values) into just 100 numbers
 /// - The network learns which features are most important to preserve
 /// - It then learns to reconstruct the image from only those 100 numbers
 /// 
@@ -549,6 +549,61 @@ public class Autoencoder<T> : NeuralNetworkBase<T>, IAuxiliaryLossLayer<T>
     }
 
     /// <summary>
+    /// Computes the gradient of the sparsity loss with respect to encoder activations.
+    /// </summary>
+    /// <returns>A tensor containing the sparsity loss gradients.</returns>
+    /// <remarks>
+    /// <para>
+    /// This method computes the gradient of the KL divergence sparsity loss:
+    /// d(KL)/da = (1/n) * [-ρ/ρ̂ + (1-ρ)/(1-ρ̂)] * AuxiliaryLossWeight
+    /// where ρ is target sparsity, ρ̂ is average activation, n is number of activations.
+    /// </para>
+    /// </remarks>
+    private Tensor<T> ComputeSparsityGradient()
+    {
+        if (_lastEncoderActivations == null)
+        {
+            throw new InvalidOperationException("No encoder activations available for gradient computation.");
+        }
+
+        // Compute the gradient coefficient: -ρ/ρ̂ + (1-ρ)/(1-ρ̂)
+        T epsilon = NumOps.FromDouble(1e-10);
+        T rhoHat = _averageActivation;
+        if (NumOps.LessThan(rhoHat, epsilon))
+        {
+            rhoHat = epsilon;
+        }
+        T oneMinusRhoHat = NumOps.Subtract(NumOps.One, rhoHat);
+        if (NumOps.LessThan(oneMinusRhoHat, epsilon))
+        {
+            oneMinusRhoHat = epsilon;
+        }
+
+        T oneMinusRho = NumOps.Subtract(NumOps.One, _sparsityParameter);
+
+        // d(KL)/d(ρ̂) = -ρ/ρ̂ + (1-ρ)/(1-ρ̂)
+        T term1 = NumOps.Divide(NumOps.Negate(_sparsityParameter), rhoHat);
+        T term2 = NumOps.Divide(oneMinusRho, oneMinusRhoHat);
+        T dKL_drhoHat = NumOps.Add(term1, term2);
+
+        // d(ρ̂)/da = 1/n for each activation
+        int n = _lastEncoderActivations.Length;
+        T scalingFactor = NumOps.Divide(dKL_drhoHat, NumOps.FromDouble(n));
+
+        // Apply auxiliary loss weight
+        scalingFactor = NumOps.Multiply(scalingFactor, AuxiliaryLossWeight);
+
+        // Create gradient tensor with the same shape as encoder activations
+        var gradient = new Tensor<T>(_lastEncoderActivations.Shape);
+        for (int i = 0; i < gradient.Length; i++)
+        {
+            gradient[i] = scalingFactor;
+        }
+
+        return gradient;
+    }
+
+    /// <summary>
     /// Gets diagnostic information about the sparsity loss.
     /// </summary>
     /// <returns>A dictionary containing diagnostic information about sparsity.</returns>
@@ -693,7 +748,23 @@ public class Autoencoder<T> : NeuralNetworkBase<T>, IAuxiliaryLossLayer<T>
                 // Backward pass (calculate gradients)
                 var outputGradient = CalculateOutputGradient(current, batchExpected);
 
-                for (int j = Layers.Count - 1; j >= 0; j--)
+                // Backpropagate from output to middle layer (decoder layers)
+                int middleLayerIndex = Layers.Count / 2;
+                for (int j = Layers.Count - 1; j > middleLayerIndex; j--)
+                {
+                    outputGradient = Layers[j].Backward(outputGradient);
+                }
+
+                // Add sparsity gradient at the middle layer (encoder output)
+                if (UseAuxiliaryLoss && _lastEncoderActivations != null)
+                {
+                    var sparsityGradient = ComputeSparsityGradient();
+                    // Add weighted sparsity gradient to the reconstruction gradient
+                    outputGradient = outputGradient.Add(sparsityGradient);
+                }
+
+                // Continue backpropagation through encoder layers
+                for (int j = middleLayerIndex; j >= 0; j--)
                 {
                     outputGradient = Layers[j].Backward(outputGradient);
                 }
