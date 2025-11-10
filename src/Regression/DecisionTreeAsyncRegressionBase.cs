@@ -883,4 +883,94 @@ public abstract class AsyncDecisionTreeRegressionBase<T> : IAsyncTreeBasedModel<
     {
         get { return CountNodes(Root) * 4 + 1; }
     }
+
+    /// <inheritdoc/>
+    /// <remarks>
+    /// <para>
+    /// For async tree-based regression models, the default loss function is Mean Squared Error (MSE).
+    /// </para>
+    /// </remarks>
+    public virtual ILossFunction<T> DefaultLossFunction => new MeanSquaredErrorLoss<T>();
+
+    /// <inheritdoc/>
+    /// <remarks>
+    /// <para><b>IMPORTANT NOTE:</b> Decision trees (including async variants) are not continuously differentiable.
+    /// This gradient computation provides a numerical approximation for compatibility with
+    /// gradient-based distributed training, but it is NOT the gradient in the traditional sense.
+    ///
+    /// For proper tree-based distributed training with async models, consider:
+    /// - Gradient Boosting (which uses gradients of the loss, not the tree)
+    /// - Model averaging approaches (Random Forests, Extremely Randomized Trees)
+    /// - Ensemble-based distributed training
+    /// </para>
+    /// <para><b>For Beginners:</b> Async tree models (like Random Forests) use multiple trees together.
+    ///
+    /// Each tree makes decisions using "if-then" rules, not smooth math functions.
+    /// This method provides an approximation for compatibility, but true tree training
+    /// happens through splitting algorithms, not gradient descent.
+    ///
+    /// For gradient-based training, use Gradient Boosting or other ensemble methods
+    /// that explicitly use gradients.
+    /// </para>
+    /// </remarks>
+    public virtual Vector<T> ComputeGradients(Matrix<T> input, Vector<T> target, ILossFunction<T>? lossFunction = null)
+    {
+        var loss = lossFunction ?? DefaultLossFunction;
+
+        // For async tree models, compute pseudo-gradients based on prediction errors
+        var predictions = Predict(input);
+        var errors = predictions.Subtract(target);
+
+        // Return pseudo-gradients for interface compatibility
+        var gradients = new Vector<T>(ParameterCount);
+
+        // Compute mean error as representative pseudo-gradient
+        T meanError = NumOps.Zero;
+        for (int i = 0; i < errors.Length; i++)
+        {
+            meanError = NumOps.Add(meanError, errors[i]);
+        }
+        meanError = NumOps.Divide(meanError, NumOps.FromDouble(errors.Length));
+
+        // Set all gradient components to the mean error
+        // Ensemble methods can override with more sophisticated gradient computations
+        for (int i = 0; i < gradients.Length; i++)
+        {
+            gradients[i] = meanError;
+        }
+
+        return gradients;
+    }
+
+    /// <inheritdoc/>
+    /// <remarks>
+    /// <para><b>IMPORTANT NOTE:</b> Async tree models are not trained via gradient descent.
+    /// This method is provided for interface compatibility.
+    ///
+    /// Async tree models are typically trained using:
+    /// - Parallel tree construction algorithms
+    /// - Bootstrap aggregating (Bagging) for Random Forests
+    /// - Gradient-based ensemble methods for Gradient Boosting
+    /// </para>
+    /// <para><b>For Beginners:</b> This is a no-op for tree-based models.
+    ///
+    /// Trees are built differently than neural networks. They don't learn by
+    /// adjusting weights with gradients. Instead, they:
+    /// 1. Find the best feature to split on at each node
+    /// 2. Build the tree structure recursively
+    /// 3. Combine multiple trees in ensembles (Random Forests, etc.)
+    ///
+    /// This method exists for interface compatibility but doesn't perform gradient updates.
+    /// </para>
+    /// </remarks>
+    public virtual void ApplyGradients(Vector<T> gradients, T learningRate)
+    {
+        if (gradients.Length != ParameterCount)
+        {
+            throw new ArgumentException($"Expected {ParameterCount} gradients, but got {gradients.Length}", nameof(gradients));
+        }
+
+        // No-op for async tree models - trees are trained via splitting algorithms
+        // Derived classes like GradientBoostingRegression can override with proper gradient-based updates
+    }
 }
