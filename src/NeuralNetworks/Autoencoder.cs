@@ -134,7 +134,7 @@ public class Autoencoder<T> : NeuralNetworkBase<T>, IAuxiliaryLossLayer<T>
     /// Target sparsity parameter (desired average activation level).
     /// Default is 0.05 (5% of neurons should be active on average).
     /// </summary>
-    private T _sparsityParameter = default(T);
+    private T _sparsityParameter;
 
     /// <summary>
     /// Stores the last encoder activations for auxiliary loss computation.
@@ -144,12 +144,12 @@ public class Autoencoder<T> : NeuralNetworkBase<T>, IAuxiliaryLossLayer<T>
     /// <summary>
     /// Stores the last computed sparsity loss for diagnostics.
     /// </summary>
-    private T _lastSparsityLoss = default(T);
+    private T _lastSparsityLoss;
 
     /// <summary>
     /// Stores the average activation level for diagnostics.
     /// </summary>
-    private T _averageActivation = default(T);
+    private T _averageActivation;
 
     /// <summary>
     /// Gets or sets whether to use auxiliary loss (sparsity penalty) during training.
@@ -161,7 +161,7 @@ public class Autoencoder<T> : NeuralNetworkBase<T>, IAuxiliaryLossLayer<T>
     /// Gets or sets the weight for the sparsity penalty.
     /// Default is 0.001. Typical range: 0.0001 to 0.01.
     /// </summary>
-    public T AuxiliaryLossWeight { get; set; } = default(T);
+    public T AuxiliaryLossWeight { get; set; }
 
     /// <summary>
     /// Initializes a new instance of the <see cref="Autoencoder{T}"/> class.
@@ -591,14 +591,24 @@ public class Autoencoder<T> : NeuralNetworkBase<T>, IAuxiliaryLossLayer<T>
 
     /// <summary>
     /// Gets diagnostic information about this component's state and behavior.
-    /// Implements <see cref="IDiagnosticsProvider{T}.GetDiagnostics"/>.
+    /// Overrides <see cref="LayerBase{T}.GetDiagnostics"/> to include auxiliary loss diagnostics.
     /// </summary>
     /// <returns>
-    /// A dictionary containing diagnostic metrics. Delegates to <see cref="GetAuxiliaryLossDiagnostics"/> for implementation.
+    /// A dictionary containing diagnostic metrics including both base layer diagnostics and
+    /// auxiliary loss diagnostics from <see cref="GetAuxiliaryLossDiagnostics"/>.
     /// </returns>
-    public Dictionary<string, string> GetDiagnostics()
+    public override Dictionary<string, string> GetDiagnostics()
     {
-        return GetAuxiliaryLossDiagnostics();
+        var diagnostics = base.GetDiagnostics();
+
+        // Merge auxiliary loss diagnostics
+        var auxDiagnostics = GetAuxiliaryLossDiagnostics();
+        foreach (var kvp in auxDiagnostics)
+        {
+            diagnostics[kvp.Key] = kvp.Value;
+        }
+
+        return diagnostics;
     }
 
     /// <summary>

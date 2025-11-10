@@ -515,14 +515,24 @@ public class DenseLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
 
     /// <summary>
     /// Gets diagnostic information about this component's state and behavior.
-    /// Implements <see cref="IDiagnosticsProvider{T}.GetDiagnostics"/>.
+    /// Overrides <see cref="LayerBase{T}.GetDiagnostics"/> to include auxiliary loss diagnostics.
     /// </summary>
     /// <returns>
-    /// A dictionary containing diagnostic metrics. Delegates to <see cref="GetAuxiliaryLossDiagnostics"/> for implementation.
+    /// A dictionary containing diagnostic metrics including both base layer diagnostics and
+    /// auxiliary loss diagnostics from <see cref="GetAuxiliaryLossDiagnostics"/>.
     /// </returns>
-    public Dictionary<string, string> GetDiagnostics()
+    public override Dictionary<string, string> GetDiagnostics()
     {
-        return GetAuxiliaryLossDiagnostics();
+        var diagnostics = base.GetDiagnostics();
+
+        // Merge auxiliary loss diagnostics
+        var auxDiagnostics = GetAuxiliaryLossDiagnostics();
+        foreach (var kvp in auxDiagnostics)
+        {
+            diagnostics[kvp.Key] = kvp.Value;
+        }
+
+        return diagnostics;
     }
 
     /// <summary>
