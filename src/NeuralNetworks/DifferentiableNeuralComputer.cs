@@ -574,27 +574,49 @@ public class DifferentiableNeuralComputer<T> : NeuralNetworkBase<T>, IAuxiliaryL
             return NumOps.Zero;
         }
 
-        // Note: Full implementation would compute entropy of addressing weights
-        // from read and write heads. This requires access to intermediate
-        // addressing tensors from the forward pass.
-        // For now, return zero as placeholder - full implementation would require
-        // caching addressing weights during forward pass.
+        // Compute negative entropy over read and write addressing weights
+        // to encourage focused, sharp memory access patterns
+        T totalNegativeEntropy = NumOps.Zero;
+        T epsilon = NumOps.FromDouble(1e-10);  // For numerical stability
 
-        // Pseudo-code for full implementation:
-        // T totalEntropy = NumOps.Zero;
-        // foreach (readHead in _readHeads)
-        // {
-        //     T entropy = ComputeEntropy(readHead.addressingWeights);
-        //     totalEntropy = NumOps.Subtract(totalEntropy, entropy); // Minimize -H
-        // }
-        // foreach (writeHead in _writeHeads)
-        // {
-        //     T entropy = ComputeEntropy(writeHead.addressingWeights);
-        //     totalEntropy = NumOps.Subtract(totalEntropy, entropy);
-        // }
+        // Compute negative entropy for read addressing weights
+        foreach (var readWeighting in _readWeightings)
+        {
+            T entropy = NumOps.Zero;
+            for (int i = 0; i < readWeighting.Length; i++)
+            {
+                T p = readWeighting[i];
+                // Entropy: H = -Σ(p * log(p))
+                // Add epsilon to avoid log(0)
+                T pWithEps = NumOps.Add(p, epsilon);
+                T logP = NumOps.Log(pWithEps);
+                T pLogP = NumOps.Multiply(p, logP);
+                entropy = NumOps.Add(entropy, pLogP);
+            }
+            // Negative entropy (we want to minimize this, encouraging sharp peaks)
+            totalNegativeEntropy = NumOps.Subtract(totalNegativeEntropy, entropy);
+        }
 
-        _lastMemoryAddressingLoss = NumOps.Zero;
-        return _lastMemoryAddressingLoss;
+        // Compute negative entropy for write addressing weights
+        if (_writeWeighting != null)
+        {
+            T entropy = NumOps.Zero;
+            for (int i = 0; i < _writeWeighting.Length; i++)
+            {
+                T p = _writeWeighting[i];
+                T pWithEps = NumOps.Add(p, epsilon);
+                T logP = NumOps.Log(pWithEps);
+                T pLogP = NumOps.Multiply(p, logP);
+                entropy = NumOps.Add(entropy, pLogP);
+            }
+            totalNegativeEntropy = NumOps.Subtract(totalNegativeEntropy, entropy);
+        }
+
+        // Store unweighted loss for diagnostics
+        _lastMemoryAddressingLoss = totalNegativeEntropy;
+
+        // Apply auxiliary loss weight and return weighted loss
+        return NumOps.Multiply(totalNegativeEntropy, AuxiliaryLossWeight);
     }
 
     /// <summary>
