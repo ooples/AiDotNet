@@ -423,10 +423,10 @@ public class MultiHeadAttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     {
         return new Dictionary<string, string>
         {
-            { "TotalEntropyLoss", _lastEntropyLoss?.ToString() ?? "0" },
-            { "TotalDiversityLoss", _lastDiversityLoss?.ToString() ?? "0" },
-            { "EntropyWeight", AuxiliaryLossWeight?.ToString() ?? "0.005" },
-            { "DiversityWeight", HeadDiversityWeight?.ToString() ?? "0.01" },
+            { "TotalEntropyLoss", System.Convert.ToString(_lastEntropyLoss) ?? "0" },
+            { "TotalDiversityLoss", System.Convert.ToString(_lastDiversityLoss) ?? "0" },
+            { "EntropyWeight", System.Convert.ToString(AuxiliaryLossWeight) ?? "0.005" },
+            { "DiversityWeight", System.Convert.ToString(HeadDiversityWeight) ?? "0.01" },
             { "UseAttentionRegularization", UseAuxiliaryLoss.ToString() },
             { "NumberOfHeads", _headCount.ToString() },
             { "AttentionScoresCached", (_lastAttentionScores != null).ToString() },

@@ -842,12 +842,14 @@ public class SelfAttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
             }
         }
 
+        // Store unweighted loss for diagnostics
         _lastEntropyLoss = totalNegativeEntropy;
-        totalLoss = NumOps.Add(totalLoss, totalNegativeEntropy);
 
         // 2. Optional: L1 sparsity penalty (not implemented in basic version)
         // Can be added if needed: _lastSparsityLoss = Σ|attention_weights|
 
+        // Apply auxiliary loss weight and return weighted loss
+        totalLoss = NumOps.Multiply(totalNegativeEntropy, AuxiliaryLossWeight);
         return totalLoss;
     }
 

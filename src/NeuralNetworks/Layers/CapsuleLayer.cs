@@ -356,8 +356,8 @@ public class CapsuleLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     {
         return new Dictionary<string, string>
         {
-            { "TotalRoutingEntropyLoss", _lastRoutingEntropyLoss?.ToString() ?? "0" },
-            { "EntropyWeight", AuxiliaryLossWeight?.ToString() ?? "0.005" },
+            { "TotalRoutingEntropyLoss", $"{_lastRoutingEntropyLoss}" },
+            { "EntropyWeight", $"{AuxiliaryLossWeight}" },
             { "UseRoutingRegularization", UseAuxiliaryLoss.ToString() },
             { "NumRoutingIterations", _numRoutingIterations.ToString() },
             { "RoutingCoefficientsCached", (_lastCouplingCoefficients != null).ToString() }
