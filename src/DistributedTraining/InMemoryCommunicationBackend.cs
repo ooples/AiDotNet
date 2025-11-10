@@ -59,7 +59,6 @@ public class InMemoryCommunicationBackend<T> : CommunicationBackendBase<T>
     private readonly int _rank;
     private readonly int _worldSize;
     private readonly string _environmentId;
-    private bool _isInitialized;
 
     // Shared state for simulating collective operations
     //
@@ -153,7 +152,6 @@ public class InMemoryCommunicationBackend<T> : CommunicationBackendBase<T>
         _rank = rank;
         _worldSize = worldSize;
         _environmentId = environmentId;
-        _isInitialized = false;
 
         // Initialize environment-specific counters
         lock (_globalLock)
@@ -173,15 +171,8 @@ public class InMemoryCommunicationBackend<T> : CommunicationBackendBase<T>
     /// <inheritdoc/>
     protected override void OnInitialize()
     {
-        lock (_globalLock)
-        {
-            if (_isInitialized)
-            {
-                return;
-            }
-
-            _isInitialized = true;
-        }
+        // Base class handles initialization state
+        // No additional initialization required for in-memory backend
     }
 
     /// <inheritdoc/>
@@ -189,15 +180,8 @@ public class InMemoryCommunicationBackend<T> : CommunicationBackendBase<T>
     {
         lock (_globalLock)
         {
-            if (!_isInitialized)
-            {
-                return;
-            }
-
             // Clear only this environment's shared state
             ClearEnvironmentState(_environmentId);
-
-            _isInitialized = false;
         }
     }
 
