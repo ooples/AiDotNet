@@ -300,31 +300,34 @@ public class MultiHeadAttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         // H = -Σ(p * log(p)) for attention weights
         // We want to maximize entropy (minimize -H), so we negate
         T totalEntropy = NumOps.Zero;
-        int sequenceLength = _lastAttentionScores.Shape[1];
+        int batchSize = _lastAttentionScores.Shape[0];
+        int sequenceLength = _lastAttentionScores.Shape[2];
 
-        for (int h = 0; h < _headCount; h++)
+        for (int b = 0; b < batchSize; b++)
         {
-            T headEntropy = NumOps.Zero;
-            for (int i = 0; i < sequenceLength; i++)
+            for (int h = 0; h < _headCount; h++)
             {
-                for (int j = 0; j < sequenceLength; j++)
+                T headEntropy = NumOps.Zero;
+                for (int i = 0; i < sequenceLength; i++)
                 {
-                    // Get attention weight for this head
-                    int flatIndex = h * sequenceLength * sequenceLength + i * sequenceLength + j;
-                    T attnWeight = _lastAttentionScores.GetFlatIndexValue(flatIndex);
+                    for (int j = 0; j < sequenceLength; j++)
+                    {
+                        // Get attention weight for this head using correct indexing
+                        T attnWeight = _lastAttentionScores[new int[] { b, h, i, j }];
 
-                    // Skip zero or very small values to avoid log(0)
-                    if (NumOps.LessThan(attnWeight, NumOps.FromDouble(1e-10)))
-                        continue;
+                        // Skip zero or very small values to avoid log(0)
+                        if (NumOps.LessThan(attnWeight, NumOps.FromDouble(1e-10)))
+                            continue;
 
-                    // H = -Σ(p * log(p))
-                    T logWeight = NumOps.Log(attnWeight);
-                    T term = NumOps.Multiply(attnWeight, logWeight);
-                    headEntropy = NumOps.Subtract(headEntropy, term);
+                        // H = -Σ(p * log(p))
+                        T logWeight = NumOps.Log(attnWeight);
+                        T term = NumOps.Multiply(attnWeight, logWeight);
+                        headEntropy = NumOps.Subtract(headEntropy, term);
+                    }
                 }
+                // We want to maximize entropy, so minimize -entropy
+                totalEntropy = NumOps.Subtract(totalEntropy, headEntropy);
             }
-            // We want to maximize entropy, so minimize -entropy
-            totalEntropy = NumOps.Subtract(totalEntropy, headEntropy);
         }
 
         _lastEntropyLoss = totalEntropy;
