@@ -1524,6 +1524,18 @@ public class GenerativeAdversarialNetwork<T> : NeuralNetworkBase<T>, IAuxiliaryL
     }
 
     /// <summary>
+    /// Gets diagnostic information about this component's state and behavior.
+    /// Implements <see cref="IDiagnosticsProvider{T}.GetDiagnostics"/>.
+    /// </summary>
+    /// <returns>
+    /// A dictionary containing diagnostic metrics. Delegates to <see cref="GetAuxiliaryLossDiagnostics"/> for implementation.
+    /// </returns>
+    public Dictionary<string, string> GetDiagnostics()
+    {
+        return GetAuxiliaryLossDiagnostics();
+    }
+
+    /// <summary>
     /// Computes the gradient penalty for WGAN-GP.
     /// </summary>
     /// <returns>The gradient penalty value.</returns>

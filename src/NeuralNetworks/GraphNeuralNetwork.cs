@@ -455,6 +455,18 @@ public class GraphNeuralNetwork<T> : NeuralNetworkBase<T>, IAuxiliaryLossLayer<T
     }
 
     /// <summary>
+    /// Gets diagnostic information about this component's state and behavior.
+    /// Implements <see cref="IDiagnosticsProvider{T}.GetDiagnostics"/>.
+    /// </summary>
+    /// <returns>
+    /// A dictionary containing diagnostic metrics. Delegates to <see cref="GetAuxiliaryLossDiagnostics"/> for implementation.
+    /// </returns>
+    public Dictionary<string, string> GetDiagnostics()
+    {
+        return GetAuxiliaryLossDiagnostics();
+    }
+
+    /// <summary>
     /// Performs a forward pass through the network to generate a prediction from graph data.
     /// </summary>
     /// <param name="nodeFeatures">A tensor containing features for each node in the graph.</param>

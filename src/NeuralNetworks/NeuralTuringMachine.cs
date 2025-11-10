@@ -391,6 +391,18 @@ public class NeuralTuringMachine<T> : NeuralNetworkBase<T>, IAuxiliaryLossLayer<
     }
 
     /// <summary>
+    /// Gets diagnostic information about this component's state and behavior.
+    /// Implements <see cref="IDiagnosticsProvider{T}.GetDiagnostics"/>.
+    /// </summary>
+    /// <returns>
+    /// A dictionary containing diagnostic metrics. Delegates to <see cref="GetAuxiliaryLossDiagnostics"/> for implementation.
+    /// </returns>
+    public Dictionary<string, string> GetDiagnostics()
+    {
+        return GetAuxiliaryLossDiagnostics();
+    }
+
+    /// <summary>
     /// Initializes the neural network layers based on the provided architecture.
     /// </summary>
     protected override void InitializeLayers()
