@@ -2,6 +2,7 @@ namespace AiDotNet.Interfaces;
 
 /// <summary>
 /// Interface for neural network layers that report auxiliary losses in addition to the primary task loss.
+/// Extends <see cref="IDiagnosticsProvider{T}"/> to provide diagnostic information about auxiliary loss computation.
 /// </summary>
 /// <typeparam name="T">The numeric type used for calculations (e.g., float, double).</typeparam>
 /// <remarks>
@@ -68,7 +69,7 @@ namespace AiDotNet.Interfaces;
 /// </code>
 /// </para>
 /// </remarks>
-public interface IAuxiliaryLossLayer<T>
+public interface IAuxiliaryLossLayer<T> : IDiagnosticsProvider<T>
 {
     /// <summary>
     /// Computes the auxiliary loss for this layer based on the most recent forward pass.
@@ -190,6 +191,7 @@ public interface IAuxiliaryLossLayer<T>
 
     /// <summary>
     /// Gets diagnostic information about the auxiliary loss computation.
+    /// This method delegates to <see cref="IDiagnosticsProvider{T}.GetDiagnostics"/> for implementation.
     /// </summary>
     /// <returns>
     /// A dictionary containing diagnostic metrics related to the auxiliary loss.
@@ -200,6 +202,12 @@ public interface IAuxiliaryLossLayer<T>
     /// This method provides additional information about the auxiliary loss that can be useful
     /// for monitoring, debugging, and understanding model behavior. The returned dictionary keys
     /// and values depend on the specific type of auxiliary loss.
+    /// </para>
+    /// <para>
+    /// <b>Implementation Note:</b> Since this interface extends <see cref="IDiagnosticsProvider{T}"/>,
+    /// implementations should provide the core diagnostic logic in <see cref="IDiagnosticsProvider{T}.GetDiagnostics"/>
+    /// and have this method delegate to it. This follows the interface segregation principle and allows
+    /// auxiliary loss diagnostics to be accessed through both the specific and general diagnostic interfaces.
     /// </para>
     /// <para>
     /// <b>For Beginners:</b> Gets extra information to help you understand what's happening.
