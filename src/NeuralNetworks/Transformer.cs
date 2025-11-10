@@ -78,9 +78,9 @@ public class Transformer<T> : NeuralNetworkBase<T>, IAuxiliaryLossLayer<T>
     /// Higher values enforce stronger attention quality constraints.
     /// </para>
     /// </remarks>
-    public T AuxiliaryLossWeight { get; set; } = NumOps.FromDouble(0.005);
+    public T AuxiliaryLossWeight { get; set; }
 
-    private T _lastAttentionRegularizationLoss = NumOps.Zero;
+    private T _lastAttentionRegularizationLoss;
 
     /// <summary>
     /// The configuration settings for this Transformer network.
@@ -162,6 +162,10 @@ public class Transformer<T> : NeuralNetworkBase<T>, IAuxiliaryLossLayer<T>
     {
         _transformerArchitecture = architecture;
         _optimizer = optimizer ?? new GradientDescentOptimizer<T, Tensor<T>, Tensor<T>>(this);
+
+        // Initialize NumOps-based fields
+        AuxiliaryLossWeight = NumOps.FromDouble(0.005);
+        _lastAttentionRegularizationLoss = NumOps.Zero;
 
         InitializeLayers();
     }
@@ -309,7 +313,7 @@ public class Transformer<T> : NeuralNetworkBase<T>, IAuxiliaryLossLayer<T>
         // Average over all attention layers
         if (attentionLayerCount > 0)
         {
-            totalAuxLoss = NumOps.Divide(totalAuxLoss, NumOps.FromInt32(attentionLayerCount));
+            totalAuxLoss = NumOps.Divide(totalAuxLoss, NumOps.FromDouble(attentionLayerCount));
         }
 
         _lastAttentionRegularizationLoss = totalAuxLoss;

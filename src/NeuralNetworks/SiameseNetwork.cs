@@ -70,14 +70,14 @@ public class SiameseNetwork<T> : NeuralNetworkBase<T>, IAuxiliaryLossLayer<T>
     /// Higher values make the network focus more on learning good embeddings.
     /// </para>
     /// </remarks>
-    public T AuxiliaryLossWeight { get; set; } = NumOps.FromDouble(0.5);
+    public T AuxiliaryLossWeight { get; set; }
 
     /// <summary>
     /// Gets or sets the margin for contrastive loss.
     /// </summary>
-    public T ContrastiveMargin { get; set; } = NumOps.FromDouble(1.0);
+    public T ContrastiveMargin { get; set; }
 
-    private T _lastContrastiveLoss = NumOps.Zero;
+    private T _lastContrastiveLoss;
 
     /// <summary>
     /// The shared neural network that processes each input independently.
@@ -112,12 +112,17 @@ public class SiameseNetwork<T> : NeuralNetworkBase<T>, IAuxiliaryLossLayer<T>
     /// where 0 means "completely different" and 1 means "identical".
     /// </para>
     /// </remarks>
-    public SiameseNetwork(NeuralNetworkArchitecture<T> architecture, ILossFunction<T>? lossFunction = null) : 
+    public SiameseNetwork(NeuralNetworkArchitecture<T> architecture, ILossFunction<T>? lossFunction = null) :
         base(architecture, lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(architecture.TaskType))
     {
         _subnetwork = new ConvolutionalNeuralNetwork<T>(architecture);
         int embeddingSize = architecture.GetOutputShape()[0];
         _outputLayer = new DenseLayer<T>(embeddingSize * 2, 1, new SigmoidActivation<T>() as IActivationFunction<T>);
+
+        // Initialize NumOps-based fields
+        AuxiliaryLossWeight = NumOps.FromDouble(0.5);
+        ContrastiveMargin = NumOps.FromDouble(1.0);
+        _lastContrastiveLoss = NumOps.Zero;
     }
 
     /// <summary>

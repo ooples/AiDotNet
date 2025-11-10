@@ -68,12 +68,12 @@ public class TransformerEncoderLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     /// If the main task is more important, you might decrease it.
     /// </para>
     /// </remarks>
-    public T AuxiliaryLossWeight { get; set; } = NumOps.FromDouble(0.005);
+    public T AuxiliaryLossWeight { get; set; }
 
     /// <summary>
     /// Stores the last computed auxiliary loss for diagnostic purposes.
     /// </summary>
-    private T _lastAuxiliaryLoss = NumOps.Zero;
+    private T _lastAuxiliaryLoss;
 
     /// <summary>
     /// The size of the embeddings for queries, keys, values, and outputs.
@@ -288,11 +288,15 @@ public class TransformerEncoderLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         _norm1 = new LayerNormalizationLayer<T>(_embeddingSize);
         
         _feedForward = new FeedForwardLayer<T>(
-            _embeddingSize, 
-            _feedForwardDim, 
+            _embeddingSize,
+            _feedForwardDim,
             new GELUActivation<T>() as IActivationFunction<T>);
-            
+
         _norm2 = new LayerNormalizationLayer<T>(_embeddingSize);
+
+        // Initialize NumOps-based fields
+        AuxiliaryLossWeight = NumOps.FromDouble(0.005);
+        _lastAuxiliaryLoss = NumOps.Zero;
     }
 
     /// <summary>
@@ -574,7 +578,7 @@ public class TransformerEncoderLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         // Average the auxiliary losses if any were computed
         if (auxLayerCount > 0)
         {
-            totalAuxLoss = NumOps.Divide(totalAuxLoss, NumOps.FromInt32(auxLayerCount));
+            totalAuxLoss = NumOps.Divide(totalAuxLoss, NumOps.FromDouble(auxLayerCount));
         }
 
         _lastAuxiliaryLoss = totalAuxLoss;

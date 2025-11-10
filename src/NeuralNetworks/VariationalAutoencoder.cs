@@ -119,7 +119,7 @@ public class VariationalAutoencoder<T> : NeuralNetworkBase<T>, IAuxiliaryLossLay
     /// <summary>
     /// Stores the last computed KL divergence value for diagnostics.
     /// </summary>
-    private T _lastKLDivergence = NumOps.Zero;
+    private T _lastKLDivergence;
 
     /// <summary>
     /// Gets or sets whether to use auxiliary loss (KL divergence) during training.
@@ -131,7 +131,7 @@ public class VariationalAutoencoder<T> : NeuralNetworkBase<T>, IAuxiliaryLossLay
     /// Gets or sets the weight (beta parameter) for the KL divergence auxiliary loss.
     /// Default is 1.0. Can be adjusted for beta-VAE variants.
     /// </summary>
-    public T AuxiliaryLossWeight { get; set; } = NumOps.One;
+    public T AuxiliaryLossWeight { get; set; }
 
     /// <summary>
     /// Initializes a new instance of the <see cref="VariationalAutoencoder{T}"/> class with the 
@@ -168,6 +168,10 @@ public class VariationalAutoencoder<T> : NeuralNetworkBase<T>, IAuxiliaryLossLay
         base(architecture, lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(architecture.TaskType), maxGradNorm)
     {
         LatentSize = latentSize;
+
+        // Initialize NumOps-based fields
+        _lastKLDivergence = NumOps.Zero;
+        AuxiliaryLossWeight = NumOps.One;
 
         // Initialize layers first so the model is fully constructed
         InitializeLayers();
@@ -837,7 +841,7 @@ public class VariationalAutoencoder<T> : NeuralNetworkBase<T>, IAuxiliaryLossLay
                 var halfLogVar = NumOps.Multiply(NumOps.FromDouble(0.5), _lastLogVariance[i]);
                 stdSum = NumOps.Add(stdSum, NumOps.Exp(halfLogVar));
             }
-            var stdMean = NumOps.Divide(stdSum, NumOps.FromInt32(_lastLogVariance.Length));
+            var stdMean = NumOps.Divide(stdSum, NumOps.FromDouble(_lastLogVariance.Length));
             diagnostics["LatentStdMean"] = stdMean.ToString() ?? "0";
         }
 

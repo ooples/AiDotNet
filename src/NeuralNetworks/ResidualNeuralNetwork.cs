@@ -81,9 +81,9 @@ public class ResidualNeuralNetwork<T> : NeuralNetworkBase<T>, IAuxiliaryLossLaye
     /// which can help with gradient flow but may slow convergence.
     /// </para>
     /// </remarks>
-    public T AuxiliaryLossWeight { get; set; } = NumOps.FromDouble(0.3);
+    public T AuxiliaryLossWeight { get; set; }
 
-    private T _lastDeepSupervisionLoss = NumOps.Zero;
+    private T _lastDeepSupervisionLoss;
     private List<ILayer<T>> _auxiliaryClassifiers = new();
     private readonly List<int> _auxiliaryClassifierPositions = new();
     /// <summary>
@@ -216,6 +216,10 @@ public class ResidualNeuralNetwork<T> : NeuralNetworkBase<T>, IAuxiliaryLossLaye
         _learningRate = learningRate ?? NumOps.FromDouble(0.01);
         _epochs = epochs;
         _batchSize = batchSize;
+
+        // Initialize NumOps-based fields
+        AuxiliaryLossWeight = NumOps.FromDouble(0.3);
+        _lastDeepSupervisionLoss = NumOps.Zero;
     }
 
     /// <summary>
