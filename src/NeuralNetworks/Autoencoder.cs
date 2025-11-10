@@ -579,10 +579,10 @@ public class Autoencoder<T> : NeuralNetworkBase<T>, IAuxiliaryLossLayer<T>
     {
         var diagnostics = new Dictionary<string, string>
         {
-            { "SparsityLoss", _lastSparsityLoss?.ToString() ?? "0" },
-            { "AverageActivation", _averageActivation?.ToString() ?? "0" },
-            { "TargetSparsity", _sparsityParameter?.ToString() ?? "0.05" },
-            { "SparsityWeight", AuxiliaryLossWeight?.ToString() ?? "0.001" },
+            { "SparsityLoss", System.Convert.ToString(_lastSparsityLoss) ?? "0" },
+            { "AverageActivation", System.Convert.ToString(_averageActivation) ?? "0" },
+            { "TargetSparsity", System.Convert.ToString(_sparsityParameter) ?? "0.05" },
+            { "SparsityWeight", System.Convert.ToString(AuxiliaryLossWeight) ?? "0.001" },
             { "UseAuxiliaryLoss", UseAuxiliaryLoss.ToString() }
         };
 
