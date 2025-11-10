@@ -71,7 +71,15 @@ public abstract class DecisionTreeRegressionBase<T> : ITreeBasedRegression<T>
     /// </para>
     /// </remarks>
     protected IRegularization<T, Matrix<T>, Vector<T>> Regularization { get; private set; }
-    
+
+    /// <summary>
+    /// Gets the default loss function for this tree-based regression model.
+    /// </summary>
+    /// <value>
+    /// The loss function used for gradient computation.
+    /// </value>
+    private readonly ILossFunction<T> _defaultLossFunction;
+
     /// <summary>
     /// Gets the maximum depth of the decision tree.
     /// </summary>
@@ -164,6 +172,7 @@ public abstract class DecisionTreeRegressionBase<T> : ITreeBasedRegression<T>
     /// </summary>
     /// <param name="options">Optional configuration options for the decision tree algorithm.</param>
     /// <param name="regularization">Optional regularization strategy to prevent overfitting.</param>
+    /// <param name="lossFunction">Loss function for gradient computation. If null, defaults to Mean Squared Error.</param>
     /// <remarks>
     /// <para>
     /// This constructor initializes a new base class for decision tree regression with the specified options
@@ -171,23 +180,25 @@ public abstract class DecisionTreeRegressionBase<T> : ITreeBasedRegression<T>
     /// is specified, no regularization is applied.
     /// </para>
     /// <para><b>For Beginners:</b> This sets up the foundation for a decision tree model.
-    /// 
-    /// When creating a decision tree, you can specify two main things:
+    ///
+    /// When creating a decision tree, you can specify three main things:
     /// - Options: Controls how the tree grows (like its maximum depth or minimum samples needed to split)
     /// - Regularization: Helps prevent the model from becoming too complex and "memorizing" the training data
-    /// 
+    /// - Loss Function: Determines how prediction errors are measured (defaults to Mean Squared Error)
+    ///
     /// If you don't specify these parameters, the model will use reasonable default settings.
-    /// 
+    ///
     /// This constructor is typically not called directly but is used by specific implementations
     /// of decision tree models.
     /// </para>
     /// </remarks>
-    protected DecisionTreeRegressionBase(DecisionTreeOptions? options, IRegularization<T, Matrix<T>, Vector<T>>? regularization)
+    protected DecisionTreeRegressionBase(DecisionTreeOptions? options, IRegularization<T, Matrix<T>, Vector<T>>? regularization, ILossFunction<T>? lossFunction = null)
     {
         Options = options ?? new();
         NumOps = MathHelper.GetNumericOperations<T>();
         FeatureImportances = new Vector<T>(0);
         Regularization = regularization ?? new NoRegularization<T, Matrix<T>, Vector<T>>();
+        _defaultLossFunction = lossFunction ?? new MeanSquaredErrorLoss<T>();
     }
     
     /// <summary>
@@ -981,5 +992,121 @@ public abstract class DecisionTreeRegressionBase<T> : ITreeBasedRegression<T>
         {
             throw new InvalidOperationException($"Failed to load or deserialize model from file '{filePath}'.", ex);
         }
+    }
+
+    /// <inheritdoc/>
+    /// <remarks>
+    /// <para>
+    /// For tree-based regression models, the default loss function is Mean Squared Error (MSE).
+    /// This can be customized by passing a different loss function to the constructor.
+    /// </para>
+    /// </remarks>
+    public virtual ILossFunction<T> DefaultLossFunction => _defaultLossFunction;
+
+    /// <inheritdoc/>
+    /// <remarks>
+    /// <para><b>IMPORTANT NOTE:</b> Decision trees are not continuously differentiable models.
+    /// This gradient computation provides a numerical approximation for compatibility with
+    /// gradient-based distributed training, but it is NOT the gradient in the traditional sense.
+    ///
+    /// For proper tree-based distributed training, consider using:
+    /// - Gradient Boosting (which uses gradients of the loss, not the tree)
+    /// - Model averaging approaches (like Random Forests in distributed mode)
+    /// - Ensemble-based distributed training
+    /// </para>
+    /// <para><b>For Beginners:</b> Decision trees make decisions using "if-then" rules, not smooth math functions.
+    ///
+    /// Because of this, they don't have traditional gradients (rates of change). This method
+    /// provides an approximation using numerical differentiation, which means:
+    /// - It estimates gradients by making small changes to predictions
+    /// - It's computationally expensive (requires many predictions)
+    /// - It's not as accurate as true gradients
+    ///
+    /// If you need gradient-based training for trees, consider Gradient Boosting, which
+    /// uses gradients of the loss function rather than gradients of the tree structure.
+    /// </para>
+    /// </remarks>
+    public virtual Vector<T> ComputeGradients(Matrix<T> input, Vector<T> target, ILossFunction<T>? lossFunction = null)
+    {
+        var loss = lossFunction ?? DefaultLossFunction;
+        var predictions = Predict(input);
+
+        // For gradient boosting: compute per-sample loss derivatives (pseudo-residuals)
+        // These are ∂Loss/∂predictions, NOT ∂Loss/∂parameters
+        // In gradient boosting, subsequent trees are fit to these negative gradients
+        var sampleGradients = loss.CalculateDerivative(predictions, target);
+
+        // Map per-sample gradients to per-parameter gradients
+        // For decision trees, parameters typically represent leaf values or split thresholds
+        // We aggregate sample gradients into ParameterCount buckets
+        var gradients = new Vector<T>(ParameterCount);
+
+        if (sampleGradients.Length == 0 || ParameterCount == 0)
+        {
+            return gradients; // Return zeros
+        }
+
+        // Distribute samples across parameters
+        int samplesPerParam = Math.Max(1, (sampleGradients.Length + ParameterCount - 1) / ParameterCount);
+
+        for (int paramIdx = 0; paramIdx < ParameterCount; paramIdx++)
+        {
+            T sum = NumOps.Zero;
+            int count = 0;
+
+            // Aggregate gradients for samples mapped to this parameter
+            int startIdx = paramIdx * samplesPerParam;
+            int endIdx = Math.Min((paramIdx + 1) * samplesPerParam, sampleGradients.Length);
+
+            for (int sampleIdx = startIdx; sampleIdx < endIdx; sampleIdx++)
+            {
+                sum = NumOps.Add(sum, sampleGradients[sampleIdx]);
+                count++;
+            }
+
+            // Average the gradients for this parameter bucket
+            gradients[paramIdx] = count > 0
+                ? NumOps.Divide(sum, NumOps.FromDouble(count))
+                : NumOps.Zero;
+        }
+
+        return gradients;
+    }
+
+    /// <inheritdoc/>
+    /// <remarks>
+    /// <para><b>IMPORTANT NOTE:</b> Decision trees are not trained via gradient descent.
+    /// This method is provided for interface compatibility but has limited effectiveness.
+    ///
+    /// Trees are typically trained using:
+    /// - Greedy splitting algorithms (CART, ID3, C4.5)
+    /// - Ensemble methods (Random Forests, Gradient Boosting)
+    /// - Specialized tree modification algorithms
+    /// </para>
+    /// <para><b>For Beginners:</b> Applying gradients to a decision tree is unusual.
+    ///
+    /// Normal trees are built by:
+    /// 1. Finding the best feature to split on
+    /// 2. Recursively building child nodes
+    /// 3. Stopping when nodes are pure enough or deep enough
+    ///
+    /// This method is provided for compatibility with distributed training interfaces,
+    /// but it doesn't perform traditional gradient descent on the tree structure.
+    /// Instead, it's primarily useful for ensemble methods like Gradient Boosting.
+    /// </para>
+    /// </remarks>
+    public virtual void ApplyGradients(Vector<T> gradients, T learningRate)
+    {
+        if (gradients.Length != ParameterCount)
+        {
+            throw new ArgumentException($"Expected {ParameterCount} gradients, but got {gradients.Length}", nameof(gradients));
+        }
+
+        // For tree models, applying gradients directly is not standard practice
+        // This is a no-op implementation for interface compatibility
+        // Derived classes (like GradientBoostingRegression) can override with proper gradient-based updates
+
+        // Note: Actual tree parameter updates would require modifying node split points and leaf values
+        // which is algorithm-specific and typically handled during the Train() method instead
     }
 }

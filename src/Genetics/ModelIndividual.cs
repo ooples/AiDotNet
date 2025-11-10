@@ -327,5 +327,26 @@ public class ModelIndividual<T, TInput, TOutput, TGene> :
         catch (Exception ex) { throw new InvalidOperationException($"Failed to deserialize model from file '{filePath}'. The file may be corrupted or incompatible: {ex.Message}", ex); }
     }
 
+    /// <summary>
+    /// Gets the default loss function for gradient computation by delegating to the inner model.
+    /// </summary>
+    public ILossFunction<T> DefaultLossFunction => _innerModel.DefaultLossFunction;
+
+    /// <summary>
+    /// Computes gradients by delegating to the inner model.
+    /// </summary>
+    public Vector<T> ComputeGradients(TInput input, TOutput target, ILossFunction<T>? lossFunction = null)
+    {
+        return _innerModel.ComputeGradients(input, target, lossFunction);
+    }
+
+    /// <summary>
+    /// Applies gradients by delegating to the inner model.
+    /// </summary>
+    public void ApplyGradients(Vector<T> gradients, T learningRate)
+    {
+        _innerModel.ApplyGradients(gradients, learningRate);
+    }
+
     #endregion
 }
