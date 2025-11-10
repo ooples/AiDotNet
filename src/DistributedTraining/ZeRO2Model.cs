@@ -101,7 +101,8 @@ public class ZeRO2Model<T, TInput, TOutput> : ShardedModelBase<T, TInput, TOutpu
         int shardEnd = Math.Min((Rank + 1) * chunkSize, totalParams);
         int deltaShardSize = shardEnd - shardStart;
 
-        _parameterDeltaShard = new Vector<T>(new T[deltaShardSize]);
+        // Initialize to null - will be populated by SynchronizeGradients()
+        _parameterDeltaShard = null;
         CachedFullParameters = null;
     }
 
