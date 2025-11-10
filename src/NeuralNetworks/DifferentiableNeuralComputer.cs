@@ -2056,17 +2056,17 @@ public class DifferentiableNeuralComputer<T> : NeuralNetworkBase<T>, IAuxiliaryL
         /// <summary>
         /// The strength for content-based writing.
         /// </summary>
-        public T WriteStrength { get; set; } = NumOps.Zero;
-    
+        public T WriteStrength { get; set; }
+
         /// <summary>
         /// The allocation gate controlling whether to use content-based or allocation-based writing.
         /// </summary>
-        public T AllocationGate { get; set; } = NumOps.Zero;
-    
+        public T AllocationGate { get; set; }
+
         /// <summary>
         /// The write gate controlling the overall intensity of writing.
         /// </summary>
-        public T WriteGate { get; set; } = NumOps.Zero;
+        public T WriteGate { get; set; }
     
         /// <summary>
         /// The list of mode vectors for each read head, controlling whether to read based on content,
@@ -2079,7 +2079,10 @@ public class DifferentiableNeuralComputer<T> : NeuralNetworkBase<T>, IAuxiliaryL
         /// </summary>
         public MemoryInterfaceSignals()
         {
-            // Default initializations are handled by the property initializers above
+            // Initialize numeric properties after NumOps is available
+            WriteStrength = NumOps.Zero;
+            AllocationGate = NumOps.Zero;
+            WriteGate = NumOps.Zero;
         }
     
         /// <summary>
