@@ -92,7 +92,7 @@ public interface INumericOperations<T>
     /// </summary>
     /// <remarks>
     /// <b>For Beginners:</b> The square root of a number is a value that, when multiplied by itself,
-    /// gives the original number. For example, the square root of 9 is 3 because 3 × 3 = 9.
+    /// gives the original number. For example, the square root of 9 is 3 because 3 ï¿½ 3 = 9.
     /// </remarks>
     /// <param name="value">The value to calculate the square root of.</param>
     /// <returns>The square root of the value.</returns>
@@ -152,7 +152,7 @@ public interface INumericOperations<T>
     /// </summary>
     /// <remarks>
     /// <b>For Beginners:</b> The square of a number is the result of multiplying the number by itself.
-    /// For example, the square of 4 is 16 because 4 × 4 = 16.
+    /// For example, the square of 4 is 16 because 4 ï¿½ 4 = 16.
     /// </remarks>
     /// <param name="value">The value to square.</param>
     /// <returns>The square of the value.</returns>
@@ -163,7 +163,7 @@ public interface INumericOperations<T>
     /// </summary>
     /// <remarks>
     /// <b>For Beginners:</b> This calculates "e" (a special mathematical constant, approximately 2.71828)
-    /// raised to the power of the given value. For example, Exp(2) is e² ˜ 7.389.
+    /// raised to the power of the given value. For example, Exp(2) is eï¿½ ï¿½ 7.389.
     /// 
     /// The exponential function is commonly used in machine learning for:
     /// - Neural network activation functions
@@ -187,7 +187,7 @@ public interface INumericOperations<T>
     /// </summary>
     /// <remarks>
     /// <b>For Beginners:</b> This calculates the result of multiplying a number by itself a specific
-    /// number of times. For example, Power(2, 3) means 2³ = 2 × 2 × 2 = 8.
+    /// number of times. For example, Power(2, 3) means 2ï¿½ = 2 ï¿½ 2 ï¿½ 2 = 8.
     /// </remarks>
     /// <param name="baseValue">The base value.</param>
     /// <param name="exponent">The exponent value.</param>
@@ -200,7 +200,7 @@ public interface INumericOperations<T>
     /// <remarks>
     /// <b>For Beginners:</b> The natural logarithm is the inverse of the exponential function.
     /// It answers the question: "To what power must e be raised to get this value?"
-    /// For example, Log(7.389) ˜ 2 because e² ˜ 7.389.
+    /// For example, Log(7.389) ï¿½ 2 because eï¿½ ï¿½ 7.389.
     /// 
     /// Natural logarithms are commonly used in machine learning for:
     /// - Converting multiplicative relationships to additive ones
@@ -314,4 +314,72 @@ public interface INumericOperations<T>
     /// <param name="value">The value to get the sign of.</param>
     /// <returns>The sign of the value (1 for positive, -1 for negative) or zero if the value is zero.</returns>
     T SignOrZero(T value);
+
+    /// <summary>
+    /// Gets the number of bits used for precision in this numeric type.
+    /// </summary>
+    /// <remarks>
+    /// <b>For Beginners:</b> This tells you how many bits are used to store the number's precision.
+    /// - float (FP32): 32 bits
+    /// - Half (FP16): 16 bits
+    /// - double (FP64): 64 bits
+    /// This is useful for mixed-precision training where different precisions are used.
+    /// </remarks>
+    int PrecisionBits { get; }
+
+    /// <summary>
+    /// Converts a value to float (FP32) precision.
+    /// </summary>
+    /// <remarks>
+    /// <b>For Beginners:</b> This converts the current numeric type to a standard 32-bit floating-point number.
+    /// Used in mixed-precision training to cast between different numeric types.
+    /// </remarks>
+    /// <param name="value">The value to convert.</param>
+    /// <returns>The value as a float.</returns>
+    float ToFloat(T value);
+
+    /// <summary>
+    /// Converts a float (FP32) value to the current numeric type.
+    /// </summary>
+    /// <remarks>
+    /// <b>For Beginners:</b> This converts a standard 32-bit floating-point number to the current numeric type.
+    /// Used in mixed-precision training to cast between different numeric types.
+    /// </remarks>
+    /// <param name="value">The float value to convert.</param>
+    /// <returns>The value converted to type T.</returns>
+    T FromFloat(float value);
+
+    /// <summary>
+    /// Converts a value to Half (FP16) precision.
+    /// </summary>
+    /// <remarks>
+    /// <b>For Beginners:</b> This converts the current numeric type to a 16-bit half-precision floating-point number.
+    /// Half precision uses less memory and can be faster on modern GPUs with Tensor Cores.
+    /// Used in mixed-precision training to reduce memory usage and increase speed.
+    /// </remarks>
+    /// <param name="value">The value to convert.</param>
+    /// <returns>The value as a Half.</returns>
+    Half ToHalf(T value);
+
+    /// <summary>
+    /// Converts a Half (FP16) value to the current numeric type.
+    /// </summary>
+    /// <remarks>
+    /// <b>For Beginners:</b> This converts a 16-bit half-precision floating-point number to the current numeric type.
+    /// Used in mixed-precision training to cast between different numeric types.
+    /// </remarks>
+    /// <param name="value">The Half value to convert.</param>
+    /// <returns>The value converted to type T.</returns>
+    T FromHalf(Half value);
+
+    /// <summary>
+    /// Converts a value to double (FP64) precision.
+    /// </summary>
+    /// <remarks>
+    /// <b>For Beginners:</b> This converts the current numeric type to a 64-bit double-precision floating-point number.
+    /// Double precision provides maximum numerical accuracy but uses more memory.
+    /// </remarks>
+    /// <param name="value">The value to convert.</param>
+    /// <returns>The value as a double.</returns>
+    double ToDouble(T value);
 }

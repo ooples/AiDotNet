@@ -66,7 +66,7 @@ public class FloatOperations : INumericOperations<float>
     /// This method performs multiplication of two floating-point values and returns their product.
     /// Multiplication is used extensively in neural networks, particularly for weight applications.
     /// </para>
-    /// <para><b>For Beginners:</b> This method multiplies two numbers together, like 2.5 × 4.0 = 10.0.
+    /// <para><b>For Beginners:</b> This method multiplies two numbers together, like 2.5 ï¿½ 4.0 = 10.0.
     /// 
     /// In neural networks, multiplication is often used when:
     /// - Applying weights to inputs
@@ -87,7 +87,7 @@ public class FloatOperations : INumericOperations<float>
     /// This method performs division of two floating-point values, computing a / b.
     /// Care should be taken to ensure the divisor is not zero to avoid runtime exceptions.
     /// </para>
-    /// <para><b>For Beginners:</b> This method divides the first number by the second, like 10.0 ÷ 2.0 = 5.0.
+    /// <para><b>For Beginners:</b> This method divides the first number by the second, like 10.0 ï¿½ 2.0 = 5.0.
     /// 
     /// In neural networks, division is commonly used for:
     /// - Normalizing values (making numbers fall within a certain range)
@@ -177,7 +177,7 @@ public class FloatOperations : INumericOperations<float>
     /// 
     /// The square root of a number is a value that, when multiplied by itself, gives the original number.
     /// For example:
-    /// - The square root of 9 is 3 (because 3 × 3 = 9)
+    /// - The square root of 9 is 3 (because 3 ï¿½ 3 = 9)
     /// - The square root of 2 is approximately 1.414
     /// 
     /// Square roots are used in neural networks for:
@@ -309,9 +309,9 @@ public class FloatOperations : INumericOperations<float>
     /// <para><b>For Beginners:</b> This method multiplies a number by itself.
     /// 
     /// For example:
-    /// - Square(4.0) returns 16.0 (4.0 × 4.0 = 16.0)
-    /// - Square(-3.0) returns 9.0 (-3.0 × -3.0 = 9.0)
-    /// - Square(0.5) returns 0.25 (0.5 × 0.5 = 0.25)
+    /// - Square(4.0) returns 16.0 (4.0 ï¿½ 4.0 = 16.0)
+    /// - Square(-3.0) returns 9.0 (-3.0 ï¿½ -3.0 = 9.0)
+    /// - Square(0.5) returns 0.25 (0.5 ï¿½ 0.5 = 0.25)
     /// 
     /// In neural networks, squaring is commonly used for:
     /// - Calculating squared errors (a measure of how far predictions are from actual values)
@@ -338,10 +338,10 @@ public class FloatOperations : INumericOperations<float>
     /// 
     /// In mathematics, "e" is a special number (approximately 2.71828) that appears naturally in many calculations.
     /// This method computes e^value:
-    /// - Exp(1.0) returns about 2.71828 (e¹)
-    /// - Exp(2.0) returns about 7.38906 (e²)
-    /// - Exp(0.0) returns exactly 1.0 (e°)
-    /// - Exp(-1.0) returns about 0.36788 (e?¹)
+    /// - Exp(1.0) returns about 2.71828 (eï¿½)
+    /// - Exp(2.0) returns about 7.38906 (eï¿½)
+    /// - Exp(0.0) returns exactly 1.0 (eï¿½)
+    /// - Exp(-1.0) returns about 0.36788 (e?ï¿½)
     /// 
     /// The exponential function is fundamental in neural networks for:
     /// - Activation functions like sigmoid and softmax
@@ -398,10 +398,10 @@ public class FloatOperations : INumericOperations<float>
     /// <para><b>For Beginners:</b> This method raises a number to a power.
     /// 
     /// For example:
-    /// - Power(2.0, 3.0) returns 8.0 (2³ = 2×2×2 = 8)
+    /// - Power(2.0, 3.0) returns 8.0 (2ï¿½ = 2ï¿½2ï¿½2 = 8)
     /// - Power(4.0, 0.5) returns 2.0 (4^(1/2) = v4 = 2)
     /// - Power(5.0, 0.0) returns 1.0 (any number raised to the power of 0 is 1)
-    /// - Power(2.0, -1.0) returns 0.5 (2?¹ = 1/2 = 0.5)
+    /// - Power(2.0, -1.0) returns 0.5 (2?ï¿½ = 1/2 = 0.5)
     /// 
     /// In neural networks, power functions are used for:
     /// - Implementing certain activation functions
@@ -425,9 +425,9 @@ public class FloatOperations : INumericOperations<float>
     /// <para><b>For Beginners:</b> This method calculates the natural logarithm of a number.
     /// 
     /// The natural logarithm (log base e) is the inverse of the exponential function:
-    /// - Log(2.71828) returns about 1.0 (because e¹ ˜ 2.71828)
-    /// - Log(7.38906) returns about 2.0 (because e² ˜ 7.38906)
-    /// - Log(1.0) returns exactly 0.0 (because e° = 1)
+    /// - Log(2.71828) returns about 1.0 (because eï¿½ ï¿½ 2.71828)
+    /// - Log(7.38906) returns about 2.0 (because eï¿½ ï¿½ 7.38906)
+    /// - Log(1.0) returns exactly 0.0 (because eï¿½ = 1)
     /// 
     /// In neural networks, logarithms are commonly used for:
     /// - Cross-entropy loss functions (used in classification problems)
@@ -549,7 +549,7 @@ public class FloatOperations : INumericOperations<float>
     /// <summary>
     /// Gets the minimum possible value for a float.
     /// </summary>
-    /// <value>The minimum value of float, approximately -3.4 × 10^38.</value>
+    /// <value>The minimum value of float, approximately -3.4 ï¿½ 10^38.</value>
     /// <remarks>
     /// <para>
     /// This property returns the smallest possible value for a single-precision floating-point number.
@@ -557,7 +557,7 @@ public class FloatOperations : INumericOperations<float>
     /// </para>
     /// <para><b>For Beginners:</b> This property gives you the smallest possible value that a float can store.
     /// 
-    /// The minimum value for a float is approximately -3.4 × 10^38, which is an extremely large negative number
+    /// The minimum value for a float is approximately -3.4 ï¿½ 10^38, which is an extremely large negative number
     /// (about -340,000,000,000,000,000,000,000,000,000,000,000,000).
     /// 
     /// In neural networks, knowing the minimum value can be important for:
@@ -571,7 +571,7 @@ public class FloatOperations : INumericOperations<float>
     /// <summary>
     /// Gets the maximum possible value for a float.
     /// </summary>
-    /// <value>The maximum value of float, approximately 3.4 × 10^38.</value>
+    /// <value>The maximum value of float, approximately 3.4 ï¿½ 10^38.</value>
     /// <remarks>
     /// <para>
     /// This property returns the largest possible value for a single-precision floating-point number.
@@ -579,7 +579,7 @@ public class FloatOperations : INumericOperations<float>
     /// </para>
     /// <para><b>For Beginners:</b> This property gives you the largest possible value that a float can store.
     /// 
-    /// The maximum value for a float is approximately 3.4 × 10^38, which is an extremely large positive number
+    /// The maximum value for a float is approximately 3.4 ï¿½ 10^38, which is an extremely large positive number
     /// (about 340,000,000,000,000,000,000,000,000,000,000,000,000).
     /// 
     /// In neural networks, knowing the maximum value can be important for:
@@ -712,4 +712,85 @@ public class FloatOperations : INumericOperations<float>
 
         return 0f;
     }
+
+    /// <summary>
+    /// Gets the number of bits used for precision in float (32 bits).
+    /// </summary>
+    public int PrecisionBits => 32;
+
+    /// <summary>
+    /// Converts a float value to float (identity operation).
+    /// </summary>
+    /// <param name="value">The float value.</param>
+    /// <returns>The same float value.</returns>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> This method returns the same value since it's already a float.
+    /// It's here for consistency with the interface, allowing generic code to work with multiple numeric types.
+    /// </para>
+    /// </remarks>
+    public float ToFloat(float value) => value;
+
+    /// <summary>
+    /// Converts a float value to float (identity operation).
+    /// </summary>
+    /// <param name="value">The float value.</param>
+    /// <returns>The same float value.</returns>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> This method returns the same value since it's already a float.
+    /// It's here for consistency with the interface, allowing generic code to work with multiple numeric types.
+    /// </para>
+    /// </remarks>
+    public float FromFloat(float value) => value;
+
+    /// <summary>
+    /// Converts a float (FP32) value to Half (FP16) precision.
+    /// </summary>
+    /// <param name="value">The float value to convert.</param>
+    /// <returns>The value converted to Half precision.</returns>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> This converts a standard 32-bit float to a smaller 16-bit half-precision float.
+    ///
+    /// This conversion:
+    /// - Reduces memory usage by 50%
+    /// - Can be faster on modern GPUs with Tensor Cores
+    /// - May lose precision (fewer decimal digits)
+    /// - May overflow if value is outside Half's range [-65504, 65504]
+    ///
+    /// Used in mixed-precision training to reduce memory usage while maintaining acceptable accuracy.
+    /// </para>
+    /// </remarks>
+    public Half ToHalf(float value) => (Half)value;
+
+    /// <summary>
+    /// Converts a Half (FP16) value to float (FP32) precision.
+    /// </summary>
+    /// <param name="value">The Half value to convert.</param>
+    /// <returns>The value converted to float precision.</returns>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> This converts a 16-bit half-precision float to a standard 32-bit float.
+    ///
+    /// This conversion:
+    /// - Is lossless (no precision is lost)
+    /// - Allows using the wider range of float
+    /// - Used when accumulating gradients in mixed-precision training
+    /// </para>
+    /// </remarks>
+    public float FromHalf(Half value) => (float)value;
+
+    /// <summary>
+    /// Converts a float (FP32) value to double (FP64) precision.
+    /// </summary>
+    /// <param name="value">The float value to convert.</param>
+    /// <returns>The value converted to double precision.</returns>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> This converts a 32-bit float to a 64-bit double.
+    ///
+    /// This conversion:
+    /// - Is lossless (no precision is lost)
+    /// - Provides more decimal digits of precision
+    /// - Uses twice as much memory
+    /// - Can represent much larger and smaller numbers
+    /// </para>
+    /// </remarks>
+    public double ToDouble(float value) => (double)value;
 }
