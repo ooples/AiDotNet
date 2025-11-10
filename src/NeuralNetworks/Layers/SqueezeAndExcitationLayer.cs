@@ -1295,7 +1295,7 @@ public class SqueezeAndExcitationLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         //     }
         //
         //     // Average across batch
-        //     attentionLoss = NumOps.Divide(attentionLoss, NumOps.FromInt32(batchSize));
+        //     attentionLoss = NumOps.Divide(attentionLoss, NumOps.FromDouble(batchSize));
         // }
         // _lastChannelAttentionLoss = attentionLoss;
 

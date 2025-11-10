@@ -461,7 +461,7 @@ public class AttentionNetwork<T> : NeuralNetworkBase<T>, IAuxiliaryLossLayer<T>
         // Average over all attention layers if any exist
         if (attentionLayerCount > 0)
         {
-            totalEntropyLoss = NumOps.Divide(totalEntropyLoss, NumOps.FromInt32(attentionLayerCount));
+            totalEntropyLoss = NumOps.Divide(totalEntropyLoss, NumOps.FromDouble(attentionLayerCount));
         }
 
         _lastAttentionEntropyLoss = totalEntropyLoss;

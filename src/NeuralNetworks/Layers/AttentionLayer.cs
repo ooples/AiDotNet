@@ -632,7 +632,7 @@ public class AttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         }
 
         // Average entropy over all attention weights
-        entropy = NumOps.Divide(entropy, NumOps.FromInt32(_lastAttentionWeights.Length));
+        entropy = NumOps.Divide(entropy, NumOps.FromDouble(_lastAttentionWeights.Length));
 
         // Store for diagnostics
         _lastAttentionEntropy = entropy;

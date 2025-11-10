@@ -723,7 +723,7 @@ public class GraphConvolutionalLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         //         }
         //     }
         //     // Normalize by number of edges and batch size
-        //     smoothnessLoss = NumOps.Divide(smoothnessLoss, NumOps.FromInt32(batchSize));
+        //     smoothnessLoss = NumOps.Divide(smoothnessLoss, NumOps.FromDouble(batchSize));
         // }
         // _lastGraphSmoothnessLoss = smoothnessLoss;
 

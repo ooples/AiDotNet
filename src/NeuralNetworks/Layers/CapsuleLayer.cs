@@ -315,7 +315,7 @@ public class CapsuleLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         // Average over all distributions
         if (numDistributions > 0)
         {
-            totalNegativeEntropy = NumOps.Divide(totalNegativeEntropy, NumOps.FromInt32(numDistributions));
+            totalNegativeEntropy = NumOps.Divide(totalNegativeEntropy, NumOps.FromDouble(numDistributions));
         }
 
         _lastRoutingEntropyLoss = totalNegativeEntropy;

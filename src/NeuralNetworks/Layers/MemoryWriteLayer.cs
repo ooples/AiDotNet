@@ -853,7 +853,7 @@ public class MemoryWriteLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         }
 
         // Average across batch
-        _lastAttentionSparsityLoss = NumOps.Divide(totalNegativeEntropy, NumOps.FromInt32(batchSize));
+        _lastAttentionSparsityLoss = NumOps.Divide(totalNegativeEntropy, NumOps.FromDouble(batchSize));
         return _lastAttentionSparsityLoss;
     }
 

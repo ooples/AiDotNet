@@ -528,7 +528,7 @@ public class EmbeddingLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
 
         // Average over all embedding values and scale by 0.5 (standard L2 regularization)
         int totalElements = _embeddingMatrix.Rows * _embeddingMatrix.Columns;
-        T regularizationLoss = NumOps.Divide(sumSquaredNorms, NumOps.FromInt32(totalElements * 2));
+        T regularizationLoss = NumOps.Divide(sumSquaredNorms, NumOps.FromDouble(totalElements * 2));
 
         // Store for diagnostics
         _lastEmbeddingRegularizationLoss = regularizationLoss;
@@ -590,7 +590,7 @@ public class EmbeddingLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
 
         if (count > 0)
         {
-            T avgMagnitude = NumOps.Divide(sumMagnitudes, NumOps.FromInt32(count));
+            T avgMagnitude = NumOps.Divide(sumMagnitudes, NumOps.FromDouble(count));
             diagnostics["AverageEmbeddingMagnitude"] = avgMagnitude.ToString() ?? "0";
         }
 

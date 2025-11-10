@@ -315,7 +315,7 @@ public class CapsuleNetwork<T> : NeuralNetworkBase<T>, IAuxiliaryLossLayer<T>
         }
 
         // Average over all elements
-        T reconstructionLoss = NumOps.Divide(sumSquaredError, NumOps.FromInt32(minLength));
+        T reconstructionLoss = NumOps.Divide(sumSquaredError, NumOps.FromDouble(minLength));
 
         return reconstructionLoss;
     }
