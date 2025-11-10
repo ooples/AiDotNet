@@ -311,7 +311,7 @@ public class MultiHeadAttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
                 {
                     // Get attention weight for this head
                     int flatIndex = h * sequenceLength * sequenceLength + i * sequenceLength + j;
-                    T attnWeight = _lastAttentionScores.GetFlatIndex(flatIndex);
+                    T attnWeight = _lastAttentionScores.GetFlatIndexValue(flatIndex);
 
                     // Skip zero or very small values to avoid log(0)
                     if (NumOps.LessThan(attnWeight, NumOps.FromDouble(1e-10)))

@@ -644,9 +644,9 @@ public class DifferentiableNeuralComputer<T> : NeuralNetworkBase<T>, IAuxiliaryL
     /// A dictionary containing diagnostic metrics including both base layer diagnostics and
     /// auxiliary loss diagnostics from <see cref="GetAuxiliaryLossDiagnostics"/>.
     /// </returns>
-    public override Dictionary<string, string> GetDiagnostics()
+    public Dictionary<string, string> GetDiagnostics()
     {
-        var diagnostics = base.GetDiagnostics();
+        var diagnostics = new Dictionary<string, string>();
 
         // Merge auxiliary loss diagnostics
         var auxDiagnostics = GetAuxiliaryLossDiagnostics();
@@ -2104,7 +2104,12 @@ public class DifferentiableNeuralComputer<T> : NeuralNetworkBase<T>, IAuxiliaryL
             WriteVector = new Vector<T>(memoryWordSize);
             EraseVector = new Vector<T>(memoryWordSize);
             WriteKey = new Vector<T>(memoryWordSize);
-        
+
+            // Initialize scalar properties
+            WriteStrength = NumOps.Zero;
+            AllocationGate = NumOps.Zero;
+            WriteGate = NumOps.Zero;
+
             // Initialize the vectors with zeros
             for (int i = 0; i < memoryWordSize; i++)
             {

@@ -295,7 +295,7 @@ public class CapsuleLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
             T entropy = NumOps.Zero;
             for (int j = 0; j < distributionSize; j++)
             {
-                T coeff = _lastCouplingCoefficients.GetFlatIndex(i + j);
+                T coeff = _lastCouplingCoefficients.GetFlatIndexValue(i + j);
 
                 // Skip zero or very small coefficients to avoid log(0)
                 if (NumOps.LessThan(coeff, NumOps.FromDouble(1e-10)))

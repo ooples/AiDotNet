@@ -856,9 +856,9 @@ public class VariationalAutoencoder<T> : NeuralNetworkBase<T>, IAuxiliaryLossLay
     /// A dictionary containing diagnostic metrics including both base layer diagnostics and
     /// auxiliary loss diagnostics from <see cref="GetAuxiliaryLossDiagnostics"/>.
     /// </returns>
-    public override Dictionary<string, string> GetDiagnostics()
+    public Dictionary<string, string> GetDiagnostics()
     {
-        var diagnostics = base.GetDiagnostics();
+        var diagnostics = new Dictionary<string, string>();
 
         // Merge auxiliary loss diagnostics
         var auxDiagnostics = GetAuxiliaryLossDiagnostics();

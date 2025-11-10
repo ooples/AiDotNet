@@ -379,7 +379,7 @@ public class GraphNeuralNetwork<T> : NeuralNetworkBase<T>, IAuxiliaryLossLayer<T
             for (int j = 0; j < numNodes; j++)
             {
                 // Get edge weight from adjacency matrix
-                T edgeWeight = _lastAdjacencyMatrix.GetValue([i, j]);
+                T edgeWeight = _lastAdjacencyMatrix[new int[] { i, j }];
 
                 // Skip if no edge
                 if (NumOps.Equals(edgeWeight, NumOps.Zero))
@@ -402,7 +402,7 @@ public class GraphNeuralNetwork<T> : NeuralNetworkBase<T>, IAuxiliaryLossLayer<T
         {
             for (int j = 0; j < numNodes; j++)
             {
-                if (!NumOps.Equals(_lastAdjacencyMatrix.GetValue([i, j]), NumOps.Zero))
+                if (!NumOps.Equals(_lastAdjacencyMatrix[new int[] { i, j }], NumOps.Zero))
                     edgeCount++;
             }
         }
@@ -462,9 +462,9 @@ public class GraphNeuralNetwork<T> : NeuralNetworkBase<T>, IAuxiliaryLossLayer<T
     /// A dictionary containing diagnostic metrics including both base layer diagnostics and
     /// auxiliary loss diagnostics from <see cref="GetAuxiliaryLossDiagnostics"/>.
     /// </returns>
-    public override Dictionary<string, string> GetDiagnostics()
+    public Dictionary<string, string> GetDiagnostics()
     {
-        var diagnostics = base.GetDiagnostics();
+        var diagnostics = new Dictionary<string, string>();
 
         // Merge auxiliary loss diagnostics
         var auxDiagnostics = GetAuxiliaryLossDiagnostics();
