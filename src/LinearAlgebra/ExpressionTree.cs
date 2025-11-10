@@ -1054,7 +1054,7 @@ public class ExpressionTree<T, TInput, TOutput> : IFullModel<T, TInput, TOutput>
 
             // Perturb parameter forward
             parameters[i] = _numOps.Add(originalValue, epsilon);
-            UpdateCoefficients(parameters);
+            SetParameters(parameters);  // ✅ CRITICAL: Use SetParameters, NOT UpdateCoefficients
             var forwardPrediction = Predict(input);
             Vector<T> forwardPredVec = ConvertOutputToVector(forwardPrediction);
             T forwardLoss = loss.CalculateLoss(forwardPredVec, targetVec);
@@ -1065,7 +1065,7 @@ public class ExpressionTree<T, TInput, TOutput> : IFullModel<T, TInput, TOutput>
 
             // Restore original value
             parameters[i] = originalValue;
-            UpdateCoefficients(parameters);
+            SetParameters(parameters);  // ✅ Restore original
         }
 
         return gradients;
@@ -1108,7 +1108,7 @@ public class ExpressionTree<T, TInput, TOutput> : IFullModel<T, TInput, TOutput>
             parameters[i] = _numOps.Subtract(parameters[i], update);
         }
 
-        UpdateCoefficients(parameters);
+        SetParameters(parameters);
     }
 
     /// <summary>
