@@ -241,8 +241,6 @@ public class MultiHeadAttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         {
             _outputBias[i] = NumOps.Zero;
         }
-
-        // Auxiliary loss fields are initialized in the constructors
     }
 
     /// <summary>

@@ -445,8 +445,6 @@ public class SpatialTransformerLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         // Initialize the localization bias2 to represent identity transformation
         _localizationBias2[0] = NumOps.One;
         _localizationBias2[4] = NumOps.One;
-
-        // Auxiliary loss fields are initialized in the constructors
     }
 
     /// <summary>

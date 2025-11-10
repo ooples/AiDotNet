@@ -917,8 +917,6 @@ public class SelfAttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         }
 
         InitializeParameters();
-
-        // Auxiliary loss fields are initialized in the constructors
     }
 
     /// <summary>
