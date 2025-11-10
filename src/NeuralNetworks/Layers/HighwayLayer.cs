@@ -828,7 +828,7 @@ public class HighwayLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         if (!UseAuxiliaryLoss || _lastGateOutput == null)
         {
             _lastGateBalanceLoss = NumOps.Zero;
-            return _lastGateBalanceLoss;
+            return NumOps.Zero;
         }
 
         // Compute mean gate value across batch and dimensions
@@ -851,10 +851,14 @@ public class HighwayLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         // Compute loss = (mean_gate - 0.5)^2 to encourage balanced gating
         T targetGate = NumOps.FromDouble(0.5);
         T deviation = NumOps.Subtract(meanGate, targetGate);
-        T loss = NumOps.Multiply(deviation, deviation);
+        T rawLoss = NumOps.Multiply(deviation, deviation);
 
-        _lastGateBalanceLoss = loss;
-        return _lastGateBalanceLoss;
+        // Store unweighted loss for diagnostics
+        _lastGateBalanceLoss = rawLoss;
+
+        // Apply auxiliary loss weight and return weighted loss
+        T weightedLoss = NumOps.Multiply(rawLoss, AuxiliaryLossWeight);
+        return weightedLoss;
     }
 
     /// <summary>
