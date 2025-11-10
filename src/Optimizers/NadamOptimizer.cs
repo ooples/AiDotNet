@@ -310,11 +310,12 @@ public class NadamOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, 
 
         for (int i = 0; i < updatedParameters.Length; i++)
         {
-            // Recalculate bias-corrected moments using PREVIOUS state (before update)
-            var mHat = NumOps.Divide(_previousM[i], NumOps.FromDouble(1 - Math.Pow(_options.Beta1, _t)));
-            var vHat = NumOps.Divide(_previousV[i], NumOps.FromDouble(1 - Math.Pow(_options.Beta2, _t)));
+            // CRITICAL: Use UPDATED moments (current _m and _v), not previous moments
+            // UpdateParameters computed the update using moments AFTER they were updated with the gradient
+            var mHat = NumOps.Divide(_m[i], NumOps.FromDouble(1 - Math.Pow(_options.Beta1, _t)));
+            var vHat = NumOps.Divide(_v[i], NumOps.FromDouble(1 - Math.Pow(_options.Beta2, _t)));
 
-            // Recalculate the Nesterov momentum term using previous state
+            // Recalculate the Nesterov momentum term using updated moments
             var mHatNesterov = NumOps.Add(NumOps.Multiply(beta1, mHat), NumOps.Multiply(NumOps.Divide(oneMinusBeta1, NumOps.FromDouble(1 - Math.Pow(_options.Beta1, _t))), appliedGradients[i]));
 
             // Recalculate the update that was applied
