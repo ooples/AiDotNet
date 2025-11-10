@@ -348,6 +348,10 @@ public class SpatialTransformerLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     public SpatialTransformerLayer(int inputHeight, int inputWidth, int outputHeight, int outputWidth, IActivationFunction<T>? activationFunction = null)
         : base([inputHeight, inputWidth], [outputHeight, outputWidth], activationFunction ?? new TanhActivation<T>())
     {
+        // Initialize auxiliary loss fields first so compiler knows they're set
+        AuxiliaryLossWeight = NumOps.FromDouble(0.01);
+        _lastTransformationLoss = NumOps.Zero;
+
         _inputHeight = inputHeight;
         _inputWidth = inputWidth;
         _outputHeight = outputHeight;
@@ -388,6 +392,10 @@ public class SpatialTransformerLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     public SpatialTransformerLayer(int inputHeight, int inputWidth, int outputHeight, int outputWidth, IVectorActivationFunction<T>? vectorActivationFunction = null)
         : base([inputHeight, inputWidth], [outputHeight, outputWidth], vectorActivationFunction ?? new TanhActivation<T>())
     {
+        // Initialize auxiliary loss fields first so compiler knows they're set
+        AuxiliaryLossWeight = NumOps.FromDouble(0.01);
+        _lastTransformationLoss = NumOps.Zero;
+
         _inputHeight = inputHeight;
         _inputWidth = inputWidth;
         _outputHeight = outputHeight;
@@ -438,9 +446,7 @@ public class SpatialTransformerLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         _localizationBias2[0] = NumOps.One;
         _localizationBias2[4] = NumOps.One;
 
-        // Initialize auxiliary loss fields after NumOps is available
-        AuxiliaryLossWeight = NumOps.FromDouble(0.01);
-        _lastTransformationLoss = NumOps.Zero;
+        // Auxiliary loss fields are initialized in the constructors
     }
 
     /// <summary>

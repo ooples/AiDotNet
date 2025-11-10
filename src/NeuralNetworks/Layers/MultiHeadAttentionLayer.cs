@@ -180,6 +180,12 @@ public class MultiHeadAttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     public MultiHeadAttentionLayer(int sequenceLength, int embeddingDimension, int headCount, IActivationFunction<T>? activationFunction = null)
         : base([sequenceLength, embeddingDimension], [sequenceLength, embeddingDimension], activationFunction ?? new IdentityActivation<T>())
     {
+        // Initialize auxiliary loss fields first so compiler knows they're set
+        AuxiliaryLossWeight = NumOps.FromDouble(0.005);
+        HeadDiversityWeight = NumOps.FromDouble(0.01);
+        _lastEntropyLoss = NumOps.Zero;
+        _lastDiversityLoss = NumOps.Zero;
+
         _headCount = headCount;
         _headDimension = embeddingDimension / headCount;
 
@@ -202,6 +208,12 @@ public class MultiHeadAttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     public MultiHeadAttentionLayer(int sequenceLength, int embeddingDimension, int headCount, IVectorActivationFunction<T>? vectorActivationFunction = null)
         : base([sequenceLength, embeddingDimension], [sequenceLength, embeddingDimension], vectorActivationFunction ?? new IdentityActivation<T>())
     {
+        // Initialize auxiliary loss fields first so compiler knows they're set
+        AuxiliaryLossWeight = NumOps.FromDouble(0.005);
+        HeadDiversityWeight = NumOps.FromDouble(0.01);
+        _lastEntropyLoss = NumOps.Zero;
+        _lastDiversityLoss = NumOps.Zero;
+
         _headCount = headCount;
         _headDimension = embeddingDimension / headCount;
 
@@ -230,11 +242,7 @@ public class MultiHeadAttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
             _outputBias[i] = NumOps.Zero;
         }
 
-        // Initialize auxiliary loss fields after NumOps is available
-        AuxiliaryLossWeight = NumOps.FromDouble(0.005);
-        HeadDiversityWeight = NumOps.FromDouble(0.01);
-        _lastEntropyLoss = NumOps.Zero;
-        _lastDiversityLoss = NumOps.Zero;
+        // Auxiliary loss fields are initialized in the constructors
     }
 
     /// <summary>

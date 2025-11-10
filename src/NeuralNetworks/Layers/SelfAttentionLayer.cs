@@ -285,15 +285,20 @@ public class SelfAttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     /// </para>
     /// </remarks>
     public SelfAttentionLayer(
-        int sequenceLength, 
-        int embeddingDimension, 
-        int headCount = 8, 
+        int sequenceLength,
+        int embeddingDimension,
+        int headCount = 8,
         IActivationFunction<T>? activationFunction = null)
         : base(
-            [sequenceLength, embeddingDimension], 
-            [sequenceLength, embeddingDimension], 
+            [sequenceLength, embeddingDimension],
+            [sequenceLength, embeddingDimension],
             activationFunction ?? new IdentityActivation<T>())
     {
+        // Initialize auxiliary loss fields first so compiler knows they're set
+        AuxiliaryLossWeight = NumOps.FromDouble(0.005);
+        _lastEntropyLoss = NumOps.Zero;
+        _lastSparsityLoss = NumOps.Zero;
+
         _queryWeights = Matrix<T>.Empty();
         _keyWeights = Matrix<T>.Empty();
         _valueWeights = Matrix<T>.Empty();
@@ -333,15 +338,20 @@ public class SelfAttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     /// </para>
     /// </remarks>
     public SelfAttentionLayer(
-        int sequenceLength, 
-        int embeddingDimension, 
-        int headCount = 8, 
+        int sequenceLength,
+        int embeddingDimension,
+        int headCount = 8,
         IVectorActivationFunction<T>? vectorActivationFunction = null)
         : base(
-            [sequenceLength, embeddingDimension], 
-            [sequenceLength, embeddingDimension], 
+            [sequenceLength, embeddingDimension],
+            [sequenceLength, embeddingDimension],
             vectorActivationFunction ?? new IdentityActivation<T>())
     {
+        // Initialize auxiliary loss fields first so compiler knows they're set
+        AuxiliaryLossWeight = NumOps.FromDouble(0.005);
+        _lastEntropyLoss = NumOps.Zero;
+        _lastSparsityLoss = NumOps.Zero;
+
         _queryWeights = Matrix<T>.Empty();
         _keyWeights = Matrix<T>.Empty();
         _valueWeights = Matrix<T>.Empty();
@@ -908,10 +918,7 @@ public class SelfAttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
 
         InitializeParameters();
 
-        // Initialize auxiliary loss fields after NumOps is available
-        AuxiliaryLossWeight = NumOps.FromDouble(0.005);
-        _lastEntropyLoss = NumOps.Zero;
-        _lastSparsityLoss = NumOps.Zero;
+        // Auxiliary loss fields are initialized in the constructors
     }
 
     /// <summary>
