@@ -304,14 +304,22 @@ public class ZeRO2Model<T, TInput, TOutput> : ShardedModelBase<T, TInput, TOutpu
         using var reader = new BinaryReader(ms);
         int savedWorldSize = reader.ReadInt32();
         int savedRank = reader.ReadInt32();
-        reader.ReadBoolean();
-        reader.ReadInt32();
-        reader.ReadBoolean();
+        bool savedAutoSyncGradients = reader.ReadBoolean();
+        int savedMinimumParameterGroupSize = reader.ReadInt32();
+        bool savedEnableGradientCompression = reader.ReadBoolean();
 
         if (savedWorldSize != WorldSize)
             throw new InvalidOperationException($"World size mismatch: {savedWorldSize} vs {WorldSize}");
         if (savedRank != Rank)
             throw new InvalidOperationException($"Rank mismatch: {savedRank} vs {Rank}");
+
+        // Validate configuration compatibility
+        if (savedAutoSyncGradients != Config.AutoSyncGradients)
+            throw new InvalidOperationException($"AutoSyncGradients mismatch: saved={savedAutoSyncGradients}, current={Config.AutoSyncGradients}");
+        if (savedMinimumParameterGroupSize != Config.MinimumParameterGroupSize)
+            throw new InvalidOperationException($"MinimumParameterGroupSize mismatch: saved={savedMinimumParameterGroupSize}, current={Config.MinimumParameterGroupSize}");
+        if (savedEnableGradientCompression != Config.EnableGradientCompression)
+            throw new InvalidOperationException($"EnableGradientCompression mismatch: saved={savedEnableGradientCompression}, current={Config.EnableGradientCompression}");
 
         int modelDataLength = reader.ReadInt32();
         byte[] modelData = reader.ReadBytes(modelDataLength);
