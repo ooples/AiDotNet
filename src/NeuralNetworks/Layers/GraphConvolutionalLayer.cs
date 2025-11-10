@@ -106,6 +106,74 @@ public class GraphConvolutionalLayer<T> : LayerBase<T>
     private Vector<T>? _biasGradient;
 
     /// <summary>
+    /// Stores the node features from the last forward pass for auxiliary loss computation.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// This field stores the output node features after the graph convolution operation.
+    /// These features are used to compute the Laplacian smoothness regularization loss,
+    /// which encourages connected nodes to have similar feature representations.
+    /// </para>
+    /// <para><b>For Beginners:</b> This stores the features for each node after processing.
+    ///
+    /// The node features:
+    /// - Represent the learned characteristics of each node in the graph
+    /// - Are used to compute regularization losses
+    /// - Help ensure that connected nodes have similar representations
+    ///
+    /// This is useful for graph-based learning where we want neighboring nodes
+    /// to have similar properties while still maintaining their unique characteristics.
+    /// </para>
+    /// </remarks>
+    private Tensor<T>? _lastNodeFeatures;
+
+    /// <summary>
+    /// Stores the list of edges in the graph for auxiliary loss computation.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// This field stores pairs of node indices representing edges in the graph.
+    /// Each tuple contains (sourceNode, targetNode) indices. These edges are extracted
+    /// from the adjacency matrix and used to compute Laplacian smoothness regularization.
+    /// </para>
+    /// <para><b>For Beginners:</b> This stores which nodes are connected to each other.
+    ///
+    /// The edge list:
+    /// - Contains pairs of node indices that are connected
+    /// - Is derived from the adjacency matrix
+    /// - Is used to compute smoothness regularization
+    ///
+    /// For example, if nodes 0 and 2 are connected, the list would include (0, 2).
+    /// This helps the layer encourage connected nodes to have similar features.
+    /// </para>
+    /// </remarks>
+    private List<(int Source, int Target)>? _graphEdges;
+
+    /// <summary>
+    /// Gets or sets the weight for Laplacian smoothness regularization.
+    /// </summary>
+    /// <value>
+    /// The weight to apply to the smoothness loss. Default is 0.001.
+    /// </value>
+    /// <remarks>
+    /// <para>
+    /// This property controls the strength of Laplacian smoothness regularization applied to
+    /// node features. Higher values encourage more similar representations for connected nodes,
+    /// while lower values allow more variation between neighbors.
+    /// </para>
+    /// <para><b>For Beginners:</b> This controls how strongly to encourage smooth features across edges.
+    ///
+    /// Smoothness regularization:
+    /// - Encourages connected nodes to have similar features
+    /// - Helps the network learn coherent representations across the graph
+    /// - Can improve generalization by enforcing local consistency
+    ///
+    /// Typical values range from 0.0001 to 0.01. Set to 0 to disable smoothness regularization.
+    /// </para>
+    /// </remarks>
+    public T SmoothnessWeight { get; set; } = NumOps.FromDouble(0.001);
+
+    /// <summary>
     /// Gets a value indicating whether this layer supports training.
     /// </summary>
     /// <value>
@@ -260,15 +328,16 @@ public class GraphConvolutionalLayer<T> : LayerBase<T>
     /// <para>
     /// This method sets the adjacency matrix that defines the graph structure. The adjacency matrix must be set
     /// before calling the Forward method. A non-zero value at position [i,j] indicates that node i is connected
-    /// to node j.
+    /// to node j. This method also extracts the edge list from the adjacency matrix for use in auxiliary loss
+    /// computation.
     /// </para>
     /// <para><b>For Beginners:</b> This method tells the layer how the nodes in your graph are connected.
-    /// 
+    ///
     /// The adjacency matrix is like a road map:
     /// - It shows which nodes can directly communicate with each other
     /// - It determines how information flows through your graph
     /// - It must be provided before processing data through the layer
-    /// 
+    ///
     /// For example, in a social network, the adjacency matrix would show who is friends with whom.
     /// In a molecule, it would show which atoms are bonded to each other.
     /// </para>
@@ -276,6 +345,26 @@ public class GraphConvolutionalLayer<T> : LayerBase<T>
     public void SetAdjacencyMatrix(Tensor<T> adjacencyMatrix)
     {
         _adjacencyMatrix = adjacencyMatrix;
+
+        // Extract edges from adjacency matrix for auxiliary loss computation
+        // We only extract edges from the first batch (assuming all batches have the same graph structure)
+        _graphEdges = new List<(int, int)>();
+
+        if (adjacencyMatrix.Shape.Length >= 3)
+        {
+            int numNodes = adjacencyMatrix.Shape[1];
+            for (int i = 0; i < numNodes; i++)
+            {
+                for (int j = 0; j < numNodes; j++)
+                {
+                    // Check if there's an edge between nodes i and j
+                    if (!MathHelper.AlmostEqual(adjacencyMatrix[0, i, j], NumOps.Zero))
+                    {
+                        _graphEdges.Add((i, j));
+                    }
+                }
+            }
+        }
     }
 
     /// <summary>
@@ -334,6 +423,10 @@ public class GraphConvolutionalLayer<T> : LayerBase<T>
         }
 
         _lastOutput = ApplyActivation(output);
+
+        // Store node features for auxiliary loss computation
+        _lastNodeFeatures = _lastOutput;
+
         return _lastOutput;
     }
 
@@ -565,6 +658,77 @@ public class GraphConvolutionalLayer<T> : LayerBase<T>
     }
 
     /// <summary>
+    /// Computes the Laplacian smoothness regularization loss on node features.
+    /// </summary>
+    /// <returns>The Laplacian smoothness loss value.</returns>
+    /// <remarks>
+    /// <para>
+    /// This method computes graph Laplacian smoothness regularization to encourage connected
+    /// nodes to have similar feature representations. The loss is calculated as the sum of
+    /// squared L2 distances between features of connected nodes, normalized by the number of edges.
+    /// This is equivalent to trace(X^T * L * X) where L is the graph Laplacian matrix (L = D - A).
+    /// </para>
+    /// <para><b>For Beginners:</b> This method encourages connected nodes to have similar features.
+    ///
+    /// Laplacian smoothness regularization:
+    /// - Measures how different neighboring nodes are from each other
+    /// - Adds a penalty when connected nodes have very different features
+    /// - Helps the network learn coherent representations across the graph structure
+    ///
+    /// The process:
+    /// 1. For each edge (i, j) in the graph
+    /// 2. Calculate the squared distance between node i's features and node j's features
+    /// 3. Sum all these distances
+    /// 4. Normalize by the number of edges
+    ///
+    /// A higher loss means connected nodes have very different features.
+    /// A lower loss means connected nodes have similar features, indicating a smooth representation.
+    ///
+    /// This loss encourages the network to learn representations where nearby nodes in the graph
+    /// have similar feature vectors, which often improves generalization on graph-structured data.
+    /// </para>
+    /// </remarks>
+    public T ComputeAuxiliaryLoss()
+    {
+        if (_lastNodeFeatures is null || _graphEdges is null || _graphEdges.Count == 0)
+        {
+            return NumOps.Zero;
+        }
+
+        // Compute Laplacian smoothness: sum of squared L2 distances across all edges
+        T smoothnessLoss = NumOps.Zero;
+
+        // Average across batch
+        int batchSize = _lastNodeFeatures.Shape[0];
+        int numFeatures = _lastNodeFeatures.Shape[2];
+
+        for (int b = 0; b < batchSize; b++)
+        {
+            foreach (var edge in _graphEdges)
+            {
+                int nodeI = edge.Source;
+                int nodeJ = edge.Target;
+
+                // Compute squared L2 distance between features of connected nodes
+                T squaredDistance = NumOps.Zero;
+                for (int f = 0; f < numFeatures; f++)
+                {
+                    T diff = NumOps.Subtract(_lastNodeFeatures[b, nodeI, f], _lastNodeFeatures[b, nodeJ, f]);
+                    squaredDistance = NumOps.Add(squaredDistance, NumOps.Multiply(diff, diff));
+                }
+
+                smoothnessLoss = NumOps.Add(smoothnessLoss, squaredDistance);
+            }
+        }
+
+        // Normalize by batch size and number of edges for scale-invariance
+        T totalEdges = NumOps.FromDouble(batchSize * _graphEdges.Count);
+        smoothnessLoss = NumOps.Divide(smoothnessLoss, totalEdges);
+
+        return smoothnessLoss;
+    }
+
+    /// <summary>
     /// Resets the internal state of the layer.
     /// </summary>
     /// <remarks>
@@ -573,17 +737,17 @@ public class GraphConvolutionalLayer<T> : LayerBase<T>
     /// This is useful when starting to process a new sequence or when implementing stateful recurrent networks.
     /// </para>
     /// <para><b>For Beginners:</b> This method clears the layer's memory to start fresh.
-    /// 
+    ///
     /// When resetting the state:
     /// - Stored inputs and outputs are cleared
     /// - Gradient information is cleared
     /// - The layer forgets any information from previous data
-    /// 
+    ///
     /// This is important for:
     /// - Processing a new, unrelated graph
     /// - Preventing information from one training batch affecting another
     /// - Starting a new training episode
-    /// 
+    ///
     /// For example, if you've processed one graph and want to start with a new graph,
     /// you should reset the state to prevent the new graph from being influenced by the previous one.
     /// </para>
@@ -593,6 +757,7 @@ public class GraphConvolutionalLayer<T> : LayerBase<T>
         // Clear cached values from forward and backward passes
         _lastInput = null;
         _lastOutput = null;
+        _lastNodeFeatures = null;
         _weightsGradient = null;
         _biasGradient = null;
     }
