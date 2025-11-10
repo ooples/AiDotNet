@@ -727,7 +727,7 @@ public class GlooCommunicationBackend<T> : CommunicationBackendBase<T>
             var leftChunkArray = new T[chunkSize];
             Array.Copy(allData, leftChildAbsolute * chunkSize, leftChunkArray, 0, chunkSize);
             var leftChunk = new Vector<T>(leftChunkArray);
-            SendData(leftChildAbsolute, new Vector<T>(new[] { NumOps.FromInt32(chunkSize) }));
+            SendData(leftChildAbsolute, new Vector<T>(new[] { NumOps.FromDouble(chunkSize) }));
             SendData(leftChildAbsolute, leftChunk);
         }
 
@@ -737,7 +737,7 @@ public class GlooCommunicationBackend<T> : CommunicationBackendBase<T>
             var rightChunkArray = new T[chunkSize];
             Array.Copy(allData, rightChildAbsolute * chunkSize, rightChunkArray, 0, chunkSize);
             var rightChunk = new Vector<T>(rightChunkArray);
-            SendData(rightChildAbsolute, new Vector<T>(new[] { NumOps.FromInt32(chunkSize) }));
+            SendData(rightChildAbsolute, new Vector<T>(new[] { NumOps.FromDouble(chunkSize) }));
             SendData(rightChildAbsolute, rightChunk);
         }
     }
