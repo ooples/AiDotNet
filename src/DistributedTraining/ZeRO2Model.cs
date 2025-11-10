@@ -54,19 +54,27 @@ namespace AiDotNet.DistributedTraining;
 /// <typeparam name="TOutput">The output type for the model</typeparam>
 public class ZeRO2Model<T, TInput, TOutput> : ShardedModelBase<T, TInput, TOutput>
 {
-    private Vector<T>? _gradientShard;
-    private Vector<T>? _computedGradients;
+    private Vector<T>? _parameterDeltaShard;
+    private Vector<T>? _parameterDeltas;
 
     /// <summary>
-    /// Gets the local gradient shard for this rank after synchronization.
+    /// Gets the local parameter delta shard for this rank after synchronization.
     /// </summary>
     /// <remarks>
-    /// In ZeRO-2, gradients are sharded via ReduceScatter so each rank only stores its portion.
-    /// This property exposes the local gradient shard to enable ZeRO2Optimizer to access
-    /// sharded gradients for local updates.
+    /// <para><b>IMPORTANT LIMITATION:</b> Due to API constraints (IFullModel.Train coupling backward
+    /// and optimizer steps), this property exposes <b>parameter deltas</b> (params_before - params_after),
+    /// NOT true gradients. Parameter deltas depend on the optimizer's update rule (learning rate, momentum, etc.)
+    /// and are NOT equivalent to gradients for adaptive optimizers like Adam.</para>
+    /// <para>
+    /// In ZeRO-2, parameter deltas are sharded via ReduceScatter so each rank only stores its portion.
+    /// This is a <b>stopgap approximation</b> until the API is refactored to separate gradient computation
+    /// from parameter updates. For correct ZeRO-2 semantics, the IFullModel interface should expose:
+    /// ComputeGradients(input, expectedOutput) and ApplyParameterUpdate(updates).</para>
+    /// <para>
     /// Returns null if SynchronizeGradients() has not been called yet.
+    /// </para>
     /// </remarks>
-    public Vector<T>? GradientShard => _gradientShard;
+    public Vector<T>? ParameterDeltaShard => _parameterDeltaShard;
 
     public ZeRO2Model(IFullModel<T, TInput, TOutput> wrappedModel, IShardingConfiguration<T> config)
         : base(wrappedModel, config)
@@ -82,16 +90,16 @@ public class ZeRO2Model<T, TInput, TOutput> : ShardedModelBase<T, TInput, TOutpu
         ShardSize = fullParameters.Length;
         LocalShard = new Vector<T>(fullParameters.ToArray());
 
-        // Calculate gradient shard size to align with ReduceScatter chunk boundaries
+        // Calculate parameter delta shard size to align with ReduceScatter chunk boundaries
         // Using ceiling division ensures chunks align: (34, 34, 32) instead of (34, 33, 33)
         // This prevents misalignment where ReduceScatter chunks don't match logical shard boundaries
         int totalParams = fullParameters.Length;
         int chunkSize = (totalParams + WorldSize - 1) / WorldSize;  // Ceiling division
         int shardStart = Rank * chunkSize;
         int shardEnd = Math.Min((Rank + 1) * chunkSize, totalParams);
-        int gradShardSize = shardEnd - shardStart;
+        int deltaShardSize = shardEnd - shardStart;
 
-        _gradientShard = new Vector<T>(new T[gradShardSize]);
+        _parameterDeltaShard = new Vector<T>(new T[deltaShardSize]);
         CachedFullParameters = null;
     }
 
