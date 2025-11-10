@@ -564,6 +564,12 @@ public class TransformerEncoderLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     /// </remarks>
     public T ComputeAuxiliaryLoss()
     {
+        if (!UseAuxiliaryLoss)
+        {
+            _lastAuxiliaryLoss = NumOps.Zero;
+            return _lastAuxiliaryLoss;
+        }
+
         T totalAuxLoss = NumOps.Zero;
         int auxLayerCount = 0;
 
