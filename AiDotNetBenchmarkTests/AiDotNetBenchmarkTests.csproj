@@ -10,6 +10,17 @@
 
   <ItemGroup>
     <PackageReference Include="BenchmarkDotNet" Version="0.15.6" />
+
+    <!-- Competitor Libraries for Benchmarking -->
+    <PackageReference Include="Accord" Version="3.8.0" />
+    <PackageReference Include="Accord.Math" Version="3.8.0" />
+    <PackageReference Include="Accord.Statistics" Version="3.8.0" />
+    <PackageReference Include="Accord.MachineLearning" Version="3.8.0" />
+    <PackageReference Include="Microsoft.ML" Version="3.0.1" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\src\AiDotNet.csproj" />
   </ItemGroup>
 
 </Project>
