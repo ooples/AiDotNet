@@ -471,11 +471,10 @@ public class ResidualNeuralNetwork<T> : NeuralNetworkBase<T>, IAuxiliaryLossLaye
 
     /// <summary>
     /// Gets diagnostic information about this component's state and behavior.
-    /// Overrides <see cref="LayerBase{T}.GetDiagnostics"/> to include auxiliary loss diagnostics.
+    /// Includes auxiliary loss diagnostics from <see cref="GetAuxiliaryLossDiagnostics"/>.
     /// </summary>
     /// <returns>
-    /// A dictionary containing diagnostic metrics including both base layer diagnostics and
-    /// auxiliary loss diagnostics from <see cref="GetAuxiliaryLossDiagnostics"/>.
+    /// A dictionary containing diagnostic metrics including auxiliary loss diagnostics.
     /// </returns>
     public Dictionary<string, string> GetDiagnostics()
     {
@@ -501,7 +500,7 @@ public class ResidualNeuralNetwork<T> : NeuralNetworkBase<T>, IAuxiliaryLossLaye
     /// This method trains the Residual Neural Network on the provided data for the specified number of epochs.
     /// It divides the data into batches and trains on each batch using backpropagation and gradient descent.
     /// The method tracks and reports the average loss for each epoch to monitor training progress.
-    /// If deep supervision is enabled, auxiliary losses from intermediate classifiers are also included.
+    /// If deep supervision is enabled and auxiliary classifiers are configured, auxiliary losses from intermediate classifiers are included.
     /// </para>
     /// <para><b>For Beginners:</b> This method teaches the ResNet to recognize patterns in your data.
     ///
