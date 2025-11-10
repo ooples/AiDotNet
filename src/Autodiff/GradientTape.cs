@@ -43,12 +43,17 @@ public class GradientTape<T> : IDisposable
     /// <summary>
     /// Thread-local stack of active tapes for handling nested tapes.
     /// </summary>
+    /// <remarks>
+    /// ThreadStatic fields are null by default for each thread. Never initialize with '= value'
+    /// as that only runs once for the type, not per-thread.
+    /// </remarks>
     [ThreadStatic]
     private static Stack<GradientTape<T>> _tapeStack;
 
     /// <summary>
-    /// Gets the currently active tape for this thread, if any.
+    /// Gets the currently active tape for this thread, or null if no tape is active.
     /// </summary>
+    /// <returns>The active GradientTape, or null if none exists.</returns>
     public static GradientTape<T> Current
     {
         get
@@ -108,6 +113,11 @@ public class GradientTape<T> : IDisposable
     private bool _hasBeenUsed;
 
     /// <summary>
+    /// Gets or sets a value indicating whether this tape has been disposed.
+    /// </summary>
+    private bool _disposed;
+
+    /// <summary>
     /// Initializes a new instance of the <see cref="GradientTape{T}"/> class.
     /// </summary>
     /// <param name="persistent">Whether the tape should persist after first use.</param>
@@ -163,6 +173,11 @@ public class GradientTape<T> : IDisposable
     /// </remarks>
     public void Watch(ComputationNode<T> node)
     {
+        if (_disposed)
+        {
+            throw new ObjectDisposedException(nameof(GradientTape<T>));
+        }
+
         if (!_watchedNodes.Contains(node))
         {
             node.RequiresGradient = true;
@@ -242,6 +257,11 @@ public class GradientTape<T> : IDisposable
         ComputationNode<T> target,
         IEnumerable<ComputationNode<T>> sources = null)
     {
+        if (_disposed)
+        {
+            throw new ObjectDisposedException(nameof(GradientTape<T>));
+        }
+
         // Check if tape has already been used
         if (!Persistent && _hasBeenUsed)
         {
@@ -253,7 +273,15 @@ public class GradientTape<T> : IDisposable
         _hasBeenUsed = true;
 
         // Use watched nodes if sources not specified
-        var sourceList = (sources != null) ? sources.ToList() : _watchedNodes;
+        List<ComputationNode<T>> sourceList;
+        if (sources != null)
+        {
+            sourceList = new List<ComputationNode<T>>(sources);
+        }
+        else
+        {
+            sourceList = _watchedNodes;
+        }
 
         // Initialize result dictionary
         var result = new Dictionary<ComputationNode<T>, Tensor<T>>();
@@ -356,6 +384,11 @@ public class GradientTape<T> : IDisposable
     /// </remarks>
     public void Dispose()
     {
+        if (_disposed)
+        {
+            return;
+        }
+
         StopRecording();
 
         // Pop from tape stack
@@ -371,6 +404,7 @@ public class GradientTape<T> : IDisposable
             _watchedNodes.Clear();
         }
 
+        _disposed = true;
         GC.SuppressFinalize(this);
     }
 }
