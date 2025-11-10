@@ -86,6 +86,7 @@ public class ResidualNeuralNetwork<T> : NeuralNetworkBase<T>, IAuxiliaryLossLaye
     private T _lastDeepSupervisionLoss;
     private List<ILayer<T>> _auxiliaryClassifiers = new();
     private readonly List<int> _auxiliaryClassifierPositions = new();
+    private List<List<ILayer<T>>> _auxiliaryClassifierLayers = new();
     private Vector<T>? _lastExpectedOutput;
 
     /// <summary>
@@ -295,6 +296,68 @@ public class ResidualNeuralNetwork<T> : NeuralNetworkBase<T>, IAuxiliaryLossLaye
             // Use default layer configuration if no layers are provided
             Layers.AddRange(LayerHelper<T>.CreateDefaultResNetLayers(Architecture));
         }
+
+        // Automatically add auxiliary classifiers for deep supervision if enabled
+        if (UseAuxiliaryLoss && Layers.Count > 3)
+        {
+            InitializeAuxiliaryClassifiers();
+        }
+    }
+
+    /// <summary>
+    /// Automatically initializes auxiliary classifiers at strategic positions based on network depth.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// This method adds auxiliary classifiers at evenly-spaced positions throughout the network
+    /// to enable deep supervision. The number and positions are determined automatically based on
+    /// the total network depth. Each auxiliary classifier consists of a 2-layer fully connected
+    /// network that maps from intermediate representations to the final output space.
+    /// </para>
+    /// <para><b>For Beginners:</b> This automatically adds "checkpoints" throughout your network
+    /// that help it learn better by providing training signals at multiple depths, not just at the end.
+    /// </para>
+    /// </remarks>
+    private void InitializeAuxiliaryClassifiers()
+    {
+        // Determine how many auxiliary classifiers to add based on network depth
+        // Add one auxiliary classifier for every 10-15 layers, but at least 1 and at most 3
+        int totalLayers = Layers.Count;
+        int numAuxClassifiers = Math.Max(1, Math.Min(3, totalLayers / 12));
+
+        // Calculate positions evenly spaced through the network, avoiding first and last layers
+        int spacing = totalLayers / (numAuxClassifiers + 1);
+
+        for (int i = 1; i <= numAuxClassifiers; i++)
+        {
+            int position = spacing * i;
+
+            // Ensure position is valid and not too close to the end
+            if (position < totalLayers - 2 && position > 0)
+            {
+                // Get the output shape at this position
+                var layerOutputShape = Layers[position].GetOutputShape();
+                int intermediateSize = layerOutputShape[0];
+
+                // Create a simple 2-layer auxiliary classifier: intermediate -> hidden -> output
+                int hiddenSize = Math.Max(128, Architecture.OutputSize * 2);
+
+                // Create the auxiliary classifier layers using existing helpers
+                IActivationFunction<T> hiddenActivation = new ReLUActivation<T>();
+                IActivationFunction<T> outputActivation = NeuralNetworkHelper<T>.GetDefaultActivationFunction(Architecture.TaskType);
+
+                // First layer: intermediate representation -> hidden layer
+                var hiddenLayer = new DenseLayer<T>(intermediateSize, hiddenSize, hiddenActivation);
+
+                // Second layer: hidden -> output
+                var outputLayer = new DenseLayer<T>(hiddenSize, Architecture.OutputSize, outputActivation);
+
+                // Store layers as a list that will be executed sequentially
+                var classifierLayers = new List<ILayer<T>> { hiddenLayer, outputLayer };
+                _auxiliaryClassifierLayers.Add(classifierLayers);
+                _auxiliaryClassifierPositions.Add(position);
+            }
+        }
     }
 
     /// <summary>
@@ -409,7 +472,7 @@ public class ResidualNeuralNetwork<T> : NeuralNetworkBase<T>, IAuxiliaryLossLaye
     /// </remarks>
     public T ComputeAuxiliaryLoss()
     {
-        if (!UseAuxiliaryLoss || _auxiliaryClassifiers.Count == 0)
+        if (!UseAuxiliaryLoss || _auxiliaryClassifierLayers.Count == 0)
         {
             _lastDeepSupervisionLoss = NumOps.Zero;
             return NumOps.Zero;
@@ -426,7 +489,7 @@ public class ResidualNeuralNetwork<T> : NeuralNetworkBase<T>, IAuxiliaryLossLaye
         T totalAuxiliaryLoss = NumOps.Zero;
         int validClassifiers = 0;
 
-        for (int i = 0; i < _auxiliaryClassifiers.Count; i++)
+        for (int i = 0; i < _auxiliaryClassifierLayers.Count; i++)
         {
             int layerPosition = _auxiliaryClassifierPositions[i];
 
@@ -437,13 +500,17 @@ public class ResidualNeuralNetwork<T> : NeuralNetworkBase<T>, IAuxiliaryLossLaye
             }
 
             var intermediateActivation = _layerOutputs[layerPosition];
-            var auxiliaryClassifier = _auxiliaryClassifiers[i];
+            var classifierLayers = _auxiliaryClassifierLayers[i];
 
-            // Pass intermediate activation through auxiliary classifier
-            var auxiliaryPrediction = auxiliaryClassifier.Forward(intermediateActivation);
+            // Pass intermediate activation through auxiliary classifier layers sequentially
+            var current = intermediateActivation;
+            foreach (var layer in classifierLayers)
+            {
+                current = layer.Forward(current);
+            }
 
             // Compute loss for this auxiliary prediction
-            Vector<T> auxPredictionVector = auxiliaryPrediction.ToVector();
+            Vector<T> auxPredictionVector = current.ToVector();
             T classifierLoss = LossFunction.CalculateLoss(auxPredictionVector, _lastExpectedOutput);
 
             totalAuxiliaryLoss = NumOps.Add(totalAuxiliaryLoss, classifierLoss);
@@ -497,7 +564,7 @@ public class ResidualNeuralNetwork<T> : NeuralNetworkBase<T>, IAuxiliaryLossLaye
             { "TotalDeepSupervisionLoss", _lastDeepSupervisionLoss?.ToString() ?? "0" },
             { "AuxiliaryWeight", AuxiliaryLossWeight?.ToString() ?? "0.3" },
             { "UseDeepSupervision", UseAuxiliaryLoss.ToString() },
-            { "NumberOfAuxiliaryClassifiers", _auxiliaryClassifiers.Count.ToString() },
+            { "NumberOfAuxiliaryClassifiers", _auxiliaryClassifierLayers.Count.ToString() },
             { "AuxiliaryClassifierPositions", string.Join(", ", _auxiliaryClassifierPositions) }
         };
     }
