@@ -39,6 +39,21 @@ public class NadamOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, 
     private int _t;
 
     /// <summary>
+    /// Stores the pre-update snapshot of first moment vector for accurate reverse updates.
+    /// </summary>
+    private Vector<T>? _previousM;
+
+    /// <summary>
+    /// Stores the pre-update snapshot of second moment vector for accurate reverse updates.
+    /// </summary>
+    private Vector<T>? _previousV;
+
+    /// <summary>
+    /// Stores the pre-update snapshot of the time step for accurate reverse updates.
+    /// </summary>
+    private int _previousT;
+
+    /// <summary>
     /// Initializes a new instance of the NadamOptimizer class.
     /// </summary>
     /// <remarks>
@@ -187,6 +202,143 @@ public class NadamOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, 
         }
 
         return currentSolution.WithParameters(newCoefficients);
+    }
+
+    /// <summary>
+    /// Updates a vector of parameters using the Nadam optimization algorithm.
+    /// </summary>
+    /// <param name="parameters">The current parameter vector to be updated.</param>
+    /// <param name="gradient">The gradient vector corresponding to the parameters.</param>
+    /// <returns>The updated parameter vector.</returns>
+    /// <remarks>
+    /// <para>
+    /// Nadam combines Adam's adaptive learning rates with Nesterov's accelerated gradient, providing
+    /// the benefits of both techniques: adaptive per-parameter learning rates and lookahead momentum.
+    /// </para>
+    /// <para><b>For Beginners:</b> Nadam is like a smart ball that not only adapts its speed for
+    /// different parts of the hill (Adam) but also looks ahead to anticipate slopes (Nesterov).
+    /// </para>
+    /// </remarks>
+    public override Vector<T> UpdateParameters(Vector<T> parameters, Vector<T> gradient)
+    {
+        if (_m == null || _v == null || _m.Length != parameters.Length || _v.Length != parameters.Length)
+        {
+            _m = new Vector<T>(parameters.Length);
+            _v = new Vector<T>(parameters.Length);
+            _t = 0;
+        }
+
+        // Save previous state BEFORE updating for ReverseUpdate
+        _previousM = _m.Clone();
+        _previousV = _v.Clone();
+        _previousT = _t;
+
+        _t++;
+
+        var updatedParams = new Vector<T>(parameters.Length);
+        var beta1 = NumOps.FromDouble(_options.Beta1);
+        var beta2 = NumOps.FromDouble(_options.Beta2);
+        var oneMinusBeta1 = NumOps.FromDouble(1 - _options.Beta1);
+        var oneMinusBeta2 = NumOps.FromDouble(1 - _options.Beta2);
+
+        for (int i = 0; i < parameters.Length; i++)
+        {
+            // Update biased first moment estimate
+            _m[i] = NumOps.Add(NumOps.Multiply(beta1, _m[i]), NumOps.Multiply(oneMinusBeta1, gradient[i]));
+
+            // Update biased second raw moment estimate
+            _v[i] = NumOps.Add(NumOps.Multiply(beta2, _v[i]), NumOps.Multiply(oneMinusBeta2, NumOps.Multiply(gradient[i], gradient[i])));
+
+            // Compute bias-corrected first moment estimate
+            var mHat = NumOps.Divide(_m[i], NumOps.FromDouble(1 - Math.Pow(_options.Beta1, _t)));
+
+            // Compute bias-corrected second raw moment estimate
+            var vHat = NumOps.Divide(_v[i], NumOps.FromDouble(1 - Math.Pow(_options.Beta2, _t)));
+
+            // Compute the Nesterov momentum term
+            var mHatNesterov = NumOps.Add(NumOps.Multiply(beta1, mHat), NumOps.Multiply(NumOps.Divide(oneMinusBeta1, NumOps.FromDouble(1 - Math.Pow(_options.Beta1, _t))), gradient[i]));
+
+            // Update parameters
+            var update = NumOps.Divide(NumOps.Multiply(CurrentLearningRate, mHatNesterov), NumOps.Add(NumOps.Sqrt(vHat), NumOps.FromDouble(_options.Epsilon)));
+            updatedParams[i] = NumOps.Subtract(parameters[i], update);
+        }
+
+        return updatedParams;
+    }
+
+    /// <summary>
+    /// Reverses a Nadam gradient update to recover original parameters.
+    /// </summary>
+    /// <param name="updatedParameters">Parameters after Nadam update</param>
+    /// <param name="appliedGradients">The gradients that were applied</param>
+    /// <returns>Original parameters before the update</returns>
+    /// <remarks>
+    /// <para>
+    /// Nadam's reverse update requires the optimizer's internal state (_m, _v, _t) from the forward pass.
+    /// This method must be called immediately after UpdateParameters while the state is fresh.
+    /// It recalculates the Nesterov-accelerated adaptive update that was applied.
+    /// </para>
+    /// <para><b>For Beginners:</b> This calculates where parameters were before a Nadam update.
+    /// Nadam combines lookahead (Nesterov) with adaptive learning (Adam), so reversing requires
+    /// both the momentum history (_m) and variance history (_v) to reconstruct the lookahead step.
+    /// </para>
+    /// </remarks>
+    public override Vector<T> ReverseUpdate(Vector<T> updatedParameters, Vector<T> appliedGradients)
+    {
+        if (updatedParameters == null)
+            throw new ArgumentNullException(nameof(updatedParameters));
+        if (appliedGradients == null)
+            throw new ArgumentNullException(nameof(appliedGradients));
+
+        if (updatedParameters.Length != appliedGradients.Length)
+        {
+            throw new ArgumentException(
+                $"Updated parameters size ({updatedParameters.Length}) must match applied gradients size ({appliedGradients.Length})",
+                nameof(appliedGradients));
+        }
+
+        if (_m == null || _v == null || _m.Length != updatedParameters.Length || _v.Length != updatedParameters.Length || _t == 0)
+        {
+            throw new InvalidOperationException(
+                "Nadam optimizer state is not initialized or timestep is zero. ReverseUpdate must be called after UpdateParameters.");
+        }
+
+        if (_previousM == null || _previousV == null || _previousM.Length != updatedParameters.Length || _previousV.Length != updatedParameters.Length)
+        {
+            throw new InvalidOperationException(
+                "Nadam optimizer previous state is not available. ReverseUpdate must be called after UpdateParameters.");
+        }
+
+        var original = new T[updatedParameters.Length];
+        var beta1 = NumOps.FromDouble(_options.Beta1);
+        var beta2 = NumOps.FromDouble(_options.Beta2);
+        var oneMinusBeta1 = NumOps.FromDouble(1 - _options.Beta1);
+
+        for (int i = 0; i < updatedParameters.Length; i++)
+        {
+            // CRITICAL: Use UPDATED moments (current _m and _v), not previous moments
+            // UpdateParameters computed the update using moments AFTER they were updated with the gradient
+            var mHat = NumOps.Divide(_m[i], NumOps.FromDouble(1 - Math.Pow(_options.Beta1, _t)));
+            var vHat = NumOps.Divide(_v[i], NumOps.FromDouble(1 - Math.Pow(_options.Beta2, _t)));
+
+            // Recalculate the Nesterov momentum term using updated moments
+            var mHatNesterov = NumOps.Add(NumOps.Multiply(beta1, mHat), NumOps.Multiply(NumOps.Divide(oneMinusBeta1, NumOps.FromDouble(1 - Math.Pow(_options.Beta1, _t))), appliedGradients[i]));
+
+            // Recalculate the update that was applied
+            var update = NumOps.Divide(NumOps.Multiply(CurrentLearningRate, mHatNesterov), NumOps.Add(NumOps.Sqrt(vHat), NumOps.FromDouble(_options.Epsilon)));
+
+            // Reverse: original = updated + update
+            original[i] = NumOps.Add(updatedParameters[i], update);
+
+            // Restore state so the rollback fully reverts the step
+            _m[i] = _previousM[i];
+            _v[i] = _previousV[i];
+        }
+
+        // Restore time step to complete the rollback
+        _t = _previousT;
+
+        return new Vector<T>(original);
     }
 
     /// <summary>

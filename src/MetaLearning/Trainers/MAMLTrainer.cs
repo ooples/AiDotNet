@@ -267,7 +267,7 @@ public class MAMLTrainer<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOutpu
         out T queryLoss,
         out T queryAccuracy)
     {
-        var gradientModel = (IGradientComputable<T, TInput, TOutput>)MetaModel;
+        var gradientModel = (ISecondOrderGradientComputable<T, TInput, TOutput>)MetaModel;
 
         // Reset to original parameters
         MetaModel.SetParameters(originalParameters.Clone());
@@ -308,7 +308,7 @@ public class MAMLTrainer<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOutpu
         out T queryLoss,
         out T queryAccuracy)
     {
-        var gradientModel = (IGradientComputable<T, TInput, TOutput>)MetaModel;
+        var gradientModel = (ISecondOrderGradientComputable<T, TInput, TOutput>)MetaModel;
 
         // Reset to original parameters
         MetaModel.SetParameters(originalParameters.Clone());

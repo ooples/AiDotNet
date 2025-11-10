@@ -49,7 +49,7 @@
 	  <PackageReference Include="Azure.Search.Documents" Version="11.7.0" />
 	  <PackageReference Include="Elastic.Clients.Elasticsearch" Version="9.2.1" />
 	  <PackageReference Include="Microsoft.CSharp" Version="4.7.0" />
-	  <PackageReference Include="Microsoft.Data.Sqlite" Version="8.0.0" />
+	  <PackageReference Include="Microsoft.Data.Sqlite" Version="8.0.21" />
 	  <PackageReference Include="Newtonsoft.Json" Version="13.0.4" />
 	  <PackageReference Include="Pinecone.Client" Version="4.0.2" />
 	  <PackageReference Include="StackExchange.Redis" Version="2.9.32" />
