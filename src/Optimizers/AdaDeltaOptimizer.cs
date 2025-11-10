@@ -356,6 +356,12 @@ public class AdaDeltaOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<
                 "AdaDelta optimizer state is not initialized. ReverseUpdate must be called after UpdateParameters.");
         }
 
+        if (_accumulatedSquaredGradients == null || _accumulatedSquaredUpdates == null)
+        {
+            throw new InvalidOperationException(
+                "AdaDelta optimizer current state is not initialized.");
+        }
+
         var original = new T[updatedParameters.Length];
 
         for (int i = 0; i < updatedParameters.Length; i++)
@@ -375,6 +381,10 @@ public class AdaDeltaOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<
 
             // Reverse: original = updated + update
             original[i] = NumOps.Add(updatedParameters[i], update);
+
+            // Restore state so the rollback fully reverts the step
+            _accumulatedSquaredGradients[i] = _previousAccumulatedSquaredGradients[i];
+            _accumulatedSquaredUpdates[i] = _previousAccumulatedSquaredUpdates[i];
         }
 
         return new Vector<T>(original);
