@@ -77,6 +77,12 @@ public class SqueezeAndExcitationLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     private T _lastChannelAttentionLoss;
 
     /// <summary>
+    /// Caches the excitation weights from the forward pass for auxiliary loss computation.
+    /// Shape: [batchSize, channels]
+    /// </summary>
+    private Matrix<T>? _lastExcitationWeights;
+
+    /// <summary>
     /// The number of input and output channels in the layer.
     /// </summary>
     /// <remarks>
@@ -671,6 +677,9 @@ public class SqueezeAndExcitationLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         var excitation2 = excitation1.Multiply(_weights2).AddVectorToEachRow(_bias2);
         var excitation = ApplyActivation(excitation2, isFirstActivation: false);
 
+        // Cache excitation weights for auxiliary loss computation
+        _lastExcitationWeights = excitation;
+
         // Scale the input
         var output = new Tensor<T>(input.Shape);
         for (int b = 0; b < batchSize; b++)
@@ -1252,55 +1261,37 @@ public class SqueezeAndExcitationLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     /// </remarks>
     public T ComputeAuxiliaryLoss()
     {
-        // Note: This is a placeholder implementation.
-        // Full implementation would require:
-        // 1. Caching the excitation weights (channel attention scores) during Forward pass
-        // 2. Computing regularization on these weights
-        //
-        // Pseudo-code for full implementation:
-        // T attentionLoss = NumOps.Zero;
-        // if (_lastExcitationWeights != null)
-        // {
-        //     int batchSize = _lastExcitationWeights.Rows;
-        //     int channels = _lastExcitationWeights.Columns;
-        //
-        //     for (int b = 0; b < batchSize; b++)
-        //     {
-        //         // Option 1: L2 regularization on excitation weights
-        //         for (int c = 0; c < channels; c++)
-        //         {
-        //             T weight = _lastExcitationWeights[b, c];
-        //             attentionLoss = NumOps.Add(attentionLoss, NumOps.Multiply(weight, weight));
-        //         }
-        //
-        //         // Option 2: Entropy regularization (encourage focused but not extreme attention)
-        //         // Normalize weights to sum to 1
-        //         T sum = NumOps.Zero;
-        //         for (int c = 0; c < channels; c++)
-        //         {
-        //             sum = NumOps.Add(sum, _lastExcitationWeights[b, c]);
-        //         }
-        //
-        //         T entropy = NumOps.Zero;
-        //         for (int c = 0; c < channels; c++)
-        //         {
-        //             T p = NumOps.Divide(_lastExcitationWeights[b, c], sum);
-        //             if (NumOps.GreaterThan(p, NumOps.FromDouble(1e-10)))
-        //             {
-        //                 entropy = NumOps.Subtract(entropy, NumOps.Multiply(p, NumOps.Log(p)));
-        //             }
-        //         }
-        //         // Use -entropy to encourage focused attention or +entropy for balanced attention
-        //         attentionLoss = NumOps.Add(attentionLoss, entropy);
-        //     }
-        //
-        //     // Average across batch
-        //     attentionLoss = NumOps.Divide(attentionLoss, NumOps.FromDouble(batchSize));
-        // }
-        // _lastChannelAttentionLoss = attentionLoss;
+        if (!UseAuxiliaryLoss || _lastExcitationWeights == null)
+        {
+            _lastChannelAttentionLoss = NumOps.Zero;
+            return NumOps.Zero;
+        }
 
-        _lastChannelAttentionLoss = NumOps.Zero;
-        return _lastChannelAttentionLoss;
+        // Compute L2 regularization on excitation weights
+        // This penalizes large excitation values and encourages sparse channel attention
+        T attentionLoss = NumOps.Zero;
+        int batchSize = _lastExcitationWeights.Rows;
+        int channels = _lastExcitationWeights.Columns;
+
+        for (int b = 0; b < batchSize; b++)
+        {
+            for (int c = 0; c < channels; c++)
+            {
+                T weight = _lastExcitationWeights[b, c];
+                // L2 regularization: sum of squared weights
+                attentionLoss = NumOps.Add(attentionLoss, NumOps.Multiply(weight, weight));
+            }
+        }
+
+        // Average across batch and channels
+        int totalElements = batchSize * channels;
+        attentionLoss = NumOps.Divide(attentionLoss, NumOps.FromDouble(totalElements));
+
+        // Store unweighted loss for diagnostics
+        _lastChannelAttentionLoss = attentionLoss;
+
+        // Return weighted auxiliary loss
+        return NumOps.Multiply(AuxiliaryLossWeight, attentionLoss);
     }
 
     /// <summary>
