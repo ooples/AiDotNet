@@ -409,6 +409,84 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
     }
 
     /// <summary>
+    /// Performs a forward pass and returns intermediate layer activations for feature extraction.
+    /// </summary>
+    /// <param name="input">The input tensor to process.</param>
+    /// <param name="layerIndices">Optional array of layer indices to extract features from. If null, returns all layer outputs.</param>
+    /// <returns>A tuple containing the final output tensor and a dictionary of intermediate features indexed by layer number.</returns>
+    /// <remarks>
+    /// <para>
+    /// This method performs a forward pass through the network while capturing intermediate layer
+    /// activations. This is useful for feature extraction, transfer learning, style transfer,
+    /// and advanced training techniques like feature matching in GANs.
+    /// </para>
+    /// <para><b>For Beginners:</b> This method lets you see what's happening inside the network at each layer.
+    ///
+    /// Think of it like watching a factory assembly line:
+    /// - Normally, you only see the final product (output)
+    /// - This method lets you inspect the product at each station (layer)
+    /// - You can choose specific stations to inspect (layerIndices)
+    ///
+    /// This is useful for:
+    /// - Understanding what features the network has learned
+    /// - Using intermediate representations for other tasks (transfer learning)
+    /// - Debugging network behavior
+    /// - Advanced training techniques like feature matching in GANs
+    ///
+    /// Example:
+    /// - layerIndices = new[] { -2, -1 } means "last two layers" (negative indices count from end)
+    /// - layerIndices = null means "all layers"
+    /// </para>
+    /// <para><b>Industry Standard:</b> This pattern is common in modern ML frameworks:
+    /// - PyTorch: model.forward_features() or register_forward_hook()
+    /// - TensorFlow/Keras: Model(inputs=..., outputs=[layer1.output, layer2.output])
+    /// - This implementation follows the TensorFlow-style approach
+    /// </para>
+    /// </remarks>
+    public virtual (Tensor<T> output, Dictionary<int, Tensor<T>> features) ForwardWithFeatures(
+        Tensor<T> input,
+        int[]? layerIndices = null)
+    {
+        // Clear previous outputs
+        _layerOutputs.Clear();
+
+        // Perform forward pass and store outputs
+        Tensor<T> current = input;
+        for (int i = 0; i < Layers.Count; i++)
+        {
+            current = Layers[i].Forward(current);
+            // Clone to prevent modification of cached values
+            _layerOutputs[i] = current.Clone();
+        }
+
+        // Build features dictionary
+        Dictionary<int, Tensor<T>> features;
+
+        if (layerIndices == null)
+        {
+            // Return all layer outputs
+            features = new Dictionary<int, Tensor<T>>(_layerOutputs);
+        }
+        else
+        {
+            // Return only requested layers
+            features = new Dictionary<int, Tensor<T>>();
+            foreach (int idx in layerIndices)
+            {
+                // Support negative indices (count from end)
+                int actualIdx = idx < 0 ? Layers.Count + idx : idx;
+
+                if (actualIdx >= 0 && actualIdx < Layers.Count && _layerOutputs.ContainsKey(actualIdx))
+                {
+                    features[actualIdx] = _layerOutputs[actualIdx];
+                }
+            }
+        }
+
+        return (current, features);
+    }
+
+    /// <summary>
     /// Gets the total number of parameters in the model.
     /// </summary>
     /// <remarks>
