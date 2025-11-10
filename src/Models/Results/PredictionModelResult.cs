@@ -599,19 +599,21 @@ public class PredictionModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
     /// <summary>
     /// Computes gradients of the loss function with respect to model parameters WITHOUT updating parameters.
     /// </summary>
-    /// <param name="input">The input data.</param>
-    /// <param name="target">The target/expected output.</param>
+    /// <param name="input">The input data (will be normalized automatically).</param>
+    /// <param name="target">The target/expected output (will be normalized automatically).</param>
     /// <param name="lossFunction">The loss function to use. If null, uses the model's default loss function.</param>
     /// <returns>A vector containing gradients with respect to all model parameters.</returns>
-    /// <exception cref="InvalidOperationException">If Model is not initialized.</exception>
+    /// <exception cref="InvalidOperationException">If Model or Normalizer is not initialized.</exception>
     /// <remarks>
     /// <para>
-    /// This method delegates to the underlying model's ComputeGradients implementation.
-    /// The normalization is NOT applied, as gradients should be computed on normalized data.
+    /// This method normalizes input and target before computing gradients, maintaining consistency
+    /// with the Predict method. Gradients are computed on normalized data and returned as-is
+    /// (gradients are with respect to parameters, not outputs, so no denormalization is needed).
     /// </para>
     /// <para><b>For Beginners:</b>
     /// This calculates which direction to adjust the model's parameters to reduce error,
-    /// without actually changing them. It delegates to the wrapped model.
+    /// without actually changing them. Input and target are automatically normalized before
+    /// gradient computation, just like Predict normalizes input automatically.
     /// </para>
     /// </remarks>
     public Vector<T> ComputeGradients(TInput input, TOutput target, ILossFunction<T>? lossFunction = null)
@@ -621,9 +623,17 @@ public class PredictionModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
             throw new InvalidOperationException("Model is not initialized.");
         }
 
-        // For gradient computation, we work with normalized data
-        // The input should already be normalized if this is being used in a training context
-        return Model.ComputeGradients(input, target, lossFunction);
+        if (NormalizationInfo.Normalizer == null)
+        {
+            throw new InvalidOperationException("Normalizer is not initialized.");
+        }
+
+        // Normalize input and target to maintain API consistency with Predict
+        var (normalizedInput, _) = NormalizationInfo.Normalizer.NormalizeInput(input);
+        var (normalizedTarget, _) = NormalizationInfo.Normalizer.NormalizeOutput(target);
+
+        // Compute gradients on normalized data (gradients are wrt parameters, no denormalization needed)
+        return Model.ComputeGradients(normalizedInput, normalizedTarget, lossFunction);
     }
 
     /// <summary>
