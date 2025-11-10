@@ -598,6 +598,18 @@ public class EmbeddingLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     }
 
     /// <summary>
+    /// Gets diagnostic information about this component's state and behavior.
+    /// Implements <see cref="IDiagnosticsProvider{T}.GetDiagnostics"/>.
+    /// </summary>
+    /// <returns>
+    /// A dictionary containing diagnostic metrics. Delegates to <see cref="GetAuxiliaryLossDiagnostics"/> for implementation.
+    /// </returns>
+    public Dictionary<string, string> GetDiagnostics()
+    {
+        return GetAuxiliaryLossDiagnostics();
+    }
+
+    /// <summary>
     /// Resets the internal state of the layer.
     /// </summary>
     /// <remarks>
