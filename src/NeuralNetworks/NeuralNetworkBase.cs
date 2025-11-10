@@ -1939,4 +1939,48 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
 
         return activations;
     }
+
+    public virtual ILossFunction<T> DefaultLossFunction => LossFunction;
+
+    public virtual Vector<T> ComputeGradients(Tensor<T> input, Tensor<T> target, ILossFunction<T>? lossFunction = null)
+    {
+        var loss = lossFunction ?? DefaultLossFunction;
+
+        var prediction = Predict(input);
+        var lossDerivative = loss.CalculateDerivative(prediction.ToVector(), target.ToVector());
+        var outputGradients = new Tensor<T>(prediction.Shape, lossDerivative);
+
+        Backpropagate(outputGradients);
+
+        var gradients = new List<T>();
+        foreach (var layer in Layers)
+        {
+            var layerParams = layer.GetParameters();
+            gradients.AddRange(layerParams.ToArray());
+        }
+
+        return new Vector<T>(gradients.ToArray());
+    }
+
+    public virtual void ApplyGradients(Vector<T> gradients, T learningRate)
+    {
+        if (gradients == null)
+            throw new ArgumentNullException(nameof(gradients));
+
+        int offset = 0;
+        foreach (var layer in Layers)
+        {
+            var layerParams = layer.GetParameters();
+            if (offset + layerParams.Length > gradients.Length)
+                throw new ArgumentException($"Gradient vector is too short for layer parameters.");
+
+            for (int i = 0; i < layerParams.Length; i++)
+            {
+                layerParams[i] = NumOps.Subtract(layerParams[i], NumOps.Multiply(learningRate, gradients[offset + i]));
+            }
+
+            layer.SetParameters(layerParams);
+            offset += layerParams.Length;
+        }
+    }
 }

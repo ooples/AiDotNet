@@ -309,6 +309,96 @@ public class LionOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, T
     }
 
     /// <summary>
+    /// Reverses a Lion gradient update to recover original parameters.
+    /// </summary>
+    /// <param name="updatedParameters">Parameters after Lion update</param>
+    /// <param name="appliedGradients">The gradients that were applied</param>
+    /// <returns>Original parameters before the update</returns>
+    /// <remarks>
+    /// <para>
+    /// Lion's reverse update is complex due to its sign-based updates and optional weight decay.
+    /// This method must be called immediately after UpdateParameters while the momentum state (_m) is fresh.
+    /// It recalculates the sign of the interpolated momentum-gradient and reverses the weight decay effect.
+    /// </para>
+    /// <para><b>For Beginners:</b> This calculates where parameters were before a Lion update.
+    /// Lion uses only the direction (sign) of updates, not their magnitude. To reverse, we need to
+    /// remember what direction was used (calculated from momentum and gradients) and also undo
+    /// the weight decay that was applied to prevent parameters from growing too large.
+    /// </para>
+    /// </remarks>
+    public override Vector<T> ReverseUpdate(Vector<T> updatedParameters, Vector<T> appliedGradients)
+    {
+        if (updatedParameters == null)
+            throw new ArgumentNullException(nameof(updatedParameters));
+        if (appliedGradients == null)
+            throw new ArgumentNullException(nameof(appliedGradients));
+
+        if (updatedParameters.Length != appliedGradients.Length)
+        {
+            throw new ArgumentException(
+                $"Updated parameters size ({updatedParameters.Length}) must match applied gradients size ({appliedGradients.Length})",
+                nameof(appliedGradients));
+        }
+
+        if (_m == null || _m.Length != updatedParameters.Length)
+        {
+            throw new InvalidOperationException(
+                "Lion optimizer state is not initialized. ReverseUpdate must be called after UpdateParameters.");
+        }
+
+        var original = new T[updatedParameters.Length];
+        var weightDecay = NumOps.FromDouble(_options.WeightDecay);
+
+        for (int i = 0; i < updatedParameters.Length; i++)
+        {
+            // Recalculate the interpolation that was used
+            // Note: _m[i] was already updated to beta2 * m_{t-1} + (1 - beta2) * g_t in UpdateParameters
+            // We need to use the OLD momentum value for interpolation, which we can approximate from current _m
+            // Actually, we need to recalculate based on what was stored BEFORE the update
+            // For Lion, the interpolation uses the PREVIOUS _m value before it was updated
+            // Since _m was updated AFTER the interpolation, we need to reverse that too
+
+            // Work backwards from current _m to get the old _m:
+            // _m[i] = beta2 * m_old[i] + (1 - beta2) * gradient[i]
+            // m_old[i] = (_m[i] - (1 - beta2) * gradient[i]) / beta2
+            var mOld = NumOps.Divide(
+                NumOps.Subtract(_m[i], NumOps.Multiply(appliedGradients[i], NumOps.Subtract(NumOps.One, _currentBeta2))),
+                _currentBeta2
+            );
+
+            // Recalculate the interpolation: c_t = beta1 * m_{t-1} + (1 - beta1) * g_t
+            var interpolated = NumOps.Add(
+                NumOps.Multiply(mOld, _currentBeta1),
+                NumOps.Multiply(appliedGradients[i], NumOps.Subtract(NumOps.One, _currentBeta1))
+            );
+
+            // Recalculate the sign
+            var signValue = NumOps.GreaterThan(interpolated, NumOps.Zero) ? NumOps.One :
+                           (NumOps.LessThan(interpolated, NumOps.Zero) ? NumOps.Negate(NumOps.One) : NumOps.Zero);
+
+            // Reverse the update
+            // Forward: params_new = params_old - lr * (sign + wd * params_old)
+            // Forward: params_new = params_old * (1 - lr * wd) - lr * sign
+            // Reverse: params_old = (params_new + lr * sign) / (1 - lr * wd)
+
+            var lrTimesSign = NumOps.Multiply(_currentLearningRate, signValue);
+            var numerator = NumOps.Add(updatedParameters[i], lrTimesSign);
+
+            if (!NumOps.Equals(weightDecay, NumOps.Zero))
+            {
+                var denominator = NumOps.Subtract(NumOps.One, NumOps.Multiply(_currentLearningRate, weightDecay));
+                original[i] = NumOps.Divide(numerator, denominator);
+            }
+            else
+            {
+                original[i] = numerator;
+            }
+        }
+
+        return new Vector<T>(original);
+    }
+
+    /// <summary>
     /// Updates a matrix of parameters using the Lion optimization algorithm.
     /// </summary>
     /// <param name="parameters">The current parameter matrix to be updated.</param>
