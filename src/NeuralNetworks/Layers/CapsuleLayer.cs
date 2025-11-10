@@ -84,9 +84,9 @@ public class CapsuleLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     /// Lower values allow more deterministic routing but might lead to overconfidence.
     /// </para>
     /// </remarks>
-    public T AuxiliaryLossWeight { get; set; } = NumOps.FromDouble(0.005);
+    public T AuxiliaryLossWeight { get; set; }
 
-    private T _lastRoutingEntropyLoss = NumOps.Zero;
+    private T _lastRoutingEntropyLoss;
 
     private readonly int _numCapsules;
     private readonly int _capsuleDimension;
@@ -163,6 +163,9 @@ public class CapsuleLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         {
             throw new ArgumentException("Number of routing iterations must be at least 1.", nameof(numRoutingIterations));
         }
+
+        AuxiliaryLossWeight = NumOps.FromDouble(0.005);
+        _lastRoutingEntropyLoss = NumOps.Zero;
 
         _numCapsules = numCapsules;
         _capsuleDimension = capsuleDimension;

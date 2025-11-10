@@ -71,12 +71,12 @@ public class MemoryReadLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     /// If the main task is more important, you might decrease it.
     /// </para>
     /// </remarks>
-    public T AuxiliaryLossWeight { get; set; } = NumOps.FromDouble(0.005);
+    public T AuxiliaryLossWeight { get; set; }
 
     /// <summary>
     /// Stores the last computed attention sparsity loss for diagnostic purposes.
     /// </summary>
-    private T _lastAttentionSparsityLoss = NumOps.Zero;
+    private T _lastAttentionSparsityLoss;
 
     /// <summary>
     /// The weight matrix used to transform the input into query keys.
@@ -239,6 +239,9 @@ public class MemoryReadLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     public MemoryReadLayer(int inputDimension, int memoryDimension, int outputDimension, IActivationFunction<T>? activationFunction = null)
         : base([inputDimension], [outputDimension], activationFunction ?? new IdentityActivation<T>())
     {
+        AuxiliaryLossWeight = NumOps.FromDouble(0.005);
+        _lastAttentionSparsityLoss = NumOps.Zero;
+
         _keyWeights = new Matrix<T>(inputDimension, memoryDimension);
         _valueWeights = new Matrix<T>(memoryDimension, outputDimension);
         _outputWeights = new Matrix<T>(outputDimension, outputDimension);
@@ -276,6 +279,9 @@ public class MemoryReadLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     public MemoryReadLayer(int inputDimension, int memoryDimension, int outputDimension, IVectorActivationFunction<T>? activationFunction = null)
         : base([inputDimension], [outputDimension], activationFunction ?? new IdentityActivation<T>())
     {
+        AuxiliaryLossWeight = NumOps.FromDouble(0.005);
+        _lastAttentionSparsityLoss = NumOps.Zero;
+
         _keyWeights = new Matrix<T>(inputDimension, memoryDimension);
         _valueWeights = new Matrix<T>(memoryDimension, outputDimension);
         _outputWeights = new Matrix<T>(outputDimension, outputDimension);
