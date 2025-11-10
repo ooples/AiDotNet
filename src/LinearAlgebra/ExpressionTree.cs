@@ -140,19 +140,20 @@ public class ExpressionTree<T, TInput, TOutput> : IFullModel<T, TInput, TOutput>
     /// <param name="value">The value for this node (for constants and variables).</param>
     /// <param name="left">The left child node.</param>
     /// <param name="right">The right child node.</param>
+    /// <param name="lossFunction">Optional loss function to use for training. If null, uses Mean Squared Error (MSE) for symbolic regression.</param>
     /// <remarks>
     /// <b>For Beginners:</b> This creates a new part of your mathematical formula.
     /// You can create simple nodes (like numbers or variables) or operation nodes
     /// (like addition or multiplication) that connect to other nodes.
     /// </remarks>
-    public ExpressionTree(ExpressionNodeType type, T? value = default, ExpressionTree<T, TInput, TOutput>? left = null, ExpressionTree<T, TInput, TOutput>? right = null)
+    public ExpressionTree(ExpressionNodeType type, T? value = default, ExpressionTree<T, TInput, TOutput>? left = null, ExpressionTree<T, TInput, TOutput>? right = null, ILossFunction<T>? lossFunction = null)
     {
         _numOps = MathHelper.GetNumericOperations<T>();
         Type = type;
         Value = value ?? _numOps.Zero;
         Left = left;
         Right = right;
-        _defaultLossFunction = new MeanSquaredErrorLoss<T>();
+        _defaultLossFunction = lossFunction ?? new MeanSquaredErrorLoss<T>();
     }
 
     /// <summary>

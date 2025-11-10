@@ -77,6 +77,8 @@ namespace AiDotNet.DistributedTraining;
 /// <typeparam name="TOutput">The output type for the model</typeparam>
 public class HybridShardedModel<T, TInput, TOutput> : ShardedModelBase<T, TInput, TOutput>
 {
+    private Vector<T>? _computedGradients;
+
     private readonly int _pipelineParallelSize;
     private readonly int _tensorParallelSize;
     private readonly int _dataParallelSize;
@@ -170,9 +172,16 @@ public class HybridShardedModel<T, TInput, TOutput> : ShardedModelBase<T, TInput
     /// <inheritdoc/>
     public override void SynchronizeGradients()
     {
-        // In 3D parallelism (hybrid sharding), LocalShard contains the pipeline/tensor slice for this rank.
-        // AllReduce across the full world averages together shards from DIFFERENT pipeline/tensor coordinates,
-        // immediately corrupting the parameters.
+        if (_computedGradients == null)
+        {
+            throw new InvalidOperationException(
+                "Gradients have not been computed. Call Train() before SynchronizeGradients().");
+        }
+
+        // In 3D parallelism (hybrid sharding), gradient synchronization is complex:
+        // - Tensor-parallel: Need to reduce partial gradients within tensor group
+        // - Data-parallel: Need to average gradients across data replicas
+        // - Pipeline-parallel: Each stage handles its own gradients
         //
         // Correct synchronization requires:
         // 1. AllReduce within tensor-parallel group (sum partial gradients from same pipeline stage)
@@ -197,29 +206,54 @@ public class HybridShardedModel<T, TInput, TOutput> : ShardedModelBase<T, TInput
             CachedFullParameters = null;
             return;
         }
-
     }
 
     /// <inheritdoc/>
     public override void Train(TInput input, TOutput expectedOutput)
     {
-        // 3D parallel training is complex:
-        // - Pipeline: forward/backward through stages
-        // - Tensor: partial computation within each layer
+        // 3D parallel training workflow with explicit gradient computation:
+        //   1. AllGather: Gather full parameters from shards
+        //   2. ComputeGradients: Forward + backward pass to compute TRUE gradients
+        //   3. SynchronizeGradients: Complex multi-level sync (tensor/data/pipeline groups)
+        //   4. ApplyGradients: Update parameters using synchronized gradients
+        //   5. UpdateShards: Extract local shard from updated parameters
+        //
+        // Note: Full 3D parallelism is complex and requires:
+        // - Pipeline: forward/backward through stages with microbatching
+        // - Tensor: partial computation within each layer with all-reduce
         // - Data: different batches on data-parallel replicas
+        //
+        // This framework provides the foundation with simplified implementation.
 
-        // This framework provides simplified implementation
+        // Gather full parameters
         var fullParams = GatherFullParameters();
         WrappedModel.SetParameters(fullParams);
-        WrappedModel.Train(input, expectedOutput);
-        var updatedParams = WrappedModel.GetParameters();
 
-        // Update local shard (this already invalidates cache via UpdateLocalShardFromFull)
-        UpdateLocalShardFromFull(updatedParams);
+        // Compute TRUE gradients using the model's gradient computation
+        _computedGradients = WrappedModel.ComputeGradients(input, expectedOutput);
 
         if (Config.AutoSyncGradients)
         {
+            // Synchronize gradients (throws NotSupportedException if _dataParallelSize > 1)
             SynchronizeGradients();
+
+            // Apply the synchronized gradients to update parameters
+            WrappedModel.ApplyGradients(_computedGradients, NumOps.FromDouble(0.01));
+
+            // Get updated parameters
+            var updatedParams = WrappedModel.GetParameters();
+
+            // Update local shard (this already invalidates cache via UpdateLocalShardFromFull)
+            UpdateLocalShardFromFull(updatedParams);
+        }
+        else
+        {
+            // Without gradient synchronization, apply gradients locally
+            WrappedModel.ApplyGradients(_computedGradients, NumOps.FromDouble(0.01));
+            var updatedParams = WrappedModel.GetParameters();
+
+            // Update local shard (this already invalidates cache via UpdateLocalShardFromFull)
+            UpdateLocalShardFromFull(updatedParams);
         }
         // Note: Cache is already invalidated by UpdateLocalShardFromFull.
         // If AutoSyncGradients is false, subsequent predictions benefit from cached parameters.

@@ -72,7 +72,8 @@ namespace AiDotNet.AutoML
         /// </summary>
         /// <param name="searchSpace">The search space defining available operations</param>
         /// <param name="numNodes">Number of nodes in the architecture</param>
-        public SuperNet(SearchSpace<T> searchSpace, int numNodes = 4)
+        /// <param name="lossFunction">Optional loss function to use for training. If null, uses Mean Squared Error (MSE) for neural architecture search.</param>
+        public SuperNet(SearchSpace<T> searchSpace, int numNodes = 4, ILossFunction<T>? lossFunction = null)
         {
             _ops = MathHelper.GetNumericOperations<T>();
             _searchSpace = searchSpace;
@@ -106,7 +107,7 @@ namespace AiDotNet.AutoML
             _weightGradients = new Dictionary<string, Vector<T>>();
 
             // Initialize default loss function (MSE for SuperNet)
-            _defaultLossFunction = new MeanSquaredErrorLoss<T>();
+            _defaultLossFunction = lossFunction ?? new MeanSquaredErrorLoss<T>();
         }
 
         /// <summary>

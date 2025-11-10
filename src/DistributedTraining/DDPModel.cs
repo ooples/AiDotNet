@@ -60,6 +60,8 @@ namespace AiDotNet.DistributedTraining;
 /// <typeparam name="TOutput">The output type for the model</typeparam>
 public class DDPModel<T, TInput, TOutput> : ShardedModelBase<T, TInput, TOutput>
 {
+    private Vector<T>? _computedGradients;
+
     /// <summary>
     /// Creates a new DDP model wrapping an existing model.
     /// </summary>
@@ -119,9 +121,15 @@ public class DDPModel<T, TInput, TOutput> : ShardedModelBase<T, TInput, TOutput>
     /// </remarks>
     public override void SynchronizeGradients()
     {
-        // In DDP, we AllReduce the full gradient vector (which is the same as full parameters in our case)
-        // Each process has full parameters, so we sync the entire LocalShard
-        Config.CommunicationBackend.AllReduce(LocalShard, ReductionOperation.Average);
+        if (_computedGradients == null)
+        {
+            throw new InvalidOperationException(
+                "Gradients have not been computed. Call Train() before SynchronizeGradients().");
+        }
+
+        // In DDP, we AllReduce the full gradient vector
+        // This averages gradients across all processes
+        Config.CommunicationBackend.AllReduce(_computedGradients, ReductionOperation.Average);
 
         // Invalidate cached full parameters
         CachedFullParameters = null;
@@ -130,28 +138,45 @@ public class DDPModel<T, TInput, TOutput> : ShardedModelBase<T, TInput, TOutput>
     /// <inheritdoc/>
     public override void Train(TInput input, TOutput expectedOutput)
     {
-        // No need to gather - we already have full parameters locally
+        // DDP workflow with explicit gradient computation:
+        //   1. ComputeGradients: Forward + backward pass to compute TRUE gradients
+        //   2. AllReduce gradients (average across all processes)
+        //   3. ApplyGradients: Update local parameters using averaged gradients
+        //
+        // Since all processes have full parameters and use the same averaged gradients,
+        // they all end up with identical parameters (DDP's key property).
+
+        // Set full parameters for gradient computation
         WrappedModel.SetParameters(LocalShard);
 
-        // Train the wrapped model
-        WrappedModel.Train(input, expectedOutput);
+        // Compute TRUE gradients using the model's gradient computation
+        // This calls the model's backpropagation without updating parameters
+        _computedGradients = WrappedModel.ComputeGradients(input, expectedOutput);
 
-        // Get updated parameters (includes gradients)
-        LocalShard = WrappedModel.GetParameters();
-
-        // Synchronize gradients if auto-sync is enabled
         if (Config.AutoSyncGradients)
         {
+            // Synchronize gradients via AllReduce
+            // All processes receive the averaged gradients
             SynchronizeGradients();
 
-            // Apply synchronized parameters back to the model
-            WrappedModel.SetParameters(LocalShard);
+            // Apply the averaged gradients to update parameters
+            // Note: We use a fixed learning rate here. For adaptive optimizers,
+            // use DDPOptimizer which properly handles optimizer state.
+            WrappedModel.ApplyGradients(_computedGradients, NumOps.FromDouble(0.01));
 
-            // Invalidate cache after synchronization since parameters changed across processes
+            // Get updated parameters back to LocalShard
+            LocalShard = WrappedModel.GetParameters();
+
+            // Invalidate cache after synchronization since parameters changed
             InvalidateCache();
         }
-        // Note: Cache is not invalidated if AutoSyncGradients is false, allowing
-        // multiple predictions to benefit from cached full parameters
+        else
+        {
+            // Without gradient synchronization, apply gradients locally
+            // This is equivalent to non-distributed training
+            WrappedModel.ApplyGradients(_computedGradients, NumOps.FromDouble(0.01));
+            LocalShard = WrappedModel.GetParameters();
+        }
     }
 
     /// <inheritdoc/>

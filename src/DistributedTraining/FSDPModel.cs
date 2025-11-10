@@ -58,6 +58,8 @@ namespace AiDotNet.DistributedTraining;
 /// <typeparam name="TOutput">The output type for the model</typeparam>
 public class FSDPModel<T, TInput, TOutput> : ShardedModelBase<T, TInput, TOutput>
 {
+    private Vector<T>? _computedGradients;
+
     /// <summary>
     /// Creates a new FSDP model wrapping an existing model.
     /// </summary>
@@ -86,39 +88,52 @@ public class FSDPModel<T, TInput, TOutput> : ShardedModelBase<T, TInput, TOutput
     /// <inheritdoc/>
     public override void Train(TInput input, TOutput expectedOutput)
     {
-        // Gather full parameters for training
+        // FSDP workflow with explicit gradient computation:
+        //   1. AllGather: Gather full parameters from all shards (just-in-time)
+        //   2. ComputeGradients: Forward + backward pass to compute TRUE gradients
+        //   3. AllReduce: Average gradients across all processes
+        //   4. ApplyGradients: Update full parameters using averaged gradients
+        //   5. UpdateShards: Extract local shard from updated parameters and release full params
+        //
+        // This implements FSDP's memory-efficient approach: gather parameters only when needed,
+        // compute gradients, synchronize, update, then immediately release to save memory.
+
+        // Gather full parameters for gradient computation (just-in-time gathering)
         var fullParams = GatherFullParameters();
         WrappedModel.SetParameters(fullParams);
 
-        // Train the wrapped model
-        WrappedModel.Train(input, expectedOutput);
-
-        // Get updated parameters - CRITICAL: Each rank now has DIFFERENT parameters from training on different data
-        var updatedParams = WrappedModel.GetParameters();
+        // Compute TRUE gradients using the model's gradient computation
+        // This calls the model's backpropagation without updating parameters
+        _computedGradients = WrappedModel.ComputeGradients(input, expectedOutput);
 
         // Synchronize gradients if auto-sync is enabled
         if (Config.AutoSyncGradients)
         {
-            // CRITICAL FIX: Average the full parameter vectors BEFORE extracting shards
-            // Without this, we would extract shards from different parameter vectors,
-            // creating a "frankenstein" vector that doesn't represent proper averaging.
-            //
-            // Correct flow:
-            // 1. Each rank has updatedParams from training on different data
-            // 2. AllReduce averages these full parameter vectors: avg = (P₀ + P₁ + ...) / worldSize
-            // 3. Extract local shards from the AVERAGED parameters
-            // 4. All ranks now have consistent shards from the same averaged parameter vector
-            Config.CommunicationBackend.AllReduce(updatedParams, ReductionOperation.Average);
+            // Average gradients across all processes
+            // All ranks receive the same averaged gradients
+            Config.CommunicationBackend.AllReduce(_computedGradients, ReductionOperation.Average);
 
-            // Update local shard from averaged parameters (invalidates cache)
+            // Apply the averaged gradients to update full parameters
+            // Note: We use a fixed learning rate here. For adaptive optimizers,
+            // use FSDPOptimizer which properly handles optimizer state.
+            WrappedModel.ApplyGradients(_computedGradients, NumOps.FromDouble(0.01));
+
+            // Get updated full parameters
+            var updatedParams = WrappedModel.GetParameters();
+
+            // Update local shard from full parameters (invalidates cache)
+            // This extracts our portion and "releases" the full parameters from memory
             UpdateLocalShardFromFull(updatedParams);
 
-            // Apply averaged parameters back to the model for consistency
+            // Apply updated parameters back to the model for consistency
             WrappedModel.SetParameters(updatedParams);
         }
         else
         {
-            // No auto-sync: just update local shard from this rank's parameters
+            // No auto-sync: apply gradients locally without synchronization
+            WrappedModel.ApplyGradients(_computedGradients, NumOps.FromDouble(0.01));
+            var updatedParams = WrappedModel.GetParameters();
+
             // Update local shard (this already invalidates cache via UpdateLocalShardFromFull)
             UpdateLocalShardFromFull(updatedParams);
         }
@@ -141,28 +156,22 @@ public class FSDPModel<T, TInput, TOutput> : ShardedModelBase<T, TInput, TOutput
     /// <inheritdoc/>
     /// <remarks>
     /// <para><b>FSDP Gradient Synchronization:</b>
-    /// Unlike the base implementation which does AllReduce on LocalShard (which would mix disjoint
-    /// parameter indices from different ranks and corrupt weights), FSDP gradient synchronization works by:
-    /// 1. Gathering full parameters from all ranks (allGather operation)
-    /// 2. Performing AllReduce on the full parameter vector (synchronizing matching indices)
-    /// 3. Scattering the result back to local shards (each rank gets its portion)
-    ///
-    /// This ensures we reduce matching data across ranks rather than mixing unrelated parameter indices.
+    /// FSDP synchronizes gradients (not parameters) using AllReduce. This averages
+    /// the gradients computed by each rank across all processes, ensuring that when
+    /// each rank applies the averaged gradients, they all end up with identical parameters.
     /// </para>
     /// </remarks>
     public override void SynchronizeGradients()
     {
-        // Gather full parameters from all shards
-        // This ensures we have the complete parameter vector on each rank
-        var fullParams = GatherFullParameters();
+        if (_computedGradients == null)
+        {
+            throw new InvalidOperationException(
+                "Gradients have not been computed. Call Train() before SynchronizeGradients().");
+        }
 
-        // Perform AllReduce on the full parameter vector
-        // This synchronizes matching parameter indices across all ranks
-        Config.CommunicationBackend.AllReduce(fullParams, ReductionOperation.Average);
-
-        // Update local shard from the synchronized full parameters
-        // Each rank extracts its portion of the reduced parameters
-        UpdateLocalShardFromFull(fullParams);
+        // Perform AllReduce on the gradient vector
+        // This averages gradients across all processes
+        Config.CommunicationBackend.AllReduce(_computedGradients, ReductionOperation.Average);
 
         // Invalidate cached full parameters to force re-gather on next access
         CachedFullParameters = null;

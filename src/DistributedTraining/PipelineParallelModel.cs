@@ -145,22 +145,12 @@ public class PipelineParallelModel<T, TInput, TOutput> : ShardedModelBase<T, TIn
             stageInput = ConversionsHelper.ConvertVectorToInput<T, TInput>(receivedActivations, input);
         }
 
-        // Train this stage (computes gradients and applies updates)
-        WrappedModel.Train(stageInput, expectedOutput);
-        var stageOutput = WrappedModel.Predict(stageInput);
+        // Compute true gradients using the model's gradient computation
+        // This provides accurate gradients before optimizer updates are applied
+        var gradientVector = WrappedModel.ComputeGradients(stageInput, expectedOutput);
 
-        // Compute gradient as parameter difference
-        // NOTE: This is an approximation. True gradients would require access to
-        // the model's gradient computation before optimizer updates are applied.
-        var parametersAfter = WrappedModel.GetParameters();
-        var localGradients = new T[parametersBefore.Length];
-        for (int i = 0; i < parametersBefore.Length; i++)
-        {
-            // Gradient ≈ (params_before - params_after)
-            // This captures the parameter update, which includes learning rate and optimizer state
-            localGradients[i] = NumOps.Subtract(parametersBefore[i], parametersAfter[i]);
-        }
-        var gradientVector = new Vector<T>(localGradients);
+        // Predict stage output for forward pass communication
+        var stageOutput = WrappedModel.Predict(stageInput);
 
         // FORWARD PASS: Send activations to next stage
         if (_stageId < _numStages - 1)
@@ -194,14 +184,12 @@ public class PipelineParallelModel<T, TInput, TOutput> : ShardedModelBase<T, TIn
             Config.CommunicationBackend.Send(gradientVector, _stageId - 1, tag: 1);
         }
 
-        // Apply accumulated gradients to parameters
-        // Start from original parameters and apply accumulated gradient
-        var finalParameters = new T[parametersBefore.Length];
-        for (int i = 0; i < parametersBefore.Length; i++)
-        {
-            finalParameters[i] = NumOps.Subtract(parametersBefore[i], gradientVector[i]);
-        }
-        WrappedModel.SetParameters(new Vector<T>(finalParameters));
+        // Apply accumulated gradients to parameters using a fixed learning rate
+        // In pipeline parallelism, we use a simple SGD-style update: θ = θ - lr * gradients
+        // For more sophisticated optimization, wrap this model with a gradient-based optimizer
+        WrappedModel.SetParameters(parametersBefore);
+        var learningRate = NumOps.FromDouble(0.01); // Default learning rate for pipeline stages
+        WrappedModel.ApplyGradients(gradientVector, learningRate);
 
         // Extract this stage's parameter shard
         var updatedParams = WrappedModel.GetParameters();

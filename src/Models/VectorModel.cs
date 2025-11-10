@@ -98,33 +98,34 @@ public class VectorModel<T> : IFullModel<T, Matrix<T>, Vector<T>>, IInterpretabl
     /// Initializes a new instance of the VectorModel class with the specified coefficients.
     /// </summary>
     /// <param name="coefficients">The vector of coefficients for the model.</param>
+    /// <param name="lossFunction">Optional loss function to use for training. If null, uses Mean Squared Error (MSE) for regression.</param>
     /// <remarks>
     /// <para>
-    /// This constructor creates a new VectorModel instance with the specified coefficients. The coefficients vector 
-    /// determines the number of features the model expects and how it weights each feature when making predictions. 
-    /// This constructor is useful when creating a model with predetermined coefficients or when creating a new model 
+    /// This constructor creates a new VectorModel instance with the specified coefficients. The coefficients vector
+    /// determines the number of features the model expects and how it weights each feature when making predictions.
+    /// This constructor is useful when creating a model with predetermined coefficients or when creating a new model
     /// as part of genetic algorithm operations.
     /// </para>
     /// <para><b>For Beginners:</b> This constructor creates a new linear model with the specified weights.
-    /// 
+    ///
     /// When creating a VectorModel:
     /// - You provide a vector of coefficients (weights)
     /// - The length of this vector determines how many input features the model expects
     /// - The values determine how each feature affects the prediction
-    /// 
+    ///
     /// This constructor is used when:
     /// - Creating a model with specific, known coefficients
     /// - Creating a model as part of a genetic algorithm
     /// - Copying or modifying an existing model
-    /// 
+    ///
     /// For example: new VectorModel<double>(new Vector<double>([2.5, -1.3, 0.7]))
     /// creates a model that expects 3 features with the specified weights.
     /// </para>
     /// </remarks>
-    public VectorModel(Vector<T> coefficients)
+    public VectorModel(Vector<T> coefficients, ILossFunction<T>? lossFunction = null)
     {
         Coefficients = coefficients ?? throw new ArgumentNullException(nameof(coefficients));
-        _defaultLossFunction = new MeanSquaredErrorLoss<T>();
+        _defaultLossFunction = lossFunction ?? new MeanSquaredErrorLoss<T>();
     }
 
     /// <summary>

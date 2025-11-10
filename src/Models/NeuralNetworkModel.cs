@@ -139,6 +139,7 @@ public class NeuralNetworkModel<T> : IFullModel<T, Tensor<T>, Tensor<T>>
     /// Initializes a new instance of the NeuralNetworkModel class with the specified architecture.
     /// </summary>
     /// <param name="architecture">The architecture defining the structure of the neural network.</param>
+    /// <param name="lossFunction">Optional loss function to use for training. If null, uses a default based on task type (CrossEntropy for classification, MSE for regression).</param>
     /// <remarks>
     /// <para>
     /// This constructor creates a new NeuralNetworkModel instance with the specified architecture. It initializes
@@ -147,33 +148,37 @@ public class NeuralNetworkModel<T> : IFullModel<T, Tensor<T>, Tensor<T>>
     /// the network is designed to perform.
     /// </para>
     /// <para><b>For Beginners:</b> This constructor creates a new neural network model with the specified design.
-    /// 
+    ///
     /// When creating a NeuralNetworkModel:
     /// - You provide an architecture that defines the network's structure
     /// - The constructor creates the actual neural network based on this design
     /// - The model is ready to be trained or to make predictions
-    /// 
+    ///
     /// The architecture is crucial as it determines what kind of data the network can process
     /// and what kind of problems it can solve. Different architectures work better for
     /// different types of problems.
     /// </para>
     /// </remarks>
-    public NeuralNetworkModel(NeuralNetworkArchitecture<T> architecture)
+    public NeuralNetworkModel(NeuralNetworkArchitecture<T> architecture, ILossFunction<T>? lossFunction = null)
     {
         Architecture = architecture ?? throw new ArgumentNullException(nameof(architecture));
         Network = new NeuralNetwork<T>(architecture);
         _learningRate = _numOps.FromDouble(0.01); // Default learning rate
-        _defaultLossFunction = NeuralNetworkHelper<T>.GetDefaultLossFunction(architecture.TaskType);
+        _defaultLossFunction = lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(architecture.TaskType);
     }
 
     /// <summary>
     /// Gets the default loss function used by this model for gradient computation.
     /// </summary>
-    /// <exception cref="InvalidOperationException">If loss function not configured</exception>
-    public ILossFunction<T> DefaultLossFunction =>
-        _defaultLossFunction ?? throw new InvalidOperationException(
-            $"{GetType().Name} requires a loss function to be configured before computing gradients. " +
-            "Ensure the model is properly initialized with a loss function.");
+    /// <remarks>
+    /// <para>
+    /// The default loss function is determined by the network's task type:
+    /// - Classification tasks use CrossEntropyLoss
+    /// - Regression tasks use MeanSquaredErrorLoss
+    /// - Custom loss functions can be provided via the constructor
+    /// </para>
+    /// </remarks>
+    public ILossFunction<T> DefaultLossFunction => _defaultLossFunction;
 
     /// <summary>
     /// Gets the number of features used by the model.

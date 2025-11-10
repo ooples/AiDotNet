@@ -56,6 +56,8 @@ public class ZeRO2Model<T, TInput, TOutput> : ShardedModelBase<T, TInput, TOutpu
 {
     private Vector<T>? _parameterDeltaShard;
     private Vector<T>? _parameterDeltas;
+    private Vector<T>? _computedGradients;
+    private Vector<T>? _gradientShard;
 
     /// <summary>
     /// Gets the local parameter delta shard for this rank after synchronization.

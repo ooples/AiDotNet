@@ -55,6 +55,8 @@ namespace AiDotNet.DistributedTraining;
 /// <typeparam name="TOutput">The output type for the model</typeparam>
 public class ZeRO1Model<T, TInput, TOutput> : ShardedModelBase<T, TInput, TOutput>
 {
+    private Vector<T>? _computedGradients;
+
     /// <summary>
     /// Creates a new ZeRO-1 model wrapping an existing model.
     /// </summary>
@@ -85,24 +87,54 @@ public class ZeRO1Model<T, TInput, TOutput> : ShardedModelBase<T, TInput, TOutpu
     /// <inheritdoc/>
     public override void SynchronizeGradients()
     {
+        if (_computedGradients == null)
+        {
+            throw new InvalidOperationException(
+                "Gradients have not been computed. Call Train() before SynchronizeGradients().");
+        }
+
         // Same as DDP - AllReduce all gradients
-        Config.CommunicationBackend.AllReduce(LocalShard, ReductionOperation.Average);
+        Config.CommunicationBackend.AllReduce(_computedGradients, ReductionOperation.Average);
         CachedFullParameters = null;
     }
 
     /// <inheritdoc/>
     public override void Train(TInput input, TOutput expectedOutput)
     {
-        // Full parameters available locally (like DDP)
+        // ZeRO-1 workflow with explicit gradient computation:
+        //   1. ComputeGradients: Forward + backward pass to compute TRUE gradients
+        //   2. AllReduce gradients (average across all processes - same as DDP)
+        //   3. ApplyGradients: Update local parameters using averaged gradients
+        //
+        // ZeRO-1 is like DDP for the model - full parameters and gradients on each process.
+        // The difference is that ZeRO-1 pairs with ZeRO1Optimizer which shards optimizer states.
+
+        // Set full parameters for gradient computation
         WrappedModel.SetParameters(LocalShard);
-        WrappedModel.Train(input, expectedOutput);
-        LocalShard = WrappedModel.GetParameters();
+
+        // Compute TRUE gradients using the model's gradient computation
+        _computedGradients = WrappedModel.ComputeGradients(input, expectedOutput);
 
         if (Config.AutoSyncGradients)
         {
+            // Synchronize gradients via AllReduce
             SynchronizeGradients();
+
+            // Apply the averaged gradients to update parameters
+            // Note: We use a fixed learning rate here. For adaptive optimizers,
+            // use ZeRO1Optimizer which properly handles optimizer state sharding.
+            WrappedModel.ApplyGradients(_computedGradients, NumOps.FromDouble(0.01));
+
+            // Get updated parameters back to LocalShard
+            LocalShard = WrappedModel.GetParameters();
             WrappedModel.SetParameters(LocalShard);
             // Cache invalidated by SynchronizeGradients
+        }
+        else
+        {
+            // Without gradient synchronization, apply gradients locally
+            WrappedModel.ApplyGradients(_computedGradients, NumOps.FromDouble(0.01));
+            LocalShard = WrappedModel.GetParameters();
         }
         // Note: Cache not invalidated if AutoSyncGradients is false,
         // allowing multiple predictions to benefit from cached full parameters

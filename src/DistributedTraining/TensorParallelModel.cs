@@ -317,37 +317,29 @@ public class TensorParallelModel<T, TInput, TOutput> : ShardedModelBase<T, TInpu
         // For this framework implementation, we provide simplified pattern
         // Production usage would implement layer-specific forward/backward logic
 
-        // Save original parameters before training
+        // Gather full parameters before training
         var originalParams = GatherFullParameters();
         WrappedModel.SetParameters(originalParams);
 
-        // Train
-        WrappedModel.Train(input, expectedOutput);
-
-        // Get updated parameters
-        var updatedParams = WrappedModel.GetParameters();
+        // Compute true gradients using the model's gradient computation
+        // This provides accurate gradients before optimizer updates are applied
+        var gradVec = WrappedModel.ComputeGradients(input, expectedOutput);
 
         // Synchronize gradients across tensor-parallel group
         if (Config.AutoSyncGradients)
         {
-            // Compute gradient (full vector)
-            var gradient = new T[updatedParams.Length];
-            for (int i = 0; i < gradient.Length; i++)
-            {
-                gradient[i] = NumOps.Subtract(updatedParams[i], originalParams[i]);
-            }
-            var gradVec = new Vector<T>(gradient);
-
-            // Average gradients across ranks
+            // Average gradients across ranks in tensor-parallel group
             SubgroupAllReduce(gradVec, ReductionOperation.Average);
-
-            // Apply averaged gradient
-            for (int i = 0; i < updatedParams.Length; i++)
-            {
-                updatedParams[i] = NumOps.Add(originalParams[i], gradVec[i]);
-            }
-            WrappedModel.SetParameters(updatedParams);
         }
+
+        // Apply averaged gradients to parameters using a fixed learning rate
+        // In tensor parallelism, we use a simple SGD-style update: θ = θ - lr * gradients
+        // For more sophisticated optimization, wrap this model with a gradient-based optimizer
+        var learningRate = NumOps.FromDouble(0.01); // Default learning rate for tensor-parallel
+        WrappedModel.ApplyGradients(gradVec, learningRate);
+
+        // Get updated parameters after applying gradients
+        var updatedParams = WrappedModel.GetParameters();
 
         // Extract shard from final parameters
         UpdateLocalShardFromFull(updatedParams);
