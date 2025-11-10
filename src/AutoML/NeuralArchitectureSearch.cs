@@ -3,6 +3,7 @@ using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
 using AiDotNet.Models;
+using AiDotNet.NeuralNetworks;
 using AiDotNet.NumericOperations;
 using AiDotNet.Optimizers;
 using System;
@@ -155,7 +156,7 @@ namespace AiDotNet.AutoML
                 }
 
                 // Phase 2: Update network weights on training set
-                supernet.BackwardWeights(trainData, trainLabels);
+                supernet.BackwardWeights(trainData, trainLabels, supernet.DefaultLossFunction);
                 var weightParams = supernet.GetWeightParameters();
                 var weightGrads = supernet.GetWeightGradients();
 
