@@ -80,6 +80,12 @@ public class SiameseNetwork<T> : NeuralNetworkBase<T>, IAuxiliaryLossLayer<T>
     private T _lastContrastiveLoss;
 
     /// <summary>
+    /// Cache for embedding pairs and their similarity labels during training.
+    /// Used to compute contrastive auxiliary loss.
+    /// </summary>
+    private List<(Vector<T> embedding1, Vector<T> embedding2, T label)> _cachedEmbeddingPairs;
+
+    /// <summary>
     /// The shared neural network that processes each input independently.
     /// </summary>
     /// <remarks>
@@ -123,6 +129,7 @@ public class SiameseNetwork<T> : NeuralNetworkBase<T>, IAuxiliaryLossLayer<T>
         AuxiliaryLossWeight = NumOps.FromDouble(0.5);
         ContrastiveMargin = NumOps.FromDouble(1.0);
         _lastContrastiveLoss = NumOps.Zero;
+        _cachedEmbeddingPairs = new List<(Vector<T>, Vector<T>, T)>();
     }
 
     /// <summary>
@@ -188,22 +195,62 @@ public class SiameseNetwork<T> : NeuralNetworkBase<T>, IAuxiliaryLossLayer<T>
             return NumOps.Zero;
         }
 
-        // Note: Full implementation would compute contrastive loss from
-        // cached embeddings during forward pass
-        // Requires storing embedding pairs and similarity labels
-        // Placeholder implementation - returns zero
+        // Return zero if no cached pairs (e.g., before first training step)
+        if (_cachedEmbeddingPairs.Count == 0)
+        {
+            _lastContrastiveLoss = NumOps.Zero;
+            return NumOps.Zero;
+        }
 
-        // Pseudo-code for full implementation:
-        // T totalLoss = NumOps.Zero;
-        // for each pair (embedding1, embedding2, label):
-        //     D = EuclideanDistance(embedding1, embedding2)
-        //     if (label == similar):
-        //         loss = 0.5 * D * D  // Pull together
-        //     else:
-        //         loss = 0.5 * max(0, margin - D) ^ 2  // Push apart
-        //     totalLoss += loss
+        T totalLoss = NumOps.Zero;
+        T half = NumOps.FromDouble(0.5);
 
-        _lastContrastiveLoss = NumOps.Zero;
+        // Compute contrastive loss for each cached pair
+        foreach (var (embedding1, embedding2, label) in _cachedEmbeddingPairs)
+        {
+            // Compute Euclidean distance between embeddings
+            T distanceSquared = NumOps.Zero;
+            for (int i = 0; i < embedding1.Length; i++)
+            {
+                T diff = NumOps.Subtract(embedding1[i], embedding2[i]);
+                T diffSquared = NumOps.Multiply(diff, diff);
+                distanceSquared = NumOps.Add(distanceSquared, diffSquared);
+            }
+            T distance = NumOps.Sqrt(distanceSquared);
+
+            // Compute contrastive loss based on label
+            // For similar pairs (label close to 1): minimize distance
+            // For dissimilar pairs (label close to 0): maximize distance up to margin
+            T one = NumOps.FromDouble(1.0);
+            T zero = NumOps.Zero;
+
+            // Check if similar (label close to 1) or dissimilar (label close to 0)
+            // Using threshold of 0.5 to classify
+            bool isSimilar = NumOps.GreaterThan(label, half);
+
+            T pairLoss;
+            if (isSimilar)
+            {
+                // Similar: loss = 0.5 * D²
+                pairLoss = NumOps.Multiply(half, distanceSquared);
+            }
+            else
+            {
+                // Dissimilar: loss = 0.5 * max(0, margin - D)²
+                T marginMinusDistance = NumOps.Subtract(ContrastiveMargin, distance);
+                // Clamp to max(0, marginMinusDistance)
+                T clamped = NumOps.GreaterThan(marginMinusDistance, zero) ? marginMinusDistance : zero;
+                T clampedSquared = NumOps.Multiply(clamped, clamped);
+                pairLoss = NumOps.Multiply(half, clampedSquared);
+            }
+
+            totalLoss = NumOps.Add(totalLoss, pairLoss);
+        }
+
+        // Average over all pairs
+        T averageLoss = NumOps.Divide(totalLoss, NumOps.FromDouble(_cachedEmbeddingPairs.Count));
+
+        _lastContrastiveLoss = averageLoss;
         return _lastContrastiveLoss;
     }
 
@@ -431,6 +478,12 @@ public class SiameseNetwork<T> : NeuralNetworkBase<T>, IAuxiliaryLossLayer<T>
 
         int batchSize = input.Shape[0];
 
+        // Clear cached embedding pairs for this training batch
+        if (UseAuxiliaryLoss)
+        {
+            _cachedEmbeddingPairs.Clear();
+        }
+
         // Forward pass to get predictions
         var predictions = Predict(input);
 
@@ -455,10 +508,17 @@ public class SiameseNetwork<T> : NeuralNetworkBase<T>, IAuxiliaryLossLayer<T>
             // Extract the pair - GetSlice returns a tensor
             var input1 = input.GetSlice(b).GetSlice(0);
             var input2 = input.GetSlice(b).GetSlice(1);
-        
+
             // Forward pass through the subnetwork
             var embedding1 = _subnetwork.Forward(input1).ToVector();
             var embedding2 = _subnetwork.Forward(input2).ToVector();
+
+            // Cache embeddings and label for contrastive loss computation
+            if (UseAuxiliaryLoss)
+            {
+                T label = expectedOutput[b, 0];
+                _cachedEmbeddingPairs.Add((embedding1, embedding2, label));
+            }
         
             // Combine embeddings
             var combinedEmbedding = CombineEmbeddings(embedding1, embedding2);
