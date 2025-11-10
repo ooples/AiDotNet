@@ -1029,33 +1029,45 @@ public abstract class DecisionTreeRegressionBase<T> : ITreeBasedRegression<T>
     public virtual Vector<T> ComputeGradients(Matrix<T> input, Vector<T> target, ILossFunction<T>? lossFunction = null)
     {
         var loss = lossFunction ?? DefaultLossFunction;
-
-        // For tree models, we approximate gradients using numerical differentiation
-        // This is a simplified approximation since trees are not continuously differentiable
         var predictions = Predict(input);
 
-        // Compute loss gradient with respect to predictions (not model parameters)
-        var errors = predictions.Subtract(target);
+        // For gradient boosting: compute per-sample loss derivatives (pseudo-residuals)
+        // These are ∂Loss/∂predictions, NOT ∂Loss/∂parameters
+        // In gradient boosting, subsequent trees are fit to these negative gradients
+        var sampleGradients = loss.CalculateDerivative(predictions, target);
 
-        // Return pseudo-gradients based on prediction errors
-        // For tree models, these represent the direction to adjust leaf values
-        // Note: Actual tree structure changes require different algorithms (e.g., tree pruning/growing)
+        // Map per-sample gradients to per-parameter gradients
+        // For decision trees, parameters typically represent leaf values or split thresholds
+        // We aggregate sample gradients into ParameterCount buckets
         var gradients = new Vector<T>(ParameterCount);
 
-        // Store error statistics as pseudo-gradients
-        // Specific tree algorithms can override this with more sophisticated approaches
-        T meanError = NumOps.Zero;
-        for (int i = 0; i < errors.Length; i++)
+        if (sampleGradients.Length == 0 || ParameterCount == 0)
         {
-            meanError = NumOps.Add(meanError, errors[i]);
+            return gradients; // Return zeros
         }
-        meanError = NumOps.Divide(meanError, NumOps.FromDouble(errors.Length));
 
-        // Set all gradient components to the mean error
-        // Derived classes can implement more sophisticated gradient approximations
-        for (int i = 0; i < gradients.Length; i++)
+        // Distribute samples across parameters
+        int samplesPerParam = Math.Max(1, (sampleGradients.Length + ParameterCount - 1) / ParameterCount);
+
+        for (int paramIdx = 0; paramIdx < ParameterCount; paramIdx++)
         {
-            gradients[i] = meanError;
+            T sum = NumOps.Zero;
+            int count = 0;
+
+            // Aggregate gradients for samples mapped to this parameter
+            int startIdx = paramIdx * samplesPerParam;
+            int endIdx = Math.Min((paramIdx + 1) * samplesPerParam, sampleGradients.Length);
+
+            for (int sampleIdx = startIdx; sampleIdx < endIdx; sampleIdx++)
+            {
+                sum = NumOps.Add(sum, sampleGradients[sampleIdx]);
+                count++;
+            }
+
+            // Average the gradients for this parameter bucket
+            gradients[paramIdx] = count > 0
+                ? NumOps.Divide(sum, NumOps.FromDouble(count))
+                : NumOps.Zero;
         }
 
         return gradients;
