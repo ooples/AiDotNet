@@ -351,8 +351,8 @@ public class Transformer<T> : NeuralNetworkBase<T>, IAuxiliaryLossLayer<T>
     {
         var diagnostics = new Dictionary<string, string>
         {
-            { "TotalAttentionRegularizationLoss", _lastAttentionRegularizationLoss.ToString() ?? "0" },
-            { "AttentionRegularizationWeight", AuxiliaryLossWeight.ToString() ?? "0.005" },
+            { "TotalAttentionRegularizationLoss", _lastAttentionRegularizationLoss?.ToString() ?? "0" },
+            { "AttentionRegularizationWeight", AuxiliaryLossWeight?.ToString() ?? "0.005" },
             { "UseAttentionRegularization", UseAuxiliaryLoss.ToString() }
         };
 

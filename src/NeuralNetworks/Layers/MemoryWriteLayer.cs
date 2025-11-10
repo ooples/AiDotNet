@@ -888,8 +888,8 @@ public class MemoryWriteLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     {
         return new Dictionary<string, string>
         {
-            { "TotalAttentionSparsityLoss", _lastAttentionSparsityLoss.ToString() ?? "0" },
-            { "AttentionSparsityWeight", AuxiliaryLossWeight.ToString() ?? "0.005" },
+            { "TotalAttentionSparsityLoss", _lastAttentionSparsityLoss?.ToString() ?? "0" },
+            { "AttentionSparsityWeight", AuxiliaryLossWeight?.ToString() ?? "0.005" },
             { "UseAttentionSparsity", UseAuxiliaryLoss.ToString() }
         };
     }

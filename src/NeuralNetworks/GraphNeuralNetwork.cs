@@ -446,8 +446,8 @@ public class GraphNeuralNetwork<T> : NeuralNetworkBase<T>, IAuxiliaryLossLayer<T
     {
         return new Dictionary<string, string>
         {
-            { "TotalGraphSmoothnessLoss", _lastGraphSmoothnessLoss.ToString() ?? "0" },
-            { "SmoothnessWeight", AuxiliaryLossWeight.ToString() ?? "0.05" },
+            { "TotalGraphSmoothnessLoss", _lastGraphSmoothnessLoss?.ToString() ?? "0" },
+            { "SmoothnessWeight", AuxiliaryLossWeight?.ToString() ?? "0.05" },
             { "UseGraphSmoothness", UseAuxiliaryLoss.ToString() },
             { "NodeRepresentationsCached", (_lastNodeRepresentations != null).ToString() },
             { "AdjacencyMatrixCached", (_lastAdjacencyMatrix != null).ToString() }

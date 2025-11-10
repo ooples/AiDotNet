@@ -670,8 +670,8 @@ public class AttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     {
         var diagnostics = new Dictionary<string, string>
         {
-            { "AttentionEntropy", _lastAttentionEntropy.ToString() ?? "0" },
-            { "EntropyWeight", AuxiliaryLossWeight.ToString() ?? "0.01" },
+            { "AttentionEntropy", _lastAttentionEntropy?.ToString() ?? "0" },
+            { "EntropyWeight", AuxiliaryLossWeight?.ToString() ?? "0.01" },
             { "UseAuxiliaryLoss", UseAuxiliaryLoss.ToString() }
         };
 
@@ -687,7 +687,7 @@ public class AttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
                     maxWeight = _lastAttentionWeights[i];
                 }
             }
-            diagnostics["MaxAttentionWeight"] = maxWeight.ToString() ?? "0";
+            diagnostics["MaxAttentionWeight"] = maxWeight?.ToString() ?? "0";
         }
 
         return diagnostics;

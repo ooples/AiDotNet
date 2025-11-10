@@ -827,8 +827,8 @@ public class HighwayLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     {
         return new Dictionary<string, string>
         {
-            { "TotalGateBalanceLoss", _lastGateBalanceLoss.ToString() ?? "0" },
-            { "GateBalanceWeight", AuxiliaryLossWeight.ToString() ?? "0.01" },
+            { "TotalGateBalanceLoss", _lastGateBalanceLoss?.ToString() ?? "0" },
+            { "GateBalanceWeight", AuxiliaryLossWeight?.ToString() ?? "0.01" },
             { "UseGateBalance", UseAuxiliaryLoss.ToString() }
         };
     }

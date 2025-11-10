@@ -237,9 +237,9 @@ public class SiameseNetwork<T> : NeuralNetworkBase<T>, IAuxiliaryLossLayer<T>
     {
         return new Dictionary<string, string>
         {
-            { "TotalContrastiveLoss", _lastContrastiveLoss.ToString() ?? "0" },
-            { "ContrastiveMargin", ContrastiveMargin.ToString() ?? "1.0" },
-            { "ContrastiveWeight", AuxiliaryLossWeight.ToString() ?? "0.5" },
+            { "TotalContrastiveLoss", _lastContrastiveLoss?.ToString() ?? "0" },
+            { "ContrastiveMargin", ContrastiveMargin?.ToString() ?? "1.0" },
+            { "ContrastiveWeight", AuxiliaryLossWeight?.ToString() ?? "0.5" },
             { "UseContrastiveLoss", UseAuxiliaryLoss.ToString() }
         };
     }

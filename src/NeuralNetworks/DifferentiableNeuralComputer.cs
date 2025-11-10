@@ -621,8 +621,8 @@ public class DifferentiableNeuralComputer<T> : NeuralNetworkBase<T>, IAuxiliaryL
     {
         return new Dictionary<string, string>
         {
-            { "TotalMemoryAddressingLoss", _lastMemoryAddressingLoss.ToString() ?? "0" },
-            { "AddressingWeight", AuxiliaryLossWeight.ToString() ?? "0.005" },
+            { "TotalMemoryAddressingLoss", _lastMemoryAddressingLoss?.ToString() ?? "0" },
+            { "AddressingWeight", AuxiliaryLossWeight?.ToString() ?? "0.005" },
             { "UseMemoryAddressingRegularization", UseAuxiliaryLoss.ToString() },
             { "NumberOfReadHeads", _readHeads.ToString() },
             { "MemorySize", _memorySize.ToString() },

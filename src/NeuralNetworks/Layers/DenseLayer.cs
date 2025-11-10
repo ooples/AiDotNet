@@ -504,11 +504,11 @@ public class DenseLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     {
         return new Dictionary<string, string>
         {
-            { "TotalRegularizationLoss", _lastRegularizationLoss.ToString() ?? "0" },
+            { "TotalRegularizationLoss", _lastRegularizationLoss?.ToString() ?? "0" },
             { "RegularizationType", Regularization.ToString() },
-            { "L1Strength", L1Strength.ToString() ?? "0.01" },
-            { "L2Strength", L2Strength.ToString() ?? "0.01" },
-            { "RegularizationWeight", AuxiliaryLossWeight.ToString() ?? "0.01" },
+            { "L1Strength", L1Strength?.ToString() ?? "0.01" },
+            { "L2Strength", L2Strength?.ToString() ?? "0.01" },
+            { "RegularizationWeight", AuxiliaryLossWeight?.ToString() ?? "0.01" },
             { "UseRegularization", UseAuxiliaryLoss.ToString() }
         };
     }

@@ -566,8 +566,8 @@ public class EmbeddingLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     {
         var diagnostics = new Dictionary<string, string>
         {
-            { "EmbeddingRegularizationLoss", _lastEmbeddingRegularizationLoss.ToString() ?? "0" },
-            { "RegularizationWeight", AuxiliaryLossWeight.ToString() ?? "0.0001" },
+            { "EmbeddingRegularizationLoss", _lastEmbeddingRegularizationLoss?.ToString() ?? "0" },
+            { "RegularizationWeight", AuxiliaryLossWeight?.ToString() ?? "0.0001" },
             { "UseAuxiliaryLoss", UseAuxiliaryLoss.ToString() }
         };
 
@@ -591,7 +591,7 @@ public class EmbeddingLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         if (count > 0)
         {
             T avgMagnitude = NumOps.Divide(sumMagnitudes, NumOps.FromDouble(count));
-            diagnostics["AverageEmbeddingMagnitude"] = avgMagnitude.ToString() ?? "0";
+            diagnostics["AverageEmbeddingMagnitude"] = avgMagnitude?.ToString() ?? "0";
         }
 
         return diagnostics;

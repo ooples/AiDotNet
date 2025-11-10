@@ -1262,8 +1262,8 @@ public class SpatialTransformerLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     {
         return new Dictionary<string, string>
         {
-            { "TotalTransformationLoss", _lastTransformationLoss.ToString() ?? "0" },
-            { "TransformationWeight", AuxiliaryLossWeight.ToString() ?? "0.01" },
+            { "TotalTransformationLoss", _lastTransformationLoss?.ToString() ?? "0" },
+            { "TransformationWeight", AuxiliaryLossWeight?.ToString() ?? "0.01" },
             { "UseTransformationLoss", UseAuxiliaryLoss.ToString() }
         };
     }

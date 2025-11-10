@@ -381,8 +381,8 @@ public class NeuralTuringMachine<T> : NeuralNetworkBase<T>, IAuxiliaryLossLayer<
     {
         return new Dictionary<string, string>
         {
-            { "TotalMemoryUsageLoss", _lastMemoryUsageLoss.ToString() ?? "0" },
-            { "MemoryUsageWeight", AuxiliaryLossWeight.ToString() ?? "0.005" },
+            { "TotalMemoryUsageLoss", _lastMemoryUsageLoss?.ToString() ?? "0" },
+            { "MemoryUsageWeight", AuxiliaryLossWeight?.ToString() ?? "0.005" },
             { "UseMemoryUsageRegularization", UseAuxiliaryLoss.ToString() },
             { "MemorySize", _memorySize.ToString() },
             { "MemoryVectorSize", _memoryVectorSize.ToString() },

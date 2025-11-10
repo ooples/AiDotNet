@@ -872,9 +872,9 @@ public class SelfAttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     {
         return new Dictionary<string, string>
         {
-            { "TotalEntropyLoss", _lastEntropyLoss.ToString() ?? "0" },
-            { "TotalSparsityLoss", _lastSparsityLoss.ToString() ?? "0" },
-            { "SparsityWeight", AuxiliaryLossWeight.ToString() ?? "0.005" },
+            { "TotalEntropyLoss", _lastEntropyLoss?.ToString() ?? "0" },
+            { "TotalSparsityLoss", _lastSparsityLoss?.ToString() ?? "0" },
+            { "SparsityWeight", AuxiliaryLossWeight?.ToString() ?? "0.005" },
             { "UseAttentionSparsity", UseAuxiliaryLoss.ToString() },
             { "NumberOfHeads", _headCount.ToString() },
             { "SequenceLength", _sequenceLength.ToString() },

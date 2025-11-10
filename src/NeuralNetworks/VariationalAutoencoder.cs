@@ -815,8 +815,8 @@ public class VariationalAutoencoder<T> : NeuralNetworkBase<T>, IAuxiliaryLossLay
     {
         var diagnostics = new Dictionary<string, string>
         {
-            { "KLDivergence", _lastKLDivergence.ToString() ?? "0" },
-            { "Beta", AuxiliaryLossWeight.ToString() ?? "1.0" },
+            { "KLDivergence", _lastKLDivergence?.ToString() ?? "0" },
+            { "Beta", AuxiliaryLossWeight?.ToString() ?? "1.0" },
             { "UseAuxiliaryLoss", UseAuxiliaryLoss.ToString() }
         };
 
@@ -829,7 +829,7 @@ public class VariationalAutoencoder<T> : NeuralNetworkBase<T>, IAuxiliaryLossLay
                 meanNormSquared = NumOps.Add(meanNormSquared, NumOps.Multiply(_lastMean[i], _lastMean[i]));
             }
             var meanNorm = NumOps.Sqrt(meanNormSquared);
-            diagnostics["LatentMeanNorm"] = meanNorm.ToString() ?? "0";
+            diagnostics["LatentMeanNorm"] = meanNorm?.ToString() ?? "0";
         }
 
         if (_lastLogVariance != null)
@@ -842,7 +842,7 @@ public class VariationalAutoencoder<T> : NeuralNetworkBase<T>, IAuxiliaryLossLay
                 stdSum = NumOps.Add(stdSum, NumOps.Exp(halfLogVar));
             }
             var stdMean = NumOps.Divide(stdSum, NumOps.FromDouble(_lastLogVariance.Length));
-            diagnostics["LatentStdMean"] = stdMean.ToString() ?? "0";
+            diagnostics["LatentStdMean"] = stdMean?.ToString() ?? "0";
         }
 
         return diagnostics;

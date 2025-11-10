@@ -1332,8 +1332,8 @@ public class SqueezeAndExcitationLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     {
         return new Dictionary<string, string>
         {
-            { "TotalChannelAttentionLoss", _lastChannelAttentionLoss.ToString() ?? "0" },
-            { "ChannelAttentionWeight", AuxiliaryLossWeight.ToString() ?? "0.01" },
+            { "TotalChannelAttentionLoss", _lastChannelAttentionLoss?.ToString() ?? "0" },
+            { "ChannelAttentionWeight", AuxiliaryLossWeight?.ToString() ?? "0.01" },
             { "UseChannelAttention", UseAuxiliaryLoss.ToString() }
         };
     }

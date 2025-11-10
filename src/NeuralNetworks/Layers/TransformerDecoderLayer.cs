@@ -952,8 +952,8 @@ public class TransformerDecoderLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     {
         var diagnostics = new Dictionary<string, string>
         {
-            { "TotalAuxiliaryLoss", _lastAuxiliaryLoss.ToString() ?? "0" },
-            { "AuxiliaryWeight", AuxiliaryLossWeight.ToString() ?? "0.005" },
+            { "TotalAuxiliaryLoss", _lastAuxiliaryLoss?.ToString() ?? "0" },
+            { "AuxiliaryWeight", AuxiliaryLossWeight?.ToString() ?? "0.005" },
             { "UseAuxiliaryLoss", UseAuxiliaryLoss.ToString() }
         };
 

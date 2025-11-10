@@ -498,8 +498,8 @@ public class AttentionNetwork<T> : NeuralNetworkBase<T>, IAuxiliaryLossLayer<T>
     {
         var diagnostics = new Dictionary<string, string>
         {
-            { "TotalAttentionEntropyLoss", _lastAttentionEntropyLoss.ToString() ?? "0" },
-            { "EntropyWeight", AuxiliaryLossWeight.ToString() ?? "0.01" },
+            { "TotalAttentionEntropyLoss", _lastAttentionEntropyLoss?.ToString() ?? "0" },
+            { "EntropyWeight", AuxiliaryLossWeight?.ToString() ?? "0.01" },
             { "UseAuxiliaryLoss", UseAuxiliaryLoss.ToString() }
         };
 

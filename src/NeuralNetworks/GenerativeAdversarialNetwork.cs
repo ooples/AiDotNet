@@ -1503,10 +1503,10 @@ public class GenerativeAdversarialNetwork<T> : NeuralNetworkBase<T>, IAuxiliaryL
     {
         var diagnostics = new Dictionary<string, string>
         {
-            { "GeneratorLoss", _lastGeneratorLoss.ToString() ?? "0" },
-            { "DiscriminatorLoss", _lastDiscriminatorLoss.ToString() ?? "0" },
-            { "GradientPenalty", _lastGradientPenalty.ToString() ?? "0" },
-            { "FeatureMatchingLoss", _lastFeatureMatchingLoss.ToString() ?? "0" },
+            { "GeneratorLoss", _lastGeneratorLoss?.ToString() ?? "0" },
+            { "DiscriminatorLoss", _lastDiscriminatorLoss?.ToString() ?? "0" },
+            { "GradientPenalty", _lastGradientPenalty?.ToString() ?? "0" },
+            { "FeatureMatchingLoss", _lastFeatureMatchingLoss?.ToString() ?? "0" },
             { "CurrentLearningRate", _currentLearningRate.ToString() },
             { "UseGradientPenalty", _useGradientPenalty.ToString() },
             { "UseFeatureMatching", _useFeatureMatching.ToString() }
@@ -1517,7 +1517,7 @@ public class GenerativeAdversarialNetwork<T> : NeuralNetworkBase<T>, IAuxiliaryL
         {
             // Wasserstein distance approximation: D(real) - D(fake)
             // In practice, we use the discriminator loss as a proxy
-            diagnostics["WassersteinDistanceEstimate"] = _lastDiscriminatorLoss.ToString() ?? "0";
+            diagnostics["WassersteinDistanceEstimate"] = _lastDiscriminatorLoss?.ToString() ?? "0";
         }
 
         return diagnostics;

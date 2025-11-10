@@ -273,10 +273,10 @@ public class CapsuleNetwork<T> : NeuralNetworkBase<T>, IAuxiliaryLossLayer<T>
     {
         var diagnostics = new Dictionary<string, string>
         {
-            { "MarginLoss", _lastMarginLoss.ToString() ?? "0" },
-            { "ReconstructionLoss", _lastReconstructionLoss.ToString() ?? "0" },
-            { "TotalLoss", LastLoss.ToString() ?? "0" },
-            { "ReconstructionWeight", AuxiliaryLossWeight.ToString() ?? "0.0005" },
+            { "MarginLoss", _lastMarginLoss?.ToString() ?? "0" },
+            { "ReconstructionLoss", _lastReconstructionLoss?.ToString() ?? "0" },
+            { "TotalLoss", LastLoss?.ToString() ?? "0" },
+            { "ReconstructionWeight", AuxiliaryLossWeight?.ToString() ?? "0.0005" },
             { "UseAuxiliaryLoss", UseAuxiliaryLoss.ToString() }
         };
 

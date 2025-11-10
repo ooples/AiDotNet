@@ -424,8 +424,8 @@ public class ResidualNeuralNetwork<T> : NeuralNetworkBase<T>, IAuxiliaryLossLaye
     {
         return new Dictionary<string, string>
         {
-            { "TotalDeepSupervisionLoss", _lastDeepSupervisionLoss.ToString() ?? "0" },
-            { "AuxiliaryWeight", AuxiliaryLossWeight.ToString() ?? "0.3" },
+            { "TotalDeepSupervisionLoss", _lastDeepSupervisionLoss?.ToString() ?? "0" },
+            { "AuxiliaryWeight", AuxiliaryLossWeight?.ToString() ?? "0.3" },
             { "UseDeepSupervision", UseAuxiliaryLoss.ToString() },
             { "NumberOfAuxiliaryClassifiers", _auxiliaryClassifiers.Count.ToString() },
             { "AuxiliaryClassifierPositions", string.Join(", ", _auxiliaryClassifierPositions) }
