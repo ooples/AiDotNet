@@ -578,6 +578,7 @@ public class DifferentiableNeuralComputer<T> : NeuralNetworkBase<T>, IAuxiliaryL
         // to encourage focused, sharp memory access patterns
         T totalNegativeEntropy = NumOps.Zero;
         T epsilon = NumOps.FromDouble(1e-10);  // For numerical stability
+        T oneMinusEpsilon = NumOps.Subtract(NumOps.One, epsilon);
 
         // Compute negative entropy for read addressing weights
         foreach (var readWeighting in _readWeightings)
@@ -587,10 +588,10 @@ public class DifferentiableNeuralComputer<T> : NeuralNetworkBase<T>, IAuxiliaryL
             {
                 T p = readWeighting[i];
                 // Entropy: H = -Σ(p * log(p))
-                // Add epsilon to avoid log(0)
-                T pWithEps = NumOps.Add(p, epsilon);
-                T logP = NumOps.Log(pWithEps);
-                T pLogP = NumOps.Multiply(p, logP);
+                // Clamp p to [epsilon, 1-epsilon] to avoid log(0) and log(>1)
+                T pClamped = MathHelper.Clamp(p, epsilon, oneMinusEpsilon);
+                T logP = NumOps.Log(pClamped);
+                T pLogP = NumOps.Multiply(pClamped, logP);
                 entropy = NumOps.Add(entropy, pLogP);
             }
             // Negative entropy (we want to minimize this, encouraging sharp peaks)
@@ -604,9 +605,10 @@ public class DifferentiableNeuralComputer<T> : NeuralNetworkBase<T>, IAuxiliaryL
             for (int i = 0; i < _writeWeighting.Length; i++)
             {
                 T p = _writeWeighting[i];
-                T pWithEps = NumOps.Add(p, epsilon);
-                T logP = NumOps.Log(pWithEps);
-                T pLogP = NumOps.Multiply(p, logP);
+                // Clamp p to [epsilon, 1-epsilon] to avoid log(0) and log(>1)
+                T pClamped = MathHelper.Clamp(p, epsilon, oneMinusEpsilon);
+                T logP = NumOps.Log(pClamped);
+                T pLogP = NumOps.Multiply(pClamped, logP);
                 entropy = NumOps.Add(entropy, pLogP);
             }
             totalNegativeEntropy = NumOps.Subtract(totalNegativeEntropy, entropy);
