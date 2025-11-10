@@ -1030,31 +1030,46 @@ public abstract class NonLinearRegressionBase<T> : INonLinearRegression<T>
         var gradients = new Vector<T>(ParameterCount);
 
         // Compute gradient for each alpha (support vector weight)
+        // Use try-finally to ensure state is restored even if exceptions occur
         for (int i = 0; i < Alphas.Length; i++)
         {
             var originalAlpha = Alphas[i];
+            try
+            {
+                // Forward difference: f(x + h) - f(x) / h
+                Alphas[i] = NumOps.Add(originalAlpha, epsilon);
+                var predPlus = Predict(input);
+                var lossPlus = loss.CalculateLoss(predPlus, target);
 
-            // Forward difference: f(x + h) - f(x) / h
-            Alphas[i] = NumOps.Add(originalAlpha, epsilon);
-            var predPlus = Predict(input);
-            var lossPlus = loss.CalculateLoss(predPlus, target);
+                var lossCurrent = loss.CalculateLoss(predictions, target);
 
-            Alphas[i] = originalAlpha;
-            var lossCurrent = loss.CalculateLoss(predictions, target);
-
-            gradients[i] = NumOps.Divide(NumOps.Subtract(lossPlus, lossCurrent), epsilon);
+                gradients[i] = NumOps.Divide(NumOps.Subtract(lossPlus, lossCurrent), epsilon);
+            }
+            finally
+            {
+                // Always restore original state, even if exception occurs
+                Alphas[i] = originalAlpha;
+            }
         }
 
         // Gradient for bias term
+        // Use try-finally to ensure state is restored even if exceptions occur
         var originalB = B;
-        B = NumOps.Add(originalB, epsilon);
-        var predPlusB = Predict(input);
-        var lossPlusB = loss.CalculateLoss(predPlusB, target);
+        try
+        {
+            B = NumOps.Add(originalB, epsilon);
+            var predPlusB = Predict(input);
+            var lossPlusB = loss.CalculateLoss(predPlusB, target);
 
-        B = originalB;
-        var lossCurrentB = loss.CalculateLoss(predictions, target);
+            var lossCurrentB = loss.CalculateLoss(predictions, target);
 
-        gradients[Alphas.Length] = NumOps.Divide(NumOps.Subtract(lossPlusB, lossCurrentB), epsilon);
+            gradients[Alphas.Length] = NumOps.Divide(NumOps.Subtract(lossPlusB, lossCurrentB), epsilon);
+        }
+        finally
+        {
+            // Always restore original state, even if exception occurs
+            B = originalB;
+        }
 
         return gradients;
     }
