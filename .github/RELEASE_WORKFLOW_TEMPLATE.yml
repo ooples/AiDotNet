@@ -1,0 +1,278 @@
+name: Automated Release with Semantic Versioning
+
+on:
+  push:
+    branches:
+      - master
+      - main
+
+permissions:
+  contents: write
+  issues: write
+  pull-requests: write
+  id-token: write
+
+jobs:
+  semantic-version:
+    name: Determine Semantic Version
+    runs-on: ubuntu-latest
+    outputs:
+      new_version: ${{ steps.semver.outputs.new_version }}
+      changelog: ${{ steps.semver.outputs.changelog }}
+      should_release: ${{ steps.semver.outputs.should_release }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # Need full history for semantic versioning
+
+      - name: Calculate Semantic Version
+        id: semver
+        run: |
+          # Get the latest tag
+          LATEST_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "v0.0.0")
+          echo "Latest tag: $LATEST_TAG"
+
+          # Remove 'v' prefix if present
+          CURRENT_VERSION="${LATEST_TAG#v}"
+          echo "Current version: $CURRENT_VERSION"
+
+          # Split version into parts
+          IFS='.' read -r MAJOR MINOR PATCH <<< "$CURRENT_VERSION"
+
+          # Get commits since last tag
+          if [ "$LATEST_TAG" = "v0.0.0" ]; then
+            COMMITS=$(git log --pretty=format:"%s" --no-merges)
+          else
+            COMMITS=$(git log ${LATEST_TAG}..HEAD --pretty=format:"%s" --no-merges)
+          fi
+
+          echo "Analyzing commits for version bump..."
+
+          # Check for breaking changes (major version bump)
+          if echo "$COMMITS" | grep -qE "^(feat|fix|perf|refactor|build|ci|docs|style|test|chore)(\(.+\))?!:|^BREAKING CHANGE:"; then
+            echo "Breaking change detected - MAJOR version bump"
+            MAJOR=$((MAJOR + 1))
+            MINOR=0
+            PATCH=0
+            BUMP_TYPE="major"
+          # Check for features (minor version bump)
+          elif echo "$COMMITS" | grep -qE "^feat(\(.+\))?:"; then
+            echo "Feature detected - MINOR version bump"
+            MINOR=$((MINOR + 1))
+            PATCH=0
+            BUMP_TYPE="minor"
+          # Check for fixes (patch version bump)
+          elif echo "$COMMITS" | grep -qE "^fix(\(.+\))?:"; then
+            echo "Fix detected - PATCH version bump"
+            PATCH=$((PATCH + 1))
+            BUMP_TYPE="patch"
+          else
+            echo "No conventional commits found - no version bump"
+            BUMP_TYPE="none"
+          fi
+
+          NEW_VERSION="${MAJOR}.${MINOR}.${PATCH}"
+          echo "New version: $NEW_VERSION"
+
+          # Generate changelog
+          CHANGELOG="## Changes in v${NEW_VERSION}\n\n"
+
+          # Breaking changes
+          BREAKING=$(echo "$COMMITS" | grep -E "^(feat|fix|perf|refactor|build|ci|docs|style|test|chore)(\(.+\))?!:|^BREAKING CHANGE:" || true)
+          if [ -n "$BREAKING" ]; then
+            CHANGELOG="${CHANGELOG}### ⚠️ BREAKING CHANGES\n\n"
+            echo "$BREAKING" | while IFS= read -r line; do
+              CHANGELOG="${CHANGELOG}- ${line}\n"
+            done
+            CHANGELOG="${CHANGELOG}\n"
+          fi
+
+          # Features
+          FEATURES=$(echo "$COMMITS" | grep -E "^feat(\(.+\))?:" || true)
+          if [ -n "$FEATURES" ]; then
+            CHANGELOG="${CHANGELOG}### ✨ Features\n\n"
+            echo "$FEATURES" | while IFS= read -r line; do
+              CHANGELOG="${CHANGELOG}- ${line}\n"
+            done
+            CHANGELOG="${CHANGELOG}\n"
+          fi
+
+          # Bug fixes
+          FIXES=$(echo "$COMMITS" | grep -E "^fix(\(.+\))?:" || true)
+          if [ -n "$FIXES" ]; then
+            CHANGELOG="${CHANGELOG}### 🐛 Bug Fixes\n\n"
+            echo "$FIXES" | while IFS= read -r line; do
+              CHANGELOG="${CHANGELOG}- ${line}\n"
+            done
+            CHANGELOG="${CHANGELOG}\n"
+          fi
+
+          # Performance improvements
+          PERF=$(echo "$COMMITS" | grep -E "^perf(\(.+\))?:" || true)
+          if [ -n "$PERF" ]; then
+            CHANGELOG="${CHANGELOG}### ⚡ Performance Improvements\n\n"
+            echo "$PERF" | while IFS= read -r line; do
+              CHANGELOG="${CHANGELOG}- ${line}\n"
+            done
+            CHANGELOG="${CHANGELOG}\n"
+          fi
+
+          # Documentation
+          DOCS=$(echo "$COMMITS" | grep -E "^docs(\(.+\))?:" || true)
+          if [ -n "$DOCS" ]; then
+            CHANGELOG="${CHANGELOG}### 📚 Documentation\n\n"
+            echo "$DOCS" | while IFS= read -r line; do
+              CHANGELOG="${CHANGELOG}- ${line}\n"
+            done
+            CHANGELOG="${CHANGELOG}\n"
+          fi
+
+          # Set outputs
+          echo "new_version=$NEW_VERSION" >> $GITHUB_OUTPUT
+          echo "bump_type=$BUMP_TYPE" >> $GITHUB_OUTPUT
+          echo "should_release=$([ "$BUMP_TYPE" != "none" ] && echo "true" || echo "false")" >> $GITHUB_OUTPUT
+
+          # Save changelog to file for multi-line output
+          echo -e "$CHANGELOG" > /tmp/changelog.md
+          echo "changelog<<EOF" >> $GITHUB_OUTPUT
+          cat /tmp/changelog.md >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
+
+  build-test-pack:
+    name: Build, Test, Pack
+    runs-on: ubuntu-latest
+    needs: semantic-version
+    if: needs.semantic-version.outputs.should_release == 'true'
+    outputs:
+      package_version: ${{ needs.semantic-version.outputs.new_version }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 8.0.x
+
+      - name: Restore
+        run: dotnet restore
+
+      - name: Build
+        run: dotnet build -c Release --no-restore
+
+      - name: Run Unit Tests
+        run: dotnet test tests/AiDotNet.Tests/AiDotNetTests.csproj -c Release --no-build --filter "FullyQualifiedName~UnitTests" --collect:"XPlat Code Coverage" --results-directory ./TestResults
+
+      - name: Run Integration Tests
+        run: dotnet test tests/AiDotNet.Tests/AiDotNetTests.csproj -c Release --no-build --filter "FullyQualifiedName~IntegrationTests" --collect:"XPlat Code Coverage" --results-directory ./TestResults
+
+      - name: Pack NuGet
+        run: |
+          if [ -f "src/AiDotNet.csproj" ]; then
+            dotnet pack src/AiDotNet.csproj -c Release -o out /p:PackageVersion=${{ needs.semantic-version.outputs.new_version }}
+          fi
+
+      - name: Verify TFMs in package
+        run: |
+          set -e
+          shopt -s nullglob
+          pkgs=(out/*.nupkg)
+          if [ ${#pkgs[@]} -eq 0 ]; then
+            echo "No packages found in out/"; exit 1
+          fi
+          for pkg in "${pkgs[@]}"; do
+            echo "Inspecting $pkg"
+            files=$(unzip -Z1 "$pkg")
+            for tfm in net462 net8.0; do
+              echo "$files" | grep -qE "^lib/${tfm}/.+\\.dll$" || { echo "Missing ${tfm} lib in package"; exit 1; }
+            done
+          done
+
+      - name: Upload package artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: nuget-out-${{ github.sha }}
+          path: out/*.nupkg
+          if-no-files-found: error
+
+  publish-nuget:
+    name: Publish to NuGet
+    runs-on: ubuntu-latest
+    needs: [semantic-version, build-test-pack]
+    if: needs.semantic-version.outputs.should_release == 'true' && secrets.NUGET_API_KEY != ''
+    steps:
+      - name: Download package
+        uses: actions/download-artifact@v4
+        with:
+          name: nuget-out-${{ github.sha }}
+          path: out/
+
+      - name: Push to NuGet
+        run: |
+          for pkg in out/*.nupkg; do
+            dotnet nuget push "$pkg" --api-key $NUGET_API_KEY --source https://api.nuget.org/v3/index.json --skip-duplicate
+          done
+        env:
+          NUGET_API_KEY: ${{ secrets.NUGET_API_KEY }}
+
+  github-release:
+    name: Create GitHub Release
+    runs-on: ubuntu-latest
+    needs: [semantic-version, build-test-pack]
+    if: needs.semantic-version.outputs.should_release == 'true'
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Download package
+        uses: actions/download-artifact@v4
+        with:
+          name: nuget-out-${{ github.sha }}
+          path: out/
+
+      - name: Create Git Tag
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git tag -a "v${{ needs.semantic-version.outputs.new_version }}" -m "Release v${{ needs.semantic-version.outputs.new_version }}"
+          git push origin "v${{ needs.semantic-version.outputs.new_version }}"
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v${{ needs.semantic-version.outputs.new_version }}
+          name: Release v${{ needs.semantic-version.outputs.new_version }}
+          body: ${{ needs.semantic-version.outputs.changelog }}
+          files: out/*.nupkg
+          draft: false
+          prerelease: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Update CHANGELOG.md
+        run: |
+          echo "Updating CHANGELOG.md"
+          if [ ! -f CHANGELOG.md ]; then
+            echo "# Changelog" > CHANGELOG.md
+            echo "" >> CHANGELOG.md
+            echo "All notable changes to this project will be documented in this file." >> CHANGELOG.md
+            echo "" >> CHANGELOG.md
+          fi
+
+          # Prepend new changelog entry
+          TEMP_FILE=$(mktemp)
+          echo "" > $TEMP_FILE
+          echo "${{ needs.semantic-version.outputs.changelog }}" >> $TEMP_FILE
+          echo "" >> $TEMP_FILE
+          cat CHANGELOG.md >> $TEMP_FILE
+          mv $TEMP_FILE CHANGELOG.md
+
+          # Commit changelog
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add CHANGELOG.md
+          git commit -m "docs: Update CHANGELOG for v${{ needs.semantic-version.outputs.new_version }}" || echo "No changes to commit"
+          git push origin main || git push origin master || echo "Could not push changelog update"
