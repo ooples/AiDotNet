@@ -782,7 +782,7 @@ public class MemoryReadLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     /// </remarks>
     public T ComputeAuxiliaryLoss()
     {
-        if (_lastAttentionScores == null)
+        if (!UseAuxiliaryLoss || _lastAttentionScores == null)
         {
             _lastAttentionSparsityLoss = NumOps.Zero;
             return _lastAttentionSparsityLoss;
