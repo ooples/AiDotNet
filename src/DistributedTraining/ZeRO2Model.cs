@@ -186,16 +186,18 @@ public class ZeRO2Model<T, TInput, TOutput> : ShardedModelBase<T, TInput, TOutpu
             int shardStart = Rank * ((LocalShard.Length + WorldSize - 1) / WorldSize);
 
             // Update only our shard: params[shard] = params[shard] - lr * gradients[shard]
+            // Create mutable copy of LocalShard to apply updates
+            var updatedParams = LocalShard.ToArray();
             for (int i = 0; i < _gradientShard.Length && (shardStart + i) < LocalShard.Length; i++)
             {
                 int globalIndex = shardStart + i;
-                updatedShard[i] = NumOps.Subtract(
+                updatedParams[globalIndex] = NumOps.Subtract(
                     LocalShard[globalIndex],
                     NumOps.Multiply(learningRate, _gradientShard[i]));
             }
 
-            // Copy updated shard back to local parameters
-            Array.Copy(updatedShard, 0, LocalShard.ToArray(), shardStart, Math.Min(updatedShard.Length, LocalShard.Length - shardStart));
+            // Update LocalShard with the modified parameters
+            LocalShard = new Vector<T>(updatedParams);
 
             // AllGather parameter shards to reconstruct full parameters
             LocalShard = AllGatherParameterShards();
