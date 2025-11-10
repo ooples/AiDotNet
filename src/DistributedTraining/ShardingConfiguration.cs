@@ -1,3 +1,5 @@
+using AiDotNet.Helpers;
+
 namespace AiDotNet.DistributedTraining;
 
 /// <summary>
@@ -55,7 +57,8 @@ public class ShardingConfiguration<T> : IShardingConfiguration<T>
     {
         CommunicationBackend = communicationBackend ??
             throw new ArgumentNullException(nameof(communicationBackend));
-        LearningRate = NumOps.FromDouble(learningRate);
+        var ops = MathHelper.GetNumericOperations<T>();
+        LearningRate = ops.FromDouble(learningRate);
     }
 
     /// <summary>

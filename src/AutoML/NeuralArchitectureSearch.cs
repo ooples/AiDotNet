@@ -155,7 +155,7 @@ namespace AiDotNet.AutoML
                 }
 
                 // Phase 2: Update network weights on training set
-                supernet.BackwardWeights(trainData, trainLabels);
+                supernet.BackwardWeights(trainData, trainLabels, supernet.DefaultLossFunction);
                 var weightParams = supernet.GetWeightParameters();
                 var weightGrads = supernet.GetWeightGradients();
 

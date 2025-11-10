@@ -133,7 +133,7 @@ public class NeuralNetworkModel<T> : IFullModel<T, Tensor<T>, Tensor<T>>
     /// <summary>
     /// The default loss function used by this model for gradient computation.
     /// </summary>
-    private ILossFunction<T>? _defaultLossFunction;
+    private ILossFunction<T> _defaultLossFunction;
 
     /// <summary>
     /// Initializes a new instance of the NeuralNetworkModel class with the specified architecture.

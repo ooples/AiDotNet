@@ -55,7 +55,6 @@ namespace AiDotNet.DistributedTraining;
 public class ZeRO2Model<T, TInput, TOutput> : ShardedModelBase<T, TInput, TOutput>
 {
     private Vector<T>? _parameterDeltaShard;
-    private Vector<T>? _parameterDeltas;
     private Vector<T>? _computedGradients;
     private Vector<T>? _gradientShard;
 
@@ -180,6 +179,9 @@ public class ZeRO2Model<T, TInput, TOutput> : ShardedModelBase<T, TInput, TOutpu
             // Apply the gradient shard to update only this rank's parameter shard
             // Note: Learning rate comes from Config. For adaptive optimizers,
             // use ZeRO2Optimizer which properly handles optimizer state.
+            if (_gradientShard is null)
+                throw new InvalidOperationException("Gradient shard is null after synchronization.");
+
             var learningRate = Config.LearningRate;
             var updatedShard = new T[_gradientShard.Length];
 
