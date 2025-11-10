@@ -210,15 +210,26 @@ public class ZeRO2Model<T, TInput, TOutput> : ShardedModelBase<T, TInput, TOutpu
         int shardEnd = Math.Min((Rank + 1) * chunkSize, totalParams);
         int shardLength = shardEnd - shardStart;
 
-        // Extract this rank's parameter shard from LocalShard
-        var myParameterShard = new T[shardLength];
-        Array.Copy(LocalShard.ToArray(), shardStart, myParameterShard, 0, shardLength);
-        var myShardVector = new Vector<T>(myParameterShard);
+        // Extract and pad this rank's parameter shard to uniform chunkSize
+        // Padding is required because AllGather expects same-length contributions from all ranks
+        var paddedShard = new T[chunkSize];
+        Array.Copy(LocalShard.ToArray(), shardStart, paddedShard, 0, shardLength);
+        // Padding elements remain at default(T) which is typically 0
 
-        // AllGather: Each rank contributes its shard, result is concatenation of all shards
-        var fullParameters = Config.CommunicationBackend.AllGather(myShardVector);
+        // AllGather: Each rank contributes its padded shard
+        var gathered = Config.CommunicationBackend.AllGather(new Vector<T>(paddedShard));
 
-        return fullParameters;
+        // Trim padding back to the logical parameter length
+        var allData = gathered.ToArray();
+        if (allData.Length < totalParams)
+        {
+            throw new InvalidOperationException(
+                $"Expected at least {totalParams} parameters after AllGather, received {allData.Length}.");
+        }
+
+        var trimmed = new T[totalParams];
+        Array.Copy(allData, 0, trimmed, 0, totalParams);
+        return new Vector<T>(trimmed);
     }
 
     /// <inheritdoc/>
