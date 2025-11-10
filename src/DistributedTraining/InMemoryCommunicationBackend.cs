@@ -652,6 +652,7 @@ public class InMemoryCommunicationBackend<T> : CommunicationBackendBase<T>
             }
 
             List<Vector<T>>? buffer;
+            Vector<T> result;
             var startTime = DateTime.UtcNow;
 
             try
