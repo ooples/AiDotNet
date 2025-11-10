@@ -17,6 +17,8 @@
     <PackageReference Include="Accord.Statistics" Version="3.8.0" />
     <PackageReference Include="Accord.MachineLearning" Version="3.8.0" />
     <PackageReference Include="Microsoft.ML" Version="3.0.1" />
+    <PackageReference Include="TensorFlow.NET" Version="0.150.0" Condition="'$(TargetFramework)' == 'net8.0'" />
+    <PackageReference Include="SciSharp.TensorFlow.Redist" Version="2.16.0" Condition="'$(TargetFramework)' == 'net8.0'" />
   </ItemGroup>
 
   <ItemGroup>
