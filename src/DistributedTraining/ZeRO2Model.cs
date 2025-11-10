@@ -62,17 +62,20 @@ public class ZeRO2Model<T, TInput, TOutput> : ShardedModelBase<T, TInput, TOutpu
     /// Gets the local parameter delta shard for this rank after synchronization.
     /// </summary>
     /// <remarks>
-    /// <para><b>IMPORTANT LIMITATION:</b> Due to API constraints (IFullModel.Train coupling backward
-    /// and optimizer steps), this property exposes <b>parameter deltas</b> (params_before - params_after),
-    /// NOT true gradients. Parameter deltas depend on the optimizer's update rule (learning rate, momentum, etc.)
-    /// and are NOT equivalent to gradients for adaptive optimizers like Adam.</para>
+    /// <para><b>DEPRECATED:</b> This property is no longer used. ZeRO2Model now uses true gradient
+    /// semantics via IFullModel.ComputeGradients() which properly separates gradient computation from
+    /// parameter updates. The implementation stores true gradients (not parameter deltas) in the
+    /// internal _gradientShard field.</para>
     /// <para>
-    /// In ZeRO-2, parameter deltas are sharded via ReduceScatter so each rank only stores its portion.
-    /// This is a <b>stopgap approximation</b> until the API is refactored to separate gradient computation
-    /// from parameter updates. For correct ZeRO-2 semantics, the IFullModel interface should expose:
-    /// ComputeGradients(input, expectedOutput) and ApplyParameterUpdate(updates).</para>
+    /// In the current implementation:
+    /// 1. ComputeGradients() computes true gradients via backpropagation without modifying parameters
+    /// 2. Gradients are sharded via ReduceScatter so each rank stores only its portion
+    /// 3. Each rank updates only its parameter shard using the gradient shard
+    /// 4. All ranks perform AllGather to reconstruct the full updated parameter vector
+    /// </para>
     /// <para>
-    /// Returns null if SynchronizeGradients() has not been called yet.
+    /// This property always returns null in the current implementation. For gradient access,
+    /// use the Train() workflow which internally manages _gradientShard.
     /// </para>
     /// </remarks>
     public Vector<T>? ParameterDeltaShard => _parameterDeltaShard;
