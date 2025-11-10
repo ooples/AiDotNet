@@ -511,6 +511,8 @@ public class EmbeddingLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     {
         if (!UseAuxiliaryLoss)
         {
+            // Reset cached loss to avoid stale diagnostics
+            _lastEmbeddingRegularizationLoss = NumOps.Zero;
             return NumOps.Zero;
         }
 
@@ -530,10 +532,11 @@ public class EmbeddingLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         int totalElements = _embeddingMatrix.Rows * _embeddingMatrix.Columns;
         T regularizationLoss = NumOps.Divide(sumSquaredNorms, NumOps.FromDouble(totalElements * 2));
 
-        // Store for diagnostics
+        // Store unweighted loss for diagnostics
         _lastEmbeddingRegularizationLoss = regularizationLoss;
 
-        return regularizationLoss;
+        // Return weighted auxiliary loss
+        return NumOps.Multiply(AuxiliaryLossWeight, regularizationLoss);
     }
 
     /// <summary>

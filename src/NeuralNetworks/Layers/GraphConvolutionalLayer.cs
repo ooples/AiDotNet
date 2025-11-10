@@ -762,7 +762,7 @@ public class GraphConvolutionalLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         {
             { "TotalSmoothnessLoss", _lastGraphSmoothnessLoss?.ToString() ?? "0" },
             { "SmoothnessWeight", AuxiliaryLossWeight?.ToString() ?? "0.01" },
-            { "UseSmoothnessLoss", UseAuxiliaryLoss.ToString() }
+            { "UseAuxiliaryLoss", UseAuxiliaryLoss.ToString() }
         };
     }
 

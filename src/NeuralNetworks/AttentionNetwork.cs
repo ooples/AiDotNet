@@ -518,14 +518,14 @@ public class AttentionNetwork<T> : NeuralNetworkBase<T>, IAuxiliaryLossLayer<T>
 
     /// <summary>
     /// Gets diagnostic information about this component's state and behavior.
-    /// Overrides <see cref="LayerBase{T}.GetDiagnostics"/> to include auxiliary loss diagnostics.
+    /// Provides auxiliary loss diagnostics specific to attention networks.
     /// </summary>
     /// <returns>
-    /// A dictionary containing diagnostic metrics including both base layer diagnostics and
-    /// auxiliary loss diagnostics from <see cref="GetAuxiliaryLossDiagnostics"/>.
+    /// A dictionary containing diagnostic metrics about auxiliary loss computation.
     /// </returns>
     public Dictionary<string, string> GetDiagnostics()
     {
+        // Return auxiliary loss diagnostics
         var diagnostics = new Dictionary<string, string>();
 
         // Merge auxiliary loss diagnostics
