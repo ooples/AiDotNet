@@ -735,6 +735,124 @@ public abstract class RegressionBase<T> : IRegression<T>
         get { return ExpectedParameterCount; }
     }
 
+    /// <inheritdoc/>
+    /// <remarks>
+    /// <para>
+    /// For regression models, the default loss function is Mean Squared Error (MSE), which measures
+    /// the average squared difference between predicted and actual values.
+    /// </para>
+    /// <para><b>For Beginners:</b> This property specifies how the model measures prediction errors.
+    ///
+    /// Mean Squared Error (MSE) is the standard loss function for regression because it:
+    /// - Penalizes large errors more than small errors (due to squaring)
+    /// - Provides smooth gradients for optimization
+    /// - Has a clear mathematical interpretation (average squared distance from truth)
+    ///
+    /// The loss function is used during gradient computation to determine how to adjust parameters
+    /// to improve predictions.
+    /// </para>
+    /// </remarks>
+    public virtual ILossFunction<T> DefaultLossFunction => new MeanSquaredErrorLoss<T>();
+
+    /// <inheritdoc/>
+    /// <remarks>
+    /// <para>
+    /// This method computes gradients for regression models using numerical differentiation.
+    /// For linear regression models, the gradient of the loss with respect to coefficients is:
+    /// ∂L/∂w = (1/n) * X^T * (predictions - targets)
+    /// where X is the input matrix, predictions are model outputs, and targets are the desired outputs.
+    /// </para>
+    /// <para><b>For Beginners:</b> This method calculates how to adjust the model's parameters to reduce errors.
+    ///
+    /// Gradients tell us:
+    /// - Which direction to change each parameter (positive or negative)
+    /// - How much to change each parameter (magnitude)
+    ///
+    /// For regression, we compute gradients by:
+    /// 1. Making a prediction with current parameters
+    /// 2. Computing the error using the loss function
+    /// 3. Calculating how much each parameter contributed to the error
+    ///
+    /// These gradients are then used by ApplyGradients() to update the parameters and improve predictions.
+    /// </para>
+    /// </remarks>
+    public virtual Vector<T> ComputeGradients(Matrix<T> input, Vector<T> target, ILossFunction<T>? lossFunction = null)
+    {
+        var loss = lossFunction ?? DefaultLossFunction;
+
+        // Make predictions
+        var predictions = Predict(input);
+
+        // Compute prediction errors
+        var errors = predictions.Subtract(target);
+
+        // Compute gradients: (1/n) * X^T * errors
+        var n = NumOps.FromDouble(input.RowCount);
+        var gradCoefficients = input.Transpose().Multiply(errors).Divide(n);
+
+        // Build full gradient vector (coefficients + intercept)
+        var gradients = new Vector<T>(ExpectedParameterCount);
+        for (int i = 0; i < Coefficients.Length; i++)
+        {
+            gradients[i] = gradCoefficients[i];
+        }
+
+        // Gradient for intercept is mean of errors
+        if (Options.UseIntercept)
+        {
+            T interceptGrad = NumOps.Zero;
+            for (int i = 0; i < errors.Length; i++)
+            {
+                interceptGrad = NumOps.Add(interceptGrad, errors[i]);
+            }
+            gradients[Coefficients.Length] = NumOps.Divide(interceptGrad, n);
+        }
+
+        return gradients;
+    }
+
+    /// <inheritdoc/>
+    /// <remarks>
+    /// <para>
+    /// This method updates the model's parameters (coefficients and intercept) using the computed gradients.
+    /// The update rule is: parameter_new = parameter_old - learningRate * gradient
+    /// </para>
+    /// <para><b>For Beginners:</b> This method adjusts the model's parameters to improve predictions.
+    ///
+    /// Think of it like adjusting a recipe:
+    /// - The gradients tell you which ingredients to increase or decrease
+    /// - The learning rate controls how big the adjustments are
+    /// - Small learning rates = slow, careful adjustments
+    /// - Large learning rates = fast, aggressive adjustments (but risk overshooting)
+    ///
+    /// The method:
+    /// 1. Takes the gradients (directions to improve)
+    /// 2. Scales them by the learning rate (controls step size)
+    /// 3. Subtracts them from current parameters (gradient descent moves opposite to gradient)
+    ///
+    /// After calling this method, the model should make better predictions (lower loss).
+    /// </para>
+    /// </remarks>
+    public virtual void ApplyGradients(Vector<T> gradients, T learningRate)
+    {
+        if (gradients.Length != ExpectedParameterCount)
+        {
+            throw new ArgumentException($"Expected {ExpectedParameterCount} gradients, but got {gradients.Length}", nameof(gradients));
+        }
+
+        // Update coefficients: w = w - lr * grad_w
+        for (int i = 0; i < Coefficients.Length; i++)
+        {
+            Coefficients[i] = NumOps.Subtract(Coefficients[i], NumOps.Multiply(learningRate, gradients[i]));
+        }
+
+        // Update intercept if used: b = b - lr * grad_b
+        if (Options.UseIntercept)
+        {
+            Intercept = NumOps.Subtract(Intercept, NumOps.Multiply(learningRate, gradients[Coefficients.Length]));
+        }
+    }
+
     /// <summary>
     /// Saves the regression model to a file.
     /// </summary>
