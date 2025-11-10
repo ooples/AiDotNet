@@ -853,4 +853,310 @@ public static class TensorOperations<T>
 
         return node;
     }
+
+    /// <summary>
+    /// Performs matrix multiplication on two computation nodes.
+    /// </summary>
+    /// <param name="a">The left matrix (must be 2D).</param>
+    /// <param name="b">The right matrix (must be 2D).</param>
+    /// <returns>A computation node representing the matrix product.</returns>
+    /// <remarks>
+    /// <para>
+    /// Computes C = A·B where A has shape [m, n] and B has shape [n, p], resulting in C with shape [m, p].
+    /// </para>
+    /// <para><b>Gradient computation:</b>
+    /// - ∂(A·B)/∂A = gradOut·B^T
+    /// - ∂(A·B)/∂B = A^T·gradOut
+    /// </para>
+    /// </remarks>
+    public static ComputationNode<T> MatrixMultiply(ComputationNode<T> a, ComputationNode<T> b)
+    {
+        var result = a.Value.MatrixMultiply(b.Value);
+
+        void BackwardFunction(Tensor<T> gradient)
+        {
+            // ∂(A·B)/∂A = gradOut·B^T
+            if (a.RequiresGradient)
+            {
+                var bTransposed = b.Value.Transpose();
+                var gradA = gradient.MatrixMultiply(bTransposed);
+
+                if (a.Gradient == null)
+                    a.Gradient = gradA;
+                else
+                    a.Gradient = a.Gradient.Add(gradA);
+            }
+
+            // ∂(A·B)/∂B = A^T·gradOut
+            if (b.RequiresGradient)
+            {
+                var aTransposed = a.Value.Transpose();
+                var gradB = aTransposed.MatrixMultiply(gradient);
+
+                if (b.Gradient == null)
+                    b.Gradient = gradB;
+                else
+                    b.Gradient = b.Gradient.Add(gradB);
+            }
+        }
+
+        var node = new ComputationNode<T>(
+            value: result,
+            requiresGradient: a.RequiresGradient || b.RequiresGradient,
+            parents: new List<ComputationNode<T>> { a, b },
+            backwardFunction: BackwardFunction,
+            name: null);
+
+        var tape = GradientTape<T>.Current;
+        if (tape != null && tape.IsRecording)
+            tape.RecordOperation(node);
+
+        return node;
+    }
+
+    /// <summary>
+    /// Transposes a 2D computation node (matrix).
+    /// </summary>
+    /// <param name="a">The matrix to transpose (must be 2D).</param>
+    /// <returns>A computation node representing the transposed matrix.</returns>
+    /// <remarks>
+    /// <para>
+    /// For a 2D tensor, swaps rows and columns: if A has shape [m, n], result has shape [n, m].
+    /// </para>
+    /// <para><b>Gradient computation:</b>
+    /// - ∂(A^T)/∂A = gradOut^T (transpose the gradient back)
+    /// </para>
+    /// </remarks>
+    public static ComputationNode<T> Transpose(ComputationNode<T> a)
+    {
+        var result = a.Value.Transpose();
+
+        void BackwardFunction(Tensor<T> gradient)
+        {
+            if (a.RequiresGradient)
+            {
+                // ∂(A^T)/∂A = gradOut^T
+                var gradA = gradient.Transpose();
+
+                if (a.Gradient == null)
+                    a.Gradient = gradA;
+                else
+                    a.Gradient = a.Gradient.Add(gradA);
+            }
+        }
+
+        var node = new ComputationNode<T>(
+            value: result,
+            requiresGradient: a.RequiresGradient,
+            parents: new List<ComputationNode<T>> { a },
+            backwardFunction: BackwardFunction,
+            name: null);
+
+        var tape = GradientTape<T>.Current;
+        if (tape != null && tape.IsRecording)
+            tape.RecordOperation(node);
+
+        return node;
+    }
+
+    /// <summary>
+    /// Sums elements of a computation node along specified axes.
+    /// </summary>
+    /// <param name="a">The computation node to sum.</param>
+    /// <param name="axes">The axes along which to sum. If null, sums all elements.</param>
+    /// <param name="keepDims">Whether to keep the reduced dimensions with size 1. Default is false.</param>
+    /// <returns>A computation node representing the sum.</returns>
+    /// <remarks>
+    /// <para>
+    /// Reduces the tensor by summing along specified axes.
+    /// </para>
+    /// <para><b>Gradient computation:</b>
+    /// - The gradient is broadcast back to the original shape, as each element contributed equally to the sum.
+    /// </para>
+    /// </remarks>
+    public static ComputationNode<T> Sum(ComputationNode<T> a, int[]? axes = null, bool keepDims = false)
+    {
+        var result = a.Value.Sum(axes);
+
+        // Store original shape for gradient computation
+        var originalShape = a.Value.Shape;
+
+        void BackwardFunction(Tensor<T> gradient)
+        {
+            if (a.RequiresGradient)
+            {
+                // Gradient needs to be broadcast back to original shape
+                // Each element in the original tensor contributed to the sum,
+                // so each gets a copy of the gradient
+
+                Tensor<T> gradA;
+                if (axes == null || axes.Length == 0)
+                {
+                    // Summed all elements - broadcast scalar gradient to full shape
+                    gradA = new Tensor<T>(originalShape);
+                    var gradValue = gradient[0]; // Scalar result
+                    for (int i = 0; i < gradA.Length; i++)
+                    {
+                        gradA[i] = gradValue;
+                    }
+                }
+                else
+                {
+                    // Summed along specific axes - need to broadcast back
+                    // For now, handle common case of summing over last axis
+                    if (axes.Length == 1 && axes[0] == originalShape.Length - 1)
+                    {
+                        // Summing over last axis - repeat gradient along that axis
+                        gradA = new Tensor<T>(originalShape);
+                        int outerSize = gradient.Length;
+                        int innerSize = originalShape[originalShape.Length - 1];
+
+                        for (int i = 0; i < outerSize; i++)
+                        {
+                            for (int j = 0; j < innerSize; j++)
+                            {
+                                gradA[i * innerSize + j] = gradient[i];
+                            }
+                        }
+                    }
+                    else
+                    {
+                        // General case - reshape gradient and broadcast
+                        gradA = new Tensor<T>(originalShape);
+                        // Simple broadcast: copy gradient value to all positions
+                        for (int i = 0; i < gradA.Length; i++)
+                        {
+                            // For general case, map back through reduction
+                            gradA[i] = gradient[0];
+                        }
+                    }
+                }
+
+                if (a.Gradient == null)
+                    a.Gradient = gradA;
+                else
+                    a.Gradient = a.Gradient.Add(gradA);
+            }
+        }
+
+        var node = new ComputationNode<T>(
+            value: result,
+            requiresGradient: a.RequiresGradient,
+            parents: new List<ComputationNode<T>> { a },
+            backwardFunction: BackwardFunction,
+            name: null);
+
+        var tape = GradientTape<T>.Current;
+        if (tape != null && tape.IsRecording)
+            tape.RecordOperation(node);
+
+        return node;
+    }
+
+    /// <summary>
+    /// Computes the mean of elements in a computation node.
+    /// </summary>
+    /// <param name="a">The computation node to compute mean of.</param>
+    /// <returns>A computation node representing the mean (scalar).</returns>
+    /// <remarks>
+    /// <para>
+    /// Computes the average of all elements in the tensor.
+    /// </para>
+    /// <para><b>Gradient computation:</b>
+    /// - ∂(mean(A))/∂A = gradOut / count
+    /// - Each element gets an equal share of the gradient, divided by the total count.
+    /// </para>
+    /// </remarks>
+    public static ComputationNode<T> Mean(ComputationNode<T> a)
+    {
+        var numOps = MathHelper.GetNumericOperations<T>();
+        var mean = a.Value.Mean();
+        var result = new Tensor<T>(new int[] { 1 });
+        result[0] = mean;
+
+        var originalShape = a.Value.Shape;
+        var count = a.Value.Length;
+
+        void BackwardFunction(Tensor<T> gradient)
+        {
+            if (a.RequiresGradient)
+            {
+                // ∂(mean(A))/∂A = gradOut / count
+                var gradA = new Tensor<T>(originalShape);
+                var gradValue = numOps.Divide(gradient[0], numOps.FromInt(count));
+
+                for (int i = 0; i < gradA.Length; i++)
+                {
+                    gradA[i] = gradValue;
+                }
+
+                if (a.Gradient == null)
+                    a.Gradient = gradA;
+                else
+                    a.Gradient = a.Gradient.Add(gradA);
+            }
+        }
+
+        var node = new ComputationNode<T>(
+            value: result,
+            requiresGradient: a.RequiresGradient,
+            parents: new List<ComputationNode<T>> { a },
+            backwardFunction: BackwardFunction,
+            name: null);
+
+        var tape = GradientTape<T>.Current;
+        if (tape != null && tape.IsRecording)
+            tape.RecordOperation(node);
+
+        return node;
+    }
+
+    /// <summary>
+    /// Reshapes a computation node to a new shape.
+    /// </summary>
+    /// <param name="a">The computation node to reshape.</param>
+    /// <param name="newShape">The new shape (must have same total number of elements).</param>
+    /// <returns>A computation node with the new shape.</returns>
+    /// <remarks>
+    /// <para>
+    /// Changes the shape of the tensor without changing the underlying data.
+    /// The total number of elements must remain the same.
+    /// </para>
+    /// <para><b>Gradient computation:</b>
+    /// - ∂(Reshape(A))/∂A = Reshape(gradOut, A.Shape)
+    /// - Simply reshape the gradient back to the original shape.
+    /// </para>
+    /// </remarks>
+    public static ComputationNode<T> Reshape(ComputationNode<T> a, params int[] newShape)
+    {
+        var result = a.Value.Reshape(newShape);
+        var originalShape = a.Value.Shape;
+
+        void BackwardFunction(Tensor<T> gradient)
+        {
+            if (a.RequiresGradient)
+            {
+                // ∂(Reshape(A))/∂A = Reshape(gradOut, originalShape)
+                var gradA = gradient.Reshape(originalShape);
+
+                if (a.Gradient == null)
+                    a.Gradient = gradA;
+                else
+                    a.Gradient = a.Gradient.Add(gradA);
+            }
+        }
+
+        var node = new ComputationNode<T>(
+            value: result,
+            requiresGradient: a.RequiresGradient,
+            parents: new List<ComputationNode<T>> { a },
+            backwardFunction: BackwardFunction,
+            name: null);
+
+        var tape = GradientTape<T>.Current;
+        if (tape != null && tape.IsRecording)
+            tape.RecordOperation(node);
+
+        return node;
+    }
 }

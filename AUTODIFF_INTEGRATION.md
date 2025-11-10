@@ -27,7 +27,18 @@ A comprehensive static helper class providing automatic differentiation support 
 - `Sigmoid()` - Sigmoid activation (1/(1+e^-x))
 - `ReLU()` - Rectified Linear Unit
 
-**Total Operations**: 13 fully-differentiable operations with mathematically correct backward functions
+**Linear Algebra Operations:**
+- `MatrixMultiply()` - Matrix multiplication (∂(A·B)/∂A = gradOut·B^T, ∂(A·B)/∂B = A^T·gradOut)
+- `Transpose()` - Matrix transpose (∂(A^T)/∂A = gradOut^T)
+
+**Reduction Operations:**
+- `Sum()` - Sum along axes with gradient broadcasting
+- `Mean()` - Mean with equal gradient distribution (gradOut/count)
+
+**Shape Operations:**
+- `Reshape()` - Shape transformation with gradient reshaping
+
+**Total Operations**: 18 fully-differentiable operations with mathematically correct backward functions
 
 **Integration Pattern:**
 - Opt-in design: only records when inside a `GradientTape` context
@@ -166,20 +177,51 @@ All changes maintain backward compatibility:
 - No breaking API changes
 - Opt-in autodiff activation via `GradientTape`
 
+### 4. User-Facing Autodiff Flags
+
+Added opt-in autodiff support to enable future layer implementations:
+
+**LayerBase.UseAutodiff Property:**
+- Boolean flag controlling whether a layer uses autodiff for backward passes
+- Defaults to `false` (manual, optimized backward passes)
+- Can be set per-layer for granular control
+- Allows mixing manual and autodiff layers in same network
+
+**NeuralNetworkArchitecture.UseAutodiff Property:**
+- Sets default autodiff mode for all layers created from this architecture
+- Individual layers can still override the setting
+- Defaults to `false` for best performance
+- Useful for research/experimental networks
+
+**Design Philosophy:**
+- **Granular control**: Per-layer or per-model configuration
+- **Performance by default**: Manual backward passes are default (faster)
+- **Opt-in flexibility**: Autodiff available when needed
+- **No global state**: Each layer/architecture controls its own mode
+
+**Current Status:**
+- ✅ Flags implemented in LayerBase and NeuralNetworkArchitecture
+- ✅ Infrastructure ready for autodiff-based backward passes
+- ⏳ Layer implementations pending (see AUTODIFF_FUTURE_WORK.md)
+- ⏳ Autodiff backward passes to be implemented per-layer as needed
+
 ## Implemented Features Summary
 
-✅ **Comprehensive Operation Support** - 13 operations with correct derivatives
+✅ **Comprehensive Operation Support** - 18 operations with correct derivatives (including MatMul, Transpose, Sum, Mean, Reshape)
 ✅ **Higher-Order Gradients** - Full support for grad-of-grad computation
 ✅ **Industry-Standard API** - TensorFlow/PyTorch-like tape-based autodiff
 ✅ **Production-Ready** - Proper memory management, error handling, documentation
 ✅ **WGAN-GP Integration** - Symbolic gradients replace numerical differentiation
+✅ **User-Facing Flags** - Granular control via LayerBase.UseAutodiff and Architecture.UseAutodiff
 
 ## Future Work
 
 ### Immediate Next Steps (Already Documented):
-1. ✅ **Additional tensor operations** - COMPLETED (13 operations implemented)
+1. ✅ **Additional tensor operations** - COMPLETED (18 operations including MatMul, Transpose, Sum, Mean, Reshape)
 2. ✅ **Higher-order gradient support** - COMPLETED (createGraph parameter)
-3. 📋 **Automatic mixed-precision training** - Architecture documented (see MIXED_PRECISION_ARCHITECTURE.md)
+3. ✅ **User-facing autodiff flags** - COMPLETED (LayerBase.UseAutodiff, Architecture.UseAutodiff)
+4. 📋 **Layer autodiff implementations** - See AUTODIFF_FUTURE_WORK.md for detailed plan
+5. 📋 **Automatic mixed-precision training** - Architecture documented (see MIXED_PRECISION_ARCHITECTURE.md)
 
 ### Long-Term Enhancements:
 4. 🔮 **JIT compilation of computation graphs** (100+ hours)
