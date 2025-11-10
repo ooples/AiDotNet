@@ -79,9 +79,9 @@ public class GraphNeuralNetwork<T> : NeuralNetworkBase<T>, IAuxiliaryLossLayer<T
     /// which can help with generalization but may reduce flexibility.
     /// </para>
     /// </remarks>
-    public T AuxiliaryLossWeight { get; set; } = NumOps.FromDouble(0.05);
+    public T AuxiliaryLossWeight { get; set; }
 
-    private T _lastGraphSmoothnessLoss = NumOps.Zero;
+    private T _lastGraphSmoothnessLoss;
     private Tensor<T>? _lastNodeRepresentations = null;
     private Tensor<T>? _lastAdjacencyMatrix = null;
     /// <summary>
@@ -244,11 +244,14 @@ public class GraphNeuralNetwork<T> : NeuralNetworkBase<T>, IAuxiliaryLossLayer<T
     /// </para>
     /// </remarks>
     public GraphNeuralNetwork(NeuralNetworkArchitecture<T> architecture, ILossFunction<T>? lossFunction = null,
-        IVectorActivationFunction<T>? graphConvolutionalVectorActivation = null, 
-        IVectorActivationFunction<T>? activationLayerVectorActivation = null, IVectorActivationFunction<T>? finalDenseLayerVectorActivation = null, 
-        IVectorActivationFunction<T>? finalActivationLayerVectorActivation = null) : 
+        IVectorActivationFunction<T>? graphConvolutionalVectorActivation = null,
+        IVectorActivationFunction<T>? activationLayerVectorActivation = null, IVectorActivationFunction<T>? finalDenseLayerVectorActivation = null,
+        IVectorActivationFunction<T>? finalActivationLayerVectorActivation = null) :
         base(architecture, lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(architecture.TaskType))
     {
+        AuxiliaryLossWeight = NumOps.FromDouble(0.05);
+        _lastGraphSmoothnessLoss = NumOps.Zero;
+
         _graphConvolutionalVectorActivation = graphConvolutionalVectorActivation;
         _activationLayerVectorActivation = activationLayerVectorActivation;
         _finalDenseLayerVectorActivation = finalDenseLayerVectorActivation;
@@ -282,11 +285,14 @@ public class GraphNeuralNetwork<T> : NeuralNetworkBase<T>, IAuxiliaryLossLayer<T
     /// </para>
     /// </remarks>
     public GraphNeuralNetwork(NeuralNetworkArchitecture<T> architecture, ILossFunction<T>? lossFunction = null,
-        IActivationFunction<T>? graphConvolutionalActivation = null, 
-        IActivationFunction<T>? activationLayerActivation = null, IActivationFunction<T>? finalDenseLayerActivation = null, 
-        IActivationFunction<T>? finalActivationLayerActivation = null) : 
+        IActivationFunction<T>? graphConvolutionalActivation = null,
+        IActivationFunction<T>? activationLayerActivation = null, IActivationFunction<T>? finalDenseLayerActivation = null,
+        IActivationFunction<T>? finalActivationLayerActivation = null) :
         base(architecture, lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(architecture.TaskType))
     {
+        AuxiliaryLossWeight = NumOps.FromDouble(0.05);
+        _lastGraphSmoothnessLoss = NumOps.Zero;
+
         _graphConvolutionalScalarActivation = graphConvolutionalActivation;
         _activationLayerScalarActivation = activationLayerActivation;
         _finalDenseLayerScalarActivation = finalDenseLayerActivation;
@@ -403,7 +409,7 @@ public class GraphNeuralNetwork<T> : NeuralNetworkBase<T>, IAuxiliaryLossLayer<T
 
         if (edgeCount > 0)
         {
-            smoothnessLoss = NumOps.Divide(smoothnessLoss, NumOps.FromInt32(edgeCount));
+            smoothnessLoss = NumOps.Divide(smoothnessLoss, NumOps.FromDouble(edgeCount));
         }
 
         _lastGraphSmoothnessLoss = smoothnessLoss;

@@ -289,22 +289,22 @@ public class GenerativeAdversarialNetwork<T> : NeuralNetworkBase<T>, IAuxiliaryL
     /// <summary>
     /// Stores the last computed gradient penalty value for diagnostics.
     /// </summary>
-    private T _lastGradientPenalty = NumOps.Zero;
+    private T _lastGradientPenalty;
 
     /// <summary>
     /// Stores the last computed feature matching loss for diagnostics.
     /// </summary>
-    private T _lastFeatureMatchingLoss = NumOps.Zero;
+    private T _lastFeatureMatchingLoss;
 
     /// <summary>
     /// Stores the last discriminator loss for diagnostics.
     /// </summary>
-    private T _lastDiscriminatorLoss = NumOps.Zero;
+    private T _lastDiscriminatorLoss;
 
     /// <summary>
     /// Stores the last generator loss for diagnostics.
     /// </summary>
-    private T _lastGeneratorLoss = NumOps.Zero;
+    private T _lastGeneratorLoss;
 
     /// <summary>
     /// Gets or sets whether to use auxiliary losses (gradient penalty, feature matching) during training.
@@ -316,7 +316,7 @@ public class GenerativeAdversarialNetwork<T> : NeuralNetworkBase<T>, IAuxiliaryL
     /// Gets or sets the weight for auxiliary losses (gradient penalty, feature matching).
     /// Default is 10.0 for gradient penalty (standard for WGAN-GP).
     /// </summary>
-    public T AuxiliaryLossWeight { get; set; } = NumOps.FromDouble(10.0);
+    public T AuxiliaryLossWeight { get; set; }
 
     /// <summary>
     /// Initializes a new instance of the <see cref="GenerativeAdversarialNetwork{T}"/> class.
@@ -360,7 +360,14 @@ public class GenerativeAdversarialNetwork<T> : NeuralNetworkBase<T>, IAuxiliaryL
     {
         _initialLearningRate = initialLearningRate;
         _currentLearningRate = initialLearningRate;
-    
+
+        // Initialize auxiliary loss fields
+        AuxiliaryLossWeight = NumOps.FromDouble(10.0);
+        _lastGradientPenalty = NumOps.Zero;
+        _lastFeatureMatchingLoss = NumOps.Zero;
+        _lastDiscriminatorLoss = NumOps.Zero;
+        _lastGeneratorLoss = NumOps.Zero;
+
         // Initialize optimizer parameters
         _beta1Power = NumOps.One;
         _beta2Power = NumOps.One;
