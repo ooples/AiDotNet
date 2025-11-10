@@ -178,9 +178,9 @@ public class ZeRO2Model<T, TInput, TOutput> : ShardedModelBase<T, TInput, TOutpu
             SynchronizeGradients();
 
             // Apply the gradient shard to update only this rank's parameter shard
-            // Note: We use a fixed learning rate here. For adaptive optimizers,
+            // Note: Learning rate comes from Config. For adaptive optimizers,
             // use ZeRO2Optimizer which properly handles optimizer state.
-            var learningRate = NumOps.FromDouble(0.01); // Default learning rate
+            var learningRate = Config.LearningRate;
             var updatedShard = new T[_gradientShard.Length];
 
             int shardStart = Rank * ((LocalShard.Length + WorldSize - 1) / WorldSize);
@@ -207,7 +207,7 @@ public class ZeRO2Model<T, TInput, TOutput> : ShardedModelBase<T, TInput, TOutpu
         {
             // Without gradient synchronization, apply gradients locally
             // This is equivalent to non-distributed training
-            WrappedModel.ApplyGradients(_computedGradients, NumOps.FromDouble(0.01));
+            WrappedModel.ApplyGradients(_computedGradients, Config.LearningRate);
             LocalShard = WrappedModel.GetParameters();
         }
     }

@@ -169,4 +169,16 @@ public interface IShardingConfiguration<T>
     /// </para>
     /// </remarks>
     bool EnableGradientCompression { get; }
+
+    /// <summary>
+    /// Gets the learning rate for gradient application during training.
+    /// </summary>
+    /// <remarks>
+    /// <para><b>For Beginners:</b>
+    /// The learning rate controls how much to update model parameters based on
+    /// computed gradients. A typical default is 0.01. Lower values mean slower
+    /// but more stable learning; higher values mean faster but potentially unstable learning.
+    /// </para>
+    /// </remarks>
+    T LearningRate { get; }
 }

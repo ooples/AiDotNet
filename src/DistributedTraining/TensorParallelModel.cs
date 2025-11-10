@@ -85,22 +85,18 @@ public class TensorParallelModel<T, TInput, TOutput> : ShardedModelBase<T, TInpu
 {
     private readonly int _tensorParallelSize;
     private readonly List<int> _tensorParallelGroup;
-    private readonly T _learningRate;
 
     /// <summary>
     /// Creates a new Tensor Parallel model.
     /// </summary>
     /// <param name="wrappedModel">The model to partition with tensor parallelism</param>
     /// <param name="config">Configuration for sharding and communication</param>
-    /// <param name="learningRate">Learning rate for training. If null, defaults to 0.01.</param>
     public TensorParallelModel(
         IFullModel<T, TInput, TOutput> wrappedModel,
-        IShardingConfiguration<T> config,
-        T? learningRate = null)
+        IShardingConfiguration<T> config)
         : base(wrappedModel, config)
     {
         _tensorParallelSize = WorldSize;
-        _learningRate = learningRate ?? NumOps.FromDouble(0.01);
 
         // Build tensor-parallel group (all ranks in this world are in the same TP group)
         _tensorParallelGroup = new List<int>();
@@ -358,7 +354,7 @@ public class TensorParallelModel<T, TInput, TOutput> : ShardedModelBase<T, TInpu
         // Apply averaged gradients to parameters using the configured learning rate
         // In tensor parallelism, we use a simple SGD-style update: θ = θ - lr * gradients
         // For more sophisticated optimization, wrap this model with a gradient-based optimizer
-        WrappedModel.ApplyGradients(gradVec, _learningRate);
+        WrappedModel.ApplyGradients(gradVec, Config.LearningRate);
 
         // Get updated parameters after applying gradients
         var updatedParams = WrappedModel.GetParameters();
@@ -394,7 +390,7 @@ public class TensorParallelModel<T, TInput, TOutput> : ShardedModelBase<T, TInpu
     public override IFullModel<T, TInput, TOutput> WithParameters(Vector<T> parameters)
     {
         return new TensorParallelModel<T, TInput, TOutput>(
-            WrappedModel.WithParameters(parameters), Config, _learningRate);
+            WrappedModel.WithParameters(parameters), Config);
     }
 
     /// <inheritdoc/>

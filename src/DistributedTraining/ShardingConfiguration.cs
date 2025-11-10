@@ -35,6 +35,9 @@ public class ShardingConfiguration<T> : IShardingConfiguration<T>
     /// <inheritdoc/>
     public bool EnableGradientCompression { get; set; } = false;
 
+    /// <inheritdoc/>
+    public T LearningRate { get; set; }
+
     /// <summary>
     /// Creates a new sharding configuration with the specified communication backend.
     /// </summary>
@@ -46,11 +49,13 @@ public class ShardingConfiguration<T> : IShardingConfiguration<T>
     /// </para>
     /// </remarks>
     /// <param name="communicationBackend">The communication backend to use</param>
+    /// <param name="learningRate">Learning rate for gradient application. Defaults to 0.01.</param>
     /// <exception cref="ArgumentNullException">Thrown if backend is null</exception>
-    public ShardingConfiguration(ICommunicationBackend<T> communicationBackend)
+    public ShardingConfiguration(ICommunicationBackend<T> communicationBackend, double learningRate = 0.01)
     {
         CommunicationBackend = communicationBackend ??
             throw new ArgumentNullException(nameof(communicationBackend));
+        LearningRate = NumOps.FromDouble(learningRate);
     }
 
     /// <summary>
