@@ -10,6 +10,24 @@
 
   <ItemGroup>
     <PackageReference Include="BenchmarkDotNet" Version="0.15.5" />
+
+    <!-- ML.NET for comparisons -->
+    <PackageReference Include="Microsoft.ML" Version="3.0.1" />
+    <PackageReference Include="Microsoft.ML.FastTree" Version="3.0.1" />
+
+    <!-- Accord.NET for comparisons -->
+    <PackageReference Include="Accord" Version="3.8.0" />
+    <PackageReference Include="Accord.Math" Version="3.8.0" />
+    <PackageReference Include="Accord.Statistics" Version="3.8.0" />
+    <PackageReference Include="Accord.MachineLearning" Version="3.8.0" />
+    <PackageReference Include="Accord.Neuro" Version="3.8.0" />
+
+    <!-- TensorFlow.NET for comparisons (net8.0 only due to compatibility) -->
+    <PackageReference Include="TensorFlow.NET" Version="0.150.0" Condition="'$(TargetFramework)' == 'net8.0'" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\src\AiDotNet.csproj" />
   </ItemGroup>
 
 </Project>
