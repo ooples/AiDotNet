@@ -3,6 +3,7 @@ using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
 using AiDotNet.Models;
+using AiDotNet.NeuralNetworks;
 using AiDotNet.NumericOperations;
 using AiDotNet.Optimizers;
 using System;

@@ -2,16 +2,16 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
+using AiDotNet.AutoML;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.Interpretability;
 using AiDotNet.LinearAlgebra;
 using AiDotNet.LossFunctions;
-using AiDotNet.Models;
 using AiDotNet.NumericOperations;
 
-namespace AiDotNet.AutoML
+namespace AiDotNet.NeuralNetworks
 {
     /// <summary>
     /// SuperNet implementation for gradient-based neural architecture search (DARTS).
@@ -21,7 +21,10 @@ namespace AiDotNet.AutoML
     /// <typeparam name="T">The numeric type for calculations</typeparam>
     public class SuperNet<T> : IFullModel<T, Tensor<T>, Tensor<T>>
     {
-        private readonly INumericOperations<T> _ops;
+        /// <summary>
+        /// Provides numeric operations for type T.
+        /// </summary>
+        protected readonly INumericOperations<T> NumOps;
         private readonly SearchSpace<T> _searchSpace;
         private readonly int _numNodes;
         private readonly int _numOperations;
@@ -76,7 +79,7 @@ namespace AiDotNet.AutoML
         /// <param name="lossFunction">Optional loss function to use for training. If null, uses Mean Squared Error (MSE) for neural architecture search.</param>
         public SuperNet(SearchSpace<T> searchSpace, int numNodes = 4, ILossFunction<T>? lossFunction = null)
         {
-            _ops = MathHelper.GetNumericOperations<T>();
+            NumOps = MathHelper.GetNumericOperations<T>();
             _searchSpace = searchSpace;
             _numNodes = numNodes;
             _numOperations = searchSpace.Operations?.Count ?? 5; // Default operations: identity, conv3x3, conv5x5, maxpool, avgpool
@@ -96,7 +99,7 @@ namespace AiDotNet.AutoML
                     for (int k = 0; k < alpha.Columns; k++)
                     {
                         // Small random initialization: range [-0.1, 0.1]
-                        alpha[j, k] = _ops.FromDouble((_random.NextDouble() - 0.5) * 0.2);
+                        alpha[j, k] = NumOps.FromDouble((_random.NextDouble() - 0.5) * 0.2);
                     }
                 }
                 _architectureParams.Add(alpha);
@@ -147,9 +150,9 @@ namespace AiDotNet.AutoML
                         {
                             for (int featureIdx = 0; featureIdx < nodeOutput.Shape[1]; featureIdx++)
                             {
-                                nodeOutput[batchIdx, featureIdx] = _ops.Add(
+                                nodeOutput[batchIdx, featureIdx] = NumOps.Add(
                                     nodeOutput[batchIdx, featureIdx],
-                                    _ops.Multiply(weight, opOutput[batchIdx, featureIdx]));
+                                    NumOps.Multiply(weight, opOutput[batchIdx, featureIdx]));
                             }
                         }
                     }
@@ -195,7 +198,7 @@ namespace AiDotNet.AutoML
         /// </summary>
         private T ComputeLoss(Tensor<T> predictions, Tensor<T> targets)
         {
-            T sumSquaredError = _ops.Zero;
+            T sumSquaredError = NumOps.Zero;
             int count = 0;
 
             // Access tensors using proper 2D indexing
@@ -203,13 +206,13 @@ namespace AiDotNet.AutoML
             {
                 for (int featureIdx = 0; featureIdx < predictions.Shape[1]; featureIdx++)
                 {
-                    var diff = _ops.Subtract(predictions[batchIdx, featureIdx], targets[batchIdx, featureIdx]);
-                    sumSquaredError = _ops.Add(sumSquaredError, _ops.Multiply(diff, diff));
+                    var diff = NumOps.Subtract(predictions[batchIdx, featureIdx], targets[batchIdx, featureIdx]);
+                    sumSquaredError = NumOps.Add(sumSquaredError, NumOps.Multiply(diff, diff));
                     count++;
                 }
             }
 
-            return _ops.Divide(sumSquaredError, _ops.FromDouble(count));
+            return NumOps.Divide(sumSquaredError, NumOps.FromDouble(count));
         }
 
         /// <summary>
@@ -223,7 +226,7 @@ namespace AiDotNet.AutoML
             var loss = ComputeLoss(output, target);
 
             // Compute gradients using finite differences (simplified)
-            T epsilon = _ops.FromDouble(1e-5);
+            T epsilon = NumOps.FromDouble(1e-5);
 
             for (int nodeIdx = 0; nodeIdx < _architectureParams.Count; nodeIdx++)
             {
@@ -237,18 +240,18 @@ namespace AiDotNet.AutoML
                         // Finite difference approximation
                         T originalValue = alpha[i, j];
 
-                        alpha[i, j] = _ops.Add(originalValue, epsilon);
+                        alpha[i, j] = NumOps.Add(originalValue, epsilon);
                         var lossPlus = ComputeValidationLoss(input, target);
 
-                        alpha[i, j] = _ops.Subtract(originalValue, epsilon);
+                        alpha[i, j] = NumOps.Subtract(originalValue, epsilon);
                         var lossMinus = ComputeValidationLoss(input, target);
 
                         alpha[i, j] = originalValue;
 
                         // Gradient = (f(x+ε) - f(x-ε)) / (2ε)
-                        grad[i, j] = _ops.Divide(
-                            _ops.Subtract(lossPlus, lossMinus),
-                            _ops.Multiply(_ops.FromDouble(2), epsilon)
+                        grad[i, j] = NumOps.Divide(
+                            NumOps.Subtract(lossPlus, lossMinus),
+                            NumOps.Multiply(NumOps.FromDouble(2), epsilon)
                         );
                     }
                 }
@@ -265,7 +268,7 @@ namespace AiDotNet.AutoML
         {
             // Simplified gradient computation for weights
             var output = Predict(input);
-            T epsilon = _ops.FromDouble(1e-5);
+            T epsilon = NumOps.FromDouble(1e-5);
 
             foreach (var kvp in _weights)
             {
@@ -277,17 +280,17 @@ namespace AiDotNet.AutoML
                 {
                     T originalValue = weight[i];
 
-                    weight[i] = _ops.Add(originalValue, epsilon);
+                    weight[i] = NumOps.Add(originalValue, epsilon);
                     var lossPlus = ComputeLossWithFunction(input, target, lossFunction);
 
-                    weight[i] = _ops.Subtract(originalValue, epsilon);
+                    weight[i] = NumOps.Subtract(originalValue, epsilon);
                     var lossMinus = ComputeLossWithFunction(input, target, lossFunction);
 
                     weight[i] = originalValue;
 
-                    grad[i] = _ops.Divide(
-                        _ops.Subtract(lossPlus, lossMinus),
-                        _ops.Multiply(_ops.FromDouble(2), epsilon)
+                    grad[i] = NumOps.Divide(
+                        NumOps.Subtract(lossPlus, lossMinus),
+                        NumOps.Multiply(NumOps.FromDouble(2), epsilon)
                     );
                 }
             }
@@ -395,18 +398,21 @@ namespace AiDotNet.AutoML
             // Use BackwardWeights to compute gradients for weight parameters
             BackwardWeights(input, target, effectiveLoss);
 
-            // Collect all weight gradients into a single vector
+            // Collect all gradients into a single vector
             var gradients = new List<T>();
 
-            // Add architecture parameter gradients (for consistency, though they're updated separately in DARTS)
-            foreach (var alphaGrad in _architectureGradients)
+            // Add architecture parameter gradients as ZEROS (not computed in this method)
+            // Architecture parameters are optimized separately in DARTS on validation data
+            // We include zeros here to maintain consistent vector length with GetParameters()
+            var zero = NumOps.FromDouble(0.0);
+            foreach (var alpha in _architectureParams)
             {
-                for (int i = 0; i < alphaGrad.Rows; i++)
-                    for (int j = 0; j < alphaGrad.Columns; j++)
-                        gradients.Add(alphaGrad[i, j]);
+                for (int i = 0; i < alpha.Rows; i++)
+                    for (int j = 0; j < alpha.Columns; j++)
+                        gradients.Add(zero);  // Zero gradient since not computed here
             }
 
-            // Add weight gradients
+            // Add weight gradients (freshly computed by BackwardWeights above)
             foreach (var weightGrad in _weightGradients.Values)
             {
                 for (int i = 0; i < weightGrad.Length; i++)
@@ -459,8 +465,8 @@ namespace AiDotNet.AutoML
                 {
                     for (int j = 0; j < alpha.Columns; j++)
                     {
-                        T update = _ops.Multiply(learningRate, gradients[idx++]);
-                        alpha[i, j] = _ops.Subtract(alpha[i, j], update);
+                        T update = NumOps.Multiply(learningRate, gradients[idx++]);
+                        alpha[i, j] = NumOps.Subtract(alpha[i, j], update);
                     }
                 }
             }
@@ -471,8 +477,8 @@ namespace AiDotNet.AutoML
                 var weight = _weights[key];
                 for (int i = 0; i < weight.Length; i++)
                 {
-                    T update = _ops.Multiply(learningRate, gradients[idx++]);
-                    weight[i] = _ops.Subtract(weight[i], update);
+                    T update = NumOps.Multiply(learningRate, gradients[idx++]);
+                    weight[i] = NumOps.Subtract(weight[i], update);
                 }
             }
         }
@@ -497,7 +503,7 @@ namespace AiDotNet.AutoML
 
                     for (int opIdx = 1; opIdx < _numOperations; opIdx++)
                     {
-                        if (_ops.GreaterThan(softmaxWeights[prevNodeIdx, opIdx], bestWeight))
+                        if (NumOps.GreaterThan(softmaxWeights[prevNodeIdx, opIdx], bestWeight))
                         {
                             bestWeight = softmaxWeights[prevNodeIdx, opIdx];
                             bestOpIdx = opIdx;
@@ -526,23 +532,23 @@ namespace AiDotNet.AutoML
                 T maxVal = alpha[row, 0];
                 for (int col = 1; col < alpha.Columns; col++)
                 {
-                    if (_ops.GreaterThan(alpha[row, col], maxVal))
+                    if (NumOps.GreaterThan(alpha[row, col], maxVal))
                         maxVal = alpha[row, col];
                 }
 
                 // Compute exp(x - max) for numerical stability
-                T sumExp = _ops.Zero;
+                T sumExp = NumOps.Zero;
                 var expValues = new T[alpha.Columns];
                 for (int col = 0; col < alpha.Columns; col++)
                 {
-                    expValues[col] = _ops.Exp(_ops.Subtract(alpha[row, col], maxVal));
-                    sumExp = _ops.Add(sumExp, expValues[col]);
+                    expValues[col] = NumOps.Exp(NumOps.Subtract(alpha[row, col], maxVal));
+                    sumExp = NumOps.Add(sumExp, expValues[col]);
                 }
 
                 // Normalize
                 for (int col = 0; col < alpha.Columns; col++)
                 {
-                    result[row, col] = _ops.Divide(expValues[col], sumExp);
+                    result[row, col] = NumOps.Divide(expValues[col], sumExp);
                 }
             }
 
@@ -563,7 +569,7 @@ namespace AiDotNet.AutoML
                 // Initialize with small random values
                 for (int i = 0; i < input.Length; i++)
                 {
-                    _weights[weightKey][i] = _ops.FromDouble((_random.NextDouble() - 0.5) * 0.1);
+                    _weights[weightKey][i] = NumOps.FromDouble((_random.NextDouble() - 0.5) * 0.1);
                 }
             }
 
@@ -591,9 +597,9 @@ namespace AiDotNet.AutoML
                             {
                                 if (featureIdx < weight.Length)
                                 {
-                                    output[batchIdx, featureIdx] = _ops.Multiply(
+                                    output[batchIdx, featureIdx] = NumOps.Multiply(
                                         input[batchIdx, featureIdx],
-                                        _ops.Add(_ops.One, weight[featureIdx]));
+                                        NumOps.Add(NumOps.One, weight[featureIdx]));
                                 }
                             }
                         }
@@ -608,9 +614,9 @@ namespace AiDotNet.AutoML
                             {
                                 if (featureIdx < weight.Length)
                                 {
-                                    output[batchIdx, featureIdx] = _ops.Multiply(
+                                    output[batchIdx, featureIdx] = NumOps.Multiply(
                                         input[batchIdx, featureIdx],
-                                        _ops.Add(_ops.One, _ops.Multiply(_ops.FromDouble(1.5), weight[featureIdx])));
+                                        NumOps.Add(NumOps.One, NumOps.Multiply(NumOps.FromDouble(1.5), weight[featureIdx])));
                                 }
                             }
                         }
@@ -622,7 +628,7 @@ namespace AiDotNet.AutoML
                     {
                         for (int featureIdx = 0; featureIdx < input.Shape[1]; featureIdx++)
                         {
-                            output[batchIdx, featureIdx] = _ops.Multiply(input[batchIdx, featureIdx], _ops.FromDouble(0.9));
+                            output[batchIdx, featureIdx] = NumOps.Multiply(input[batchIdx, featureIdx], NumOps.FromDouble(0.9));
                         }
                     }
                     break;
@@ -632,7 +638,7 @@ namespace AiDotNet.AutoML
                     {
                         for (int featureIdx = 0; featureIdx < input.Shape[1]; featureIdx++)
                         {
-                            output[batchIdx, featureIdx] = _ops.Multiply(input[batchIdx, featureIdx], _ops.FromDouble(0.8));
+                            output[batchIdx, featureIdx] = NumOps.Multiply(input[batchIdx, featureIdx], NumOps.FromDouble(0.8));
                         }
                     }
                     break;
@@ -842,7 +848,7 @@ namespace AiDotNet.AutoML
                 {
                     for (int j = 0; j < cols; j++)
                     {
-                        alpha[i, j] = _ops.FromDouble(reader.ReadDouble());
+                        alpha[i, j] = NumOps.FromDouble(reader.ReadDouble());
                     }
                 }
                 _architectureParams.Add(alpha);
@@ -860,7 +866,7 @@ namespace AiDotNet.AutoML
                 var weight = new Vector<T>(length);
                 for (int i = 0; i < length; i++)
                 {
-                    weight[i] = _ops.FromDouble(reader.ReadDouble());
+                    weight[i] = NumOps.FromDouble(reader.ReadDouble());
                 }
                 _weights[key] = weight;
                 _weightGradients[key] = new Vector<T>(length);
@@ -942,7 +948,7 @@ namespace AiDotNet.AutoML
                 {
                     for (int j = 0; j < cols; j++)
                     {
-                        alpha[i, j] = _ops.FromDouble(reader.ReadDouble());
+                        alpha[i, j] = NumOps.FromDouble(reader.ReadDouble());
                     }
                 }
                 _architectureParams.Add(alpha);
@@ -960,7 +966,7 @@ namespace AiDotNet.AutoML
                 var weight = new Vector<T>(length);
                 for (int i = 0; i < length; i++)
                 {
-                    weight[i] = _ops.FromDouble(reader.ReadDouble());
+                    weight[i] = NumOps.FromDouble(reader.ReadDouble());
                 }
                 _weights[key] = weight;
                 _weightGradients[key] = new Vector<T>(length);
@@ -1006,7 +1012,7 @@ namespace AiDotNet.AutoML
             // Each operation index represents a different architectural operation (identity, conv3x3, etc.)
             for (int opIdx = 0; opIdx < _numOperations; opIdx++)
             {
-                T sum = _ops.Zero;
+                T sum = NumOps.Zero;
 
                 // Aggregate importance across all nodes and connections
                 foreach (var alpha in _architectureParams)
@@ -1016,7 +1022,7 @@ namespace AiDotNet.AutoML
                     {
                         if (opIdx < alpha.Columns)
                         {
-                            sum = _ops.Add(sum, _ops.Abs(alpha[i, opIdx]));
+                            sum = NumOps.Add(sum, NumOps.Abs(alpha[i, opIdx]));
                         }
                     }
                 }
@@ -1039,7 +1045,7 @@ namespace AiDotNet.AutoML
             // to determine which operations are most active for this specific input
             for (int opIdx = 0; opIdx < _numOperations; opIdx++)
             {
-                T sum = _ops.Zero;
+                T sum = NumOps.Zero;
 
                 // Apply softmax and aggregate weights for each operation
                 foreach (var alpha in _architectureParams)
@@ -1050,7 +1056,7 @@ namespace AiDotNet.AutoML
                     {
                         if (opIdx < softmaxWeights.Columns)
                         {
-                            sum = _ops.Add(sum, softmaxWeights[i, opIdx]);
+                            sum = NumOps.Add(sum, softmaxWeights[i, opIdx]);
                         }
                     }
                 }
@@ -1179,7 +1185,7 @@ namespace AiDotNet.AutoML
                     {
                         for (int j = 0; j < softmax.Columns; j++)
                         {
-                            if (_ops.GreaterThan(softmax[i, j], bestWeight))
+                            if (NumOps.GreaterThan(softmax[i, j], bestWeight))
                             {
                                 bestWeight = softmax[i, j];
                                 bestOp = j;
@@ -1214,11 +1220,11 @@ namespace AiDotNet.AutoML
             }
 
             // Calculate correlation between two operations across all architecture parameters
-            T sum1 = _ops.Zero;
-            T sum2 = _ops.Zero;
-            T sumProduct = _ops.Zero;
-            T sumSquares1 = _ops.Zero;
-            T sumSquares2 = _ops.Zero;
+            T sum1 = NumOps.Zero;
+            T sum2 = NumOps.Zero;
+            T sumProduct = NumOps.Zero;
+            T sumSquares1 = NumOps.Zero;
+            T sumSquares2 = NumOps.Zero;
             int count = 0;
 
             foreach (var alpha in _architectureParams)
@@ -1230,11 +1236,11 @@ namespace AiDotNet.AutoML
                         T val1 = alpha[i, feature1Index];
                         T val2 = alpha[i, feature2Index];
 
-                        sum1 = _ops.Add(sum1, val1);
-                        sum2 = _ops.Add(sum2, val2);
-                        sumProduct = _ops.Add(sumProduct, _ops.Multiply(val1, val2));
-                        sumSquares1 = _ops.Add(sumSquares1, _ops.Multiply(val1, val1));
-                        sumSquares2 = _ops.Add(sumSquares2, _ops.Multiply(val2, val2));
+                        sum1 = NumOps.Add(sum1, val1);
+                        sum2 = NumOps.Add(sum2, val2);
+                        sumProduct = NumOps.Add(sumProduct, NumOps.Multiply(val1, val2));
+                        sumSquares1 = NumOps.Add(sumSquares1, NumOps.Multiply(val1, val1));
+                        sumSquares2 = NumOps.Add(sumSquares2, NumOps.Multiply(val2, val2));
                         count++;
                     }
                 }
@@ -1242,35 +1248,35 @@ namespace AiDotNet.AutoML
 
             if (count == 0)
             {
-                return _ops.Zero;
+                return NumOps.Zero;
             }
 
             // Calculate correlation coefficient
-            T n = _ops.FromDouble(count);
-            T numerator = _ops.Subtract(
-                _ops.Multiply(n, sumProduct),
-                _ops.Multiply(sum1, sum2)
+            T n = NumOps.FromDouble(count);
+            T numerator = NumOps.Subtract(
+                NumOps.Multiply(n, sumProduct),
+                NumOps.Multiply(sum1, sum2)
             );
 
-            T denom1 = _ops.Subtract(
-                _ops.Multiply(n, sumSquares1),
-                _ops.Multiply(sum1, sum1)
+            T denom1 = NumOps.Subtract(
+                NumOps.Multiply(n, sumSquares1),
+                NumOps.Multiply(sum1, sum1)
             );
 
-            T denom2 = _ops.Subtract(
-                _ops.Multiply(n, sumSquares2),
-                _ops.Multiply(sum2, sum2)
+            T denom2 = NumOps.Subtract(
+                NumOps.Multiply(n, sumSquares2),
+                NumOps.Multiply(sum2, sum2)
             );
 
-            T denominator = _ops.Multiply(denom1, denom2);
+            T denominator = NumOps.Multiply(denom1, denom2);
 
             // Avoid division by zero
-            if (_ops.Equals(denominator, _ops.Zero))
+            if (NumOps.Equals(denominator, NumOps.Zero))
             {
-                return _ops.Zero;
+                return NumOps.Zero;
             }
 
-            T correlation = _ops.Divide(numerator, _ops.Sqrt(denominator));
+            T correlation = NumOps.Divide(numerator, NumOps.Sqrt(denominator));
 
             return await Task.FromResult(correlation);
         }

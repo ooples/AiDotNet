@@ -1,6 +1,7 @@
 using AiDotNet.AutoML;
 using AiDotNet.Enums;
 using AiDotNet.LinearAlgebra;
+using AiDotNet.NeuralNetworks;
 using System;
 using System.Threading.Tasks;
 using Xunit;
