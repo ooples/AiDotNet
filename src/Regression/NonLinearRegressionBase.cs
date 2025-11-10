@@ -123,6 +123,14 @@ public abstract class NonLinearRegressionBase<T> : INonLinearRegression<T>
     protected T B { get; set; }
 
     /// <summary>
+    /// Gets the default loss function for this non-linear regression model.
+    /// </summary>
+    /// <value>
+    /// The loss function used for gradient computation.
+    /// </value>
+    private readonly ILossFunction<T> _defaultLossFunction;
+
+    /// <summary>
     /// Gets or sets the feature names.
     /// </summary>
     /// <value>
@@ -135,6 +143,7 @@ public abstract class NonLinearRegressionBase<T> : INonLinearRegression<T>
     /// </summary>
     /// <param name="options">Configuration options for the non-linear regression model. If null, default options will be used.</param>
     /// <param name="regularization">Regularization method to prevent overfitting. If null, no regularization will be applied.</param>
+    /// <param name="lossFunction">Loss function for gradient computation. If null, defaults to Mean Squared Error.</param>
     /// <remarks>
     /// <para>
     /// The constructor initializes the model with default values and prepares it for training.
@@ -143,10 +152,11 @@ public abstract class NonLinearRegressionBase<T> : INonLinearRegression<T>
     /// For Beginners:
     /// This constructor sets up the model with either the options you provide or default settings.
     /// It's like setting up a new tool before you start using it - you're configuring how it will work
-    /// before you actually train it with data.
+    /// before you actually train it with data. The loss function determines how prediction errors
+    /// are measured during training.
     /// </para>
     /// </remarks>
-    protected NonLinearRegressionBase(NonLinearRegressionOptions? options = null, IRegularization<T, Matrix<T>, Vector<T>>? regularization = null)
+    protected NonLinearRegressionBase(NonLinearRegressionOptions? options = null, IRegularization<T, Matrix<T>, Vector<T>>? regularization = null, ILossFunction<T>? lossFunction = null)
     {
         Options = options ?? new NonLinearRegressionOptions();
         Regularization = regularization ?? new NoRegularization<T, Matrix<T>, Vector<T>>();
@@ -154,6 +164,7 @@ public abstract class NonLinearRegressionBase<T> : INonLinearRegression<T>
         SupportVectors = new Matrix<T>(0, 0);
         Alphas = new Vector<T>(0);
         B = NumOps.Zero;
+        _defaultLossFunction = lossFunction ?? new MeanSquaredErrorLoss<T>();
     }
 
     /// <summary>
@@ -972,5 +983,129 @@ public abstract class NonLinearRegressionBase<T> : INonLinearRegression<T>
         catch (UnauthorizedAccessException ex) { throw new InvalidOperationException($"Access denied when loading model from '{filePath}': {ex.Message}", ex); }
         catch (System.Security.SecurityException ex) { throw new InvalidOperationException($"Security error when loading model from '{filePath}': {ex.Message}", ex); }
         catch (Exception ex) { throw new InvalidOperationException($"Failed to deserialize model from file '{filePath}'. The file may be corrupted or incompatible: {ex.Message}", ex); }
+    }
+
+    /// <inheritdoc/>
+    /// <remarks>
+    /// <para>
+    /// For non-linear regression models, the default loss function is Mean Squared Error (MSE).
+    /// This can be customized by passing a different loss function to the constructor.
+    /// </para>
+    /// </remarks>
+    public virtual ILossFunction<T> DefaultLossFunction => _defaultLossFunction;
+
+    /// <inheritdoc/>
+    /// <remarks>
+    /// <para>
+    /// Non-linear regression models use kernel functions and support vectors, making gradient
+    /// computation more complex than linear regression. This implementation uses numerical
+    /// differentiation to compute gradients with respect to the support vector weights (alphas)
+    /// and bias term.
+    /// </para>
+    /// <para><b>For Beginners:</b> This method computes how to adjust the model to reduce errors.
+    ///
+    /// Non-linear models are more complex than linear ones - they use kernel functions to capture
+    /// curved relationships. Computing gradients requires:
+    /// 1. Making predictions with the current model
+    /// 2. Measuring the errors
+    /// 3. Computing how each support vector weight should change
+    ///
+    /// This uses numerical differentiation, which approximates gradients by making small changes
+    /// to parameters and observing the effect on the loss.
+    /// </para>
+    /// </remarks>
+    public virtual Vector<T> ComputeGradients(Matrix<T> input, Vector<T> target, ILossFunction<T>? lossFunction = null)
+    {
+        var loss = lossFunction ?? DefaultLossFunction;
+
+        // Make predictions
+        var predictions = Predict(input);
+
+        // Compute prediction errors
+        var errors = predictions.Subtract(target);
+
+        // For kernel-based models, compute gradients using numerical differentiation
+        // This is a simplified implementation - specific algorithms may override with analytical gradients
+        var epsilon = NumOps.FromDouble(1e-7);
+        var gradients = new Vector<T>(ParameterCount);
+
+        // Compute gradient for each alpha (support vector weight)
+        // Use try-finally to ensure state is restored even if exceptions occur
+        for (int i = 0; i < Alphas.Length; i++)
+        {
+            var originalAlpha = Alphas[i];
+            try
+            {
+                // Forward difference: f(x + h) - f(x) / h
+                Alphas[i] = NumOps.Add(originalAlpha, epsilon);
+                var predPlus = Predict(input);
+                var lossPlus = loss.CalculateLoss(predPlus, target);
+
+                var lossCurrent = loss.CalculateLoss(predictions, target);
+
+                gradients[i] = NumOps.Divide(NumOps.Subtract(lossPlus, lossCurrent), epsilon);
+            }
+            finally
+            {
+                // Always restore original state, even if exception occurs
+                Alphas[i] = originalAlpha;
+            }
+        }
+
+        // Gradient for bias term
+        // Use try-finally to ensure state is restored even if exceptions occur
+        var originalB = B;
+        try
+        {
+            B = NumOps.Add(originalB, epsilon);
+            var predPlusB = Predict(input);
+            var lossPlusB = loss.CalculateLoss(predPlusB, target);
+
+            var lossCurrentB = loss.CalculateLoss(predictions, target);
+
+            gradients[Alphas.Length] = NumOps.Divide(NumOps.Subtract(lossPlusB, lossCurrentB), epsilon);
+        }
+        finally
+        {
+            // Always restore original state, even if exception occurs
+            B = originalB;
+        }
+
+        return gradients;
+    }
+
+    /// <inheritdoc/>
+    /// <remarks>
+    /// <para>
+    /// Updates the support vector weights (alphas) and bias term using gradient descent.
+    /// </para>
+    /// <para><b>For Beginners:</b> This method applies the computed gradients to improve the model.
+    ///
+    /// It updates:
+    /// - Support vector weights (alphas): Control how much each support vector influences predictions
+    /// - Bias term (B): The baseline prediction value
+    ///
+    /// The update follows gradient descent: new_value = old_value - learning_rate * gradient
+    /// </para>
+    /// </remarks>
+    public virtual void ApplyGradients(Vector<T> gradients, T learningRate)
+    {
+        if (gradients.Length != ParameterCount)
+        {
+            throw new ArgumentException($"Expected {ParameterCount} gradients, but got {gradients.Length}", nameof(gradients));
+        }
+
+        // Get current parameters
+        var currentParams = GetParameters();
+
+        // Apply gradient descent: params = params - learningRate * gradients
+        var newParams = new Vector<T>(currentParams.Length);
+        for (int i = 0; i < currentParams.Length; i++)
+        {
+            newParams[i] = NumOps.Subtract(currentParams[i], NumOps.Multiply(learningRate, gradients[i]));
+        }
+
+        // Use SetParameters to update all model state
+        SetParameters(newParams);
     }
 }
