@@ -355,6 +355,13 @@ public class InMemoryCommunicationBackend<T> : CommunicationBackendBase<T>
 
             var startTime = DateTime.UtcNow;
 
+            // Initialize pending consumers counter to track how many ranks need to read the result
+            // This prevents race condition where rank 0 removes the buffer before other ranks finish reading
+            if (!_pendingConsumers.ContainsKey(bufferId))
+            {
+                _pendingConsumers[bufferId] = _worldSize;
+            }
+
             try
             {
                 // Wait until all processes have contributed
@@ -379,28 +386,26 @@ public class InMemoryCommunicationBackend<T> : CommunicationBackendBase<T>
                         data[i] = result[i];
                     }
                 }
-
-                // Cleanup happens AFTER all ranks pass the check but BEFORE releasing the lock
-                // This ensures all ranks see the final buffer state before it's removed
-                if (_rank == 0 && _sharedBuffers.ContainsKey(bufferId))
-                {
-                    _sharedBuffers.Remove(bufferId);
-                    _operationCounters[_environmentId]++;
-                }
             }
             finally
             {
+                // CRITICAL: Decrement consumer count even on exception to prevent buffer leaks
+                // This must happen in finally to ensure cleanup even if reduction or copy operations fail
+                if (_pendingConsumers.ContainsKey(bufferId))
+                {
+                    int remaining = --_pendingConsumers[bufferId];
+                    if (remaining == 0)
+                    {
+                        // All ranks have consumed the result, safe to cleanup
+                        _sharedBuffers.Remove(bufferId);
+                        _pendingConsumers.Remove(bufferId);
+                        _operationCounters[_environmentId]++;
+                    }
+                }
+
                 // CRITICAL: PulseAll must happen even on timeout to wake other waiting processes
                 // Without this, a timeout in one process causes deadlock in others waiting at Monitor.Wait
                 Monitor.PulseAll(_globalLock);
-
-                // Cleanup in finally for timeout case - ensures cleanup even on exception
-                // Check if cleanup already happened in normal flow
-                if (_rank == 0 && _sharedBuffers.ContainsKey(bufferId))
-                {
-                    _sharedBuffers.Remove(bufferId);
-                    _operationCounters[_environmentId]++;
-                }
             }
         }
     }
@@ -433,6 +438,13 @@ public class InMemoryCommunicationBackend<T> : CommunicationBackendBase<T>
             if (!_sharedBuffers.ContainsKey(bufferId))
             {
                 _sharedBuffers[bufferId] = new List<Vector<T>>(new Vector<T>[_worldSize]);
+            }
+
+            // Initialize pending consumers counter to track how many ranks need to read the result
+            // This prevents race condition where cleanup happens before other ranks finish reading
+            if (!_pendingConsumers.ContainsKey(bufferId))
+            {
+                _pendingConsumers[bufferId] = _worldSize;
             }
 
             // Contribute local data
@@ -477,17 +489,23 @@ public class InMemoryCommunicationBackend<T> : CommunicationBackendBase<T>
             }
             finally
             {
+                // CRITICAL: Decrement consumer count even on exception to prevent buffer leaks
+                // This must happen in finally to ensure cleanup even if concatenation or copy operations fail
+                if (_pendingConsumers.ContainsKey(bufferId))
+                {
+                    int remaining = --_pendingConsumers[bufferId];
+                    if (remaining == 0)
+                    {
+                        // All ranks have consumed the result, safe to cleanup
+                        _sharedBuffers.Remove(bufferId);
+                        _pendingConsumers.Remove(bufferId);
+                        _operationCounters[_environmentId]++;
+                    }
+                }
+
                 // CRITICAL: PulseAll must happen even on timeout to wake other waiting processes
                 // Without this, a timeout in one process causes deadlock in others waiting at Monitor.Wait
                 Monitor.PulseAll(_globalLock);
-
-                // Cleanup - rank 0 removes key and increments counter for next operation
-                // This must happen even on timeout to prevent memory leaks
-                if (_rank == 0)
-                {
-                    _sharedBuffers.Remove(bufferId);
-                    _operationCounters[_environmentId]++;
-                }
             }
         }
     }
