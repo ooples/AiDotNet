@@ -426,6 +426,18 @@ public class MultiHeadAttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     }
 
     /// <summary>
+    /// Gets diagnostic information about this layer's state and behavior.
+    /// Implements <see cref="IDiagnosticsProvider{T}.GetDiagnostics"/>.
+    /// </summary>
+    /// <returns>
+    /// A dictionary containing diagnostic metrics. Delegates to <see cref="GetAuxiliaryLossDiagnostics"/> for implementation.
+    /// </returns>
+    public Dictionary<string, string> GetDiagnostics()
+    {
+        return GetAuxiliaryLossDiagnostics();
+    }
+
+    /// <summary>
     /// Performs the forward pass of the multi-head attention layer.
     /// </summary>
     /// <param name="input">The input tensor.</param>
