@@ -54,6 +54,14 @@ public abstract class RegressionBase<T> : IRegression<T>
     protected IRegularization<T, Matrix<T>, Vector<T>> Regularization { get; private set; }
 
     /// <summary>
+    /// Gets the default loss function for this regression model.
+    /// </summary>
+    /// <value>
+    /// The loss function used for gradient computation.
+    /// </value>
+    private readonly ILossFunction<T> _defaultLossFunction;
+
+    /// <summary>
     /// Gets or sets the coefficients (weights) of the regression model.
     /// </summary>
     /// <value>
@@ -98,6 +106,7 @@ public abstract class RegressionBase<T> : IRegression<T>
     /// </summary>
     /// <param name="options">Configuration options for the regression model. If null, default options will be used.</param>
     /// <param name="regularization">Regularization method to prevent overfitting. If null, no regularization will be applied.</param>
+    /// <param name="lossFunction">Loss function for gradient computation. If null, defaults to Mean Squared Error.</param>
     /// <remarks>
     /// <para>
     /// The constructor initializes the model with either the provided options or default settings.
@@ -106,16 +115,18 @@ public abstract class RegressionBase<T> : IRegression<T>
     /// <b>For Beginners:</b>
     /// This constructor sets up the regression model with your specified settings or uses
     /// default settings if none are provided. Regularization is an optional technique to prevent the model
-    /// from becoming too complex and overfitting to the training data.
+    /// from becoming too complex and overfitting to the training data. The loss function determines how
+    /// prediction errors are measured during training.
     /// </para>
     /// </remarks>
-    protected RegressionBase(RegressionOptions<T>? options = null, IRegularization<T, Matrix<T>, Vector<T>>? regularization = null)
+    protected RegressionBase(RegressionOptions<T>? options = null, IRegularization<T, Matrix<T>, Vector<T>>? regularization = null, ILossFunction<T>? lossFunction = null)
     {
         Regularization = regularization ?? new NoRegularization<T, Matrix<T>, Vector<T>>();
         NumOps = MathHelper.GetNumericOperations<T>();
         Options = options ?? new RegressionOptions<T>();
         Coefficients = new Vector<T>(0);
         Intercept = NumOps.Zero;
+        _defaultLossFunction = lossFunction ?? new MeanSquaredErrorLoss<T>();
     }
 
     /// <summary>
@@ -739,7 +750,8 @@ public abstract class RegressionBase<T> : IRegression<T>
     /// <remarks>
     /// <para>
     /// For regression models, the default loss function is Mean Squared Error (MSE), which measures
-    /// the average squared difference between predicted and actual values.
+    /// the average squared difference between predicted and actual values. This can be customized
+    /// by passing a different loss function to the constructor.
     /// </para>
     /// <para><b>For Beginners:</b> This property specifies how the model measures prediction errors.
     ///
@@ -748,11 +760,12 @@ public abstract class RegressionBase<T> : IRegression<T>
     /// - Provides smooth gradients for optimization
     /// - Has a clear mathematical interpretation (average squared distance from truth)
     ///
+    /// You can customize this by passing your own loss function when creating the model.
     /// The loss function is used during gradient computation to determine how to adjust parameters
     /// to improve predictions.
     /// </para>
     /// </remarks>
-    public virtual ILossFunction<T> DefaultLossFunction => new MeanSquaredErrorLoss<T>();
+    public virtual ILossFunction<T> DefaultLossFunction => _defaultLossFunction;
 
     /// <inheritdoc/>
     /// <remarks>

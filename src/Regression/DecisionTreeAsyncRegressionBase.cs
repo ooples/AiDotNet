@@ -46,13 +46,21 @@ public abstract class AsyncDecisionTreeRegressionBase<T> : IAsyncTreeBasedModel<
     /// <para><b>For Beginners:</b> Regularization is a technique used to prevent the model from becoming
     /// too complex and fitting the training data too closely. This helps the model generalize better
     /// to new, unseen data.
-    /// 
+    ///
     /// Think of it like learning to ride a bike:
     /// - Without regularization, you might only learn to ride on one specific path.
     /// - With regularization, you learn general bike-riding skills that work on many different paths.
     /// </para>
     /// </remarks>
     protected IRegularization<T, Matrix<T>, Vector<T>> Regularization { get; private set; }
+
+    /// <summary>
+    /// Gets the default loss function for this async tree-based regression model.
+    /// </summary>
+    /// <value>
+    /// The loss function used for gradient computation.
+    /// </value>
+    private readonly ILossFunction<T> _defaultLossFunction;
 
     /// <summary>
     /// Gets the maximum depth of the decision tree.
@@ -105,12 +113,14 @@ public abstract class AsyncDecisionTreeRegressionBase<T> : IAsyncTreeBasedModel<
     /// </summary>
     /// <param name="options">The options for configuring the decision tree.</param>
     /// <param name="regularization">The regularization method to use.</param>
-    protected AsyncDecisionTreeRegressionBase(DecisionTreeOptions? options, IRegularization<T, Matrix<T>, Vector<T>>? regularization)
+    /// <param name="lossFunction">Loss function for gradient computation. If null, defaults to Mean Squared Error.</param>
+    protected AsyncDecisionTreeRegressionBase(DecisionTreeOptions? options, IRegularization<T, Matrix<T>, Vector<T>>? regularization, ILossFunction<T>? lossFunction = null)
     {
         Options = options ?? new();
         NumOps = MathHelper.GetNumericOperations<T>();
         FeatureImportances = new Vector<T>(0);
         Regularization = regularization ?? new NoRegularization<T, Matrix<T>, Vector<T>>();
+        _defaultLossFunction = lossFunction ?? new MeanSquaredErrorLoss<T>();
     }
 
     /// <summary>
@@ -888,9 +898,10 @@ public abstract class AsyncDecisionTreeRegressionBase<T> : IAsyncTreeBasedModel<
     /// <remarks>
     /// <para>
     /// For async tree-based regression models, the default loss function is Mean Squared Error (MSE).
+    /// This can be customized by passing a different loss function to the constructor.
     /// </para>
     /// </remarks>
-    public virtual ILossFunction<T> DefaultLossFunction => new MeanSquaredErrorLoss<T>();
+    public virtual ILossFunction<T> DefaultLossFunction => _defaultLossFunction;
 
     /// <inheritdoc/>
     /// <remarks>

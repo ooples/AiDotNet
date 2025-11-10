@@ -71,7 +71,15 @@ public abstract class DecisionTreeRegressionBase<T> : ITreeBasedRegression<T>
     /// </para>
     /// </remarks>
     protected IRegularization<T, Matrix<T>, Vector<T>> Regularization { get; private set; }
-    
+
+    /// <summary>
+    /// Gets the default loss function for this tree-based regression model.
+    /// </summary>
+    /// <value>
+    /// The loss function used for gradient computation.
+    /// </value>
+    private readonly ILossFunction<T> _defaultLossFunction;
+
     /// <summary>
     /// Gets the maximum depth of the decision tree.
     /// </summary>
@@ -164,6 +172,7 @@ public abstract class DecisionTreeRegressionBase<T> : ITreeBasedRegression<T>
     /// </summary>
     /// <param name="options">Optional configuration options for the decision tree algorithm.</param>
     /// <param name="regularization">Optional regularization strategy to prevent overfitting.</param>
+    /// <param name="lossFunction">Loss function for gradient computation. If null, defaults to Mean Squared Error.</param>
     /// <remarks>
     /// <para>
     /// This constructor initializes a new base class for decision tree regression with the specified options
@@ -171,23 +180,25 @@ public abstract class DecisionTreeRegressionBase<T> : ITreeBasedRegression<T>
     /// is specified, no regularization is applied.
     /// </para>
     /// <para><b>For Beginners:</b> This sets up the foundation for a decision tree model.
-    /// 
-    /// When creating a decision tree, you can specify two main things:
+    ///
+    /// When creating a decision tree, you can specify three main things:
     /// - Options: Controls how the tree grows (like its maximum depth or minimum samples needed to split)
     /// - Regularization: Helps prevent the model from becoming too complex and "memorizing" the training data
-    /// 
+    /// - Loss Function: Determines how prediction errors are measured (defaults to Mean Squared Error)
+    ///
     /// If you don't specify these parameters, the model will use reasonable default settings.
-    /// 
+    ///
     /// This constructor is typically not called directly but is used by specific implementations
     /// of decision tree models.
     /// </para>
     /// </remarks>
-    protected DecisionTreeRegressionBase(DecisionTreeOptions? options, IRegularization<T, Matrix<T>, Vector<T>>? regularization)
+    protected DecisionTreeRegressionBase(DecisionTreeOptions? options, IRegularization<T, Matrix<T>, Vector<T>>? regularization, ILossFunction<T>? lossFunction = null)
     {
         Options = options ?? new();
         NumOps = MathHelper.GetNumericOperations<T>();
         FeatureImportances = new Vector<T>(0);
         Regularization = regularization ?? new NoRegularization<T, Matrix<T>, Vector<T>>();
+        _defaultLossFunction = lossFunction ?? new MeanSquaredErrorLoss<T>();
     }
     
     /// <summary>
@@ -987,9 +998,10 @@ public abstract class DecisionTreeRegressionBase<T> : ITreeBasedRegression<T>
     /// <remarks>
     /// <para>
     /// For tree-based regression models, the default loss function is Mean Squared Error (MSE).
+    /// This can be customized by passing a different loss function to the constructor.
     /// </para>
     /// </remarks>
-    public virtual ILossFunction<T> DefaultLossFunction => new MeanSquaredErrorLoss<T>();
+    public virtual ILossFunction<T> DefaultLossFunction => _defaultLossFunction;
 
     /// <inheritdoc/>
     /// <remarks>

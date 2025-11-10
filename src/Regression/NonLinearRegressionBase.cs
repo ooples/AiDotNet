@@ -123,6 +123,14 @@ public abstract class NonLinearRegressionBase<T> : INonLinearRegression<T>
     protected T B { get; set; }
 
     /// <summary>
+    /// Gets the default loss function for this non-linear regression model.
+    /// </summary>
+    /// <value>
+    /// The loss function used for gradient computation.
+    /// </value>
+    private readonly ILossFunction<T> _defaultLossFunction;
+
+    /// <summary>
     /// Gets or sets the feature names.
     /// </summary>
     /// <value>
@@ -135,6 +143,7 @@ public abstract class NonLinearRegressionBase<T> : INonLinearRegression<T>
     /// </summary>
     /// <param name="options">Configuration options for the non-linear regression model. If null, default options will be used.</param>
     /// <param name="regularization">Regularization method to prevent overfitting. If null, no regularization will be applied.</param>
+    /// <param name="lossFunction">Loss function for gradient computation. If null, defaults to Mean Squared Error.</param>
     /// <remarks>
     /// <para>
     /// The constructor initializes the model with default values and prepares it for training.
@@ -143,10 +152,11 @@ public abstract class NonLinearRegressionBase<T> : INonLinearRegression<T>
     /// For Beginners:
     /// This constructor sets up the model with either the options you provide or default settings.
     /// It's like setting up a new tool before you start using it - you're configuring how it will work
-    /// before you actually train it with data.
+    /// before you actually train it with data. The loss function determines how prediction errors
+    /// are measured during training.
     /// </para>
     /// </remarks>
-    protected NonLinearRegressionBase(NonLinearRegressionOptions? options = null, IRegularization<T, Matrix<T>, Vector<T>>? regularization = null)
+    protected NonLinearRegressionBase(NonLinearRegressionOptions? options = null, IRegularization<T, Matrix<T>, Vector<T>>? regularization = null, ILossFunction<T>? lossFunction = null)
     {
         Options = options ?? new NonLinearRegressionOptions();
         Regularization = regularization ?? new NoRegularization<T, Matrix<T>, Vector<T>>();
@@ -154,6 +164,7 @@ public abstract class NonLinearRegressionBase<T> : INonLinearRegression<T>
         SupportVectors = new Matrix<T>(0, 0);
         Alphas = new Vector<T>(0);
         B = NumOps.Zero;
+        _defaultLossFunction = lossFunction ?? new MeanSquaredErrorLoss<T>();
     }
 
     /// <summary>
@@ -978,9 +989,10 @@ public abstract class NonLinearRegressionBase<T> : INonLinearRegression<T>
     /// <remarks>
     /// <para>
     /// For non-linear regression models, the default loss function is Mean Squared Error (MSE).
+    /// This can be customized by passing a different loss function to the constructor.
     /// </para>
     /// </remarks>
-    public virtual ILossFunction<T> DefaultLossFunction => new MeanSquaredErrorLoss<T>();
+    public virtual ILossFunction<T> DefaultLossFunction => _defaultLossFunction;
 
     /// <inheritdoc/>
     /// <remarks>
