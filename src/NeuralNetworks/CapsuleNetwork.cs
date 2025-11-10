@@ -381,8 +381,11 @@ public class CapsuleNetwork<T> : NeuralNetworkBase<T>
         // Flatten original input for comparison
         var flattenedInput = input.Reshape([input.Length]);
 
-        // Compute MSE loss
-        return ComputeMSE(reconstruction, flattenedInput);
+        // Compute MSE loss using StatisticsHelper
+        return StatisticsHelper<T>.CalculateMeanSquaredError(
+            flattenedInput.ToEnumerable(),
+            reconstruction.ToEnumerable()
+        );
     }
 
     /// <summary>
@@ -483,27 +486,6 @@ public class CapsuleNetwork<T> : NeuralNetworkBase<T>
         }
 
         return maxIndex;
-    }
-
-    /// <summary>
-    /// Computes Mean Squared Error between two tensors.
-    /// </summary>
-    /// <param name="prediction">The predicted tensor.</param>
-    /// <param name="target">The target tensor.</param>
-    /// <returns>The MSE loss value.</returns>
-    private T ComputeMSE(Tensor<T> prediction, Tensor<T> target)
-    {
-        int length = Math.Min(prediction.Length, target.Length);
-        T sumSquaredError = NumOps.Zero;
-
-        for (int i = 0; i < length; i++)
-        {
-            T diff = NumOps.Subtract(prediction[i], target[i]);
-            sumSquaredError = NumOps.Add(sumSquaredError, NumOps.Multiply(diff, diff));
-        }
-
-        // Return mean (divide by number of elements)
-        return NumOps.Divide(sumSquaredError, NumOps.FromDouble(length));
     }
 
     /// <summary>
