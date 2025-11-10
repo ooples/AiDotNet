@@ -87,6 +87,39 @@ public class ResidualNeuralNetwork<T> : NeuralNetworkBase<T>, IAuxiliaryLossLaye
     private List<ILayer<T>> _auxiliaryClassifiers = new();
     private readonly List<int> _auxiliaryClassifierPositions = new();
     private Vector<T>? _lastExpectedOutput;
+
+    /// <summary>
+    /// Adds an auxiliary classifier at the specified layer position for deep supervision.
+    /// </summary>
+    /// <param name="classifier">The classifier layer to add for intermediate predictions.</param>
+    /// <param name="layerPosition">The layer index where this classifier should be applied.</param>
+    /// <remarks>
+    /// <para>
+    /// Auxiliary classifiers enable deep supervision by providing additional training signals
+    /// at intermediate layers. This helps with gradient flow and can improve training stability.
+    /// </para>
+    /// <para><b>For Beginners:</b> Think of auxiliary classifiers as "checkpoints" in your network.
+    /// They make predictions at intermediate stages, helping the network learn better representations
+    /// at each layer rather than only at the final output.
+    /// </para>
+    /// </remarks>
+    public void AddAuxiliaryClassifier(ILayer<T> classifier, int layerPosition)
+    {
+        if (classifier == null)
+        {
+            throw new ArgumentNullException(nameof(classifier));
+        }
+
+        if (layerPosition < 0 || layerPosition >= Layers.Count)
+        {
+            throw new ArgumentOutOfRangeException(nameof(layerPosition),
+                $"Layer position must be between 0 and {Layers.Count - 1}");
+        }
+
+        _auxiliaryClassifiers.Add(classifier);
+        _auxiliaryClassifierPositions.Add(layerPosition);
+    }
+
     /// <summary>
     /// Gets or sets the learning rate for parameter updates.
     /// </summary>
