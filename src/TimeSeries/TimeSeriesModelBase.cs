@@ -1565,14 +1565,14 @@ public abstract class TimeSeriesModelBase<T> : ITimeSeriesModel<T>
 
             var modelPlus = (TimeSeriesModelBase<T>)WithParameters(paramsPlus);
             var predPlus = modelPlus.Predict(input);
-            var lossPlus = loss.ComputeLoss(predPlus, target);
+            var lossPlus = loss.CalculateLoss(predPlus, target);
 
             var paramsMinus = parameters.Clone();
             paramsMinus[i] = NumOps.Subtract(paramsMinus[i], epsilon);
 
             var modelMinus = (TimeSeriesModelBase<T>)WithParameters(paramsMinus);
             var predMinus = modelMinus.Predict(input);
-            var lossMinus = loss.ComputeLoss(predMinus, target);
+            var lossMinus = loss.CalculateLoss(predMinus, target);
 
             var twoEpsilon = NumOps.Multiply(epsilon, NumOps.FromDouble(2.0));
             gradients[i] = NumOps.Divide(NumOps.Subtract(lossPlus, lossMinus), twoEpsilon);
