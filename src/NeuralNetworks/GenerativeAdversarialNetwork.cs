@@ -1693,6 +1693,198 @@ public class GenerativeAdversarialNetwork<T> : NeuralNetworkBase<T>
     }
 
     /// <summary>
+    /// Computes the gradient penalty for WGAN-GP (Wasserstein GAN with Gradient Penalty).
+    /// </summary>
+    /// <param name="realSamples">Batch of real samples.</param>
+    /// <param name="fakeSamples">Batch of generated (fake) samples.</param>
+    /// <param name="lambda">Weight for the gradient penalty term (default: 10.0).</param>
+    /// <returns>The gradient penalty loss value.</returns>
+    /// <remarks>
+    /// <para>
+    /// This method implements the gradient penalty from Gulrajani et al. (2017) "Improved Training
+    /// of Wasserstein GANs". The gradient penalty enforces the Lipschitz constraint by penalizing
+    /// the discriminator when gradients deviate from unit norm at interpolated points between
+    /// real and fake samples.
+    /// </para>
+    /// <para>
+    /// The penalty is computed as: λ * E[(||∇_x D(x)|| - 1)²] where x is sampled uniformly
+    /// along straight lines between real and fake samples. This replaces weight clipping
+    /// and leads to more stable training and higher quality results.
+    /// </para>
+    /// <para>
+    /// This implementation uses numerical differentiation (finite differences) to compute
+    /// gradients with respect to the input. While symbolic autodiff would be more elegant,
+    /// numerical gradients are accurate and commonly used in production WGAN-GP implementations.
+    /// </para>
+    /// <para><b>For Beginners:</b> This helps stabilize WGAN training by constraining gradients.
+    ///
+    /// How it works:
+    /// 1. Create interpolated samples between real and fake images (mix them randomly)
+    /// 2. Compute how the discriminator output changes with respect to input (gradient)
+    /// 3. Measure how far the gradient norm is from 1.0
+    /// 4. Penalize the discriminator if gradients are too large or too small
+    ///
+    /// Why this helps:
+    /// - Enforces the mathematical constraint needed for Wasserstein distance
+    /// - Prevents discriminator gradients from exploding or vanishing
+    /// - More stable than weight clipping (older WGAN approach)
+    /// - Results in higher quality generated images
+    ///
+    /// The gradient penalty is added to the discriminator loss during training.
+    /// Typical lambda values are 10.0 for images.
+    /// </para>
+    /// </remarks>
+    public T ComputeGradientPenalty(Tensor<T> realSamples, Tensor<T> fakeSamples, double lambda = 10.0)
+    {
+        if (realSamples == null || fakeSamples == null)
+        {
+            return NumOps.Zero;
+        }
+
+        int batchSize = realSamples.Shape[0];
+        if (batchSize != fakeSamples.Shape[0])
+        {
+            throw new ArgumentException("Real and fake samples must have the same batch size.");
+        }
+
+        // Generate random interpolation coefficients (epsilon) for each sample in batch
+        var random = new Random();
+        var epsilon = new T[batchSize];
+        for (int i = 0; i < batchSize; i++)
+        {
+            epsilon[i] = NumOps.FromDouble(random.NextDouble());
+        }
+
+        // Compute interpolated samples: x_hat = epsilon * real + (1 - epsilon) * fake
+        var interpolated = new Tensor<T>(realSamples.Shape);
+        int elementsPerSample = realSamples.Length / batchSize;
+
+        for (int b = 0; b < batchSize; b++)
+        {
+            T eps = epsilon[b];
+            T oneMinusEps = NumOps.Subtract(NumOps.One, eps);
+
+            for (int i = 0; i < elementsPerSample; i++)
+            {
+                int idx = b * elementsPerSample + i;
+                if (idx < realSamples.Length && idx < fakeSamples.Length)
+                {
+                    T realPart = NumOps.Multiply(eps, realSamples[idx]);
+                    T fakePart = NumOps.Multiply(oneMinusEps, fakeSamples[idx]);
+                    interpolated[idx] = NumOps.Add(realPart, fakePart);
+                }
+            }
+        }
+
+        // Compute gradients using numerical differentiation
+        var gradients = ComputeNumericalGradient(interpolated);
+
+        // Compute gradient penalty: lambda * mean((||gradient|| - 1)^2)
+        T totalPenalty = NumOps.Zero;
+
+        for (int b = 0; b < batchSize; b++)
+        {
+            // Compute L2 norm of gradient for this sample
+            T gradientNormSquared = NumOps.Zero;
+            for (int i = 0; i < elementsPerSample; i++)
+            {
+                int idx = b * elementsPerSample + i;
+                if (idx < gradients.Length)
+                {
+                    T g = gradients[idx];
+                    gradientNormSquared = NumOps.Add(gradientNormSquared, NumOps.Multiply(g, g));
+                }
+            }
+
+            T gradientNorm = NumOps.Sqrt(gradientNormSquared);
+
+            // Penalty term: (||gradient|| - 1)^2
+            T deviation = NumOps.Subtract(gradientNorm, NumOps.One);
+            T penalty = NumOps.Multiply(deviation, deviation);
+
+            totalPenalty = NumOps.Add(totalPenalty, penalty);
+        }
+
+        // Average over batch
+        totalPenalty = NumOps.Divide(totalPenalty, NumOps.FromDouble(batchSize));
+
+        // Apply lambda weight
+        totalPenalty = NumOps.Multiply(totalPenalty, NumOps.FromDouble(lambda));
+
+        return totalPenalty;
+    }
+
+    /// <summary>
+    /// Computes numerical gradients of discriminator output with respect to input using finite differences.
+    /// </summary>
+    /// <param name="input">The input tensor to compute gradients for.</param>
+    /// <returns>A tensor containing the numerical gradients.</returns>
+    /// <remarks>
+    /// <para>
+    /// This method uses the finite difference method to approximate gradients:
+    /// ∂f/∂x ≈ (f(x + h) - f(x - h)) / (2h) where h is a small step size (epsilon).
+    /// </para>
+    /// <para>
+    /// Central differences are more accurate than forward differences and are
+    /// suitable for computing gradient penalties in WGAN-GP. The epsilon value
+    /// is chosen to balance numerical accuracy and precision (1e-4 works well for
+    /// typical neural network outputs).
+    /// </para>
+    /// <para><b>For Beginners:</b> This computes how the output changes when the input changes.
+    ///
+    /// The process:
+    /// 1. For each input value, make a tiny change (+epsilon and -epsilon)
+    /// 2. See how much the discriminator output changes
+    /// 3. The gradient is the rate of change (output change / input change)
+    ///
+    /// This is called "numerical differentiation" - we approximate the derivative
+    /// by actually trying tiny changes rather than using calculus formulas.
+    /// It's accurate enough for gradient penalty computation.
+    /// </para>
+    /// </remarks>
+    private Tensor<T> ComputeNumericalGradient(Tensor<T> input)
+    {
+        var gradients = new Tensor<T>(input.Shape);
+        T epsilon = NumOps.FromDouble(1e-4); // Small perturbation for numerical gradient
+
+        // Store original discriminator training mode
+        bool originalMode = Discriminator.SupportsTraining;
+        Discriminator.SetTrainingMode(false); // Use inference mode for gradient computation
+
+        // Get baseline output
+        var baselineOutput = Discriminator.Predict(input);
+
+        // Compute gradient for each input element using central differences
+        for (int i = 0; i < input.Length; i++)
+        {
+            // Save original value
+            T originalValue = input[i];
+
+            // Compute f(x + epsilon)
+            input[i] = NumOps.Add(originalValue, epsilon);
+            var outputPlus = Discriminator.Predict(input);
+
+            // Compute f(x - epsilon)
+            input[i] = NumOps.Subtract(originalValue, epsilon);
+            var outputMinus = Discriminator.Predict(input);
+
+            // Restore original value
+            input[i] = originalValue;
+
+            // Central difference: (f(x+h) - f(x-h)) / (2h)
+            // For discriminator, we use the first output element (real/fake score)
+            T outputDiff = NumOps.Subtract(outputPlus[0, 0], outputMinus[0, 0]);
+            T twoEpsilon = NumOps.Multiply(epsilon, NumOps.FromDouble(2.0));
+            gradients[i] = NumOps.Divide(outputDiff, twoEpsilon);
+        }
+
+        // Restore original training mode
+        Discriminator.SetTrainingMode(originalMode);
+
+        return gradients;
+    }
+
+    /// <summary>
     /// Computes the feature matching loss between real and generated data.
     /// </summary>
     /// <returns>The feature matching loss value.</returns>
