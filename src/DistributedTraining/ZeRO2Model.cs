@@ -132,7 +132,7 @@ public class ZeRO2Model<T, TInput, TOutput> : ShardedModelBase<T, TInput, TOutpu
             reduceInput = new Vector<T>(padded);
         }
 
-        // Perform ReduceScatter on padded gradient data (not parameters!)
+        // Perform ReduceScatter on padded gradient data
         var reducedChunk = Config.CommunicationBackend.ReduceScatter(reduceInput, ReductionOperation.Average);
 
         // Calculate this rank's shard boundaries in the original (non-padded) parameter space
