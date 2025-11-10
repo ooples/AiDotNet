@@ -441,6 +441,7 @@ public class AttentionNetwork<T> : NeuralNetworkBase<T>, IAuxiliaryLossLayer<T>
     {
         if (!UseAuxiliaryLoss)
         {
+            _lastAttentionEntropyLoss = NumOps.Zero;
             return NumOps.Zero;
         }
 
@@ -462,6 +463,10 @@ public class AttentionNetwork<T> : NeuralNetworkBase<T>, IAuxiliaryLossLayer<T>
         if (attentionLayerCount > 0)
         {
             totalEntropyLoss = NumOps.Divide(totalEntropyLoss, NumOps.FromDouble(attentionLayerCount));
+        }
+        else
+        {
+            totalEntropyLoss = NumOps.Zero;
         }
 
         _lastAttentionEntropyLoss = totalEntropyLoss;
