@@ -318,8 +318,11 @@ public class CapsuleLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
             totalNegativeEntropy = NumOps.Divide(totalNegativeEntropy, NumOps.FromDouble(numDistributions));
         }
 
+        // Store unweighted loss for diagnostics
         _lastRoutingEntropyLoss = totalNegativeEntropy;
-        return totalNegativeEntropy;
+
+        // Return weighted auxiliary loss
+        return NumOps.Multiply(AuxiliaryLossWeight, totalNegativeEntropy);
     }
 
     /// <summary>

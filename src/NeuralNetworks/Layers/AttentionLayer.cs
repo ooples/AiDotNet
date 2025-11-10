@@ -610,6 +610,8 @@ public class AttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     {
         if (!UseAuxiliaryLoss || _lastAttentionWeights == null)
         {
+            // Reset diagnostics when disabled to avoid stale values
+            _lastAttentionEntropy = NumOps.Zero;
             return NumOps.Zero;
         }
 
@@ -637,8 +639,9 @@ public class AttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         // Store for diagnostics
         _lastAttentionEntropy = entropy;
 
-        // Return negative entropy as loss (we want to maximize entropy, so minimize -entropy)
-        return NumOps.Negate(entropy);
+        // Return weighted negative entropy as loss (we want to maximize entropy, so minimize -entropy)
+        T negativeEntropy = NumOps.Negate(entropy);
+        return NumOps.Multiply(AuxiliaryLossWeight, negativeEntropy);
     }
 
     /// <summary>

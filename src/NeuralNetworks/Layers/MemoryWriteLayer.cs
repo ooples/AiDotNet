@@ -849,7 +849,9 @@ public class MemoryWriteLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
                 T term = NumOps.Multiply(attnWeight, logWeight);
                 entropy = NumOps.Subtract(entropy, term);
             }
-            totalNegativeEntropy = NumOps.Subtract(totalNegativeEntropy, entropy);
+            // Add entropy to accumulate positive negative-entropy loss
+            // (entropy is already positive from the subtraction above)
+            totalNegativeEntropy = NumOps.Add(totalNegativeEntropy, entropy);
         }
 
         // Average across batch
