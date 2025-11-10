@@ -737,6 +737,42 @@ namespace AiDotNet.AutoML
             SetCandidateModels(modelTypes);
         }
 
+        /// <summary>
+        /// Gets the default loss function for gradient computation.
+        /// </summary>
+        /// <remarks>
+        /// AutoML delegates to the best model found during search. If no best model exists yet,
+        /// returns Mean Squared Error as a sensible default.
+        /// </remarks>
+        public virtual ILossFunction<T> DefaultLossFunction =>
+            BestModel is not null && BestModel != null
+                ? BestModel.DefaultLossFunction
+                : new MeanSquaredErrorLoss<T>();
+
+        /// <summary>
+        /// Computes gradients by delegating to the best model.
+        /// </summary>
+        public virtual Vector<T> ComputeGradients(TInput input, TOutput target, ILossFunction<T>? lossFunction = null)
+        {
+            if (BestModel is null || BestModel == null)
+                throw new InvalidOperationException(
+                    "Cannot compute gradients before AutoML search has found a best model. Call Search() first.");
+
+            return BestModel.ComputeGradients(input, target, lossFunction);
+        }
+
+        /// <summary>
+        /// Applies gradients by delegating to the best model.
+        /// </summary>
+        public virtual void ApplyGradients(Vector<T> gradients, T learningRate)
+        {
+            if (BestModel is null || BestModel == null)
+                throw new InvalidOperationException(
+                    "Cannot apply gradients before AutoML search has found a best model. Call Search() first.");
+
+            BestModel.ApplyGradients(gradients, learningRate);
+        }
+
         #endregion
     }
 }

@@ -43,6 +43,17 @@ public abstract class GradientBasedOptimizerBase<T, TInput, TOutput> : Optimizer
     protected Vector<T> _previousGradient;
 
     /// <summary>
+    /// The gradients computed during the last optimization step.
+    /// </summary>
+    /// <remarks>
+    /// This field stores the gradients calculated in the most recent call to CalculateGradient().
+    /// It enables external access to gradients for features like gradient clipping, distributed
+    /// training (true DDP), debugging, and visualization.
+    /// Returns Vector&lt;T&gt;.Empty() if no gradients have been computed yet.
+    /// </remarks>
+    protected Vector<T> _lastComputedGradients;
+
+    /// <summary>
     /// A cache for storing and retrieving gradients to improve performance.
     /// </summary>
     protected IGradientCache<T> GradientCache;
@@ -84,9 +95,116 @@ public abstract class GradientBasedOptimizerBase<T, TInput, TOutput> : Optimizer
         _currentLearningRate = GradientOptions.InitialLearningRate;
         _currentMomentum = GradientOptions.InitialMomentum;
         _previousGradient = Vector<T>.Empty();
+        _lastComputedGradients = Vector<T>.Empty();
         LossFunction = options.LossFunction;
         GradientCache = options.GradientCache;
         Regularization = options.Regularization;
+    }
+
+    /// <inheritdoc/>
+    public virtual Vector<T> LastComputedGradients => _lastComputedGradients;
+
+    /// <inheritdoc/>
+    /// <remarks>
+    /// <para><b>Note:</b> This overload extracts parameters from the model. For distributed training,
+    /// use the safer 3-parameter overload that accepts originalParameters explicitly to prevent
+    /// double-stepping bugs.
+    /// </para>
+    /// </remarks>
+    public virtual IFullModel<T, TInput, TOutput> ApplyGradients(Vector<T> gradients, IFullModel<T, TInput, TOutput> model)
+    {
+        if (model == null)
+            throw new ArgumentNullException(nameof(model));
+
+        // Delegate to the safe 3-parameter overload
+        var parameters = model.GetParameters();
+        return ApplyGradients(parameters, gradients, model);
+    }
+
+    /// <inheritdoc/>
+    /// <remarks>
+    /// <para><b>Production-Ready for Distributed Training:</b>
+    /// This overload prevents double-stepping by accepting originalParameters explicitly.
+    /// The model parameter is used only as a template for structure.
+    /// </para>
+    /// <para>
+    /// Correct implementation: applies gradients to originalParameters (not model.GetParameters()),
+    /// ensuring single-step behavior even if model contains post-update parameters.
+    /// </para>
+    /// </remarks>
+    public virtual IFullModel<T, TInput, TOutput> ApplyGradients(Vector<T> originalParameters, Vector<T> gradients, IFullModel<T, TInput, TOutput> model)
+    {
+        if (originalParameters == null)
+            throw new ArgumentNullException(nameof(originalParameters));
+        if (gradients == null)
+            throw new ArgumentNullException(nameof(gradients));
+        if (model == null)
+            throw new ArgumentNullException(nameof(model));
+
+        if (gradients.Length != originalParameters.Length)
+        {
+            throw new ArgumentException(
+                $"Gradient size ({gradients.Length}) must match original parameter count ({originalParameters.Length})",
+                nameof(gradients));
+        }
+
+        // CRITICAL: Apply gradients to originalParameters (explicitly passed in),
+        // NOT to model.GetParameters(). This prevents double-stepping.
+        //
+        // UpdateParameters applies optimizer-specific logic: params_new = params_old - optimizer_update(gradients)
+        var updatedParameters = UpdateParameters(originalParameters, gradients);
+
+        // Create new model instance with updated parameters
+        return model.WithParameters(updatedParameters);
+    }
+
+    /// <summary>
+    /// Reverses a gradient update to recover original parameters.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// This base implementation uses the vanilla SGD reversal formula:
+    /// params_old = params_new + learning_rate * gradients
+    /// </para>
+    /// <para>
+    /// <b>For Adaptive Optimizers (Adam, RMSprop, etc.):</b>
+    /// This method should be overridden to account for optimizer-specific state.
+    /// The base implementation is only accurate for vanilla SGD.
+    /// </para>
+    /// <para><b>For Beginners:</b> This calculates where the parameters were before
+    /// a gradient update was applied. Think of it like rewinding a step you took.
+    /// </para>
+    /// </remarks>
+    /// <param name="updatedParameters">Parameters after gradient application</param>
+    /// <param name="appliedGradients">The gradients that were applied</param>
+    /// <returns>Estimated original parameters</returns>
+    public virtual Vector<T> ReverseUpdate(Vector<T> updatedParameters, Vector<T> appliedGradients)
+    {
+        if (updatedParameters == null)
+            throw new ArgumentNullException(nameof(updatedParameters));
+        if (appliedGradients == null)
+            throw new ArgumentNullException(nameof(appliedGradients));
+
+        if (updatedParameters.Length != appliedGradients.Length)
+        {
+            throw new ArgumentException(
+                $"Updated parameters size ({updatedParameters.Length}) must match applied gradients size ({appliedGradients.Length})",
+                nameof(appliedGradients));
+        }
+
+        // Use current learning rate (may differ from initial due to decay/scheduling)
+        var lr = NumOps.FromDouble(_currentLearningRate);
+
+        // Reverse the SGD update: params_old = params_new + lr * gradients
+        var original = new T[updatedParameters.Length];
+        for (int i = 0; i < updatedParameters.Length; i++)
+        {
+            // Use NumOps for all arithmetic to maintain precision and type safety
+            var lrTimesGradient = NumOps.Multiply(lr, appliedGradients[i]);
+            original[i] = NumOps.Add(updatedParameters[i], lrTimesGradient);
+        }
+
+        return new Vector<T>(original);
     }
 
     /// <summary>
@@ -143,7 +261,12 @@ public abstract class GradientBasedOptimizerBase<T, TInput, TOutput> : Optimizer
         var cachedGradient = GradientCache.GetCachedGradient(cacheKey);
         if (cachedGradient != null)
         {
-            return cachedGradient.Parameters;
+            // CRITICAL: Clone the cached gradient to prevent external modifications from corrupting the cache.
+            // If we return the cached vector directly, callers could modify it (e.g., during AllReduce operations),
+            // which would corrupt the cache for future calls with the same key.
+            var clonedGradient = new Vector<T>(cachedGradient.Parameters.ToArray());
+            _lastComputedGradients = clonedGradient;
+            return clonedGradient;
         }
 
         Vector<T> gradient;
@@ -183,6 +306,9 @@ public abstract class GradientBasedOptimizerBase<T, TInput, TOutput> : Optimizer
 
         var gradientModel = new GradientModel<T>(gradient);
         GradientCache.CacheGradient(cacheKey, gradientModel);
+
+        // Store for external access (enables gradient clipping, true DDP, debugging, etc.)
+        _lastComputedGradients = gradient;
 
         return gradient;
     }
@@ -440,7 +566,10 @@ public abstract class GradientBasedOptimizerBase<T, TInput, TOutput> : Optimizer
         {
             gradient[i] = NumOps.Divide(gradient[i], NumOps.FromDouble(batchIndices.Length));
         }
-    
+
+        // Store for external access (enables gradient clipping, true DDP, debugging, etc.)
+        _lastComputedGradients = gradient;
+
         return gradient;
     }
 

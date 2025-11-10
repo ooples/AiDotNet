@@ -119,11 +119,11 @@ public class NeuralNetworkModel<T> : IFullModel<T, Tensor<T>, Tensor<T>>
     /// This flag enables those components to adjust their behavior accordingly.
     /// </para>
     /// <para><b>For Beginners:</b> This tells the network whether it's learning or making predictions.
-    /// 
+    ///
     /// Some parts of neural networks work differently depending on whether the network is:
     /// - Training (learning from examples)
     /// - Making predictions (using what it learned)
-    /// 
+    ///
     /// For example, a technique called "dropout" randomly turns off some neurons during
     /// training to prevent overfitting, but doesn't do this during prediction.
     /// </para>
@@ -131,9 +131,15 @@ public class NeuralNetworkModel<T> : IFullModel<T, Tensor<T>, Tensor<T>>
     private bool _isTrainingMode = true;
 
     /// <summary>
+    /// The default loss function used by this model for gradient computation.
+    /// </summary>
+    private ILossFunction<T> _defaultLossFunction;
+
+    /// <summary>
     /// Initializes a new instance of the NeuralNetworkModel class with the specified architecture.
     /// </summary>
     /// <param name="architecture">The architecture defining the structure of the neural network.</param>
+    /// <param name="lossFunction">Optional loss function to use for training. If null, uses a default based on task type (CrossEntropy for classification, MSE for regression).</param>
     /// <remarks>
     /// <para>
     /// This constructor creates a new NeuralNetworkModel instance with the specified architecture. It initializes
@@ -142,23 +148,37 @@ public class NeuralNetworkModel<T> : IFullModel<T, Tensor<T>, Tensor<T>>
     /// the network is designed to perform.
     /// </para>
     /// <para><b>For Beginners:</b> This constructor creates a new neural network model with the specified design.
-    /// 
+    ///
     /// When creating a NeuralNetworkModel:
     /// - You provide an architecture that defines the network's structure
     /// - The constructor creates the actual neural network based on this design
     /// - The model is ready to be trained or to make predictions
-    /// 
+    ///
     /// The architecture is crucial as it determines what kind of data the network can process
     /// and what kind of problems it can solve. Different architectures work better for
     /// different types of problems.
     /// </para>
     /// </remarks>
-    public NeuralNetworkModel(NeuralNetworkArchitecture<T> architecture)
+    public NeuralNetworkModel(NeuralNetworkArchitecture<T> architecture, ILossFunction<T>? lossFunction = null)
     {
         Architecture = architecture ?? throw new ArgumentNullException(nameof(architecture));
         Network = new NeuralNetwork<T>(architecture);
         _learningRate = _numOps.FromDouble(0.01); // Default learning rate
+        _defaultLossFunction = lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(architecture.TaskType);
     }
+
+    /// <summary>
+    /// Gets the default loss function used by this model for gradient computation.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// The default loss function is determined by the network's task type:
+    /// - Classification tasks use CrossEntropyLoss
+    /// - Regression tasks use MeanSquaredErrorLoss
+    /// - Custom loss functions can be provided via the constructor
+    /// </para>
+    /// </remarks>
+    public ILossFunction<T> DefaultLossFunction => _defaultLossFunction;
 
     /// <summary>
     /// Gets the number of features used by the model.
@@ -298,6 +318,105 @@ public class NeuralNetworkModel<T> : IFullModel<T, Tensor<T>, Tensor<T>>
         
         // Neural networks typically use all input features in some capacity
         return true;
+    }
+
+    /// <summary>
+    /// Computes gradients of the loss function with respect to model parameters WITHOUT updating parameters.
+    /// </summary>
+    /// <param name="input">The input tensor.</param>
+    /// <param name="target">The target/expected output tensor.</param>
+    /// <param name="lossFunction">The loss function to use. If null, uses the model's default loss function.</param>
+    /// <returns>A vector containing gradients with respect to all model parameters.</returns>
+    /// <exception cref="InvalidOperationException">If the network doesn't support training or loss function is null and no default is configured.</exception>
+    /// <remarks>
+    /// <para>
+    /// This method performs a forward pass, computes the loss, and back-propagates to compute gradients,
+    /// but does NOT update the model's parameters. The parameters remain unchanged after this call.
+    /// </para>
+    /// <para><b>For Beginners:</b>
+    /// This method calculates which direction to move the model's parameters to reduce error,
+    /// but it doesn't actually move them. This is useful for:
+    /// - Distributed training: compute gradients on different machines and average them
+    /// - Custom optimization: apply your own learning algorithm to the gradients
+    /// - Analysis: inspect gradient values to understand what the model is learning
+    /// </para>
+    /// </remarks>
+    public Vector<T> ComputeGradients(Tensor<T> input, Tensor<T> target, ILossFunction<T>? lossFunction = null)
+    {
+        if (!Network.SupportsTraining)
+        {
+            throw new InvalidOperationException("This neural network does not support training.");
+        }
+
+        var loss = lossFunction ?? DefaultLossFunction;
+
+        // Ensure the network is in training mode
+        Network.SetTrainingMode(true);
+
+        // Convert tensors to the format expected by the network
+        Vector<T> inputVector = input.ToVector();
+        Vector<T> targetVector = target.ToVector();
+
+        // Forward pass with memory to store intermediate values for backpropagation
+        Tensor<T> outputTensor = Network.ForwardWithMemory(Tensor<T>.FromVector(inputVector));
+        Vector<T> outputVector = outputTensor.ToVector();
+
+        // Calculate error gradient using the loss function
+        Vector<T> error = loss.CalculateDerivative(outputVector, targetVector);
+
+        // Backpropagate error through the network
+        Network.Backpropagate(Tensor<T>.FromVector(error));
+
+        // Get and return gradients from the network
+        Vector<T> gradients = Network.GetParameterGradients();
+        return gradients;
+    }
+
+    /// <summary>
+    /// Applies pre-computed gradients to update the model parameters.
+    /// </summary>
+    /// <param name="gradients">The gradient vector to apply.</param>
+    /// <param name="learningRate">The learning rate for the update.</param>
+    /// <exception cref="ArgumentNullException">If gradients is null.</exception>
+    /// <exception cref="ArgumentException">If gradient vector length doesn't match parameter count.</exception>
+    /// <remarks>
+    /// <para>
+    /// Updates parameters using: θ = θ - learningRate * gradients
+    /// </para>
+    /// <para><b>For Beginners:</b>
+    /// After computing gradients (seeing which direction to move),
+    /// this method actually moves the model in that direction.
+    /// The learning rate controls how big of a step to take.
+    ///
+    /// In distributed training, this applies the synchronized (averaged) gradients after
+    /// communication across workers. Each worker applies the same averaged gradients
+    /// to keep parameters consistent.
+    /// </para>
+    /// </remarks>
+    public void ApplyGradients(Vector<T> gradients, T learningRate)
+    {
+        if (gradients == null)
+            throw new ArgumentNullException(nameof(gradients));
+
+        var currentParams = Network.GetParameters();
+
+        if (gradients.Length != currentParams.Length)
+        {
+            throw new ArgumentException(
+                $"Gradient vector length ({gradients.Length}) must match parameter count ({currentParams.Length})",
+                nameof(gradients));
+        }
+
+        var newParams = new Vector<T>(currentParams.Length);
+
+        // Apply gradient descent: params = params - learningRate * gradients
+        for (int i = 0; i < currentParams.Length; i++)
+        {
+            T update = _numOps.Multiply(learningRate, gradients[i]);
+            newParams[i] = _numOps.Subtract(currentParams[i], update);
+        }
+
+        Network.UpdateParameters(newParams);
     }
 
     /// <summary>
