@@ -102,7 +102,6 @@ public class AMSGradOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T
 
         for (int iteration = 0; iteration < _options.MaxIterations; iteration++)
         {
-            _t++;
             var gradient = CalculateGradient(currentSolution, inputData.XTrain, inputData.YTrain);
             var newSolution = UpdateSolution(currentSolution, gradient);
 

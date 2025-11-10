@@ -39,6 +39,16 @@ public class NadamOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, 
     private int _t;
 
     /// <summary>
+    /// Stores the pre-update snapshot of first moment vector for accurate reverse updates.
+    /// </summary>
+    private Vector<T>? _previousM;
+
+    /// <summary>
+    /// Stores the pre-update snapshot of second moment vector for accurate reverse updates.
+    /// </summary>
+    private Vector<T>? _previousV;
+
+    /// <summary>
     /// Initializes a new instance of the NadamOptimizer class.
     /// </summary>
     /// <remarks>
@@ -206,12 +216,16 @@ public class NadamOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, 
     /// </remarks>
     public override Vector<T> UpdateParameters(Vector<T> parameters, Vector<T> gradient)
     {
-        if (_m == null || _v == null || _m.Length != parameters.Length)
+        if (_m == null || _v == null || _m.Length != parameters.Length || _v.Length != parameters.Length)
         {
             _m = new Vector<T>(parameters.Length);
             _v = new Vector<T>(parameters.Length);
             _t = 0;
         }
+
+        // Save previous state BEFORE updating for ReverseUpdate
+        _previousM = _m.Clone();
+        _previousV = _v.Clone();
 
         _t++;
 
@@ -277,10 +291,16 @@ public class NadamOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, 
                 nameof(appliedGradients));
         }
 
-        if (_m == null || _v == null || _m.Length != updatedParameters.Length || _t == 0)
+        if (_m == null || _v == null || _m.Length != updatedParameters.Length || _v.Length != updatedParameters.Length || _t == 0)
         {
             throw new InvalidOperationException(
                 "Nadam optimizer state is not initialized or timestep is zero. ReverseUpdate must be called after UpdateParameters.");
+        }
+
+        if (_previousM == null || _previousV == null || _previousM.Length != updatedParameters.Length || _previousV.Length != updatedParameters.Length)
+        {
+            throw new InvalidOperationException(
+                "Nadam optimizer previous state is not available. ReverseUpdate must be called after UpdateParameters.");
         }
 
         var original = new T[updatedParameters.Length];
@@ -290,11 +310,11 @@ public class NadamOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, 
 
         for (int i = 0; i < updatedParameters.Length; i++)
         {
-            // Recalculate bias-corrected moments
-            var mHat = NumOps.Divide(_m[i], NumOps.FromDouble(1 - Math.Pow(_options.Beta1, _t)));
-            var vHat = NumOps.Divide(_v[i], NumOps.FromDouble(1 - Math.Pow(_options.Beta2, _t)));
+            // Recalculate bias-corrected moments using PREVIOUS state (before update)
+            var mHat = NumOps.Divide(_previousM[i], NumOps.FromDouble(1 - Math.Pow(_options.Beta1, _t)));
+            var vHat = NumOps.Divide(_previousV[i], NumOps.FromDouble(1 - Math.Pow(_options.Beta2, _t)));
 
-            // Recalculate the Nesterov momentum term
+            // Recalculate the Nesterov momentum term using previous state
             var mHatNesterov = NumOps.Add(NumOps.Multiply(beta1, mHat), NumOps.Multiply(NumOps.Divide(oneMinusBeta1, NumOps.FromDouble(1 - Math.Pow(_options.Beta1, _t))), appliedGradients[i]));
 
             // Recalculate the update that was applied
@@ -302,6 +322,10 @@ public class NadamOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, 
 
             // Reverse: original = updated + update
             original[i] = NumOps.Add(updatedParameters[i], update);
+
+            // Restore state so the rollback fully reverts the step
+            _m[i] = _previousM[i];
+            _v[i] = _previousV[i];
         }
 
         return new Vector<T>(original);
