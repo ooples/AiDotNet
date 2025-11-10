@@ -332,4 +332,19 @@ public abstract class ShardedModelBase<T, TInput, TOutput> : IShardedModel<T, TI
     {
         return WrappedModel.IsFeatureUsed(featureIndex);
     }
+
+    /// <inheritdoc/>
+    public virtual ILossFunction<T> DefaultLossFunction => WrappedModel.DefaultLossFunction;
+
+    /// <inheritdoc/>
+    public virtual Vector<T> ComputeGradients(TInput input, TOutput target, ILossFunction<T>? lossFunction = null)
+    {
+        return WrappedModel.ComputeGradients(input, target, lossFunction);
+    }
+
+    /// <inheritdoc/>
+    public virtual void ApplyGradients(Vector<T> gradients, T learningRate)
+    {
+        WrappedModel.ApplyGradients(gradients, learningRate);
+    }
 }
