@@ -86,6 +86,7 @@ public class ResidualNeuralNetwork<T> : NeuralNetworkBase<T>, IAuxiliaryLossLaye
     private T _lastDeepSupervisionLoss;
     private List<ILayer<T>> _auxiliaryClassifiers = new();
     private readonly List<int> _auxiliaryClassifierPositions = new();
+    private Vector<T>? _lastExpectedOutput;
     /// <summary>
     /// Gets or sets the learning rate for parameter updates.
     /// </summary>
@@ -381,15 +382,51 @@ public class ResidualNeuralNetwork<T> : NeuralNetworkBase<T>, IAuxiliaryLossLaye
             return NumOps.Zero;
         }
 
-        // Note: In a full implementation, we would:
-        // 1. Store intermediate activations during forward pass
-        // 2. Pass them through auxiliary classifiers
-        // 3. Compute loss for each auxiliary prediction
-        // 4. Average the losses
-        //
-        // For now, we return zero as auxiliary classifiers need to be
-        // explicitly configured by the user for specific layer positions
-        _lastDeepSupervisionLoss = NumOps.Zero;
+        // Ensure we have intermediate activations and expected output
+        if (_layerOutputs.Count == 0 || _lastExpectedOutput == null)
+        {
+            _lastDeepSupervisionLoss = NumOps.Zero;
+            return NumOps.Zero;
+        }
+
+        // Compute auxiliary loss from each intermediate classifier
+        T totalAuxiliaryLoss = NumOps.Zero;
+        int validClassifiers = 0;
+
+        for (int i = 0; i < _auxiliaryClassifiers.Count; i++)
+        {
+            int layerPosition = _auxiliaryClassifierPositions[i];
+
+            // Check if we have the intermediate activation at this position
+            if (!_layerOutputs.ContainsKey(layerPosition))
+            {
+                continue;
+            }
+
+            var intermediateActivation = _layerOutputs[layerPosition];
+            var auxiliaryClassifier = _auxiliaryClassifiers[i];
+
+            // Pass intermediate activation through auxiliary classifier
+            var auxiliaryPrediction = auxiliaryClassifier.Forward(intermediateActivation);
+
+            // Compute loss for this auxiliary prediction
+            Vector<T> auxPredictionVector = auxiliaryPrediction.ToVector();
+            T classifierLoss = LossFunction.CalculateLoss(auxPredictionVector, _lastExpectedOutput);
+
+            totalAuxiliaryLoss = NumOps.Add(totalAuxiliaryLoss, classifierLoss);
+            validClassifiers++;
+        }
+
+        // Average the losses across all auxiliary classifiers
+        if (validClassifiers > 0)
+        {
+            _lastDeepSupervisionLoss = NumOps.Divide(totalAuxiliaryLoss, NumOps.FromDouble(validClassifiers));
+        }
+        else
+        {
+            _lastDeepSupervisionLoss = NumOps.Zero;
+        }
+
         return _lastDeepSupervisionLoss;
     }
 
@@ -525,6 +562,8 @@ public class ResidualNeuralNetwork<T> : NeuralNetworkBase<T>, IAuxiliaryLossLaye
                     // Add auxiliary loss if enabled
                     if (UseAuxiliaryLoss)
                     {
+                        // Cache expected output for auxiliary classifiers
+                        _lastExpectedOutput = y;
                         T auxLoss = ComputeAuxiliaryLoss();
                         T weightedAuxLoss = NumOps.Multiply(AuxiliaryLossWeight, auxLoss);
                         loss = NumOps.Add(loss, weightedAuxLoss);
