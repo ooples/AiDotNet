@@ -296,11 +296,14 @@ public class TensorParallelModel<T, TInput, TOutput> : ShardedModelBase<T, TInpu
     /// </remarks>
     public override void SynchronizeGradients()
     {
-        // Tensor parallel synchronization uses Sum operation (not Average)
-        // because each rank computes partial results that need to be summed
-        SubgroupAllReduce(LocalShard, ReductionOperation.Sum);
-
-        CachedFullParameters = null;
+        // Note: Gradient synchronization is handled within Train() by averaging
+        // the full gradient vector across ranks. This method is provided for API
+        // compatibility but is a no-op in the current implementation.
+        //
+        // True tensor-parallel semantics would require layer-aware gradient computation
+        // where each rank only computes gradients for its parameter shard. The current
+        // implementation uses data-parallel gradient averaging, which is correct for
+        // distributed training where all ranks train on different data.
     }
 
     /// <inheritdoc/>
@@ -314,23 +317,41 @@ public class TensorParallelModel<T, TInput, TOutput> : ShardedModelBase<T, TInpu
         // For this framework implementation, we provide simplified pattern
         // Production usage would implement layer-specific forward/backward logic
 
-        // Set local shard (partial weights)
-        var fullParams = GatherFullParameters();
-        WrappedModel.SetParameters(fullParams);
+        // Save original parameters before training
+        var originalParams = GatherFullParameters();
+        WrappedModel.SetParameters(originalParams);
 
         // Train
         WrappedModel.Train(input, expectedOutput);
 
-        // Get updated parameters and extract shard
+        // Get updated parameters
         var updatedParams = WrappedModel.GetParameters();
-        UpdateLocalShardFromFull(updatedParams);
-        InvalidateCache();
 
-        // Synchronize across tensor-parallel group using subgroup AllReduce
+        // Synchronize gradients across tensor-parallel group
         if (Config.AutoSyncGradients)
         {
-            SynchronizeGradients();
+            // Compute gradient (full vector)
+            var gradient = new T[updatedParams.Length];
+            for (int i = 0; i < gradient.Length; i++)
+            {
+                gradient[i] = NumOps.Subtract(updatedParams[i], originalParams[i]);
+            }
+            var gradVec = new Vector<T>(gradient);
+
+            // Average gradients across ranks
+            SubgroupAllReduce(gradVec, ReductionOperation.Average);
+
+            // Apply averaged gradient
+            for (int i = 0; i < updatedParams.Length; i++)
+            {
+                updatedParams[i] = NumOps.Add(originalParams[i], gradVec[i]);
+            }
+            WrappedModel.SetParameters(updatedParams);
         }
+
+        // Extract shard from final parameters
+        UpdateLocalShardFromFull(updatedParams);
+        InvalidateCache();
     }
 
     /// <inheritdoc/>

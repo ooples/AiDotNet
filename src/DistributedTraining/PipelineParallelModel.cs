@@ -221,7 +221,8 @@ public class PipelineParallelModel<T, TInput, TOutput> : ShardedModelBase<T, TIn
         // Pipeline forward pass for inference
         // Activations flow through stages sequentially
 
-        WrappedModel.SetParameters(LocalShard);
+        var fullParams = GatherFullParameters();
+        WrappedModel.SetParameters(fullParams);
 
         // Determine actual input for this stage
         TInput stageInput = input;
