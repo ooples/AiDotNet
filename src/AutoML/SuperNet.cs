@@ -256,9 +256,12 @@ namespace AiDotNet.AutoML
         }
 
         /// <summary>
-        /// Backward pass to compute gradients for network weights
+        /// Backward pass to compute gradients for network weights using the specified loss function.
         /// </summary>
-        public void BackwardWeights(Tensor<T> input, Tensor<T> target)
+        /// <param name="input">The input tensor.</param>
+        /// <param name="target">The target tensor.</param>
+        /// <param name="lossFunction">The loss function to use for gradient computation.</param>
+        public void BackwardWeights(Tensor<T> input, Tensor<T> target, ILossFunction<T> lossFunction)
         {
             // Simplified gradient computation for weights
             var output = Predict(input);
@@ -275,10 +278,10 @@ namespace AiDotNet.AutoML
                     T originalValue = weight[i];
 
                     weight[i] = _ops.Add(originalValue, epsilon);
-                    var lossPlus = ComputeTrainingLoss(input, target);
+                    var lossPlus = ComputeLossWithFunction(input, target, lossFunction);
 
                     weight[i] = _ops.Subtract(originalValue, epsilon);
-                    var lossMinus = ComputeTrainingLoss(input, target);
+                    var lossMinus = ComputeLossWithFunction(input, target, lossFunction);
 
                     weight[i] = originalValue;
 
@@ -288,6 +291,40 @@ namespace AiDotNet.AutoML
                     );
                 }
             }
+        }
+
+        /// <summary>
+        /// Computes loss using the specified loss function.
+        /// </summary>
+        /// <param name="input">The input tensor.</param>
+        /// <param name="target">The target tensor.</param>
+        /// <param name="lossFunction">The loss function to use.</param>
+        /// <returns>The computed loss value.</returns>
+        private T ComputeLossWithFunction(Tensor<T> input, Tensor<T> target, ILossFunction<T> lossFunction)
+        {
+            var predictions = Predict(input);
+
+            // Flatten tensors to vectors for ILossFunction
+            var predVector = FlattenTensor(predictions);
+            var targetVector = FlattenTensor(target);
+
+            return lossFunction.CalculateLoss(predVector, targetVector);
+        }
+
+        /// <summary>
+        /// Flattens a 2D tensor to a vector.
+        /// </summary>
+        private Vector<T> FlattenTensor(Tensor<T> tensor)
+        {
+            var flattenedData = new List<T>();
+            for (int i = 0; i < tensor.Shape[0]; i++)
+            {
+                for (int j = 0; j < tensor.Shape[1]; j++)
+                {
+                    flattenedData.Add(tensor[i, j]);
+                }
+            }
+            return new Vector<T>(flattenedData.ToArray());
         }
 
         /// <summary>
@@ -352,8 +389,11 @@ namespace AiDotNet.AutoML
             if (target == null)
                 throw new ArgumentNullException(nameof(target));
 
+            // Use the effective loss function (supplied or default)
+            var effectiveLoss = lossFunction ?? _defaultLossFunction;
+
             // Use BackwardWeights to compute gradients for weight parameters
-            BackwardWeights(input, target);
+            BackwardWeights(input, target, effectiveLoss);
 
             // Collect all weight gradients into a single vector
             var gradients = new List<T>();
