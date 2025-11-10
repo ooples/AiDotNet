@@ -46,6 +46,25 @@ namespace AiDotNet.DistributedTraining;
 /// layer types). This implementation provides the infrastructure. For production use with
 /// specific models (e.g., transformers), extend this class with layer-aware partitioning.
 /// </para>
+/// <para><b>⚠️ IMPORTANT LIMITATION - Memory Efficiency:</b>
+/// This implementation gathers the full parameter vector on every Train() and Predict() call
+/// (via GatherFullParameters and SetParameters), which defeats the memory-saving purpose of
+/// true tensor parallelism. While parameters are sharded across ranks for storage, they are
+/// reconstructed into the full vector for each forward/backward pass. This means:
+/// - Memory savings are minimal compared to data-parallel training
+/// - Communication overhead is high (AllGather on every forward pass)
+/// - This wrapper primarily provides gradient synchronization, not memory-efficient tensor parallelism
+///
+/// For true memory-efficient tensor parallelism, you would need layer-aware implementations where
+/// each rank only loads its parameter shard and performs partial matrix multiplications without
+/// ever reconstructing the full parameter vector. This simplified implementation is suitable for:
+/// - Testing and development of distributed training infrastructure
+/// - Scenarios where gradient synchronization is more important than memory efficiency
+/// - Models where memory is not the primary constraint
+///
+/// If memory efficiency is critical, consider using FSDP (Fully Sharded Data Parallel) or ZeRO-3
+/// instead, which shard parameters more aggressively and avoid full parameter reconstruction.
+/// </para>
 /// <para>
 /// Example:
 /// <code>
