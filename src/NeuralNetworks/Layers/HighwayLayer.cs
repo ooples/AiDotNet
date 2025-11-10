@@ -36,12 +36,12 @@ public class HighwayLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     /// <summary>
     /// Gets or sets the weight for the auxiliary loss contribution.
     /// </summary>
-    public T AuxiliaryLossWeight { get; set; } = NumOps.FromDouble(0.01);
+    public T AuxiliaryLossWeight { get; set; }
 
     /// <summary>
     /// Stores the last computed gate balance loss for diagnostic purposes.
     /// </summary>
-    private T _lastGateBalanceLoss = NumOps.Zero;
+    private T _lastGateBalanceLoss;
 
     /// <summary>
     /// The weight matrix used to transform the input data.
@@ -296,6 +296,9 @@ public class HighwayLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     public HighwayLayer(int inputDimension, IActivationFunction<T>? transformActivation = null, IActivationFunction<T>? gateActivation = null)
         : base([inputDimension], [inputDimension], transformActivation ?? new TanhActivation<T>())
     {
+        AuxiliaryLossWeight = NumOps.FromDouble(0.01);
+        _lastGateBalanceLoss = NumOps.Zero;
+
         _transformWeights = new Matrix<T>(inputDimension, inputDimension);
         _transformBias = new Vector<T>(inputDimension);
         _gateWeights = new Matrix<T>(inputDimension, inputDimension);
@@ -333,6 +336,9 @@ public class HighwayLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     public HighwayLayer(int inputDimension, IVectorActivationFunction<T>? transformActivation = null, IVectorActivationFunction<T>? gateActivation = null)
         : base([inputDimension], [inputDimension], transformActivation ?? new TanhActivation<T>())
     {
+        AuxiliaryLossWeight = NumOps.FromDouble(0.01);
+        _lastGateBalanceLoss = NumOps.Zero;
+
         _transformWeights = new Matrix<T>(inputDimension, inputDimension);
         _transformBias = new Vector<T>(inputDimension);
         _gateWeights = new Matrix<T>(inputDimension, inputDimension);

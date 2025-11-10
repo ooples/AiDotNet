@@ -69,12 +69,12 @@ public class SqueezeAndExcitationLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     /// If the main task is more important, you might decrease it.
     /// </para>
     /// </remarks>
-    public T AuxiliaryLossWeight { get; set; } = NumOps.FromDouble(0.01);
+    public T AuxiliaryLossWeight { get; set; }
 
     /// <summary>
     /// Stores the last computed channel attention regularization loss for diagnostic purposes.
     /// </summary>
-    private T _lastChannelAttentionLoss = NumOps.Zero;
+    private T _lastChannelAttentionLoss;
 
     /// <summary>
     /// The number of input and output channels in the layer.
@@ -455,11 +455,14 @@ public class SqueezeAndExcitationLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     /// on only the most important patterns.
     /// </para>
     /// </remarks>
-    public SqueezeAndExcitationLayer(int channels, int reductionRatio, 
-        IActivationFunction<T>? firstActivation = null, 
+    public SqueezeAndExcitationLayer(int channels, int reductionRatio,
+        IActivationFunction<T>? firstActivation = null,
         IActivationFunction<T>? secondActivation = null)
         : base([[channels]], [channels])
     {
+        AuxiliaryLossWeight = NumOps.FromDouble(0.01);
+        _lastChannelAttentionLoss = NumOps.Zero;
+
         _channels = channels;
         _reducedChannels = channels / reductionRatio;
         _firstActivation = firstActivation ?? new ReLUActivation<T>();
@@ -497,11 +500,14 @@ public class SqueezeAndExcitationLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     /// how different features relate to each other, rather than treating each feature independently.
     /// </para>
     /// </remarks>
-    public SqueezeAndExcitationLayer(int channels, int reductionRatio, 
-        IVectorActivationFunction<T>? firstVectorActivation = null, 
+    public SqueezeAndExcitationLayer(int channels, int reductionRatio,
+        IVectorActivationFunction<T>? firstVectorActivation = null,
         IVectorActivationFunction<T>? secondVectorActivation = null)
         : base([[channels]], [channels])
     {
+        AuxiliaryLossWeight = NumOps.FromDouble(0.01);
+        _lastChannelAttentionLoss = NumOps.Zero;
+
         _channels = channels;
         _reducedChannels = channels / reductionRatio;
         _firstVectorActivation = firstVectorActivation ?? new ReLUActivation<T>();

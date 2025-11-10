@@ -66,12 +66,12 @@ public class GraphConvolutionalLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     /// If the main task is more important, you might decrease it.
     /// </para>
     /// </remarks>
-    public T AuxiliaryLossWeight { get; set; } = NumOps.FromDouble(0.01);
+    public T AuxiliaryLossWeight { get; set; }
 
     /// <summary>
     /// Stores the last computed graph smoothness loss for diagnostic purposes.
     /// </summary>
-    private T _lastGraphSmoothnessLoss = NumOps.Zero;
+    private T _lastGraphSmoothnessLoss;
 
     /// <summary>
     /// The weight matrix that transforms input features to output features.
@@ -201,6 +201,9 @@ public class GraphConvolutionalLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     public GraphConvolutionalLayer(int inputFeatures, int outputFeatures, IActivationFunction<T>? activationFunction = null)
         : base([inputFeatures], [outputFeatures], activationFunction ?? new IdentityActivation<T>())
     {
+        AuxiliaryLossWeight = NumOps.FromDouble(0.01);
+        _lastGraphSmoothnessLoss = NumOps.Zero;
+
         _weights = new Matrix<T>(inputFeatures, outputFeatures);
         _bias = new Vector<T>(outputFeatures);
 
@@ -232,6 +235,9 @@ public class GraphConvolutionalLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     public GraphConvolutionalLayer(int inputFeatures, int outputFeatures, IVectorActivationFunction<T>? vectorActivationFunction = null)
         : base([inputFeatures], [outputFeatures], vectorActivationFunction ?? new IdentityActivation<T>())
     {
+        AuxiliaryLossWeight = NumOps.FromDouble(0.01);
+        _lastGraphSmoothnessLoss = NumOps.Zero;
+
         _weights = new Matrix<T>(inputFeatures, outputFeatures);
         _bias = new Vector<T>(outputFeatures);
 
