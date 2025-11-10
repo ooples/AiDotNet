@@ -69,9 +69,9 @@ public class DifferentiableNeuralComputer<T> : NeuralNetworkBase<T>, IAuxiliaryL
     /// Higher values encourage sharper memory addressing patterns.
     /// </para>
     /// </remarks>
-    public T AuxiliaryLossWeight { get; set; } = NumOps.FromDouble(0.005);
+    public T AuxiliaryLossWeight { get; set; }
 
-    private T _lastMemoryAddressingLoss = NumOps.Zero;
+    private T _lastMemoryAddressingLoss;
 
     /// <summary>
     /// Gets or sets the number of memory locations in the memory matrix.
@@ -384,6 +384,9 @@ public class DifferentiableNeuralComputer<T> : NeuralNetworkBase<T>, IAuxiliaryL
         IActivationFunction<T>? activationFunction = null) 
         : base(architecture, lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(architecture.TaskType))
     {
+        AuxiliaryLossWeight = NumOps.FromDouble(0.005);
+        _lastMemoryAddressingLoss = NumOps.Zero;
+
         _memorySize = memorySize;
         _memoryWordSize = memoryWordSize;
         _controllerSize = controllerSize;
@@ -455,6 +458,9 @@ public class DifferentiableNeuralComputer<T> : NeuralNetworkBase<T>, IAuxiliaryL
         IVectorActivationFunction<T>? vectorActivationFunction = null) 
         : base(architecture, lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(architecture.TaskType))
     {
+        AuxiliaryLossWeight = NumOps.FromDouble(0.005);
+        _lastMemoryAddressingLoss = NumOps.Zero;
+
         _memorySize = memorySize;
         _memoryWordSize = memoryWordSize;
         _controllerSize = controllerSize;
