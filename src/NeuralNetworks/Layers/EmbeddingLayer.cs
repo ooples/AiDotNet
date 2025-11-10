@@ -116,7 +116,7 @@ public class EmbeddingLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     /// <summary>
     /// Stores the last computed embedding regularization loss for diagnostics.
     /// </summary>
-    private T _lastEmbeddingRegularizationLoss = NumOps.Zero;
+    private T _lastEmbeddingRegularizationLoss;
 
     /// <summary>
     /// Gets or sets whether to use auxiliary loss (embedding regularization) during training.
@@ -128,7 +128,7 @@ public class EmbeddingLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     /// Gets or sets the weight for embedding regularization.
     /// Default is 0.0001. Controls L2 regularization strength on embedding weights.
     /// </summary>
-    public T AuxiliaryLossWeight { get; set; } = NumOps.FromDouble(0.0001);
+    public T AuxiliaryLossWeight { get; set; }
 
     /// <summary>
     /// Gets a value indicating whether this layer supports training.
@@ -192,6 +192,9 @@ public class EmbeddingLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     public EmbeddingLayer(int vocabularySize, int embeddingDimension)
         : base([1], [embeddingDimension])
     {
+        AuxiliaryLossWeight = NumOps.FromDouble(0.0001);
+        _lastEmbeddingRegularizationLoss = NumOps.Zero;
+
         _embeddingMatrix = new Matrix<T>(vocabularySize, embeddingDimension);
         InitializeParameters();
     }

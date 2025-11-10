@@ -41,12 +41,12 @@ public class CapsuleNetwork<T> : NeuralNetworkBase<T>, IAuxiliaryLossLayer<T>
     /// <summary>
     /// Stores the last computed reconstruction loss for diagnostics.
     /// </summary>
-    private T _lastReconstructionLoss = NumOps.Zero;
+    private T _lastReconstructionLoss;
 
     /// <summary>
     /// Stores the last computed margin loss for diagnostics.
     /// </summary>
-    private T _lastMarginLoss = NumOps.Zero;
+    private T _lastMarginLoss;
 
     /// <summary>
     /// Gets or sets whether to use auxiliary loss (reconstruction regularization) during training.
@@ -58,7 +58,7 @@ public class CapsuleNetwork<T> : NeuralNetworkBase<T>, IAuxiliaryLossLayer<T>
     /// Gets or sets the weight for reconstruction loss.
     /// Default is 0.0005 (standard value from original CapsNet paper).
     /// </summary>
-    public T AuxiliaryLossWeight { get; set; } = NumOps.FromDouble(0.0005);
+    public T AuxiliaryLossWeight { get; set; }
 
     /// <summary>
     /// Initializes a new instance of the <see cref="CapsuleNetwork{T}"/> class with the specified architecture.
@@ -82,9 +82,13 @@ public class CapsuleNetwork<T> : NeuralNetworkBase<T>, IAuxiliaryLossLayer<T>
     /// you're just getting everything ready to use.
     /// </para>
     /// </remarks>
-    public CapsuleNetwork(NeuralNetworkArchitecture<T> architecture, ILossFunction<T>? lossFunction = null) : 
+    public CapsuleNetwork(NeuralNetworkArchitecture<T> architecture, ILossFunction<T>? lossFunction = null) :
         base(architecture, lossFunction ?? new MarginLoss<T>())
     {
+        AuxiliaryLossWeight = NumOps.FromDouble(0.0005);
+        _lastReconstructionLoss = NumOps.Zero;
+        _lastMarginLoss = NumOps.Zero;
+
         _lossFunction = lossFunction ?? new MarginLoss<T>();
 
         InitializeLayers();

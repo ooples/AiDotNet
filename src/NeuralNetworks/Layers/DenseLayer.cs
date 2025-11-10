@@ -97,7 +97,7 @@ public class DenseLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     /// Lower values allow more complexity but might overfit.
     /// </para>
     /// </remarks>
-    public T AuxiliaryLossWeight { get; set; } = NumOps.FromDouble(0.01);
+    public T AuxiliaryLossWeight { get; set; }
 
     /// <summary>
     /// Gets or sets the type of regularization to apply.
@@ -107,14 +107,14 @@ public class DenseLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     /// <summary>
     /// Gets or sets the L1 regularization strength (used when Regularization is L1 or L1L2).
     /// </summary>
-    public T L1Strength { get; set; } = NumOps.FromDouble(0.01);
+    public T L1Strength { get; set; }
 
     /// <summary>
     /// Gets or sets the L2 regularization strength (used when Regularization is L2 or L1L2).
     /// </summary>
-    public T L2Strength { get; set; } = NumOps.FromDouble(0.01);
+    public T L2Strength { get; set; }
 
-    private T _lastRegularizationLoss = NumOps.Zero;
+    private T _lastRegularizationLoss;
     /// <summary>
     /// The weight matrix that connects input neurons to output neurons.
     /// </summary>
@@ -301,6 +301,11 @@ public class DenseLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     public DenseLayer(int inputSize, int outputSize, IActivationFunction<T>? activationFunction = null)
         : base([inputSize], [outputSize], activationFunction ?? new ReLUActivation<T>())
     {
+        AuxiliaryLossWeight = NumOps.FromDouble(0.01);
+        L1Strength = NumOps.FromDouble(0.01);
+        L2Strength = NumOps.FromDouble(0.01);
+        _lastRegularizationLoss = NumOps.Zero;
+
         _weights = new Matrix<T>(outputSize, inputSize);
         _biases = new Vector<T>(outputSize);
 
@@ -336,6 +341,11 @@ public class DenseLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     public DenseLayer(int inputSize, int outputSize, IVectorActivationFunction<T>? vectorActivation = null)
         : base([inputSize], [outputSize], vectorActivation ?? new ReLUActivation<T>())
     {
+        AuxiliaryLossWeight = NumOps.FromDouble(0.01);
+        L1Strength = NumOps.FromDouble(0.01);
+        L2Strength = NumOps.FromDouble(0.01);
+        _lastRegularizationLoss = NumOps.Zero;
+
         _weights = new Matrix<T>(outputSize, inputSize);
         _biases = new Vector<T>(outputSize);
 
