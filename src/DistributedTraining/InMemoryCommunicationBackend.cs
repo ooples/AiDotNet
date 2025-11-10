@@ -224,6 +224,18 @@ public class InMemoryCommunicationBackend<T> : CommunicationBackendBase<T>
             _messageQueues.Remove(key);
         }
 
+        var consumersToRemove = _pendingConsumers.Keys.Where(k => k.StartsWith($"{environmentId}_")).ToList();
+        foreach (var key in consumersToRemove)
+        {
+            _pendingConsumers.Remove(key);
+        }
+
+        var releaseCountsToRemove = _barrierReleaseCounts.Keys.Where(k => k.StartsWith($"{environmentId}_")).ToList();
+        foreach (var key in releaseCountsToRemove)
+        {
+            _barrierReleaseCounts.Remove(key);
+        }
+
         // Reset environment counters
         _barrierGenerations[environmentId] = 0;
         _operationCounters[environmentId] = 0;
