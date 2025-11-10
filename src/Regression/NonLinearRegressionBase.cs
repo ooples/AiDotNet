@@ -1037,10 +1037,10 @@ public abstract class NonLinearRegressionBase<T> : INonLinearRegression<T>
             // Forward difference: f(x + h) - f(x) / h
             Alphas[i] = NumOps.Add(originalAlpha, epsilon);
             var predPlus = Predict(input);
-            var lossPlus = ComputeLoss(predPlus, target, loss);
+            var lossPlus = loss.CalculateLoss(predPlus, target);
 
             Alphas[i] = originalAlpha;
-            var lossCurrent = ComputeLoss(predictions, target, loss);
+            var lossCurrent = loss.CalculateLoss(predictions, target);
 
             gradients[i] = NumOps.Divide(NumOps.Subtract(lossPlus, lossCurrent), epsilon);
         }
@@ -1049,22 +1049,14 @@ public abstract class NonLinearRegressionBase<T> : INonLinearRegression<T>
         var originalB = B;
         B = NumOps.Add(originalB, epsilon);
         var predPlusB = Predict(input);
-        var lossPlusB = ComputeLoss(predPlusB, target, loss);
+        var lossPlusB = loss.CalculateLoss(predPlusB, target);
 
         B = originalB;
-        var lossCurrentB = ComputeLoss(predictions, target, loss);
+        var lossCurrentB = loss.CalculateLoss(predictions, target);
 
         gradients[Alphas.Length] = NumOps.Divide(NumOps.Subtract(lossPlusB, lossCurrentB), epsilon);
 
         return gradients;
-    }
-
-    /// <summary>
-    /// Computes the loss value for given predictions and targets.
-    /// </summary>
-    private T ComputeLoss(Vector<T> predictions, Vector<T> targets, ILossFunction<T> lossFunction)
-    {
-        return lossFunction.CalculateLoss(predictions, targets);
     }
 
     /// <inheritdoc/>
