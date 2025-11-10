@@ -927,27 +927,45 @@ public abstract class AsyncDecisionTreeRegressionBase<T> : IAsyncTreeBasedModel<
     public virtual Vector<T> ComputeGradients(Matrix<T> input, Vector<T> target, ILossFunction<T>? lossFunction = null)
     {
         var loss = lossFunction ?? DefaultLossFunction;
-
-        // For async tree models, compute pseudo-gradients based on prediction errors
         var predictions = Predict(input);
-        var errors = predictions.Subtract(target);
 
-        // Return pseudo-gradients for interface compatibility
+        // For gradient boosting: compute per-sample loss derivatives (pseudo-residuals)
+        // These are ∂Loss/∂predictions, NOT ∂Loss/∂parameters
+        // In gradient boosting, subsequent trees are fit to these negative gradients
+        var sampleGradients = loss.CalculateDerivative(predictions, target);
+
+        // Map per-sample gradients to per-parameter gradients
+        // For decision trees, parameters typically represent leaf values or split thresholds
+        // We aggregate sample gradients into ParameterCount buckets
         var gradients = new Vector<T>(ParameterCount);
 
-        // Compute mean error as representative pseudo-gradient
-        T meanError = NumOps.Zero;
-        for (int i = 0; i < errors.Length; i++)
+        if (sampleGradients.Length == 0 || ParameterCount == 0)
         {
-            meanError = NumOps.Add(meanError, errors[i]);
+            return gradients; // Return zeros
         }
-        meanError = NumOps.Divide(meanError, NumOps.FromDouble(errors.Length));
 
-        // Set all gradient components to the mean error
-        // Ensemble methods can override with more sophisticated gradient computations
-        for (int i = 0; i < gradients.Length; i++)
+        // Distribute samples across parameters
+        int samplesPerParam = Math.Max(1, (sampleGradients.Length + ParameterCount - 1) / ParameterCount);
+
+        for (int paramIdx = 0; paramIdx < ParameterCount; paramIdx++)
         {
-            gradients[i] = meanError;
+            T sum = NumOps.Zero;
+            int count = 0;
+
+            // Aggregate gradients for samples mapped to this parameter
+            int startIdx = paramIdx * samplesPerParam;
+            int endIdx = Math.Min((paramIdx + 1) * samplesPerParam, sampleGradients.Length);
+
+            for (int sampleIdx = startIdx; sampleIdx < endIdx; sampleIdx++)
+            {
+                sum = NumOps.Add(sum, sampleGradients[sampleIdx]);
+                count++;
+            }
+
+            // Average the gradients for this parameter bucket
+            gradients[paramIdx] = count > 0
+                ? NumOps.Divide(sum, NumOps.FromDouble(count))
+                : NumOps.Zero;
         }
 
         return gradients;
