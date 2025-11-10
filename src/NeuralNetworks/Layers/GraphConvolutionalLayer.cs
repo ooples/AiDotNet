@@ -171,7 +171,7 @@ public class GraphConvolutionalLayer<T> : LayerBase<T>
     /// Typical values range from 0.0001 to 0.01. Set to 0 to disable smoothness regularization.
     /// </para>
     /// </remarks>
-    public T SmoothnessWeight { get; set; } = NumOps.FromDouble(0.001);
+    public T SmoothnessWeight { get; set; }
 
     /// <summary>
     /// Gets a value indicating whether this layer supports training.
@@ -224,6 +224,8 @@ public class GraphConvolutionalLayer<T> : LayerBase<T>
         _weights = new Matrix<T>(inputFeatures, outputFeatures);
         _bias = new Vector<T>(outputFeatures);
 
+        SmoothnessWeight = NumOps.FromDouble(0.001);
+
         InitializeParameters();
     }
 
@@ -254,6 +256,8 @@ public class GraphConvolutionalLayer<T> : LayerBase<T>
     {
         _weights = new Matrix<T>(inputFeatures, outputFeatures);
         _bias = new Vector<T>(outputFeatures);
+
+        SmoothnessWeight = NumOps.FromDouble(0.001);
 
         InitializeParameters();
     }

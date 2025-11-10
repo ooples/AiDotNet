@@ -316,7 +316,7 @@ public class SqueezeAndExcitationLayer<T> : LayerBase<T>
     /// Typical values range from 0.0001 to 0.01. Set to 0 to disable sparsity regularization.
     /// </para>
     /// </remarks>
-    public T SparsityWeight { get; set; } = NumOps.FromDouble(0.0001);
+    public T SparsityWeight { get; set; }
 
     /// <summary>
     /// The activation function applied after the first fully connected layer.
@@ -453,8 +453,8 @@ public class SqueezeAndExcitationLayer<T> : LayerBase<T>
     /// on only the most important patterns.
     /// </para>
     /// </remarks>
-    public SqueezeAndExcitationLayer(int channels, int reductionRatio, 
-        IActivationFunction<T>? firstActivation = null, 
+    public SqueezeAndExcitationLayer(int channels, int reductionRatio,
+        IActivationFunction<T>? firstActivation = null,
         IActivationFunction<T>? secondActivation = null)
         : base([[channels]], [channels])
     {
@@ -467,6 +467,8 @@ public class SqueezeAndExcitationLayer<T> : LayerBase<T>
         _bias1 = new Vector<T>(_reducedChannels);
         _weights2 = new Matrix<T>(_reducedChannels, _channels);
         _bias2 = new Vector<T>(_channels);
+
+        SparsityWeight = NumOps.FromDouble(0.0001);
 
         InitializeWeights();
     }
@@ -495,8 +497,8 @@ public class SqueezeAndExcitationLayer<T> : LayerBase<T>
     /// how different features relate to each other, rather than treating each feature independently.
     /// </para>
     /// </remarks>
-    public SqueezeAndExcitationLayer(int channels, int reductionRatio, 
-        IVectorActivationFunction<T>? firstVectorActivation = null, 
+    public SqueezeAndExcitationLayer(int channels, int reductionRatio,
+        IVectorActivationFunction<T>? firstVectorActivation = null,
         IVectorActivationFunction<T>? secondVectorActivation = null)
         : base([[channels]], [channels])
     {
@@ -509,6 +511,8 @@ public class SqueezeAndExcitationLayer<T> : LayerBase<T>
         _bias1 = new Vector<T>(_reducedChannels);
         _weights2 = new Matrix<T>(_reducedChannels, _channels);
         _bias2 = new Vector<T>(_channels);
+
+        SparsityWeight = NumOps.FromDouble(0.0001);
 
         InitializeWeights();
     }

@@ -198,7 +198,7 @@ public class ComputationNode<T>
         if (Gradient == null)
         {
             Gradient = new Tensor<T>(Value.Shape);
-            var numOps = INumericOperations<T>.GetOperations();
+            var numOps = MathHelper.GetNumericOperations<T>();
             for (int i = 0; i < Gradient.Length; i++)
             {
                 Gradient[i] = numOps.One;
@@ -288,7 +288,7 @@ public class ComputationNode<T>
     {
         if (Gradient != null)
         {
-            var numOps = INumericOperations<T>.GetOperations();
+            var numOps = MathHelper.GetNumericOperations<T>();
             for (int i = 0; i < Gradient.Length; i++)
             {
                 Gradient[i] = numOps.Zero;
