@@ -2,6 +2,7 @@ using AiDotNet.Enums;
 using AiDotNet.FeatureSelectors;
 using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
+using AiDotNet.LossFunctions;
 using AiDotNet.Models;
 using Xunit;
 
@@ -75,6 +76,19 @@ namespace AiDotNetTests.UnitTests.FeatureSelectors
         public IFullModel<double, Matrix<double>, Vector<double>> DeepCopy()
         {
             return new SimpleMockModel();
+        }
+
+        // IGradientComputable implementation
+        public ILossFunction<double> DefaultLossFunction => new MeanSquaredErrorLoss<double>();
+
+        public Vector<double> ComputeGradients(Matrix<double> input, Vector<double> target, ILossFunction<double>? lossFunction = null)
+        {
+            return new Vector<double>(ParameterCount);
+        }
+
+        public void ApplyGradients(Vector<double> gradients, double learningRate)
+        {
+            // Mock implementation does nothing
         }
     }
 
@@ -416,6 +430,19 @@ namespace AiDotNetTests.UnitTests.FeatureSelectors
         public IFullModel<float, Matrix<float>, Vector<float>> DeepCopy()
         {
             return new SimpleMockModelFloat();
+        }
+
+        // IGradientComputable implementation
+        public ILossFunction<float> DefaultLossFunction => new MeanSquaredErrorLoss<float>();
+
+        public Vector<float> ComputeGradients(Matrix<float> input, Vector<float> target, ILossFunction<float>? lossFunction = null)
+        {
+            return new Vector<float>(ParameterCount);
+        }
+
+        public void ApplyGradients(Vector<float> gradients, float learningRate)
+        {
+            // Mock implementation does nothing
         }
     }
 }
