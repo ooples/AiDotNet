@@ -93,7 +93,7 @@ public class AttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     /// <summary>
     /// Stores the last computed attention entropy for diagnostics.
     /// </summary>
-    private T _lastAttentionEntropy = NumOps.Zero;
+    private T _lastAttentionEntropy;
 
     /// <summary>
     /// Gets or sets whether to use auxiliary loss (attention entropy regularization) during training.
@@ -105,7 +105,7 @@ public class AttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     /// Gets or sets the weight for attention entropy regularization.
     /// Default is 0.01. Higher values encourage more uniform attention distributions.
     /// </summary>
-    public T AuxiliaryLossWeight { get; set; } = NumOps.FromDouble(0.01);
+    public T AuxiliaryLossWeight { get; set; }
 
     /// <summary>
     /// Gets the total number of trainable parameters in the layer.
@@ -174,6 +174,9 @@ public class AttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     public AttentionLayer(int inputSize, int attentionSize, IActivationFunction<T>? activation = null)
         : base([inputSize], [attentionSize], activation ?? new SoftmaxActivation<T>())
     {
+        AuxiliaryLossWeight = NumOps.FromDouble(0.01);
+        _lastAttentionEntropy = NumOps.Zero;
+
         _inputSize = inputSize;
         _attentionSize = attentionSize;
         T scale = NumOps.Sqrt(NumOps.FromDouble(1.0 / _attentionSize));
@@ -201,6 +204,9 @@ public class AttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     public AttentionLayer(int inputSize, int attentionSize, IVectorActivationFunction<T>? activation = null)
         : base([inputSize], [attentionSize], activation ?? new SoftmaxActivation<T>())
     {
+        AuxiliaryLossWeight = NumOps.FromDouble(0.01);
+        _lastAttentionEntropy = NumOps.Zero;
+
         _inputSize = inputSize;
         _attentionSize = attentionSize;
         T scale = NumOps.Sqrt(NumOps.FromDouble(1.0 / _attentionSize));

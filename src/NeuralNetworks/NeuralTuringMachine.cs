@@ -69,9 +69,9 @@ public class NeuralTuringMachine<T> : NeuralNetworkBase<T>, IAuxiliaryLossLayer<
     /// Higher values encourage sharper, more focused memory usage.
     /// </para>
     /// </remarks>
-    public T AuxiliaryLossWeight { get; set; } = NumOps.FromDouble(0.005);
+    public T AuxiliaryLossWeight { get; set; }
 
-    private T _lastMemoryUsageLoss = NumOps.Zero;
+    private T _lastMemoryUsageLoss;
 
     /// <summary>
     /// The size of the external memory matrix (number of memory locations).
@@ -172,6 +172,9 @@ public class NeuralTuringMachine<T> : NeuralNetworkBase<T>, IAuxiliaryLossLayer<
         if (memoryVectorSize <= 0) throw new ArgumentOutOfRangeException(nameof(memoryVectorSize), "Memory vector size must be positive");
         if (controllerSize <= 0) throw new ArgumentOutOfRangeException(nameof(controllerSize), "Controller size must be positive");
 
+        AuxiliaryLossWeight = NumOps.FromDouble(0.005);
+        _lastMemoryUsageLoss = NumOps.Zero;
+
         _memorySize = memorySize;
         _memoryVectorSize = memoryVectorSize;
         _controllerSize = controllerSize;
@@ -223,6 +226,9 @@ public class NeuralTuringMachine<T> : NeuralNetworkBase<T>, IAuxiliaryLossLayer<
         if (memorySize <= 0) throw new ArgumentOutOfRangeException(nameof(memorySize), "Memory size must be positive");
         if (memoryVectorSize <= 0) throw new ArgumentOutOfRangeException(nameof(memoryVectorSize), "Memory vector size must be positive");
         if (controllerSize <= 0) throw new ArgumentOutOfRangeException(nameof(controllerSize), "Controller size must be positive");
+
+        AuxiliaryLossWeight = NumOps.FromDouble(0.005);
+        _lastMemoryUsageLoss = NumOps.Zero;
 
         _memorySize = memorySize;
         _memoryVectorSize = memoryVectorSize;

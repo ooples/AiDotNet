@@ -98,7 +98,7 @@ public class AttentionNetwork<T> : NeuralNetworkBase<T>, IAuxiliaryLossLayer<T>
     /// <summary>
     /// Stores the last computed attention entropy loss for diagnostics.
     /// </summary>
-    private T _lastAttentionEntropyLoss = NumOps.Zero;
+    private T _lastAttentionEntropyLoss;
 
     /// <summary>
     /// Gets or sets whether to use auxiliary loss (attention entropy regularization) during training.
@@ -110,7 +110,7 @@ public class AttentionNetwork<T> : NeuralNetworkBase<T>, IAuxiliaryLossLayer<T>
     /// Gets or sets the weight for attention entropy regularization.
     /// Default is 0.01. Controls the strength of entropy regularization across attention layers.
     /// </summary>
-    public T AuxiliaryLossWeight { get; set; } = NumOps.FromDouble(0.01);
+    public T AuxiliaryLossWeight { get; set; }
 
     /// <summary>
     /// Initializes a new instance of the <see cref="AttentionNetwork{T}"/> class.
@@ -142,9 +142,12 @@ public class AttentionNetwork<T> : NeuralNetworkBase<T>, IAuxiliaryLossLayer<T>
     /// Cross-Entropy Loss is used by default because it works well for many language-related tasks.
     /// </para>
     /// </remarks>
-    public AttentionNetwork(NeuralNetworkArchitecture<T> architecture, int sequenceLength, int embeddingSize, ILossFunction<T>? lossFunction = null) : 
+    public AttentionNetwork(NeuralNetworkArchitecture<T> architecture, int sequenceLength, int embeddingSize, ILossFunction<T>? lossFunction = null) :
         base(architecture, lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(architecture.TaskType))
     {
+        AuxiliaryLossWeight = NumOps.FromDouble(0.01);
+        _lastAttentionEntropyLoss = NumOps.Zero;
+
         _sequenceLength = sequenceLength;
         _embeddingSize = embeddingSize;
         _lossFunction = lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(architecture.TaskType);
