@@ -49,6 +49,11 @@ public class NadamOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, 
     private Vector<T>? _previousV;
 
     /// <summary>
+    /// Stores the pre-update snapshot of the time step for accurate reverse updates.
+    /// </summary>
+    private int _previousT;
+
+    /// <summary>
     /// Initializes a new instance of the NadamOptimizer class.
     /// </summary>
     /// <remarks>
@@ -226,6 +231,7 @@ public class NadamOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, 
         // Save previous state BEFORE updating for ReverseUpdate
         _previousM = _m.Clone();
         _previousV = _v.Clone();
+        _previousT = _t;
 
         _t++;
 
@@ -328,6 +334,9 @@ public class NadamOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, 
             _m[i] = _previousM[i];
             _v[i] = _previousV[i];
         }
+
+        // Restore time step to complete the rollback
+        _t = _previousT;
 
         return new Vector<T>(original);
     }
