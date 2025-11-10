@@ -973,4 +973,121 @@ public abstract class NonLinearRegressionBase<T> : INonLinearRegression<T>
         catch (System.Security.SecurityException ex) { throw new InvalidOperationException($"Security error when loading model from '{filePath}': {ex.Message}", ex); }
         catch (Exception ex) { throw new InvalidOperationException($"Failed to deserialize model from file '{filePath}'. The file may be corrupted or incompatible: {ex.Message}", ex); }
     }
+
+    /// <inheritdoc/>
+    /// <remarks>
+    /// <para>
+    /// For non-linear regression models, the default loss function is Mean Squared Error (MSE).
+    /// </para>
+    /// </remarks>
+    public virtual ILossFunction<T> DefaultLossFunction => new MeanSquaredErrorLoss<T>();
+
+    /// <inheritdoc/>
+    /// <remarks>
+    /// <para>
+    /// Non-linear regression models use kernel functions and support vectors, making gradient
+    /// computation more complex than linear regression. This implementation uses numerical
+    /// differentiation to compute gradients with respect to the support vector weights (alphas)
+    /// and bias term.
+    /// </para>
+    /// <para><b>For Beginners:</b> This method computes how to adjust the model to reduce errors.
+    ///
+    /// Non-linear models are more complex than linear ones - they use kernel functions to capture
+    /// curved relationships. Computing gradients requires:
+    /// 1. Making predictions with the current model
+    /// 2. Measuring the errors
+    /// 3. Computing how each support vector weight should change
+    ///
+    /// This uses numerical differentiation, which approximates gradients by making small changes
+    /// to parameters and observing the effect on the loss.
+    /// </para>
+    /// </remarks>
+    public virtual Vector<T> ComputeGradients(Matrix<T> input, Vector<T> target, ILossFunction<T>? lossFunction = null)
+    {
+        var loss = lossFunction ?? DefaultLossFunction;
+
+        // Make predictions
+        var predictions = Predict(input);
+
+        // Compute prediction errors
+        var errors = predictions.Subtract(target);
+
+        // For kernel-based models, compute gradients using numerical differentiation
+        // This is a simplified implementation - specific algorithms may override with analytical gradients
+        var epsilon = NumOps.FromDouble(1e-7);
+        var gradients = new Vector<T>(ParameterCount);
+
+        // Compute gradient for each alpha (support vector weight)
+        for (int i = 0; i < Alphas.Length; i++)
+        {
+            var originalAlpha = Alphas[i];
+
+            // Forward difference: f(x + h) - f(x) / h
+            Alphas[i] = NumOps.Add(originalAlpha, epsilon);
+            var predPlus = Predict(input);
+            var lossPlus = ComputeLoss(predPlus, target, loss);
+
+            Alphas[i] = originalAlpha;
+            var lossCurrent = ComputeLoss(predictions, target, loss);
+
+            gradients[i] = NumOps.Divide(NumOps.Subtract(lossPlus, lossCurrent), epsilon);
+        }
+
+        // Gradient for bias term
+        var originalB = B;
+        B = NumOps.Add(originalB, epsilon);
+        var predPlusB = Predict(input);
+        var lossPlusB = ComputeLoss(predPlusB, target, loss);
+
+        B = originalB;
+        var lossCurrentB = ComputeLoss(predictions, target, loss);
+
+        gradients[Alphas.Length] = NumOps.Divide(NumOps.Subtract(lossPlusB, lossCurrentB), epsilon);
+
+        return gradients;
+    }
+
+    /// <summary>
+    /// Computes the loss value for given predictions and targets.
+    /// </summary>
+    private T ComputeLoss(Vector<T> predictions, Vector<T> targets, ILossFunction<T> lossFunction)
+    {
+        T totalLoss = NumOps.Zero;
+        for (int i = 0; i < predictions.Length; i++)
+        {
+            totalLoss = NumOps.Add(totalLoss, lossFunction.ComputeLoss(predictions[i], targets[i]));
+        }
+        return NumOps.Divide(totalLoss, NumOps.FromDouble(predictions.Length));
+    }
+
+    /// <inheritdoc/>
+    /// <remarks>
+    /// <para>
+    /// Updates the support vector weights (alphas) and bias term using gradient descent.
+    /// </para>
+    /// <para><b>For Beginners:</b> This method applies the computed gradients to improve the model.
+    ///
+    /// It updates:
+    /// - Support vector weights (alphas): Control how much each support vector influences predictions
+    /// - Bias term (B): The baseline prediction value
+    ///
+    /// The update follows gradient descent: new_value = old_value - learning_rate * gradient
+    /// </para>
+    /// </remarks>
+    public virtual void ApplyGradients(Vector<T> gradients, T learningRate)
+    {
+        if (gradients.Length != ParameterCount)
+        {
+            throw new ArgumentException($"Expected {ParameterCount} gradients, but got {gradients.Length}", nameof(gradients));
+        }
+
+        // Update alphas (support vector weights)
+        for (int i = 0; i < Alphas.Length; i++)
+        {
+            Alphas[i] = NumOps.Subtract(Alphas[i], NumOps.Multiply(learningRate, gradients[i]));
+        }
+
+        // Update bias term
+        B = NumOps.Subtract(B, NumOps.Multiply(learningRate, gradients[Alphas.Length]));
+    }
 }
