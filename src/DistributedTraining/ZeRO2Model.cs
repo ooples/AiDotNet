@@ -152,46 +152,58 @@ public class ZeRO2Model<T, TInput, TOutput> : ShardedModelBase<T, TInput, TOutpu
     /// <inheritdoc/>
     public override void Train(TInput input, TOutput expectedOutput)
     {
-        // IMPORTANT: ZeRO2Model is designed to be used WITH ZeRO2Optimizer, not standalone.
-        // The ZeRO-2 workflow requires separating gradient computation from parameter updates:
-        //   1. Forward + backward pass to compute gradients
+        // ZeRO-2 workflow with explicit gradient computation (IFullModel.IGradientComputable support):
+        //   1. ComputeGradients: Forward + backward pass to compute TRUE gradients
         //   2. ReduceScatter gradients (each rank gets a shard)
-        //   3. Update ONLY local parameter shard using gradient shard
+        //   3. ApplyGradients: Update ONLY local parameter shard using gradient shard
         //   4. AllGather updated shards to reconstruct full parameters
         //
-        // However, IFullModel.Train() couples backward and optimizer steps, making true ZeRO-2
-        // impossible without API changes. Therefore, this method provides LIMITED functionality:
+        // Now that IFullModel extends IGradientComputable, we can compute true gradients
+        // instead of parameter deltas, enabling proper ZeRO-2 semantics!
 
-        // Save parameters BEFORE training to compute gradients
-        var parametersBefore = LocalShard.Clone();
-
-        // Set full parameters and perform full training step
+        // Set full parameters for gradient computation
         WrappedModel.SetParameters(LocalShard);
-        WrappedModel.Train(input, expectedOutput);
-        LocalShard = WrappedModel.GetParameters();
 
-        // Compute gradients as parameter delta (approximation since we don't have true gradients)
-        // Gradient = parameters_after - parameters_before
-        var gradientData = new T[LocalShard.Length];
-        for (int i = 0; i < LocalShard.Length; i++)
-        {
-            gradientData[i] = NumOps.Subtract(LocalShard[i], parametersBefore[i]);
-        }
-        _computedGradients = new Vector<T>(gradientData);
+        // Compute TRUE gradients using the model's gradient computation
+        // This calls the model's backpropagation without updating parameters
+        _computedGradients = WrappedModel.ComputeGradients(input, expectedOutput);
 
         if (Config.AutoSyncGradients)
         {
             // Synchronize gradients via ReduceScatter
-            // This populates _gradientShard for potential use by ZeRO2Optimizer
+            // Each rank receives only its shard of the averaged gradients
             SynchronizeGradients();
 
-            // For standalone use (without ZeRO2Optimizer), we need to synchronize parameters
-            // Since all ranks performed full updates, we AllReduce to average them
-            // NOTE: This is NOT true ZeRO-2 semantics - use with ZeRO2Optimizer for proper ZeRO-2
-            var syncedParams = new Vector<T>(LocalShard.ToArray());
-            Config.CommunicationBackend.AllReduce(syncedParams, ReductionOperation.Average);
-            LocalShard = syncedParams;
+            // Apply the gradient shard to update only this rank's parameter shard
+            // Note: We use a fixed learning rate here. For adaptive optimizers,
+            // use ZeRO2Optimizer which properly handles optimizer state.
+            var learningRate = NumOps.FromDouble(0.01); // Default learning rate
+            var updatedShard = new T[_gradientShard.Length];
+
+            int shardStart = Rank * ((LocalShard.Length + WorldSize - 1) / WorldSize);
+
+            // Update only our shard: params[shard] = params[shard] - lr * gradients[shard]
+            for (int i = 0; i < _gradientShard.Length && (shardStart + i) < LocalShard.Length; i++)
+            {
+                int globalIndex = shardStart + i;
+                updatedShard[i] = NumOps.Subtract(
+                    LocalShard[globalIndex],
+                    NumOps.Multiply(learningRate, _gradientShard[i]));
+            }
+
+            // Copy updated shard back to local parameters
+            Array.Copy(updatedShard, 0, LocalShard.ToArray(), shardStart, Math.Min(updatedShard.Length, LocalShard.Length - shardStart));
+
+            // AllGather parameter shards to reconstruct full parameters
+            LocalShard = AllGatherParameterShards();
             CachedFullParameters = null;
+        }
+        else
+        {
+            // Without gradient synchronization, apply gradients locally
+            // This is equivalent to non-distributed training
+            WrappedModel.ApplyGradients(_computedGradients, NumOps.FromDouble(0.01));
+            LocalShard = WrappedModel.GetParameters();
         }
     }
 
