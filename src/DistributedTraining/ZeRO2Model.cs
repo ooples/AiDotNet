@@ -55,6 +55,7 @@ namespace AiDotNet.DistributedTraining;
 public class ZeRO2Model<T, TInput, TOutput> : ShardedModelBase<T, TInput, TOutput>
 {
     private Vector<T>? _gradientShard;
+    private Vector<T>? _computedGradients;
 
     /// <summary>
     /// Gets the local gradient shard for this rank after synchronization.
@@ -99,23 +100,29 @@ public class ZeRO2Model<T, TInput, TOutput> : ShardedModelBase<T, TInput, TOutpu
     /// </summary>
     public override void SynchronizeGradients()
     {
-        var totalParams = LocalShard.Length;
+        if (_computedGradients == null)
+        {
+            throw new InvalidOperationException(
+                "Gradients have not been computed. Call Train() before SynchronizeGradients().");
+        }
+
+        var totalParams = _computedGradients.Length;
 
         // Calculate chunk size using ceiling division to align with ReduceScatter boundaries
         int chunkSize = (totalParams + WorldSize - 1) / WorldSize;
         var paddedLength = chunkSize * WorldSize;
 
         // Pad to satisfy ReduceScatter's divisibility requirement
-        Vector<T> reduceInput = LocalShard;
+        Vector<T> reduceInput = _computedGradients;
         if (paddedLength > totalParams)
         {
             var padded = new T[paddedLength];
-            Array.Copy(LocalShard.ToArray(), padded, totalParams);
+            Array.Copy(_computedGradients.ToArray(), padded, totalParams);
             // Padding elements remain at default(T) which is typically 0
             reduceInput = new Vector<T>(padded);
         }
 
-        // Perform ReduceScatter on padded data
+        // Perform ReduceScatter on padded gradient data (not parameters!)
         var reducedChunk = Config.CommunicationBackend.ReduceScatter(reduceInput, ReductionOperation.Average);
 
         // Calculate this rank's shard boundaries in the original (non-padded) parameter space
@@ -147,10 +154,22 @@ public class ZeRO2Model<T, TInput, TOutput> : ShardedModelBase<T, TInput, TOutpu
         // However, IFullModel.Train() couples backward and optimizer steps, making true ZeRO-2
         // impossible without API changes. Therefore, this method provides LIMITED functionality:
 
+        // Save parameters BEFORE training to compute gradients
+        var parametersBefore = LocalShard.Clone();
+
         // Set full parameters and perform full training step
         WrappedModel.SetParameters(LocalShard);
         WrappedModel.Train(input, expectedOutput);
         LocalShard = WrappedModel.GetParameters();
+
+        // Compute gradients as parameter delta (approximation since we don't have true gradients)
+        // Gradient = parameters_after - parameters_before
+        var gradientData = new T[LocalShard.Length];
+        for (int i = 0; i < LocalShard.Length; i++)
+        {
+            gradientData[i] = NumOps.Subtract(LocalShard[i], parametersBefore[i]);
+        }
+        _computedGradients = new Vector<T>(gradientData);
 
         if (Config.AutoSyncGradients)
         {
