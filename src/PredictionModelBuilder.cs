@@ -1011,30 +1011,59 @@ public class PredictionModelBuilder<T, TInput, TOutput> : IPredictionModelBuilde
             // Step 5: Define forward and backward functions
             Func<Vector<T>, Vector<T>> studentForward = input => vectorStudentModel.Predict(input);
 
+            // Prepare backward function for parameter updates during distillation training
+            // This function receives output gradients from distillation strategy and applies them to the model
             Action<Vector<T>> studentBackward = gradient =>
             {
-                // TODO: CRITICAL - Integrate with optimizer for proper gradient updates
-                // Current implementation bypasses the optimizer, which:
-                // - Loses optimizer state (momentum, ADAM state, etc.)
-                // - Ignores configured learning rate (options.LearningRate)
-                // - Calls Train() with incorrect signature (gradient as both input and output)
-                //
-                // Proper implementation should:
-                // 1. Extract current model parameters: var params = vectorStudentModel.GetParameters();
-                // 2. Backpropagate gradient through model to get parameter gradients
-                // 3. Apply optimizer update:
-                //    if (optimizer is IGradientBasedOptimizer<T, Vector<T>, Vector<T>> gradOptimizer)
-                //    {
-                //        var updatedModel = gradOptimizer.ApplyGradients(paramGradients, vectorStudentModel);
-                //        // or: var newParams = gradOptimizer.UpdateParameters(params, paramGradients);
-                //        //     vectorStudentModel.SetParameters(newParams);
-                //    }
-                // 4. This preserves optimizer state and respects options.LearningRate
-                //
-                // Issue: https://github.com/ooples/AiDotNet/issues/408 (line 1013-1018)
-                //
-                // Temporary placeholder (incorrect but allows basic functionality):
-                vectorStudentModel.Train(gradient, gradient);
+                // Cast to NeuralNetworkModel to access backpropagation methods
+                if (vectorStudentModel is not NeuralNetworkModel<T> nnModel)
+                {
+                    throw new InvalidOperationException(
+                        "Knowledge distillation requires a NeuralNetworkModel for gradient backpropagation. " +
+                        $"Current model type: {vectorStudentModel.GetType().Name}");
+                }
+
+                try
+                {
+                    // Step 1: Backpropagate output gradient through network to compute parameter gradients
+                    nnModel.Network.Backpropagate(Tensor<T>.FromVector(gradient));
+
+                    // Step 2: Get parameter gradients from backpropagation
+                    var paramGradients = nnModel.Network.GetParameterGradients();
+
+                    // Step 3: Apply gradient-based optimizer update if available
+                    if (optimizer is IGradientBasedOptimizer<T, Vector<T>, Vector<T>> gradOptimizer)
+                    {
+                        // Use optimizer's UpdateParameters to apply gradients with proper state management
+                        // This preserves momentum, ADAM state, and uses configured learning rate
+                        var currentParams = nnModel.GetParameters();
+                        var updatedParams = gradOptimizer.UpdateParameters(currentParams, paramGradients);
+                        nnModel.Network.UpdateParameters(updatedParams);
+                    }
+                    else
+                    {
+                        // Fallback: Simple gradient descent with configured learning rate
+                        // This doesn't preserve optimizer state but respects the learning rate
+                        var currentParams = nnModel.GetParameters();
+                        var learningRate = NumOps.FromDouble(options.LearningRate);
+                        var newParams = new Vector<T>(currentParams.Length);
+
+                        for (int i = 0; i < currentParams.Length; i++)
+                        {
+                            // Apply gradient descent: params = params - learningRate * gradient
+                            newParams[i] = NumOps.Subtract(currentParams[i],
+                                NumOps.Multiply(learningRate, paramGradients[i]));
+                        }
+
+                        nnModel.Network.UpdateParameters(newParams);
+                    }
+                }
+                catch (Exception ex)
+                {
+                    throw new InvalidOperationException(
+                        "Failed to apply gradient updates during knowledge distillation. " +
+                        "Ensure the model supports backpropagation.", ex);
+                }
             };
 
             // Step 6: Setup early stopping and checkpointing
