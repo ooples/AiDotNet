@@ -18,6 +18,30 @@ public class DistributedTeacherModel<T> : TeacherModelBase<Vector<T>, Vector<T>,
         AggregationMode aggregation = AggregationMode.Average)
     {
         _workers = workers ?? throw new ArgumentNullException(nameof(workers));
+
+        // Validate workers array is non-empty
+        if (_workers.Length == 0)
+            throw new ArgumentException("Workers array cannot be empty", nameof(workers));
+
+        // Validate no worker is null
+        for (int i = 0; i < _workers.Length; i++)
+        {
+            if (_workers[i] == null)
+                throw new ArgumentException($"Worker at index {i} is null", nameof(workers));
+        }
+
+        // Validate all workers have the same output dimension
+        int expectedOutputDim = _workers[0].OutputDimension;
+        for (int i = 1; i < _workers.Length; i++)
+        {
+            if (_workers[i].OutputDimension != expectedOutputDim)
+                throw new ArgumentException(
+                    $"Worker at index {i} has OutputDimension {_workers[i].OutputDimension}, " +
+                    $"but expected {expectedOutputDim} (from worker 0). " +
+                    $"All workers must have the same OutputDimension.",
+                    nameof(workers));
+        }
+
         _aggregation = aggregation;
     }
 
