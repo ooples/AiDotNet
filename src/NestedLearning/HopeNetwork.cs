@@ -367,4 +367,153 @@ public class HopeNetwork<T> : NeuralNetworkBase<T>
     /// Gets the number of in-context learning levels (unbounded in theory, bounded in practice).
     /// </summary>
     public int InContextLearningLevels => _inContextLearningLevels;
+
+    /// <summary>
+    /// Makes a prediction on the given input (required by NeuralNetworkBase).
+    /// For Hope, this is equivalent to Forward pass.
+    /// </summary>
+    public override Tensor<T> Predict(Tensor<T> input)
+    {
+        if (input == null)
+            throw new ArgumentNullException(nameof(input));
+
+        return Forward(input);
+    }
+
+    /// <summary>
+    /// Updates all parameters in the network (required by NeuralNetworkBase).
+    /// Distributes parameters across all CMS blocks and recurrent layers.
+    /// </summary>
+    public override void UpdateParameters(Vector<T> parameters)
+    {
+        if (parameters == null)
+            throw new ArgumentNullException(nameof(parameters));
+
+        if (Layers == null || Layers.Count == 0)
+            throw new InvalidOperationException("Network layers are not initialized");
+
+        // Calculate total parameter count across all layers
+        int totalParams = 0;
+        foreach (var layer in Layers)
+        {
+            if (layer == null)
+                throw new InvalidOperationException("Layer is null");
+
+            totalParams += layer.ParameterCount;
+        }
+
+        if (parameters.Length != totalParams)
+        {
+            throw new ArgumentException(
+                $"Parameter vector length ({parameters.Length}) does not match total parameters ({totalParams})",
+                nameof(parameters));
+        }
+
+        // Distribute parameters to each layer
+        int offset = 0;
+        foreach (var layer in Layers)
+        {
+            int layerParamCount = layer.ParameterCount;
+            var layerParams = new Vector<T>(layerParamCount);
+
+            for (int i = 0; i < layerParamCount; i++)
+            {
+                layerParams[i] = parameters[offset + i];
+            }
+
+            layer.SetParameters(layerParams);
+            offset += layerParamCount;
+        }
+    }
+
+    /// <summary>
+    /// Trains the network on a single input-output pair (required by NeuralNetworkBase).
+    /// </summary>
+    public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
+    {
+        if (input == null)
+            throw new ArgumentNullException(nameof(input));
+
+        if (expectedOutput == null)
+            throw new ArgumentNullException(nameof(expectedOutput));
+
+        if (LossFunction == null)
+            throw new InvalidOperationException("Loss function is not set");
+
+        // Forward pass
+        var prediction = Forward(input);
+
+        // Compute loss
+        var loss = LossFunction.ComputeLoss(prediction, expectedOutput);
+
+        // Compute loss gradient
+        var lossGradient = LossFunction.ComputeGradient(prediction, expectedOutput);
+
+        // Backward pass
+        Backward(lossGradient);
+
+        // Update parameters using gradient descent with default learning rate
+        T learningRate = _numOps.FromDouble(0.001);
+
+        foreach (var layer in Layers)
+        {
+            if (layer.SupportsTraining)
+            {
+                layer.UpdateParameters(learningRate);
+            }
+        }
+
+        // Periodically consolidate memory
+        if (_adaptationStep % 100 == 0)
+        {
+            ConsolidateMemory();
+        }
+    }
+
+    /// <summary>
+    /// Gets metadata about the model (required by NeuralNetworkBase).
+    /// </summary>
+    public override ModelMetadata<T> GetModelMetadata()
+    {
+        var metadata = new ModelMetadata<T>
+        {
+            Name = "HopeNetwork",
+            ModelType = Enums.ModelType.RecurrentNeuralNetwork, // Hope is a recurrent architecture variant
+            Version = "1.0",
+            Description = "Self-modifying recurrent network with Continuum Memory System for continual learning based on Google's Nested Learning paradigm",
+            FeatureCount = _hiddenDim,
+            Complexity = ParameterCount,
+            TrainingDate = DateTimeOffset.Now
+        };
+
+        // Add Hope-specific metadata using AdditionalInfo
+        metadata.AdditionalInfo = new Dictionary<string, object>
+        {
+            { "Architecture", "NestedLearning-Hope" },
+            { "HiddenDimension", _hiddenDim },
+            { "CMSLevels", _numCMSLevels },
+            { "RecurrentLayers", _numRecurrentLayers },
+            { "InContextLearningLevels", _inContextLearningLevels },
+            { "AdaptationStep", _adaptationStep },
+            { "SelfModificationRate", _selfModificationRate },
+            { "ParameterCount", ParameterCount },
+            { "LayerCount", Layers?.Count ?? 0 }
+        };
+
+        return metadata;
+    }
+
+    /// <summary>
+    /// Indicates whether the network supports training. Hope always supports training.
+    /// </summary>
+    public override bool SupportsTraining => true;
+
+    /// <summary>
+    /// Resets the state of the network (required by NeuralNetworkBase).
+    /// </summary>
+    public override void ResetState()
+    {
+        ResetMemory();
+        ResetRecurrentState();
+    }
 }

@@ -23,6 +23,11 @@ public class ContinuumMemorySystemLayer<T> : LayerBase<T>
     private static readonly INumericOperations<T> _numOps = MathHelper.GetNumericOperations<T>();
 
     /// <summary>
+    /// Indicates whether this layer supports training. CMS always supports training.
+    /// </summary>
+    public override bool SupportsTraining => true;
+
+    /// <summary>
     /// Creates a CMS layer as a chain of MLP blocks.
     /// </summary>
     /// <param name="inputShape">Input shape</param>
@@ -337,4 +342,180 @@ public class ContinuumMemorySystemLayer<T> : LayerBase<T>
     /// Gets the chunk sizes for gradient accumulation.
     /// </summary>
     public int[] ChunkSizes => _chunkSizes;
+
+    /// <summary>
+    /// Updates parameters using the specified learning rate.
+    /// Note: CMS manages its own learning rates per level, so this applies a global multiplier.
+    /// </summary>
+    /// <param name="learningRate">Global learning rate multiplier</param>
+    public override void UpdateParameters(T learningRate)
+    {
+        if (_mlpBlocks == null || _mlpBlocks.Length == 0)
+            throw new InvalidOperationException("MLP blocks are not initialized");
+
+        // Apply learning rate multiplier to all MLP blocks
+        foreach (var mlp in _mlpBlocks)
+        {
+            if (mlp == null)
+                throw new InvalidOperationException("MLP block is null");
+
+            mlp.UpdateParameters(learningRate);
+        }
+    }
+
+    /// <summary>
+    /// Gets all parameters from all MLP blocks in the chain.
+    /// Returns a concatenated vector of all parameters from all levels.
+    /// </summary>
+    /// <returns>Concatenated parameter vector</returns>
+    public override Vector<T> GetParameters()
+    {
+        if (_mlpBlocks == null || _mlpBlocks.Length == 0)
+            throw new InvalidOperationException("MLP blocks are not initialized");
+
+        // Calculate total parameter count
+        int totalParams = 0;
+        foreach (var mlp in _mlpBlocks)
+        {
+            if (mlp == null)
+                throw new InvalidOperationException("MLP block is null");
+
+            totalParams += mlp.Parameters.Length;
+        }
+
+        // Concatenate all parameters
+        var allParams = new Vector<T>(totalParams);
+        int offset = 0;
+
+        foreach (var mlp in _mlpBlocks)
+        {
+            var mlpParams = mlp.Parameters;
+            for (int i = 0; i < mlpParams.Length; i++)
+            {
+                allParams[offset + i] = mlpParams[i];
+            }
+            offset += mlpParams.Length;
+        }
+
+        return allParams;
+    }
+
+    /// <summary>
+    /// Sets all parameters for all MLP blocks in the chain.
+    /// Distributes the parameter vector across all levels.
+    /// </summary>
+    /// <param name="parameters">Concatenated parameter vector</param>
+    public override void SetParameters(Vector<T> parameters)
+    {
+        if (parameters == null)
+            throw new ArgumentNullException(nameof(parameters));
+
+        if (_mlpBlocks == null || _mlpBlocks.Length == 0)
+            throw new InvalidOperationException("MLP blocks are not initialized");
+
+        // Calculate total expected parameter count
+        int totalParams = 0;
+        foreach (var mlp in _mlpBlocks)
+        {
+            if (mlp == null)
+                throw new InvalidOperationException("MLP block is null");
+
+            totalParams += mlp.Parameters.Length;
+        }
+
+        if (parameters.Length != totalParams)
+        {
+            throw new ArgumentException(
+                $"Parameter vector length ({parameters.Length}) does not match total parameters ({totalParams})",
+                nameof(parameters));
+        }
+
+        // Distribute parameters to each MLP block
+        int offset = 0;
+        foreach (var mlp in _mlpBlocks)
+        {
+            int mlpParamCount = mlp.Parameters.Length;
+            var mlpParams = new Vector<T>(mlpParamCount);
+
+            for (int i = 0; i < mlpParamCount; i++)
+            {
+                mlpParams[i] = parameters[offset + i];
+            }
+
+            mlp.SetParameters(mlpParams);
+            offset += mlpParamCount;
+        }
+
+        // Update the base class Parameters property
+        Parameters = parameters;
+    }
+
+    /// <summary>
+    /// Resets the state of the layer (required by LayerBase).
+    /// Resets all MLP blocks and clears gradient accumulation.
+    /// </summary>
+    public override void ResetState()
+    {
+        ResetMemory(); // Use existing ResetMemory implementation
+    }
+
+    /// <summary>
+    /// Gets the parameter gradients for all MLP blocks.
+    /// Returns concatenated gradients from all levels.
+    /// </summary>
+    public override Vector<T> GetParameterGradients()
+    {
+        if (_mlpBlocks == null || _mlpBlocks.Length == 0)
+            throw new InvalidOperationException("MLP blocks are not initialized");
+
+        // Calculate total parameter count
+        int totalParams = 0;
+        foreach (var mlp in _mlpBlocks)
+        {
+            if (mlp == null)
+                throw new InvalidOperationException("MLP block is null");
+
+            totalParams += mlp.Parameters.Length;
+        }
+
+        // Concatenate all accumulated gradients
+        var allGradients = new Vector<T>(totalParams);
+        int offset = 0;
+
+        for (int level = 0; level < _mlpBlocks.Length; level++)
+        {
+            var accGrad = _accumulatedGradients[level];
+            for (int i = 0; i < accGrad.Length; i++)
+            {
+                allGradients[offset + i] = accGrad[i];
+            }
+            offset += accGrad.Length;
+        }
+
+        return allGradients;
+    }
+
+    /// <summary>
+    /// Clears all accumulated gradients across all levels.
+    /// </summary>
+    public override void ClearGradients()
+    {
+        if (_mlpBlocks == null || _mlpBlocks.Length == 0)
+            throw new InvalidOperationException("MLP blocks are not initialized");
+
+        // Clear gradients in all MLP blocks
+        foreach (var mlp in _mlpBlocks)
+        {
+            if (mlp == null)
+                throw new InvalidOperationException("MLP block is null");
+
+            mlp.ClearGradients();
+        }
+
+        // Clear accumulated gradients
+        for (int i = 0; i < _accumulatedGradients.Length; i++)
+        {
+            _accumulatedGradients[i] = new Vector<T>(_accumulatedGradients[i].Length);
+        }
+    }
 }
