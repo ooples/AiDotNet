@@ -617,8 +617,8 @@ public class NeuralNetworkModel<T> : IFullModel<T, Tensor<T>, Tensor<T>>
             throw new ArgumentException("Predicted and expected vectors must have the same length.");
         }
 
-        // Get appropriate loss function based on the task type
-        var lossFunction = NeuralNetworkHelper<T>.GetDefaultLossFunction(Architecture.TaskType);
+        // Use the configured loss function (custom or default) with null fallback
+        var lossFunction = _defaultLossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(Architecture.TaskType);
     
         // Calculate gradients based on the loss function
         Vector<T> error = lossFunction.CalculateDerivative(predicted, expected);
