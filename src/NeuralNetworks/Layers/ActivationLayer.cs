@@ -5,7 +5,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
 /// <para>
 /// Activation functions introduce non-linearity to neural networks. Non-linearity means the output isn't 
 /// simply proportional to the input (like y = 2x). Instead, it can follow curves or more complex patterns.
-/// Without non-linearity, a neural network—no matter how many layers—would behave just like a single layer,
+/// Without non-linearity, a neural networkï¿½no matter how many layersï¿½would behave just like a single layer,
 /// severely limiting what it can learn.
 /// </para>
 /// <para>
@@ -234,33 +234,143 @@ public class ActivationLayer<T> : LayerBase<T>
     /// multiplied by the output gradient. For vector activation, the derivative tensor is multiplied by the output gradient.
     /// </para>
     /// <para><b>For Beginners:</b> This method calculates how the error gradient flows backward through this layer.
-    /// 
+    ///
     /// During backpropagation, the network calculates how each part contributed to the error.
     /// This method:
     /// 1. Checks that Forward() was called first (we need the saved input)
     /// 2. Verifies the gradient has the correct shape
     /// 3. Calculates how the gradient changes as it passes through this layer
     /// 4. Returns the modified gradient
-    /// 
+    ///
     /// For example, with ReLU activation:
     /// - If the input was positive, the gradient passes through unchanged
     /// - If the input was negative, the gradient is blocked (becomes 0)
-    /// 
+    ///
     /// This is because ReLU's derivative is 1 for positive inputs and 0 for negative inputs.
-    /// 
+    ///
     /// This process helps the network understand which neurons to adjust during training.
     /// </para>
     /// </remarks>
     public override Tensor<T> Backward(Tensor<T> outputGradient)
+    {
+        if (UseAutodiff)
+            return BackwardViaAutodiff(outputGradient);
+        else
+            return BackwardManual(outputGradient);
+    }
+
+    /// <summary>
+    /// Manual backward pass implementation.
+    /// </summary>
+    private Tensor<T> BackwardManual(Tensor<T> outputGradient)
     {
         if (_lastInput == null)
             throw new ForwardPassRequiredException("ActivationLayer", GetType().Name);
 
         TensorValidator.ValidateShapesMatch(_lastInput, outputGradient, "Activation Layer", "Backward Pass");
 
-        return _useVectorActivation 
-            ? BackwardVectorActivation(outputGradient) 
+        return _useVectorActivation
+            ? BackwardVectorActivation(outputGradient)
             : BackwardScalarActivation(outputGradient);
+    }
+
+    /// <summary>
+    /// Backward pass implementation using automatic differentiation.
+    /// </summary>
+    private Tensor<T> BackwardViaAutodiff(Tensor<T> outputGradient)
+    {
+        if (_lastInput == null)
+            throw new ForwardPassRequiredException("ActivationLayer", GetType().Name);
+
+        TensorValidator.ValidateShapesMatch(_lastInput, outputGradient, "Activation Layer", "Backward Pass");
+
+        // Create computation node for input
+        var input = Autodiff.TensorOperations<T>.Variable(_lastInput, "input", requiresGradient: true);
+
+        // Apply activation using autodiff
+        var output = ApplyActivationAutodiff(input);
+
+        // Set the gradient and propagate backward
+        output.Gradient = outputGradient;
+
+        // Perform backward pass
+        var topoOrder = GetTopologicalOrder(output);
+        for (int i = topoOrder.Count - 1; i >= 0; i--)
+        {
+            var node = topoOrder[i];
+            if (node.RequiresGradient && node.BackwardFunction != null && node.Gradient != null)
+            {
+                node.BackwardFunction(node.Gradient);
+            }
+        }
+
+        return input.Gradient!;
+    }
+
+    /// <summary>
+    /// Applies activation function using autodiff operations.
+    /// </summary>
+    private Autodiff.ComputationNode<T> ApplyActivationAutodiff(Autodiff.ComputationNode<T> input)
+    {
+        if (ScalarActivation is ReLUActivation<T>)
+        {
+            return Autodiff.TensorOperations<T>.ReLU(input);
+        }
+        else if (ScalarActivation is SigmoidActivation<T>)
+        {
+            return Autodiff.TensorOperations<T>.Sigmoid(input);
+        }
+        else if (ScalarActivation is TanhActivation<T>)
+        {
+            return Autodiff.TensorOperations<T>.Tanh(input);
+        }
+        else
+        {
+            // For unsupported activations, return input unchanged
+            return input;
+        }
+    }
+
+    /// <summary>
+    /// Gets the topological order of nodes in the computation graph.
+    /// </summary>
+    private List<Autodiff.ComputationNode<T>> GetTopologicalOrder(Autodiff.ComputationNode<T> root)
+    {
+        var visited = new HashSet<Autodiff.ComputationNode<T>>();
+        var result = new List<Autodiff.ComputationNode<T>>();
+
+        var stack = new Stack<(Autodiff.ComputationNode<T> node, bool processed)>();
+        stack.Push((root, false));
+
+        while (stack.Count > 0)
+        {
+            var (node, processed) = stack.Pop();
+
+            if (visited.Contains(node))
+            {
+                continue;
+            }
+
+            if (processed)
+            {
+                visited.Add(node);
+                result.Add(node);
+            }
+            else
+            {
+                stack.Push((node, true));
+
+                foreach (var parent in node.Parents)
+                {
+                    if (!visited.Contains(parent))
+                    {
+                        stack.Push((parent, false));
+                    }
+                }
+            }
+        }
+
+        return result;
     }
 
     /// <summary>
