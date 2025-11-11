@@ -154,6 +154,79 @@ public class GraphConvolutionalLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     private Vector<T>? _biasGradient;
 
     /// <summary>
+    /// Stores the node features from the last forward pass for auxiliary loss computation.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// This field stores the output node features after the graph convolution operation.
+    /// These features are used to compute the Laplacian smoothness regularization loss,
+    /// which encourages connected nodes to have similar feature representations.
+    /// </para>
+    /// <para><b>For Beginners:</b> This stores the features for each node after processing.
+    ///
+    /// The node features:
+    /// - Represent the learned characteristics of each node in the graph
+    /// - Are used to compute regularization losses
+    /// - Help ensure that connected nodes have similar representations
+    ///
+    /// This is useful for graph-based learning where we want neighboring nodes
+    /// to have similar properties while still maintaining their unique characteristics.
+    /// </para>
+    /// </remarks>
+    private Tensor<T>? _lastNodeFeatures;
+
+    /// <summary>
+    /// Stores the list of edges in the graph for auxiliary loss computation.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// This field stores pairs of node indices representing edges in the graph.
+    /// Each tuple contains (sourceNode, targetNode) indices. These edges are extracted
+    /// from the adjacency matrix and used to compute Laplacian smoothness regularization.
+    /// </para>
+    /// <para><b>For Beginners:</b> This stores which nodes are connected to each other.
+    ///
+    /// The edge list:
+    /// - Contains pairs of node indices that are connected
+    /// - Is derived from the adjacency matrix
+    /// - Is used to compute smoothness regularization
+    ///
+    /// For example, if nodes 0 and 2 are connected, the list would include (0, 2).
+    /// This helps the layer encourage connected nodes to have similar features.
+    /// </para>
+    /// </remarks>
+    private List<(int Source, int Target)>? _graphEdges;
+
+    /// <summary>
+    /// Tracks whether edges have been extracted from the current adjacency matrix.
+    /// </summary>
+    private bool _edgesExtracted = false;
+
+    /// <summary>
+    /// Gets or sets the weight for Laplacian smoothness regularization.
+    /// </summary>
+    /// <value>
+    /// The weight to apply to the smoothness loss. Default is 0.001.
+    /// </value>
+    /// <remarks>
+    /// <para>
+    /// This property controls the strength of Laplacian smoothness regularization applied to
+    /// node features. Higher values encourage more similar representations for connected nodes,
+    /// while lower values allow more variation between neighbors.
+    /// </para>
+    /// <para><b>For Beginners:</b> This controls how strongly to encourage smooth features across edges.
+    ///
+    /// Smoothness regularization:
+    /// - Encourages connected nodes to have similar features
+    /// - Helps the network learn coherent representations across the graph
+    /// - Can improve generalization by enforcing local consistency
+    ///
+    /// Typical values range from 0.0001 to 0.01. Set to 0 to disable smoothness regularization.
+    /// </para>
+    /// </remarks>
+    public T SmoothnessWeight { get; set; }
+
+    /// <summary>
     /// Gets a value indicating whether this layer supports training.
     /// </summary>
     /// <value>
@@ -207,6 +280,8 @@ public class GraphConvolutionalLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         _weights = new Matrix<T>(inputFeatures, outputFeatures);
         _bias = new Vector<T>(outputFeatures);
 
+        SmoothnessWeight = NumOps.FromDouble(0.001);
+
         InitializeParameters();
     }
 
@@ -240,6 +315,8 @@ public class GraphConvolutionalLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
 
         _weights = new Matrix<T>(inputFeatures, outputFeatures);
         _bias = new Vector<T>(outputFeatures);
+
+        SmoothnessWeight = NumOps.FromDouble(0.001);
 
         InitializeParameters();
     }
@@ -314,22 +391,57 @@ public class GraphConvolutionalLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     /// <para>
     /// This method sets the adjacency matrix that defines the graph structure. The adjacency matrix must be set
     /// before calling the Forward method. A non-zero value at position [i,j] indicates that node i is connected
-    /// to node j.
+    /// to node j. This method also extracts the edge list from the adjacency matrix for use in auxiliary loss
+    /// computation.
+    /// </para>
+    /// <para>
+    /// <b>Important Limitation:</b> Edge extraction only examines the first batch element (batch index 0).
+    /// This assumes all samples in a batch share the same graph structure. If different samples have different
+    /// graph topologies, the smoothness loss computation will only reflect the structure of the first sample.
+    /// For per-sample graph structures, consider extracting edges dynamically or using separate forward passes.
     /// </para>
     /// <para><b>For Beginners:</b> This method tells the layer how the nodes in your graph are connected.
-    /// 
+    ///
     /// The adjacency matrix is like a road map:
     /// - It shows which nodes can directly communicate with each other
     /// - It determines how information flows through your graph
     /// - It must be provided before processing data through the layer
-    /// 
+    ///
     /// For example, in a social network, the adjacency matrix would show who is friends with whom.
     /// In a molecule, it would show which atoms are bonded to each other.
     /// </para>
     /// </remarks>
     public void SetAdjacencyMatrix(Tensor<T> adjacencyMatrix)
     {
+        // Check if we need to re-extract edges (new matrix or first time)
+        bool needsExtraction = _adjacencyMatrix != adjacencyMatrix || !_edgesExtracted;
+
         _adjacencyMatrix = adjacencyMatrix;
+
+        // Extract edges from adjacency matrix for auxiliary loss computation only if needed
+        // We only extract edges from the first batch (assuming all batches have the same graph structure)
+        if (needsExtraction)
+        {
+            _graphEdges = new List<(int, int)>();
+
+            if (adjacencyMatrix.Shape.Length >= 3)
+            {
+                int numNodes = adjacencyMatrix.Shape[1];
+                for (int i = 0; i < numNodes; i++)
+                {
+                    for (int j = 0; j < numNodes; j++)
+                    {
+                        // Check if there's an edge between nodes i and j
+                        if (!MathHelper.AlmostEqual(adjacencyMatrix[0, i, j], NumOps.Zero))
+                        {
+                            _graphEdges.Add((i, j));
+                        }
+                    }
+                }
+            }
+
+            _edgesExtracted = true;
+        }
     }
 
     /// <summary>
@@ -388,6 +500,10 @@ public class GraphConvolutionalLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         }
 
         _lastOutput = ApplyActivation(output);
+
+        // Store node features for auxiliary loss computation
+        _lastNodeFeatures = _lastOutput;
+
         return _lastOutput;
     }
 
@@ -650,6 +766,96 @@ public class GraphConvolutionalLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     }
 
     /// <summary>
+    /// Computes the Laplacian smoothness regularization loss on node features.
+    /// </summary>
+    /// <returns>The Laplacian smoothness loss value.</returns>
+    /// <remarks>
+    /// <para>
+    /// This method computes graph Laplacian smoothness regularization to encourage connected
+    /// nodes to have similar feature representations. The loss is calculated as the sum of
+    /// squared L2 distances between features of connected nodes, normalized by the number of edges.
+    /// This is equivalent to trace(X^T * L * X) where L is the graph Laplacian matrix (L = D - A).
+    /// </para>
+    /// <para><b>For Beginners:</b> This method encourages connected nodes to have similar features.
+    ///
+    /// Laplacian smoothness regularization:
+    /// - Measures how different neighboring nodes are from each other
+    /// - Adds a penalty when connected nodes have very different features
+    /// - Helps the network learn coherent representations across the graph structure
+    ///
+    /// The process:
+    /// 1. For each edge (i, j) in the graph
+    /// 2. Calculate the squared distance between node i's features and node j's features
+    /// 3. Sum all these distances
+    /// 4. Normalize by the number of edges
+    ///
+    /// A higher loss means connected nodes have very different features.
+    /// A lower loss means connected nodes have similar features, indicating a smooth representation.
+    ///
+    /// This loss encourages the network to learn representations where nearby nodes in the graph
+    /// have similar feature vectors, which often improves generalization on graph-structured data.
+    /// </para>
+    /// </remarks>
+    public T ComputeAuxiliaryLoss()
+    {
+        if (_lastNodeFeatures is null || _graphEdges is null || _graphEdges.Count == 0)
+        {
+            return NumOps.Zero;
+        }
+
+        // Compute Laplacian smoothness: weighted sum of squared L2 distances across all edges
+        // Formula: ∑_{(i,j)} A_ij ||x_i - x_j||²
+        T smoothnessLoss = NumOps.Zero;
+        T totalWeight = NumOps.Zero;
+
+        // Average across batch
+        int batchSize = _lastNodeFeatures.Shape[0];
+        int numFeatures = _lastNodeFeatures.Shape[2];
+
+        for (int b = 0; b < batchSize; b++)
+        {
+            foreach (var edge in _graphEdges)
+            {
+                int nodeI = edge.Source;
+                int nodeJ = edge.Target;
+
+                // Get edge weight from adjacency matrix
+                // Use batch-specific weight if available, otherwise use batch 0
+                T edgeWeight = NumOps.One; // Default to 1 if adjacency not available
+                if (_adjacencyMatrix != null && _adjacencyMatrix.Shape.Length >= 3)
+                {
+                    int batchIdx = Math.Min(b, _adjacencyMatrix.Shape[0] - 1);
+                    edgeWeight = _adjacencyMatrix[batchIdx, nodeI, nodeJ];
+                }
+
+                // Compute squared L2 distance between features of connected nodes
+                T squaredDistance = NumOps.Zero;
+                for (int f = 0; f < numFeatures; f++)
+                {
+                    T diff = NumOps.Subtract(_lastNodeFeatures[b, nodeI, f], _lastNodeFeatures[b, nodeJ, f]);
+                    squaredDistance = NumOps.Add(squaredDistance, NumOps.Multiply(diff, diff));
+                }
+
+                // Weight the distance by the adjacency value
+                T weightedDistance = NumOps.Multiply(edgeWeight, squaredDistance);
+                smoothnessLoss = NumOps.Add(smoothnessLoss, weightedDistance);
+                totalWeight = NumOps.Add(totalWeight, edgeWeight);
+            }
+        }
+
+        // Normalize by total weight (not edge count) for proper Laplacian formulation
+        if (NumOps.GreaterThan(totalWeight, NumOps.Zero))
+        {
+            smoothnessLoss = NumOps.Divide(smoothnessLoss, totalWeight);
+        }
+
+        // Apply smoothness weight to allow tuning of this auxiliary loss
+        smoothnessLoss = NumOps.Multiply(smoothnessLoss, SmoothnessWeight);
+
+        return smoothnessLoss;
+    }
+
+    /// <summary>
     /// Resets the internal state of the layer.
     /// </summary>
     /// <remarks>
@@ -678,88 +884,9 @@ public class GraphConvolutionalLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         // Clear cached values from forward and backward passes
         _lastInput = null;
         _lastOutput = null;
+        _lastNodeFeatures = null;
         _weightsGradient = null;
         _biasGradient = null;
-    }
-
-    /// <summary>
-    /// Computes the auxiliary loss for this layer based on graph smoothness regularization.
-    /// </summary>
-    /// <returns>The computed auxiliary loss value.</returns>
-    /// <remarks>
-    /// <para>
-    /// This method computes a graph smoothness loss that encourages connected nodes in the graph
-    /// to have similar learned representations. The loss is computed as:
-    /// L = Σ_(i,j)∈E ||h_i - h_j||² * A_ij
-    /// where E is the set of edges, h_i and h_j are the learned features for nodes i and j,
-    /// and A_ij is the adjacency matrix value indicating connection strength.
-    /// </para>
-    /// <para><b>For Beginners:</b> This method calculates a penalty for nodes that are connected but have different features.
-    ///
-    /// Graph smoothness loss:
-    /// - Looks at all pairs of connected nodes in the graph
-    /// - Measures how different their learned features are
-    /// - Adds up these differences as a penalty
-    ///
-    /// Why this is useful:
-    /// - In most graphs, connected nodes should be related (e.g., friends in social networks, bonded atoms in molecules)
-    /// - Encouraging similar features for connected nodes helps the network learn more meaningful patterns
-    /// - This is especially helpful when you have limited training data
-    ///
-    /// Example: In a citation network, papers that cite each other should have similar topics.
-    /// This loss encourages the network to give them similar learned features.
-    ///
-    /// <b>Note:</b> This is a placeholder implementation. For full functionality, the layer would need to
-    /// cache the output features during the forward pass and use them here to compute the smoothness loss.
-    /// The formula would iterate over all edges (i,j) where A_ij > 0, compute the squared difference
-    /// between features h_i and h_j, multiply by the edge weight A_ij, and sum over all edges.
-    /// </para>
-    /// </remarks>
-    public T ComputeAuxiliaryLoss()
-    {
-        // Note: This is a placeholder implementation.
-        // Full implementation would require:
-        // 1. Caching the output features (_lastOutput) during Forward pass
-        // 2. Iterating over all edges in the adjacency matrix
-        // 3. Computing squared difference between connected node features
-        //
-        // Pseudo-code for full implementation:
-        // T smoothnessLoss = NumOps.Zero;
-        // if (_lastOutput != null && _adjacencyMatrix != null)
-        // {
-        //     int batchSize = _lastOutput.Shape[0];
-        //     int numNodes = _lastOutput.Shape[1];
-        //     int outputFeatures = _lastOutput.Shape[2];
-        //
-        //     for (int b = 0; b < batchSize; b++)
-        //     {
-        //         for (int i = 0; i < numNodes; i++)
-        //         {
-        //             for (int j = 0; j < numNodes; j++)
-        //             {
-        //                 T edgeWeight = _adjacencyMatrix[b, i, j];
-        //                 if (NumOps.GreaterThan(edgeWeight, NumOps.Zero))
-        //                 {
-        //                     // Compute ||h_i - h_j||²
-        //                     T squaredDiff = NumOps.Zero;
-        //                     for (int f = 0; f < outputFeatures; f++)
-        //                     {
-        //                         T diff = NumOps.Subtract(_lastOutput[b, i, f], _lastOutput[b, j, f]);
-        //                         squaredDiff = NumOps.Add(squaredDiff, NumOps.Multiply(diff, diff));
-        //                     }
-        //                     // Weight by edge strength and accumulate
-        //                     smoothnessLoss = NumOps.Add(smoothnessLoss, NumOps.Multiply(edgeWeight, squaredDiff));
-        //                 }
-        //             }
-        //         }
-        //     }
-        //     // Normalize by number of edges and batch size
-        //     smoothnessLoss = NumOps.Divide(smoothnessLoss, NumOps.FromDouble(batchSize));
-        // }
-        // _lastGraphSmoothnessLoss = smoothnessLoss;
-
-        _lastGraphSmoothnessLoss = NumOps.Zero;
-        return _lastGraphSmoothnessLoss;
     }
 
     /// <summary>

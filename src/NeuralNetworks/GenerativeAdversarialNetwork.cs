@@ -282,9 +282,84 @@ public class GenerativeAdversarialNetwork<T> : NeuralNetworkBase<T>, IAuxiliaryL
     private bool _useGradientPenalty = false;
 
     /// <summary>
-    /// Gets or sets whether feature matching loss is enabled.
+    /// Gets or sets whether feature matching is enabled for generator training.
     /// </summary>
-    private bool _useFeatureMatching = false;
+    /// <value>True if feature matching should be used; false otherwise.</value>
+    /// <remarks>
+    /// <para>
+    /// Feature matching is a technique from Salimans et al. (2016) that helps stabilize GAN training
+    /// and prevent mode collapse. Instead of training the generator to fool the discriminator directly,
+    /// it trains the generator to match the statistics of real data features at intermediate layers
+    /// of the discriminator.
+    /// </para>
+    /// <para><b>For Beginners:</b> This enables a more stable way of training the generator.
+    ///
+    /// Instead of just trying to fool the discriminator:
+    /// - The generator learns to match the internal patterns of real images
+    /// - This helps create more diverse and realistic outputs
+    /// - It reduces the risk of mode collapse (generating the same image repeatedly)
+    /// - Training tends to be more stable with this enabled
+    /// </para>
+    /// <para><b>Important:</b> When enabled, batches are stored but ComputeFeatureMatchingLoss()
+    /// must be manually called and added to the generator loss in your training loop.
+    /// The base Train() method does not automatically integrate this loss.
+    /// See ComputeFeatureMatchingLoss() documentation for integration examples.
+    /// </para>
+    /// </remarks>
+    public bool UseFeatureMatching { get; set; } = false;
+
+    /// <summary>
+    /// Gets or sets the weight applied to the feature matching loss.
+    /// </summary>
+    /// <value>The multiplier for the feature matching loss component.</value>
+    /// <remarks>
+    /// <para>
+    /// This weight balances the feature matching loss against the standard adversarial loss.
+    /// Typical values range from 0.1 to 1.0. Higher values make the generator focus more on
+    /// matching feature statistics rather than fooling the discriminator directly.
+    /// </para>
+    /// <para><b>For Beginners:</b> This controls how much the generator focuses on feature matching.
+    ///
+    /// The weight determines:
+    /// - How much to prioritize matching internal patterns vs. fooling the discriminator
+    /// - Higher values mean more focus on feature matching
+    /// - Lower values mean more focus on the adversarial objective
+    /// - Typical values are around 0.1 to 1.0
+    /// </para>
+    /// </remarks>
+    public double FeatureMatchingWeight { get; set; } = 1.0;
+
+    /// <summary>
+    /// Gets or sets the indices of discriminator layers to use for feature matching.
+    /// If null, uses middle layers by default.
+    /// </summary>
+    /// <value>Array of layer indices, or null to use defaults.</value>
+    /// <remarks>
+    /// <para>
+    /// Specifies which discriminator layers to extract features from for feature matching.
+    /// Typically, intermediate layers (not too early, not too late) work best. If null,
+    /// the implementation will automatically select appropriate middle layers.
+    /// </para>
+    /// <para><b>For Beginners:</b> This chooses which internal layers to compare.
+    ///
+    /// Layer selection matters:
+    /// - Early layers capture low-level features (edges, textures)
+    /// - Middle layers capture mid-level features (shapes, parts)
+    /// - Late layers capture high-level features (object identity)
+    /// - If not specified, sensible defaults are used automatically
+    /// </para>
+    /// </remarks>
+    public int[]? FeatureMatchingLayers { get; set; } = null;
+
+    /// <summary>
+    /// Stores the last real batch for feature matching computation.
+    /// </summary>
+    private Tensor<T>? _lastRealBatch;
+
+    /// <summary>
+    /// Stores the last fake batch for feature matching computation.
+    /// </summary>
+    private Tensor<T>? _lastFakeBatch;
 
     /// <summary>
     /// Stores the last computed gradient penalty value for diagnostics.
@@ -413,25 +488,32 @@ public class GenerativeAdversarialNetwork<T> : NeuralNetworkBase<T>, IAuxiliaryL
         // Ensure we're in training mode
         Generator.SetTrainingMode(true);
         Discriminator.SetTrainingMode(true);
-    
+
         // ----- Train the discriminator -----
-    
+
         // Generate fake images
         Tensor<T> fakeImages = GenerateImages(noise);
-    
+
+        // Store batches for feature matching if enabled
+        if (UseFeatureMatching)
+        {
+            _lastRealBatch = realImages.Clone();
+            _lastFakeBatch = fakeImages.Clone();
+        }
+
         // Get batch size from real images tensor
         int batchSize = realImages.Shape[0];
-    
+
         // Create label tensors (1 for real, 0 for fake)
         Tensor<T> realLabels = CreateLabelTensor(batchSize, NumOps.One);
         Tensor<T> fakeLabels = CreateLabelTensor(batchSize, NumOps.Zero);
-    
+
         // Train discriminator on real images
         T realLoss = TrainDiscriminatorBatch(realImages, realLabels);
-    
+
         // Train discriminator on fake images
         T fakeLoss = TrainDiscriminatorBatch(fakeImages, fakeLabels);
-    
+
         // Compute total discriminator loss
         T discriminatorLoss = NumOps.Add(realLoss, fakeLoss);
         discriminatorLoss = NumOps.Divide(discriminatorLoss, NumOps.FromDouble(2.0)); // Average loss
@@ -466,15 +548,15 @@ public class GenerativeAdversarialNetwork<T> : NeuralNetworkBase<T>, IAuxiliaryL
         {
             _generatorLosses.RemoveAt(0); // Keep only recent losses
         }
-    
+
         // ----- Adaptive learning rate adjustment -----
-    
+
         // Adapt learning rate based on recent performance
         if (_generatorLosses.Count >= 20)
         {
             var recentAverage = _generatorLosses.Skip(_generatorLosses.Count - 10).Average(l => Convert.ToDouble(l));
             var previousAverage = _generatorLosses.Skip(_generatorLosses.Count - 20).Take(10).Average(l => Convert.ToDouble(l));
-        
+
             // If loss is not improving or worsening, adjust learning rate
             if (recentAverage > previousAverage * 0.95)
             {
@@ -486,7 +568,7 @@ public class GenerativeAdversarialNetwork<T> : NeuralNetworkBase<T>, IAuxiliaryL
                 _currentLearningRate = Math.Min(_currentLearningRate * 1.05, 0.001); // Increase but cap
             }
         }
-    
+
         return (discriminatorLoss, generatorLoss);
     }
 
@@ -878,6 +960,13 @@ public class GenerativeAdversarialNetwork<T> : NeuralNetworkBase<T>, IAuxiliaryL
 
         // Generate fake images with tensor operations
         var fakeImages = Generator.Predict(input);
+
+        // Store batches for feature matching if enabled
+        if (UseFeatureMatching)
+        {
+            _lastRealBatch = expectedOutput.Clone();
+            _lastFakeBatch = fakeImages.Clone();
+        }
 
         // Create label tensors (1 for real, 0 for fake)
         var realLabels = CreateLabelTensor(batchSize, NumOps.One);
@@ -1423,7 +1512,7 @@ public class GenerativeAdversarialNetwork<T> : NeuralNetworkBase<T>, IAuxiliaryL
     /// </remarks>
     public void EnableFeatureMatching(bool enable = true)
     {
-        _useFeatureMatching = enable;
+        UseFeatureMatching = enable;
     }
 
     /// <summary>
@@ -1462,7 +1551,7 @@ public class GenerativeAdversarialNetwork<T> : NeuralNetworkBase<T>, IAuxiliaryL
         }
 
         // Compute feature matching loss if enabled
-        if (_useFeatureMatching)
+        if (UseFeatureMatching)
         {
             _lastFeatureMatchingLoss = ComputeFeatureMatchingLoss();
             totalAuxLoss = NumOps.Add(totalAuxLoss, _lastFeatureMatchingLoss);
@@ -1509,7 +1598,7 @@ public class GenerativeAdversarialNetwork<T> : NeuralNetworkBase<T>, IAuxiliaryL
             { "FeatureMatchingLoss", _lastFeatureMatchingLoss?.ToString() ?? "0" },
             { "CurrentLearningRate", _currentLearningRate.ToString() },
             { "UseGradientPenalty", _useGradientPenalty.ToString() },
-            { "UseFeatureMatching", _useFeatureMatching.ToString() }
+            { "UseFeatureMatching", UseFeatureMatching.ToString() }
         };
 
         // Estimate Wasserstein distance (difference between discriminator outputs for real and fake)
@@ -1565,28 +1654,6 @@ public class GenerativeAdversarialNetwork<T> : NeuralNetworkBase<T>, IAuxiliaryL
         // 4. Compute (||gradient||_2 - 1)^2
 
         // Placeholder implementation - return small penalty
-        return NumOps.FromDouble(0.01);
-    }
-
-    /// <summary>
-    /// Computes the feature matching loss.
-    /// </summary>
-    /// <returns>The feature matching loss value.</returns>
-    /// <remarks>
-    /// Feature matching loss encourages the generator to produce samples that have similar
-    /// statistics to real data at intermediate layers of the discriminator.
-    /// Formula: ||E[f(x)] - E[f(G(z))]||₂² where f(·) are intermediate layer activations
-    /// </remarks>
-    private T ComputeFeatureMatchingLoss()
-    {
-        // Feature matching requires access to intermediate layer activations
-        // This is a simplified implementation that returns a placeholder
-        // A full implementation would require:
-        // 1. Extract intermediate layer activations from discriminator for real samples
-        // 2. Extract intermediate layer activations from discriminator for fake samples
-        // 3. Compute L2 distance between the mean activations
-
-        // Placeholder implementation - return small loss
         return NumOps.FromDouble(0.01);
     }
 
@@ -1889,6 +1956,471 @@ public class GenerativeAdversarialNetwork<T> : NeuralNetworkBase<T>, IAuxiliaryL
     }
 
     /// <summary>
+    /// Computes the gradient penalty for WGAN-GP (Wasserstein GAN with Gradient Penalty).
+    /// </summary>
+    /// <param name="realSamples">Batch of real samples.</param>
+    /// <param name="fakeSamples">Batch of generated (fake) samples.</param>
+    /// <param name="lambda">Weight for the gradient penalty term (default: 10.0).</param>
+    /// <returns>The gradient penalty loss value.</returns>
+    /// <remarks>
+    /// <para>
+    /// This method implements the gradient penalty from Gulrajani et al. (2017) "Improved Training
+    /// of Wasserstein GANs". The gradient penalty enforces the Lipschitz constraint by penalizing
+    /// the discriminator when gradients deviate from unit norm at interpolated points between
+    /// real and fake samples.
+    /// </para>
+    /// <para>
+    /// The penalty is computed as: λ * E[(||∇_x D(x)|| - 1)²] where x is sampled uniformly
+    /// along straight lines between real and fake samples. This replaces weight clipping
+    /// and leads to more stable training and higher quality results.
+    /// </para>
+    /// <para>
+    /// This implementation uses symbolic differentiation (autodiff) to compute
+    /// gradients with respect to the input. This is more accurate and efficient than
+    /// numerical differentiation and is the standard approach in modern WGAN-GP implementations.
+    /// </para>
+    /// <para><b>For Beginners:</b> This helps stabilize WGAN training by constraining gradients.
+    ///
+    /// How it works:
+    /// 1. Create interpolated samples between real and fake images (mix them randomly)
+    /// 2. Compute how the discriminator output changes with respect to input (gradient)
+    /// 3. Measure how far the gradient norm is from 1.0
+    /// 4. Penalize the discriminator if gradients are too large or too small
+    ///
+    /// Why this helps:
+    /// - Enforces the mathematical constraint needed for Wasserstein distance
+    /// - Prevents discriminator gradients from exploding or vanishing
+    /// - More stable than weight clipping (older WGAN approach)
+    /// - Results in higher quality generated images
+    ///
+    /// <b>Important:</b> This method computes the gradient penalty but does not automatically
+    /// integrate it into training. To use WGAN-GP, you must:
+    /// 1. Call this method during discriminator training
+    /// 2. Add the returned penalty to the discriminator loss
+    /// 3. Use the combined loss to update discriminator parameters
+    ///
+    /// The base Train() method does not automatically include gradient penalty.
+    /// Typical lambda values are 10.0 for images.
+    /// </para>
+    /// </remarks>
+    public T ComputeGradientPenalty(Tensor<T> realSamples, Tensor<T> fakeSamples, double lambda = 10.0)
+    {
+        if (realSamples == null || fakeSamples == null)
+        {
+            return NumOps.Zero;
+        }
+
+        int batchSize = realSamples.Shape[0];
+        if (batchSize != fakeSamples.Shape[0])
+        {
+            throw new ArgumentException("Real and fake samples must have the same batch size.");
+        }
+
+        // Generate random interpolation coefficients (epsilon) for each sample in batch
+        var epsilon = new T[batchSize];
+        for (int i = 0; i < batchSize; i++)
+        {
+            epsilon[i] = NumOps.FromDouble(Random.NextDouble());
+        }
+
+        // Compute interpolated samples: x_hat = epsilon * real + (1 - epsilon) * fake
+        var interpolated = new Tensor<T>(realSamples.Shape);
+        int elementsPerSample = realSamples.Length / batchSize;
+
+        for (int b = 0; b < batchSize; b++)
+        {
+            T eps = epsilon[b];
+            T oneMinusEps = NumOps.Subtract(NumOps.One, eps);
+
+            for (int i = 0; i < elementsPerSample; i++)
+            {
+                int idx = b * elementsPerSample + i;
+                if (idx < realSamples.Length && idx < fakeSamples.Length)
+                {
+                    T realPart = NumOps.Multiply(eps, realSamples[idx]);
+                    T fakePart = NumOps.Multiply(oneMinusEps, fakeSamples[idx]);
+                    interpolated[idx] = NumOps.Add(realPart, fakePart);
+                }
+            }
+        }
+
+        // Compute gradients using symbolic differentiation (autodiff)
+        // This is more accurate and efficient than numerical differentiation
+        var gradients = ComputeSymbolicGradient(interpolated);
+
+        // Compute gradient penalty: lambda * mean((||gradient|| - 1)^2)
+        T totalPenalty = NumOps.Zero;
+
+        for (int b = 0; b < batchSize; b++)
+        {
+            // Compute L2 norm of gradient for this sample
+            T gradientNormSquared = NumOps.Zero;
+            for (int i = 0; i < elementsPerSample; i++)
+            {
+                int idx = b * elementsPerSample + i;
+                if (idx < gradients.Length)
+                {
+                    T g = gradients[idx];
+                    gradientNormSquared = NumOps.Add(gradientNormSquared, NumOps.Multiply(g, g));
+                }
+            }
+
+            T gradientNorm = NumOps.Sqrt(gradientNormSquared);
+
+            // Penalty term: (||gradient|| - 1)^2
+            T deviation = NumOps.Subtract(gradientNorm, NumOps.One);
+            T penalty = NumOps.Multiply(deviation, deviation);
+
+            totalPenalty = NumOps.Add(totalPenalty, penalty);
+        }
+
+        // Average over batch
+        totalPenalty = NumOps.Divide(totalPenalty, NumOps.FromDouble(batchSize));
+
+        // Apply lambda weight
+        totalPenalty = NumOps.Multiply(totalPenalty, NumOps.FromDouble(lambda));
+
+        return totalPenalty;
+    }
+
+    /// <summary>
+    /// Computes gradients of discriminator output with respect to input using symbolic differentiation.
+    /// </summary>
+    /// <param name="input">The input tensor to compute gradients for.</param>
+    /// <returns>A tensor containing the gradients with respect to the input.</returns>
+    /// <remarks>
+    /// <para>
+    /// This method uses automatic differentiation (autodiff) to compute exact gradients by
+    /// running a backward pass through the discriminator network. This is more accurate and
+    /// efficient than numerical differentiation, and is the industry-standard approach used
+    /// in frameworks like TensorFlow and PyTorch.
+    /// </para>
+    /// <para>
+    /// The process:
+    /// 1. Run forward pass through discriminator to get output
+    /// 2. Create gradient signal with respect to output (typically all ones)
+    /// 3. Backpropagate through all layers to compute gradient with respect to input
+    /// 4. Return the accumulated input gradients
+    /// </para>
+    /// <para><b>For Beginners:</b> This computes how the output changes when the input changes, using calculus.
+    ///
+    /// Unlike numerical differentiation which approximates gradients by trying tiny changes,
+    /// symbolic differentiation uses the mathematical rules of calculus to compute exact derivatives.
+    ///
+    /// The process:
+    /// 1. Run the input through the discriminator to get an output
+    /// 2. Start with "how much we care about the output" (gradient = 1.0)
+    /// 3. Work backwards through each layer, computing how much each input affects the output
+    /// 4. This gives us the exact gradient without approximations
+    ///
+    /// Benefits over numerical differentiation:
+    /// - More accurate (no approximation error)
+    /// - Faster (only requires one forward and one backward pass)
+    /// - Uses less memory (doesn't need to perturb each input element)
+    /// - Industry standard approach used in modern deep learning frameworks
+    /// </para>
+    /// </remarks>
+    private Tensor<T> ComputeSymbolicGradient(Tensor<T> input)
+    {
+        // Store original training mode
+        bool originalMode = Discriminator.IsTrainingMode;
+        Discriminator.SetTrainingMode(false); // Use inference mode for stable gradients
+
+        // Reset layer states to ensure clean forward pass
+        Discriminator.ResetState();
+
+        // Forward pass through discriminator
+        var output = Discriminator.Predict(input);
+
+        // Create gradient signal: we want d(output)/d(input)
+        // Start with gradient of 1.0 with respect to the output
+        var outputGradient = new Tensor<T>(output.Shape);
+        outputGradient.Fill(NumOps.One);
+
+        // Run backward pass through discriminator layers to compute input gradient
+        // The discriminator's Backward method will propagate gradients back to the input
+        var inputGradient = Discriminator.BackwardWithInputGradient(outputGradient);
+
+        // Restore original training mode
+        Discriminator.SetTrainingMode(originalMode);
+
+        return inputGradient;
+    }
+
+    /// <summary>
+    /// Computes numerical gradients of discriminator output with respect to input using finite differences.
+    /// </summary>
+    /// <param name="input">The input tensor to compute gradients for.</param>
+    /// <returns>A tensor containing the numerical gradients.</returns>
+    /// <remarks>
+    /// <para>
+    /// This method uses the finite difference method to approximate gradients:
+    /// ∂f/∂x ≈ (f(x + h) - f(x - h)) / (2h) where h is a small step size (epsilon).
+    /// </para>
+    /// <para>
+    /// Central differences are more accurate than forward differences and are
+    /// suitable for computing gradient penalties in WGAN-GP. The epsilon value
+    /// is chosen to balance numerical accuracy and precision (1e-4 works well for
+    /// typical neural network outputs).
+    /// </para>
+    /// <para>
+    /// NOTE: This method is kept for backward compatibility and as a fallback.
+    /// For production use, prefer ComputeSymbolicGradient() which is more accurate
+    /// and efficient.
+    /// </para>
+    /// <para><b>For Beginners:</b> This computes how the output changes when the input changes.
+    ///
+    /// The process:
+    /// 1. For each input value, make a tiny change (+epsilon and -epsilon)
+    /// 2. See how much the discriminator output changes
+    /// 3. The gradient is the rate of change (output change / input change)
+    ///
+    /// This is called "numerical differentiation" - we approximate the derivative
+    /// by actually trying tiny changes rather than using calculus formulas.
+    /// It's accurate but slower than symbolic differentiation.
+    /// </para>
+    /// </remarks>
+    private Tensor<T> ComputeNumericalGradient(Tensor<T> input)
+    {
+        var gradients = new Tensor<T>(input.Shape);
+        T epsilon = NumOps.FromDouble(1e-4); // Small perturbation for numerical gradient
+
+        // Store original discriminator training mode
+        bool originalMode = Discriminator.IsTrainingMode;
+        Discriminator.SetTrainingMode(false); // Use inference mode for gradient computation
+
+        // Work on a copy to avoid modifying the input tensor
+        var inputCopy = new Tensor<T>(input.Shape);
+        for (int idx = 0; idx < input.Length; idx++)
+        {
+            inputCopy[idx] = input[idx];
+        }
+
+        // Compute gradient for each input element using central differences
+        for (int i = 0; i < inputCopy.Length; i++)
+        {
+            // Save original value
+            T originalValue = inputCopy[i];
+
+            // Compute f(x + epsilon)
+            inputCopy[i] = NumOps.Add(originalValue, epsilon);
+            var outputPlus = Discriminator.Predict(inputCopy);
+
+            // Compute f(x - epsilon)
+            inputCopy[i] = NumOps.Subtract(originalValue, epsilon);
+            var outputMinus = Discriminator.Predict(inputCopy);
+
+            // Restore original value
+            inputCopy[i] = originalValue;
+
+            // Central difference: (f(x+h) - f(x-h)) / (2h)
+            // For discriminator, we use the first output element (real/fake score)
+            // Handle both 1D and 2D output tensors
+            T plusValue = outputPlus.Shape.Length >= 2 ? outputPlus[0, 0] : outputPlus[0];
+            T minusValue = outputMinus.Shape.Length >= 2 ? outputMinus[0, 0] : outputMinus[0];
+            T outputDiff = NumOps.Subtract(plusValue, minusValue);
+            T twoEpsilon = NumOps.Multiply(epsilon, NumOps.FromDouble(2.0));
+            gradients[i] = NumOps.Divide(outputDiff, twoEpsilon);
+        }
+
+        // Restore original training mode
+        Discriminator.SetTrainingMode(originalMode);
+
+        return gradients;
+    }
+
+    /// <summary>
+    /// Computes the feature matching loss between real and generated data.
+    /// </summary>
+    /// <returns>The feature matching loss value.</returns>
+    /// <remarks>
+    /// <para>
+    /// This method implements feature matching loss from Salimans et al. (2016). Instead of training
+    /// the generator to maximize discriminator confusion directly, it trains the generator to match
+    /// the statistics (mean activations) of real data at intermediate layers of the discriminator.
+    /// This approach helps stabilize training and prevent mode collapse.
+    /// </para>
+    /// <para>
+    /// The loss is computed as the L2 distance between the mean feature activations of real and
+    /// generated samples across specified discriminator layers. If no layers are specified via
+    /// FeatureMatchingLayers, the method automatically selects middle layers of the discriminator.
+    /// </para>
+    /// <para><b>For Beginners:</b> This measures how well generated images match real images internally.
+    ///
+    /// How it works:
+    /// 1. Pass real images through the discriminator and extract internal features
+    /// 2. Pass fake images through the discriminator and extract the same features
+    /// 3. Compare the average features from real vs. fake images
+    /// 4. Return a score showing how different they are
+    ///
+    /// Why this helps:
+    /// - Forces the generator to match internal patterns, not just fool the discriminator
+    /// - Helps create more diverse outputs (prevents mode collapse)
+    /// - Makes training more stable
+    /// - Results in more realistic generated images
+    ///
+    /// The loss should be minimized during generator training, typically weighted and
+    /// combined with the standard adversarial loss.
+    /// </para>
+    /// </remarks>
+    public T ComputeFeatureMatchingLoss()
+    {
+        // Check if we have stored batches
+        if (_lastRealBatch == null || _lastFakeBatch == null)
+        {
+            return NumOps.Zero;
+        }
+
+        // Determine which layers to use for feature extraction
+        int[] layerIndices;
+        if (FeatureMatchingLayers != null && FeatureMatchingLayers.Length > 0)
+        {
+            layerIndices = FeatureMatchingLayers;
+        }
+        else
+        {
+            // Use middle layers by default (25%, 50%, 75% through the network)
+            // Adjust based on actual discriminator depth to avoid invalid indices
+            int discriminatorLayerCount = Discriminator.LayerCount;
+            if (discriminatorLayerCount <= 2)
+            {
+                // Very shallow network - just use available layers
+                layerIndices = discriminatorLayerCount == 1 ? new int[] { 0 } : new int[] { 0, 1 };
+            }
+            else if (discriminatorLayerCount <= 4)
+            {
+                // Small network - use first, middle, last
+                layerIndices = new int[] { 0, discriminatorLayerCount / 2, discriminatorLayerCount - 1 };
+            }
+            else
+            {
+                // Standard network - use 25%, 50%, 75% positions
+                int idx25 = discriminatorLayerCount / 4;
+                int idx50 = discriminatorLayerCount / 2;
+                int idx75 = (discriminatorLayerCount * 3) / 4;
+                layerIndices = new int[] { idx25, idx50, idx75 };
+            }
+        }
+
+        // Set discriminator to inference mode (no training during feature extraction)
+        bool originalTrainingMode = Discriminator.IsTrainingMode;
+        Discriminator.SetTrainingMode(false);
+
+        // Extract features from real batch
+        var (_, realFeatures) = Discriminator.ForwardWithFeatures(_lastRealBatch, layerIndices);
+
+        // Extract features from fake batch
+        var (_, fakeFeatures) = Discriminator.ForwardWithFeatures(_lastFakeBatch, layerIndices);
+
+        // Restore original training mode
+        Discriminator.SetTrainingMode(originalTrainingMode);
+
+        // Compute L2 distance between feature statistics
+        T totalLoss = NumOps.Zero;
+        int featureCount = 0;
+
+        foreach (int layerIdx in layerIndices)
+        {
+            if (!realFeatures.TryGetValue(layerIdx, out var realLayerFeatures) ||
+                !fakeFeatures.TryGetValue(layerIdx, out var fakeLayerFeatures))
+            {
+                continue;
+            }
+
+            // Compute mean features across batch dimension
+            var realMean = ComputeBatchMean(realLayerFeatures);
+            var fakeMean = ComputeBatchMean(fakeLayerFeatures);
+
+            // Compute L2 distance between means
+            T layerLoss = NumOps.Zero;
+            int elementCount = Math.Min(realMean.Length, fakeMean.Length);
+
+            for (int i = 0; i < elementCount; i++)
+            {
+                T diff = NumOps.Subtract(realMean[i], fakeMean[i]);
+                layerLoss = NumOps.Add(layerLoss, NumOps.Multiply(diff, diff));
+            }
+
+            // Normalize by number of features
+            if (elementCount > 0)
+            {
+                layerLoss = NumOps.Divide(layerLoss, NumOps.FromDouble(elementCount));
+            }
+
+            totalLoss = NumOps.Add(totalLoss, layerLoss);
+            featureCount++;
+        }
+
+        // Average across layers
+        if (featureCount > 0)
+        {
+            totalLoss = NumOps.Divide(totalLoss, NumOps.FromDouble(featureCount));
+        }
+
+        // Apply feature matching weight
+        totalLoss = NumOps.Multiply(totalLoss, NumOps.FromDouble(FeatureMatchingWeight));
+
+        return totalLoss;
+    }
+
+    /// <summary>
+    /// Computes the mean of a tensor across the batch dimension.
+    /// </summary>
+    /// <param name="tensor">The input tensor with batch as first dimension.</param>
+    /// <returns>A 1D tensor containing the mean values.</returns>
+    /// <remarks>
+    /// <para>
+    /// This helper method computes the mean of tensor values across the batch dimension,
+    /// reducing a [batch, ...] tensor to a flattened mean representation. This is used
+    /// for computing feature statistics in feature matching.
+    /// </para>
+    /// <para><b>For Beginners:</b> This calculates average values across multiple examples.
+    ///
+    /// The process:
+    /// - Takes features from multiple images in a batch
+    /// - Averages each feature value across all images
+    /// - Returns a single "typical" feature representation
+    ///
+    /// For example, if you have 32 images and each has 256 features,
+    /// this computes 256 average values (one for each feature).
+    /// </para>
+    /// </remarks>
+    private Tensor<T> ComputeBatchMean(Tensor<T> tensor)
+    {
+        if (tensor.Rank == 0 || tensor.Length == 0)
+        {
+            return new Tensor<T>(new int[] { 0 });
+        }
+
+        int batchSize = tensor.Shape[0];
+        int elementsPerSample = tensor.Length / batchSize;
+
+        var mean = new Tensor<T>(new int[] { elementsPerSample });
+
+        // Sum across batch dimension
+        for (int b = 0; b < batchSize; b++)
+        {
+            for (int i = 0; i < elementsPerSample; i++)
+            {
+                int tensorIdx = b * elementsPerSample + i;
+                if (tensorIdx < tensor.Length)
+                {
+                    mean[i] = NumOps.Add(mean[i], tensor[tensorIdx]);
+                }
+            }
+        }
+
+        // Divide by batch size to get mean
+        T batchSizeT = NumOps.FromDouble(batchSize);
+        for (int i = 0; i < elementsPerSample; i++)
+        {
+            mean[i] = NumOps.Divide(mean[i], batchSizeT);
+        }
+
+        return mean;
+    }
+
+    /// <summary>
     /// Creates a new instance of the GenerativeAdversarialNetwork with the same configuration as the current instance.
     /// </summary>
     /// <returns>A new GenerativeAdversarialNetwork instance with the same architecture as the current instance.</returns>
@@ -1899,13 +2431,13 @@ public class GenerativeAdversarialNetwork<T> : NeuralNetworkBase<T>, IAuxiliaryL
     /// cross-validation scenarios where multiple instances of the same model with identical configurations are needed.
     /// </para>
     /// <para><b>For Beginners:</b> This method creates a fresh copy of the GAN's blueprint.
-    /// 
+    ///
     /// When you need multiple versions of the same GAN with identical settings:
     /// - This method creates a new, empty GAN with the same configuration
     /// - It copies the architecture of both the generator and discriminator networks
     /// - The new GAN has the same structure but no trained data
     /// - This is useful for techniques that need multiple models, like ensemble methods
-    /// 
+    ///
     /// For example, when experimenting with different training approaches,
     /// you'd want to start with identical model configurations.
     /// </para>

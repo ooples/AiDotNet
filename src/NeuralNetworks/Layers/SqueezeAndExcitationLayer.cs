@@ -315,16 +315,40 @@ public class SqueezeAndExcitationLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     /// should be adjusted to reduce the loss. The value is null if no backward pass has been performed yet or after ResetState is called.
     /// </para>
     /// <para><b>For Beginners:</b> This shows how the second set of biases should change.
-    /// 
+    ///
     /// These gradients:
     /// - Help adjust the default attention given to each feature
     /// - Allow the network to learn which features are generally more important
     /// - Fine-tune the "excitation" part of the layer
-    /// 
+    ///
     /// Along with the other gradients, these help the network improve through training.
     /// </para>
     /// </remarks>
     private Vector<T>? _bias2Gradient;
+
+    /// <summary>
+    /// Gets or sets the weight for L1 sparsity regularization on attention weights.
+    /// </summary>
+    /// <value>
+    /// The weight to apply to the L1 sparsity loss. Default is 0.0001.
+    /// </value>
+    /// <remarks>
+    /// <para>
+    /// This property controls the strength of L1 sparsity regularization applied to
+    /// the channel attention weights. Higher values encourage more sparse attention
+    /// (fewer active channels), while lower values allow more distributed attention.
+    /// </para>
+    /// <para><b>For Beginners:</b> This controls how strongly to encourage sparse attention.
+    ///
+    /// Sparsity regularization:
+    /// - Encourages the network to focus on fewer, more important channels
+    /// - Helps prevent overfitting by reducing model complexity
+    /// - Can improve interpretability by making channel selection clearer
+    ///
+    /// Typical values range from 0.0001 to 0.01. Set to 0 to disable sparsity regularization.
+    /// </para>
+    /// </remarks>
+    public T SparsityWeight { get; set; }
 
     /// <summary>
     /// The activation function applied after the first fully connected layer.
@@ -479,6 +503,8 @@ public class SqueezeAndExcitationLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         _weights2 = new Matrix<T>(_reducedChannels, _channels);
         _bias2 = new Vector<T>(_channels);
 
+        SparsityWeight = NumOps.FromDouble(0.0001);
+
         InitializeWeights();
     }
 
@@ -523,6 +549,8 @@ public class SqueezeAndExcitationLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         _bias1 = new Vector<T>(_reducedChannels);
         _weights2 = new Matrix<T>(_reducedChannels, _channels);
         _bias2 = new Vector<T>(_channels);
+
+        SparsityWeight = NumOps.FromDouble(0.0001);
 
         InitializeWeights();
     }

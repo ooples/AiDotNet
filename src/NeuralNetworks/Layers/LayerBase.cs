@@ -282,6 +282,37 @@ public abstract class LayerBase<T> : ILayer<T>, IDiagnosticsProvider<T>
     public abstract bool SupportsTraining { get; }
 
     /// <summary>
+    /// Gets or sets a value indicating whether this layer uses automatic differentiation for backward passes.
+    /// </summary>
+    /// <value>
+    /// <c>true</c> if the layer should use autodiff; <c>false</c> if it uses manual backward implementation. Default is <c>false</c>.
+    /// </value>
+    /// <remarks>
+    /// <para>
+    /// This property controls whether the layer uses the automatic differentiation system (autodiff) or
+    /// manual backward pass implementations during training. Manual backward passes are typically faster
+    /// but require explicit gradient computation code. Autodiff is more flexible and can be useful for:
+    /// - Custom layer implementations where manual gradients are complex
+    /// - Research and experimentation with novel architectures
+    /// - Rapid prototyping of new layer types
+    /// </para>
+    /// <para><b>For Beginners:</b> This controls how the layer computes gradients during training.
+    ///
+    /// Two modes are available:
+    /// - <b>Manual (default, false):</b> Uses hand-written, optimized gradient code. Faster but requires careful implementation.
+    /// - <b>Autodiff (true):</b> Uses automatic differentiation to compute gradients. Slower but more flexible and less error-prone.
+    ///
+    /// Most users should leave this as false (default) for best performance. Set to true only for:
+    /// - Custom layers with complex gradients
+    /// - Experimental or research purposes
+    /// - When you need guaranteed correct gradients for a new operation
+    ///
+    /// <b>Note:</b> Autodiff support must be implemented by the specific layer type. Not all layers support autodiff mode yet.
+    /// </para>
+    /// </remarks>
+    public bool UseAutodiff { get; set; } = false;
+
+    /// <summary>
     /// Initializes a new instance of the <see cref="LayerBase{T}"/> class with the specified input and output shapes.
     /// </summary>
     /// <param name="inputShape">The shape of the input tensor.</param>
