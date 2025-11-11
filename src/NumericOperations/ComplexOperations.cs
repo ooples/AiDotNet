@@ -13,7 +13,7 @@ namespace AiDotNet.NumericOperations;
 ///
 /// Complex numbers have two parts:
 /// - A real part (like regular numbers)
-/// - An imaginary part (multiplied by i, where i² = -1)
+/// - An imaginary part (multiplied by i, where iï¿½ = -1)
 ///
 /// For example, 3 + 4i is a complex number where:
 /// - 3 is the real part
@@ -134,9 +134,9 @@ public class ComplexOperations<T> : INumericOperations<Complex<T>>
     /// - It follows a specific formula: (a + bi)(c + di) = (ac - bd) + (ad + bc)i
     /// 
     /// For example:
-    /// - (3 + 2i) × (1 + 4i) = (3×1 - 2×4) + (3×4 + 2×1)i = -5 + 14i
+    /// - (3 + 2i) ï¿½ (1 + 4i) = (3ï¿½1 - 2ï¿½4) + (3ï¿½4 + 2ï¿½1)i = -5 + 14i
     /// 
-    /// This is because i² = -1, which makes complex multiplication different from
+    /// This is because iï¿½ = -1, which makes complex multiplication different from
     /// regular multiplication.
     /// </para>
     /// </remarks>
@@ -161,12 +161,12 @@ public class ComplexOperations<T> : INumericOperations<Complex<T>>
     /// 2. This makes the denominator a real number
     /// 3. Then divide each part of the numerator by this real number
     /// 
-    /// For example, to calculate (3 + 2i) ÷ (1 + i):
+    /// For example, to calculate (3 + 2i) ï¿½ (1 + i):
     /// 1. Multiply top and bottom by (1 - i), the conjugate of (1 + i)
-    /// 2. (3 + 2i)(1 - i) ÷ (1 + i)(1 - i)
-    /// 3. (3 - 3i + 2i - 2i²) ÷ (1² - i²)
-    /// 4. (3 - 3i + 2i + 2) ÷ (1 + 1)
-    /// 5. (5 - i) ÷ 2
+    /// 2. (3 + 2i)(1 - i) ï¿½ (1 + i)(1 - i)
+    /// 3. (3 - 3i + 2i - 2iï¿½) ï¿½ (1ï¿½ - iï¿½)
+    /// 4. (3 - 3i + 2i + 2) ï¿½ (1 + 1)
+    /// 5. (5 - i) ï¿½ 2
     /// 6. 2.5 - 0.5i
     /// 
     /// Complex division is one of the more challenging operations with complex numbers.
@@ -264,7 +264,7 @@ public class ComplexOperations<T> : INumericOperations<Complex<T>>
     /// For example, the square root of -4 (which is 0 - 4i in complex form):
     /// - Has a magnitude of 4 and an angle of -90 degrees
     /// - The square root has magnitude v4 = 2 and angle -90/2 = -45 degrees
-    /// - Converting back gives 2 × (cos(-45°) + i × sin(-45°)) = v2 - v2i
+    /// - Converting back gives 2 ï¿½ (cos(-45ï¿½) + i ï¿½ sin(-45ï¿½)) = v2 - v2i
     /// 
     /// This is one of the key advantages of complex numbers - they allow us to take
     /// square roots of negative numbers.
@@ -320,11 +320,11 @@ public class ComplexOperations<T> : INumericOperations<Complex<T>>
     /// Since complex numbers have two components, comparing them directly isn't straightforward.
     /// Instead, we compare their magnitudes (distances from zero).
     /// 
-    /// The magnitude of a complex number a + bi is v(a² + b²).
+    /// The magnitude of a complex number a + bi is v(aï¿½ + bï¿½).
     /// 
     /// For example:
-    /// - The magnitude of 3 + 4i is v(3² + 4²) = v25 = 5
-    /// - The magnitude of 1 + 2i is v(1² + 2²) = v5 ˜ 2.24
+    /// - The magnitude of 3 + 4i is v(3ï¿½ + 4ï¿½) = v25 = 5
+    /// - The magnitude of 1 + 2i is v(1ï¿½ + 2ï¿½) = v5 ï¿½ 2.24
     /// - So 3 + 4i is greater than 1 + 2i in terms of magnitude
     /// 
     /// This is similar to comparing the lengths of vectors.
@@ -348,8 +348,8 @@ public class ComplexOperations<T> : INumericOperations<Complex<T>>
     /// Like with GreaterThan, this compares the magnitudes (distances from zero) of the complex numbers.
     /// 
     /// For example:
-    /// - 1 + i has magnitude v2 ˜ 1.41
-    /// - 2 + 2i has magnitude v8 ˜ 2.83
+    /// - 1 + i has magnitude v2 ï¿½ 1.41
+    /// - 2 + 2i has magnitude v8 ï¿½ 2.83
     /// - So 1 + i is less than 2 + 2i
     /// 
     /// This comparison ignores the direction and only considers the size of the complex numbers.
@@ -369,10 +369,10 @@ public class ComplexOperations<T> : INumericOperations<Complex<T>>
     /// </para>
     /// <para><b>For Beginners:</b> This method calculates the size of a complex number.
     /// 
-    /// The absolute value (or magnitude) of a complex number a + bi is v(a² + b²).
+    /// The absolute value (or magnitude) of a complex number a + bi is v(aï¿½ + bï¿½).
     /// 
     /// For example:
-    /// - The absolute value of 3 + 4i is v(3² + 4²) = v25 = 5
+    /// - The absolute value of 3 + 4i is v(3ï¿½ + 4ï¿½) = v25 = 5
     /// - So Abs(3 + 4i) returns the complex number 5 + 0i
     /// 
     /// The magnitude represents the distance from the origin to the complex number
@@ -388,17 +388,17 @@ public class ComplexOperations<T> : INumericOperations<Complex<T>>
     /// <returns>The square of the complex number.</returns>
     /// <remarks>
     /// <para>
-    /// This method computes the square of a complex number using the formula (a + bi)² = (a² - b²) + 2abi.
+    /// This method computes the square of a complex number using the formula (a + bi)ï¿½ = (aï¿½ - bï¿½) + 2abi.
     /// It calculates the real and imaginary parts separately and constructs a new complex number.
     /// </para>
     /// <para><b>For Beginners:</b> This method multiplies a complex number by itself.
     /// 
     /// When squaring a complex number (a + bi):
-    /// - The real part of the result is a² - b²
+    /// - The real part of the result is aï¿½ - bï¿½
     /// - The imaginary part is 2ab
     /// 
     /// For example:
-    /// - (3 + 2i)² = (3² - 2²) + 2×3×2i = (9 - 4) + 12i = 5 + 12i
+    /// - (3 + 2i)ï¿½ = (3ï¿½ - 2ï¿½) + 2ï¿½3ï¿½2i = (9 - 4) + 12i = 5 + 12i
     /// 
     /// This formula comes from applying the complex multiplication rule: (a + bi)(a + bi)
     /// </para>
@@ -426,13 +426,13 @@ public class ComplexOperations<T> : INumericOperations<Complex<T>>
     /// </para>
     /// <para><b>For Beginners:</b> This method calculates e raised to a complex power.
     /// 
-    /// The constant e (˜2.718) is an important mathematical constant.
+    /// The constant e (ï¿½2.718) is an important mathematical constant.
     /// Calculating e raised to a complex power follows Euler's formula:
     /// 
-    /// e^(a + bi) = e^a × (cos(b) + i × sin(b))
+    /// e^(a + bi) = e^a ï¿½ (cos(b) + i ï¿½ sin(b))
     /// 
     /// For example:
-    /// - e^(0 + pi) = e^0 × (cos(p) + i × sin(p)) = 1 × (-1 + 0i) = -1
+    /// - e^(0 + pi) = e^0 ï¿½ (cos(p) + i ï¿½ sin(p)) = 1 ï¿½ (-1 + 0i) = -1
     /// - This shows the famous equation: e^(pi) = -1
     /// 
     /// This function is fundamental in many areas of mathematics and engineering.
@@ -488,7 +488,7 @@ public class ComplexOperations<T> : INumericOperations<Complex<T>>
     /// </para>
     /// <para><b>For Beginners:</b> This method raises a complex number to a complex power.
     /// 
-    /// For real numbers, 2³ means 2×2×2. For complex numbers, it's more complicated.
+    /// For real numbers, 2ï¿½ means 2ï¿½2ï¿½2. For complex numbers, it's more complicated.
     /// 
     /// To calculate a complex number raised to a complex power:
     /// 1. Take the natural logarithm (ln) of the base
@@ -496,7 +496,7 @@ public class ComplexOperations<T> : INumericOperations<Complex<T>>
     /// 3. Raise e to that product
     /// 
     /// For example:
-    /// - To calculate (2 + i)^(3 + 2i), we compute e^((3 + 2i) × ln(2 + i))
+    /// - To calculate (2 + i)^(3 + 2i), we compute e^((3 + 2i) ï¿½ ln(2 + i))
     /// 
     /// A special case: if both base and exponent are zero, the result is 1.
     /// 
@@ -528,9 +528,9 @@ public class ComplexOperations<T> : INumericOperations<Complex<T>>
     /// 
     /// For example:
     /// - The natural logarithm of 1 + i has:
-    ///   - Real part = ln(v2) ˜ 0.347
-    ///   - Imaginary part = p/4 ˜ 0.785
-    ///   - So ln(1 + i) ˜ 0.347 + 0.785i
+    ///   - Real part = ln(v2) ï¿½ 0.347
+    ///   - Imaginary part = p/4 ï¿½ 0.785
+    ///   - So ln(1 + i) ï¿½ 0.347 + 0.785i
     /// 
     /// One interesting result: ln(-1) = pi
     /// 
@@ -790,7 +790,7 @@ public class ComplexOperations<T> : INumericOperations<Complex<T>>
     /// 
     /// For example:
     /// - 3 + 4i has magnitude 5, so it converts to 5
-    /// - 1 + 1i has magnitude v2 ˜ 1.414, which rounds to 1
+    /// - 1 + 1i has magnitude v2 ï¿½ 1.414, which rounds to 1
     /// 
     /// This conversion loses all information about direction, keeping only the size.
     /// </para>
@@ -800,4 +800,58 @@ public class ComplexOperations<T> : INumericOperations<Complex<T>>
         double magnitude = Convert.ToDouble(value.Magnitude);
         return (int)Math.Round(magnitude);
     }
+
+    /// <summary>
+    /// Gets the number of bits used for precision in the underlying type T.
+    /// </summary>
+    /// <remarks>
+    /// For Complex<T>, this returns the precision bits of the underlying type T.
+    /// Note that a complex number stores two values (real and imaginary), so the total
+    /// storage is actually twice this value.
+    /// </remarks>
+    public int PrecisionBits => _ops.PrecisionBits;
+
+    /// <summary>
+    /// Converts a Complex<T> value to float by extracting the real part.
+    /// </summary>
+    /// <param name="value">The complex value to convert.</param>
+    /// <returns>The real part of the complex number as a float.</returns>
+    /// <remarks>
+    /// This conversion extracts only the real part and discards the imaginary part.
+    /// </remarks>
+    public float ToFloat(Complex<T> value) => _ops.ToFloat(value.Real);
+
+    /// <summary>
+    /// Converts a float value to Complex<T> with zero imaginary part.
+    /// </summary>
+    /// <param name="value">The float value to convert.</param>
+    /// <returns>A complex number with the float as the real part and zero imaginary part.</returns>
+    public Complex<T> FromFloat(float value) => new Complex<T>(_ops.FromFloat(value), _ops.Zero);
+
+    /// <summary>
+    /// Converts a Complex<T> value to Half by extracting the real part.
+    /// </summary>
+    /// <param name="value">The complex value to convert.</param>
+    /// <returns>The real part of the complex number as a Half.</returns>
+    /// <remarks>
+    /// This conversion extracts only the real part and discards the imaginary part.
+    /// </remarks>
+    public Half ToHalf(Complex<T> value) => _ops.ToHalf(value.Real);
+
+    /// <summary>
+    /// Converts a Half value to Complex<T> with zero imaginary part.
+    /// </summary>
+    /// <param name="value">The Half value to convert.</param>
+    /// <returns>A complex number with the Half as the real part and zero imaginary part.</returns>
+    public Complex<T> FromHalf(Half value) => new Complex<T>(_ops.FromHalf(value), _ops.Zero);
+
+    /// <summary>
+    /// Converts a Complex<T> value to double by extracting the real part.
+    /// </summary>
+    /// <param name="value">The complex value to convert.</param>
+    /// <returns>The real part of the complex number as a double.</returns>
+    /// <remarks>
+    /// This conversion extracts only the real part and discards the imaginary part.
+    /// </remarks>
+    public double ToDouble(Complex<T> value) => _ops.ToDouble(value.Real);
 }

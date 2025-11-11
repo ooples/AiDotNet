@@ -211,8 +211,8 @@ public class UInt64Operations : INumericOperations<ulong>
     /// The square root of a number is another number that, when multiplied by itself, gives the original number.
     /// 
     /// For example:
-    /// - Sqrt(4) returns 2 (because 2 × 2 = 4)
-    /// - Sqrt(9) returns 3 (because 3 × 3 = 9)
+    /// - Sqrt(4) returns 2 (because 2 ï¿½ 2 = 4)
+    /// - Sqrt(9) returns 3 (because 3 ï¿½ 3 = 9)
     /// - Sqrt(10) returns 3 (because the true square root is approximately 3.16, but as a ulong it's rounded down to 3)
     /// 
     /// For very large numbers, the result might not be perfectly accurate because of how the calculation
@@ -328,8 +328,8 @@ public class UInt64Operations : INumericOperations<ulong>
     /// <para><b>For Beginners:</b> This method multiplies a number by itself.
     /// 
     /// For example:
-    /// - Square(4) returns 16 (because 4 × 4 = 16)
-    /// - Square(10) returns 100 (because 10 × 10 = 100)
+    /// - Square(4) returns 16 (because 4 ï¿½ 4 = 16)
+    /// - Square(10) returns 100 (because 10 ï¿½ 10 = 100)
     /// 
     /// Be careful with larger numbers! Squaring even moderate values can easily exceed the ulong range:
     /// - Square(4,294,967,296) would be 18,446,744,073,709,551,616, which is just outside the ulong range,
@@ -356,11 +356,11 @@ public class UInt64Operations : INumericOperations<ulong>
     /// those involving growth or decay.
     /// 
     /// For example:
-    /// - Exp(1) returns 3 (because e^1 ˜ 2.71828, rounded to 3 as a ulong)
-    /// - Exp(2) returns 7 (because e^2 ˜ 7.38906, rounded to 7 as a ulong)
+    /// - Exp(1) returns 3 (because e^1 ï¿½ 2.71828, rounded to 3 as a ulong)
+    /// - Exp(2) returns 7 (because e^2 ï¿½ 7.38906, rounded to 7 as a ulong)
     /// 
     /// For larger input values, the result grows very quickly:
-    /// - Exp(10) returns 22,026 (because e^10 ˜ 22,026.47)
+    /// - Exp(10) returns 22,026 (because e^10 ï¿½ 22,026.47)
     /// - Exp(43) or higher will return 18,446,744,073,709,551,615 (the maximum ulong value)
     ///   because the true result would be too large
     /// 
@@ -410,8 +410,8 @@ public class UInt64Operations : INumericOperations<ulong>
     /// <para><b>For Beginners:</b> This method multiplies a number by itself a specified number of times.
     /// 
     /// For example:
-    /// - Power(2, 3) returns 8 (because 2³ = 2 × 2 × 2 = 8)
-    /// - Power(3, 2) returns 9 (because 3² = 3 × 3 = 9)
+    /// - Power(2, 3) returns 8 (because 2ï¿½ = 2 ï¿½ 2 ï¿½ 2 = 8)
+    /// - Power(3, 2) returns 9 (because 3ï¿½ = 3 ï¿½ 3 = 9)
     /// - Power(5, 0) returns 1 (any number raised to the power of 0 is 1)
     /// 
     /// Be careful with larger values! The result can quickly exceed the ulong range:
@@ -445,13 +445,13 @@ public class UInt64Operations : INumericOperations<ulong>
     /// 
     /// For example:
     /// - Log(1) returns 0 (because e^0 = 1)
-    /// - Log(3) returns 1 (because e^1 ˜ 2.71828, and when cast to a ulong, the decimal part is dropped)
-    /// - Log(10) returns 2 (because e^2.303 ˜ 10, and when cast to a ulong, the decimal part is dropped)
+    /// - Log(3) returns 1 (because e^1 ï¿½ 2.71828, and when cast to a ulong, the decimal part is dropped)
+    /// - Log(10) returns 2 (because e^2.303 ï¿½ 10, and when cast to a ulong, the decimal part is dropped)
     /// 
     /// Important notes:
     /// - The logarithm of zero is not defined mathematically, so Log(0) will return 0
     /// - Logarithm results are usually decimals, but they'll be converted to whole numbers when stored as ulongs
-    /// - Even for very large inputs, the result is relatively small (e.g., Log(18446744073709551615) ˜ 44)
+    /// - Even for very large inputs, the result is relatively small (e.g., Log(18446744073709551615) ï¿½ 44)
     /// </para>
     /// </remarks>
     public ulong Log(ulong value) => (ulong)Math.Log(value);
@@ -677,4 +677,34 @@ public class UInt64Operations : INumericOperations<ulong>
     /// </para>
     /// </remarks>
     public ulong SignOrZero(ulong value) => value == 0 ? 0ul : 1ul;
+
+    /// <summary>
+    /// Gets the number of bits used for precision in ulong (64 bits).
+    /// </summary>
+    public int PrecisionBits => 64;
+
+    /// <summary>
+    /// Converts a ulong value to float (FP32) precision.
+    /// </summary>
+    public float ToFloat(ulong value) => (float)value;
+
+    /// <summary>
+    /// Converts a float value to ulong.
+    /// </summary>
+    public ulong FromFloat(float value) => (ulong)Math.Clamp(Math.Round(value), ulong.MinValue, ulong.MaxValue);
+
+    /// <summary>
+    /// Converts a ulong value to Half (FP16) precision.
+    /// </summary>
+    public Half ToHalf(ulong value) => (Half)value;
+
+    /// <summary>
+    /// Converts a Half value to ulong.
+    /// </summary>
+    public ulong FromHalf(Half value) => (ulong)Math.Clamp(Math.Round((double)(float)value), ulong.MinValue, ulong.MaxValue);
+
+    /// <summary>
+    /// Converts a ulong value to double (FP64) precision.
+    /// </summary>
+    public double ToDouble(ulong value) => (double)value;
 }
