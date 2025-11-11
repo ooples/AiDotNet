@@ -729,6 +729,9 @@ public class GraphConvolutionalLayer<T> : LayerBase<T>
         T totalEdges = NumOps.FromDouble(batchSize * _graphEdges.Count);
         smoothnessLoss = NumOps.Divide(smoothnessLoss, totalEdges);
 
+        // Apply smoothness weight to allow tuning of this auxiliary loss
+        smoothnessLoss = NumOps.Multiply(smoothnessLoss, SmoothnessWeight);
+
         return smoothnessLoss;
     }
 

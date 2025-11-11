@@ -1234,6 +1234,9 @@ public class SqueezeAndExcitationLayer<T> : LayerBase<T>
         T totalElements = NumOps.FromDouble(_lastAttentionWeights.Rows * _lastAttentionWeights.Columns);
         T sparsityLoss = NumOps.Divide(l1Norm, totalElements);
 
+        // Apply sparsity weight to allow tuning of this auxiliary loss
+        sparsityLoss = NumOps.Multiply(sparsityLoss, SparsityWeight);
+
         return sparsityLoss;
     }
 
