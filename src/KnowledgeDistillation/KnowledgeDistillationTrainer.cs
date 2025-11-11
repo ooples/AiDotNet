@@ -39,6 +39,7 @@ public class KnowledgeDistillationTrainer<T>
     private readonly ITeacherModel<Vector<T>, Vector<T>> _teacher;
     private readonly IDistillationStrategy<Vector<T>, T> _distillationStrategy;
     private readonly INumericOperations<T> _numOps;
+    private readonly Random _random;
 
     /// <summary>
     /// Initializes a new instance of the KnowledgeDistillationTrainer class.
@@ -60,11 +61,13 @@ public class KnowledgeDistillationTrainer<T>
     /// </remarks>
     public KnowledgeDistillationTrainer(
         ITeacherModel<Vector<T>, Vector<T>> teacher,
-        IDistillationStrategy<Vector<T>, T> distillationStrategy)
+        IDistillationStrategy<Vector<T>, T> distillationStrategy,
+        int? seed = null)
     {
         _teacher = teacher ?? throw new ArgumentNullException(nameof(teacher));
         _distillationStrategy = distillationStrategy ?? throw new ArgumentNullException(nameof(distillationStrategy));
         _numOps = MathHelper.GetNumericOperations<T>();
+        _random = seed.HasValue ? new Random(seed.Value) : new Random();
     }
 
     /// <summary>
@@ -269,13 +272,12 @@ public class KnowledgeDistillationTrainer<T>
     /// </remarks>
     private (Vector<T>[] inputs, Vector<T>[]? labels) ShuffleData(Vector<T>[] inputs, Vector<T>[]? labels)
     {
-        var random = new Random();
         var indices = Enumerable.Range(0, inputs.Length).ToArray();
 
         // Fisher-Yates shuffle
         for (int i = indices.Length - 1; i > 0; i--)
         {
-            int j = random.Next(i + 1);
+            int j = _random.Next(i + 1);
             (indices[i], indices[j]) = (indices[j], indices[i]);
         }
 
