@@ -1954,4 +1954,502 @@ public static class TensorOperations<T>
 
         return node;
     }
+
+    /// <summary>
+    /// Applies layer normalization to a computation node.
+    /// </summary>
+    /// <param name="a">The input node.</param>
+    /// <param name="normalizedShape">The shape over which to normalize (typically the feature dimensions).</param>
+    /// <param name="gamma">Optional scale parameter (learnable). If null, uses ones.</param>
+    /// <param name="beta">Optional shift parameter (learnable). If null, uses zeros.</param>
+    /// <param name="epsilon">Small constant for numerical stability. Default is 1e-5.</param>
+    /// <returns>A new computation node containing the layer normalized result.</returns>
+    /// <remarks>
+    /// <para>
+    /// Layer normalization normalizes inputs across the feature dimension for each sample independently.
+    /// Formula: y = gamma * (x - mean) / sqrt(variance + epsilon) + beta
+    /// Unlike batch normalization, this doesn't depend on batch statistics.
+    /// </para>
+    /// <para><b>For Beginners:</b> LayerNorm standardizes features for each sample independently.
+    ///
+    /// For layer normalization:
+    /// - Computes mean and variance for each sample's features
+    /// - Normalizes: (x - mean) / sqrt(variance)
+    /// - Scales and shifts: result * gamma + beta
+    /// - Works the same during training and inference (no batch dependency)
+    ///
+    /// Used in:
+    /// - Transformers (critical component)
+    /// - RNNs (stabilizes training)
+    /// - Any architecture needing sample-independent normalization
+    /// </para>
+    /// </remarks>
+    public static ComputationNode<T> LayerNorm(
+        ComputationNode<T> a,
+        int[] normalizedShape,
+        ComputationNode<T>? gamma = null,
+        ComputationNode<T>? beta = null,
+        double epsilon = 1e-5)
+    {
+        var numOps = MathHelper.GetNumericOperations<T>();
+        var shape = a.Value.Shape;
+        var eps = numOps.FromDouble(epsilon);
+
+        // For 2D input [batch, features], normalize over features
+        if (shape.Length == 2 && normalizedShape.Length == 1 && normalizedShape[0] == shape[1])
+        {
+            int batchSize = shape[0];
+            int features = shape[1];
+
+            // Create default gamma (ones) and beta (zeros) if not provided
+            if (gamma == null)
+            {
+                var gammaTensor = new Tensor<T>(new int[] { features });
+                for (int i = 0; i < features; i++)
+                    gammaTensor[i] = numOps.One;
+                gamma = Variable(gammaTensor, requiresGradient: false);
+            }
+
+            if (beta == null)
+            {
+                var betaTensor = new Tensor<T>(new int[] { features });
+                for (int i = 0; i < features; i++)
+                    betaTensor[i] = numOps.Zero;
+                beta = Variable(betaTensor, requiresGradient: false);
+            }
+
+            var result = new Tensor<T>(shape);
+            var means = new T[batchSize];
+            var variances = new T[batchSize];
+            var normalized = new Tensor<T>(shape);
+
+            // Forward pass: compute mean and variance per sample
+            for (int b = 0; b < batchSize; b++)
+            {
+                // Compute mean
+                var sum = numOps.Zero;
+                for (int f = 0; f < features; f++)
+                {
+                    sum = numOps.Add(sum, a.Value[b, f]);
+                }
+                means[b] = numOps.Divide(sum, numOps.FromDouble(features));
+
+                // Compute variance
+                var varSum = numOps.Zero;
+                for (int f = 0; f < features; f++)
+                {
+                    var diff = numOps.Subtract(a.Value[b, f], means[b]);
+                    varSum = numOps.Add(varSum, numOps.Multiply(diff, diff));
+                }
+                variances[b] = numOps.Divide(varSum, numOps.FromDouble(features));
+
+                // Normalize and scale
+                var std = numOps.Sqrt(numOps.Add(variances[b], eps));
+                for (int f = 0; f < features; f++)
+                {
+                    var norm = numOps.Divide(
+                        numOps.Subtract(a.Value[b, f], means[b]),
+                        std);
+                    normalized[b, f] = norm;
+                    result[b, f] = numOps.Add(
+                        numOps.Multiply(norm, gamma.Value[f]),
+                        beta.Value[f]);
+                }
+            }
+
+            void BackwardFunction(Tensor<T> gradient)
+            {
+                // Gradients for gamma and beta
+                if (gamma.RequiresGradient)
+                {
+                    var gradGamma = new Tensor<T>(new int[] { features });
+                    for (int f = 0; f < features; f++)
+                    {
+                        var sum = numOps.Zero;
+                        for (int b = 0; b < batchSize; b++)
+                        {
+                            sum = numOps.Add(sum,
+                                numOps.Multiply(gradient[b, f], normalized[b, f]));
+                        }
+                        gradGamma[f] = sum;
+                    }
+
+                    if (gamma.Gradient == null)
+                        gamma.Gradient = gradGamma;
+                    else
+                        gamma.Gradient = gamma.Gradient.Add(gradGamma);
+                }
+
+                if (beta.RequiresGradient)
+                {
+                    var gradBeta = new Tensor<T>(new int[] { features });
+                    for (int f = 0; f < features; f++)
+                    {
+                        var sum = numOps.Zero;
+                        for (int b = 0; b < batchSize; b++)
+                        {
+                            sum = numOps.Add(sum, gradient[b, f]);
+                        }
+                        gradBeta[f] = sum;
+                    }
+
+                    if (beta.Gradient == null)
+                        beta.Gradient = gradBeta;
+                    else
+                        beta.Gradient = beta.Gradient.Add(gradBeta);
+                }
+
+                // Gradient for input
+                if (a.RequiresGradient)
+                {
+                    var gradA = new Tensor<T>(shape);
+
+                    for (int b = 0; b < batchSize; b++)
+                    {
+                        var std = numOps.Sqrt(numOps.Add(variances[b], eps));
+                        var invStd = numOps.Divide(numOps.One, std);
+
+                        // Compute gradient components
+                        var gradNormSum = numOps.Zero;
+                        var gradNormDotNorm = numOps.Zero;
+
+                        for (int f = 0; f < features; f++)
+                        {
+                            var gradNorm = numOps.Multiply(gradient[b, f], gamma.Value[f]);
+                            gradNormSum = numOps.Add(gradNormSum, gradNorm);
+                            gradNormDotNorm = numOps.Add(gradNormDotNorm,
+                                numOps.Multiply(gradNorm, normalized[b, f]));
+                        }
+
+                        // Apply gradient formula
+                        var featuresT = numOps.FromDouble(features);
+                        for (int f = 0; f < features; f++)
+                        {
+                            var gradNorm = numOps.Multiply(gradient[b, f], gamma.Value[f]);
+
+                            var term1 = gradNorm;
+                            var term2 = numOps.Divide(gradNormSum, featuresT);
+                            var term3 = numOps.Divide(
+                                numOps.Multiply(normalized[b, f], gradNormDotNorm),
+                                featuresT);
+
+                            var grad = numOps.Multiply(
+                                numOps.Subtract(numOps.Subtract(term1, term2), term3),
+                                invStd);
+
+                            gradA[b, f] = grad;
+                        }
+                    }
+
+                    if (a.Gradient == null)
+                        a.Gradient = gradA;
+                    else
+                        a.Gradient = a.Gradient.Add(gradA);
+                }
+            }
+
+            var parents = new List<ComputationNode<T>> { a };
+            if (gamma != null) parents.Add(gamma);
+            if (beta != null) parents.Add(beta);
+
+            var node = new ComputationNode<T>(
+                value: result,
+                requiresGradient: a.RequiresGradient || (gamma?.RequiresGradient ?? false) || (beta?.RequiresGradient ?? false),
+                parents: parents,
+                backwardFunction: BackwardFunction,
+                name: null);
+
+            var tape = GradientTape<T>.Current;
+            if (tape != null && tape.IsRecording)
+                tape.RecordOperation(node);
+
+            return node;
+        }
+        else
+        {
+            throw new NotImplementedException(
+                $"LayerNorm is currently only implemented for 2D tensors normalizing over last dimension. " +
+                $"Got shape=[{string.Join(", ", shape)}], normalizedShape=[{string.Join(", ", normalizedShape)}]");
+        }
+    }
+
+    /// <summary>
+    /// Applies batch normalization to a computation node.
+    /// </summary>
+    /// <param name="a">The input node with shape [batch, features].</param>
+    /// <param name="gamma">Optional scale parameter (learnable). If null, uses ones.</param>
+    /// <param name="beta">Optional shift parameter (learnable). If null, uses zeros.</param>
+    /// <param name="runningMean">Running mean for inference (not updated during this operation).</param>
+    /// <param name="runningVar">Running variance for inference (not updated during this operation).</param>
+    /// <param name="training">Whether in training mode (uses batch statistics) or inference mode (uses running statistics).</param>
+    /// <param name="epsilon">Small constant for numerical stability. Default is 1e-5.</param>
+    /// <returns>A new computation node containing the batch normalized result.</returns>
+    /// <remarks>
+    /// <para>
+    /// Batch normalization normalizes inputs across the batch dimension.
+    /// During training: Uses batch statistics (mean and variance computed from current batch).
+    /// During inference: Uses running statistics (accumulated during training).
+    /// </para>
+    /// <para><b>For Beginners:</b> BatchNorm standardizes features across the batch.
+    ///
+    /// For batch normalization:
+    /// - Training mode: Uses current batch's mean and variance
+    /// - Inference mode: Uses running mean/variance from training
+    /// - Normalizes: (x - mean) / sqrt(variance)
+    /// - Scales and shifts: result * gamma + beta
+    ///
+    /// Benefits:
+    /// - Stabilizes training (reduces internal covariate shift)
+    /// - Allows higher learning rates
+    /// - Acts as regularization
+    ///
+    /// Used in:
+    /// - CNNs (after convolutional layers)
+    /// - Deep feedforward networks
+    /// - GANs and many other architectures
+    /// </para>
+    /// </remarks>
+    public static ComputationNode<T> BatchNorm(
+        ComputationNode<T> a,
+        ComputationNode<T>? gamma = null,
+        ComputationNode<T>? beta = null,
+        Tensor<T>? runningMean = null,
+        Tensor<T>? runningVar = null,
+        bool training = true,
+        double epsilon = 1e-5)
+    {
+        var numOps = MathHelper.GetNumericOperations<T>();
+        var shape = a.Value.Shape;
+        var eps = numOps.FromDouble(epsilon);
+
+        // Handle 2D case [batch, features]
+        if (shape.Length == 2)
+        {
+            int batchSize = shape[0];
+            int features = shape[1];
+
+            // Create default gamma and beta if not provided
+            if (gamma == null)
+            {
+                var gammaTensor = new Tensor<T>(new int[] { features });
+                for (int i = 0; i < features; i++)
+                    gammaTensor[i] = numOps.One;
+                gamma = Variable(gammaTensor, requiresGradient: false);
+            }
+
+            if (beta == null)
+            {
+                var betaTensor = new Tensor<T>(new int[] { features });
+                for (int i = 0; i < features; i++)
+                    betaTensor[i] = numOps.Zero;
+                beta = Variable(betaTensor, requiresGradient: false);
+            }
+
+            var result = new Tensor<T>(shape);
+            T[] batchMean;
+            T[] batchVar;
+            var normalized = new Tensor<T>(shape);
+
+            if (training)
+            {
+                // Compute batch statistics
+                batchMean = new T[features];
+                batchVar = new T[features];
+
+                // Compute mean per feature
+                for (int f = 0; f < features; f++)
+                {
+                    var sum = numOps.Zero;
+                    for (int b = 0; b < batchSize; b++)
+                    {
+                        sum = numOps.Add(sum, a.Value[b, f]);
+                    }
+                    batchMean[f] = numOps.Divide(sum, numOps.FromDouble(batchSize));
+                }
+
+                // Compute variance per feature
+                for (int f = 0; f < features; f++)
+                {
+                    var varSum = numOps.Zero;
+                    for (int b = 0; b < batchSize; b++)
+                    {
+                        var diff = numOps.Subtract(a.Value[b, f], batchMean[f]);
+                        varSum = numOps.Add(varSum, numOps.Multiply(diff, diff));
+                    }
+                    batchVar[f] = numOps.Divide(varSum, numOps.FromDouble(batchSize));
+                }
+            }
+            else
+            {
+                // Use running statistics for inference
+                if (runningMean == null || runningVar == null)
+                    throw new ArgumentException("Running statistics required for inference mode");
+
+                batchMean = new T[features];
+                batchVar = new T[features];
+                for (int f = 0; f < features; f++)
+                {
+                    batchMean[f] = runningMean[f];
+                    batchVar[f] = runningVar[f];
+                }
+            }
+
+            // Normalize and scale
+            for (int b = 0; b < batchSize; b++)
+            {
+                for (int f = 0; f < features; f++)
+                {
+                    var std = numOps.Sqrt(numOps.Add(batchVar[f], eps));
+                    var norm = numOps.Divide(
+                        numOps.Subtract(a.Value[b, f], batchMean[f]),
+                        std);
+                    normalized[b, f] = norm;
+                    result[b, f] = numOps.Add(
+                        numOps.Multiply(norm, gamma.Value[f]),
+                        beta.Value[f]);
+                }
+            }
+
+            void BackwardFunction(Tensor<T> gradient)
+            {
+                if (!training)
+                {
+                    // Inference mode: simpler gradient (no batch statistics gradient)
+                    if (a.RequiresGradient)
+                    {
+                        var gradA = new Tensor<T>(shape);
+                        for (int b = 0; b < batchSize; b++)
+                        {
+                            for (int f = 0; f < features; f++)
+                            {
+                                var std = numOps.Sqrt(numOps.Add(batchVar[f], eps));
+                                var invStd = numOps.Divide(numOps.One, std);
+                                gradA[b, f] = numOps.Multiply(
+                                    numOps.Multiply(gradient[b, f], gamma.Value[f]),
+                                    invStd);
+                            }
+                        }
+
+                        if (a.Gradient == null)
+                            a.Gradient = gradA;
+                        else
+                            a.Gradient = a.Gradient.Add(gradA);
+                    }
+                    return;
+                }
+
+                // Training mode: full gradient computation
+                // Gradients for gamma and beta
+                if (gamma.RequiresGradient)
+                {
+                    var gradGamma = new Tensor<T>(new int[] { features });
+                    for (int f = 0; f < features; f++)
+                    {
+                        var sum = numOps.Zero;
+                        for (int b = 0; b < batchSize; b++)
+                        {
+                            sum = numOps.Add(sum,
+                                numOps.Multiply(gradient[b, f], normalized[b, f]));
+                        }
+                        gradGamma[f] = sum;
+                    }
+
+                    if (gamma.Gradient == null)
+                        gamma.Gradient = gradGamma;
+                    else
+                        gamma.Gradient = gamma.Gradient.Add(gradGamma);
+                }
+
+                if (beta.RequiresGradient)
+                {
+                    var gradBeta = new Tensor<T>(new int[] { features });
+                    for (int f = 0; f < features; f++)
+                    {
+                        var sum = numOps.Zero;
+                        for (int b = 0; b < batchSize; b++)
+                        {
+                            sum = numOps.Add(sum, gradient[b, f]);
+                        }
+                        gradBeta[f] = sum;
+                    }
+
+                    if (beta.Gradient == null)
+                        beta.Gradient = gradBeta;
+                    else
+                        beta.Gradient = beta.Gradient.Add(gradBeta);
+                }
+
+                // Gradient for input (complex due to batch statistics)
+                if (a.RequiresGradient)
+                {
+                    var gradA = new Tensor<T>(shape);
+                    var batchSizeT = numOps.FromDouble(batchSize);
+
+                    for (int f = 0; f < features; f++)
+                    {
+                        var std = numOps.Sqrt(numOps.Add(batchVar[f], eps));
+                        var invStd = numOps.Divide(numOps.One, std);
+
+                        // Sum of gradients and gradient*normalized
+                        var gradSum = numOps.Zero;
+                        var gradNormSum = numOps.Zero;
+
+                        for (int b = 0; b < batchSize; b++)
+                        {
+                            var grad = numOps.Multiply(gradient[b, f], gamma.Value[f]);
+                            gradSum = numOps.Add(gradSum, grad);
+                            gradNormSum = numOps.Add(gradNormSum,
+                                numOps.Multiply(grad, normalized[b, f]));
+                        }
+
+                        // Apply gradient formula
+                        for (int b = 0; b < batchSize; b++)
+                        {
+                            var grad = numOps.Multiply(gradient[b, f], gamma.Value[f]);
+
+                            var term1 = grad;
+                            var term2 = numOps.Divide(gradSum, batchSizeT);
+                            var term3 = numOps.Divide(
+                                numOps.Multiply(normalized[b, f], gradNormSum),
+                                batchSizeT);
+
+                            var gradInput = numOps.Multiply(
+                                numOps.Subtract(numOps.Subtract(term1, term2), term3),
+                                invStd);
+
+                            gradA[b, f] = gradInput;
+                        }
+                    }
+
+                    if (a.Gradient == null)
+                        a.Gradient = gradA;
+                    else
+                        a.Gradient = a.Gradient.Add(gradA);
+                }
+            }
+
+            var parents = new List<ComputationNode<T>> { a };
+            if (gamma != null) parents.Add(gamma);
+            if (beta != null) parents.Add(beta);
+
+            var node = new ComputationNode<T>(
+                value: result,
+                requiresGradient: a.RequiresGradient || (gamma?.RequiresGradient ?? false) || (beta?.RequiresGradient ?? false),
+                parents: parents,
+                backwardFunction: BackwardFunction,
+                name: null);
+
+            var tape = GradientTape<T>.Current;
+            if (tape != null && tape.IsRecording)
+                tape.RecordOperation(node);
+
+            return node;
+        }
+        else
+        {
+            throw new NotImplementedException(
+                $"BatchNorm is currently only implemented for 2D tensors [batch, features]. " +
+                $"Got shape=[{string.Join(", ", shape)}]");
+        }
+    }
 }
