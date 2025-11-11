@@ -266,20 +266,33 @@ public class ResidualLayer<T> : LayerBase<T>
     /// </para>
     /// <para><b>For Beginners:</b> This method is used during training to calculate how the layer's input
     /// should change to reduce errors.
-    /// 
+    ///
     /// During the backward pass:
     /// - The method throws an error if the forward pass hasn't been called first
     /// - The gradient is computed for the combined output after the addition
     /// - If there's an inner layer, the gradient is propagated through it
     /// - The original gradient and the inner layer gradient are combined
     /// - The combined gradient is returned for further backpropagation
-    /// 
+    ///
     /// This process ensures that gradient information flows both through the inner layer
     /// and directly back to earlier layers, preventing the vanishing gradient problem
     /// in deep networks.
     /// </para>
     /// </remarks>
     public override Tensor<T> Backward(Tensor<T> outputGradient)
+    {
+        if (UseAutodiff)
+            return BackwardViaAutodiff(outputGradient);
+        else
+            return BackwardManual(outputGradient);
+    }
+
+    /// <summary>
+    /// Manual backward pass implementation using optimized gradient calculations.
+    /// </summary>
+    /// <param name="outputGradient">The gradient of the loss with respect to the layer's output.</param>
+    /// <returns>The gradient of the loss with respect to the layer's input.</returns>
+    private Tensor<T> BackwardManual(Tensor<T> outputGradient)
     {
         if (_lastInput == null)
             throw new InvalidOperationException("Forward pass must be called before backward pass.");
@@ -295,6 +308,128 @@ public class ResidualLayer<T> : LayerBase<T>
 
         var innerGradient = _innerLayer.Backward(combinedGradient);
         return combinedGradient.Add(innerGradient);
+    }
+
+    /// <summary>
+    /// Backward pass implementation using automatic differentiation.
+    /// </summary>
+    /// <param name="outputGradient">The gradient of the loss with respect to the layer's output.</param>
+    /// <returns>The gradient of the loss with respect to the layer's input.</returns>
+    /// <remarks>
+    /// <para>
+    /// This method uses automatic differentiation to compute gradients. It recreates the forward
+    /// computation graph for the residual connection (input + inner layer output) and propagates
+    /// gradients through it.
+    /// </para>
+    /// </remarks>
+    private Tensor<T> BackwardViaAutodiff(Tensor<T> outputGradient)
+    {
+        if (_lastInput == null)
+            throw new InvalidOperationException("Forward pass must be called before backward pass.");
+
+        // Convert to computation nodes
+        var input = Autodiff.TensorOperations<T>.Variable(_lastInput, "input", requiresGradient: true);
+
+        // Compute inner layer output if present
+        Autodiff.ComputationNode<T> result;
+        if (_innerLayer != null)
+        {
+            var innerOutput = _innerLayer.Forward(_lastInput);
+            var innerNode = Autodiff.TensorOperations<T>.Variable(innerOutput, "inner_output", requiresGradient: false);
+            // output = input + innerOutput
+            result = Autodiff.TensorOperations<T>.Add(input, innerNode);
+        }
+        else
+        {
+            result = input;
+        }
+
+        // Apply activation using autodiff
+        var activated = ApplyActivationAutodiff(result);
+
+        // Set the gradient at the output
+        activated.Gradient = outputGradient;
+
+        // Perform topological sort and backward pass
+        var topoOrder = GetTopologicalOrder(activated);
+
+        // Execute backward pass in reverse topological order
+        for (int i = topoOrder.Count - 1; i >= 0; i--)
+        {
+            var node = topoOrder[i];
+            if (node.RequiresGradient && node.BackwardFunction != null && node.Gradient != null)
+            {
+                node.BackwardFunction(node.Gradient);
+            }
+        }
+
+        return input.Gradient!;
+    }
+
+    /// <summary>
+    /// Gets the topological order of nodes in the computation graph.
+    /// </summary>
+    private List<Autodiff.ComputationNode<T>> GetTopologicalOrder(Autodiff.ComputationNode<T> root)
+    {
+        var visited = new HashSet<Autodiff.ComputationNode<T>>();
+        var result = new List<Autodiff.ComputationNode<T>>();
+
+        var stack = new Stack<(Autodiff.ComputationNode<T> node, bool processed)>();
+        stack.Push((root, false));
+
+        while (stack.Count > 0)
+        {
+            var (node, processed) = stack.Pop();
+
+            if (visited.Contains(node))
+            {
+                continue;
+            }
+
+            if (processed)
+            {
+                visited.Add(node);
+                result.Add(node);
+            }
+            else
+            {
+                stack.Push((node, true));
+
+                foreach (var parent in node.Parents)
+                {
+                    if (!visited.Contains(parent))
+                    {
+                        stack.Push((parent, false));
+                    }
+                }
+            }
+        }
+
+        return result;
+    }
+
+    /// <summary>
+    /// Applies activation function using autodiff operations.
+    /// </summary>
+    private Autodiff.ComputationNode<T> ApplyActivationAutodiff(Autodiff.ComputationNode<T> input)
+    {
+        if (ScalarActivation is ReLUActivation<T>)
+        {
+            return Autodiff.TensorOperations<T>.ReLU(input);
+        }
+        else if (ScalarActivation is SigmoidActivation<T>)
+        {
+            return Autodiff.TensorOperations<T>.Sigmoid(input);
+        }
+        else if (ScalarActivation is TanhActivation<T>)
+        {
+            return Autodiff.TensorOperations<T>.Tanh(input);
+        }
+        else
+        {
+            // For unsupported activations, return input unchanged
+            return input;
+        }
     }
 
     /// <summary>

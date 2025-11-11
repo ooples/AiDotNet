@@ -12,7 +12,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
 /// <para><b>For Beginners:</b> This layer adds together multiple inputs of the same shape.
 /// 
 /// Think of this layer as performing element-wise addition:
-/// - If you have two 3×3 matrices, it adds corresponding elements together
+/// - If you have two 3ï¿½3 matrices, it adds corresponding elements together
 /// - All inputs must have exactly the same dimensions
 /// - After adding, it can optionally apply an activation function
 /// 
@@ -92,7 +92,7 @@ public class AddLayer<T> : LayerBase<T>
     /// 
     /// For example:
     /// ```csharp
-    /// // Create an AddLayer for combining two 28×28 feature maps with ReLU activation
+    /// // Create an AddLayer for combining two 28ï¿½28 feature maps with ReLU activation
     /// var addLayer = new AddLayer<float>(
     ///     new[] { new[] { 32, 28, 28, 64 }, new[] { 32, 28, 28, 64 } },
     ///     new ReLU<float>()
@@ -268,22 +268,35 @@ public class AddLayer<T> : LayerBase<T>
     /// interface, but internally it calculates gradients for all inputs.
     /// </para>
     /// <para><b>For Beginners:</b> This method calculates how the error gradient flows backward through this layer.
-    /// 
+    ///
     /// During backpropagation, this method:
     /// 1. Checks that Forward() was called first
     /// 2. Calculates how the gradient changes due to the activation function (if any)
     /// 3. Creates a copy of this gradient for each input
     /// 4. Returns the gradient for the first input
-    /// 
+    ///
     /// For addition, the gradient flows equally to all inputs. This means if the output
     /// needs to change by some amount, each input contributes equally to that change.
-    /// 
+    ///
     /// Note: This method only returns the gradient for the first input due to interface
     /// constraints. In a real network, you would need to handle returning all gradients
     /// to their respective sources.
     /// </para>
     /// </remarks>
     public override Tensor<T> Backward(Tensor<T> outputGradient)
+    {
+        if (UseAutodiff)
+            return BackwardViaAutodiff(outputGradient);
+        else
+            return BackwardManual(outputGradient);
+    }
+
+    /// <summary>
+    /// Manual backward pass implementation using optimized gradient calculations.
+    /// </summary>
+    /// <param name="outputGradient">The gradient of the loss with respect to the layer's output.</param>
+    /// <returns>The gradient of the loss with respect to the layer's input.</returns>
+    private Tensor<T> BackwardManual(Tensor<T> outputGradient)
     {
         if (_lastInputs == null || _lastOutput == null)
         {
@@ -311,6 +324,123 @@ public class AddLayer<T> : LayerBase<T>
         }
 
         return inputGradients[0];
+    }
+
+    /// <summary>
+    /// Backward pass implementation using automatic differentiation.
+    /// </summary>
+    /// <param name="outputGradient">The gradient of the loss with respect to the layer's output.</param>
+    /// <returns>The gradient of the loss with respect to the layer's input.</returns>
+    /// <remarks>
+    /// <para>
+    /// This method uses automatic differentiation to compute gradients for addition operation.
+    /// </para>
+    /// </remarks>
+    private Tensor<T> BackwardViaAutodiff(Tensor<T> outputGradient)
+    {
+        if (_lastInputs == null || _lastOutput == null)
+        {
+            throw new InvalidOperationException("Forward pass must be called before backward pass.");
+        }
+
+        // Convert to computation nodes
+        var inputNodes = new List<Autodiff.ComputationNode<T>>();
+        inputNodes.Add(Autodiff.TensorOperations<T>.Variable(_lastInputs[0], "input_0", requiresGradient: true));
+
+        // Forward computation using autodiff ops: result = input[0] + input[1] + ...
+        var result = inputNodes[0];
+        for (int i = 1; i < _lastInputs.Length; i++)
+        {
+            var inputNode = Autodiff.TensorOperations<T>.Variable(_lastInputs[i], $"input_{i}", requiresGradient: false);
+            result = Autodiff.TensorOperations<T>.Add(result, inputNode);
+        }
+
+        // Apply activation using autodiff
+        var activated = ApplyActivationAutodiff(result);
+
+        // Set the gradient at the output
+        activated.Gradient = outputGradient;
+
+        // Perform topological sort and backward pass
+        var topoOrder = GetTopologicalOrder(activated);
+
+        // Execute backward pass in reverse topological order
+        for (int i = topoOrder.Count - 1; i >= 0; i--)
+        {
+            var node = topoOrder[i];
+            if (node.RequiresGradient && node.BackwardFunction != null && node.Gradient != null)
+            {
+                node.BackwardFunction(node.Gradient);
+            }
+        }
+
+        return inputNodes[0].Gradient!;
+    }
+
+    /// <summary>
+    /// Gets the topological order of nodes in the computation graph.
+    /// </summary>
+    private List<Autodiff.ComputationNode<T>> GetTopologicalOrder(Autodiff.ComputationNode<T> root)
+    {
+        var visited = new HashSet<Autodiff.ComputationNode<T>>();
+        var result = new List<Autodiff.ComputationNode<T>>();
+
+        var stack = new Stack<(Autodiff.ComputationNode<T> node, bool processed)>();
+        stack.Push((root, false));
+
+        while (stack.Count > 0)
+        {
+            var (node, processed) = stack.Pop();
+
+            if (visited.Contains(node))
+            {
+                continue;
+            }
+
+            if (processed)
+            {
+                visited.Add(node);
+                result.Add(node);
+            }
+            else
+            {
+                stack.Push((node, true));
+
+                foreach (var parent in node.Parents)
+                {
+                    if (!visited.Contains(parent))
+                    {
+                        stack.Push((parent, false));
+                    }
+                }
+            }
+        }
+
+        return result;
+    }
+
+    /// <summary>
+    /// Applies activation function using autodiff operations.
+    /// </summary>
+    private Autodiff.ComputationNode<T> ApplyActivationAutodiff(Autodiff.ComputationNode<T> input)
+    {
+        if (ScalarActivation is ReLUActivation<T>)
+        {
+            return Autodiff.TensorOperations<T>.ReLU(input);
+        }
+        else if (ScalarActivation is SigmoidActivation<T>)
+        {
+            return Autodiff.TensorOperations<T>.Sigmoid(input);
+        }
+        else if (ScalarActivation is TanhActivation<T>)
+        {
+            return Autodiff.TensorOperations<T>.Tanh(input);
+        }
+        else
+        {
+            // For unsupported activations, return input unchanged
+            return input;
+        }
     }
 
     /// <summary>

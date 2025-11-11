@@ -252,19 +252,32 @@ public class LayerNormalizationLayer<T> : LayerBase<T>
     /// </para>
     /// <para><b>For Beginners:</b> This method is used during training to calculate how the layer's input
     /// and parameters should change to reduce errors.
-    /// 
+    ///
     /// During the backward pass:
     /// 1. The layer receives information about how its output contributed to errors
     /// 2. It calculates how the gamma and beta parameters should change to reduce errors
     /// 3. It calculates how the input should change, which will be used by earlier layers
-    /// 
+    ///
     /// This backward computation is complex because changing the mean and standard deviation
     /// of a sample affects all features, creating interdependencies in the gradients.
-    /// 
+    ///
     /// The method will throw an error if you try to run it before performing a forward pass.
     /// </para>
     /// </remarks>
     public override Tensor<T> Backward(Tensor<T> outputGradient)
+    {
+        if (UseAutodiff)
+            return BackwardViaAutodiff(outputGradient);
+        else
+            return BackwardManual(outputGradient);
+    }
+
+    /// <summary>
+    /// Manual backward pass implementation using optimized gradient calculations.
+    /// </summary>
+    /// <param name="outputGradient">The gradient of the loss with respect to the layer's output.</param>
+    /// <returns>The gradient of the loss with respect to the layer's input.</returns>
+    private Tensor<T> BackwardManual(Tensor<T> outputGradient)
     {
         if (_lastInput == null || _lastNormalized == null || _lastMean == null || _lastStd == null)
             throw new InvalidOperationException("Forward pass must be called before backward pass.");
@@ -319,6 +332,153 @@ public class LayerNormalizationLayer<T> : LayerBase<T>
         }
 
         return inputGradient;
+    }
+
+    /// <summary>
+    /// Backward pass implementation using automatic differentiation.
+    /// </summary>
+    /// <param name="outputGradient">The gradient of the loss with respect to the layer's output.</param>
+    /// <returns>The gradient of the loss with respect to the layer's input.</returns>
+    /// <remarks>
+    /// <para>
+    /// This method uses automatic differentiation to compute gradients. It recreates the forward
+    /// computation graph and propagates gradients through it.
+    /// </para>
+    /// </remarks>
+    private Tensor<T> BackwardViaAutodiff(Tensor<T> outputGradient)
+    {
+        if (_lastInput == null || _lastNormalized == null)
+            throw new InvalidOperationException("Forward pass must be called before backward pass.");
+
+        int batchSize = _lastInput.Shape[0];
+        int featureSize = _lastInput.Shape[1];
+
+        // Convert to computation nodes
+        var input = Autodiff.TensorOperations<T>.Variable(_lastInput, "input", requiresGradient: true);
+
+        // Convert gamma and beta to tensors and broadcast
+        var gammaTensor = VectorToTensor(_gamma);
+        var betaTensor = VectorToTensor(_beta);
+        var gammaBroadcast = BroadcastVector(gammaTensor, batchSize);
+        var betaBroadcast = BroadcastVector(betaTensor, batchSize);
+
+        var gammaNode = Autodiff.TensorOperations<T>.Variable(gammaBroadcast, "gamma_broadcast", requiresGradient: false);
+        var betaNode = Autodiff.TensorOperations<T>.Variable(betaBroadcast, "beta_broadcast", requiresGradient: false);
+
+        // Use pre-computed normalized values from forward pass
+        var normalizedNode = Autodiff.TensorOperations<T>.Variable(_lastNormalized, "normalized", requiresGradient: false);
+
+        // output = gamma * normalized + beta
+        var scaled = Autodiff.TensorOperations<T>.ElementwiseMultiply(gammaNode, normalizedNode);
+        var output = Autodiff.TensorOperations<T>.Add(scaled, betaNode);
+
+        // Set the gradient at the output
+        output.Gradient = outputGradient;
+
+        // Perform topological sort and backward pass
+        var topoOrder = GetTopologicalOrder(output);
+
+        // Execute backward pass in reverse topological order
+        for (int i = topoOrder.Count - 1; i >= 0; i--)
+        {
+            var node = topoOrder[i];
+            if (node.RequiresGradient && node.BackwardFunction != null && node.Gradient != null)
+            {
+                node.BackwardFunction(node.Gradient);
+            }
+        }
+
+        // Extract gradients - sum gamma and beta gradients across batch dimension
+        _gammaGradient = new Vector<T>(featureSize);
+        _betaGradient = new Vector<T>(featureSize);
+
+        var gammaGrad = gammaNode.Gradient!;
+        var betaGrad = betaNode.Gradient!;
+
+        for (int j = 0; j < featureSize; j++)
+        {
+            for (int i = 0; i < batchSize; i++)
+            {
+                _gammaGradient[j] = NumOps.Add(_gammaGradient[j], gammaGrad[i, j]);
+                _betaGradient[j] = NumOps.Add(_betaGradient[j], betaGrad[i, j]);
+            }
+        }
+
+        return input.Gradient!;
+    }
+
+    /// <summary>
+    /// Gets the topological order of nodes in the computation graph.
+    /// </summary>
+    private List<Autodiff.ComputationNode<T>> GetTopologicalOrder(Autodiff.ComputationNode<T> root)
+    {
+        var visited = new HashSet<Autodiff.ComputationNode<T>>();
+        var result = new List<Autodiff.ComputationNode<T>>();
+
+        var stack = new Stack<(Autodiff.ComputationNode<T> node, bool processed)>();
+        stack.Push((root, false));
+
+        while (stack.Count > 0)
+        {
+            var (node, processed) = stack.Pop();
+
+            if (visited.Contains(node))
+            {
+                continue;
+            }
+
+            if (processed)
+            {
+                visited.Add(node);
+                result.Add(node);
+            }
+            else
+            {
+                stack.Push((node, true));
+
+                foreach (var parent in node.Parents)
+                {
+                    if (!visited.Contains(parent))
+                    {
+                        stack.Push((parent, false));
+                    }
+                }
+            }
+        }
+
+        return result;
+    }
+
+    /// <summary>
+    /// Converts a Vector to a 1D Tensor.
+    /// </summary>
+    private Tensor<T> VectorToTensor(Vector<T> vector)
+    {
+        var tensor = new Tensor<T>(new int[] { vector.Length });
+        for (int i = 0; i < vector.Length; i++)
+        {
+            tensor[i] = vector[i];
+        }
+        return tensor;
+    }
+
+    /// <summary>
+    /// Broadcasts a 1D vector across the batch dimension to create a 2D tensor.
+    /// </summary>
+    private Tensor<T> BroadcastVector(Tensor<T> vector, int batchSize)
+    {
+        var featureSize = vector.Length;
+        var broadcasted = new Tensor<T>(new int[] { batchSize, featureSize });
+
+        for (int i = 0; i < batchSize; i++)
+        {
+            for (int j = 0; j < featureSize; j++)
+            {
+                broadcasted[i, j] = vector[j];
+            }
+        }
+
+        return broadcasted;
     }
 
     /// <summary>

@@ -69,7 +69,7 @@ public class DropoutLayer<T> : LayerBase<T>
     /// When some neurons are turned off:
     /// - The total signal would be weaker (reduced by the dropout percentage)
     /// - To compensate, we make the remaining neurons stronger
-    /// - If we drop 50% of neurons, we make the remaining ones 2× stronger
+    /// - If we drop 50% of neurons, we make the remaining ones 2ï¿½ stronger
     /// 
     /// The formula is simple: scale = 1 / (1 - dropout_rate)
     /// 
@@ -279,24 +279,37 @@ public class DropoutLayer<T> : LayerBase<T>
     /// no dropout was applied in the forward pass.
     /// </para>
     /// <para><b>For Beginners:</b> This is where the layer passes error information back to previous layers.
-    /// 
+    ///
     /// During training:
     /// - Gradients represent how each neuron should change to improve
     /// - We only want to update neurons that were active during the forward pass
     /// - The dropout mask (which recorded which neurons were on/off) is applied to the gradients
     /// - Dropped neurons receive zero gradient (no update)
     /// - Active neurons receive the scaled gradient
-    /// 
+    ///
     /// During inference:
     /// - All gradients pass through unchanged
     /// - This matches the behavior of the forward pass where all neurons were active
-    /// 
+    ///
     /// This consistency between forward and backward passes is essential for proper training.
     /// </para>
     /// <exception cref="InvalidOperationException">
     /// Thrown when backward is called before a forward pass has been performed.
     /// </exception>
     public override Tensor<T> Backward(Tensor<T> outputGradient)
+    {
+        if (UseAutodiff)
+            return BackwardViaAutodiff(outputGradient);
+        else
+            return BackwardManual(outputGradient);
+    }
+
+    /// <summary>
+    /// Manual backward pass implementation using optimized gradient calculations.
+    /// </summary>
+    /// <param name="outputGradient">The gradient of the loss with respect to the layer's output.</param>
+    /// <returns>The gradient of the loss with respect to the layer's input.</returns>
+    private Tensor<T> BackwardManual(Tensor<T> outputGradient)
     {
         if (_lastInput == null || _dropoutMask == null)
             throw new InvalidOperationException("Forward pass must be called before backward pass.");
@@ -312,6 +325,94 @@ public class DropoutLayer<T> : LayerBase<T>
         }
 
         return inputGradient;
+    }
+
+    /// <summary>
+    /// Backward pass implementation using automatic differentiation.
+    /// </summary>
+    /// <param name="outputGradient">The gradient of the loss with respect to the layer's output.</param>
+    /// <returns>The gradient of the loss with respect to the layer's input.</returns>
+    /// <remarks>
+    /// <para>
+    /// This method uses automatic differentiation to compute gradients. It recreates the forward
+    /// computation graph and propagates gradients through it.
+    /// </para>
+    /// </remarks>
+    private Tensor<T> BackwardViaAutodiff(Tensor<T> outputGradient)
+    {
+        if (_lastInput == null || _dropoutMask == null)
+            throw new InvalidOperationException("Forward pass must be called before backward pass.");
+
+        if (!IsTrainingMode)
+            return outputGradient;
+
+        // Convert to computation nodes
+        var input = Autodiff.TensorOperations<T>.Variable(_lastInput, "input", requiresGradient: true);
+        var mask = Autodiff.TensorOperations<T>.Variable(_dropoutMask, "mask", requiresGradient: false);
+
+        // Forward computation using autodiff ops
+        // output = input * mask
+        var output = Autodiff.TensorOperations<T>.ElementwiseMultiply(input, mask);
+
+        // Set the gradient at the output
+        output.Gradient = outputGradient;
+
+        // Perform topological sort and backward pass
+        var topoOrder = GetTopologicalOrder(output);
+
+        // Execute backward pass in reverse topological order
+        for (int i = topoOrder.Count - 1; i >= 0; i--)
+        {
+            var node = topoOrder[i];
+            if (node.RequiresGradient && node.BackwardFunction != null && node.Gradient != null)
+            {
+                node.BackwardFunction(node.Gradient);
+            }
+        }
+
+        return input.Gradient!;
+    }
+
+    /// <summary>
+    /// Gets the topological order of nodes in the computation graph.
+    /// </summary>
+    private List<Autodiff.ComputationNode<T>> GetTopologicalOrder(Autodiff.ComputationNode<T> root)
+    {
+        var visited = new HashSet<Autodiff.ComputationNode<T>>();
+        var result = new List<Autodiff.ComputationNode<T>>();
+
+        var stack = new Stack<(Autodiff.ComputationNode<T> node, bool processed)>();
+        stack.Push((root, false));
+
+        while (stack.Count > 0)
+        {
+            var (node, processed) = stack.Pop();
+
+            if (visited.Contains(node))
+            {
+                continue;
+            }
+
+            if (processed)
+            {
+                visited.Add(node);
+                result.Add(node);
+            }
+            else
+            {
+                stack.Push((node, true));
+
+                foreach (var parent in node.Parents)
+                {
+                    if (!visited.Contains(parent))
+                    {
+                        stack.Push((parent, false));
+                    }
+                }
+            }
+        }
+
+        return result;
     }
 
     /// <summary>
