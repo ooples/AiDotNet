@@ -19,6 +19,30 @@ public class MultiModalTeacherModel<T> : TeacherModelBase<Vector<T>, Vector<T>, 
     {
         _modalityTeachers = modalityTeachers ?? throw new ArgumentNullException(nameof(modalityTeachers));
 
+        // Validate modality teachers array is non-empty
+        if (_modalityTeachers.Length == 0)
+            throw new ArgumentException("Modality teachers array cannot be empty", nameof(modalityTeachers));
+
+        // Validate no teacher is null
+        for (int i = 0; i < _modalityTeachers.Length; i++)
+        {
+            if (_modalityTeachers[i] == null)
+                throw new ArgumentException($"Modality teacher at index {i} is null", nameof(modalityTeachers));
+        }
+
+        // Validate all teachers have the same output dimension
+        int expectedOutputDim = _modalityTeachers[0].OutputDimension;
+        for (int i = 1; i < _modalityTeachers.Length; i++)
+        {
+            if (_modalityTeachers[i].OutputDimension != expectedOutputDim)
+                throw new ArgumentException(
+                    $"Modality teacher at index {i} has OutputDimension {_modalityTeachers[i].OutputDimension}, " +
+                    $"but expected {expectedOutputDim} (from teacher 0). " +
+                    $"All modality teachers must have the same OutputDimension.",
+                    nameof(modalityTeachers));
+        }
+
+        // Set or validate modality weights
         if (modalityWeights == null)
         {
             _modalityWeights = Enumerable.Repeat(1.0 / modalityTeachers.Length, modalityTeachers.Length).ToArray();
@@ -26,7 +50,9 @@ public class MultiModalTeacherModel<T> : TeacherModelBase<Vector<T>, Vector<T>, 
         else
         {
             if (modalityWeights.Length != modalityTeachers.Length)
-                throw new ArgumentException("Modality weights must match number of teachers");
+                throw new ArgumentException(
+                    $"Modality weights length ({modalityWeights.Length}) must match number of teachers ({modalityTeachers.Length})",
+                    nameof(modalityWeights));
             _modalityWeights = modalityWeights;
         }
     }
