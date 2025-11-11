@@ -1,6 +1,7 @@
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
+using AiDotNet.NestedLearning;
 
 namespace AiDotNet.NeuralNetworks.Layers;
 
@@ -19,6 +20,7 @@ public class ContinuumMemorySystemLayer<T> : LayerBase<T>
     private readonly T[] _learningRates;
     private readonly Vector<T>[] _accumulatedGradients;
     private readonly int[] _stepCounters;
+    private readonly Vector<T>[] _storedInputs;  // Store input to each MLP block for Modified GD
     private int _globalStep;
     private static readonly INumericOperations<T> _numOps = MathHelper.GetNumericOperations<T>();
 
@@ -118,6 +120,9 @@ public class ContinuumMemorySystemLayer<T> : LayerBase<T>
             _stepCounters[i] = 0;
         }
 
+        // Initialize stored inputs for Modified GD
+        _storedInputs = new Vector<T>[numFrequencyLevels];
+
         _globalStep = 0;
         Parameters = new Vector<T>(0); // CMS manages its own MLP parameters
     }
@@ -160,6 +165,9 @@ public class ContinuumMemorySystemLayer<T> : LayerBase<T>
         {
             if (_mlpBlocks[level] == null)
                 throw new InvalidOperationException($"MLP block at level {level} is null");
+
+            // Store input for Modified GD optimizer
+            _storedInputs[level] = current.ToVector();
 
             current = _mlpBlocks[level].Forward(current);
 
@@ -240,17 +248,33 @@ public class ContinuumMemorySystemLayer<T> : LayerBase<T>
                 $"Parameter count mismatch at level {level}: params={currentParams.Length}, gradients={_accumulatedGradients[level].Length}");
         }
 
-        var updated = new Vector<T>(currentParams.Length);
         T learningRate = _learningRates[level];
 
-        for (int i = 0; i < currentParams.Length; i++)
+        // Use Modified Gradient Descent if input data is available (Equations 27-29)
+        if (_storedInputs[level] != null)
         {
-            // θ^(fℓ)_{i+1} = θ^(fℓ)_i - η^(ℓ) * Σ gradients
-            T update = _numOps.Multiply(_accumulatedGradients[level][i], learningRate);
-            updated[i] = _numOps.Subtract(currentParams[i], update);
-        }
+            var modifiedGD = new ModifiedGradientDescentOptimizer<T>(learningRate);
+            var inputVec = _storedInputs[level];
+            var outputGradVec = _accumulatedGradients[level];
 
-        _mlpBlocks[level].SetParameters(updated);
+            // Apply modified GD: Wt+1 = Wt * (I - xt*xt^T) - η * ∇ytL(Wt; xt) ⊗ xt
+            var updated = modifiedGD.UpdateVector(currentParams, inputVec, outputGradVec);
+            _mlpBlocks[level].SetParameters(updated);
+        }
+        else
+        {
+            // Fallback to standard gradient descent
+            var updated = new Vector<T>(currentParams.Length);
+
+            for (int i = 0; i < currentParams.Length; i++)
+            {
+                // θ^(fℓ)_{i+1} = θ^(fℓ)_i - η^(ℓ) * Σ gradients
+                T update = _numOps.Multiply(_accumulatedGradients[level][i], learningRate);
+                updated[i] = _numOps.Subtract(currentParams[i], update);
+            }
+
+            _mlpBlocks[level].SetParameters(updated);
+        }
     }
 
     /// <summary>
