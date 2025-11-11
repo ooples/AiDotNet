@@ -42,6 +42,8 @@ namespace AiDotNet.KnowledgeDistillation;
 public class DistillationLoss<T> : IDistillationStrategy<Vector<T>, T>
 {
     private readonly INumericOperations<T> _numOps;
+    private double _temperature;
+    private double _alpha;
 
     /// <summary>
     /// Gets or sets the temperature parameter for softening probability distributions.
@@ -57,7 +59,16 @@ public class DistillationLoss<T> : IDistillationStrategy<Vector<T>, T>
     ///
     /// <para>Typical values: 3-5 for image classification, 2-4 for language models.</para>
     /// </remarks>
-    public double Temperature { get; set; }
+    public double Temperature
+    {
+        get => _temperature;
+        set
+        {
+            if (value <= 0)
+                throw new ArgumentException("Temperature must be positive (> 0)", nameof(value));
+            _temperature = value;
+        }
+    }
 
     /// <summary>
     /// Gets or sets the balance parameter between hard loss and soft loss.
@@ -69,7 +80,16 @@ public class DistillationLoss<T> : IDistillationStrategy<Vector<T>, T>
     /// - α = 0.5: Equal weight to both sources
     /// - α = 1: Only learn from labels (no distillation)</para>
     /// </remarks>
-    public double Alpha { get; set; }
+    public double Alpha
+    {
+        get => _alpha;
+        set
+        {
+            if (value < 0 || value > 1)
+                throw new ArgumentException("Alpha must be between 0 and 1", nameof(value));
+            _alpha = value;
+        }
+    }
 
     /// <summary>
     /// Initializes a new instance of the DistillationLoss class.
