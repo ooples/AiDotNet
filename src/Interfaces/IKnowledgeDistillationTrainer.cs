@@ -75,10 +75,10 @@ public interface IKnowledgeDistillationTrainer<TInput, TOutput, T>
     /// <param name="studentForward">Function to perform forward pass on student model.</param>
     /// <param name="testInputs">Test input data.</param>
     /// <param name="testLabels">Test labels (one-hot encoded).</param>
-    /// <returns>Classification accuracy (fraction of correct predictions).</returns>
+    /// <returns>Classification accuracy as a percentage (0-100).</returns>
     /// <remarks>
     /// <para><b>For Beginners:</b> This measures how well the student has learned.
-    /// Returns a value between 0 and 1, where 1.0 means perfect accuracy.</para>
+    /// Returns a percentage between 0 and 100, where 100.0 means perfect accuracy.</para>
     /// </remarks>
     double Evaluate(
         Func<TInput, TOutput> studentForward,
