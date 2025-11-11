@@ -176,6 +176,48 @@ public class MiniBatchGradientDescentOptimizer<T, TInput, TOutput> : GradientBas
     }
 
     /// <summary>
+    /// Reverses a Mini-Batch Gradient Descent update to recover original parameters.
+    /// </summary>
+    /// <param name="updatedParameters">Parameters after Mini-Batch GD update</param>
+    /// <param name="appliedGradients">The gradients that were applied</param>
+    /// <returns>Original parameters before the update</returns>
+    /// <remarks>
+    /// <para>
+    /// Mini-Batch Gradient Descent uses vanilla SGD update rule: params_new = params_old - lr * gradient.
+    /// The reverse is straightforward: params_old = params_new + lr * gradient.
+    /// </para>
+    /// <para><b>For Beginners:</b> This calculates where parameters were before a Mini-Batch GD update.
+    /// Since Mini-Batch GD uses simple steps (parameter minus learning_rate times gradient), reversing
+    /// just means adding back that step.
+    /// </para>
+    /// </remarks>
+    public override Vector<T> ReverseUpdate(Vector<T> updatedParameters, Vector<T> appliedGradients)
+    {
+        if (updatedParameters == null)
+            throw new ArgumentNullException(nameof(updatedParameters));
+        if (appliedGradients == null)
+            throw new ArgumentNullException(nameof(appliedGradients));
+
+        if (updatedParameters.Length != appliedGradients.Length)
+        {
+            throw new ArgumentException(
+                $"Updated parameters size ({updatedParameters.Length}) must match applied gradients size ({appliedGradients.Length})",
+                nameof(appliedGradients));
+        }
+
+        var original = new T[updatedParameters.Length];
+
+        for (int i = 0; i < updatedParameters.Length; i++)
+        {
+            // Reverse: original = updated + lr * gradient
+            var gradientStep = NumOps.Multiply(CurrentLearningRate, appliedGradients[i]);
+            original[i] = NumOps.Add(updatedParameters[i], gradientStep);
+        }
+
+        return new Vector<T>(original);
+    }
+
+    /// <summary>
     /// Updates the adaptive parameters of the optimizer based on the current and previous optimization steps.
     /// </summary>
     /// <remarks>

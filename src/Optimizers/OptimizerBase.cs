@@ -1128,7 +1128,7 @@ public abstract class OptimizerBase<T, TInput, TOutput> : IOptimizer<T, TInput, 
     /// </para>
     /// </remarks>
     public abstract OptimizationAlgorithmOptions<T, TInput, TOutput> GetOptions();
-    
+
     /// <summary>
     /// Calculates the parameter updates based on the gradients.
     /// </summary>

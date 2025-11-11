@@ -8,6 +8,7 @@ global using AiDotNet.DataProcessor;
 global using AiDotNet.FitDetectors;
 global using AiDotNet.LossFunctions;
 global using AiDotNet.MetaLearning.Trainers;
+global using AiDotNet.DistributedTraining;
 global using AiDotNet.Agents;
 global using AiDotNet.LanguageModels;
 global using AiDotNet.Tools;
@@ -51,6 +52,9 @@ public class PredictionModelBuilder<T, TInput, TOutput> : IPredictionModelBuilde
     private IGenerator<T>? _ragGenerator;
     private IEnumerable<IQueryProcessor>? _queryProcessors;
     private IMetaLearner<T, TInput, TOutput>? _metaLearner;
+    private ICommunicationBackend<T>? _distributedBackend;
+    private DistributedStrategy _distributedStrategy = DistributedStrategy.DDP;
+    private IShardingConfiguration<T>? _distributedConfiguration;
     private IModelEvaluator<T, TInput, TOutput>? _modelEvaluator;
     private ICrossValidator<T, TInput, TOutput>? _crossValidator;
     private AgentConfiguration<T>? _agentConfig;
@@ -325,6 +329,72 @@ public class PredictionModelBuilder<T, TInput, TOutput> : IPredictionModelBuilde
         var outlierRemoval = _outlierRemoval ?? new NoOutlierRemoval<T, TInput, TOutput>();
         var dataPreprocessor = _dataPreprocessor ?? new DefaultDataPreprocessor<T, TInput, TOutput>(normalizer, featureSelector, outlierRemoval);
 
+        // Wrap model and optimizer for distributed training if configured
+        IFullModel<T, TInput, TOutput> model = _model;
+        IOptimizer<T, TInput, TOutput> finalOptimizer = optimizer;
+
+        // Enable distributed training if backend or configuration was explicitly provided
+        if (_distributedBackend != null || _distributedConfiguration != null)
+        {
+            // Use provided backend or default to InMemory for single-process
+            var backend = _distributedBackend ?? new DistributedTraining.InMemoryCommunicationBackend<T>(rank: 0, worldSize: 1);
+
+            // Use provided configuration or create default from backend
+            var shardingConfig = _distributedConfiguration ?? new DistributedTraining.ShardingConfiguration<T>(backend);
+
+            // Check if model/optimizer are already sharded to avoid double-wrapping
+            bool isModelAlreadySharded = _model is DistributedTraining.IShardedModel<T, TInput, TOutput>;
+            bool isOptimizerAlreadySharded = optimizer is DistributedTraining.IShardedOptimizer<T, TInput, TOutput>;
+
+            // Only wrap if not already sharded
+            if (isModelAlreadySharded || isOptimizerAlreadySharded)
+            {
+                // Model or optimizer already sharded - skip wrapping to avoid double-wrapping
+                model = _model;
+                finalOptimizer = optimizer;
+            }
+            else
+            {
+                // Switch on strategy to create appropriate model/optimizer pair
+                (model, finalOptimizer) = _distributedStrategy switch
+            {
+                DistributedStrategy.DDP => (
+                    (IFullModel<T, TInput, TOutput>)new DistributedTraining.DDPModel<T, TInput, TOutput>(_model, shardingConfig),
+                    (IOptimizer<T, TInput, TOutput>)new DistributedTraining.DDPOptimizer<T, TInput, TOutput>(optimizer, shardingConfig)
+                ),
+                DistributedStrategy.FSDP => (
+                    (IFullModel<T, TInput, TOutput>)new DistributedTraining.FSDPModel<T, TInput, TOutput>(_model, shardingConfig),
+                    (IOptimizer<T, TInput, TOutput>)new DistributedTraining.FSDPOptimizer<T, TInput, TOutput>(optimizer, shardingConfig)
+                ),
+                DistributedStrategy.ZeRO1 => (
+                    (IFullModel<T, TInput, TOutput>)new DistributedTraining.ZeRO1Model<T, TInput, TOutput>(_model, shardingConfig),
+                    (IOptimizer<T, TInput, TOutput>)new DistributedTraining.ZeRO1Optimizer<T, TInput, TOutput>(optimizer, shardingConfig)
+                ),
+                DistributedStrategy.ZeRO2 => (
+                    (IFullModel<T, TInput, TOutput>)new DistributedTraining.ZeRO2Model<T, TInput, TOutput>(_model, shardingConfig),
+                    (IOptimizer<T, TInput, TOutput>)new DistributedTraining.ZeRO2Optimizer<T, TInput, TOutput>(optimizer, shardingConfig)
+                ),
+                DistributedStrategy.ZeRO3 => (
+                    (IFullModel<T, TInput, TOutput>)new DistributedTraining.ZeRO3Model<T, TInput, TOutput>(_model, shardingConfig),
+                    (IOptimizer<T, TInput, TOutput>)new DistributedTraining.ZeRO3Optimizer<T, TInput, TOutput>(optimizer, shardingConfig)
+                ),
+                DistributedStrategy.PipelineParallel => (
+                    (IFullModel<T, TInput, TOutput>)new DistributedTraining.PipelineParallelModel<T, TInput, TOutput>(_model, shardingConfig),
+                    (IOptimizer<T, TInput, TOutput>)new DistributedTraining.PipelineParallelOptimizer<T, TInput, TOutput>(optimizer, shardingConfig)
+                ),
+                DistributedStrategy.TensorParallel => (
+                    (IFullModel<T, TInput, TOutput>)new DistributedTraining.TensorParallelModel<T, TInput, TOutput>(_model, shardingConfig),
+                    (IOptimizer<T, TInput, TOutput>)new DistributedTraining.TensorParallelOptimizer<T, TInput, TOutput>(optimizer, shardingConfig)
+                ),
+                DistributedStrategy.Hybrid => (
+                    (IFullModel<T, TInput, TOutput>)new DistributedTraining.HybridShardedModel<T, TInput, TOutput>(_model, shardingConfig),
+                    (IOptimizer<T, TInput, TOutput>)new DistributedTraining.HybridShardedOptimizer<T, TInput, TOutput>(optimizer, shardingConfig)
+                ),
+                _ => throw new InvalidOperationException($"Unsupported distributed strategy: {_distributedStrategy}")
+            };
+            }
+        }
+
         // Preprocess the data
         var (preprocessedX, preprocessedY, normInfo) = dataPreprocessor.PreprocessData(x, y);
 
@@ -351,8 +421,8 @@ public class PredictionModelBuilder<T, TInput, TOutput> : IPredictionModelBuilde
         // This prevents state contamination from CV (accumulated fitness lists, cache, learning rates)
         optimizer.Reset();
 
-        // Optimize the final model on the full training set
-        var optimizationResult = optimizer.Optimize(OptimizerHelper<T, TInput, TOutput>.CreateOptimizationInputData(XTrain, yTrain, XVal, yVal, XTest, yTest));
+        // Optimize the final model on the full training set (using distributed optimizer if configured)
+        var optimizationResult = finalOptimizer.Optimize(OptimizerHelper<T, TInput, TOutput>.CreateOptimizationInputData(XTrain, yTrain, XVal, yVal, XTest, yTest));
 
         // Return PredictionModelResult with CV results and agent data
         var finalResult = new PredictionModelResult<T, TInput, TOutput>(
@@ -593,6 +663,43 @@ public class PredictionModelBuilder<T, TInput, TOutput> : IPredictionModelBuilde
     public IPredictionModelBuilder<T, TInput, TOutput> ConfigureMetaLearning(IMetaLearner<T, TInput, TOutput> metaLearner)
     {
         _metaLearner = metaLearner;
+        return this;
+    }
+
+    /// <summary>
+    /// Configures distributed training across multiple GPUs or machines.
+    /// </summary>
+    /// <param name="backend">Communication backend to use. If null, uses InMemoryCommunicationBackend.</param>
+    /// <param name="strategy">Distributed training strategy. Default is DDP.</param>
+    /// <param name="configuration">Optional sharding configuration for advanced settings like gradient compression, parameter grouping, etc.</param>
+    /// <returns>This builder instance for method chaining.</returns>
+    /// <remarks>
+    /// <para>
+    /// When distributed training is configured, the Build() method will automatically wrap
+    /// the model and optimizer with their distributed counterparts based on the chosen strategy.
+    /// This enables training across multiple GPUs or machines with automatic parameter
+    /// sharding and gradient synchronization.
+    /// </para>
+    /// <para>
+    /// <b>For Beginners:</b> This enables distributed training across multiple GPUs or machines.
+    /// You can call it with no parameters for sensible defaults, or customize as needed.
+    ///
+    /// When you configure this, the builder automatically handles all the complexity:
+    /// - Your model gets split across GPUs (parameter sharding)
+    /// - Gradients are synchronized automatically
+    /// - Training is coordinated across all processes
+    ///
+    /// You just train as normal - the distributed magic happens behind the scenes!
+    /// </para>
+    /// </remarks>
+    public IPredictionModelBuilder<T, TInput, TOutput> ConfigureDistributedTraining(
+        ICommunicationBackend<T>? backend = null,
+        DistributedStrategy strategy = DistributedStrategy.DDP,
+        IShardingConfiguration<T>? configuration = null)
+    {
+        _distributedBackend = backend;
+        _distributedStrategy = strategy;
+        _distributedConfiguration = configuration;
         return this;
     }
 

@@ -123,6 +123,48 @@ public class GradientDescentOptimizer<T, TInput, TOutput> : GradientBasedOptimiz
     }
 
     /// <summary>
+    /// Reverses a Gradient Descent update to recover original parameters.
+    /// </summary>
+    /// <param name="updatedParameters">Parameters after GD update</param>
+    /// <param name="appliedGradients">The gradients that were applied</param>
+    /// <returns>Original parameters before the update</returns>
+    /// <remarks>
+    /// <para>
+    /// Gradient Descent uses vanilla SGD update rule: params_new = params_old - lr * gradient.
+    /// The reverse is straightforward: params_old = params_new + lr * gradient.
+    /// </para>
+    /// <para><b>For Beginners:</b> This calculates where parameters were before a Gradient Descent update.
+    /// Since GD uses simple steps (parameter minus learning_rate times gradient), reversing
+    /// just means adding back that step.
+    /// </para>
+    /// </remarks>
+    public override Vector<T> ReverseUpdate(Vector<T> updatedParameters, Vector<T> appliedGradients)
+    {
+        if (updatedParameters == null)
+            throw new ArgumentNullException(nameof(updatedParameters));
+        if (appliedGradients == null)
+            throw new ArgumentNullException(nameof(appliedGradients));
+
+        if (updatedParameters.Length != appliedGradients.Length)
+        {
+            throw new ArgumentException(
+                $"Updated parameters size ({updatedParameters.Length}) must match applied gradients size ({appliedGradients.Length})",
+                nameof(appliedGradients));
+        }
+
+        var original = new T[updatedParameters.Length];
+
+        for (int i = 0; i < updatedParameters.Length; i++)
+        {
+            // Reverse: original = updated + lr * gradient
+            var gradientStep = NumOps.Multiply(CurrentLearningRate, appliedGradients[i]);
+            original[i] = NumOps.Add(updatedParameters[i], gradientStep);
+        }
+
+        return new Vector<T>(original);
+    }
+
+    /// <summary>
     /// Calculates the loss for a given solution and input data.
     /// </summary>
     /// <remarks>

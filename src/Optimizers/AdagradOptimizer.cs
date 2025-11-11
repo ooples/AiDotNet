@@ -246,6 +246,57 @@ public class AdagradOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T
     }
 
     /// <summary>
+    /// Updates a vector of parameters using the Adagrad optimization algorithm.
+    /// </summary>
+    /// <param name="parameters">The current parameter vector to be updated.</param>
+    /// <param name="gradient">The gradient vector corresponding to the parameters.</param>
+    /// <returns>The updated parameter vector.</returns>
+    /// <remarks>
+    /// <para>
+    /// This method implements the Adagrad update rule by accumulating squared gradients for each parameter
+    /// and using them to adapt the learning rate individually. Parameters with larger accumulated gradients
+    /// receive smaller learning rates, and vice versa.
+    /// </para>
+    /// <para><b>For Beginners:</b> Adagrad adjusts the learning rate for each parameter based on how much
+    /// it has changed in the past. Parameters that have received many large updates get smaller future updates,
+    /// while rarely-updated parameters get larger updates. This helps focus learning on less frequent features.
+    /// </para>
+    /// </remarks>
+    public override Vector<T> UpdateParameters(Vector<T> parameters, Vector<T> gradient)
+    {
+        if (_accumulatedSquaredGradients == null || _accumulatedSquaredGradients.Length != parameters.Length)
+        {
+            _accumulatedSquaredGradients = new Vector<T>(parameters.Length);
+        }
+
+        var updatedParams = new Vector<T>(parameters.Length);
+
+        for (int i = 0; i < parameters.Length; i++)
+        {
+            // Accumulate squared gradient
+            _accumulatedSquaredGradients[i] = NumOps.Add(
+                _accumulatedSquaredGradients[i],
+                NumOps.Multiply(gradient[i], gradient[i])
+            );
+
+            // Calculate adaptive learning rate
+            var adaptiveLearningRate = NumOps.Divide(
+                CurrentLearningRate,
+                NumOps.Add(NumOps.Sqrt(_accumulatedSquaredGradients[i]), NumOps.FromDouble(_options.Epsilon))
+            );
+
+            // Update parameters
+            updatedParams[i] = NumOps.Subtract(
+                parameters[i],
+                NumOps.Multiply(adaptiveLearningRate, gradient[i])
+            );
+        }
+
+        return updatedParams;
+    }
+
+
+    /// <summary>
     /// Updates the adaptive parameters of the Adagrad optimizer.
     /// </summary>
     /// <param name="currentStepData">The optimization step data for the current iteration.</param>
@@ -438,5 +489,68 @@ public class AdagradOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T
     {
         var baseKey = base.GenerateGradientCacheKey(model, X, y);
         return $"{baseKey}_Adagrad_{_options.InitialLearningRate}_{_options.Epsilon}";
+    }
+
+    /// <summary>
+    /// Reverses an Adagrad gradient update to recover original parameters.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// For Adagrad, the forward update is:
+    /// 1. _accumulatedSquaredGradients[i] += gradient[i]^2
+    /// 2. adaptiveLearningRate = learning_rate / (sqrt(_accumulatedSquaredGradients[i]) + epsilon)
+    /// 3. params_new = params_old - adaptiveLearningRate * gradient
+    ///
+    /// To reverse: params_old = params_new + adaptiveLearningRate * gradient
+    ///
+    /// This requires access to the accumulated squared gradients to recalculate the adaptive learning rate.
+    /// </para>
+    /// <para><b>For Beginners:</b>
+    /// This is like undoing a learning step. Given where the optimizer ended up (updated parameters)
+    /// and its memory of past improvements (accumulated squared gradients), we can calculate
+    /// the exact step that was taken and figure out where it started from.
+    /// </para>
+    /// </remarks>
+    /// <param name="updatedParameters">Parameters after gradient application</param>
+    /// <param name="appliedGradients">The gradients that were applied</param>
+    /// <returns>Original parameters before the gradient update</returns>
+    /// <exception cref="ArgumentNullException">If parameters or gradients are null</exception>
+    /// <exception cref="ArgumentException">If parameter and gradient sizes do not match</exception>
+    public override Vector<T> ReverseUpdate(Vector<T> updatedParameters, Vector<T> appliedGradients)
+    {
+        if (updatedParameters == null)
+            throw new ArgumentNullException(nameof(updatedParameters));
+        if (appliedGradients == null)
+            throw new ArgumentNullException(nameof(appliedGradients));
+
+        if (updatedParameters.Length != appliedGradients.Length)
+        {
+            throw new ArgumentException(
+                $"Updated parameters size ({updatedParameters.Length}) must match applied gradients size ({appliedGradients.Length})",
+                nameof(appliedGradients));
+        }
+
+        // If accumulated gradients are not initialized, fall back to vanilla SGD reversal
+        if (_accumulatedSquaredGradients == null || _accumulatedSquaredGradients.Length != updatedParameters.Length)
+        {
+            return base.ReverseUpdate(updatedParameters, appliedGradients);
+        }
+
+        // Reverse Adagrad update: params_old = params_new + adaptiveLearningRate * gradient
+        var original = new T[updatedParameters.Length];
+        for (int i = 0; i < updatedParameters.Length; i++)
+        {
+            // Recalculate the adaptive learning rate that was used
+            T denominator = NumOps.Add(NumOps.Sqrt(_accumulatedSquaredGradients[i]), NumOps.FromDouble(_options.Epsilon));
+            T adaptiveLearningRate = NumOps.Divide(CurrentLearningRate, denominator);
+
+            // Calculate the update that was applied
+            T update = NumOps.Multiply(adaptiveLearningRate, appliedGradients[i]);
+
+            // Reverse: params_old = params_new + update
+            original[i] = NumOps.Add(updatedParameters[i], update);
+        }
+
+        return new Vector<T>(original);
     }
 }
