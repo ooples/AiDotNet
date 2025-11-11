@@ -52,6 +52,7 @@ public class SelfDistillationTrainer<T> : KnowledgeDistillationTrainerBase<T, Ve
 {
     private readonly int _generations;
     private Dictionary<Vector<T>, Vector<T>>? _cachedTeacherPredictions;
+    private Func<Vector<T>, Vector<T>>? _studentForward;
 
     /// <summary>
     /// Gets or sets whether to use exponential moving average for teacher predictions.
@@ -111,14 +112,24 @@ public class SelfDistillationTrainer<T> : KnowledgeDistillationTrainerBase<T, Ve
     /// <para><b>For Self-Distillation:</b> Instead of calling a separate teacher model,
     /// we return predictions that were cached from the previous generation. We use the input
     /// itself as the key (via reference equality) to handle shuffled batches correctly.</para>
+    ///
+    /// <para><b>Generation 0 Handling:</b> When no cached predictions exist (first generation),
+    /// we use the student's own predictions as the teacher. This makes distillation a no-op for
+    /// generation 0, effectively training normally. This avoids dimension mismatches since the
+    /// placeholder teacher has OutputDimension = 0.</para>
     /// </remarks>
     protected override Vector<T> GetTeacherPredictions(Vector<T> input, int index)
     {
         if (_cachedTeacherPredictions == null)
         {
-            // First generation - return dummy teacher
-            // This will be handled properly in TrainMultipleGenerations
-            return new Vector<T>(Teacher.OutputDimension);
+            // First generation - use student's own predictions as teacher
+            // This makes distillation a no-op (teacher same as student) for generation 0
+            if (_studentForward == null)
+            {
+                throw new InvalidOperationException(
+                    "Student forward function not set. Call TrainMultipleGenerations to properly initialize self-distillation.");
+            }
+            return _studentForward(input);
         }
 
         // Look up by input reference to handle shuffled data correctly
@@ -128,7 +139,15 @@ public class SelfDistillationTrainer<T> : KnowledgeDistillationTrainerBase<T, Ve
         }
 
         // Fallback for inputs not in cache (shouldn't happen in normal flow)
-        return new Vector<T>(Teacher.OutputDimension);
+        // Use student predictions if available
+        if (_studentForward != null)
+        {
+            return _studentForward(input);
+        }
+
+        throw new InvalidOperationException(
+            $"Input not found in cached teacher predictions and no fallback available. " +
+            $"Cache size: {_cachedTeacherPredictions.Count}, Input hash: {input.GetHashCode()}");
     }
 
     /// <summary>
@@ -176,6 +195,10 @@ public class SelfDistillationTrainer<T> : KnowledgeDistillationTrainerBase<T, Ve
             throw new ArgumentException("Epochs must be positive", nameof(epochs));
         if (trainInputs.Length != trainLabels.Length)
             throw new ArgumentException("Inputs and labels must have the same length");
+
+        // Store student forward function for GetTeacherPredictions to use
+        // This is needed for generation 0 where no cached predictions exist yet
+        _studentForward = modelForward;
 
         for (int generation = 0; generation < _generations; generation++)
         {
