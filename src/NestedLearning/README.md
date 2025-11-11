@@ -43,7 +43,12 @@ hope.ConsolidateMemory();
 
 ### 2. Continuum Memory System (CMS)
 
-Spectrum of memory modules operating at different frequencies (not binary short/long-term):
+Spectrum of memory modules operating at different frequencies (not binary short/long-term).
+
+**Two implementations available:**
+
+**A. ContinuumMemorySystem<T> - Utility Class (NOT from paper)**
+Used by `NestedLearner` for meta-learning. Uses exponential moving averages with decay rates:
 
 ```csharp
 var cms = new ContinuumMemorySystem<double>(
@@ -58,16 +63,26 @@ cms.Store(representation, frequencyLevel: 2); // Slow (updates every 100 steps)
 cms.Consolidate(); // Transfers information from fast → slow memories
 ```
 
-**Update Frequencies:**
+**B. ContinuumMemorySystemLayer<T> - Paper-Accurate Implementation (Equations 30-31)**
+Used by `HopeNetwork` for the HOPE architecture. Uses gradient accumulation with Modified GD:
+
+```csharp
+// Used internally by HopeNetwork - implements Equation 31 from paper
+var hope = new HopeNetwork<double>(
+    architecture,
+    hiddenDim: 512,
+    numCMSLevels: 4);  // Uses ContinuumMemorySystemLayer internally
+```
+
+**Update Frequencies (both implementations):**
 - Level 0 (Fast): Every 1 step - immediate patterns
 - Level 1 (Medium): Every 10 steps - tactical patterns
 - Level 2 (Slow): Every 100 steps - strategic patterns
 - Level 3+ (Very Slow): Every 1000+ steps - long-term knowledge
 
-**Decay Rates:**
-- Fast memories decay quickly (0.90)
-- Slow memories decay slowly (0.99)
-- Creates rich, effective memory for continual learning
+**Memory Update Methods:**
+- `ContinuumMemorySystem<T>`: Exponential moving averages with decay rates (utility class)
+- `ContinuumMemorySystemLayer<T>`: Gradient accumulation + Modified GD (paper-accurate HOPE)
 
 ### 3. Context Flow
 
@@ -267,11 +282,13 @@ Level 2: 0.0001    (slow)
 Level 3: 0.00001   (very slow)
 ```
 
-### Memory Decay Rates (by level)
+### Memory Decay Rates (ContinuumMemorySystem only)
 
-**Important**: The decay parameter is a *retention factor*. Higher values = more retention of old memory = slower decay rate.
+**IMPORTANT**: These decay rates apply ONLY to the `ContinuumMemorySystem<T>` utility class used by `NestedLearner`. They are **NOT from the research paper** and **NOT used in the HOPE architecture**.
 
-Formula: `updated = (currentMemory × decay) + (newRepresentation × (1 - decay))`
+The paper-accurate **HOPE architecture** (via `HopeNetwork<T>`) uses `ContinuumMemorySystemLayer<T>`, which implements **gradient accumulation** (Equation 31) with **Modified Gradient Descent** (Equations 27-29) as specified in the research paper, **not exponential moving averages**.
+
+Formula for `ContinuumMemorySystem<T>`: `updated = (currentMemory × decay) + (newRepresentation × (1 - decay))`
 
 ```
 Level 0: 0.90  (90% retention, 10% decay per update - moderate persistence)
@@ -280,7 +297,9 @@ Level 2: 0.99  (99% retention, 1% decay per update  - very high persistence)
 Level 3: 0.995 (99.5% retention, 0.5% decay per update - extremely high persistence)
 ```
 
-**Interpretation**: Larger decay values retain more old memory, resulting in slower decay. Level 3 (0.995) changes very slowly and maintains long-term information, while Level 0 (0.90) adapts more quickly to new inputs.
+**Interpretation**: The decay parameter is a *retention factor*. Higher values = more retention of old memory = slower decay rate. Level 3 (0.995) changes very slowly and maintains long-term information, while Level 0 (0.90) adapts more quickly to new inputs.
+
+**For HOPE architecture**: Use `HopeNetwork<T>` which internally uses `ContinuumMemorySystemLayer<T>` with gradient accumulation (Equation 31 from paper), not these decay rates.
 
 ## Performance Benchmarks
 
