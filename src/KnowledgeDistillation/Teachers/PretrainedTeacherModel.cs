@@ -21,35 +21,12 @@ public class PretrainedTeacherModel<T> : TeacherModelBase<Vector<T>, Vector<T>, 
         _outputDim = outputDimension;
     }
 
+    /// <summary>
+    /// Gets logits from the pretrained model.
+    /// </summary>
+    /// <remarks>
+    /// <para><b>Architecture Note:</b> Returns raw logits. Temperature scaling and softmax
+    /// are handled by distillation strategies, not by the teacher model.</para>
+    /// </remarks>
     public override Vector<T> GetLogits(Vector<T> input) => _pretrainedForward(input);
-
-    protected override Vector<T> ApplyTemperatureSoftmax(Vector<T> logits, double temperature)
-    {
-        int n = logits.Length;
-        var result = new Vector<T>(n);
-        var scaled = new T[n];
-
-        for (int i = 0; i < n; i++)
-            scaled[i] = NumOps.FromDouble(Convert.ToDouble(logits[i]) / temperature);
-
-        T maxLogit = scaled[0];
-        for (int i = 1; i < n; i++)
-            if (NumOps.GreaterThan(scaled[i], maxLogit))
-                maxLogit = scaled[i];
-
-        T sum = NumOps.Zero;
-        var expValues = new T[n];
-
-        for (int i = 0; i < n; i++)
-        {
-            double val = Convert.ToDouble(NumOps.Subtract(scaled[i], maxLogit));
-            expValues[i] = NumOps.FromDouble(Math.Exp(val));
-            sum = NumOps.Add(sum, expValues[i]);
-        }
-
-        for (int i = 0; i < n; i++)
-            result[i] = NumOps.Divide(expValues[i], sum);
-
-        return result;
-    }
 }

@@ -28,40 +28,19 @@ public class SelfTeacherModel<T> : TeacherModelBase<Vector<T>, Vector<T>, T>
         throw new InvalidOperationException("Self teacher uses cached predictions, not direct input");
     }
 
+    /// <summary>
+    /// Gets a cached prediction by index.
+    /// </summary>
+    /// <param name="index">Index of the cached prediction.</param>
+    /// <returns>The cached logits for the specified index.</returns>
+    /// <remarks>
+    /// <para><b>Architecture Note:</b> Returns raw cached logits. Temperature scaling and softmax
+    /// are handled by distillation strategies, not by the teacher model.</para>
+    /// </remarks>
     public Vector<T> GetCachedPrediction(int index)
     {
         if (_cachedPredictions == null || index >= _cachedPredictions.Length)
             throw new InvalidOperationException("Predictions not cached or index out of range");
         return _cachedPredictions[index];
-    }
-
-    protected override Vector<T> ApplyTemperatureSoftmax(Vector<T> logits, double temperature)
-    {
-        int n = logits.Length;
-        var result = new Vector<T>(n);
-        var scaled = new T[n];
-
-        for (int i = 0; i < n; i++)
-            scaled[i] = NumOps.FromDouble(Convert.ToDouble(logits[i]) / temperature);
-
-        T maxLogit = scaled[0];
-        for (int i = 1; i < n; i++)
-            if (NumOps.GreaterThan(scaled[i], maxLogit))
-                maxLogit = scaled[i];
-
-        T sum = NumOps.Zero;
-        var expValues = new T[n];
-
-        for (int i = 0; i < n; i++)
-        {
-            double val = Convert.ToDouble(NumOps.Subtract(scaled[i], maxLogit));
-            expValues[i] = NumOps.FromDouble(Math.Exp(val));
-            sum = NumOps.Add(sum, expValues[i]);
-        }
-
-        for (int i = 0; i < n; i++)
-            result[i] = NumOps.Divide(expValues[i], sum);
-
-        return result;
     }
 }

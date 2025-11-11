@@ -102,6 +102,18 @@ public static class TeacherModelFactory<T>
         return new MultiModalTeacherModel<T>(modalityTeachers, modalityWeights);
     }
 
+    /// <summary>
+    /// Creates an adaptive teacher model wrapper.
+    /// </summary>
+    /// <remarks>
+    /// <para><b>Architecture Note:</b> This method creates a simple wrapper around the base model.
+    /// For adaptive temperature adjustment based on student performance, use
+    /// <see cref="Strategies.AdaptiveDistillationStrategy{T}"/> instead.</para>
+    ///
+    /// <para>The AdaptiveTeacherModel class is maintained for backward compatibility but does not
+    /// contain adaptive logic. Adaptive features (dynamic temperature, performance tracking) belong
+    /// in the distillation strategy layer.</para>
+    /// </remarks>
     private static ITeacherModel<Vector<T>, Vector<T>> CreateAdaptiveTeacher(
         IFullModel<T, Vector<T>, Vector<T>>? model,
         int? outputDimension)
@@ -131,6 +143,18 @@ public static class TeacherModelFactory<T>
             updateRate: 0.999);
     }
 
+    /// <summary>
+    /// Creates a curriculum teacher model wrapper.
+    /// </summary>
+    /// <remarks>
+    /// <para><b>Architecture Note:</b> This method creates a simple wrapper around the base model.
+    /// For curriculum learning with progressive difficulty adjustment, use
+    /// <see cref="Strategies.CurriculumDistillationStrategy{T}"/> instead.</para>
+    ///
+    /// <para>The CurriculumTeacherModel class is maintained for backward compatibility but does not
+    /// contain curriculum logic. Curriculum features (easy-to-hard progression, difficulty-based
+    /// temperature adjustment) belong in the distillation strategy layer.</para>
+    /// </remarks>
     private static ITeacherModel<Vector<T>, Vector<T>> CreateCurriculumTeacher(
         IFullModel<T, Vector<T>, Vector<T>>? model,
         int? outputDimension)

@@ -45,6 +45,15 @@ public class DistributedTeacherModel<T> : TeacherModelBase<Vector<T>, Vector<T>,
         _aggregation = aggregation;
     }
 
+    /// <summary>
+    /// Gets aggregated logits from all distributed workers.
+    /// </summary>
+    /// <param name="input">Input data.</param>
+    /// <returns>Aggregated logits from all workers.</returns>
+    /// <remarks>
+    /// <para><b>Architecture Note:</b> Returns raw aggregated logits. Temperature scaling and softmax
+    /// are handled by distillation strategies, not by the teacher model.</para>
+    /// </remarks>
     public override Vector<T> GetLogits(Vector<T> input)
     {
         int n = _workers[0].OutputDimension;
@@ -71,36 +80,6 @@ public class DistributedTeacherModel<T> : TeacherModelBase<Vector<T>, Vector<T>,
         }
 
         return aggregated;
-    }
-
-    protected override Vector<T> ApplyTemperatureSoftmax(Vector<T> logits, double temperature)
-    {
-        int n = logits.Length;
-        var result = new Vector<T>(n);
-        var scaled = new T[n];
-
-        for (int i = 0; i < n; i++)
-            scaled[i] = NumOps.FromDouble(Convert.ToDouble(logits[i]) / temperature);
-
-        T maxLogit = scaled[0];
-        for (int i = 1; i < n; i++)
-            if (NumOps.GreaterThan(scaled[i], maxLogit))
-                maxLogit = scaled[i];
-
-        T sum = NumOps.Zero;
-        var expValues = new T[n];
-
-        for (int i = 0; i < n; i++)
-        {
-            double val = Convert.ToDouble(NumOps.Subtract(scaled[i], maxLogit));
-            expValues[i] = NumOps.FromDouble(Math.Exp(val));
-            sum = NumOps.Add(sum, expValues[i]);
-        }
-
-        for (int i = 0; i < n; i++)
-            result[i] = NumOps.Divide(expValues[i], sum);
-
-        return result;
     }
 }
 

@@ -145,6 +145,9 @@ public class EnsembleTeacherModel<T> : TeacherModelBase<Vector<T>, Vector<T>, T>
     /// <remarks>
     /// <para><b>For Beginners:</b> This combines logits from all teachers according to the
     /// aggregation mode (usually weighted average).</para>
+    ///
+    /// <para><b>Architecture Note:</b> Returns raw ensemble logits. Temperature scaling and softmax
+    /// are handled by distillation strategies, not by the teacher model.</para>
     /// </remarks>
     public override Vector<T> GetLogits(Vector<T> input)
     {
@@ -158,50 +161,6 @@ public class EnsembleTeacherModel<T> : TeacherModelBase<Vector<T>, Vector<T>, T>
         }
 
         return AggregateLogits(teacherLogits);
-    }
-
-    /// <summary>
-    /// Applies temperature-scaled softmax to ensemble logits.
-    /// </summary>
-    protected override Vector<T> ApplyTemperatureSoftmax(Vector<T> logits, double temperature)
-    {
-        int n = logits.Length;
-        var result = new Vector<T>(n);
-
-        // Scale logits by temperature
-        var scaledLogits = new T[n];
-        for (int i = 0; i < n; i++)
-        {
-            double val = Convert.ToDouble(logits[i]) / temperature;
-            scaledLogits[i] = NumOps.FromDouble(val);
-        }
-
-        // Find max for numerical stability
-        T maxLogit = scaledLogits[0];
-        for (int i = 1; i < n; i++)
-        {
-            if (NumOps.GreaterThan(scaledLogits[i], maxLogit))
-                maxLogit = scaledLogits[i];
-        }
-
-        // Compute exp(logit - max) and sum
-        T sum = NumOps.Zero;
-        var expValues = new T[n];
-
-        for (int i = 0; i < n; i++)
-        {
-            double val = Convert.ToDouble(NumOps.Subtract(scaledLogits[i], maxLogit));
-            expValues[i] = NumOps.FromDouble(Math.Exp(val));
-            sum = NumOps.Add(sum, expValues[i]);
-        }
-
-        // Normalize
-        for (int i = 0; i < n; i++)
-        {
-            result[i] = NumOps.Divide(expValues[i], sum);
-        }
-
-        return result;
     }
 
     /// <summary>
