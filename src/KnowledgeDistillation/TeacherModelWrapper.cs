@@ -262,7 +262,7 @@ public class TeacherModelWrapper<T> : ITeacherModel<Vector<T>, Vector<T>>
         var scaledLogits = new T[n];
         for (int i = 0; i < n; i++)
         {
-            double val = _numOps.ToDouble(logits[i]) / temperature;
+            double val = Convert.ToDouble(logits[i]) / temperature;
             scaledLogits[i] = _numOps.FromDouble(val);
         }
 
@@ -280,7 +280,7 @@ public class TeacherModelWrapper<T> : ITeacherModel<Vector<T>, Vector<T>>
 
         for (int i = 0; i < n; i++)
         {
-            double val = _numOps.ToDouble(_numOps.Subtract(scaledLogits[i], maxLogit));
+            double val = Convert.ToDouble(_numOps.Subtract(scaledLogits[i], maxLogit));
             expValues[i] = _numOps.FromDouble(Math.Exp(val));
             sum = _numOps.Add(sum, expValues[i]);
         }
