@@ -406,19 +406,10 @@ public class CapsuleNetwork<T> : NeuralNetworkBase<T>
     /// </remarks>
     private Tensor<T> ApplyCapsuleMask(Tensor<T> capsuleOutputs, int? targetClass)
     {
-        // Determine target capsule index
-        int targetCapsuleIndex;
-
-        if (targetClass.HasValue)
-        {
-            // Use provided label (training mode)
-            targetCapsuleIndex = targetClass.Value;
-        }
-        else
-        {
-            // Use argmax of capsule norms (inference mode)
-            targetCapsuleIndex = GetPredictedClass(capsuleOutputs);
-        }
+        // Use provided label (training mode) or argmax of capsule norms (inference mode)
+        int targetCapsuleIndex = targetClass.HasValue
+            ? targetClass.Value
+            : GetPredictedClass(capsuleOutputs);
 
         // Create masked copy
         var masked = capsuleOutputs.Clone();
