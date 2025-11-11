@@ -38,6 +38,42 @@ public class ContinuumMemorySystemLayer<T> : LayerBase<T>
         T[]? learningRates = null)
         : base(inputShape, new[] { hiddenDim }, null, null)
     {
+        // Validate inputs
+        if (inputShape == null || inputShape.Length == 0)
+            throw new ArgumentException("Input shape cannot be null or empty", nameof(inputShape));
+
+        if (inputShape[0] <= 0)
+            throw new ArgumentException("Input dimension must be positive", nameof(inputShape));
+
+        if (hiddenDim <= 0)
+            throw new ArgumentException("Hidden dimension must be positive", nameof(hiddenDim));
+
+        if (numFrequencyLevels <= 0)
+            throw new ArgumentException("Number of frequency levels must be positive", nameof(numFrequencyLevels));
+
+        if (numFrequencyLevels > 10)
+            throw new ArgumentException("Number of frequency levels should not exceed 10 for practical purposes", nameof(numFrequencyLevels));
+
+        // Validate custom update frequencies if provided
+        if (updateFrequencies != null)
+        {
+            if (updateFrequencies.Length != numFrequencyLevels)
+                throw new ArgumentException($"Update frequencies array length ({updateFrequencies.Length}) must match numFrequencyLevels ({numFrequencyLevels})", nameof(updateFrequencies));
+
+            for (int i = 0; i < updateFrequencies.Length; i++)
+            {
+                if (updateFrequencies[i] <= 0)
+                    throw new ArgumentException($"Update frequency at index {i} must be positive", nameof(updateFrequencies));
+            }
+        }
+
+        // Validate custom learning rates if provided
+        if (learningRates != null)
+        {
+            if (learningRates.Length != numFrequencyLevels)
+                throw new ArgumentException($"Learning rates array length ({learningRates.Length}) must match numFrequencyLevels ({numFrequencyLevels})", nameof(learningRates));
+        }
+
         // Default update frequencies: 1, 10, 100, ...
         _updateFrequencies = updateFrequencies ?? CreateDefaultUpdateFrequencies(numFrequencyLevels);
 
@@ -47,6 +83,8 @@ public class ContinuumMemorySystemLayer<T> : LayerBase<T>
         for (int i = 0; i < numFrequencyLevels; i++)
         {
             _chunkSizes[i] = maxChunkSize / _updateFrequencies[i];
+            if (_chunkSizes[i] <= 0)
+                _chunkSizes[i] = 1; // Ensure at least 1 step per chunk
         }
 
         // Default learning rates: decrease with level
@@ -103,13 +141,25 @@ public class ContinuumMemorySystemLayer<T> : LayerBase<T>
 
     public override Tensor<T> Forward(Tensor<T> input)
     {
+        if (input == null)
+            throw new ArgumentNullException(nameof(input));
+
+        if (input.Shape == null || input.Shape.Length == 0)
+            throw new ArgumentException("Input tensor must have a valid shape", nameof(input));
+
         LastInput = input;
         var current = input;
 
         // Sequential chain: yt = MLP^(fk)(MLP^(fk-1)(...MLP^(f1)(xt)))
         for (int level = 0; level < _mlpBlocks.Length; level++)
         {
+            if (_mlpBlocks[level] == null)
+                throw new InvalidOperationException($"MLP block at level {level} is null");
+
             current = _mlpBlocks[level].Forward(current);
+
+            if (current == null)
+                throw new InvalidOperationException($"MLP block at level {level} returned null output");
         }
 
         LastOutput = current;
@@ -119,18 +169,30 @@ public class ContinuumMemorySystemLayer<T> : LayerBase<T>
 
     public override Tensor<T> Backward(Tensor<T> outputGradient)
     {
+        if (outputGradient == null)
+            throw new ArgumentNullException(nameof(outputGradient));
+
         var gradient = outputGradient;
 
         // Backprop through chain in reverse order
         for (int level = _mlpBlocks.Length - 1; level >= 0; level--)
         {
+            if (_mlpBlocks[level] == null)
+                throw new InvalidOperationException($"MLP block at level {level} is null");
+
             gradient = _mlpBlocks[level].Backward(gradient);
 
             // Accumulate gradients for this level
             // Equation 31: θ^(fℓ)_{i+1} = θ^(fℓ)_i - Σ η^(ℓ)_t f(θ^(fℓ)_t; xt) if i ≡ 0 (mod C(ℓ))
-            var mlpGradient = _mlpBlocks[level].Gradients;
-            if (mlpGradient != null)
+            var mlpGradient = _mlpBlocks[level].GetParameterGradients();
+            if (mlpGradient != null && mlpGradient.Length > 0)
             {
+                if (mlpGradient.Length != _accumulatedGradients[level].Length)
+                {
+                    throw new InvalidOperationException(
+                        $"Gradient length mismatch at level {level}: expected {_accumulatedGradients[level].Length}, got {mlpGradient.Length}");
+                }
+
                 for (int i = 0; i < mlpGradient.Length; i++)
                 {
                     _accumulatedGradients[level][i] = _numOps.Add(
@@ -157,9 +219,23 @@ public class ContinuumMemorySystemLayer<T> : LayerBase<T>
 
     private void UpdateLevelParameters(int level)
     {
-        var currentParams = _mlpBlocks[level].Parameters;
-        var updated = new Vector<T>(currentParams.Length);
+        if (level < 0 || level >= _mlpBlocks.Length)
+            throw new ArgumentOutOfRangeException(nameof(level), $"Level {level} is out of range [0, {_mlpBlocks.Length})");
 
+        if (_mlpBlocks[level] == null)
+            throw new InvalidOperationException($"MLP block at level {level} is null");
+
+        var currentParams = _mlpBlocks[level].Parameters;
+        if (currentParams == null || currentParams.Length == 0)
+            throw new InvalidOperationException($"MLP block at level {level} has no parameters");
+
+        if (currentParams.Length != _accumulatedGradients[level].Length)
+        {
+            throw new InvalidOperationException(
+                $"Parameter count mismatch at level {level}: params={currentParams.Length}, gradients={_accumulatedGradients[level].Length}");
+        }
+
+        var updated = new Vector<T>(currentParams.Length);
         T learningRate = _learningRates[level];
 
         for (int i = 0; i < currentParams.Length; i++)
@@ -174,14 +250,30 @@ public class ContinuumMemorySystemLayer<T> : LayerBase<T>
 
     /// <summary>
     /// Consolidates memory from faster to slower levels.
+    /// Transfers knowledge from lower-level (faster) MLPs to higher-level (slower) MLPs.
     /// </summary>
     public void ConsolidateMemory()
     {
+        if (_mlpBlocks == null || _mlpBlocks.Length == 0)
+            throw new InvalidOperationException("MLP blocks are not initialized");
+
         // Transfer knowledge from faster (lower level) to slower (higher level) MLPs
         for (int i = 0; i < _mlpBlocks.Length - 1; i++)
         {
+            if (_mlpBlocks[i] == null)
+                throw new InvalidOperationException($"MLP block at level {i} is null");
+
+            if (_mlpBlocks[i + 1] == null)
+                throw new InvalidOperationException($"MLP block at level {i + 1} is null");
+
             var fastParams = _mlpBlocks[i].Parameters;
             var slowParams = _mlpBlocks[i + 1].Parameters;
+
+            if (fastParams == null || fastParams.Length == 0)
+                throw new InvalidOperationException($"Fast MLP at level {i} has no parameters");
+
+            if (slowParams == null || slowParams.Length == 0)
+                throw new InvalidOperationException($"Slow MLP at level {i + 1} has no parameters");
 
             int minLen = Math.Min(fastParams.Length, slowParams.Length);
             T transferRate = _numOps.FromDouble(0.01);
@@ -211,9 +303,15 @@ public class ContinuumMemorySystemLayer<T> : LayerBase<T>
     /// </summary>
     public void ResetMemory()
     {
+        if (_mlpBlocks == null)
+            throw new InvalidOperationException("MLP blocks are not initialized");
+
         foreach (var mlp in _mlpBlocks)
         {
-            mlp.Reset();
+            if (mlp == null)
+                throw new InvalidOperationException("MLP block is null");
+
+            mlp.ResetState();
         }
 
         for (int i = 0; i < _accumulatedGradients.Length; i++)

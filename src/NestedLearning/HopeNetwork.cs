@@ -61,13 +61,14 @@ public class HopeNetwork<T> : NeuralNetworkBase<T>
     {
         Layers.Clear();
 
-        // Initialize CMS blocks for extended context windows
+        // Initialize CMS blocks as sequential MLP chains (Equation 30)
+        // Each CMS block is a chain of MLPs: yt = MLP^(fk)(MLP^(fk-1)(...MLP^(f1)(xt)))
         _cmsBlocks = new ContinuumMemorySystemLayer<T>[_numCMSLevels];
         for (int i = 0; i < _numCMSLevels; i++)
         {
             _cmsBlocks[i] = new ContinuumMemorySystemLayer<T>(
                 inputShape: new[] { _hiddenDim },
-                memoryDim: _hiddenDim,
+                hiddenDim: _hiddenDim,
                 numFrequencyLevels: _inContextLearningLevels);
 
             Layers.Add(_cmsBlocks[i]);
