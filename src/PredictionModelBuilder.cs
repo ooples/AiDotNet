@@ -14,6 +14,7 @@ global using AiDotNet.LanguageModels;
 global using AiDotNet.Tools;
 global using AiDotNet.Models;
 global using AiDotNet.Enums;
+global using AiDotNet.MixedPrecision;
 
 namespace AiDotNet;
 
