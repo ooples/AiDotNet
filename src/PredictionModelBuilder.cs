@@ -422,7 +422,7 @@ public class PredictionModelBuilder<T, TInput, TOutput> : IPredictionModelBuilde
         // This prevents state contamination from CV (accumulated fitness lists, cache, learning rates)
         optimizer.Reset();
 
-        OptimizerResult<T, TInput, TOutput> optimizationResult;
+        OptimizationResult<T, TInput, TOutput> optimizationResult;
 
         // Check if knowledge distillation is configured
         if (_knowledgeDistillationOptions != null)
@@ -898,7 +898,7 @@ public class PredictionModelBuilder<T, TInput, TOutput> : IPredictionModelBuilde
     /// <summary>
     /// Performs knowledge distillation training using the configured options.
     /// </summary>
-    private async Task<OptimizerResult<T, TInput, TOutput>> PerformKnowledgeDistillationAsync(
+    private async Task<OptimizationResult<T, TInput, TOutput>> PerformKnowledgeDistillationAsync(
         IFullModel<T, TInput, TOutput> studentModel,
         IOptimizer<T, TInput, TOutput> optimizer,
         TInput XTrain,
