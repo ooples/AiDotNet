@@ -418,11 +418,17 @@ public class SEALTrainer<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOutpu
     }
 
     /// <summary>
-    /// Selects indices of top-K most confident examples.
+    /// Selects indices of top-K most confident examples using a min-heap for O(n log k) performance.
     /// </summary>
     /// <remarks>
+    /// <para>
     /// If k exceeds the number of available examples, all examples are used (k is clamped to confidences.Length)
     /// and a warning is issued via Debug.WriteLine. This may include low-confidence examples, which can affect active learning quality.
+    /// </para>
+    /// <para>
+    /// Uses a min-heap (SortedSet) to maintain top-K elements efficiently. Time complexity is O(n log k) instead of O(n log n),
+    /// which provides significant performance benefits when k is much smaller than n.
+    /// </para>
     /// </remarks>
     private List<int> SelectTopK(Vector<T> confidences, int k)
     {
@@ -435,26 +441,45 @@ public class SEALTrainer<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOutpu
         }
         k = Math.Min(k, confidences.Length);
 
-        // Create (index, confidence) pairs
-        var pairs = new List<(int index, T confidence)>();
+        // Use a min-heap to keep track of top-K elements
+        // The heap stores (confidence, index) so that the smallest confidence is at the top
+        var heap = new SortedSet<(T confidence, int index)>(Comparer<(T confidence, int index)>.Create((a, b) =>
+        {
+            // Compare by confidence ascending (min-heap)
+            if (NumOps.LessThan(a.confidence, b.confidence))
+                return -1;
+            else if (NumOps.GreaterThan(a.confidence, b.confidence))
+                return 1;
+            else
+                return a.index.CompareTo(b.index); // Ensure uniqueness in SortedSet
+        }));
+
         for (int i = 0; i < confidences.Length; i++)
         {
-            pairs.Add((i, confidences[i]));
+            var item = (confidences[i], i);
+            if (heap.Count < k)
+            {
+                heap.Add(item);
+            }
+            else if (NumOps.GreaterThan(confidences[i], heap.Min.confidence))
+            {
+                heap.Remove(heap.Min);
+                heap.Add(item);
+            }
         }
 
-        // Sort by confidence descending
-        pairs.Sort((a, b) =>
+        // Extract indices and sort them by descending confidence
+        var result = heap.OrderByDescending(x => x.confidence, Comparer<T>.Create((a, b) =>
         {
-            if (NumOps.GreaterThan(a.confidence, b.confidence))
-                return -1;  // a is more confident
-            else if (NumOps.LessThan(a.confidence, b.confidence))
-                return 1;   // b is more confident
+            if (NumOps.GreaterThan(a, b))
+                return 1;
+            else if (NumOps.LessThan(a, b))
+                return -1;
             else
-                return 0;   // Equal confidence
-        });
+                return 0;
+        })).Select(x => x.index).ToList();
 
-        // Take top-K indices
-        return pairs.Take(k).Select(p => p.index).ToList();
+        return result;
     }
 
     /// <summary>
