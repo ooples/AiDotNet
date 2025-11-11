@@ -124,12 +124,14 @@ public class SEALTrainerConfig<T> : IMetaLearnerConfig<T>
 
     /// <inheritdoc/>
     /// <remarks>
-    /// <para><b>Note for SEAL:</b> InnerSteps is replaced by two separate phases:
-    /// - SelfSupervisedSteps (phase 1)
-    /// - SupervisedSteps (phase 3)
+    /// <para><b>Note for SEAL:</b> This property is kept for interface compatibility with IMetaLearnerConfig
+    /// and maps directly to SupervisedSteps. Getting InnerSteps returns SupervisedSteps, and setting InnerSteps
+    /// modifies SupervisedSteps. SEAL has multiple adaptation phases:
+    /// - SelfSupervisedSteps (phase 1: self-supervised pre-training)
+    /// - SupervisedSteps (phase 3: supervised fine-tuning, mapped from InnerSteps)
+    /// - ActiveLearningK (phase 2: active learning selection)
     ///
-    /// This property is kept for compatibility with IMetaLearnerConfig but is not directly used.
-    /// Instead, use SupervisedSteps for the supervised adaptation phase.
+    /// For full control over SEAL training, use the specific phase properties instead of InnerSteps.
     /// </para>
     /// </remarks>
     public int InnerSteps
@@ -190,6 +192,17 @@ public class SEALTrainerConfig<T> : IMetaLearnerConfig<T>
     }
 
     /// <inheritdoc/>
+    /// <remarks>
+    /// <para><b>Validation rules:</b>
+    /// - InnerLearningRate: must be in range (0, 1.0]
+    /// - MetaLearningRate: must be in range (0, 1.0]
+    /// - SelfSupervisedSteps: must be in range [1, 100]
+    /// - SupervisedSteps: must be in range [1, 100]
+    /// - ActiveLearningK: must be in range [1, 1000]
+    /// - MetaBatchSize: must be in range [1, 128]
+    /// - NumMetaIterations: must be in range [1, 1000000]
+    /// </para>
+    /// </remarks>
     public bool IsValid()
     {
         var innerLr = Convert.ToDouble(InnerLearningRate);

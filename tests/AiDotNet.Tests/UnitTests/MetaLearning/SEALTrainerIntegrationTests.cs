@@ -55,7 +55,7 @@ public class SEALTrainerIntegrationTests
         var preTrainingAccuracy = EvaluateAccuracy(trainer, dataLoader, numTasks: 20);
 
         // Act: Meta-train
-        var trainingResult = trainer.Train();
+        trainer.Train();
 
         // Evaluate after meta-training
         var postTrainingAccuracy = EvaluateAccuracy(trainer, dataLoader, numTasks: 20);
@@ -238,9 +238,6 @@ internal class LearningMockModel : AiDotNet.Interfaces.IFullModel<double, Matrix
     public void Train(Matrix<double> input, Vector<double> expectedOutput)
     {
         // Simple gradient descent update
-        var predictions = Predict(input);
-        int numExamples = input.Rows;
-
         // Compute simple gradients and update parameters
         for (int i = 0; i < _parameters.Length; i++)
         {

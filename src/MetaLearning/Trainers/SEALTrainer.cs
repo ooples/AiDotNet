@@ -420,9 +420,19 @@ public class SEALTrainer<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOutpu
     /// <summary>
     /// Selects indices of top-K most confident examples.
     /// </summary>
+    /// <remarks>
+    /// If k exceeds the number of available examples, all examples are used (k is clamped to confidences.Length)
+    /// and a warning is issued via Debug.WriteLine. This may include low-confidence examples, which can affect active learning quality.
+    /// </remarks>
     private List<int> SelectTopK(Vector<T> confidences, int k)
     {
         // Limit k to the number of available examples
+        if (k > confidences.Length)
+        {
+            System.Diagnostics.Debug.WriteLine(
+                $"[SEALTrainer] Warning: Requested top-{k} examples, but only {confidences.Length} available. Using all available examples. " +
+                "This may include low-confidence examples and affect active learning quality.");
+        }
         k = Math.Min(k, confidences.Length);
 
         // Create (index, confidence) pairs

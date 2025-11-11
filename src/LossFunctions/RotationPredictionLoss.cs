@@ -105,6 +105,11 @@ public class RotationPredictionLoss<T> : ISelfSupervisedLoss<T>
     /// <param name="height">Image height.</param>
     /// <param name="width">Image width.</param>
     /// <param name="channels">Number of color channels.</param>
+    /// <remarks>
+    /// <b>Note:</b> This implementation assumes square images for correct rotation behavior.
+    /// For non-square images, 90° and 270° rotations will result in distorted images,
+    /// since the output dimensions remain [height, width] instead of swapping to [width, height].
+    /// </remarks>
     private void RotateAndCopy(
         Tensor<T> source,
         Tensor<T> dest,
