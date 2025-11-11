@@ -626,42 +626,50 @@ public class SEALTrainer<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOutpu
     /// </summary>
     private void CopyTensorSlice(Tensor<T> source, Tensor<T> dest, int srcIdx, int destIdx)
     {
-        // For 2D tensors [N, C]
-        if (source.Shape.Length == 2)
+        if (source.Shape.Length < 2)
         {
-            for (int j = 0; j < source.Shape[1]; j++)
+            throw new NotSupportedException($"Tensor copy only supports 2D or higher tensors, got {source.Shape.Length}D");
+        }
+
+        if (source.Shape.Length != dest.Shape.Length)
+        {
+            throw new ArgumentException("Source and destination tensors must have the same number of dimensions");
+        }
+
+        for (int d = 1; d < source.Shape.Length; d++)
+        {
+            if (source.Shape[d] != dest.Shape[d])
             {
-                dest[destIdx, j] = source[srcIdx, j];
+                throw new ArgumentException("Source and destination tensor shapes must match in all but the first dimension");
             }
         }
-        // For 3D tensors [N, H, W]
-        else if (source.Shape.Length == 3)
+
+        int dims = source.Shape.Length;
+        int[] srcIndices = new int[dims];
+        int[] destIndices = new int[dims];
+        srcIndices[0] = srcIdx;
+        destIndices[0] = destIdx;
+
+        CopyTensorSliceRecursive(source, dest, srcIndices, destIndices, 1);
+    }
+
+    /// <summary>
+    /// Recursively copies a slice from source to destination tensor for arbitrary dimensions.
+    /// </summary>
+    private void CopyTensorSliceRecursive(Tensor<T> source, Tensor<T> dest, int[] srcIndices, int[] destIndices, int dim)
+    {
+        if (dim == source.Shape.Length)
         {
-            for (int j = 0; j < source.Shape[1]; j++)
-            {
-                for (int k = 0; k < source.Shape[2]; k++)
-                {
-                    dest[destIdx, j, k] = source[srcIdx, j, k];
-                }
-            }
+            // At the innermost element, copy value
+            dest[destIndices] = source[srcIndices];
+            return;
         }
-        // For 4D tensors [N, H, W, C]
-        else if (source.Shape.Length == 4)
+
+        for (int i = 0; i < source.Shape[dim]; i++)
         {
-            for (int j = 0; j < source.Shape[1]; j++)
-            {
-                for (int k = 0; k < source.Shape[2]; k++)
-                {
-                    for (int l = 0; l < source.Shape[3]; l++)
-                    {
-                        dest[destIdx, j, k, l] = source[srcIdx, j, k, l];
-                    }
-                }
-            }
-        }
-        else
-        {
-            throw new NotSupportedException($"Tensor copy only supports 2D, 3D, and 4D tensors, got {source.Shape.Length}D");
+            srcIndices[dim] = i;
+            destIndices[dim] = i;
+            CopyTensorSliceRecursive(source, dest, srcIndices, destIndices, dim + 1);
         }
     }
 
