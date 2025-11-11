@@ -8,6 +8,7 @@ This document tracks the implementation status of automatic differentiation (aut
 **Total Layers:** 75
 **Layers with Autodiff Infrastructure:** 75 (100%)
 **Layers with Full Autodiff Support:** 15+ (20%)
+**TensorOperations Implemented:** 24 (19 base + 5 new)
 **Higher-Order Gradients:** ✅ Fully supported via GradientTape.Gradient(createGraph: true)
 
 ## Implementation Status
@@ -76,12 +77,9 @@ To achieve full autodiff support across all layers, the following operations nee
 
 ### High Priority
 
-1. **Softmax** - Required for attention mechanisms
-   ```csharp
-   public static ComputationNode<T> Softmax(ComputationNode<T> input, int axis = -1)
-   ```
+1. ✅ **Softmax** - IMPLEMENTED
    - Used by: AttentionLayer, MultiHeadAttentionLayer, SelfAttentionLayer
-   - Complexity: Medium (requires exp, sum, and broadcasting)
+   - Status: Ready for integration into attention layers
 
 2. **Convolution2D** - Required for convolutional layers
    ```csharp
@@ -107,25 +105,13 @@ To achieve full autodiff support across all layers, the following operations nee
 
 ### Medium Priority
 
-4. **MaxPool2D** - Required for max pooling
-   ```csharp
-   public static ComputationNode<T> MaxPool2D(
-       ComputationNode<T> input,
-       int[] poolSize,
-       int[] strides)
-   ```
+4. ✅ **MaxPool2D** - IMPLEMENTED
    - Used by: MaxPoolingLayer, PoolingLayer
-   - Complexity: Medium (requires gradient routing to max element)
+   - Status: Ready for integration into pooling layers
 
-5. **AvgPool2D** - Required for average pooling
-   ```csharp
-   public static ComputationNode<T> AvgPool2D(
-       ComputationNode<T> input,
-       int[] poolSize,
-       int[] strides)
-   ```
+5. ✅ **AvgPool2D** - IMPLEMENTED
    - Used by: PoolingLayer, GlobalPoolingLayer
-   - Complexity: Low
+   - Status: Ready for integration into pooling layers
 
 6. **LayerNorm** - Required for layer normalization
    ```csharp
@@ -155,9 +141,9 @@ To achieve full autodiff support across all layers, the following operations nee
 
 ### Low Priority
 
-8. **Concat** - Tensor concatenation
+8. ✅ **Concat** - IMPLEMENTED - Tensor concatenation along axis
 9. **Split** - Tensor splitting
-10. **Pad** - Tensor padding operations
+10. ✅ **Pad** - IMPLEMENTED - Tensor padding operations with constant values
 11. **Gather** - Advanced indexing
 12. **Scatter** - Scatter operations
 
@@ -174,7 +160,7 @@ The following operations are required for specialized research layers and can be
 
 ## Current TensorOperations Support
 
-All 19 operations currently implemented in `src/Autodiff/TensorOperations.cs`:
+All 24 operations currently implemented in `src/Autodiff/TensorOperations.cs`:
 
 ✅ **Basic Arithmetic (6 operations):**
 1. Add - Element-wise addition with broadcasting
@@ -192,22 +178,29 @@ All 19 operations currently implemented in `src/Autodiff/TensorOperations.cs`:
 9. Sum - Sum along specified axes with keepDims support
 10. Mean - Average along all dimensions
 
-✅ **Activation Functions (3 operations):**
+✅ **Activation Functions (4 operations):**
 11. ReLU - Rectified Linear Unit
 12. Sigmoid - Logistic sigmoid
 13. Tanh - Hyperbolic tangent
+14. Softmax - Softmax activation (for attention and classification)
 
-✅ **Tensor Manipulation (1 operation):**
-14. Reshape - Change tensor shape
+✅ **Tensor Manipulation (3 operations):**
+15. Reshape - Change tensor shape
+16. Concat - Concatenate tensors along axis
+17. Pad - Pad tensors with constant values
+
+✅ **Pooling Operations (2 operations):**
+18. MaxPool2D - 2D max pooling with gradient routing
+19. AvgPool2D - 2D average pooling
 
 ✅ **Advanced Math (3 operations):**
-15. Exp - Exponential function
-16. Log - Natural logarithm
-17. Sqrt - Square root
+20. Exp - Exponential function
+21. Log - Natural logarithm
+22. Sqrt - Square root
 
 ✅ **Utility (2 operations):**
-18. Variable - Create differentiable variable node
-19. Constant - Create non-differentiable constant node
+23. Variable - Create differentiable variable node
+24. Constant - Create non-differentiable constant node
 
 **All operations support:**
 - Automatic gradient computation via backward functions
