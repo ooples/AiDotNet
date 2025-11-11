@@ -67,45 +67,45 @@ public class ModifiedGradientDescentOptimizer<T>
     /// <summary>
     /// Updates a parameter vector using modified gradient descent.
     ///
-    /// NOTE: This is a simplified scalar approximation of the matrix operation.
-    /// The matrix form W_t * (I - x_t x_t^T) is always stable, but this scalar
-    /// version using (1 - ||x_t||²) requires clipping to prevent instability
-    /// when input norm exceeds 1.
+    /// For a vector parameter w, the matrix operation W * (I - x x^T) becomes:
+    /// w_new = w * (I - x x^T) = w - x*(x^T*w) = w - x*dot(w,x)
+    ///
+    /// Full update: w_{t+1} = w_t - x_t*dot(w_t,x_t) - η * gradient
     /// </summary>
-    /// <param name="currentParameters">Current parameters</param>
-    /// <param name="input">Input vector</param>
-    /// <param name="outputGradient">Output gradient</param>
-    /// <returns>Updated parameters</returns>
+    /// <param name="currentParameters">Current parameter vector w_t</param>
+    /// <param name="input">Input vector x_t</param>
+    /// <param name="outputGradient">Output gradient ∇_y L(w_t; x_t)</param>
+    /// <returns>Updated parameters w_{t+1}</returns>
     public Vector<T> UpdateVector(Vector<T> currentParameters, Vector<T> input, Vector<T> outputGradient)
     {
+        if (currentParameters.Length != input.Length)
+            throw new ArgumentException($"Parameter length ({currentParameters.Length}) must match input length ({input.Length})");
+
+        if (currentParameters.Length != outputGradient.Length)
+            throw new ArgumentException($"Parameter length ({currentParameters.Length}) must match gradient length ({outputGradient.Length})");
+
         var updated = new Vector<T>(currentParameters.Length);
 
-        // For vector form: apply element-wise operations
-        // This is a simplified version that preserves the spirit of the modification
-        T inputNormSquared = _numOps.Zero;
-        for (int i = 0; i < input.Length; i++)
-        {
-            inputNormSquared = _numOps.Add(inputNormSquared, _numOps.Square(input[i]));
-        }
-
-        // Apply modified update rule
+        // Compute dot(w_t, x_t) = x_t^T * w_t
+        T dotProduct = _numOps.Zero;
         for (int i = 0; i < currentParameters.Length; i++)
         {
-            // Standard GD component: -η * gradient
+            dotProduct = _numOps.Add(dotProduct, _numOps.Multiply(currentParameters[i], input[i]));
+        }
+
+        // Apply modified update rule: w_{t+1} = w_t - x_t*dot(w_t,x_t) - η*gradient
+        for (int i = 0; i < currentParameters.Length; i++)
+        {
+            // Projection term: w_t - x_t*dot(w_t,x_t)
+            // This is the vector equivalent of W_t * (I - x_t*x_t^T)
+            T projectionComponent = _numOps.Multiply(input[i], dotProduct);
+            T projectedParam = _numOps.Subtract(currentParameters[i], projectionComponent);
+
+            // Gradient term: -η * gradient
             T gradComponent = _numOps.Multiply(outputGradient[i], _learningRate);
 
-            // Modification: scale by (1 - ||x_t||²) factor for regularization
-            // CRITICAL: Clip to prevent negative scaling when ||x_t||² > 1
-            // Without clipping, parameters would explode when input norm exceeds 1
-            T modFactor = _numOps.Subtract(_numOps.One, inputNormSquared);
-            if (_numOps.LessThan(modFactor, _numOps.Zero))
-            {
-                modFactor = _numOps.Zero;
-            }
-
-            T paramComponent = _numOps.Multiply(currentParameters[i], modFactor);
-
-            updated[i] = _numOps.Subtract(paramComponent, gradComponent);
+            // Final update: w_{t+1} = (w_t - x_t*dot(w_t,x_t)) - η*gradient
+            updated[i] = _numOps.Subtract(projectedParam, gradComponent);
         }
 
         return updated;
