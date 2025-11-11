@@ -278,20 +278,54 @@ public class SelfDistillationTrainer<T> : KnowledgeDistillationTrainerBase<T, Ve
 /// Placeholder teacher model for self-distillation (not actually used for predictions).
 /// </summary>
 /// <remarks>
-/// <para>This placeholder satisfies the ITeacherModel requirement in the base class constructor,
-/// but GetLogits is never called because SelfDistillationTrainer overrides GetTeacherPredictions
-/// to use cached student predictions instead.</para>
+/// <para><b>Architecture Note:</b> This placeholder satisfies the ITeacherModel requirement
+/// in the base class constructor, but GetLogits is never called in practice because
+/// SelfDistillationTrainer overrides GetTeacherPredictions to use cached student predictions instead.</para>
+///
+/// <para>This design allows SelfDistillationTrainer to inherit from KnowledgeDistillationTrainerBase
+/// without requiring a real teacher model, since the student acts as its own teacher.</para>
+///
+/// <para><b>LSP Compliance:</b> Even though this class isn't used in the normal flow, it provides
+/// valid implementations to avoid violating the Liskov Substitution Principle. GetLogits returns
+/// an empty vector rather than throwing exceptions.</para>
 /// </remarks>
 internal class SelfTeacherModelPlaceholder<T> : ITeacherModel<Vector<T>, Vector<T>>
 {
+    private readonly INumericOperations<T> _numOps;
+
+    /// <summary>
+    /// Initializes the placeholder teacher model.
+    /// </summary>
+    public SelfTeacherModelPlaceholder()
+    {
+        _numOps = MathHelper.GetNumericOperations<T>();
+    }
+
     /// <summary>
     /// Returns 0 because the actual output dimension comes from the student model.
     /// </summary>
+    /// <remarks>
+    /// <para>In self-distillation, the student determines the output dimension.
+    /// This placeholder doesn't represent a real model with a fixed output size.</para>
+    /// </remarks>
     public int OutputDimension => 0;
 
     /// <summary>
-    /// Not used - self-distillation uses cached student predictions instead.
+    /// Returns an empty vector. This method is not called in practice.
     /// </summary>
-    public Vector<T> GetLogits(Vector<T> input) =>
-        throw new NotImplementedException("Self-distillation uses cached predictions, not a separate teacher model");
+    /// <param name="input">Input data (ignored).</param>
+    /// <returns>An empty vector to maintain LSP compliance.</returns>
+    /// <remarks>
+    /// <para><b>Important:</b> This method is never called in normal self-distillation flow
+    /// because SelfDistillationTrainer overrides GetTeacherPredictions. It returns an empty
+    /// vector rather than throwing an exception to maintain Liskov Substitution Principle.</para>
+    ///
+    /// <para>If this method is called, it indicates a programming error - the caller should
+    /// be using SelfDistillationTrainer's GetTeacherPredictions override instead.</para>
+    /// </remarks>
+    public Vector<T> GetLogits(Vector<T> input)
+    {
+        // Return empty vector for LSP compliance (never called in practice)
+        return new Vector<T>(0);
+    }
 }

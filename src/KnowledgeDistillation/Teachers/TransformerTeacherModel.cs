@@ -4,58 +4,44 @@ using AiDotNet.LinearAlgebra;
 namespace AiDotNet.KnowledgeDistillation.Teachers;
 
 /// <summary>
-/// Transformer-based teacher model with attention mechanism support.
+/// Transformer-based teacher model that provides logits from transformer architectures.
 /// </summary>
+/// <typeparam name="T">The numeric type for calculations (e.g., double, float).</typeparam>
+/// <remarks>
+/// <para><b>Architecture Note:</b> This class has been simplified to match the current architecture
+/// where teachers only provide logits. Attention mechanism extraction and temperature scaling
+/// belong in the strategy layer, not in teacher models.</para>
+///
+/// <para>For attention-based distillation strategies that need attention weights, implement
+/// a custom IDistillationStrategy that can extract attention from the underlying model.</para>
+/// </remarks>
 public class TransformerTeacherModel<T> : TeacherModelBase<Vector<T>, Vector<T>, T>
 {
     private readonly Func<Vector<T>, Vector<T>> _forwardFunc;
-    private readonly Func<Vector<T>, string, object?>? _attentionExtractor;
     private readonly int _outputDim;
 
+    /// <summary>
+    /// Gets the output dimension.
+    /// </summary>
     public override int OutputDimension => _outputDim;
 
+    /// <summary>
+    /// Initializes a new instance of the TransformerTeacherModel class.
+    /// </summary>
+    /// <param name="forwardFunc">Function that performs forward pass and returns logits.</param>
+    /// <param name="outputDimension">The number of output dimensions.</param>
     public TransformerTeacherModel(
         Func<Vector<T>, Vector<T>> forwardFunc,
-        int outputDimension,
-        Func<Vector<T>, string, object?>? attentionExtractor = null)
+        int outputDimension)
     {
         _forwardFunc = forwardFunc ?? throw new ArgumentNullException(nameof(forwardFunc));
         _outputDim = outputDimension;
-        _attentionExtractor = attentionExtractor;
     }
 
+    /// <summary>
+    /// Gets logits from the transformer model.
+    /// </summary>
+    /// <param name="input">The input data.</param>
+    /// <returns>Raw logits from the transformer.</returns>
     public override Vector<T> GetLogits(Vector<T> input) => _forwardFunc(input);
-
-    public override object? GetAttentionWeights(Vector<T> input, string layerName) =>
-        _attentionExtractor?.Invoke(input, layerName);
-
-    protected override Vector<T> ApplyTemperatureSoftmax(Vector<T> logits, double temperature)
-    {
-        int n = logits.Length;
-        var result = new Vector<T>(n);
-        var scaled = new T[n];
-
-        for (int i = 0; i < n; i++)
-            scaled[i] = NumOps.FromDouble(Convert.ToDouble(logits[i]) / temperature);
-
-        T maxLogit = scaled[0];
-        for (int i = 1; i < n; i++)
-            if (NumOps.GreaterThan(scaled[i], maxLogit))
-                maxLogit = scaled[i];
-
-        T sum = NumOps.Zero;
-        var expValues = new T[n];
-
-        for (int i = 0; i < n; i++)
-        {
-            double val = Convert.ToDouble(NumOps.Subtract(scaled[i], maxLogit));
-            expValues[i] = NumOps.FromDouble(Math.Exp(val));
-            sum = NumOps.Add(sum, expValues[i]);
-        }
-
-        for (int i = 0; i < n; i++)
-            result[i] = NumOps.Divide(expValues[i], sum);
-
-        return result;
-    }
 }

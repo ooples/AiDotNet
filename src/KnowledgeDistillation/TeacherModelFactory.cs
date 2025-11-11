@@ -110,9 +110,7 @@ public static class TeacherModelFactory<T>
             throw new ArgumentException("Model is required for Adaptive teacher type");
 
         var baseTeacher = new TeacherModelWrapper<T>(model);
-        return new AdaptiveTeacherModel<T>(
-            baseTeacher,
-            AdaptiveStrategy.ConfidenceBased);
+        return new AdaptiveTeacherModel<T>(baseTeacher);
     }
 
     private static ITeacherModel<Vector<T>, Vector<T>> CreateOnlineTeacher(
