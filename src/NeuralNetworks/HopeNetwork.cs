@@ -1,10 +1,10 @@
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
-using AiDotNet.NeuralNetworks;
 using AiDotNet.NeuralNetworks.Layers;
+using AiDotNet.NestedLearning;
 
-namespace AiDotNet.NestedLearning;
+namespace AiDotNet.NeuralNetworks;
 
 /// <summary>
 /// Hope architecture - a self-modifying recurrent neural network variant of Titans

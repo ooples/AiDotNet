@@ -114,6 +114,8 @@ var retrieved = memory.Retrieve(query);
 Custom optimizer for the HOPE architecture that considers data dependencies (Equations 27-29):
 
 ```csharp
+using AiDotNet.Optimizers;
+
 // Used internally by ContinuumMemorySystemLayer
 // Implements: W_{t+1} = W_t * (I - x_t x_t^T) - η * ∇y_t L ⊗ x_t
 
@@ -129,8 +131,8 @@ var updatedParams = optimizer.UpdateMatrix(currentParams, input, outputGradient)
 ## Complete Example: HOPE Network for Continual Learning
 
 ```csharp
-using AiDotNet.NestedLearning;
 using AiDotNet.NeuralNetworks;
+using AiDotNet.NestedLearning;
 using AiDotNet.LinearAlgebra;
 
 // Create HOPE architecture for continual learning

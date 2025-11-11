@@ -1,6 +1,6 @@
 using System;
 using AiDotNet.LinearAlgebra;
-using AiDotNet.NestedLearning;
+using AiDotNet.Optimizers;
 using Xunit;
 
 namespace AiDotNetTests.UnitTests.NestedLearning

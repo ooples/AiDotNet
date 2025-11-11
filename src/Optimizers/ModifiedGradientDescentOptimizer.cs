@@ -2,7 +2,7 @@ using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
 
-namespace AiDotNet.NestedLearning;
+namespace AiDotNet.Optimizers;
 
 /// <summary>
 /// Modified Gradient Descent optimizer for Hope architecture.

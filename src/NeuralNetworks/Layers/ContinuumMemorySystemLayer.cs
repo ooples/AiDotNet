@@ -1,7 +1,7 @@
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
-using AiDotNet.NestedLearning;
+using AiDotNet.Optimizers;
 
 namespace AiDotNet.NeuralNetworks.Layers;
 
