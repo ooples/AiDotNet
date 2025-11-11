@@ -1412,12 +1412,12 @@ public class LSTMNeuralNetwork<T> : NeuralNetworkBase<T>
         int hiddenFeatures = hiddenGradient.Shape[hiddenGradient.Shape.Length - 1];
         int outputFeatures = outputShape[outputShape.Length - 1];
 
-        // Calculate batch and sequence dimensions
-        int batchSize = outputShape.Length > 0 ? outputShape[0] : 1;
-        int hiddenBatchSize = hiddenGradient.Shape.Length > 0 ? hiddenGradient.Shape[0] : 1;
+        // Calculate first dimension (could be batch size, sequence length, or combined depending on layout)
+        int outputFirstDim = outputShape.Length > 0 ? outputShape[0] : 1;
+        int hiddenFirstDim = hiddenGradient.Shape.Length > 0 ? hiddenGradient.Shape[0] : 1;
 
-        // Ensure batch sizes are compatible
-        if (hiddenBatchSize != batchSize && hiddenBatchSize != 1 && batchSize != 1)
+        // Ensure first dimensions are compatible
+        if (hiddenFirstDim != outputFirstDim && hiddenFirstDim != 1 && outputFirstDim != 1)
         {
             // Incompatible batch sizes - use fallback
             int minLength = Math.Min(hiddenGradient.Length, transformedGradient.Length);
@@ -1442,7 +1442,7 @@ public class LSTMNeuralNetwork<T> : NeuralNetworkBase<T>
         {
             // Hidden state has more features - average/pool gradients
             // This approximates gradient flow through a dimensionality reduction
-            for (int b = 0; b < Math.Min(batchSize, hiddenBatchSize); b++)
+            for (int b = 0; b < Math.Min(outputFirstDim, hiddenFirstDim); b++)
             {
                 for (int outF = 0; outF < outputFeatures; outF++)
                 {
@@ -1476,7 +1476,7 @@ public class LSTMNeuralNetwork<T> : NeuralNetworkBase<T>
         {
             // Output has more features - replicate gradients
             // This approximates gradient flow through a dimensionality expansion
-            for (int b = 0; b < Math.Min(batchSize, hiddenBatchSize); b++)
+            for (int b = 0; b < Math.Min(outputFirstDim, hiddenFirstDim); b++)
             {
                 for (int outF = 0; outF < outputFeatures; outF++)
                 {
