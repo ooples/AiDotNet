@@ -23,7 +23,7 @@ public class CurriculumTeacherModel<T> : TeacherModelBase<Vector<T>, Vector<T>, 
         _currentDifficulty = 0.0;
     }
 
-    public void UpdateDifficulty(double difficulty) => _currentDifficulty = Math.Clamp(difficulty, 0.0, 1.0);
+    public void UpdateDifficulty(double difficulty) => _currentDifficulty = MathHelper.Clamp(difficulty, 0.0, 1.0);
 
     public override Vector<T> GetLogits(Vector<T> input) => _baseTeacher.GetLogits(input);
 
