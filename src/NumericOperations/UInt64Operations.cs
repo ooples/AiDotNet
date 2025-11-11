@@ -689,9 +689,24 @@ public class UInt64Operations : INumericOperations<ulong>
     public float ToFloat(ulong value) => (float)value;
 
     /// <summary>
-    /// Converts a float value to ulong.
+    /// Converts a float value to ulong with proper saturation.
     /// </summary>
-    public ulong FromFloat(float value) => (ulong)MathExtensions.Clamp(Math.Round(value), ulong.MinValue, ulong.MaxValue);
+    public ulong FromFloat(float value)
+    {
+        double rounded = Math.Round(value);
+
+        if (double.IsNaN(rounded) || rounded <= 0d)
+        {
+            return 0ul;
+        }
+
+        if (rounded >= ulong.MaxValue)
+        {
+            return ulong.MaxValue;
+        }
+
+        return (ulong)rounded;
+    }
 
     /// <summary>
     /// Converts a ulong value to Half (FP16) precision.
@@ -699,9 +714,24 @@ public class UInt64Operations : INumericOperations<ulong>
     public Half ToHalf(ulong value) => (Half)value;
 
     /// <summary>
-    /// Converts a Half value to ulong.
+    /// Converts a Half value to ulong with proper saturation.
     /// </summary>
-    public ulong FromHalf(Half value) => (ulong)MathExtensions.Clamp(Math.Round((double)(float)value), ulong.MinValue, ulong.MaxValue);
+    public ulong FromHalf(Half value)
+    {
+        double rounded = Math.Round((double)(float)value);
+
+        if (double.IsNaN(rounded) || rounded <= 0d)
+        {
+            return 0ul;
+        }
+
+        if (rounded >= ulong.MaxValue)
+        {
+            return ulong.MaxValue;
+        }
+
+        return (ulong)rounded;
+    }
 
     /// <summary>
     /// Converts a ulong value to double (FP64) precision.
