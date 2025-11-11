@@ -48,10 +48,10 @@ namespace AiDotNet.KnowledgeDistillation;
 /// - Furlanello, T., et al. (2018). Born Again Neural Networks. ICML.
 /// - Zhang, L., et al. (2019). Be Your Own Teacher: Improve the Performance of Convolutional Neural Networks via Self-Distillation.</para>
 /// </remarks>
-public class SelfDistillationTrainer<T> : KnowledgeDistillationTrainerBase<Vector<T>, Vector<T>, T>
+public class SelfDistillationTrainer<T> : KnowledgeDistillationTrainerBase<T, Vector<T>, Vector<T>>
 {
     private readonly int _generations;
-    private Vector<T>[]? _cachedTeacherPredictions;
+    private Vector<Vector<T>>? _cachedTeacherPredictions;
 
     /// <summary>
     /// Gets or sets whether to use exponential moving average for teacher predictions.
@@ -88,7 +88,7 @@ public class SelfDistillationTrainer<T> : KnowledgeDistillationTrainerBase<Vecto
     /// </para>
     /// </remarks>
     public SelfDistillationTrainer(
-        IDistillationStrategy<Vector<T>, T> distillationStrategy,
+        IDistillationStrategy<T, Vector<T>> distillationStrategy,
         int generations = 1,
         int? seed = null)
         : base(new SelfTeacherModelPlaceholder<T>(), distillationStrategy, seed)
@@ -153,8 +153,8 @@ public class SelfDistillationTrainer<T> : KnowledgeDistillationTrainerBase<Vecto
     public void TrainMultipleGenerations(
         Func<Vector<T>, Vector<T>> modelForward,
         Action<Vector<T>> modelBackward,
-        Vector<T>[] trainInputs,
-        Vector<T>[] trainLabels,
+        Vector<Vector<T>> trainInputs,
+        Vector<Vector<T>> trainLabels,
         int epochs,
         int batchSize = 32,
         Action<int, T>? onGenerationComplete = null)
@@ -174,7 +174,7 @@ public class SelfDistillationTrainer<T> : KnowledgeDistillationTrainerBase<Vecto
             // Cache predictions from previous generation (if not first generation)
             if (generation > 0)
             {
-                var newPredictions = new Vector<T>[trainInputs.Length];
+                var newPredictions = new Vector<Vector<T>>(trainInputs.Length);
                 for (int i = 0; i < trainInputs.Length; i++)
                 {
                     newPredictions[i] = modelForward(trainInputs[i]);

@@ -81,17 +81,17 @@ public class KnowledgeDistillationTrainerTests
         var distillationLoss = new DistillationLoss<double>(temperature: 3.0, alpha: 0.3);
         var trainer = new KnowledgeDistillationTrainer<double>(teacher, distillationLoss);
 
-        var inputs = new[]
+        var inputs = new Vector<Vector<double>>(new[]
         {
             new Vector<double>(new[] { 0.5, 0.3, 0.2 }),
             new Vector<double>(new[] { 0.4, 0.4, 0.2 })
-        };
+        });
 
-        var labels = new[]
+        var labels = new Vector<Vector<double>>(new[]
         {
             new Vector<double>(new[] { 1.0, 0.0, 0.0 }),
             new Vector<double>(new[] { 0.0, 1.0, 0.0 })
-        };
+        });
 
         // Simple student model: returns fixed logits
         Func<Vector<double>, Vector<double>> studentForward = input =>
@@ -140,7 +140,7 @@ public class KnowledgeDistillationTrainerTests
 
         // Act & Assert
         Assert.Throws<ArgumentException>(() =>
-            trainer.TrainBatch(studentForward, studentBackward, Array.Empty<Vector<double>>(), null));
+            trainer.TrainBatch(studentForward, studentBackward, new Vector<Vector<double>>(0), null));
     }
 
     [Fact]
@@ -151,21 +151,21 @@ public class KnowledgeDistillationTrainerTests
         var distillationLoss = new DistillationLoss<double>(temperature: 3.0, alpha: 0.3);
         var trainer = new KnowledgeDistillationTrainer<double>(teacher, distillationLoss);
 
-        var trainInputs = new[]
+        var trainInputs = new Vector<Vector<double>>(new[]
         {
             new Vector<double>(new[] { 0.5, 0.3, 0.2 }),
             new Vector<double>(new[] { 0.4, 0.4, 0.2 }),
             new Vector<double>(new[] { 0.6, 0.2, 0.2 }),
             new Vector<double>(new[] { 0.3, 0.5, 0.2 })
-        };
+        });
 
-        var trainLabels = new[]
+        var trainLabels = new Vector<Vector<double>>(new[]
         {
             new Vector<double>(new[] { 1.0, 0.0, 0.0 }),
             new Vector<double>(new[] { 0.0, 1.0, 0.0 }),
             new Vector<double>(new[] { 1.0, 0.0, 0.0 }),
             new Vector<double>(new[] { 0.0, 1.0, 0.0 })
-        };
+        });
 
         Func<Vector<double>, Vector<double>> studentForward = input =>
             new Vector<double>(new[] { 1.0, 1.5, 0.8 });
@@ -197,8 +197,8 @@ public class KnowledgeDistillationTrainerTests
         var distillationLoss = new DistillationLoss<double>();
         var trainer = new KnowledgeDistillationTrainer<double>(teacher, distillationLoss);
 
-        var trainInputs = new[] { new Vector<double>(new[] { 0.5, 0.3, 0.2 }) };
-        var trainLabels = new[] { new Vector<double>(new[] { 1.0, 0.0, 0.0 }) };
+        var trainInputs = new Vector<Vector<double>>(new[] { new Vector<double>(new[] { 0.5, 0.3, 0.2 }) });
+        var trainLabels = new Vector<Vector<double>>(new[] { new Vector<double>(new[] { 1.0, 0.0, 0.0 }) });
 
         Func<Vector<double>, Vector<double>> studentForward = input =>
             new Vector<double>(new[] { 1.0, 1.5, 0.8 });
@@ -219,17 +219,17 @@ public class KnowledgeDistillationTrainerTests
         var distillationLoss = new DistillationLoss<double>();
         var trainer = new KnowledgeDistillationTrainer<double>(teacher, distillationLoss);
 
-        var testInputs = new[]
+        var testInputs = new Vector<Vector<double>>(new[]
         {
             new Vector<double>(new[] { 0.5, 0.3, 0.2 }),
             new Vector<double>(new[] { 0.4, 0.4, 0.2 })
-        };
+        });
 
-        var testLabels = new[]
+        var testLabels = new Vector<Vector<double>>(new[]
         {
             new Vector<double>(new[] { 1.0, 0.0, 0.0 }), // Class 0
             new Vector<double>(new[] { 0.0, 1.0, 0.0 })  // Class 1
-        };
+        });
 
         // Student predicts class 1 for all inputs
         Func<Vector<double>, Vector<double>> studentForward = input =>
@@ -251,13 +251,13 @@ public class KnowledgeDistillationTrainerTests
         var distillationLoss = new DistillationLoss<double>();
         var trainer = new KnowledgeDistillationTrainer<double>(teacher, distillationLoss);
 
-        var testInputs = new[]
+        var testInputs = new Vector<Vector<double>>(new[]
         {
             new Vector<double>(new[] { 0.5, 0.3, 0.2 }),
             new Vector<double>(new[] { 0.4, 0.4, 0.2 })
         };
 
-        var testLabels = new[]
+        var testLabels = new Vector<Vector<double>>(new[]
         {
             new Vector<double>(new[] { 1.0, 0.0, 0.0 }),
             new Vector<double>(new[] { 1.0, 0.0, 0.0 })
@@ -282,13 +282,13 @@ public class KnowledgeDistillationTrainerTests
         var distillationLoss = new DistillationLoss<double>();
         var trainer = new KnowledgeDistillationTrainer<double>(teacher, distillationLoss);
 
-        var testInputs = new[]
+        var testInputs = new Vector<Vector<double>>(new[]
         {
             new Vector<double>(new[] { 0.5, 0.3, 0.2 }),
             new Vector<double>(new[] { 0.4, 0.4, 0.2 })
         };
 
-        var testLabels = new[]
+        var testLabels = new Vector<Vector<double>>(new[]
         {
             new Vector<double>(new[] { 1.0, 0.0, 0.0 }), // True class: 0
             new Vector<double>(new[] { 1.0, 0.0, 0.0 })  // True class: 0

@@ -25,9 +25,9 @@ namespace AiDotNet.KnowledgeDistillation.Strategies;
 /// - More robust than single-strategy distillation
 /// - Commonly used in SOTA models like TinyBERT, MobileBERT</para>
 /// </remarks>
-public class HybridDistillationStrategy<T> : DistillationStrategyBase<Vector<T>, T>
+public class HybridDistillationStrategy<T> : DistillationStrategyBase<T, Vector<T>>
 {
-    private readonly (IDistillationStrategy<Vector<T>, T> Strategy, double Weight)[] _strategies;
+    private readonly (IDistillationStrategy<T, Vector<T>> Strategy, double Weight)[] _strategies;
 
     /// <summary>
     /// Initializes a new instance of the HybridDistillationStrategy class.
@@ -50,7 +50,7 @@ public class HybridDistillationStrategy<T> : DistillationStrategyBase<Vector<T>,
     /// </para>
     /// </remarks>
     public HybridDistillationStrategy(
-        (IDistillationStrategy<Vector<T>, T> Strategy, double Weight)[] strategies,
+        (IDistillationStrategy<T, Vector<T>> Strategy, double Weight)[] strategies,
         double temperature = 3.0,
         double alpha = 0.3)
         : base(temperature, alpha)
@@ -123,5 +123,5 @@ public class HybridDistillationStrategy<T> : DistillationStrategyBase<Vector<T>,
     /// <summary>
     /// Gets the individual strategies and their weights.
     /// </summary>
-    public (IDistillationStrategy<Vector<T>, T> Strategy, double Weight)[] GetStrategies() => _strategies;
+    public (IDistillationStrategy<T, Vector<T>> Strategy, double Weight)[] GetStrategies() => _strategies;
 }

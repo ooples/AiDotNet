@@ -72,7 +72,7 @@ namespace AiDotNet.KnowledgeDistillation.Strategies;
 /// - Tung & Mori (2019). Similarity-Preserving Knowledge Distillation. ICCV.
 /// - Peng et al. (2019). Correlation Congruence for Knowledge Distillation. ICCV.</para>
 /// </remarks>
-public class RelationalDistillationStrategy<T> : DistillationStrategyBase<Vector<T>, T>
+public class RelationalDistillationStrategy<T> : DistillationStrategyBase<T, Vector<T>>
 {
     private readonly double _distanceWeight;
     private readonly double _angleWeight;

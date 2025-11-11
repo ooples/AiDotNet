@@ -7,8 +7,8 @@ namespace AiDotNet.KnowledgeDistillation;
 /// Abstract base class for knowledge distillation strategies.
 /// Provides common functionality for computing losses and gradients in student-teacher training.
 /// </summary>
-/// <typeparam name="TOutput">The output data type (typically Vector or Matrix of logits).</typeparam>
 /// <typeparam name="T">The numeric type for calculations (e.g., double, float).</typeparam>
+/// <typeparam name="TOutput">The output data type (typically Vector&lt;T&gt; or Matrix&lt;T&gt; of logits).</typeparam>
 /// <remarks>
 /// <para><b>For Beginners:</b> A distillation strategy defines how to measure the difference
 /// between student and teacher predictions. This base class provides common functionality that
@@ -27,7 +27,7 @@ namespace AiDotNet.KnowledgeDistillation;
 /// <para><b>Template Method Pattern:</b> The base class defines the structure (properties, validation),
 /// and subclasses implement the specifics (loss computation logic).</para>
 /// </remarks>
-public abstract class DistillationStrategyBase<TOutput, T> : IDistillationStrategy<TOutput, T>
+public abstract class DistillationStrategyBase<T, TOutput> : IDistillationStrategy<T, TOutput>
 {
     /// <summary>
     /// Numeric operations for the specified type T.

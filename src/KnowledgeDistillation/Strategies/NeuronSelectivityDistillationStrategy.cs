@@ -22,7 +22,7 @@ namespace AiDotNet.KnowledgeDistillation.Strategies;
 /// 2. Sparsity (what percentage of time the neuron is active)
 /// 3. Peak-to-average ratio (how peaked the activation distribution is)</para>
 /// </remarks>
-public class NeuronSelectivityDistillationStrategy<T> : DistillationStrategyBase<Vector<T>, T>
+public class NeuronSelectivityDistillationStrategy<T> : DistillationStrategyBase<T, Vector<T>>
 {
     private readonly double _selectivityWeight;
     private readonly SelectivityMetric _metric;

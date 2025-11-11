@@ -39,7 +39,7 @@ namespace AiDotNet.KnowledgeDistillation;
 /// <para><b>References:</b>
 /// - Hinton, G., Vinyals, O., & Dean, J. (2015). Distilling the Knowledge in a Neural Network. arXiv:1503.02531</para>
 /// </remarks>
-public class DistillationLoss<T> : DistillationStrategyBase<Vector<T>, T>
+public class DistillationLoss<T> : DistillationStrategyBase<T, Vector<T>>
 {
     /// <summary>
     /// Initializes a new instance of the DistillationLoss class.

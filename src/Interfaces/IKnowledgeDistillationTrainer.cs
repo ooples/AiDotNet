@@ -4,9 +4,9 @@ namespace AiDotNet.Interfaces;
 /// Defines the contract for knowledge distillation trainers that train student models
 /// using knowledge transferred from teacher models.
 /// </summary>
-/// <typeparam name="TInput">The input data type.</typeparam>
-/// <typeparam name="TOutput">The output data type.</typeparam>
 /// <typeparam name="T">The numeric type for calculations (e.g., double, float).</typeparam>
+/// <typeparam name="TInput">The input data type (e.g., Matrix&lt;T&gt; for tabular data, Tensor&lt;T&gt; for images).</typeparam>
+/// <typeparam name="TOutput">The output data type (e.g., Matrix&lt;T&gt; for batch outputs, Tensor&lt;T&gt; for structured outputs).</typeparam>
 /// <remarks>
 /// <para><b>For Beginners:</b> A knowledge distillation trainer orchestrates the process of
 /// transferring knowledge from a large, accurate teacher model to a smaller, faster student model.</para>
@@ -24,7 +24,7 @@ namespace AiDotNet.Interfaces;
 /// - **Online Trainer**: Teacher updates during student training
 /// - **Mutual Learning Trainer**: Multiple students learn from each other</para>
 /// </remarks>
-public interface IKnowledgeDistillationTrainer<TInput, TOutput, T>
+public interface IKnowledgeDistillationTrainer<T, TInput, TOutput>
 {
     /// <summary>
     /// Trains the student model on a single batch of data.
@@ -43,8 +43,8 @@ public interface IKnowledgeDistillationTrainer<TInput, TOutput, T>
     T TrainBatch(
         Func<TInput, TOutput> studentForward,
         Action<TOutput> studentBackward,
-        TInput[] inputs,
-        TOutput[]? trueLabels = null);
+        Vector<TInput> inputs,
+        Vector<TOutput>? trueLabels = null);
 
     /// <summary>
     /// Trains the student model for multiple epochs.
@@ -63,8 +63,8 @@ public interface IKnowledgeDistillationTrainer<TInput, TOutput, T>
     void Train(
         Func<TInput, TOutput> studentForward,
         Action<TOutput> studentBackward,
-        TInput[] trainInputs,
-        TOutput[]? trainLabels,
+        Vector<TInput> trainInputs,
+        Vector<TOutput>? trainLabels,
         int epochs,
         int batchSize = 32,
         Action<int, T>? onEpochComplete = null);
@@ -82,8 +82,8 @@ public interface IKnowledgeDistillationTrainer<TInput, TOutput, T>
     /// </remarks>
     double Evaluate(
         Func<TInput, TOutput> studentForward,
-        TInput[] testInputs,
-        TOutput[] testLabels);
+        Vector<TInput> testInputs,
+        Vector<TOutput> testLabels);
 
     /// <summary>
     /// Gets the teacher model used for distillation.
@@ -93,5 +93,5 @@ public interface IKnowledgeDistillationTrainer<TInput, TOutput, T>
     /// <summary>
     /// Gets the distillation strategy used for computing loss and gradients.
     /// </summary>
-    IDistillationStrategy<TOutput, T> DistillationStrategy { get; }
+    IDistillationStrategy<T, TOutput> DistillationStrategy { get; }
 }

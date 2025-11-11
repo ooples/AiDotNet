@@ -35,7 +35,7 @@ namespace AiDotNet.KnowledgeDistillation.Strategies;
 /// - Variational Knowledge Distillation (Ahn et al., 2019)
 /// - Bayesian Dark Knowledge (Balan et al., 2015)</para>
 /// </remarks>
-public class VariationalDistillationStrategy<T> : DistillationStrategyBase<Vector<T>, T>
+public class VariationalDistillationStrategy<T> : DistillationStrategyBase<T, Vector<T>>
 {
     private readonly double _variationalWeight;
     private readonly VariationalMode _mode;

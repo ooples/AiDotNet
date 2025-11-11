@@ -34,7 +34,7 @@ namespace AiDotNet.KnowledgeDistillation;
 /// - MobileNet: Distilled from ResNet, 10x fewer parameters, deployable on phones
 /// - TinyBERT: 7.5x smaller than BERT, suitable for edge deployment</para>
 /// </remarks>
-public class KnowledgeDistillationTrainer<T> : KnowledgeDistillationTrainerBase<Vector<T>, Vector<T>, T>
+public class KnowledgeDistillationTrainer<T> : KnowledgeDistillationTrainerBase<T, Vector<T>, Vector<T>>
 {
     /// <summary>
     /// Initializes a new instance of the KnowledgeDistillationTrainer class.
@@ -57,7 +57,7 @@ public class KnowledgeDistillationTrainer<T> : KnowledgeDistillationTrainerBase<
     /// </remarks>
     public KnowledgeDistillationTrainer(
         ITeacherModel<Vector<T>, Vector<T>> teacher,
-        IDistillationStrategy<Vector<T>, T> distillationStrategy,
+        IDistillationStrategy<T, Vector<T>> distillationStrategy,
         int? seed = null)
         : base(teacher, distillationStrategy, seed)
     {

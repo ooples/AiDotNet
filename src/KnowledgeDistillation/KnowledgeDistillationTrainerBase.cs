@@ -8,9 +8,9 @@ namespace AiDotNet.KnowledgeDistillation;
 /// Abstract base class for all knowledge distillation trainers.
 /// Provides common functionality for training loops, data shuffling, validation, and evaluation.
 /// </summary>
+/// <typeparam name="T">The numeric type for calculations (e.g., double, float).</typeparam>
 /// <typeparam name="TInput">The input data type.</typeparam>
 /// <typeparam name="TOutput">The output data type.</typeparam>
-/// <typeparam name="T">The numeric type for calculations (e.g., double, float).</typeparam>
 /// <remarks>
 /// <para><b>For Beginners:</b> This base class implements the common training workflow shared by all
 /// distillation trainers. Specific trainer types (standard, self-distillation, online, etc.) inherit
@@ -34,7 +34,7 @@ namespace AiDotNet.KnowledgeDistillation;
 /// - OnTrainingStart(): Custom logic before training begins
 /// - OnTrainingEnd(): Custom logic after training completes</para>
 /// </remarks>
-public abstract class KnowledgeDistillationTrainerBase<TInput, TOutput, T> : IKnowledgeDistillationTrainer<TInput, TOutput, T>
+public abstract class KnowledgeDistillationTrainerBase<T, TInput, TOutput> : IKnowledgeDistillationTrainer<T, TInput, TOutput>
 {
     /// <summary>
     /// Gets the numeric operations helper for the type T.
@@ -54,7 +54,7 @@ public abstract class KnowledgeDistillationTrainerBase<TInput, TOutput, T> : IKn
     /// <summary>
     /// Gets the distillation strategy for computing loss and gradients.
     /// </summary>
-    public IDistillationStrategy<TOutput, T> DistillationStrategy { get; protected set; }
+    public IDistillationStrategy<T, TOutput> DistillationStrategy { get; protected set; }
 
     /// <summary>
     /// Initializes a new instance of the KnowledgeDistillationTrainerBase class.
@@ -69,7 +69,7 @@ public abstract class KnowledgeDistillationTrainerBase<TInput, TOutput, T> : IKn
     /// </remarks>
     protected KnowledgeDistillationTrainerBase(
         ITeacherModel<TInput, TOutput> teacher,
-        IDistillationStrategy<TOutput, T> distillationStrategy,
+        IDistillationStrategy<T, TOutput> distillationStrategy,
         int? seed = null)
     {
         Teacher = teacher ?? throw new ArgumentNullException(nameof(teacher));
@@ -97,8 +97,8 @@ public abstract class KnowledgeDistillationTrainerBase<TInput, TOutput, T> : IKn
     public virtual T TrainBatch(
         Func<TInput, TOutput> studentForward,
         Action<TOutput> studentBackward,
-        TInput[] inputs,
-        TOutput[] trueLabels = null)
+        Vector<TInput> inputs,
+        Vector<TOutput>? trueLabels = null)
     {
         if (studentForward == null) throw new ArgumentNullException(nameof(studentForward));
         if (studentBackward == null) throw new ArgumentNullException(nameof(studentBackward));
@@ -160,12 +160,12 @@ public abstract class KnowledgeDistillationTrainerBase<TInput, TOutput, T> : IKn
     public virtual void Train(
         Func<TInput, TOutput> studentForward,
         Action<TOutput> studentBackward,
-        TInput[] trainInputs,
-        TOutput[]? trainLabels = null,
+        Vector<TInput> trainInputs,
+        Vector<TOutput>? trainLabels = null,
         int epochs = 20,
         int batchSize = 32,
-        TInput[]? validationInputs = null,
-        TOutput[]? validationLabels = null,
+        Vector<TInput>? validationInputs = null,
+        Vector<TOutput>? validationLabels = null,
         Action<int, T>? onEpochComplete = null)
     {
         if (studentForward == null) throw new ArgumentNullException(nameof(studentForward));
@@ -203,14 +203,12 @@ public abstract class KnowledgeDistillationTrainerBase<TInput, TOutput, T> : IKn
                 int end = Math.Min(start + batchSize, trainInputs.Length);
                 int currentBatchSize = end - start;
 
-                var batchInputs = new TInput[currentBatchSize];
-                Array.Copy(shuffledInputs, start, batchInputs, 0, currentBatchSize);
+                var batchInputs = new Vector<TInput>(shuffledInputs.Skip(start).Take(currentBatchSize));
 
-                TOutput[]? batchLabels = null;
+                Vector<TOutput>? batchLabels = null;
                 if (shuffledLabels != null)
                 {
-                    batchLabels = new TOutput[currentBatchSize];
-                    Array.Copy(shuffledLabels, start, batchLabels, 0, currentBatchSize);
+                    batchLabels = new Vector<TOutput>(shuffledLabels.Skip(start).Take(currentBatchSize));
                 }
 
                 var batchLoss = TrainBatch(studentForward, studentBackward, batchInputs, batchLabels);
@@ -254,8 +252,8 @@ public abstract class KnowledgeDistillationTrainerBase<TInput, TOutput, T> : IKn
     public virtual void Train(
         Func<TInput, TOutput> studentForward,
         Action<TOutput> studentBackward,
-        TInput[] trainInputs,
-        TOutput[]? trainLabels,
+        Vector<TInput> trainInputs,
+        Vector<TOutput>? trainLabels,
         int epochs,
         int batchSize = 32,
         Action<int, T>? onEpochComplete = null)
@@ -280,8 +278,8 @@ public abstract class KnowledgeDistillationTrainerBase<TInput, TOutput, T> : IKn
     /// </remarks>
     public virtual double Evaluate(
         Func<TInput, TOutput> studentForward,
-        TInput[] inputs,
-        TOutput[] trueLabels)
+        Vector<TInput> inputs,
+        Vector<TOutput> trueLabels)
     {
         if (studentForward == null) throw new ArgumentNullException(nameof(studentForward));
         if (inputs == null) throw new ArgumentNullException(nameof(inputs));
@@ -319,17 +317,17 @@ public abstract class KnowledgeDistillationTrainerBase<TInput, TOutput, T> : IKn
     ///
     /// <para>Fisher-Yates is O(n) compared to O(n log n) for sort-based shuffling.</para>
     /// </remarks>
-    protected virtual (TInput[] shuffledInputs, TOutput[]? shuffledLabels) ShuffleData(
-        TInput[] inputs,
-        TOutput[]? labels)
+    protected virtual (Vector<TInput> shuffledInputs, Vector<TOutput>? shuffledLabels) ShuffleData(
+        Vector<TInput> inputs,
+        Vector<TOutput>? labels)
     {
         var indices = FisherYatesShuffle(inputs.Length);
-        var shuffledInputs = indices.Select(i => inputs[i]).ToArray();
-        TOutput[]? shuffledLabels = null;
+        var shuffledInputs = new Vector<TInput>(indices.Select(i => inputs[i]));
+        Vector<TOutput>? shuffledLabels = null;
 
         if (labels != null)
         {
-            shuffledLabels = indices.Select(i => labels[i]).ToArray();
+            shuffledLabels = new Vector<TOutput>(indices.Select(i => labels[i]));
         }
 
         return (shuffledInputs, shuffledLabels);
@@ -425,7 +423,7 @@ public abstract class KnowledgeDistillationTrainerBase<TInput, TOutput, T> : IKn
     /// - Setup curriculum schedules
     /// - Allocate temporary buffers</para>
     /// </remarks>
-    protected virtual void OnTrainingStart(TInput[] trainInputs, TOutput[]? trainLabels)
+    protected virtual void OnTrainingStart(Vector<TInput> trainInputs, Vector<TOutput>? trainLabels)
     {
         // Default: no-op, derived classes can override
     }
@@ -442,7 +440,7 @@ public abstract class KnowledgeDistillationTrainerBase<TInput, TOutput, T> : IKn
     /// - Log final metrics
     /// - Free temporary resources</para>
     /// </remarks>
-    protected virtual void OnTrainingEnd(TInput[] trainInputs, TOutput[]? trainLabels)
+    protected virtual void OnTrainingEnd(Vector<TInput> trainInputs, Vector<TOutput>? trainLabels)
     {
         // Default: no-op, derived classes can override
     }
@@ -460,7 +458,7 @@ public abstract class KnowledgeDistillationTrainerBase<TInput, TOutput, T> : IKn
     /// - Update curriculum difficulty
     /// - Refresh teacher in online distillation</para>
     /// </remarks>
-    protected virtual void OnEpochStart(int epoch, TInput[] trainInputs, TOutput[]? trainLabels)
+    protected virtual void OnEpochStart(int epoch, Vector<TInput> trainInputs, Vector<TOutput>? trainLabels)
     {
         // Default: no-op, derived classes can override
     }

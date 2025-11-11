@@ -54,7 +54,7 @@ namespace AiDotNet.KnowledgeDistillation.Strategies;
 /// - Jiao et al. (2020). TinyBERT: Distilling BERT for Natural Language Understanding. EMNLP.
 /// - Wang et al. (2020). MiniLM: Deep Self-Attention Distillation for Task-Agnostic Compression.</para>
 /// </remarks>
-public class AttentionDistillationStrategy<T> : DistillationStrategyBase<Vector<T>, T>
+public class AttentionDistillationStrategy<T> : DistillationStrategyBase<T, Vector<T>>
 {
     private readonly string[] _attentionLayers;
     private readonly double _attentionWeight;

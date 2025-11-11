@@ -64,7 +64,7 @@ namespace AiDotNet.KnowledgeDistillation.Strategies;
 /// - Tian et al. (2020). Contrastive Representation Distillation. ICLR.
 /// - Chen et al. (2020). A Simple Framework for Contrastive Learning of Visual Representations. ICML.</para>
 /// </remarks>
-public class ContrastiveDistillationStrategy<T> : DistillationStrategyBase<Vector<T>, T>
+public class ContrastiveDistillationStrategy<T> : DistillationStrategyBase<T, Vector<T>>
 {
     private readonly double _contrastiveWeight;
     private readonly int _negativesSampleSize;

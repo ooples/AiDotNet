@@ -3,8 +3,8 @@ namespace AiDotNet.Interfaces;
 /// <summary>
 /// Defines a strategy for computing knowledge distillation loss between student and teacher models.
 /// </summary>
-/// <typeparam name="TOutput">The output data type (typically Vector or Matrix of logits).</typeparam>
 /// <typeparam name="T">The numeric type for calculations (e.g., double, float).</typeparam>
+/// <typeparam name="TOutput">The output data type (typically Vector&lt;T&gt; or Matrix&lt;T&gt; of logits).</typeparam>
 /// <remarks>
 /// <para><b>For Beginners:</b> A distillation strategy determines how to measure the difference
 /// between what the student predicts and what the teacher predicts. Different strategies can
@@ -20,7 +20,7 @@ namespace AiDotNet.Interfaces;
 /// <para>This combination allows the student to both get the right answers (hard loss) and
 /// learn the teacher's reasoning (soft loss).</para>
 /// </remarks>
-public interface IDistillationStrategy<TOutput, T>
+public interface IDistillationStrategy<T, TOutput>
 {
     /// <summary>
     /// Computes the distillation loss between student and teacher outputs.

@@ -43,7 +43,7 @@ namespace AiDotNet.KnowledgeDistillation.Strategies;
 /// - FitNets: Hints for Thin Deep Nets (Romero et al., 2015)
 /// - Attention Transfer (Zagoruyko & Komodakis, 2017)</para>
 /// </remarks>
-public class FactorTransferDistillationStrategy<T> : DistillationStrategyBase<Vector<T>, T>
+public class FactorTransferDistillationStrategy<T> : DistillationStrategyBase<T, Vector<T>>
 {
     private readonly double _factorWeight;
     private readonly FactorMode _mode;

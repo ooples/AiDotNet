@@ -7,7 +7,7 @@ namespace AiDotNet.KnowledgeDistillation.Strategies;
 /// <summary>
 /// Similarity-preserving distillation that preserves pairwise similarity structure.
 /// </summary>
-public class SimilarityPreservingStrategy<T> : DistillationStrategyBase<Vector<T>, T>
+public class SimilarityPreservingStrategy<T> : DistillationStrategyBase<T, Vector<T>>
 {
     private readonly double _similarityWeight;
 
