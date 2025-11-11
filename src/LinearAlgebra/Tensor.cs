@@ -246,6 +246,7 @@ public class Tensor<T> : TensorBase<T>, IEnumerable<T>
                 double doubleValue = sourceOps.ToDouble(sourceValue);
                 resultData[i] = (TOut)(object)doubleValue;
             }
+            // Target type is not float/Half/double, check source type for efficient conversion
             else if (typeof(T) == typeof(float))
             {
                 // Source is float, convert to target
