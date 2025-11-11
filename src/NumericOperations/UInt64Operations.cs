@@ -693,7 +693,6 @@ public class UInt64Operations : INumericOperations<ulong>
     /// </summary>
     public ulong FromFloat(float value) => (ulong)MathExtensions.Clamp(Math.Round(value), ulong.MinValue, ulong.MaxValue);
 
-#if NET5_0_OR_GREATER
     /// <summary>
     /// Converts a ulong value to Half (FP16) precision.
     /// </summary>
@@ -703,7 +702,6 @@ public class UInt64Operations : INumericOperations<ulong>
     /// Converts a Half value to ulong.
     /// </summary>
     public ulong FromHalf(Half value) => (ulong)MathExtensions.Clamp(Math.Round((double)(float)value), ulong.MinValue, ulong.MaxValue);
-#endif
 
     /// <summary>
     /// Converts a ulong value to double (FP64) precision.

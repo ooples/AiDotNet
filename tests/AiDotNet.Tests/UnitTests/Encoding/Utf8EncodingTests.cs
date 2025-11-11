@@ -13,6 +13,20 @@ public class Utf8EncodingTests
 {
     private const char ReplacementCharacter = '\uFFFD'; // U+FFFD
 
+    private static string GetRelativePathCompat(string relativeTo, string path)
+    {
+#if NET462 || NET471
+        // Path.GetRelativePath not available in .NET Framework 4.6.2/4.7.1
+        if (path.StartsWith(relativeTo, StringComparison.OrdinalIgnoreCase))
+        {
+            return path.Substring(relativeTo.Length).TrimStart(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+        }
+        return path;
+#else
+        return Path.GetRelativePath(relativeTo, path);
+#endif
+    }
+
     /// <summary>
     /// Ensures no UTF-8 replacement characters exist in source files.
     /// The replacement character (U+FFFD) indicates encoding corruption.
@@ -34,7 +48,7 @@ public class Utf8EncodingTests
 
             if (count > 0)
             {
-                filesWithIssues.Add((Path.GetRelativePath(rootDir, file), count));
+                filesWithIssues.Add((GetRelativePathCompat(rootDir, file), count));
             }
         }
 

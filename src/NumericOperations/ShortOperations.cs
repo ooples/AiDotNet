@@ -661,7 +661,6 @@ public class ShortOperations : INumericOperations<short>
     /// </summary>
     public short FromFloat(float value) => (short)MathExtensions.Clamp((int)Math.Round(value), short.MinValue, short.MaxValue);
 
-#if NET5_0_OR_GREATER
     /// <summary>
     /// Converts a short value to Half (FP16) precision.
     /// </summary>
@@ -671,7 +670,6 @@ public class ShortOperations : INumericOperations<short>
     /// Converts a Half value to short.
     /// </summary>
     public short FromHalf(Half value) => (short)MathExtensions.Clamp((int)Math.Round((float)value), short.MinValue, short.MaxValue);
-#endif
 
     /// <summary>
     /// Converts a short value to double (FP64) precision.

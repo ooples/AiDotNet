@@ -674,7 +674,6 @@ public class UInt32Operations : INumericOperations<uint>
     /// </summary>
     public uint FromFloat(float value) => (uint)MathExtensions.Clamp((long)Math.Round(value), uint.MinValue, uint.MaxValue);
 
-#if NET5_0_OR_GREATER
     /// <summary>
     /// Converts a uint value to Half (FP16) precision.
     /// </summary>
@@ -684,7 +683,6 @@ public class UInt32Operations : INumericOperations<uint>
     /// Converts a Half value to uint.
     /// </summary>
     public uint FromHalf(Half value) => (uint)MathExtensions.Clamp((long)Math.Round((float)value), uint.MinValue, uint.MaxValue);
-#endif
 
     /// <summary>
     /// Converts a uint value to double (FP64) precision.

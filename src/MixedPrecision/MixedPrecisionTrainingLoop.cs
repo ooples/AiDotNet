@@ -136,12 +136,7 @@ public class MixedPrecisionTrainingLoop<T>
 
         // Step 5: Backward pass (gradients computed with scaled loss)
         // Compute error gradient
-        var errorVector = new Vector<T>(outputVector.Length);
-        for (int i = 0; i < outputVector.Length; i++)
-        {
-            var error = _lossFunction.CalculateGradient(outputVector[i], targetVector[i]);
-            errorVector[i] = error;
-        }
+        var errorVector = _lossFunction.CalculateDerivative(outputVector, targetVector);
 
         // Scale the error
         var scaledError = new Vector<T>(errorVector.Length);

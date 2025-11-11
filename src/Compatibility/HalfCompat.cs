@@ -7,11 +7,6 @@ namespace System
     /// Compatibility shim for Half (FP16) type on .NET Framework 4.6.2 and .NET Standard.
     /// Uses float internally but provides Half interface for API compatibility.
     /// </summary>
-    /// <remarks>
-    /// This is not a true 16-bit float - it uses 32-bit float internally for storage.
-    /// Performance and memory characteristics will differ from native Half in .NET 5+.
-    /// This exists solely for API compatibility to allow mixed-precision training code to compile.
-    /// </remarks>
     public readonly struct Half : IComparable, IFormattable, IComparable<Half>, IEquatable<Half>
     {
         private readonly float _value;
@@ -70,15 +65,16 @@ namespace System
         public static bool operator >(Half left, Half right) => left._value > right._value;
         public static bool operator <=(Half left, Half right) => left._value <= right._value;
         public static bool operator >=(Half left, Half right) => left._value >= right._value;
+        public static Half operator -(Half value) => new Half(-value._value);
     }
 }
 #endif
 
-#if !NET5_0_OR_GREATER
 namespace System
 {
     public static class MathExtensions
     {
+#if !NET5_0_OR_GREATER
         public static T Clamp<T>(T value, T min, T max) where T : IComparable<T>
         {
             if (value.CompareTo(min) < 0) return min;
@@ -92,6 +88,31 @@ namespace System
             if (value > max) return max;
             return value;
         }
+
+        public static long Clamp(long value, long min, long max)
+        {
+            if (value < min) return min;
+            if (value > max) return max;
+            return value;
+        }
+#else
+        // For NET5+, delegate to Math.Clamp
+        public static T Clamp<T>(T value, T min, T max) where T : IComparable<T>
+        {
+            if (value.CompareTo(min) < 0) return min;
+            if (value.CompareTo(max) > 0) return max;
+            return value;
+        }
+
+        public static int Clamp(int value, int min, int max)
+        {
+            return Math.Clamp(value, min, max);
+        }
+
+        public static long Clamp(long value, long min, long max)
+        {
+            return Math.Clamp(value, min, max);
+        }
+#endif
     }
 }
-#endif

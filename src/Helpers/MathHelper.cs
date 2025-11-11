@@ -1,3 +1,6 @@
+using AiDotNet.Interfaces;
+using AiDotNet.NumericOperations;
+
 namespace AiDotNet.Helpers;
 
 /// <summary>

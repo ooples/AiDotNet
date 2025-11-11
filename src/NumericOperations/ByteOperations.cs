@@ -622,7 +622,6 @@ public class ByteOperations : INumericOperations<byte>
     /// </remarks>
     public byte FromFloat(float value) => (byte)MathExtensions.Clamp((int)Math.Round(value), byte.MinValue, byte.MaxValue);
 
-#if NET5_0_OR_GREATER
     /// <summary>
     /// Converts a byte value to Half (FP16) precision.
     /// </summary>
@@ -639,7 +638,6 @@ public class ByteOperations : INumericOperations<byte>
     /// This conversion will round the Half to the nearest integer and clamp it to the byte range [0, 255].
     /// </remarks>
     public byte FromHalf(Half value) => (byte)MathExtensions.Clamp((int)Math.Round((float)value), byte.MinValue, byte.MaxValue);
-#endif
 
     /// <summary>
     /// Converts a byte value to double (FP64) precision.

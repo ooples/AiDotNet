@@ -349,7 +349,6 @@ public interface INumericOperations<T>
     /// <returns>The value converted to type T.</returns>
     T FromFloat(float value);
 
-#if NET5_0_OR_GREATER
     /// <summary>
     /// Converts a value to Half (FP16) precision.
     /// </summary>
@@ -374,7 +373,6 @@ public interface INumericOperations<T>
     /// <param name="value">The Half value to convert.</param>
     /// <returns>The value converted to type T.</returns>
     T FromHalf(Half value);
-#endif
 
     /// <summary>
     /// Converts a value to double (FP64) precision.

@@ -1,4 +1,3 @@
-#if NET5_0_OR_GREATER
 using System;
 using AiDotNet.Interfaces;
 
@@ -92,12 +91,12 @@ public class HalfOperations : INumericOperations<Half>
     /// <summary>
     /// Negates a Half value.
     /// </summary>
-    public Half Negate(Half a) => Half.Negate(a);
+    public Half Negate(Half a) => -a;
 
     /// <summary>
     /// Calculates the square root of a Half value.
     /// </summary>
-    public Half Sqrt(Half value) => (Half)MathF.Sqrt((float)value);
+    public Half Sqrt(Half value) => (Half)Math.Sqrt((float)value);
 
     /// <summary>
     /// Converts a double value to Half.
@@ -125,7 +124,7 @@ public class HalfOperations : INumericOperations<Half>
     /// <summary>
     /// Calculates the absolute value of a Half.
     /// </summary>
-    public Half Abs(Half value) => Half.Abs(value);
+    public Half Abs(Half value) => (Half)Math.Abs((float)value);
 
     /// <summary>
     /// Calculates the square of a Half value.
@@ -138,7 +137,7 @@ public class HalfOperations : INumericOperations<Half>
     /// <remarks>
     /// Warning: exp() can easily overflow Half's range. Use with loss scaling.
     /// </remarks>
-    public Half Exp(Half value) => (Half)MathF.Exp((float)value);
+    public Half Exp(Half value) => (Half)Math.Exp((float)value);
 
     /// <summary>
     /// Compares two Half values for equality.
@@ -149,12 +148,12 @@ public class HalfOperations : INumericOperations<Half>
     /// Raises a Half value to a power.
     /// </summary>
     public Half Power(Half baseValue, Half exponent) =>
-        (Half)MathF.Pow((float)baseValue, (float)exponent);
+        (Half)Math.Pow((float)baseValue, (float)exponent);
 
     /// <summary>
     /// Calculates the natural logarithm of a Half value.
     /// </summary>
-    public Half Log(Half value) => (Half)MathF.Log((float)value);
+    public Half Log(Half value) => (Half)Math.Log((float)value);
 
     /// <summary>
     /// Compares two Half values for greater than or equal.
@@ -169,7 +168,7 @@ public class HalfOperations : INumericOperations<Half>
     /// <summary>
     /// Rounds a Half value to the nearest integer.
     /// </summary>
-    public Half Round(Half value) => (Half)MathF.Round((float)value);
+    public Half Round(Half value) => (Half)Math.Round((float)value);
 
     /// <summary>
     /// Determines whether a Half value is NaN (Not a Number).
@@ -230,4 +229,3 @@ public class HalfOperations : INumericOperations<Half>
     /// </remarks>
     public double ToDouble(Half value) => (double)value;
 }
-#endif

@@ -742,7 +742,6 @@ public class FloatOperations : INumericOperations<float>
     /// </remarks>
     public float FromFloat(float value) => value;
 
-#if NET5_0_OR_GREATER
     /// <summary>
     /// Converts a float (FP32) value to Half (FP16) precision.
     /// </summary>
@@ -777,7 +776,6 @@ public class FloatOperations : INumericOperations<float>
     /// </para>
     /// </remarks>
     public float FromHalf(Half value) => (float)value;
-#endif
 
     /// <summary>
     /// Converts a float (FP32) value to double (FP64) precision.

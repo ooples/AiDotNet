@@ -665,7 +665,6 @@ public class UInt16Operations : INumericOperations<ushort>
     /// </summary>
     public ushort FromFloat(float value) => (ushort)MathExtensions.Clamp((int)Math.Round(value), ushort.MinValue, ushort.MaxValue);
 
-#if NET5_0_OR_GREATER
     /// <summary>
     /// Converts a ushort value to Half (FP16) precision.
     /// </summary>
@@ -675,7 +674,6 @@ public class UInt16Operations : INumericOperations<ushort>
     /// Converts a Half value to ushort.
     /// </summary>
     public ushort FromHalf(Half value) => (ushort)MathExtensions.Clamp((int)Math.Round((float)value), ushort.MinValue, ushort.MaxValue);
-#endif
 
     /// <summary>
     /// Converts a ushort value to double (FP64) precision.

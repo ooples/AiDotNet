@@ -657,7 +657,6 @@ public class DecimalOperations : INumericOperations<decimal>
     /// </summary>
     public decimal FromFloat(float value) => (decimal)value;
 
-#if NET5_0_OR_GREATER
     /// <summary>
     /// Converts a decimal value to Half (FP16) precision.
     /// </summary>
@@ -670,8 +669,7 @@ public class DecimalOperations : INumericOperations<decimal>
     /// <summary>
     /// Converts a Half value to decimal precision.
     /// </summary>
-    public decimal FromHalf(Half value) => (decimal)value;
-#endif
+    public decimal FromHalf(Half value) => (decimal)(float)value;
 
     /// <summary>
     /// Converts a decimal value to double precision.

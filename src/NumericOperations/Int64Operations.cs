@@ -735,7 +735,6 @@ public class Int64Operations : INumericOperations<long>
     /// </remarks>
     public long FromFloat(float value) => (long)MathExtensions.Clamp(Math.Round(value), long.MinValue, long.MaxValue);
 
-#if NET5_0_OR_GREATER
     /// <summary>
     /// Converts a long value to Half (FP16) precision.
     /// </summary>
@@ -755,7 +754,6 @@ public class Int64Operations : INumericOperations<long>
     /// This conversion will round the Half to the nearest integer.
     /// </remarks>
     public long FromHalf(Half value) => (long)Math.Round((float)value);
-#endif
 
     /// <summary>
     /// Converts a long value to double (FP64) precision.
