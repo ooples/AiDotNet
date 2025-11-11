@@ -381,17 +381,25 @@ public class CapsuleNetwork<T> : NeuralNetworkBase<T>
         // Flatten original input for comparison
         var flattenedInput = input.Reshape([input.Length]);
 
+        // Validate shapes match before computing MSE
+        if (flattenedInput.Length != reconstruction.Length)
+        {
+            throw new InvalidOperationException(
+                $"Shape mismatch: input length ({flattenedInput.Length}) " +
+                $"does not match reconstruction length ({reconstruction.Length}). " +
+                $"This indicates a misconfiguration in the reconstruction layer architecture.");
+        }
+
         // Compute MSE loss manually since Tensor doesn't have ToEnumerable
         T sumSquaredError = NumOps.Zero;
-        int minLength = Math.Min(flattenedInput.Length, reconstruction.Length);
 
-        for (int i = 0; i < minLength; i++)
+        for (int i = 0; i < flattenedInput.Length; i++)
         {
             T diff = NumOps.Subtract(flattenedInput[i], reconstruction[i]);
             sumSquaredError = NumOps.Add(sumSquaredError, NumOps.Multiply(diff, diff));
         }
 
-        return NumOps.Divide(sumSquaredError, NumOps.FromDouble(minLength));
+        return NumOps.Divide(sumSquaredError, NumOps.FromDouble(flattenedInput.Length));
     }
 
     /// <summary>
