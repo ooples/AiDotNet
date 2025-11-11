@@ -201,7 +201,7 @@ public class SelfDistillationTrainer<T>
                 generationLoss = _numOps.Add(generationLoss, epochLoss);
             }
 
-            var avgGenLoss = _numOps.Divide(generationLoss, _numOps.FromDouble(epochs));
+            var avgGenLoss = _numOps.Divide(generationLoss, _numOps.FromDouble(epochs * numBatches));
 
             // Invoke callback if provided
             onGenerationComplete?.Invoke(generation, avgGenLoss);
