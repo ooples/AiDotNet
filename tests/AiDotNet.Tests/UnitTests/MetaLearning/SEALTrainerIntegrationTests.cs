@@ -22,7 +22,7 @@ public class SEALTrainerIntegrationTests
             examplesPerClass: 50,
             imageSize: 28);
 
-        var dataLoader = new UniformEpisodicDataLoader<double, Tensor<double>, Tensor<double>>(
+        var dataLoader = new UniformEpisodicDataLoader<double, Matrix<double>, Vector<double>>(
             datasetX: datasetX,
             datasetY: datasetY,
             nWay: 5,
@@ -44,7 +44,7 @@ public class SEALTrainerIntegrationTests
             metaBatchSize: 4,
             numMetaIterations: 50);  // Limited for test speed
 
-        var trainer = new SEALTrainer<double, Tensor<double>, Tensor<double>>(
+        var trainer = new SEALTrainer<double, Matrix<double>, Vector<double>>(
             metaModel: model,
             lossFunction: new MeanSquaredErrorLoss<double>(),
             selfSupervisedLoss: new RotationPredictionLoss<double>(),
@@ -80,7 +80,7 @@ public class SEALTrainerIntegrationTests
             examplesPerClass: 30,
             imageSize: 16);  // Smaller for faster test
 
-        var dataLoader = new UniformEpisodicDataLoader<double, Tensor<double>, Tensor<double>>(
+        var dataLoader = new UniformEpisodicDataLoader<double, Matrix<double>, Vector<double>>(
             datasetX: datasetX,
             datasetY: datasetY,
             nWay: 3,
@@ -96,7 +96,7 @@ public class SEALTrainerIntegrationTests
             metaBatchSize: 2,
             numMetaIterations: 10);
 
-        var trainer = new SEALTrainer<double, Tensor<double>, Tensor<double>>(
+        var trainer = new SEALTrainer<double, Matrix<double>, Vector<double>>(
             metaModel: model,
             lossFunction: new MeanSquaredErrorLoss<double>(),
             selfSupervisedLoss: new RotationPredictionLoss<double>(),
@@ -124,8 +124,8 @@ public class SEALTrainerIntegrationTests
     /// Evaluates average accuracy across multiple tasks.
     /// </summary>
     private double EvaluateAccuracy(
-        SEALTrainer<double, Tensor<double>, Tensor<double>> trainer,
-        IEpisodicDataLoader<double, Tensor<double>, Tensor<double>> dataLoader,
+        SEALTrainer<double, Matrix<double>, Vector<double>> trainer,
+        IEpisodicDataLoader<double, Matrix<double>, Vector<double>> dataLoader,
         int numTasks)
     {
         double totalAccuracy = 0.0;
@@ -143,15 +143,16 @@ public class SEALTrainerIntegrationTests
     /// <summary>
     /// Generates a synthetic dataset with class-specific visual patterns.
     /// </summary>
-    private (Tensor<double> X, Tensor<double> Y) GenerateSyntheticDataset(
+    private (Matrix<double> X, Vector<double> Y) GenerateSyntheticDataset(
         int numClasses,
         int examplesPerClass,
         int imageSize)
     {
         int totalExamples = numClasses * examplesPerClass;
+        int flattenedSize = imageSize * imageSize;
 
-        var datasetX = new Tensor<double>(new[] { totalExamples, imageSize, imageSize, 1 });
-        var datasetY = new Tensor<double>(new[] { totalExamples, numClasses });
+        var datasetX = new Matrix<double>(totalExamples, flattenedSize);
+        var datasetY = new Vector<double>(totalExamples);
 
         var random = new Random(42);
 
@@ -177,15 +178,14 @@ public class SEALTrainerIntegrationTests
                         value += (random.NextDouble() - 0.5) * 0.2;
                         value = Math.Max(0.0, Math.Min(1.0, value));  // Clamp to [0, 1]
 
-                        datasetX[idx, i, j, 0] = value;
+                        // Flatten 2D image to 1D
+                        int flatIdx = i * imageSize + j;
+                        datasetX[idx, flatIdx] = value;
                     }
                 }
 
-                // One-hot label
-                for (int k = 0; k < numClasses; k++)
-                {
-                    datasetY[idx, k] = (k == classIdx) ? 1.0 : 0.0;
-                }
+                // Class label (integer)
+                datasetY[idx] = classIdx;
             }
         }
 
@@ -196,7 +196,7 @@ public class SEALTrainerIntegrationTests
 /// <summary>
 /// Simple learning mock model that actually learns from training data.
 /// </summary>
-internal class LearningMockModel : AiDotNet.Interfaces.IFullModel<double, Tensor<double>, Tensor<double>>
+internal class LearningMockModel : AiDotNet.Interfaces.IFullModel<double, Matrix<double>, Vector<double>>
 {
     private Vector<double> _parameters;
     private int _inputSize;
@@ -235,11 +235,11 @@ internal class LearningMockModel : AiDotNet.Interfaces.IFullModel<double, Tensor
 
     public int ParameterCount => _parameters.Length;
 
-    public void Train(Tensor<double> input, Tensor<double> expectedOutput)
+    public void Train(Matrix<double> input, Vector<double> expectedOutput)
     {
         // Simple gradient descent update
         var predictions = Predict(input);
-        int numExamples = input.Shape[0];
+        int numExamples = input.Rows;
 
         // Compute simple gradients and update parameters
         for (int i = 0; i < _parameters.Length; i++)
@@ -249,15 +249,15 @@ internal class LearningMockModel : AiDotNet.Interfaces.IFullModel<double, Tensor
         }
     }
 
-    public Tensor<double> Predict(Tensor<double> input)
+    public Vector<double> Predict(Matrix<double> input)
     {
-        int numExamples = input.Shape[0];
-        var output = new Tensor<double>(new[] { numExamples, _outputSize });
+        int numExamples = input.Rows;
+        var output = new Vector<double>(numExamples);
 
         // Simple forward pass
         for (int i = 0; i < numExamples; i++)
         {
-            // Compute simple output (sum of inputs modulated by parameters)
+            // Compute simple output (predict class based on parameters)
             double[] probs = new double[_outputSize];
             double sum = 0.0;
 
@@ -267,11 +267,19 @@ internal class LearningMockModel : AiDotNet.Interfaces.IFullModel<double, Tensor
                 sum += probs[j];
             }
 
-            // Normalize to probabilities
+            // Normalize to probabilities and select argmax
+            double maxProb = 0.0;
+            int predictedClass = 0;
             for (int j = 0; j < _outputSize; j++)
             {
-                output[i, j] = sum > 0 ? probs[j] / sum : 1.0 / _outputSize;
+                double prob = sum > 0 ? probs[j] / sum : 1.0 / _outputSize;
+                if (prob > maxProb)
+                {
+                    maxProb = prob;
+                    predictedClass = j;
+                }
             }
+            output[i] = predictedClass;
         }
 
         return output;
@@ -282,14 +290,14 @@ internal class LearningMockModel : AiDotNet.Interfaces.IFullModel<double, Tensor
     public void LoadModel(string filePath) { }
     public byte[] Serialize() => Array.Empty<byte>();
     public void Deserialize(byte[] data) { }
-    public AiDotNet.Interfaces.IFullModel<double, Tensor<double>, Tensor<double>> DeepCopy()
+    public AiDotNet.Interfaces.IFullModel<double, Matrix<double>, Vector<double>> DeepCopy()
     {
         var copy = new LearningMockModel(_inputSize, _hiddenSize, _outputSize);
         copy.SetParameters(_parameters);
         return copy;
     }
-    public AiDotNet.Interfaces.IFullModel<double, Tensor<double>, Tensor<double>> Clone() => DeepCopy();
-    public AiDotNet.Interfaces.IFullModel<double, Tensor<double>, Tensor<double>> WithParameters(Vector<double> parameters)
+    public AiDotNet.Interfaces.IFullModel<double, Matrix<double>, Vector<double>> Clone() => DeepCopy();
+    public AiDotNet.Interfaces.IFullModel<double, Matrix<double>, Vector<double>> WithParameters(Vector<double> parameters)
     {
         var newModel = new LearningMockModel(_inputSize, _hiddenSize, _outputSize);
         newModel.SetParameters(parameters);
@@ -303,7 +311,7 @@ internal class LearningMockModel : AiDotNet.Interfaces.IFullModel<double, Tensor
     public bool IsFeatureUsed(int featureIndex) => featureIndex >= 0 && featureIndex < InputFeatureCount;
     public Dictionary<string, double> GetFeatureImportance() => new Dictionary<string, double>();
     public AiDotNet.Interfaces.ILossFunction<double> DefaultLossFunction => new MeanSquaredErrorLoss<double>();
-    public Vector<double> ComputeGradients(Tensor<double> input, Tensor<double> target, AiDotNet.Interfaces.ILossFunction<double>? lossFunction = null)
+    public Vector<double> ComputeGradients(Matrix<double> input, Vector<double> target, AiDotNet.Interfaces.ILossFunction<double>? lossFunction = null)
     {
         return new Vector<double>(ParameterCount);
     }

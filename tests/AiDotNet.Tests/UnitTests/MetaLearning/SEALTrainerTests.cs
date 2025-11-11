@@ -30,7 +30,7 @@ public class SEALTrainerTests
             numMetaIterations: 1);
 
         // Act
-        var trainer = new SEALTrainer<double, Tensor<double>, Tensor<double>>(
+        var trainer = new SEALTrainer<double, Matrix<double>, Vector<double>>(
             metaModel: model,
             lossFunction: new MeanSquaredErrorLoss<double>(),
             selfSupervisedLoss: selfSupervisedLoss,
@@ -50,7 +50,7 @@ public class SEALTrainerTests
 
         // Act & Assert
         Assert.Throws<ArgumentNullException>(() =>
-            new SEALTrainer<double, Tensor<double>, Tensor<double>>(
+            new SEALTrainer<double, Matrix<double>, Vector<double>>(
                 metaModel: model,
                 lossFunction: new MeanSquaredErrorLoss<double>(),
                 selfSupervisedLoss: null,
@@ -72,7 +72,7 @@ public class SEALTrainerTests
             metaBatchSize: 2,
             numMetaIterations: 1);
 
-        var trainer = new SEALTrainer<double, Tensor<double>, Tensor<double>>(
+        var trainer = new SEALTrainer<double, Matrix<double>, Vector<double>>(
             metaModel: model,
             lossFunction: new MeanSquaredErrorLoss<double>(),
             selfSupervisedLoss: selfSupervisedLoss,
@@ -97,7 +97,7 @@ public class SEALTrainerTests
         var (dataLoader, model, selfSupervisedLoss) = CreateTestSetup();
         var initialParams = model.GetParameters().Clone();
 
-        var trainer = new SEALTrainer<double, Tensor<double>, Tensor<double>>(
+        var trainer = new SEALTrainer<double, Matrix<double>, Vector<double>>(
             metaModel: model,
             lossFunction: new MeanSquaredErrorLoss<double>(),
             selfSupervisedLoss: selfSupervisedLoss,
@@ -126,7 +126,7 @@ public class SEALTrainerTests
     {
         // Arrange
         var (dataLoader, model, selfSupervisedLoss) = CreateTestSetup();
-        var trainer = new SEALTrainer<double, Tensor<double>, Tensor<double>>(
+        var trainer = new SEALTrainer<double, Matrix<double>, Vector<double>>(
             metaModel: model,
             lossFunction: new MeanSquaredErrorLoss<double>(),
             selfSupervisedLoss: selfSupervisedLoss,
@@ -143,7 +143,7 @@ public class SEALTrainerTests
     {
         // Arrange
         var (dataLoader, model, selfSupervisedLoss) = CreateTestSetup();
-        var trainer = new SEALTrainer<double, Tensor<double>, Tensor<double>>(
+        var trainer = new SEALTrainer<double, Matrix<double>, Vector<double>>(
             metaModel: model,
             lossFunction: new MeanSquaredErrorLoss<double>(),
             selfSupervisedLoss: selfSupervisedLoss,
@@ -174,7 +174,7 @@ public class SEALTrainerTests
             metaBatchSize: 2,
             numMetaIterations: 5);  // Small number for fast test
 
-        var trainer = new SEALTrainer<double, Tensor<double>, Tensor<double>>(
+        var trainer = new SEALTrainer<double, Matrix<double>, Vector<double>>(
             metaModel: model,
             lossFunction: new MeanSquaredErrorLoss<double>(),
             selfSupervisedLoss: selfSupervisedLoss,
@@ -194,15 +194,15 @@ public class SEALTrainerTests
     /// <summary>
     /// Creates test setup with mock components.
     /// </summary>
-    private (IEpisodicDataLoader<double, Tensor<double>, Tensor<double>> dataLoader,
-             IFullModel<double, Tensor<double>, Tensor<double>> model,
+    private (IEpisodicDataLoader<double, Matrix<double>, Vector<double>> dataLoader,
+             IFullModel<double, Matrix<double>, Vector<double>> model,
              ISelfSupervisedLoss<double> selfSupervisedLoss) CreateTestSetup()
     {
         // Create dataset: 10 classes, 20 examples per class
         var (datasetX, datasetY) = CreateTestDataset(numClasses: 10, examplesPerClass: 20, imageSize: 28);
 
         // Create data loader for 5-way 5-shot tasks with 15 query examples
-        var dataLoader = new UniformEpisodicDataLoader<double, Tensor<double>, Tensor<double>>(
+        var dataLoader = new UniformEpisodicDataLoader<double, Matrix<double>, Vector<double>>(
             datasetX: datasetX,
             datasetY: datasetY,
             nWay: 5,
@@ -221,13 +221,14 @@ public class SEALTrainerTests
     /// <summary>
     /// Creates a synthetic dataset for testing.
     /// </summary>
-    private (Tensor<double> X, Tensor<double> Y) CreateTestDataset(int numClasses, int examplesPerClass, int imageSize)
+    private (Matrix<double> X, Vector<double> Y) CreateTestDataset(int numClasses, int examplesPerClass, int imageSize)
     {
         int totalExamples = numClasses * examplesPerClass;
+        int flattenedSize = imageSize * imageSize;
 
-        // Create images: [N, H, W, C] with C=1 for grayscale
-        var datasetX = new Tensor<double>(new[] { totalExamples, imageSize, imageSize, 1 });
-        var datasetY = new Tensor<double>(new[] { totalExamples, numClasses });
+        // Create flattened images: [N, H*W]
+        var datasetX = new Matrix<double>(totalExamples, flattenedSize);
+        var datasetY = new Vector<double>(totalExamples);
 
         var random = new Random(42);
 
@@ -245,15 +246,15 @@ public class SEALTrainerTests
                         double value = Math.Sin((i + classIdx) * 0.3) * Math.Cos((j + classIdx) * 0.3);
                         value = (value + 1.0) / 2.0;  // Normalize to [0, 1]
                         value += random.NextDouble() * 0.1;  // Add noise
-                        datasetX[idx, i, j, 0] = value;
+
+                        // Flatten 2D image to 1D
+                        int flatIdx = i * imageSize + j;
+                        datasetX[idx, flatIdx] = value;
                     }
                 }
 
-                // One-hot label
-                for (int k = 0; k < numClasses; k++)
-                {
-                    datasetY[idx, k] = (k == classIdx) ? 1.0 : 0.0;
-                }
+                // Class label (integer)
+                datasetY[idx] = classIdx;
             }
         }
 
@@ -264,7 +265,7 @@ public class SEALTrainerTests
 /// <summary>
 /// Mock model that produces predictions with varying confidence for SEAL testing.
 /// </summary>
-internal class SEALMockModel : IFullModel<double, Tensor<double>, Tensor<double>>
+internal class SEALMockModel : IFullModel<double, Matrix<double>, Vector<double>>
 {
     private Vector<double> _parameters;
     private Random _random = new Random(42);
@@ -295,14 +296,14 @@ internal class SEALMockModel : IFullModel<double, Tensor<double>, Tensor<double>
 
     public int ParameterCount => _parameters.Length;
 
-    public IFullModel<double, Tensor<double>, Tensor<double>> WithParameters(Vector<double> parameters)
+    public IFullModel<double, Matrix<double>, Vector<double>> WithParameters(Vector<double> parameters)
     {
         var newModel = new SEALMockModel(_parameters.Length);
         newModel.SetParameters(parameters);
         return newModel;
     }
 
-    public void Train(Tensor<double> input, Tensor<double> expectedOutput)
+    public void Train(Matrix<double> input, Vector<double> expectedOutput)
     {
         TrainCallCount++;
         // Simple update: add a small value to each parameter
@@ -312,16 +313,16 @@ internal class SEALMockModel : IFullModel<double, Tensor<double>, Tensor<double>
         }
     }
 
-    public Tensor<double> Predict(Tensor<double> input)
+    public Vector<double> Predict(Matrix<double> input)
     {
         PredictCallCount++;
 
-        // Return predictions with varying confidence (softmax-like distribution)
-        int numExamples = input.Shape[0];
+        // Return class predictions
+        int numExamples = input.Rows;
         // Assume 5-way classification based on typical 5-way 5-shot setup
         int numClasses = 5;
 
-        var predictions = new Tensor<double>(new[] { numExamples, numClasses });
+        var predictions = new Vector<double>(numExamples);
 
         for (int i = 0; i < numExamples; i++)
         {
@@ -342,11 +343,9 @@ internal class SEALMockModel : IFullModel<double, Tensor<double>, Tensor<double>
                 }
             }
 
-            // Copy to tensor
-            for (int j = 0; j < numClasses; j++)
-            {
-                predictions[i, j] = probs[j];
-            }
+            // Return argmax
+            double maxProb = probs[predictedClass];
+            predictions[i] = predictedClass;
         }
 
         return predictions;
@@ -357,13 +356,13 @@ internal class SEALMockModel : IFullModel<double, Tensor<double>, Tensor<double>
     public void LoadModel(string filePath) { }
     public byte[] Serialize() => Array.Empty<byte>();
     public void Deserialize(byte[] data) { }
-    public IFullModel<double, Tensor<double>, Tensor<double>> DeepCopy()
+    public IFullModel<double, Matrix<double>, Vector<double>> DeepCopy()
     {
         var copy = new SEALMockModel(_parameters.Length);
         copy.SetParameters(_parameters);
         return copy;
     }
-    public IFullModel<double, Tensor<double>, Tensor<double>> Clone() => DeepCopy();
+    public IFullModel<double, Matrix<double>, Vector<double>> Clone() => DeepCopy();
     public int InputFeatureCount => 784;  // 28x28 image
     public int OutputFeatureCount => 5;   // 5-way classification
     public string[] FeatureNames { get; set; } = Array.Empty<string>();
@@ -372,7 +371,7 @@ internal class SEALMockModel : IFullModel<double, Tensor<double>, Tensor<double>
     public bool IsFeatureUsed(int featureIndex) => featureIndex >= 0 && featureIndex < InputFeatureCount;
     public Dictionary<string, double> GetFeatureImportance() => new Dictionary<string, double>();
     public ILossFunction<double> DefaultLossFunction => new MeanSquaredErrorLoss<double>();
-    public Vector<double> ComputeGradients(Tensor<double> input, Tensor<double> target, ILossFunction<double>? lossFunction = null)
+    public Vector<double> ComputeGradients(Matrix<double> input, Vector<double> target, ILossFunction<double>? lossFunction = null)
     {
         return new Vector<double>(ParameterCount);
     }
