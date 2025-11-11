@@ -304,6 +304,74 @@ public class KnowledgeDistillationOptions<TInput, TOutput, T>
     public int SelfDistillationGenerations { get; set; } = 1;
 
     /// <summary>
+    /// Gets or sets whether to enable early stopping based on validation loss.
+    /// </summary>
+    /// <remarks>
+    /// <para><b>For Production:</b> Stops training when validation loss stops improving.
+    /// Prevents overfitting and saves compute time.</para>
+    /// </remarks>
+    public bool UseEarlyStopping { get; set; } = true;
+
+    /// <summary>
+    /// Gets or sets patience for early stopping (epochs without improvement).
+    /// </summary>
+    /// <remarks>
+    /// <para>Typical values: 3-10. Higher patience allows more time for improvement.</para>
+    /// </remarks>
+    public int EarlyStoppingPatience { get; set; } = 5;
+
+    /// <summary>
+    /// Gets or sets minimum improvement delta for early stopping.
+    /// </summary>
+    /// <remarks>
+    /// <para>Loss must improve by at least this amount to count as improvement.
+    /// Typical values: 0.001-0.01</para>
+    /// </remarks>
+    public double EarlyStoppingMinDelta { get; set; } = 0.001;
+
+    /// <summary>
+    /// Gets or sets whether to save checkpoints during training.
+    /// </summary>
+    /// <remarks>
+    /// <para><b>For Production:</b> Saves best model automatically.
+    /// Essential for long-running training and recovery from failures.</para>
+    /// </remarks>
+    public bool SaveCheckpoints { get; set; } = false;
+
+    /// <summary>
+    /// Gets or sets checkpoint directory path (if checkpoints are enabled).
+    /// </summary>
+    /// <remarks>
+    /// <para>If null, uses "./checkpoints" by default.</para>
+    /// </remarks>
+    public string? CheckpointDirectory { get; set; }
+
+    /// <summary>
+    /// Gets or sets checkpoint frequency (save every N epochs).
+    /// </summary>
+    /// <remarks>
+    /// <para>Set to 1 to save after every epoch. Higher values save less frequently.</para>
+    /// </remarks>
+    public int CheckpointFrequency { get; set; } = 1;
+
+    /// <summary>
+    /// Gets or sets whether to only save the best model checkpoint.
+    /// </summary>
+    /// <remarks>
+    /// <para>If true, only keeps the checkpoint with best validation loss.
+    /// If false, keeps all checkpoints.</para>
+    /// </remarks>
+    public bool SaveOnlyBestCheckpoint { get; set; } = true;
+
+    /// <summary>
+    /// Gets or sets output dimension for models (if not inferrable from teacher).
+    /// </summary>
+    /// <remarks>
+    /// <para>Usually inferred automatically. Set manually if needed.</para>
+    /// </remarks>
+    public int? OutputDimension { get; set; }
+
+    /// <summary>
     /// Validates the options and throws if any are invalid.
     /// </summary>
     public void Validate()
