@@ -14,8 +14,8 @@ public class ContextFlow<T> : IContextFlow<T>
 {
     private readonly int _numLevels;
     private readonly int _contextDimension;
-    private Vector<T>[] _contextStates;
-    private Matrix<T>[] _transformationMatrices;
+    private readonly Vector<T>[] _contextStates;
+    private readonly Matrix<T>[] _transformationMatrices;
     private Matrix<T>[] _compressionMatrices;
     private static readonly INumericOperations<T> _numOps = MathHelper.GetNumericOperations<T>();
 
