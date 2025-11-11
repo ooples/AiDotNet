@@ -343,8 +343,8 @@ public class ContrastiveDistillationStrategy<T> : DistillationStrategyBase<T, Ve
             // Positive: corresponding teacher embedding
             double positiveSim = CosineSimilarity(studentEmbs[i], teacherEmbs[i]) / Temperature;
 
-            // Denominator: all pairs
-            double denominator = 0;
+            // Denominator: sum over ALL pairs (including positive)
+            double denominator = Math.Exp(positiveSim); // Include positive pair
             for (int j = 0; j < batchSize; j++)
             {
                 if (i != j)
@@ -354,6 +354,7 @@ public class ContrastiveDistillationStrategy<T> : DistillationStrategyBase<T, Ve
                 }
             }
 
+            // NT-Xent: -log(exp(pos)/sum_all) = -pos + log(sum_all)
             double loss = -positiveSim + Math.Log(denominator + Epsilon);
             totalLoss = NumOps.Add(totalLoss, NumOps.FromDouble(loss));
         }
