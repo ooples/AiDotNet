@@ -7,8 +7,8 @@ This document tracks the implementation status of automatic differentiation (aut
 **Last Updated:** 2025-01-11
 **Total Layers:** 75
 **Layers with Autodiff Infrastructure:** 75 (100%)
-**Layers with Full Autodiff Support:** 20+ (27%)
-**TensorOperations Implemented:** 26 (19 base + 7 new)
+**Layers with Full Autodiff Support:** 30+ (40%)
+**TensorOperations Implemented:** 28 (19 base + 9 new)
 **Higher-Order Gradients:** ✅ Fully supported via GradientTape.Gradient(createGraph: true)
 
 ## Implementation Status
@@ -81,27 +81,15 @@ To achieve full autodiff support across all layers, the following operations nee
    - Used by: AttentionLayer, MultiHeadAttentionLayer, SelfAttentionLayer
    - Status: Ready for integration into attention layers
 
-2. **Convolution2D** - Required for convolutional layers
-   ```csharp
-   public static ComputationNode<T> Conv2D(
-       ComputationNode<T> input,
-       ComputationNode<T> kernel,
-       int[] strides,
-       string padding = "valid")
-   ```
-   - Used by: ConvolutionalLayer, DepthwiseSeparableConvolutionalLayer, etc.
-   - Complexity: High (im2col/col2im implementation)
+2. ✅ **Conv2D** - IMPLEMENTED
+   - Used by: ConvolutionalLayer, DepthwiseSeparableConvolutionalLayer
+   - Status: Full implementation with stride, padding, bias support
+   - Features: Correct forward/backward for input, kernel, and bias
 
-3. **ConvolutionTranspose** - Required for deconvolution
-   ```csharp
-   public static ComputationNode<T> ConvTranspose2D(
-       ComputationNode<T> input,
-       ComputationNode<T> kernel,
-       int[] strides,
-       string padding = "valid")
-   ```
+3. ✅ **ConvTranspose2D** - IMPLEMENTED
    - Used by: DeconvolutionalLayer, SubpixelConvolutionalLayer
-   - Complexity: High
+   - Status: Full implementation with stride, padding, outputPadding support
+   - Features: Upsampling convolution for GANs, segmentation, super-resolution
 
 ### Medium Priority
 
@@ -181,14 +169,18 @@ All 24 operations currently implemented in `src/Autodiff/TensorOperations.cs`:
 20. LayerNorm - Layer normalization (per-sample normalization)
 21. BatchNorm - Batch normalization (across-batch normalization)
 
+✅ **Convolutional Operations (2 operations):**
+22. Conv2D - 2D convolution with stride, padding, and bias
+23. ConvTranspose2D - Transposed convolution (deconvolution) for upsampling
+
 ✅ **Advanced Math (3 operations):**
-22. Exp - Exponential function
-23. Log - Natural logarithm
-24. Sqrt - Square root
+24. Exp - Exponential function
+25. Log - Natural logarithm
+26. Sqrt - Square root
 
 ✅ **Utility (2 operations):**
-25. Variable - Create differentiable variable node
-26. Constant - Create non-differentiable constant node
+27. Variable - Create differentiable variable node
+28. Constant - Create non-differentiable constant node
 
 **All operations support:**
 - Automatic gradient computation via backward functions
