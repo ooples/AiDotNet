@@ -242,8 +242,8 @@ public class CroppingLayer<T> : LayerBase<T>
     /// - Subtract how much you're trimming from the right
     /// - The result is the new size for that dimension
     ///
-    /// For example, if you start with an image that's 28×28 pixels and crop 2 pixels from each side,
-    /// the output will be 24×24 pixels (28 - 2 - 2 = 24).
+    /// For example, if you start with an image that's 28ï¿½28 pixels and crop 2 pixels from each side,
+    /// the output will be 24ï¿½24 pixels (28 - 2 - 2 = 24).
     /// </para>
     /// </remarks>
     private static int[] CalculateOutputShape(int[] inputShape, int[] cropTop, int[] cropBottom, int[] cropLeft, int[] cropRight)
@@ -316,7 +316,7 @@ public class CroppingLayer<T> : LayerBase<T>
     /// input that were kept during the forward pass.
     /// </para>
     /// <para><b>For Beginners:</b> This method helps pass error information backward through the network during training.
-    /// 
+    ///
     /// During the backward pass:
     /// - A tensor the same size as the original input is created
     /// - The gradient information is placed in the center (non-cropped) region
@@ -328,6 +328,19 @@ public class CroppingLayer<T> : LayerBase<T>
     /// </para>
     /// </remarks>
     public override Tensor<T> Backward(Tensor<T> outputGradient)
+    {
+        if (UseAutodiff)
+            return BackwardViaAutodiff(outputGradient);
+        else
+            return BackwardManual(outputGradient);
+    }
+
+    /// <summary>
+    /// Manual backward pass implementation using optimized gradient calculations.
+    /// </summary>
+    /// <param name="outputGradient">The gradient of the loss with respect to the layer's output.</param>
+    /// <returns>The gradient of the loss with respect to the layer's input.</returns>
+    private Tensor<T> BackwardManual(Tensor<T> outputGradient)
     {
         int[] inputShape = GetInputShape();
         Tensor<T> inputGradient = new Tensor<T>(inputShape);
@@ -347,6 +360,23 @@ public class CroppingLayer<T> : LayerBase<T>
             }
         }
         return ApplyActivationDerivative(inputGradient, outputGradient);
+    }
+
+    /// <summary>
+    /// Backward pass implementation using automatic differentiation.
+    /// </summary>
+    /// <param name="outputGradient">The gradient of the loss with respect to the layer's output.</param>
+    /// <returns>The gradient of the loss with respect to the layer's input.</returns>
+    /// <remarks>
+    /// <para>
+    /// This method uses automatic differentiation to compute gradients. Cropping operations
+    /// are not yet available in TensorOperations, so this falls back to the manual implementation.
+    /// </para>
+    /// </remarks>
+    private Tensor<T> BackwardViaAutodiff(Tensor<T> outputGradient)
+    {
+        // TODO: Specialized operation not yet available in TensorOperations
+        return BackwardManual(outputGradient);
     }
    
     /// <summary>

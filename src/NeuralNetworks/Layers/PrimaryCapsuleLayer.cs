@@ -19,7 +19,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
 /// 
 /// Think of it like this:
 /// - Standard neurons: "I see a nose with 90% confidence"
-/// - Capsule neurons: "I see a nose with 90% confidence, and it's pointing 30° to the left, 
+/// - Capsule neurons: "I see a nose with 90% confidence, and it's pointing 30Â° to the left, 
 ///   it's 2cm long, it has a slightly curved shape..."
 /// 
 /// The primary capsule layer converts traditional feature maps (from convolutional layers)
@@ -170,7 +170,7 @@ public class PrimaryCapsuleLayer<T> : LayerBase<T>
     /// - inputChannels: How many channels your input has (e.g., 3 for RGB images, or more if from a conv layer)
     /// - capsuleChannels: How many different types of capsules to create
     /// - capsuleDimension: How many values in each capsule's output vector
-    /// - kernelSize: The size of the area examined by the convolution (e.g., 3 for a 3×3 kernel)
+    /// - kernelSize: The size of the area examined by the convolution (e.g., 3 for a 3Ã—3 kernel)
     /// - stride: How far to move the kernel each step
     /// - scalarActivation: The function applied to each scalar value (defaults to Squash)
     /// 
@@ -357,7 +357,7 @@ public class PrimaryCapsuleLayer<T> : LayerBase<T>
     /// <remarks>
     /// <para>
     /// This method extracts a square patch from the input tensor at the specified location and flattens
-    /// it into a vector for use in the convolution operation. The patch has dimensions _kernelSize × _kernelSize
+    /// it into a vector for use in the convolution operation. The patch has dimensions _kernelSize Ã— _kernelSize
     /// and includes all input channels.
     /// </para>
     /// <para><b>For Beginners:</b> This method extracts a small square region from the input for processing.
@@ -368,12 +368,12 @@ public class PrimaryCapsuleLayer<T> : LayerBase<T>
     /// 
     /// This method:
     /// - Takes coordinates that specify where to start (startX, startY)
-    /// - Extracts a square patch of size _kernelSize × _kernelSize
+    /// - Extracts a square patch of size _kernelSize Ã— _kernelSize
     /// - Includes all channels from the input for that patch
     /// - Flattens this 3D patch into a 1D vector for easier processing
     /// 
-    /// For example, with a 3×3 kernel and 3 input channels, this would extract
-    /// a 3×3×3 patch (27 values) and arrange them into a single vector.
+    /// For example, with a 3Ã—3 kernel and 3 input channels, this would extract
+    /// a 3Ã—3Ã—3 patch (27 values) and arrange them into a single vector.
     /// </para>
     /// </remarks>
     private Vector<T> ExtractPatch(Tensor<T> input, int batch, int startY, int startX)
@@ -427,6 +427,19 @@ public class PrimaryCapsuleLayer<T> : LayerBase<T>
     /// </para>
     /// </remarks>
     public override Tensor<T> Backward(Tensor<T> outputGradient)
+    {
+        if (UseAutodiff)
+            return BackwardViaAutodiff(outputGradient);
+        else
+            return BackwardManual(outputGradient);
+    }
+
+    /// <summary>
+    /// Manual backward pass implementation using optimized gradient calculations.
+    /// </summary>
+    /// <param name="outputGradient">The gradient of the loss with respect to the layer's output.</param>
+    /// <returns>The gradient of the loss with respect to the layer's input.</returns>
+    private Tensor<T> BackwardManual(Tensor<T> outputGradient)
     {
         if (_lastInput == null || _lastOutput == null)
             throw new InvalidOperationException("Forward pass must be called before backward pass.");
@@ -485,6 +498,24 @@ public class PrimaryCapsuleLayer<T> : LayerBase<T>
 
         return inputGradient;
     }
+
+    /// <summary>
+    /// Backward pass implementation using automatic differentiation.
+    /// </summary>
+    /// <param name="outputGradient">The gradient of the loss with respect to the layer's output.</param>
+    /// <returns>The gradient of the loss with respect to the layer's input.</returns>
+    /// <remarks>
+    /// <para>
+    /// This method uses automatic differentiation to compute gradients. Specialized operations
+    /// are not yet available in TensorOperations, so this falls back to the manual implementation.
+    /// </para>
+    /// </remarks>
+    private Tensor<T> BackwardViaAutodiff(Tensor<T> outputGradient)
+    {
+        // TODO: Specialized operation not yet available in TensorOperations
+        return BackwardManual(outputGradient);
+    }
+
 
     /// <summary>
     /// Updates the parameters of the primary capsule layer using the calculated gradients.

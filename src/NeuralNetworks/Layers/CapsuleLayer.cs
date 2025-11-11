@@ -518,7 +518,7 @@ public class CapsuleLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     /// parameters (transformation matrix and bias) and the layer's input. The gradients are stored internally and
     /// used during the parameter update step.
     /// </para>
-    /// <para><b>For Beginners:</b> This method is used during training to calculate how the layer's inputs 
+    /// <para><b>For Beginners:</b> This method is used during training to calculate how the layer's inputs
     /// and parameters should change to reduce errors.
     ///
     /// The backward pass:
@@ -526,18 +526,31 @@ public class CapsuleLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     /// 2. Applies the derivative of the activation function
     /// 3. Calculates how much each parameter (transformation matrix and bias) contributed to the error
     /// 4. Calculates how the input contributed to the error, to pass gradients to the previous layer
-    /// 
+    ///
     /// During this process, the method:
     /// - Creates gradient tensors for the transformation matrix and bias
     /// - Uses the coupling coefficients (connection strengths) calculated during the forward pass
     /// - Produces gradients that will be used to update the parameters
-    /// 
+    ///
     /// This is part of the "backpropagation" algorithm that helps neural networks learn.
     /// The error flows backward through the network, and each layer determines how it
     /// should change to reduce that error.
     /// </para>
     /// </remarks>
     public override Tensor<T> Backward(Tensor<T> outputGradient)
+    {
+        if (UseAutodiff)
+            return BackwardViaAutodiff(outputGradient);
+        else
+            return BackwardManual(outputGradient);
+    }
+
+    /// <summary>
+    /// Manual backward pass implementation using optimized gradient calculations.
+    /// </summary>
+    /// <param name="outputGradient">The gradient of the loss with respect to the layer's output.</param>
+    /// <returns>The gradient of the loss with respect to the layer's input.</returns>
+    private Tensor<T> BackwardManual(Tensor<T> outputGradient)
     {
         if (_lastInput == null || _lastOutput == null || _lastCouplingCoefficients == null)
             throw new InvalidOperationException("Forward pass must be called before backward pass.");
@@ -573,11 +586,11 @@ public class CapsuleLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
                         {
                             T input = _lastInput[b, i, k];
                             _transformationMatrixGradient[i, k, j, d] = NumOps.Add(
-                                _transformationMatrixGradient[i, k, j, d], 
+                                _transformationMatrixGradient[i, k, j, d],
                                 NumOps.Multiply(NumOps.Multiply(grad, coeff), input)
                             );
                             inputGradient[b, i, k] = NumOps.Add(
-                                inputGradient[b, i, k], 
+                                inputGradient[b, i, k],
                                 NumOps.Multiply(NumOps.Multiply(grad, coeff), _transformationMatrix[i, k, j, d])
                             );
                         }
@@ -587,6 +600,23 @@ public class CapsuleLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         }
 
         return inputGradient;
+    }
+
+    /// <summary>
+    /// Backward pass implementation using automatic differentiation.
+    /// </summary>
+    /// <param name="outputGradient">The gradient of the loss with respect to the layer's output.</param>
+    /// <returns>The gradient of the loss with respect to the layer's input.</returns>
+    /// <remarks>
+    /// <para>
+    /// This method uses automatic differentiation to compute gradients. Dynamic routing and capsule-specific
+    /// operations are not yet available in TensorOperations, so this falls back to the manual implementation.
+    /// </para>
+    /// </remarks>
+    private Tensor<T> BackwardViaAutodiff(Tensor<T> outputGradient)
+    {
+        // TODO: Specialized operation not yet available in TensorOperations
+        return BackwardManual(outputGradient);
     }
 
     /// <summary>

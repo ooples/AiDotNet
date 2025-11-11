@@ -18,7 +18,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
 /// - It remembers how it generated these samples so it can learn during training
 /// 
 /// For example, in a VAE generating faces:
-/// - Input might represent "average nose size is 5 with variation of ±2"
+/// - Input might represent "average nose size is 5 with variation of Â±2"
 /// - This layer randomly picks a specific nose size (like 6.3) based on those statistics
 /// - But it does this in a way that allows the network to learn better statistics
 /// 
@@ -206,6 +206,19 @@ public class RepParameterizationLayer<T> : LayerBase<T>
     /// </remarks>
     public override Tensor<T> Backward(Tensor<T> outputGradient)
     {
+        if (UseAutodiff)
+            return BackwardViaAutodiff(outputGradient);
+        else
+            return BackwardManual(outputGradient);
+    }
+
+    /// <summary>
+    /// Manual backward pass implementation using optimized gradient calculations.
+    /// </summary>
+    /// <param name="outputGradient">The gradient of the loss with respect to the layer's output.</param>
+    /// <returns>The gradient of the loss with respect to the layer's input.</returns>
+    private Tensor<T> BackwardManual(Tensor<T> outputGradient)
+    {
         if (_lastMean == null || _lastLogVar == null || _lastEpsilon == null)
             throw new InvalidOperationException("Forward pass must be called before backward pass.");
         int batchSize = outputGradient.Shape[0];
@@ -229,6 +242,24 @@ public class RepParameterizationLayer<T> : LayerBase<T>
         }
         return inputGradient;
     }
+
+    /// <summary>
+    /// Backward pass implementation using automatic differentiation.
+    /// </summary>
+    /// <param name="outputGradient">The gradient of the loss with respect to the layer's output.</param>
+    /// <returns>The gradient of the loss with respect to the layer's input.</returns>
+    /// <remarks>
+    /// <para>
+    /// This method uses automatic differentiation to compute gradients. Specialized operations
+    /// are not yet available in TensorOperations, so this falls back to the manual implementation.
+    /// </para>
+    /// </remarks>
+    private Tensor<T> BackwardViaAutodiff(Tensor<T> outputGradient)
+    {
+        // TODO: Specialized operation not yet available in TensorOperations
+        return BackwardManual(outputGradient);
+    }
+
 
     /// <summary>
     /// Updates the parameters of the reparameterization layer.

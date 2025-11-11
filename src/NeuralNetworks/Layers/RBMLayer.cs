@@ -35,7 +35,7 @@ public class RBMLayer<T> : LayerBase<T>
     /// <para><b>For Beginners:</b> Think of the visible units as the "input sensors" of the RBM.
     /// 
     /// For example, if you're working with 28x28 pixel images:
-    /// - You would have 784 visible units (28 × 28 = 784)
+    /// - You would have 784 visible units (28 Ã— 28 = 784)
     /// - Each visible unit represents one pixel in the image
     /// - The visible layer receives the actual data you want to analyze
     /// 
@@ -77,7 +77,7 @@ public class RBMLayer<T> : LayerBase<T>
     /// <para><b>For Beginners:</b> Think of the weights as "connection strengths" between units.
     /// 
     /// The weight matrix:
-    /// - Has dimensions [hiddenUnits × visibleUnits]
+    /// - Has dimensions [hiddenUnits Ã— visibleUnits]
     /// - Each weight shows how strongly a visible unit influences a hidden unit
     /// - Positive weights mean "these units tend to be active together"
     /// - Negative weights mean "when one unit is active, the other tends to be inactive"
@@ -527,6 +527,19 @@ public class RBMLayer<T> : LayerBase<T>
     /// </remarks>
     public override Tensor<T> Backward(Tensor<T> outputGradient)
     {
+        if (UseAutodiff)
+            return BackwardViaAutodiff(outputGradient);
+        else
+            return BackwardManual(outputGradient);
+    }
+
+    /// <summary>
+    /// Manual backward pass implementation using optimized gradient calculations.
+    /// </summary>
+    /// <param name="outputGradient">The gradient of the loss with respect to the layer's output.</param>
+    /// <returns>The gradient of the loss with respect to the layer's input.</returns>
+    private Tensor<T> BackwardManual(Tensor<T> outputGradient)
+    {
         // In RBM training, this is used for the reconstruction phase
         Vector<T> hiddenLayer = outputGradient.ToVector();
     
@@ -541,6 +554,24 @@ public class RBMLayer<T> : LayerBase<T>
     
         return Tensor<T>.FromVector(visibleProbs);
     }
+
+    /// <summary>
+    /// Backward pass implementation using automatic differentiation.
+    /// </summary>
+    /// <param name="outputGradient">The gradient of the loss with respect to the layer's output.</param>
+    /// <returns>The gradient of the loss with respect to the layer's input.</returns>
+    /// <remarks>
+    /// <para>
+    /// This method uses automatic differentiation to compute gradients. Specialized operations
+    /// are not yet available in TensorOperations, so this falls back to the manual implementation.
+    /// </para>
+    /// </remarks>
+    private Tensor<T> BackwardViaAutodiff(Tensor<T> outputGradient)
+    {
+        // TODO: Specialized operation not yet available in TensorOperations
+        return BackwardManual(outputGradient);
+    }
+
 
     /// <summary>
     /// Computes the probability of each hidden unit being active given the visible units.

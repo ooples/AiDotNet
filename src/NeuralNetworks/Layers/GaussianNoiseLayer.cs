@@ -69,8 +69,8 @@ public class GaussianNoiseLayer<T> : LayerBase<T>
     /// - Smaller values create milder noise (less regularization)
     /// 
     /// For example:
-    /// - Standard deviation = 0.1: Noise typically varies by about ±10% of the data range
-    /// - Standard deviation = 0.5: Noise typically varies by about ±50% of the data range
+    /// - Standard deviation = 0.1: Noise typically varies by about Â±10% of the data range
+    /// - Standard deviation = 0.5: Noise typically varies by about Â±50% of the data range
     /// 
     /// Finding the right amount of noise is important:
     /// - Too much noise can prevent learning
@@ -147,10 +147,10 @@ public class GaussianNoiseLayer<T> : LayerBase<T>
     /// 
     /// For example:
     /// ```csharp
-    /// // Add mild noise to 28×28 grayscale images
+    /// // Add mild noise to 28Ã—28 grayscale images
     /// var noiseLayer = new GaussianNoiseLayer<float>(new int[] { 28, 28, 1 }, 0.1);
     /// 
-    /// // Add stronger noise to 32×32 color images
+    /// // Add stronger noise to 32Ã—32 color images
     /// var strongerNoise = new GaussianNoiseLayer<float>(new int[] { 32, 32, 3 }, 0.3);
     /// ```
     /// 
@@ -237,9 +237,40 @@ public class GaussianNoiseLayer<T> : LayerBase<T>
     /// </remarks>
     public override Tensor<T> Backward(Tensor<T> outputGradient)
     {
+        if (UseAutodiff)
+            return BackwardViaAutodiff(outputGradient);
+        else
+            return BackwardManual(outputGradient);
+    }
+
+    /// <summary>
+    /// Manual backward pass implementation using optimized gradient calculations.
+    /// </summary>
+    /// <param name="outputGradient">The gradient of the loss with respect to the layer's output.</param>
+    /// <returns>The gradient of the loss with respect to the layer's input.</returns>
+    private Tensor<T> BackwardManual(Tensor<T> outputGradient)
+    {
         // The gradient flows through unchanged
         return outputGradient;
     }
+
+    /// <summary>
+    /// Backward pass implementation using automatic differentiation.
+    /// </summary>
+    /// <param name="outputGradient">The gradient of the loss with respect to the layer's output.</param>
+    /// <returns>The gradient of the loss with respect to the layer's input.</returns>
+    /// <remarks>
+    /// <para>
+    /// This method uses automatic differentiation to compute gradients. Specialized operations
+    /// are not yet available in TensorOperations, so this falls back to the manual implementation.
+    /// </para>
+    /// </remarks>
+    private Tensor<T> BackwardViaAutodiff(Tensor<T> outputGradient)
+    {
+        // TODO: Specialized operation not yet available in TensorOperations
+        return BackwardManual(outputGradient);
+    }
+
 
     /// <summary>
     /// Generates a tensor of random Gaussian noise with the specified shape.
