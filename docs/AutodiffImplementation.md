@@ -7,8 +7,8 @@ This document tracks the implementation status of automatic differentiation (aut
 **Last Updated:** 2025-01-11
 **Total Layers:** 75
 **Layers with Autodiff Infrastructure:** 75 (100%)
-**Layers with Full Autodiff Support:** 22 core layers (29%)
-**TensorOperations Implemented:** 36 (19 base + 17 new: Conv2D, ConvTranspose2D, MaxPool2D, AvgPool2D, Softmax, Concat, Pad, LayerNorm, BatchNorm, ReduceMax, ReduceMean, Split, Crop, Upsample, PixelShuffle, DilatedConv2D, DepthwiseConv2D)
+**Layers with Full Autodiff Support:** 23 core layers (31%)
+**TensorOperations Implemented:** 37 (19 base + 18 new: Conv2D, ConvTranspose2D, MaxPool2D, AvgPool2D, Softmax, Concat, Pad, LayerNorm, BatchNorm, ReduceMax, ReduceMean, Split, Crop, Upsample, PixelShuffle, DilatedConv2D, DepthwiseConv2D, LocallyConnectedConv2D)
 **Higher-Order Gradients:** ✅ Fully supported via GradientTape.Gradient(createGraph: true)
 **Graph Caching Optimization:** ✅ Automatic for persistent tapes
 
@@ -40,6 +40,7 @@ These layers have complete autodiff support using TensorOperations:
 20. **SplitLayer** - Reshape operation for tensor splitting
 21. **DilatedConvolutionalLayer** - DilatedConv2D operation with dilation support
 22. **SeparableConvolutionalLayer** - DepthwiseConv2D + Conv2D composition
+23. **LocallyConnectedLayer** - LocallyConnectedConv2D operation with position-specific weights
 
 ### 🔄 Partial Implementation (Infrastructure Ready)
 

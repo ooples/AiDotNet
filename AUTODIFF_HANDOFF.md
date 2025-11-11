@@ -6,11 +6,11 @@
 
 ### Completed Work
 
-**TensorOperations Implemented:** 36 total
+**TensorOperations Implemented:** 37 total
 - Base operations (19): Add, Subtract, Multiply, Divide, MatMul, Transpose, Reshape, ReLU, Sigmoid, Tanh, ElementwiseMultiply, Sum, Mean, Variance, Exp, Log, Pow, Sqrt, Abs
-- Session additions (17): Conv2D, ConvTranspose2D, MaxPool2D, AvgPool2D, Softmax, Concat, Pad, LayerNorm, BatchNorm, ReduceMax, ReduceMean, Split, Crop, Upsample, PixelShuffle, DilatedConv2D, DepthwiseConv2D
+- Session additions (18): Conv2D, ConvTranspose2D, MaxPool2D, AvgPool2D, Softmax, Concat, Pad, LayerNorm, BatchNorm, ReduceMax, ReduceMean, Split, Crop, Upsample, PixelShuffle, DilatedConv2D, DepthwiseConv2D, LocallyConnectedConv2D
 
-**Layers with Full Autodiff:** 22
+**Layers with Full Autodiff:** 23
 1. DenseLayer
 2. ActivationLayer
 3. DropoutLayer
@@ -33,38 +33,15 @@
 20. SplitLayer
 21. DilatedConvolutionalLayer
 22. SeparableConvolutionalLayer
+23. LocallyConnectedLayer
 
-### Remaining Work: 21 Layers
+### Remaining Work: 20 Layers
 
-## HIGH PRIORITY: Production-Ready Layers (4 layers)
+## HIGH PRIORITY: Production-Ready Layers (3 layers)
 
 These layers are commonly used in production and need TensorOperations added:
 
-### 1. LocallyConnectedLayer → LocallyConnectedConv2D operation
-**File:** `src/NeuralNetworks/Layers/LocallyConnectedLayer.cs:???`
-**Operation:** Locally connected (unshared convolution)
-**Implementation Notes:**
-- Like Conv2D but weights are NOT shared across spatial locations
-- Each output position has its own unique set of weights
-- Much larger parameter count than standard conv
-- Forward: Different weights per spatial location
-- Backward: Separate gradients for each location's weights
-
-**Pseudo-code:**
-```csharp
-public static ComputationNode<T> LocallyConnectedConv2D(
-    ComputationNode<T> input,
-    ComputationNode<T> weights,  // [out_h, out_w, out_c, in_c, kH, kW]
-    ComputationNode<T>? bias = null,
-    int[]? stride = null,
-    int[]? padding = null)
-{
-    // Each output spatial location has unique weights
-    // weights is 6D instead of 4D!
-}
-```
-
-### 2. SpatialTransformerLayer → AffineGrid + GridSample operations
+### 1. SpatialTransformerLayer → AffineGrid + GridSample operations
 **File:** `src/NeuralNetworks/Layers/SpatialTransformerLayer.cs:???`
 **Operations:** Two-part operation
 1. **AffineGrid**: Generate sampling grid from affine matrix
@@ -97,7 +74,7 @@ public static ComputationNode<T> GridSample(
 }
 ```
 
-### 3. RBFLayer → RBFKernel operation
+### 2. RBFLayer → RBFKernel operation
 **File:** `src/NeuralNetworks/Layers/RBFLayer.cs:???`
 **Operation:** Radial Basis Function kernel
 **Implementation Notes:**
@@ -118,7 +95,7 @@ public static ComputationNode<T> RBFKernel(
 }
 ```
 
-### 4. LogVarianceLayer → Can use existing Log operation
+### 3. LogVarianceLayer → Can use existing Log operation
 **File:** `src/NeuralNetworks/Layers/LogVarianceLayer.cs:???`
 **Status:** Likely can use existing operations
 **Action Required:** Check if Variance exists, compose with Log
@@ -380,15 +357,12 @@ After completing operations, update:
 
 ## Session Summary
 
-**Previous sessions:** Added Split, Crop, Upsample, PixelShuffle, DilatedConv2D operations and updated SubpixelConvolutionalLayer, UpsamplingLayer, GaussianNoiseLayer, MaskingLayer.
+**Previous sessions:** Added Split, Crop, Upsample, PixelShuffle, DilatedConv2D, DepthwiseConv2D operations and updated SubpixelConvolutionalLayer, UpsamplingLayer, GaussianNoiseLayer, MaskingLayer, DepthwiseSeparableConvolutionalLayer, CroppingLayer, SplitLayer, DilatedConvolutionalLayer, SeparableConvolutionalLayer.
 
-**This session:** Added DepthwiseConv2D operation (250 lines) and updated 5 layers:
-1. DepthwiseSeparableConvolutionalLayer - Uses DepthwiseConv2D + Conv2D
-2. CroppingLayer - Uses Crop operation
-3. SplitLayer - Uses Reshape operation
-4. DilatedConvolutionalLayer - Uses DilatedConv2D operation
-5. SeparableConvolutionalLayer - Composes DepthwiseConv2D + Conv2D
+**This session:** Added LocallyConnectedConv2D operation (240 lines) and updated LocallyConnectedLayer:
+1. LocallyConnectedConv2D - Position-specific convolution with 6D weights
+2. LocallyConnectedLayer - Uses LocallyConnectedConv2D operation
 
-**Current status:** 22 layers with full autodiff (was 17), 36 TensorOperations (was 35), 21 layers remaining.
+**Current status:** 23 layers with full autodiff (was 22), 37 TensorOperations (was 36), 20 layers remaining.
 
-**Priority:** 4 high-priority production layers (LocallyConnected, SpatialTransformer, RBF, LogVariance) followed by 17 specialized research layers as needed.
+**Priority:** 3 high-priority production layers (SpatialTransformer, RBF, LogVariance) followed by 17 specialized research layers as needed.
