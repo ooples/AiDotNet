@@ -882,7 +882,7 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
     /// </example>
     /// <exception cref="NotSupportedException">Thrown when T is not float.</exception>
     /// <exception cref="InvalidOperationException">Thrown when mixed-precision is already enabled.</exception>
-    public virtual void EnableMixedPrecision(MixedPrecisionConfig? config = null)
+    internal virtual void EnableMixedPrecision(MixedPrecisionConfig? config = null)
     {
         // Check that T is float
         if (typeof(T) != typeof(float))
@@ -914,7 +914,7 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
     /// - Switching to FP32 training for the final epochs
     /// </para>
     /// </remarks>
-    public virtual void DisableMixedPrecision()
+    internal virtual void DisableMixedPrecision()
     {
         if (_mixedPrecisionContext != null)
         {
@@ -933,7 +933,7 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
     /// such as the current loss scale and overflow statistics. Useful for monitoring and debugging.
     /// </para>
     /// </remarks>
-    public virtual MixedPrecisionContext? GetMixedPrecisionContext()
+    internal virtual MixedPrecisionContext? GetMixedPrecisionContext()
     {
         return _mixedPrecisionContext;
     }

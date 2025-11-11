@@ -264,7 +264,7 @@ public abstract class GradientBasedOptimizerBase<T, TInput, TOutput> : Optimizer
     /// </example>
     /// <exception cref="NotSupportedException">Thrown when T is not float.</exception>
     /// <exception cref="InvalidOperationException">Thrown when mixed-precision is already enabled.</exception>
-    public virtual void EnableMixedPrecision(MixedPrecisionConfig? config = null)
+    internal virtual void EnableMixedPrecision(MixedPrecisionConfig? config = null)
     {
         // Check that T is float
         if (typeof(T) != typeof(float))
@@ -293,7 +293,7 @@ public abstract class GradientBasedOptimizerBase<T, TInput, TOutput> : Optimizer
     /// standard FP32 operation. Useful for debugging or comparing performance.
     /// </para>
     /// </remarks>
-    public virtual void DisableMixedPrecision()
+    internal virtual void DisableMixedPrecision()
     {
         if (_mixedPrecisionContext != null)
         {
@@ -312,7 +312,7 @@ public abstract class GradientBasedOptimizerBase<T, TInput, TOutput> : Optimizer
     /// such as the current loss scale and overflow statistics. Useful for monitoring and debugging.
     /// </para>
     /// </remarks>
-    public virtual MixedPrecisionContext? GetMixedPrecisionContext()
+    internal virtual MixedPrecisionContext? GetMixedPrecisionContext()
     {
         return _mixedPrecisionContext;
     }
@@ -335,7 +335,7 @@ public abstract class GradientBasedOptimizerBase<T, TInput, TOutput> : Optimizer
     /// 4. Skips the update if overflow is detected
     /// </para>
     /// </remarks>
-    public virtual IFullModel<T, TInput, TOutput> ApplyGradientsWithMixedPrecision(
+    internal virtual IFullModel<T, TInput, TOutput> ApplyGradientsWithMixedPrecision(
         Vector<T> originalParameters,
         Vector<T> gradients,
         IFullModel<T, TInput, TOutput> model)
