@@ -277,17 +277,21 @@ public class SelfDistillationTrainer<T> : KnowledgeDistillationTrainerBase<T, Ve
 /// <summary>
 /// Placeholder teacher model for self-distillation (not actually used for predictions).
 /// </summary>
+/// <remarks>
+/// <para>This placeholder satisfies the ITeacherModel requirement in the base class constructor,
+/// but GetLogits is never called because SelfDistillationTrainer overrides GetTeacherPredictions
+/// to use cached student predictions instead.</para>
+/// </remarks>
 internal class SelfTeacherModelPlaceholder<T> : ITeacherModel<Vector<T>, Vector<T>>
 {
-    public int OutputDimension => 0; // Will be set by actual model
+    /// <summary>
+    /// Returns 0 because the actual output dimension comes from the student model.
+    /// </summary>
+    public int OutputDimension => 0;
 
+    /// <summary>
+    /// Not used - self-distillation uses cached student predictions instead.
+    /// </summary>
     public Vector<T> GetLogits(Vector<T> input) =>
         throw new NotImplementedException("Self-distillation uses cached predictions, not a separate teacher model");
-
-    public Vector<T> GetSoftPredictions(Vector<T> input, double temperature = 1) =>
-        throw new NotImplementedException("Self-distillation uses cached predictions, not a separate teacher model");
-
-    public object? GetFeatures(Vector<T> input, string layerName) => null;
-
-    public object? GetAttentionWeights(Vector<T> input, string layerName) => null;
 }

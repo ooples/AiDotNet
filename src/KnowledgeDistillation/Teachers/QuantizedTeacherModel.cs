@@ -29,12 +29,6 @@ public class QuantizedTeacherModel<T> : TeacherModelBase<Vector<T>, Vector<T>, T
         return Quantize(logits);
     }
 
-    protected override Vector<T> ApplyTemperatureSoftmax(Vector<T> logits, double temperature)
-    {
-        var quantized = Quantize(logits);
-        return Softmax(quantized, temperature);
-    }
-
     private Vector<T> Quantize(Vector<T> vector)
     {
         int n = vector.Length;
@@ -58,36 +52,6 @@ public class QuantizedTeacherModel<T> : TeacherModelBase<Vector<T>, Vector<T>, T
             double dequantized = Convert.ToDouble(minVal) + (quantized / scale) * range;
             result[i] = NumOps.FromDouble(dequantized);
         }
-
-        return result;
-    }
-
-    private Vector<T> Softmax(Vector<T> logits, double temperature)
-    {
-        int n = logits.Length;
-        var result = new Vector<T>(n);
-        var scaled = new T[n];
-
-        for (int i = 0; i < n; i++)
-            scaled[i] = NumOps.FromDouble(Convert.ToDouble(logits[i]) / temperature);
-
-        T maxLogit = scaled[0];
-        for (int i = 1; i < n; i++)
-            if (NumOps.GreaterThan(scaled[i], maxLogit))
-                maxLogit = scaled[i];
-
-        T sum = NumOps.Zero;
-        var expValues = new T[n];
-
-        for (int i = 0; i < n; i++)
-        {
-            double val = Convert.ToDouble(NumOps.Subtract(scaled[i], maxLogit));
-            expValues[i] = NumOps.FromDouble(Math.Exp(val));
-            sum = NumOps.Add(sum, expValues[i]);
-        }
-
-        for (int i = 0; i < n; i++)
-            result[i] = NumOps.Divide(expValues[i], sum);
 
         return result;
     }
