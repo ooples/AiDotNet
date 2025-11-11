@@ -207,6 +207,49 @@ public class MomentumOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<
     }
 
     /// <summary>
+    /// Updates a vector of parameters using the Momentum optimization algorithm.
+    /// </summary>
+    /// <param name="parameters">The current parameter vector to be updated.</param>
+    /// <param name="gradient">The gradient vector corresponding to the parameters.</param>
+    /// <returns>The updated parameter vector.</returns>
+    /// <remarks>
+    /// <para>
+    /// This method implements the Momentum update rule by maintaining a velocity vector that accumulates
+    /// a weighted average of past gradients. The velocity combines the previous velocity (scaled by momentum)
+    /// with the current gradient (scaled by learning rate).
+    /// </para>
+    /// <para><b>For Beginners:</b> This method applies Momentum to adjust parameters. Like a ball rolling
+    /// down a hill, it remembers its previous direction and speed (velocity) and combines it with the
+    /// current slope (gradient) to determine where to go next. This helps the optimizer move faster
+    /// in consistent directions and resist getting stuck in small bumps.
+    /// </para>
+    /// </remarks>
+    public override Vector<T> UpdateParameters(Vector<T> parameters, Vector<T> gradient)
+    {
+        if (_velocity == null || _velocity.Length != parameters.Length)
+        {
+            _velocity = new Vector<T>(parameters.Length);
+        }
+
+        var updatedParams = new Vector<T>(parameters.Length);
+
+        for (int i = 0; i < parameters.Length; i++)
+        {
+            // Update velocity: velocity = momentum * velocity + lr * gradient
+            _velocity[i] = NumOps.Add(
+                NumOps.Multiply(CurrentMomentum, _velocity[i]),
+                NumOps.Multiply(CurrentLearningRate, gradient[i])
+            );
+
+            // Update parameters: params = params - velocity
+            updatedParams[i] = NumOps.Subtract(parameters[i], _velocity[i]);
+        }
+
+        return updatedParams;
+    }
+
+
+    /// <summary>
     /// Updates the adaptive parameters of the optimizer based on the current and previous optimization steps.
     /// </summary>
     /// <remarks>
@@ -368,13 +411,13 @@ public class MomentumOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<
     /// </summary>
     /// <remarks>
     /// <para>
-    /// This method creates a unique identifier for caching gradients. It combines the base gradient cache key 
+    /// This method creates a unique identifier for caching gradients. It combines the base gradient cache key
     /// with specific parameters of the Momentum algorithm.
     /// </para>
     /// <para><b>For Beginners:</b>
-    /// Imagine you're leaving markers along your ball-rolling path. This method creates a unique label for each marker, 
-    /// combining information about the hill (the model and data) with specifics about how you're rolling the ball 
-    /// (initial momentum and learning rate). This helps you quickly recognize and use information from similar 
+    /// Imagine you're leaving markers along your ball-rolling path. This method creates a unique label for each marker,
+    /// combining information about the hill (the model and data) with specifics about how you're rolling the ball
+    /// (initial momentum and learning rate). This helps you quickly recognize and use information from similar
     /// situations you've encountered before.
     /// </para>
     /// </remarks>
@@ -386,5 +429,60 @@ public class MomentumOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<
     {
         var baseKey = base.GenerateGradientCacheKey(model, X, y);
         return $"{baseKey}_Momentum_{_options.InitialMomentum}_{_options.InitialLearningRate}";
+    }
+
+    /// <summary>
+    /// Reverses a momentum-based gradient update to recover original parameters.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// For momentum optimizer, the forward update is:
+    /// 1. velocity_new = momentum * velocity_old + learning_rate * gradient
+    /// 2. params_new = params_old - velocity_new
+    ///
+    /// To reverse: params_old = params_new + velocity_new
+    ///
+    /// This requires access to the current velocity state, which is maintained by the optimizer.
+    /// </para>
+    /// <para><b>For Beginners:</b>
+    /// This is like rewinding your ball-rolling experiment. Given where the ball ended up (updated parameters)
+    /// and how fast it was moving (velocity), we can figure out where it started from.
+    /// </para>
+    /// </remarks>
+    /// <param name="updatedParameters">Parameters after gradient application</param>
+    /// <param name="appliedGradients">The gradients that were applied (not used directly for momentum reversal)</param>
+    /// <returns>Original parameters before the gradient update</returns>
+    /// <exception cref="ArgumentNullException">If parameters or gradients are null</exception>
+    /// <exception cref="ArgumentException">If parameter and gradient sizes do not match</exception>
+    public override Vector<T> ReverseUpdate(Vector<T> updatedParameters, Vector<T> appliedGradients)
+    {
+        if (updatedParameters == null)
+            throw new ArgumentNullException(nameof(updatedParameters));
+        if (appliedGradients == null)
+            throw new ArgumentNullException(nameof(appliedGradients));
+
+        if (updatedParameters.Length != appliedGradients.Length)
+        {
+            throw new ArgumentException(
+                $"Updated parameters size ({updatedParameters.Length}) must match applied gradients size ({appliedGradients.Length})",
+                nameof(appliedGradients));
+        }
+
+        // If velocity is not initialized, fall back to vanilla SGD reversal
+        if (_velocity == null || _velocity.Length != updatedParameters.Length)
+        {
+            return base.ReverseUpdate(updatedParameters, appliedGradients);
+        }
+
+        // Reverse momentum update: params_old = params_new + velocity_new
+        // The velocity was applied as: params_new = params_old - velocity
+        // So: params_old = params_new + velocity
+        var original = new T[updatedParameters.Length];
+        for (int i = 0; i < updatedParameters.Length; i++)
+        {
+            original[i] = NumOps.Add(updatedParameters[i], _velocity[i]);
+        }
+
+        return new Vector<T>(original);
     }
 }

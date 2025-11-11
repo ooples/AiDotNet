@@ -448,5 +448,58 @@ internal class MappedRandomForestModel<T> : IFullModel<T, Matrix<T>, Vector<T>>
     {
         _baseModel.SetActiveFeatureIndices(featureIndices);
     }
+
+    /// <summary>
+    /// Gets the default loss function used by this model for gradient computation.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Delegates to the underlying base model's default loss function.
+    /// </para>
+    /// </remarks>
+    public ILossFunction<T> DefaultLossFunction => _baseModel.DefaultLossFunction;
+
+    /// <summary>
+    /// Computes gradients of the loss function with respect to model parameters WITHOUT updating parameters.
+    /// </summary>
+    /// <param name="input">The input data.</param>
+    /// <param name="target">The target/expected output.</param>
+    /// <param name="lossFunction">The loss function to use. If null, uses the model's default loss function.</param>
+    /// <returns>A vector containing gradients with respect to all model parameters.</returns>
+    /// <remarks>
+    /// <para>
+    /// This method delegates to the underlying base model's ComputeGradients implementation.
+    /// The feature mapping is NOT applied during gradient computation, as the base model
+    /// operates in the target feature space.
+    /// </para>
+    /// <para><b>For Beginners:</b>
+    /// This calculates which direction to adjust the model's parameters to reduce error.
+    /// It delegates to the wrapped Random Forest model.
+    /// </para>
+    /// </remarks>
+    public Vector<T> ComputeGradients(Matrix<T> input, Vector<T> target, ILossFunction<T>? lossFunction = null)
+    {
+        return _baseModel.ComputeGradients(input, target, lossFunction);
+    }
+
+    /// <summary>
+    /// Applies pre-computed gradients to update the model parameters.
+    /// </summary>
+    /// <param name="gradients">The gradient vector to apply.</param>
+    /// <param name="learningRate">The learning rate for the update.</param>
+    /// <remarks>
+    /// <para>
+    /// This method delegates to the underlying base model's ApplyGradients implementation.
+    /// Updates parameters using: θ = θ - learningRate * gradients
+    /// </para>
+    /// <para><b>For Beginners:</b>
+    /// After computing gradients, this method actually updates the model's parameters.
+    /// It delegates to the wrapped Random Forest model.
+    /// </para>
+    /// </remarks>
+    public void ApplyGradients(Vector<T> gradients, T learningRate)
+    {
+        _baseModel.ApplyGradients(gradients, learningRate);
+    }
 }
 

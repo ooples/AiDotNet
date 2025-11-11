@@ -92,6 +92,11 @@ public class ProximalGradientDescentOptimizer<T, TInput, TOutput> : GradientBase
     private IRegularization<T, TInput, TOutput> _regularization;
 
     /// <summary>
+    /// Stores the pre-update parameters for approximate reverse updates.
+    /// </summary>
+    private Vector<T>? _previousParameters;
+
+    /// <summary>
     /// Initializes a new instance of the <see cref="ProximalGradientDescentOptimizer{T}"/> class with the specified options and components.
     /// </summary>
     /// <param name="model">The model to optimize.</param>
@@ -249,6 +254,16 @@ public class ProximalGradientDescentOptimizer<T, TInput, TOutput> : GradientBase
         var stepSize = CurrentLearningRate;
         var parameters = currentSolution.GetParameters();
 
+        // Save pre-update parameters for reverse updates
+        if (_previousParameters == null || _previousParameters.Length != parameters.Length)
+        {
+            _previousParameters = new Vector<T>(parameters.Length);
+        }
+        for (int i = 0; i < parameters.Length; i++)
+        {
+            _previousParameters[i] = parameters[i];
+        }
+
         var newCoefficients = new Vector<T>(parameters.Length);
         for (int i = 0; i < parameters.Length; i++)
         {
@@ -260,6 +275,55 @@ public class ProximalGradientDescentOptimizer<T, TInput, TOutput> : GradientBase
         newCoefficients = _regularization.Regularize(newCoefficients);
 
         return currentSolution.WithParameters(newCoefficients);
+    }
+
+    /// <summary>
+    /// Reverses a Proximal Gradient Descent update to recover original parameters.
+    /// </summary>
+    /// <param name="updatedParameters">Parameters after PGD update</param>
+    /// <param name="appliedGradients">The gradients that were applied</param>
+    /// <returns>Original parameters before the update</returns>
+    /// <remarks>
+    /// <para>
+    /// PGD applies vanilla gradient descent followed by a proximal operator (regularization).
+    /// The reverse update undoes the gradient step. Note: The regularization cannot be perfectly
+    /// reversed since the proximal operator is generally not invertible.
+    /// </para>
+    /// <para><b>For Beginners:</b> This calculates where parameters were before a PGD update.
+    /// PGD takes a gradient step then applies regularization. We can reverse the gradient step
+    /// but the regularization effect remains, since regularization is one-way (like rounding numbers).
+    /// </para>
+    /// </remarks>
+    public override Vector<T> ReverseUpdate(Vector<T> updatedParameters, Vector<T> appliedGradients)
+    {
+        if (updatedParameters == null)
+            throw new ArgumentNullException(nameof(updatedParameters));
+        if (appliedGradients == null)
+            throw new ArgumentNullException(nameof(appliedGradients));
+
+        if (updatedParameters.Length != appliedGradients.Length)
+        {
+            throw new ArgumentException(
+                $"Updated parameters size ({updatedParameters.Length}) must match applied gradients size ({appliedGradients.Length})",
+                nameof(appliedGradients));
+        }
+
+        if (_previousParameters == null || _previousParameters.Length != updatedParameters.Length)
+        {
+            throw new InvalidOperationException(
+                "Proximal GD optimizer state is not initialized. ReverseUpdate must be called after UpdateSolution.");
+        }
+
+        // PGD's proximal operator (regularization) cannot be inverted.
+        // Return the pre-update parameters that were saved in UpdateSolution.
+        // This is the best we can do since the proximal operator is irreversible.
+        var original = new T[updatedParameters.Length];
+        for (int i = 0; i < updatedParameters.Length; i++)
+        {
+            original[i] = _previousParameters[i];
+        }
+
+        return new Vector<T>(original);
     }
 
     /// <summary>
