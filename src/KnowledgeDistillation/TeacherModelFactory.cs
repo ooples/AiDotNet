@@ -62,10 +62,10 @@ public static class TeacherModelFactory<T>
             throw new ArgumentException("Ensemble models are required for Ensemble teacher type");
 
         var aggregation = ensembleWeights != null
-            ? EnsembleAggregation.WeightedAverage
-            : EnsembleAggregation.WeightedAverage;
+            ? EnsembleAggregationMode.WeightedAverage
+            : EnsembleAggregationMode.WeightedAverage;
 
-        return new EnsembleTeacherModel<T>(ensembleModels, aggregation, ensembleWeights);
+        return new EnsembleTeacherModel<T>(ensembleModels, ensembleWeights, aggregation);
     }
 
     private static ITeacherModel<Vector<T>, Vector<T>> CreatePretrainedTeacher(
@@ -74,8 +74,10 @@ public static class TeacherModelFactory<T>
     {
         if (model == null)
             throw new ArgumentException("Model is required for Pretrained teacher type");
+        if (!outputDimension.HasValue)
+            throw new ArgumentException("Output dimension is required for Pretrained teacher type");
 
-        return new PretrainedTeacherModel<T>(model);
+        return new PretrainedTeacherModel<T>(model.Predict, outputDimension.Value);
     }
 
     private static ITeacherModel<Vector<T>, Vector<T>> CreateTransformerTeacher(
@@ -84,8 +86,10 @@ public static class TeacherModelFactory<T>
     {
         if (model == null)
             throw new ArgumentException("Model is required for Transformer teacher type");
+        if (!outputDimension.HasValue)
+            throw new ArgumentException("Output dimension is required for Transformer teacher type");
 
-        return new TransformerTeacherModel<T>(model);
+        return new TransformerTeacherModel<T>(model.Predict, outputDimension.Value);
     }
 
     private static ITeacherModel<Vector<T>, Vector<T>> CreateMultiModalTeacher(
@@ -108,7 +112,7 @@ public static class TeacherModelFactory<T>
         var baseTeacher = new TeacherModelWrapper<T>(model);
         return new AdaptiveTeacherModel<T>(
             baseTeacher,
-            AdaptationStrategy.ConfidenceBased);
+            AdaptiveStrategy.ConfidenceBased);
     }
 
     private static ITeacherModel<Vector<T>, Vector<T>> CreateOnlineTeacher(
@@ -117,12 +121,16 @@ public static class TeacherModelFactory<T>
     {
         if (model == null)
             throw new ArgumentException("Model is required for Online teacher type");
+        if (!outputDimension.HasValue)
+            throw new ArgumentException("Output dimension is required for Online teacher type");
 
-        var baseTeacher = new TeacherModelWrapper<T>(model);
+        // Online teacher needs forward and update functions
         return new OnlineTeacherModel<T>(
-            baseTeacher,
-            UpdateMode.EMA,
-            emaDecay: 0.999);
+            model.Predict,
+            (pred, target) => { }, // No-op update for now
+            outputDimension.Value,
+            OnlineUpdateMode.EMA,
+            updateRate: 0.999);
     }
 
     private static ITeacherModel<Vector<T>, Vector<T>> CreateCurriculumTeacher(
@@ -151,7 +159,7 @@ public static class TeacherModelFactory<T>
             throw new ArgumentException("Model is required for Quantized teacher type");
 
         var baseTeacher = new TeacherModelWrapper<T>(model);
-        return new QuantizedTeacherModel<T>(baseTeacher, bitWidth: 8);
+        return new QuantizedTeacherModel<T>(baseTeacher, quantizationBits: 8);
     }
 
     private static ITeacherModel<Vector<T>, Vector<T>> CreateDistributedTeacher(
