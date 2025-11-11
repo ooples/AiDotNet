@@ -22,6 +22,8 @@ public class ContinuumMemorySystemLayer<T> : LayerBase<T>
     private readonly int[] _stepCounters;
     private readonly Vector<T>[] _storedInputs;  // Store input to each MLP block for Modified GD
     private int _globalStep;
+    private Tensor<T>? LastInput;
+    private Tensor<T>? LastOutput;
     private static readonly INumericOperations<T> _numOps = MathHelper.GetNumericOperations<T>();
 
     /// <summary>
@@ -43,7 +45,7 @@ public class ContinuumMemorySystemLayer<T> : LayerBase<T>
         int numFrequencyLevels = 3,
         int[]? updateFrequencies = null,
         T[]? learningRates = null)
-        : base(inputShape, new[] { hiddenDim }, null, null)
+        : base(inputShape, new[] { hiddenDim })
     {
         // Validate inputs
         if (inputShape == null || inputShape.Length == 0)
@@ -103,10 +105,7 @@ public class ContinuumMemorySystemLayer<T> : LayerBase<T>
 
         for (int i = 0; i < numFrequencyLevels; i++)
         {
-            _mlpBlocks[i] = new DenseLayer<T>(
-                inputShape: new[] { currentDim },
-                outputUnits: hiddenDim,
-                activation: ActivationFunction.ReLU);
+            _mlpBlocks[i] = new DenseLayer<T>(currentDim, hiddenDim, (IActivationFunction<T>)new ReLUActivation<T>());
             currentDim = hiddenDim;
         }
 
@@ -115,7 +114,7 @@ public class ContinuumMemorySystemLayer<T> : LayerBase<T>
         _stepCounters = new int[numFrequencyLevels];
         for (int i = 0; i < numFrequencyLevels; i++)
         {
-            int paramCount = _mlpBlocks[i].Parameters.Length;
+            int paramCount = _mlpBlocks[i].ParameterCount;
             _accumulatedGradients[i] = new Vector<T>(paramCount);
             _stepCounters[i] = 0;
         }
@@ -238,7 +237,7 @@ public class ContinuumMemorySystemLayer<T> : LayerBase<T>
         if (_mlpBlocks[level] == null)
             throw new InvalidOperationException($"MLP block at level {level} is null");
 
-        var currentParams = _mlpBlocks[level].Parameters;
+        var currentParams = _mlpBlocks[level].GetParameters();
         if (currentParams == null || currentParams.Length == 0)
             throw new InvalidOperationException($"MLP block at level {level} has no parameters");
 
@@ -295,8 +294,8 @@ public class ContinuumMemorySystemLayer<T> : LayerBase<T>
             if (_mlpBlocks[i + 1] == null)
                 throw new InvalidOperationException($"MLP block at level {i + 1} is null");
 
-            var fastParams = _mlpBlocks[i].Parameters;
-            var slowParams = _mlpBlocks[i + 1].Parameters;
+            var fastParams = _mlpBlocks[i].GetParameters();
+            var slowParams = _mlpBlocks[i + 1].GetParameters();
 
             if (fastParams == null || fastParams.Length == 0)
                 throw new InvalidOperationException($"Fast MLP at level {i} has no parameters");
@@ -404,7 +403,7 @@ public class ContinuumMemorySystemLayer<T> : LayerBase<T>
             if (mlp == null)
                 throw new InvalidOperationException("MLP block is null");
 
-            totalParams += mlp.Parameters.Length;
+            totalParams += mlp.ParameterCount;
         }
 
         // Concatenate all parameters
@@ -413,7 +412,7 @@ public class ContinuumMemorySystemLayer<T> : LayerBase<T>
 
         foreach (var mlp in _mlpBlocks)
         {
-            var mlpParams = mlp.Parameters;
+            var mlpParams = mlp.GetParameters();
             for (int i = 0; i < mlpParams.Length; i++)
             {
                 allParams[offset + i] = mlpParams[i];
@@ -444,7 +443,7 @@ public class ContinuumMemorySystemLayer<T> : LayerBase<T>
             if (mlp == null)
                 throw new InvalidOperationException("MLP block is null");
 
-            totalParams += mlp.Parameters.Length;
+            totalParams += mlp.ParameterCount;
         }
 
         if (parameters.Length != totalParams)
@@ -458,7 +457,7 @@ public class ContinuumMemorySystemLayer<T> : LayerBase<T>
         int offset = 0;
         foreach (var mlp in _mlpBlocks)
         {
-            int mlpParamCount = mlp.Parameters.Length;
+            int mlpParamCount = mlp.ParameterCount;
             var mlpParams = new Vector<T>(mlpParamCount);
 
             for (int i = 0; i < mlpParamCount; i++)
@@ -499,7 +498,7 @@ public class ContinuumMemorySystemLayer<T> : LayerBase<T>
             if (mlp == null)
                 throw new InvalidOperationException("MLP block is null");
 
-            totalParams += mlp.Parameters.Length;
+            totalParams += mlp.ParameterCount;
         }
 
         // Concatenate all accumulated gradients

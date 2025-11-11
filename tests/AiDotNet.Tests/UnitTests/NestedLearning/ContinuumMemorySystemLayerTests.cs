@@ -173,7 +173,7 @@ namespace AiDotNetTests.UnitTests.NestedLearning
                 numFrequencyLevels: 3);
 
             // Act & Assert
-            Assert.Throws<ArgumentNullException>(() => layer.Forward(null!));
+            Assert.Throws<ArgumentNullException>(() => layer.Forward((Tensor<double>)null!));
         }
 
         [Fact]
@@ -202,7 +202,7 @@ namespace AiDotNetTests.UnitTests.NestedLearning
             foreach (var block in mlpBlocks)
             {
                 Assert.NotNull(block);
-                Assert.True(block.Parameters.Length > 0);
+                Assert.True(block.ParameterCount > 0);
             }
         }
 
@@ -302,7 +302,7 @@ namespace AiDotNetTests.UnitTests.NestedLearning
             foreach (var block in mlpBlocks)
             {
                 Assert.NotNull(block);
-                Assert.True(block.Parameters.Length > 0);
+                Assert.True(block.ParameterCount > 0);
             }
         }
 

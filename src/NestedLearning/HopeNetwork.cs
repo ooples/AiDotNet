@@ -39,7 +39,7 @@ public class HopeNetwork<T> : NeuralNetworkBase<T>
         int numCMSLevels = 4,
         int numRecurrentLayers = 3,
         int inContextLearningLevels = 5)
-        : base(architecture, lossFunction, maxGradNorm: 1.0)
+        : base(architecture, lossFunction ?? new MeanSquaredErrorLoss<T>(), maxGradNorm: 1.0)
     {
         _hiddenDim = hiddenDim;
         _numCMSLevels = numCMSLevels;
@@ -47,6 +47,10 @@ public class HopeNetwork<T> : NeuralNetworkBase<T>
         _inContextLearningLevels = inContextLearningLevels;
         _adaptationStep = 0;
         _selfModificationRate = _numOps.FromDouble(0.01);
+
+        // Initialize arrays to avoid non-nullable warnings
+        _cmsBlocks = new ContinuumMemorySystemLayer<T>[numCMSLevels];
+        _recurrentLayers = new RecurrentLayer<T>[numRecurrentLayers];
 
         // Initialize context flow for multi-level optimization
         _contextFlow = new ContextFlow<T>(hiddenDim, inContextLearningLevels);
@@ -79,9 +83,9 @@ public class HopeNetwork<T> : NeuralNetworkBase<T>
         for (int i = 0; i < _numRecurrentLayers; i++)
         {
             _recurrentLayers[i] = new RecurrentLayer<T>(
-                inputShape: new[] { _hiddenDim },
-                outputUnits: _hiddenDim,
-                activation: ActivationFunction.Tanh);
+                _hiddenDim,
+                _hiddenDim,
+                (IActivationFunction<T>)new TanhActivation<T>());
 
             Layers.Add(_recurrentLayers[i]);
         }
@@ -330,11 +334,16 @@ public class HopeNetwork<T> : NeuralNetworkBase<T>
     /// </summary>
     public void AddOutputLayer(int outputDim, ActivationFunction activation = ActivationFunction.Linear)
     {
-        _outputLayer = new DenseLayer<T>(
-            inputShape: new[] { _hiddenDim },
-            outputUnits: outputDim,
-            activation: activation);
+        IActivationFunction<T> activationFunc = activation switch
+        {
+            ActivationFunction.Tanh => new TanhActivation<T>(),
+            ActivationFunction.Softmax => new SoftmaxActivation<T>(),
+            ActivationFunction.Sigmoid => new SigmoidActivation<T>(),
+            ActivationFunction.ReLU => new ReLUActivation<T>(),
+            _ => new IdentityActivation<T>()
+        };
 
+        _outputLayer = new DenseLayer<T>(_hiddenDim, outputDim, activationFunc);
         Layers.Add(_outputLayer);
     }
 
@@ -451,11 +460,18 @@ public class HopeNetwork<T> : NeuralNetworkBase<T>
         // Forward pass
         var prediction = Forward(input);
 
+        // Convert tensors to vectors for loss computation
+        var predictionVector = new Vector<T>(prediction.ToArray());
+        var expectedVector = new Vector<T>(expectedOutput.ToArray());
+
         // Compute loss
-        var loss = LossFunction.ComputeLoss(prediction, expectedOutput);
+        var loss = LossFunction.CalculateLoss(predictionVector, expectedVector);
 
         // Compute loss gradient
-        var lossGradient = LossFunction.ComputeGradient(prediction, expectedOutput);
+        var lossGradientVector = LossFunction.CalculateDerivative(predictionVector, expectedVector);
+
+        // Convert gradient vector back to tensor for backward pass
+        var lossGradient = new Tensor<T>(prediction.Shape, lossGradientVector);
 
         // Backward pass
         Backward(lossGradient);
@@ -503,7 +519,7 @@ public class HopeNetwork<T> : NeuralNetworkBase<T>
             { "RecurrentLayers", _numRecurrentLayers },
             { "InContextLearningLevels", _inContextLearningLevels },
             { "AdaptationStep", _adaptationStep },
-            { "SelfModificationRate", _selfModificationRate },
+            { "SelfModificationRate", (object?)_selfModificationRate ?? 0 },
             { "ParameterCount", ParameterCount },
             { "LayerCount", Layers?.Count ?? 0 }
         };
