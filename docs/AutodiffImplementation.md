@@ -4,10 +4,11 @@
 
 This document tracks the implementation status of automatic differentiation (autodiff) support across all neural network layers in AiDotNet.
 
-**Last Updated:** 2025-01-XX
+**Last Updated:** 2025-01-11
 **Total Layers:** 75
 **Layers with Autodiff Infrastructure:** 75 (100%)
-**Layers with Full Autodiff Support:** ~15 (20%)
+**Layers with Full Autodiff Support:** 15+ (20%)
+**Higher-Order Gradients:** ✅ Fully supported via GradientTape.Gradient(createGraph: true)
 
 ## Implementation Status
 
@@ -173,31 +174,46 @@ The following operations are required for specialized research layers and can be
 
 ## Current TensorOperations Support
 
-Already implemented in `TensorOperations.cs`:
+All 19 operations currently implemented in `src/Autodiff/TensorOperations.cs`:
 
-✅ **Basic Arithmetic:**
-- Add, Subtract, Negate
-- ElementwiseMultiply, Divide
-- Power, Sqrt
+✅ **Basic Arithmetic (6 operations):**
+1. Add - Element-wise addition with broadcasting
+2. Subtract - Element-wise subtraction with broadcasting
+3. Negate - Unary negation
+4. ElementwiseMultiply - Hadamard product with broadcasting
+5. Divide - Element-wise division with broadcasting
+6. Power - Exponentiation (x^n)
 
-✅ **Matrix Operations:**
-- MatrixMultiply
-- Transpose
+✅ **Matrix Operations (2 operations):**
+7. MatrixMultiply - Matrix/tensor multiplication
+8. Transpose - Matrix/tensor transpose
 
-✅ **Reduction Operations:**
-- Sum (with axis support)
-- Mean (with axis support)
+✅ **Reduction Operations (2 operations):**
+9. Sum - Sum along specified axes with keepDims support
+10. Mean - Average along all dimensions
 
-✅ **Activation Functions:**
-- ReLU
-- Sigmoid
-- Tanh
+✅ **Activation Functions (3 operations):**
+11. ReLU - Rectified Linear Unit
+12. Sigmoid - Logistic sigmoid
+13. Tanh - Hyperbolic tangent
 
-✅ **Tensor Manipulation:**
-- Reshape
+✅ **Tensor Manipulation (1 operation):**
+14. Reshape - Change tensor shape
 
-✅ **Advanced Math:**
-- Exp, Log
+✅ **Advanced Math (3 operations):**
+15. Exp - Exponential function
+16. Log - Natural logarithm
+17. Sqrt - Square root
+
+✅ **Utility (2 operations):**
+18. Variable - Create differentiable variable node
+19. Constant - Create non-differentiable constant node
+
+**All operations support:**
+- Automatic gradient computation via backward functions
+- Broadcasting semantics where applicable
+- Integration with GradientTape for graph building
+- Higher-order gradients (gradients of gradients)
 
 ## Usage Guidelines
 
@@ -305,28 +321,73 @@ The performance overhead comes from:
 - Gradient accumulation
 - Dynamic dispatch
 
-## Future Work
+## Higher-Order Gradients
 
-### Phase 1: Complete Core Operations
-- [ ] Implement Softmax operation
-- [ ] Implement BatchNorm operation
-- [ ] Implement LayerNorm operation
-- [ ] Add comprehensive tests
+The autodiff system fully supports higher-order gradients (gradients of gradients) through the `createGraph` parameter in `GradientTape.Gradient()`.
 
-### Phase 2: Convolutional Support
-- [ ] Implement Conv2D operation (im2col approach)
-- [ ] Implement ConvTranspose2D operation
-- [ ] Implement MaxPool2D with gradient routing
-- [ ] Implement AvgPool2D operation
+### Computing Second Derivatives
 
-### Phase 3: Advanced Operations
-- [ ] Implement Concat/Split operations
-- [ ] Implement Pad operation
-- [ ] Implement Gather/Scatter operations
-- [ ] Performance optimization
+```csharp
+using (var tape1 = new GradientTape<float>())
+{
+    tape1.Watch(x);
+    var y = TensorOperations<float>.Power(x, 2);
 
-### Phase 4: Specialized Research Layers
-- Implement operations on-demand based on user requirements
+    // First derivative: dy/dx = 2x
+    using (var tape2 = new GradientTape<float>())
+    {
+        tape2.Watch(x);
+        var firstGrad = tape2.Gradient(y, new[] { x }, createGraph: true)[x];
+
+        // Second derivative: d²y/dx² = 2
+        var secondGrad = tape1.Gradient(firstGrad, new[] { x })[x];
+    }
+}
+```
+
+### Use Cases for Higher-Order Gradients
+
+1. **Physics-Informed Neural Networks (PINNs)**: Require derivatives of network outputs with respect to inputs (for PDEs)
+2. **Hessian Computation**: Second-order optimization methods (Newton's method, L-BFGS)
+3. **Curvature Analysis**: Understanding loss landscape geometry
+4. **Adversarial Training**: Computing gradients of gradient norms
+5. **Meta-Learning**: Optimizing through multiple levels of differentiation
+
+### Implementation Details
+
+- Set `createGraph: true` when computing gradients to make them differentiable
+- GradientTape tracks operations during gradient computation itself
+- Supports arbitrary order derivatives (third, fourth, etc.)
+- No performance penalty when not using higher-order gradients
+
+## Future Development
+
+### Priority Operations for Full Layer Support
+
+**High Priority:**
+- **Softmax** - For attention mechanisms (AttentionLayer, MultiHeadAttentionLayer, SelfAttentionLayer)
+- **Conv2D/ConvTranspose2D** - For convolutional and deconvolutional layers
+- **MaxPool2D/AvgPool2D** - For pooling layers
+- **BatchNorm/LayerNorm** - For full normalization layer support
+
+**Medium Priority:**
+- **Concat/Split** - For tensor concatenation and splitting operations
+- **Pad** - For spatial padding operations
+- **Gather/Scatter** - For advanced indexing and sparse operations
+
+**Specialized Operations (On-Demand):**
+- Custom operations for research layers implemented as needed based on user requirements
+- Examples: DynamicRouting (capsule networks), ViterbiDecode (CRF layers), specialized graph operations
+
+### Implementation Approach
+
+When adding new TensorOperations:
+1. Implement forward computation
+2. Define backward function for gradient propagation
+3. Ensure broadcasting semantics are correct
+4. Add comprehensive unit tests
+5. Update layer `BackwardViaAutodiff()` implementations to use the new operation
+6. Verify gradient correctness against manual implementations
 
 ## References
 
