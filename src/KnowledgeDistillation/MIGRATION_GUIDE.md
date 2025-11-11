@@ -2,7 +2,7 @@
 
 ## Overview
 
-This guide helps you migrate from the old knowledge distillation architecture to the new, refactored version that follows SOLID principles and separates concerns properly.
+This guide helps you migrate to the refactored knowledge distillation architecture that follows SOLID principles with proper interfaces, abstract base classes, and concrete implementations.
 
 ## What Changed?
 
@@ -10,146 +10,72 @@ This guide helps you migrate from the old knowledge distillation architecture to
 
 1. **ITeacherModel Interface Simplified**: Removed unused methods and variance modifiers
 2. **Teacher Models Simplified**: Teachers now only provide logits (predictions)
-3. **Adaptive Logic Moved**: Dynamic temperature adjustment moved to `AdaptiveDistillationStrategy`
-4. **Curriculum Logic Moved**: Progressive difficulty adjustment moved to `CurriculumDistillationStrategy`
-5. **Backward Compatibility Maintained**: Old teacher classes still work but are now simple wrappers
+3. **Adaptive Strategies Improved**: Created proper interface hierarchy with 3 concrete strategies
+4. **Curriculum Strategies Improved**: Created proper interface hierarchy with 2 concrete strategies
+5. **Open/Closed Principle**: Easy to extend with new strategies without modifying existing code
+
+### New Architecture
+
+The refactoring creates a proper **Strategy Pattern** hierarchy:
+
+```
+IDistillationStrategy<T, TOutput>
+│
+├─ DistillationStrategyBase<T, TOutput>
+│  │
+│  ├─ StandardDistillationStrategy<T>
+│  │
+│  ├─ IAdaptiveDistillationStrategy<T>
+│  │  │
+│  │  ├─ AdaptiveDistillationStrategyBase<T>
+│  │  │  │
+│  │  │  ├─ ConfidenceBasedAdaptiveStrategy<T>
+│  │  │  ├─ AccuracyBasedAdaptiveStrategy<T>
+│  │  │  └─ EntropyBasedAdaptiveStrategy<T>
+│  │
+│  └─ ICurriculumDistillationStrategy<T>
+│     │
+│     ├─ CurriculumDistillationStrategyBase<T>
+│        │
+│        ├─ EasyToHardCurriculumStrategy<T>
+│        └─ HardToEasyCurriculumStrategy<T>
+```
 
 ### Architectural Principles
 
-The refactoring enforces proper **Separation of Concerns**:
-
+**Separation of Concerns**:
 - **Teachers**: Inference layer - only generate predictions (logits)
 - **Strategies**: Training layer - handle temperature scaling, loss computation, gradient calculation
 
-This follows the **Single Responsibility Principle** (SRP):
-- Teachers are responsible for prediction
-- Strategies are responsible for training logic
-
-## Detailed Changes
-
-### 1. ITeacherModel Interface
-
-**Before:**
-```csharp
-public interface ITeacherModel<in TInput, out TOutput>
-{
-    TOutput GetLogits(TInput input);
-    TOutput GetSoftPredictions(TInput input, double temperature);
-    object? GetFeatures(TInput input, string layerName);
-    object? GetAttentionWeights(TInput input);
-    int OutputDimension { get; }
-}
-```
-
-**After:**
-```csharp
-public interface ITeacherModel<TInput, TOutput>
-{
-    TOutput GetLogits(TInput input);
-    int OutputDimension { get; }
-}
-```
-
-**Why**: The removed methods were never called in the codebase. `GetSoftPredictions` duplicates strategy responsibility, while `GetFeatures` and `GetAttentionWeights` returned type-unsafe `object?`.
-
-### 2. AdaptiveTeacherModel
-
-**Before** (300+ lines with adaptive logic):
-```csharp
-public class AdaptiveTeacherModel<T>
-{
-    private Dictionary<int, double> _performanceHistory;
-    private double _minTemperature;
-    private double _maxTemperature;
-
-    public Vector<T> GetSoftPredictions(Vector<T> input, double temperature)
-    {
-        // Dynamic temperature adjustment based on student performance
-        double adaptiveTemp = ComputeAdaptiveTemperature(input);
-        return ApplySoftmax(GetLogits(input), adaptiveTemp);
-    }
-
-    private double ComputeAdaptiveTemperature(Vector<T> input) { ... }
-    public void UpdatePerformance(int sampleIndex, double performance) { ... }
-}
-```
-
-**After** (simple wrapper):
-```csharp
-public class AdaptiveTeacherModel<T> : TeacherModelBase<Vector<T>, Vector<T>, T>
-{
-    private readonly ITeacherModel<Vector<T>, Vector<T>> _baseTeacher;
-
-    public override Vector<T> GetLogits(Vector<T> input) => _baseTeacher.GetLogits(input);
-    public override int OutputDimension => _baseTeacher.OutputDimension;
-}
-```
-
-**Migration**: Use `AdaptiveDistillationStrategy<T>` instead (see examples below).
-
-### 3. CurriculumTeacherModel
-
-**Before** (had curriculum parameters):
-```csharp
-public class CurriculumTeacherModel<T>
-{
-    private int _currentEpoch;
-    private CurriculumStrategy _strategy;
-
-    // Curriculum logic mixed into teacher
-}
-```
-
-**After** (simple wrapper):
-```csharp
-public class CurriculumTeacherModel<T> : TeacherModelBase<Vector<T>, Vector<T>, T>
-{
-    private readonly ITeacherModel<Vector<T>, Vector<T>> _baseTeacher;
-
-    public override Vector<T> GetLogits(Vector<T> input) => _baseTeacher.GetLogits(input);
-}
-```
-
-**Migration**: Use `CurriculumDistillationStrategy<T>` instead (see examples below).
+**SOLID Principles**:
+- **Single Responsibility**: Teachers predict, strategies train
+- **Open/Closed**: Add new strategies without modifying existing code
+- **Liskov Substitution**: All strategies are interchangeable through interfaces
+- **Interface Segregation**: Specific interfaces (IAdaptive, ICurriculum) for specialized features
+- **Dependency Inversion**: Depend on abstractions (interfaces), not concretions
 
 ## Migration Examples
 
-### Example 1: Migrating Adaptive Distillation
+### Example 1: Confidence-Based Adaptive Distillation
 
-**Old Code:**
+**Old Code (enum-based switching):**
 ```csharp
-// Create adaptive teacher
-var adaptiveTeacher = new AdaptiveTeacherModel<double>(
-    baseTeacher,
-    AdaptiveStrategy.ConfidenceBased,
-    minTemperature: 1.0,
-    maxTemperature: 5.0
-);
-
-// Training loop
-for (int i = 0; i < samples.Length; i++)
-{
-    var teacherPrediction = adaptiveTeacher.GetSoftPredictions(samples[i], temperature: 3.0);
-    var studentPrediction = student.Predict(samples[i]);
-
-    // Update adaptive teacher's performance tracking
-    adaptiveTeacher.UpdatePerformance(i, studentPrediction, labels[i]);
-
-    // Compute loss manually
-    var loss = ComputeKLDivergence(teacherPrediction, studentPrediction);
-}
-```
-
-**New Code:**
-```csharp
-// Create simple teacher (just provides logits)
-var teacher = new TeacherModelWrapper<double>(baseModel);
-
-// Create adaptive strategy (handles temperature adaptation)
+// OLD: Single class with enum parameter
 var strategy = new AdaptiveDistillationStrategy<double>(
     baseTemperature: 3.0,
     alpha: 0.3,
-    strategy: AdaptiveStrategy.ConfidenceBased,
+    strategy: AdaptiveStrategy.ConfidenceBased,  // ❌ Enum switching
+    minTemperature: 1.0,
+    maxTemperature: 5.0
+);
+```
+
+**New Code (concrete class):**
+```csharp
+// NEW: Specific strategy class
+var strategy = new ConfidenceBasedAdaptiveStrategy<double>(
+    baseTemperature: 3.0,
+    alpha: 0.3,
     minTemperature: 1.0,
     maxTemperature: 5.0,
     adaptationRate: 0.1
@@ -159,221 +85,370 @@ var strategy = new AdaptiveDistillationStrategy<double>(
 for (int i = 0; i < samples.Length; i++)
 {
     var teacherLogits = teacher.GetLogits(samples[i]);
-    var studentLogits = student.Predict(samples[i]); // Raw logits, not softmax
+    var studentLogits = student.Predict(samples[i]);
 
-    // Update strategy's performance tracking
-    strategy.UpdatePerformance(i, studentLogits, labels[i]);
+    // Update performance tracking
+    strategy.UpdatePerformance(i, studentLogits);
 
-    // Strategy handles temperature adjustment and loss computation
+    // Strategy handles adaptive temperature automatically
     var loss = strategy.ComputeLoss(studentLogits, teacherLogits, labels[i]);
     var gradient = strategy.ComputeGradient(studentLogits, teacherLogits, labels[i]);
 
-    // Apply gradient to student
     student.ApplyGradient(gradient);
 }
 ```
 
-**Benefits:**
-- Teacher focuses on prediction only
-- Strategy handles all training logic
-- Performance tracking is explicit
-- Temperature adaptation is automatic per sample
-- Loss and gradient computation are unified
+**Benefits**:
+- ✅ No enum switching (Open/Closed Principle)
+- ✅ Each strategy is a dedicated class
+- ✅ Easy to extend with new adaptive strategies
+- ✅ Better testability (mock specific strategy)
 
-### Example 2: Migrating Curriculum Learning
-
-**Old Code:**
-```csharp
-// Create curriculum teacher
-var curriculumTeacher = new CurriculumTeacherModel<double>(
-    baseTeacher,
-    CurriculumStrategy.EasyToHard
-);
-
-// Training loop
-for (int epoch = 0; epoch < 100; epoch++)
-{
-    // Manually filter samples by difficulty (outside teacher)
-    var currentSamples = FilterSamplesByDifficulty(samples, epoch);
-
-    foreach (var sample in currentSamples)
-    {
-        var teacherPrediction = curriculumTeacher.GetSoftPredictions(sample, temperature: 3.0);
-        // ... training logic
-    }
-}
-```
+### Example 2: Accuracy-Based Adaptive Distillation
 
 **New Code:**
 ```csharp
-// Create simple teacher
-var teacher = new TeacherModelWrapper<double>(baseModel);
+// Tracks correctness instead of confidence
+var strategy = new AccuracyBasedAdaptiveStrategy<double>(
+    minTemperature: 1.5,  // For samples student gets right
+    maxTemperature: 6.0,  // For samples student gets wrong
+    adaptationRate: 0.2   // How fast to adapt
+);
 
-// Define sample difficulties (optional)
-var difficulties = new Dictionary<int, double>
+for (int i = 0; i < samples.Length; i++)
 {
-    { 0, 0.1 }, // Easy sample
-    { 1, 0.3 }, // Medium sample
-    { 2, 0.8 }, // Hard sample
-    // ... etc
-};
+    var teacherLogits = teacher.GetLogits(samples[i]);
+    var studentLogits = student.Predict(samples[i]);
 
-// Create curriculum strategy
+    // IMPORTANT: Pass labels for accuracy tracking
+    strategy.UpdatePerformance(i, studentLogits, labels[i]);
+    var loss = strategy.ComputeLoss(studentLogits, teacherLogits, labels[i]);
+
+    student.ApplyGradient(strategy.ComputeGradient(studentLogits, teacherLogits, labels[i]));
+}
+```
+
+### Example 3: Entropy-Based Adaptive Distillation
+
+**New Code:**
+```csharp
+// Adapts based on prediction uncertainty (entropy)
+var strategy = new EntropyBasedAdaptiveStrategy<double>(
+    minTemperature: 1.5,  // For uncertain predictions (high entropy)
+    maxTemperature: 4.0,  // For confident predictions (low entropy)
+    adaptationRate: 0.15
+);
+
+// Automatically adapts based on entropy - no labels needed!
+for (int i = 0; i < samples.Length; i++)
+{
+    var teacherLogits = teacher.GetLogits(samples[i]);
+    var studentLogits = student.Predict(samples[i]);
+
+    strategy.UpdatePerformance(i, studentLogits);
+    var loss = strategy.ComputeLoss(studentLogits, teacherLogits);
+
+    student.ApplyGradient(strategy.ComputeGradient(studentLogits, teacherLogits));
+}
+```
+
+### Example 4: Easy-to-Hard Curriculum Learning
+
+**Old Code (enum-based switching):**
+```csharp
+// OLD: Single class with enum parameter
 var strategy = new CurriculumDistillationStrategy<double>(
-    baseTemperature: 3.0,
-    alpha: 0.3,
-    strategy: CurriculumStrategy.EasyToHard,
+    strategy: CurriculumStrategy.EasyToHard,  // ❌ Enum switching
     minTemperature: 2.0,
     maxTemperature: 5.0,
-    totalSteps: 100,
+    totalSteps: 100
+);
+```
+
+**New Code (concrete class):**
+```csharp
+// NEW: Specific curriculum strategy class
+var difficulties = new Dictionary<int, double>
+{
+    { 0, 0.1 },  // Easy sample
+    { 1, 0.3 },  // Medium sample
+    { 2, 0.8 },  // Hard sample
+};
+
+var strategy = new EasyToHardCurriculumStrategy<double>(
+    minTemperature: 2.0,   // Final temperature (hard phase)
+    maxTemperature: 5.0,   // Initial temperature (easy phase)
+    totalSteps: 100,       // 100 epochs
     sampleDifficulties: difficulties
 );
 
-// Training loop
+// Training loop with curriculum filtering
 for (int epoch = 0; epoch < 100; epoch++)
 {
-    // Update curriculum progress
-    strategy.UpdateProgress(epoch);
+    strategy.UpdateProgress(epoch);  // Advance curriculum
 
-    for (int i = 0; i < samples.Length; i++)
+    foreach (var (sample, index) in trainingSamples.WithIndex())
     {
-        // Strategy decides if sample should be included in current stage
-        if (!strategy.ShouldIncludeSample(i))
-            continue;
+        // Filter samples by curriculum
+        if (!strategy.ShouldIncludeSample(index))
+            continue; // Too hard for current stage
 
-        var teacherLogits = teacher.GetLogits(samples[i]);
-        var studentLogits = student.Predict(samples[i]);
+        var teacherLogits = teacher.GetLogits(sample);
+        var studentLogits = student.Predict(sample);
 
-        // Strategy automatically adjusts temperature based on curriculum stage
-        var loss = strategy.ComputeLoss(studentLogits, teacherLogits, labels[i]);
-        var gradient = strategy.ComputeGradient(studentLogits, teacherLogits, labels[i]);
-
-        student.ApplyGradient(gradient);
+        // Temperature automatically adjusts based on epoch
+        var loss = strategy.ComputeLoss(studentLogits, teacherLogits, labels[index]);
+        student.ApplyGradient(strategy.ComputeGradient(studentLogits, teacherLogits, labels[index]));
     }
 }
 ```
 
-**Benefits:**
-- Curriculum progression is explicit and controllable
-- Sample filtering is strategy-driven
-- Temperature adjusts automatically per epoch
-- Supports both EasyToHard and HardToEasy
-- Can optionally use difficulty scores per sample
+### Example 5: Hard-to-Easy Curriculum (Fine-Tuning)
 
-### Example 3: Using Standard Distillation (No Changes Needed)
-
-**Old Code (still works):**
+**New Code:**
 ```csharp
-var teacher = new TeacherModelWrapper<double>(pretrainedModel);
-var strategy = new StandardDistillationStrategy<double>(temperature: 3.0, alpha: 0.3);
+// For fine-tuning already-trained students
+var strategy = new HardToEasyCurriculumStrategy<double>(
+    minTemperature: 1.5,   // Initial temperature (hard phase)
+    maxTemperature: 4.0,   // Final temperature (easy phase)
+    totalSteps: 50,        // Shorter for fine-tuning
+    sampleDifficulties: difficulties
+);
 
-// Training loop
-foreach (var sample in samples)
+// Fine-tuning loop
+for (int epoch = 0; epoch < 50; epoch++)
 {
-    var teacherLogits = teacher.GetLogits(sample);
-    var studentLogits = student.Predict(sample);
-    var loss = strategy.ComputeLoss(studentLogits, teacherLogits, labels);
+    strategy.UpdateProgress(epoch);
+
+    foreach (var (sample, index) in trainingSamples.WithIndex())
+    {
+        // Filter: Only hard samples early, all samples later
+        if (!strategy.ShouldIncludeSample(index))
+            continue; // Too easy for current stage
+
+        // Fine-tune on this sample...
+    }
 }
 ```
 
-**New Code (identical):**
-```csharp
-// No changes needed - standard distillation API unchanged
-var teacher = new TeacherModelWrapper<double>(pretrainedModel);
-var strategy = new StandardDistillationStrategy<double>(temperature: 3.0, alpha: 0.3);
-
-// Training loop remains the same
-```
-
-## Backward Compatibility
-
-### What Still Works
-
-1. **TeacherModelFactory**: All factory methods still work
-   ```csharp
-   var teacher = TeacherModelFactory<double>.CreateTeacher(
-       TeacherModelType.Adaptive,
-       model: pretrainedModel
-   );
-   ```
-
-2. **AdaptiveTeacherModel/CurriculumTeacherModel**: Can still be instantiated, but are now simple wrappers
-   ```csharp
-   var adaptiveTeacher = new AdaptiveTeacherModel<double>(baseTeacher);
-   // Works, but contains no adaptive logic - use AdaptiveDistillationStrategy instead
-   ```
-
-3. **Standard Distillation**: No changes to existing standard distillation code
-
-### What Changed
-
-1. **No more GetSoftPredictions**: Use `strategy.ComputeLoss()` instead of manually computing softmax
-2. **No more performance tracking in teachers**: Use `strategy.UpdatePerformance()` instead
-3. **No more temperature parameters in teachers**: Temperature is strategy responsibility
-
 ## Strategy Comparison
 
-| Feature | StandardDistillationStrategy | AdaptiveDistillationStrategy | CurriculumDistillationStrategy |
-|---------|------------------------------|------------------------------|--------------------------------|
-| **Temperature** | Fixed | Per-sample adaptive | Per-epoch progressive |
-| **Performance Tracking** | No | Yes (EMA) | Optional (via difficulties) |
-| **Sample Filtering** | No | No | Yes (ShouldIncludeSample) |
-| **Use Case** | Standard KD | Varies by sample confidence | Progressive difficulty |
-| **Configuration** | Temperature, alpha | Min/max temp, strategy type | Curriculum direction, total steps |
+| Strategy | Adaptation Basis | Requires Labels | Best For |
+|----------|-----------------|-----------------|----------|
+| **ConfidenceBasedAdaptiveStrategy** | Max probability | No | General-purpose, varying difficulty |
+| **AccuracyBasedAdaptiveStrategy** | Correctness | Yes | Supervised learning, labeled data |
+| **EntropyBasedAdaptiveStrategy** | Uncertainty | No | Uncertainty-aware adaptation |
+| **EasyToHardCurriculumStrategy** | Training progress | No (optional) | Training from scratch |
+| **HardToEasyCurriculumStrategy** | Training progress (inverted) | No (optional) | Fine-tuning, transfer learning |
 
-## Best Practices
+## Creating Custom Strategies
 
-### 1. Choose the Right Strategy
-
-- **StandardDistillationStrategy**: Use for basic knowledge distillation with fixed temperature
-- **AdaptiveDistillationStrategy**: Use when samples vary in difficulty and student performance is uneven
-- **CurriculumDistillationStrategy**: Use for structured learning progression over epochs
-
-### 2. Temperature Range Selection
+### Custom Adaptive Strategy
 
 ```csharp
-// For adaptive strategies
-minTemperature: 1.0,   // Sharp for hard/confident samples
-maxTemperature: 5.0    // Soft for easy/uncertain samples
+public class MyCustomAdaptiveStrategy<T> : AdaptiveDistillationStrategyBase<T>
+{
+    public MyCustomAdaptiveStrategy(
+        double baseTemperature = 3.0,
+        double alpha = 0.3,
+        double minTemperature = 1.0,
+        double maxTemperature = 5.0,
+        double adaptationRate = 0.1)
+        : base(baseTemperature, alpha, minTemperature, maxTemperature, adaptationRate)
+    {
+    }
 
-// For curriculum strategies (EasyToHard)
-minTemperature: 2.0,   // End temperature (sharp, challenging)
-maxTemperature: 5.0    // Start temperature (soft, gentle)
+    public override double ComputeAdaptiveTemperature(Vector<T> studentOutput, Vector<T> teacherOutput)
+    {
+        // Your custom adaptation logic here
+        // Example: Adapt based on teacher-student agreement
+        var studentProbs = Softmax(studentOutput, 1.0);
+        var teacherProbs = Softmax(teacherOutput, 1.0);
+
+        double agreement = ComputeAgreement(studentProbs, teacherProbs);
+        double difficulty = 1.0 - agreement;
+
+        return MinTemperature + difficulty * (MaxTemperature - MinTemperature);
+    }
+
+    private double ComputeAgreement(Vector<T> studentProbs, Vector<T> teacherProbs)
+    {
+        // Compute cosine similarity or KL divergence
+        // ...
+    }
+}
 ```
 
-### 3. Alpha Tuning
+### Custom Curriculum Strategy
 
 ```csharp
-alpha: 0.3   // 30% hard loss (true labels), 70% soft loss (teacher)
-alpha: 0.5   // Equal weight
-alpha: 0.1   // Focus more on teacher knowledge
+public class PacedCurriculumStrategy<T> : CurriculumDistillationStrategyBase<T>
+{
+    private readonly double _pacingFunction;
+
+    public PacedCurriculumStrategy(
+        double baseTemperature = 3.0,
+        double alpha = 0.3,
+        double minTemperature = 2.0,
+        double maxTemperature = 5.0,
+        int totalSteps = 100,
+        double pacingFunction = 2.0)  // Controls progression speed
+        : base(baseTemperature, alpha, minTemperature, maxTemperature, totalSteps)
+    {
+        _pacingFunction = pacingFunction;
+    }
+
+    public override bool ShouldIncludeSample(int sampleIndex)
+    {
+        double? difficulty = GetSampleDifficulty(sampleIndex);
+        if (difficulty == null) return true;
+
+        // Non-linear pacing (e.g., exponential)
+        double effectiveProgress = Math.Pow(CurriculumProgress, _pacingFunction);
+        return difficulty.Value <= effectiveProgress;
+    }
+
+    public override double ComputeCurriculumTemperature()
+    {
+        // Non-linear temperature progression
+        double effectiveProgress = Math.Pow(CurriculumProgress, _pacingFunction);
+        return MaxTemperature - effectiveProgress * (MaxTemperature - MinTemperature);
+    }
+}
 ```
 
-### 4. Adaptive Strategy Selection
+## Interface Reference
+
+### IAdaptiveDistillationStrategy<T>
 
 ```csharp
-AdaptiveStrategy.ConfidenceBased  // Best for most cases - uses max probability
-AdaptiveStrategy.EntropyBased     // Good for uncertainty-aware adaptation
-AdaptiveStrategy.AccuracyBased    // Requires true labels, tracks correctness
+public interface IAdaptiveDistillationStrategy<T>
+{
+    double MinTemperature { get; }
+    double MaxTemperature { get; }
+    double AdaptationRate { get; }
+
+    void UpdatePerformance(int sampleIndex, Vector<T> studentOutput, Vector<T>? trueLabel = null);
+    double ComputeAdaptiveTemperature(Vector<T> studentOutput, Vector<T> teacherOutput);
+    double GetPerformance(int sampleIndex);
+}
+```
+
+### ICurriculumDistillationStrategy<T>
+
+```csharp
+public interface ICurriculumDistillationStrategy<T>
+{
+    int TotalSteps { get; }
+    double CurriculumProgress { get; }
+    double MinTemperature { get; }
+    double MaxTemperature { get; }
+
+    void UpdateProgress(int step);
+    void SetSampleDifficulty(int sampleIndex, double difficulty);
+    bool ShouldIncludeSample(int sampleIndex);
+    double ComputeCurriculumTemperature();
+    double? GetSampleDifficulty(int sampleIndex);
+}
+```
+
+## Benefits of New Architecture
+
+### 1. Open/Closed Principle
+**Before**: Adding new strategy required modifying enum and switch statement
+```csharp
+// ❌ Required modifying existing code
+public enum AdaptiveStrategy
+{
+    ConfidenceBased,
+    AccuracyBased,
+    EntropyBased,
+    MyNewStrategy  // ← Must modify enum
+}
+
+switch (_strategy)
+{
+    case ConfidenceBased: ...
+    case AccuracyBased: ...
+    case EntropyBased: ...
+    case MyNewStrategy: ... // ← Must modify switch
+}
+```
+
+**After**: Just create new class
+```csharp
+// ✅ No modification of existing code needed
+public class MyNewAdaptiveStrategy<T> : AdaptiveDistillationStrategyBase<T>
+{
+    public override double ComputeAdaptiveTemperature(...) { ... }
+}
+```
+
+### 2. Testability
+**Before**: Mock entire class, test specific enum branch
+```csharp
+// ❌ Complex testing
+var mock = new Mock<AdaptiveDistillationStrategy<double>>();
+// How to test just ConfidenceBased logic?
+```
+
+**After**: Test specific strategy in isolation
+```csharp
+// ✅ Clean, focused testing
+var strategy = new ConfidenceBasedAdaptiveStrategy<double>();
+var temp = strategy.ComputeAdaptiveTemperature(studentOutput, teacherOutput);
+Assert.InRange(temp, strategy.MinTemperature, strategy.MaxTemperature);
+```
+
+### 3. Composition
+**Before**: Can't combine strategies
+```csharp
+// ❌ Can't mix ConfidenceBased + CurriculumLearning easily
+```
+
+**After**: Compose strategies through interfaces
+```csharp
+// ✅ Can create hybrid strategies
+public class HybridStrategy<T> : AdaptiveDistillationStrategyBase<T>
+{
+    private readonly ICurriculumDistillationStrategy<T> _curriculum;
+
+    public override double ComputeAdaptiveTemperature(...)
+    {
+        double adaptiveTemp = base.ComputeAdaptiveTemperature(...);
+        double curriculumTemp = _curriculum.ComputeCurriculumTemperature();
+        return (adaptiveTemp + curriculumTemp) / 2.0; // Blend both
+    }
+}
+```
+
+### 4. Dependency Injection
+**Before**: Hard to inject strategies
+```csharp
+// ❌ Tightly coupled to concrete enum
+```
+
+**After**: Inject through interface
+```csharp
+// ✅ Flexible dependency injection
+public class DistillationTrainer<T>
+{
+    private readonly IAdaptiveDistillationStrategy<T> _strategy;
+
+    public DistillationTrainer(IAdaptiveDistillationStrategy<T> strategy)
+    {
+        _strategy = strategy; // Any adaptive strategy works!
+    }
+}
+
+// Usage
+var trainer1 = new DistillationTrainer(new ConfidenceBasedAdaptiveStrategy<double>());
+var trainer2 = new DistillationTrainer(new MyCustomAdaptiveStrategy<double>());
 ```
 
 ## Common Migration Issues
 
-### Issue 1: Compilation Error - GetSoftPredictions Not Found
-
-**Error:**
-```
-'ITeacherModel<Vector<double>, Vector<double>>' does not contain a definition for 'GetSoftPredictions'
-```
-
-**Fix:**
-Replace direct softmax calls with strategy-based loss computation:
-```csharp
-// OLD: var softPredictions = teacher.GetSoftPredictions(input, temperature);
-// NEW: var loss = strategy.ComputeLoss(studentLogits, teacherLogits);
-```
-
-### Issue 2: AdaptiveStrategy Enum Not Found
+### Issue 1: Enum Not Found
 
 **Error:**
 ```
@@ -381,73 +456,61 @@ The type or namespace name 'AdaptiveStrategy' could not be found
 ```
 
 **Fix:**
-This enum moved from Teachers namespace to Strategies namespace:
+Replace enum with specific strategy class:
 ```csharp
-// Add using directive
-using AiDotNet.KnowledgeDistillation.Strategies;
+// OLD:
+new AdaptiveDistillationStrategy<double>(strategy: AdaptiveStrategy.ConfidenceBased)
 
-// Use the strategy
-var strategy = new AdaptiveDistillationStrategy<double>(
-    strategy: AdaptiveStrategy.ConfidenceBased
-);
+// NEW:
+new ConfidenceBasedAdaptiveStrategy<double>()
 ```
 
-### Issue 3: Teacher Doesn't Track Performance
+### Issue 2: UpdatePerformance Method Signature Changed
 
 **Error:**
 ```
-'AdaptiveTeacherModel<double>' does not contain a definition for 'UpdatePerformance'
+Cannot convert Vector<double> to double
 ```
 
 **Fix:**
-Performance tracking moved to strategy:
+Pass full vector, not just a scalar:
 ```csharp
-// OLD: adaptiveTeacher.UpdatePerformance(sampleIndex, studentOutput, label);
-// NEW: adaptiveStrategy.UpdatePerformance(sampleIndex, studentOutput, label);
+// OLD:
+strategy.UpdatePerformance(sampleIndex, performanceScalar);
+
+// NEW:
+strategy.UpdatePerformance(sampleIndex, studentOutput, trueLabel);
 ```
 
 ## FAQs
 
-### Q: Why were these changes made?
+### Q: Why split into multiple classes instead of using enums?
 
-**A**: To enforce SOLID principles:
-- **Single Responsibility**: Teachers predict, strategies train
-- **Separation of Concerns**: Inference logic separate from training logic
-- **Interface Segregation**: Removed unused methods with type-unsafe signatures
+**A**: The Open/Closed Principle states that code should be open for extension but closed for modification. With enums, adding a new strategy requires modifying the existing class (adding enum value + switch case). With the new architecture, you just create a new class that implements the interface.
 
-### Q: Is the old code broken?
+### Q: Can I still use the old AdaptiveDistillationStrategy?
 
-**A**: No. Backward compatibility is maintained. Old teacher classes still work as simple wrappers.
+**A**: No, it has been removed in favor of specific strategy classes. This encourages better architecture and makes extension easier.
 
-### Q: Do I need to migrate immediately?
+### Q: How do I choose between Confidence, Accuracy, and Entropy strategies?
 
-**A**: No. Old code continues to work. However, using the new strategies provides:
-- Better separation of concerns
-- More flexible configuration
-- Clearer code intent
-- Production-ready implementation
+**A**:
+- **ConfidenceBasedAdaptiveStrategy**: Best default choice, works without labels
+- **AccuracyBasedAdaptiveStrategy**: Use when you have labeled data and want to track correctness
+- **EntropyBasedAdaptiveStrategy**: Use when you want a more holistic uncertainty measure
 
-### Q: What if I need custom adaptive logic?
+### Q: Can I create my own adaptive strategy?
 
-**A**: Extend `DistillationStrategyBase<T, Vector<T>>` and implement your custom `ComputeLoss` and `ComputeGradient` methods.
-
-### Q: Can I mix strategies?
-
-**A**: No. Each training run should use one strategy. However, you can switch strategies between training sessions.
-
-## Additional Resources
-
-- **AdaptiveDistillationStrategy.cs**: See inline documentation for detailed examples
-- **CurriculumDistillationStrategy.cs**: See inline documentation for curriculum learning patterns
-- **DistillationStrategyBase.cs**: Base class for implementing custom strategies
+**A**: Yes! Extend `AdaptiveDistillationStrategyBase<T>` and override `ComputeAdaptiveTemperature`. See "Creating Custom Strategies" section above.
 
 ## Summary
 
 The refactoring:
-- ✅ Enforces SOLID principles
-- ✅ Separates inference from training logic
-- ✅ Maintains backward compatibility
-- ✅ Provides production-ready adaptive and curriculum strategies
-- ✅ Improves code clarity and maintainability
+- ✅ Follows SOLID principles (especially Open/Closed)
+- ✅ Separates inference (teachers) from training (strategies)
+- ✅ Makes extending with new strategies easy
+- ✅ Improves testability through focused classes
+- ✅ Enables composition and dependency injection
+- ✅ Provides production-ready implementations
 
-**Migration is optional but recommended** for new code to leverage the improved architecture.
+**Migration is straightforward**: Replace enum-based construction with specific strategy classes!
