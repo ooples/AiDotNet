@@ -452,10 +452,17 @@ public class CapsuleNetwork<T> : NeuralNetworkBase<T>
     /// </summary>
     /// <param name="capsuleOutputs">The capsule output tensor.</param>
     /// <returns>The index of the capsule with the highest norm.</returns>
+    /// <remarks>
+    /// Note: For batched inputs, this currently only examines the first batch element (batch index 0).
+    /// For proper batched inference, this would need to return predictions for all batch elements.
+    /// Current usage is primarily for reconstruction masking during training with batch size 1.
+    /// </remarks>
     private int GetPredictedClass(Tensor<T> capsuleOutputs)
     {
         // Compute norm of each capsule and return argmax
         // Assuming shape is [batch, numCapsules, capsuleDim]
+        // Currently only processes batch index 0 for simplicity
+        int batchOffset = 0; // Could be parameterized for specific batch element
         int numCapsules = capsuleOutputs.Shape.Length > 1 ? capsuleOutputs.Shape[1] : 1;
         int capsuleDim = capsuleOutputs.Shape.Length > 2 ? capsuleOutputs.Shape[2] : 1;
 
@@ -467,7 +474,7 @@ public class CapsuleNetwork<T> : NeuralNetworkBase<T>
             T normSquared = NumOps.Zero;
             for (int d = 0; d < capsuleDim; d++)
             {
-                int index = c * capsuleDim + d;
+                int index = batchOffset + c * capsuleDim + d;
                 if (index < capsuleOutputs.Length)
                 {
                     T val = capsuleOutputs[index];
