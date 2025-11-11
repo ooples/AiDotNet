@@ -56,24 +56,29 @@ public class ProbabilisticDistillationStrategy<T> : DistillationStrategyBase<Vec
     {
         ValidateOutputDimensions(studentOutput, teacherOutput, v => v.Length);
 
-        // Standard distillation loss (weighted)
+        // Standard distillation loss
         var studentSoft = Softmax(studentOutput, Temperature);
         var teacherSoft = Softmax(teacherOutput, Temperature);
         var softLoss = KLDivergence(teacherSoft, studentSoft);
-        softLoss = NumOps.Multiply(softLoss, NumOps.FromDouble(Temperature * Temperature * (1.0 - _distributionWeight)));
+        softLoss = NumOps.Multiply(softLoss, NumOps.FromDouble(Temperature * Temperature));
 
+        T finalLoss;
         if (trueLabels != null)
         {
             ValidateLabelDimensions(studentOutput, trueLabels, v => v.Length);
             var studentProbs = Softmax(studentOutput, 1.0);
             var hardLoss = CrossEntropy(studentProbs, trueLabels);
-            var combinedLoss = NumOps.Add(
+            finalLoss = NumOps.Add(
                 NumOps.Multiply(NumOps.FromDouble(Alpha), hardLoss),
                 NumOps.Multiply(NumOps.FromDouble(1.0 - Alpha), softLoss));
-            return NumOps.Multiply(combinedLoss, NumOps.FromDouble(1.0 - _distributionWeight));
+        }
+        else
+        {
+            finalLoss = softLoss;
         }
 
-        return softLoss;
+        // Apply distribution weight reduction exactly once
+        return NumOps.Multiply(finalLoss, NumOps.FromDouble(1.0 - _distributionWeight));
     }
 
     public override Vector<T> ComputeGradient(Vector<T> studentOutput, Vector<T> teacherOutput, Vector<T>? trueLabels = null)
@@ -86,12 +91,6 @@ public class ProbabilisticDistillationStrategy<T> : DistillationStrategyBase<Vec
         var studentSoft = Softmax(studentOutput, Temperature);
         var teacherSoft = Softmax(teacherOutput, Temperature);
 
-        for (int i = 0; i < n; i++)
-        {
-            var diff = NumOps.Subtract(studentSoft[i], teacherSoft[i]);
-            gradient[i] = NumOps.Multiply(diff, NumOps.FromDouble(Temperature * Temperature * (1.0 - _distributionWeight)));
-        }
-
         if (trueLabels != null)
         {
             ValidateLabelDimensions(studentOutput, trueLabels, v => v.Length);
@@ -99,10 +98,32 @@ public class ProbabilisticDistillationStrategy<T> : DistillationStrategyBase<Vec
 
             for (int i = 0; i < n; i++)
             {
+                // Soft gradient (temperature-scaled)
+                var softGrad = NumOps.Subtract(studentSoft[i], teacherSoft[i]);
+                softGrad = NumOps.Multiply(softGrad, NumOps.FromDouble(Temperature * Temperature));
+
+                // Hard gradient
                 var hardGrad = NumOps.Subtract(studentProbs[i], trueLabels[i]);
-                gradient[i] = NumOps.Add(
-                    NumOps.Multiply(NumOps.FromDouble(Alpha * (1.0 - _distributionWeight)), hardGrad),
-                    NumOps.Multiply(NumOps.FromDouble((1.0 - Alpha) * (1.0 - _distributionWeight)), gradient[i]));
+
+                // Combined gradient: Alpha * hardGrad + (1 - Alpha) * softGrad
+                var combined = NumOps.Add(
+                    NumOps.Multiply(NumOps.FromDouble(Alpha), hardGrad),
+                    NumOps.Multiply(NumOps.FromDouble(1.0 - Alpha), softGrad));
+
+                // Apply distribution weight reduction exactly once
+                gradient[i] = NumOps.Multiply(combined, NumOps.FromDouble(1.0 - _distributionWeight));
+            }
+        }
+        else
+        {
+            for (int i = 0; i < n; i++)
+            {
+                // Soft gradient (temperature-scaled)
+                var softGrad = NumOps.Subtract(studentSoft[i], teacherSoft[i]);
+                softGrad = NumOps.Multiply(softGrad, NumOps.FromDouble(Temperature * Temperature));
+
+                // Apply distribution weight reduction exactly once
+                gradient[i] = NumOps.Multiply(softGrad, NumOps.FromDouble(1.0 - _distributionWeight));
             }
         }
 
