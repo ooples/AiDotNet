@@ -628,6 +628,33 @@ public class GRULayer<T> : LayerBase<T>
     /// </remarks>
     public override Tensor<T> Backward(Tensor<T> outputGradient)
     {
+        // Note: Autodiff for GRU with BPTT and gated units is not yet implemented.
+        // The manual BPTT implementation handles the complex gradient calculations
+        // through reset and update gates efficiently.
+        return BackwardManual(outputGradient);
+    }
+
+    /// <summary>
+    /// Manual backward pass implementation using Backpropagation Through Time (BPTT) for GRU.
+    /// </summary>
+    /// <param name="outputGradient">The gradient of the loss with respect to the layer's output.</param>
+    /// <returns>The gradient of the loss with respect to the layer's input.</returns>
+    /// <remarks>
+    /// <para>
+    /// This method implements the backward pass using manual gradient calculations optimized for
+    /// GRU networks. It performs backpropagation through time (BPTT), processing the
+    /// sequence in reverse order and computing gradients for all gate parameters (reset, update)
+    /// and hidden states.
+    /// </para>
+    /// <para>
+    /// Autodiff Note: GRU backward pass involves complex interactions between reset and update gates.
+    /// Implementing this with automatic differentiation would require handling temporal dependencies
+    /// and gate-specific gradient flows. The manual implementation provides efficient and correct
+    /// gradient calculations for all GRU components.
+    /// </para>
+    /// </remarks>
+    private Tensor<T> BackwardManual(Tensor<T> outputGradient)
+    {
         if (_lastInput == null || _lastHiddenState == null || _lastZ == null || _lastR == null || _lastH == null)
             throw new InvalidOperationException("Forward pass must be called before backward pass.");
 

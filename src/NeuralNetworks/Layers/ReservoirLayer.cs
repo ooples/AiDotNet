@@ -283,7 +283,14 @@ public class ReservoirLayer<T> : LayerBase<T>
     /// </remarks>
     public override Tensor<T> Backward(Tensor<T> outputGradient)
     {
-        // In ESN, we don't backpropagate through the reservoir
+        // Note: ReservoirLayer does not support backward pass or autodiff.
+        // In Echo State Networks (ESNs), the reservoir weights are randomly initialized
+        // and remain fixed during training. Only the readout layer (placed after the reservoir)
+        // is trained to interpret the reservoir states.
+        //
+        // Autodiff Note: Since the reservoir itself is not trained, there is no gradient
+        // computation required for this layer. All training occurs in the separate readout layer.
+
         throw new InvalidOperationException("Backward pass is not supported for ReservoirLayer in Echo State Networks as reservoir weights are typically fixed.");
     }
 

@@ -462,6 +462,32 @@ public class MemoryWriteLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     /// </remarks>
     public override Tensor<T> Backward(Tensor<T> outputGradient)
     {
+        // Note: Autodiff for attention-based memory writing is not yet implemented.
+        // The manual implementation handles complex gradient calculations through
+        // the softmax attention mechanism, query-key-value transformations, and memory update.
+        return BackwardManual(outputGradient);
+    }
+
+    /// <summary>
+    /// Manual backward pass implementation for memory write layer with attention.
+    /// </summary>
+    /// <param name="outputGradient">The gradient of the loss with respect to the layer's output.</param>
+    /// <returns>The gradient of the loss with respect to the layer's input.</returns>
+    /// <remarks>
+    /// <para>
+    /// This method implements the backward pass using manual gradient calculations for
+    /// attention-based memory writing. It computes gradients through the attention mechanism,
+    /// including softmax, query/key/value transformations, and output projection.
+    /// </para>
+    /// <para>
+    /// Autodiff Note: The memory write operation involves complex attention mechanisms with
+    /// softmax over attention scores, query-key-value structure, and multiple weight matrices.
+    /// The manual implementation provides efficient gradient calculations for all components
+    /// of the attention-based memory update.
+    /// </para>
+    /// </remarks>
+    private Tensor<T> BackwardManual(Tensor<T> outputGradient)
+    {
         if (_lastInput == null || _lastMemory == null || _lastOutput == null || _lastAttentionScores == null)
             throw new InvalidOperationException("Forward pass must be called before backward pass.");
 

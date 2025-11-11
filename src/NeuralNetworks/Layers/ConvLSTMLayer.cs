@@ -259,8 +259,8 @@ public class ConvLSTMLayer<T> : LayerBase<T>
     /// - Strides determine how far to move the cropping tool each time
     /// - Filters determine how many different "versions" of the output we'll have
     /// 
-    /// For example, if you have a 64×64 image and use a kernel size of 3, padding of 1,
-    /// and strides of 1, the output height and width will still be 64×64, preserving
+    /// For example, if you have a 64ï¿½64 image and use a kernel size of 3, padding of 1,
+    /// and strides of 1, the output height and width will still be 64ï¿½64, preserving
     /// the spatial dimensions.
     /// </para>
     /// </remarks>
@@ -533,6 +533,34 @@ public class ConvLSTMLayer<T> : LayerBase<T>
     /// </para>
     /// </remarks>
     public override Tensor<T> Backward(Tensor<T> outputGradient)
+    {
+        // Note: Autodiff for ConvLSTM with BPTT, convolutional operations, and gated cell states is not yet implemented.
+        // The manual BPTT implementation handles the complex gradient calculations through
+        // convolutional gates (forget, input, cell, output) and spatial-temporal dependencies efficiently.
+        return BackwardManual(outputGradient);
+    }
+
+    /// <summary>
+    /// Manual backward pass implementation using Backpropagation Through Time (BPTT) for ConvLSTM.
+    /// </summary>
+    /// <param name="outputGradient">The gradient of the loss with respect to the layer's output.</param>
+    /// <returns>The gradient of the loss with respect to the layer's input.</returns>
+    /// <remarks>
+    /// <para>
+    /// This method implements the backward pass using manual gradient calculations optimized for
+    /// ConvLSTM networks. It performs backpropagation through time (BPTT), processing the
+    /// sequence in reverse order and computing gradients for all convolutional gate parameters,
+    /// hidden states, and cell states.
+    /// </para>
+    /// <para>
+    /// Autodiff Note: ConvLSTM backward pass combines the complexity of LSTM gates with
+    /// convolutional operations across spatial dimensions. Implementing this with automatic
+    /// differentiation would require handling temporal dependencies, spatial convolutions,
+    /// and gate-specific gradient flows. The manual implementation provides efficient and
+    /// correct gradient calculations for all ConvLSTM components.
+    /// </para>
+    /// </remarks>
+    private Tensor<T> BackwardManual(Tensor<T> outputGradient)
     {
         int batchSize = _lastInput!.Shape[0];
         int timeSteps = _lastInput.Shape[1];

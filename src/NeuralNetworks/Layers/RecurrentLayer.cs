@@ -250,7 +250,7 @@ public class RecurrentLayer<T> : LayerBase<T>
     /// 3. The outputs at each time step become the overall output of the layer
     /// 
     /// The formula at each step is approximately:
-    /// new_memory = activation(input_weights × current_input + hidden_weights × previous_memory + bias)
+    /// new_memory = activation(input_weights ï¿½ current_input + hidden_weights ï¿½ previous_memory + bias)
     /// 
     /// This step-by-step processing allows the layer to build up an understanding of the entire sequence.
     /// The layer saves all inputs, hidden states, and outputs for later use during training.
@@ -341,6 +341,30 @@ public class RecurrentLayer<T> : LayerBase<T>
     /// </para>
     /// </remarks>
     public override Tensor<T> Backward(Tensor<T> outputGradient)
+    {
+        // Note: Autodiff for recurrent layers with BPTT is not yet implemented.
+        // The manual BPTT implementation is optimized for sequential processing.
+        return BackwardManual(outputGradient);
+    }
+
+    /// <summary>
+    /// Manual backward pass implementation using Backpropagation Through Time (BPTT).
+    /// </summary>
+    /// <param name="outputGradient">The gradient of the loss with respect to the layer's output.</param>
+    /// <returns>The gradient of the loss with respect to the layer's input.</returns>
+    /// <remarks>
+    /// <para>
+    /// This method implements the backward pass using manual gradient calculations optimized for
+    /// recurrent neural networks. It performs backpropagation through time (BPTT), processing the
+    /// sequence in reverse order and accumulating gradients across time steps.
+    /// </para>
+    /// <para>
+    /// Autodiff Note: Implementing BPTT with automatic differentiation is complex due to temporal
+    /// dependencies and the need to accumulate gradients across time steps. The manual implementation
+    /// provides efficient and correct gradient calculations for recurrent layers.
+    /// </para>
+    /// </remarks>
+    private Tensor<T> BackwardManual(Tensor<T> outputGradient)
     {
         if (_lastInput == null || _lastHiddenState == null || _lastOutput == null)
             throw new InvalidOperationException("Forward pass must be called before backward pass.");

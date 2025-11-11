@@ -440,6 +440,32 @@ public class MemoryReadLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     /// </remarks>
     public override Tensor<T> Backward(Tensor<T> outputGradient)
     {
+        // Note: Autodiff for attention-based memory reading is not yet implemented.
+        // The manual implementation handles complex gradient calculations through
+        // the softmax attention mechanism, key-value transformations, and dual-input structure.
+        return BackwardManual(outputGradient);
+    }
+
+    /// <summary>
+    /// Manual backward pass implementation for memory read layer with attention.
+    /// </summary>
+    /// <param name="outputGradient">The gradient of the loss with respect to the layer's output.</param>
+    /// <returns>The gradient of the loss with respect to the layer's inputs (both input and memory).</returns>
+    /// <remarks>
+    /// <para>
+    /// This method implements the backward pass using manual gradient calculations for
+    /// attention-based memory reading. It computes gradients through the attention mechanism,
+    /// including softmax, key/value transformations, and output projection.
+    /// </para>
+    /// <para>
+    /// Autodiff Note: The memory read operation involves complex attention mechanisms with
+    /// softmax over attention scores, dual-input structure (input and memory), and multiple
+    /// weight matrices. The manual implementation provides efficient gradient calculations
+    /// for all components of the attention-based memory retrieval.
+    /// </para>
+    /// </remarks>
+    private Tensor<T> BackwardManual(Tensor<T> outputGradient)
+    {
         if (_lastInput == null || _lastMemory == null || _lastOutput == null || _lastAttentionScores == null)
             throw new InvalidOperationException("Forward pass must be called before backward pass.");
 

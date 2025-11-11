@@ -344,6 +344,10 @@ public class TimeDistributedLayer<T> : LayerBase<T>
     /// </remarks>
     public override Tensor<T> Backward(Tensor<T> outputGradient)
     {
+        // Note: TimeDistributedLayer delegates backward pass to the inner layer at each time step.
+        // Autodiff support is handled by the inner layer. This wrapper layer simply manages
+        // time-step-wise gradient propagation without temporal dependencies between steps.
+
         if (_lastInput == null || _lastOutput == null)
         {
             throw new InvalidOperationException("Forward pass must be called before backward pass.");

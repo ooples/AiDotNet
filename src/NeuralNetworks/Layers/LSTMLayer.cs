@@ -928,6 +928,33 @@ public class LSTMLayer<T> : LayerBase<T>
     /// </remarks>
     public override Tensor<T> Backward(Tensor<T> outputGradient)
     {
+        // Note: Autodiff for LSTM with BPTT and gated cell states is not yet implemented.
+        // The manual BPTT implementation handles the complex gradient calculations
+        // through forget, input, cell, and output gates efficiently.
+        return BackwardManual(outputGradient);
+    }
+
+    /// <summary>
+    /// Manual backward pass implementation using Backpropagation Through Time (BPTT) for LSTM.
+    /// </summary>
+    /// <param name="outputGradient">The gradient of the loss with respect to the layer's output.</param>
+    /// <returns>The gradient of the loss with respect to the layer's input.</returns>
+    /// <remarks>
+    /// <para>
+    /// This method implements the backward pass using manual gradient calculations optimized for
+    /// LSTM networks. It performs backpropagation through time (BPTT), processing the
+    /// sequence in reverse order and computing gradients for all gate parameters (forget, input,
+    /// cell, output), hidden states, and cell states.
+    /// </para>
+    /// <para>
+    /// Autodiff Note: LSTM backward pass involves complex gate interactions and cell state dynamics.
+    /// Implementing this with automatic differentiation would require handling temporal dependencies,
+    /// gate-specific gradient flows, and the memory cell update mechanism. The manual implementation
+    /// provides efficient and correct gradient calculations for all LSTM components.
+    /// </para>
+    /// </remarks>
+    private Tensor<T> BackwardManual(Tensor<T> outputGradient)
+    {
         if (_lastInput == null || _lastHiddenState == null || _lastCellState == null)
         {
             throw new InvalidOperationException("Backward pass called before forward pass.");
@@ -959,7 +986,7 @@ public class LSTMLayer<T> : LayerBase<T>
             var prevH = t > 0 ? _lastHiddenState.GetSlice(t - 1) : new Tensor<T>([batchSize, _hiddenSize]);
             var prevC = t > 0 ? _lastCellState.GetSlice(t - 1) : new Tensor<T>([batchSize, _hiddenSize]);
 
-            var (dxt, dprevH, dprevC, dWfi, dWii, dWci, dWoi, dWfh, dWih, dWch, dWoh, dbf, dbi, dbc, dbo) = 
+            var (dxt, dprevH, dprevC, dWfi, dWii, dWci, dWoi, dWfh, dWih, dWch, dWoh, dbf, dbi, dbc, dbo) =
                 BackwardStep(dh, dNextC, xt, prevH, prevC);
 
             inputGradient.SetSlice(t, dxt);

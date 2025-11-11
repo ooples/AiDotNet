@@ -238,6 +238,10 @@ public class BidirectionalLayer<T> : LayerBase<T>
     /// </remarks>
     public override Tensor<T> Backward(Tensor<T> outputGradient)
     {
+        // Note: BidirectionalLayer delegates backward pass to inner forward and backward layers.
+        // Autodiff support is handled by the inner layers (e.g., LSTMLayer, GRULayer).
+        // This wrapper layer simply manages gradient flow for bidirectional processing.
+
         Tensor<T> forwardGradient, backwardGradient;
 
         if (_mergeMode)
