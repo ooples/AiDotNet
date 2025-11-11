@@ -39,58 +39,8 @@ namespace AiDotNet.KnowledgeDistillation;
 /// <para><b>References:</b>
 /// - Hinton, G., Vinyals, O., & Dean, J. (2015). Distilling the Knowledge in a Neural Network. arXiv:1503.02531</para>
 /// </remarks>
-public class DistillationLoss<T> : IDistillationStrategy<Vector<T>, T>
+public class DistillationLoss<T> : DistillationStrategyBase<Vector<T>, T>
 {
-    private readonly INumericOperations<T> _numOps;
-    private double _temperature;
-    private double _alpha;
-
-    /// <summary>
-    /// Gets or sets the temperature parameter for softening probability distributions.
-    /// </summary>
-    /// <remarks>
-    /// <para><b>For Beginners:</b> Higher temperature makes the probability distribution "softer",
-    /// revealing more information about the model's uncertainty and class relationships.</para>
-    ///
-    /// <para>Example with logits [10, 2, 1]:
-    /// - T=1: probabilities [0.9999, 0.0001, 0.0000] (very peaked)
-    /// - T=3: probabilities [0.952, 0.024, 0.024] (softer, more information)
-    /// - T=5: probabilities [0.866, 0.067, 0.067] (even softer)</para>
-    ///
-    /// <para>Typical values: 3-5 for image classification, 2-4 for language models.</para>
-    /// </remarks>
-    public double Temperature
-    {
-        get => _temperature;
-        set
-        {
-            if (value <= 0)
-                throw new ArgumentException("Temperature must be positive (> 0)", nameof(value));
-            _temperature = value;
-        }
-    }
-
-    /// <summary>
-    /// Gets or sets the balance parameter between hard loss and soft loss.
-    /// </summary>
-    /// <remarks>
-    /// <para><b>For Beginners:</b> Controls how much the student learns from true labels vs. teacher:
-    /// - α = 0: Only learn from teacher (useful when labels are noisy)
-    /// - α = 0.3: 30% from labels, 70% from teacher (common default)
-    /// - α = 0.5: Equal weight to both sources
-    /// - α = 1: Only learn from labels (no distillation)</para>
-    /// </remarks>
-    public double Alpha
-    {
-        get => _alpha;
-        set
-        {
-            if (value < 0 || value > 1)
-                throw new ArgumentException("Alpha must be between 0 and 1", nameof(value));
-            _alpha = value;
-        }
-    }
-
     /// <summary>
     /// Initializes a new instance of the DistillationLoss class.
     /// </summary>
@@ -106,15 +56,8 @@ public class DistillationLoss<T> : IDistillationStrategy<Vector<T>, T>
     /// - Increase alpha if you have very clean labels and a smaller capacity gap</para>
     /// </remarks>
     public DistillationLoss(double temperature = 3.0, double alpha = 0.3)
+        : base(temperature, alpha)
     {
-        if (temperature <= 0)
-            throw new ArgumentException("Temperature must be positive", nameof(temperature));
-        if (alpha < 0 || alpha > 1)
-            throw new ArgumentException("Alpha must be between 0 and 1", nameof(alpha));
-
-        _numOps = MathHelper.GetNumericOperations<T>();
-        Temperature = temperature;
-        Alpha = alpha;
     }
 
     /// <summary>
@@ -134,12 +77,10 @@ public class DistillationLoss<T> : IDistillationStrategy<Vector<T>, T>
     /// distributions are. When the student's soft predictions match the teacher's, KL divergence
     /// approaches zero.</para>
     /// </remarks>
-    public T ComputeLoss(Vector<T> studentLogits, Vector<T> teacherLogits, Vector<T>? trueLabels = null)
+    public override T ComputeLoss(Vector<T> studentLogits, Vector<T> teacherLogits, Vector<T>? trueLabels = null)
     {
-        if (studentLogits.Length != teacherLogits.Length)
-            throw new ArgumentException("Student and teacher logits must have the same length");
-        if (trueLabels != null && studentLogits.Length != trueLabels.Length)
-            throw new ArgumentException("Logits and labels must have the same length");
+        ValidateOutputDimensions(studentLogits, teacherLogits, v => v.Length);
+        ValidateLabelDimensions(studentLogits, trueLabels, v => v.Length);
 
         // Compute soft loss: KL divergence between temperature-scaled distributions
         var studentSoft = Softmax(studentLogits, Temperature);
@@ -149,7 +90,7 @@ public class DistillationLoss<T> : IDistillationStrategy<Vector<T>, T>
 
         // Scale by T² to balance gradient magnitudes
         // This is crucial: without T² scaling, the soft loss gradients would be too small
-        softLoss = _numOps.Multiply(softLoss, _numOps.FromDouble(Temperature * Temperature));
+        softLoss = NumOps.Multiply(softLoss, NumOps.FromDouble(Temperature * Temperature));
 
         // If we have true labels, add hard loss
         if (trueLabels != null)
@@ -158,12 +99,12 @@ public class DistillationLoss<T> : IDistillationStrategy<Vector<T>, T>
             var hardLoss = CrossEntropy(studentProbs, trueLabels);
 
             // Combine: α × hard_loss + (1 - α) × soft_loss
-            var alphaT = _numOps.FromDouble(Alpha);
-            var oneMinusAlpha = _numOps.FromDouble(1.0 - Alpha);
+            var alphaT = NumOps.FromDouble(Alpha);
+            var oneMinusAlpha = NumOps.FromDouble(1.0 - Alpha);
 
-            var totalLoss = _numOps.Add(
-                _numOps.Multiply(alphaT, hardLoss),
-                _numOps.Multiply(oneMinusAlpha, softLoss)
+            var totalLoss = NumOps.Add(
+                NumOps.Multiply(alphaT, hardLoss),
+                NumOps.Multiply(oneMinusAlpha, softLoss)
             );
 
             return totalLoss;
@@ -188,12 +129,10 @@ public class DistillationLoss<T> : IDistillationStrategy<Vector<T>, T>
     /// The hard gradient: (student_probs - true_labels)
     /// Combined gradient: α × hard_grad + (1 - α) × soft_grad</para>
     /// </remarks>
-    public Vector<T> ComputeGradient(Vector<T> studentLogits, Vector<T> teacherLogits, Vector<T>? trueLabels = null)
+    public override Vector<T> ComputeGradient(Vector<T> studentLogits, Vector<T> teacherLogits, Vector<T>? trueLabels = null)
     {
-        if (studentLogits.Length != teacherLogits.Length)
-            throw new ArgumentException("Student and teacher logits must have the same length");
-        if (trueLabels != null && studentLogits.Length != trueLabels.Length)
-            throw new ArgumentException("Logits and labels must have the same length");
+        ValidateOutputDimensions(studentLogits, teacherLogits, v => v.Length);
+        ValidateLabelDimensions(studentLogits, trueLabels, v => v.Length);
 
         int n = studentLogits.Length;
         var gradient = new Vector<T>(n);
@@ -204,8 +143,8 @@ public class DistillationLoss<T> : IDistillationStrategy<Vector<T>, T>
 
         for (int i = 0; i < n; i++)
         {
-            var diff = _numOps.Subtract(studentSoft[i], teacherSoft[i]);
-            gradient[i] = _numOps.Multiply(diff, _numOps.FromDouble(Temperature * Temperature));
+            var diff = NumOps.Subtract(studentSoft[i], teacherSoft[i]);
+            gradient[i] = NumOps.Multiply(diff, NumOps.FromDouble(Temperature * Temperature));
         }
 
         // If we have true labels, add hard gradient
@@ -217,18 +156,18 @@ public class DistillationLoss<T> : IDistillationStrategy<Vector<T>, T>
             // Hard gradient: ∂L_hard/∂logits = student_probs - true_labels
             for (int i = 0; i < n; i++)
             {
-                hardGradient[i] = _numOps.Subtract(studentProbs[i], trueLabels[i]);
+                hardGradient[i] = NumOps.Subtract(studentProbs[i], trueLabels[i]);
             }
 
             // Combine gradients: α × hard_grad + (1 - α) × soft_grad
-            var alphaT = _numOps.FromDouble(Alpha);
-            var oneMinusAlpha = _numOps.FromDouble(1.0 - Alpha);
+            var alphaT = NumOps.FromDouble(Alpha);
+            var oneMinusAlpha = NumOps.FromDouble(1.0 - Alpha);
 
             for (int i = 0; i < n; i++)
             {
-                gradient[i] = _numOps.Add(
-                    _numOps.Multiply(alphaT, hardGradient[i]),
-                    _numOps.Multiply(oneMinusAlpha, gradient[i])
+                gradient[i] = NumOps.Add(
+                    NumOps.Multiply(alphaT, hardGradient[i]),
+                    NumOps.Multiply(oneMinusAlpha, gradient[i])
                 );
             }
         }
@@ -259,33 +198,33 @@ public class DistillationLoss<T> : IDistillationStrategy<Vector<T>, T>
         var scaledLogits = new T[n];
         for (int i = 0; i < n; i++)
         {
-            double val = _numOps.ToDouble(logits[i]) / temperature;
-            scaledLogits[i] = _numOps.FromDouble(val);
+            double val = NumOps.ToDouble(logits[i]) / temperature;
+            scaledLogits[i] = NumOps.FromDouble(val);
         }
 
         // Find max for numerical stability (prevents overflow in exp)
         T maxLogit = scaledLogits[0];
         for (int i = 1; i < n; i++)
         {
-            if (_numOps.GreaterThan(scaledLogits[i], maxLogit))
+            if (NumOps.GreaterThan(scaledLogits[i], maxLogit))
                 maxLogit = scaledLogits[i];
         }
 
         // Compute exp(logit - max) and sum
-        T sum = _numOps.Zero;
+        T sum = NumOps.Zero;
         var expValues = new T[n];
 
         for (int i = 0; i < n; i++)
         {
-            double val = _numOps.ToDouble(_numOps.Subtract(scaledLogits[i], maxLogit));
-            expValues[i] = _numOps.FromDouble(Math.Exp(val));
-            sum = _numOps.Add(sum, expValues[i]);
+            double val = NumOps.ToDouble(NumOps.Subtract(scaledLogits[i], maxLogit));
+            expValues[i] = NumOps.FromDouble(Math.Exp(val));
+            sum = NumOps.Add(sum, expValues[i]);
         }
 
         // Normalize to get probabilities
         for (int i = 0; i < n; i++)
         {
-            result[i] = _numOps.Divide(expValues[i], sum);
+            result[i] = NumOps.Divide(expValues[i], sum);
         }
 
         return result;
@@ -307,18 +246,18 @@ public class DistillationLoss<T> : IDistillationStrategy<Vector<T>, T>
     /// </remarks>
     private T KLDivergence(Vector<T> p, Vector<T> q)
     {
-        T divergence = _numOps.Zero;
+        T divergence = NumOps.Zero;
         const double epsilon = 1e-10; // Small value to avoid log(0)
 
         for (int i = 0; i < p.Length; i++)
         {
-            double pVal = _numOps.ToDouble(p[i]);
-            double qVal = _numOps.ToDouble(q[i]);
+            double pVal = NumOps.ToDouble(p[i]);
+            double qVal = NumOps.ToDouble(q[i]);
 
             if (pVal > epsilon) // Only compute where p is non-zero
             {
                 double contrib = pVal * Math.Log(pVal / (qVal + epsilon));
-                divergence = _numOps.Add(divergence, _numOps.FromDouble(contrib));
+                divergence = NumOps.Add(divergence, NumOps.FromDouble(contrib));
             }
         }
 
@@ -342,18 +281,18 @@ public class DistillationLoss<T> : IDistillationStrategy<Vector<T>, T>
     /// </remarks>
     private T CrossEntropy(Vector<T> predictions, Vector<T> trueLabels)
     {
-        T entropy = _numOps.Zero;
+        T entropy = NumOps.Zero;
         const double epsilon = 1e-10; // Small value to avoid log(0)
 
         for (int i = 0; i < predictions.Length; i++)
         {
-            double pred = _numOps.ToDouble(predictions[i]);
-            double label = _numOps.ToDouble(trueLabels[i]);
+            double pred = NumOps.ToDouble(predictions[i]);
+            double label = NumOps.ToDouble(trueLabels[i]);
 
             if (label > epsilon) // Only compute where label is non-zero
             {
                 double contrib = -label * Math.Log(pred + epsilon);
-                entropy = _numOps.Add(entropy, _numOps.FromDouble(contrib));
+                entropy = NumOps.Add(entropy, NumOps.FromDouble(contrib));
             }
         }
 

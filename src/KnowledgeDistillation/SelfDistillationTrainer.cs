@@ -48,12 +48,10 @@ namespace AiDotNet.KnowledgeDistillation;
 /// - Furlanello, T., et al. (2018). Born Again Neural Networks. ICML.
 /// - Zhang, L., et al. (2019). Be Your Own Teacher: Improve the Performance of Convolutional Neural Networks via Self-Distillation.</para>
 /// </remarks>
-public class SelfDistillationTrainer<T>
+public class SelfDistillationTrainer<T> : KnowledgeDistillationTrainerBase<Vector<T>, Vector<T>, T>
 {
-    private readonly IDistillationStrategy<Vector<T>, T> _distillationStrategy;
-    private readonly INumericOperations<T> _numOps;
     private readonly int _generations;
-    private readonly Random _random;
+    private Vector<T>[]? _cachedTeacherPredictions;
 
     /// <summary>
     /// Gets or sets whether to use exponential moving average for teacher predictions.
@@ -75,6 +73,7 @@ public class SelfDistillationTrainer<T>
     /// <param name="distillationStrategy">The strategy for computing distillation loss.</param>
     /// <param name="generations">Number of self-distillation generations (default 1).
     /// More generations can improve performance but take longer to train.</param>
+    /// <param name="seed">Optional random seed for reproducibility.</param>
     /// <remarks>
     /// <para><b>For Beginners:</b> Generations control how many times the model relearns from itself:
     /// - 1 generation: Train normally, then retrain with self as teacher
@@ -92,16 +91,36 @@ public class SelfDistillationTrainer<T>
         IDistillationStrategy<Vector<T>, T> distillationStrategy,
         int generations = 1,
         int? seed = null)
+        : base(new SelfTeacherModelPlaceholder<T>(), distillationStrategy, seed)
     {
         if (generations < 1)
             throw new ArgumentException("Generations must be at least 1", nameof(generations));
 
-        _distillationStrategy = distillationStrategy ?? throw new ArgumentNullException(nameof(distillationStrategy));
-        _numOps = MathHelper.GetNumericOperations<T>();
         _generations = generations;
-        _random = seed.HasValue ? new Random(seed.Value) : new Random();
         UseEMA = false;
         EMADecay = 0.99;
+    }
+
+    /// <summary>
+    /// Gets teacher predictions from the cached predictions array (for self-distillation).
+    /// </summary>
+    /// <param name="input">The input data (unused - predictions are cached).</param>
+    /// <param name="index">The index in the training batch.</param>
+    /// <returns>Cached teacher prediction for this index.</returns>
+    /// <remarks>
+    /// <para><b>For Self-Distillation:</b> Instead of calling a separate teacher model,
+    /// we return predictions that were cached from the previous generation.</para>
+    /// </remarks>
+    protected override Vector<T> GetTeacherPredictions(Vector<T> input, int index)
+    {
+        if (_cachedTeacherPredictions == null || index >= _cachedTeacherPredictions.Length)
+        {
+            // First generation or out of bounds - return input as dummy teacher
+            // This will be handled properly in TrainMultipleGenerations
+            return new Vector<T>(Teacher.OutputDimension);
+        }
+
+        return _cachedTeacherPredictions[index];
     }
 
     /// <summary>
@@ -150,68 +169,10 @@ public class SelfDistillationTrainer<T>
         if (trainInputs.Length != trainLabels.Length)
             throw new ArgumentException("Inputs and labels must have the same length");
 
-        // Store teacher predictions for current generation
-        Vector<T>[]? teacherPredictions = null;
-
         for (int generation = 0; generation < _generations; generation++)
         {
-            T generationLoss = _numOps.Zero;
-            int numBatches = (trainInputs.Length + batchSize - 1) / batchSize;
-
-            for (int epoch = 0; epoch < epochs; epoch++)
-            {
-                T epochLoss = _numOps.Zero;
-
-                // Shuffle data - use same indices for inputs, labels, and teacher predictions
-                var indices = FisherYatesShuffle(trainInputs.Length);
-                var shuffledInputs = indices.Select(i => trainInputs[i]).ToArray();
-                var shuffledLabels = indices.Select(i => trainLabels[i]).ToArray();
-                Vector<T>[]? shuffledTeacher = null;
-
-                if (teacherPredictions != null)
-                {
-                    // Use same indices to ensure alignment
-                    shuffledTeacher = indices.Select(i => teacherPredictions[i]).ToArray();
-                }
-
-                // Train on batches
-                for (int b = 0; b < numBatches; b++)
-                {
-                    int start = b * batchSize;
-                    int end = Math.Min(start + batchSize, trainInputs.Length);
-                    int currentBatchSize = end - start;
-
-                    var batchInputs = new Vector<T>[currentBatchSize];
-                    var batchLabels = new Vector<T>[currentBatchSize];
-                    Array.Copy(shuffledInputs, start, batchInputs, 0, currentBatchSize);
-                    Array.Copy(shuffledLabels, start, batchLabels, 0, currentBatchSize);
-
-                    Vector<T>[]? batchTeacher = null;
-                    if (shuffledTeacher != null)
-                    {
-                        batchTeacher = new Vector<T>[currentBatchSize];
-                        Array.Copy(shuffledTeacher, start, batchTeacher, 0, currentBatchSize);
-                    }
-
-                    var batchLoss = TrainBatch(
-                        modelForward,
-                        modelBackward,
-                        batchInputs,
-                        batchLabels,
-                        batchTeacher);
-                    epochLoss = _numOps.Add(epochLoss, batchLoss);
-                }
-
-                generationLoss = _numOps.Add(generationLoss, epochLoss);
-            }
-
-            var avgGenLoss = _numOps.Divide(generationLoss, _numOps.FromDouble(epochs * numBatches));
-
-            // Invoke callback if provided
-            onGenerationComplete?.Invoke(generation, avgGenLoss);
-
-            // After training this generation, save predictions as teacher for next generation
-            if (generation < _generations - 1)
+            // Cache predictions from previous generation (if not first generation)
+            if (generation > 0)
             {
                 var newPredictions = new Vector<T>[trainInputs.Length];
                 for (int i = 0; i < trainInputs.Length; i++)
@@ -219,108 +180,66 @@ public class SelfDistillationTrainer<T>
                     newPredictions[i] = modelForward(trainInputs[i]);
                 }
 
-                // Apply EMA to teacher predictions if enabled
-                if (UseEMA && teacherPredictions != null)
+                // Apply EMA if enabled
+                if (UseEMA && _cachedTeacherPredictions != null)
                 {
-                    // Exponential moving average: teacher = decay * old + (1-decay) * new
-                    teacherPredictions = new Vector<T>[trainInputs.Length];
                     for (int i = 0; i < trainInputs.Length; i++)
                     {
                         var blended = new Vector<T>(newPredictions[i].Length);
                         for (int j = 0; j < newPredictions[i].Length; j++)
                         {
-                            var oldValue = _numOps.Multiply(
-                                teacherPredictions[i][j],
-                                _numOps.FromDouble(EMADecay));
-                            var newValue = _numOps.Multiply(
+                            var oldValue = NumOps.Multiply(
+                                _cachedTeacherPredictions[i][j],
+                                NumOps.FromDouble(EMADecay));
+                            var newValue = NumOps.Multiply(
                                 newPredictions[i][j],
-                                _numOps.FromDouble(1.0 - EMADecay));
-                            blended[j] = _numOps.Add(oldValue, newValue);
+                                NumOps.FromDouble(1.0 - EMADecay));
+                            blended[j] = NumOps.Add(oldValue, newValue);
                         }
-                        teacherPredictions[i] = blended;
+                        newPredictions[i] = blended;
                     }
                 }
-                else
+
+                _cachedTeacherPredictions = newPredictions;
+            }
+
+            // Train using base class Train method
+            T generationLoss = NumOps.Zero;
+            int epochCount = 0;
+
+            Train(
+                modelForward,
+                modelBackward,
+                trainInputs,
+                trainLabels,
+                epochs,
+                batchSize,
+                onEpochComplete: (epoch, loss) =>
                 {
-                    // No EMA, just use new predictions directly
-                    teacherPredictions = newPredictions;
-                }
-            }
+                    generationLoss = NumOps.Add(generationLoss, loss);
+                    epochCount++;
+                });
+
+            var avgGenLoss = NumOps.Divide(generationLoss, NumOps.FromDouble(epochCount));
+            onGenerationComplete?.Invoke(generation, avgGenLoss);
         }
     }
+}
 
-    /// <summary>
-    /// Trains on a single batch with self-distillation.
-    /// </summary>
-    private T TrainBatch(
-        Func<Vector<T>, Vector<T>> modelForward,
-        Action<Vector<T>> modelBackward,
-        Vector<T>[] batchInputs,
-        Vector<T>[] batchLabels,
-        Vector<T>[]? teacherPredictions)
-    {
-        T totalLoss = _numOps.Zero;
+/// <summary>
+/// Placeholder teacher model for self-distillation (not actually used for predictions).
+/// </summary>
+internal class SelfTeacherModelPlaceholder<T> : ITeacherModel<Vector<T>, Vector<T>>
+{
+    public int OutputDimension => 0; // Will be set by actual model
 
-        for (int i = 0; i < batchInputs.Length; i++)
-        {
-            var input = batchInputs[i];
-            var label = batchLabels[i];
+    public Vector<T> GetLogits(Vector<T> input) =>
+        throw new NotImplementedException("Self-distillation uses cached predictions, not a separate teacher model");
 
-            // Get current predictions
-            var studentLogits = modelForward(input);
+    public Vector<T> GetSoftPredictions(Vector<T> input, double temperature = 1) =>
+        throw new NotImplementedException("Self-distillation uses cached predictions, not a separate teacher model");
 
-            // Compute loss
-            T loss;
-            Vector<T> gradient;
+    public object? GetFeatures(Vector<T> input, string layerName) => null;
 
-            if (teacherPredictions != null)
-            {
-                // Use self-distillation: learn from both labels and previous self
-                loss = _distillationStrategy.ComputeLoss(studentLogits, teacherPredictions[i], label);
-                gradient = _distillationStrategy.ComputeGradient(studentLogits, teacherPredictions[i], label);
-            }
-            else
-            {
-                // First generation: standard training (just use labels)
-                // Compute as if teacher predictions match labels
-                loss = _distillationStrategy.ComputeLoss(studentLogits, studentLogits, label);
-                gradient = _distillationStrategy.ComputeGradient(studentLogits, studentLogits, label);
-            }
-
-            totalLoss = _numOps.Add(totalLoss, loss);
-            modelBackward(gradient);
-        }
-
-        return _numOps.Divide(totalLoss, _numOps.FromDouble(batchInputs.Length));
-    }
-
-    /// <summary>
-    /// Shuffles data using random permutation.
-    /// </summary>
-    /// <summary>
-    /// Generates a random permutation of indices using Fisher-Yates shuffle algorithm.
-    /// </summary>
-    /// <param name="length">The length of the array to shuffle.</param>
-    /// <returns>An array of shuffled indices.</returns>
-    /// <remarks>
-    /// Fisher-Yates is O(n) compared to O(n log n) for Guid-based sorting.
-    /// </remarks>
-    private int[] FisherYatesShuffle(int length)
-    {
-        var indices = Enumerable.Range(0, length).ToArray();
-        for (int i = length - 1; i > 0; i--)
-        {
-            int j = _random.Next(i + 1);
-            (indices[i], indices[j]) = (indices[j], indices[i]);
-        }
-        return indices;
-    }
-
-    private (Vector<T>[] inputs, Vector<T>[] labels) ShuffleData(Vector<T>[] inputs, Vector<T>[] labels)
-    {
-        var indices = FisherYatesShuffle(inputs.Length);
-        var shuffledInputs = indices.Select(i => inputs[i]).ToArray();
-        var shuffledLabels = indices.Select(i => labels[i]).ToArray();
-        return (shuffledInputs, shuffledLabels);
-    }
+    public object? GetAttentionWeights(Vector<T> input, string layerName) => null;
 }

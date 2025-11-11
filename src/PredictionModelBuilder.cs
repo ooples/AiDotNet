@@ -59,6 +59,7 @@ public class PredictionModelBuilder<T, TInput, TOutput> : IPredictionModelBuilde
     private ICrossValidator<T, TInput, TOutput>? _crossValidator;
     private AgentConfiguration<T>? _agentConfig;
     private AgentAssistanceOptions _agentOptions = AgentAssistanceOptions.Default;
+    private KnowledgeDistillationOptions<TInput, TOutput, T>? _knowledgeDistillationOptions;
 
     /// <summary>
     /// Configures which features (input variables) should be used in the model.
@@ -791,6 +792,83 @@ public class PredictionModelBuilder<T, TInput, TOutput> : IPredictionModelBuilde
         var agent = new Agent<T>(chatModel, tools);
 
         return await agent.RunAsync(question);
+    }
+
+    /// <summary>
+    /// Configures knowledge distillation to train a smaller, faster student model from a larger teacher model.
+    /// </summary>
+    /// <param name="options">The knowledge distillation configuration options.</param>
+    /// <returns>This builder instance for method chaining.</returns>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> Knowledge distillation is a technique to compress a large, accurate "teacher" model
+    /// into a smaller, faster "student" model while preserving most of the teacher's accuracy. Think of it like
+    /// an expert (teacher) teaching a student - the student learns not just the answers, but also the reasoning process.</para>
+    ///
+    /// <para><b>Benefits:</b>
+    /// - **Model Compression**: 40-90% size reduction with 90-97% accuracy preserved
+    /// - **Faster Inference**: Smaller models run 2-10x faster
+    /// - **Edge Deployment**: Deploy on mobile devices, IoT, browsers
+    /// - **Cost Reduction**: Lower compute and memory costs</para>
+    ///
+    /// <para><b>Common Use Cases:</b>
+    /// - Deploy BERT/GPT models on mobile devices (DistilBERT is 40% smaller, 60% faster)
+    /// - Run vision models on edge devices (MobileNet distilled from ResNet)
+    /// - Reduce cloud compute costs for inference
+    /// - Multi-teacher ensembles distilled into single student</para>
+    ///
+    /// <para><b>Quick Start Example:</b>
+    /// <code>
+    /// // Configure knowledge distillation with default settings (good for most cases)
+    /// var distillationOptions = new KnowledgeDistillationOptions&lt;Vector&lt;double&gt;, Vector&lt;double&gt;, double&gt;
+    /// {
+    ///     TeacherModelType = TeacherModelType.NeuralNetwork,
+    ///     StrategyType = DistillationStrategyType.ResponseBased,
+    ///     Temperature = 3.0,      // Soften predictions (2-5 typical)
+    ///     Alpha = 0.3,            // 30% hard labels, 70% teacher knowledge
+    ///     Epochs = 20,
+    ///     BatchSize = 32,
+    ///     LearningRate = 0.001
+    /// };
+    ///
+    /// var result = await new PredictionModelBuilder&lt;double, Vector&lt;double&gt;, Vector&lt;double&gt;&gt;()
+    ///     .ConfigureModel(studentModel)
+    ///     .ConfigureKnowledgeDistillation(distillationOptions)
+    ///     .BuildAsync(trainInputs, trainLabels);
+    /// </code>
+    /// </para>
+    ///
+    /// <para><b>Advanced Techniques:</b>
+    /// - **Response-Based**: Standard Hinton distillation (recommended start)
+    /// - **Feature-Based**: Match intermediate layer representations
+    /// - **Attention-Based**: For transformers (BERT, GPT)
+    /// - **Relational**: Preserve relationships between samples
+    /// - **Self-Distillation**: Model teaches itself for better calibration
+    /// - **Ensemble**: Multiple teachers for richer knowledge</para>
+    ///
+    /// <para><b>Key Parameters:</b>
+    /// - **Temperature** (2-5): Higher = softer predictions, more knowledge transfer
+    /// - **Alpha** (0.2-0.5): Lower = rely more on teacher, higher = rely more on labels
+    /// - **Strategy**: ResponseBased (standard), FeatureBased (deeper), AttentionBased (transformers)
+    /// - **Teacher Type**: NeuralNetwork (single), Ensemble (multiple), Self (no separate teacher)</para>
+    ///
+    /// <para><b>Success Stories:</b>
+    /// - DistilBERT: 40% smaller than BERT, 97% performance, 60% faster
+    /// - TinyBERT: 7.5x smaller than BERT for mobile deployment
+    /// - MobileNet: Distilled from ResNet, 10x fewer parameters
+    /// - SqueezeNet: AlexNet-level accuracy at 50x smaller size</para>
+    ///
+    /// <para><b>References:</b>
+    /// - Hinton et al. (2015). Distilling the Knowledge in a Neural Network
+    /// - Sanh et al. (2019). DistilBERT
+    /// - Park et al. (2019). Relational Knowledge Distillation</para>
+    /// </remarks>
+    public IPredictionModelBuilder<T, TInput, TOutput> ConfigureKnowledgeDistillation(
+        KnowledgeDistillationOptions<TInput, TOutput, T> options)
+    {
+        ArgumentNullException.ThrowIfNull(options);
+        options.Validate(); // Validate options immediately
+        _knowledgeDistillationOptions = options;
+        return this;
     }
 
     // ============================================================================
