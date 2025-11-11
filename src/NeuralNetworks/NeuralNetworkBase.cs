@@ -129,8 +129,8 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
     /// <b>For Beginners:</b> Neural networks behave differently during training versus when they're making predictions.
     /// In training mode, the network keeps track of additional information needed for learning.
     /// </remarks>
-    protected bool IsTrainingMode = true;
-    
+    public bool IsTrainingMode { get; internal set; } = true;
+
     /// <summary>
     /// Indicates whether this network supports training (learning from data).
     /// </summary>

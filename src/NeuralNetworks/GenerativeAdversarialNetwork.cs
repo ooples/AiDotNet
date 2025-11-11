@@ -1854,7 +1854,7 @@ public class GenerativeAdversarialNetwork<T> : NeuralNetworkBase<T>
     private Tensor<T> ComputeSymbolicGradient(Tensor<T> input)
     {
         // Store original training mode
-        bool originalMode = Discriminator.SupportsTraining;
+        bool originalMode = Discriminator.IsTrainingMode;
         Discriminator.SetTrainingMode(false); // Use inference mode for stable gradients
 
         // Reset layer states to ensure clean forward pass
@@ -1917,25 +1917,32 @@ public class GenerativeAdversarialNetwork<T> : NeuralNetworkBase<T>
         T epsilon = NumOps.FromDouble(1e-4); // Small perturbation for numerical gradient
 
         // Store original discriminator training mode
-        bool originalMode = Discriminator.SupportsTraining;
+        bool originalMode = Discriminator.IsTrainingMode;
         Discriminator.SetTrainingMode(false); // Use inference mode for gradient computation
 
+        // Work on a copy to avoid modifying the input tensor
+        var inputCopy = new Tensor<T>(input.Shape);
+        for (int idx = 0; idx < input.Length; idx++)
+        {
+            inputCopy[idx] = input[idx];
+        }
+
         // Compute gradient for each input element using central differences
-        for (int i = 0; i < input.Length; i++)
+        for (int i = 0; i < inputCopy.Length; i++)
         {
             // Save original value
-            T originalValue = input[i];
+            T originalValue = inputCopy[i];
 
             // Compute f(x + epsilon)
-            input[i] = NumOps.Add(originalValue, epsilon);
-            var outputPlus = Discriminator.Predict(input);
+            inputCopy[i] = NumOps.Add(originalValue, epsilon);
+            var outputPlus = Discriminator.Predict(inputCopy);
 
             // Compute f(x - epsilon)
-            input[i] = NumOps.Subtract(originalValue, epsilon);
-            var outputMinus = Discriminator.Predict(input);
+            inputCopy[i] = NumOps.Subtract(originalValue, epsilon);
+            var outputMinus = Discriminator.Predict(inputCopy);
 
             // Restore original value
-            input[i] = originalValue;
+            inputCopy[i] = originalValue;
 
             // Central difference: (f(x+h) - f(x-h)) / (2h)
             // For discriminator, we use the first output element (real/fake score)
@@ -2007,7 +2014,7 @@ public class GenerativeAdversarialNetwork<T> : NeuralNetworkBase<T>
         }
 
         // Set discriminator to inference mode (no training during feature extraction)
-        bool originalTrainingMode = Discriminator.SupportsTraining;
+        bool originalTrainingMode = Discriminator.IsTrainingMode;
         Discriminator.SetTrainingMode(false);
 
         // Extract features from real batch
