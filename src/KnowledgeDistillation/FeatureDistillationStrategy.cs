@@ -84,13 +84,31 @@ public class FeatureDistillationStrategy<T>
         if (_layerPairs.Length == 0)
             throw new ArgumentException("At least one layer pair must be specified", nameof(layerPairs));
 
-        // Validate layer pair format using explicit Where
-        var invalidPairs = _layerPairs.Where(pair => string.IsNullOrWhiteSpace(pair) || !pair.Contains(':')).ToArray();
+        // Validate layer pair format: must be exactly "teacher_layer:student_layer" with both parts non-empty
+        var invalidPairs = _layerPairs.Where(pair =>
+        {
+            if (string.IsNullOrWhiteSpace(pair))
+                return true;
+
+            var parts = pair.Split(':');
+
+            // Must have exactly 2 parts
+            if (parts.Length != 2)
+                return true;
+
+            // Both parts must be non-empty after trimming
+            if (string.IsNullOrWhiteSpace(parts[0]) || string.IsNullOrWhiteSpace(parts[1]))
+                return true;
+
+            return false;
+        }).ToArray();
+
         if (invalidPairs.Length > 0)
         {
             var invalidList = string.Join(", ", invalidPairs.Select(p => $"'{p}'"));
             throw new ArgumentException(
-                $"Invalid layer pair format: {invalidList}. Expected 'teacher_layer:student_layer'",
+                $"Invalid layer pair format: {invalidList}. Expected 'teacher_layer:student_layer' " +
+                $"with exactly one colon and both layer names non-empty",
                 nameof(layerPairs));
         }
     }
