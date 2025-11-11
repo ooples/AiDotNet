@@ -66,6 +66,11 @@ public class ModifiedGradientDescentOptimizer<T>
 
     /// <summary>
     /// Updates a parameter vector using modified gradient descent.
+    ///
+    /// NOTE: This is a simplified scalar approximation of the matrix operation.
+    /// The matrix form W_t * (I - x_t x_t^T) is always stable, but this scalar
+    /// version using (1 - ||x_t||²) requires clipping to prevent instability
+    /// when input norm exceeds 1.
     /// </summary>
     /// <param name="currentParameters">Current parameters</param>
     /// <param name="input">Input vector</param>
@@ -90,7 +95,14 @@ public class ModifiedGradientDescentOptimizer<T>
             T gradComponent = _numOps.Multiply(outputGradient[i], _learningRate);
 
             // Modification: scale by (1 - ||xt||²) factor for regularization
+            // CRITICAL: Clip to prevent negative scaling when ||xt||² > 1
+            // Without clipping, parameters would explode when input norm exceeds 1
             T modFactor = _numOps.Subtract(_numOps.One, inputNormSquared);
+            if (_numOps.LessThan(modFactor, _numOps.Zero))
+            {
+                modFactor = _numOps.Zero;
+            }
+
             T paramComponent = _numOps.Multiply(currentParameters[i], modFactor);
 
             updated[i] = _numOps.Subtract(paramComponent, gradComponent);
