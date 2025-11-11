@@ -196,6 +196,12 @@ public class SEALTrainerIntegrationTests
 /// <summary>
 /// Simple learning mock model that actually learns from training data.
 /// </summary>
+/// <remarks>
+/// <b>Limitation:</b> The Random instance is initialized with a fixed seed (42) for reproducibility.
+/// When DeepCopy() or Clone() is called, the new instance gets a fresh Random with the same seed,
+/// causing all cloned models to produce identical predictions from the same seed state.
+/// This is acceptable for basic testing but does not reflect real prediction diversity across model copies.
+/// </remarks>
 internal class LearningMockModel : AiDotNet.Interfaces.IFullModel<double, Matrix<double>, Vector<double>>
 {
     private Vector<double> _parameters;
