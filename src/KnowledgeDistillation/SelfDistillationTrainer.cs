@@ -51,7 +51,7 @@ namespace AiDotNet.KnowledgeDistillation;
 public class SelfDistillationTrainer<T> : KnowledgeDistillationTrainerBase<T, Vector<T>, Vector<T>>
 {
     private readonly int _generations;
-    private Vector<Vector<T>>? _cachedTeacherPredictions;
+    private Dictionary<Vector<T>, Vector<T>>? _cachedTeacherPredictions;
 
     /// <summary>
     /// Gets or sets whether to use exponential moving average for teacher predictions.
@@ -102,25 +102,33 @@ public class SelfDistillationTrainer<T> : KnowledgeDistillationTrainerBase<T, Ve
     }
 
     /// <summary>
-    /// Gets teacher predictions from the cached predictions array (for self-distillation).
+    /// Gets teacher predictions from the cached predictions dictionary (for self-distillation).
     /// </summary>
-    /// <param name="input">The input data (unused - predictions are cached).</param>
-    /// <param name="index">The index in the training batch.</param>
-    /// <returns>Cached teacher prediction for this index.</returns>
+    /// <param name="input">The input data to look up cached predictions for.</param>
+    /// <param name="index">The index in the training batch (unused - we use input for lookup).</param>
+    /// <returns>Cached teacher prediction for this input.</returns>
     /// <remarks>
     /// <para><b>For Self-Distillation:</b> Instead of calling a separate teacher model,
-    /// we return predictions that were cached from the previous generation.</para>
+    /// we return predictions that were cached from the previous generation. We use the input
+    /// itself as the key (via reference equality) to handle shuffled batches correctly.</para>
     /// </remarks>
     protected override Vector<T> GetTeacherPredictions(Vector<T> input, int index)
     {
-        if (_cachedTeacherPredictions == null || index >= _cachedTeacherPredictions.Length)
+        if (_cachedTeacherPredictions == null)
         {
-            // First generation or out of bounds - return input as dummy teacher
+            // First generation - return dummy teacher
             // This will be handled properly in TrainMultipleGenerations
             return new Vector<T>(Teacher.OutputDimension);
         }
 
-        return _cachedTeacherPredictions[index];
+        // Look up by input reference to handle shuffled data correctly
+        if (_cachedTeacherPredictions.TryGetValue(input, out var cachedPrediction))
+        {
+            return cachedPrediction;
+        }
+
+        // Fallback for inputs not in cache (shouldn't happen in normal flow)
+        return new Vector<T>(Teacher.OutputDimension);
     }
 
     /// <summary>
@@ -174,33 +182,50 @@ public class SelfDistillationTrainer<T> : KnowledgeDistillationTrainerBase<T, Ve
             // Cache predictions from previous generation (if not first generation)
             if (generation > 0)
             {
-                var newPredictions = new Vector<Vector<T>>(trainInputs.Length);
+                // Use reference equality comparer to map input instances to their predictions
+                var newPredictions = new Dictionary<Vector<T>, Vector<T>>(ReferenceEqualityComparer.Instance);
                 for (int i = 0; i < trainInputs.Length; i++)
                 {
-                    newPredictions[i] = modelForward(trainInputs[i]);
+                    var input = trainInputs[i];
+                    newPredictions[input] = modelForward(input);
                 }
 
                 // Apply EMA if enabled
                 if (UseEMA && _cachedTeacherPredictions != null)
                 {
-                    for (int i = 0; i < trainInputs.Length; i++)
+                    var blendedPredictions = new Dictionary<Vector<T>, Vector<T>>(ReferenceEqualityComparer.Instance);
+                    foreach (var kvp in newPredictions)
                     {
-                        var blended = new Vector<T>(newPredictions[i].Length);
-                        for (int j = 0; j < newPredictions[i].Length; j++)
-                        {
-                            var oldValue = NumOps.Multiply(
-                                _cachedTeacherPredictions[i][j],
-                                NumOps.FromDouble(EMADecay));
-                            var newValue = NumOps.Multiply(
-                                newPredictions[i][j],
-                                NumOps.FromDouble(1.0 - EMADecay));
-                            blended[j] = NumOps.Add(oldValue, newValue);
-                        }
-                        newPredictions[i] = blended;
-                    }
-                }
+                        var input = kvp.Key;
+                        var newPred = kvp.Value;
 
-                _cachedTeacherPredictions = newPredictions;
+                        if (_cachedTeacherPredictions.TryGetValue(input, out var oldPred))
+                        {
+                            var blended = new Vector<T>(newPred.Length);
+                            for (int j = 0; j < newPred.Length; j++)
+                            {
+                                var oldValue = NumOps.Multiply(
+                                    oldPred[j],
+                                    NumOps.FromDouble(EMADecay));
+                                var newValue = NumOps.Multiply(
+                                    newPred[j],
+                                    NumOps.FromDouble(1.0 - EMADecay));
+                                blended[j] = NumOps.Add(oldValue, newValue);
+                            }
+                            blendedPredictions[input] = blended;
+                        }
+                        else
+                        {
+                            // No old prediction, use new one as-is
+                            blendedPredictions[input] = newPred;
+                        }
+                    }
+                    _cachedTeacherPredictions = blendedPredictions;
+                }
+                else
+                {
+                    _cachedTeacherPredictions = newPredictions;
+                }
             }
 
             // Train using base class Train method
