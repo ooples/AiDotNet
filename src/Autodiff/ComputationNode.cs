@@ -245,24 +245,41 @@ public class ComputationNode<T>
         var visited = new HashSet<ComputationNode<T>>();
         var result = new List<ComputationNode<T>>();
 
-        void Visit(ComputationNode<T> node)
+        // Use iterative DFS with explicit stack to avoid stack overflow for deep graphs
+        var stack = new Stack<(ComputationNode<T> node, bool processed)>();
+        stack.Push((this, false));
+
+        while (stack.Count > 0)
         {
+            var (node, processed) = stack.Pop();
+
             if (visited.Contains(node))
             {
-                return;
+                continue;
             }
 
-            visited.Add(node);
-
-            foreach (var parent in node.Parents)
+            if (processed)
             {
-                Visit(parent);
+                // All parents have been visited, add to result
+                visited.Add(node);
+                result.Add(node);
             }
+            else
+            {
+                // Mark for processing after parents
+                stack.Push((node, true));
 
-            result.Add(node);
+                // Push parents onto stack (they will be processed first)
+                foreach (var parent in node.Parents)
+                {
+                    if (!visited.Contains(parent))
+                    {
+                        stack.Push((parent, false));
+                    }
+                }
+            }
         }
 
-        Visit(this);
         return result;
     }
 

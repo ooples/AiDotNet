@@ -465,6 +465,10 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
         {
             current = Layers[i].Forward(current);
             // Clone to prevent modification of cached values
+            // Note: This is memory-intensive for large networks but necessary for correctness.
+            // If layers modify their output tensors in-place during subsequent operations,
+            // we need independent copies to avoid corrupting feature extraction results.
+            // For memory-constrained scenarios, consider using features only when needed.
             _layerOutputs[i] = current.Clone();
         }
 
