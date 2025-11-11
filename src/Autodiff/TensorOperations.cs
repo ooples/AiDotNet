@@ -2452,4 +2452,536 @@ public static class TensorOperations<T>
                 $"Got shape=[{string.Join(", ", shape)}]");
         }
     }
+
+    /// <summary>
+    /// Performs 2D convolution on a 4D tensor (batch, channels, height, width).
+    /// </summary>
+    /// <param name="input">The input node with shape [batch, inChannels, height, width].</param>
+    /// <param name="kernel">The kernel/filter with shape [outChannels, inChannels, kernelH, kernelW].</param>
+    /// <param name="bias">Optional bias with shape [outChannels]. If null, no bias is added.</param>
+    /// <param name="stride">The stride [strideH, strideW]. Default is [1, 1].</param>
+    /// <param name="padding">The padding [padH, padW]. Default is [0, 0].</param>
+    /// <returns>A new computation node containing the convolution result.</returns>
+    /// <remarks>
+    /// <para>
+    /// This method performs 2D convolution, the fundamental operation in CNNs.
+    /// Forward: Slides the kernel over the input computing dot products.
+    /// Backward: Computes gradients for both input and kernel using transposed convolutions.
+    /// </para>
+    /// <para><b>For Beginners:</b> Conv2D is the core operation of convolutional neural networks.
+    ///
+    /// For 2D convolution:
+    /// - The kernel "slides" over the input, computing weighted sums
+    /// - Each output position is a dot product of the kernel with input patch
+    /// - Stride controls how far the kernel moves each step
+    /// - Padding adds borders to control output size
+    ///
+    /// Gradient computation:
+    /// - Gradient w.r.t. input: "full" convolution with flipped kernel
+    /// - Gradient w.r.t. kernel: cross-correlation between input and output gradient
+    ///
+    /// Used in:
+    /// - All CNNs (image classification, object detection, segmentation)
+    /// - Feature extraction in vision models
+    /// - Learning spatial hierarchies
+    /// </para>
+    /// </remarks>
+    public static ComputationNode<T> Conv2D(
+        ComputationNode<T> input,
+        ComputationNode<T> kernel,
+        ComputationNode<T>? bias = null,
+        int[]? stride = null,
+        int[]? padding = null)
+    {
+        var numOps = MathHelper.GetNumericOperations<T>();
+        var inputShape = input.Value.Shape;
+        var kernelShape = kernel.Value.Shape;
+
+        if (inputShape.Length != 4)
+            throw new ArgumentException("Conv2D requires 4D input [batch, inChannels, height, width]");
+        if (kernelShape.Length != 4)
+            throw new ArgumentException("Conv2D requires 4D kernel [outChannels, inChannels, kernelH, kernelW]");
+
+        stride ??= new int[] { 1, 1 };
+        padding ??= new int[] { 0, 0 };
+
+        int batch = inputShape[0];
+        int inChannels = inputShape[1];
+        int inH = inputShape[2];
+        int inW = inputShape[3];
+
+        int outChannels = kernelShape[0];
+        int kernelInChannels = kernelShape[1];
+        int kernelH = kernelShape[2];
+        int kernelW = kernelShape[3];
+
+        if (inChannels != kernelInChannels)
+            throw new ArgumentException($"Input channels ({inChannels}) must match kernel input channels ({kernelInChannels})");
+
+        int strideH = stride[0];
+        int strideW = stride[1];
+        int padH = padding[0];
+        int padW = padding[1];
+
+        int outH = (inH + 2 * padH - kernelH) / strideH + 1;
+        int outW = (inW + 2 * padW - kernelW) / strideW + 1;
+
+        var result = new Tensor<T>(new int[] { batch, outChannels, outH, outW });
+
+        // Forward pass: convolution
+        for (int b = 0; b < batch; b++)
+        {
+            for (int oc = 0; oc < outChannels; oc++)
+            {
+                for (int oh = 0; oh < outH; oh++)
+                {
+                    for (int ow = 0; ow < outW; ow++)
+                    {
+                        var sum = numOps.Zero;
+
+                        // Convolve kernel over input
+                        for (int ic = 0; ic < inChannels; ic++)
+                        {
+                            for (int kh = 0; kh < kernelH; kh++)
+                            {
+                                for (int kw = 0; kw < kernelW; kw++)
+                                {
+                                    int ih = oh * strideH + kh - padH;
+                                    int iw = ow * strideW + kw - padW;
+
+                                    // Check bounds (padding)
+                                    if (ih >= 0 && ih < inH && iw >= 0 && iw < inW)
+                                    {
+                                        var inputVal = input.Value[b, ic, ih, iw];
+                                        var kernelVal = kernel.Value[oc, ic, kh, kw];
+                                        sum = numOps.Add(sum, numOps.Multiply(inputVal, kernelVal));
+                                    }
+                                }
+                            }
+                        }
+
+                        // Add bias if provided
+                        if (bias != null)
+                        {
+                            sum = numOps.Add(sum, bias.Value[oc]);
+                        }
+
+                        result[b, oc, oh, ow] = sum;
+                    }
+                }
+            }
+        }
+
+        void BackwardFunction(Tensor<T> gradient)
+        {
+            // Gradient w.r.t. input
+            if (input.RequiresGradient)
+            {
+                var gradInput = new Tensor<T>(inputShape);
+
+                // Full convolution with flipped kernel
+                for (int b = 0; b < batch; b++)
+                {
+                    for (int ic = 0; ic < inChannels; ic++)
+                    {
+                        for (int ih = 0; ih < inH; ih++)
+                        {
+                            for (int iw = 0; iw < inW; iw++)
+                            {
+                                var sum = numOps.Zero;
+
+                                // Iterate over all output positions that used this input position
+                                for (int oc = 0; oc < outChannels; oc++)
+                                {
+                                    for (int kh = 0; kh < kernelH; kh++)
+                                    {
+                                        for (int kw = 0; kw < kernelW; kw++)
+                                        {
+                                            // Compute output position
+                                            int ohShifted = ih + padH - kh;
+                                            int owShifted = iw + padW - kw;
+
+                                            if (ohShifted % strideH == 0 && owShifted % strideW == 0)
+                                            {
+                                                int oh = ohShifted / strideH;
+                                                int ow = owShifted / strideW;
+
+                                                if (oh >= 0 && oh < outH && ow >= 0 && ow < outW)
+                                                {
+                                                    var gradVal = gradient[b, oc, oh, ow];
+                                                    var kernelVal = kernel.Value[oc, ic, kh, kw];
+                                                    sum = numOps.Add(sum, numOps.Multiply(gradVal, kernelVal));
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+
+                                gradInput[b, ic, ih, iw] = sum;
+                            }
+                        }
+                    }
+                }
+
+                if (input.Gradient == null)
+                    input.Gradient = gradInput;
+                else
+                    input.Gradient = input.Gradient.Add(gradInput);
+            }
+
+            // Gradient w.r.t. kernel
+            if (kernel.RequiresGradient)
+            {
+                var gradKernel = new Tensor<T>(kernelShape);
+
+                // Cross-correlation between input and output gradient
+                for (int oc = 0; oc < outChannels; oc++)
+                {
+                    for (int ic = 0; ic < inChannels; ic++)
+                    {
+                        for (int kh = 0; kh < kernelH; kh++)
+                        {
+                            for (int kw = 0; kw < kernelW; kw++)
+                            {
+                                var sum = numOps.Zero;
+
+                                for (int b = 0; b < batch; b++)
+                                {
+                                    for (int oh = 0; oh < outH; oh++)
+                                    {
+                                        for (int ow = 0; ow < outW; ow++)
+                                        {
+                                            int ih = oh * strideH + kh - padH;
+                                            int iw = ow * strideW + kw - padW;
+
+                                            if (ih >= 0 && ih < inH && iw >= 0 && iw < inW)
+                                            {
+                                                var gradVal = gradient[b, oc, oh, ow];
+                                                var inputVal = input.Value[b, ic, ih, iw];
+                                                sum = numOps.Add(sum, numOps.Multiply(gradVal, inputVal));
+                                            }
+                                        }
+                                    }
+                                }
+
+                                gradKernel[oc, ic, kh, kw] = sum;
+                            }
+                        }
+                    }
+                }
+
+                if (kernel.Gradient == null)
+                    kernel.Gradient = gradKernel;
+                else
+                    kernel.Gradient = kernel.Gradient.Add(gradKernel);
+            }
+
+            // Gradient w.r.t. bias
+            if (bias != null && bias.RequiresGradient)
+            {
+                var gradBias = new Tensor<T>(new int[] { outChannels });
+
+                for (int oc = 0; oc < outChannels; oc++)
+                {
+                    var sum = numOps.Zero;
+                    for (int b = 0; b < batch; b++)
+                    {
+                        for (int oh = 0; oh < outH; oh++)
+                        {
+                            for (int ow = 0; ow < outW; ow++)
+                            {
+                                sum = numOps.Add(sum, gradient[b, oc, oh, ow]);
+                            }
+                        }
+                    }
+                    gradBias[oc] = sum;
+                }
+
+                if (bias.Gradient == null)
+                    bias.Gradient = gradBias;
+                else
+                    bias.Gradient = bias.Gradient.Add(gradBias);
+            }
+        }
+
+        var parents = new List<ComputationNode<T>> { input, kernel };
+        if (bias != null) parents.Add(bias);
+
+        var node = new ComputationNode<T>(
+            value: result,
+            requiresGradient: input.RequiresGradient || kernel.RequiresGradient || (bias?.RequiresGradient ?? false),
+            parents: parents,
+            backwardFunction: BackwardFunction,
+            name: null);
+
+        var tape = GradientTape<T>.Current;
+        if (tape != null && tape.IsRecording)
+            tape.RecordOperation(node);
+
+        return node;
+    }
+
+    /// <summary>
+    /// Performs 2D transposed convolution (deconvolution) on a 4D tensor.
+    /// </summary>
+    /// <param name="input">The input node with shape [batch, inChannels, height, width].</param>
+    /// <param name="kernel">The kernel with shape [inChannels, outChannels, kernelH, kernelW] (note: reversed from Conv2D).</param>
+    /// <param name="bias">Optional bias with shape [outChannels]. If null, no bias is added.</param>
+    /// <param name="stride">The stride [strideH, strideW]. Default is [1, 1].</param>
+    /// <param name="padding">The padding [padH, padW]. Default is [0, 0].</param>
+    /// <param name="outputPadding">Output padding [outPadH, outPadW] for size adjustment. Default is [0, 0].</param>
+    /// <returns>A new computation node containing the transposed convolution result.</returns>
+    /// <remarks>
+    /// <para>
+    /// Transposed convolution (often called deconvolution) upsamples the input.
+    /// It's the gradient of Conv2D with respect to its input, used as a forward operation.
+    /// </para>
+    /// <para><b>For Beginners:</b> ConvTranspose2D upsamples spatial dimensions.
+    ///
+    /// For transposed convolution:
+    /// - Inserts zeros between input elements according to stride
+    /// - Applies regular convolution to the expanded input
+    /// - Results in larger spatial dimensions (upsampling)
+    ///
+    /// Used in:
+    /// - Image generation (GANs, VAEs)
+    /// - Semantic segmentation (U-Net decoder)
+    /// - Super-resolution
+    /// - Any task requiring upsampling
+    /// </para>
+    /// </remarks>
+    public static ComputationNode<T> ConvTranspose2D(
+        ComputationNode<T> input,
+        ComputationNode<T> kernel,
+        ComputationNode<T>? bias = null,
+        int[]? stride = null,
+        int[]? padding = null,
+        int[]? outputPadding = null)
+    {
+        var numOps = MathHelper.GetNumericOperations<T>();
+        var inputShape = input.Value.Shape;
+        var kernelShape = kernel.Value.Shape;
+
+        if (inputShape.Length != 4)
+            throw new ArgumentException("ConvTranspose2D requires 4D input [batch, inChannels, height, width]");
+        if (kernelShape.Length != 4)
+            throw new ArgumentException("ConvTranspose2D requires 4D kernel [inChannels, outChannels, kernelH, kernelW]");
+
+        stride ??= new int[] { 1, 1 };
+        padding ??= new int[] { 0, 0 };
+        outputPadding ??= new int[] { 0, 0 };
+
+        int batch = inputShape[0];
+        int inChannels = inputShape[1];
+        int inH = inputShape[2];
+        int inW = inputShape[3];
+
+        int kernelInChannels = kernelShape[0];
+        int outChannels = kernelShape[1];
+        int kernelH = kernelShape[2];
+        int kernelW = kernelShape[3];
+
+        if (inChannels != kernelInChannels)
+            throw new ArgumentException($"Input channels ({inChannels}) must match kernel input channels ({kernelInChannels})");
+
+        int strideH = stride[0];
+        int strideW = stride[1];
+        int padH = padding[0];
+        int padW = padding[1];
+        int outPadH = outputPadding[0];
+        int outPadW = outputPadding[1];
+
+        int outH = (inH - 1) * strideH - 2 * padH + kernelH + outPadH;
+        int outW = (inW - 1) * strideW - 2 * padW + kernelW + outPadW;
+
+        var result = new Tensor<T>(new int[] { batch, outChannels, outH, outW });
+
+        // Forward pass: transposed convolution
+        for (int b = 0; b < batch; b++)
+        {
+            for (int ic = 0; ic < inChannels; ic++)
+            {
+                for (int ih = 0; ih < inH; ih++)
+                {
+                    for (int iw = 0; iw < inW; iw++)
+                    {
+                        var inputVal = input.Value[b, ic, ih, iw];
+
+                        // Distribute this input value to output using kernel
+                        for (int oc = 0; oc < outChannels; oc++)
+                        {
+                            for (int kh = 0; kh < kernelH; kh++)
+                            {
+                                for (int kw = 0; kw < kernelW; kw++)
+                                {
+                                    int oh = ih * strideH + kh - padH;
+                                    int ow = iw * strideW + kw - padW;
+
+                                    if (oh >= 0 && oh < outH && ow >= 0 && ow < outW)
+                                    {
+                                        var kernelVal = kernel.Value[ic, oc, kh, kw];
+                                        var contribution = numOps.Multiply(inputVal, kernelVal);
+                                        result[b, oc, oh, ow] = numOps.Add(result[b, oc, oh, ow], contribution);
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            // Add bias if provided
+            if (bias != null)
+            {
+                for (int oc = 0; oc < outChannels; oc++)
+                {
+                    for (int oh = 0; oh < outH; oh++)
+                    {
+                        for (int ow = 0; ow < outW; ow++)
+                        {
+                            result[b, oc, oh, ow] = numOps.Add(result[b, oc, oh, ow], bias.Value[oc]);
+                        }
+                    }
+                }
+            }
+        }
+
+        void BackwardFunction(Tensor<T> gradient)
+        {
+            // Gradient w.r.t. input (this is a forward Conv2D!)
+            if (input.RequiresGradient)
+            {
+                var gradInput = new Tensor<T>(inputShape);
+
+                for (int b = 0; b < batch; b++)
+                {
+                    for (int ic = 0; ic < inChannels; ic++)
+                    {
+                        for (int ih = 0; ih < inH; ih++)
+                        {
+                            for (int iw = 0; iw < inW; iw++)
+                            {
+                                var sum = numOps.Zero;
+
+                                for (int oc = 0; oc < outChannels; oc++)
+                                {
+                                    for (int kh = 0; kh < kernelH; kh++)
+                                    {
+                                        for (int kw = 0; kw < kernelW; kw++)
+                                        {
+                                            int oh = ih * strideH + kh - padH;
+                                            int ow = iw * strideW + kw - padW;
+
+                                            if (oh >= 0 && oh < outH && ow >= 0 && ow < outW)
+                                            {
+                                                var gradVal = gradient[b, oc, oh, ow];
+                                                var kernelVal = kernel.Value[ic, oc, kh, kw];
+                                                sum = numOps.Add(sum, numOps.Multiply(gradVal, kernelVal));
+                                            }
+                                        }
+                                    }
+                                }
+
+                                gradInput[b, ic, ih, iw] = sum;
+                            }
+                        }
+                    }
+                }
+
+                if (input.Gradient == null)
+                    input.Gradient = gradInput;
+                else
+                    input.Gradient = input.Gradient.Add(gradInput);
+            }
+
+            // Gradient w.r.t. kernel
+            if (kernel.RequiresGradient)
+            {
+                var gradKernel = new Tensor<T>(kernelShape);
+
+                for (int ic = 0; ic < inChannels; ic++)
+                {
+                    for (int oc = 0; oc < outChannels; oc++)
+                    {
+                        for (int kh = 0; kh < kernelH; kh++)
+                        {
+                            for (int kw = 0; kw < kernelW; kw++)
+                            {
+                                var sum = numOps.Zero;
+
+                                for (int b = 0; b < batch; b++)
+                                {
+                                    for (int ih = 0; ih < inH; ih++)
+                                    {
+                                        for (int iw = 0; iw < inW; iw++)
+                                        {
+                                            int oh = ih * strideH + kh - padH;
+                                            int ow = iw * strideW + kw - padW;
+
+                                            if (oh >= 0 && oh < outH && ow >= 0 && ow < outW)
+                                            {
+                                                var inputVal = input.Value[b, ic, ih, iw];
+                                                var gradVal = gradient[b, oc, oh, ow];
+                                                sum = numOps.Add(sum, numOps.Multiply(inputVal, gradVal));
+                                            }
+                                        }
+                                    }
+                                }
+
+                                gradKernel[ic, oc, kh, kw] = sum;
+                            }
+                        }
+                    }
+                }
+
+                if (kernel.Gradient == null)
+                    kernel.Gradient = gradKernel;
+                else
+                    kernel.Gradient = kernel.Gradient.Add(gradKernel);
+            }
+
+            // Gradient w.r.t. bias
+            if (bias != null && bias.RequiresGradient)
+            {
+                var gradBias = new Tensor<T>(new int[] { outChannels });
+
+                for (int oc = 0; oc < outChannels; oc++)
+                {
+                    var sum = numOps.Zero;
+                    for (int b = 0; b < batch; b++)
+                    {
+                        for (int oh = 0; oh < outH; oh++)
+                        {
+                            for (int ow = 0; ow < outW; ow++)
+                            {
+                                sum = numOps.Add(sum, gradient[b, oc, oh, ow]);
+                            }
+                        }
+                    }
+                    gradBias[oc] = sum;
+                }
+
+                if (bias.Gradient == null)
+                    bias.Gradient = gradBias;
+                else
+                    bias.Gradient = bias.Gradient.Add(gradBias);
+            }
+        }
+
+        var parents = new List<ComputationNode<T>> { input, kernel };
+        if (bias != null) parents.Add(bias);
+
+        var node = new ComputationNode<T>(
+            value: result,
+            requiresGradient: input.RequiresGradient || kernel.RequiresGradient || (bias?.RequiresGradient ?? false),
+            parents: parents,
+            backwardFunction: BackwardFunction,
+            name: null);
+
+        var tape = GradientTape<T>.Current;
+        if (tape != null && tape.IsRecording)
+            tape.RecordOperation(node);
+
+        return node;
+    }
 }
