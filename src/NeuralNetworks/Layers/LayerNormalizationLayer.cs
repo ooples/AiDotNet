@@ -347,7 +347,7 @@ public class LayerNormalizationLayer<T> : LayerBase<T>
     /// </remarks>
     private Tensor<T> BackwardViaAutodiff(Tensor<T> outputGradient)
     {
-        if (_lastInput == null || _lastNormalized == null)
+        if (_lastInput == null)
             throw new InvalidOperationException("Forward pass must be called before backward pass.");
 
         int batchSize = _lastInput.Shape[0];
@@ -356,21 +356,15 @@ public class LayerNormalizationLayer<T> : LayerBase<T>
         // Convert to computation nodes
         var input = Autodiff.TensorOperations<T>.Variable(_lastInput, "input", requiresGradient: true);
 
-        // Convert gamma and beta to tensors and broadcast
+        // Convert gamma and beta vectors to tensors
         var gammaTensor = VectorToTensor(_gamma);
         var betaTensor = VectorToTensor(_beta);
-        var gammaBroadcast = BroadcastVector(gammaTensor, batchSize);
-        var betaBroadcast = BroadcastVector(betaTensor, batchSize);
+        var gammaNode = Autodiff.TensorOperations<T>.Variable(gammaTensor, "gamma", requiresGradient: true);
+        var betaNode = Autodiff.TensorOperations<T>.Variable(betaTensor, "beta", requiresGradient: true);
 
-        var gammaNode = Autodiff.TensorOperations<T>.Variable(gammaBroadcast, "gamma_broadcast", requiresGradient: false);
-        var betaNode = Autodiff.TensorOperations<T>.Variable(betaBroadcast, "beta_broadcast", requiresGradient: false);
-
-        // Use pre-computed normalized values from forward pass
-        var normalizedNode = Autodiff.TensorOperations<T>.Variable(_lastNormalized, "normalized", requiresGradient: false);
-
-        // output = gamma * normalized + beta
-        var scaled = Autodiff.TensorOperations<T>.ElementwiseMultiply(gammaNode, normalizedNode);
-        var output = Autodiff.TensorOperations<T>.Add(scaled, betaNode);
+        // Use LayerNorm operation for full gradient computation
+        var normalizedShape = new int[] { featureSize };
+        var output = Autodiff.TensorOperations<T>.LayerNorm(input, normalizedShape, gammaNode, betaNode, _epsilon);
 
         // Set the gradient at the output
         output.Gradient = outputGradient;
@@ -388,23 +382,44 @@ public class LayerNormalizationLayer<T> : LayerBase<T>
             }
         }
 
-        // Extract gradients - sum gamma and beta gradients across batch dimension
-        _gammaGradient = new Vector<T>(featureSize);
-        _betaGradient = new Vector<T>(featureSize);
-
-        var gammaGrad = gammaNode.Gradient!;
-        var betaGrad = betaNode.Gradient!;
-
-        for (int j = 0; j < featureSize; j++)
+        // Extract gradients from the computation graph
+        if (gammaNode.Gradient != null)
         {
-            for (int i = 0; i < batchSize; i++)
-            {
-                _gammaGradient[j] = NumOps.Add(_gammaGradient[j], gammaGrad[i, j]);
-                _betaGradient[j] = NumOps.Add(_betaGradient[j], betaGrad[i, j]);
-            }
+            _gammaGradient = TensorToVector(gammaNode.Gradient);
+        }
+
+        if (betaNode.Gradient != null)
+        {
+            _betaGradient = TensorToVector(betaNode.Gradient);
         }
 
         return input.Gradient!;
+    }
+
+    /// <summary>
+    /// Converts a Vector to a 1D Tensor.
+    /// </summary>
+    private Tensor<T> VectorToTensor(Vector<T> vector)
+    {
+        var tensor = new Tensor<T>(new int[] { vector.Length });
+        for (int i = 0; i < vector.Length; i++)
+        {
+            tensor[i] = vector[i];
+        }
+        return tensor;
+    }
+
+    /// <summary>
+    /// Converts a 1D Tensor to a Vector.
+    /// </summary>
+    private Vector<T> TensorToVector(Tensor<T> tensor)
+    {
+        var vector = new Vector<T>(tensor.Length);
+        for (int i = 0; i < tensor.Length; i++)
+        {
+            vector[i] = tensor[i];
+        }
+        return vector;
     }
 
     /// <summary>
