@@ -53,6 +53,7 @@ public class SelfDistillationTrainer<T>
     private readonly IDistillationStrategy<Vector<T>, T> _distillationStrategy;
     private readonly INumericOperations<T> _numOps;
     private readonly int _generations;
+    private readonly Random _random;
 
     /// <summary>
     /// Gets or sets whether to use exponential moving average for teacher predictions.
@@ -89,7 +90,8 @@ public class SelfDistillationTrainer<T>
     /// </remarks>
     public SelfDistillationTrainer(
         IDistillationStrategy<Vector<T>, T> distillationStrategy,
-        int generations = 1)
+        int generations = 1,
+        int? seed = null)
     {
         if (generations < 1)
             throw new ArgumentException("Generations must be at least 1", nameof(generations));
@@ -97,6 +99,7 @@ public class SelfDistillationTrainer<T>
         _distillationStrategy = distillationStrategy ?? throw new ArgumentNullException(nameof(distillationStrategy));
         _numOps = MathHelper.GetNumericOperations<T>();
         _generations = generations;
+        _random = seed.HasValue ? new Random(seed.Value) : new Random();
         UseEMA = false;
         EMADecay = 0.99;
     }
@@ -160,7 +163,7 @@ public class SelfDistillationTrainer<T>
                 T epochLoss = _numOps.Zero;
 
                 // Shuffle data - use same indices for inputs, labels, and teacher predictions
-                var indices = Enumerable.Range(0, trainInputs.Length).OrderBy(_ => Guid.NewGuid()).ToArray();
+                var indices = FisherYatesShuffle(trainInputs.Length);
                 var shuffledInputs = indices.Select(i => trainInputs[i]).ToArray();
                 var shuffledLabels = indices.Select(i => trainLabels[i]).ToArray();
                 Vector<T>[]? shuffledTeacher = null;
@@ -267,9 +270,28 @@ public class SelfDistillationTrainer<T>
     /// <summary>
     /// Shuffles data using random permutation.
     /// </summary>
+    /// <summary>
+    /// Generates a random permutation of indices using Fisher-Yates shuffle algorithm.
+    /// </summary>
+    /// <param name="length">The length of the array to shuffle.</param>
+    /// <returns>An array of shuffled indices.</returns>
+    /// <remarks>
+    /// Fisher-Yates is O(n) compared to O(n log n) for Guid-based sorting.
+    /// </remarks>
+    private int[] FisherYatesShuffle(int length)
+    {
+        var indices = Enumerable.Range(0, length).ToArray();
+        for (int i = length - 1; i > 0; i--)
+        {
+            int j = _random.Next(i + 1);
+            (indices[i], indices[j]) = (indices[j], indices[i]);
+        }
+        return indices;
+    }
+
     private (Vector<T>[] inputs, Vector<T>[] labels) ShuffleData(Vector<T>[] inputs, Vector<T>[] labels)
     {
-        var indices = Enumerable.Range(0, inputs.Length).OrderBy(_ => Guid.NewGuid()).ToArray();
+        var indices = FisherYatesShuffle(inputs.Length);
         var shuffledInputs = indices.Select(i => inputs[i]).ToArray();
         var shuffledLabels = indices.Select(i => labels[i]).ToArray();
         return (shuffledInputs, shuffledLabels);
