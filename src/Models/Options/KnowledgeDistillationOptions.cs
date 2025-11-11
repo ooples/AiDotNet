@@ -398,7 +398,30 @@ public class KnowledgeDistillationOptions<T, TInput, TOutput>
         if (SelfDistillationGenerations < 1)
             throw new ArgumentException("SelfDistillationGenerations must be at least 1", nameof(SelfDistillationGenerations));
 
-        if (ValidateAfterEpoch && (ValidationInputs == null || ValidationLabels == null))
+        // Validate validation data consistency
+        if (ValidationInputs != null || ValidationLabels != null)
+        {
+            // If either is provided, both must be provided
+            if (ValidationInputs == null)
+                throw new ArgumentNullException(nameof(ValidationInputs), "ValidationLabels is provided but ValidationInputs is null");
+            if (ValidationLabels == null)
+                throw new ArgumentNullException(nameof(ValidationLabels), "ValidationInputs is provided but ValidationLabels is null");
+
+            // Both must be non-empty
+            if (ValidationInputs.Length == 0)
+                throw new ArgumentException("ValidationInputs cannot be empty", nameof(ValidationInputs));
+            if (ValidationLabels.Length == 0)
+                throw new ArgumentException("ValidationLabels cannot be empty", nameof(ValidationLabels));
+
+            // Both must have the same length
+            if (ValidationInputs.Length != ValidationLabels.Length)
+                throw new ArgumentException(
+                    $"ValidationInputs and ValidationLabels must have the same length. " +
+                    $"ValidationInputs.Length = {ValidationInputs.Length}, ValidationLabels.Length = {ValidationLabels.Length}");
+        }
+
+        // If validation is enabled, validation data must be provided
+        if (ValidateAfterEpoch && ValidationInputs == null)
             throw new ArgumentException("Validation data must be provided when ValidateAfterEpoch is true");
     }
 }
