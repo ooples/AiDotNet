@@ -119,9 +119,9 @@ jobs:
           BREAKING=$(echo "$COMMITS" | grep -iE "BREAKING CHANGE:|BREAKING:" || true)
           if [ -n "$BREAKING" ]; then
             CHANGELOG+="### 🚨 Breaking Changes"$'\n'
-            echo "$BREAKING" | while IFS= read -r line; do
+            while IFS= read -r line; do
               CHANGELOG+="- ${line#* }"$'\n'
-            done
+            done < <(echo "$BREAKING")
             CHANGELOG+=$'\n'
           fi
 
@@ -129,10 +129,10 @@ jobs:
           FEATURES=$(echo "$COMMITS" | grep -iE "^[a-f0-9]+ feat(\(.*\))?:" || true)
           if [ -n "$FEATURES" ]; then
             CHANGELOG+="### ✨ Features"$'\n'
-            echo "$FEATURES" | while IFS= read -r line; do
+            while IFS= read -r line; do
               MSG=$(echo "$line" | sed -E 's/^[a-f0-9]+ feat(\(.*\))?: //')
               CHANGELOG+="- $MSG"$'\n'
-            done
+            done < <(echo "$FEATURES")
             CHANGELOG+=$'\n'
           fi
 
@@ -140,10 +140,10 @@ jobs:
           FIXES=$(echo "$COMMITS" | grep -iE "^[a-f0-9]+ fix(\(.*\))?:" || true)
           if [ -n "$FIXES" ]; then
             CHANGELOG+="### 🐛 Bug Fixes"$'\n'
-            echo "$FIXES" | while IFS= read -r line; do
+            while IFS= read -r line; do
               MSG=$(echo "$line" | sed -E 's/^[a-f0-9]+ fix(\(.*\))?: //')
               CHANGELOG+="- $MSG"$'\n'
-            done
+            done < <(echo "$FIXES")
             CHANGELOG+=$'\n'
           fi
 
@@ -151,10 +151,10 @@ jobs:
           PERF=$(echo "$COMMITS" | grep -iE "^[a-f0-9]+ perf(\(.*\))?:" || true)
           if [ -n "$PERF" ]; then
             CHANGELOG+="### ⚡ Performance Improvements"$'\n'
-            echo "$PERF" | while IFS= read -r line; do
+            while IFS= read -r line; do
               MSG=$(echo "$line" | sed -E 's/^[a-f0-9]+ perf(\(.*\))?: //')
               CHANGELOG+="- $MSG"$'\n'
-            done
+            done < <(echo "$PERF")
             CHANGELOG+=$'\n'
           fi
 
@@ -162,10 +162,10 @@ jobs:
           REFACTOR=$(echo "$COMMITS" | grep -iE "^[a-f0-9]+ refactor(\(.*\))?:" || true)
           if [ -n "$REFACTOR" ]; then
             CHANGELOG+="### ♻️ Code Refactoring"$'\n'
-            echo "$REFACTOR" | while IFS= read -r line; do
+            while IFS= read -r line; do
               MSG=$(echo "$line" | sed -E 's/^[a-f0-9]+ refactor(\(.*\))?: //')
               CHANGELOG+="- $MSG"$'\n'
-            done
+            done < <(echo "$REFACTOR")
             CHANGELOG+=$'\n'
           fi
 
@@ -173,10 +173,10 @@ jobs:
           DOCS=$(echo "$COMMITS" | grep -iE "^[a-f0-9]+ docs(\(.*\))?:" || true)
           if [ -n "$DOCS" ]; then
             CHANGELOG+="### 📚 Documentation"$'\n'
-            echo "$DOCS" | while IFS= read -r line; do
+            while IFS= read -r line; do
               MSG=$(echo "$line" | sed -E 's/^[a-f0-9]+ docs(\(.*\))?: //')
               CHANGELOG+="- $MSG"$'\n'
-            done
+            done < <(echo "$DOCS")
             CHANGELOG+=$'\n'
           fi
 
