@@ -159,14 +159,15 @@ public class SelfDistillationTrainer<T>
             {
                 T epochLoss = _numOps.Zero;
 
-                // Shuffle data
-                var (shuffledInputs, shuffledLabels) = ShuffleData(trainInputs, trainLabels);
+                // Shuffle data - use same indices for inputs, labels, and teacher predictions
+                var indices = Enumerable.Range(0, trainInputs.Length).OrderBy(_ => Guid.NewGuid()).ToArray();
+                var shuffledInputs = indices.Select(i => trainInputs[i]).ToArray();
+                var shuffledLabels = indices.Select(i => trainLabels[i]).ToArray();
                 Vector<T>[]? shuffledTeacher = null;
 
                 if (teacherPredictions != null)
                 {
-                    // Shuffle teacher predictions in sync
-                    var indices = Enumerable.Range(0, trainInputs.Length).OrderBy(_ => Guid.NewGuid()).ToArray();
+                    // Use same indices to ensure alignment
                     shuffledTeacher = indices.Select(i => teacherPredictions[i]).ToArray();
                 }
 
