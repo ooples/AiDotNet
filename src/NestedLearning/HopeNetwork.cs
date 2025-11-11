@@ -103,7 +103,15 @@ public class HopeNetwork<T> : NeuralNetworkBase<T>
             _associativeMemory.Associate(inputVec, inputVec); // Self-association
         }
 
-        // Process through multiple in-context learning levels
+        // Process through sequential CMS chains (Equation 30 from paper)
+        // Each CMS block is a chain of MLPs: yt = MLP^(fk)(MLP^(fk-1)(...MLP^(f1)(xt)))
+        // NOT cyclic - each CMS block processes the input sequentially
+        foreach (var cmsBlock in _cmsBlocks)
+        {
+            current = cmsBlock.Forward(current);
+        }
+
+        // Process through context flow at multiple levels for richer representations
         for (int level = 0; level < _inContextLearningLevels; level++)
         {
             // Propagate context flow at this level
@@ -113,16 +121,8 @@ public class HopeNetwork<T> : NeuralNetworkBase<T>
             // Compress context for deeper computational depth
             var compressed = _contextFlow.CompressContext(contextVec, level);
 
-            // Blend with current state
+            // Blend with current state for unbounded in-context learning
             current = BlendTensors(current, contextTensor, _numOps.FromDouble(0.2));
-
-            // Update frequency based on level (unbounded in-context learning)
-            if (_adaptationStep % (int)Math.Pow(2, level) == 0)
-            {
-                // Process through CMS block for this level
-                int cmsIndex = level % _numCMSLevels;
-                current = _cmsBlocks[cmsIndex].Forward(current);
-            }
         }
 
         // Process through recurrent layers (looped learning levels)
