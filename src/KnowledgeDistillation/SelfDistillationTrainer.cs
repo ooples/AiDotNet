@@ -213,10 +213,37 @@ public class SelfDistillationTrainer<T>
             // After training this generation, save predictions as teacher for next generation
             if (generation < _generations - 1)
             {
-                teacherPredictions = new Vector<T>[trainInputs.Length];
+                var newPredictions = new Vector<T>[trainInputs.Length];
                 for (int i = 0; i < trainInputs.Length; i++)
                 {
-                    teacherPredictions[i] = modelForward(trainInputs[i]);
+                    newPredictions[i] = modelForward(trainInputs[i]);
+                }
+
+                // Apply EMA to teacher predictions if enabled
+                if (UseEMA && teacherPredictions != null)
+                {
+                    // Exponential moving average: teacher = decay * old + (1-decay) * new
+                    teacherPredictions = new Vector<T>[trainInputs.Length];
+                    for (int i = 0; i < trainInputs.Length; i++)
+                    {
+                        var blended = new Vector<T>(newPredictions[i].Length);
+                        for (int j = 0; j < newPredictions[i].Length; j++)
+                        {
+                            var oldValue = _numOps.Multiply(
+                                teacherPredictions[i][j],
+                                _numOps.FromDouble(EMADecay));
+                            var newValue = _numOps.Multiply(
+                                newPredictions[i][j],
+                                _numOps.FromDouble(1.0 - EMADecay));
+                            blended[j] = _numOps.Add(oldValue, newValue);
+                        }
+                        teacherPredictions[i] = blended;
+                    }
+                }
+                else
+                {
+                    // No EMA, just use new predictions directly
+                    teacherPredictions = newPredictions;
                 }
             }
         }
