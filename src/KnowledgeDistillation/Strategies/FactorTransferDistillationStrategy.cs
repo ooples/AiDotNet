@@ -110,12 +110,6 @@ public class FactorTransferDistillationStrategy<T> : DistillationStrategyBase<Ve
         var studentSoft = Softmax(studentOutput, Temperature);
         var teacherSoft = Softmax(teacherOutput, Temperature);
 
-        for (int i = 0; i < n; i++)
-        {
-            var diff = NumOps.Subtract(studentSoft[i], teacherSoft[i]);
-            gradient[i] = NumOps.Multiply(diff, NumOps.FromDouble(Temperature * Temperature));
-        }
-
         if (trueLabels != null)
         {
             ValidateLabelDimensions(studentOutput, trueLabels, v => v.Length);
@@ -123,17 +117,33 @@ public class FactorTransferDistillationStrategy<T> : DistillationStrategyBase<Ve
 
             for (int i = 0; i < n; i++)
             {
+                // Soft gradient (temperature-scaled)
+                var softGrad = NumOps.Subtract(studentSoft[i], teacherSoft[i]);
+                softGrad = NumOps.Multiply(softGrad, NumOps.FromDouble(Temperature * Temperature));
+
+                // Hard gradient
                 var hardGrad = NumOps.Subtract(studentProbs[i], trueLabels[i]);
-                gradient[i] = NumOps.Add(
+
+                // Combined gradient: Alpha * hardGrad + (1 - Alpha) * softGrad
+                var combined = NumOps.Add(
                     NumOps.Multiply(NumOps.FromDouble(Alpha), hardGrad),
-                    NumOps.Multiply(NumOps.FromDouble(1.0 - Alpha), gradient[i]));
+                    NumOps.Multiply(NumOps.FromDouble(1.0 - Alpha), softGrad));
+
+                // Apply factor weight reduction exactly once
+                gradient[i] = NumOps.Multiply(combined, NumOps.FromDouble(1.0 - _factorWeight));
             }
         }
-
-        // Apply factor weight reduction exactly once
-        for (int i = 0; i < n; i++)
+        else
         {
-            gradient[i] = NumOps.Multiply(gradient[i], NumOps.FromDouble(1.0 - _factorWeight));
+            for (int i = 0; i < n; i++)
+            {
+                // Soft gradient (temperature-scaled)
+                var softGrad = NumOps.Subtract(studentSoft[i], teacherSoft[i]);
+                softGrad = NumOps.Multiply(softGrad, NumOps.FromDouble(Temperature * Temperature));
+
+                // Apply factor weight reduction exactly once
+                gradient[i] = NumOps.Multiply(softGrad, NumOps.FromDouble(1.0 - _factorWeight));
+            }
         }
 
         return gradient;
