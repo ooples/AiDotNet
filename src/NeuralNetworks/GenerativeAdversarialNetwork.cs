@@ -277,6 +277,11 @@ public class GenerativeAdversarialNetwork<T> : NeuralNetworkBase<T>
     private ILossFunction<T> _lossFunction;
 
     /// <summary>
+    /// Reusable random number generator for gradient penalty computation.
+    /// </summary>
+    private readonly Random _random = new Random();
+
+    /// <summary>
     /// Gets or sets whether feature matching is enabled for generator training.
     /// </summary>
     /// <value>True if feature matching should be used; false otherwise.</value>
@@ -1748,11 +1753,10 @@ public class GenerativeAdversarialNetwork<T> : NeuralNetworkBase<T>
         }
 
         // Generate random interpolation coefficients (epsilon) for each sample in batch
-        var random = new Random();
         var epsilon = new T[batchSize];
         for (int i = 0; i < batchSize; i++)
         {
-            epsilon[i] = NumOps.FromDouble(random.NextDouble());
+            epsilon[i] = NumOps.FromDouble(_random.NextDouble());
         }
 
         // Compute interpolated samples: x_hat = epsilon * real + (1 - epsilon) * fake
