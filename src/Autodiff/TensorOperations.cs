@@ -3249,5 +3249,278 @@ public static class TensorOperations<T>
 
         return node;
     }
+
+    /// <summary>
+    /// Splits a tensor along a specified axis into multiple tensors.
+    /// </summary>
+    /// <param name="a">The input computation node.</param>
+    /// <param name="numSplits">The number of splits to create.</param>
+    /// <param name="axis">The axis along which to split.</param>
+    /// <returns>A list of computation nodes representing the split tensors.</returns>
+    public static List<ComputationNode<T>> Split(ComputationNode<T> a, int numSplits, int axis = 0)
+    {
+        var numOps = MathHelper.GetNumericOperations<T>();
+        var inputShape = a.Value.Shape;
+
+        if (axis < 0 || axis >= inputShape.Length)
+            throw new ArgumentException($"Axis {axis} is out of bounds for tensor with {inputShape.Length} dimensions.");
+
+        if (inputShape[axis] % numSplits != 0)
+            throw new ArgumentException($"Dimension size {inputShape[axis]} is not evenly divisible by {numSplits}.");
+
+        int splitSize = inputShape[axis] / numSplits;
+        var results = new List<ComputationNode<T>>();
+
+        // Create output shapes
+        var outputShape = (int[])inputShape.Clone();
+        outputShape[axis] = splitSize;
+
+        // Forward pass: split the tensor
+        var splitTensors = new List<Tensor<T>>();
+        for (int split = 0; split < numSplits; split++)
+        {
+            var splitTensor = new Tensor<T>(outputShape);
+            splitTensors.Add(splitTensor);
+        }
+
+        // Copy data to split tensors
+        void CopySplit(int[] currentIndices, int dim)
+        {
+            if (dim == inputShape.Length)
+            {
+                var value = a.Value[currentIndices];
+                int splitIdx = currentIndices[axis] / splitSize;
+                var localIndices = (int[])currentIndices.Clone();
+                localIndices[axis] = currentIndices[axis] % splitSize;
+                splitTensors[splitIdx][localIndices] = value;
+                return;
+            }
+
+            for (int i = 0; i < inputShape[dim]; i++)
+            {
+                currentIndices[dim] = i;
+                CopySplit(currentIndices, dim + 1);
+            }
+        }
+
+        CopySplit(new int[inputShape.Length], 0);
+
+        // Create nodes for each split
+        for (int split = 0; split < numSplits; split++)
+        {
+            var splitIndex = split;
+            void BackwardFunction(Tensor<T> gradient)
+            {
+                if (!a.RequiresGradient) return;
+
+                if (a.Gradient == null)
+                    a.Gradient = new Tensor<T>(inputShape);
+
+                // Accumulate gradient back to input
+                void AccumulateGrad(int[] currentIndices, int dim)
+                {
+                    if (dim == outputShape.Length)
+                    {
+                        var inputIndices = (int[])currentIndices.Clone();
+                        inputIndices[axis] = currentIndices[axis] + splitIndex * splitSize;
+                        a.Gradient[inputIndices] = numOps.Add(a.Gradient[inputIndices], gradient[currentIndices]);
+                        return;
+                    }
+
+                    for (int i = 0; i < outputShape[dim]; i++)
+                    {
+                        currentIndices[dim] = i;
+                        AccumulateGrad(currentIndices, dim + 1);
+                    }
+                }
+
+                AccumulateGrad(new int[outputShape.Length], 0);
+            }
+
+            var node = new ComputationNode<T>(
+                value: splitTensors[split],
+                requiresGradient: a.RequiresGradient,
+                parents: new List<ComputationNode<T>> { a },
+                backwardFunction: BackwardFunction,
+                name: null);
+
+            var tape = GradientTape<T>.Current;
+            if (tape != null && tape.IsRecording)
+                tape.RecordOperation(node);
+
+            results.Add(node);
+        }
+
+        return results;
+    }
+
+    /// <summary>
+    /// Crops a tensor by removing elements from the edges.
+    /// </summary>
+    /// <param name="a">The input computation node.</param>
+    /// <param name="cropping">Array of [top, bottom, left, right] cropping amounts for 4D tensors.</param>
+    /// <returns>A computation node representing the cropped tensor.</returns>
+    public static ComputationNode<T> Crop(ComputationNode<T> a, int[] cropping)
+    {
+        var numOps = MathHelper.GetNumericOperations<T>();
+        var inputShape = a.Value.Shape;
+
+        if (inputShape.Length == 4 && cropping.Length == 4)
+        {
+            // 4D tensor: [batch, channels, height, width]
+            int top = cropping[0];
+            int bottom = cropping[1];
+            int left = cropping[2];
+            int right = cropping[3];
+
+            int outH = inputShape[2] - top - bottom;
+            int outW = inputShape[3] - left - right;
+
+            if (outH <= 0 || outW <= 0)
+                throw new ArgumentException("Cropping results in non-positive dimensions.");
+
+            var outputShape = new int[] { inputShape[0], inputShape[1], outH, outW };
+            var result = new Tensor<T>(outputShape);
+
+            // Forward: copy cropped region
+            for (int b = 0; b < outputShape[0]; b++)
+            {
+                for (int c = 0; c < outputShape[1]; c++)
+                {
+                    for (int h = 0; h < outH; h++)
+                    {
+                        for (int w = 0; w < outW; w++)
+                        {
+                            result[b, c, h, w] = a.Value[b, c, h + top, w + left];
+                        }
+                    }
+                }
+            }
+
+            void BackwardFunction(Tensor<T> gradient)
+            {
+                if (!a.RequiresGradient) return;
+
+                if (a.Gradient == null)
+                    a.Gradient = new Tensor<T>(inputShape);
+
+                // Backward: place gradient in cropped region
+                for (int b = 0; b < outputShape[0]; b++)
+                {
+                    for (int c = 0; c < outputShape[1]; c++)
+                    {
+                        for (int h = 0; h < outH; h++)
+                        {
+                            for (int w = 0; w < outW; w++)
+                            {
+                                a.Gradient[b, c, h + top, w + left] = numOps.Add(
+                                    a.Gradient[b, c, h + top, w + left],
+                                    gradient[b, c, h, w]);
+                            }
+                        }
+                    }
+                }
+            }
+
+            var node = new ComputationNode<T>(
+                value: result,
+                requiresGradient: a.RequiresGradient,
+                parents: new List<ComputationNode<T>> { a },
+                backwardFunction: BackwardFunction,
+                name: null);
+
+            var tape = GradientTape<T>.Current;
+            if (tape != null && tape.IsRecording)
+                tape.RecordOperation(node);
+
+            return node;
+        }
+        else
+        {
+            throw new NotSupportedException($"Crop operation not supported for shape {string.Join("x", inputShape)} with cropping {string.Join(",", cropping)}");
+        }
+    }
+
+    /// <summary>
+    /// Upsamples a tensor using nearest neighbor interpolation.
+    /// </summary>
+    /// <param name="a">The input computation node.</param>
+    /// <param name="scale">The upsampling scale factor.</param>
+    /// <returns>A computation node representing the upsampled tensor.</returns>
+    public static ComputationNode<T> Upsample(ComputationNode<T> a, int scale)
+    {
+        var numOps = MathHelper.GetNumericOperations<T>();
+        var inputShape = a.Value.Shape;
+
+        if (inputShape.Length != 4)
+            throw new ArgumentException("Upsample expects 4D input [batch, channels, height, width]");
+
+        int batch = inputShape[0];
+        int channels = inputShape[1];
+        int inH = inputShape[2];
+        int inW = inputShape[3];
+        int outH = inH * scale;
+        int outW = inW * scale;
+
+        var outputShape = new int[] { batch, channels, outH, outW };
+        var result = new Tensor<T>(outputShape);
+
+        // Forward: nearest neighbor upsampling
+        for (int b = 0; b < batch; b++)
+        {
+            for (int c = 0; c < channels; c++)
+            {
+                for (int h = 0; h < outH; h++)
+                {
+                    for (int w = 0; w < outW; w++)
+                    {
+                        int inH_idx = h / scale;
+                        int inW_idx = w / scale;
+                        result[b, c, h, w] = a.Value[b, c, inH_idx, inW_idx];
+                    }
+                }
+            }
+        }
+
+        void BackwardFunction(Tensor<T> gradient)
+        {
+            if (!a.RequiresGradient) return;
+
+            if (a.Gradient == null)
+                a.Gradient = new Tensor<T>(inputShape);
+
+            // Backward: sum gradients that came from the same input pixel
+            for (int b = 0; b < batch; b++)
+            {
+                for (int c = 0; c < channels; c++)
+                {
+                    for (int h = 0; h < outH; h++)
+                    {
+                        for (int w = 0; w < outW; w++)
+                        {
+                            int inH_idx = h / scale;
+                            int inW_idx = w / scale;
+                            a.Gradient[b, c, inH_idx, inW_idx] = numOps.Add(
+                                a.Gradient[b, c, inH_idx, inW_idx],
+                                gradient[b, c, h, w]);
+                        }
+                    }
+                }
+            }
+        }
+
+        var node = new ComputationNode<T>(
+            value: result,
+            requiresGradient: a.RequiresGradient,
+            parents: new List<ComputationNode<T>> { a },
+            backwardFunction: BackwardFunction,
+            name: null);
+
+        var tape = GradientTape<T>.Current;
+        if (tape != null && tape.IsRecording)
+            tape.RecordOperation(node);
+
+        return node;
+    }
 }
 }
