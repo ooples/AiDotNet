@@ -336,25 +336,27 @@ using (var tape1 = new GradientTape<float>())
 
 ## Graph Caching Optimization
 
-The autodiff system includes an optional graph caching optimization that significantly improves performance when computing gradients multiple times with the same computation graph structure.
+The autodiff system includes an automatic graph caching optimization that improves performance when computing gradients multiple times with the same computation graph structure.
 
 ### How It Works
 
-When enabled, GradientTape caches the topological order of computation nodes based on the graph structure. For identical graph structures, the cached topological order is reused, avoiding expensive recomputation of the topological sort.
+Graph caching is **automatically enabled** for persistent tapes. When you create a persistent tape, GradientTape automatically caches the topological order of computation nodes based on the graph structure. For identical graph structures, the cached topological order is reused, avoiding expensive recomputation of the topological sort.
 
-### Enabling Graph Caching
+### Usage
+
+Graph caching is completely transparent - just use persistent tapes normally:
 
 ```csharp
-// Create a persistent tape with graph caching enabled
-using (var tape = new GradientTape<float>(persistent: true, enableGraphCaching: true))
+// Graph caching is automatically enabled for persistent tapes
+using (var tape = new GradientTape<float>(persistent: true))
 {
     tape.Watch(parameters);
 
-    // First gradient computation - builds and caches graph
+    // First gradient computation - automatically builds and caches graph
     var output1 = ComputeModel(parameters);
     var gradients1 = tape.Gradient(output1, new[] { parameters });
 
-    // Second gradient computation - reuses cached graph
+    // Second gradient computation - automatically reuses cached graph
     // Much faster as topological sort is skipped
     var output2 = ComputeModel(parameters);
     var gradients2 = tape.Gradient(output2, new[] { parameters });
@@ -363,31 +365,19 @@ using (var tape = new GradientTape<float>(persistent: true, enableGraphCaching: 
 
 ### Performance Benefits
 
-Graph caching is most beneficial when:
-- Using persistent tapes that compute gradients multiple times
-- Training loops where the graph structure remains constant across iterations
-- Computing gradients for multiple samples with the same model architecture
-- Performance-critical applications requiring minimal overhead
-
-Typical performance improvement with caching:
+Graph caching provides automatic performance improvements for persistent tapes:
 - **First gradient computation**: Same as uncached (builds cache)
 - **Subsequent computations**: 30-50% faster (skips topological sort)
+- **No configuration needed**: Optimization is automatic and transparent
 
 ### Implementation Details
 
+- **Automatic**: Enabled for persistent tapes, disabled for single-use tapes
 - **Cache Key**: Based on node relationships and graph structure
 - **Cache Storage**: Dictionary mapping graph signatures to topological orders
 - **Memory Impact**: Minimal - only stores node references, not values
 - **Thread Safety**: Each tape has its own cache (tapes are thread-local)
-- **Cache Invalidation**: Cache is cleared on Reset() and Dispose()
-
-### When Not to Use Caching
-
-Graph caching may not be beneficial when:
-- Using non-persistent tapes (single gradient computation)
-- Graph structure changes between gradient computations
-- Memory is extremely constrained
-- Gradient computation dominates over topological sort (very small graphs)
+- **Cache Invalidation**: Automatically cleared on Reset() and Dispose()
 
 ## Future Development
 

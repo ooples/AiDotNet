@@ -121,47 +121,33 @@ public class GradientTape<T> : IDisposable
     /// Caches topological orders for graph structures to avoid recomputation.
     /// </summary>
     /// <remarks>
+    /// <para>
     /// The cache maps from a graph signature (based on node structure) to the
     /// precomputed topological order. This significantly improves performance
-    /// for persistent tapes or when computing gradients multiple times with
-    /// the same graph structure.
+    /// for persistent tapes when computing gradients multiple times with the
+    /// same graph structure.
+    /// </para>
+    /// <para>
+    /// Graph caching is automatically enabled for persistent tapes and disabled
+    /// for single-use tapes, providing optimal performance without requiring
+    /// user configuration.
+    /// </para>
     /// </remarks>
     private Dictionary<string, List<ComputationNode<T>>>? _graphCache;
-
-    /// <summary>
-    /// Gets or sets a value indicating whether graph caching is enabled.
-    /// </summary>
-    /// <value>If true, topological orders will be cached and reused.</value>
-    /// <remarks>
-    /// <para>
-    /// Graph caching can significantly improve performance when computing gradients
-    /// multiple times with the same computation graph structure. This is especially
-    /// useful for persistent tapes or in scenarios where the graph structure remains
-    /// constant across iterations.
-    /// </para>
-    /// <para><b>For Beginners:</b> Controls whether to remember and reuse graph structures.
-    ///
-    /// - True: Remember the graph structure to speed up repeated gradient computations
-    /// - False (default): Recompute the graph structure each time
-    ///
-    /// Enable this for:
-    /// - Persistent tapes that compute gradients multiple times
-    /// - Training loops where the graph structure doesn't change
-    /// - Performance-critical applications
-    /// </para>
-    /// </remarks>
-    public bool EnableGraphCaching { get; set; }
 
     /// <summary>
     /// Initializes a new instance of the <see cref="GradientTape{T}"/> class.
     /// </summary>
     /// <param name="persistent">Whether the tape should persist after first use.</param>
-    /// <param name="enableGraphCaching">Whether to enable graph caching optimization.</param>
     /// <remarks>
     /// <para>
     /// Creates a new gradient tape and pushes it onto the thread-local tape stack,
     /// making it the active tape for this thread. All operations performed within
     /// the scope of this tape will be recorded for automatic differentiation.
+    /// </para>
+    /// <para>
+    /// Graph caching is automatically enabled for persistent tapes to optimize
+    /// performance when computing gradients multiple times.
     /// </para>
     /// <para><b>For Beginners:</b> This creates a new recording session.
     ///
@@ -172,17 +158,17 @@ public class GradientTape<T> : IDisposable
     /// - When the block ends, recording stops and resources are cleaned up
     /// </para>
     /// </remarks>
-    public GradientTape(bool persistent = false, bool enableGraphCaching = false)
+    public GradientTape(bool persistent = false)
     {
         _watchedNodes = new List<ComputationNode<T>>();
         _operations = new List<ComputationNode<T>>();
         IsRecording = true;
         Persistent = persistent;
-        EnableGraphCaching = enableGraphCaching;
         _hasBeenUsed = false;
 
-        // Initialize graph cache if caching is enabled
-        if (EnableGraphCaching)
+        // Automatically enable graph caching for persistent tapes
+        // This provides optimal performance without requiring user configuration
+        if (persistent)
         {
             _graphCache = new Dictionary<string, List<ComputationNode<T>>>();
         }
@@ -471,8 +457,9 @@ public class GradientTape<T> : IDisposable
             StopRecording();
         }
 
-        // Perform backward pass from target with optional caching
-        if (EnableGraphCaching && _graphCache != null)
+        // Perform backward pass from target
+        // For persistent tapes, use graph caching optimization automatically
+        if (_graphCache != null)
         {
             // Use cached topological order if available
             string graphSignature = ComputeGraphSignature(target);
@@ -495,7 +482,7 @@ public class GradientTape<T> : IDisposable
         }
         else
         {
-            // Standard backward pass without caching
+            // Standard backward pass without caching (for non-persistent tapes)
             target.Backward();
         }
 
