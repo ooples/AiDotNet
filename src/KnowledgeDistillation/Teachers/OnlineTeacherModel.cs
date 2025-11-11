@@ -137,7 +137,7 @@ public class OnlineTeacherModel<T> : TeacherModelBase<Vector<T>, Vector<T>, T>
     /// </summary>
     public override Vector<T> GetLogits(Vector<T> input)
     {
-        ArgumentNullException.ThrowIfNull(input);
+        if (input == null) throw new ArgumentNullException(nameof(input));
         return _teacherForward(input);
     }
 

@@ -118,9 +118,9 @@ public class FeatureDistillationStrategy<T>
         Func<string, Vector<T>> studentFeatureExtractor,
         Vector<T> input)
     {
-        ArgumentNullException.ThrowIfNull(teacherFeatureExtractor);
-        ArgumentNullException.ThrowIfNull(studentFeatureExtractor);
-        ArgumentNullException.ThrowIfNull(input);
+        if (teacherFeatureExtractor == null) throw new ArgumentNullException(nameof(teacherFeatureExtractor));
+        if (studentFeatureExtractor == null) throw new ArgumentNullException(nameof(studentFeatureExtractor));
+        if (input == null) throw new ArgumentNullException(nameof(input));
 
         T totalLoss = _numOps.Zero;
 

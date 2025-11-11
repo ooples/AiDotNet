@@ -148,7 +148,7 @@ public class EnsembleTeacherModel<T> : TeacherModelBase<Vector<T>, Vector<T>, T>
     /// </remarks>
     public override Vector<T> GetLogits(Vector<T> input)
     {
-        ArgumentNullException.ThrowIfNull(input);
+        if (input == null) throw new ArgumentNullException(nameof(input));
 
         // Get predictions from all teachers
         var teacherLogits = new Vector<T>[_teachers.Length];

@@ -123,7 +123,7 @@ public abstract class TeacherModelBase<TInput, TOutput, T> : ITeacherModel<TInpu
     /// <param name="paramName">Parameter name for exception message.</param>
     protected void ValidateInput(TInput? input, string paramName = "input")
     {
-        ArgumentNullException.ThrowIfNull(input, paramName);
+        if (input == null) throw new ArgumentNullException(paramName);
     }
 
     /// <summary>
@@ -132,6 +132,6 @@ public abstract class TeacherModelBase<TInput, TOutput, T> : ITeacherModel<TInpu
     /// <param name="layerName">Layer name to validate.</param>
     protected void ValidateLayerName(string? layerName)
     {
-        ArgumentException.ThrowIfNullOrWhiteSpace(layerName, nameof(layerName));
+        if (string.IsNullOrWhiteSpace(layerName)) throw new ArgumentException("Value cannot be null or whitespace.", nameof(layerName));
     }
 }

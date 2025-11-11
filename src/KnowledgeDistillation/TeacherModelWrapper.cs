@@ -162,7 +162,7 @@ public class TeacherModelWrapper<T> : ITeacherModel<Vector<T>, Vector<T>>
     /// </remarks>
     public Vector<T> GetLogits(Vector<T> input)
     {
-        ArgumentNullException.ThrowIfNull(input);
+        if (input == null) throw new ArgumentNullException(nameof(input));
         return _forwardFunc(input);
     }
 
@@ -206,8 +206,8 @@ public class TeacherModelWrapper<T> : ITeacherModel<Vector<T>, Vector<T>>
     /// </remarks>
     public object? GetFeatures(Vector<T> input, string layerName)
     {
-        ArgumentNullException.ThrowIfNull(input);
-        ArgumentException.ThrowIfNullOrWhiteSpace(layerName);
+        if (input == null) throw new ArgumentNullException(nameof(input));
+        if (string.IsNullOrWhiteSpace(layerName)) throw new ArgumentException("Value cannot be null or whitespace.", nameof(layerName));
 
         if (_featureExtractor == null)
             return null;
@@ -230,8 +230,8 @@ public class TeacherModelWrapper<T> : ITeacherModel<Vector<T>, Vector<T>>
     /// </remarks>
     public object? GetAttentionWeights(Vector<T> input, string layerName)
     {
-        ArgumentNullException.ThrowIfNull(input);
-        ArgumentException.ThrowIfNullOrWhiteSpace(layerName);
+        if (input == null) throw new ArgumentNullException(nameof(input));
+        if (string.IsNullOrWhiteSpace(layerName)) throw new ArgumentException("Value cannot be null or whitespace.", nameof(layerName));
 
         if (_attentionExtractor == null)
             return null;

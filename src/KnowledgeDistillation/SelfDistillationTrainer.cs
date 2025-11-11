@@ -159,10 +159,10 @@ public class SelfDistillationTrainer<T> : KnowledgeDistillationTrainerBase<Vecto
         int batchSize = 32,
         Action<int, T>? onGenerationComplete = null)
     {
-        ArgumentNullException.ThrowIfNull(modelForward);
-        ArgumentNullException.ThrowIfNull(modelBackward);
-        ArgumentNullException.ThrowIfNull(trainInputs);
-        ArgumentNullException.ThrowIfNull(trainLabels);
+        if (modelForward == null) throw new ArgumentNullException(nameof(modelForward));
+        if (modelBackward == null) throw new ArgumentNullException(nameof(modelBackward));
+        if (trainInputs == null) throw new ArgumentNullException(nameof(trainInputs));
+        if (trainLabels == null) throw new ArgumentNullException(nameof(trainLabels));
 
         if (epochs <= 0)
             throw new ArgumentException("Epochs must be positive", nameof(epochs));

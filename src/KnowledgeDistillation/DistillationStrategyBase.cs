@@ -135,8 +135,8 @@ public abstract class DistillationStrategyBase<TOutput, T> : IDistillationStrate
     /// <exception cref="ArgumentException">Thrown when dimensions don't match.</exception>
     protected void ValidateOutputDimensions(TOutput studentOutput, TOutput teacherOutput, Func<TOutput, int> getDimension)
     {
-        ArgumentNullException.ThrowIfNull(studentOutput, nameof(studentOutput));
-        ArgumentNullException.ThrowIfNull(teacherOutput, nameof(teacherOutput));
+        if (studentOutput == null) throw new ArgumentNullException(nameof(studentOutput));
+        if (teacherOutput == null) throw new ArgumentNullException(nameof(teacherOutput));
 
         int studentDim = getDimension(studentOutput);
         int teacherDim = getDimension(teacherOutput);

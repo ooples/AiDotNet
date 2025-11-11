@@ -100,9 +100,9 @@ public abstract class KnowledgeDistillationTrainerBase<TInput, TOutput, T> : IKn
         TInput[] inputs,
         TOutput[]? trueLabels = null)
     {
-        ArgumentNullException.ThrowIfNull(studentForward);
-        ArgumentNullException.ThrowIfNull(studentBackward);
-        ArgumentNullException.ThrowIfNull(inputs);
+        if (studentForward == null) throw new ArgumentNullException(nameof(studentForward));
+        if (studentBackward == null) throw new ArgumentNullException(nameof(studentBackward));
+        if (inputs == null) throw new ArgumentNullException(nameof(inputs));
 
         T totalLoss = NumOps.Zero;
 
@@ -168,9 +168,9 @@ public abstract class KnowledgeDistillationTrainerBase<TInput, TOutput, T> : IKn
         TOutput[]? validationLabels = null,
         Action<int, T>? onEpochComplete = null)
     {
-        ArgumentNullException.ThrowIfNull(studentForward);
-        ArgumentNullException.ThrowIfNull(studentBackward);
-        ArgumentNullException.ThrowIfNull(trainInputs);
+        if (studentForward == null) throw new ArgumentNullException(nameof(studentForward));
+        if (studentBackward == null) throw new ArgumentNullException(nameof(studentBackward));
+        if (trainInputs == null) throw new ArgumentNullException(nameof(trainInputs));
 
         if (epochs <= 0)
             throw new ArgumentException("Epochs must be positive", nameof(epochs));
@@ -283,9 +283,9 @@ public abstract class KnowledgeDistillationTrainerBase<TInput, TOutput, T> : IKn
         TInput[] inputs,
         TOutput[] trueLabels)
     {
-        ArgumentNullException.ThrowIfNull(studentForward);
-        ArgumentNullException.ThrowIfNull(inputs);
-        ArgumentNullException.ThrowIfNull(trueLabels);
+        if (studentForward == null) throw new ArgumentNullException(nameof(studentForward));
+        if (inputs == null) throw new ArgumentNullException(nameof(inputs));
+        if (trueLabels == null) throw new ArgumentNullException(nameof(trueLabels));
 
         if (inputs.Length != trueLabels.Length)
             throw new ArgumentException("Inputs and labels must have the same length");

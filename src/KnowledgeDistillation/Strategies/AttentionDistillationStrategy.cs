@@ -241,8 +241,8 @@ public class AttentionDistillationStrategy<T> : DistillationStrategyBase<Vector<
         Func<string, Vector<T>> teacherAttentionExtractor,
         Func<string, Vector<T>> studentAttentionExtractor)
     {
-        ArgumentNullException.ThrowIfNull(teacherAttentionExtractor);
-        ArgumentNullException.ThrowIfNull(studentAttentionExtractor);
+        if (teacherAttentionExtractor == null) throw new ArgumentNullException(nameof(teacherAttentionExtractor));
+        if (studentAttentionExtractor == null) throw new ArgumentNullException(nameof(studentAttentionExtractor));
 
         T totalLoss = NumOps.Zero;
 
