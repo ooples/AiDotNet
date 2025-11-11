@@ -1920,9 +1920,6 @@ public class GenerativeAdversarialNetwork<T> : NeuralNetworkBase<T>
         bool originalMode = Discriminator.SupportsTraining;
         Discriminator.SetTrainingMode(false); // Use inference mode for gradient computation
 
-        // Get baseline output
-        var baselineOutput = Discriminator.Predict(input);
-
         // Compute gradient for each input element using central differences
         for (int i = 0; i < input.Length; i++)
         {
@@ -2014,10 +2011,10 @@ public class GenerativeAdversarialNetwork<T> : NeuralNetworkBase<T>
         Discriminator.SetTrainingMode(false);
 
         // Extract features from real batch
-        var (realOutput, realFeatures) = Discriminator.ForwardWithFeatures(_lastRealBatch, layerIndices);
+        var (_, realFeatures) = Discriminator.ForwardWithFeatures(_lastRealBatch, layerIndices);
 
         // Extract features from fake batch
-        var (fakeOutput, fakeFeatures) = Discriminator.ForwardWithFeatures(_lastFakeBatch, layerIndices);
+        var (_, fakeFeatures) = Discriminator.ForwardWithFeatures(_lastFakeBatch, layerIndices);
 
         // Restore original training mode
         Discriminator.SetTrainingMode(originalTrainingMode);
@@ -2028,13 +2025,11 @@ public class GenerativeAdversarialNetwork<T> : NeuralNetworkBase<T>
 
         foreach (int layerIdx in layerIndices)
         {
-            if (!realFeatures.ContainsKey(layerIdx) || !fakeFeatures.ContainsKey(layerIdx))
+            if (!realFeatures.TryGetValue(layerIdx, out var realLayerFeatures) ||
+                !fakeFeatures.TryGetValue(layerIdx, out var fakeLayerFeatures))
             {
                 continue;
             }
-
-            var realLayerFeatures = realFeatures[layerIdx];
-            var fakeLayerFeatures = fakeFeatures[layerIdx];
 
             // Compute mean features across batch dimension
             var realMean = ComputeBatchMean(realLayerFeatures);

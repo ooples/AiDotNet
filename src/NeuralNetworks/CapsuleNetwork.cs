@@ -364,13 +364,11 @@ public class CapsuleNetwork<T> : NeuralNetworkBase<T>
             }
         }
 
-        if (digitCapsLayerIndex == -1 || !_layerOutputs.ContainsKey(digitCapsLayerIndex))
+        if (digitCapsLayerIndex == -1 || !_layerOutputs.TryGetValue(digitCapsLayerIndex, out var capsuleOutputs))
         {
             // Could not find capsule layer output
             return NumOps.Zero;
         }
-
-        var capsuleOutputs = _layerOutputs[digitCapsLayerIndex];
 
         // Apply masking: zero out all capsules except the target capsule
         var maskedCapsules = ApplyCapsuleMask(capsuleOutputs, trueLabel);

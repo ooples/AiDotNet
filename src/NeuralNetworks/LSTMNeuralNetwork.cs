@@ -1442,8 +1442,6 @@ public class LSTMNeuralNetwork<T> : NeuralNetworkBase<T>
         {
             // Hidden state has more features - average/pool gradients
             // This approximates gradient flow through a dimensionality reduction
-            T scaleFactor = NumOps.FromDouble((double)hiddenFeatures / outputFeatures);
-
             for (int b = 0; b < Math.Min(batchSize, hiddenBatchSize); b++)
             {
                 for (int outF = 0; outF < outputFeatures; outF++)

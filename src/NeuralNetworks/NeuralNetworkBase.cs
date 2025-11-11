@@ -476,9 +476,9 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
                 // Support negative indices (count from end)
                 int actualIdx = idx < 0 ? Layers.Count + idx : idx;
 
-                if (actualIdx >= 0 && actualIdx < Layers.Count && _layerOutputs.ContainsKey(actualIdx))
+                if (actualIdx >= 0 && actualIdx < Layers.Count && _layerOutputs.TryGetValue(actualIdx, out var value))
                 {
-                    features[actualIdx] = _layerOutputs[actualIdx];
+                    features[actualIdx] = value;
                 }
             }
         }
