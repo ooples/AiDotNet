@@ -4,6 +4,7 @@ using AiDotNet.LinearAlgebra;
 using AiDotNet.LossFunctions;
 using AiDotNet.MetaLearning.Config;
 using AiDotNet.MetaLearning.Trainers;
+using AiDotNet.Models;
 using AiDotNet.Tests.UnitTests.MetaLearning.Helpers;
 using Xunit;
 

@@ -1,4 +1,5 @@
 using AiDotNet.Data.Loaders;
+using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
 using AiDotNet.LossFunctions;
 using AiDotNet.MetaLearning.Config;

@@ -47,8 +47,6 @@ public class RotationPredictionLoss<T> : ISelfSupervisedLoss<T>
 
     /// <inheritdoc/>
     public (TInput augmentedX, TOutput augmentedY) CreateTask<TInput, TOutput>(TInput input)
-        where TInput : class
-        where TOutput : class
     {
         if (input is not Tensor<T> tensorInput)
         {

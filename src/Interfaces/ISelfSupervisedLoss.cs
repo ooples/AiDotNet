@@ -67,7 +67,5 @@ public interface ISelfSupervisedLoss<T>
     /// These learned features are useful for the actual classification task!
     /// </para>
     /// </remarks>
-    (TInput augmentedX, TOutput augmentedY) CreateTask<TInput, TOutput>(TInput input)
-        where TInput : class
-        where TOutput : class;
+    (TInput augmentedX, TOutput augmentedY) CreateTask<TInput, TOutput>(TInput input);
 }
