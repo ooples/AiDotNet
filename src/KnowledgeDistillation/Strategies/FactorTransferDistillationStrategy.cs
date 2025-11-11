@@ -75,24 +75,29 @@ public class FactorTransferDistillationStrategy<T> : DistillationStrategyBase<Ve
     {
         ValidateOutputDimensions(studentOutput, teacherOutput, v => v.Length);
 
-        // Standard distillation loss (weighted)
+        // Standard distillation loss
         var studentSoft = Softmax(studentOutput, Temperature);
         var teacherSoft = Softmax(teacherOutput, Temperature);
         var softLoss = KLDivergence(teacherSoft, studentSoft);
-        softLoss = NumOps.Multiply(softLoss, NumOps.FromDouble(Temperature * Temperature * (1.0 - _factorWeight)));
+        softLoss = NumOps.Multiply(softLoss, NumOps.FromDouble(Temperature * Temperature));
 
+        T finalLoss;
         if (trueLabels != null)
         {
             ValidateLabelDimensions(studentOutput, trueLabels, v => v.Length);
             var studentProbs = Softmax(studentOutput, 1.0);
             var hardLoss = CrossEntropy(studentProbs, trueLabels);
-            var combinedLoss = NumOps.Add(
+            finalLoss = NumOps.Add(
                 NumOps.Multiply(NumOps.FromDouble(Alpha), hardLoss),
                 NumOps.Multiply(NumOps.FromDouble(1.0 - Alpha), softLoss));
-            return NumOps.Multiply(combinedLoss, NumOps.FromDouble(1.0 - _factorWeight));
+        }
+        else
+        {
+            finalLoss = softLoss;
         }
 
-        return softLoss;
+        // Apply factor weight reduction exactly once
+        return NumOps.Multiply(finalLoss, NumOps.FromDouble(1.0 - _factorWeight));
     }
 
     public override Vector<T> ComputeGradient(Vector<T> studentOutput, Vector<T> teacherOutput, Vector<T>? trueLabels = null)
@@ -108,7 +113,7 @@ public class FactorTransferDistillationStrategy<T> : DistillationStrategyBase<Ve
         for (int i = 0; i < n; i++)
         {
             var diff = NumOps.Subtract(studentSoft[i], teacherSoft[i]);
-            gradient[i] = NumOps.Multiply(diff, NumOps.FromDouble(Temperature * Temperature * (1.0 - _factorWeight)));
+            gradient[i] = NumOps.Multiply(diff, NumOps.FromDouble(Temperature * Temperature));
         }
 
         if (trueLabels != null)
@@ -120,9 +125,15 @@ public class FactorTransferDistillationStrategy<T> : DistillationStrategyBase<Ve
             {
                 var hardGrad = NumOps.Subtract(studentProbs[i], trueLabels[i]);
                 gradient[i] = NumOps.Add(
-                    NumOps.Multiply(NumOps.FromDouble(Alpha * (1.0 - _factorWeight)), hardGrad),
-                    NumOps.Multiply(NumOps.FromDouble((1.0 - Alpha) * (1.0 - _factorWeight)), gradient[i]));
+                    NumOps.Multiply(NumOps.FromDouble(Alpha), hardGrad),
+                    NumOps.Multiply(NumOps.FromDouble(1.0 - Alpha), gradient[i]));
             }
+        }
+
+        // Apply factor weight reduction exactly once
+        for (int i = 0; i < n; i++)
+        {
+            gradient[i] = NumOps.Multiply(gradient[i], NumOps.FromDouble(1.0 - _factorWeight));
         }
 
         return gradient;
