@@ -448,10 +448,42 @@ public class GlobalPoolingLayer<T> : LayerBase<T>
     /// </remarks>
     private Tensor<T> BackwardViaAutodiff(Tensor<T> outputGradient)
     {
-        // TODO: Implement autodiff backward pass once global pooling operations are available in TensorOperations
-        // Pooling operation not yet available in TensorOperations
-        // Falling back to manual implementation
-        return BackwardManual(outputGradient);
+        if (_lastInput == null)
+            throw new InvalidOperationException("Forward pass must be called before backward pass.");
+
+        // Convert input to computation node
+        var inputNode = Autodiff.TensorOperations<T>.Variable(_lastInput, "input", requiresGradient: true);
+
+        // Apply global pooling using reduce operations
+        // Global pooling reduces over spatial dimensions (height and width), keeping channels
+        var axes = new int[] { 2, 3 }; // Reduce over height and width dimensions
+
+        Autodiff.ComputationNode<T> outputNode;
+        if (_poolingType == PoolingType.Max)
+        {
+            outputNode = Autodiff.TensorOperations<T>.ReduceMax(inputNode, axes, keepDims: true);
+        }
+        else // Average pooling
+        {
+            outputNode = Autodiff.TensorOperations<T>.ReduceMean(inputNode, axes, keepDims: true);
+        }
+
+        // Remove the spatial dimensions to match expected output shape
+        var squeezed = Autodiff.TensorOperations<T>.Reshape(outputNode, OutputShape);
+
+        // Perform backward pass
+        squeezed.Gradient = outputGradient;
+        var topoOrder = GetTopologicalOrder(squeezed);
+        for (int i = topoOrder.Count - 1; i >= 0; i--)
+        {
+            var node = topoOrder[i];
+            if (node.RequiresGradient && node.BackwardFunction != null && node.Gradient != null)
+            {
+                node.BackwardFunction(node.Gradient);
+            }
+        }
+
+        return inputNode.Gradient ?? throw new InvalidOperationException("Gradient computation failed.");
     }
 
     /// <summary>

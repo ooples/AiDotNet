@@ -2984,4 +2984,270 @@ public static class TensorOperations<T>
 
         return node;
     }
+
+    /// <summary>
+    /// Reduces a tensor by computing the maximum value along specified axes.
+    /// </summary>
+    /// <param name="a">The input computation node.</param>
+    /// <param name="axes">The axes along which to compute the maximum. If null, reduces over all axes.</param>
+    /// <param name="keepDims">Whether to keep the reduced dimensions with size 1.</param>
+    /// <returns>A computation node representing the result of the reduce max operation.</returns>
+    public static ComputationNode<T> ReduceMax(ComputationNode<T> a, int[]? axes = null, bool keepDims = false)
+    {
+        var numOps = MathHelper.GetNumericOperations<T>();
+        var inputShape = a.Value.Shape;
+
+        // If axes is null, reduce all dimensions
+        if (axes == null)
+        {
+            axes = Enumerable.Range(0, inputShape.Length).ToArray();
+        }
+
+        // Compute output shape
+        var outputShape = new List<int>();
+        for (int i = 0; i < inputShape.Length; i++)
+        {
+            if (!axes.Contains(i))
+            {
+                outputShape.Add(inputShape[i]);
+            }
+            else if (keepDims)
+            {
+                outputShape.Add(1);
+            }
+        }
+
+        if (outputShape.Count == 0)
+            outputShape.Add(1);
+
+        var result = new Tensor<T>(outputShape.ToArray());
+
+        // Store max indices for gradient routing
+        var maxIndices = new Dictionary<string, int[]>();
+
+        // Compute forward pass: find max values
+        void ComputeMax(int[] currentIndices, int dim, int[] outputIndices)
+        {
+            if (dim == inputShape.Length)
+            {
+                // Reached a leaf, update result
+                var value = a.Value[currentIndices];
+                var outKey = string.Join(",", outputIndices.Take(outputShape.Count));
+
+                if (!maxIndices.ContainsKey(outKey))
+                {
+                    result[outputIndices] = value;
+                    maxIndices[outKey] = (int[])currentIndices.Clone();
+                }
+                else
+                {
+                    if (numOps.GreaterThan(value, result[outputIndices]))
+                    {
+                        result[outputIndices] = value;
+                        maxIndices[outKey] = (int[])currentIndices.Clone();
+                    }
+                }
+                return;
+            }
+
+            if (axes.Contains(dim))
+            {
+                // Reduce along this dimension
+                for (int i = 0; i < inputShape[dim]; i++)
+                {
+                    currentIndices[dim] = i;
+                    ComputeMax(currentIndices, dim + 1, outputIndices);
+                }
+            }
+            else
+            {
+                // Keep this dimension
+                int outIdx = outputIndices[0];
+                for (int i = 0; i < inputShape[dim]; i++)
+                {
+                    currentIndices[dim] = i;
+                    outputIndices[outIdx] = i;
+                    ComputeMax(currentIndices, dim + 1, outputIndices);
+                }
+            }
+        }
+
+        ComputeMax(new int[inputShape.Length], 0, new int[outputShape.Count]);
+
+        // Backward function
+        void BackwardFunction(Tensor<T> gradient)
+        {
+            if (!a.RequiresGradient) return;
+
+            var gradInput = new Tensor<T>(inputShape);
+
+            // Route gradients only to max positions
+            foreach (var kvp in maxIndices)
+            {
+                var outIndices = kvp.Key.Split(',').Select(int.Parse).ToArray();
+                var inIndices = kvp.Value;
+
+                gradInput[inIndices] = numOps.Add(gradInput[inIndices], gradient[outIndices]);
+            }
+
+            if (a.Gradient == null)
+                a.Gradient = gradInput;
+            else
+                a.Gradient = a.Gradient.Add(gradInput);
+        }
+
+        var node = new ComputationNode<T>(
+            value: result,
+            requiresGradient: a.RequiresGradient,
+            parents: new List<ComputationNode<T>> { a },
+            backwardFunction: BackwardFunction,
+            name: null);
+
+        var tape = GradientTape<T>.Current;
+        if (tape != null && tape.IsRecording)
+            tape.RecordOperation(node);
+
+        return node;
+    }
+
+    /// <summary>
+    /// Reduces a tensor by computing the mean value along specified axes.
+    /// </summary>
+    /// <param name="a">The input computation node.</param>
+    /// <param name="axes">The axes along which to compute the mean. If null, reduces over all axes.</param>
+    /// <param name="keepDims">Whether to keep the reduced dimensions with size 1.</param>
+    /// <returns>A computation node representing the result of the reduce mean operation.</returns>
+    public static ComputationNode<T> ReduceMean(ComputationNode<T> a, int[]? axes = null, bool keepDims = false)
+    {
+        var numOps = MathHelper.GetNumericOperations<T>();
+        var inputShape = a.Value.Shape;
+
+        // If axes is null, reduce all dimensions
+        if (axes == null)
+        {
+            axes = Enumerable.Range(0, inputShape.Length).ToArray();
+        }
+
+        // Compute output shape and count for averaging
+        var outputShape = new List<int>();
+        int reduceCount = 1;
+        for (int i = 0; i < inputShape.Length; i++)
+        {
+            if (!axes.Contains(i))
+            {
+                outputShape.Add(inputShape[i]);
+            }
+            else
+            {
+                reduceCount *= inputShape[i];
+                if (keepDims)
+                {
+                    outputShape.Add(1);
+                }
+            }
+        }
+
+        if (outputShape.Count == 0)
+            outputShape.Add(1);
+
+        var result = new Tensor<T>(outputShape.ToArray());
+        var divisor = numOps.FromInt(reduceCount);
+
+        // Compute forward pass: sum and then divide
+        void ComputeSum(int[] currentIndices, int dim, int[] outputIndices)
+        {
+            if (dim == inputShape.Length)
+            {
+                var value = a.Value[currentIndices];
+                result[outputIndices] = numOps.Add(result[outputIndices], value);
+                return;
+            }
+
+            if (axes.Contains(dim))
+            {
+                for (int i = 0; i < inputShape[dim]; i++)
+                {
+                    currentIndices[dim] = i;
+                    ComputeSum(currentIndices, dim + 1, outputIndices);
+                }
+            }
+            else
+            {
+                int outIdx = Array.IndexOf(outputShape.ToArray(), inputShape[dim]);
+                for (int i = 0; i < inputShape[dim]; i++)
+                {
+                    currentIndices[dim] = i;
+                    outputIndices[outIdx] = i;
+                    ComputeSum(currentIndices, dim + 1, outputIndices);
+                }
+            }
+        }
+
+        ComputeSum(new int[inputShape.Length], 0, new int[outputShape.Count]);
+
+        // Divide by count to get mean
+        for (int i = 0; i < result.Length; i++)
+        {
+            result[i] = numOps.Divide(result[i], divisor);
+        }
+
+        // Backward function
+        void BackwardFunction(Tensor<T> gradient)
+        {
+            if (!a.RequiresGradient) return;
+
+            var gradInput = new Tensor<T>(inputShape);
+            var gradScale = numOps.Divide(numOps.One, divisor);
+
+            // Broadcast gradient back to input shape
+            void BroadcastGrad(int[] currentIndices, int dim, int[] outputIndices)
+            {
+                if (dim == inputShape.Length)
+                {
+                    gradInput[currentIndices] = numOps.Multiply(gradient[outputIndices], gradScale);
+                    return;
+                }
+
+                if (axes.Contains(dim))
+                {
+                    for (int i = 0; i < inputShape[dim]; i++)
+                    {
+                        currentIndices[dim] = i;
+                        BroadcastGrad(currentIndices, dim + 1, outputIndices);
+                    }
+                }
+                else
+                {
+                    int outIdx = Array.IndexOf(outputShape.ToArray(), inputShape[dim]);
+                    for (int i = 0; i < inputShape[dim]; i++)
+                    {
+                        currentIndices[dim] = i;
+                        outputIndices[outIdx] = i;
+                        BroadcastGrad(currentIndices, dim + 1, outputIndices);
+                    }
+                }
+            }
+
+            BroadcastGrad(new int[inputShape.Length], 0, new int[outputShape.Count]);
+
+            if (a.Gradient == null)
+                a.Gradient = gradInput;
+            else
+                a.Gradient = a.Gradient.Add(gradInput);
+        }
+
+        var node = new ComputationNode<T>(
+            value: result,
+            requiresGradient: a.RequiresGradient,
+            parents: new List<ComputationNode<T>> { a },
+            backwardFunction: BackwardFunction,
+            name: null);
+
+        var tape = GradientTape<T>.Current;
+        if (tape != null && tape.IsRecording)
+            tape.RecordOperation(node);
+
+        return node;
+    }
+}
 }
