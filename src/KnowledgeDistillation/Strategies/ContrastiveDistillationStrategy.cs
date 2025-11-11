@@ -374,9 +374,9 @@ public class ContrastiveDistillationStrategy<T> : DistillationStrategyBase<Vecto
             norm2 = NumOps.Add(norm2, NumOps.Multiply(v2[i], v2[i]));
         }
 
-        double dotVal = NumOps.ToDouble(dot);
-        double norm1Val = Math.Sqrt(NumOps.ToDouble(norm1));
-        double norm2Val = Math.Sqrt(NumOps.ToDouble(norm2));
+        double dotVal = Convert.ToDouble(dot);
+        double norm1Val = Math.Sqrt(Convert.ToDouble(norm1));
+        double norm2Val = Math.Sqrt(Convert.ToDouble(norm2));
 
         return dotVal / (norm1Val * norm2Val + Epsilon);
     }
@@ -389,7 +389,7 @@ public class ContrastiveDistillationStrategy<T> : DistillationStrategyBase<Vecto
             var diff = NumOps.Subtract(v1[i], v2[i]);
             sumSq = NumOps.Add(sumSq, NumOps.Multiply(diff, diff));
         }
-        return Math.Sqrt(NumOps.ToDouble(sumSq));
+        return Math.Sqrt(Convert.ToDouble(sumSq));
     }
 
     private Vector<T> Softmax(Vector<T> logits, double temperature)
@@ -400,7 +400,7 @@ public class ContrastiveDistillationStrategy<T> : DistillationStrategyBase<Vecto
         var scaledLogits = new T[n];
         for (int i = 0; i < n; i++)
         {
-            scaledLogits[i] = NumOps.FromDouble(NumOps.ToDouble(logits[i]) / temperature);
+            scaledLogits[i] = NumOps.FromDouble(Convert.ToDouble(logits[i]) / temperature);
         }
 
         T maxLogit = scaledLogits[0];
@@ -415,7 +415,7 @@ public class ContrastiveDistillationStrategy<T> : DistillationStrategyBase<Vecto
 
         for (int i = 0; i < n; i++)
         {
-            double val = NumOps.ToDouble(NumOps.Subtract(scaledLogits[i], maxLogit));
+            double val = Convert.ToDouble(NumOps.Subtract(scaledLogits[i], maxLogit));
             expValues[i] = NumOps.FromDouble(Math.Exp(val));
             sum = NumOps.Add(sum, expValues[i]);
         }
@@ -434,8 +434,8 @@ public class ContrastiveDistillationStrategy<T> : DistillationStrategyBase<Vecto
 
         for (int i = 0; i < p.Length; i++)
         {
-            double pVal = NumOps.ToDouble(p[i]);
-            double qVal = NumOps.ToDouble(q[i]);
+            double pVal = Convert.ToDouble(p[i]);
+            double qVal = Convert.ToDouble(q[i]);
 
             if (pVal > Epsilon)
             {
@@ -453,8 +453,8 @@ public class ContrastiveDistillationStrategy<T> : DistillationStrategyBase<Vecto
 
         for (int i = 0; i < predictions.Length; i++)
         {
-            double pred = NumOps.ToDouble(predictions[i]);
-            double label = NumOps.ToDouble(trueLabels[i]);
+            double pred = Convert.ToDouble(predictions[i]);
+            double label = Convert.ToDouble(trueLabels[i]);
 
             if (label > Epsilon)
             {

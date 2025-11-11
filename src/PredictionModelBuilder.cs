@@ -984,7 +984,7 @@ public class PredictionModelBuilder<T, TInput, TOutput> : IPredictionModelBuilde
                 trainInputs[i] = trainMatrix.GetRow(i);
                 // Create one-hot encoded labels
                 var oneHot = new Vector<T>(teacher.OutputDimension);
-                int labelIdx = (int)NumOps.ToDouble(trainVector[i]);
+                int labelIdx = (int)Convert.ToDouble(trainVector[i]);
                 if (labelIdx >= 0 && labelIdx < teacher.OutputDimension)
                     oneHot[labelIdx] = NumOps.One;
                 trainLabels[i] = oneHot;
@@ -1000,7 +1000,7 @@ public class PredictionModelBuilder<T, TInput, TOutput> : IPredictionModelBuilde
                 {
                     valInputs[i] = valMatrix.GetRow(i);
                     var oneHot = new Vector<T>(teacher.OutputDimension);
-                    int labelIdx = (int)NumOps.ToDouble(valVector[i]);
+                    int labelIdx = (int)Convert.ToDouble(valVector[i]);
                     if (labelIdx >= 0 && labelIdx < teacher.OutputDimension)
                         oneHot[labelIdx] = NumOps.One;
                     valLabels[i] = oneHot;
@@ -1040,11 +1040,11 @@ public class PredictionModelBuilder<T, TInput, TOutput> : IPredictionModelBuilde
                 onEpochComplete: (epoch, avgLoss) =>
                 {
                     double valAcc = 0;
-                    double valLoss = NumOps.ToDouble(avgLoss);
+                    double valLoss = Convert.ToDouble(avgLoss);
 
                     if (valInputs != null && valLabels != null)
                     {
-                        valAcc = NumOps.ToDouble(trainer.Evaluate(studentForward, valInputs, valLabels));
+                        valAcc = Convert.ToDouble(trainer.Evaluate(studentForward, valInputs, valLabels));
                     }
 
                     Console.WriteLine($"  Epoch {epoch + 1}/{options.Epochs}: Loss = {valLoss:F4}, Val Acc = {valAcc:F2}%");

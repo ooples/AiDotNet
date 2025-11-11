@@ -42,7 +42,7 @@ public class SelfTeacherModel<T> : TeacherModelBase<Vector<T>, Vector<T>, T>
         var scaled = new T[n];
 
         for (int i = 0; i < n; i++)
-            scaled[i] = NumOps.FromDouble(NumOps.ToDouble(logits[i]) / temperature);
+            scaled[i] = NumOps.FromDouble(Convert.ToDouble(logits[i]) / temperature);
 
         T maxLogit = scaled[0];
         for (int i = 1; i < n; i++)
@@ -54,7 +54,7 @@ public class SelfTeacherModel<T> : TeacherModelBase<Vector<T>, Vector<T>, T>
 
         for (int i = 0; i < n; i++)
         {
-            double val = NumOps.ToDouble(NumOps.Subtract(scaled[i], maxLogit));
+            double val = Convert.ToDouble(NumOps.Subtract(scaled[i], maxLogit));
             expValues[i] = NumOps.FromDouble(Math.Exp(val));
             sum = NumOps.Add(sum, expValues[i]);
         }

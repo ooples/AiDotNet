@@ -233,7 +233,7 @@ public class ProbabilisticDistillationStrategy<T> : DistillationStrategyBase<Vec
             double sum = 0;
             for (int sampleIdx = 0; sampleIdx < batchSize; sampleIdx++)
             {
-                sum += NumOps.ToDouble(predictions[sampleIdx][classIdx]);
+                sum += Convert.ToDouble(predictions[sampleIdx][classIdx]);
             }
             means[classIdx] = sum / batchSize;
         }
@@ -251,7 +251,7 @@ public class ProbabilisticDistillationStrategy<T> : DistillationStrategyBase<Vec
             double sumSquaredDiff = 0;
             for (int sampleIdx = 0; sampleIdx < batchSize; sampleIdx++)
             {
-                double val = NumOps.ToDouble(predictions[sampleIdx][classIdx]);
+                double val = Convert.ToDouble(predictions[sampleIdx][classIdx]);
                 double diff = val - means[classIdx];
                 sumSquaredDiff += diff * diff;
             }
@@ -290,7 +290,7 @@ public class ProbabilisticDistillationStrategy<T> : DistillationStrategyBase<Vec
 
         for (int i = 0; i < v1.Length; i++)
         {
-            double diff = NumOps.ToDouble(v1[i]) - NumOps.ToDouble(v2[i]);
+            double diff = Convert.ToDouble(v1[i]) - Convert.ToDouble(v2[i]);
             squaredDistance += diff * diff;
         }
 
@@ -303,7 +303,7 @@ public class ProbabilisticDistillationStrategy<T> : DistillationStrategyBase<Vec
 
         for (int i = 0; i < probabilities.Length; i++)
         {
-            double p = NumOps.ToDouble(probabilities[i]);
+            double p = Convert.ToDouble(probabilities[i]);
             if (p > Epsilon)
             {
                 entropy -= p * Math.Log(p);
@@ -320,7 +320,7 @@ public class ProbabilisticDistillationStrategy<T> : DistillationStrategyBase<Vec
         var scaled = new T[n];
 
         for (int i = 0; i < n; i++)
-            scaled[i] = NumOps.FromDouble(NumOps.ToDouble(logits[i]) / temperature);
+            scaled[i] = NumOps.FromDouble(Convert.ToDouble(logits[i]) / temperature);
 
         T maxLogit = scaled[0];
         for (int i = 1; i < n; i++)
@@ -332,7 +332,7 @@ public class ProbabilisticDistillationStrategy<T> : DistillationStrategyBase<Vec
 
         for (int i = 0; i < n; i++)
         {
-            double val = NumOps.ToDouble(NumOps.Subtract(scaled[i], maxLogit));
+            double val = Convert.ToDouble(NumOps.Subtract(scaled[i], maxLogit));
             expValues[i] = NumOps.FromDouble(Math.Exp(val));
             sum = NumOps.Add(sum, expValues[i]);
         }
@@ -348,8 +348,8 @@ public class ProbabilisticDistillationStrategy<T> : DistillationStrategyBase<Vec
         T divergence = NumOps.Zero;
         for (int i = 0; i < p.Length; i++)
         {
-            double pVal = NumOps.ToDouble(p[i]);
-            double qVal = NumOps.ToDouble(q[i]);
+            double pVal = Convert.ToDouble(p[i]);
+            double qVal = Convert.ToDouble(q[i]);
             if (pVal > Epsilon)
                 divergence = NumOps.Add(divergence, NumOps.FromDouble(pVal * Math.Log(pVal / (qVal + Epsilon))));
         }
@@ -361,8 +361,8 @@ public class ProbabilisticDistillationStrategy<T> : DistillationStrategyBase<Vec
         T entropy = NumOps.Zero;
         for (int i = 0; i < predictions.Length; i++)
         {
-            double pred = NumOps.ToDouble(predictions[i]);
-            double label = NumOps.ToDouble(trueLabels[i]);
+            double pred = Convert.ToDouble(predictions[i]);
+            double label = Convert.ToDouble(trueLabels[i]);
             if (label > Epsilon)
                 entropy = NumOps.Add(entropy, NumOps.FromDouble(-label * Math.Log(pred + Epsilon)));
         }

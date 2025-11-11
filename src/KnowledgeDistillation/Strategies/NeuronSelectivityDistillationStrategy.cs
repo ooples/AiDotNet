@@ -146,7 +146,7 @@ public class NeuronSelectivityDistillationStrategy<T> : DistillationStrategyBase
             var neuronActivations = new double[batchSize];
             for (int sampleIdx = 0; sampleIdx < batchSize; sampleIdx++)
             {
-                neuronActivations[sampleIdx] = NumOps.ToDouble(activations[sampleIdx][neuronIdx]);
+                neuronActivations[sampleIdx] = Convert.ToDouble(activations[sampleIdx][neuronIdx]);
             }
 
             scores[neuronIdx] = _metric switch
@@ -189,7 +189,7 @@ public class NeuronSelectivityDistillationStrategy<T> : DistillationStrategyBase
         var scaled = new T[n];
 
         for (int i = 0; i < n; i++)
-            scaled[i] = NumOps.FromDouble(NumOps.ToDouble(logits[i]) / temperature);
+            scaled[i] = NumOps.FromDouble(Convert.ToDouble(logits[i]) / temperature);
 
         T maxLogit = scaled[0];
         for (int i = 1; i < n; i++)
@@ -201,7 +201,7 @@ public class NeuronSelectivityDistillationStrategy<T> : DistillationStrategyBase
 
         for (int i = 0; i < n; i++)
         {
-            double val = NumOps.ToDouble(NumOps.Subtract(scaled[i], maxLogit));
+            double val = Convert.ToDouble(NumOps.Subtract(scaled[i], maxLogit));
             expValues[i] = NumOps.FromDouble(Math.Exp(val));
             sum = NumOps.Add(sum, expValues[i]);
         }
@@ -217,8 +217,8 @@ public class NeuronSelectivityDistillationStrategy<T> : DistillationStrategyBase
         T divergence = NumOps.Zero;
         for (int i = 0; i < p.Length; i++)
         {
-            double pVal = NumOps.ToDouble(p[i]);
-            double qVal = NumOps.ToDouble(q[i]);
+            double pVal = Convert.ToDouble(p[i]);
+            double qVal = Convert.ToDouble(q[i]);
             if (pVal > Epsilon)
                 divergence = NumOps.Add(divergence, NumOps.FromDouble(pVal * Math.Log(pVal / (qVal + Epsilon))));
         }
@@ -230,8 +230,8 @@ public class NeuronSelectivityDistillationStrategy<T> : DistillationStrategyBase
         T entropy = NumOps.Zero;
         for (int i = 0; i < predictions.Length; i++)
         {
-            double pred = NumOps.ToDouble(predictions[i]);
-            double label = NumOps.ToDouble(trueLabels[i]);
+            double pred = Convert.ToDouble(predictions[i]);
+            double label = Convert.ToDouble(trueLabels[i]);
             if (label > Epsilon)
                 entropy = NumOps.Add(entropy, NumOps.FromDouble(-label * Math.Log(pred + Epsilon)));
         }

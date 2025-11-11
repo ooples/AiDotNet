@@ -193,7 +193,7 @@ public class VariationalDistillationStrategy<T> : DistillationStrategyBase<Vecto
         T reconstructionLoss = NumOps.Zero;
         for (int i = 0; i < dim; i++)
         {
-            double diff = NumOps.ToDouble(NumOps.Subtract(studentMean[i], teacherMean[i]));
+            double diff = Convert.ToDouble(NumOps.Subtract(studentMean[i], teacherMean[i]));
             reconstructionLoss = NumOps.Add(reconstructionLoss, NumOps.FromDouble(diff * diff));
         }
         reconstructionLoss = NumOps.Divide(reconstructionLoss, NumOps.FromDouble(dim));
@@ -226,7 +226,7 @@ public class VariationalDistillationStrategy<T> : DistillationStrategyBase<Vecto
         T teacherInfo = ComputeKLToStandardNormal(teacherMean, teacherLogVar);
 
         // Match information levels (teacher acts as target information level)
-        var diff = NumOps.ToDouble(NumOps.Subtract(studentInfo, teacherInfo));
+        var diff = Convert.ToDouble(NumOps.Subtract(studentInfo, teacherInfo));
         T infoLoss = NumOps.FromDouble(diff * diff);
 
         // Scale by β (information bottleneck parameter)
@@ -261,10 +261,10 @@ public class VariationalDistillationStrategy<T> : DistillationStrategyBase<Vecto
 
         for (int i = 0; i < dim; i++)
         {
-            double muPVal = NumOps.ToDouble(muP[i]);
-            double muQVal = NumOps.ToDouble(muQ[i]);
-            double logVarPVal = NumOps.ToDouble(logVarP[i]);
-            double logVarQVal = NumOps.ToDouble(logVarQ[i]);
+            double muPVal = Convert.ToDouble(muP[i]);
+            double muQVal = Convert.ToDouble(muQ[i]);
+            double logVarPVal = Convert.ToDouble(logVarP[i]);
+            double logVarQVal = Convert.ToDouble(logVarQ[i]);
 
             double varP = Math.Exp(logVarPVal);
             double varQ = Math.Exp(logVarQVal);
@@ -290,8 +290,8 @@ public class VariationalDistillationStrategy<T> : DistillationStrategyBase<Vecto
 
         for (int i = 0; i < dim; i++)
         {
-            double muVal = NumOps.ToDouble(mu[i]);
-            double logVarVal = NumOps.ToDouble(logVar[i]);
+            double muVal = Convert.ToDouble(mu[i]);
+            double logVarVal = Convert.ToDouble(logVar[i]);
             double varVal = Math.Exp(logVarVal);
 
             double klDim = 0.5 * (muVal * muVal + varVal - logVarVal - 1.0);
@@ -316,10 +316,10 @@ public class VariationalDistillationStrategy<T> : DistillationStrategyBase<Vecto
         for (int i = 0; i < dim; i++)
         {
             // z = μ + σ * ε, where σ = exp(0.5 * logVar)
-            double muVal = NumOps.ToDouble(mean[i]);
-            double logVarVal = NumOps.ToDouble(logVar[i]);
+            double muVal = Convert.ToDouble(mean[i]);
+            double logVarVal = Convert.ToDouble(logVar[i]);
             double sigma = Math.Exp(0.5 * logVarVal);
-            double epsVal = NumOps.ToDouble(epsilon[i]);
+            double epsVal = Convert.ToDouble(epsilon[i]);
 
             double sampleVal = muVal + sigma * epsVal;
             sample[i] = NumOps.FromDouble(sampleVal);
@@ -335,7 +335,7 @@ public class VariationalDistillationStrategy<T> : DistillationStrategyBase<Vecto
         var scaled = new T[n];
 
         for (int i = 0; i < n; i++)
-            scaled[i] = NumOps.FromDouble(NumOps.ToDouble(logits[i]) / temperature);
+            scaled[i] = NumOps.FromDouble(Convert.ToDouble(logits[i]) / temperature);
 
         T maxLogit = scaled[0];
         for (int i = 1; i < n; i++)
@@ -347,7 +347,7 @@ public class VariationalDistillationStrategy<T> : DistillationStrategyBase<Vecto
 
         for (int i = 0; i < n; i++)
         {
-            double val = NumOps.ToDouble(NumOps.Subtract(scaled[i], maxLogit));
+            double val = Convert.ToDouble(NumOps.Subtract(scaled[i], maxLogit));
             expValues[i] = NumOps.FromDouble(Math.Exp(val));
             sum = NumOps.Add(sum, expValues[i]);
         }
@@ -363,8 +363,8 @@ public class VariationalDistillationStrategy<T> : DistillationStrategyBase<Vecto
         T divergence = NumOps.Zero;
         for (int i = 0; i < p.Length; i++)
         {
-            double pVal = NumOps.ToDouble(p[i]);
-            double qVal = NumOps.ToDouble(q[i]);
+            double pVal = Convert.ToDouble(p[i]);
+            double qVal = Convert.ToDouble(q[i]);
             if (pVal > Epsilon)
                 divergence = NumOps.Add(divergence, NumOps.FromDouble(pVal * Math.Log(pVal / (qVal + Epsilon))));
         }
@@ -376,8 +376,8 @@ public class VariationalDistillationStrategy<T> : DistillationStrategyBase<Vecto
         T entropy = NumOps.Zero;
         for (int i = 0; i < predictions.Length; i++)
         {
-            double pred = NumOps.ToDouble(predictions[i]);
-            double label = NumOps.ToDouble(trueLabels[i]);
+            double pred = Convert.ToDouble(predictions[i]);
+            double label = Convert.ToDouble(trueLabels[i]);
             if (label > Epsilon)
                 entropy = NumOps.Add(entropy, NumOps.FromDouble(-label * Math.Log(pred + Epsilon)));
         }

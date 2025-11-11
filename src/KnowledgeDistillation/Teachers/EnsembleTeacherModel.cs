@@ -172,7 +172,7 @@ public class EnsembleTeacherModel<T> : TeacherModelBase<Vector<T>, Vector<T>, T>
         var scaledLogits = new T[n];
         for (int i = 0; i < n; i++)
         {
-            double val = NumOps.ToDouble(logits[i]) / temperature;
+            double val = Convert.ToDouble(logits[i]) / temperature;
             scaledLogits[i] = NumOps.FromDouble(val);
         }
 
@@ -190,7 +190,7 @@ public class EnsembleTeacherModel<T> : TeacherModelBase<Vector<T>, Vector<T>, T>
 
         for (int i = 0; i < n; i++)
         {
-            double val = NumOps.ToDouble(NumOps.Subtract(scaledLogits[i], maxLogit));
+            double val = Convert.ToDouble(NumOps.Subtract(scaledLogits[i], maxLogit));
             expValues[i] = NumOps.FromDouble(Math.Exp(val));
             sum = NumOps.Add(sum, expValues[i]);
         }
@@ -238,7 +238,7 @@ public class EnsembleTeacherModel<T> : TeacherModelBase<Vector<T>, Vector<T>, T>
                     double logSum = 0;
                     for (int t = 0; t < _teachers.Length; t++)
                     {
-                        double val = NumOps.ToDouble(teacherLogits[t][i]);
+                        double val = Convert.ToDouble(teacherLogits[t][i]);
                         logSum += Math.Log(Math.Abs(val) + 1e-10) * _weights![t];
                     }
                     result[i] = NumOps.FromDouble(Math.Exp(logSum));
@@ -266,7 +266,7 @@ public class EnsembleTeacherModel<T> : TeacherModelBase<Vector<T>, Vector<T>, T>
                     var values = new double[_teachers.Length];
                     for (int t = 0; t < _teachers.Length; t++)
                     {
-                        values[t] = NumOps.ToDouble(teacherLogits[t][i]);
+                        values[t] = Convert.ToDouble(teacherLogits[t][i]);
                     }
                     Array.Sort(values);
                     double median = _teachers.Length % 2 == 0

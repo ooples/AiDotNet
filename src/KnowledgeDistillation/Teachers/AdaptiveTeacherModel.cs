@@ -218,7 +218,7 @@ public class AdaptiveTeacherModel<T> : TeacherModelBase<Vector<T>, Vector<T>, T>
         var scaledLogits = new T[n];
         for (int i = 0; i < n; i++)
         {
-            scaledLogits[i] = NumOps.FromDouble(NumOps.ToDouble(logits[i]) / temperature);
+            scaledLogits[i] = NumOps.FromDouble(Convert.ToDouble(logits[i]) / temperature);
         }
 
         // Numerical stability
@@ -235,7 +235,7 @@ public class AdaptiveTeacherModel<T> : TeacherModelBase<Vector<T>, Vector<T>, T>
 
         for (int i = 0; i < n; i++)
         {
-            double val = NumOps.ToDouble(NumOps.Subtract(scaledLogits[i], maxLogit));
+            double val = Convert.ToDouble(NumOps.Subtract(scaledLogits[i], maxLogit));
             expValues[i] = NumOps.FromDouble(Math.Exp(val));
             sum = NumOps.Add(sum, expValues[i]);
         }
@@ -256,7 +256,7 @@ public class AdaptiveTeacherModel<T> : TeacherModelBase<Vector<T>, Vector<T>, T>
             if (NumOps.GreaterThan(probs[i], maxVal))
                 maxVal = probs[i];
         }
-        return NumOps.ToDouble(maxVal);
+        return Convert.ToDouble(maxVal);
     }
 
     private double ComputeEntropy(Vector<T> probs)
@@ -266,7 +266,7 @@ public class AdaptiveTeacherModel<T> : TeacherModelBase<Vector<T>, Vector<T>, T>
 
         for (int i = 0; i < probs.Length; i++)
         {
-            double p = NumOps.ToDouble(probs[i]);
+            double p = Convert.ToDouble(probs[i]);
             if (p > epsilon)
             {
                 entropy -= p * Math.Log(p);

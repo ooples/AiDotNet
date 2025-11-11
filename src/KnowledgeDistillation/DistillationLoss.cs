@@ -198,7 +198,7 @@ public class DistillationLoss<T> : DistillationStrategyBase<Vector<T>, T>
         var scaledLogits = new T[n];
         for (int i = 0; i < n; i++)
         {
-            double val = NumOps.ToDouble(logits[i]) / temperature;
+            double val = Convert.ToDouble(logits[i]) / temperature;
             scaledLogits[i] = NumOps.FromDouble(val);
         }
 
@@ -216,7 +216,7 @@ public class DistillationLoss<T> : DistillationStrategyBase<Vector<T>, T>
 
         for (int i = 0; i < n; i++)
         {
-            double val = NumOps.ToDouble(NumOps.Subtract(scaledLogits[i], maxLogit));
+            double val = Convert.ToDouble(NumOps.Subtract(scaledLogits[i], maxLogit));
             expValues[i] = NumOps.FromDouble(Math.Exp(val));
             sum = NumOps.Add(sum, expValues[i]);
         }
@@ -251,8 +251,8 @@ public class DistillationLoss<T> : DistillationStrategyBase<Vector<T>, T>
 
         for (int i = 0; i < p.Length; i++)
         {
-            double pVal = NumOps.ToDouble(p[i]);
-            double qVal = NumOps.ToDouble(q[i]);
+            double pVal = Convert.ToDouble(p[i]);
+            double qVal = Convert.ToDouble(q[i]);
 
             if (pVal > epsilon) // Only compute where p is non-zero
             {
@@ -286,8 +286,8 @@ public class DistillationLoss<T> : DistillationStrategyBase<Vector<T>, T>
 
         for (int i = 0; i < predictions.Length; i++)
         {
-            double pred = NumOps.ToDouble(predictions[i]);
-            double label = NumOps.ToDouble(trueLabels[i]);
+            double pred = Convert.ToDouble(predictions[i]);
+            double label = Convert.ToDouble(trueLabels[i]);
 
             if (label > epsilon) // Only compute where label is non-zero
             {

@@ -285,7 +285,7 @@ public class FactorTransferDistillationStrategy<T> : DistillationStrategyBase<Ve
             double sum = 0;
             for (int i = 0; i < batchSize; i++)
             {
-                sum += NumOps.ToDouble(features[i][j]);
+                sum += Convert.ToDouble(features[i][j]);
             }
             mean[j] = sum / batchSize;
         }
@@ -297,7 +297,7 @@ public class FactorTransferDistillationStrategy<T> : DistillationStrategyBase<Ve
             centered[i] = new Vector<T>(featureDim);
             for (int j = 0; j < featureDim; j++)
             {
-                double val = NumOps.ToDouble(features[i][j]) - mean[j];
+                double val = Convert.ToDouble(features[i][j]) - mean[j];
                 centered[i][j] = NumOps.FromDouble(val);
             }
         }
@@ -319,8 +319,8 @@ public class FactorTransferDistillationStrategy<T> : DistillationStrategyBase<Ve
                 double sum = 0;
                 for (int k = 0; k < batchSize; k++)
                 {
-                    sum += NumOps.ToDouble(centeredFeatures[k][i]) *
-                           NumOps.ToDouble(centeredFeatures[k][j]);
+                    sum += Convert.ToDouble(centeredFeatures[k][i]) *
+                           Convert.ToDouble(centeredFeatures[k][j]);
                 }
                 cov[i, j] = sum / batchSize;
                 cov[j, i] = cov[i, j]; // Symmetric
@@ -354,7 +354,7 @@ public class FactorTransferDistillationStrategy<T> : DistillationStrategyBase<Ve
                 double sum = 0;
                 for (int j = 0; j < dim; j++)
                 {
-                    sum += matrix[i, j] * NumOps.ToDouble(vector[j]);
+                    sum += matrix[i, j] * Convert.ToDouble(vector[j]);
                 }
                 newVector[i] = NumOps.FromDouble(sum);
             }
@@ -375,7 +375,7 @@ public class FactorTransferDistillationStrategy<T> : DistillationStrategyBase<Ve
             double sum = 0;
             for (int j = 0; j < dim; j++)
             {
-                sum += matrix[i, j] * NumOps.ToDouble(eigenvector[j]);
+                sum += matrix[i, j] * Convert.ToDouble(eigenvector[j]);
             }
             Av[i] = sum;
         }
@@ -383,7 +383,7 @@ public class FactorTransferDistillationStrategy<T> : DistillationStrategyBase<Ve
         double eigenvalue = 0;
         for (int i = 0; i < dim; i++)
         {
-            eigenvalue += NumOps.ToDouble(eigenvector[i]) * Av[i];
+            eigenvalue += Convert.ToDouble(eigenvector[i]) * Av[i];
         }
 
         return eigenvalue;
@@ -398,8 +398,8 @@ public class FactorTransferDistillationStrategy<T> : DistillationStrategyBase<Ve
         {
             for (int j = 0; j < dim; j++)
             {
-                double vi = NumOps.ToDouble(eigenvector[i]);
-                double vj = NumOps.ToDouble(eigenvector[j]);
+                double vi = Convert.ToDouble(eigenvector[i]);
+                double vj = Convert.ToDouble(eigenvector[j]);
                 matrix[i, j] -= eigenvalue * vi * vj;
             }
         }
@@ -410,7 +410,7 @@ public class FactorTransferDistillationStrategy<T> : DistillationStrategyBase<Ve
         double norm = 0;
         for (int i = 0; i < vector.Length; i++)
         {
-            double val = NumOps.ToDouble(vector[i]);
+            double val = Convert.ToDouble(vector[i]);
             norm += val * val;
         }
         norm = Math.Sqrt(norm);
@@ -418,7 +418,7 @@ public class FactorTransferDistillationStrategy<T> : DistillationStrategyBase<Ve
         var normalized = new Vector<T>(vector.Length);
         for (int i = 0; i < vector.Length; i++)
         {
-            normalized[i] = NumOps.FromDouble(NumOps.ToDouble(vector[i]) / (norm + Epsilon));
+            normalized[i] = NumOps.FromDouble(Convert.ToDouble(vector[i]) / (norm + Epsilon));
         }
 
         return normalized;
@@ -434,7 +434,7 @@ public class FactorTransferDistillationStrategy<T> : DistillationStrategyBase<Ve
         {
             for (int j = 0; j < vectors1[i].Length; j++)
             {
-                double diff = NumOps.ToDouble(vectors1[i][j]) - NumOps.ToDouble(vectors2[i][j]);
+                double diff = Convert.ToDouble(vectors1[i][j]) - Convert.ToDouble(vectors2[i][j]);
                 mse = NumOps.Add(mse, NumOps.FromDouble(diff * diff));
                 totalElements++;
             }
@@ -454,7 +454,7 @@ public class FactorTransferDistillationStrategy<T> : DistillationStrategyBase<Ve
             norm2 = NumOps.Add(norm2, NumOps.Multiply(v2[i], v2[i]));
         }
 
-        return NumOps.ToDouble(dot) / (Math.Sqrt(NumOps.ToDouble(norm1)) * Math.Sqrt(NumOps.ToDouble(norm2)) + Epsilon);
+        return Convert.ToDouble(dot) / (Math.Sqrt(Convert.ToDouble(norm1)) * Math.Sqrt(Convert.ToDouble(norm2)) + Epsilon);
     }
 
     private Vector<T> Softmax(Vector<T> logits, double temperature)
@@ -464,7 +464,7 @@ public class FactorTransferDistillationStrategy<T> : DistillationStrategyBase<Ve
         var scaled = new T[n];
 
         for (int i = 0; i < n; i++)
-            scaled[i] = NumOps.FromDouble(NumOps.ToDouble(logits[i]) / temperature);
+            scaled[i] = NumOps.FromDouble(Convert.ToDouble(logits[i]) / temperature);
 
         T maxLogit = scaled[0];
         for (int i = 1; i < n; i++)
@@ -476,7 +476,7 @@ public class FactorTransferDistillationStrategy<T> : DistillationStrategyBase<Ve
 
         for (int i = 0; i < n; i++)
         {
-            double val = NumOps.ToDouble(NumOps.Subtract(scaled[i], maxLogit));
+            double val = Convert.ToDouble(NumOps.Subtract(scaled[i], maxLogit));
             expValues[i] = NumOps.FromDouble(Math.Exp(val));
             sum = NumOps.Add(sum, expValues[i]);
         }
@@ -492,8 +492,8 @@ public class FactorTransferDistillationStrategy<T> : DistillationStrategyBase<Ve
         T divergence = NumOps.Zero;
         for (int i = 0; i < p.Length; i++)
         {
-            double pVal = NumOps.ToDouble(p[i]);
-            double qVal = NumOps.ToDouble(q[i]);
+            double pVal = Convert.ToDouble(p[i]);
+            double qVal = Convert.ToDouble(q[i]);
             if (pVal > Epsilon)
                 divergence = NumOps.Add(divergence, NumOps.FromDouble(pVal * Math.Log(pVal / (qVal + Epsilon))));
         }
@@ -505,8 +505,8 @@ public class FactorTransferDistillationStrategy<T> : DistillationStrategyBase<Ve
         T entropy = NumOps.Zero;
         for (int i = 0; i < predictions.Length; i++)
         {
-            double pred = NumOps.ToDouble(predictions[i]);
-            double label = NumOps.ToDouble(trueLabels[i]);
+            double pred = Convert.ToDouble(predictions[i]);
+            double label = Convert.ToDouble(trueLabels[i]);
             if (label > Epsilon)
                 entropy = NumOps.Add(entropy, NumOps.FromDouble(-label * Math.Log(pred + Epsilon)));
         }

@@ -48,14 +48,14 @@ public class QuantizedTeacherModel<T> : TeacherModelBase<Vector<T>, Vector<T>, T
             if (NumOps.GreaterThan(vector[i], maxVal)) maxVal = vector[i];
         }
 
-        double range = NumOps.ToDouble(NumOps.Subtract(maxVal, minVal));
+        double range = Convert.ToDouble(NumOps.Subtract(maxVal, minVal));
         if (range < 1e-10) return vector;
 
         for (int i = 0; i < n; i++)
         {
-            double normalized = (NumOps.ToDouble(vector[i]) - NumOps.ToDouble(minVal)) / range;
+            double normalized = (Convert.ToDouble(vector[i]) - Convert.ToDouble(minVal)) / range;
             int quantized = (int)(normalized * scale);
-            double dequantized = NumOps.ToDouble(minVal) + (quantized / scale) * range;
+            double dequantized = Convert.ToDouble(minVal) + (quantized / scale) * range;
             result[i] = NumOps.FromDouble(dequantized);
         }
 
@@ -69,7 +69,7 @@ public class QuantizedTeacherModel<T> : TeacherModelBase<Vector<T>, Vector<T>, T
         var scaled = new T[n];
 
         for (int i = 0; i < n; i++)
-            scaled[i] = NumOps.FromDouble(NumOps.ToDouble(logits[i]) / temperature);
+            scaled[i] = NumOps.FromDouble(Convert.ToDouble(logits[i]) / temperature);
 
         T maxLogit = scaled[0];
         for (int i = 1; i < n; i++)
@@ -81,7 +81,7 @@ public class QuantizedTeacherModel<T> : TeacherModelBase<Vector<T>, Vector<T>, T
 
         for (int i = 0; i < n; i++)
         {
-            double val = NumOps.ToDouble(NumOps.Subtract(scaled[i], maxLogit));
+            double val = Convert.ToDouble(NumOps.Subtract(scaled[i], maxLogit));
             expValues[i] = NumOps.FromDouble(Math.Exp(val));
             sum = NumOps.Add(sum, expValues[i]);
         }

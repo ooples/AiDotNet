@@ -153,7 +153,7 @@ public class OnlineTeacherModel<T> : TeacherModelBase<Vector<T>, Vector<T>, T>
         var scaledLogits = new T[n];
         for (int i = 0; i < n; i++)
         {
-            double val = NumOps.ToDouble(logits[i]) / temperature;
+            double val = Convert.ToDouble(logits[i]) / temperature;
             scaledLogits[i] = NumOps.FromDouble(val);
         }
 
@@ -171,7 +171,7 @@ public class OnlineTeacherModel<T> : TeacherModelBase<Vector<T>, Vector<T>, T>
 
         for (int i = 0; i < n; i++)
         {
-            double val = NumOps.ToDouble(NumOps.Subtract(scaledLogits[i], maxLogit));
+            double val = Convert.ToDouble(NumOps.Subtract(scaledLogits[i], maxLogit));
             expValues[i] = NumOps.FromDouble(Math.Exp(val));
             sum = NumOps.Add(sum, expValues[i]);
         }

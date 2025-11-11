@@ -320,9 +320,9 @@ public class AttentionDistillationStrategy<T> : DistillationStrategyBase<Vector<
             normTeacher = NumOps.Add(normTeacher, NumOps.Multiply(teacher[i], teacher[i]));
         }
 
-        double dotVal = NumOps.ToDouble(dot);
-        double normStudentVal = Math.Sqrt(NumOps.ToDouble(normStudent));
-        double normTeacherVal = Math.Sqrt(NumOps.ToDouble(normTeacher));
+        double dotVal = Convert.ToDouble(dot);
+        double normStudentVal = Math.Sqrt(Convert.ToDouble(normStudent));
+        double normTeacherVal = Math.Sqrt(Convert.ToDouble(normTeacher));
 
         double similarity = dotVal / (normStudentVal * normTeacherVal + Epsilon);
         double loss = 1.0 - similarity;
@@ -338,7 +338,7 @@ public class AttentionDistillationStrategy<T> : DistillationStrategyBase<Vector<
         var scaledLogits = new T[n];
         for (int i = 0; i < n; i++)
         {
-            scaledLogits[i] = NumOps.FromDouble(NumOps.ToDouble(logits[i]) / temperature);
+            scaledLogits[i] = NumOps.FromDouble(Convert.ToDouble(logits[i]) / temperature);
         }
 
         T maxLogit = scaledLogits[0];
@@ -353,7 +353,7 @@ public class AttentionDistillationStrategy<T> : DistillationStrategyBase<Vector<
 
         for (int i = 0; i < n; i++)
         {
-            double val = NumOps.ToDouble(NumOps.Subtract(scaledLogits[i], maxLogit));
+            double val = Convert.ToDouble(NumOps.Subtract(scaledLogits[i], maxLogit));
             expValues[i] = NumOps.FromDouble(Math.Exp(val));
             sum = NumOps.Add(sum, expValues[i]);
         }
@@ -372,8 +372,8 @@ public class AttentionDistillationStrategy<T> : DistillationStrategyBase<Vector<
 
         for (int i = 0; i < p.Length; i++)
         {
-            double pVal = NumOps.ToDouble(p[i]);
-            double qVal = NumOps.ToDouble(q[i]);
+            double pVal = Convert.ToDouble(p[i]);
+            double qVal = Convert.ToDouble(q[i]);
 
             if (pVal > Epsilon)
             {
@@ -391,8 +391,8 @@ public class AttentionDistillationStrategy<T> : DistillationStrategyBase<Vector<
 
         for (int i = 0; i < predictions.Length; i++)
         {
-            double pred = NumOps.ToDouble(predictions[i]);
-            double label = NumOps.ToDouble(trueLabels[i]);
+            double pred = Convert.ToDouble(predictions[i]);
+            double label = Convert.ToDouble(trueLabels[i]);
 
             if (label > Epsilon)
             {

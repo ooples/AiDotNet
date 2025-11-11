@@ -107,7 +107,7 @@ public class SimilarityPreservingStrategy<T> : DistillationStrategyBase<Vector<T
             norm2 = NumOps.Add(norm2, NumOps.Multiply(v2[i], v2[i]));
         }
 
-        return NumOps.ToDouble(dot) / (Math.Sqrt(NumOps.ToDouble(norm1)) * Math.Sqrt(NumOps.ToDouble(norm2)) + Epsilon);
+        return Convert.ToDouble(dot) / (Math.Sqrt(Convert.ToDouble(norm1)) * Math.Sqrt(Convert.ToDouble(norm2)) + Epsilon);
     }
 
     private Vector<T> Softmax(Vector<T> logits, double temperature)
@@ -117,7 +117,7 @@ public class SimilarityPreservingStrategy<T> : DistillationStrategyBase<Vector<T
         var scaled = new T[n];
 
         for (int i = 0; i < n; i++)
-            scaled[i] = NumOps.FromDouble(NumOps.ToDouble(logits[i]) / temperature);
+            scaled[i] = NumOps.FromDouble(Convert.ToDouble(logits[i]) / temperature);
 
         T maxLogit = scaled[0];
         for (int i = 1; i < n; i++)
@@ -129,7 +129,7 @@ public class SimilarityPreservingStrategy<T> : DistillationStrategyBase<Vector<T
 
         for (int i = 0; i < n; i++)
         {
-            double val = NumOps.ToDouble(NumOps.Subtract(scaled[i], maxLogit));
+            double val = Convert.ToDouble(NumOps.Subtract(scaled[i], maxLogit));
             expValues[i] = NumOps.FromDouble(Math.Exp(val));
             sum = NumOps.Add(sum, expValues[i]);
         }
@@ -146,8 +146,8 @@ public class SimilarityPreservingStrategy<T> : DistillationStrategyBase<Vector<T
 
         for (int i = 0; i < p.Length; i++)
         {
-            double pVal = NumOps.ToDouble(p[i]);
-            double qVal = NumOps.ToDouble(q[i]);
+            double pVal = Convert.ToDouble(p[i]);
+            double qVal = Convert.ToDouble(q[i]);
 
             if (pVal > Epsilon)
             {
@@ -165,8 +165,8 @@ public class SimilarityPreservingStrategy<T> : DistillationStrategyBase<Vector<T
 
         for (int i = 0; i < predictions.Length; i++)
         {
-            double pred = NumOps.ToDouble(predictions[i]);
-            double label = NumOps.ToDouble(trueLabels[i]);
+            double pred = Convert.ToDouble(predictions[i]);
+            double label = Convert.ToDouble(trueLabels[i]);
 
             if (label > Epsilon)
             {

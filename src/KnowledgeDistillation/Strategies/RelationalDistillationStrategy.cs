@@ -284,7 +284,7 @@ public class RelationalDistillationStrategy<T> : DistillationStrategyBase<Vector
 
                 // Huber loss for robust distance matching
                 var diff = NumOps.Subtract(studentDist, teacherDist);
-                var absDiff = Math.Abs(NumOps.ToDouble(diff));
+                var absDiff = Math.Abs(Convert.ToDouble(diff));
 
                 T pairLoss;
                 if (absDiff < 1.0)
@@ -371,7 +371,7 @@ public class RelationalDistillationStrategy<T> : DistillationStrategyBase<Vector
             var diff = NumOps.Subtract(v1[i], v2[i]);
             sum = NumOps.Add(sum, NumOps.Multiply(diff, diff));
         }
-        return NumOps.FromDouble(Math.Sqrt(NumOps.ToDouble(sum)));
+        return NumOps.FromDouble(Math.Sqrt(Convert.ToDouble(sum)));
     }
 
     private T ComputeCosineDistance(Vector<T> v1, Vector<T> v2)
@@ -387,8 +387,8 @@ public class RelationalDistillationStrategy<T> : DistillationStrategyBase<Vector
             norm2 = NumOps.Add(norm2, NumOps.Multiply(v2[i], v2[i]));
         }
 
-        double similarity = NumOps.ToDouble(dot) /
-            (Math.Sqrt(NumOps.ToDouble(norm1)) * Math.Sqrt(NumOps.ToDouble(norm2)) + Epsilon);
+        double similarity = Convert.ToDouble(dot) /
+            (Math.Sqrt(Convert.ToDouble(norm1)) * Math.Sqrt(Convert.ToDouble(norm2)) + Epsilon);
 
         return NumOps.FromDouble(1.0 - similarity); // Distance = 1 - similarity
     }
@@ -398,7 +398,7 @@ public class RelationalDistillationStrategy<T> : DistillationStrategyBase<Vector
         T sum = NumOps.Zero;
         for (int i = 0; i < v1.Length; i++)
         {
-            var diff = Math.Abs(NumOps.ToDouble(NumOps.Subtract(v1[i], v2[i])));
+            var diff = Math.Abs(Convert.ToDouble(NumOps.Subtract(v1[i], v2[i])));
             sum = NumOps.Add(sum, NumOps.FromDouble(diff));
         }
         return sum;
@@ -419,8 +419,8 @@ public class RelationalDistillationStrategy<T> : DistillationStrategyBase<Vector
         T normJk = Norm(jk);
 
         // cos(angle) = dot / (norm1 * norm2)
-        double cosAngle = NumOps.ToDouble(dot) /
-            (NumOps.ToDouble(normJi) * NumOps.ToDouble(normJk) + Epsilon);
+        double cosAngle = Convert.ToDouble(dot) /
+            (Convert.ToDouble(normJi) * Convert.ToDouble(normJk) + Epsilon);
 
         // Clamp to [-1, 1] for numerical stability
         cosAngle = Math.Max(-1.0, Math.Min(1.0, cosAngle));
@@ -455,7 +455,7 @@ public class RelationalDistillationStrategy<T> : DistillationStrategyBase<Vector
         {
             sum = NumOps.Add(sum, NumOps.Multiply(v[i], v[i]));
         }
-        return NumOps.FromDouble(Math.Sqrt(NumOps.ToDouble(sum)));
+        return NumOps.FromDouble(Math.Sqrt(Convert.ToDouble(sum)));
     }
 
     private Vector<T> Softmax(Vector<T> logits, double temperature)
@@ -466,7 +466,7 @@ public class RelationalDistillationStrategy<T> : DistillationStrategyBase<Vector
         var scaledLogits = new T[n];
         for (int i = 0; i < n; i++)
         {
-            scaledLogits[i] = NumOps.FromDouble(NumOps.ToDouble(logits[i]) / temperature);
+            scaledLogits[i] = NumOps.FromDouble(Convert.ToDouble(logits[i]) / temperature);
         }
 
         T maxLogit = scaledLogits[0];
@@ -481,7 +481,7 @@ public class RelationalDistillationStrategy<T> : DistillationStrategyBase<Vector
 
         for (int i = 0; i < n; i++)
         {
-            double val = NumOps.ToDouble(NumOps.Subtract(scaledLogits[i], maxLogit));
+            double val = Convert.ToDouble(NumOps.Subtract(scaledLogits[i], maxLogit));
             expValues[i] = NumOps.FromDouble(Math.Exp(val));
             sum = NumOps.Add(sum, expValues[i]);
         }
@@ -500,8 +500,8 @@ public class RelationalDistillationStrategy<T> : DistillationStrategyBase<Vector
 
         for (int i = 0; i < p.Length; i++)
         {
-            double pVal = NumOps.ToDouble(p[i]);
-            double qVal = NumOps.ToDouble(q[i]);
+            double pVal = Convert.ToDouble(p[i]);
+            double qVal = Convert.ToDouble(q[i]);
 
             if (pVal > Epsilon)
             {
@@ -519,8 +519,8 @@ public class RelationalDistillationStrategy<T> : DistillationStrategyBase<Vector
 
         for (int i = 0; i < predictions.Length; i++)
         {
-            double pred = NumOps.ToDouble(predictions[i]);
-            double label = NumOps.ToDouble(trueLabels[i]);
+            double pred = Convert.ToDouble(predictions[i]);
+            double label = Convert.ToDouble(trueLabels[i]);
 
             if (label > Epsilon)
             {
