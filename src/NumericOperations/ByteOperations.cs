@@ -649,4 +649,3 @@ namespace AiDotNet.NumericOperations;
     /// <returns>The value as a double.</returns>
     public double ToDouble(byte value) => (double)value;
 }
-#endif
