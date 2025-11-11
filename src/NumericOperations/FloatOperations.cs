@@ -66,7 +66,7 @@ public class FloatOperations : INumericOperations<float>
     /// This method performs multiplication of two floating-point values and returns their product.
     /// Multiplication is used extensively in neural networks, particularly for weight applications.
     /// </para>
-    /// <para><b>For Beginners:</b> This method multiplies two numbers together, like 2.5 � 4.0 = 10.0.
+    /// <para><b>For Beginners:</b> This method multiplies two numbers together, like 2.5 × 4.0 = 10.0.
     /// 
     /// In neural networks, multiplication is often used when:
     /// - Applying weights to inputs
@@ -87,7 +87,7 @@ public class FloatOperations : INumericOperations<float>
     /// This method performs division of two floating-point values, computing a / b.
     /// Care should be taken to ensure the divisor is not zero to avoid runtime exceptions.
     /// </para>
-    /// <para><b>For Beginners:</b> This method divides the first number by the second, like 10.0 � 2.0 = 5.0.
+    /// <para><b>For Beginners:</b> This method divides the first number by the second, like 10.0 × 2.0 = 5.0.
     /// 
     /// In neural networks, division is commonly used for:
     /// - Normalizing values (making numbers fall within a certain range)
@@ -177,7 +177,7 @@ public class FloatOperations : INumericOperations<float>
     /// 
     /// The square root of a number is a value that, when multiplied by itself, gives the original number.
     /// For example:
-    /// - The square root of 9 is 3 (because 3 � 3 = 9)
+    /// - The square root of 9 is 3 (because 3 × 3 = 9)
     /// - The square root of 2 is approximately 1.414
     /// 
     /// Square roots are used in neural networks for:
@@ -309,9 +309,9 @@ public class FloatOperations : INumericOperations<float>
     /// <para><b>For Beginners:</b> This method multiplies a number by itself.
     /// 
     /// For example:
-    /// - Square(4.0) returns 16.0 (4.0 � 4.0 = 16.0)
-    /// - Square(-3.0) returns 9.0 (-3.0 � -3.0 = 9.0)
-    /// - Square(0.5) returns 0.25 (0.5 � 0.5 = 0.25)
+    /// - Square(4.0) returns 16.0 (4.0 × 4.0 = 16.0)
+    /// - Square(-3.0) returns 9.0 (-3.0 ≈ -3.0 = 9.0)
+    /// - Square(0.5) returns 0.25 (0.5 × 0.5 = 0.25)
     /// 
     /// In neural networks, squaring is commonly used for:
     /// - Calculating squared errors (a measure of how far predictions are from actual values)
@@ -338,10 +338,10 @@ public class FloatOperations : INumericOperations<float>
     /// 
     /// In mathematics, "e" is a special number (approximately 2.71828) that appears naturally in many calculations.
     /// This method computes e^value:
-    /// - Exp(1.0) returns about 2.71828 (e�)
-    /// - Exp(2.0) returns about 7.38906 (e�)
-    /// - Exp(0.0) returns exactly 1.0 (e�)
-    /// - Exp(-1.0) returns about 0.36788 (e?�)
+    /// - Exp(1.0) returns about 2.71828 (e^)
+    /// - Exp(2.0) returns about 7.38906 (e^)
+    /// - Exp(0.0) returns exactly 1.0 (e^)
+    /// - Exp(-1.0) returns about 0.36788 (e^-1)
     /// 
     /// The exponential function is fundamental in neural networks for:
     /// - Activation functions like sigmoid and softmax
@@ -398,10 +398,10 @@ public class FloatOperations : INumericOperations<float>
     /// <para><b>For Beginners:</b> This method raises a number to a power.
     /// 
     /// For example:
-    /// - Power(2.0, 3.0) returns 8.0 (2� = 2�2�2 = 8)
+    /// - Power(2.0, 3.0) returns 8.0 (2³ = 2×2 × 2 = 8)
     /// - Power(4.0, 0.5) returns 2.0 (4^(1/2) = v4 = 2)
     /// - Power(5.0, 0.0) returns 1.0 (any number raised to the power of 0 is 1)
-    /// - Power(2.0, -1.0) returns 0.5 (2?� = 1/2 = 0.5)
+    /// - Power(2.0, -1.0) returns 0.5 (2^-1 = 1/2 = 0.5)
     /// 
     /// In neural networks, power functions are used for:
     /// - Implementing certain activation functions
@@ -425,9 +425,9 @@ public class FloatOperations : INumericOperations<float>
     /// <para><b>For Beginners:</b> This method calculates the natural logarithm of a number.
     /// 
     /// The natural logarithm (log base e) is the inverse of the exponential function:
-    /// - Log(2.71828) returns about 1.0 (because e� � 2.71828)
-    /// - Log(7.38906) returns about 2.0 (because e� � 7.38906)
-    /// - Log(1.0) returns exactly 0.0 (because e� = 1)
+    /// - Log(2.71828) returns about 1.0 (because e^ ≈ 2.71828)
+    /// - Log(7.38906) returns about 2.0 (because e^ ≈ 7.38906)
+    /// - Log(1.0) returns exactly 0.0 (because e^ = 1)
     /// 
     /// In neural networks, logarithms are commonly used for:
     /// - Cross-entropy loss functions (used in classification problems)
@@ -549,7 +549,7 @@ public class FloatOperations : INumericOperations<float>
     /// <summary>
     /// Gets the minimum possible value for a float.
     /// </summary>
-    /// <value>The minimum value of float, approximately -3.4 � 10^38.</value>
+    /// <value>The minimum value of float, approximately -3.4 × 10^38.</value>
     /// <remarks>
     /// <para>
     /// This property returns the smallest possible value for a single-precision floating-point number.
@@ -557,7 +557,7 @@ public class FloatOperations : INumericOperations<float>
     /// </para>
     /// <para><b>For Beginners:</b> This property gives you the smallest possible value that a float can store.
     /// 
-    /// The minimum value for a float is approximately -3.4 � 10^38, which is an extremely large negative number
+    /// The minimum value for a float is approximately -3.4 × 10^38, which is an extremely large negative number
     /// (about -340,000,000,000,000,000,000,000,000,000,000,000,000).
     /// 
     /// In neural networks, knowing the minimum value can be important for:
@@ -571,7 +571,7 @@ public class FloatOperations : INumericOperations<float>
     /// <summary>
     /// Gets the maximum possible value for a float.
     /// </summary>
-    /// <value>The maximum value of float, approximately 3.4 � 10^38.</value>
+    /// <value>The maximum value of float, approximately 3.4 × 10^38.</value>
     /// <remarks>
     /// <para>
     /// This property returns the largest possible value for a single-precision floating-point number.
@@ -579,7 +579,7 @@ public class FloatOperations : INumericOperations<float>
     /// </para>
     /// <para><b>For Beginners:</b> This property gives you the largest possible value that a float can store.
     /// 
-    /// The maximum value for a float is approximately 3.4 � 10^38, which is an extremely large positive number
+    /// The maximum value for a float is approximately 3.4 × 10^38, which is an extremely large positive number
     /// (about 340,000,000,000,000,000,000,000,000,000,000,000,000).
     /// 
     /// In neural networks, knowing the maximum value can be important for:

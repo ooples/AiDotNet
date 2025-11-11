@@ -92,7 +92,7 @@ public interface INumericOperations<T>
     /// </summary>
     /// <remarks>
     /// <b>For Beginners:</b> The square root of a number is a value that, when multiplied by itself,
-    /// gives the original number. For example, the square root of 9 is 3 because 3 � 3 = 9.
+    /// gives the original number. For example, the square root of 9 is 3 because 3 × 3 = 9.
     /// </remarks>
     /// <param name="value">The value to calculate the square root of.</param>
     /// <returns>The square root of the value.</returns>
@@ -152,7 +152,7 @@ public interface INumericOperations<T>
     /// </summary>
     /// <remarks>
     /// <b>For Beginners:</b> The square of a number is the result of multiplying the number by itself.
-    /// For example, the square of 4 is 16 because 4 � 4 = 16.
+    /// For example, the square of 4 is 16 because 4 × 4 = 16.
     /// </remarks>
     /// <param name="value">The value to square.</param>
     /// <returns>The square of the value.</returns>
@@ -163,7 +163,7 @@ public interface INumericOperations<T>
     /// </summary>
     /// <remarks>
     /// <b>For Beginners:</b> This calculates "e" (a special mathematical constant, approximately 2.71828)
-    /// raised to the power of the given value. For example, Exp(2) is e� � 7.389.
+    /// raised to the power of the given value. For example, Exp(2) is e^ ≈ 7.389.
     /// 
     /// The exponential function is commonly used in machine learning for:
     /// - Neural network activation functions
@@ -187,7 +187,7 @@ public interface INumericOperations<T>
     /// </summary>
     /// <remarks>
     /// <b>For Beginners:</b> This calculates the result of multiplying a number by itself a specific
-    /// number of times. For example, Power(2, 3) means 2� = 2 � 2 � 2 = 8.
+    /// number of times. For example, Power(2, 3) means 2³ = 2 × 2 × 2 = 8.
     /// </remarks>
     /// <param name="baseValue">The base value.</param>
     /// <param name="exponent">The exponent value.</param>
@@ -200,7 +200,7 @@ public interface INumericOperations<T>
     /// <remarks>
     /// <b>For Beginners:</b> The natural logarithm is the inverse of the exponential function.
     /// It answers the question: "To what power must e be raised to get this value?"
-    /// For example, Log(7.389) � 2 because e� � 7.389.
+    /// For example, Log(7.389) ≈ 2 because e^ ≈ 7.389.
     /// 
     /// Natural logarithms are commonly used in machine learning for:
     /// - Converting multiplicative relationships to additive ones

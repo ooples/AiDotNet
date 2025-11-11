@@ -640,7 +640,7 @@ public static class MathHelper
     /// <remarks>
     /// <para>
     /// <b>For Beginners:</b> The factorial of a number (written as n!) is the product of all positive 
-    /// integers less than or equal to n. For example, 5! = 5 � 4 � 3 � 2 � 1 = 120.
+    /// integers less than or equal to n. For example, 5! = 5 × 4 ≈ 3 × 2 ≈ 1 = 120.
     /// Factorials are used in many probability and statistics calculations.
     /// </para>
     /// </remarks>
@@ -749,7 +749,7 @@ public static class MathHelper
     /// <remarks>
     /// <para>
     /// <b>For Beginners:</b> The base-2 logarithm (log2) tells you what power you need to raise 2 to in order 
-    /// to get a specific number. For example, log2(8) = 3 because 2� = 8. Base-2 logarithms are commonly 
+    /// to get a specific number. For example, log2(8) = 3 because 2³ = 8. Base-2 logarithms are commonly 
     /// used in computer science and information theory because computers use binary (base-2) number systems.
     /// </para>
     /// </remarks>
@@ -959,7 +959,7 @@ public static class MathHelper
     /// before considering any features.
     /// </para>
     /// <para>
-    /// This method uses the formula: y-intercept = mean(y) - (coefficient1 � mean(x1) + coefficient2 � mean(x2) + ...)
+    /// This method uses the formula: y-intercept = mean(y) - (coefficient1 ≈ mean(x1) + coefficient2 ≈ mean(x2) + ...)
     /// which ensures that the regression line passes through the point of means (the average of all data points).
     /// </para>
     /// <para>

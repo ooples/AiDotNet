@@ -12,8 +12,8 @@ namespace AiDotNet.NumericOperations;
 /// <para><b>For Beginners:</b> This class handles math operations for the double number type.
 ///
 /// The double type in C# is designed for general-purpose calculations:
-/// - It can represent very large numbers (up to approximately 1.8 � 10^308)
-/// - It can represent very small numbers (down to approximately 5.0 � 10^-324)
+/// - It can represent very large numbers (up to approximately 1.8 × 10^308)
+/// - It can represent very small numbers (down to approximately 5.0 × 10^-324)
 /// - It stores decimal numbers with about 15-17 significant digits of precision
 /// - It can represent special values like infinity and NaN (Not a Number)
 ///
@@ -317,12 +317,12 @@ public class DoubleOperations : INumericOperations<double>
     /// <para><b>For Beginners:</b> This method multiplies a number by itself.
     /// 
     /// For example:
-    /// - Square of 4.0 is 16.0 (4.0 � 4.0)
-    /// - Square of 0.5 is 0.25 (0.5 � 0.5)
-    /// - Square of -3.0 is 9.0 (-3.0 � -3.0)
+    /// - Square of 4.0 is 16.0 (4.0 × 4.0)
+    /// - Square of 0.5 is 0.25 (0.5 × 0.5)
+    /// - Square of -3.0 is 9.0 (-3.0 ≈ -3.0)
     /// 
     /// Squaring always produces a non-negative result (except for NaN, which remains NaN).
-    /// If the result is too large to represent (over 1.8 � 10^308), it becomes positive infinity.
+    /// If the result is too large to represent (over 1.8 × 10^308), it becomes positive infinity.
     /// </para>
     /// </remarks>
     public double Square(double value) => Multiply(value, value);
@@ -338,13 +338,13 @@ public class DoubleOperations : INumericOperations<double>
     /// The constant e is approximately 2.71828. For large positive inputs, the result may become infinity.
     /// For large negative inputs, the result approaches zero.
     /// </para>
-    /// <para><b>For Beginners:</b> This method calculates the mathematical constant e (�2.718) raised to a power.
+    /// <para><b>For Beginners:</b> This method calculates the mathematical constant e (≈2.718) raised to a power.
     /// 
     /// For example:
-    /// - e^1 � 2.718
-    /// - e^2 � 7.389
+    /// - e^1 × 2.718
+    /// - e^2 × 7.389
     /// - e^0 = 1.0 exactly
-    /// - e^-1 � 0.368
+    /// - e^-1 × 0.368
     /// 
     /// The exponential function is used in many fields including finance (compound interest),
     /// science, and engineering. It grows very rapidly as the input increases.
@@ -398,8 +398,8 @@ public class DoubleOperations : INumericOperations<double>
     /// <para><b>For Beginners:</b> This method raises one number to the power of another.
     /// 
     /// For example:
-    /// - 2.0 raised to power 3.0 is 8.0 (2^3 = 2�2�2 = 8)
-    /// - 10.0 raised to power 2.0 is 100.0 (10^2 = 10�10 = 100)
+    /// - 2.0 raised to power 3.0 is 8.0 (2^3 = 2×2 × 2 = 8)
+    /// - 10.0 raised to power 2.0 is 100.0 (10^2 = 10×10 = 100)
     /// - Any number raised to power 0.0 is 1.0
     /// - Any number raised to power 1.0 is that number itself
     /// 
@@ -427,8 +427,8 @@ public class DoubleOperations : INumericOperations<double>
     /// 
     /// For example:
     /// - Log of 1.0 is 0.0 (e^0 = 1)
-    /// - Log of 2.718... is approximately 1.0 (e^1 � 2.718)
-    /// - Log of 7.389... is approximately 2.0 (e^2 � 7.389)
+    /// - Log of 2.718... is approximately 1.0 (e^1 × 2.718)
+    /// - Log of 7.389... is approximately 2.0 (e^2 × 7.389)
     /// 
     /// Special cases:
     /// - Log of a negative number gives NaN (Not a Number)
@@ -512,7 +512,7 @@ public class DoubleOperations : INumericOperations<double>
     /// This is useful when you need an integer result after performing floating-point calculations.
     /// 
     /// Note: If the double value is too large or too small to fit in an integer
-    /// (outside the range of approximately �2.1 billion), this will cause an error.
+    /// (outside the range of approximately ±2.1 billion), this will cause an error.
     /// </para>
     /// </remarks>
     public int ToInt32(double value) => (int)Math.Round(value);
@@ -543,7 +543,7 @@ public class DoubleOperations : INumericOperations<double>
     /// <summary>
     /// Gets the minimum value that can be represented by a double.
     /// </summary>
-    /// <value>The minimum value of a double, which is approximately -1.8 � 10^308.</value>
+    /// <value>The minimum value of a double, which is approximately -1.8 × 10^308.</value>
     /// <remarks>
     /// <para>
     /// This property returns the minimum value that can be represented by a double,
@@ -551,7 +551,7 @@ public class DoubleOperations : INumericOperations<double>
     /// </para>
     /// <para><b>For Beginners:</b> This property gives you the smallest possible double value.
     /// 
-    /// For doubles, the minimum value is approximately -1.8 � 10^308, which is a very large
+    /// For doubles, the minimum value is approximately -1.8 × 10^308, which is a very large
     /// negative number (about 1 with 308 zeros after it, with a negative sign).
     /// 
     /// This is useful when you need to work with the full range of double values or
@@ -564,7 +564,7 @@ public class DoubleOperations : INumericOperations<double>
     /// <summary>
     /// Gets the maximum value that can be represented by a double.
     /// </summary>
-    /// <value>The maximum value of a double, which is approximately 1.8 � 10^308.</value>
+    /// <value>The maximum value of a double, which is approximately 1.8 × 10^308.</value>
     /// <remarks>
     /// <para>
     /// This property returns the maximum value that can be represented by a double,
@@ -572,7 +572,7 @@ public class DoubleOperations : INumericOperations<double>
     /// </para>
     /// <para><b>For Beginners:</b> This property gives you the largest possible double value.
     /// 
-    /// For doubles, the maximum value is approximately 1.8 � 10^308, which is a very large
+    /// For doubles, the maximum value is approximately 1.8 × 10^308, which is a very large
     /// positive number (about 1 with 308 zeros after it).
     /// 
     /// This is useful when you need to work with the full range of double values or
