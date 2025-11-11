@@ -718,8 +718,10 @@ public class GraphConvolutionalLayer<T> : LayerBase<T>
             return NumOps.Zero;
         }
 
-        // Compute Laplacian smoothness: sum of squared L2 distances across all edges
+        // Compute Laplacian smoothness: weighted sum of squared L2 distances across all edges
+        // Formula: ∑_{(i,j)} A_ij ||x_i - x_j||²
         T smoothnessLoss = NumOps.Zero;
+        T totalWeight = NumOps.Zero;
 
         // Average across batch
         int batchSize = _lastNodeFeatures.Shape[0];
@@ -732,6 +734,15 @@ public class GraphConvolutionalLayer<T> : LayerBase<T>
                 int nodeI = edge.Source;
                 int nodeJ = edge.Target;
 
+                // Get edge weight from adjacency matrix
+                // Use batch-specific weight if available, otherwise use batch 0
+                T edgeWeight = NumOps.One; // Default to 1 if adjacency not available
+                if (_adjacencyMatrix != null && _adjacencyMatrix.Shape.Length >= 3)
+                {
+                    int batchIdx = Math.Min(b, _adjacencyMatrix.Shape[0] - 1);
+                    edgeWeight = _adjacencyMatrix[batchIdx, nodeI, nodeJ];
+                }
+
                 // Compute squared L2 distance between features of connected nodes
                 T squaredDistance = NumOps.Zero;
                 for (int f = 0; f < numFeatures; f++)
@@ -740,15 +751,18 @@ public class GraphConvolutionalLayer<T> : LayerBase<T>
                     squaredDistance = NumOps.Add(squaredDistance, NumOps.Multiply(diff, diff));
                 }
 
-                smoothnessLoss = NumOps.Add(smoothnessLoss, squaredDistance);
+                // Weight the distance by the adjacency value
+                T weightedDistance = NumOps.Multiply(edgeWeight, squaredDistance);
+                smoothnessLoss = NumOps.Add(smoothnessLoss, weightedDistance);
+                totalWeight = NumOps.Add(totalWeight, edgeWeight);
             }
         }
 
-        // Normalize by batch size and number of edges for scale-invariance
-        // Note: Assumes all batches have the same graph structure (same edge count)
-        // This matches the edge extraction assumption where edges are extracted from batch 0 only
-        T totalEdges = NumOps.FromDouble((long)batchSize * (long)_graphEdges.Count);
-        smoothnessLoss = NumOps.Divide(smoothnessLoss, totalEdges);
+        // Normalize by total weight (not edge count) for proper Laplacian formulation
+        if (NumOps.GreaterThan(totalWeight, NumOps.Zero))
+        {
+            smoothnessLoss = NumOps.Divide(smoothnessLoss, totalWeight);
+        }
 
         // Apply smoothness weight to allow tuning of this auxiliary loss
         smoothnessLoss = NumOps.Multiply(smoothnessLoss, SmoothnessWeight);
