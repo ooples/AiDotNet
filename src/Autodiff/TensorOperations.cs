@@ -3522,5 +3522,106 @@ public static class TensorOperations<T>
 
         return node;
     }
+
+    /// <summary>
+    /// Performs pixel shuffle (depth-to-space) operation for sub-pixel convolution.
+    /// </summary>
+    /// <param name="a">The input computation node with shape [batch, channels, height, width].</param>
+    /// <param name="upscaleFactor">The upscaling factor (r). Channels must be divisible by r².</param>
+    /// <returns>A computation node with shape [batch, channels/(r²), height*r, width*r].</returns>
+    public static ComputationNode<T> PixelShuffle(ComputationNode<T> a, int upscaleFactor)
+    {
+        var numOps = MathHelper.GetNumericOperations<T>();
+        var inputShape = a.Value.Shape;
+
+        if (inputShape.Length != 4)
+            throw new ArgumentException("PixelShuffle expects 4D input [batch, channels, height, width]");
+
+        int batch = inputShape[0];
+        int channels = inputShape[1];
+        int inH = inputShape[2];
+        int inW = inputShape[3];
+        int r = upscaleFactor;
+        int r2 = r * r;
+
+        if (channels % r2 != 0)
+            throw new ArgumentException($"Channels {channels} must be divisible by upscale_factor² ({r2})");
+
+        int outC = channels / r2;
+        int outH = inH * r;
+        int outW = inW * r;
+
+        var outputShape = new int[] { batch, outC, outH, outW };
+        var result = new Tensor<T>(outputShape);
+
+        // Forward: rearrange channels into spatial dimensions
+        // input[b, c, h, w] -> output[b, c/(r²), h*r + r_h, w*r + r_w]
+        // where c = c_out * r² + r_h * r + r_w
+        for (int b = 0; b < batch; b++)
+        {
+            for (int c = 0; c < channels; c++)
+            {
+                int c_out = c / r2;
+                int c_offset = c % r2;
+                int r_h = c_offset / r;
+                int r_w = c_offset % r;
+
+                for (int h = 0; h < inH; h++)
+                {
+                    for (int w = 0; w < inW; w++)
+                    {
+                        int out_h = h * r + r_h;
+                        int out_w = w * r + r_w;
+                        result[b, c_out, out_h, out_w] = a.Value[b, c, h, w];
+                    }
+                }
+            }
+        }
+
+        void BackwardFunction(Tensor<T> gradient)
+        {
+            if (!a.RequiresGradient) return;
+
+            if (a.Gradient == null)
+                a.Gradient = new Tensor<T>(inputShape);
+
+            // Backward: reverse the rearrangement
+            for (int b = 0; b < batch; b++)
+            {
+                for (int c = 0; c < channels; c++)
+                {
+                    int c_out = c / r2;
+                    int c_offset = c % r2;
+                    int r_h = c_offset / r;
+                    int r_w = c_offset % r;
+
+                    for (int h = 0; h < inH; h++)
+                    {
+                        for (int w = 0; w < inW; w++)
+                        {
+                            int out_h = h * r + r_h;
+                            int out_w = w * r + r_w;
+                            a.Gradient[b, c, h, w] = numOps.Add(
+                                a.Gradient[b, c, h, w],
+                                gradient[b, c_out, out_h, out_w]);
+                        }
+                    }
+                }
+            }
+        }
+
+        var node = new ComputationNode<T>(
+            value: result,
+            requiresGradient: a.RequiresGradient,
+            parents: new List<ComputationNode<T>> { a },
+            backwardFunction: BackwardFunction,
+            name: null);
+
+        var tape = GradientTape<T>.Current;
+        if (tape != null && tape.IsRecording)
+            tape.RecordOperation(node);
+
+        return node;
+    }
 }
 }
