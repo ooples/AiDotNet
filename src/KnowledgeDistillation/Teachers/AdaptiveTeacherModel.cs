@@ -118,10 +118,22 @@ public class AdaptiveTeacherModel<T> : TeacherModelBase<Vector<T>, Vector<T>, T>
     /// <returns>Soft predictions with adaptive temperature.</returns>
     public override Vector<T> GetSoftPredictions(Vector<T> input, double temperature = 1.0)
     {
+        return GetSoftPredictions(input, temperature, sampleIndex: null);
+    }
+
+    /// <summary>
+    /// Gets soft predictions with adaptive temperature based on sample difficulty.
+    /// </summary>
+    /// <param name="input">Input data.</param>
+    /// <param name="temperature">Base temperature (will be adapted).</param>
+    /// <param name="sampleIndex">Optional sample index to look up recorded performance (for AccuracyBased strategy).</param>
+    /// <returns>Soft predictions with adaptive temperature.</returns>
+    public Vector<T> GetSoftPredictions(Vector<T> input, double temperature, int? sampleIndex)
+    {
         var logits = GetLogits(input);
 
         // Compute adaptive temperature based on strategy
-        double adaptiveTemp = ComputeAdaptiveTemperature(logits, temperature);
+        double adaptiveTemp = ComputeAdaptiveTemperature(logits, temperature, sampleIndex);
 
         return ApplyTemperatureSoftmax(logits, adaptiveTemp);
     }
@@ -176,7 +188,10 @@ public class AdaptiveTeacherModel<T> : TeacherModelBase<Vector<T>, Vector<T>, T>
     /// <summary>
     /// Computes adaptive temperature based on sample difficulty.
     /// </summary>
-    private double ComputeAdaptiveTemperature(Vector<T> logits, double baseTemperature)
+    /// <param name="logits">Raw model outputs.</param>
+    /// <param name="baseTemperature">Base temperature to scale.</param>
+    /// <param name="sampleIndex">Optional sample index to look up recorded performance.</param>
+    private double ComputeAdaptiveTemperature(Vector<T> logits, double baseTemperature, int? sampleIndex)
     {
         // Convert logits to normalized probabilities
         var probs = ApplyTemperatureSoftmax(logits, 1.0);
@@ -196,8 +211,18 @@ public class AdaptiveTeacherModel<T> : TeacherModelBase<Vector<T>, Vector<T>, T>
                 break;
 
             case AdaptiveStrategy.AccuracyBased:
-                // Use stored performance (default to medium difficulty)
-                difficulty = 0.5;
+                // Use stored performance for this sample if available
+                // High performance (1.0) -> low difficulty (0.0) -> min temp (sharper)
+                // Low performance (0.0) -> high difficulty (1.0) -> max temp (softer)
+                if (sampleIndex.HasValue && StudentPerformance.ContainsKey(sampleIndex.Value))
+                {
+                    difficulty = 1.0 - StudentPerformance[sampleIndex.Value];
+                }
+                else
+                {
+                    // Fallback to medium difficulty if no performance data
+                    difficulty = 0.5;
+                }
                 break;
         }
 
