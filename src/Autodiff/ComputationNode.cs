@@ -196,19 +196,23 @@ public class ComputationNode<T>
     /// </remarks>
     public void Backward()
     {
-        // Initialize gradient to ones if not set (for final node)
-        if (Gradient == null)
-        {
-            Gradient = new Tensor<T>(Value.Shape);
-            var numOps = MathHelper.GetNumericOperations<T>();
-            for (int i = 0; i < Gradient.Length; i++)
-            {
-                Gradient[i] = numOps.One;
-            }
-        }
-
         // Build topological order
         var topoOrder = TopologicalSort();
+
+        // Clear all gradients in the topological order to ensure clean state
+        // This is critical for multiple backward passes (persistent tapes, higher-order gradients)
+        foreach (var node in topoOrder)
+        {
+            node.Gradient = null;
+        }
+
+        // Initialize root gradient to ones (for final node)
+        Gradient = new Tensor<T>(Value.Shape);
+        var numOps = MathHelper.GetNumericOperations<T>();
+        for (int i = 0; i < Gradient.Length; i++)
+        {
+            Gradient[i] = numOps.One;
+        }
 
         // Execute backward pass in reverse topological order
         for (int i = topoOrder.Count - 1; i >= 0; i--)

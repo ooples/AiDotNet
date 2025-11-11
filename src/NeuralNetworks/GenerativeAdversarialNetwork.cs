@@ -295,6 +295,11 @@ public class GenerativeAdversarialNetwork<T> : NeuralNetworkBase<T>
     /// - It reduces the risk of mode collapse (generating the same image repeatedly)
     /// - Training tends to be more stable with this enabled
     /// </para>
+    /// <para><b>Important:</b> When enabled, batches are stored but ComputeFeatureMatchingLoss()
+    /// must be manually called and added to the generator loss in your training loop.
+    /// The base Train() method does not automatically integrate this loss.
+    /// See ComputeFeatureMatchingLoss() documentation for integration examples.
+    /// </para>
     /// </remarks>
     public bool UseFeatureMatching { get; set; } = false;
 
@@ -1730,7 +1735,13 @@ public class GenerativeAdversarialNetwork<T> : NeuralNetworkBase<T>
     /// - More stable than weight clipping (older WGAN approach)
     /// - Results in higher quality generated images
     ///
-    /// The gradient penalty is added to the discriminator loss during training.
+    /// <b>Important:</b> This method computes the gradient penalty but does not automatically
+    /// integrate it into training. To use WGAN-GP, you must:
+    /// 1. Call this method during discriminator training
+    /// 2. Add the returned penalty to the discriminator loss
+    /// 3. Use the combined loss to update discriminator parameters
+    ///
+    /// The base Train() method does not automatically include gradient penalty.
     /// Typical lambda values are 10.0 for images.
     /// </para>
     /// </remarks>

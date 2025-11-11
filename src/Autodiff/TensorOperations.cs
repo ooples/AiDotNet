@@ -1041,13 +1041,53 @@ public static class TensorOperations<T>
                     }
                     else
                     {
-                        // General case - reshape gradient and broadcast
+                        // General case - proper gradient broadcasting for arbitrary axes
                         gradA = new Tensor<T>(originalShape);
-                        // Simple broadcast: copy gradient value to all positions
+
+                        // Create reduced shape (original shape with summed dimensions set to 1)
+                        int[] reducedShape = new int[originalShape.Length];
+                        for (int d = 0; d < originalShape.Length; d++)
+                        {
+                            reducedShape[d] = axes.Contains(d) ? 1 : originalShape[d];
+                        }
+
+                        // Compute strides for original shape
+                        int[] strides = new int[originalShape.Length];
+                        strides[originalShape.Length - 1] = 1;
+                        for (int d = originalShape.Length - 2; d >= 0; d--)
+                        {
+                            strides[d] = strides[d + 1] * originalShape[d + 1];
+                        }
+
+                        // Compute strides for reduced shape
+                        int[] reducedStrides = new int[reducedShape.Length];
+                        reducedStrides[reducedShape.Length - 1] = 1;
+                        for (int d = reducedShape.Length - 2; d >= 0; d--)
+                        {
+                            reducedStrides[d] = reducedStrides[d + 1] * reducedShape[d + 1];
+                        }
+
+                        // Broadcast gradient back to original shape
                         for (int i = 0; i < gradA.Length; i++)
                         {
-                            // For general case, map back through reduction
-                            gradA[i] = gradient[0];
+                            // Compute multi-dimensional index for original tensor
+                            int[] indices = new int[originalShape.Length];
+                            int remaining = i;
+                            for (int d = 0; d < originalShape.Length; d++)
+                            {
+                                indices[d] = remaining / strides[d];
+                                remaining %= strides[d];
+                            }
+
+                            // Map to reduced index by setting summed dimensions to 0
+                            int reducedIndex = 0;
+                            for (int d = 0; d < originalShape.Length; d++)
+                            {
+                                int idx = axes.Contains(d) ? 0 : indices[d];
+                                reducedIndex += idx * reducedStrides[d];
+                            }
+
+                            gradA[i] = gradient[reducedIndex];
                         }
                     }
                 }

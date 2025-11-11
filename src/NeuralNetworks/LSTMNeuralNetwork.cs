@@ -1441,7 +1441,12 @@ public class LSTMNeuralNetwork<T> : NeuralNetworkBase<T>
         else if (hiddenFeatures > outputFeatures)
         {
             // Hidden state has more features - average/pool gradients
-            // This approximates gradient flow through a dimensionality reduction
+            // NOTE: This is an approximation using uniform averaging. For learned projections
+            // (e.g., dense layers with weight matrix W), the mathematically correct approach
+            // would be gradOutput = W^T @ gradHidden. This approximation is suitable when
+            // no explicit projection layers exist, or as a fallback for debugging.
+            // If your architecture includes dense output layers after LSTM, those layers
+            // handle the gradient transformation via their Backward() methods.
             for (int b = 0; b < Math.Min(outputFirstDim, hiddenFirstDim); b++)
             {
                 for (int outF = 0; outF < outputFeatures; outF++)
@@ -1475,7 +1480,9 @@ public class LSTMNeuralNetwork<T> : NeuralNetworkBase<T>
         else
         {
             // Output has more features - replicate gradients
-            // This approximates gradient flow through a dimensionality expansion
+            // NOTE: This is an approximation using gradient replication. For learned projections,
+            // the correct approach would use the transpose of the projection matrix.
+            // This approximation is suitable when no explicit projection layers exist.
             for (int b = 0; b < Math.Min(outputFirstDim, hiddenFirstDim); b++)
             {
                 for (int outF = 0; outF < outputFeatures; outF++)
