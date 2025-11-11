@@ -817,9 +817,19 @@ public class ComplexOperations<T> : INumericOperations<Complex<T>>
     /// <param name="value">The complex value to convert.</param>
     /// <returns>The real part of the complex number as a float.</returns>
     /// <remarks>
-    /// This conversion extracts only the real part and discards the imaginary part.
+    /// This conversion only succeeds if the imaginary part is zero.
+    /// If the imaginary part is non-zero, throws NotSupportedException to prevent silent data loss.
     /// </remarks>
-    public float ToFloat(Complex<T> value) => _ops.ToFloat(value.Real);
+    public float ToFloat(Complex<T> value)
+    {
+        if (!_ops.Equals(value.Imaginary, _ops.Zero))
+        {
+            throw new NotSupportedException(
+                "Cannot convert Complex<T> with non-zero imaginary component to scalar float. " +
+                "This would result in silent data loss. Extract Real property explicitly if this is intentional.");
+        }
+        return _ops.ToFloat(value.Real);
+    }
 
     /// <summary>
     /// Converts a float value to Complex<T> with zero imaginary part.
@@ -834,9 +844,19 @@ public class ComplexOperations<T> : INumericOperations<Complex<T>>
     /// <param name="value">The complex value to convert.</param>
     /// <returns>The real part of the complex number as a Half.</returns>
     /// <remarks>
-    /// This conversion extracts only the real part and discards the imaginary part.
+    /// This conversion only succeeds if the imaginary part is zero.
+    /// If the imaginary part is non-zero, throws NotSupportedException to prevent silent data loss.
     /// </remarks>
-    public Half ToHalf(Complex<T> value) => _ops.ToHalf(value.Real);
+    public Half ToHalf(Complex<T> value)
+    {
+        if (!_ops.Equals(value.Imaginary, _ops.Zero))
+        {
+            throw new NotSupportedException(
+                "Cannot convert Complex<T> with non-zero imaginary component to scalar Half. " +
+                "This would result in silent data loss. Extract Real property explicitly if this is intentional.");
+        }
+        return _ops.ToHalf(value.Real);
+    }
 
     /// <summary>
     /// Converts a Half value to Complex<T> with zero imaginary part.
@@ -851,7 +871,17 @@ public class ComplexOperations<T> : INumericOperations<Complex<T>>
     /// <param name="value">The complex value to convert.</param>
     /// <returns>The real part of the complex number as a double.</returns>
     /// <remarks>
-    /// This conversion extracts only the real part and discards the imaginary part.
+    /// This conversion only succeeds if the imaginary part is zero.
+    /// If the imaginary part is non-zero, throws NotSupportedException to prevent silent data loss.
     /// </remarks>
-    public double ToDouble(Complex<T> value) => _ops.ToDouble(value.Real);
+    public double ToDouble(Complex<T> value)
+    {
+        if (!_ops.Equals(value.Imaginary, _ops.Zero))
+        {
+            throw new NotSupportedException(
+                "Cannot convert Complex<T> with non-zero imaginary component to scalar double. " +
+                "This would result in silent data loss. Extract Real property explicitly if this is intentional.");
+        }
+        return _ops.ToDouble(value.Real);
+    }
 }
