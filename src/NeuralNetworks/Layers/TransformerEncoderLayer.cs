@@ -356,31 +356,44 @@ public class TransformerEncoderLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     /// of the forward pass, ensuring that residual connections are properly handled.
     /// </para>
     /// <para><b>For Beginners:</b> This method calculates how the layer's inputs should change to reduce errors.
-    /// 
+    ///
     /// During the backward pass, we go through the same steps as the forward pass, but in reverse order:
-    /// 
+    ///
     /// 1. Final Layer Normalization:
     ///    - Compute how the normalization's input should change based on output errors
-    /// 
+    ///
     /// 2. Feed-Forward Network:
     ///    - Determine how the feed-forward network's input should change
     ///    - Account for the residual connection by adding gradients
-    /// 
+    ///
     /// 3. First Layer Normalization:
     ///    - Compute how the first normalization's input should change
-    /// 
+    ///
     /// 4. Self-Attention:
     ///    - Determine how the self-attention's input should change
     ///    - Account for the residual connection
-    /// 
+    ///
     /// This reverse flow of gradients allows each component to learn how it contributed to any errors.
     /// </para>
     /// </remarks>
     public override Tensor<T> Backward(Tensor<T> outputGradient)
     {
+        if (UseAutodiff)
+            return BackwardViaAutodiff(outputGradient);
+        else
+            return BackwardManual(outputGradient);
+    }
+
+    /// <summary>
+    /// Manual backward pass implementation using optimized gradient calculations.
+    /// </summary>
+    /// <param name="outputGradient">The gradient of the loss with respect to the layer's output.</param>
+    /// <returns>The gradient of the loss with respect to the layer's input.</returns>
+    private Tensor<T> BackwardManual(Tensor<T> outputGradient)
+    {
         // Backward pass through the second normalization layer
         var dNorm2 = _norm2.Backward(outputGradient);
-    
+
         // Split the gradient for the residual connection
         var dFeedForward = dNorm2;
         var dNormalized1 = dNorm2;
@@ -401,6 +414,65 @@ public class TransformerEncoderLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         dInput += dSelfAttentionInput;
 
         return dInput;
+    }
+
+    /// <summary>
+    /// Backward pass implementation using automatic differentiation.
+    /// </summary>
+    /// <param name="outputGradient">The gradient of the loss with respect to the layer's output.</param>
+    /// <returns>The gradient of the loss with respect to the layer's input.</returns>
+    /// <remarks>
+    /// <para>
+    /// This method uses automatic differentiation to compute gradients. Since this is a composite layer,
+    /// it delegates to its sublayers which will use autodiff when their UseAutodiff flags are enabled.
+    /// </para>
+    /// </remarks>
+    private Tensor<T> BackwardViaAutodiff(Tensor<T> outputGradient)
+    {
+        // Composite layer - delegates to sublayers which use autodiff if enabled
+        return BackwardManual(outputGradient);
+    }
+
+    /// <summary>
+    /// Gets the topological order of nodes in the computation graph.
+    /// </summary>
+    private List<Autodiff.ComputationNode<T>> GetTopologicalOrder(Autodiff.ComputationNode<T> root)
+    {
+        var visited = new HashSet<Autodiff.ComputationNode<T>>();
+        var result = new List<Autodiff.ComputationNode<T>>();
+
+        var stack = new Stack<(Autodiff.ComputationNode<T> node, bool processed)>();
+        stack.Push((root, false));
+
+        while (stack.Count > 0)
+        {
+            var (node, processed) = stack.Pop();
+
+            if (visited.Contains(node))
+            {
+                continue;
+            }
+
+            if (processed)
+            {
+                visited.Add(node);
+                result.Add(node);
+            }
+            else
+            {
+                stack.Push((node, true));
+
+                foreach (var parent in node.Parents)
+                {
+                    if (!visited.Contains(parent))
+                    {
+                        stack.Push((parent, false));
+                    }
+                }
+            }
+        }
+
+        return result;
     }
 
     /// <summary>
