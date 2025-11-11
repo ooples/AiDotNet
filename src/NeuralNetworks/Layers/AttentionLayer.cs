@@ -611,11 +611,15 @@ public class AttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         {
             return Autodiff.TensorOperations<T>.Tanh(input);
         }
+        else if (ScalarActivation is SoftmaxActivation<T>)
+        {
+            // Use Softmax operation for attention weights normalization
+            return Autodiff.TensorOperations<T>.Softmax(input, axis: -1);
+        }
         else
         {
-            // For unsupported activations (like softmax), return input unchanged
-            // This is a limitation of autodiff - not all activations are implemented yet
-            return input;
+            // For unsupported activations, fallback to manual implementation
+            throw new NotSupportedException($"Activation {ScalarActivation?.GetType().Name} not supported in autodiff mode");
         }
     }
 
