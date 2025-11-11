@@ -305,6 +305,8 @@ public class LossScalerTests
         Assert.Contains("LossScaler", result);
         Assert.Contains("Scale=1000", result);
         Assert.Contains("Dynamic=True", result);
+        Assert.Contains("Total Updates=0", result);
+        Assert.Contains("Skipped=0", result);
     }
 
     [Fact]

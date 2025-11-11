@@ -380,6 +380,31 @@ public class PredictionModelBuilder<T, TInput, TOutput> : IPredictionModelBuilde
         IFullModel<T, TInput, TOutput> model = _model;
         IOptimizer<T, TInput, TOutput> finalOptimizer = optimizer;
 
+        // Enable mixed-precision training BEFORE distributed training wrapping (if configured)
+        // This ensures mixed-precision is applied to the base model/optimizer before any wrapping
+        if (_mixedPrecisionConfig != null)
+        {
+            // Verify T is float
+            if (typeof(T) != typeof(float))
+            {
+                throw new InvalidOperationException(
+                    $"Mixed-precision training requires T = float, got T = {typeof(T).Name}. " +
+                    $"Use PredictionModelBuilder<float, ...> to enable mixed-precision training.");
+            }
+
+            // Enable on neural network model if applicable
+            if (_model is NeuralNetworkBase<T> neuralNet)
+            {
+                neuralNet.EnableMixedPrecision(_mixedPrecisionConfig);
+            }
+
+            // Enable on gradient-based optimizer if applicable
+            if (optimizer is GradientBasedOptimizerBase<T, TInput, TOutput> gradOptimizer)
+            {
+                gradOptimizer.EnableMixedPrecision(_mixedPrecisionConfig);
+            }
+        }
+
         // Enable distributed training if backend or configuration was explicitly provided
         if (_distributedBackend != null || _distributedConfiguration != null)
         {
@@ -468,31 +493,7 @@ public class PredictionModelBuilder<T, TInput, TOutput> : IPredictionModelBuilde
         // This prevents state contamination from CV (accumulated fitness lists, cache, learning rates)
         optimizer.Reset();
 
-        // Enable mixed-precision training if configured
-        if (_mixedPrecisionConfig != null)
-        {
-            // Verify T is float
-            if (typeof(T) != typeof(float))
-            {
-                throw new InvalidOperationException(
-                    $"Mixed-precision training requires T = float, got T = {typeof(T).Name}. " +
-                    $"Use PredictionModelBuilder<float, ...> to enable mixed-precision training.");
-            }
-
-            // Enable on neural network model if applicable
-            if (model is NeuralNetworkBase<T> neuralNet)
-            {
-                neuralNet.EnableMixedPrecision(_mixedPrecisionConfig);
-            }
-
-            // Enable on gradient-based optimizer if applicable
-            if (finalOptimizer is GradientBasedOptimizerBase<T, TInput, TOutput> gradOptimizer)
-            {
-                gradOptimizer.EnableMixedPrecision(_mixedPrecisionConfig);
-            }
-        }
-
-        // Optimize the final model on the full training set (using distributed optimizer if configured)
+// Optimize the final model on the full training set (using distributed optimizer if configured)
         var optimizationResult = finalOptimizer.Optimize(OptimizerHelper<T, TInput, TOutput>.CreateOptimizationInputData(XTrain, yTrain, XVal, yVal, XTest, yTest));
 
         // Return PredictionModelResult with CV results and agent data
