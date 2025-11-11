@@ -84,13 +84,14 @@ public class FeatureDistillationStrategy<T>
         if (_layerPairs.Length == 0)
             throw new ArgumentException("At least one layer pair must be specified", nameof(layerPairs));
 
-        // Validate layer pair format
-        foreach (var pair in _layerPairs)
+        // Validate layer pair format using explicit Where
+        var invalidPairs = _layerPairs.Where(pair => string.IsNullOrWhiteSpace(pair) || !pair.Contains(':')).ToArray();
+        if (invalidPairs.Length > 0)
         {
-            if (string.IsNullOrWhiteSpace(pair) || !pair.Contains(':'))
-                throw new ArgumentException(
-                    $"Invalid layer pair format: '{pair}'. Expected 'teacher_layer:student_layer'",
-                    nameof(layerPairs));
+            var invalidList = string.Join(", ", invalidPairs.Select(p => $"'{p}'"));
+            throw new ArgumentException(
+                $"Invalid layer pair format: {invalidList}. Expected 'teacher_layer:student_layer'",
+                nameof(layerPairs));
         }
     }
 
@@ -123,12 +124,15 @@ public class FeatureDistillationStrategy<T>
 
         T totalLoss = _numOps.Zero;
 
-        foreach (var layerPair in _layerPairs)
+        // Parse layer pairs into structured format using explicit Select
+        var parsedPairs = _layerPairs.Select(pair =>
         {
-            var parts = layerPair.Split(':');
-            string teacherLayer = parts[0].Trim();
-            string studentLayer = parts[1].Trim();
+            var parts = pair.Split(':');
+            return (TeacherLayer: parts[0].Trim(), StudentLayer: parts[1].Trim());
+        });
 
+        foreach (var (teacherLayer, studentLayer) in parsedPairs)
+        {
             // Extract features from both models
             var teacherFeatures = teacherFeatureExtractor(teacherLayer);
             var studentFeatures = studentFeatureExtractor(studentLayer);
