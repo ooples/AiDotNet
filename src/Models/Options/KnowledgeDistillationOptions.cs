@@ -62,6 +62,56 @@ public class KnowledgeDistillationOptions<TInput, TOutput, T>
     public ITeacherModel<TInput, TOutput>? Teacher { get; set; }
 
     /// <summary>
+    /// Gets or sets multiple teacher models (for ensemble distillation).
+    /// </summary>
+    /// <remarks>
+    /// <para><b>For Ensemble Distillation:</b> Provide multiple teacher models.
+    /// They will be automatically combined into an ensemble.</para>
+    /// </remarks>
+    public ITeacherModel<TInput, TOutput>[]? Teachers { get; set; }
+
+    /// <summary>
+    /// Gets or sets the teacher IFullModel (recommended approach).
+    /// </summary>
+    /// <remarks>
+    /// <para><b>For Beginners (Recommended):</b> Pass your trained IFullModel directly.
+    /// This is the standard way to provide a teacher model in the AiDotNet architecture.</para>
+    /// <para>Example:
+    /// <code>
+    /// // After training
+    /// var trainedModel = await builder.ConfigureModel(model).BuildAsync(x, y);
+    ///
+    /// // Use as teacher
+    /// TeacherModel = trainedModel.Model
+    /// </code>
+    /// </para>
+    /// </remarks>
+    public IFullModel<T, TInput, TOutput>? TeacherModel { get; set; }
+
+    /// <summary>
+    /// Gets or sets the teacher model forward function (alternative approach).
+    /// </summary>
+    /// <remarks>
+    /// <para><b>For Advanced Users:</b> If you have a trained model with a forward function,
+    /// provide it and it will be automatically wrapped as a teacher.</para>
+    /// <para>Example:
+    /// <code>
+    /// TeacherForward = input => myTrainedModel.Predict(input)
+    /// </code>
+    /// </para>
+    /// </remarks>
+    public Func<TInput, TOutput>? TeacherForward { get; set; }
+
+    /// <summary>
+    /// Gets or sets ensemble weights (if using multiple teachers).
+    /// </summary>
+    /// <remarks>
+    /// <para>Optional weights for each teacher. Must sum to 1.0.
+    /// If null, uniform weights are used.</para>
+    /// </remarks>
+    public double[]? EnsembleWeights { get; set; }
+
+    /// <summary>
     /// Gets or sets the distillation strategy instance (if using custom strategy).
     /// </summary>
     /// <remarks>
