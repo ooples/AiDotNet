@@ -193,15 +193,46 @@ public class PredictionModelBuilder<T, TInput, TOutput> : IPredictionModelBuilde
     /// - **~50% memory reduction** allows training larger models or using bigger batches
     /// - **Maintained accuracy** through careful precision management and loss scaling
     ///
-    /// When to use:
-    /// - ✅ Training large models (>100M parameters)
-    /// - ✅ Using modern GPUs with Tensor Core support
-    /// - ✅ Memory-constrained scenarios
-    /// - ❌ CPU-only training (minimal benefit)
-    /// - ❌ Very small models (<1M parameters)
+    /// <b>Requirements:</b>
+    /// Mixed-precision training has specific technical requirements:
     ///
-    /// Note: Mixed-precision only works with float (FP32) as the base type T.
-    /// Both the model and optimizer must support float.
+    /// 1. **Type Constraint: float only**
+    ///    - Type parameter T must be float (FP32)
+    ///    - Cannot use double, decimal, or integer types
+    ///    - Reason: Mixed-precision converts between FP32 (float) and FP16 (Half) representations
+    ///
+    /// 2. **Gradient-Based Optimizers Only**
+    ///    - Requires optimizers that compute gradients (SGD, Adam, RMSProp, etc.)
+    ///    - Does NOT work with non-gradient methods (genetic algorithms, random search, Bayesian optimization)
+    ///    - Reason: Core techniques require gradient computation:
+    ///      * Loss scaling: Multiplies gradients to prevent underflow in FP16
+    ///      * Master weights: FP32 copy for accurate incremental gradient updates
+    ///      * Gradient accumulation: Accumulates tiny updates in FP32 precision
+    ///
+    /// 3. **Neural Networks (Recommended)**
+    ///    - Best suited for neural networks with large parameter counts
+    ///    - Can technically work with other gradient-based models, but benefits are minimal
+    ///    - Reason: Neural networks benefit from:
+    ///      * GPU Tensor Core acceleration for matrix operations (2-3x speedup)
+    ///      * Massive parameter counts (millions/billions) where 50% memory reduction matters
+    ///      * Robustness to small FP16 precision losses during training
+    ///
+    /// When to use:
+    /// - ✅ Neural networks trained with gradient-based optimizers (SGD, Adam, etc.)
+    /// - ✅ Large models (>100M parameters) on modern GPUs with Tensor Cores
+    /// - ✅ Memory-constrained scenarios where you need bigger batch sizes
+    /// - ❌ Non-gradient optimizers (evolutionary algorithms, random search)
+    /// - ❌ CPU-only training (minimal benefit without Tensor Cores)
+    /// - ❌ Very small models (<1M parameters) where memory isn't a concern
+    /// - ❌ Non-float types (double, decimal, int)
+    ///
+    /// <b>Technical Details:</b>
+    /// Mixed-precision maintains two copies of model parameters:
+    /// - Working weights (FP16): Used for forward/backward passes to save memory and increase speed
+    /// - Master weights (FP32): Used for optimizer updates to maintain precision over many iterations
+    ///
+    /// Loss scaling prevents gradient underflow by multiplying the loss by a large factor (e.g., 65536)
+    /// before backpropagation, then dividing gradients by the same factor before applying updates.
     /// </para>
     /// </remarks>
     /// <example>
