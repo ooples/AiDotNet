@@ -7,8 +7,8 @@ This document tracks the implementation status of automatic differentiation (aut
 **Last Updated:** 2025-01-11
 **Total Layers:** 75
 **Layers with Autodiff Infrastructure:** 75 (100%)
-**Layers with Full Autodiff Support:** 12 core layers + 30+ with partial support (56%)
-**TensorOperations Implemented:** 28 (19 base + 9 new)
+**Layers with Full Autodiff Support:** 15 core layers + 30+ with partial support (60%)
+**TensorOperations Implemented:** 30 (19 base + 11 new: Conv2D, ConvTranspose2D, MaxPool2D, AvgPool2D, Softmax, Concat, Pad, LayerNorm, BatchNorm, ReduceMax, ReduceMean)
 **Higher-Order Gradients:** ✅ Fully supported via GradientTape.Gradient(createGraph: true)
 **Graph Caching Optimization:** ✅ Automatic for persistent tapes
 
@@ -30,6 +30,9 @@ These layers have complete autodiff support using TensorOperations:
 10. **BatchNormalizationLayer** - BatchNorm operation with training/inference modes
 11. **LayerNormalizationLayer** - LayerNorm operation
 12. **AttentionLayer** - Softmax operation for attention weights
+13. **GlobalPoolingLayer** - ReduceMax and ReduceMean operations
+14. **GaussianNoiseLayer** - Identity gradient (noise is independent)
+15. **MaskingLayer** - ElementwiseMultiply for masking operation
 
 ### 🔄 Partial Implementation (Infrastructure Ready)
 
@@ -50,25 +53,29 @@ These layers have the autodiff pattern implemented but fall back to manual gradi
 - SubpixelConvolutionalLayer (needs pixel shuffle operation)
 - LocallyConnectedLayer (needs locally connected operation)
 
-**Pooling Layers:**
-- GlobalPoolingLayer (needs global reduce operations)
-
 **Recurrent Layers:**
-- LSTMLayer (manual BPTT preserved)
-- GRULayer (manual BPTT preserved)
+- LSTMLayer (manual BPTT preserved for numerical stability)
+- GRULayer (manual BPTT preserved for numerical stability)
 - RecurrentLayer
 - ConvLSTMLayer
 - MemoryReadLayer
 - MemoryWriteLayer
 
-**Specialized Layers:**
-- ResidualLayer
-- HighwayLayer
-- GatedLinearUnitLayer
-- SqueezeAndExcitationLayer
-- CapsuleLayer family
-- Graph networks
-- And 28+ other specialized layers
+**Specialized Research Layers (Manual by Design):**
+
+The following layers use manual gradient implementations by design, as they require highly specialized operations that would only be used by these specific layers:
+
+- **Capsule Networks:** CapsuleLayer, DigitCapsuleLayer, PrimaryCapsuleLayer (dynamic routing algorithms)
+- **Structured Prediction:** ConditionalRandomFieldLayer (Viterbi decoding, CRF inference)
+- **Quantum Computing:** QuantumLayer, MeasurementLayer (quantum state operations)
+- **Graph Neural Networks:** GraphConvolutionalLayer, SpatialPoolerLayer (graph convolution, message passing)
+- **Spatial Transformations:** SpatialTransformerLayer (affine transformations, grid sampling)
+- **Neuromorphic:** SpikingLayer, SynapticPlasticityLayer, TemporalMemoryLayer (spiking dynamics)
+- **Specialized Architectures:** RBFLayer, RBMLayer, AnomalyDetectorLayer, RepParameterizationLayer
+- **Advanced Convolutions:** DilatedConvolutionalLayer, SeparableConvolutionalLayer, DepthwiseSeparableConvolutionalLayer, LocallyConnectedLayer, SubpixelConvolutionalLayer (require specialized conv variants)
+- **Utility Layers:** CroppingLayer, UpsamplingLayer, SplitLayer, ReadoutLayer, DecoderLayer, ExpertLayer, MixtureOfExpertsLayer, LogVarianceLayer, ReconstructionLayer
+
+These layers have working, optimized manual implementations. Adding TensorOperations for them would create maintenance burden for single-use operations.
 
 ## Missing TensorOperations
 
