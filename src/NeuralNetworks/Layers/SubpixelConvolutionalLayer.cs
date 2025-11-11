@@ -731,10 +731,28 @@ public class SubpixelConvolutionalLayer<T> : LayerBase<T>
     /// </remarks>
     private Tensor<T> BackwardViaAutodiff(Tensor<T> outputGradient)
     {
-        // TODO: Implement autodiff backward pass once subpixel convolution operations are available in TensorOperations
-        // Convolution operation not yet available in TensorOperations
-        // Falling back to manual implementation
-        return BackwardManual(outputGradient);
+        if (_lastInput == null)
+            throw new InvalidOperationException("Forward pass must be called before backward pass.");
+
+        // Convert input to computation node
+        var inputNode = Autodiff.TensorOperations<T>.Variable(_lastInput, "input", requiresGradient: true);
+
+        // Apply pixel shuffle operation
+        var outputNode = Autodiff.TensorOperations<T>.PixelShuffle(inputNode, UpscaleFactor);
+
+        // Perform backward pass
+        outputNode.Gradient = outputGradient;
+        var topoOrder = GetTopologicalOrder(outputNode);
+        for (int i = topoOrder.Count - 1; i >= 0; i--)
+        {
+            var node = topoOrder[i];
+            if (node.RequiresGradient && node.BackwardFunction != null && node.Gradient != null)
+            {
+                node.BackwardFunction(node.Gradient);
+            }
+        }
+
+        return inputNode.Gradient ?? throw new InvalidOperationException("Gradient computation failed.");
     }
 
     /// <summary>
