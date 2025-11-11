@@ -69,7 +69,8 @@ jobs:
           BUMP_TYPE="none"
 
           # Check for BREAKING CHANGE (triggers MAJOR bump)
-          if echo "$COMMITS" | grep -iE "(BREAKING CHANGE:|BREAKING:)" > /dev/null; then
+          # Supports both "BREAKING CHANGE:" footer and "!" notation (e.g., feat!:, fix(scope)!:)
+          if echo "$COMMITS" | grep -iE "(BREAKING CHANGE:|BREAKING:|^[a-f0-9]+ [a-z]+(\([^)]*\))?!:)" > /dev/null; then
             BUMP_TYPE="major"
             echo "Found BREAKING CHANGE - will bump MAJOR version"
           fi
