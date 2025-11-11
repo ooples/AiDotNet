@@ -15,7 +15,7 @@ namespace AiDotNet.NeuralNetworks;
 /// This class provides the foundation for building different types of neural networks.
 /// </para>
 /// </remarks>
-public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpretableModel<T>
+public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpretableModel<T>, IDisposable
 {
     /// <summary>
     /// The internal collection of layers that make up this neural network.
@@ -2264,4 +2264,30 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
             offset += layerParams.Length;
         }
     }
+
+    /// <summary>
+    /// Disposes resources used by the neural network.
+    /// </summary>
+    /// <remarks>
+    /// Ensures that the mixed-precision context is properly disposed if it was enabled.
+    /// </remarks>
+    public void Dispose()
+    {
+        Dispose(true);
+        GC.SuppressFinalize(this);
+    }
+
+    /// <summary>
+    /// Protected Dispose pattern implementation.
+    /// </summary>
+    /// <param name="disposing">True if called from Dispose(), false if called from finalizer.</param>
+    protected virtual void Dispose(bool disposing)
+    {
+        if (disposing)
+        {
+            // Dispose managed resources
+            DisableMixedPrecision();
+        }
+    }
+
 }
