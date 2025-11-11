@@ -43,46 +43,27 @@ hope.ConsolidateMemory();
 
 ### 2. Continuum Memory System (CMS)
 
-Spectrum of memory modules operating at different frequencies (not binary short/long-term).
-
-**Two implementations available:**
-
-**A. ContinuumMemorySystem<T> - Utility Class (NOT from paper)**
-Used by `NestedLearner` for meta-learning. Uses exponential moving averages with decay rates:
+Spectrum of MLP blocks operating at different update frequencies (not binary short/long-term). Implemented via `ContinuumMemorySystemLayer<T>` which follows Equations 30-31 from the research paper.
 
 ```csharp
-var cms = new ContinuumMemorySystem<double>(
-    memoryDimension: 128,
-    numFrequencyLevels: 4);
-
-// Store at different frequencies
-cms.Store(representation, frequencyLevel: 0); // Fast (updates every step)
-cms.Store(representation, frequencyLevel: 2); // Slow (updates every 100 steps)
-
-// Biological memory consolidation
-cms.Consolidate(); // Transfers information from fast → slow memories
-```
-
-**B. ContinuumMemorySystemLayer<T> - Paper-Accurate Implementation (Equations 30-31)**
-Used by `HopeNetwork` for the HOPE architecture. Uses gradient accumulation with Modified GD:
-
-```csharp
-// Used internally by HopeNetwork - implements Equation 31 from paper
+// Used internally by HopeNetwork - implements Equations 30-31 from paper
 var hope = new HopeNetwork<double>(
     architecture,
     hiddenDim: 512,
     numCMSLevels: 4);  // Uses ContinuumMemorySystemLayer internally
 ```
 
-**Update Frequencies (both implementations):**
+**Update Frequencies:**
 - Level 0 (Fast): Every 1 step - immediate patterns
 - Level 1 (Medium): Every 10 steps - tactical patterns
 - Level 2 (Slow): Every 100 steps - strategic patterns
 - Level 3+ (Very Slow): Every 1000+ steps - long-term knowledge
 
-**Memory Update Methods:**
-- `ContinuumMemorySystem<T>`: Exponential moving averages with decay rates (utility class)
-- `ContinuumMemorySystemLayer<T>`: Gradient accumulation + Modified GD (paper-accurate HOPE)
+**Implementation Details:**
+- Sequential MLP chain: `yt = MLP(fk)(MLP(fk−1)(···MLP(f1)(xt)))`
+- Gradient accumulation over chunk sizes: `C(ℓ) = max_ℓ C(ℓ) / fℓ`
+- Updates using Modified Gradient Descent (Equations 27-29)
+- Parameters updated every C(ℓ) steps with accumulated gradients
 
 ### 3. Context Flow
 
@@ -128,66 +109,65 @@ var retrieved = memory.Retrieve(query);
 - Transformer attention (architectural component as memory)
 - Enables new optimizer designs with better data sample relationships
 
-### 5. Nested Learner
+### 5. Modified Gradient Descent
 
-Main training algorithm with multi-level optimization:
+Custom optimizer for the HOPE architecture that considers data dependencies (Equations 27-29):
 
 ```csharp
-var learner = new NestedLearner<double, Matrix<double>, Vector<double>>(
-    model: yourModel,
-    lossFunction: new CrossEntropyLoss<double>(),
-    numLevels: 4,
-    memoryDimension: 128);
+// Used internally by ContinuumMemorySystemLayer
+// Implements: W_{t+1} = W_t * (I - x_t x_t^T) - η * ∇y_t L ⊗ x_t
 
-// Train on Task 1
-var result = learner.Train(task1Data, maxIterations: 1000);
-Console.WriteLine($"Converged: {result.Converged}, Loss: {result.FinalMetaLoss}");
-
-// Adapt to Task 2 without forgetting Task 1
-var adaptResult = learner.AdaptToNewTask(
-    task2Data,
-    preservationStrength: 0.7); // 0.7 = strongly preserve old knowledge
-
-Console.WriteLine($"Forgetting metric: {adaptResult.ForgettingMetric}");
+var optimizer = new ModifiedGradientDescentOptimizer<double>(learningRate: 0.001);
+var updatedParams = optimizer.UpdateMatrix(currentParams, input, outputGradient);
 ```
 
-## Complete Example: Continual Learning
+**Key Difference from Standard GD:**
+- Standard GD: `W_{t+1} = W_t - η * ∇L`
+- Modified GD: `W_{t+1} = W_t * (I - x_t x_t^T) - η * ∇L`
+- The modification term `(I - x_t x_t^T)` accounts for data dependencies, crucial for token sequences
+
+## Complete Example: HOPE Network for Continual Learning
 
 ```csharp
 using AiDotNet.NestedLearning;
 using AiDotNet.NeuralNetworks;
 using AiDotNet.LinearAlgebra;
 
-// Create feedforward network
+// Create HOPE architecture for continual learning
 var architecture = new NeuralNetworkArchitecture<double>
 {
     InputSize = 784,
-    OutputSize = 10,
-    HiddenLayerSizes = new[] { 256, 128 }
+    OutputSize = 10
 };
-var model = new FeedForwardNeuralNetwork<double>(architecture);
 
-// Create nested learner (multi-level optimization)
-var learner = new NestedLearner<double, Matrix<double>, Vector<double>>(
-    model,
-    new CrossEntropyLoss<double>(),
-    numLevels: 4,              // 4 nested optimization levels
-    memoryDimension: 256);      // Rich memory capacity
+var hope = new HopeNetwork<double>(
+    architecture,
+    optimizer: null,
+    lossFunction: new CrossEntropyLoss<double>(),
+    hiddenDim: 256,
+    numCMSLevels: 4,              // 4 CMS levels with different update frequencies
+    numRecurrentLayers: 2,        // Recurrent processing depth
+    inContextLearningLevels: 3);  // In-context learning capacity
+
+hope.AddOutputLayer(10, ActivationFunction.Softmax);
 
 // Learn Task 1: Digits 0-4
-learner.Train(digits_0_4_data, maxIterations: 1000);
+foreach (var (input, label) in digits_0_4_data)
+{
+    hope.Train(input, label);
+}
 
-// Learn Task 2: Digits 5-9 (without forgetting 0-4)
-learner.AdaptToNewTask(
-    digits_5_9_data,
-    preservationStrength: 0.8); // Strong preservation
+// Consolidate long-term memory
+hope.ConsolidateMemory();
 
-// Learn Task 3: Fashion items
-learner.AdaptToNewTask(
-    fashion_data,
-    preservationStrength: 0.7);
+// Learn Task 2: Digits 5-9
+// Multi-timescale updates prevent catastrophic forgetting
+foreach (var (input, label) in digits_5_9_data)
+{
+    hope.Train(input, label);
+}
 
-// Model now knows all three tasks without catastrophic forgetting!
+// Model retains knowledge of both tasks through CMS!
 ```
 
 ## Example: Hope Architecture for Sequence Modeling
@@ -282,24 +262,21 @@ Level 2: 0.0001    (slow)
 Level 3: 0.00001   (very slow)
 ```
 
-### Memory Decay Rates (ContinuumMemorySystem only)
+### Chunk Sizes (Gradient Accumulation Windows)
 
-**IMPORTANT**: These decay rates apply ONLY to the `ContinuumMemorySystem<T>` utility class used by `NestedLearner`. They are **NOT from the research paper** and **NOT used in the HOPE architecture**.
-
-The paper-accurate **HOPE architecture** (via `HopeNetwork<T>`) uses `ContinuumMemorySystemLayer<T>`, which implements **gradient accumulation** (Equation 31) with **Modified Gradient Descent** (Equations 27-29) as specified in the research paper, **not exponential moving averages**.
-
-Formula for `ContinuumMemorySystem<T>`: `updated = (currentMemory × decay) + (newRepresentation × (1 - decay))`
+The CMS layer accumulates gradients over "chunk sizes" before updating parameters:
 
 ```
-Level 0: 0.90  (90% retention, 10% decay per update - moderate persistence)
-Level 1: 0.95  (95% retention, 5% decay per update  - high persistence)
-Level 2: 0.99  (99% retention, 1% decay per update  - very high persistence)
-Level 3: 0.995 (99.5% retention, 0.5% decay per update - extremely high persistence)
+C(ℓ) = max_ℓ C(ℓ) / fℓ
+
+If max frequency = 1000:
+Level 0 (f=1):   C(0) = 1000/1 = 1000 steps
+Level 1 (f=10):  C(1) = 1000/10 = 100 steps
+Level 2 (f=100): C(2) = 1000/100 = 10 steps
+Level 3 (f=1000): C(3) = 1000/1000 = 1 step
 ```
 
-**Interpretation**: The decay parameter is a *retention factor*. Higher values = more retention of old memory = slower decay rate. Level 3 (0.995) changes very slowly and maintains long-term information, while Level 0 (0.90) adapts more quickly to new inputs.
-
-**For HOPE architecture**: Use `HopeNetwork<T>` which internally uses `ContinuumMemorySystemLayer<T>` with gradient accumulation (Equation 31 from paper), not these decay rates.
+**Interpretation**: Higher levels update less frequently, accumulating gradients over longer windows. This creates the multi-timescale optimization that prevents catastrophic forgetting.
 
 ## Performance Benchmarks
 
