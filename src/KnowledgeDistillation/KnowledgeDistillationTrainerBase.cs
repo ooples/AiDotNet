@@ -238,6 +238,32 @@ public abstract class KnowledgeDistillationTrainerBase<TInput, TOutput, T> : IKn
     }
 
     /// <summary>
+    /// Trains the student model for multiple epochs (interface-compliant overload).
+    /// </summary>
+    /// <param name="studentForward">Function to perform forward pass on student model.</param>
+    /// <param name="studentBackward">Function to perform backward pass on student model.</param>
+    /// <param name="trainInputs">Training input data.</param>
+    /// <param name="trainLabels">Training labels (optional). If null, uses only teacher supervision.</param>
+    /// <param name="epochs">Number of epochs to train.</param>
+    /// <param name="batchSize">Batch size for training.</param>
+    /// <param name="onEpochComplete">Optional callback invoked after each epoch with (epoch, avgLoss).</param>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> This overload matches the interface contract and delegates to the
+    /// extended version with no validation data.</para>
+    /// </remarks>
+    public virtual void Train(
+        Func<TInput, TOutput> studentForward,
+        Action<TOutput> studentBackward,
+        TInput[] trainInputs,
+        TOutput[]? trainLabels,
+        int epochs,
+        int batchSize = 32,
+        Action<int, T>? onEpochComplete = null)
+    {
+        Train(studentForward, studentBackward, trainInputs, trainLabels, epochs, batchSize, null, null, onEpochComplete);
+    }
+
+    /// <summary>
     /// Evaluates the student model's accuracy on a dataset.
     /// </summary>
     /// <param name="studentForward">Function to perform forward pass through student model.</param>
