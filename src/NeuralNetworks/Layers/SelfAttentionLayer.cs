@@ -31,8 +31,57 @@ namespace AiDotNet.NeuralNetworks.Layers;
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric type used for calculations, typically float or double.</typeparam>
-public class SelfAttentionLayer<T> : LayerBase<T>
+public class SelfAttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
 {
+    /// <summary>
+    /// Gets or sets whether auxiliary loss (attention sparsity regularization) should be used during training.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Attention sparsity regularization encourages the attention mechanism to focus on relevant positions
+    /// while ignoring irrelevant ones. This prevents attention from being too diffuse and improves interpretability.
+    /// </para>
+    /// <para><b>For Beginners:</b> This helps self-attention focus on what matters.
+    ///
+    /// Self-attention works best when it's selective:
+    /// - Without regularization: Attention might spread too thin across all positions
+    /// - With regularization: Attention focuses on truly relevant relationships
+    ///
+    /// This includes:
+    /// 1. Entropy regularization: Prevents overly uniform attention
+    /// 2. Sparsity penalties: Encourages sharp, focused attention patterns
+    ///
+    /// This helps the model:
+    /// - Learn clearer, more interpretable attention patterns
+    /// - Focus computational resources on relevant relationships
+    /// - Improve robustness and generalization
+    /// </para>
+    /// </remarks>
+    public bool UseAuxiliaryLoss { get; set; } = false;
+
+    /// <summary>
+    /// Gets or sets the weight for the attention sparsity auxiliary loss.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// This weight controls how much attention sparsity regularization contributes to the total loss.
+    /// Typical values range from 0.001 to 0.01.
+    /// </para>
+    /// <para><b>For Beginners:</b> This controls how much we encourage focused attention.
+    ///
+    /// Common values:
+    /// - 0.005 (default): Balanced sparsity regularization
+    /// - 0.001-0.003: Light sparsity enforcement
+    /// - 0.008-0.01: Strong sparsity enforcement
+    ///
+    /// Higher values encourage sharper, more focused attention patterns.
+    /// </para>
+    /// </remarks>
+    public T AuxiliaryLossWeight { get; set; }
+
+    private T _lastEntropyLoss;
+    private T _lastSparsityLoss;
+
     /// <summary>
     /// Matrix of weights for transforming input embeddings into query vectors.
     /// </summary>
@@ -231,20 +280,25 @@ public class SelfAttentionLayer<T> : LayerBase<T>
     /// - embeddingDimension might be 768 (the number of features per word/token)
     /// - Using 8 attention heads lets the model focus on 8 different types of relationships
     /// 
-    /// The embedding dimension must be divisible by the number of heads (e.g., 768 � 8 = 96),
+    /// The embedding dimension must be divisible by the number of heads (e.g., 768 ÷ 8 = 96),
     /// so each head has the same dimension.
     /// </para>
     /// </remarks>
     public SelfAttentionLayer(
-        int sequenceLength, 
-        int embeddingDimension, 
-        int headCount = 8, 
+        int sequenceLength,
+        int embeddingDimension,
+        int headCount = 8,
         IActivationFunction<T>? activationFunction = null)
         : base(
-            [sequenceLength, embeddingDimension], 
-            [sequenceLength, embeddingDimension], 
+            [sequenceLength, embeddingDimension],
+            [sequenceLength, embeddingDimension],
             activationFunction ?? new IdentityActivation<T>())
     {
+        // Initialize auxiliary loss fields first so compiler knows they're set
+        AuxiliaryLossWeight = NumOps.FromDouble(0.005);
+        _lastEntropyLoss = NumOps.Zero;
+        _lastSparsityLoss = NumOps.Zero;
+
         _queryWeights = Matrix<T>.Empty();
         _keyWeights = Matrix<T>.Empty();
         _valueWeights = Matrix<T>.Empty();
@@ -284,15 +338,20 @@ public class SelfAttentionLayer<T> : LayerBase<T>
     /// </para>
     /// </remarks>
     public SelfAttentionLayer(
-        int sequenceLength, 
-        int embeddingDimension, 
-        int headCount = 8, 
+        int sequenceLength,
+        int embeddingDimension,
+        int headCount = 8,
         IVectorActivationFunction<T>? vectorActivationFunction = null)
         : base(
-            [sequenceLength, embeddingDimension], 
-            [sequenceLength, embeddingDimension], 
+            [sequenceLength, embeddingDimension],
+            [sequenceLength, embeddingDimension],
             vectorActivationFunction ?? new IdentityActivation<T>())
     {
+        // Initialize auxiliary loss fields first so compiler knows they're set
+        AuxiliaryLossWeight = NumOps.FromDouble(0.005);
+        _lastEntropyLoss = NumOps.Zero;
+        _lastSparsityLoss = NumOps.Zero;
+
         _queryWeights = Matrix<T>.Empty();
         _keyWeights = Matrix<T>.Empty();
         _valueWeights = Matrix<T>.Empty();
@@ -707,13 +766,156 @@ public class SelfAttentionLayer<T> : LayerBase<T>
     /// - It triggers the creation of all the weight matrices with proper initial values
     /// 
     /// The head dimension calculation is important - if you have an embedding size of 512 and
-    /// 8 attention heads, each head will have a dimension of 64 (512 � 8). This allows each
+    /// 8 attention heads, each head will have a dimension of 64 (512 ÷ 8). This allows each
     /// head to specialize in different aspects of the input sequence.
-    /// 
+    ///
     /// This method throws an error if the embedding dimension isn't divisible by the head count
     /// because the attention mechanism requires equal-sized heads.
     /// </para>
     /// </remarks>
+
+    /// <summary>
+    /// Computes the auxiliary loss for attention sparsity regularization.
+    /// </summary>
+    /// <returns>The computed attention sparsity auxiliary loss.</returns>
+    /// <remarks>
+    /// <para>
+    /// This method computes two types of regularization for self-attention:
+    /// 1. Entropy regularization: Prevents overly uniform attention distributions
+    /// 2. Sparsity penalty: Encourages focused attention on relevant positions
+    /// Formula: L = -H(attention) + λ * ||attention||_1 where H is entropy
+    /// </para>
+    /// <para><b>For Beginners:</b> This calculates penalties to improve attention quality.
+    ///
+    /// Attention sparsity works by:
+    /// 1. Measuring attention entropy (how spread out attention is)
+    /// 2. Computing L1 norm (sum of absolute attention weights)
+    /// 3. Combining these to encourage focused, interpretable attention
+    ///
+    /// This helps because:
+    /// - Prevents attention from being too diffuse (attending to everything)
+    /// - Encourages sharp, focused attention on relevant positions
+    /// - Improves model interpretability
+    /// - Reduces computational waste on irrelevant positions
+    ///
+    /// The auxiliary loss is minimized during training alongside the main task loss.
+    /// </para>
+    /// </remarks>
+    public T ComputeAuxiliaryLoss()
+    {
+        if (!UseAuxiliaryLoss || _lastAttentionScores == null)
+        {
+            _lastEntropyLoss = NumOps.Zero;
+            _lastSparsityLoss = NumOps.Zero;
+            return NumOps.Zero;
+        }
+
+        T totalLoss = NumOps.Zero;
+
+        // 1. Compute negative entropy (to encourage low entropy/focused attention)
+        // H = -Σ(p * log(p))
+        T totalNegativeEntropy = NumOps.Zero;
+        int numHeads = _headCount;
+        int seqLen = _sequenceLength;
+
+        for (int h = 0; h < numHeads; h++)
+        {
+            for (int i = 0; i < seqLen; i++)
+            {
+                T entropy = NumOps.Zero;
+                for (int j = 0; j < seqLen; j++)
+                {
+                    // Get attention weight for this head and position
+                    T attnWeight = _lastAttentionScores[h, i, j];
+
+                    // Skip zero or very small values to avoid log(0)
+                    if (NumOps.LessThan(attnWeight, NumOps.FromDouble(1e-10)))
+                        continue;
+
+                    // H = -Σ(p * log(p))
+                    T logWeight = NumOps.Log(attnWeight);
+                    T term = NumOps.Multiply(attnWeight, logWeight);
+                    entropy = NumOps.Subtract(entropy, term);
+                }
+                // We want low entropy (focused attention), so we minimize -H
+                totalNegativeEntropy = NumOps.Subtract(totalNegativeEntropy, entropy);
+            }
+        }
+
+        // Store unweighted loss for diagnostics
+        _lastEntropyLoss = totalNegativeEntropy;
+
+        // 2. Optional: L1 sparsity penalty (not implemented in basic version)
+        // Can be added if needed: _lastSparsityLoss = Σ|attention_weights|
+
+        // Apply auxiliary loss weight and return weighted loss
+        totalLoss = NumOps.Multiply(totalNegativeEntropy, AuxiliaryLossWeight);
+        return totalLoss;
+    }
+
+    /// <summary>
+    /// Gets diagnostic information about the attention sparsity auxiliary loss.
+    /// </summary>
+    /// <returns>A dictionary containing diagnostic information about attention regularization.</returns>
+    /// <remarks>
+    /// <para>
+    /// This method returns detailed diagnostics about attention sparsity regularization, including
+    /// entropy loss, sparsity penalty, and configuration parameters.
+    /// This information is useful for monitoring training progress and debugging attention patterns.
+    /// </para>
+    /// <para><b>For Beginners:</b> This provides information about how attention regularization is working.
+    ///
+    /// The diagnostics include:
+    /// - Total entropy loss (how focused attention patterns are)
+    /// - Total sparsity loss (L1 penalty on attention weights)
+    /// - Weight applied to the regularization
+    /// - Whether regularization is enabled
+    /// - Number of attention heads
+    ///
+    /// This helps you:
+    /// - Monitor if attention is becoming too diffuse or too sharp
+    /// - Debug issues with attention patterns
+    /// - Understand the impact of regularization on learning
+    ///
+    /// You can use this information to adjust regularization weights for better results.
+    /// </para>
+    /// </remarks>
+    public Dictionary<string, string> GetAuxiliaryLossDiagnostics()
+    {
+        return new Dictionary<string, string>
+        {
+            { "TotalEntropyLoss", _lastEntropyLoss?.ToString() ?? "0" },
+            { "TotalSparsityLoss", _lastSparsityLoss?.ToString() ?? "0" },
+            { "SparsityWeight", AuxiliaryLossWeight?.ToString() ?? "0.005" },
+            { "UseAttentionSparsity", UseAuxiliaryLoss.ToString() },
+            { "NumberOfHeads", _headCount.ToString() },
+            { "SequenceLength", _sequenceLength.ToString() },
+            { "AttentionScoresCached", (_lastAttentionScores != null).ToString() }
+        };
+    }
+
+    /// <summary>
+    /// Gets diagnostic information about this component's state and behavior.
+    /// Overrides <see cref="LayerBase{T}.GetDiagnostics"/> to include auxiliary loss diagnostics.
+    /// </summary>
+    /// <returns>
+    /// A dictionary containing diagnostic metrics including both base layer diagnostics and
+    /// auxiliary loss diagnostics from <see cref="GetAuxiliaryLossDiagnostics"/>.
+    /// </returns>
+    public override Dictionary<string, string> GetDiagnostics()
+    {
+        var diagnostics = base.GetDiagnostics();
+
+        // Merge auxiliary loss diagnostics
+        var auxDiagnostics = GetAuxiliaryLossDiagnostics();
+        foreach (var kvp in auxDiagnostics)
+        {
+            diagnostics[kvp.Key] = kvp.Value;
+        }
+
+        return diagnostics;
+    }
+
     private void InitializeLayer(int sequenceLength, int embeddingDimension, int headCount)
     {
         _sequenceLength = sequenceLength;

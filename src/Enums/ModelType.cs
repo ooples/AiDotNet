@@ -791,5 +791,33 @@ public enum ModelType
 
     ProphetModel,
 
-    NeuralNetworkARIMA
+    NeuralNetworkARIMA,
+
+    /// <summary>
+    /// A neural network architecture that employs multiple specialist networks (experts) with learned routing.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> Mixture-of-Experts is like having a team of specialists rather than one generalist.
+    ///
+    /// Imagine a hospital with different specialists:
+    /// - A cardiologist handles heart problems
+    /// - A neurologist handles brain issues
+    /// - A pediatrician handles children's health
+    /// - A triage system (gating network) directs patients to the right specialist(s)
+    ///
+    /// In a MoE neural network:
+    /// - Multiple "expert" networks specialize in different patterns
+    /// - A "gating network" learns to route inputs to the best expert(s)
+    /// - Only a few experts process each input (sparse activation), making it efficient
+    /// - Final predictions combine outputs from selected experts
+    ///
+    /// Key advantages:
+    /// - Increased model capacity without proportional compute cost
+    /// - Different experts specialize in different aspects of the problem
+    /// - Scalable to very large models
+    /// - Efficient through sparse expert activation
+    /// </para>
+    /// </remarks>
+    MixtureOfExperts
 }

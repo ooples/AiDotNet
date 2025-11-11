@@ -28,8 +28,23 @@ namespace AiDotNet.NeuralNetworks.Layers;
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric type used for calculations, typically float or double.</typeparam>
-public class SpatialTransformerLayer<T> : LayerBase<T>
+public class SpatialTransformerLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
 {
+    /// <summary>
+    /// Gets or sets a value indicating whether auxiliary loss is enabled for this layer.
+    /// </summary>
+    public bool UseAuxiliaryLoss { get; set; } = false;
+
+    /// <summary>
+    /// Gets or sets the weight for the auxiliary loss contribution.
+    /// </summary>
+    public T AuxiliaryLossWeight { get; set; }
+
+    /// <summary>
+    /// Stores the last computed transformation regularization loss for diagnostic purposes.
+    /// </summary>
+    private T _lastTransformationLoss;
+
     /// <summary>
     /// Weights for the first layer of the localization network.
     /// </summary>
@@ -333,6 +348,10 @@ public class SpatialTransformerLayer<T> : LayerBase<T>
     public SpatialTransformerLayer(int inputHeight, int inputWidth, int outputHeight, int outputWidth, IActivationFunction<T>? activationFunction = null)
         : base([inputHeight, inputWidth], [outputHeight, outputWidth], activationFunction ?? new TanhActivation<T>())
     {
+        // Initialize auxiliary loss fields first so compiler knows they're set
+        AuxiliaryLossWeight = NumOps.FromDouble(0.01);
+        _lastTransformationLoss = NumOps.Zero;
+
         _inputHeight = inputHeight;
         _inputWidth = inputWidth;
         _outputHeight = outputHeight;
@@ -373,6 +392,10 @@ public class SpatialTransformerLayer<T> : LayerBase<T>
     public SpatialTransformerLayer(int inputHeight, int inputWidth, int outputHeight, int outputWidth, IVectorActivationFunction<T>? vectorActivationFunction = null)
         : base([inputHeight, inputWidth], [outputHeight, outputWidth], vectorActivationFunction ?? new TanhActivation<T>())
     {
+        // Initialize auxiliary loss fields first so compiler knows they're set
+        AuxiliaryLossWeight = NumOps.FromDouble(0.01);
+        _lastTransformationLoss = NumOps.Zero;
+
         _inputHeight = inputHeight;
         _inputWidth = inputWidth;
         _outputHeight = outputHeight;
@@ -523,7 +546,7 @@ public class SpatialTransformerLayer<T> : LayerBase<T>
     /// - Translation (2 parameters)
     /// 
     /// The method:
-    /// - Converts these parameters into a 2×3 matrix format that can be used for transformation
+    /// - Converts these parameters into a 2Ã—3 matrix format that can be used for transformation
     /// - Applies limits to prevent extreme transformations that might distort the image too much
     /// - Ensures that small parameter values result in transformations close to identity (no change)
     /// 
@@ -1221,5 +1244,53 @@ public class SpatialTransformerLayer<T> : LayerBase<T>
         _localizationBias1Gradient = null;
         _localizationWeights2Gradient = null;
         _localizationBias2Gradient = null;
+    }
+
+    /// <summary>
+    /// Computes the auxiliary loss for this layer based on transformation regularization.
+    /// </summary>
+    /// <returns>The computed auxiliary loss value.</returns>
+    public T ComputeAuxiliaryLoss()
+    {
+        // Placeholder - full implementation would regularize transformation parameters
+        // to prevent extreme transformations
+        _lastTransformationLoss = NumOps.Zero;
+        return _lastTransformationLoss;
+    }
+
+    /// <summary>
+    /// Gets diagnostic information about the auxiliary loss computation.
+    /// </summary>
+    /// <returns>A dictionary containing diagnostic information about the auxiliary loss.</returns>
+    public Dictionary<string, string> GetAuxiliaryLossDiagnostics()
+    {
+        return new Dictionary<string, string>
+        {
+            { "TotalTransformationLoss", $"{_lastTransformationLoss}" },
+            { "TransformationWeight", $"{AuxiliaryLossWeight}" },
+            { "UseTransformationLoss", UseAuxiliaryLoss.ToString() }
+        };
+    }
+
+    /// <summary>
+    /// Gets diagnostic information about this component's state and behavior.
+    /// Overrides <see cref="LayerBase{T}.GetDiagnostics"/> to include auxiliary loss diagnostics.
+    /// </summary>
+    /// <returns>
+    /// A dictionary containing diagnostic metrics including both base layer diagnostics and
+    /// auxiliary loss diagnostics from <see cref="GetAuxiliaryLossDiagnostics"/>.
+    /// </returns>
+    public override Dictionary<string, string> GetDiagnostics()
+    {
+        var diagnostics = base.GetDiagnostics();
+
+        // Merge auxiliary loss diagnostics
+        var auxDiagnostics = GetAuxiliaryLossDiagnostics();
+        foreach (var kvp in auxDiagnostics)
+        {
+            diagnostics[kvp.Key] = kvp.Value;
+        }
+
+        return diagnostics;
     }
 }

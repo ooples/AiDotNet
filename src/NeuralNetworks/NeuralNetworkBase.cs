@@ -39,7 +39,16 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
     /// </para>
     /// </remarks>
     protected List<ILayer<T>> Layers => _layers;
-    
+
+    /// <summary>
+    /// Gets the number of layers in this neural network.
+    /// </summary>
+    /// <remarks>
+    /// <b>For Beginners:</b> This tells you how many processing stages (layers) your network has.
+    /// More layers generally means the network can learn more complex patterns.
+    /// </remarks>
+    public int LayerCount => _layers.Count;
+
     /// <summary>
     /// The architecture definition for this neural network.
     /// </summary>
@@ -92,7 +101,7 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
     /// <summary>
     /// Random number generator for initialization.
     /// </summary>
-    protected Random Random => new();
+    protected readonly Random Random = new();
 
     /// <summary>
     /// The loss function used to calculate error during training.
@@ -130,8 +139,8 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
     /// <b>For Beginners:</b> Neural networks behave differently during training versus when they're making predictions.
     /// In training mode, the network keeps track of additional information needed for learning.
     /// </remarks>
-    protected bool IsTrainingMode = true;
-    
+    public bool IsTrainingMode { get; internal set; } = true;
+
     /// <summary>
     /// Indicates whether this network supports training (learning from data).
     /// </summary>
@@ -430,6 +439,88 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
         }
 
         return current;
+    }
+
+    /// <summary>
+    /// Performs a forward pass and returns intermediate layer activations for feature extraction.
+    /// </summary>
+    /// <param name="input">The input tensor to process.</param>
+    /// <param name="layerIndices">Optional array of layer indices to extract features from. If null, returns all layer outputs.</param>
+    /// <returns>A tuple containing the final output tensor and a dictionary of intermediate features indexed by layer number.</returns>
+    /// <remarks>
+    /// <para>
+    /// This method performs a forward pass through the network while capturing intermediate layer
+    /// activations. This is useful for feature extraction, transfer learning, style transfer,
+    /// and advanced training techniques like feature matching in GANs.
+    /// </para>
+    /// <para><b>For Beginners:</b> This method lets you see what's happening inside the network at each layer.
+    ///
+    /// Think of it like watching a factory assembly line:
+    /// - Normally, you only see the final product (output)
+    /// - This method lets you inspect the product at each station (layer)
+    /// - You can choose specific stations to inspect (layerIndices)
+    ///
+    /// This is useful for:
+    /// - Understanding what features the network has learned
+    /// - Using intermediate representations for other tasks (transfer learning)
+    /// - Debugging network behavior
+    /// - Advanced training techniques like feature matching in GANs
+    ///
+    /// Example:
+    /// - layerIndices = new[] { -2, -1 } means "last two layers" (negative indices count from end)
+    /// - layerIndices = null means "all layers"
+    /// </para>
+    /// <para><b>Industry Standard:</b> This pattern is common in modern ML frameworks:
+    /// - PyTorch: model.forward_features() or register_forward_hook()
+    /// - TensorFlow/Keras: Model(inputs=..., outputs=[layer1.output, layer2.output])
+    /// - This implementation follows the TensorFlow-style approach
+    /// </para>
+    /// </remarks>
+    public virtual (Tensor<T> output, Dictionary<int, Tensor<T>> features) ForwardWithFeatures(
+        Tensor<T> input,
+        int[]? layerIndices = null)
+    {
+        // Clear previous outputs
+        _layerOutputs.Clear();
+
+        // Perform forward pass and store outputs
+        Tensor<T> current = input;
+        for (int i = 0; i < Layers.Count; i++)
+        {
+            current = Layers[i].Forward(current);
+            // Clone to prevent modification of cached values
+            // Note: This is memory-intensive for large networks but necessary for correctness.
+            // If layers modify their output tensors in-place during subsequent operations,
+            // we need independent copies to avoid corrupting feature extraction results.
+            // For memory-constrained scenarios, consider using features only when needed.
+            _layerOutputs[i] = current.Clone();
+        }
+
+        // Build features dictionary
+        Dictionary<int, Tensor<T>> features;
+
+        if (layerIndices == null)
+        {
+            // Return all layer outputs
+            features = new Dictionary<int, Tensor<T>>(_layerOutputs);
+        }
+        else
+        {
+            // Return only requested layers
+            features = new Dictionary<int, Tensor<T>>();
+            foreach (int idx in layerIndices)
+            {
+                // Support negative indices (count from end)
+                int actualIdx = idx < 0 ? Layers.Count + idx : idx;
+
+                if (actualIdx >= 0 && actualIdx < Layers.Count && _layerOutputs.TryGetValue(actualIdx, out var value))
+                {
+                    features[actualIdx] = value;
+                }
+            }
+        }
+
+        return (current, features);
     }
 
     /// <summary>
@@ -1031,6 +1122,65 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
         {
             layer.ResetState();
         }
+    }
+
+    /// <summary>
+    /// Computes gradients of the network output with respect to the network input using backpropagation.
+    /// </summary>
+    /// <param name="outputGradient">The gradient signal from the output (typically all ones for gradient computation).</param>
+    /// <returns>A tensor containing the gradients with respect to the network input.</returns>
+    /// <remarks>
+    /// <para>
+    /// This method performs a backward pass through all layers to compute how the output changes
+    /// with respect to the input. Unlike the standard backward pass which computes gradients for
+    /// parameters, this method computes gradients for the input itself.
+    /// </para>
+    /// <para>
+    /// This is essential for techniques like:
+    /// - Gradient-based input optimization
+    /// - Saliency maps and input attribution
+    /// - WGAN-GP gradient penalty computation
+    /// - Adversarial example generation
+    /// </para>
+    /// <para><b>For Beginners:</b> This calculates how sensitive the output is to changes in the input.
+    ///
+    /// Normally, backpropagation adjusts the network's internal parameters (weights and biases).
+    /// This method instead computes how the output would change if we modified the input data.
+    ///
+    /// Use cases:
+    /// - Understanding which input features matter most (interpretability)
+    /// - Generating adversarial examples (security research)
+    /// - Computing gradient penalties for training stability (WGAN-GP)
+    ///
+    /// The process:
+    /// 1. Assumes a forward pass has already been run (outputs are cached)
+    /// 2. Starts with a gradient signal at the output (how much we "care" about each output)
+    /// 3. Propagates this gradient backwards through each layer
+    /// 4. Returns the gradient with respect to the original input
+    /// </para>
+    /// </remarks>
+    public virtual Tensor<T> BackwardWithInputGradient(Tensor<T> outputGradient)
+    {
+        if (Layers.Count == 0)
+        {
+            throw new InvalidOperationException("Cannot compute input gradients for a network with no layers.");
+        }
+
+        // Start with the output gradient and propagate backwards through layers
+        var currentGradient = outputGradient;
+
+        // Iterate backwards through layers
+        for (int i = Layers.Count - 1; i >= 0; i--)
+        {
+            var layer = Layers[i];
+
+            // Each layer's Backward method takes the gradient from the next layer
+            // and returns the gradient to pass to the previous layer
+            currentGradient = layer.Backward(currentGradient);
+        }
+
+        // The final gradient is with respect to the network input
+        return currentGradient;
     }
 
     /// <summary>
