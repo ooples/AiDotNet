@@ -1,7 +1,9 @@
+using System.Linq;
 using AiDotNet.Enums;
 using AiDotNet.Interfaces;
 using AiDotNet.KnowledgeDistillation.Strategies;
 using AiDotNet.LinearAlgebra;
+using ContrastiveMode = AiDotNet.KnowledgeDistillation.Strategies.ContrastiveMode;
 
 namespace AiDotNet.KnowledgeDistillation;
 
@@ -19,8 +21,10 @@ public static class DistillationStrategyFactory<T>
     /// <param name="alpha">Weight for hard loss vs soft loss (default 0.3).</param>
     /// <param name="featureWeight">Weight for feature matching loss (for feature-based strategies).</param>
     /// <param name="attentionWeight">Weight for attention matching loss (for attention-based strategies).</param>
-    /// <param name="contrastiveLossType">Type of contrastive loss (for contrastive strategies).</param>
-    /// <param name="strategies">Array of strategies to combine (for hybrid).</param>
+    /// <param name="contrastiveMode">Mode for contrastive loss (for contrastive strategies).</param>
+    /// <param name="featureLayerPairs">Layer pairs for feature matching (for feature-based).</param>
+    /// <param name="attentionLayers">Attention layers to match (for attention-based).</param>
+    /// <param name="strategies">Vector of strategies to combine (for hybrid).</param>
     /// <param name="strategyWeights">Weights for combined strategies (for hybrid).</param>
     /// <returns>A configured distillation strategy.</returns>
     public static IDistillationStrategy<Vector<T>, T> CreateStrategy(
@@ -29,17 +33,19 @@ public static class DistillationStrategyFactory<T>
         double alpha = 0.3,
         double? featureWeight = null,
         double? attentionWeight = null,
-        ContrastiveLossType? contrastiveLossType = null,
-        IDistillationStrategy<Vector<T>, T>[]? strategies = null,
-        double[]? strategyWeights = null)
+        ContrastiveMode? contrastiveMode = null,
+        Vector<string>? featureLayerPairs = null,
+        Vector<string>? attentionLayers = null,
+        Vector<IDistillationStrategy<Vector<T>, T>>? strategies = null,
+        Vector<double>? strategyWeights = null)
     {
         return strategyType switch
         {
             DistillationStrategyType.ResponseBased => CreateResponseBasedStrategy(temperature, alpha),
-            DistillationStrategyType.FeatureBased => CreateFeatureBasedStrategy(temperature, alpha, featureWeight ?? 0.5),
-            DistillationStrategyType.AttentionBased => CreateAttentionBasedStrategy(temperature, alpha, attentionWeight ?? 0.5),
+            DistillationStrategyType.FeatureBased => CreateFeatureBasedStrategy(featureLayerPairs, featureWeight ?? 0.5),
+            DistillationStrategyType.AttentionBased => CreateAttentionBasedStrategy(attentionLayers, temperature, alpha, attentionWeight ?? 0.3),
             DistillationStrategyType.RelationBased => CreateRelationBasedStrategy(temperature, alpha),
-            DistillationStrategyType.ContrastiveBased => CreateContrastiveStrategy(temperature, alpha, contrastiveLossType ?? ContrastiveLossType.InfoNCE),
+            DistillationStrategyType.ContrastiveBased => CreateContrastiveStrategy(temperature, alpha, contrastiveMode ?? ContrastiveMode.InfoNCE),
             DistillationStrategyType.SimilarityPreserving => CreateSimilarityPreservingStrategy(temperature, alpha),
             DistillationStrategyType.FlowBased => CreateProbabilisticStrategy(temperature, alpha), // Flow-based uses probabilistic
             DistillationStrategyType.ProbabilisticTransfer => CreateProbabilisticStrategy(temperature, alpha),
@@ -60,27 +66,34 @@ public static class DistillationStrategyFactory<T>
     }
 
     private static IDistillationStrategy<Vector<T>, T> CreateFeatureBasedStrategy(
-        double temperature,
-        double alpha,
+        Vector<string>? layerPairs,
         double featureWeight)
     {
-        return new FeatureDistillationStrategy<T>(
-            featureWeight: featureWeight,
-            matchingMode: FeatureMatchingMode.MSE,
-            temperature: temperature,
-            alpha: alpha);
+        // FeatureDistillationStrategy doesn't implement IDistillationStrategy
+        // It's a separate utility class that computes feature loss
+        throw new NotSupportedException(
+            "FeatureDistillationStrategy requires layer-specific feature extraction and cannot be used " +
+            "through the factory. Create it directly: new FeatureDistillationStrategy<T>(layerPairs, featureWeight)");
     }
 
     private static IDistillationStrategy<Vector<T>, T> CreateAttentionBasedStrategy(
+        Vector<string>? attentionLayers,
         double temperature,
         double alpha,
         double attentionWeight)
     {
+        // Provide default attention layers if none specified
+        var defaultLayers = new[] { "layer.0.attention", "layer.1.attention", "layer.2.attention" };
+        var layersArray = attentionLayers != null ?
+            Enumerable.Range(0, attentionLayers.Length).Select(i => attentionLayers[i]).ToArray() :
+            defaultLayers;
+
         return new AttentionDistillationStrategy<T>(
+            attentionLayers: layersArray,
             attentionWeight: attentionWeight,
-            matchingMode: AttentionMatchingMode.MSE,
             temperature: temperature,
-            alpha: alpha);
+            alpha: alpha,
+            matchingMode: AttentionMatchingMode.MSE);
     }
 
     private static IDistillationStrategy<Vector<T>, T> CreateRelationBasedStrategy(
@@ -97,13 +110,14 @@ public static class DistillationStrategyFactory<T>
     private static IDistillationStrategy<Vector<T>, T> CreateContrastiveStrategy(
         double temperature,
         double alpha,
-        ContrastiveLossType lossType)
+        ContrastiveMode mode)
     {
         return new ContrastiveDistillationStrategy<T>(
-            contrastiveWeight: 0.5,
-            lossType: lossType,
+            contrastiveWeight: 0.8,
             temperature: temperature,
-            alpha: alpha);
+            alpha: alpha,
+            negativesSampleSize: 1024,
+            mode: mode);
     }
 
     private static IDistillationStrategy<Vector<T>, T> CreateSimilarityPreservingStrategy(
@@ -167,30 +181,47 @@ public static class DistillationStrategyFactory<T>
     private static IDistillationStrategy<Vector<T>, T> CreateHybridStrategy(
         double temperature,
         double alpha,
-        IDistillationStrategy<Vector<T>, T>[]? strategies,
-        double[]? strategyWeights)
+        Vector<IDistillationStrategy<Vector<T>, T>>? strategies,
+        Vector<double>? strategyWeights)
     {
+        // Create tuple array from strategies and weights
+        (IDistillationStrategy<Vector<T>, T> Strategy, double Weight)[] strategyTuples;
+
         if (strategies == null || strategies.Length == 0)
         {
-            // Default: combine response-based and feature-based
-            strategies = new IDistillationStrategy<Vector<T>, T>[]
+            // Default: combine response-based and relational
+            strategyTuples = new[]
             {
-                CreateResponseBasedStrategy(temperature, alpha),
-                CreateFeatureBasedStrategy(temperature, alpha, 0.5)
+                (CreateResponseBasedStrategy(temperature, alpha), 0.5),
+                (CreateRelationBasedStrategy(temperature, alpha), 0.5)
             };
-            strategyWeights = new[] { 0.5, 0.5 };
         }
-
-        if (strategyWeights == null)
+        else
         {
-            // Equal weights if not specified
-            strategyWeights = new double[strategies.Length];
-            double equalWeight = 1.0 / strategies.Length;
-            for (int i = 0; i < strategyWeights.Length; i++)
-                strategyWeights[i] = equalWeight;
+            // Create tuple array from provided strategies and weights
+            if (strategyWeights == null)
+            {
+                // Equal weights if not specified
+                double equalWeight = 1.0 / strategies.Length;
+                strategyTuples = Enumerable.Range(0, strategies.Length)
+                    .Select(i => (strategies[i], equalWeight))
+                    .ToArray();
+            }
+            else
+            {
+                if (strategies.Length != strategyWeights.Length)
+                {
+                    throw new ArgumentException(
+                        $"Number of strategies ({strategies.Length}) must match number of weights ({strategyWeights.Length})");
+                }
+                // Zip strategies with weights from Vector
+                strategyTuples = Enumerable.Range(0, strategies.Length)
+                    .Select(i => (strategies[i], Convert.ToDouble(strategyWeights[i])))
+                    .ToArray();
+            }
         }
 
-        return new HybridDistillationStrategy<T>(strategies, strategyWeights, temperature, alpha);
+        return new HybridDistillationStrategy<T>(strategyTuples, temperature, alpha);
     }
 
     /// <summary>
@@ -211,9 +242,11 @@ public static class DistillationStrategyFactory<T>
         private double _alpha = 0.3;
         private double? _featureWeight;
         private double? _attentionWeight;
-        private ContrastiveLossType? _contrastiveLossType;
-        private IDistillationStrategy<Vector<TNum>, TNum>[]? _strategies;
-        private double[]? _strategyWeights;
+        private ContrastiveMode? _contrastiveMode;
+        private Vector<string>? _featureLayerPairs;
+        private Vector<string>? _attentionLayers;
+        private Vector<IDistillationStrategy<Vector<TNum>, TNum>>? _strategies;
+        private Vector<double>? _strategyWeights;
 
         internal StrategyBuilder(DistillationStrategyType strategyType)
         {
@@ -244,15 +277,27 @@ public static class DistillationStrategyFactory<T>
             return this;
         }
 
-        public StrategyBuilder<TNum> WithContrastiveLossType(ContrastiveLossType lossType)
+        public StrategyBuilder<TNum> WithContrastiveMode(ContrastiveMode mode)
         {
-            _contrastiveLossType = lossType;
+            _contrastiveMode = mode;
+            return this;
+        }
+
+        public StrategyBuilder<TNum> WithFeatureLayerPairs(Vector<string> layerPairs)
+        {
+            _featureLayerPairs = layerPairs;
+            return this;
+        }
+
+        public StrategyBuilder<TNum> WithAttentionLayers(Vector<string> layers)
+        {
+            _attentionLayers = layers;
             return this;
         }
 
         public StrategyBuilder<TNum> WithStrategies(
-            IDistillationStrategy<Vector<TNum>, TNum>[] strategies,
-            double[]? weights = null)
+            Vector<IDistillationStrategy<Vector<TNum>, TNum>> strategies,
+            Vector<double>? weights = null)
         {
             _strategies = strategies;
             _strategyWeights = weights;
@@ -267,7 +312,9 @@ public static class DistillationStrategyFactory<T>
                 _alpha,
                 _featureWeight,
                 _attentionWeight,
-                _contrastiveLossType,
+                _contrastiveMode,
+                _featureLayerPairs,
+                _attentionLayers,
                 _strategies,
                 _strategyWeights);
         }

@@ -1,5 +1,6 @@
 using AiDotNet.Enums;
 using AiDotNet.Interfaces;
+using AiDotNet.LinearAlgebra;
 
 namespace AiDotNet.Models.Options;
 
@@ -68,7 +69,7 @@ public class KnowledgeDistillationOptions<T, TInput, TOutput>
     /// <para><b>For Ensemble Distillation:</b> Provide multiple teacher models.
     /// They will be automatically combined into an ensemble.</para>
     /// </remarks>
-    public ITeacherModel<TInput, TOutput>[]? Teachers { get; set; }
+    public Vector<ITeacherModel<TInput, TOutput>>? Teachers { get; set; }
 
     /// <summary>
     /// Gets or sets the teacher IFullModel (recommended approach).
@@ -109,7 +110,7 @@ public class KnowledgeDistillationOptions<T, TInput, TOutput>
     /// <para>Optional weights for each teacher. Must sum to 1.0.
     /// If null, uniform weights are used.</para>
     /// </remarks>
-    public double[]? EnsembleWeights { get; set; }
+    public Vector<double>? EnsembleWeights { get; set; }
 
     /// <summary>
     /// Gets or sets the distillation strategy instance (if using custom strategy).
@@ -248,7 +249,7 @@ public class KnowledgeDistillationOptions<T, TInput, TOutput>
     /// <para><b>For Feature-Based Distillation:</b> Specify which layers to match.
     /// Example: ["conv3:conv2", "conv4:conv3"]</para>
     /// </remarks>
-    public string[]? FeatureLayerPairs { get; set; }
+    public Vector<string>? FeatureLayerPairs { get; set; }
 
     /// <summary>
     /// Gets or sets weight for feature loss (if using feature-based distillation).
@@ -266,7 +267,7 @@ public class KnowledgeDistillationOptions<T, TInput, TOutput>
     /// <para><b>For Attention-Based Distillation:</b> Specify attention layers to match.
     /// Example: ["attention1", "attention2"]</para>
     /// </remarks>
-    public string[]? AttentionLayers { get; set; }
+    public Vector<string>? AttentionLayers { get; set; }
 
     /// <summary>
     /// Gets or sets weight for attention loss (if using attention-based distillation).
