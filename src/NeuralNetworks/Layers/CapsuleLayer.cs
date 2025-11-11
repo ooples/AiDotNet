@@ -30,8 +30,64 @@ namespace AiDotNet.NeuralNetworks.Layers;
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric type used for calculations, typically float or double.</typeparam>
-public class CapsuleLayer<T> : LayerBase<T>
+public class CapsuleLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
 {
+    /// <summary>
+    /// Gets or sets whether auxiliary loss (routing entropy regularization) should be used during training.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Routing entropy regularization encourages diversity in the routing coefficients by penalizing
+    /// low entropy distributions. This prevents routing from becoming too deterministic and helps
+    /// the capsule layer learn more robust features.
+    /// </para>
+    /// <para><b>For Beginners:</b> Routing regularization helps capsules make better decisions.
+    ///
+    /// In capsule networks:
+    /// - Routing coefficients decide how much information flows from lower to higher capsules
+    /// - If routing becomes too "certain" (all weight on one capsule), it might miss important patterns
+    /// - Entropy regularization encourages routing to consider multiple options
+    ///
+    /// Think of it like this:
+    /// - Without regularization: "This is 100% a face, ignore everything else"
+    /// - With regularization: "This is probably a face (80%), but could be other things (20%)"
+    ///
+    /// This helps the network:
+    /// - Learn more robust features
+    /// - Avoid overconfidence
+    /// - Generalize better to new examples
+    /// </para>
+    /// </remarks>
+    public bool UseAuxiliaryLoss { get; set; } = false;
+
+    /// <summary>
+    /// Gets or sets the weight for the routing entropy auxiliary loss.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// This weight controls how much the routing entropy regularization contributes to the total loss.
+    /// The total loss is: main_loss + (auxiliary_weight * entropy_loss).
+    /// Typical values range from 0.001 to 0.01.
+    /// </para>
+    /// <para><b>For Beginners:</b> This controls how much the network should encourage diverse routing.
+    ///
+    /// The weight determines the balance between:
+    /// - Task accuracy (main loss)
+    /// - Routing diversity (entropy loss)
+    ///
+    /// Common values:
+    /// - 0.005 (default): Balanced routing diversity
+    /// - 0.001-0.003: Light diversity enforcement
+    /// - 0.008-0.01: Strong diversity enforcement
+    ///
+    /// Higher values make routing more diverse but might reduce task performance.
+    /// Lower values allow more deterministic routing but might lead to overconfidence.
+    /// </para>
+    /// </remarks>
+    public T AuxiliaryLossWeight { get; set; }
+
+    private T _lastRoutingEntropyLoss;
+
     private readonly int _numCapsules;
     private readonly int _capsuleDimension;
     private readonly int _numRoutingIterations;
@@ -107,6 +163,9 @@ public class CapsuleLayer<T> : LayerBase<T>
         {
             throw new ArgumentException("Number of routing iterations must be at least 1.", nameof(numRoutingIterations));
         }
+
+        AuxiliaryLossWeight = NumOps.FromDouble(0.005);
+        _lastRoutingEntropyLoss = NumOps.Zero;
 
         _numCapsules = numCapsules;
         _capsuleDimension = capsuleDimension;
@@ -184,6 +243,147 @@ public class CapsuleLayer<T> : LayerBase<T>
         {
             tensor.SetFlatIndex(i, NumOps.Multiply(NumOps.FromDouble(Random.NextDouble() - 0.5), scale));
         }
+    }
+
+    /// <summary>
+    /// Computes the auxiliary loss for routing entropy regularization.
+    /// </summary>
+    /// <returns>The computed routing entropy auxiliary loss.</returns>
+    /// <remarks>
+    /// <para>
+    /// This method computes the entropy of the routing coefficients. Low entropy means the routing
+    /// is very deterministic (concentrating on one capsule), while high entropy means it's more
+    /// distributed across multiple capsules. We penalize low entropy to encourage diverse routing.
+    /// Entropy: H = -Σ(p * log(p)) where p are the routing coefficients.
+    /// We use negative entropy as loss since we want to maximize entropy (minimize -H).
+    /// </para>
+    /// <para><b>For Beginners:</b> This calculates how diverse the routing decisions are.
+    ///
+    /// Routing entropy works by:
+    /// 1. Looking at the routing coefficients (how information flows between capsules)
+    /// 2. Measuring how "spread out" these coefficients are
+    /// 3. Penalizing routing that's too concentrated on one capsule
+    /// 4. Encouraging routing that considers multiple capsules
+    ///
+    /// Entropy is a measure of uncertainty/diversity:
+    /// - Low entropy: Very certain, concentrated (e.g., [0.99, 0.01, 0.00])
+    /// - High entropy: Uncertain, diverse (e.g., [0.33, 0.33, 0.34])
+    ///
+    /// By encouraging higher entropy, we prevent the network from becoming overconfident
+    /// and help it learn more robust features that work in different situations.
+    /// </para>
+    /// </remarks>
+    public T ComputeAuxiliaryLoss()
+    {
+        if (!UseAuxiliaryLoss || _lastCouplingCoefficients == null)
+        {
+            _lastRoutingEntropyLoss = NumOps.Zero;
+            return NumOps.Zero;
+        }
+
+        // Compute negative entropy of routing coefficients: -Σ(p * log(p))
+        // We use negative entropy because we want to maximize entropy (minimize -entropy)
+        T totalNegativeEntropy = NumOps.Zero;
+        int numDistributions = 0;
+
+        // Iterate over all routing coefficient distributions
+        int flatSize = _lastCouplingCoefficients.Shape.Aggregate(1, (acc, dim) => acc * dim);
+        int distributionSize = _numCapsules; // Each distribution is over output capsules
+
+        for (int i = 0; i < flatSize; i += distributionSize)
+        {
+            T entropy = NumOps.Zero;
+            for (int j = 0; j < distributionSize; j++)
+            {
+                T coeff = _lastCouplingCoefficients.GetFlatIndexValue(i + j);
+
+                // Skip zero or very small coefficients to avoid log(0)
+                if (NumOps.LessThan(coeff, NumOps.FromDouble(1e-10)))
+                    continue;
+
+                // H = -Σ(p * log(p))
+                T logCoeff = NumOps.Log(coeff);
+                T term = NumOps.Multiply(coeff, logCoeff);
+                entropy = NumOps.Subtract(entropy, term); // Add -p*log(p)
+            }
+
+            // We want to maximize entropy, so we minimize -entropy
+            totalNegativeEntropy = NumOps.Subtract(totalNegativeEntropy, entropy);
+            numDistributions++;
+        }
+
+        // Average over all distributions
+        if (numDistributions > 0)
+        {
+            totalNegativeEntropy = NumOps.Divide(totalNegativeEntropy, NumOps.FromDouble(numDistributions));
+        }
+
+        // Store unweighted loss for diagnostics
+        _lastRoutingEntropyLoss = totalNegativeEntropy;
+
+        // Return weighted auxiliary loss
+        return NumOps.Multiply(AuxiliaryLossWeight, totalNegativeEntropy);
+    }
+
+    /// <summary>
+    /// Gets diagnostic information about the routing entropy auxiliary loss.
+    /// </summary>
+    /// <returns>A dictionary containing diagnostic information about routing regularization.</returns>
+    /// <remarks>
+    /// <para>
+    /// This method returns detailed diagnostics about the routing entropy regularization, including
+    /// the computed entropy loss, weight applied, and whether the feature is enabled.
+    /// This information is useful for monitoring training progress and debugging.
+    /// </para>
+    /// <para><b>For Beginners:</b> This provides information about how routing regularization is working.
+    ///
+    /// The diagnostics include:
+    /// - Total routing entropy loss (how concentrated routing is)
+    /// - Weight applied to the entropy loss
+    /// - Whether routing regularization is enabled
+    /// - Number of routing iterations being used
+    ///
+    /// This helps you:
+    /// - Monitor if routing is becoming too deterministic
+    /// - Debug issues with capsule layer learning
+    /// - Understand the impact of entropy regularization on routing
+    ///
+    /// You can use this information to adjust the auxiliary loss weight or
+    /// routing iterations for better results.
+    /// </para>
+    /// </remarks>
+    public Dictionary<string, string> GetAuxiliaryLossDiagnostics()
+    {
+        return new Dictionary<string, string>
+        {
+            { "TotalRoutingEntropyLoss", $"{_lastRoutingEntropyLoss}" },
+            { "EntropyWeight", $"{AuxiliaryLossWeight}" },
+            { "UseRoutingRegularization", UseAuxiliaryLoss.ToString() },
+            { "NumRoutingIterations", _numRoutingIterations.ToString() },
+            { "RoutingCoefficientsCached", (_lastCouplingCoefficients != null).ToString() }
+        };
+    }
+
+    /// <summary>
+    /// Gets diagnostic information about this component's state and behavior.
+    /// Overrides <see cref="LayerBase{T}.GetDiagnostics"/> to include auxiliary loss diagnostics.
+    /// </summary>
+    /// <returns>
+    /// A dictionary containing diagnostic metrics including both base layer diagnostics and
+    /// auxiliary loss diagnostics from <see cref="GetAuxiliaryLossDiagnostics"/>.
+    /// </returns>
+    public override Dictionary<string, string> GetDiagnostics()
+    {
+        var diagnostics = base.GetDiagnostics();
+
+        // Merge auxiliary loss diagnostics
+        var auxDiagnostics = GetAuxiliaryLossDiagnostics();
+        foreach (var kvp in auxDiagnostics)
+        {
+            diagnostics[kvp.Key] = kvp.Value;
+        }
+
+        return diagnostics;
     }
 
     /// <summary>
