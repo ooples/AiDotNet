@@ -661,6 +661,10 @@ public class DecimalOperations : INumericOperations<decimal>
     /// <summary>
     /// Converts a decimal value to Half (FP16) precision.
     /// </summary>
+    /// <remarks>
+    /// Warning: Decimal has a much larger range than Half. Values outside [-65504, 65504] will overflow to infinity.
+    /// This conversion may also lose significant precision.
+    /// </remarks>
     public Half ToHalf(decimal value) => (Half)value;
 
     /// <summary>
