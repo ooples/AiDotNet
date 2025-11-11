@@ -488,7 +488,7 @@ git rebase -i HEAD~5  # Interactive rebase last 5 commits
 
 If you have questions about conventional commits:
 
-1. Check this guide and [VERSIONING.md](.github/VERSIONING.md)
+1. Check this guide and [VERSIONING.md](VERSIONING.md)
 2. Review examples in project commit history: `git log --oneline -20`
 3. Ask in pull request reviews
 4. Open a discussion on GitHub
