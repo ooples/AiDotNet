@@ -299,18 +299,223 @@ public class GradientCorrectnessTests
         }
     }
 
-    /// <summary>
-    /// Helper method to verify numerical gradients using finite differences.
-    /// This provides an additional check that both manual and autodiff are correct.
-    /// </summary>
-    private void VerifyGradientsWithFiniteDifferences<T>(
-        LayerBase<T> layer,
-        Tensor<T> input,
-        Tensor<T> computedGradient,
-        double epsilon = 1e-5)
+    [Fact]
+    public void AddLayer_AutodiffGradients_MatchManualGradients()
     {
-        // TODO: Implement numerical gradient checking
-        // This would use (f(x + epsilon) - f(x - epsilon)) / (2 * epsilon)
-        // to compute numerical approximation of gradient and compare
+        // Arrange
+        var shape = new[] { 4, 6 };
+        var layer = new AddLayer<float>(shape);
+
+        var input1 = CreateRandomTensor(shape);
+        var input2 = CreateRandomTensor(shape);
+        var outputGradient = CreateRandomTensor(shape);
+
+        // Act - Manual gradients
+        layer.UseAutodiff = false;
+        layer.Forward(new[] { input1, input2 });
+        var manualGradients = layer.Backward(outputGradient);
+
+        layer.ResetState();
+
+        // Act - Autodiff gradients
+        layer.UseAutodiff = true;
+        layer.Forward(new[] { input1, input2 });
+        var autodiffGradients = layer.Backward(outputGradient);
+
+        // Assert - Both input gradients should match
+        Assert.Equal(2, manualGradients.Length);
+        Assert.Equal(2, autodiffGradients.Length);
+
+        for (int inputIdx = 0; inputIdx < 2; inputIdx++)
+        {
+            var manual = manualGradients[inputIdx];
+            var autodiff = autodiffGradients[inputIdx];
+
+            Assert.Equal(manual.Shape, autodiff.Shape);
+
+            for (int i = 0; i < manual.Length; i++)
+            {
+                var diff = Math.Abs(manual[i] - autodiff[i]);
+                Assert.True(diff < Tolerance,
+                    $"AddLayer gradient mismatch at input {inputIdx}, index {i}: manual={manual[i]}, autodiff={autodiff[i]}");
+            }
+        }
+    }
+
+    [Fact]
+    public void MultiplyLayer_AutodiffGradients_MatchManualGradients()
+    {
+        // Arrange
+        var shape = new[] { 3, 5 };
+        var layer = new MultiplyLayer<float>(shape);
+
+        var input1 = CreateRandomTensor(shape);
+        var input2 = CreateRandomTensor(shape);
+        var outputGradient = CreateRandomTensor(shape);
+
+        // Act - Manual gradients
+        layer.UseAutodiff = false;
+        layer.Forward(new[] { input1, input2 });
+        var manualGradients = layer.Backward(outputGradient);
+
+        layer.ResetState();
+
+        // Act - Autodiff gradients
+        layer.UseAutodiff = true;
+        layer.Forward(new[] { input1, input2 });
+        var autodiffGradients = layer.Backward(outputGradient);
+
+        // Assert
+        Assert.Equal(2, manualGradients.Length);
+        Assert.Equal(2, autodiffGradients.Length);
+
+        for (int inputIdx = 0; inputIdx < 2; inputIdx++)
+        {
+            var manual = manualGradients[inputIdx];
+            var autodiff = autodiffGradients[inputIdx];
+
+            Assert.Equal(manual.Shape, autodiff.Shape);
+
+            for (int i = 0; i < manual.Length; i++)
+            {
+                var diff = Math.Abs(manual[i] - autodiff[i]);
+                Assert.True(diff < Tolerance,
+                    $"MultiplyLayer gradient mismatch at input {inputIdx}, index {i}: manual={manual[i]}, autodiff={autodiff[i]}");
+            }
+        }
+    }
+
+    [Fact]
+    public void ResidualLayer_AutodiffGradients_MatchManualGradients()
+    {
+        // Arrange
+        var shape = new[] { 2, 8 };
+        var innerLayer = new DenseLayer<float>(8, 8, new ReLUActivation<float>());
+        var layer = new ResidualLayer<float>(shape, innerLayer);
+
+        var input = CreateRandomTensor(shape);
+        var outputGradient = CreateRandomTensor(shape);
+
+        // Act - Manual gradients
+        layer.UseAutodiff = false;
+        innerLayer.UseAutodiff = false;
+        layer.Forward(input);
+        var manualGradient = layer.Backward(outputGradient);
+
+        layer.ResetState();
+        innerLayer.ResetState();
+
+        // Act - Autodiff gradients
+        layer.UseAutodiff = true;
+        innerLayer.UseAutodiff = true;
+        layer.Forward(input);
+        var autodiffGradient = layer.Backward(outputGradient);
+
+        // Assert
+        Assert.Equal(manualGradient.Shape, autodiffGradient.Shape);
+
+        for (int i = 0; i < manualGradient.Length; i++)
+        {
+            var diff = Math.Abs(manualGradient[i] - autodiffGradient[i]);
+            Assert.True(diff < Tolerance,
+                $"ResidualLayer gradient mismatch at index {i}: manual={manualGradient[i]}, autodiff={autodiffGradient[i]}");
+        }
+    }
+
+    [Fact]
+    public void LayerNormalizationLayer_AutodiffGradients_MatchManualGradients()
+    {
+        // Arrange
+        const int features = 6;
+        const int batchSize = 4;
+        var shape = new[] { batchSize, features };
+
+        var layer = new LayerNormalizationLayer<float>(features);
+
+        var input = CreateRandomTensor(shape);
+        var outputGradient = CreateRandomTensor(shape);
+
+        // Act - Manual gradients
+        layer.UseAutodiff = false;
+        layer.Forward(input);
+        var manualGradient = layer.Backward(outputGradient);
+
+        layer.ResetState();
+
+        // Act - Autodiff gradients
+        layer.UseAutodiff = true;
+        layer.Forward(input);
+        var autodiffGradient = layer.Backward(outputGradient);
+
+        // Assert
+        Assert.Equal(manualGradient.Shape, autodiffGradient.Shape);
+
+        for (int i = 0; i < manualGradient.Length; i++)
+        {
+            var diff = Math.Abs(manualGradient[i] - autodiffGradient[i]);
+            Assert.True(diff < Tolerance,
+                $"LayerNorm gradient mismatch at index {i}: manual={manualGradient[i]}, autodiff={autodiffGradient[i]}");
+        }
+    }
+
+    [Fact]
+    public void MultiLayerNetwork_AutodiffGradients_MatchManualGradients()
+    {
+        // Arrange - Create a small network: Dense -> ReLU -> Dense
+        const int inputSize = 8;
+        const int hiddenSize = 6;
+        const int outputSize = 4;
+        const int batchSize = 3;
+
+        var dense1 = new DenseLayer<float>(inputSize, hiddenSize, new ReLUActivation<float>());
+        var dense2 = new DenseLayer<float>(hiddenSize, outputSize, new ReLUActivation<float>());
+
+        var input = CreateRandomTensor(new[] { batchSize, inputSize });
+        var outputGradient = CreateRandomTensor(new[] { batchSize, outputSize });
+
+        // Act - Manual gradients
+        dense1.UseAutodiff = false;
+        dense2.UseAutodiff = false;
+
+        var hidden = dense1.Forward(input);
+        var output = dense2.Forward(hidden);
+        var grad2 = dense2.Backward(outputGradient);
+        var manualGradient = dense1.Backward(grad2);
+
+        dense1.ResetState();
+        dense2.ResetState();
+
+        // Act - Autodiff gradients
+        dense1.UseAutodiff = true;
+        dense2.UseAutodiff = true;
+
+        hidden = dense1.Forward(input);
+        output = dense2.Forward(hidden);
+        grad2 = dense2.Backward(outputGradient);
+        var autodiffGradient = dense1.Backward(grad2);
+
+        // Assert
+        Assert.Equal(manualGradient.Shape, autodiffGradient.Shape);
+
+        for (int i = 0; i < manualGradient.Length; i++)
+        {
+            var diff = Math.Abs(manualGradient[i] - autodiffGradient[i]);
+            Assert.True(diff < Tolerance,
+                $"Multi-layer gradient mismatch at index {i}: manual={manualGradient[i]}, autodiff={autodiffGradient[i]}");
+        }
+    }
+
+    /// <summary>
+    /// Helper to create random tensors for testing.
+    /// </summary>
+    private static Tensor<float> CreateRandomTensor(int[] shape)
+    {
+        var tensor = new Tensor<float>(shape);
+        var random = new Random(42);
+        for (int i = 0; i < tensor.Length; i++)
+        {
+            tensor[i] = (float)(random.NextDouble() * 2 - 1);
+        }
+        return tensor;
     }
 }
