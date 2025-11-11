@@ -47,8 +47,8 @@ public class TeacherModelFactoryTests
         var model2 = new MockFullModel(inputDim: 10, outputDim: 5);
         var teachers = new[]
         {
-            new TeacherModelWrapper<double>(model1),
-            new TeacherModelWrapper<double>(model2)
+            new TeacherModelWrapper<double>(model1, outputDimension: 5),
+            new TeacherModelWrapper<double>(model2, outputDimension: 5)
         };
 
         // Act
@@ -111,8 +111,8 @@ public class TeacherModelFactoryTests
         var model2 = new MockFullModel(inputDim: 10, outputDim: 5);
         var teachers = new[]
         {
-            new TeacherModelWrapper<double>(model1),
-            new TeacherModelWrapper<double>(model2)
+            new TeacherModelWrapper<double>(model1, outputDimension: 5),
+            new TeacherModelWrapper<double>(model2, outputDimension: 5)
         };
 
         // Act
@@ -211,8 +211,8 @@ public class TeacherModelFactoryTests
         var model2 = new MockFullModel(inputDim: 10, outputDim: 5);
         var teachers = new[]
         {
-            new TeacherModelWrapper<double>(model1),
-            new TeacherModelWrapper<double>(model2)
+            new TeacherModelWrapper<double>(model1, outputDimension: 5),
+            new TeacherModelWrapper<double>(model2, outputDimension: 5)
         };
 
         // Act
@@ -231,11 +231,16 @@ public class TeacherModelFactoryTests
         private readonly int _inputDim;
         private readonly int _outputDim;
         private readonly Random _random = new Random(42);
+        private readonly HashSet<int> _activeFeatures = new();
 
         public MockFullModel(int inputDim, int outputDim)
         {
             _inputDim = inputDim;
             _outputDim = outputDim;
+
+            // Initialize with all features active
+            for (int i = 0; i < inputDim; i++)
+                _activeFeatures.Add(i);
         }
 
         public Vector<double> Predict(Vector<double> input)
@@ -265,5 +270,81 @@ public class TeacherModelFactoryTests
 
         public void SaveState(Stream stream) { }
         public void LoadState(Stream stream) { }
+
+        public byte[] Serialize() => Array.Empty<byte>();
+        public void Deserialize(byte[] data) { }
+        public void SaveModel(string filePath) { }
+        public void LoadModel(string filePath) { }
+
+        // IFeatureAware implementation
+        public IEnumerable<int> GetActiveFeatureIndices() => _activeFeatures;
+
+        public void SetActiveFeatureIndices(IEnumerable<int> featureIndices)
+        {
+            _activeFeatures.Clear();
+            foreach (var idx in featureIndices)
+                _activeFeatures.Add(idx);
+        }
+
+        public bool IsFeatureUsed(int featureIndex) => _activeFeatures.Contains(featureIndex);
+
+        // IFeatureImportance implementation
+        public Dictionary<string, double> GetFeatureImportance()
+        {
+            var importance = new Dictionary<string, double>();
+            for (int i = 0; i < _inputDim; i++)
+                importance[$"feature_{i}"] = 1.0 / _inputDim;
+            return importance;
+        }
+
+        // ICloneable implementation
+        public IFullModel<double, Vector<double>, Vector<double>> DeepCopy()
+        {
+            var copy = new MockFullModel(_inputDim, _outputDim);
+            copy.SetActiveFeatureIndices(_activeFeatures);
+            return copy;
+        }
+
+        public IFullModel<double, Vector<double>, Vector<double>> Clone()
+        {
+            return new MockFullModel(_inputDim, _outputDim);
+        }
+
+        // IGradientComputable implementation
+        public Vector<double> ComputeGradients(Vector<double> input, Vector<double> target, ILossFunction<double>? lossFunction = null)
+        {
+            // Return dummy gradients for testing
+            return new Vector<double>(_inputDim * _outputDim);
+        }
+
+        public void ApplyGradients(Vector<double> gradients, double learningRate)
+        {
+            // Placeholder - do nothing for mock
+        }
+
+        // DefaultLossFunction property
+        public ILossFunction<double> DefaultLossFunction =>
+            throw new InvalidOperationException("Mock model does not have a default loss function");
+
+        // IParameterizable implementation
+        public Vector<double> GetParameters()
+        {
+            // Return dummy parameters for testing
+            return new Vector<double>(_inputDim * _outputDim);
+        }
+
+        public void SetParameters(Vector<double> parameters)
+        {
+            // Placeholder - do nothing for mock
+        }
+
+        public int ParameterCount => _inputDim * _outputDim;
+
+        public IFullModel<double, Vector<double>, Vector<double>> WithParameters(Vector<double> parameters)
+        {
+            var copy = new MockFullModel(_inputDim, _outputDim);
+            copy.SetParameters(parameters);
+            return copy;
+        }
     }
 }
