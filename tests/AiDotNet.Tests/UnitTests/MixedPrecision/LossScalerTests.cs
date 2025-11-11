@@ -98,10 +98,10 @@ public class LossScalerTests
         scaler.UnscaleGradients(gradients);
 
         // Assert
-        Assert.Equal(1.0f, gradients._data[0], precision: 5);
-        Assert.Equal(2.0f, gradients._data[1], precision: 5);
-        Assert.Equal(3.0f, gradients._data[2], precision: 5);
-        Assert.Equal(4.0f, gradients._data[3], precision: 5);
+        Assert.Equal(1.0f, gradients.GetFlatIndexValue(0), precision: 5);
+        Assert.Equal(2.0f, gradients.GetFlatIndexValue(1), precision: 5);
+        Assert.Equal(3.0f, gradients.GetFlatIndexValue(2), precision: 5);
+        Assert.Equal(4.0f, gradients.GetFlatIndexValue(3), precision: 5);
     }
 
     [Fact]
