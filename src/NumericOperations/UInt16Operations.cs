@@ -663,7 +663,7 @@ public class UInt16Operations : INumericOperations<ushort>
     /// <summary>
     /// Converts a float value to ushort.
     /// </summary>
-    public ushort FromFloat(float value) => (ushort)Math.Clamp((int)Math.Round(value), ushort.MinValue, ushort.MaxValue);
+    public ushort FromFloat(float value) => (ushort)MathExtensions.Clamp((int)Math.Round(value), ushort.MinValue, ushort.MaxValue);
 
 #if NET5_0_OR_GREATER
     /// <summary>
@@ -674,7 +674,7 @@ public class UInt16Operations : INumericOperations<ushort>
     /// <summary>
     /// Converts a Half value to ushort.
     /// </summary>
-    public ushort FromHalf(Half value) => (ushort)Math.Clamp((int)Math.Round((float)value), ushort.MinValue, ushort.MaxValue);
+    public ushort FromHalf(Half value) => (ushort)MathExtensions.Clamp((int)Math.Round((float)value), ushort.MinValue, ushort.MaxValue);
 #endif
 
     /// <summary>
@@ -682,4 +682,3 @@ public class UInt16Operations : INumericOperations<ushort>
     /// </summary>
     public double ToDouble(ushort value) => (double)value;
 }
-#endif

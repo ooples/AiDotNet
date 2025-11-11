@@ -689,7 +689,7 @@ public class Int32Operations : INumericOperations<int>
     /// <remarks>
     /// This conversion will round the float to the nearest integer and clamp it to the int range.
     /// </remarks>
-    public int FromFloat(float value) => (int)Math.Clamp((long)Math.Round(value), int.MinValue, int.MaxValue);
+    public int FromFloat(float value) => (int)MathExtensions.Clamp((long)Math.Round(value), int.MinValue, int.MaxValue);
 
 #if NET5_0_OR_GREATER
     /// <summary>
@@ -717,4 +717,3 @@ public class Int32Operations : INumericOperations<int>
     /// <returns>The value as a double.</returns>
     public double ToDouble(int value) => (double)value;
 }
-#endif

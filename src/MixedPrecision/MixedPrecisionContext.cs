@@ -1,3 +1,4 @@
+using System;
 using AiDotNet.LinearAlgebra;
 
 namespace AiDotNet.MixedPrecision;
@@ -141,8 +142,10 @@ public class MixedPrecisionContext : IDisposable
             throw new InvalidOperationException("Context is already initialized. Call Reset() first if you want to re-initialize.");
         }
 
-        foreach (var (name, parameters) in namedParameters)
+        foreach (var kvp in namedParameters)
         {
+            var name = kvp.Key;
+            var parameters = kvp.Value;
             _masterWeights[name] = parameters.Clone() as Vector<float>
                 ?? throw new InvalidOperationException($"Failed to clone parameters '{name}'.");
             ParameterCount += parameters.Length;
@@ -166,8 +169,10 @@ public class MixedPrecisionContext : IDisposable
             throw new InvalidOperationException("Context not initialized. Call Initialize() first.");
         }
 
-        foreach (var (name, masterParams) in _masterWeights)
+        foreach (var kvp in _masterWeights)
         {
+            var name = kvp.Key;
+            var masterParams = kvp.Value;
             // Convert FP32 master to FP16 working
             var workingParams = new Vector<Half>(masterParams.Length);
 

@@ -678,4 +678,3 @@ public class DecimalOperations : INumericOperations<decimal>
     /// </summary>
     public double ToDouble(decimal value) => (double)value;
 }
-#endif

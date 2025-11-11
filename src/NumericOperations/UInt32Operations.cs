@@ -672,7 +672,7 @@ public class UInt32Operations : INumericOperations<uint>
     /// <summary>
     /// Converts a float value to uint.
     /// </summary>
-    public uint FromFloat(float value) => (uint)Math.Clamp((long)Math.Round(value), uint.MinValue, uint.MaxValue);
+    public uint FromFloat(float value) => (uint)MathExtensions.Clamp((long)Math.Round(value), uint.MinValue, uint.MaxValue);
 
 #if NET5_0_OR_GREATER
     /// <summary>
@@ -683,7 +683,7 @@ public class UInt32Operations : INumericOperations<uint>
     /// <summary>
     /// Converts a Half value to uint.
     /// </summary>
-    public uint FromHalf(Half value) => (uint)Math.Clamp((long)Math.Round((float)value), uint.MinValue, uint.MaxValue);
+    public uint FromHalf(Half value) => (uint)MathExtensions.Clamp((long)Math.Round((float)value), uint.MinValue, uint.MaxValue);
 #endif
 
     /// <summary>
@@ -691,4 +691,3 @@ public class UInt32Operations : INumericOperations<uint>
     /// </summary>
     public double ToDouble(uint value) => (double)value;
 }
-#endif

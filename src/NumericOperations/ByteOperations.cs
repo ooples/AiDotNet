@@ -1,3 +1,5 @@
+using System;
+
 namespace AiDotNet.NumericOperations;
 
 /// <summary>
@@ -597,11 +599,6 @@ public class ByteOperations : INumericOperations<byte>
         return 0;
     }
 
-    /// <summary>
-    /// Gets the number of bits used for precision in byte (8 bits).
-using System;
-
-namespace AiDotNet.NumericOperations;
 
     /// <summary>
     /// Gets the number of bits used for precision in byte (8 bits).
@@ -623,8 +620,9 @@ namespace AiDotNet.NumericOperations;
     /// <remarks>
     /// This conversion will round the float to the nearest integer and clamp it to the byte range [0, 255].
     /// </remarks>
-    public byte FromFloat(float value) => (byte)Math.Clamp((int)Math.Round(value), byte.MinValue, byte.MaxValue);
+    public byte FromFloat(float value) => (byte)MathExtensions.Clamp((int)Math.Round(value), byte.MinValue, byte.MaxValue);
 
+#if NET5_0_OR_GREATER
     /// <summary>
     /// Converts a byte value to Half (FP16) precision.
     /// </summary>
@@ -640,7 +638,8 @@ namespace AiDotNet.NumericOperations;
     /// <remarks>
     /// This conversion will round the Half to the nearest integer and clamp it to the byte range [0, 255].
     /// </remarks>
-    public byte FromHalf(Half value) => (byte)Math.Clamp((int)Math.Round((float)value), byte.MinValue, byte.MaxValue);
+    public byte FromHalf(Half value) => (byte)MathExtensions.Clamp((int)Math.Round((float)value), byte.MinValue, byte.MaxValue);
+#endif
 
     /// <summary>
     /// Converts a byte value to double (FP64) precision.

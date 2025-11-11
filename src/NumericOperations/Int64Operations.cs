@@ -733,7 +733,7 @@ public class Int64Operations : INumericOperations<long>
     /// This conversion will round the float to the nearest integer.
     /// Values outside the long range will be clamped.
     /// </remarks>
-    public long FromFloat(float value) => (long)Math.Clamp(Math.Round(value), long.MinValue, long.MaxValue);
+    public long FromFloat(float value) => (long)MathExtensions.Clamp(Math.Round(value), long.MinValue, long.MaxValue);
 
 #if NET5_0_OR_GREATER
     /// <summary>
@@ -764,4 +764,3 @@ public class Int64Operations : INumericOperations<long>
     /// <returns>The value as a double.</returns>
     public double ToDouble(long value) => (double)value;
 }
-#endif
