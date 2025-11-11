@@ -414,10 +414,42 @@ public class PoolingLayer<T> : LayerBase<T>
     /// </remarks>
     private Tensor<T> BackwardViaAutodiff(Tensor<T> outputGradient)
     {
-        // TODO: Implement autodiff backward pass once pooling operations are available in TensorOperations
-        // Pooling operation not yet available in TensorOperations
-        // Falling back to manual implementation
-        return BackwardManual(outputGradient);
+        if (_lastInput == null)
+            throw new InvalidOperationException("Forward pass must be called before backward pass.");
+
+        // Convert input to computation node
+        var inputNode = Autodiff.TensorOperations<T>.Variable(_lastInput, "input", requiresGradient: true);
+
+        // Forward pass using autodiff pooling operations
+        var poolSize = new int[] { PoolSize, PoolSize };
+        var strides = new int[] { Stride, Stride };
+
+        Autodiff.ComputationNode<T> outputNode;
+        if (Type == PoolingType.Max)
+        {
+            // Use MaxPool2D for max pooling
+            outputNode = Autodiff.TensorOperations<T>.MaxPool2D(inputNode, poolSize, strides);
+        }
+        else
+        {
+            // Use AvgPool2D for average pooling
+            outputNode = Autodiff.TensorOperations<T>.AvgPool2D(inputNode, poolSize, strides);
+        }
+
+        // Perform backward pass
+        outputNode.Gradient = outputGradient;
+        var topoOrder = GetTopologicalOrder(outputNode);
+        for (int i = topoOrder.Count - 1; i >= 0; i--)
+        {
+            var node = topoOrder[i];
+            if (node.RequiresGradient && node.BackwardFunction != null && node.Gradient != null)
+            {
+                node.BackwardFunction(node.Gradient);
+            }
+        }
+
+        // Extract input gradient
+        return inputNode.Gradient ?? throw new InvalidOperationException("Gradient computation failed.");
     }
 
     /// <summary>

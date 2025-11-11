@@ -421,60 +421,38 @@ public class BatchNormalizationLayer<T> : LayerBase<T>
     /// </remarks>
     private Tensor<T> BackwardViaAutodiff(Tensor<T> outputGradient)
     {
-        if (_lastInput == null || _lastMean == null || _lastVariance == null)
+        if (_lastInput == null)
             throw new InvalidOperationException("Forward pass must be called before backward pass.");
 
-        int batchSize = _lastInput.Shape[0];
         int featureSize = _lastInput.Shape[1];
 
         // Convert to computation nodes
-        var input = Autodiff.TensorOperations<T>.Variable(_lastInput, "input", requiresGradient: true);
+        var inputNode = Autodiff.TensorOperations<T>.Variable(_lastInput, "input", requiresGradient: true);
 
         // Convert gamma and beta to tensors for autodiff
         var gammaTensor = VectorToTensor(_gamma);
         var betaTensor = VectorToTensor(_beta);
-        var gamma = Autodiff.TensorOperations<T>.Variable(gammaTensor, "gamma", requiresGradient: true);
-        var beta = Autodiff.TensorOperations<T>.Variable(betaTensor, "beta", requiresGradient: true);
+        var gammaNode = Autodiff.TensorOperations<T>.Variable(gammaTensor, "gamma", requiresGradient: true);
+        var betaNode = Autodiff.TensorOperations<T>.Variable(betaTensor, "beta", requiresGradient: true);
 
-        // Convert mean and variance to tensors and broadcast
-        var meanTensor = VectorToTensor(_lastMean);
-        var varianceTensor = VectorToTensor(_lastVariance);
-        var meanBroadcast = BroadcastVector(meanTensor, batchSize);
-        var varianceBroadcast = BroadcastVector(varianceTensor, batchSize);
-        var gammaBroadcast = BroadcastVector(gammaTensor, batchSize);
-        var betaBroadcast = BroadcastVector(betaTensor, batchSize);
+        // Convert running statistics to tensors
+        var runningMeanTensor = VectorToTensor(_runningMean);
+        var runningVarTensor = VectorToTensor(_runningVariance);
 
-        var meanNode = Autodiff.TensorOperations<T>.Variable(meanBroadcast, "mean", requiresGradient: false);
-        var varianceNode = Autodiff.TensorOperations<T>.Variable(varianceBroadcast, "variance", requiresGradient: false);
-        var gammaNode = Autodiff.TensorOperations<T>.Variable(gammaBroadcast, "gamma_broadcast", requiresGradient: false);
-        var betaNode = Autodiff.TensorOperations<T>.Variable(betaBroadcast, "beta_broadcast", requiresGradient: false);
+        // Forward pass using autodiff BatchNorm operation
+        var outputNode = Autodiff.TensorOperations<T>.BatchNorm(
+            inputNode,
+            gammaNode,
+            betaNode,
+            runningMeanTensor,
+            runningVarTensor,
+            IsTrainingMode,
+            _epsilon
+        );
 
-        // Forward computation using autodiff ops
-        // normalized = (input - mean) / sqrt(variance + epsilon)
-        var centered = Autodiff.TensorOperations<T>.Subtract(input, meanNode);
-
-        var epsilonTensor = new Tensor<T>(new int[] { 1 });
-        epsilonTensor[0] = _epsilon;
-        var epsilonNode = Autodiff.TensorOperations<T>.Variable(epsilonTensor, "epsilon", requiresGradient: false);
-        var variancePlusEpsilon = Autodiff.TensorOperations<T>.Add(varianceNode, epsilonNode);
-
-        // For sqrt, we need to implement it using available operations
-        // Since we don't have a direct sqrt operation, we'll work around it
-        // by using the normalized values we already computed
-        var normalizedFromForward = _lastNormalized!;
-        var normalizedNode = Autodiff.TensorOperations<T>.Variable(normalizedFromForward, "normalized", requiresGradient: false);
-
-        // output = gamma * normalized + beta
-        var scaled = Autodiff.TensorOperations<T>.ElementwiseMultiply(gammaNode, normalizedNode);
-        var output = Autodiff.TensorOperations<T>.Add(scaled, betaNode);
-
-        // Set the gradient at the output
-        output.Gradient = outputGradient;
-
-        // Perform topological sort and backward pass
-        var topoOrder = GetTopologicalOrder(output);
-
-        // Execute backward pass in reverse topological order
+        // Perform backward pass
+        outputNode.Gradient = outputGradient;
+        var topoOrder = GetTopologicalOrder(outputNode);
         for (int i = topoOrder.Count - 1; i >= 0; i--)
         {
             var node = topoOrder[i];
@@ -484,24 +462,11 @@ public class BatchNormalizationLayer<T> : LayerBase<T>
             }
         }
 
-        // Extract gradients - we need to sum gamma and beta gradients across batch dimension
-        _gammaGradient = new Vector<T>(featureSize);
-        _betaGradient = new Vector<T>(featureSize);
+        // Extract gradients
+        _gammaGradient = TensorToVector(gammaNode.Gradient ?? throw new InvalidOperationException("Gamma gradient is null."));
+        _betaGradient = TensorToVector(betaNode.Gradient ?? throw new InvalidOperationException("Beta gradient is null."));
 
-        // Since we used broadcast gamma/beta, we need to sum gradients across batch
-        var gammaGrad = gammaNode.Gradient!;
-        var betaGrad = betaNode.Gradient!;
-
-        for (int j = 0; j < featureSize; j++)
-        {
-            for (int i = 0; i < batchSize; i++)
-            {
-                _gammaGradient[j] = NumOps.Add(_gammaGradient[j], gammaGrad[i, j]);
-                _betaGradient[j] = NumOps.Add(_betaGradient[j], betaGrad[i, j]);
-            }
-        }
-
-        return input.Gradient!;
+        return inputNode.Gradient ?? throw new InvalidOperationException("Gradient computation failed.");
     }
 
     /// <summary>

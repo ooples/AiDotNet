@@ -60,6 +60,11 @@ public class MaxPoolingLayer<T> : LayerBase<T>
     private Tensor<int> _maxIndices;
 
     /// <summary>
+    /// Stores the last input tensor from the forward pass for use in autodiff backward pass.
+    /// </summary>
+    private Tensor<T>? _lastInput;
+
+    /// <summary>
     /// Creates a new max pooling layer with the specified parameters.
     /// </summary>
     /// <param name="inputShape">The shape of the input data (channels, height, width).</param>
@@ -117,6 +122,9 @@ public class MaxPoolingLayer<T> : LayerBase<T>
     {
         if (input.Shape.Length != 3)
             throw new ArgumentException("Input tensor must have 3 dimensions (channels, height, width)");
+
+        // Store input for autodiff backward pass
+        _lastInput = input;
 
         int channels = input.Shape[0];
         int inputHeight = input.Shape[1];
@@ -236,11 +244,8 @@ public class MaxPoolingLayer<T> : LayerBase<T>
     /// <returns>The gradient to pass to the previous layer.</returns>
     /// <remarks>
     /// <para>
-    /// This method uses automatic differentiation to compute gradients. Currently, max pooling operations
-    /// are not yet available in TensorOperations, so this method falls back to the manual implementation.
-    /// </para>
-    /// <para>
-    /// Once max pooling operations are added to TensorOperations, this method will provide:
+    /// This method uses automatic differentiation to compute gradients using the MaxPool2D
+    /// operation from TensorOperations. This provides:
     /// - Automatic gradient computation through the computation graph
     /// - Verification of manual gradient implementations
     /// - Support for rapid prototyping with custom modifications
@@ -248,10 +253,31 @@ public class MaxPoolingLayer<T> : LayerBase<T>
     /// </remarks>
     private Tensor<T> BackwardViaAutodiff(Tensor<T> outputGradient)
     {
-        // TODO: Implement autodiff backward pass once max pooling operations are available in TensorOperations
-        // Pooling operation not yet available in TensorOperations
-        // Falling back to manual implementation
-        return BackwardManual(outputGradient);
+        if (_lastInput == null)
+            throw new InvalidOperationException("Forward pass must be called before backward pass.");
+
+        // Convert input to computation node
+        var inputNode = Autodiff.TensorOperations<T>.Variable(_lastInput, "input", requiresGradient: true);
+
+        // Forward pass using autodiff MaxPool2D operation
+        var poolSize = new int[] { PoolSize, PoolSize };
+        var strides = new int[] { Strides, Strides };
+        var outputNode = Autodiff.TensorOperations<T>.MaxPool2D(inputNode, poolSize, strides);
+
+        // Perform backward pass
+        outputNode.Gradient = outputGradient;
+        var topoOrder = GetTopologicalOrder(outputNode);
+        for (int i = topoOrder.Count - 1; i >= 0; i--)
+        {
+            var node = topoOrder[i];
+            if (node.RequiresGradient && node.BackwardFunction != null && node.Gradient != null)
+            {
+                node.BackwardFunction(node.Gradient);
+            }
+        }
+
+        // Extract input gradient
+        return inputNode.Gradient ?? throw new InvalidOperationException("Gradient computation failed.");
     }
 
     /// <summary>
