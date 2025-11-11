@@ -201,8 +201,8 @@ public class LossScaler<T>
 
         for (int i = 0; i < gradients.Length; i++)
         {
-            T scaledValue = gradients._data[i];
-            gradients._data[i] = _numOps.Multiply(scaledValue, inverseScale);
+            T scaledValue = gradients.GetFlatIndexValue(i);
+            gradients.SetFlatIndex(i, _numOps.Multiply(scaledValue, inverseScale));
         }
     }
 
@@ -240,7 +240,7 @@ public class LossScaler<T>
     {
         for (int i = 0; i < gradients.Length; i++)
         {
-            if (HasOverflow(gradients._data[i]))
+            if (HasOverflow(gradients.GetFlatIndexValue(i)))
             {
                 return true;
             }
@@ -284,11 +284,20 @@ public class LossScaler<T>
     {
         _totalUpdates++;
 
-        // First unscale the gradients
-        UnscaleGradients(gradients);
+        // Combine unscaling and overflow check in single pass for better cache locality
+        T inverseScale = _numOps.FromDouble(1.0 / Scale);
+        bool hasOverflow = false;
 
-        // Check for overflow
-        bool hasOverflow = DetectOverflow(gradients);
+        for (int i = 0; i < gradients.Length; i++)
+        {
+            T unscaled = _numOps.Multiply(gradients.GetFlatIndexValue(i), inverseScale);
+            gradients.SetFlatIndex(i, unscaled);
+
+            if (!hasOverflow && (_numOps.IsNaN(unscaled) || _numOps.IsInfinity(unscaled)))
+            {
+                hasOverflow = true;
+            }
+        }
 
         if (hasOverflow)
         {
