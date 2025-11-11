@@ -691,6 +691,7 @@ public class Int32Operations : INumericOperations<int>
     /// </remarks>
     public int FromFloat(float value) => (int)Math.Clamp((long)Math.Round(value), int.MinValue, int.MaxValue);
 
+#if NET5_0_OR_GREATER
     /// <summary>
     /// Converts an int value to Half (FP16) precision.
     /// </summary>
@@ -707,6 +708,7 @@ public class Int32Operations : INumericOperations<int>
     /// This conversion will round the Half to the nearest integer.
     /// </remarks>
     public int FromHalf(Half value) => (int)Math.Round((float)value);
+#endif
 
     /// <summary>
     /// Converts an int value to double (FP64) precision.
@@ -715,3 +717,4 @@ public class Int32Operations : INumericOperations<int>
     /// <returns>The value as a double.</returns>
     public double ToDouble(int value) => (double)value;
 }
+#endif

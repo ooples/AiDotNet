@@ -1,3 +1,4 @@
+#if NET5_0_OR_GREATER
 using AiDotNet.Interfaces;
 
 namespace AiDotNet.NumericOperations;
@@ -228,3 +229,4 @@ public class HalfOperations : INumericOperations<Half>
     /// </remarks>
     public double ToDouble(Half value) => (double)value;
 }
+#endif

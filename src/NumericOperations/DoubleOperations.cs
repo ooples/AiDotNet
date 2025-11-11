@@ -695,6 +695,7 @@ public class DoubleOperations : INumericOperations<double>
     /// </summary>
     public double FromFloat(float value) => (double)value;
 
+#if NET5_0_OR_GREATER
     /// <summary>
     /// Converts a double value to Half (FP16) precision.
     /// </summary>
@@ -704,6 +705,7 @@ public class DoubleOperations : INumericOperations<double>
     /// Converts a Half value to double precision.
     /// </summary>
     public double FromHalf(Half value) => (double)value;
+#endif
 
     /// <summary>
     /// Converts a double value to double (identity operation).

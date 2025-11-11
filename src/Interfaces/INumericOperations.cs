@@ -349,6 +349,7 @@ public interface INumericOperations<T>
     /// <returns>The value converted to type T.</returns>
     T FromFloat(float value);
 
+#if NET5_0_OR_GREATER
     /// <summary>
     /// Converts a value to Half (FP16) precision.
     /// </summary>
@@ -356,6 +357,7 @@ public interface INumericOperations<T>
     /// <b>For Beginners:</b> This converts the current numeric type to a 16-bit half-precision floating-point number.
     /// Half precision uses less memory and can be faster on modern GPUs with Tensor Cores.
     /// Used in mixed-precision training to reduce memory usage and increase speed.
+    /// Note: Half type is only available in .NET 5.0 and later.
     /// </remarks>
     /// <param name="value">The value to convert.</param>
     /// <returns>The value as a Half.</returns>
@@ -367,10 +369,12 @@ public interface INumericOperations<T>
     /// <remarks>
     /// <b>For Beginners:</b> This converts a 16-bit half-precision floating-point number to the current numeric type.
     /// Used in mixed-precision training to cast between different numeric types.
+    /// Note: Half type is only available in .NET 5.0 and later.
     /// </remarks>
     /// <param name="value">The Half value to convert.</param>
     /// <returns>The value converted to type T.</returns>
     T FromHalf(Half value);
+#endif
 
     /// <summary>
     /// Converts a value to double (FP64) precision.

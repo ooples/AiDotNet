@@ -828,6 +828,7 @@ public class ComplexOperations<T> : INumericOperations<Complex<T>>
     /// <returns>A complex number with the float as the real part and zero imaginary part.</returns>
     public Complex<T> FromFloat(float value) => new Complex<T>(_ops.FromFloat(value), _ops.Zero);
 
+#if NET5_0_OR_GREATER
     /// <summary>
     /// Converts a Complex<T> value to Half by extracting the real part.
     /// </summary>
@@ -844,6 +845,7 @@ public class ComplexOperations<T> : INumericOperations<Complex<T>>
     /// <param name="value">The Half value to convert.</param>
     /// <returns>A complex number with the Half as the real part and zero imaginary part.</returns>
     public Complex<T> FromHalf(Half value) => new Complex<T>(_ops.FromHalf(value), _ops.Zero);
+#endif
 
     /// <summary>
     /// Converts a Complex<T> value to double by extracting the real part.
@@ -855,3 +857,4 @@ public class ComplexOperations<T> : INumericOperations<Complex<T>>
     /// </remarks>
     public double ToDouble(Complex<T> value) => _ops.ToDouble(value.Real);
 }
+#endif

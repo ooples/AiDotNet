@@ -700,6 +700,7 @@ public class SByteOperations : INumericOperations<sbyte>
     /// </summary>
     public sbyte FromFloat(float value) => (sbyte)Math.Clamp((int)Math.Round(value), sbyte.MinValue, sbyte.MaxValue);
 
+#if NET5_0_OR_GREATER
     /// <summary>
     /// Converts an sbyte value to Half (FP16) precision.
     /// </summary>
@@ -709,9 +710,11 @@ public class SByteOperations : INumericOperations<sbyte>
     /// Converts a Half value to sbyte.
     /// </summary>
     public sbyte FromHalf(Half value) => (sbyte)Math.Clamp((int)Math.Round((float)value), sbyte.MinValue, sbyte.MaxValue);
+#endif
 
     /// <summary>
     /// Converts an sbyte value to double (FP64) precision.
     /// </summary>
     public double ToDouble(sbyte value) => (double)value;
 }
+#endif
