@@ -174,28 +174,28 @@ public class HopeNetwork<T> : NeuralNetworkBase<T>
             gradient = _recurrentLayers[i].Backward(gradient);
         }
 
-        // Backprop through CMS blocks and context flow
-        Tensor<T>? totalGradient = null;
-
+        // Backprop through context flow levels (applied after CMS blocks in forward pass)
+        // Context flow blended with the output of CMS blocks, so we propagate gradients through
         for (int level = _inContextLearningLevels - 1; level >= 0; level--)
         {
-            // Compute context flow gradients
+            // Compute and accumulate context flow gradients for this level
             var contextGrad = _contextFlow.ComputeContextGradients(gradient.ToVector(), level);
+            var contextTensor = new Tensor<T>(new[] { _hiddenDim }, contextGrad);
 
-            int cmsIndex = level % _numCMSLevels;
-            var cmsGrad = _cmsBlocks[cmsIndex].Backward(gradient);
-
-            if (totalGradient == null)
-            {
-                totalGradient = cmsGrad;
-            }
-            else
-            {
-                totalGradient = AddTensors(totalGradient, cmsGrad);
-            }
+            // Add context gradient to current upstream gradient (blending was additive in forward)
+            gradient = AddTensors(gradient, contextTensor);
         }
 
-        return totalGradient!;
+        // Backprop through CMS blocks in reverse order (no modulo - proper chain rule)
+        // Each block receives the accumulated gradient from the previous block
+        for (int i = _numCMSLevels - 1; i >= 0; i--)
+        {
+            // Pass combined gradient to this CMS block's backward
+            gradient = _cmsBlocks[i].Backward(gradient);
+            // gradient now contains the downstream gradient for the next (previous) block
+        }
+
+        return gradient;
     }
 
     /// <summary>
