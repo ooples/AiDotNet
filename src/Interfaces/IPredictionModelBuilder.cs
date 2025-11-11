@@ -577,12 +577,29 @@ public interface IPredictionModelBuilder<T, TInput, TOutput>
     /// - ~50% less memory usage
     /// - Same model accuracy
     ///
-    /// Only enable this if you have a GPU with Tensor Core support. For CPU training or older GPUs,
-    /// this provides little to no benefit.
-    ///
     /// <b>Requirements:</b>
-    /// - Model type parameter T must be float
-    /// - GPU with Tensor Core support (V100, A100, H100, RTX 3000/4000+)
+    /// Mixed-precision training has specific technical requirements:
+    ///
+    /// 1. **Type Constraint: float only**
+    ///    - Type parameter T must be float (FP32)
+    ///    - Cannot use double, decimal, or integer types
+    ///    - Reason: Mixed-precision converts between FP32 (float) and FP16 (Half) representations
+    ///
+    /// 2. **Gradient-Based Optimizers Only**
+    ///    - Requires optimizers that compute gradients (SGD, Adam, RMSProp, etc.)
+    ///    - Does NOT work with non-gradient methods (genetic algorithms, random search, Bayesian optimization)
+    ///    - Reason: Requires gradient computation for loss scaling, master weights, and gradient accumulation
+    ///
+    /// 3. **Neural Networks (Recommended)**
+    ///    - Best suited for neural networks with large parameter counts
+    ///    - GPU with Tensor Core support (V100, A100, H100, RTX 3000/4000+)
+    ///
+    /// Only enable this if you have:
+    /// - A neural network trained with gradient-based optimizer
+    /// - Float as your numeric type (T = float)
+    /// - A GPU with Tensor Core support
+    ///
+    /// For CPU training, older GPUs, or non-gradient optimizers, this provides no benefit.
     ///
     /// Example usage:
     /// <code>
