@@ -268,12 +268,19 @@ Level 3: 0.00001   (very slow)
 ```
 
 ### Memory Decay Rates (by level)
+
+**Important**: The decay parameter is a *retention factor*. Higher values = more retention of old memory = slower decay rate.
+
+Formula: `updated = (currentMemory × decay) + (newRepresentation × (1 - decay))`
+
 ```
-Level 0: 0.90  (fast decay)
-Level 1: 0.95  (medium decay)
-Level 2: 0.99  (slow decay)
-Level 3: 0.995 (very slow decay)
+Level 0: 0.90  (90% retention, 10% decay per update - moderate persistence)
+Level 1: 0.95  (95% retention, 5% decay per update  - high persistence)
+Level 2: 0.99  (99% retention, 1% decay per update  - very high persistence)
+Level 3: 0.995 (99.5% retention, 0.5% decay per update - extremely high persistence)
 ```
+
+**Interpretation**: Larger decay values retain more old memory, resulting in slower decay. Level 3 (0.995) changes very slowly and maintains long-term information, while Level 0 (0.90) adapts more quickly to new inputs.
 
 ## Performance Benchmarks
 
