@@ -26,8 +26,53 @@ namespace AiDotNet.NeuralNetworks;
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric type used for calculations, typically float or double.</typeparam>
-public class DifferentiableNeuralComputer<T> : NeuralNetworkBase<T>
+public class DifferentiableNeuralComputer<T> : NeuralNetworkBase<T>, IAuxiliaryLossLayer<T>
 {
+    /// <summary>
+    /// Gets or sets whether auxiliary loss (memory addressing regularization) should be used during training.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Memory addressing regularization prevents soft addressing from becoming too diffuse or collapsing.
+    /// This encourages the DNC to learn focused, interpretable memory access patterns.
+    /// </para>
+    /// <para><b>For Beginners:</b> This helps the DNC use memory effectively.
+    ///
+    /// Memory addressing regularization ensures:
+    /// - Read/write heads focus on relevant memory locations
+    /// - Addressing doesn't spread too thin across all locations
+    /// - Memory operations are interpretable and efficient
+    ///
+    /// This is important because:
+    /// - Focused addressing improves memory utilization
+    /// - Sharp addressing patterns are more interpretable
+    /// - Prevents wasting computation on irrelevant memory locations
+    /// </para>
+    /// </remarks>
+    public bool UseAuxiliaryLoss { get; set; } = false;
+
+    /// <summary>
+    /// Gets or sets the weight for the memory addressing auxiliary loss.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// This weight controls how much memory addressing regularization contributes to the total loss.
+    /// Typical values range from 0.001 to 0.01.
+    /// </para>
+    /// <para><b>For Beginners:</b> This controls how much we encourage focused memory access.
+    ///
+    /// Common values:
+    /// - 0.005 (default): Balanced addressing regularization
+    /// - 0.001-0.003: Light regularization
+    /// - 0.008-0.01: Strong regularization
+    ///
+    /// Higher values encourage sharper memory addressing patterns.
+    /// </para>
+    /// </remarks>
+    public T AuxiliaryLossWeight { get; set; }
+
+    private T _lastMemoryAddressingLoss;
+
     /// <summary>
     /// Gets or sets the number of memory locations in the memory matrix.
     /// </summary>
@@ -339,6 +384,9 @@ public class DifferentiableNeuralComputer<T> : NeuralNetworkBase<T>
         IActivationFunction<T>? activationFunction = null) 
         : base(architecture, lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(architecture.TaskType))
     {
+        AuxiliaryLossWeight = NumOps.FromDouble(0.005);
+        _lastMemoryAddressingLoss = NumOps.Zero;
+
         _memorySize = memorySize;
         _memoryWordSize = memoryWordSize;
         _controllerSize = controllerSize;
@@ -410,6 +458,9 @@ public class DifferentiableNeuralComputer<T> : NeuralNetworkBase<T>
         IVectorActivationFunction<T>? vectorActivationFunction = null) 
         : base(architecture, lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(architecture.TaskType))
     {
+        AuxiliaryLossWeight = NumOps.FromDouble(0.005);
+        _lastMemoryAddressingLoss = NumOps.Zero;
+
         _memorySize = memorySize;
         _memoryWordSize = memoryWordSize;
         _controllerSize = controllerSize;
@@ -486,6 +537,149 @@ public class DifferentiableNeuralComputer<T> : NeuralNetworkBase<T>
 
             _usageFree[i] = NumOps.FromDouble(1.0);
         }
+    }
+
+    /// <summary>
+    /// Computes the auxiliary loss for memory addressing regularization.
+    /// </summary>
+    /// <returns>The computed memory addressing auxiliary loss.</returns>
+    /// <remarks>
+    /// <para>
+    /// This method computes entropy-based regularization for memory read/write addressing.
+    /// It encourages focused, sharp addressing patterns while preventing diffuse addressing.
+    /// Formula: L = -Σ_heads H(addressing) where H is entropy of addressing weights
+    /// </para>
+    /// <para><b>For Beginners:</b> This calculates how focused the DNC's memory access is.
+    ///
+    /// Memory addressing regularization works by:
+    /// 1. Measuring entropy of read/write addressing weights
+    /// 2. Lower entropy means more focused, sharp addressing
+    /// 3. Higher entropy means diffuse, spread-out addressing
+    /// 4. We minimize negative entropy to encourage focused access
+    ///
+    /// This helps because:
+    /// - Focused addressing is more interpretable
+    /// - Sharp addressing improves memory efficiency
+    /// - Prevents wasting computation on many irrelevant locations
+    /// - Encourages the DNC to learn clear memory access patterns
+    ///
+    /// The auxiliary loss is added to the main task loss during training.
+    /// </para>
+    /// </remarks>
+    public T ComputeAuxiliaryLoss()
+    {
+        if (!UseAuxiliaryLoss)
+        {
+            _lastMemoryAddressingLoss = NumOps.Zero;
+            return NumOps.Zero;
+        }
+
+        // Compute negative entropy over read and write addressing weights
+        // to encourage focused, sharp memory access patterns
+        T totalNegativeEntropy = NumOps.Zero;
+        T epsilon = NumOps.FromDouble(1e-10);  // For numerical stability
+        T oneMinusEpsilon = NumOps.Subtract(NumOps.One, epsilon);
+
+        // Compute negative entropy for read addressing weights
+        foreach (var readWeighting in _readWeightings)
+        {
+            T entropy = NumOps.Zero;
+            for (int i = 0; i < readWeighting.Length; i++)
+            {
+                T p = readWeighting[i];
+                // Entropy: H = -Σ(p * log(p))
+                // Clamp p to [epsilon, 1-epsilon] to avoid log(0) and log(>1)
+                T pClamped = MathHelper.Clamp(p, epsilon, oneMinusEpsilon);
+                T logP = NumOps.Log(pClamped);
+                T pLogP = NumOps.Multiply(pClamped, logP);
+                entropy = NumOps.Add(entropy, pLogP);
+            }
+            // Negative entropy (we want to minimize this, encouraging sharp peaks)
+            totalNegativeEntropy = NumOps.Subtract(totalNegativeEntropy, entropy);
+        }
+
+        // Compute negative entropy for write addressing weights
+        if (_writeWeighting != null)
+        {
+            T entropy = NumOps.Zero;
+            for (int i = 0; i < _writeWeighting.Length; i++)
+            {
+                T p = _writeWeighting[i];
+                // Clamp p to [epsilon, 1-epsilon] to avoid log(0) and log(>1)
+                T pClamped = MathHelper.Clamp(p, epsilon, oneMinusEpsilon);
+                T logP = NumOps.Log(pClamped);
+                T pLogP = NumOps.Multiply(pClamped, logP);
+                entropy = NumOps.Add(entropy, pLogP);
+            }
+            totalNegativeEntropy = NumOps.Subtract(totalNegativeEntropy, entropy);
+        }
+
+        // Store unweighted loss for diagnostics
+        _lastMemoryAddressingLoss = totalNegativeEntropy;
+
+        // Apply auxiliary loss weight and return weighted loss
+        return NumOps.Multiply(totalNegativeEntropy, AuxiliaryLossWeight);
+    }
+
+    /// <summary>
+    /// Gets diagnostic information about the memory addressing auxiliary loss.
+    /// </summary>
+    /// <returns>A dictionary containing diagnostic information about memory addressing regularization.</returns>
+    /// <remarks>
+    /// <para>
+    /// This method returns detailed diagnostics about memory addressing regularization, including
+    /// addressing entropy, number of read/write heads, and configuration parameters.
+    /// This information is useful for monitoring memory access patterns and debugging.
+    /// </para>
+    /// <para><b>For Beginners:</b> This provides information about how the DNC accesses memory.
+    ///
+    /// The diagnostics include:
+    /// - Total addressing entropy loss (how focused memory access is)
+    /// - Weight applied to the regularization
+    /// - Number of read and write heads
+    /// - Whether addressing regularization is enabled
+    ///
+    /// This helps you:
+    /// - Monitor if memory addressing is focused or diffuse
+    /// - Debug issues with memory access patterns
+    /// - Understand the impact of regularization on memory usage
+    ///
+    /// You can use this information to adjust regularization weights for better memory utilization.
+    /// </para>
+    /// </remarks>
+    public Dictionary<string, string> GetAuxiliaryLossDiagnostics()
+    {
+        return new Dictionary<string, string>
+        {
+            { "TotalMemoryAddressingLoss", _lastMemoryAddressingLoss?.ToString() ?? "0" },
+            { "AddressingWeight", AuxiliaryLossWeight?.ToString() ?? "0.005" },
+            { "UseMemoryAddressingRegularization", UseAuxiliaryLoss.ToString() },
+            { "NumberOfReadHeads", _readHeads.ToString() },
+            { "MemorySize", _memorySize.ToString() },
+            { "MemoryWordSize", _memoryWordSize.ToString() }
+        };
+    }
+
+    /// <summary>
+    /// Gets diagnostic information about this component's state and behavior.
+    /// Overrides <see cref="LayerBase{T}.GetDiagnostics"/> to include auxiliary loss diagnostics.
+    /// </summary>
+    /// <returns>
+    /// A dictionary containing diagnostic metrics including both base layer diagnostics and
+    /// auxiliary loss diagnostics from <see cref="GetAuxiliaryLossDiagnostics"/>.
+    /// </returns>
+    public Dictionary<string, string> GetDiagnostics()
+    {
+        var diagnostics = new Dictionary<string, string>();
+
+        // Merge auxiliary loss diagnostics
+        var auxDiagnostics = GetAuxiliaryLossDiagnostics();
+        foreach (var kvp in auxDiagnostics)
+        {
+            diagnostics[kvp.Key] = kvp.Value;
+        }
+
+        return diagnostics;
     }
 
     /// <summary>
@@ -1919,6 +2113,7 @@ public class DifferentiableNeuralComputer<T> : NeuralNetworkBase<T>
         /// </summary>
         public MemoryInterfaceSignals()
         {
+            // Initialize numeric properties after NumOps is available
             WriteStrength = NumOps.Zero;
             AllocationGate = NumOps.Zero;
             WriteGate = NumOps.Zero;
@@ -1934,6 +2129,7 @@ public class DifferentiableNeuralComputer<T> : NeuralNetworkBase<T>
             EraseVector = new Vector<T>(memoryWordSize);
             WriteKey = new Vector<T>(memoryWordSize);
 
+            // Initialize scalar properties
             WriteStrength = NumOps.Zero;
             AllocationGate = NumOps.Zero;
             WriteGate = NumOps.Zero;

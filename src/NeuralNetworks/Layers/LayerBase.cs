@@ -23,7 +23,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric type used for calculations, typically float or double.</typeparam>
-public abstract class LayerBase<T> : ILayer<T>
+public abstract class LayerBase<T> : ILayer<T>, IDiagnosticsProvider<T>
 {
     /// <summary>
     /// Gets the element-wise activation function for this layer, if specified.
@@ -1464,4 +1464,103 @@ public abstract class LayerBase<T> : ILayer<T>
     /// </para>
     /// </remarks>
     public abstract void ResetState();
+
+    /// <summary>
+    /// Gets diagnostic information about this layer's state and behavior.
+    /// </summary>
+    /// <returns>
+    /// A dictionary containing diagnostic metrics for this layer. Base implementation provides
+    /// common metrics like layer type, input/output shapes, and parameter count. Derived classes
+    /// can override this method to add layer-specific diagnostics.
+    /// </returns>
+    /// <remarks>
+    /// <para>
+    /// The base implementation provides the following diagnostics:
+    /// <list type="bullet">
+    /// <item><description><c>layer.type</c>: The concrete type name of the layer</description></item>
+    /// <item><description><c>layer.input_shape</c>: The shape of input tensors</description></item>
+    /// <item><description><c>layer.output_shape</c>: The shape of output tensors</description></item>
+    /// <item><description><c>layer.parameter_count</c>: The total number of trainable parameters</description></item>
+    /// <item><description><c>layer.supports_training</c>: Whether the layer has trainable parameters</description></item>
+    /// <item><description><c>layer.activation</c>: The activation function type, if any</description></item>
+    /// </list>
+    /// </para>
+    /// <para><b>For Beginners:</b> This method returns a report card with useful information about the layer.
+    ///
+    /// The diagnostics help you understand:
+    /// - What type of layer this is (Dense, Convolutional, etc.)
+    /// - What size of data it expects (input shape)
+    /// - What size of data it produces (output shape)
+    /// - How many parameters it's learning
+    /// - What activation function it uses
+    ///
+    /// Derived classes (specific layer types) can add more detailed information:
+    /// - Attention layers might report attention weights statistics
+    /// - Batch normalization layers might report running mean/variance
+    /// - Dropout layers might report dropout rate
+    ///
+    /// Example usage:
+    /// <code>
+    /// var diagnostics = layer.GetDiagnostics();
+    /// foreach (var (key, value) in diagnostics)
+    /// {
+    ///     Console.WriteLine($"{key}: {value}");
+    /// }
+    /// </code>
+    /// </para>
+    /// <para>
+    /// <b>Override Guidelines:</b>
+    /// When overriding in derived classes:
+    /// <list type="number">
+    /// <item><description>Call base.GetDiagnostics() first to get common metrics</description></item>
+    /// <item><description>Add your layer-specific diagnostics to the returned dictionary</description></item>
+    /// <item><description>Use consistent key naming (e.g., "activation.mean", "gradient.norm")</description></item>
+    /// <item><description>Provide human-readable string values</description></item>
+    /// <item><description>Keep computations lightweight to avoid impacting performance</description></item>
+    /// </list>
+    ///
+    /// Example override:
+    /// <code>
+    /// public override Dictionary&lt;string, string&gt; GetDiagnostics()
+    /// {
+    ///     var diagnostics = base.GetDiagnostics();
+    ///
+    ///     if (_lastActivations != null)
+    ///     {
+    ///         diagnostics["activation.mean"] = ComputeMean(_lastActivations).ToString();
+    ///         diagnostics["activation.std"] = ComputeStd(_lastActivations).ToString();
+    ///     }
+    ///
+    ///     return diagnostics;
+    /// }
+    /// </code>
+    /// </para>
+    /// </remarks>
+    public virtual Dictionary<string, string> GetDiagnostics()
+    {
+        var diagnostics = new Dictionary<string, string>
+        {
+            ["layer.type"] = GetType().Name,
+            ["layer.input_shape"] = $"[{string.Join(", ", InputShape)}]",
+            ["layer.output_shape"] = $"[{string.Join(", ", OutputShape)}]",
+            ["layer.parameter_count"] = ParameterCount.ToString(),
+            ["layer.supports_training"] = SupportsTraining.ToString()
+        };
+
+        // Add activation function information
+        if (UsingVectorActivation && VectorActivation != null)
+        {
+            diagnostics["layer.activation"] = VectorActivation.GetType().Name + " (vector)";
+        }
+        else if (ScalarActivation != null)
+        {
+            diagnostics["layer.activation"] = ScalarActivation.GetType().Name + " (scalar)";
+        }
+        else
+        {
+            diagnostics["layer.activation"] = "None";
+        }
+
+        return diagnostics;
+    }
 }

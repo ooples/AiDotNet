@@ -28,8 +28,56 @@ namespace AiDotNet.NeuralNetworks.Layers;
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric type used for calculations, typically float or double.</typeparam>
-public class MemoryReadLayer<T> : LayerBase<T>
+public class MemoryReadLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
 {
+    /// <summary>
+    /// Gets or sets a value indicating whether auxiliary loss is enabled for this layer.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// When enabled, the layer computes an attention sparsity auxiliary loss that encourages focused memory access.
+    /// This helps prevent the layer from attending to too many memory locations at once, promoting more selective retrieval.
+    /// </para>
+    /// <para><b>For Beginners:</b> This setting controls whether the layer uses an additional learning signal.
+    ///
+    /// When enabled (true):
+    /// - The layer encourages focused attention on specific memory locations
+    /// - This helps the network learn to be more selective about what information it retrieves
+    /// - Training may be more stable and produce better memory access patterns
+    ///
+    /// When disabled (false):
+    /// - Only the main task loss is used for training
+    /// - This is the default setting
+    /// </para>
+    /// </remarks>
+    public bool UseAuxiliaryLoss { get; set; } = false;
+
+    /// <summary>
+    /// Gets or sets the weight for the auxiliary loss contribution.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// This value determines how much the attention sparsity loss contributes to the total loss.
+    /// The default value of 0.005 provides a good balance between the main task and sparsity regularization.
+    /// </para>
+    /// <para><b>For Beginners:</b> This controls how much importance to give to the attention sparsity penalty.
+    ///
+    /// The weight affects training:
+    /// - Higher values (e.g., 0.01) make the network prioritize focused attention more strongly
+    /// - Lower values (e.g., 0.001) make the sparsity penalty less important
+    /// - The default (0.005) works well for most memory-augmented tasks
+    ///
+    /// If your memory attention is too diffuse (spreading across too many locations), increase this value.
+    /// If the main task is more important, you might decrease it.
+    /// </para>
+    /// </remarks>
+    public T AuxiliaryLossWeight { get; set; }
+
+    /// <summary>
+    /// Stores the last computed attention sparsity loss for diagnostic purposes.
+    /// </summary>
+    private T _lastAttentionSparsityLoss;
+
     /// <summary>
     /// The weight matrix used to transform the input into query keys.
     /// </summary>
@@ -191,6 +239,9 @@ public class MemoryReadLayer<T> : LayerBase<T>
     public MemoryReadLayer(int inputDimension, int memoryDimension, int outputDimension, IActivationFunction<T>? activationFunction = null)
         : base([inputDimension], [outputDimension], activationFunction ?? new IdentityActivation<T>())
     {
+        AuxiliaryLossWeight = NumOps.FromDouble(0.005);
+        _lastAttentionSparsityLoss = NumOps.Zero;
+
         _keyWeights = new Matrix<T>(inputDimension, memoryDimension);
         _valueWeights = new Matrix<T>(memoryDimension, outputDimension);
         _outputWeights = new Matrix<T>(outputDimension, outputDimension);
@@ -228,6 +279,9 @@ public class MemoryReadLayer<T> : LayerBase<T>
     public MemoryReadLayer(int inputDimension, int memoryDimension, int outputDimension, IVectorActivationFunction<T>? activationFunction = null)
         : base([inputDimension], [outputDimension], activationFunction ?? new IdentityActivation<T>())
     {
+        AuxiliaryLossWeight = NumOps.FromDouble(0.005);
+        _lastAttentionSparsityLoss = NumOps.Zero;
+
         _keyWeights = new Matrix<T>(inputDimension, memoryDimension);
         _valueWeights = new Matrix<T>(memoryDimension, outputDimension);
         _outputWeights = new Matrix<T>(outputDimension, outputDimension);
@@ -665,17 +719,17 @@ public class MemoryReadLayer<T> : LayerBase<T>
     /// or batch of data, or when implementing stateful networks.
     /// </para>
     /// <para><b>For Beginners:</b> This method clears the layer's memory to start fresh.
-    /// 
+    ///
     /// When resetting the state:
     /// - Stored inputs, memory, outputs, and attention scores from previous processing are cleared
     /// - All calculated gradients are cleared
     /// - The layer forgets any information from previous data batches
-    /// 
+    ///
     /// This is important for:
     /// - Processing a new, unrelated batch of data
     /// - Ensuring clean state before a new training epoch
     /// - Preventing information from one batch affecting another
-    /// 
+    ///
     /// Resetting state helps ensure that each forward and backward pass is independent,
     /// which is important for correct behavior in many neural network architectures.
     /// </para>
@@ -692,5 +746,134 @@ public class MemoryReadLayer<T> : LayerBase<T>
         _valueWeightsGradient = null;
         _outputWeightsGradient = null;
         _outputBiasGradient = null;
+    }
+
+    /// <summary>
+    /// Computes the auxiliary loss for this layer based on attention sparsity regularization.
+    /// </summary>
+    /// <returns>The computed auxiliary loss value.</returns>
+    /// <remarks>
+    /// <para>
+    /// This method computes an attention sparsity loss that encourages focused memory access patterns.
+    /// The loss is computed as the negative entropy of the attention weights: L = -Σ(p * log(p))
+    /// where p represents the attention probabilities. Lower entropy (more focused attention) results in lower loss.
+    /// This encourages the layer to attend to specific memory locations rather than spreading attention uniformly.
+    /// </para>
+    /// <para><b>For Beginners:</b> This method calculates a penalty for unfocused attention patterns.
+    ///
+    /// Attention sparsity loss:
+    /// - Measures how focused the attention is on specific memory locations
+    /// - Lower values mean more focused attention (good)
+    /// - Higher values mean attention is spread across many locations (less focused)
+    ///
+    /// Why this is useful:
+    /// - In most tasks, you want to retrieve specific relevant information from memory
+    /// - Spreading attention too thin means you get a "blurry" mix of information
+    /// - Focused attention means you get clear, specific information
+    ///
+    /// Example: If you're answering "What is the capital of France?" from memory,
+    /// you want focused attention on the entry about Paris, not a mix of all French cities.
+    ///
+    /// Technical note: The loss is computed using entropy. Entropy measures how "spread out" a distribution is.
+    /// - Low entropy = focused distribution (e.g., [0.9, 0.05, 0.05] - mostly on first item)
+    /// - High entropy = spread out distribution (e.g., [0.33, 0.33, 0.34] - spread evenly)
+    /// We use negative entropy as the loss, so the network is penalized for high entropy (unfocused attention).
+    /// </para>
+    /// </remarks>
+    public T ComputeAuxiliaryLoss()
+    {
+        if (!UseAuxiliaryLoss || _lastAttentionScores == null)
+        {
+            _lastAttentionSparsityLoss = NumOps.Zero;
+            return _lastAttentionSparsityLoss;
+        }
+
+        // Compute negative entropy to encourage low entropy (focused attention)
+        // L = -Σ(p * log(p))
+        T totalNegativeEntropy = NumOps.Zero;
+        int batchSize = _lastAttentionScores.Shape[0];
+        int sequenceLength = _lastAttentionScores.Shape.Length > 1 ? _lastAttentionScores.Shape[1] : 1;
+
+        for (int b = 0; b < batchSize; b++)
+        {
+            T entropy = NumOps.Zero;
+            for (int i = 0; i < sequenceLength; i++)
+            {
+                T attnWeight = _lastAttentionScores.Shape.Length > 1
+                    ? _lastAttentionScores[b, i]
+                    : _lastAttentionScores[b];
+
+                if (NumOps.LessThan(attnWeight, NumOps.FromDouble(1e-10)))
+                    continue;
+
+                T logWeight = NumOps.Log(attnWeight);
+                T term = NumOps.Multiply(attnWeight, logWeight);
+                entropy = NumOps.Subtract(entropy, term);
+            }
+            totalNegativeEntropy = NumOps.Subtract(totalNegativeEntropy, entropy);
+        }
+
+        // Average across batch
+        _lastAttentionSparsityLoss = NumOps.Divide(totalNegativeEntropy, NumOps.FromDouble(batchSize));
+        return _lastAttentionSparsityLoss;
+    }
+
+    /// <summary>
+    /// Gets diagnostic information about the auxiliary loss computation.
+    /// </summary>
+    /// <returns>A dictionary containing diagnostic information about the auxiliary loss.</returns>
+    /// <remarks>
+    /// <para>
+    /// This method returns diagnostic information that can be used to monitor the auxiliary loss during training.
+    /// The diagnostics include the total attention sparsity loss, the weight applied to it, and whether auxiliary loss is enabled.
+    /// </para>
+    /// <para><b>For Beginners:</b> This method provides information to help you understand how the auxiliary loss is working.
+    ///
+    /// The diagnostics show:
+    /// - TotalAttentionSparsityLoss: The computed penalty for unfocused attention
+    /// - AttentionSparsityWeight: How much this penalty affects the overall training
+    /// - UseAttentionSparsity: Whether this penalty is currently enabled
+    ///
+    /// You can use this information to:
+    /// - Monitor if attention is becoming more focused over time
+    /// - Debug training issues related to memory access
+    /// - Understand how the layer is learning to retrieve information
+    ///
+    /// Example: If TotalAttentionSparsityLoss is decreasing during training, it means the layer
+    /// is learning to be more focused in its memory access, which is typically a good sign.
+    /// If it's staying high or increasing, it might mean the layer is having trouble learning
+    /// which parts of memory are relevant.
+    /// </para>
+    /// </remarks>
+    public Dictionary<string, string> GetAuxiliaryLossDiagnostics()
+    {
+        return new Dictionary<string, string>
+        {
+            { "TotalAttentionSparsityLoss", System.Convert.ToString(_lastAttentionSparsityLoss) ?? "0" },
+            { "AttentionSparsityWeight", System.Convert.ToString(AuxiliaryLossWeight) ?? "0.005" },
+            { "UseAttentionSparsity", UseAuxiliaryLoss.ToString() }
+        };
+    }
+
+    /// <summary>
+    /// Gets diagnostic information about this component's state and behavior.
+    /// Overrides <see cref="LayerBase{T}.GetDiagnostics"/> to include auxiliary loss diagnostics.
+    /// </summary>
+    /// <returns>
+    /// A dictionary containing diagnostic metrics including both base layer diagnostics and
+    /// auxiliary loss diagnostics from <see cref="GetAuxiliaryLossDiagnostics"/>.
+    /// </returns>
+    public override Dictionary<string, string> GetDiagnostics()
+    {
+        var diagnostics = base.GetDiagnostics();
+
+        // Merge auxiliary loss diagnostics
+        var auxDiagnostics = GetAuxiliaryLossDiagnostics();
+        foreach (var kvp in auxDiagnostics)
+        {
+            diagnostics[kvp.Key] = kvp.Value;
+        }
+
+        return diagnostics;
     }
 }

@@ -26,8 +26,62 @@ namespace AiDotNet.NeuralNetworks.Layers;
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric type used for calculations, typically float or double.</typeparam>
-public class SqueezeAndExcitationLayer<T> : LayerBase<T>
+public class SqueezeAndExcitationLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
 {
+    /// <summary>
+    /// Gets or sets a value indicating whether auxiliary loss is enabled for this layer.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// When enabled, the layer computes a channel attention regularization loss that encourages balanced
+    /// channel importance. This helps prevent the layer from over-relying on specific channels.
+    /// </para>
+    /// <para><b>For Beginners:</b> This setting controls whether the layer uses an additional learning signal.
+    ///
+    /// When enabled (true):
+    /// - The layer encourages balanced attention across channels
+    /// - This helps prevent over-reliance on specific features
+    /// - Training may be more stable and produce more robust representations
+    ///
+    /// When disabled (false):
+    /// - Only the main task loss is used for training
+    /// - This is the default setting
+    /// </para>
+    /// </remarks>
+    public bool UseAuxiliaryLoss { get; set; } = false;
+
+    /// <summary>
+    /// Gets or sets the weight for the auxiliary loss contribution.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// This value determines how much the channel attention regularization contributes to the total loss.
+    /// The default value of 0.01 provides a good balance between the main task and regularization.
+    /// </para>
+    /// <para><b>For Beginners:</b> This controls how much importance to give to the channel attention regularization.
+    ///
+    /// The weight affects training:
+    /// - Higher values (e.g., 0.05) make the network prioritize balanced channel attention more strongly
+    /// - Lower values (e.g., 0.001) make the regularization less important
+    /// - The default (0.01) works well for most computer vision tasks
+    ///
+    /// If your network is over-fitting to specific channels, increase this value.
+    /// If the main task is more important, you might decrease it.
+    /// </para>
+    /// </remarks>
+    public T AuxiliaryLossWeight { get; set; }
+
+    /// <summary>
+    /// Stores the last computed channel attention regularization loss for diagnostic purposes.
+    /// </summary>
+    private T _lastChannelAttentionLoss;
+
+    /// <summary>
+    /// Caches the excitation weights from the forward pass for auxiliary loss computation.
+    /// Shape: [batchSize, channels]
+    /// </summary>
+    private Matrix<T>? _lastExcitationWeights;
+
     /// <summary>
     /// The number of input and output channels in the layer.
     /// </summary>
@@ -273,28 +327,6 @@ public class SqueezeAndExcitationLayer<T> : LayerBase<T>
     private Vector<T>? _bias2Gradient;
 
     /// <summary>
-    /// The attention weights from the most recent forward pass.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// This field stores the channel attention weights computed during the forward pass.
-    /// These weights represent the importance of each channel and are used to compute
-    /// auxiliary losses such as L1 sparsity regularization.
-    /// </para>
-    /// <para><b>For Beginners:</b> This stores how much attention each feature channel received.
-    ///
-    /// The attention weights:
-    /// - Are values between 0 and 1 (from the sigmoid activation)
-    /// - Indicate the importance of each channel
-    /// - Can be used for regularization to encourage sparsity
-    ///
-    /// Sparsity means encouraging the network to use only a few important channels
-    /// rather than spreading attention across all channels equally.
-    /// </para>
-    /// </remarks>
-    private Matrix<T>? _lastAttentionWeights;
-
-    /// <summary>
     /// Gets or sets the weight for L1 sparsity regularization on attention weights.
     /// </summary>
     /// <value>
@@ -458,6 +490,9 @@ public class SqueezeAndExcitationLayer<T> : LayerBase<T>
         IActivationFunction<T>? secondActivation = null)
         : base([[channels]], [channels])
     {
+        AuxiliaryLossWeight = NumOps.FromDouble(0.01);
+        _lastChannelAttentionLoss = NumOps.Zero;
+
         _channels = channels;
         _reducedChannels = channels / reductionRatio;
         _firstActivation = firstActivation ?? new ReLUActivation<T>();
@@ -502,6 +537,9 @@ public class SqueezeAndExcitationLayer<T> : LayerBase<T>
         IVectorActivationFunction<T>? secondVectorActivation = null)
         : base([[channels]], [channels])
     {
+        AuxiliaryLossWeight = NumOps.FromDouble(0.01);
+        _lastChannelAttentionLoss = NumOps.Zero;
+
         _channels = channels;
         _reducedChannels = channels / reductionRatio;
         _firstVectorActivation = firstVectorActivation ?? new ReLUActivation<T>();
@@ -667,8 +705,8 @@ public class SqueezeAndExcitationLayer<T> : LayerBase<T>
         var excitation2 = excitation1.Multiply(_weights2).AddVectorToEachRow(_bias2);
         var excitation = ApplyActivation(excitation2, isFirstActivation: false);
 
-        // Store attention weights for auxiliary loss computation
-        _lastAttentionWeights = excitation;
+        // Cache excitation weights for auxiliary loss computation
+        _lastExcitationWeights = excitation;
 
         // Scale the input
         var output = new Tensor<T>(input.Shape);
@@ -1182,65 +1220,6 @@ public class SqueezeAndExcitationLayer<T> : LayerBase<T>
     }
 
     /// <summary>
-    /// Computes the L1 sparsity regularization loss on channel attention weights.
-    /// </summary>
-    /// <returns>The L1 sparsity loss value.</returns>
-    /// <remarks>
-    /// <para>
-    /// This method computes L1 sparsity regularization on the channel attention weights
-    /// to encourage sparse attention patterns. Sparse attention means that only a few
-    /// channels should have high attention weights, which improves feature selection
-    /// and reduces overfitting. The loss is computed as the L1 norm (sum of absolute values)
-    /// of the attention weights, normalized by the number of channels.
-    /// </para>
-    /// <para><b>For Beginners:</b> This method encourages the layer to focus on fewer, more important channels.
-    ///
-    /// L1 sparsity regularization:
-    /// - Adds a penalty for using many channels with high attention
-    /// - Encourages the network to be selective about which features to use
-    /// - Helps prevent overfitting by simplifying the model
-    ///
-    /// The process:
-    /// 1. Take the absolute value of each attention weight
-    /// 2. Sum all these absolute values (L1 norm)
-    /// 3. Normalize by the number of channels for scale-invariance
-    ///
-    /// A higher loss means the network is spreading attention across many channels.
-    /// A lower loss means the network is focusing on just a few important channels.
-    ///
-    /// This loss is typically added to the main training loss with a small weight
-    /// (controlled by the SparsityWeight property) to gently encourage sparsity.
-    /// </para>
-    /// </remarks>
-    public T ComputeAuxiliaryLoss()
-    {
-        if (_lastAttentionWeights is null)
-        {
-            return NumOps.Zero;
-        }
-
-        // Compute L1 norm: sum of absolute values across all attention weights
-        T l1Norm = NumOps.Zero;
-        for (int b = 0; b < _lastAttentionWeights.Rows; b++)
-        {
-            for (int c = 0; c < _lastAttentionWeights.Columns; c++)
-            {
-                T absWeight = NumOps.Abs(_lastAttentionWeights[b, c]);
-                l1Norm = NumOps.Add(l1Norm, absWeight);
-            }
-        }
-
-        // Normalize by total number of elements for scale-invariance
-        T totalElements = NumOps.FromDouble((long)_lastAttentionWeights.Rows * (long)_lastAttentionWeights.Columns);
-        T sparsityLoss = NumOps.Divide(l1Norm, totalElements);
-
-        // Apply sparsity weight to allow tuning of this auxiliary loss
-        sparsityLoss = NumOps.Multiply(sparsityLoss, SparsityWeight);
-
-        return sparsityLoss;
-    }
-
-    /// <summary>
     /// Resets the internal state of the Squeeze-and-Excitation layer.
     /// </summary>
     /// <remarks>
@@ -1269,10 +1248,134 @@ public class SqueezeAndExcitationLayer<T> : LayerBase<T>
         // Clear cached values from forward and backward passes
         _lastInput = null;
         _lastOutput = null;
-        _lastAttentionWeights = null;
         _weights1Gradient = null;
         _bias1Gradient = null;
         _weights2Gradient = null;
         _bias2Gradient = null;
+    }
+
+    /// <summary>
+    /// Computes the auxiliary loss for this layer based on channel attention regularization.
+    /// </summary>
+    /// <returns>The computed auxiliary loss value.</returns>
+    /// <remarks>
+    /// <para>
+    /// This method computes a channel attention regularization loss. In a full implementation, this would encourage
+    /// balanced channel attention by penalizing extreme attention values (all attention on one channel or uniform
+    /// attention across all channels). The regularization can use L2 norm or entropy-based measures.
+    /// </para>
+    /// <para><b>For Beginners:</b> This method calculates a penalty to encourage balanced feature importance.
+    ///
+    /// Channel attention regularization:
+    /// - Prevents the layer from relying too heavily on specific channels
+    /// - Encourages the network to use information from multiple features
+    /// - Helps create more robust and generalizable models
+    ///
+    /// Why this is useful:
+    /// - In complex tasks, multiple types of features are usually important
+    /// - Over-relying on one type of feature can lead to poor generalization
+    /// - Balanced attention helps the network learn richer representations
+    ///
+    /// Example: In image classification, instead of only looking at edges (one channel),
+    /// the network should also consider colors, textures, and shapes (other channels).
+    ///
+    /// <b>Note:</b> This is a placeholder implementation. For full functionality, the layer would need to
+    /// cache the excitation weights (channel attention scores) during the forward pass. The formula would
+    /// compute a regularization term based on these attention weights, such as:
+    /// - L2 regularization: L = ||excitation||²
+    /// - Entropy regularization: L = -Σ(p * log(p)) for normalized excitation weights
+    /// - Variance penalty: encouraging variance in attention across channels
+    /// </para>
+    /// </remarks>
+    public T ComputeAuxiliaryLoss()
+    {
+        if (!UseAuxiliaryLoss || _lastExcitationWeights == null)
+        {
+            _lastChannelAttentionLoss = NumOps.Zero;
+            return NumOps.Zero;
+        }
+
+        // Compute L2 regularization on excitation weights
+        // This penalizes large excitation values and encourages sparse channel attention
+        T attentionLoss = NumOps.Zero;
+        int batchSize = _lastExcitationWeights.Rows;
+        int channels = _lastExcitationWeights.Columns;
+
+        for (int b = 0; b < batchSize; b++)
+        {
+            for (int c = 0; c < channels; c++)
+            {
+                T weight = _lastExcitationWeights[b, c];
+                // L2 regularization: sum of squared weights
+                attentionLoss = NumOps.Add(attentionLoss, NumOps.Multiply(weight, weight));
+            }
+        }
+
+        // Average across batch and channels
+        int totalElements = batchSize * channels;
+        attentionLoss = NumOps.Divide(attentionLoss, NumOps.FromDouble(totalElements));
+
+        // Store unweighted loss for diagnostics
+        _lastChannelAttentionLoss = attentionLoss;
+
+        // Return weighted auxiliary loss
+        return NumOps.Multiply(AuxiliaryLossWeight, attentionLoss);
+    }
+
+    /// <summary>
+    /// Gets diagnostic information about the auxiliary loss computation.
+    /// </summary>
+    /// <returns>A dictionary containing diagnostic information about the auxiliary loss.</returns>
+    /// <remarks>
+    /// <para>
+    /// This method returns diagnostic information that can be used to monitor the auxiliary loss during training.
+    /// The diagnostics include the total channel attention loss, the weight applied to it, and whether auxiliary loss is enabled.
+    /// </para>
+    /// <para><b>For Beginners:</b> This method provides information to help you understand how the auxiliary loss is working.
+    ///
+    /// The diagnostics show:
+    /// - TotalChannelAttentionLoss: The computed penalty for imbalanced channel attention
+    /// - ChannelAttentionWeight: How much this penalty affects the overall training
+    /// - UseChannelAttention: Whether this penalty is currently enabled
+    ///
+    /// You can use this information to:
+    /// - Monitor if channel attention is becoming more balanced over time
+    /// - Debug training issues related to feature selection
+    /// - Understand which features the network prioritizes
+    ///
+    /// Example: If TotalChannelAttentionLoss is high, it might indicate that the network is over-relying
+    /// on specific channels, which could be a sign of overfitting or poor feature diversity.
+    /// </para>
+    /// </remarks>
+    public Dictionary<string, string> GetAuxiliaryLossDiagnostics()
+    {
+        return new Dictionary<string, string>
+        {
+            { "TotalChannelAttentionLoss", System.Convert.ToString(_lastChannelAttentionLoss) ?? "0" },
+            { "ChannelAttentionWeight", System.Convert.ToString(AuxiliaryLossWeight) ?? "0.01" },
+            { "UseChannelAttention", UseAuxiliaryLoss.ToString() }
+        };
+    }
+
+    /// <summary>
+    /// Gets diagnostic information about this component's state and behavior.
+    /// Overrides <see cref="LayerBase{T}.GetDiagnostics"/> to include auxiliary loss diagnostics.
+    /// </summary>
+    /// <returns>
+    /// A dictionary containing diagnostic metrics including both base layer diagnostics and
+    /// auxiliary loss diagnostics from <see cref="GetAuxiliaryLossDiagnostics"/>.
+    /// </returns>
+    public override Dictionary<string, string> GetDiagnostics()
+    {
+        var diagnostics = base.GetDiagnostics();
+
+        // Merge auxiliary loss diagnostics
+        var auxDiagnostics = GetAuxiliaryLossDiagnostics();
+        foreach (var kvp in auxDiagnostics)
+        {
+            diagnostics[kvp.Key] = kvp.Value;
+        }
+
+        return diagnostics;
     }
 }

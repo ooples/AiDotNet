@@ -23,8 +23,56 @@ namespace AiDotNet.NeuralNetworks.Layers;
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric type used for calculations, typically float or double.</typeparam>
-public class GraphConvolutionalLayer<T> : LayerBase<T>
+public class GraphConvolutionalLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
 {
+    /// <summary>
+    /// Gets or sets a value indicating whether auxiliary loss is enabled for this layer.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// When enabled, the layer computes a graph smoothness auxiliary loss that encourages connected nodes
+    /// to have similar learned representations. This helps the network learn more coherent graph embeddings.
+    /// </para>
+    /// <para><b>For Beginners:</b> This setting controls whether the layer uses an additional learning signal.
+    ///
+    /// When enabled (true):
+    /// - The layer encourages connected nodes to learn similar features
+    /// - This helps the network understand that connected nodes should be related
+    /// - Training may be more stable and produce better results
+    ///
+    /// When disabled (false):
+    /// - Only the main task loss is used for training
+    /// - This is the default setting
+    /// </para>
+    /// </remarks>
+    public bool UseAuxiliaryLoss { get; set; } = false;
+
+    /// <summary>
+    /// Gets or sets the weight for the auxiliary loss contribution.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// This value determines how much the graph smoothness loss contributes to the total loss.
+    /// The default value of 0.01 provides a good balance between the main task and smoothness regularization.
+    /// </para>
+    /// <para><b>For Beginners:</b> This controls how much importance to give to the smoothness penalty.
+    ///
+    /// The weight affects training:
+    /// - Higher values (e.g., 0.1) make the network prioritize smooth features more strongly
+    /// - Lower values (e.g., 0.001) make the smoothness penalty less important
+    /// - The default (0.01) works well for most graph learning tasks
+    ///
+    /// If your graph has very clear structure, you might increase this value.
+    /// If the main task is more important, you might decrease it.
+    /// </para>
+    /// </remarks>
+    public T AuxiliaryLossWeight { get; set; }
+
+    /// <summary>
+    /// Stores the last computed graph smoothness loss for diagnostic purposes.
+    /// </summary>
+    private T _lastGraphSmoothnessLoss;
+
     /// <summary>
     /// The weight matrix that transforms input features to output features.
     /// </summary>
@@ -226,6 +274,9 @@ public class GraphConvolutionalLayer<T> : LayerBase<T>
     public GraphConvolutionalLayer(int inputFeatures, int outputFeatures, IActivationFunction<T>? activationFunction = null)
         : base([inputFeatures], [outputFeatures], activationFunction ?? new IdentityActivation<T>())
     {
+        AuxiliaryLossWeight = NumOps.FromDouble(0.01);
+        _lastGraphSmoothnessLoss = NumOps.Zero;
+
         _weights = new Matrix<T>(inputFeatures, outputFeatures);
         _bias = new Vector<T>(outputFeatures);
 
@@ -259,6 +310,9 @@ public class GraphConvolutionalLayer<T> : LayerBase<T>
     public GraphConvolutionalLayer(int inputFeatures, int outputFeatures, IVectorActivationFunction<T>? vectorActivationFunction = null)
         : base([inputFeatures], [outputFeatures], vectorActivationFunction ?? new IdentityActivation<T>())
     {
+        AuxiliaryLossWeight = NumOps.FromDouble(0.01);
+        _lastGraphSmoothnessLoss = NumOps.Zero;
+
         _weights = new Matrix<T>(inputFeatures, outputFeatures);
         _bias = new Vector<T>(outputFeatures);
 
@@ -802,5 +856,62 @@ public class GraphConvolutionalLayer<T> : LayerBase<T>
         _lastNodeFeatures = null;
         _weightsGradient = null;
         _biasGradient = null;
+    }
+
+    /// <summary>
+    /// Gets diagnostic information about the auxiliary loss computation.
+    /// </summary>
+    /// <returns>A dictionary containing diagnostic information about the auxiliary loss.</returns>
+    /// <remarks>
+    /// <para>
+    /// This method returns diagnostic information that can be used to monitor the auxiliary loss during training.
+    /// The diagnostics include the total smoothness loss, the weight applied to it, and whether auxiliary loss is enabled.
+    /// </para>
+    /// <para><b>For Beginners:</b> This method provides information to help you understand how the auxiliary loss is working.
+    ///
+    /// The diagnostics show:
+    /// - TotalSmoothnessLoss: The computed penalty for feature differences between connected nodes
+    /// - SmoothnessWeight: How much this penalty affects the overall training
+    /// - UseSmoothnessLoss: Whether this penalty is currently enabled
+    ///
+    /// You can use this information to:
+    /// - Monitor if the smoothness penalty is too high or too low
+    /// - Debug training issues
+    /// - Understand how the graph structure affects learning
+    ///
+    /// Example: If TotalSmoothnessLoss is very high, it might mean your network is learning very different
+    /// features for connected nodes, which might indicate the need to adjust hyperparameters.
+    /// </para>
+    /// </remarks>
+    public Dictionary<string, string> GetAuxiliaryLossDiagnostics()
+    {
+        return new Dictionary<string, string>
+        {
+            { "TotalSmoothnessLoss", $"{_lastGraphSmoothnessLoss}" },
+            { "SmoothnessWeight", $"{AuxiliaryLossWeight}" },
+            { "UseAuxiliaryLoss", UseAuxiliaryLoss.ToString() }
+        };
+    }
+
+    /// <summary>
+    /// Gets diagnostic information about this component's state and behavior.
+    /// Overrides <see cref="LayerBase{T}.GetDiagnostics"/> to include auxiliary loss diagnostics.
+    /// </summary>
+    /// <returns>
+    /// A dictionary containing diagnostic metrics including both base layer diagnostics and
+    /// auxiliary loss diagnostics from <see cref="GetAuxiliaryLossDiagnostics"/>.
+    /// </returns>
+    public override Dictionary<string, string> GetDiagnostics()
+    {
+        var diagnostics = base.GetDiagnostics();
+
+        // Merge auxiliary loss diagnostics
+        var auxDiagnostics = GetAuxiliaryLossDiagnostics();
+        foreach (var kvp in auxDiagnostics)
+        {
+            diagnostics[kvp.Key] = kvp.Value;
+        }
+
+        return diagnostics;
     }
 }
