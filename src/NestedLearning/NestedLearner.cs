@@ -7,7 +7,8 @@ using AiDotNet.Models.Results;
 namespace AiDotNet.NestedLearning;
 
 /// <summary>
-/// Implementation of Nested Learning algorithm for continual learning without catastrophic forgetting.
+/// Production-ready implementation of Nested Learning algorithm for continual learning.
+/// Treats models as interconnected, multi-level learning problems optimized simultaneously.
 /// Based on Google's Nested Learning research.
 /// </summary>
 /// <typeparam name="T">The numeric type</typeparam>
@@ -21,10 +22,20 @@ public class NestedLearner<T, TInput, TOutput> : INestedLearner<T, TInput, TOutp
     private readonly int[] _updateFrequencies;
     private readonly T[] _learningRates;
     private readonly IContinuumMemorySystem<T> _memorySystem;
+    private readonly IContextFlow<T> _contextFlow;
+    private readonly IAssociativeMemory<T> _associativeMemory;
     private int _globalStep;
     private Vector<T>? _previousTaskParameters;
     private static readonly INumericOperations<T> _numOps = MathHelper.GetNumericOperations<T>();
 
+    /// <summary>
+    /// Initializes a new Nested Learner with production-ready defaults.
+    /// </summary>
+    /// <param name="model">The model to train with nested learning</param>
+    /// <param name="lossFunction">Loss function for training</param>
+    /// <param name="numLevels">Number of nested optimization levels</param>
+    /// <param name="learningRates">Learning rates per level (optional)</param>
+    /// <param name="memoryDimension">Dimension of continuum memory</param>
     public NestedLearner(
         IFullModel<T, TInput, TOutput> model,
         ILossFunction<T> lossFunction,
@@ -37,7 +48,12 @@ public class NestedLearner<T, TInput, TOutput> : INestedLearner<T, TInput, TOutp
         _numLevels = numLevels;
         _learningRates = learningRates ?? CreateDefaultLearningRates(numLevels);
         _updateFrequencies = CreateUpdateFrequencies(numLevels);
+
+        // Initialize core components
         _memorySystem = new ContinuumMemorySystem<T>(memoryDimension, numLevels);
+        _contextFlow = new ContextFlow<T>(memoryDimension, numLevels);
+        _associativeMemory = new AssociativeMemory<T>(memoryDimension, capacity: 10000);
+
         _globalStep = 0;
     }
 
@@ -79,23 +95,33 @@ public class NestedLearner<T, TInput, TOutput> : INestedLearner<T, TInput, TOutp
         // Get current parameters
         var currentParams = _model.GetParameters();
 
-        // Update memory system based on update frequencies
-        var updateMask = new bool[_numLevels];
-        for (int lvl = 0; lvl < _numLevels; lvl++)
-        {
-            updateMask[lvl] = (_globalStep % _updateFrequencies[lvl] == 0);
-        }
-
-        // Create context representation (simple: first N params + loss)
+        // Create context representation
         var contextSize = Math.Min(currentParams.Length, _memorySystem.NumberOfFrequencyLevels * 10);
         var context = new Vector<T>(contextSize);
         for (int i = 0; i < contextSize - 1; i++)
         {
             context[i] = currentParams[i];
         }
-        context[contextSize - 1] = loss; // Include loss in context
+        context[contextSize - 1] = loss;
 
-        _memorySystem.Update(context, updateMask);
+        // Propagate context through context flow (distinct information pathways)
+        for (int lvl = 0; lvl < _numLevels; lvl++)
+        {
+            if (_globalStep % _updateFrequencies[lvl] == 0)
+            {
+                // Propagate and compress context
+                var flowedContext = _contextFlow.PropagateContext(context, lvl);
+                var compressed = _contextFlow.CompressContext(flowedContext, lvl);
+
+                // Store in associative memory (backprop as associative memory)
+                _associativeMemory.Associate(context, flowedContext);
+
+                // Update continuum memory system
+                var updateMask = new bool[_numLevels];
+                updateMask[lvl] = true;
+                _memorySystem.Update(compressed, updateMask);
+            }
+        }
 
         // Periodically consolidate memory
         if (_globalStep % 100 == 0)
@@ -188,7 +214,7 @@ public class NestedLearner<T, TInput, TOutput> : INestedLearner<T, TInput, TOutp
             newTaskLoss = _numOps.Add(newTaskLoss, stepResult.MetaLoss);
             adaptationSteps++;
 
-            // Apply preservation constraint
+            // Apply preservation constraint (prevents catastrophic forgetting)
             if (_previousTaskParameters != null)
             {
                 var currentParams = _model.GetParameters();
@@ -201,7 +227,7 @@ public class NestedLearner<T, TInput, TOutput> : INestedLearner<T, TInput, TOutp
 
         T avgNewTaskLoss = _numOps.Divide(newTaskLoss, _numOps.FromDouble(dataList.Count));
 
-        // Measure forgetting
+        // Measure forgetting (parameter drift)
         T forgettingMetric = _numOps.Zero;
         if (_previousTaskParameters != null)
         {
@@ -230,5 +256,18 @@ public class NestedLearner<T, TInput, TOutput> : INestedLearner<T, TInput, TOutp
     public int NumberOfLevels => _numLevels;
     public int[] UpdateFrequencies => _updateFrequencies;
 
+    /// <summary>
+    /// Gets the continuum memory system for inspection.
+    /// </summary>
     public IContinuumMemorySystem<T> GetMemorySystem() => _memorySystem;
+
+    /// <summary>
+    /// Gets the context flow mechanism for inspection.
+    /// </summary>
+    public IContextFlow<T> GetContextFlow() => _contextFlow;
+
+    /// <summary>
+    /// Gets the associative memory system for inspection.
+    /// </summary>
+    public IAssociativeMemory<T> GetAssociativeMemory() => _associativeMemory;
 }
