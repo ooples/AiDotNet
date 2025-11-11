@@ -8,8 +8,8 @@ namespace AiDotNet.Optimizers;
 /// Modified Gradient Descent optimizer for Hope architecture.
 /// Based on Equations 27-29 from "Nested Learning" paper.
 ///
-/// Traditional GD: Wt+1 = Wt - η * ∇L(Wt; xt) ⊗ xt
-/// Modified GD:    Wt+1 = Wt * (I - xt*xt^T) - η * ∇L(Wt; xt) ⊗ xt
+/// Traditional GD: W(t+1) = W(t) - eta * gradient(L(W(t); x(t))) outer-product x(t)
+/// Modified GD:    W(t+1) = W(t) * (I - x(t)*x(t)^T) - eta * gradient(L(W(t); x(t))) outer-product x(t)
 ///
 /// This formulation uses L2 regression objective instead of dot-product similarity,
 /// resulting in better handling of data dependencies in token space.
@@ -23,7 +23,7 @@ public class ModifiedGradientDescentOptimizer<T>
     /// <summary>
     /// Creates a modified gradient descent optimizer.
     /// </summary>
-    /// <param name="learningRate">Learning rate η</param>
+    /// <param name="learningRate">Learning rate (eta)</param>
     public ModifiedGradientDescentOptimizer(T learningRate)
     {
         _learningRate = learningRate;
@@ -32,33 +32,33 @@ public class ModifiedGradientDescentOptimizer<T>
     /// <summary>
     /// Updates parameters using modified gradient descent (Equations 27-29).
     ///
-    /// min_W ||W*xt - ∇ytL(Wt; xt)||²_2
+    /// min_W ||W*x(t) - gradient_y(L(W(t); x(t)))||^2
     ///
     /// Results in:
-    /// Wt+1 = Wt * (I - xt*xt^T) - η * ∇ytL(Wt; xt) ⊗ xt
+    /// W(t+1) = W(t) * (I - x(t)*x(t)^T) - eta * gradient_y(L(W(t); x(t))) outer-product x(t)
     /// </summary>
-    /// <param name="currentParameters">Current parameter matrix Wt</param>
-    /// <param name="input">Input vector xt</param>
-    /// <param name="outputGradient">Gradient ∇ytL(Wt; xt)</param>
-    /// <returns>Updated parameters Wt+1</returns>
+    /// <param name="currentParameters">Current parameter matrix W(t)</param>
+    /// <param name="input">Input vector x(t)</param>
+    /// <param name="outputGradient">Gradient gradient_y(L(W(t); x(t)))</param>
+    /// <returns>Updated parameters W(t+1)</returns>
     public Matrix<T> UpdateMatrix(Matrix<T> currentParameters, Vector<T> input, Vector<T> outputGradient)
     {
         int rows = currentParameters.Rows;
         int cols = currentParameters.Columns;
 
-        // Compute (I - xt*xt^T)
+        // Compute (I - x(t)*x(t)^T)
         var identityMinusOuterProduct = ComputeIdentityMinusOuterProduct(input);
 
-        // Compute Wt * (I - xt*xt^T)
+        // Compute W(t) * (I - x(t)*x(t)^T)
         var firstTerm = currentParameters.Multiply(identityMinusOuterProduct);
 
-        // Compute ∇ytL(Wt; xt) ⊗ xt (outer product)
+        // Compute gradient_y(L(W(t); x(t))) outer-product x(t)
         var gradientUpdate = ComputeOuterProduct(outputGradient, input);
 
-        // Scale by learning rate: η * (∇ytL ⊗ xt)
+        // Scale by learning rate: eta * (gradient_y(L) outer-product x(t))
         var scaledGradient = gradientUpdate.Multiply(_learningRate);
 
-        // Final update: Wt+1 = Wt * (I - xt*xt^T) - η * (∇ytL ⊗ xt)
+        // Final update: W(t+1) = W(t) * (I - x(t)*x(t)^T) - eta * (gradient_y(L) outer-product x(t))
         var updated = firstTerm.Subtract(scaledGradient);
 
         return updated;
@@ -91,11 +91,11 @@ public class ModifiedGradientDescentOptimizer<T>
         // Apply modified update rule
         for (int i = 0; i < currentParameters.Length; i++)
         {
-            // Standard GD component: -η * gradient
+            // Standard GD component: -eta * gradient
             T gradComponent = _numOps.Multiply(outputGradient[i], _learningRate);
 
-            // Modification: scale by (1 - ||xt||²) factor for regularization
-            // CRITICAL: Clip to prevent negative scaling when ||xt||² > 1
+            // Modification: scale by (1 - ||x(t)||^2) factor for regularization
+            // CRITICAL: Clip to prevent negative scaling when ||x(t)||^2 > 1
             // Without clipping, parameters would explode when input norm exceeds 1
             T modFactor = _numOps.Subtract(_numOps.One, inputNormSquared);
             if (_numOps.LessThan(modFactor, _numOps.Zero))
@@ -112,7 +112,7 @@ public class ModifiedGradientDescentOptimizer<T>
     }
 
     /// <summary>
-    /// Computes (I - xt*xt^T) where xt is the input vector.
+    /// Computes (I - x(t)*x(t)^T) where x(t) is the input vector.
     /// This is the modification term that accounts for data dependencies.
     /// </summary>
     private Matrix<T> ComputeIdentityMinusOuterProduct(Vector<T> input)
@@ -126,7 +126,7 @@ public class ModifiedGradientDescentOptimizer<T>
             result[i, i] = _numOps.One;
         }
 
-        // Subtract outer product: xt*xt^T
+        // Subtract outer product: x(t)*x(t)^T
         for (int i = 0; i < dim; i++)
         {
             for (int j = 0; j < dim; j++)
@@ -140,7 +140,7 @@ public class ModifiedGradientDescentOptimizer<T>
     }
 
     /// <summary>
-    /// Computes outer product of two vectors: a ⊗ b = a*b^T
+    /// Computes outer product of two vectors: a outer-product b = a*b^T
     /// </summary>
     private Matrix<T> ComputeOuterProduct(Vector<T> a, Vector<T> b)
     {
