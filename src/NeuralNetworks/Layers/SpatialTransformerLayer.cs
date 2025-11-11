@@ -546,7 +546,7 @@ public class SpatialTransformerLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     /// - Translation (2 parameters)
     /// 
     /// The method:
-    /// - Converts these parameters into a 2�3 matrix format that can be used for transformation
+    /// - Converts these parameters into a 2×3 matrix format that can be used for transformation
     /// - Applies limits to prevent extreme transformations that might distort the image too much
     /// - Ensures that small parameter values result in transformations close to identity (no change)
     /// 

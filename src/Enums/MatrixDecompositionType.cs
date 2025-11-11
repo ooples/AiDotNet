@@ -10,7 +10,7 @@ namespace AiDotNet.Enums;
 /// (grids of numbers) into simpler components to solve problems more efficiently.
 /// 
 /// Think of it as:
-/// - Breaking down a complex number like 15 into its factors 3 � 5
+/// - Breaking down a complex number like 15 into its factors 3 × 5
 /// - Disassembling a complicated machine into its basic parts
 /// - Converting a difficult problem into several easier ones
 /// 
@@ -353,7 +353,7 @@ public enum MatrixDecompositionType
     Bidiagonal,
     
     /// <summary>
-    /// Decomposes a symmetric matrix into the product U�D�U?, where U is upper triangular with 1s on the diagonal and D is diagonal.
+    /// Decomposes a symmetric matrix into the product U·D·Uᵀ, where U is upper triangular with 1s on the diagonal and D is diagonal.
     /// </summary>
     /// <remarks>
     /// <para>
@@ -377,7 +377,7 @@ public enum MatrixDecompositionType
     Udu,
     
     /// <summary>
-    /// Decomposes a symmetric matrix into the product L�D�L?, where L is lower triangular with 1s on the diagonal and D is diagonal.
+    /// Decomposes a symmetric matrix into the product L·D·Lᵀ, where L is lower triangular with 1s on the diagonal and D is diagonal.
     /// </summary>
     /// <remarks>
     /// <para>

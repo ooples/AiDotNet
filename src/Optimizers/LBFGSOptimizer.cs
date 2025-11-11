@@ -3,12 +3,12 @@
 namespace AiDotNet.Optimizers;
 
 /// <summary>
-/// Implements the Limited-memory Broyden�Fletcher�Goldfarb�Shanno (L-BFGS) optimization algorithm.
+/// Implements the Limited-memory Broyden-Fletcher-Goldfarb-Shanno (L-BFGS) optimization algorithm.
 /// </summary>
 /// <remarks>
 /// <para>
-/// L-BFGS is a quasi-Newton method for solving unconstrained nonlinear optimization problems. It approximates the 
-/// Broyden�Fletcher�Goldfarb�Shanno (BFGS) algorithm using a limited amount of computer memory, making it suitable 
+/// L-BFGS is a quasi-Newton method for solving unconstrained nonlinear optimization problems. It approximates the
+/// Broyden-Fletcher-Goldfarb-Shanno (BFGS) algorithm using a limited amount of computer memory, making it suitable 
 /// for optimization problems with many variables.
 /// </para>
 /// <para><b>For Beginners:</b> 
