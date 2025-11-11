@@ -265,7 +265,7 @@ jobs:
     name: Publish to NuGet
     runs-on: ubuntu-latest
     needs: version-and-build
-    if: needs.version-and-build.outputs.should_release == 'true' && secrets.NUGET_API_KEY != ''
+    if: needs.version-and-build.outputs.should_release == 'true' && secrets.NUGET_API_KEY != null
     steps:
       - name: Download package
         uses: actions/download-artifact@v4
