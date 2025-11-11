@@ -353,11 +353,13 @@ public class CapsuleNetwork<T> : NeuralNetworkBase<T>
         }
 
         // Find the digit capsule layer (second-to-last layer, before reconstruction)
+        // Use type-safe checking instead of string matching to avoid fragility
         int digitCapsLayerIndex = -1;
         for (int i = Layers.Count - 1; i >= 0; i--)
         {
-            if (Layers[i].GetType().Name.Contains("DigitCapsule") ||
-                Layers[i].GetType().Name.Contains("Capsule"))
+            if (Layers[i] is DigitCapsuleLayer<T> ||
+                Layers[i] is CapsuleLayer<T> ||
+                Layers[i] is PrimaryCapsuleLayer<T>)
             {
                 digitCapsLayerIndex = i;
                 break;
