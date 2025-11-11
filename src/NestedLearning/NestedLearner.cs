@@ -145,6 +145,21 @@ public class NestedLearner<T, TInput, TOutput> : INestedLearner<T, TInput, TOutp
         var stopwatch = Stopwatch.StartNew();
         var dataList = trainingData.ToList();
 
+        // Guard against empty dataset
+        if (dataList.Count == 0)
+        {
+            stopwatch.Stop();
+            return new MetaTrainingResult<T>
+            {
+                FinalMetaLoss = _numOps.Zero,
+                FinalTaskLoss = _numOps.Zero,
+                FinalAccuracy = _numOps.Zero,
+                TotalIterations = _globalStep,
+                TotalTimeMs = stopwatch.Elapsed.TotalMilliseconds,
+                Converged = false
+            };
+        }
+
         T previousLoss = _numOps.FromDouble(double.MaxValue);
         int iterationsWithoutImprovement = 0;
         const int patience = 50;
@@ -205,6 +220,20 @@ public class NestedLearner<T, TInput, TOutput> : INestedLearner<T, TInput, TOutp
         _previousTaskParameters = _model.GetParameters().Clone();
 
         var dataList = newTaskData.ToList();
+
+        // Guard against empty dataset
+        if (dataList.Count == 0)
+        {
+            startTime.Stop();
+            return new MetaAdaptationResult<T>
+            {
+                NewTaskLoss = _numOps.Zero,
+                ForgettingMetric = _numOps.Zero,
+                AdaptationSteps = 0,
+                AdaptationTimeMs = startTime.Elapsed.TotalMilliseconds
+            };
+        }
+
         T newTaskLoss = _numOps.Zero;
         int adaptationSteps = 0;
 
