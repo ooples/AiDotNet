@@ -7,8 +7,8 @@ This document tracks the implementation status of automatic differentiation (aut
 **Last Updated:** 2025-01-11
 **Total Layers:** 75
 **Layers with Autodiff Infrastructure:** 75 (100%)
-**Layers with Full Autodiff Support:** 15+ (20%)
-**TensorOperations Implemented:** 24 (19 base + 5 new)
+**Layers with Full Autodiff Support:** 20+ (27%)
+**TensorOperations Implemented:** 26 (19 base + 7 new)
 **Higher-Order Gradients:** ✅ Fully supported via GradientTape.Gradient(createGraph: true)
 
 ## Implementation Status
@@ -113,31 +113,15 @@ To achieve full autodiff support across all layers, the following operations nee
    - Used by: PoolingLayer, GlobalPoolingLayer
    - Status: Ready for integration into pooling layers
 
-6. **LayerNorm** - Required for layer normalization
-   ```csharp
-   public static ComputationNode<T> LayerNorm(
-       ComputationNode<T> input,
-       ComputationNode<T> gamma,
-       ComputationNode<T> beta,
-       double epsilon = 1e-5)
-   ```
+6. ✅ **LayerNorm** - IMPLEMENTED
    - Used by: LayerNormalizationLayer
-   - Complexity: Medium (mean, variance, normalization)
+   - Status: Ready for integration, supports learnable gamma/beta
+   - Features: Per-sample normalization, no batch dependency
 
-7. **BatchNorm** - Required for batch normalization
-   ```csharp
-   public static ComputationNode<T> BatchNorm(
-       ComputationNode<T> input,
-       ComputationNode<T> gamma,
-       ComputationNode<T> beta,
-       ComputationNode<T> runningMean,
-       ComputationNode<T> runningVar,
-       bool training = true,
-       double momentum = 0.9,
-       double epsilon = 1e-5)
-   ```
+7. ✅ **BatchNorm** - IMPLEMENTED
    - Used by: BatchNormalizationLayer
-   - Complexity: Medium (statistics computation and moving averages)
+   - Status: Ready for integration, supports train/inference modes
+   - Features: Batch statistics, running mean/variance, learnable gamma/beta
 
 ### Low Priority
 
@@ -193,14 +177,18 @@ All 24 operations currently implemented in `src/Autodiff/TensorOperations.cs`:
 18. MaxPool2D - 2D max pooling with gradient routing
 19. AvgPool2D - 2D average pooling
 
+✅ **Normalization Operations (2 operations):**
+20. LayerNorm - Layer normalization (per-sample normalization)
+21. BatchNorm - Batch normalization (across-batch normalization)
+
 ✅ **Advanced Math (3 operations):**
-20. Exp - Exponential function
-21. Log - Natural logarithm
-22. Sqrt - Square root
+22. Exp - Exponential function
+23. Log - Natural logarithm
+24. Sqrt - Square root
 
 ✅ **Utility (2 operations):**
-23. Variable - Create differentiable variable node
-24. Constant - Create non-differentiable constant node
+25. Variable - Create differentiable variable node
+26. Constant - Create non-differentiable constant node
 
 **All operations support:**
 - Automatic gradient computation via backward functions
