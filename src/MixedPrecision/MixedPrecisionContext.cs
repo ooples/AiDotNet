@@ -192,12 +192,12 @@ public class MixedPrecisionContext : IDisposable
     /// <returns>The working weights in FP16.</returns>
     public Vector<Half> GetWorkingWeights(string parameterName = "params")
     {
-        if (!_workingWeights.ContainsKey(parameterName))
+        if (!_workingWeights.TryGetValue(parameterName, out var workingWeights))
         {
             throw new KeyNotFoundException($"Parameter '{parameterName}' not found. Available parameters: {string.Join(", ", ParameterNames)}");
         }
 
-        return _workingWeights[parameterName];
+        return workingWeights;
     }
 
     /// <summary>
@@ -207,12 +207,12 @@ public class MixedPrecisionContext : IDisposable
     /// <returns>The master weights in FP32.</returns>
     public Vector<float> GetMasterWeights(string parameterName = "params")
     {
-        if (!_masterWeights.ContainsKey(parameterName))
+        if (!_masterWeights.TryGetValue(parameterName, out var masterWeights))
         {
             throw new KeyNotFoundException($"Parameter '{parameterName}' not found. Available parameters: {string.Join(", ", ParameterNames)}");
         }
 
-        return _masterWeights[parameterName];
+        return masterWeights;
     }
 
     /// <summary>
@@ -228,12 +228,10 @@ public class MixedPrecisionContext : IDisposable
     /// </remarks>
     public void UpdateMasterWeights(Vector<float> gradients, float learningRate, string parameterName = "params")
     {
-        if (!_masterWeights.ContainsKey(parameterName))
+        if (!_masterWeights.TryGetValue(parameterName, out var masterParams))
         {
             throw new KeyNotFoundException($"Parameter '{parameterName}' not found.");
         }
-
-        var masterParams = _masterWeights[parameterName];
 
         if (masterParams.Length != gradients.Length)
         {

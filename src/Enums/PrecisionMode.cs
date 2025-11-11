@@ -28,6 +28,8 @@ public enum PrecisionMode
     /// Brain float 16 (bfloat16) format.
     /// Same range as FP32 but reduced precision (8 bits mantissa).
     /// Better numerical stability than FP16, used by Google TPUs.
+    ///
+    /// Note: BF16 is reserved for future implementation and not currently supported.
     /// </summary>
     BF16,
 

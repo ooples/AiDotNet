@@ -218,7 +218,6 @@ public class LossScalerTests
             growthInterval: growthInterval,
             growthFactor: 2.0
         );
-        var gradients = new Vector<float>(new[] { 10.0f, 20.0f });
 
         // Act - Perform successful updates for growth interval
         for (int i = 0; i < growthInterval; i++)
@@ -235,7 +234,6 @@ public class LossScalerTests
     {
         // Arrange
         var scaler = new LossScaler<float>(initialScale: 100.0, dynamicScaling: false);
-        var gradients = new Vector<float>(new[] { 10.0f, 20.0f });
 
         // Act - Perform multiple successful updates
         for (int i = 0; i < 10; i++)
