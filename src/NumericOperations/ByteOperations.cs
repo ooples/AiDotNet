@@ -301,11 +301,11 @@ public class ByteOperations : INumericOperations<byte>
     /// <para><b>For Beginners:</b> This method multiplies a number by itself.
     /// 
     /// For example:
-    /// - Square of 2 is 4 (2 � 2)
-    /// - Square of 10 is 100 (10 � 10)
+    /// - Square of 2 is 4 (2 × 2)
+    /// - Square of 10 is 100 (10 × 10)
     /// 
     /// Because of byte limits:
-    /// - Square of 16 is 0 (16 � 16 = 256, which wraps to 0)
+    /// - Square of 16 is 0 (16 × 16 = 256, which wraps to 0)
     /// - Any value of 16 or higher will wrap around when squared
     /// 
     /// Be careful when squaring larger byte values.
@@ -323,12 +323,12 @@ public class ByteOperations : INumericOperations<byte>
     /// This method calculates the exponential function (e^value) and rounds the result to the nearest integer.
     /// If the result exceeds 255, it is capped at 255.
     /// </para>
-    /// <para><b>For Beginners:</b> This method calculates the mathematical constant e (�2.718) raised to a power.
+    /// <para><b>For Beginners:</b> This method calculates the mathematical constant e (≈2.718) raised to a power.
     /// 
     /// For example:
-    /// - e^1 � 2.718 (rounded to 3 as a byte)
-    /// - e^2 � 7.389 (rounded to 7 as a byte)
-    /// - e^5 � 148.413 (rounded to 148 as a byte)
+    /// - e^1 × 2.718 (rounded to 3 as a byte)
+    /// - e^2 × 7.389 (rounded to 7 as a byte)
+    /// - e^5 × 148.413 (rounded to 148 as a byte)
     /// 
     /// The result is limited to 255 (maximum byte value).
     /// This function grows very quickly, so even moderate input values will reach the maximum.
@@ -371,8 +371,8 @@ public class ByteOperations : INumericOperations<byte>
     /// <para><b>For Beginners:</b> This method raises one number to the power of another.
     /// 
     /// For example:
-    /// - 2 raised to power 3 is 8 (2� = 2�2�2 = 8)
-    /// - 3 raised to power 2 is 9 (3� = 3�3 = 9)
+    /// - 2 raised to power 3 is 8 (2² = 2 × 2×2 = 8)
+    /// - 3 raised to power 2 is 9 (3² = 3 × 3 = 9)
     /// 
     /// Because of byte limits:
     /// - 2 raised to power 8 is 0 (28 = 256, which wraps to 0)
@@ -398,7 +398,7 @@ public class ByteOperations : INumericOperations<byte>
     /// The natural logarithm answers the question: "To what power must e be raised to get this number?"
     /// 
     /// For example:
-    /// - Log of 1 is 0 (e� = 1)
+    /// - Log of 1 is 0 (e^ = 1)
     /// - Log of 3 is approximately 1.099 (truncated to 1 as a byte)
     /// - Log of 7 is approximately 1.946 (truncated to 1 as a byte)
     /// 

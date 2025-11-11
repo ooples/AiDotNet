@@ -83,7 +83,7 @@ public class SByteOperations : INumericOperations<sbyte>
     /// This method performs multiplication of two signed byte values and returns their product, cast to a signed byte.
     /// If the product exceeds the range of a signed byte, overflow will occur.
     /// </para>
-    /// <para><b>For Beginners:</b> This method multiplies two numbers together, like 10 � 5 = 50.
+    /// <para><b>For Beginners:</b> This method multiplies two numbers together, like 10 × 5 = 50.
     /// 
     /// Multiplication is especially prone to overflow with sbytes since numbers grow quickly when multiplied:
     /// - Multiply(20, 10) should be 200, but since that's outside the sbyte range, you get -56 instead
@@ -200,8 +200,8 @@ public class SByteOperations : INumericOperations<sbyte>
     /// 
     /// The square root of a number is a value that, when multiplied by itself, gives the original number.
     /// For example:
-    /// - The square root of 9 is 3 (because 3 � 3 = 9)
-    /// - The square root of 16 is 4 (because 4 � 4 = 16)
+    /// - The square root of 9 is 3 (because 3 × 3 = 9)
+    /// - The square root of 16 is 4 (because 4 × 4 = 16)
     /// - The square root of 125 would be approximately 11.18, but this method returns 11 (the whole number part only)
     /// 
     /// Since the square root of most numbers is not a whole number, and sbyte can only store whole numbers,
@@ -337,8 +337,8 @@ public class SByteOperations : INumericOperations<sbyte>
     /// <para><b>For Beginners:</b> This method multiplies a number by itself.
     /// 
     /// For example:
-    /// - Square(4) returns 16 (4 � 4 = 16)
-    /// - Square(-3) returns 9 (-3 � -3 = 9)
+    /// - Square(4) returns 16 (4 × 4 = 16)
+    /// - Square(-3) returns 9 (-3 ≈ -3 = 9)
     /// - Square(12) should return 144, but since that's outside the range of sbyte, you get -112 instead
     /// 
     /// Due to the limited range of sbyte (-128 to 127), squaring even moderate values (like 12) can cause overflow.
@@ -365,10 +365,10 @@ public class SByteOperations : INumericOperations<sbyte>
     /// 
     /// In mathematics, "e" is a special number (approximately 2.71828) that appears naturally in many calculations.
     /// This method computes e^value and rounds to the nearest whole number, capping at 127 (the maximum sbyte value):
-    /// - Exp(1) returns 3 (e� � 2.71828, rounded to 3)
-    /// - Exp(2) returns 7 (e� � 7.38906, rounded to 7)
-    /// - Exp(0) returns 1 (e� = 1)
-    /// - Exp(5) returns 127 (e5 � 148.4, which exceeds 127, so it's capped at 127)
+    /// - Exp(1) returns 3 (e^ ≈ 2.71828, rounded to 3)
+    /// - Exp(2) returns 7 (e^ ≈ 7.38906, rounded to 7)
+    /// - Exp(0) returns 1 (e^ = 1)
+    /// - Exp(5) returns 127 (e5 × 148.4, which exceeds 127, so it's capped at 127)
     /// 
     /// The exponential function grows very quickly, so it's only useful with sbyte for small input values.
     /// Any input value of 5 or greater will produce a result that exceeds the maximum sbyte value of 127,
@@ -415,8 +415,8 @@ public class SByteOperations : INumericOperations<sbyte>
     /// <para><b>For Beginners:</b> This method raises a number to a power and gives a small whole number result.
     /// 
     /// For example:
-    /// - Power(2, 3) returns 8 (2� = 2�2�2 = 8)
-    /// - Power(3, 2) returns 9 (3� = 3�3 = 9)
+    /// - Power(2, 3) returns 8 (2² = 2 × 2×2 = 8)
+    /// - Power(3, 2) returns 9 (3² = 3 × 3 = 9)
     /// - Power(2, 7) should return 128, but since that's outside the range of sbyte, you'd get -128 instead
     /// 
     /// Due to the limited range of sbyte, even moderate powers can cause overflow:
@@ -442,10 +442,10 @@ public class SByteOperations : INumericOperations<sbyte>
     /// <para><b>For Beginners:</b> This method calculates the natural logarithm of a number and gives a small whole number result.
     /// 
     /// The natural logarithm tells you what power you need to raise "e" to get your number:
-    /// - Log(3) returns 1 (because e� � 2.718, and the integer result of ln(3) � 1.099 is 1)
-    /// - Log(10) returns 2 (because ln(10) � 2.303)
-    /// - Log(125) returns 4 (because ln(125) � 4.828)
-    /// - Log(1) returns 0 (because e� = 1)
+    /// - Log(3) returns 1 (because e^ ≈ 2.718, and the integer result of ln(3) ≈ 1.099 is 1)
+    /// - Log(10) returns 2 (because ln(10) ≈ 2.303)
+    /// - Log(125) returns 4 (because ln(125) ≈ 4.828)
+    /// - Log(1) returns 0 (because e^ = 1)
     /// 
     /// This integer version of logarithm loses a lot of precision compared to its floating-point
     /// equivalent. However, since the logarithm of small positive numbers is typically a small number,
