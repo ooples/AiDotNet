@@ -393,6 +393,8 @@ public class KnowledgeDistillationOptions<T, TInput, TOutput>
             throw new ArgumentException("AttentionWeight must be between 0 and 1", nameof(AttentionWeight));
         if (EMADecay < 0 || EMADecay > 1)
             throw new ArgumentException("EMADecay must be between 0 and 1", nameof(EMADecay));
+        if (LabelSmoothingFactor < 0 || LabelSmoothingFactor > 1)
+            throw new ArgumentException("LabelSmoothingFactor must be between 0 and 1", nameof(LabelSmoothingFactor));
         if (SelfDistillationGenerations < 1)
             throw new ArgumentException("SelfDistillationGenerations must be at least 1", nameof(SelfDistillationGenerations));
 
