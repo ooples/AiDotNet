@@ -86,7 +86,7 @@ public class DistillationLoss<T> : DistillationStrategyBase<Vector<T>, T>
         var studentSoft = Softmax(studentLogits, Temperature);
         var teacherSoft = Softmax(teacherLogits, Temperature);
 
-        var softLoss = KLDivergence(studentSoft, teacherSoft);
+        var softLoss = KLDivergence(teacherSoft, studentSoft);
 
         // Scale by T² to balance gradient magnitudes
         // This is crucial: without T² scaling, the soft loss gradients would be too small

@@ -123,7 +123,7 @@ public class ContrastiveDistillationStrategy<T> : DistillationStrategyBase<Vecto
         // Standard distillation loss (scaled by 1 - contrastiveWeight)
         var studentSoft = Softmax(studentOutput, Temperature);
         var teacherSoft = Softmax(teacherOutput, Temperature);
-        var softLoss = KLDivergence(studentSoft, teacherSoft);
+        var softLoss = KLDivergence(teacherSoft, studentSoft);
         softLoss = NumOps.Multiply(softLoss, NumOps.FromDouble(Temperature * Temperature));
 
         if (trueLabels != null)

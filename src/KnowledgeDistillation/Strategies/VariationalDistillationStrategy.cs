@@ -67,7 +67,7 @@ public class VariationalDistillationStrategy<T> : DistillationStrategyBase<Vecto
         // Standard distillation loss (weighted)
         var studentSoft = Softmax(studentOutput, Temperature);
         var teacherSoft = Softmax(teacherOutput, Temperature);
-        var softLoss = KLDivergence(studentSoft, teacherSoft);
+        var softLoss = KLDivergence(teacherSoft, studentSoft);
         softLoss = NumOps.Multiply(softLoss, NumOps.FromDouble(Temperature * Temperature * (1.0 - _variationalWeight)));
 
         if (trueLabels != null)

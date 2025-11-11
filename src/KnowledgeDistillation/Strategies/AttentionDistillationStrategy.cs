@@ -145,7 +145,7 @@ public class AttentionDistillationStrategy<T> : DistillationStrategyBase<Vector<
         // Soft loss with temperature scaling
         var studentSoft = Softmax(studentOutput, Temperature);
         var teacherSoft = Softmax(teacherOutput, Temperature);
-        var softLoss = KLDivergence(studentSoft, teacherSoft);
+        var softLoss = KLDivergence(teacherSoft, studentSoft);
         softLoss = NumOps.Multiply(softLoss, NumOps.FromDouble(Temperature * Temperature));
 
         // Hard loss if labels provided

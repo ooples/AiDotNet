@@ -26,7 +26,7 @@ public class SimilarityPreservingStrategy<T> : DistillationStrategyBase<Vector<T
 
         var studentSoft = Softmax(studentOutput, Temperature);
         var teacherSoft = Softmax(teacherOutput, Temperature);
-        var softLoss = KLDivergence(studentSoft, teacherSoft);
+        var softLoss = KLDivergence(teacherSoft, studentSoft);
         softLoss = NumOps.Multiply(softLoss, NumOps.FromDouble(Temperature * Temperature));
 
         if (trueLabels != null)
