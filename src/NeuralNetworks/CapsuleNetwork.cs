@@ -496,6 +496,227 @@ public class CapsuleNetwork<T> : NeuralNetworkBase<T>, IAuxiliaryLossLayer<T>
     }
 
     /// <summary>
+    /// Computes the reconstruction loss for capsule network regularization.
+    /// </summary>
+    /// <param name="input">The original input tensor.</param>
+    /// <param name="trueLabel">The true class label for masking. If null, uses argmax of capsule outputs.</param>
+    /// <returns>The reconstruction loss (MSE between reconstruction and input).</returns>
+    /// <remarks>
+    /// <para>
+    /// This method implements the reconstruction loss from the original Capsule Networks paper
+    /// (Sabour et al., 2017). During training, only the capsule corresponding to the true class
+    /// is used for reconstruction (others are masked to zero). During inference, the capsule with
+    /// the highest activation is used. The reconstruction helps regularize the network and ensures
+    /// that capsule vectors encode meaningful instantiation parameters.
+    /// </para>
+    /// <para><b>For Beginners:</b> This method helps the network learn better by making it reconstruct the input.
+    ///
+    /// How it works:
+    /// 1. Forward pass through the network to get capsule outputs
+    /// 2. Mask: Zero out all capsules except the correct one (or most active one)
+    /// 3. Reconstruction: Pass masked capsules through decoder layers
+    /// 4. Loss: Measure how different the reconstruction is from the original input
+    ///
+    /// Why this helps:
+    /// - Forces capsules to encode useful information (position, rotation, etc.)
+    /// - Acts as regularization to prevent overfitting
+    /// - Improves interpretability of what capsules represent
+    ///
+    /// The reconstruction loss is typically weighted much lower than the main classification loss
+    /// (e.g., 0.0005 * reconstruction_loss) to avoid overwhelming the primary objective.
+    /// </para>
+    /// </remarks>
+    public T ComputeReconstructionLoss(Tensor<T> input, int? trueLabel = null)
+    {
+        // Find the reconstruction layer (should be last layer in default architecture)
+        var reconstructionLayer = Layers.OfType<ReconstructionLayer<T>>().FirstOrDefault();
+        if (reconstructionLayer == null)
+        {
+            // No reconstruction layer in architecture - return zero loss
+            return NumOps.Zero;
+        }
+
+        // Perform forward pass with memory to capture intermediate outputs
+        if (SupportsTraining)
+        {
+            ForwardWithMemory(input);
+        }
+        else
+        {
+            // If not in training mode, do regular forward pass
+            Predict(input);
+        }
+
+        // Find the digit capsule layer (second-to-last layer, before reconstruction)
+        // Use type-safe checking instead of string matching to avoid fragility
+        int digitCapsLayerIndex = -1;
+        for (int i = Layers.Count - 1; i >= 0; i--)
+        {
+            if (Layers[i] is DigitCapsuleLayer<T> ||
+                Layers[i] is CapsuleLayer<T> ||
+                Layers[i] is PrimaryCapsuleLayer<T>)
+            {
+                digitCapsLayerIndex = i;
+                break;
+            }
+        }
+
+        if (digitCapsLayerIndex == -1 || !_layerOutputs.TryGetValue(digitCapsLayerIndex, out var capsuleOutputs))
+        {
+            // Could not find capsule layer output
+            return NumOps.Zero;
+        }
+
+        // Apply masking: zero out all capsules except the target capsule
+        var maskedCapsules = ApplyCapsuleMask(capsuleOutputs, trueLabel);
+
+        // Pass masked capsules through reconstruction layer
+        var reconstruction = reconstructionLayer.Forward(maskedCapsules);
+
+        // Flatten original input for comparison
+        // Validate the input can be flattened before attempting reshape
+        int expectedLength = 1;
+        foreach (int dim in input.Shape)
+        {
+            expectedLength *= dim;
+        }
+
+        if (expectedLength != input.Length)
+        {
+            throw new InvalidOperationException(
+                $"Input tensor product of dimensions ({expectedLength}) " +
+                $"does not match actual length ({input.Length}).");
+        }
+
+        var flattenedInput = input.Reshape([input.Length]);
+
+        // Validate shapes match before computing MSE
+        if (flattenedInput.Length != reconstruction.Length)
+        {
+            throw new InvalidOperationException(
+                $"Shape mismatch: input length ({flattenedInput.Length}) " +
+                $"does not match reconstruction length ({reconstruction.Length}). " +
+                $"This indicates a misconfiguration in the reconstruction layer architecture.");
+        }
+
+        // Compute MSE loss manually since Tensor doesn't have ToEnumerable
+        T sumSquaredError = NumOps.Zero;
+
+        for (int i = 0; i < flattenedInput.Length; i++)
+        {
+            T diff = NumOps.Subtract(flattenedInput[i], reconstruction[i]);
+            sumSquaredError = NumOps.Add(sumSquaredError, NumOps.Multiply(diff, diff));
+        }
+
+        return NumOps.Divide(sumSquaredError, NumOps.FromDouble(flattenedInput.Length));
+    }
+
+    /// <summary>
+    /// Applies masking to capsule outputs, zeroing out all capsules except the target.
+    /// </summary>
+    /// <param name="capsuleOutputs">The capsule output tensor.</param>
+    /// <param name="targetClass">The target class index. If null, uses argmax.</param>
+    /// <returns>Masked capsule tensor.</returns>
+    /// <remarks>
+    /// <para>
+    /// During training, we mask out the activity vectors of all but the target capsule.
+    /// During inference (targetClass = null), we use the capsule with the highest norm.
+    /// </para>
+    /// <para>
+    /// Note: Current implementation applies the same target capsule mask to all batch elements.
+    /// This is appropriate for reconstruction loss with batch size 1 or when all samples
+    /// in the batch have the same target class. For per-sample masking with different targets,
+    /// this method would need to accept an array of target indices.
+    /// </para>
+    /// </remarks>
+    private Tensor<T> ApplyCapsuleMask(Tensor<T> capsuleOutputs, int? targetClass)
+    {
+        // Use provided label (training mode) or argmax of capsule norms (inference mode)
+        int targetCapsuleIndex = targetClass.HasValue
+            ? targetClass.Value
+            : GetPredictedClass(capsuleOutputs);
+
+        // Create masked copy
+        var masked = capsuleOutputs.Clone();
+
+        // Zero out all capsules except target
+        // Shape is expected to be [batch, numCapsules, capsuleDim]
+        // Note: Same target capsule is masked for all batch elements
+        if (capsuleOutputs.Shape.Length >= 2)
+        {
+            int batchSize = capsuleOutputs.Shape[0];
+            int numCapsules = capsuleOutputs.Shape[1];
+            int capsuleDim = capsuleOutputs.Shape.Length > 2 ? capsuleOutputs.Shape[2] : 1;
+
+            for (int b = 0; b < batchSize; b++)
+            {
+                for (int c = 0; c < numCapsules; c++)
+                {
+                    if (c != targetCapsuleIndex)
+                    {
+                        // Zero out this capsule
+                        for (int d = 0; d < capsuleDim; d++)
+                        {
+                            int index = b * numCapsules * capsuleDim + c * capsuleDim + d;
+                            if (index < masked.Length)
+                            {
+                                masked[index] = NumOps.Zero;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        return masked;
+    }
+
+    /// <summary>
+    /// Gets the predicted class from capsule outputs based on capsule norms.
+    /// </summary>
+    /// <param name="capsuleOutputs">The capsule output tensor.</param>
+    /// <returns>The index of the capsule with the highest norm.</returns>
+    /// <remarks>
+    /// Note: For batched inputs, this currently only examines the first batch element (batch index 0).
+    /// For proper batched inference, this would need to return predictions for all batch elements.
+    /// Current usage is primarily for reconstruction masking during training with batch size 1.
+    /// </remarks>
+    private int GetPredictedClass(Tensor<T> capsuleOutputs)
+    {
+        // Compute norm of each capsule and return argmax
+        // Assuming shape is [batch, numCapsules, capsuleDim]
+        // Currently only processes batch index 0 for simplicity
+        int batchOffset = 0; // Could be parameterized for specific batch element
+        int numCapsules = capsuleOutputs.Shape.Length > 1 ? capsuleOutputs.Shape[1] : 1;
+        int capsuleDim = capsuleOutputs.Shape.Length > 2 ? capsuleOutputs.Shape[2] : 1;
+
+        T maxNorm = NumOps.Zero;
+        int maxIndex = 0;
+
+        for (int c = 0; c < numCapsules; c++)
+        {
+            T normSquared = NumOps.Zero;
+            for (int d = 0; d < capsuleDim; d++)
+            {
+                int index = batchOffset + c * capsuleDim + d;
+                if (index < capsuleOutputs.Length)
+                {
+                    T val = capsuleOutputs[index];
+                    normSquared = NumOps.Add(normSquared, NumOps.Multiply(val, val));
+                }
+            }
+
+            if (NumOps.GreaterThan(normSquared, maxNorm))
+            {
+                maxNorm = normSquared;
+                maxIndex = c;
+            }
+        }
+
+        return maxIndex;
+    }
+
+    /// <summary>
     /// Creates a new instance of the capsule network model.
     /// </summary>
     /// <returns>A new instance of the capsule network model with the same configuration.</returns>
@@ -506,12 +727,12 @@ public class CapsuleNetwork<T> : NeuralNetworkBase<T>, IAuxiliaryLossLayer<T>
     /// with the serialized data. The new instance will have the same architecture and loss function as the original.
     /// </para>
     /// <para><b>For Beginners:</b> This method creates a copy of the network structure without copying the learned data.
-    /// 
+    ///
     /// Think of it like creating a blueprint of the capsule network:
     /// - It copies the same overall design (architecture)
     /// - It uses the same loss function to measure performance
     /// - But it doesn't copy any of the learned values or weights
-    /// 
+    ///
     /// This is primarily used when saving or loading models, creating a framework that the saved parameters
     /// can be loaded into later. It's like creating an empty duplicate of the network's structure
     /// that can later be filled with the knowledge from the original network.
