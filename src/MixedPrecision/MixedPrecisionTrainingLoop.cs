@@ -130,19 +130,18 @@ public class MixedPrecisionTrainingLoop<T>
         var loss = _lossFunction.CalculateLoss(outputVector, targetVector);
         LastLoss = loss;
 
-        // Step 4: Scale loss to prevent gradient underflow
-        var scaledLoss = _context.LossScaler.ScaleLoss(loss as float? ?? throw new InvalidOperationException("Loss must be float"));
-        var scaledLossTensor = Tensor<T>.FromVector(new Vector<T>(new[] { (T)(object)scaledLoss }));
+        // Step 4: Get loss scale factor
+        float scale = (float)_context.LossScaler.Scale;
 
-        // Step 5: Backward pass (gradients computed with scaled loss)
+        // Step 5: Backward pass (gradients scaled by scale factor)
         // Compute error gradient
         var errorVector = _lossFunction.CalculateDerivative(outputVector, targetVector);
 
-        // Scale the error
+        // Scale the error by the scale factor (not by loss * scale)
         var scaledError = new Vector<T>(errorVector.Length);
         for (int i = 0; i < errorVector.Length; i++)
         {
-            scaledError[i] = (T)(object)((float)(object)errorVector[i]! * scaledLoss);
+            scaledError[i] = (T)(object)((float)(object)errorVector[i]! * scale);
         }
 
         var errorTensor = Tensor<T>.FromVector(scaledError);

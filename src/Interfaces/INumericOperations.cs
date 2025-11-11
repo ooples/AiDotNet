@@ -1,3 +1,4 @@
+using System;
 namespace AiDotNet.Interfaces;
 
 /// <summary>

@@ -260,10 +260,9 @@ public class Tensor<T> : TensorBase<T>, IEnumerable<T>
             }
             else if (typeof(T) == typeof(double))
             {
-                // Source is double, convert via float (most compatible path)
+                // Source is double, preserve precision by converting directly
                 double doubleValue = (double)(object)sourceValue!;
-                float floatValue = (float)doubleValue;
-                resultData[i] = targetOps.FromFloat(floatValue);
+                resultData[i] = targetOps.FromDouble(doubleValue);
             }
             else
             {
