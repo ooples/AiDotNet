@@ -7,8 +7,8 @@ This document tracks the implementation status of automatic differentiation (aut
 **Last Updated:** 2025-01-11
 **Total Layers:** 75
 **Layers with Autodiff Infrastructure:** 75 (100%)
-**Layers with Full Autodiff Support:** 15 core layers + 30+ with partial support (60%)
-**TensorOperations Implemented:** 30 (19 base + 11 new: Conv2D, ConvTranspose2D, MaxPool2D, AvgPool2D, Softmax, Concat, Pad, LayerNorm, BatchNorm, ReduceMax, ReduceMean)
+**Layers with Full Autodiff Support:** 22 core layers (29%)
+**TensorOperations Implemented:** 36 (19 base + 17 new: Conv2D, ConvTranspose2D, MaxPool2D, AvgPool2D, Softmax, Concat, Pad, LayerNorm, BatchNorm, ReduceMax, ReduceMean, Split, Crop, Upsample, PixelShuffle, DilatedConv2D, DepthwiseConv2D)
 **Higher-Order Gradients:** ✅ Fully supported via GradientTape.Gradient(createGraph: true)
 **Graph Caching Optimization:** ✅ Automatic for persistent tapes
 
@@ -33,6 +33,13 @@ These layers have complete autodiff support using TensorOperations:
 13. **GlobalPoolingLayer** - ReduceMax and ReduceMean operations
 14. **GaussianNoiseLayer** - Identity gradient (noise is independent)
 15. **MaskingLayer** - ElementwiseMultiply for masking operation
+16. **SubpixelConvolutionalLayer** - PixelShuffle operation for depth-to-space
+17. **UpsamplingLayer** - Upsample operation for nearest-neighbor upsampling
+18. **DepthwiseSeparableConvolutionalLayer** - DepthwiseConv2D + Conv2D operations
+19. **CroppingLayer** - Crop operation for spatial cropping
+20. **SplitLayer** - Reshape operation for tensor splitting
+21. **DilatedConvolutionalLayer** - DilatedConv2D operation with dilation support
+22. **SeparableConvolutionalLayer** - DepthwiseConv2D + Conv2D composition
 
 ### 🔄 Partial Implementation (Infrastructure Ready)
 

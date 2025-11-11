@@ -6,11 +6,11 @@
 
 ### Completed Work
 
-**TensorOperations Implemented:** 34 total
+**TensorOperations Implemented:** 36 total
 - Base operations (19): Add, Subtract, Multiply, Divide, MatMul, Transpose, Reshape, ReLU, Sigmoid, Tanh, ElementwiseMultiply, Sum, Mean, Variance, Exp, Log, Pow, Sqrt, Abs
-- Session additions (15): Conv2D, ConvTranspose2D, MaxPool2D, AvgPool2D, Softmax, Concat, Pad, LayerNorm, BatchNorm, ReduceMax, ReduceMean, Split, Crop, Upsample, PixelShuffle
+- Session additions (17): Conv2D, ConvTranspose2D, MaxPool2D, AvgPool2D, Softmax, Concat, Pad, LayerNorm, BatchNorm, ReduceMax, ReduceMean, Split, Crop, Upsample, PixelShuffle, DilatedConv2D, DepthwiseConv2D
 
-**Layers with Full Autodiff:** 17
+**Layers with Full Autodiff:** 22
 1. DenseLayer
 2. ActivationLayer
 3. DropoutLayer
@@ -28,109 +28,19 @@
 15. MaskingLayer
 16. SubpixelConvolutionalLayer
 17. UpsamplingLayer
+18. DepthwiseSeparableConvolutionalLayer
+19. CroppingLayer
+20. SplitLayer
+21. DilatedConvolutionalLayer
+22. SeparableConvolutionalLayer
 
-### Remaining Work: 26 Layers
+### Remaining Work: 21 Layers
 
-## HIGH PRIORITY: Production-Ready Layers (9 layers)
+## HIGH PRIORITY: Production-Ready Layers (4 layers)
 
 These layers are commonly used in production and need TensorOperations added:
 
-### 1. DilatedConvolutionalLayer → DilatedConv2D operation needed
-**File:** `src/NeuralNetworks/Layers/DilatedConvolutionalLayer.cs:625`
-**Operation:** Dilated (atrous) convolution with dilation rate
-**Implementation Notes:**
-- Similar to Conv2D but with dilation parameter
-- Dilation inserts gaps between kernel elements
-- Formula: `output_h = (input_h + 2*pad - dilation*(kernel-1) - 1) / stride + 1`
-- Forward: Apply conv with dilated kernel
-- Backward: Same as Conv2D but accounting for dilation in index calculations
-
-**Pseudo-code for DilatedConv2D:**
-```csharp
-public static ComputationNode<T> DilatedConv2D(
-    ComputationNode<T> input,
-    ComputationNode<T> kernel,
-    ComputationNode<T>? bias = null,
-    int[]? stride = null,
-    int[]? padding = null,
-    int[]? dilation = null)  // NEW parameter
-{
-    // dilation defaults to [1,1] (normal conv)
-    // For dilation[0]=2, insert 1 zero between kernel rows
-    // Forward: standard conv but sample input with dilation spacing
-    // Backward: dilate gradients same way
-}
-```
-
-### 2. DepthwiseSeparableConvolutionalLayer → DepthwiseConv2D operation
-**File:** `src/NeuralNetworks/Layers/DepthwiseSeparableConvolutionalLayer.cs:587`
-**Operation:** Depthwise convolution (each input channel convolved separately)
-**Implementation Notes:**
-- Each input channel gets its own kernel (channel multiplier)
-- More efficient than standard convolution
-- Popular in MobileNets and efficient architectures
-- Forward: Apply separate conv per channel
-- Backward: Route gradients to respective channel kernels
-
-**Pseudo-code:**
-```csharp
-public static ComputationNode<T> DepthwiseConv2D(
-    ComputationNode<T> input,  // [batch, in_channels, H, W]
-    ComputationNode<T> kernel,  // [in_channels, multiplier, kH, kW]
-    ComputationNode<T>? bias = null,
-    int[]? stride = null,
-    int[]? padding = null)
-{
-    // Output: [batch, in_channels * multiplier, H', W']
-    // Each input channel convolved with its own kernel(s)
-    // No mixing across channels (that's done by pointwise conv)
-}
-```
-
-### 3. SeparableConvolutionalLayer → SeparableConv2D operation
-**File:** `src/NeuralNetworks/Layers/SeparableConvolutionalLayer.cs:529`
-**Operation:** Depthwise conv followed by 1x1 pointwise conv
-**Implementation Notes:**
-- Can be composed from DepthwiseConv2D + Conv2D(1x1)
-- Or implement as single fused operation for efficiency
-- Forward: depthwise then pointwise
-- Backward: backprop through both stages
-
-**Pseudo-code:**
-```csharp
-public static ComputationNode<T> SeparableConv2D(
-    ComputationNode<T> input,
-    ComputationNode<T> depthwiseKernel,
-    ComputationNode<T> pointwiseKernel,
-    ComputationNode<T>? bias = null,
-    int[]? stride = null,
-    int[]? padding = null)
-{
-    var depthwise = DepthwiseConv2D(input, depthwiseKernel, null, stride, padding);
-    var pointwise = Conv2D(depthwise, pointwiseKernel, bias, [1,1], [0,0]);
-    return pointwise;
-}
-```
-
-### 4. CroppingLayer → Use existing Crop operation
-**File:** `src/NeuralNetworks/Layers/CroppingLayer.cs:376`
-**Status:** Operation already exists!
-**Action Required:** Update BackwardViaAutodiff to use `Autodiff.TensorOperations<T>.Crop()`
-**Notes:**
-- Layer has `_cropTop`, `_cropBottom`, `_cropLeft`, `_cropRight` arrays
-- Need to convert to `[top, bottom, left, right]` format for Crop operation
-- Verify dimension handling matches
-
-### 5. SplitLayer → Use existing Split operation
-**File:** `src/NeuralNetworks/Layers/SplitLayer.cs:261`
-**Status:** Operation already exists!
-**Action Required:** Update BackwardViaAutodiff
-**Complexity:** Split returns `List<ComputationNode<T>>` not single node
-**Notes:**
-- Layer probably has multiple outputs, need to handle list return
-- May need to rethink layer backward pass to handle multiple gradient inputs
-
-### 6. LocallyConnectedLayer → LocallyConnectedConv2D operation
+### 1. LocallyConnectedLayer → LocallyConnectedConv2D operation
 **File:** `src/NeuralNetworks/Layers/LocallyConnectedLayer.cs:???`
 **Operation:** Locally connected (unshared convolution)
 **Implementation Notes:**
@@ -154,7 +64,7 @@ public static ComputationNode<T> LocallyConnectedConv2D(
 }
 ```
 
-### 7. SpatialTransformerLayer → AffineGrid + GridSample operations
+### 2. SpatialTransformerLayer → AffineGrid + GridSample operations
 **File:** `src/NeuralNetworks/Layers/SpatialTransformerLayer.cs:???`
 **Operations:** Two-part operation
 1. **AffineGrid**: Generate sampling grid from affine matrix
@@ -187,7 +97,7 @@ public static ComputationNode<T> GridSample(
 }
 ```
 
-### 8. RBFLayer → RBFKernel operation
+### 3. RBFLayer → RBFKernel operation
 **File:** `src/NeuralNetworks/Layers/RBFLayer.cs:???`
 **Operation:** Radial Basis Function kernel
 **Implementation Notes:**
@@ -208,7 +118,7 @@ public static ComputationNode<T> RBFKernel(
 }
 ```
 
-### 9. LogVarianceLayer → Can use existing Log operation
+### 4. LogVarianceLayer → Can use existing Log operation
 **File:** `src/NeuralNetworks/Layers/LogVarianceLayer.cs:???`
 **Status:** Likely can use existing operations
 **Action Required:** Check if Variance exists, compose with Log
@@ -294,20 +204,20 @@ These are research-oriented and require complex domain-specific implementations:
 
 ### Recommended Order
 
-**Phase 1 (Next Session):** Production Conv Variants
-1. Add `DilatedConv2D` operation
-2. Update DilatedConvolutionalLayer
-3. Add `DepthwiseConv2D` operation
-4. Update DepthwiseSeparableConvolutionalLayer
-5. Add `SeparableConv2D` operation (or compose from above)
-6. Update SeparableConvolutionalLayer
+**Phase 1 (Completed):** Production Conv Variants ✅
+1. ✅ Added `DilatedConv2D` operation
+2. ✅ Updated DilatedConvolutionalLayer
+3. ✅ Added `DepthwiseConv2D` operation
+4. ✅ Updated DepthwiseSeparableConvolutionalLayer
+5. ✅ Composed from DepthwiseConv2D + Conv2D
+6. ✅ Updated SeparableConvolutionalLayer
 
-**Phase 2:** Simple Layers Using Existing Ops
-1. Update CroppingLayer to use Crop
-2. Update SplitLayer to use Split (handle List return)
+**Phase 2 (Completed):** Simple Layers Using Existing Ops ✅
+1. ✅ Updated CroppingLayer to use Crop
+2. ✅ Updated SplitLayer to use Reshape (not Split - layer does reshape)
 3. Investigate and update LogVarianceLayer, RepParameterizationLayer, ReadoutLayer
 
-**Phase 3:** Advanced Production Ops
+**Phase 3 (Next):** Advanced Production Ops
 1. Add `LocallyConnectedConv2D` operation
 2. Update LocallyConnectedLayer
 3. Add `AffineGrid` + `GridSample` operations
@@ -470,6 +380,15 @@ After completing operations, update:
 
 ## Session Summary
 
-This session added 4 operations (Split, Crop, Upsample, PixelShuffle) and updated 3 layers (SubpixelConvolutionalLayer, UpsamplingLayer, GaussianNoiseLayer, MaskingLayer).
+**Previous sessions:** Added Split, Crop, Upsample, PixelShuffle, DilatedConv2D operations and updated SubpixelConvolutionalLayer, UpsamplingLayer, GaussianNoiseLayer, MaskingLayer.
 
-26 layers remain. Priority is the 9 production conv variants and utility layers, followed by 17 specialized research layers as needed.
+**This session:** Added DepthwiseConv2D operation (250 lines) and updated 5 layers:
+1. DepthwiseSeparableConvolutionalLayer - Uses DepthwiseConv2D + Conv2D
+2. CroppingLayer - Uses Crop operation
+3. SplitLayer - Uses Reshape operation
+4. DilatedConvolutionalLayer - Uses DilatedConv2D operation
+5. SeparableConvolutionalLayer - Composes DepthwiseConv2D + Conv2D
+
+**Current status:** 22 layers with full autodiff (was 17), 36 TensorOperations (was 35), 21 layers remaining.
+
+**Priority:** 4 high-priority production layers (LocallyConnected, SpatialTransformer, RBF, LogVariance) followed by 17 specialized research layers as needed.
