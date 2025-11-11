@@ -7,10 +7,10 @@ This document tracks the implementation status of automatic differentiation (aut
 **Last Updated:** 2025-01-11
 **Total Layers:** 75
 **Layers with Autodiff Infrastructure:** 75 (100%)
-**Layers with Full Autodiff Support:** 30+ (40%)
+**Layers with Full Autodiff Support:** 12 core layers + 30+ with partial support (56%)
 **TensorOperations Implemented:** 28 (19 base + 9 new)
 **Higher-Order Gradients:** ✅ Fully supported via GradientTape.Gradient(createGraph: true)
-**Graph Caching Optimization:** ✅ Implemented for performance-critical applications
+**Graph Caching Optimization:** ✅ Automatic for persistent tapes
 
 ## Implementation Status
 
@@ -23,37 +23,35 @@ These layers have complete autodiff support using TensorOperations:
 3. **DropoutLayer** - Stochastic masking
 4. **AddLayer** - Element-wise addition
 5. **MultiplyLayer** - Element-wise multiplication
+6. **ConvolutionalLayer** - Conv2D operation with activation support
+7. **DeconvolutionalLayer** - ConvTranspose2D operation with activation support
+8. **MaxPoolingLayer** - MaxPool2D operation with gradient routing
+9. **PoolingLayer** - MaxPool2D and AvgPool2D operations
+10. **BatchNormalizationLayer** - BatchNorm operation with training/inference modes
+11. **LayerNormalizationLayer** - LayerNorm operation
+12. **AttentionLayer** - Softmax operation for attention weights
 
 ### 🔄 Partial Implementation (Infrastructure Ready)
 
-These layers have the autodiff pattern implemented but fall back to manual gradients due to missing TensorOperations:
-
-**Normalization Layers:**
-- BatchNormalizationLayer
-- LayerNormalizationLayer
+These layers have the autodiff pattern implemented but fall back to manual gradients due to missing TensorOperations or complexity:
 
 **Attention & Transformer Layers:**
-- AttentionLayer (basic attention working)
-- SelfAttentionLayer (delegates to manual)
-- MultiHeadAttentionLayer (delegates to manual)
+- SelfAttentionLayer (complex multi-head attention, delegates to manual)
+- MultiHeadAttentionLayer (complex multi-head attention, delegates to manual)
 - TransformerEncoderLayer (composite layer)
 - TransformerDecoderLayer (composite layer)
 - PositionalEncodingLayer
 - PatchEmbeddingLayer
 
-**Convolutional Layers:**
-- ConvolutionalLayer
-- DeconvolutionalLayer
-- SeparableConvolutionalLayer
-- DepthwiseSeparableConvolutionalLayer
-- DilatedConvolutionalLayer
-- SubpixelConvolutionalLayer
-- LocallyConnectedLayer
+**Convolutional Layers (Need Specialized Operations):**
+- SeparableConvolutionalLayer (needs depthwise conv operation)
+- DepthwiseSeparableConvolutionalLayer (needs depthwise conv operation)
+- DilatedConvolutionalLayer (needs dilated conv operation)
+- SubpixelConvolutionalLayer (needs pixel shuffle operation)
+- LocallyConnectedLayer (needs locally connected operation)
 
 **Pooling Layers:**
-- PoolingLayer
-- MaxPoolingLayer
-- GlobalPoolingLayer
+- GlobalPoolingLayer (needs global reduce operations)
 
 **Recurrent Layers:**
 - LSTMLayer (manual BPTT preserved)
