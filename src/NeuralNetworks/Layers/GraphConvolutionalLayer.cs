@@ -726,7 +726,7 @@ public class GraphConvolutionalLayer<T> : LayerBase<T>
         }
 
         // Normalize by batch size and number of edges for scale-invariance
-        T totalEdges = NumOps.FromDouble(batchSize * _graphEdges.Count);
+        T totalEdges = NumOps.FromDouble((long)batchSize * (long)_graphEdges.Count);
         smoothnessLoss = NumOps.Divide(smoothnessLoss, totalEdges);
 
         // Apply smoothness weight to allow tuning of this auxiliary loss

@@ -1231,7 +1231,7 @@ public class SqueezeAndExcitationLayer<T> : LayerBase<T>
         }
 
         // Normalize by total number of elements for scale-invariance
-        T totalElements = NumOps.FromDouble(_lastAttentionWeights.Rows * _lastAttentionWeights.Columns);
+        T totalElements = NumOps.FromDouble((long)_lastAttentionWeights.Rows * (long)_lastAttentionWeights.Columns);
         T sparsityLoss = NumOps.Divide(l1Norm, totalElements);
 
         // Apply sparsity weight to allow tuning of this auxiliary loss
