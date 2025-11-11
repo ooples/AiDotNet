@@ -20,7 +20,7 @@ namespace AiDotNet.Interfaces;
 /// <para>This combination allows the student to both get the right answers (hard loss) and
 /// learn the teacher's reasoning (soft loss).</para>
 /// </remarks>
-public interface IDistillationStrategy<in TOutput, T>
+public interface IDistillationStrategy<TOutput, T>
 {
     /// <summary>
     /// Computes the distillation loss between student and teacher outputs.
