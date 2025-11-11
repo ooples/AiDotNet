@@ -98,7 +98,7 @@ public abstract class KnowledgeDistillationTrainerBase<TInput, TOutput, T> : IKn
         Func<TInput, TOutput> studentForward,
         Action<TOutput> studentBackward,
         TInput[] inputs,
-        TOutput[]? trueLabels = null)
+        TOutput[] trueLabels = null)
     {
         if (studentForward == null) throw new ArgumentNullException(nameof(studentForward));
         if (studentBackward == null) throw new ArgumentNullException(nameof(studentBackward));
