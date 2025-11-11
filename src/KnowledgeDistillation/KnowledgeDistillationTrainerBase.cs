@@ -474,10 +474,19 @@ public abstract class KnowledgeDistillationTrainerBase<T, TInput, TOutput> : IKn
     /// - Save checkpoints
     /// - Update adaptive parameters
     /// - Implement early stopping logic</para>
+    ///
+    /// <para><b>IMPORTANT:</b> This base implementation calls Reset() on RelationalDistillationStrategy
+    /// to flush partial batches and prevent buffer leakage between epochs. Derived classes should
+    /// call base.OnEpochEnd() if they override this method.</para>
     /// </remarks>
     protected virtual void OnEpochEnd(int epoch, T avgLoss)
     {
-        // Default: no-op, derived classes can override
+        // Reset RelationalDistillationStrategy buffers at epoch boundaries to prevent leakage
+        // This ensures partial batches are flushed and amortization uses correct counts
+        if (DistillationStrategy is Strategies.RelationalDistillationStrategy<T> relationalStrategy)
+        {
+            relationalStrategy.Reset();
+        }
     }
 
     /// <summary>

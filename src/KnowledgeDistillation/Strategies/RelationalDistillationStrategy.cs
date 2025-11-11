@@ -84,6 +84,7 @@ public class RelationalDistillationStrategy<T> : DistillationStrategyBase<T, Vec
     private readonly List<Vector<T>> _batchTeacherOutputs = new();
     private T _accumulatedRelationalLoss = default!;
     private int _samplesSinceRelationalCompute = 0;
+    private int _actualBatchCountForAmortization = 0; // Tracks actual count used for loss computation
     private readonly int _relationalBatchSize;
 
     /// <summary>
@@ -150,11 +151,65 @@ public class RelationalDistillationStrategy<T> : DistillationStrategyBase<T, Vec
     }
 
     /// <summary>
+    /// Resets the strategy's internal state, flushing any partial batches and clearing buffers.
+    /// </summary>
+    /// <remarks>
+    /// <para><b>IMPORTANT:</b> This method MUST be called at epoch boundaries to prevent:
+    /// 1. Partial batches leaking into the next epoch
+    /// 2. Incorrect amortization using configured batch size instead of actual count</para>
+    ///
+    /// <para><b>For Beginners:</b> This cleans up leftover data from the current epoch
+    /// so it doesn't contaminate the next epoch. Think of it as "starting fresh" for each epoch.</para>
+    ///
+    /// <para><b>When to Call:</b>
+    /// - At the end of each training epoch
+    /// - Before evaluation
+    /// - When switching between training and validation data</para>
+    ///
+    /// <para><b>What It Does:</b>
+    /// 1. If there are buffered samples (partial batch), computes final relational loss
+    ///    using actual buffer count (not configured batch size)
+    /// 2. Stores that final loss contribution for amortization
+    /// 3. Clears all accumulation buffers
+    /// 4. Resets counters to initial state</para>
+    ///
+    /// <para><b>Integration with Trainer:</b>
+    /// The trainer should call this method in OnEpochEnd() to ensure proper state management.</para>
+    /// </remarks>
+    public void Reset()
+    {
+        // If there are buffered samples, compute final relational loss with actual count
+        if (_batchStudentOutputs.Count > 0)
+        {
+            // Compute relational loss for the partial batch
+            _accumulatedRelationalLoss = ComputeRelationalLoss(
+                _batchStudentOutputs.ToArray(),
+                _batchTeacherOutputs.ToArray());
+
+            // Track actual count for proper amortization (not the configured batch size)
+            _actualBatchCountForAmortization = _batchStudentOutputs.Count;
+            _samplesSinceRelationalCompute = 0;
+        }
+        else
+        {
+            // No buffered samples, reset to initial state
+            _accumulatedRelationalLoss = NumOps.Zero;
+            _actualBatchCountForAmortization = 0;
+        }
+
+        // Clear all buffers
+        _batchStudentOutputs.Clear();
+        _batchTeacherOutputs.Clear();
+    }
+
+    /// <summary>
     /// Computes combined output loss and relational loss.
     /// </summary>
     /// <remarks>
     /// <para>This method accumulates student/teacher outputs and computes relational loss
     /// when a batch is complete. The relational loss is then amortized across subsequent samples.</para>
+    ///
+    /// <para><b>CRITICAL:</b> Call Reset() at epoch boundaries to prevent buffer leakage.</para>
     /// </remarks>
     public override T ComputeLoss(Vector<T> studentOutput, Vector<T> teacherOutput, Vector<T>? trueLabels = null)
     {
@@ -170,6 +225,8 @@ public class RelationalDistillationStrategy<T> : DistillationStrategyBase<T, Vec
             _accumulatedRelationalLoss = ComputeRelationalLoss(
                 _batchStudentOutputs.ToArray(),
                 _batchTeacherOutputs.ToArray());
+            // Track actual count for proper amortization
+            _actualBatchCountForAmortization = _batchStudentOutputs.Count;
             _samplesSinceRelationalCompute = 0;
             // Clear buffers for next batch
             _batchStudentOutputs.Clear();
@@ -202,12 +259,13 @@ public class RelationalDistillationStrategy<T> : DistillationStrategyBase<T, Vec
         }
 
         // Add amortized relational loss (distributed across batch samples)
+        // Use actual batch count for proper amortization, not configured batch size
         T relationalContribution = NumOps.Zero;
-        if (_samplesSinceRelationalCompute < _relationalBatchSize)
+        if (_actualBatchCountForAmortization > 0 && _samplesSinceRelationalCompute < _actualBatchCountForAmortization)
         {
             relationalContribution = NumOps.Divide(
                 _accumulatedRelationalLoss,
-                NumOps.FromDouble(_relationalBatchSize));
+                NumOps.FromDouble(_actualBatchCountForAmortization));
             _samplesSinceRelationalCompute++;
         }
 
