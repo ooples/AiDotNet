@@ -1128,17 +1128,31 @@ public class PredictionModelBuilder<T, TInput, TOutput> : IPredictionModelBuilde
                                 if (valLoss <= bestValLoss)
                                 {
                                     checkpointPath = Path.Combine(checkpointDir, "best_model.bin");
-                                    using var stream = File.Create(checkpointPath);
-                                    vectorStudentModel.SaveState(stream);
-                                    Console.WriteLine($"    → Checkpoint saved: {checkpointPath}");
+                                    if (vectorStudentModel is ICheckpointableModel checkpointable)
+                                    {
+                                        using var stream = File.Create(checkpointPath);
+                                        checkpointable.SaveState(stream);
+                                        Console.WriteLine($"    → Checkpoint saved: {checkpointPath}");
+                                    }
+                                    else
+                                    {
+                                        Console.WriteLine($"    ⚠ Checkpointing not supported by model type {vectorStudentModel.GetType().Name}");
+                                    }
                                 }
                             }
                             else
                             {
                                 checkpointPath = Path.Combine(checkpointDir, $"model_epoch_{epoch + 1}.bin");
-                                using var stream = File.Create(checkpointPath);
-                                vectorStudentModel.SaveState(stream);
-                                Console.WriteLine($"    → Checkpoint saved: {checkpointPath}");
+                                if (vectorStudentModel is ICheckpointableModel checkpointable)
+                                {
+                                    using var stream = File.Create(checkpointPath);
+                                    checkpointable.SaveState(stream);
+                                    Console.WriteLine($"    → Checkpoint saved: {checkpointPath}");
+                                }
+                                else
+                                {
+                                    Console.WriteLine($"    ⚠ Checkpointing not supported by model type {vectorStudentModel.GetType().Name}");
+                                }
                             }
                         }
                         catch (Exception ex)
@@ -1159,9 +1173,16 @@ public class PredictionModelBuilder<T, TInput, TOutput> : IPredictionModelBuilde
                 {
                     try
                     {
-                        using var stream = File.OpenRead(bestCheckpoint);
-                        vectorStudentModel.LoadState(stream);
-                        Console.WriteLine($"✓ Loaded best checkpoint (val loss: {bestValLoss:F4})");
+                        if (vectorStudentModel is ICheckpointableModel checkpointable)
+                        {
+                            using var stream = File.OpenRead(bestCheckpoint);
+                            checkpointable.LoadState(stream);
+                            Console.WriteLine($"✓ Loaded best checkpoint (val loss: {bestValLoss:F4})");
+                        }
+                        else
+                        {
+                            Console.WriteLine($"⚠ Checkpointing not supported by model type {vectorStudentModel.GetType().Name}");
+                        }
                     }
                     catch (Exception ex)
                     {
