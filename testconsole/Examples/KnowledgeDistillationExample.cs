@@ -72,7 +72,7 @@ public static class KnowledgeDistillationExample
         // ===================================================================
         Console.WriteLine("Step 4: Configuring knowledge distillation...");
 
-        var kdOptions = new KnowledgeDistillationOptions<Vector<double>, Vector<double>, double>
+        var kdOptions = new KnowledgeDistillationOptions<double, Vector<double>, Vector<double>>
         {
             // Provide the teacher model
             TeacherModel = teacherModel,

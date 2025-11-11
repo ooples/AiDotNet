@@ -563,6 +563,35 @@ public interface IPredictionModelBuilder<T, TInput, TOutput>
     IPredictionModelBuilder<T, TInput, TOutput> ConfigureCrossValidation(ICrossValidator<T, TInput, TOutput> crossValidator);
 
     /// <summary>
+    /// Configures knowledge distillation for training a smaller student model from a larger teacher model.
+    /// </summary>
+    /// <remarks>
+    /// Knowledge distillation enables model compression by transferring knowledge from a large,
+    /// accurate teacher model to a smaller, faster student model. The student learns to mimic
+    /// the teacher's predictions and internal representations.
+    ///
+    /// <b>For Beginners:</b> Knowledge distillation is like having an expert teacher help train
+    /// a smaller, faster student. The student model learns not just from the training labels,
+    /// but also from the teacher's "soft" predictions which contain richer information about
+    /// relationships between classes.
+    ///
+    /// Benefits:
+    /// - Model compression: Deploy 10x smaller models with 90%+ of original accuracy
+    /// - Faster inference: Smaller models run significantly faster
+    /// - Lower memory: Fits on edge devices and mobile platforms
+    /// - Better generalization: Learning from soft labels often improves accuracy
+    ///
+    /// Common use cases:
+    /// - DistilBERT: 40% smaller than BERT, 97% performance, 60% faster
+    /// - MobileNet: Distilled from ResNet for mobile deployment
+    /// - Edge AI: Deploy powerful models on resource-constrained devices
+    /// </remarks>
+    /// <param name="options">The knowledge distillation configuration options.</param>
+    /// <returns>The builder instance for method chaining.</returns>
+    IPredictionModelBuilder<T, TInput, TOutput> ConfigureKnowledgeDistillation(
+        KnowledgeDistillationOptions<T, TInput, TOutput> options);
+
+    /// <summary>
     /// Asynchronously builds a meta-trained model that can quickly adapt to new tasks.
     /// </summary>
     /// <remarks>

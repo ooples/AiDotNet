@@ -6,9 +6,9 @@ namespace AiDotNet.Models.Options;
 /// <summary>
 /// Configuration options for knowledge distillation training.
 /// </summary>
+/// <typeparam name="T">The numeric type for calculations.</typeparam>
 /// <typeparam name="TInput">The input data type.</typeparam>
 /// <typeparam name="TOutput">The output data type.</typeparam>
-/// <typeparam name="T">The numeric type for calculations.</typeparam>
 /// <remarks>
 /// <para><b>For Beginners:</b> This class configures how knowledge distillation works.
 /// Think of it as the "settings" for transferring knowledge from a large teacher model
@@ -16,7 +16,7 @@ namespace AiDotNet.Models.Options;
 ///
 /// <para><b>Quick Start Example:</b>
 /// <code>
-/// var options = new KnowledgeDistillationOptions&lt;Vector&lt;double&gt;, Vector&lt;double&gt;, double&gt;
+/// var options = new KnowledgeDistillationOptions&lt;double, Vector&lt;double&gt;, Vector&lt;double&gt;&gt;
 /// {
 ///     TeacherModelType = TeacherModelType.NeuralNetwork,
 ///     StrategyType = DistillationStrategyType.ResponseBased,
@@ -28,7 +28,7 @@ namespace AiDotNet.Models.Options;
 /// </code>
 /// </para>
 /// </remarks>
-public class KnowledgeDistillationOptions<TInput, TOutput, T>
+public class KnowledgeDistillationOptions<T, TInput, TOutput>
 {
     /// <summary>
     /// Gets or sets the type of teacher model to use.

@@ -59,7 +59,7 @@ public class PredictionModelBuilder<T, TInput, TOutput> : IPredictionModelBuilde
     private ICrossValidator<T, TInput, TOutput>? _crossValidator;
     private AgentConfiguration<T>? _agentConfig;
     private AgentAssistanceOptions _agentOptions = AgentAssistanceOptions.Default;
-    private KnowledgeDistillationOptions<TInput, TOutput, T>? _knowledgeDistillationOptions;
+    private KnowledgeDistillationOptions<T, TInput, TOutput>? _knowledgeDistillationOptions;
 
     /// <summary>
     /// Configures which features (input variables) should be used in the model.
@@ -883,10 +883,9 @@ public class PredictionModelBuilder<T, TInput, TOutput> : IPredictionModelBuilde
     /// - Park et al. (2019). Relational Knowledge Distillation</para>
     /// </remarks>
     public IPredictionModelBuilder<T, TInput, TOutput> ConfigureKnowledgeDistillation(
-        KnowledgeDistillationOptions<TInput, TOutput, T> options)
+        KnowledgeDistillationOptions<T, TInput, TOutput> options)
     {
-        if (options == null) throw new ArgumentNullException(nameof(options));
-        options.Validate(); // Validate options immediately
+        ArgumentNullException.ThrowIfNull(options);
         _knowledgeDistillationOptions = options;
         return this;
     }
@@ -912,6 +911,8 @@ public class PredictionModelBuilder<T, TInput, TOutput> : IPredictionModelBuilde
             throw new InvalidOperationException("Knowledge distillation options not configured");
 
         var options = _knowledgeDistillationOptions;
+        options.Validate(); // Validate all options before training
+
         var NumOps = MathHelper.GetNumericOperations<T>();
 
         // Validate that we have Vector types (required for current KD implementation)

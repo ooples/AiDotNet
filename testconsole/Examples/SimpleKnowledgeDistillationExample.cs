@@ -26,7 +26,7 @@ public static class SimpleKnowledgeDistillationExample
         IFullModel<double, Vector<double>, Vector<double>> studentModel = CreateStudentModel();
 
         // 4. Configure knowledge distillation
-        var kdOptions = new KnowledgeDistillationOptions<Vector<double>, Vector<double>, double>
+        var kdOptions = new KnowledgeDistillationOptions<double, Vector<double>, Vector<double>>
         {
             TeacherModel = teacherModel,
             StrategyType = DistillationStrategyType.ResponseBased, // Standard KD
