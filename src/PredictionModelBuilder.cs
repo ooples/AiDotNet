@@ -1013,8 +1013,27 @@ public class PredictionModelBuilder<T, TInput, TOutput> : IPredictionModelBuilde
 
             Action<Vector<T>> studentBackward = gradient =>
             {
-                // Apply gradient to model - simplified update
-                // In production, this would integrate with optimizer's update rule
+                // TODO: CRITICAL - Integrate with optimizer for proper gradient updates
+                // Current implementation bypasses the optimizer, which:
+                // - Loses optimizer state (momentum, ADAM state, etc.)
+                // - Ignores configured learning rate (options.LearningRate)
+                // - Calls Train() with incorrect signature (gradient as both input and output)
+                //
+                // Proper implementation should:
+                // 1. Extract current model parameters: var params = vectorStudentModel.GetParameters();
+                // 2. Backpropagate gradient through model to get parameter gradients
+                // 3. Apply optimizer update:
+                //    if (optimizer is IGradientBasedOptimizer<T, Vector<T>, Vector<T>> gradOptimizer)
+                //    {
+                //        var updatedModel = gradOptimizer.ApplyGradients(paramGradients, vectorStudentModel);
+                //        // or: var newParams = gradOptimizer.UpdateParameters(params, paramGradients);
+                //        //     vectorStudentModel.SetParameters(newParams);
+                //    }
+                // 4. This preserves optimizer state and respects options.LearningRate
+                //
+                // Issue: https://github.com/ooples/AiDotNet/issues/408 (line 1013-1018)
+                //
+                // Temporary placeholder (incorrect but allows basic functionality):
                 vectorStudentModel.Train(gradient, gradient);
             };
 
