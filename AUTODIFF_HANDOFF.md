@@ -6,11 +6,11 @@
 
 ### Completed Work
 
-**TensorOperations Implemented:** 37 total
+**TensorOperations Implemented:** 41 total
 - Base operations (19): Add, Subtract, Multiply, Divide, MatMul, Transpose, Reshape, ReLU, Sigmoid, Tanh, ElementwiseMultiply, Sum, Mean, Variance, Exp, Log, Pow, Sqrt, Abs
-- Session additions (18): Conv2D, ConvTranspose2D, MaxPool2D, AvgPool2D, Softmax, Concat, Pad, LayerNorm, BatchNorm, ReduceMax, ReduceMean, Split, Crop, Upsample, PixelShuffle, DilatedConv2D, DepthwiseConv2D, LocallyConnectedConv2D
+- Session additions (22): Conv2D, ConvTranspose2D, MaxPool2D, AvgPool2D, Softmax, Concat, Pad, LayerNorm, BatchNorm, ReduceMax, ReduceMean, Split, Crop, Upsample, PixelShuffle, DilatedConv2D, DepthwiseConv2D, LocallyConnectedConv2D, ReduceLogVariance, RBFKernel, AffineGrid, GridSample
 
-**Layers with Full Autodiff:** 23
+**Layers with Full Autodiff:** 26
 1. DenseLayer
 2. ActivationLayer
 3. DropoutLayer
@@ -34,72 +34,33 @@
 21. DilatedConvolutionalLayer
 22. SeparableConvolutionalLayer
 23. LocallyConnectedLayer
+24. LogVarianceLayer
+25. RBFLayer
+26. SpatialTransformerLayer
 
-### Remaining Work: 20 Layers
+### Remaining Work: 17 Layers
 
-## HIGH PRIORITY: Production-Ready Layers (3 layers)
+## ✅ HIGH PRIORITY COMPLETED: Production-Ready Layers (3/3 layers)
 
-These layers are commonly used in production and need TensorOperations added:
+All high-priority production layers now have full autodiff support:
 
-### 1. SpatialTransformerLayer → AffineGrid + GridSample operations
-**File:** `src/NeuralNetworks/Layers/SpatialTransformerLayer.cs:???`
-**Operations:** Two-part operation
-1. **AffineGrid**: Generate sampling grid from affine matrix
-2. **GridSample**: Sample input using grid (bilinear interpolation)
+### 1. ✅ SpatialTransformerLayer
+**Operations Added:** AffineGrid + GridSample
+- AffineGrid: Generates sampling grid from [batch, 2, 3] affine transformation matrices
+- GridSample: Bilinear interpolation sampling with gradients for both input and grid
+- Full gradient support for learnable spatial transformations
 
-**Implementation Notes:**
-- Used for learnable spatial transformations
-- Common in STNs (Spatial Transformer Networks)
-- AffineGrid: Create meshgrid and apply affine transform
-- GridSample: Bilinear interpolation with gradient support
-- Both need careful gradient implementation
+### 2. ✅ RBFLayer
+**Operation Added:** RBFKernel
+- Gaussian RBF computation: exp(-epsilon * distance²)
+- Gradients computed for input, centers, and epsilon parameters
+- Supports batch processing with efficient distance computation
 
-**Pseudo-code:**
-```csharp
-public static ComputationNode<T> AffineGrid(
-    ComputationNode<T> theta,  // [batch, 2, 3] affine matrix
-    int[] outputSize)  // [H, W]
-{
-    // Generate regular grid
-    // Apply affine transform to grid points
-    // Return transformed sampling coordinates
-}
-
-public static ComputationNode<T> GridSample(
-    ComputationNode<T> input,
-    ComputationNode<T> grid)  // sampling coordinates
-{
-    // Bilinear interpolation at grid points
-    // Backward: gradients w.r.t both input and grid
-}
-```
-
-### 2. RBFLayer → RBFKernel operation
-**File:** `src/NeuralNetworks/Layers/RBFLayer.cs:???`
-**Operation:** Radial Basis Function kernel
-**Implementation Notes:**
-- Compute RBF: `exp(-gamma * ||x - center||²)`
-- Forward: Gaussian kernel centered at each RBF center
-- Backward: Gradients for input, centers, and gamma
-
-**Pseudo-code:**
-```csharp
-public static ComputationNode<T> RBFKernel(
-    ComputationNode<T> input,  // [batch, features]
-    ComputationNode<T> centers,  // [num_centers, features]
-    ComputationNode<T> gamma)  // [num_centers]
-{
-    // For each center: compute distance to all inputs
-    // Apply Gaussian: exp(-gamma * distance²)
-    // Gradients flow through distance computation
-}
-```
-
-### 3. LogVarianceLayer → Can use existing Log operation
-**File:** `src/NeuralNetworks/Layers/LogVarianceLayer.cs:???`
-**Status:** Likely can use existing operations
-**Action Required:** Check if Variance exists, compose with Log
-**Notes:** May just need `Log(Variance(input))` composition
+### 3. ✅ LogVarianceLayer
+**Operation Added:** ReduceLogVariance
+- Computes log(variance + epsilon) along specified axis
+- Full gradient support for variance reduction operations
+- Numerically stable with configurable epsilon
 
 ## MEDIUM PRIORITY: Specialized Research Layers (17 layers)
 
