@@ -531,6 +531,26 @@ public class SEALTrainer<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOutpu
             throw new NotSupportedException($"Combining only supports Tensor<T>, got {typeof(TInput)}");
         }
 
+        // Validate tensors are not empty
+        if (tensor1.Shape.Length == 0 || tensor2.Shape.Length == 0)
+        {
+            throw new ArgumentException("Cannot combine empty tensors");
+        }
+
+        // Validate shape compatibility (all dimensions except first must match)
+        if (tensor1.Shape.Length != tensor2.Shape.Length)
+        {
+            throw new ArgumentException($"Tensors must have same number of dimensions. Got {tensor1.Shape.Length} and {tensor2.Shape.Length}");
+        }
+
+        for (int i = 1; i < tensor1.Shape.Length; i++)
+        {
+            if (tensor1.Shape[i] != tensor2.Shape[i])
+            {
+                throw new ArgumentException($"Tensor shapes must match in dimension {i}. Got {tensor1.Shape[i]} and {tensor2.Shape[i]}");
+            }
+        }
+
         int[] newShape = (int[])tensor1.Shape.Clone();
         newShape[0] = tensor1.Shape[0] + tensor2.Shape[0];
 
@@ -559,6 +579,26 @@ public class SEALTrainer<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOutpu
         if (output1 is not Tensor<T> tensor1 || output2 is not Tensor<T> tensor2)
         {
             throw new NotSupportedException($"Combining only supports Tensor<T>, got {typeof(TOutput)}");
+        }
+
+        // Validate tensors are not empty
+        if (tensor1.Shape.Length == 0 || tensor2.Shape.Length == 0)
+        {
+            throw new ArgumentException("Cannot combine empty tensors");
+        }
+
+        // Validate shape compatibility (all dimensions except first must match)
+        if (tensor1.Shape.Length != tensor2.Shape.Length)
+        {
+            throw new ArgumentException($"Tensors must have same number of dimensions. Got {tensor1.Shape.Length} and {tensor2.Shape.Length}");
+        }
+
+        for (int i = 1; i < tensor1.Shape.Length; i++)
+        {
+            if (tensor1.Shape[i] != tensor2.Shape[i])
+            {
+                throw new ArgumentException($"Tensor shapes must match in dimension {i}. Got {tensor1.Shape[i]} and {tensor2.Shape[i]}");
+            }
         }
 
         int[] newShape = (int[])tensor1.Shape.Clone();
