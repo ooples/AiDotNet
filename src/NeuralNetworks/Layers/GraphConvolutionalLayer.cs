@@ -150,6 +150,11 @@ public class GraphConvolutionalLayer<T> : LayerBase<T>
     private List<(int Source, int Target)>? _graphEdges;
 
     /// <summary>
+    /// Tracks whether edges have been extracted from the current adjacency matrix.
+    /// </summary>
+    private bool _edgesExtracted = false;
+
+    /// <summary>
     /// Gets or sets the weight for Laplacian smoothness regularization.
     /// </summary>
     /// <value>
@@ -335,6 +340,12 @@ public class GraphConvolutionalLayer<T> : LayerBase<T>
     /// to node j. This method also extracts the edge list from the adjacency matrix for use in auxiliary loss
     /// computation.
     /// </para>
+    /// <para>
+    /// <b>Important Limitation:</b> Edge extraction only examines the first batch element (batch index 0).
+    /// This assumes all samples in a batch share the same graph structure. If different samples have different
+    /// graph topologies, the smoothness loss computation will only reflect the structure of the first sample.
+    /// For per-sample graph structures, consider extracting edges dynamically or using separate forward passes.
+    /// </para>
     /// <para><b>For Beginners:</b> This method tells the layer how the nodes in your graph are connected.
     ///
     /// The adjacency matrix is like a road map:
@@ -348,26 +359,34 @@ public class GraphConvolutionalLayer<T> : LayerBase<T>
     /// </remarks>
     public void SetAdjacencyMatrix(Tensor<T> adjacencyMatrix)
     {
+        // Check if we need to re-extract edges (new matrix or first time)
+        bool needsExtraction = _adjacencyMatrix != adjacencyMatrix || !_edgesExtracted;
+
         _adjacencyMatrix = adjacencyMatrix;
 
-        // Extract edges from adjacency matrix for auxiliary loss computation
+        // Extract edges from adjacency matrix for auxiliary loss computation only if needed
         // We only extract edges from the first batch (assuming all batches have the same graph structure)
-        _graphEdges = new List<(int, int)>();
-
-        if (adjacencyMatrix.Shape.Length >= 3)
+        if (needsExtraction)
         {
-            int numNodes = adjacencyMatrix.Shape[1];
-            for (int i = 0; i < numNodes; i++)
+            _graphEdges = new List<(int, int)>();
+
+            if (adjacencyMatrix.Shape.Length >= 3)
             {
-                for (int j = 0; j < numNodes; j++)
+                int numNodes = adjacencyMatrix.Shape[1];
+                for (int i = 0; i < numNodes; i++)
                 {
-                    // Check if there's an edge between nodes i and j
-                    if (!MathHelper.AlmostEqual(adjacencyMatrix[0, i, j], NumOps.Zero))
+                    for (int j = 0; j < numNodes; j++)
                     {
-                        _graphEdges.Add((i, j));
+                        // Check if there's an edge between nodes i and j
+                        if (!MathHelper.AlmostEqual(adjacencyMatrix[0, i, j], NumOps.Zero))
+                        {
+                            _graphEdges.Add((i, j));
+                        }
                     }
                 }
             }
+
+            _edgesExtracted = true;
         }
     }
 
@@ -726,6 +745,8 @@ public class GraphConvolutionalLayer<T> : LayerBase<T>
         }
 
         // Normalize by batch size and number of edges for scale-invariance
+        // Note: Assumes all batches have the same graph structure (same edge count)
+        // This matches the edge extraction assumption where edges are extracted from batch 0 only
         T totalEdges = NumOps.FromDouble((long)batchSize * (long)_graphEdges.Count);
         smoothnessLoss = NumOps.Divide(smoothnessLoss, totalEdges);
 
