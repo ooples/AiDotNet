@@ -372,10 +372,10 @@ public class VectorModel<T> : IFullModel<T, Matrix<T>, Vector<T>>, IInterpretabl
     /// - Throws an error if the input has the wrong number of features
     /// 
     /// This is the core of how a linear model works - it's just a weighted sum:
-    /// prediction = (input1 � coefficient1) + (input2 � coefficient2) + ...
-    /// 
+    /// prediction = (input1 × coefficient1) + (input2 × coefficient2) + ...
+    ///
     /// For example, with coefficients [50000, 100, 20000] and input [3, 1500, 2],
-    /// the prediction would be: 3�50000 + 1500�100 + 2�20000 = 350,000
+    /// the prediction would be: 3×50000 + 1500×100 + 2×20000 = 350,000
     /// </para>
     /// </remarks>
     public T Evaluate(Vector<T> input)

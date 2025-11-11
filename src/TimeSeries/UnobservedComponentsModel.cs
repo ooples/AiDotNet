@@ -1037,8 +1037,8 @@ public class UnobservedComponentsModel<T, TInput, TOutput> : TimeSeriesModelBase
     /// - RMSE (Root Mean Squared Error): The square root of MSE, which gives errors in the same units
     ///   as your original data. For example, if forecasting sales in dollars, RMSE is also in dollars.
     /// 
-    /// - R� (R-squared): The proportion of variance in the dependent variable explained by the model.
-    ///   Values range from 0 to 1, with higher values indicating better fit. An R� of 0.75 means
+    /// - R² (R-squared): The proportion of variance in the dependent variable explained by the model.
+    ///   Values range from 0 to 1, with higher values indicating better fit. An R² of 0.75 means
     ///   the model explains 75% of the variation in the data.
     /// 
     /// These metrics together provide a comprehensive assessment of model performance.

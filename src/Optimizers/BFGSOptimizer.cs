@@ -3,7 +3,7 @@ using Newtonsoft.Json;
 namespace AiDotNet.Optimizers;
 
 /// <summary>
-/// Implements the Broyden�Fletcher�Goldfarb�Shanno (BFGS) optimization algorithm.
+/// Implements the Broyden-Fletcher-Goldfarb-Shanno (BFGS) optimization algorithm.
 /// </summary>
 /// <typeparam name="T">The numeric type used for calculations (e.g., float, double).</typeparam>
 /// <remarks>
