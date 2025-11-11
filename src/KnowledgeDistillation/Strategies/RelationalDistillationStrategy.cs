@@ -83,6 +83,7 @@ public class RelationalDistillationStrategy<T> : DistillationStrategyBase<T, Vec
     private readonly List<Vector<T>> _batchStudentOutputs = new();
     private readonly List<Vector<T>> _batchTeacherOutputs = new();
     private T _accumulatedRelationalLoss = default!;
+    private Vector<T>? _cachedRelationalGradient = null; // Cached average gradient for amortization
     private int _samplesSinceRelationalCompute = 0;
     private int _actualBatchCountForAmortization = 0; // Tracks actual count used for loss computation
     private readonly int _relationalBatchSize;
@@ -178,11 +179,16 @@ public class RelationalDistillationStrategy<T> : DistillationStrategyBase<T, Vec
     /// </remarks>
     public void Reset()
     {
-        // If there are buffered samples, compute final relational loss with actual count
+        // If there are buffered samples, compute final relational loss and gradient with actual count
         if (_batchStudentOutputs.Count > 0)
         {
             // Compute relational loss for the partial batch
             _accumulatedRelationalLoss = ComputeRelationalLoss(
+                _batchStudentOutputs.ToArray(),
+                _batchTeacherOutputs.ToArray());
+
+            // Compute average relational gradient for the batch
+            _cachedRelationalGradient = ComputeAverageRelationalGradientForBatch(
                 _batchStudentOutputs.ToArray(),
                 _batchTeacherOutputs.ToArray());
 
@@ -194,6 +200,7 @@ public class RelationalDistillationStrategy<T> : DistillationStrategyBase<T, Vec
         {
             // No buffered samples, reset to initial state
             _accumulatedRelationalLoss = NumOps.Zero;
+            _cachedRelationalGradient = null;
             _actualBatchCountForAmortization = 0;
         }
 
@@ -219,12 +226,18 @@ public class RelationalDistillationStrategy<T> : DistillationStrategyBase<T, Vec
         _batchStudentOutputs.Add(studentOutput);
         _batchTeacherOutputs.Add(teacherOutput);
 
-        // When batch is full, compute relational loss
+        // When batch is full, compute relational loss and cache gradient
         if (_batchStudentOutputs.Count >= _relationalBatchSize)
         {
             _accumulatedRelationalLoss = ComputeRelationalLoss(
                 _batchStudentOutputs.ToArray(),
                 _batchTeacherOutputs.ToArray());
+
+            // Compute and cache average relational gradient for distribution to subsequent samples
+            _cachedRelationalGradient = ComputeAverageRelationalGradientForBatch(
+                _batchStudentOutputs.ToArray(),
+                _batchTeacherOutputs.ToArray());
+
             // Track actual count for proper amortization
             _actualBatchCountForAmortization = _batchStudentOutputs.Count;
             _samplesSinceRelationalCompute = 0;
@@ -320,10 +333,12 @@ public class RelationalDistillationStrategy<T> : DistillationStrategyBase<T, Vec
         }
 
         // Add relational gradient contribution
-        // Since we're accumulating batch-level relational loss, we compute gradients
-        // for all pairs/triplets involving this sample when the batch is complete
+        // Two paths:
+        // 1. If buffers are accumulating, compute gradients for pairs/triplets involving current sample
+        // 2. If we have cached gradient, apply it (for samples receiving amortized loss)
         if (_batchStudentOutputs.Count > 1 && _batchStudentOutputs.Count <= _relationalBatchSize)
         {
+            // Path 1: Sample is contributing to the current batch - compute its relational gradient
             var relationalGrad = ComputeRelationalGradient(
                 studentOutput,
                 teacherOutput,
@@ -333,6 +348,17 @@ public class RelationalDistillationStrategy<T> : DistillationStrategyBase<T, Vec
             for (int i = 0; i < n; i++)
             {
                 gradient[i] = NumOps.Add(gradient[i], relationalGrad[i]);
+            }
+        }
+        else if (_cachedRelationalGradient != null &&
+                 _actualBatchCountForAmortization > 0 &&
+                 _samplesSinceRelationalCompute < _actualBatchCountForAmortization)
+        {
+            // Path 2: Sample is receiving amortized loss - apply cached gradient
+            // This ensures gradient matches the loss contribution
+            for (int i = 0; i < n; i++)
+            {
+                gradient[i] = NumOps.Add(gradient[i], _cachedRelationalGradient[i]);
             }
         }
 
@@ -508,6 +534,111 @@ public class RelationalDistillationStrategy<T> : DistillationStrategyBase<T, Vec
         }
 
         return gradient;
+    }
+
+    /// <summary>
+    /// Computes the average relational gradient for all samples in a batch.
+    /// </summary>
+    /// <param name="studentEmbeddings">Student's output embeddings/features for batch.</param>
+    /// <param name="teacherEmbeddings">Teacher's output embeddings/features for batch.</param>
+    /// <returns>Average relational gradient vector to be distributed across samples.</returns>
+    /// <remarks>
+    /// <para>This method computes relational gradients for all samples in the batch and averages
+    /// them to produce a single gradient that can be applied to subsequent samples receiving the
+    /// amortized relational loss. This ensures gradient-loss consistency.</para>
+    /// </remarks>
+    private Vector<T> ComputeAverageRelationalGradientForBatch(Vector<T>[] studentEmbeddings, Vector<T>[] teacherEmbeddings)
+    {
+        if (studentEmbeddings.Length == 0 || teacherEmbeddings.Length == 0)
+        {
+            // Return zero gradient for empty batch
+            int dim = studentEmbeddings.Length > 0 ? studentEmbeddings[0].Length :
+                     (teacherEmbeddings.Length > 0 ? teacherEmbeddings[0].Length : 0);
+            return new Vector<T>(dim);
+        }
+
+        int n = studentEmbeddings.Length;
+        int dim = studentEmbeddings[0].Length;
+        var sumGradient = new Vector<T>(dim);
+
+        // Initialize to zero
+        for (int i = 0; i < dim; i++)
+        {
+            sumGradient[i] = NumOps.Zero;
+        }
+
+        // Compute gradient for each sample in the batch and accumulate
+        for (int sampleIdx = 0; sampleIdx < n; sampleIdx++)
+        {
+            var sampleGrad = new Vector<T>(dim);
+            for (int i = 0; i < dim; i++)
+            {
+                sampleGrad[i] = NumOps.Zero;
+            }
+
+            // Distance-wise gradient: for all pairs involving this sample
+            if (_distanceWeight > 0)
+            {
+                for (int j = 0; j < n; j++)
+                {
+                    if (j == sampleIdx) continue;
+
+                    var distGrad = ComputePairwiseDistanceGradient(
+                        studentEmbeddings[sampleIdx],
+                        studentEmbeddings[j],
+                        teacherEmbeddings[sampleIdx],
+                        teacherEmbeddings[j]);
+
+                    for (int k = 0; k < dim; k++)
+                    {
+                        var weighted = NumOps.Multiply(distGrad[k], NumOps.FromDouble(_distanceWeight));
+                        sampleGrad[k] = NumOps.Add(sampleGrad[k], weighted);
+                    }
+                }
+            }
+
+            // Angle-wise gradient: for triplets involving this sample
+            if (_angleWeight > 0 && n >= 3)
+            {
+                int maxTriplets = Math.Min(10, n - 1);
+                for (int t = 0; t < maxTriplets; t++)
+                {
+                    int j = (sampleIdx + t + 1) % n;
+                    int k = (sampleIdx + t + 2) % n;
+
+                    if (j == sampleIdx || k == sampleIdx || j == k)
+                        continue;
+
+                    var angleGrad = ComputeTripletAngleGradient(
+                        studentEmbeddings[sampleIdx],
+                        studentEmbeddings[j],
+                        studentEmbeddings[k],
+                        teacherEmbeddings[sampleIdx],
+                        teacherEmbeddings[j],
+                        teacherEmbeddings[k]);
+
+                    for (int d = 0; d < dim; d++)
+                    {
+                        var weighted = NumOps.Multiply(angleGrad[d], NumOps.FromDouble(_angleWeight));
+                        sampleGrad[d] = NumOps.Add(sampleGrad[d], weighted);
+                    }
+                }
+            }
+
+            // Add this sample's gradient to the sum
+            for (int i = 0; i < dim; i++)
+            {
+                sumGradient[i] = NumOps.Add(sumGradient[i], sampleGrad[i]);
+            }
+        }
+
+        // Average across all samples
+        for (int i = 0; i < dim; i++)
+        {
+            sumGradient[i] = NumOps.Divide(sumGradient[i], NumOps.FromDouble(n));
+        }
+
+        return sumGradient;
     }
 
     /// <summary>
