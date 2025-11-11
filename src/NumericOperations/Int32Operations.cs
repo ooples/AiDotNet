@@ -93,9 +93,9 @@ public class Int32Operations : INumericOperations<int>
     /// <para><b>For Beginners:</b> This method divides the first number by the second, but drops any remainder.
     /// 
     /// For example:
-    /// - 10 × 2 = 5 (exact division, no remainder)
-    /// - 7 × 2 = 3 (not 3.5, because integers can't store decimals)
-    /// - 5 × 10 = 0 (less than 1, so the integer result is 0)
+    /// - 10 / 2 = 5 (exact division, no remainder)
+    /// - 7 / 2 = 3 (not 3.5, because integers can't store decimals)
+    /// - 5 / 10 = 0 (less than 1, so the integer result is 0)
     /// 
     /// This is different from regular division you might do with a calculator because:
     /// - It only gives you the whole number part of the answer
@@ -320,7 +320,7 @@ public class Int32Operations : INumericOperations<int>
     /// 
     /// For example:
     /// - Square(4) returns 16 (4 × 4 = 16)
-    /// - Square(-3) returns 9 (-3 ≈ -3 = 9)
+    /// - Square(-3) returns 9 (-3 × -3 = 9)
     /// - Square(0) returns 0 (0 × 0 = 0)
     /// 
     /// In neural networks, squaring is commonly used for:
@@ -348,8 +348,8 @@ public class Int32Operations : INumericOperations<int>
     /// 
     /// In mathematics, "e" is a special number (approximately 2.71828) that appears naturally in many calculations.
     /// This method computes e^value and rounds to the nearest whole number:
-    /// - Exp(1) returns 3 (e^ ≈ 2.71828, rounded to 3)
-    /// - Exp(2) returns 7 (e^ ≈ 7.38906, rounded to 7)
+    /// - Exp(1) ≈ 3 (e^1 ≈ 2.71828, rounded to 3)
+    /// - Exp(2) ≈ 7 (e^2 ≈ 7.38906, rounded to 7)
     /// - Exp(0) returns 1 (e^ = 1)
     /// - Exp(-1) returns 0 (e^-1 ≈ 0.36788, rounded to 0)
     /// 

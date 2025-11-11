@@ -87,7 +87,7 @@ public class FloatOperations : INumericOperations<float>
     /// This method performs division of two floating-point values, computing a / b.
     /// Care should be taken to ensure the divisor is not zero to avoid runtime exceptions.
     /// </para>
-    /// <para><b>For Beginners:</b> This method divides the first number by the second, like 10.0 × 2.0 = 5.0.
+    /// <para><b>For Beginners:</b> This method divides the first number by the second, like 10.0 / 2.0 = 5.0.
     /// 
     /// In neural networks, division is commonly used for:
     /// - Normalizing values (making numbers fall within a certain range)
@@ -310,7 +310,7 @@ public class FloatOperations : INumericOperations<float>
     /// 
     /// For example:
     /// - Square(4.0) returns 16.0 (4.0 × 4.0 = 16.0)
-    /// - Square(-3.0) returns 9.0 (-3.0 ≈ -3.0 = 9.0)
+    /// - Square(-3.0) returns 9.0 (-3.0 × -3.0 = 9.0)
     /// - Square(0.5) returns 0.25 (0.5 × 0.5 = 0.25)
     /// 
     /// In neural networks, squaring is commonly used for:
@@ -338,10 +338,10 @@ public class FloatOperations : INumericOperations<float>
     /// 
     /// In mathematics, "e" is a special number (approximately 2.71828) that appears naturally in many calculations.
     /// This method computes e^value:
-    /// - Exp(1.0) returns about 2.71828 (e^)
-    /// - Exp(2.0) returns about 7.38906 (e^)
-    /// - Exp(0.0) returns exactly 1.0 (e^)
-    /// - Exp(-1.0) returns about 0.36788 (e^-1)
+    /// - Exp(1.0) ≈ 2.71828 (e^1)
+    /// - Exp(2.0) ≈ 7.38906 (e^2)
+    /// - Exp(0.0) = 1.0 (e^0)
+    /// - Exp(-1.0) ≈ 0.36788 (e^-1)
     /// 
     /// The exponential function is fundamental in neural networks for:
     /// - Activation functions like sigmoid and softmax

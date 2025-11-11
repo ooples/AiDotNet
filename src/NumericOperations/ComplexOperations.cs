@@ -488,7 +488,7 @@ public class ComplexOperations<T> : INumericOperations<Complex<T>>
     /// </para>
     /// <para><b>For Beginners:</b> This method raises a complex number to a complex power.
     /// 
-    /// For real numbers, 2² means 2 × 2×2. For complex numbers, it's more complicated.
+    /// For real numbers, 2² means 2 × 2. For complex numbers, it's more complicated.
     /// 
     /// To calculate a complex number raised to a complex power:
     /// 1. Take the natural logarithm (ln) of the base

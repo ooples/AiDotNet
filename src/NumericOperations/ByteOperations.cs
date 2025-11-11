@@ -328,9 +328,9 @@ public class ByteOperations : INumericOperations<byte>
     /// <para><b>For Beginners:</b> This method calculates the mathematical constant e (≈2.718) raised to a power.
     /// 
     /// For example:
-    /// - e^1 × 2.718 (rounded to 3 as a byte)
-    /// - e^2 × 7.389 (rounded to 7 as a byte)
-    /// - e^5 × 148.413 (rounded to 148 as a byte)
+    /// - e^1 ≈ 2.718 (rounded to 3 as a byte)
+    /// - e^2 ≈ 7.389 (rounded to 7 as a byte)
+    /// - e^5 ≈ 148.413 (rounded to 148 as a byte)
     /// 
     /// The result is limited to 255 (maximum byte value).
     /// This function grows very quickly, so even moderate input values will reach the maximum.
@@ -373,7 +373,7 @@ public class ByteOperations : INumericOperations<byte>
     /// <para><b>For Beginners:</b> This method raises one number to the power of another.
     /// 
     /// For example:
-    /// - 2 raised to power 3 is 8 (2² = 2 × 2×2 = 8)
+    /// - 2 raised to power 3 is 8 (2³ = 2 × 2 × 2 = 8)
     /// - 3 raised to power 2 is 9 (3² = 3 × 3 = 9)
     /// 
     /// Because of byte limits:
@@ -400,7 +400,7 @@ public class ByteOperations : INumericOperations<byte>
     /// The natural logarithm answers the question: "To what power must e be raised to get this number?"
     /// 
     /// For example:
-    /// - Log of 1 is 0 (e^ = 1)
+    /// - Log of 1 is 0 (e^0 = 1)
     /// - Log of 3 is approximately 1.099 (truncated to 1 as a byte)
     /// - Log of 7 is approximately 1.946 (truncated to 1 as a byte)
     /// 
