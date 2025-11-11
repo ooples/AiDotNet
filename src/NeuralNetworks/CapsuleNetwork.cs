@@ -427,6 +427,12 @@ public class CapsuleNetwork<T> : NeuralNetworkBase<T>
     /// During training, we mask out the activity vectors of all but the target capsule.
     /// During inference (targetClass = null), we use the capsule with the highest norm.
     /// </para>
+    /// <para>
+    /// Note: Current implementation applies the same target capsule mask to all batch elements.
+    /// This is appropriate for reconstruction loss with batch size 1 or when all samples
+    /// in the batch have the same target class. For per-sample masking with different targets,
+    /// this method would need to accept an array of target indices.
+    /// </para>
     /// </remarks>
     private Tensor<T> ApplyCapsuleMask(Tensor<T> capsuleOutputs, int? targetClass)
     {
@@ -439,7 +445,8 @@ public class CapsuleNetwork<T> : NeuralNetworkBase<T>
         var masked = capsuleOutputs.Clone();
 
         // Zero out all capsules except target
-        // Assuming shape is [batch, numCapsules, capsuleDim]
+        // Shape is expected to be [batch, numCapsules, capsuleDim]
+        // Note: Same target capsule is masked for all batch elements
         if (capsuleOutputs.Shape.Length >= 2)
         {
             int batchSize = capsuleOutputs.Shape[0];

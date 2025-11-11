@@ -38,7 +38,16 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
     /// </para>
     /// </remarks>
     protected List<ILayer<T>> Layers => _layers;
-    
+
+    /// <summary>
+    /// Gets the number of layers in this neural network.
+    /// </summary>
+    /// <remarks>
+    /// <b>For Beginners:</b> This tells you how many processing stages (layers) your network has.
+    /// More layers generally means the network can learn more complex patterns.
+    /// </remarks>
+    public int LayerCount => _layers.Count;
+
     /// <summary>
     /// The architecture definition for this neural network.
     /// </summary>

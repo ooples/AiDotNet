@@ -1946,7 +1946,10 @@ public class GenerativeAdversarialNetwork<T> : NeuralNetworkBase<T>
 
             // Central difference: (f(x+h) - f(x-h)) / (2h)
             // For discriminator, we use the first output element (real/fake score)
-            T outputDiff = NumOps.Subtract(outputPlus[0, 0], outputMinus[0, 0]);
+            // Handle both 1D and 2D output tensors
+            T plusValue = outputPlus.Shape.Length >= 2 ? outputPlus[0, 0] : outputPlus[0];
+            T minusValue = outputMinus.Shape.Length >= 2 ? outputMinus[0, 0] : outputMinus[0];
+            T outputDiff = NumOps.Subtract(plusValue, minusValue);
             T twoEpsilon = NumOps.Multiply(epsilon, NumOps.FromDouble(2.0));
             gradients[i] = NumOps.Divide(outputDiff, twoEpsilon);
         }
@@ -2007,10 +2010,27 @@ public class GenerativeAdversarialNetwork<T> : NeuralNetworkBase<T>
         }
         else
         {
-            // Use middle layers by default
-            // Typically discriminators have ~5-10 layers, so use indices 1, 3, 5
-            // These will be validated in ForwardWithFeatures
-            layerIndices = new int[] { 1, 3, 5 };
+            // Use middle layers by default (25%, 50%, 75% through the network)
+            // Adjust based on actual discriminator depth to avoid invalid indices
+            int discriminatorLayerCount = Discriminator.LayerCount;
+            if (discriminatorLayerCount <= 2)
+            {
+                // Very shallow network - just use available layers
+                layerIndices = discriminatorLayerCount == 1 ? new int[] { 0 } : new int[] { 0, 1 };
+            }
+            else if (discriminatorLayerCount <= 4)
+            {
+                // Small network - use first, middle, last
+                layerIndices = new int[] { 0, discriminatorLayerCount / 2, discriminatorLayerCount - 1 };
+            }
+            else
+            {
+                // Standard network - use 25%, 50%, 75% positions
+                int idx25 = discriminatorLayerCount / 4;
+                int idx50 = discriminatorLayerCount / 2;
+                int idx75 = (discriminatorLayerCount * 3) / 4;
+                layerIndices = new int[] { idx25, idx50, idx75 };
+            }
         }
 
         // Set discriminator to inference mode (no training during feature extraction)
