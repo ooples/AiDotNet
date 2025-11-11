@@ -1,4 +1,5 @@
 #if NET5_0_OR_GREATER
+using System;
 using AiDotNet.Interfaces;
 
 namespace AiDotNet.NumericOperations;
