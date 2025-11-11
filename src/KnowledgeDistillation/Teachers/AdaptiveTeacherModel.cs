@@ -178,18 +178,21 @@ public class AdaptiveTeacherModel<T> : TeacherModelBase<Vector<T>, Vector<T>, T>
     /// </summary>
     private double ComputeAdaptiveTemperature(Vector<T> logits, double baseTemperature)
     {
+        // Convert logits to normalized probabilities
+        var probs = ApplyTemperatureSoftmax(logits, 1.0);
+
         double difficulty = 0;
 
         switch (_strategy)
         {
             case AdaptiveStrategy.ConfidenceBased:
                 // Lower confidence = harder sample = lower temperature
-                difficulty = 1.0 - GetMaxConfidence(logits);
+                difficulty = 1.0 - GetMaxConfidence(probs);
                 break;
 
             case AdaptiveStrategy.EntropyBased:
                 // Higher entropy = harder sample = lower temperature
-                difficulty = ComputeEntropy(logits);
+                difficulty = ComputeEntropy(probs);
                 break;
 
             case AdaptiveStrategy.AccuracyBased:
@@ -197,6 +200,9 @@ public class AdaptiveTeacherModel<T> : TeacherModelBase<Vector<T>, Vector<T>, T>
                 difficulty = 0.5;
                 break;
         }
+
+        // Clamp difficulty to [0,1] to ensure temperature stays within bounds
+        difficulty = Math.Max(0.0, Math.Min(1.0, difficulty));
 
         // Map difficulty [0,1] to temperature [min, max]
         // High difficulty (0) -> min temp (sharper)
