@@ -379,6 +379,20 @@ public class CapsuleNetwork<T> : NeuralNetworkBase<T>
         var reconstruction = reconstructionLayer.Forward(maskedCapsules);
 
         // Flatten original input for comparison
+        // Validate the input can be flattened before attempting reshape
+        int expectedLength = 1;
+        foreach (int dim in input.Shape)
+        {
+            expectedLength *= dim;
+        }
+
+        if (expectedLength != input.Length)
+        {
+            throw new InvalidOperationException(
+                $"Input tensor product of dimensions ({expectedLength}) " +
+                $"does not match actual length ({input.Length}).");
+        }
+
         var flattenedInput = input.Reshape([input.Length]);
 
         // Validate shapes match before computing MSE
