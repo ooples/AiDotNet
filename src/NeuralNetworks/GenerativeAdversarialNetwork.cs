@@ -339,17 +339,17 @@ public class GenerativeAdversarialNetwork<T> : NeuralNetworkBase<T>
     /// - If not specified, sensible defaults are used automatically
     /// </para>
     /// </remarks>
-    public int[] FeatureMatchingLayers { get; set; } = null;
+    public int[]? FeatureMatchingLayers { get; set; } = null;
 
     /// <summary>
     /// Stores the last real batch for feature matching computation.
     /// </summary>
-    private Tensor<T> _lastRealBatch;
+    private Tensor<T>? _lastRealBatch;
 
     /// <summary>
     /// Stores the last fake batch for feature matching computation.
     /// </summary>
-    private Tensor<T> _lastFakeBatch;
+    private Tensor<T>? _lastFakeBatch;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="GenerativeAdversarialNetwork{T}"/> class.
@@ -2004,14 +2004,10 @@ public class GenerativeAdversarialNetwork<T> : NeuralNetworkBase<T>
         }
         else
         {
-            // Use middle layers by default (25%, 50%, 75% through the network)
-            int numLayers = Discriminator.Layers.Count;
-            layerIndices = new int[]
-            {
-                numLayers / 4,
-                numLayers / 2,
-                (3 * numLayers) / 4
-            };
+            // Use middle layers by default
+            // Typically discriminators have ~5-10 layers, so use indices 1, 3, 5
+            // These will be validated in ForwardWithFeatures
+            layerIndices = new int[] { 1, 3, 5 };
         }
 
         // Set discriminator to inference mode (no training during feature extraction)

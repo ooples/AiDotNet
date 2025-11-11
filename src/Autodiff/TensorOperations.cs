@@ -374,15 +374,23 @@ public static class TensorOperations<T>
     /// </remarks>
     public static ComputationNode<T> Divide(ComputationNode<T> a, ComputationNode<T> b)
     {
-        var result = a.Value.ElementwiseDivide(b.Value);
         var numOps = MathHelper.GetNumericOperations<T>();
+        var result = new Tensor<T>(a.Value.Shape);
+        for (int i = 0; i < a.Value.Length; i++)
+        {
+            result[i] = numOps.Divide(a.Value[i], b.Value[i]);
+        }
 
         void BackwardFunction(Tensor<T> gradient)
         {
             // ∂(a/b)/∂a = 1/b
             if (a.RequiresGradient)
             {
-                var gradA = gradient.ElementwiseDivide(b.Value);
+                var gradA = new Tensor<T>(gradient.Shape);
+                for (int i = 0; i < gradient.Length; i++)
+                {
+                    gradA[i] = numOps.Divide(gradient[i], b.Value[i]);
+                }
                 if (a.Gradient == null)
                     a.Gradient = gradA;
                 else
@@ -393,8 +401,12 @@ public static class TensorOperations<T>
             if (b.RequiresGradient)
             {
                 var bSquared = b.Value.ElementwiseMultiply(b.Value);
-                var gradB = gradient.ElementwiseMultiply(a.Value).ElementwiseDivide(bSquared);
-                gradB = gradB.Transform((x, _) => numOps.Negate(x));
+                var gradB = new Tensor<T>(gradient.Shape);
+                for (int i = 0; i < gradient.Length; i++)
+                {
+                    var numerator = numOps.Multiply(gradient[i], a.Value[i]);
+                    gradB[i] = numOps.Negate(numOps.Divide(numerator, bSquared[i]));
+                }
                 if (b.Gradient == null)
                     b.Gradient = gradB;
                 else
@@ -562,7 +574,11 @@ public static class TensorOperations<T>
             if (a.RequiresGradient)
             {
                 // ∂(log(a))/∂a = 1/a
-                var gradA = gradient.ElementwiseDivide(a.Value);
+                var gradA = new Tensor<T>(gradient.Shape);
+                for (int i = 0; i < gradient.Length; i++)
+                {
+                    gradA[i] = numOps.Divide(gradient[i], a.Value[i]);
+                }
 
                 if (a.Gradient == null)
                     a.Gradient = gradA;
@@ -614,8 +630,12 @@ public static class TensorOperations<T>
             {
                 // ∂(√a)/∂a = 1/(2√a) = 1/(2*result)
                 var two = numOps.FromDouble(2.0);
-                var twoTimesResult = result.Transform((x, _) => numOps.Multiply(two, x));
-                var gradA = gradient.ElementwiseDivide(twoTimesResult);
+                var gradA = new Tensor<T>(gradient.Shape);
+                for (int i = 0; i < gradient.Length; i++)
+                {
+                    var twoTimesResult = numOps.Multiply(two, result[i]);
+                    gradA[i] = numOps.Divide(gradient[i], twoTimesResult);
+                }
 
                 if (a.Gradient == null)
                     a.Gradient = gradA;
@@ -1083,7 +1103,7 @@ public static class TensorOperations<T>
             {
                 // ∂(mean(A))/∂A = gradOut / count
                 var gradA = new Tensor<T>(originalShape);
-                var gradValue = numOps.Divide(gradient[0], numOps.FromInt(count));
+                var gradValue = numOps.Divide(gradient[0], numOps.FromDouble(count));
 
                 for (int i = 0; i < gradA.Length; i++)
                 {

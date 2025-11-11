@@ -381,11 +381,17 @@ public class CapsuleNetwork<T> : NeuralNetworkBase<T>
         // Flatten original input for comparison
         var flattenedInput = input.Reshape([input.Length]);
 
-        // Compute MSE loss using StatisticsHelper
-        return StatisticsHelper<T>.CalculateMeanSquaredError(
-            flattenedInput.ToEnumerable(),
-            reconstruction.ToEnumerable()
-        );
+        // Compute MSE loss manually since Tensor doesn't have ToEnumerable
+        T sumSquaredError = NumOps.Zero;
+        int minLength = Math.Min(flattenedInput.Length, reconstruction.Length);
+
+        for (int i = 0; i < minLength; i++)
+        {
+            T diff = NumOps.Subtract(flattenedInput[i], reconstruction[i]);
+            sumSquaredError = NumOps.Add(sumSquaredError, NumOps.Multiply(diff, diff));
+        }
+
+        return NumOps.Divide(sumSquaredError, NumOps.FromDouble(minLength));
     }
 
     /// <summary>
