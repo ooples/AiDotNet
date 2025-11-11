@@ -857,4 +857,3 @@ public class ComplexOperations<T> : INumericOperations<Complex<T>>
     /// </remarks>
     public double ToDouble(Complex<T> value) => _ops.ToDouble(value.Real);
 }
-#endif
