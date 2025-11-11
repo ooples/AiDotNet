@@ -281,12 +281,18 @@ jobs:
 
       - name: Push to NuGet
         run: |
-          for pkg in out/*.nupkg; do
+          # Enable nullglob to handle case where no .nupkg files exist
+          shopt -s nullglob
+          pkgs=(out/*.nupkg)
+          
+          if [ ${#pkgs[@]} -eq 0 ]; then
+            echo "Error: No .nupkg files found in out/ directory"
+            exit 1
+          fi
+          
+          for pkg in "${pkgs[@]}"; do
             echo "Publishing $pkg to NuGet..."
-            dotnet nuget push "$pkg" \
-              --api-key ${{ secrets.NUGET_API_KEY }} \
-              --source https://api.nuget.org/v3/index.json \
-              --skip-duplicate
+            dotnet nuget push "$pkg"               --api-key ${{ secrets.NUGET_API_KEY }}               --source https://api.nuget.org/v3/index.json               --skip-duplicate
 
             if [ $? -eq 0 ]; then
               echo "✓ Successfully published $pkg"
