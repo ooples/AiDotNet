@@ -1,179 +1,133 @@
-using System;
-using System.Numerics;
+using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
-using MathNet.Numerics.LinearAlgebra;
+using AiDotNet.LinearAlgebra;
 
-namespace AiDotNet.NestedLearning
+namespace AiDotNet.NestedLearning;
+
+/// <summary>
+/// Implementation of Continuum Memory System (CMS) for nested learning.
+/// Provides a spectrum of memory modules operating at different frequencies.
+/// </summary>
+/// <typeparam name="T">The numeric type</typeparam>
+public class ContinuumMemorySystem<T> : IContinuumMemorySystem<T>
 {
-    /// <summary>
-    /// Implementation of Continuum Memory System (CMS) for nested learning.
-    /// Provides a spectrum of memory modules operating at different frequencies.
-    /// </summary>
-    /// <typeparam name="T">The numeric type</typeparam>
-    public class ContinuumMemorySystem<T> : IContinuumMemorySystem<T>
-        where T : struct, IFloatingPoint<T>, IPowerFunctions<T>, IExponentialFunctions<T>
+    private readonly int _numFrequencyLevels;
+    private readonly int _memoryDimension;
+    private Vector<T>[] _memoryStates;
+    private T[] _decayRates;
+    private static readonly INumericOperations<T> _numOps = MathHelper.GetNumericOperations<T>();
+
+    public ContinuumMemorySystem(int memoryDimension, int numFrequencyLevels = 3, T[]? decayRates = null)
     {
-        private readonly int _numFrequencyLevels;
-        private readonly int _memoryDimension;
-        private Tensor<T>[] _memoryStates;
-        private T[] _decayRates;
+        _memoryDimension = memoryDimension;
+        _numFrequencyLevels = numFrequencyLevels;
 
-        /// <summary>
-        /// Initializes a new Continuum Memory System.
-        /// </summary>
-        /// <param name="memoryDimension">Dimension of memory representations</param>
-        /// <param name="numFrequencyLevels">Number of frequency levels</param>
-        /// <param name="decayRates">Optional custom decay rates per level</param>
-        public ContinuumMemorySystem(
-            int memoryDimension,
-            int numFrequencyLevels = 3,
-            T[]? decayRates = null)
+        _memoryStates = new Vector<T>[numFrequencyLevels];
+        for (int i = 0; i < numFrequencyLevels; i++)
         {
-            _memoryDimension = memoryDimension;
-            _numFrequencyLevels = numFrequencyLevels;
-
-            // Initialize memory states
-            _memoryStates = new Tensor<T>[numFrequencyLevels];
-            for (int i = 0; i < numFrequencyLevels; i++)
-            {
-                _memoryStates[i] = Tensor<T>.CreateFromArray(
-                    new T[memoryDimension],
-                    new[] { memoryDimension });
-            }
-
-            // Initialize decay rates - higher levels decay slower
-            _decayRates = decayRates ?? CreateDefaultDecayRates();
+            _memoryStates[i] = new Vector<T>(memoryDimension);
         }
 
-        private T[] CreateDefaultDecayRates()
+        _decayRates = decayRates ?? CreateDefaultDecayRates();
+    }
+
+    private T[] CreateDefaultDecayRates()
+    {
+        var rates = new T[_numFrequencyLevels];
+        for (int i = 0; i < _numFrequencyLevels; i++)
         {
-            var rates = new T[_numFrequencyLevels];
-            for (int i = 0; i < _numFrequencyLevels; i++)
-            {
-                // Exponentially decreasing decay: 0.9, 0.95, 0.98, ...
-                double rate = 0.9 + (i * 0.05);
-                rates[i] = T.CreateChecked(Math.Min(rate, 0.99));
-            }
-            return rates;
+            double rate = 0.9 + (i * 0.05);
+            rates[i] = _numOps.FromDouble(Math.Min(rate, 0.99));
+        }
+        return rates;
+    }
+
+    public void Store(Vector<T> representation, int frequencyLevel)
+    {
+        if (frequencyLevel < 0 || frequencyLevel >= _numFrequencyLevels)
+            throw new ArgumentException($"Invalid frequency level: {frequencyLevel}");
+
+        T decay = _decayRates[frequencyLevel];
+        T oneMinusDecay = _numOps.Subtract(_numOps.One, decay);
+
+        var currentMemory = _memoryStates[frequencyLevel];
+        var updated = new Vector<T>(_memoryDimension);
+
+        for (int i = 0; i < Math.Min(_memoryDimension, representation.Length); i++)
+        {
+            T decayed = _numOps.Multiply(currentMemory[i], decay);
+            T newVal = _numOps.Multiply(representation[i], oneMinusDecay);
+            updated[i] = _numOps.Add(decayed, newVal);
         }
 
-        /// <inheritdoc/>
-        public void Store(Tensor<T> representation, int frequencyLevel)
+        _memoryStates[frequencyLevel] = updated;
+    }
+
+    public Vector<T> Retrieve(Vector<T> query, int frequencyLevel)
+    {
+        if (frequencyLevel < 0 || frequencyLevel >= _numFrequencyLevels)
+            throw new ArgumentException($"Invalid frequency level: {frequencyLevel}");
+
+        return _memoryStates[frequencyLevel];
+    }
+
+    public void Update(Vector<T> context, bool[] updateMask)
+    {
+        if (updateMask.Length != _numFrequencyLevels)
+            throw new ArgumentException("Update mask length must match number of frequency levels");
+
+        for (int i = 0; i < _numFrequencyLevels; i++)
         {
-            if (frequencyLevel < 0 || frequencyLevel >= _numFrequencyLevels)
+            if (updateMask[i])
             {
-                throw new ArgumentException($"Invalid frequency level: {frequencyLevel}");
-            }
-
-            // Store with exponential moving average based on decay rate
-            T decay = _decayRates[frequencyLevel];
-            T oneMinusDecay = T.One - decay;
-
-            var currentMemory = _memoryStates[frequencyLevel].ToArray();
-            var newRepresentation = representation.ToArray();
-
-            for (int i = 0; i < Math.Min(currentMemory.Length, newRepresentation.Length); i++)
-            {
-                currentMemory[i] = currentMemory[i] * decay + newRepresentation[i] * oneMinusDecay;
-            }
-
-            _memoryStates[frequencyLevel] = Tensor<T>.CreateFromArray(
-                currentMemory,
-                _memoryStates[frequencyLevel].Shape);
-        }
-
-        /// <inheritdoc/>
-        public Tensor<T> Retrieve(Tensor<T> query, int frequencyLevel)
-        {
-            if (frequencyLevel < 0 || frequencyLevel >= _numFrequencyLevels)
-            {
-                throw new ArgumentException($"Invalid frequency level: {frequencyLevel}");
-            }
-
-            // For now, simple retrieval returns the memory state
-            // In a more advanced implementation, this could use attention mechanism
-            return _memoryStates[frequencyLevel];
-        }
-
-        /// <inheritdoc/>
-        public void Update(Tensor<T> context, bool[] updateMask)
-        {
-            if (updateMask.Length != _numFrequencyLevels)
-            {
-                throw new ArgumentException(
-                    $"Update mask length ({updateMask.Length}) must match number of frequency levels ({_numFrequencyLevels})");
-            }
-
-            for (int i = 0; i < _numFrequencyLevels; i++)
-            {
-                if (updateMask[i])
-                {
-                    Store(context, i);
-                }
+                Store(context, i);
             }
         }
+    }
 
-        /// <inheritdoc/>
-        public void Consolidate()
+    public void Consolidate()
+    {
+        for (int i = 0; i < _numFrequencyLevels - 1; i++)
         {
-            // Memory consolidation: transfer information from faster to slower levels
-            for (int i = 0; i < _numFrequencyLevels - 1; i++)
+            var fastMemory = _memoryStates[i];
+            var slowMemory = _memoryStates[i + 1];
+
+            double transferRateVal = 0.05 / (i + 1);
+            T transferRate = _numOps.FromDouble(transferRateVal);
+            T oneMinusTransfer = _numOps.Subtract(_numOps.One, transferRate);
+
+            var consolidated = new Vector<T>(_memoryDimension);
+            for (int j = 0; j < _memoryDimension; j++)
             {
-                var fastMemory = _memoryStates[i].ToArray();
-                var slowMemory = _memoryStates[i + 1].ToArray();
-
-                // Transfer rate decreases with level (faster levels transfer more)
-                T transferRate = T.CreateChecked(0.05 / (i + 1)); // 0.05, 0.025, 0.0167, ...
-
-                for (int j = 0; j < Math.Min(fastMemory.Length, slowMemory.Length); j++)
-                {
-                    // Blend fast memory into slow memory
-                    slowMemory[j] = slowMemory[j] * (T.One - transferRate) + fastMemory[j] * transferRate;
-                }
-
-                _memoryStates[i + 1] = Tensor<T>.CreateFromArray(
-                    slowMemory,
-                    _memoryStates[i + 1].Shape);
+                T slow = _numOps.Multiply(slowMemory[j], oneMinusTransfer);
+                T fast = _numOps.Multiply(fastMemory[j], transferRate);
+                consolidated[j] = _numOps.Add(slow, fast);
             }
+
+            _memoryStates[i + 1] = consolidated;
         }
+    }
 
-        /// <inheritdoc/>
-        public int NumberOfFrequencyLevels => _numFrequencyLevels;
+    public int NumberOfFrequencyLevels => _numFrequencyLevels;
 
-        /// <inheritdoc/>
-        public T[] DecayRates
+    public T[] DecayRates
+    {
+        get => _decayRates;
+        set
         {
-            get => _decayRates;
-            set
-            {
-                if (value.Length != _numFrequencyLevels)
-                {
-                    throw new ArgumentException(
-                        $"Decay rates length ({value.Length}) must match number of frequency levels ({_numFrequencyLevels})");
-                }
-                _decayRates = value;
-            }
+            if (value.Length != _numFrequencyLevels)
+                throw new ArgumentException("Decay rates length must match number of frequency levels");
+            _decayRates = value;
         }
+    }
 
-        /// <inheritdoc/>
-        public Tensor<T>[] MemoryStates => _memoryStates;
+    public Vector<T>[] MemoryStates => _memoryStates;
 
-        /// <summary>
-        /// Resets all memory states to zero.
-        /// </summary>
-        public void Reset()
+    public void Reset()
+    {
+        for (int i = 0; i < _numFrequencyLevels; i++)
         {
-            for (int i = 0; i < _numFrequencyLevels; i++)
-            {
-                _memoryStates[i] = Tensor<T>.CreateFromArray(
-                    new T[_memoryDimension],
-                    new[] { _memoryDimension });
-            }
+            _memoryStates[i] = new Vector<T>(_memoryDimension);
         }
-
-        /// <summary>
-        /// Gets the memory dimension.
-        /// </summary>
-        public int MemoryDimension => _memoryDimension;
     }
 }
