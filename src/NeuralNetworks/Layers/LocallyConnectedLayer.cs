@@ -520,22 +520,36 @@ public class LocallyConnectedLayer<T> : LayerBase<T>
     /// </para>
     /// <para><b>For Beginners:</b> This method is used during training to calculate how the layer's input
     /// and parameters should change to reduce errors.
-    /// 
+    ///
     /// During the backward pass:
     /// 1. The layer receives information about how its output contributed to errors
     /// 2. It calculates how the weights and biases should change to reduce errors
     /// 3. It calculates how the input should change, which will be used by earlier layers
-    /// 
+    ///
     /// This process involves:
     /// - Applying the derivative of the activation function
     /// - Computing gradients for each unique filter
     /// - Computing gradients for biases
     /// - Computing how the input should change
-    /// 
+    ///
     /// The method will throw an error if you try to run it before performing a forward pass.
     /// </para>
     /// </remarks>
     public override Tensor<T> Backward(Tensor<T> outputGradient)
+    {
+        if (UseAutodiff)
+            return BackwardViaAutodiff(outputGradient);
+        else
+            return BackwardManual(outputGradient);
+    }
+
+    /// <summary>
+    /// Manual backward pass implementation using optimized gradient calculations.
+    /// </summary>
+    /// <param name="outputGradient">The gradient of the loss with respect to the layer's output.</param>
+    /// <returns>The gradient of the loss with respect to the layer's input.</returns>
+    /// <exception cref="InvalidOperationException">Thrown when Forward has not been called before Backward.</exception>
+    private Tensor<T> BackwardManual(Tensor<T> outputGradient)
     {
         if (_lastInput == null)
             throw new InvalidOperationException("Forward pass must be called before backward pass.");
@@ -579,6 +593,75 @@ public class LocallyConnectedLayer<T> : LayerBase<T>
         }
 
         return inputGradient;
+    }
+
+    /// <summary>
+    /// Backward pass implementation using automatic differentiation.
+    /// </summary>
+    /// <param name="outputGradient">The gradient of the loss with respect to the layer's output.</param>
+    /// <returns>The gradient of the loss with respect to the layer's input.</returns>
+    /// <remarks>
+    /// <para>
+    /// This method uses automatic differentiation to compute gradients. Currently, locally connected operations
+    /// are not yet available in TensorOperations, so this method falls back to the manual implementation.
+    /// </para>
+    /// <para>
+    /// Once locally connected operations are added to TensorOperations, this method will provide:
+    /// - Automatic gradient computation through the computation graph
+    /// - Verification of manual gradient implementations
+    /// - Support for rapid prototyping with custom modifications
+    /// </para>
+    /// </remarks>
+    private Tensor<T> BackwardViaAutodiff(Tensor<T> outputGradient)
+    {
+        // TODO: Implement autodiff backward pass once locally connected operations are available in TensorOperations
+        // Convolution operation not yet available in TensorOperations
+        // Falling back to manual implementation
+        return BackwardManual(outputGradient);
+    }
+
+    /// <summary>
+    /// Gets the topological order of nodes in the computation graph.
+    /// </summary>
+    /// <param name="root">The root node of the computation graph.</param>
+    /// <returns>A list of nodes in topological order.</returns>
+    private List<Autodiff.ComputationNode<T>> GetTopologicalOrder(Autodiff.ComputationNode<T> root)
+    {
+        var visited = new HashSet<Autodiff.ComputationNode<T>>();
+        var result = new List<Autodiff.ComputationNode<T>>();
+
+        var stack = new Stack<(Autodiff.ComputationNode<T> node, bool processed)>();
+        stack.Push((root, false));
+
+        while (stack.Count > 0)
+        {
+            var (node, processed) = stack.Pop();
+
+            if (visited.Contains(node))
+            {
+                continue;
+            }
+
+            if (processed)
+            {
+                visited.Add(node);
+                result.Add(node);
+            }
+            else
+            {
+                stack.Push((node, true));
+
+                foreach (var parent in node.Parents)
+                {
+                    if (!visited.Contains(parent))
+                    {
+                        stack.Push((parent, false));
+                    }
+                }
+            }
+        }
+
+        return result;
     }
 
     /// <summary>

@@ -13,11 +13,11 @@ namespace AiDotNet.NeuralNetworks.Layers;
 /// <para><b>For Beginners:</b> A dilated convolutional layer is like looking at an image with a special magnifying glass.
 /// 
 /// Regular convolutions look at pixels that are right next to each other, like this:
-/// - Looking at a 3×3 area of an image (9 adjacent pixels)
+/// - Looking at a 3ï¿½3 area of an image (9 adjacent pixels)
 /// 
 /// Dilated convolutions skip some pixels, creating gaps, like this:
 /// - With dilation=2, it looks at pixels with a gap of 1 pixel between them
-/// - The 3×3 filter now covers a 5×5 area (still using only 9 values)
+/// - The 3ï¿½3 filter now covers a 5ï¿½5 area (still using only 9 values)
 /// 
 /// Benefits:
 /// - Sees a larger area without needing more computing power
@@ -79,16 +79,16 @@ public class DilatedConvolutionalLayer<T> : LayerBase<T>
     /// <remarks>
     /// <para>
     /// This field represents the size of the square filter used in the convolution operation.
-    /// Common kernel sizes are 3×3, 5×5, and 7×7.
+    /// Common kernel sizes are 3ï¿½3, 5ï¿½5, and 7ï¿½7.
     /// </para>
     /// <para><b>For Beginners:</b> This is the size of the "window" that looks at the input data.
     /// 
     /// The kernel size determines how much local context is considered:
-    /// - Small kernels (3×3): Look at very local patterns
-    /// - Larger kernels (7×7): Look at wider patterns
+    /// - Small kernels (3ï¿½3): Look at very local patterns
+    /// - Larger kernels (7ï¿½7): Look at wider patterns
     /// 
-    /// For example, with a 3×3 kernel, each output value is calculated by looking at 
-    /// a 3×3 grid of input values (accounting for dilation).
+    /// For example, with a 3ï¿½3 kernel, each output value is calculated by looking at 
+    /// a 3ï¿½3 grid of input values (accounting for dilation).
     /// </para>
     /// </remarks>
     private readonly int _kernelSize;
@@ -113,7 +113,7 @@ public class DilatedConvolutionalLayer<T> : LayerBase<T>
     /// - Reduce computation time
     /// - Can lose some information
     /// 
-    /// For example, with stride=2, a 100×100 image would become roughly 50×50 after the convolution.
+    /// For example, with stride=2, a 100ï¿½100 image would become roughly 50ï¿½50 after the convolution.
     /// </para>
     /// </remarks>
     private readonly int _stride;
@@ -134,7 +134,7 @@ public class DilatedConvolutionalLayer<T> : LayerBase<T>
     /// - With padding, the output can stay the same size as the input
     /// - It helps the network pay attention to features at the edges
     /// 
-    /// For example, with padding=1 and a 3×3 kernel, a single row of zeros is added 
+    /// For example, with padding=1 and a 3ï¿½3 kernel, a single row of zeros is added 
     /// around the entire input before applying the convolution.
     /// </para>
     /// </remarks>
@@ -161,7 +161,7 @@ public class DilatedConvolutionalLayer<T> : LayerBase<T>
     /// - Captures long-range dependencies
     /// - Efficient way to increase the "field of view"
     /// 
-    /// For example, a 3×3 filter with dilation=2 would cover a 5×5 area,
+    /// For example, a 3ï¿½3 filter with dilation=2 would cover a 5ï¿½5 area,
     /// but still only use 9 values from that area.
     /// </para>
     /// </remarks>
@@ -344,12 +344,12 @@ public class DilatedConvolutionalLayer<T> : LayerBase<T>
     /// The layer automatically initializes the filters with small random values
     /// that are carefully scaled to work well with training.
     /// 
-    /// Example: For processing 32×32 color images with 16 filters of size 3×3 and dilation of 2:
+    /// Example: For processing 32ï¿½32 color images with 16 filters of size 3ï¿½3 and dilation of 2:
     /// ```csharp
     /// var convLayer = new DilatedConvolutionalLayer<float>(
     ///     inputDepth: 3,           // RGB input
     ///     outputDepth: 16,         // 16 different feature detectors
-    ///     kernelSize: 3,           // 3×3 filters
+    ///     kernelSize: 3,           // 3ï¿½3 filters
     ///     inputHeight: 32,         // Image height
     ///     inputWidth: 32,          // Image width
     ///     dilation: 2,             // Look at every other pixel
@@ -560,12 +560,12 @@ public class DilatedConvolutionalLayer<T> : LayerBase<T>
     /// <exception cref="InvalidOperationException">Thrown when backward is called before forward.</exception>
     /// <remarks>
     /// <para>
-    /// This method implements the backward pass (backpropagation) of the dilated convolutional layer. 
+    /// This method implements the backward pass (backpropagation) of the dilated convolutional layer.
     /// It computes the gradients of the loss with respect to the layer's weights, biases, and inputs.
     /// These gradients are used to update the parameters during training.
     /// </para>
     /// <para><b>For Beginners:</b> This is where the layer learns from its mistakes during training.
-    /// 
+    ///
     /// During the backward pass:
     /// 1. The layer receives information about how its output contributed to errors
     /// 2. It calculates three things:
@@ -573,12 +573,26 @@ public class DilatedConvolutionalLayer<T> : LayerBase<T>
     ///    - How to adjust each bias value (bias gradients)
     ///    - How the error flows back to the previous layer (input gradients)
     /// 3. These gradients are used to update the filters and biases
-    /// 
+    ///
     /// The dilation is also taken into account when calculating these gradients,
     /// ensuring that the learning process understands the dilated nature of the convolution.
     /// </para>
     /// </remarks>
     public override Tensor<T> Backward(Tensor<T> outputGradient)
+    {
+        if (UseAutodiff)
+            return BackwardViaAutodiff(outputGradient);
+        else
+            return BackwardManual(outputGradient);
+    }
+
+    /// <summary>
+    /// Manual backward pass implementation using optimized gradient calculations.
+    /// </summary>
+    /// <param name="outputGradient">The gradient of the loss with respect to the layer's output.</param>
+    /// <returns>The gradient of the loss with respect to the layer's input.</returns>
+    /// <exception cref="InvalidOperationException">Thrown when backward is called before forward.</exception>
+    private Tensor<T> BackwardManual(Tensor<T> outputGradient)
     {
         if (_lastInput == null || _lastOutput == null)
         {
@@ -636,6 +650,75 @@ public class DilatedConvolutionalLayer<T> : LayerBase<T>
         _biasGradients = biasGradients;
 
         return inputGradients;
+    }
+
+    /// <summary>
+    /// Backward pass implementation using automatic differentiation.
+    /// </summary>
+    /// <param name="outputGradient">The gradient of the loss with respect to the layer's output.</param>
+    /// <returns>The gradient of the loss with respect to the layer's input.</returns>
+    /// <remarks>
+    /// <para>
+    /// This method uses automatic differentiation to compute gradients. Currently, dilated convolution operations
+    /// are not yet available in TensorOperations, so this method falls back to the manual implementation.
+    /// </para>
+    /// <para>
+    /// Once dilated convolution operations are added to TensorOperations, this method will provide:
+    /// - Automatic gradient computation through the computation graph
+    /// - Verification of manual gradient implementations
+    /// - Support for rapid prototyping with custom modifications
+    /// </para>
+    /// </remarks>
+    private Tensor<T> BackwardViaAutodiff(Tensor<T> outputGradient)
+    {
+        // TODO: Implement autodiff backward pass once dilated convolution operations are available in TensorOperations
+        // Convolution operation not yet available in TensorOperations
+        // Falling back to manual implementation
+        return BackwardManual(outputGradient);
+    }
+
+    /// <summary>
+    /// Gets the topological order of nodes in the computation graph.
+    /// </summary>
+    /// <param name="root">The root node of the computation graph.</param>
+    /// <returns>A list of nodes in topological order.</returns>
+    private List<Autodiff.ComputationNode<T>> GetTopologicalOrder(Autodiff.ComputationNode<T> root)
+    {
+        var visited = new HashSet<Autodiff.ComputationNode<T>>();
+        var result = new List<Autodiff.ComputationNode<T>>();
+
+        var stack = new Stack<(Autodiff.ComputationNode<T> node, bool processed)>();
+        stack.Push((root, false));
+
+        while (stack.Count > 0)
+        {
+            var (node, processed) = stack.Pop();
+
+            if (visited.Contains(node))
+            {
+                continue;
+            }
+
+            if (processed)
+            {
+                visited.Add(node);
+                result.Add(node);
+            }
+            else
+            {
+                stack.Push((node, true));
+
+                foreach (var parent in node.Parents)
+                {
+                    if (!visited.Contains(parent))
+                    {
+                        stack.Push((parent, false));
+                    }
+                }
+            }
+        }
+
+        return result;
     }
 
     /// <summary>
@@ -719,7 +802,7 @@ public class DilatedConvolutionalLayer<T> : LayerBase<T>
     /// - How big the stride is
     /// 
     /// For example:
-    /// - With a 32×32 input, 3×3 kernel, stride of 1, padding of 1, and dilation of 1:
+    /// - With a 32ï¿½32 input, 3ï¿½3 kernel, stride of 1, padding of 1, and dilation of 1:
     ///   Output size = (32 + 2*1 - 1*(3-1) - 1)/1 + 1 = 32
     ///   (The output stays the same size as the input)
     /// 

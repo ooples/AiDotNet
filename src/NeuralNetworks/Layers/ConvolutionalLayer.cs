@@ -80,11 +80,11 @@ public class ConvolutionalLayer<T> : LayerBase<T>
     /// <para><b>For Beginners:</b> Kernel size is how big the "spotlight" or "magnifying glass" is.
     /// 
     /// For example:
-    /// - A kernel size of 3 means a 3×3 area (9 pixels in an image)
-    /// - A kernel size of 5 means a 5×5 area (25 pixels)
+    /// - A kernel size of 3 means a 3ï¿½3 area (9 pixels in an image)
+    /// - A kernel size of 5 means a 5ï¿½5 area (25 pixels)
     /// 
-    /// Smaller kernels (like 3×3) are good for detecting fine details.
-    /// Larger kernels (like 7×7) can see broader patterns but may miss small details.
+    /// Smaller kernels (like 3ï¿½3) are good for detecting fine details.
+    /// Larger kernels (like 7ï¿½7) can see broader patterns but may miss small details.
     /// </para>
     /// </remarks>
     public int KernelSize { get; private set; }
@@ -389,7 +389,7 @@ public class ConvolutionalLayer<T> : LayerBase<T>
     /// - Pass all three dimensions in a single array
     /// - Specify the other settings in a more intuitive way
     /// 
-    /// For example, if your input is 3-channel images that are 28×28 pixels:
+    /// For example, if your input is 3-channel images that are 28ï¿½28 pixels:
     /// - You would use inputShape = [3, 28, 28]
     /// - Rather than listing all dimensions separately
     /// 
@@ -756,19 +756,32 @@ public class ConvolutionalLayer<T> : LayerBase<T>
     /// earlier layers.
     /// </para>
     /// <para><b>For Beginners:</b> This method helps the layer learn from its mistakes.
-    /// 
+    ///
     /// During the backward pass:
     /// - The layer receives information about how wrong its output was
     /// - It calculates how to adjust its pattern detectors to be more accurate
     /// - It updates the kernels and biases to improve future predictions
     /// - It passes information back to previous layers so they can learn too
-    /// 
+    ///
     /// This is where the actual "learning" happens in the neural network.
     /// The layer gradually improves its pattern recognition based on feedback
     /// about its performance.
     /// </para>
     /// </remarks>
     public override Tensor<T> Backward(Tensor<T> outputGradient)
+    {
+        if (UseAutodiff)
+            return BackwardViaAutodiff(outputGradient);
+        else
+            return BackwardManual(outputGradient);
+    }
+
+    /// <summary>
+    /// Manual backward pass implementation using optimized gradient calculations.
+    /// </summary>
+    /// <param name="outputGradient">The gradient of the loss with respect to the layer's output.</param>
+    /// <returns>The gradient of the loss with respect to the layer's input.</returns>
+    private Tensor<T> BackwardManual(Tensor<T> outputGradient)
     {
         Tensor<T> activationGradient = ApplyActivationDerivative(_lastOutput, outputGradient);
         outputGradient = Tensor<T>.ElementwiseMultiply(outputGradient, activationGradient);
@@ -828,6 +841,75 @@ public class ConvolutionalLayer<T> : LayerBase<T>
         }
 
         return inputGradient;
+    }
+
+    /// <summary>
+    /// Backward pass implementation using automatic differentiation.
+    /// </summary>
+    /// <param name="outputGradient">The gradient of the loss with respect to the layer's output.</param>
+    /// <returns>The gradient of the loss with respect to the layer's input.</returns>
+    /// <remarks>
+    /// <para>
+    /// This method uses automatic differentiation to compute gradients. Currently, convolution operations
+    /// are not yet available in TensorOperations, so this method falls back to the manual implementation.
+    /// </para>
+    /// <para>
+    /// Once convolution operations are added to TensorOperations, this method will provide:
+    /// - Automatic gradient computation through the computation graph
+    /// - Verification of manual gradient implementations
+    /// - Support for rapid prototyping with custom modifications
+    /// </para>
+    /// </remarks>
+    private Tensor<T> BackwardViaAutodiff(Tensor<T> outputGradient)
+    {
+        // TODO: Implement autodiff backward pass once convolution operations are available in TensorOperations
+        // Convolution operation not yet available in TensorOperations
+        // Falling back to manual implementation
+        return BackwardManual(outputGradient);
+    }
+
+    /// <summary>
+    /// Gets the topological order of nodes in the computation graph.
+    /// </summary>
+    /// <param name="root">The root node of the computation graph.</param>
+    /// <returns>A list of nodes in topological order.</returns>
+    private List<Autodiff.ComputationNode<T>> GetTopologicalOrder(Autodiff.ComputationNode<T> root)
+    {
+        var visited = new HashSet<Autodiff.ComputationNode<T>>();
+        var result = new List<Autodiff.ComputationNode<T>>();
+
+        var stack = new Stack<(Autodiff.ComputationNode<T> node, bool processed)>();
+        stack.Push((root, false));
+
+        while (stack.Count > 0)
+        {
+            var (node, processed) = stack.Pop();
+
+            if (visited.Contains(node))
+            {
+                continue;
+            }
+
+            if (processed)
+            {
+                visited.Add(node);
+                result.Add(node);
+            }
+            else
+            {
+                stack.Push((node, true));
+
+                foreach (var parent in node.Parents)
+                {
+                    if (!visited.Contains(parent))
+                    {
+                        stack.Push((parent, false));
+                    }
+                }
+            }
+        }
+
+        return result;
     }
 
     /// <summary>

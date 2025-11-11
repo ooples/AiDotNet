@@ -25,7 +25,7 @@ public class MaxPoolingLayer<T> : LayerBase<T>
     /// </summary>
     /// <remarks>
     /// <b>For Beginners:</b> This determines how large of an area we look at when selecting the maximum value.
-    /// For example, a pool size of 2 means we look at 2×2 squares of the input.
+    /// For example, a pool size of 2 means we look at 2ï¿½2 squares of the input.
     /// </remarks>
     public int PoolSize { get; private set; }
 
@@ -173,14 +173,28 @@ public class MaxPoolingLayer<T> : LayerBase<T>
     /// <remarks>
     /// <b>For Beginners:</b> During training, neural networks need to adjust their parameters based on
     /// how much error they made. This adjustment flows backward through the network.
-    /// 
+    ///
     /// In max pooling, only the maximum value from each window contributed to the output.
     /// So during the backward pass, the gradient only flows back to that maximum value's position.
     /// All other positions receive zero gradient because they didn't contribute to the output.
-    /// 
+    ///
     /// Think of it like giving credit only to the team member who contributed the most to a project.
     /// </remarks>
     public override Tensor<T> Backward(Tensor<T> outputGradient)
+    {
+        if (UseAutodiff)
+            return BackwardViaAutodiff(outputGradient);
+        else
+            return BackwardManual(outputGradient);
+    }
+
+    /// <summary>
+    /// Manual backward pass implementation using optimized gradient calculations.
+    /// </summary>
+    /// <param name="outputGradient">The gradient flowing back from the next layer.</param>
+    /// <returns>The gradient to pass to the previous layer.</returns>
+    /// <exception cref="ArgumentException">Thrown when the output gradient tensor doesn't have 3 dimensions.</exception>
+    private Tensor<T> BackwardManual(Tensor<T> outputGradient)
     {
         if (outputGradient.Shape.Length != 3)
             throw new ArgumentException("Output gradient tensor must have 3 dimensions (channels, height, width)");
@@ -213,6 +227,75 @@ public class MaxPoolingLayer<T> : LayerBase<T>
         }
 
         return inputGradient;
+    }
+
+    /// <summary>
+    /// Backward pass implementation using automatic differentiation.
+    /// </summary>
+    /// <param name="outputGradient">The gradient flowing back from the next layer.</param>
+    /// <returns>The gradient to pass to the previous layer.</returns>
+    /// <remarks>
+    /// <para>
+    /// This method uses automatic differentiation to compute gradients. Currently, max pooling operations
+    /// are not yet available in TensorOperations, so this method falls back to the manual implementation.
+    /// </para>
+    /// <para>
+    /// Once max pooling operations are added to TensorOperations, this method will provide:
+    /// - Automatic gradient computation through the computation graph
+    /// - Verification of manual gradient implementations
+    /// - Support for rapid prototyping with custom modifications
+    /// </para>
+    /// </remarks>
+    private Tensor<T> BackwardViaAutodiff(Tensor<T> outputGradient)
+    {
+        // TODO: Implement autodiff backward pass once max pooling operations are available in TensorOperations
+        // Pooling operation not yet available in TensorOperations
+        // Falling back to manual implementation
+        return BackwardManual(outputGradient);
+    }
+
+    /// <summary>
+    /// Gets the topological order of nodes in the computation graph.
+    /// </summary>
+    /// <param name="root">The root node of the computation graph.</param>
+    /// <returns>A list of nodes in topological order.</returns>
+    private List<Autodiff.ComputationNode<T>> GetTopologicalOrder(Autodiff.ComputationNode<T> root)
+    {
+        var visited = new HashSet<Autodiff.ComputationNode<T>>();
+        var result = new List<Autodiff.ComputationNode<T>>();
+
+        var stack = new Stack<(Autodiff.ComputationNode<T> node, bool processed)>();
+        stack.Push((root, false));
+
+        while (stack.Count > 0)
+        {
+            var (node, processed) = stack.Pop();
+
+            if (visited.Contains(node))
+            {
+                continue;
+            }
+
+            if (processed)
+            {
+                visited.Add(node);
+                result.Add(node);
+            }
+            else
+            {
+                stack.Push((node, true));
+
+                foreach (var parent in node.Parents)
+                {
+                    if (!visited.Contains(parent))
+                    {
+                        stack.Push((parent, false));
+                    }
+                }
+            }
+        }
+
+        return result;
     }
 
     /// <summary>

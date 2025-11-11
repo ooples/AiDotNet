@@ -16,8 +16,8 @@ namespace AiDotNet.NeuralNetworks.Layers;
 /// - First, the layer creates many detailed patterns from the input (convolution step)
 /// - Then, it rearranges these patterns to form a larger, higher-resolution output (pixel shuffling step)
 /// 
-/// For example, if you're working with a low-resolution image that's 32×32 pixels, this layer can help
-/// transform it into a higher-resolution image of 64×64 or 128×128 pixels by intelligently filling in 
+/// For example, if you're working with a low-resolution image that's 32ï¿½32 pixels, this layer can help
+/// transform it into a higher-resolution image of 64ï¿½64 or 128ï¿½128 pixels by intelligently filling in 
 /// the details between the original pixels.
 /// 
 /// This is often used in applications like:
@@ -79,9 +79,9 @@ public class SubpixelConvolutionalLayer<T> : LayerBase<T>
     /// <para><b>For Beginners:</b> This determines how much larger the output will be compared to the input.
     /// 
     /// For example:
-    /// - With an upscale factor of 2: A 32×32 image becomes 64×64
-    /// - With an upscale factor of 3: A 32×32 image becomes 96×96
-    /// - With an upscale factor of 4: A 32×32 image becomes 128×128
+    /// - With an upscale factor of 2: A 32ï¿½32 image becomes 64ï¿½64
+    /// - With an upscale factor of 3: A 32ï¿½32 image becomes 96ï¿½96
+    /// - With an upscale factor of 4: A 32ï¿½32 image becomes 128ï¿½128
     /// 
     /// Higher upscale factors create larger outputs but require more channels in the intermediate step,
     /// which makes the layer more computationally intensive.
@@ -95,16 +95,16 @@ public class SubpixelConvolutionalLayer<T> : LayerBase<T>
     /// <remarks>
     /// <para>
     /// This field stores the size of the square convolutional kernel used in the layer. A common value is 3,
-    /// which creates a 3×3 kernel that examines a 3×3 region of the input for each output value.
+    /// which creates a 3ï¿½3 kernel that examines a 3ï¿½3 region of the input for each output value.
     /// </para>
     /// <para><b>For Beginners:</b> This determines the area size that the network looks at when analyzing patterns.
     /// 
     /// The kernel is like a small window that slides over the input:
-    /// - A 3×3 kernel looks at each pixel and its 8 neighbors
-    /// - A 5×5 kernel examines a wider area around each pixel
+    /// - A 3ï¿½3 kernel looks at each pixel and its 8 neighbors
+    /// - A 5ï¿½5 kernel examines a wider area around each pixel
     /// - Larger kernels can detect larger patterns but require more computation
     /// 
-    /// Most commonly, a 3×3 kernel is used as it provides a good balance between detecting
+    /// Most commonly, a 3ï¿½3 kernel is used as it provides a good balance between detecting
     /// useful patterns and computational efficiency.
     /// </para>
     /// </remarks>
@@ -511,8 +511,8 @@ public class SubpixelConvolutionalLayer<T> : LayerBase<T>
     ///    - The final output has higher resolution but fewer channels
     /// 
     /// For example, with upscaleFactor=2:
-    /// - A 32×32×64 input might become 32×32×256 after convolution
-    /// - Then become 64×64×64 after pixel shuffling (4 times more pixels, 1/4 the channels)
+    /// - A 32ï¿½32ï¿½64 input might become 32ï¿½32ï¿½256 after convolution
+    /// - Then become 64ï¿½64ï¿½64 after pixel shuffling (4 times more pixels, 1/4 the channels)
     /// </para>
     /// </remarks>
     public override Tensor<T> Forward(Tensor<T> input)
@@ -601,25 +601,39 @@ public class SubpixelConvolutionalLayer<T> : LayerBase<T>
     /// </para>
     /// <para><b>For Beginners:</b> This method is used during training to calculate how the layer's input
     /// and parameters should change to reduce errors.
-    /// 
+    ///
     /// During the backward pass, we reverse the steps from the forward pass:
-    /// 
+    ///
     /// 1. First, calculate how the activation function affects the gradient
-    /// 
+    ///
     /// 2. Reverse the pixel shuffling:
     ///    - Convert the gradient from high resolution back to the lower resolution with more channels
     ///    - This helps determine how each output channel contributed to the errors
-    /// 
+    ///
     /// 3. Calculate three types of gradients:
     ///    - How the input should change (inputGradient)
     ///    - How the kernels should change (kernelGradients)
     ///    - How the biases should change (biasGradients)
-    /// 
+    ///
     /// These gradients tell the network how to adjust its parameters during the update step
     /// to improve its performance on the next forward pass.
     /// </para>
     /// </remarks>
     public override Tensor<T> Backward(Tensor<T> outputGradient)
+    {
+        if (UseAutodiff)
+            return BackwardViaAutodiff(outputGradient);
+        else
+            return BackwardManual(outputGradient);
+    }
+
+    /// <summary>
+    /// Manual backward pass implementation using optimized gradient calculations.
+    /// </summary>
+    /// <param name="outputGradient">The gradient of the loss with respect to the layer's output.</param>
+    /// <returns>The gradient of the loss with respect to the layer's input.</returns>
+    /// <exception cref="InvalidOperationException">Thrown when trying to perform a backward pass before a forward pass.</exception>
+    private Tensor<T> BackwardManual(Tensor<T> outputGradient)
     {
         if (_lastInput == null || _lastOutput == null)
             throw new InvalidOperationException("Forward pass must be called before backward pass.");
@@ -699,6 +713,75 @@ public class SubpixelConvolutionalLayer<T> : LayerBase<T>
     }
 
     /// <summary>
+    /// Backward pass implementation using automatic differentiation.
+    /// </summary>
+    /// <param name="outputGradient">The gradient of the loss with respect to the layer's output.</param>
+    /// <returns>The gradient of the loss with respect to the layer's input.</returns>
+    /// <remarks>
+    /// <para>
+    /// This method uses automatic differentiation to compute gradients. Currently, subpixel convolution operations
+    /// are not yet available in TensorOperations, so this method falls back to the manual implementation.
+    /// </para>
+    /// <para>
+    /// Once subpixel convolution operations are added to TensorOperations, this method will provide:
+    /// - Automatic gradient computation through the computation graph
+    /// - Verification of manual gradient implementations
+    /// - Support for rapid prototyping with custom modifications
+    /// </para>
+    /// </remarks>
+    private Tensor<T> BackwardViaAutodiff(Tensor<T> outputGradient)
+    {
+        // TODO: Implement autodiff backward pass once subpixel convolution operations are available in TensorOperations
+        // Convolution operation not yet available in TensorOperations
+        // Falling back to manual implementation
+        return BackwardManual(outputGradient);
+    }
+
+    /// <summary>
+    /// Gets the topological order of nodes in the computation graph.
+    /// </summary>
+    /// <param name="root">The root node of the computation graph.</param>
+    /// <returns>A list of nodes in topological order.</returns>
+    private List<Autodiff.ComputationNode<T>> GetTopologicalOrder(Autodiff.ComputationNode<T> root)
+    {
+        var visited = new HashSet<Autodiff.ComputationNode<T>>();
+        var result = new List<Autodiff.ComputationNode<T>>();
+
+        var stack = new Stack<(Autodiff.ComputationNode<T> node, bool processed)>();
+        stack.Push((root, false));
+
+        while (stack.Count > 0)
+        {
+            var (node, processed) = stack.Pop();
+
+            if (visited.Contains(node))
+            {
+                continue;
+            }
+
+            if (processed)
+            {
+                visited.Add(node);
+                result.Add(node);
+            }
+            else
+            {
+                stack.Push((node, true));
+
+                foreach (var parent in node.Parents)
+                {
+                    if (!visited.Contains(parent))
+                    {
+                        stack.Push((parent, false));
+                    }
+                }
+            }
+        }
+
+        return result;
+    }
+
+    /// <summary>
     /// Computes the gradient with respect to the activation function.
     /// </summary>
     /// <param name="outputGradient">The gradient of the loss with respect to the layer's output.</param>
@@ -761,7 +844,7 @@ public class SubpixelConvolutionalLayer<T> : LayerBase<T>
     /// - Width: How wide the input feature map is
     /// - Depth: How many channels or features each position has
     /// 
-    /// For example, a 32×32 RGB image would have a shape of [32, 32, 3].
+    /// For example, a 32ï¿½32 RGB image would have a shape of [32, 32, 3].
     /// This helps the layer know exactly what kind of data it should expect.
     /// </para>
     /// </remarks>
@@ -789,7 +872,7 @@ public class SubpixelConvolutionalLayer<T> : LayerBase<T>
     /// - Width: How wide the output will be (upscaled from input)
     /// - Depth: How many channels the output will have
     /// 
-    /// For example, if upscaleFactor=2, a 32×32×64 input might produce a 64×64×32 output.
+    /// For example, if upscaleFactor=2, a 32ï¿½32ï¿½64 input might produce a 64ï¿½64ï¿½32 output.
     /// The spatial dimensions increase by the upscale factor, while the number of channels
     /// is determined by the outputDepth parameter.
     /// </para>
