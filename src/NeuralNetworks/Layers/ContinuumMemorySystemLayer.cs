@@ -368,22 +368,16 @@ public class ContinuumMemorySystemLayer<T> : LayerBase<T>
 
     /// <summary>
     /// Updates parameters using the specified learning rate.
-    /// Note: CMS manages its own learning rates per level, so this applies a global multiplier.
+    /// This is a no-op for CMS because parameters are updated exclusively via UpdateLevelParameters
+    /// when chunk counters trigger (i ≡ 0 mod C(ℓ)). Updating here would double-apply gradients.
     /// </summary>
-    /// <param name="learningRate">Global learning rate multiplier</param>
+    /// <param name="learningRate">Learning rate (unused - each level has its own rate)</param>
     public override void UpdateParameters(T learningRate)
     {
-        if (_mlpBlocks == null || _mlpBlocks.Length == 0)
-            throw new InvalidOperationException("MLP blocks are not initialized");
-
-        // Apply learning rate multiplier to all MLP blocks
-        foreach (var mlp in _mlpBlocks)
-        {
-            if (mlp == null)
-                throw new InvalidOperationException("MLP block is null");
-
-            mlp.UpdateParameters(learningRate);
-        }
+        // No-op: Parameters are updated via UpdateLevelParameters during Backward pass
+        // when chunk counters reach their thresholds. Updating here would cause
+        // double application of gradients since MLP blocks are already updated
+        // in UpdateLevelParameters using Modified Gradient Descent (Equations 27-29).
     }
 
     /// <summary>
