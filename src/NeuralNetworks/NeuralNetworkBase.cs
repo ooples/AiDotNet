@@ -91,7 +91,7 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
     /// <summary>
     /// Random number generator for initialization.
     /// </summary>
-    protected Random Random => new();
+    protected readonly Random Random = new();
 
     /// <summary>
     /// The loss function used to calculate error during training.
