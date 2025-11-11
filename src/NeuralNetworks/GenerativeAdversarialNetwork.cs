@@ -1712,9 +1712,9 @@ public class GenerativeAdversarialNetwork<T> : NeuralNetworkBase<T>
     /// and leads to more stable training and higher quality results.
     /// </para>
     /// <para>
-    /// This implementation uses numerical differentiation (finite differences) to compute
-    /// gradients with respect to the input. While symbolic autodiff would be more elegant,
-    /// numerical gradients are accurate and commonly used in production WGAN-GP implementations.
+    /// This implementation uses symbolic differentiation (autodiff) to compute
+    /// gradients with respect to the input. This is more accurate and efficient than
+    /// numerical differentiation and is the standard approach in modern WGAN-GP implementations.
     /// </para>
     /// <para><b>For Beginners:</b> This helps stabilize WGAN training by constraining gradients.
     ///
