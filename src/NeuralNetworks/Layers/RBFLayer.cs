@@ -294,14 +294,151 @@ public class RBFLayer<T> : LayerBase<T>
     /// <returns>The gradient of the loss with respect to the layer's input.</returns>
     /// <remarks>
     /// <para>
-    /// This method uses automatic differentiation to compute gradients. Specialized operations
-    /// are not yet available in TensorOperations, so this falls back to the manual implementation.
+    /// This method uses automatic differentiation via the RBFKernel operation to compute gradients.
+    /// The operation handles Gaussian RBF computations with proper gradient flow.
     /// </para>
     /// </remarks>
     private Tensor<T> BackwardViaAutodiff(Tensor<T> outputGradient)
     {
-        // TODO: Specialized operation not yet available in TensorOperations
-        return BackwardManual(outputGradient);
+        if (_lastInput == null)
+            throw new InvalidOperationException("Forward pass must be called before backward pass.");
+
+        // Convert centers matrix to tensor [numCenters, inputSize]
+        var centersTensor = MatrixToTensor(_centers);
+
+        // Convert widths vector to tensor [numCenters]
+        var widthsTensor = VectorToTensor(_widths);
+
+        // Create computation nodes
+        var inputNode = Autodiff.TensorOperations<T>.Variable(
+            _lastInput,
+            "input",
+            requiresGradient: true);
+
+        var centersNode = Autodiff.TensorOperations<T>.Variable(
+            centersTensor,
+            "centers",
+            requiresGradient: true);
+
+        var widthsNode = Autodiff.TensorOperations<T>.Variable(
+            widthsTensor,
+            "widths",
+            requiresGradient: true);
+
+        // Apply RBFKernel operation
+        var outputNode = Autodiff.TensorOperations<T>.RBFKernel(
+            inputNode,
+            centersNode,
+            widthsNode);
+
+        // Set the output gradient
+        outputNode.Gradient = outputGradient;
+
+        // Perform backward pass
+        var topoOrder = GetTopologicalOrder(outputNode);
+        for (int i = topoOrder.Count - 1; i >= 0; i--)
+        {
+            var node = topoOrder[i];
+            if (node.RequiresGradient && node.BackwardFunction != null && node.Gradient != null)
+            {
+                node.BackwardFunction(node.Gradient);
+            }
+        }
+
+        // Update parameter gradients
+        if (centersNode.Gradient != null)
+            _centersGradient = TensorToMatrix(centersNode.Gradient, _centers.Rows, _centers.Columns);
+
+        if (widthsNode.Gradient != null)
+            _widthsGradient = TensorToVector(widthsNode.Gradient);
+
+        // Return input gradient
+        return inputNode.Gradient ?? throw new InvalidOperationException("Gradient computation failed.");
+    }
+
+    /// <summary>
+    /// Gets the computation nodes in topological order for backward pass.
+    /// </summary>
+    /// <param name="outputNode">The output node to start from.</param>
+    /// <returns>List of nodes in topological order.</returns>
+    private List<Autodiff.ComputationNode<T>> GetTopologicalOrder(Autodiff.ComputationNode<T> outputNode)
+    {
+        var visited = new HashSet<Autodiff.ComputationNode<T>>();
+        var order = new List<Autodiff.ComputationNode<T>>();
+
+        void Visit(Autodiff.ComputationNode<T> node)
+        {
+            if (visited.Contains(node)) return;
+            visited.Add(node);
+
+            foreach (var parent in node.Parents)
+            {
+                Visit(parent);
+            }
+
+            order.Add(node);
+        }
+
+        Visit(outputNode);
+        return order;
+    }
+
+    /// <summary>
+    /// Converts a Matrix to a Tensor.
+    /// </summary>
+    private Tensor<T> MatrixToTensor(Matrix<T> matrix)
+    {
+        var tensor = new Tensor<T>([matrix.Rows, matrix.Columns]);
+        for (int i = 0; i < matrix.Rows; i++)
+        {
+            for (int j = 0; j < matrix.Columns; j++)
+            {
+                tensor[i, j] = matrix[i, j];
+            }
+        }
+        return tensor;
+    }
+
+    /// <summary>
+    /// Converts a Tensor back to a Matrix.
+    /// </summary>
+    private Matrix<T> TensorToMatrix(Tensor<T> tensor, int rows, int cols)
+    {
+        var matrix = new Matrix<T>(rows, cols);
+        for (int i = 0; i < rows; i++)
+        {
+            for (int j = 0; j < cols; j++)
+            {
+                matrix[i, j] = tensor[i, j];
+            }
+        }
+        return matrix;
+    }
+
+    /// <summary>
+    /// Converts a Vector to a Tensor.
+    /// </summary>
+    private Tensor<T> VectorToTensor(Vector<T> vector)
+    {
+        var tensor = new Tensor<T>([vector.Length]);
+        for (int i = 0; i < vector.Length; i++)
+        {
+            tensor[i] = vector[i];
+        }
+        return tensor;
+    }
+
+    /// <summary>
+    /// Converts a Tensor back to a Vector.
+    /// </summary>
+    private Vector<T> TensorToVector(Tensor<T> tensor)
+    {
+        var vector = new Vector<T>(tensor.Shape[0]);
+        for (int i = 0; i < tensor.Shape[0]; i++)
+        {
+            vector[i] = tensor[i];
+        }
+        return vector;
     }
 
 

@@ -321,14 +321,70 @@ public class LogVarianceLayer<T> : LayerBase<T>
     /// <returns>The gradient of the loss with respect to the layer's input.</returns>
     /// <remarks>
     /// <para>
-    /// This method uses automatic differentiation to compute gradients. Specialized operations
-    /// are not yet available in TensorOperations, so this falls back to the manual implementation.
+    /// This method uses automatic differentiation via the ReduceLogVariance operation to compute gradients.
+    /// The operation handles the full forward and backward pass for log-variance computation.
     /// </para>
     /// </remarks>
     private Tensor<T> BackwardViaAutodiff(Tensor<T> outputGradient)
     {
-        // TODO: Specialized operation not yet available in TensorOperations
-        return BackwardManual(outputGradient);
+        if (_lastInput == null)
+            throw new InvalidOperationException("Forward pass must be called before backward pass.");
+
+        // Create computation node for input
+        var inputNode = Autodiff.TensorOperations<T>.Variable(
+            _lastInput,
+            "input",
+            requiresGradient: true);
+
+        // Apply ReduceLogVariance operation
+        var outputNode = Autodiff.TensorOperations<T>.ReduceLogVariance(
+            inputNode,
+            axis: Axis,
+            epsilon: 1e-8);
+
+        // Set the output gradient
+        outputNode.Gradient = outputGradient;
+
+        // Perform backward pass
+        var topoOrder = GetTopologicalOrder(outputNode);
+        for (int i = topoOrder.Count - 1; i >= 0; i--)
+        {
+            var node = topoOrder[i];
+            if (node.RequiresGradient && node.BackwardFunction != null && node.Gradient != null)
+            {
+                node.BackwardFunction(node.Gradient);
+            }
+        }
+
+        // Return input gradient
+        return inputNode.Gradient ?? throw new InvalidOperationException("Gradient computation failed.");
+    }
+
+    /// <summary>
+    /// Gets the computation nodes in topological order for backward pass.
+    /// </summary>
+    /// <param name="outputNode">The output node to start from.</param>
+    /// <returns>List of nodes in topological order.</returns>
+    private List<Autodiff.ComputationNode<T>> GetTopologicalOrder(Autodiff.ComputationNode<T> outputNode)
+    {
+        var visited = new HashSet<Autodiff.ComputationNode<T>>();
+        var order = new List<Autodiff.ComputationNode<T>>();
+
+        void Visit(Autodiff.ComputationNode<T> node)
+        {
+            if (visited.Contains(node)) return;
+            visited.Add(node);
+
+            foreach (var parent in node.Parents)
+            {
+                Visit(parent);
+            }
+
+            order.Add(node);
+        }
+
+        Visit(outputNode);
+        return order;
     }
 
 

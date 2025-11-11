@@ -4336,5 +4336,769 @@ public static class TensorOperations<T>
 
         return node;
     }
+
+    /// <summary>
+    /// Computes the natural logarithm of variance along the specified axis.
+    /// </summary>
+    /// <param name="input">Input tensor of any shape</param>
+    /// <param name="axis">The axis along which to compute variance (must be specified)</param>
+    /// <param name="epsilon">Small constant for numerical stability (default: 1e-8)</param>
+    /// <returns>Tensor with reduced shape containing log-variance values</returns>
+    /// <remarks>
+    /// <para>
+    /// This operation computes log(variance + epsilon) along the specified axis. The output shape
+    /// has the specified axis dimension removed from the input shape.
+    /// </para>
+    /// <para>
+    /// Forward pass: log(variance + epsilon) where variance = mean((x - mean(x))^2)
+    /// </para>
+    /// <para>
+    /// Backward pass uses chain rule:
+    /// ∂L/∂x_i = ∂L/∂log_var * (1/variance) * (2/N) * (x_i - mean)
+    /// where N is the size of the reduction axis.
+    /// </para>
+    /// <para><b>For Beginners:</b> This operation measures how spread out values are along an axis,
+    /// then takes the logarithm. Commonly used in variational autoencoders and uncertainty estimation.
+    /// </para>
+    /// </remarks>
+    public static ComputationNode<T> ReduceLogVariance(
+        ComputationNode<T> input,
+        int axis,
+        double epsilon = 1e-8)
+    {
+        var numOps = MathHelper.GetNumericOperations<T>();
+        var inputShape = input.Value.Shape;
+
+        if (axis < 0 || axis >= inputShape.Length)
+            throw new ArgumentException($"Axis {axis} is out of range for tensor of rank {inputShape.Length}");
+
+        // Compute output shape (remove the reduction axis)
+        var outputShape = new int[inputShape.Length - 1];
+        int outIdx = 0;
+        for (int i = 0; i < inputShape.Length; i++)
+        {
+            if (i != axis)
+                outputShape[outIdx++] = inputShape[i];
+        }
+
+        if (outputShape.Length == 0)
+            outputShape = new int[] { 1 };
+
+        var result = new Tensor<T>(outputShape);
+        var meanValues = new Tensor<T>(outputShape);
+        int axisSize = inputShape[axis];
+        T axisScale = numOps.FromDouble(1.0 / axisSize);
+        T eps = numOps.FromDouble(epsilon);
+
+        // Helper to iterate over all positions except the reduction axis
+        void IterateOverDimensions(Action<int[], int[]> action)
+        {
+            void Recurse(int[] inputIndices, int[] outputIndices, int dim)
+            {
+                if (dim == inputShape.Length)
+                {
+                    action(inputIndices, outputIndices);
+                    return;
+                }
+
+                if (dim == axis)
+                {
+                    Recurse(inputIndices, outputIndices, dim + 1);
+                }
+                else
+                {
+                    int outDim = dim < axis ? dim : dim - 1;
+                    for (int i = 0; i < inputShape[dim]; i++)
+                    {
+                        inputIndices[dim] = i;
+                        outputIndices[outDim] = i;
+                        Recurse(inputIndices, outputIndices, dim + 1);
+                    }
+                }
+            }
+
+            Recurse(new int[inputShape.Length], new int[outputShape.Length], 0);
+        }
+
+        // Forward pass: compute mean
+        IterateOverDimensions((inputIndices, outputIndices) =>
+        {
+            T sum = numOps.Zero;
+            for (int i = 0; i < axisSize; i++)
+            {
+                inputIndices[axis] = i;
+                sum = numOps.Add(sum, input.Value[inputIndices]);
+            }
+            meanValues[outputIndices] = numOps.Multiply(sum, axisScale);
+        });
+
+        // Forward pass: compute log variance
+        IterateOverDimensions((inputIndices, outputIndices) =>
+        {
+            T sumSquaredDiff = numOps.Zero;
+            T mean = meanValues[outputIndices];
+            for (int i = 0; i < axisSize; i++)
+            {
+                inputIndices[axis] = i;
+                T diff = numOps.Subtract(input.Value[inputIndices], mean);
+                sumSquaredDiff = numOps.Add(sumSquaredDiff, numOps.Square(diff));
+            }
+            T variance = numOps.Multiply(sumSquaredDiff, axisScale);
+            result[outputIndices] = numOps.Log(numOps.Add(variance, eps));
+        });
+
+        // Backward function
+        void BackwardFunction(Tensor<T> gradient)
+        {
+            if (!input.RequiresGradient) return;
+
+            var inputGradient = new Tensor<T>(inputShape);
+            T two = numOps.FromDouble(2.0);
+            T twoOverN = numOps.FromDouble(2.0 / axisSize);
+
+            // Compute gradients: ∂L/∂x_i = ∂L/∂log_var * (1/variance) * (2/N) * (x_i - mean)
+            IterateOverDimensions((inputIndices, outputIndices) =>
+            {
+                T mean = meanValues[outputIndices];
+                T logVar = result[outputIndices];
+                T variance = numOps.Exp(logVar);  // Recover variance from log_variance
+                T grad = gradient[outputIndices];
+                T gradScale = numOps.Divide(grad, variance);
+
+                for (int i = 0; i < axisSize; i++)
+                {
+                    inputIndices[axis] = i;
+                    T diff = numOps.Subtract(input.Value[inputIndices], mean);
+                    T inputGrad = numOps.Multiply(
+                        numOps.Multiply(diff, gradScale),
+                        twoOverN);
+                    inputGradient[inputIndices] = inputGrad;
+                }
+            });
+
+            if (input.Gradient == null)
+                input.Gradient = inputGradient;
+            else
+                input.Gradient = input.Gradient.Add(inputGradient);
+        }
+
+        var node = new ComputationNode<T>(
+            value: result,
+            requiresGradient: input.RequiresGradient,
+            parents: new List<ComputationNode<T>> { input },
+            backwardFunction: BackwardFunction,
+            name: null);
+
+        var tape = GradientTape<T>.Current;
+        if (tape != null && tape.IsRecording)
+            tape.RecordOperation(node);
+
+        return node;
+    }
+
+    /// <summary>
+    /// Computes Gaussian Radial Basis Function (RBF) kernel activations.
+    /// </summary>
+    /// <param name="input">Input tensor of shape [batch, inputSize]</param>
+    /// <param name="centers">Center points tensor of shape [numCenters, inputSize]</param>
+    /// <param name="epsilons">Width parameters tensor of shape [numCenters]</param>
+    /// <returns>Output tensor of shape [batch, numCenters] containing RBF activations</returns>
+    /// <remarks>
+    /// <para>
+    /// This operation implements the Gaussian RBF: f(r) = exp(-epsilon * r²)
+    /// where r is the Euclidean distance between input and center.
+    /// </para>
+    /// <para>
+    /// Forward pass: For each input and center pair, computes:
+    /// 1. distance = sqrt(sum((input - center)²))
+    /// 2. output = exp(-epsilon * distance²)
+    /// </para>
+    /// <para>
+    /// Backward pass gradients:
+    /// - ∂L/∂input = ∂L/∂output * (-2 * epsilon * distance) * (input - center) / distance
+    /// - ∂L/∂centers = -∂L/∂input (opposite direction)
+    /// - ∂L/∂epsilon = ∂L/∂output * (-distance²) * output
+    /// </para>
+    /// <para><b>For Beginners:</b> This operation creates "similarity scores" between inputs and centers.
+    /// Each RBF neuron responds strongly (value near 1) when input is close to its center,
+    /// and weakly (value near 0) when far away. The epsilon parameter controls how quickly
+    /// the response decreases with distance.
+    /// </para>
+    /// </remarks>
+    public static ComputationNode<T> RBFKernel(
+        ComputationNode<T> input,
+        ComputationNode<T> centers,
+        ComputationNode<T> epsilons)
+    {
+        var numOps = MathHelper.GetNumericOperations<T>();
+        var inputShape = input.Value.Shape;
+        var centersShape = centers.Value.Shape;
+        var epsilonsShape = epsilons.Value.Shape;
+
+        // Validate shapes
+        if (inputShape.Length != 2)
+            throw new ArgumentException("Input must be 2D tensor [batch, inputSize]");
+        if (centersShape.Length != 2)
+            throw new ArgumentException("Centers must be 2D tensor [numCenters, inputSize]");
+        if (epsilonsShape.Length != 1)
+            throw new ArgumentException("Epsilons must be 1D tensor [numCenters]");
+        if (inputShape[1] != centersShape[1])
+            throw new ArgumentException($"Input size {inputShape[1]} must match centers input size {centersShape[1]}");
+        if (epsilonsShape[0] != centersShape[0])
+            throw new ArgumentException($"Number of epsilons {epsilonsShape[0]} must match number of centers {centersShape[0]}");
+
+        int batchSize = inputShape[0];
+        int inputSize = inputShape[1];
+        int numCenters = centersShape[0];
+
+        var output = new Tensor<T>([batchSize, numCenters]);
+        var distances = new Tensor<T>([batchSize, numCenters]);
+
+        // Forward pass: compute RBF activations
+        for (int b = 0; b < batchSize; b++)
+        {
+            for (int c = 0; c < numCenters; c++)
+            {
+                // Compute Euclidean distance
+                T sumSquaredDiff = numOps.Zero;
+                for (int i = 0; i < inputSize; i++)
+                {
+                    T diff = numOps.Subtract(input.Value[b, i], centers.Value[c, i]);
+                    sumSquaredDiff = numOps.Add(sumSquaredDiff, numOps.Multiply(diff, diff));
+                }
+                T distance = numOps.Sqrt(sumSquaredDiff);
+                distances[b, c] = distance;
+
+                // Compute Gaussian RBF: exp(-epsilon * distance²)
+                T distanceSquared = numOps.Multiply(distance, distance);
+                T epsilon = epsilons.Value[c];
+                T exponent = numOps.Negate(numOps.Multiply(epsilon, distanceSquared));
+                output[b, c] = numOps.Exp(exponent);
+            }
+        }
+
+        // Backward function
+        void BackwardFunction(Tensor<T> gradient)
+        {
+            T two = numOps.FromDouble(2.0);
+            T minusTwo = numOps.FromDouble(-2.0);
+
+            // Gradients w.r.t. input
+            if (input.RequiresGradient)
+            {
+                var inputGradient = new Tensor<T>(inputShape);
+
+                for (int b = 0; b < batchSize; b++)
+                {
+                    for (int c = 0; c < numCenters; c++)
+                    {
+                        T distance = distances[b, c];
+                        T epsilon = epsilons.Value[c];
+                        T outputVal = output[b, c];
+                        T grad = gradient[b, c];
+
+                        // Derivative: -2 * epsilon * r * exp(-epsilon * r²) = -2 * epsilon * r * output
+                        T gradScale = numOps.Multiply(
+                            numOps.Multiply(minusTwo, epsilon),
+                            numOps.Multiply(distance, outputVal));
+                        gradScale = numOps.Multiply(gradScale, grad);
+
+                        // Scale by (input - center) / distance to get gradient direction
+                        T invDistance = numOps.IsZero(distance) ? numOps.Zero : numOps.Divide(numOps.One, distance);
+
+                        for (int i = 0; i < inputSize; i++)
+                        {
+                            T diff = numOps.Subtract(input.Value[b, i], centers.Value[c, i]);
+                            T inputGrad = numOps.Multiply(gradScale, numOps.Multiply(diff, invDistance));
+                            inputGradient[b, i] = numOps.Add(inputGradient[b, i], inputGrad);
+                        }
+                    }
+                }
+
+                if (input.Gradient == null)
+                    input.Gradient = inputGradient;
+                else
+                    input.Gradient = input.Gradient.Add(inputGradient);
+            }
+
+            // Gradients w.r.t. centers
+            if (centers.RequiresGradient)
+            {
+                var centersGradient = new Tensor<T>(centersShape);
+
+                for (int b = 0; b < batchSize; b++)
+                {
+                    for (int c = 0; c < numCenters; c++)
+                    {
+                        T distance = distances[b, c];
+                        T epsilon = epsilons.Value[c];
+                        T outputVal = output[b, c];
+                        T grad = gradient[b, c];
+
+                        // Same as input gradient but opposite sign
+                        T gradScale = numOps.Multiply(
+                            numOps.Multiply(two, epsilon),
+                            numOps.Multiply(distance, outputVal));
+                        gradScale = numOps.Multiply(gradScale, grad);
+
+                        T invDistance = numOps.IsZero(distance) ? numOps.Zero : numOps.Divide(numOps.One, distance);
+
+                        for (int i = 0; i < inputSize; i++)
+                        {
+                            T diff = numOps.Subtract(input.Value[b, i], centers.Value[c, i]);
+                            T centerGrad = numOps.Multiply(gradScale, numOps.Multiply(diff, invDistance));
+                            centersGradient[c, i] = numOps.Add(centersGradient[c, i], centerGrad);
+                        }
+                    }
+                }
+
+                if (centers.Gradient == null)
+                    centers.Gradient = centersGradient;
+                else
+                    centers.Gradient = centers.Gradient.Add(centersGradient);
+            }
+
+            // Gradients w.r.t. epsilons
+            if (epsilons.RequiresGradient)
+            {
+                var epsilonsGradient = new Tensor<T>(epsilonsShape);
+
+                for (int b = 0; b < batchSize; b++)
+                {
+                    for (int c = 0; c < numCenters; c++)
+                    {
+                        T distance = distances[b, c];
+                        T distanceSquared = numOps.Multiply(distance, distance);
+                        T outputVal = output[b, c];
+                        T grad = gradient[b, c];
+
+                        // Derivative w.r.t. epsilon: -r² * exp(-epsilon * r²) = -r² * output
+                        T epsilonGrad = numOps.Multiply(
+                            numOps.Negate(distanceSquared),
+                            numOps.Multiply(outputVal, grad));
+                        epsilonsGradient[c] = numOps.Add(epsilonsGradient[c], epsilonGrad);
+                    }
+                }
+
+                if (epsilons.Gradient == null)
+                    epsilons.Gradient = epsilonsGradient;
+                else
+                    epsilons.Gradient = epsilons.Gradient.Add(epsilonsGradient);
+            }
+        }
+
+        var node = new ComputationNode<T>(
+            value: output,
+            requiresGradient: input.RequiresGradient || centers.RequiresGradient || epsilons.RequiresGradient,
+            parents: new List<ComputationNode<T>> { input, centers, epsilons },
+            backwardFunction: BackwardFunction,
+            name: null);
+
+        var tape = GradientTape<T>.Current;
+        if (tape != null && tape.IsRecording)
+            tape.RecordOperation(node);
+
+        return node;
+    }
+
+    /// <summary>
+    /// Generates a sampling grid for spatial transformer networks using affine transformation matrices.
+    /// </summary>
+    /// <param name="theta">Affine transformation matrices of shape [batch, 2, 3]</param>
+    /// <param name="outputHeight">Height of the output grid</param>
+    /// <param name="outputWidth">Width of the output grid</param>
+    /// <returns>Sampling grid of shape [batch, outputHeight, outputWidth, 2] with (x, y) coordinates</returns>
+    /// <remarks>
+    /// <para>
+    /// This operation generates a grid of sampling coordinates for spatial transformations.
+    /// The output grid starts as a regular grid in normalized coordinates [-1, 1], then
+    /// each point is transformed using the affine matrix.
+    /// </para>
+    /// <para>
+    /// Forward pass:
+    /// 1. Generate base grid in [-1, 1] normalized space
+    /// 2. For each point (x_out, y_out) in output space:
+    ///    x_in = theta[0,0]*x_out + theta[0,1]*y_out + theta[0,2]
+    ///    y_in = theta[1,0]*x_out + theta[1,1]*y_out + theta[1,2]
+    /// </para>
+    /// <para>
+    /// Backward pass:
+    /// - ∂L/∂theta[i,j] = sum over all grid points of (∂L/∂grid * ∂grid/∂theta)
+    /// </para>
+    /// <para><b>For Beginners:</b> This creates a map showing where each output pixel should sample from.
+    /// The affine matrix controls rotation, scaling, translation, and shearing of the grid.
+    /// </para>
+    /// </remarks>
+    public static ComputationNode<T> AffineGrid(
+        ComputationNode<T> theta,
+        int outputHeight,
+        int outputWidth)
+    {
+        var numOps = MathHelper.GetNumericOperations<T>();
+        var thetaShape = theta.Value.Shape;
+
+        // Validate shapes
+        if (thetaShape.Length != 3 || thetaShape[1] != 2 || thetaShape[2] != 3)
+            throw new ArgumentException("Theta must be of shape [batch, 2, 3]");
+
+        int batchSize = thetaShape[0];
+        var grid = new Tensor<T>([batchSize, outputHeight, outputWidth, 2]);
+
+        // Generate base grid coordinates in [-1, 1] range
+        T[,] baseGrid = new T[outputHeight * outputWidth, 3];
+        int idx = 0;
+        for (int h = 0; h < outputHeight; h++)
+        {
+            for (int w = 0; w < outputWidth; w++)
+            {
+                // Normalized coordinates [-1, 1]
+                T x = numOps.FromDouble((double)w / Math.Max(outputWidth - 1, 1) * 2.0 - 1.0);
+                T y = numOps.FromDouble((double)h / Math.Max(outputHeight - 1, 1) * 2.0 - 1.0);
+                baseGrid[idx, 0] = x;
+                baseGrid[idx, 1] = y;
+                baseGrid[idx, 2] = numOps.One;  // Homogeneous coordinate
+                idx++;
+            }
+        }
+
+        // Forward pass: apply affine transformation to each grid point
+        for (int b = 0; b < batchSize; b++)
+        {
+            idx = 0;
+            for (int h = 0; h < outputHeight; h++)
+            {
+                for (int w = 0; w < outputWidth; w++)
+                {
+                    T x = baseGrid[idx, 0];
+                    T y = baseGrid[idx, 1];
+
+                    // Apply affine transformation: [x_in, y_in]^T = theta * [x_out, y_out, 1]^T
+                    T xTransformed = numOps.Add(
+                        numOps.Add(
+                            numOps.Multiply(theta.Value[b, 0, 0], x),
+                            numOps.Multiply(theta.Value[b, 0, 1], y)),
+                        theta.Value[b, 0, 2]);
+
+                    T yTransformed = numOps.Add(
+                        numOps.Add(
+                            numOps.Multiply(theta.Value[b, 1, 0], x),
+                            numOps.Multiply(theta.Value[b, 1, 1], y)),
+                        theta.Value[b, 1, 2]);
+
+                    grid[b, h, w, 0] = xTransformed;
+                    grid[b, h, w, 1] = yTransformed;
+                    idx++;
+                }
+            }
+        }
+
+        // Backward function
+        void BackwardFunction(Tensor<T> gradient)
+        {
+            if (!theta.RequiresGradient) return;
+
+            var thetaGradient = new Tensor<T>(thetaShape);
+
+            // Compute gradients w.r.t. theta
+            for (int b = 0; b < batchSize; b++)
+            {
+                idx = 0;
+                for (int h = 0; h < outputHeight; h++)
+                {
+                    for (int w = 0; w < outputWidth; w++)
+                    {
+                        T x = baseGrid[idx, 0];
+                        T y = baseGrid[idx, 1];
+                        T gradX = gradient[b, h, w, 0];
+                        T gradY = gradient[b, h, w, 1];
+
+                        // Gradient for theta[b, 0, :] from x_transformed
+                        thetaGradient[b, 0, 0] = numOps.Add(thetaGradient[b, 0, 0], numOps.Multiply(gradX, x));
+                        thetaGradient[b, 0, 1] = numOps.Add(thetaGradient[b, 0, 1], numOps.Multiply(gradX, y));
+                        thetaGradient[b, 0, 2] = numOps.Add(thetaGradient[b, 0, 2], gradX);
+
+                        // Gradient for theta[b, 1, :] from y_transformed
+                        thetaGradient[b, 1, 0] = numOps.Add(thetaGradient[b, 1, 0], numOps.Multiply(gradY, x));
+                        thetaGradient[b, 1, 1] = numOps.Add(thetaGradient[b, 1, 1], numOps.Multiply(gradY, y));
+                        thetaGradient[b, 1, 2] = numOps.Add(thetaGradient[b, 1, 2], gradY);
+
+                        idx++;
+                    }
+                }
+            }
+
+            if (theta.Gradient == null)
+                theta.Gradient = thetaGradient;
+            else
+                theta.Gradient = theta.Gradient.Add(thetaGradient);
+        }
+
+        var node = new ComputationNode<T>(
+            value: grid,
+            requiresGradient: theta.RequiresGradient,
+            parents: new List<ComputationNode<T>> { theta },
+            backwardFunction: BackwardFunction,
+            name: null);
+
+        var tape = GradientTape<T>.Current;
+        if (tape != null && tape.IsRecording)
+            tape.RecordOperation(node);
+
+        return node;
+    }
+
+    /// <summary>
+    /// Samples input using bilinear interpolation at grid locations for spatial transformer networks.
+    /// </summary>
+    /// <param name="input">Input tensor of shape [batch, height, width, channels]</param>
+    /// <param name="grid">Sampling grid of shape [batch, out_height, out_width, 2] with normalized coordinates in [-1, 1]</param>
+    /// <returns>Sampled output of shape [batch, out_height, out_width, channels]</returns>
+    /// <remarks>
+    /// <para>
+    /// This operation performs differentiable bilinear sampling from the input tensor
+    /// using coordinates specified in the grid. Grid coordinates are in normalized [-1, 1] space
+    /// where (-1, -1) is top-left and (1, 1) is bottom-right.
+    /// </para>
+    /// <para>
+    /// Forward pass:
+    /// 1. Convert normalized grid coordinates to input pixel coordinates
+    /// 2. For each sampling point, find the 4 nearest pixels
+    /// 3. Compute bilinear interpolation weights
+    /// 4. Interpolate: out = w00*v00 + w01*v01 + w10*v10 + w11*v11
+    /// </para>
+    /// <para>
+    /// Backward pass:
+    /// - ∂L/∂input: Distribute gradients back to the 4 nearest pixels using same weights
+    /// - ∂L/∂grid: Compute how grid coordinates affect the sampling result
+    /// </para>
+    /// <para><b>For Beginners:</b> This samples from an image using smooth interpolation.
+    /// Instead of reading exact pixels, it can sample from positions between pixels
+    /// by blending nearby pixel values. This enables smooth transformations like rotation.
+    /// </para>
+    /// </remarks>
+    public static ComputationNode<T> GridSample(
+        ComputationNode<T> input,
+        ComputationNode<T> grid)
+    {
+        var numOps = MathHelper.GetNumericOperations<T>();
+        var inputShape = input.Value.Shape;
+        var gridShape = grid.Value.Shape;
+
+        // Validate shapes
+        if (inputShape.Length != 4)
+            throw new ArgumentException("Input must be 4D tensor [batch, height, width, channels]");
+        if (gridShape.Length != 4 || gridShape[3] != 2)
+            throw new ArgumentException("Grid must be 4D tensor [batch, out_height, out_width, 2]");
+        if (inputShape[0] != gridShape[0])
+            throw new ArgumentException($"Batch size mismatch: input {inputShape[0]} vs grid {gridShape[0]}");
+
+        int batchSize = inputShape[0];
+        int inputHeight = inputShape[1];
+        int inputWidth = inputShape[2];
+        int channels = inputShape[3];
+        int outHeight = gridShape[1];
+        int outWidth = gridShape[2];
+
+        var output = new Tensor<T>([batchSize, outHeight, outWidth, channels]);
+
+        // Cache for backward pass
+        var interpolationWeights = new Tensor<T>([batchSize, outHeight, outWidth, 4]);  // w00, w01, w10, w11
+        var pixelCoords = new int[batchSize, outHeight, outWidth, 4];  // x0, x1, y0, y1
+
+        T half = numOps.FromDouble(0.5);
+        T heightScale = numOps.FromDouble((inputHeight - 1) / 2.0);
+        T widthScale = numOps.FromDouble((inputWidth - 1) / 2.0);
+
+        // Forward pass: bilinear sampling
+        for (int b = 0; b < batchSize; b++)
+        {
+            for (int h = 0; h < outHeight; h++)
+            {
+                for (int w = 0; w < outWidth; w++)
+                {
+                    // Convert normalized grid coordinates [-1, 1] to pixel coordinates
+                    T gridX = grid.Value[b, h, w, 0];
+                    T gridY = grid.Value[b, h, w, 1];
+
+                    // Map from [-1, 1] to [0, width-1] and [0, height-1]
+                    T srcX = numOps.Multiply(numOps.Add(gridX, numOps.One), widthScale);
+                    T srcY = numOps.Multiply(numOps.Add(gridY, numOps.One), heightScale);
+
+                    // Compute nearest neighbor coordinates
+                    double srcXDouble = Convert.ToDouble(srcX);
+                    double srcYDouble = Convert.ToDouble(srcY);
+                    int x0 = Math.Max(0, Math.Min((int)Math.Floor(srcXDouble), inputWidth - 1));
+                    int x1 = Math.Max(0, Math.Min(x0 + 1, inputWidth - 1));
+                    int y0 = Math.Max(0, Math.Min((int)Math.Floor(srcYDouble), inputHeight - 1));
+                    int y1 = Math.Max(0, Math.Min(y0 + 1, inputHeight - 1));
+
+                    // Store for backward pass
+                    pixelCoords[b, h, w, 0] = x0;
+                    pixelCoords[b, h, w, 1] = x1;
+                    pixelCoords[b, h, w, 2] = y0;
+                    pixelCoords[b, h, w, 3] = y1;
+
+                    // Compute interpolation weights
+                    T wx1 = numOps.Subtract(srcX, numOps.FromDouble(x0));
+                    T wx0 = numOps.Subtract(numOps.One, wx1);
+                    T wy1 = numOps.Subtract(srcY, numOps.FromDouble(y0));
+                    T wy0 = numOps.Subtract(numOps.One, wy1);
+
+                    // Clamp weights to [0, 1]
+                    wx0 = numOps.IsNegative(wx0) ? numOps.Zero : wx0;
+                    wx1 = numOps.IsNegative(wx1) ? numOps.Zero : wx1;
+                    wy0 = numOps.IsNegative(wy0) ? numOps.Zero : wy0;
+                    wy1 = numOps.IsNegative(wy1) ? numOps.Zero : wy1;
+
+                    T w00 = numOps.Multiply(wx0, wy0);
+                    T w01 = numOps.Multiply(wx1, wy0);
+                    T w10 = numOps.Multiply(wx0, wy1);
+                    T w11 = numOps.Multiply(wx1, wy1);
+
+                    // Store weights for backward pass
+                    interpolationWeights[b, h, w, 0] = w00;
+                    interpolationWeights[b, h, w, 1] = w01;
+                    interpolationWeights[b, h, w, 2] = w10;
+                    interpolationWeights[b, h, w, 3] = w11;
+
+                    // Perform bilinear interpolation for each channel
+                    for (int c = 0; c < channels; c++)
+                    {
+                        T v00 = input.Value[b, y0, x0, c];
+                        T v01 = input.Value[b, y0, x1, c];
+                        T v10 = input.Value[b, y1, x0, c];
+                        T v11 = input.Value[b, y1, x1, c];
+
+                        T interpolated = numOps.Add(
+                            numOps.Add(
+                                numOps.Multiply(v00, w00),
+                                numOps.Multiply(v01, w01)),
+                            numOps.Add(
+                                numOps.Multiply(v10, w10),
+                                numOps.Multiply(v11, w11)));
+
+                        output[b, h, w, c] = interpolated;
+                    }
+                }
+            }
+        }
+
+        // Backward function
+        void BackwardFunction(Tensor<T> gradient)
+        {
+            // Gradient w.r.t. input
+            if (input.RequiresGradient)
+            {
+                var inputGradient = new Tensor<T>(inputShape);
+
+                for (int b = 0; b < batchSize; b++)
+                {
+                    for (int h = 0; h < outHeight; h++)
+                    {
+                        for (int w = 0; w < outWidth; w++)
+                        {
+                            int x0 = pixelCoords[b, h, w, 0];
+                            int x1 = pixelCoords[b, h, w, 1];
+                            int y0 = pixelCoords[b, h, w, 2];
+                            int y1 = pixelCoords[b, h, w, 3];
+
+                            T w00 = interpolationWeights[b, h, w, 0];
+                            T w01 = interpolationWeights[b, h, w, 1];
+                            T w10 = interpolationWeights[b, h, w, 2];
+                            T w11 = interpolationWeights[b, h, w, 3];
+
+                            for (int c = 0; c < channels; c++)
+                            {
+                                T grad = gradient[b, h, w, c];
+
+                                // Distribute gradient to the 4 nearest pixels
+                                inputGradient[b, y0, x0, c] = numOps.Add(inputGradient[b, y0, x0, c], numOps.Multiply(grad, w00));
+                                inputGradient[b, y0, x1, c] = numOps.Add(inputGradient[b, y0, x1, c], numOps.Multiply(grad, w01));
+                                inputGradient[b, y1, x0, c] = numOps.Add(inputGradient[b, y1, x0, c], numOps.Multiply(grad, w10));
+                                inputGradient[b, y1, x1, c] = numOps.Add(inputGradient[b, y1, x1, c], numOps.Multiply(grad, w11));
+                            }
+                        }
+                    }
+                }
+
+                if (input.Gradient == null)
+                    input.Gradient = inputGradient;
+                else
+                    input.Gradient = input.Gradient.Add(inputGradient);
+            }
+
+            // Gradient w.r.t. grid
+            if (grid.RequiresGradient)
+            {
+                var gridGradient = new Tensor<T>(gridShape);
+
+                for (int b = 0; b < batchSize; b++)
+                {
+                    for (int h = 0; h < outHeight; h++)
+                    {
+                        for (int w = 0; w < outWidth; w++)
+                        {
+                            int x0 = pixelCoords[b, h, w, 0];
+                            int x1 = pixelCoords[b, h, w, 1];
+                            int y0 = pixelCoords[b, h, w, 2];
+                            int y1 = pixelCoords[b, h, w, 3];
+
+                            T w00 = interpolationWeights[b, h, w, 0];
+                            T w01 = interpolationWeights[b, h, w, 1];
+                            T w10 = interpolationWeights[b, h, w, 2];
+                            T w11 = interpolationWeights[b, h, w, 3];
+
+                            T gradX = numOps.Zero;
+                            T gradY = numOps.Zero;
+
+                            for (int c = 0; c < channels; c++)
+                            {
+                                T grad = gradient[b, h, w, c];
+                                T v00 = input.Value[b, y0, x0, c];
+                                T v01 = input.Value[b, y0, x1, c];
+                                T v10 = input.Value[b, y1, x0, c];
+                                T v11 = input.Value[b, y1, x1, c];
+
+                                // Gradient w.r.t. srcX
+                                T dOutDSrcX = numOps.Subtract(
+                                    numOps.Add(numOps.Multiply(v01, w01), numOps.Multiply(v11, w11)),
+                                    numOps.Add(numOps.Multiply(v00, w00), numOps.Multiply(v10, w10)));
+
+                                // Gradient w.r.t. srcY
+                                T dOutDSrcY = numOps.Subtract(
+                                    numOps.Add(numOps.Multiply(v10, w10), numOps.Multiply(v11, w11)),
+                                    numOps.Add(numOps.Multiply(v00, w00), numOps.Multiply(v01, w01)));
+
+                                gradX = numOps.Add(gradX, numOps.Multiply(grad, dOutDSrcX));
+                                gradY = numOps.Add(gradY, numOps.Multiply(grad, dOutDSrcY));
+                            }
+
+                            // Chain rule: dL/dgrid = dL/dout * dout/dsrc * dsrc/dgrid
+                            gridGradient[b, h, w, 0] = numOps.Multiply(gradX, widthScale);
+                            gridGradient[b, h, w, 1] = numOps.Multiply(gradY, heightScale);
+                        }
+                    }
+                }
+
+                if (grid.Gradient == null)
+                    grid.Gradient = gridGradient;
+                else
+                    grid.Gradient = grid.Gradient.Add(gridGradient);
+            }
+        }
+
+        var node = new ComputationNode<T>(
+            value: output,
+            requiresGradient: input.RequiresGradient || grid.RequiresGradient,
+            parents: new List<ComputationNode<T>> { input, grid },
+            backwardFunction: BackwardFunction,
+            name: null);
+
+        var tape = GradientTape<T>.Current;
+        if (tape != null && tape.IsRecording)
+            tape.RecordOperation(node);
+
+        return node;
+    }
 }
 }
