@@ -26,8 +26,56 @@ namespace AiDotNet.NeuralNetworks.Layers;
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric type used for calculations, typically float or double.</typeparam>
-public class TransformerDecoderLayer<T> : LayerBase<T>
+public class TransformerDecoderLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
 {
+    /// <summary>
+    /// Gets or sets a value indicating whether auxiliary loss is enabled for this layer.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// When enabled, the layer aggregates auxiliary losses from its attention sublayers (both self-attention and cross-attention).
+    /// This helps regularize attention patterns and prevents issues like attention collapse.
+    /// </para>
+    /// <para><b>For Beginners:</b> This setting controls whether the layer uses additional learning signals.
+    ///
+    /// When enabled (true):
+    /// - The layer collects extra penalties from both self-attention and cross-attention mechanisms
+    /// - This helps the attention heads learn diverse and focused patterns
+    /// - Training may be more stable and produce better results
+    ///
+    /// When disabled (false):
+    /// - Only the main task loss is used for training
+    /// - This is the default setting
+    /// </para>
+    /// </remarks>
+    public bool UseAuxiliaryLoss { get; set; } = false;
+
+    /// <summary>
+    /// Gets or sets the weight for the auxiliary loss contribution.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// This value determines how much the aggregated auxiliary losses contribute to the total loss.
+    /// The default value of 0.005 provides a good balance between the main task and regularization.
+    /// </para>
+    /// <para><b>For Beginners:</b> This controls how much importance to give to the attention regularization.
+    ///
+    /// The weight affects training:
+    /// - Higher values (e.g., 0.01) make the network prioritize better attention patterns more strongly
+    /// - Lower values (e.g., 0.001) make the regularization less important
+    /// - The default (0.005) works well for most transformer tasks
+    ///
+    /// If your attention is collapsing (all heads learning the same thing), you might increase this value.
+    /// If the main task is more important, you might decrease it.
+    /// </para>
+    /// </remarks>
+    public T AuxiliaryLossWeight { get; set; }
+
+    /// <summary>
+    /// Stores the last computed auxiliary loss for diagnostic purposes.
+    /// </summary>
+    private T _lastAuxiliaryLoss;
+
     /// <summary>
     /// The size of the embeddings for queries, keys, values, and outputs.
     /// </summary>
@@ -464,6 +512,10 @@ public class TransformerDecoderLayer<T> : LayerBase<T>
         // Feed-forward layer (with activation)
         _feedForward = new FeedForwardLayer<T>(_embeddingSize, _feedForwardDim, activation);
         _norm3 = new LayerNormalizationLayer<T>(_embeddingSize);
+
+        // Initialize NumOps-based fields
+        AuxiliaryLossWeight = NumOps.FromDouble(0.005);
+        _lastAuxiliaryLoss = NumOps.Zero;
     }
 
     /// <summary>
@@ -515,6 +567,10 @@ public class TransformerDecoderLayer<T> : LayerBase<T>
         // Feed-forward layer (with vector activation)
         _feedForward = new FeedForwardLayer<T>(_embeddingSize, _feedForwardDim, activation);
         _norm3 = new LayerNormalizationLayer<T>(_embeddingSize);
+
+        // Initialize NumOps-based fields
+        AuxiliaryLossWeight = NumOps.FromDouble(0.005);
+        _lastAuxiliaryLoss = NumOps.Zero;
     }
 
     /// <summary>
@@ -764,17 +820,17 @@ public class TransformerDecoderLayer<T> : LayerBase<T>
     /// tensors from the forward pass and delegates the reset operation to each sublayer.
     /// </para>
     /// <para><b>For Beginners:</b> This method clears the layer's memory to start fresh.
-    /// 
+    ///
     /// When resetting the state:
     /// - All sublayers are reset to their initial condition
     /// - Stored inputs and outputs are cleared
     /// - The layer forgets all intermediate results from previous processing
-    /// 
+    ///
     /// This is important for:
     /// - Processing a new, unrelated sequence
     /// - Starting a new training episode
     /// - Testing the layer with fresh inputs
-    /// 
+    ///
     /// Think of it like clearing the entire team's mind before starting a completely new task,
     /// ensuring no residual information affects the processing of new inputs.
     /// </para>
@@ -788,7 +844,7 @@ public class TransformerDecoderLayer<T> : LayerBase<T>
         _norm2.ResetState();
         _feedForward.ResetState();
         _norm3.ResetState();
-    
+
         // Clear cached tensors
         _lastInput = null;
         _lastEncoderOutput = null;
@@ -797,5 +853,158 @@ public class TransformerDecoderLayer<T> : LayerBase<T>
         _lastCrossAttentionOutput = null;
         _lastNormalized2 = null;
         _lastFeedForwardOutput = null;
+    }
+
+    /// <summary>
+    /// Computes the auxiliary loss for this layer by aggregating losses from sublayers.
+    /// </summary>
+    /// <returns>The computed auxiliary loss value.</returns>
+    /// <remarks>
+    /// <para>
+    /// This method computes the auxiliary loss by aggregating losses from sublayers that implement IAuxiliaryLossLayer.
+    /// For the decoder layer, this includes both self-attention and cross-attention mechanisms, which provide
+    /// attention entropy and head diversity regularization.
+    /// </para>
+    /// <para><b>For Beginners:</b> This method collects additional learning signals from the layer's components.
+    ///
+    /// Auxiliary loss aggregation:
+    /// - Checks each attention sublayer to see if it has auxiliary losses
+    /// - Collects those losses from both self-attention and cross-attention
+    /// - Combines them and returns the total for use in training
+    ///
+    /// Why this is useful:
+    /// - Both attention mechanisms benefit from regularization to prevent all heads from learning the same patterns
+    /// - Self-attention regularization helps the decoder maintain coherent generation patterns
+    /// - Cross-attention regularization helps the decoder focus on relevant parts of the source
+    /// - Aggregating losses at the decoder level provides a unified view of attention quality
+    ///
+    /// Example: If the self-attention has an entropy loss (to keep attention focused) and a diversity loss
+    /// (to prevent heads from being redundant), and the cross-attention has similar losses, this method
+    /// adds all of them together and returns the total.
+    ///
+    /// The aggregated loss helps ensure:
+    /// - Both attention mechanisms learn diverse patterns
+    /// - Attention is focused rather than diffuse
+    /// - The decoder uses its capacity efficiently for both understanding context and attending to source
+    /// </para>
+    /// </remarks>
+    public T ComputeAuxiliaryLoss()
+    {
+        if (!UseAuxiliaryLoss)
+        {
+            _lastAuxiliaryLoss = NumOps.Zero;
+            return NumOps.Zero;
+        }
+
+        T totalAuxLoss = NumOps.Zero;
+        int auxLayerCount = 0;
+
+        // Aggregate auxiliary loss from self-attention if it implements IAuxiliaryLossLayer
+        if (_selfAttention is IAuxiliaryLossLayer<T> auxSelfAttention && auxSelfAttention.UseAuxiliaryLoss)
+        {
+            T selfAttentionAuxLoss = auxSelfAttention.ComputeAuxiliaryLoss();
+            totalAuxLoss = NumOps.Add(totalAuxLoss, selfAttentionAuxLoss);
+            auxLayerCount++;
+        }
+
+        // Aggregate auxiliary loss from cross-attention if it implements IAuxiliaryLossLayer
+        if (_crossAttention is IAuxiliaryLossLayer<T> auxCrossAttention && auxCrossAttention.UseAuxiliaryLoss)
+        {
+            T crossAttentionAuxLoss = auxCrossAttention.ComputeAuxiliaryLoss();
+            totalAuxLoss = NumOps.Add(totalAuxLoss, crossAttentionAuxLoss);
+            auxLayerCount++;
+        }
+
+        // Average the auxiliary losses if any were computed
+        if (auxLayerCount > 0)
+        {
+            totalAuxLoss = NumOps.Divide(totalAuxLoss, NumOps.FromDouble(auxLayerCount));
+        }
+
+        _lastAuxiliaryLoss = totalAuxLoss;
+        return _lastAuxiliaryLoss;
+    }
+
+    /// <summary>
+    /// Gets diagnostic information about the auxiliary loss computation.
+    /// </summary>
+    /// <returns>A dictionary containing diagnostic information about the auxiliary loss.</returns>
+    /// <remarks>
+    /// <para>
+    /// This method returns diagnostic information that can be used to monitor the auxiliary loss during training.
+    /// The diagnostics include the total auxiliary loss, the weight applied to it, whether auxiliary loss is enabled,
+    /// and detailed diagnostics from both self-attention and cross-attention sublayers.
+    /// </para>
+    /// <para><b>For Beginners:</b> This method provides information to help you understand how the auxiliary loss is working.
+    ///
+    /// The diagnostics show:
+    /// - TotalAuxiliaryLoss: The combined penalty from all attention sublayers
+    /// - AuxiliaryWeight: How much this penalty affects the overall training
+    /// - UseAuxiliaryLoss: Whether this penalty is currently enabled
+    /// - SelfAttentionDiagnostics: Detailed information from the self-attention mechanism
+    /// - CrossAttentionDiagnostics: Detailed information from the cross-attention mechanism
+    ///
+    /// You can use this information to:
+    /// - Monitor if attention patterns are healthy (diverse and focused) in both mechanisms
+    /// - Debug training issues related to attention
+    /// - Understand how the decoder is learning both context and source information
+    ///
+    /// Example: If you see that self-attention entropy is very low, it might mean the decoder isn't
+    /// maintaining good coherence with its own generated output. If cross-attention diversity is low,
+    /// it might mean all heads are looking at the same part of the source, wasting capacity.
+    /// </para>
+    /// </remarks>
+    public Dictionary<string, string> GetAuxiliaryLossDiagnostics()
+    {
+        var diagnostics = new Dictionary<string, string>
+        {
+            { "TotalAuxiliaryLoss", _lastAuxiliaryLoss?.ToString() ?? "0" },
+            { "AuxiliaryWeight", AuxiliaryLossWeight?.ToString() ?? "0.005" },
+            { "UseAuxiliaryLoss", UseAuxiliaryLoss.ToString() }
+        };
+
+        // Include diagnostics from self-attention if available
+        if (_selfAttention is IAuxiliaryLossLayer<T> auxSelfAttention)
+        {
+            var selfAttentionDiagnostics = auxSelfAttention.GetAuxiliaryLossDiagnostics();
+            foreach (var kvp in selfAttentionDiagnostics)
+            {
+                diagnostics[$"SelfAttention_{kvp.Key}"] = kvp.Value;
+            }
+        }
+
+        // Include diagnostics from cross-attention if available
+        if (_crossAttention is IAuxiliaryLossLayer<T> auxCrossAttention)
+        {
+            var crossAttentionDiagnostics = auxCrossAttention.GetAuxiliaryLossDiagnostics();
+            foreach (var kvp in crossAttentionDiagnostics)
+            {
+                diagnostics[$"CrossAttention_{kvp.Key}"] = kvp.Value;
+            }
+        }
+
+        return diagnostics;
+    }
+
+    /// <summary>
+    /// Gets diagnostic information about this component's state and behavior.
+    /// Overrides <see cref="LayerBase{T}.GetDiagnostics"/> to include auxiliary loss diagnostics.
+    /// </summary>
+    /// <returns>
+    /// A dictionary containing diagnostic metrics including both base layer diagnostics and
+    /// auxiliary loss diagnostics from <see cref="GetAuxiliaryLossDiagnostics"/>.
+    /// </returns>
+    public override Dictionary<string, string> GetDiagnostics()
+    {
+        var diagnostics = base.GetDiagnostics();
+
+        // Merge auxiliary loss diagnostics
+        var auxDiagnostics = GetAuxiliaryLossDiagnostics();
+        foreach (var kvp in auxDiagnostics)
+        {
+            diagnostics[kvp.Key] = kvp.Value;
+        }
+
+        return diagnostics;
     }
 }
