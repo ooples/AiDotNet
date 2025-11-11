@@ -280,7 +280,7 @@ jobs:
           dotnet-version: 8.0.x
 
       - name: Push to NuGet
-        if: ${{ secrets.NUGET_API_KEY != '' }}
+        continue-on-error: true
         run: |
           # Enable nullglob to handle case where no .nupkg files exist
           shopt -s nullglob
