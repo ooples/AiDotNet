@@ -659,11 +659,12 @@ public class DilatedConvolutionalLayer<T> : LayerBase<T>
     /// <returns>The gradient of the loss with respect to the layer's input.</returns>
     /// <remarks>
     /// <para>
-    /// This method uses automatic differentiation to compute gradients. Currently, dilated convolution operations
-    /// are not yet available in TensorOperations, so this method falls back to the manual implementation.
+    /// This method uses automatic differentiation to compute gradients using DilatedConv2D operation.
+    /// The layer uses NHWC format [batch, H, W, channels], while TensorOperations uses NCHW format,
+    /// so format conversion is performed.
     /// </para>
     /// <para>
-    /// Once dilated convolution operations are added to TensorOperations, this method will provide:
+    /// This provides:
     /// - Automatic gradient computation through the computation graph
     /// - Verification of manual gradient implementations
     /// - Support for rapid prototyping with custom modifications
@@ -671,10 +672,165 @@ public class DilatedConvolutionalLayer<T> : LayerBase<T>
     /// </remarks>
     private Tensor<T> BackwardViaAutodiff(Tensor<T> outputGradient)
     {
-        // TODO: Implement autodiff backward pass once dilated convolution operations are available in TensorOperations
-        // Convolution operation not yet available in TensorOperations
-        // Falling back to manual implementation
-        return BackwardManual(outputGradient);
+        if (_lastInput == null)
+            throw new InvalidOperationException("Forward pass must be called before backward pass.");
+
+        // Convert from NHWC [batch, H, W, channels] to NCHW [batch, channels, H, W]
+        var inputNCHW = ConvertNHWCtoNCHW(_lastInput);
+        var kernelNCHW = ConvertKernelToNCHW(_kernels);
+
+        // Create computation nodes
+        var inputNode = Autodiff.TensorOperations<T>.Variable(inputNCHW, "input", requiresGradient: true);
+        var kernelNode = Autodiff.TensorOperations<T>.Variable(kernelNCHW, "kernel", requiresGradient: true);
+        var biasNode = Autodiff.TensorOperations<T>.Variable(ConvertVectorToTensor(_biases), "bias", requiresGradient: true);
+
+        // Forward pass using autodiff DilatedConv2D operation
+        var outputNode = Autodiff.TensorOperations<T>.DilatedConv2D(
+            inputNode,
+            kernelNode,
+            biasNode,
+            stride: new int[] { _stride, _stride },
+            padding: new int[] { _padding, _padding },
+            dilation: new int[] { _dilation, _dilation });
+
+        // Apply activation function
+        outputNode = ApplyActivationAutodiff(outputNode);
+
+        // Convert output gradient from NHWC to NCHW
+        var outputGradientNCHW = ConvertNHWCtoNCHW(outputGradient);
+
+        // Perform backward pass
+        outputNode.Gradient = outputGradientNCHW;
+        var topoOrder = GetTopologicalOrder(outputNode);
+        for (int i = topoOrder.Count - 1; i >= 0; i--)
+        {
+            var node = topoOrder[i];
+            if (node.RequiresGradient && node.BackwardFunction != null && node.Gradient != null)
+            {
+                node.BackwardFunction(node.Gradient);
+            }
+        }
+
+        // Update parameter gradients
+        if (kernelNode.Gradient != null)
+            _kernelGradients = ConvertKernelFromNCHW(kernelNode.Gradient);
+
+        if (biasNode.Gradient != null)
+            _biasGradients = ConvertTensorToVector(biasNode.Gradient);
+
+        // Convert input gradient from NCHW back to NHWC
+        var inputGradientNCHW = inputNode.Gradient ?? throw new InvalidOperationException("Gradient computation failed.");
+        return ConvertNCHWtoNHWC(inputGradientNCHW);
+    }
+
+    /// <summary>
+    /// Converts tensor from NHWC [batch, H, W, channels] to NCHW [batch, channels, H, W] format.
+    /// </summary>
+    private Tensor<T> ConvertNHWCtoNCHW(Tensor<T> nhwc)
+    {
+        int batch = nhwc.Shape[0];
+        int height = nhwc.Shape[1];
+        int width = nhwc.Shape[2];
+        int channels = nhwc.Shape[3];
+
+        var nchw = new Tensor<T>([batch, channels, height, width]);
+        for (int b = 0; b < batch; b++)
+            for (int c = 0; c < channels; c++)
+                for (int h = 0; h < height; h++)
+                    for (int w = 0; w < width; w++)
+                        nchw[b, c, h, w] = nhwc[b, h, w, c];
+
+        return nchw;
+    }
+
+    /// <summary>
+    /// Converts tensor from NCHW [batch, channels, H, W] to NHWC [batch, H, W, channels] format.
+    /// </summary>
+    private Tensor<T> ConvertNCHWtoNHWC(Tensor<T> nchw)
+    {
+        int batch = nchw.Shape[0];
+        int channels = nchw.Shape[1];
+        int height = nchw.Shape[2];
+        int width = nchw.Shape[3];
+
+        var nhwc = new Tensor<T>([batch, height, width, channels]);
+        for (int b = 0; b < batch; b++)
+            for (int h = 0; h < height; h++)
+                for (int w = 0; w < width; w++)
+                    for (int c = 0; c < channels; c++)
+                        nhwc[b, h, w, c] = nchw[b, c, h, w];
+
+        return nhwc;
+    }
+
+    /// <summary>
+    /// Converts kernel from [outputDepth, inputDepth, kH, kW] to [outputDepth, inputDepth, kH, kW] format.
+    /// </summary>
+    private Tensor<T> ConvertKernelToNCHW(Tensor<T> kernel)
+    {
+        // Already in the correct format
+        return kernel;
+    }
+
+    /// <summary>
+    /// Converts kernel from NCHW back to original format.
+    /// </summary>
+    private Tensor<T> ConvertKernelFromNCHW(Tensor<T> kernel)
+    {
+        // Already in the correct format
+        return kernel;
+    }
+
+    /// <summary>
+    /// Converts vector to 1D tensor.
+    /// </summary>
+    private Tensor<T> ConvertVectorToTensor(Vector<T> vector)
+    {
+        var tensor = new Tensor<T>([vector.Length]);
+        for (int i = 0; i < vector.Length; i++)
+            tensor[i] = vector[i];
+        return tensor;
+    }
+
+    /// <summary>
+    /// Converts 1D tensor to vector.
+    /// </summary>
+    private Vector<T> ConvertTensorToVector(Tensor<T> tensor)
+    {
+        var vector = new Vector<T>(tensor.Shape[0]);
+        for (int i = 0; i < tensor.Shape[0]; i++)
+            vector[i] = tensor[i];
+        return vector;
+    }
+
+    /// <summary>
+    /// Applies activation function using autodiff operations.
+    /// </summary>
+    private Autodiff.ComputationNode<T> ApplyActivationAutodiff(Autodiff.ComputationNode<T> input)
+    {
+        // Apply the appropriate activation function
+        if (UsingVectorActivation)
+        {
+            if (VectorActivation is ReLUActivation<T>)
+                return Autodiff.TensorOperations<T>.ReLU(input);
+            else if (VectorActivation is SigmoidActivation<T>)
+                return Autodiff.TensorOperations<T>.Sigmoid(input);
+            else if (VectorActivation is TanhActivation<T>)
+                return Autodiff.TensorOperations<T>.Tanh(input);
+            else
+                throw new NotSupportedException($"Activation {VectorActivation.GetType().Name} not yet supported in autodiff");
+        }
+        else
+        {
+            if (ScalarActivation is ReLUActivation<T>)
+                return Autodiff.TensorOperations<T>.ReLU(input);
+            else if (ScalarActivation is SigmoidActivation<T>)
+                return Autodiff.TensorOperations<T>.Sigmoid(input);
+            else if (ScalarActivation is TanhActivation<T>)
+                return Autodiff.TensorOperations<T>.Tanh(input);
+            else
+                throw new NotSupportedException($"Activation {ScalarActivation.GetType().Name} not yet supported in autodiff");
+        }
     }
 
     /// <summary>
