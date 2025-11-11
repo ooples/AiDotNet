@@ -862,10 +862,90 @@ public class ConvolutionalLayer<T> : LayerBase<T>
     /// </remarks>
     private Tensor<T> BackwardViaAutodiff(Tensor<T> outputGradient)
     {
-        // TODO: Implement autodiff backward pass once convolution operations are available in TensorOperations
-        // Convolution operation not yet available in TensorOperations
-        // Falling back to manual implementation
-        return BackwardManual(outputGradient);
+        if (_lastInput == null)
+            throw new InvalidOperationException("Forward pass must be called before backward pass.");
+
+        // Convert parameters to computation nodes
+        var inputNode = Autodiff.TensorOperations<T>.Variable(_lastInput, "input", requiresGradient: true);
+        var kernelNode = Autodiff.TensorOperations<T>.Variable(_kernels, "kernel", requiresGradient: true);
+
+        // Convert biases from Vector to Tensor for TensorOperations
+        var biasesTensor = new Tensor<T>(new int[] { OutputDepth });
+        for (int i = 0; i < OutputDepth; i++)
+        {
+            biasesTensor[i] = _biases[i];
+        }
+        var biasNode = Autodiff.TensorOperations<T>.Variable(biasesTensor, "bias", requiresGradient: true);
+
+        // Forward pass using autodiff Conv2D operation
+        var stride = new int[] { Stride, Stride };
+        var padding = new int[] { Padding, Padding };
+        var convOutput = Autodiff.TensorOperations<T>.Conv2D(inputNode, kernelNode, biasNode, stride, padding);
+
+        // Apply activation if present
+        Autodiff.ComputationNode<T> activated;
+        if (ScalarActivation != null)
+        {
+            // Apply scalar activation element-wise
+            activated = ApplyScalarActivationAutodiff(convOutput);
+        }
+        else if (VectorActivation != null)
+        {
+            // Vector activation would need special handling
+            // For now, fallback to manual
+            return BackwardManual(outputGradient);
+        }
+        else
+        {
+            activated = convOutput;
+        }
+
+        // Set output gradient
+        activated.Gradient = outputGradient;
+
+        // Perform backward pass
+        var topoOrder = GetTopologicalOrder(activated);
+        for (int i = topoOrder.Count - 1; i >= 0; i--)
+        {
+            var node = topoOrder[i];
+            if (node.RequiresGradient && node.BackwardFunction != null && node.Gradient != null)
+            {
+                node.BackwardFunction(node.Gradient);
+            }
+        }
+
+        // Extract gradients
+        if (kernelNode.Gradient != null)
+        {
+            _kernelsGradient = kernelNode.Gradient;
+        }
+
+        if (biasNode.Gradient != null)
+        {
+            // Convert Tensor gradient back to Vector
+            _biasesGradient = new Vector<T>(OutputDepth);
+            for (int i = 0; i < OutputDepth; i++)
+            {
+                _biasesGradient[i] = biasNode.Gradient[i];
+            }
+        }
+
+        return inputNode.Gradient!;
+    }
+
+    /// <summary>
+    /// Applies scalar activation function using autodiff operations.
+    /// </summary>
+    private Autodiff.ComputationNode<T> ApplyScalarActivationAutodiff(Autodiff.ComputationNode<T> input)
+    {
+        if (ScalarActivation is ReLUActivation<T>)
+            return Autodiff.TensorOperations<T>.ReLU(input);
+        else if (ScalarActivation is SigmoidActivation<T>)
+            return Autodiff.TensorOperations<T>.Sigmoid(input);
+        else if (ScalarActivation is TanhActivation<T>)
+            return Autodiff.TensorOperations<T>.Tanh(input);
+        else
+            throw new NotSupportedException($"Activation {ScalarActivation?.GetType().Name} not supported in autodiff mode");
     }
 
     /// <summary>
