@@ -802,6 +802,171 @@ public class GradientCorrectnessTests
         return result;
     }
 
+    [Fact]
+    public void LayerNorm_AutodiffGradients_MatchNumericalGradients()
+    {
+        // Arrange
+        const int batchSize = 2;
+        const int features = 4;
+        var shape = new[] { batchSize, features };
+
+        var input = CreateRandomTensor(shape);
+        var gamma = CreateRandomTensor(new int[] { features });
+        var beta = CreateRandomTensor(new int[] { features });
+        var outputGradient = CreateRandomTensor(shape);
+
+        // Act - Autodiff gradients
+        using (var tape = new Autodiff.GradientTape<float>())
+        {
+            var inputNode = Autodiff.TensorOperations<float>.Variable(input, "input", requiresGradient: true);
+            var gammaNode = Autodiff.TensorOperations<float>.Variable(gamma, "gamma", requiresGradient: true);
+            var betaNode = Autodiff.TensorOperations<float>.Variable(beta, "beta", requiresGradient: true);
+            tape.Watch(inputNode);
+            tape.Watch(gammaNode);
+            tape.Watch(betaNode);
+
+            var output = Autodiff.TensorOperations<float>.LayerNorm(inputNode, new int[] { features }, gammaNode, betaNode);
+            output.Gradient = outputGradient;
+
+            // Backward pass
+            var topoOrder = GetTopologicalOrder(output);
+            for (int i = topoOrder.Count - 1; i >= 0; i--)
+            {
+                var node = topoOrder[i];
+                if (node.RequiresGradient && node.BackwardFunction != null && node.Gradient != null)
+                {
+                    node.BackwardFunction(node.Gradient);
+                }
+            }
+
+            var autodiffGradient = inputNode.Gradient!;
+
+            // Numerical gradient for input
+            const float epsilon = 1e-4f;
+            var numericalGradient = new Tensor<float>(shape);
+
+            for (int i = 0; i < input.Length; i++)
+            {
+                // Forward + epsilon
+                var inputPlus = input.Clone();
+                inputPlus[i] += epsilon;
+                var nodePlus = Autodiff.TensorOperations<float>.Variable(inputPlus, requiresGradient: false);
+                var gammaNodePlus = Autodiff.TensorOperations<float>.Variable(gamma, requiresGradient: false);
+                var betaNodePlus = Autodiff.TensorOperations<float>.Variable(beta, requiresGradient: false);
+                var outputPlus = Autodiff.TensorOperations<float>.LayerNorm(nodePlus, new int[] { features }, gammaNodePlus, betaNodePlus);
+
+                // Forward - epsilon
+                var inputMinus = input.Clone();
+                inputMinus[i] -= epsilon;
+                var nodeMinus = Autodiff.TensorOperations<float>.Variable(inputMinus, requiresGradient: false);
+                var gammaNodeMinus = Autodiff.TensorOperations<float>.Variable(gamma, requiresGradient: false);
+                var betaNodeMinus = Autodiff.TensorOperations<float>.Variable(beta, requiresGradient: false);
+                var outputMinus = Autodiff.TensorOperations<float>.LayerNorm(nodeMinus, new int[] { features }, gammaNodeMinus, betaNodeMinus);
+
+                // Numerical gradient
+                float gradSum = 0;
+                for (int j = 0; j < outputGradient.Length; j++)
+                {
+                    float diff = (outputPlus.Value[j] - outputMinus.Value[j]) / (2 * epsilon);
+                    gradSum += outputGradient[j] * diff;
+                }
+                numericalGradient[i] = gradSum;
+            }
+
+            // Assert - gradients should match within tolerance
+            for (int i = 0; i < autodiffGradient.Length; i++)
+            {
+                var diff = Math.Abs(autodiffGradient[i] - numericalGradient[i]);
+                Assert.True(diff < Tolerance,
+                    $"LayerNorm gradient mismatch at index {i}: autodiff={autodiffGradient[i]}, numerical={numericalGradient[i]}");
+            }
+        }
+    }
+
+    [Fact]
+    public void BatchNorm_AutodiffGradients_MatchNumericalGradients()
+    {
+        // Arrange
+        const int batchSize = 4;
+        const int features = 3;
+        var shape = new[] { batchSize, features };
+
+        var input = CreateRandomTensor(shape);
+        var gamma = CreateRandomTensor(new int[] { features });
+        var beta = CreateRandomTensor(new int[] { features });
+        var outputGradient = CreateRandomTensor(shape);
+
+        // Act - Autodiff gradients (training mode)
+        using (var tape = new Autodiff.GradientTape<float>())
+        {
+            var inputNode = Autodiff.TensorOperations<float>.Variable(input, "input", requiresGradient: true);
+            var gammaNode = Autodiff.TensorOperations<float>.Variable(gamma, "gamma", requiresGradient: true);
+            var betaNode = Autodiff.TensorOperations<float>.Variable(beta, "beta", requiresGradient: true);
+            tape.Watch(inputNode);
+            tape.Watch(gammaNode);
+            tape.Watch(betaNode);
+
+            var output = Autodiff.TensorOperations<float>.BatchNorm(
+                inputNode, gammaNode, betaNode, null, null, training: true);
+            output.Gradient = outputGradient;
+
+            // Backward pass
+            var topoOrder = GetTopologicalOrder(output);
+            for (int i = topoOrder.Count - 1; i >= 0; i--)
+            {
+                var node = topoOrder[i];
+                if (node.RequiresGradient && node.BackwardFunction != null && node.Gradient != null)
+                {
+                    node.BackwardFunction(node.Gradient);
+                }
+            }
+
+            var autodiffGradient = inputNode.Gradient!;
+
+            // Numerical gradient for input
+            const float epsilon = 1e-4f;
+            var numericalGradient = new Tensor<float>(shape);
+
+            for (int i = 0; i < input.Length; i++)
+            {
+                // Forward + epsilon
+                var inputPlus = input.Clone();
+                inputPlus[i] += epsilon;
+                var nodePlus = Autodiff.TensorOperations<float>.Variable(inputPlus, requiresGradient: false);
+                var gammaNodePlus = Autodiff.TensorOperations<float>.Variable(gamma, requiresGradient: false);
+                var betaNodePlus = Autodiff.TensorOperations<float>.Variable(beta, requiresGradient: false);
+                var outputPlus = Autodiff.TensorOperations<float>.BatchNorm(
+                    nodePlus, gammaNodePlus, betaNodePlus, null, null, training: true);
+
+                // Forward - epsilon
+                var inputMinus = input.Clone();
+                inputMinus[i] -= epsilon;
+                var nodeMinus = Autodiff.TensorOperations<float>.Variable(inputMinus, requiresGradient: false);
+                var gammaNodeMinus = Autodiff.TensorOperations<float>.Variable(gamma, requiresGradient: false);
+                var betaNodeMinus = Autodiff.TensorOperations<float>.Variable(beta, requiresGradient: false);
+                var outputMinus = Autodiff.TensorOperations<float>.BatchNorm(
+                    nodeMinus, gammaNodeMinus, betaNodeMinus, null, null, training: true);
+
+                // Numerical gradient
+                float gradSum = 0;
+                for (int j = 0; j < outputGradient.Length; j++)
+                {
+                    float diff = (outputPlus.Value[j] - outputMinus.Value[j]) / (2 * epsilon);
+                    gradSum += outputGradient[j] * diff;
+                }
+                numericalGradient[i] = gradSum;
+            }
+
+            // Assert - gradients should match within tolerance
+            for (int i = 0; i < autodiffGradient.Length; i++)
+            {
+                var diff = Math.Abs(autodiffGradient[i] - numericalGradient[i]);
+                Assert.True(diff < Tolerance,
+                    $"BatchNorm gradient mismatch at index {i}: autodiff={autodiffGradient[i]}, numerical={numericalGradient[i]}");
+            }
+        }
+    }
+
     /// <summary>
     /// Helper to create random tensors for testing.
     /// </summary>
