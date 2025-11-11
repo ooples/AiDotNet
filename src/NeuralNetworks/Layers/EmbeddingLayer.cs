@@ -48,7 +48,7 @@ public class EmbeddingLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     /// The embedding matrix works like this:
     /// - Each row corresponds to one token (word, character, etc.)
     /// - Each column is one dimension of the embedding space
-    /// - If you have 10,000 words and 300 dimensions, the matrix will be 10,000 � 300
+    /// - If you have 10,000 words and 300 dimensions, the matrix will be 10,000 × 300
     /// 
     /// For example, with a vocabulary of 5 words and 4 dimensions:
     /// ```
