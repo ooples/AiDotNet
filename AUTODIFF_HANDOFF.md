@@ -10,7 +10,7 @@
 - Base operations (19): Add, Subtract, Multiply, Divide, MatMul, Transpose, Reshape, ReLU, Sigmoid, Tanh, ElementwiseMultiply, Sum, Mean, Variance, Exp, Log, Pow, Sqrt, Abs
 - Session additions (22): Conv2D, ConvTranspose2D, MaxPool2D, AvgPool2D, Softmax, Concat, Pad, LayerNorm, BatchNorm, ReduceMax, ReduceMean, Split, Crop, Upsample, PixelShuffle, DilatedConv2D, DepthwiseConv2D, LocallyConnectedConv2D, ReduceLogVariance, RBFKernel, AffineGrid, GridSample
 
-**Layers with Full Autodiff:** 26
+**Layers with Full Autodiff:** 32
 1. DenseLayer
 2. ActivationLayer
 3. DropoutLayer
@@ -37,8 +37,14 @@
 24. LogVarianceLayer
 25. RBFLayer
 26. SpatialTransformerLayer
+27. RepParameterizationLayer
+28. ReadoutLayer
+29. ReconstructionLayer
+30. DecoderLayer
+31. ExpertLayer
+32. MixtureOfExpertsLayer
 
-### Remaining Work: 17 Layers
+### Remaining Work: 11 Layers
 
 ## ✅ HIGH PRIORITY COMPLETED: Production-Ready Layers (3/3 layers)
 

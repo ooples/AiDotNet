@@ -7,7 +7,7 @@ This document tracks the implementation status of automatic differentiation (aut
 **Last Updated:** 2025-01-11
 **Total Layers:** 75
 **Layers with Autodiff Infrastructure:** 75 (100%)
-**Layers with Full Autodiff Support:** 26 core layers (35%)
+**Layers with Full Autodiff Support:** 32 core layers (43%)
 **TensorOperations Implemented:** 41 (19 base + 22 new: Conv2D, ConvTranspose2D, MaxPool2D, AvgPool2D, Softmax, Concat, Pad, LayerNorm, BatchNorm, ReduceMax, ReduceMean, Split, Crop, Upsample, PixelShuffle, DilatedConv2D, DepthwiseConv2D, LocallyConnectedConv2D, ReduceLogVariance, RBFKernel, AffineGrid, GridSample)
 **Higher-Order Gradients:** ✅ Fully supported via GradientTape.Gradient(createGraph: true)
 **Graph Caching Optimization:** ✅ Automatic for persistent tapes
@@ -44,6 +44,12 @@ These layers have complete autodiff support using TensorOperations:
 24. **LogVarianceLayer** - ReduceLogVariance operation for log-variance computation
 25. **RBFLayer** - RBFKernel operation for Gaussian RBF activations
 26. **SpatialTransformerLayer** - AffineGrid + GridSample operations for learnable spatial transformations
+27. **RepParameterizationLayer** - VAE reparameterization using Exp, Multiply, Add operations
+28. **ReadoutLayer** - MatMul and Add operations for output mapping
+29. **ReconstructionLayer** - Composite of three FullyConnectedLayers
+30. **DecoderLayer** - Composite Transformer decoder with attention and normalization
+31. **ExpertLayer** - Composite expert module for MoE architectures
+32. **MixtureOfExpertsLayer** - Sparse MoE with expert routing and combination
 
 ### 🔄 Partial Implementation (Infrastructure Ready)
 
