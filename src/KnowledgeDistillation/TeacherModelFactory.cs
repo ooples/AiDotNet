@@ -184,7 +184,9 @@ public static class TeacherModelFactory<T>
             throw new ArgumentException("Model is required for Curriculum teacher type");
 
         var baseTeacher = new TeacherModelWrapper<T>(model);
-        return new CurriculumTeacherModel<T>(baseTeacher, strategy);
+        // Note: CurriculumStrategy is no longer used in the constructor
+        // Curriculum logic is implemented in CurriculumDistillationStrategy
+        return new CurriculumTeacherModel<T>(baseTeacher);
     }
 
     private static ITeacherModel<Vector<T>, Vector<T>> CreateSelfTeacher(int outputDimension)

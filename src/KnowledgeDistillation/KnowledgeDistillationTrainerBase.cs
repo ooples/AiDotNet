@@ -151,7 +151,7 @@ public abstract class KnowledgeDistillationTrainerBase<T, TInput, TOutput> : IKn
         for (int i = 0; i < inputs.Length; i++)
         {
             var input = inputs[i];
-            TOutput label = default;
+            TOutput? label = default;
             bool hasLabel = false;
             if (trueLabels != null)
             {

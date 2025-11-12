@@ -173,6 +173,19 @@ public class EnsembleTeacherModel<T> : TeacherModelBase<Vector<T>, Vector<T>, T>
 
         switch (_aggregationMode)
         {
+            case EnsembleAggregationMode.Average:
+                // Simple average (equal weights)
+                for (int i = 0; i < n; i++)
+                {
+                    T sum = NumOps.Zero;
+                    for (int t = 0; t < _teachers.Length; t++)
+                    {
+                        sum = NumOps.Add(sum, teacherLogits[t][i]);
+                    }
+                    result[i] = NumOps.Divide(sum, NumOps.FromDouble(_teachers.Length));
+                }
+                break;
+
             case EnsembleAggregationMode.WeightedAverage:
                 // Weighted average of logits
                 for (int i = 0; i < n; i++)
@@ -308,6 +321,11 @@ public class EnsembleTeacherModel<T> : TeacherModelBase<Vector<T>, Vector<T>, T>
 /// </summary>
 public enum EnsembleAggregationMode
 {
+    /// <summary>
+    /// Simple average of teacher logits (equal weights).
+    /// </summary>
+    Average,
+
     /// <summary>
     /// Weighted average of teacher logits (most common).
     /// </summary>

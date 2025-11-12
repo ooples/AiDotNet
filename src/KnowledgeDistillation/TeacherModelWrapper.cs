@@ -99,19 +99,31 @@ public class TeacherModelWrapper<T> : ITeacherModel<Vector<T>, Vector<T>>
 
     private static int GetOutputDimensionFromModel(IFullModel<T, Vector<T>, Vector<T>> model)
     {
-        // Try to infer output dimension from model - use direct cast or reflection
-        if (model is IMetadataProvider metadataProvider)
+        // Try to use reflection to get metadata from the model
+        var modelType = model.GetType();
+        var getMetadataMethod = modelType.GetMethod("GetMetadata");
+        
+        if (getMetadataMethod != null)
         {
-            var metadata = metadataProvider.GetMetadata();
-            
-            if (metadata.TryGetValue("OutputDimension", out var outputDimValue) && outputDimValue is int outputDim && outputDim > 0)
-                return outputDim;
+            try
+            {
+                var metadata = getMetadataMethod.Invoke(model, null) as Dictionary<string, object>;
+                if (metadata != null)
+                {
+                    if (metadata.TryGetValue("OutputDimension", out var outputDimValue) && outputDimValue is int outputDim && outputDim > 0)
+                        return outputDim;
 
-            if (metadata.TryGetValue("NumClasses", out var numClassesValue) && numClassesValue is int numClasses && numClasses > 0)
-                return numClasses;
+                    if (metadata.TryGetValue("NumClasses", out var numClassesValue) && numClassesValue is int numClasses && numClasses > 0)
+                        return numClasses;
 
-            if (metadata.TryGetValue("ClassCount", out var classCountValue) && classCountValue is int classCount && classCount > 0)
-                return classCount;
+                    if (metadata.TryGetValue("ClassCount", out var classCountValue) && classCountValue is int classCount && classCount > 0)
+                        return classCount;
+                }
+            }
+            catch
+            {
+                // Ignore reflection errors and fall through to exception below
+            }
         }
 
         // If metadata doesn't contain dimension info, we cannot reliably determine output dimension
