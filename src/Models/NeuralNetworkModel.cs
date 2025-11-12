@@ -1040,4 +1040,123 @@ public class NeuralNetworkModel<T> : IFullModel<T, Tensor<T>, Tensor<T>>
         catch (System.Security.SecurityException ex) { throw new InvalidOperationException($"Security error when loading model from '{filePath}': {ex.Message}", ex); }
         catch (Exception ex) { throw new InvalidOperationException($"Failed to deserialize model from file '{filePath}'. The file may be corrupted or incompatible: {ex.Message}", ex); }
     }
+
+    /// <summary>
+    /// Saves the model's current state (parameters and configuration) to a stream.
+    /// </summary>
+    /// <param name="stream">The stream to write the model state to.</param>
+    /// <remarks>
+    /// <para>
+    /// This method serializes all the information needed to recreate the model's current state,
+    /// including trained parameters, network architecture, and any internal configuration.
+    /// It uses the existing Serialize method and writes the data to the provided stream.
+    /// </para>
+    /// <para><b>For Beginners:</b> This is like creating a snapshot of your trained neural network.
+    ///
+    /// When you call SaveState:
+    /// - All the learned parameters (weights and biases) are written to the stream
+    /// - The model's architecture information is saved
+    /// - Any other internal state (like learning rate) is preserved
+    ///
+    /// This is particularly useful for:
+    /// - Checkpointing during long training sessions
+    /// - Knowledge distillation (saving teacher/student models)
+    /// - Resuming interrupted training
+    /// - Creating model ensembles
+    ///
+    /// You can later use LoadState to restore the model to this exact state.
+    /// </para>
+    /// </remarks>
+    /// <exception cref="ArgumentNullException">Thrown when stream is null.</exception>
+    /// <exception cref="IOException">Thrown when there's an error writing to the stream.</exception>
+    public virtual void SaveState(Stream stream)
+    {
+        if (stream == null)
+            throw new ArgumentNullException(nameof(stream));
+
+        if (!stream.CanWrite)
+            throw new ArgumentException("Stream must be writable.", nameof(stream));
+
+        try
+        {
+            var data = this.Serialize();
+            stream.Write(data, 0, data.Length);
+            stream.Flush();
+        }
+        catch (IOException ex)
+        {
+            throw new IOException($"Failed to save model state to stream: {ex.Message}", ex);
+        }
+        catch (Exception ex)
+        {
+            throw new InvalidOperationException($"Unexpected error while saving model state: {ex.Message}", ex);
+        }
+    }
+
+    /// <summary>
+    /// Loads the model's state (parameters and configuration) from a stream.
+    /// </summary>
+    /// <param name="stream">The stream to read the model state from.</param>
+    /// <remarks>
+    /// <para>
+    /// This method deserializes model state that was previously saved with SaveState,
+    /// restoring all parameters, architecture configuration, and internal state to recreate
+    /// the saved model. It uses the existing Deserialize method after reading data from the stream.
+    /// </para>
+    /// <para><b>For Beginners:</b> This is like loading a saved snapshot of your neural network.
+    ///
+    /// When you call LoadState:
+    /// - All the parameters are read from the stream
+    /// - The model is configured to match the saved architecture
+    /// - The model becomes identical to when SaveState was called
+    ///
+    /// After loading, the model can:
+    /// - Make predictions using the restored parameters
+    /// - Continue training from where it left off
+    /// - Be used as a teacher model in knowledge distillation
+    ///
+    /// This is essential for:
+    /// - Resuming interrupted training sessions
+    /// - Loading the best checkpoint after training
+    /// - Deploying trained models to production
+    /// - Knowledge distillation workflows
+    /// </para>
+    /// </remarks>
+    /// <exception cref="ArgumentNullException">Thrown when stream is null.</exception>
+    /// <exception cref="IOException">Thrown when there's an error reading from the stream.</exception>
+    /// <exception cref="InvalidOperationException">Thrown when the stream contains invalid or incompatible data.</exception>
+    public virtual void LoadState(Stream stream)
+    {
+        if (stream == null)
+            throw new ArgumentNullException(nameof(stream));
+
+        if (!stream.CanRead)
+            throw new ArgumentException("Stream must be readable.", nameof(stream));
+
+        try
+        {
+            using var ms = new MemoryStream();
+            stream.CopyTo(ms);
+            var data = ms.ToArray();
+
+            if (data.Length == 0)
+                throw new InvalidOperationException("Stream contains no data.");
+
+            this.Deserialize(data);
+        }
+        catch (IOException ex)
+        {
+            throw new IOException($"Failed to read model state from stream: {ex.Message}", ex);
+        }
+        catch (InvalidOperationException)
+        {
+            // Re-throw InvalidOperationException from Deserialize
+            throw;
+        }
+        catch (Exception ex)
+        {
+            throw new InvalidOperationException(
+                $"Failed to deserialize model state. The stream may contain corrupted or incompatible data: {ex.Message}", ex);
+        }
+    }
 }
