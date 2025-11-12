@@ -1,4 +1,7 @@
+using AiDotNet.Interfaces;
+using AiDotNet.LinearAlgebra;
 using AiDotNet.LossFunctions;
+using AiDotNet.ReinforcementLearning.Agents;
 
 namespace AiDotNet.Models.Options;
 
@@ -28,32 +31,19 @@ namespace AiDotNet.Models.Options;
 /// Famous for: StarCraft micromanagement, cooperative games
 /// </para>
 /// </remarks>
-public class QMIXOptions<T>
+public class QMIXOptions<T> : ReinforcementLearningOptions<T>
 {
-    public int NumAgents { get; set; }
-    public int StateSize { get; set; }  // Per-agent observation size
-    public int ActionSize { get; set; }  // Per-agent action size
-    public int GlobalStateSize { get; set; }  // Global state for mixing network
-    public T LearningRate { get; set; }
-    public T DiscountFactor { get; set; }
-
-    // QMIX-specific
-    public double EpsilonStart { get; set; } = 1.0;
-    public double EpsilonEnd { get; set; } = 0.05;
-    public double EpsilonDecay { get; set; } = 0.9995;
-    public int BatchSize { get; set; } = 32;
-    public int ReplayBufferSize { get; set; } = 5000;
-    public int TargetUpdateFrequency { get; set; } = 200;
+    public int NumAgents { get; init; }
+    public int StateSize { get; init; }  // Per-agent observation size
+    public int ActionSize { get; init; }  // Per-agent action size
+    public int GlobalStateSize { get; init; }  // Global state for mixing network
 
     // Network architectures
-    public List<int> AgentHiddenLayers { get; set; } = [64];
-    public List<int> MixingHiddenLayers { get; set; } = [32];
-    public int? Seed { get; set; }
+    public List<int> AgentHiddenLayers { get; init; } = [64];
+    public List<int> MixingHiddenLayers { get; init; } = [32];
 
-    public QMIXOptions()
-    {
-        var numOps = NumericOperations<T>.Instance;
-        LearningRate = numOps.FromDouble(0.0005);
-        DiscountFactor = numOps.FromDouble(0.99);
-    }
+    /// <summary>
+    /// The optimizer used for updating network parameters. If null, Adam optimizer will be used by default.
+    /// </summary>
+    public IOptimizer<T, Vector<T>, Vector<T>>? Optimizer { get; init; }
 }

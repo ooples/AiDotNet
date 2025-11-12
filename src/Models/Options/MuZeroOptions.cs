@@ -1,4 +1,7 @@
+using AiDotNet.Interfaces;
+using AiDotNet.LinearAlgebra;
 using AiDotNet.LossFunctions;
+using AiDotNet.ReinforcementLearning.Agents;
 
 namespace AiDotNet.Models.Options;
 
@@ -28,40 +31,33 @@ namespace AiDotNet.Models.Options;
 /// Famous for: Superhuman performance across Atari, board games, without rules
 /// </para>
 /// </remarks>
-public class MuZeroOptions<T>
+public class MuZeroOptions<T> : ReinforcementLearningOptions<T>
 {
-    public int ObservationSize { get; set; }
-    public int ActionSize { get; set; }
-    public T LearningRate { get; set; }
+    public int ObservationSize { get; init; }
+    public int ActionSize { get; init; }
 
     // Network architecture
-    public int LatentStateSize { get; set; } = 256;
-    public List<int> RepresentationLayers { get; set; } = [256, 256];
-    public List<int> DynamicsLayers { get; set; } = [256, 256];
-    public List<int> PredictionLayers { get; set; } = [256, 256];
+    public int LatentStateSize { get; init; } = 256;
+    public List<int> RepresentationLayers { get; init; } = [256, 256];
+    public List<int> DynamicsLayers { get; init; } = [256, 256];
+    public List<int> PredictionLayers { get; init; } = [256, 256];
 
     // MCTS parameters
-    public int NumSimulations { get; set; } = 50;
-    public double PUCTConstant { get; set; } = 1.25;
-    public T DiscountFactor { get; set; }
-    public double RootDirichletAlpha { get; set; } = 0.3;
-    public double RootExplorationFraction { get; set; } = 0.25;
+    public int NumSimulations { get; init; } = 50;
+    public double PUCTConstant { get; init; } = 1.25;
+    public double RootDirichletAlpha { get; init; } = 0.3;
+    public double RootExplorationFraction { get; init; } = 0.25;
 
     // Training parameters
-    public int UnrollSteps { get; set; } = 5;  // Number of steps to unroll for training
-    public int TDSteps { get; set; } = 10;  // TD bootstrap steps
-    public int BatchSize { get; set; } = 256;
-    public int ReplayBufferSize { get; set; } = 1000000;
-    public double PriorityAlpha { get; set; } = 1.0;
+    public int UnrollSteps { get; init; } = 5;  // Number of steps to unroll for training
+    public int TDSteps { get; init; } = 10;  // TD bootstrap steps
+    public double PriorityAlpha { get; init; } = 1.0;
 
     // Value/Policy targets
-    public bool UseValuePrefix { get; set; } = false;  // Value prefix for long-horizon tasks
-    public int? Seed { get; set; }
+    public bool UseValuePrefix { get; init; } = false;  // Value prefix for long-horizon tasks
 
-    public MuZeroOptions()
-    {
-        var numOps = NumericOperations<T>.Instance;
-        LearningRate = numOps.FromDouble(0.0001);
-        DiscountFactor = numOps.FromDouble(0.997);
-    }
+    /// <summary>
+    /// The optimizer used for updating network parameters. If null, Adam optimizer will be used by default.
+    /// </summary>
+    public IOptimizer<T, Vector<T>, Vector<T>>? Optimizer { get; init; }
 }

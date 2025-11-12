@@ -1,4 +1,7 @@
+using AiDotNet.Interfaces;
+using AiDotNet.LinearAlgebra;
 using AiDotNet.LossFunctions;
+using AiDotNet.ReinforcementLearning.Agents;
 
 namespace AiDotNet.Models.Options;
 
@@ -28,32 +31,31 @@ namespace AiDotNet.Models.Options;
 /// Examples: Robot coordination, traffic control, multi-player games
 /// </para>
 /// </remarks>
-public class MADDPGOptions<T>
+public class MADDPGOptions<T> : ReinforcementLearningOptions<T>
 {
-    public int NumAgents { get; set; }
-    public int StateSize { get; set; }  // Per-agent state size
-    public int ActionSize { get; set; }  // Per-agent action size
-    public T ActorLearningRate { get; set; }
-    public T CriticLearningRate { get; set; }
-    public T DiscountFactor { get; set; }
-    public T TargetUpdateTau { get; set; }
+    public int NumAgents { get; init; }
+    public int StateSize { get; init; }  // Per-agent state size
+    public int ActionSize { get; init; }  // Per-agent action size
+    public T ActorLearningRate { get; init; }
+    public T CriticLearningRate { get; init; }
+    public T TargetUpdateTau { get; init; }
 
     // MADDPG-specific
-    public int BatchSize { get; set; } = 64;
-    public int ReplayBufferSize { get; set; } = 1000000;
-    public int WarmupSteps { get; set; } = 10000;
-    public double ExplorationNoise { get; set; } = 0.1;
+    public double ExplorationNoise { get; init; } = 0.1;
 
-    public List<int> ActorHiddenLayers { get; set; } = [128, 128];
-    public List<int> CriticHiddenLayers { get; set; } = [128, 128];
-    public int? Seed { get; set; }
+    public List<int> ActorHiddenLayers { get; init; } = [128, 128];
+    public List<int> CriticHiddenLayers { get; init; } = [128, 128];
+
+    /// <summary>
+    /// The optimizer used for updating network parameters. If null, Adam optimizer will be used by default.
+    /// </summary>
+    public IOptimizer<T, Vector<T>, Vector<T>>? Optimizer { get; init; }
 
     public MADDPGOptions()
     {
         var numOps = NumericOperations<T>.Instance;
         ActorLearningRate = numOps.FromDouble(0.0001);
         CriticLearningRate = numOps.FromDouble(0.001);
-        DiscountFactor = numOps.FromDouble(0.99);
         TargetUpdateTau = numOps.FromDouble(0.001);
     }
 }

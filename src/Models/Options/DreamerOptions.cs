@@ -1,4 +1,7 @@
+using AiDotNet.Interfaces;
+using AiDotNet.LinearAlgebra;
 using AiDotNet.LossFunctions;
+using AiDotNet.ReinforcementLearning.Agents;
 
 namespace AiDotNet.Models.Options;
 
@@ -28,36 +31,28 @@ namespace AiDotNet.Models.Options;
 /// Advantages: Sample efficient, works with image observations, enables planning
 /// </para>
 /// </remarks>
-public class DreamerOptions<T>
+public class DreamerOptions<T> : ReinforcementLearningOptions<T>
 {
-    public int ObservationSize { get; set; }
-    public int ActionSize { get; set; }
-    public T LearningRate { get; set; }
+    public int ObservationSize { get; init; }
+    public int ActionSize { get; init; }
 
     // World model architecture
-    public int LatentSize { get; set; } = 200;
-    public int DeterministicSize { get; set; } = 200;
-    public int StochasticSize { get; set; } = 30;
-    public int HiddenSize { get; set; } = 200;
+    public int LatentSize { get; init; } = 200;
+    public int DeterministicSize { get; init; } = 200;
+    public int StochasticSize { get; init; } = 30;
+    public int HiddenSize { get; init; } = 200;
 
     // Training parameters
-    public int BatchSize { get; set; } = 50;
-    public int BatchLength { get; set; } = 50;
-    public int ImaginationHorizon { get; set; } = 15;
-    public T DiscountFactor { get; set; }
+    public int BatchLength { get; init; } = 50;
+    public int ImaginationHorizon { get; init; } = 15;
 
     // Model losses
-    public double KLScale { get; set; } = 1.0;
-    public double RewardScale { get; set; } = 1.0;
-    public double ContinueScale { get; set; } = 1.0;
+    public double KLScale { get; init; } = 1.0;
+    public double RewardScale { get; init; } = 1.0;
+    public double ContinueScale { get; init; } = 1.0;
 
-    public int ReplayBufferSize { get; set; } = 1000000;
-    public int? Seed { get; set; }
-
-    public DreamerOptions()
-    {
-        var numOps = NumericOperations<T>.Instance;
-        LearningRate = numOps.FromDouble(0.0001);
-        DiscountFactor = numOps.FromDouble(0.99);
-    }
+    /// <summary>
+    /// The optimizer used for updating network parameters. If null, Adam optimizer will be used by default.
+    /// </summary>
+    public IOptimizer<T, Vector<T>, Vector<T>>? Optimizer { get; init; }
 }

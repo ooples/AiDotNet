@@ -1,4 +1,7 @@
+using AiDotNet.Interfaces;
+using AiDotNet.LinearAlgebra;
 using AiDotNet.LossFunctions;
+using AiDotNet.ReinforcementLearning.Agents;
 
 namespace AiDotNet.Models.Options;
 
@@ -28,43 +31,36 @@ namespace AiDotNet.Models.Options;
 /// Famous for: Car racing from pixels, learning with limited real environment samples
 /// </para>
 /// </remarks>
-public class WorldModelsOptions<T>
+public class WorldModelsOptions<T> : ReinforcementLearningOptions<T>
 {
-    public int ObservationWidth { get; set; } = 64;
-    public int ObservationHeight { get; set; } = 64;
-    public int ObservationChannels { get; set; } = 3;
-    public int ActionSize { get; set; }
-    public T LearningRate { get; set; }
+    public int ObservationWidth { get; init; } = 64;
+    public int ObservationHeight { get; init; } = 64;
+    public int ObservationChannels { get; init; } = 3;
+    public int ActionSize { get; init; }
 
     // VAE parameters
-    public int LatentSize { get; set; } = 32;
-    public List<int> VAEEncoderChannels { get; set; } = [32, 64, 128, 256];
-    public double VAEBeta { get; set; } = 1.0;  // KL weight
+    public int LatentSize { get; init; } = 32;
+    public List<int> VAEEncoderChannels { get; init; } = [32, 64, 128, 256];
+    public double VAEBeta { get; init; } = 1.0;  // KL weight
 
     // MDN-RNN parameters
-    public int RNNHiddenSize { get; set; } = 256;
-    public int RNNLayers { get; set; } = 1;
-    public int NumMixtures { get; set; } = 5;  // For mixture density network
-    public double Temperature { get; set; } = 1.0;
+    public int RNNHiddenSize { get; init; } = 256;
+    public int RNNLayers { get; init; } = 1;
+    public int NumMixtures { get; init; } = 5;  // For mixture density network
+    public double Temperature { get; init; } = 1.0;
 
     // Controller parameters
-    public List<int> ControllerLayers { get; set; } = [32];
+    public List<int> ControllerLayers { get; init; } = [32];
 
     // Training parameters
-    public int VAEEpochs { get; set; } = 10;
-    public int RNNEpochs { get; set; } = 20;
-    public int ControllerGenerations { get; set; } = 100;  // For CMA-ES
-    public int ControllerPopulationSize { get; set; } = 64;
+    public int VAEEpochs { get; init; } = 10;
+    public int RNNEpochs { get; init; } = 20;
+    public int ControllerGenerations { get; init; } = 100;  // For CMA-ES
+    public int ControllerPopulationSize { get; init; } = 64;
+    public int RolloutLength { get; init; } = 1000;
 
-    public int BatchSize { get; set; } = 100;
-    public int RolloutLength { get; set; } = 1000;
-    public T DiscountFactor { get; set; }
-    public int? Seed { get; set; }
-
-    public WorldModelsOptions()
-    {
-        var numOps = NumericOperations<T>.Instance;
-        LearningRate = numOps.FromDouble(0.001);
-        DiscountFactor = numOps.FromDouble(0.99);
-    }
+    /// <summary>
+    /// The optimizer used for updating network parameters. If null, Adam optimizer will be used by default.
+    /// </summary>
+    public IOptimizer<T, Vector<T>, Vector<T>>? Optimizer { get; init; }
 }

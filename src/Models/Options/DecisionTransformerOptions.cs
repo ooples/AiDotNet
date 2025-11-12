@@ -1,4 +1,7 @@
+using AiDotNet.Interfaces;
+using AiDotNet.LinearAlgebra;
 using AiDotNet.LossFunctions;
+using AiDotNet.ReinforcementLearning.Agents;
 
 namespace AiDotNet.Models.Options;
 
@@ -28,28 +31,23 @@ namespace AiDotNet.Models.Options;
 /// Famous for: Berkeley/Meta research showing transformers can replace RL algorithms
 /// </para>
 /// </remarks>
-public class DecisionTransformerOptions<T>
+public class DecisionTransformerOptions<T> : ReinforcementLearningOptions<T>
 {
-    public int StateSize { get; set; }
-    public int ActionSize { get; set; }
-    public T LearningRate { get; set; }
+    public int StateSize { get; init; }
+    public int ActionSize { get; init; }
 
     // Transformer architecture parameters
-    public int EmbeddingDim { get; set; } = 128;
-    public int NumLayers { get; set; } = 3;
-    public int NumHeads { get; set; } = 1;
-    public int ContextLength { get; set; } = 20;  // Number of timesteps to condition on
-    public double DropoutRate { get; set; } = 0.1;
+    public int EmbeddingDim { get; init; } = 128;
+    public int NumLayers { get; init; } = 3;
+    public int NumHeads { get; init; } = 1;
+    public int ContextLength { get; init; } = 20;  // Number of timesteps to condition on
+    public double DropoutRate { get; init; } = 0.1;
 
     // Training parameters
-    public int BatchSize { get; set; } = 64;
-    public int BufferSize { get; set; } = 1000000;
-    public ILossFunction<T> LossFunction { get; set; } = new MeanSquaredError<T>();
-    public int? Seed { get; set; }
+    public int BufferSize { get; init; } = 1000000;
 
-    public DecisionTransformerOptions()
-    {
-        var numOps = NumericOperations<T>.Instance;
-        LearningRate = numOps.FromDouble(0.0001);
-    }
+    /// <summary>
+    /// The optimizer used for updating network parameters. If null, Adam optimizer will be used by default.
+    /// </summary>
+    public IOptimizer<T, Vector<T>, Vector<T>>? Optimizer { get; init; }
 }
