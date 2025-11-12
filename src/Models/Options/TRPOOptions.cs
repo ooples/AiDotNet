@@ -1,4 +1,7 @@
+using AiDotNet.Interfaces;
+using AiDotNet.LinearAlgebra;
 using AiDotNet.LossFunctions;
+using AiDotNet.ReinforcementLearning.Agents;
 
 namespace AiDotNet.Models.Options;
 
@@ -28,35 +31,37 @@ namespace AiDotNet.Models.Options;
 /// Famous for: OpenAI's robotics research, predecessor to PPO
 /// </para>
 /// </remarks>
-public class TRPOOptions<T>
+public class TRPOOptions<T> : ReinforcementLearningOptions<T>
 {
-    public int StateSize { get; set; }
-    public int ActionSize { get; set; }
-    public bool IsContinuous { get; set; } = false;
-    public T ValueLearningRate { get; set; }
-    public T DiscountFactor { get; set; }
-    public T GaeLambda { get; set; }
+    public int StateSize { get; init; }
+    public int ActionSize { get; init; }
+    public bool IsContinuous { get; init; } = false;
+    public T ValueLearningRate { get; init; }
+    public T GaeLambda { get; init; }
 
     // TRPO-specific parameters
-    public T MaxKL { get; set; }  // Maximum KL divergence (trust region size)
-    public double Damping { get; set; } = 0.1;  // Damping coefficient for conjugate gradient
-    public int ConjugateGradientIterations { get; set; } = 10;
-    public int LineSearchSteps { get; set; } = 10;
-    public double LineSearchAcceptRatio { get; set; } = 0.1;
-    public double LineSearchBacktrackCoeff { get; set; } = 0.8;
+    public T MaxKL { get; init; }  // Maximum KL divergence (trust region size)
+    public double Damping { get; init; } = 0.1;  // Damping coefficient for conjugate gradient
+    public int ConjugateGradientIterations { get; init; } = 10;
+    public int LineSearchSteps { get; init; } = 10;
+    public double LineSearchAcceptRatio { get; init; } = 0.1;
+    public double LineSearchBacktrackCoeff { get; init; } = 0.8;
 
-    public int StepsPerUpdate { get; set; } = 2048;
-    public int ValueIterations { get; set; } = 5;
-    public ILossFunction<T> ValueLossFunction { get; set; } = new MeanSquaredError<T>();
-    public List<int> PolicyHiddenLayers { get; set; } = [64, 64];
-    public List<int> ValueHiddenLayers { get; set; } = [64, 64];
-    public int? Seed { get; set; }
+    public int StepsPerUpdate { get; init; } = 2048;
+    public int ValueIterations { get; init; } = 5;
+    public ILossFunction<T> ValueLossFunction { get; init; } = new MeanSquaredError<T>();
+    public List<int> PolicyHiddenLayers { get; init; } = [64, 64];
+    public List<int> ValueHiddenLayers { get; init; } = [64, 64];
+
+    /// <summary>
+    /// The optimizer used for updating network parameters. If null, Adam optimizer will be used by default.
+    /// </summary>
+    public IOptimizer<T, Vector<T>, Vector<T>>? Optimizer { get; init; }
 
     public TRPOOptions()
     {
         var numOps = NumericOperations<T>.Instance;
         ValueLearningRate = numOps.FromDouble(0.001);
-        DiscountFactor = numOps.FromDouble(0.99);
         GaeLambda = numOps.FromDouble(0.95);
         MaxKL = numOps.FromDouble(0.01);
     }

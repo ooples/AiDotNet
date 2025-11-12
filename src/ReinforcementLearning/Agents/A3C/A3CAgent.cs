@@ -1,3 +1,4 @@
+using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
 using AiDotNet.Models;
 using AiDotNet.Models.Options;
@@ -5,6 +6,7 @@ using AiDotNet.NeuralNetworks;
 using AiDotNet.NeuralNetworks.Layers;
 using AiDotNet.NeuralNetworks.Activations;
 using AiDotNet.Helpers;
+using AiDotNet.Optimizers;
 
 namespace AiDotNet.ReinforcementLearning.Agents.A3C;
 
@@ -35,16 +37,25 @@ namespace AiDotNet.ReinforcementLearning.Agents.A3C;
 public class A3CAgent<T> : ReinforcementLearningAgentBase<T>
 {
     private readonly A3COptions<T> _options;
+    private readonly IOptimizer<T, Vector<T>, Vector<T>> _optimizer;
 
-    private NeuralNetwork<T> _globalPolicyNetwork;
-    private NeuralNetwork<T> _globalValueNetwork;
+    private INeuralNetwork<T> _globalPolicyNetwork;
+    private INeuralNetwork<T> _globalValueNetwork;
     private readonly object _globalLock = new();
 
     private int _globalSteps;
 
-    public A3CAgent(A3COptions<T> options) : base(options.StateSize, options.ActionSize)
+    public A3CAgent(A3COptions<T> options, IOptimizer<T, Vector<T>, Vector<T>>? optimizer = null)
+        : base(options)
     {
-        _options = options;
+        _options = options ?? throw new ArgumentNullException(nameof(options));
+        _optimizer = optimizer ?? options.Optimizer ?? new AdamOptimizer<T, Vector<T>, Vector<T>>(this, new AdamOptimizerOptions<T, Vector<T>, Vector<T>>
+        {
+            LearningRate = 0.001,
+            Beta1 = 0.9,
+            Beta2 = 0.999,
+            Epsilon = 1e-8
+        });
         _globalSteps = 0;
 
         InitializeGlobalNetworks();
@@ -54,50 +65,67 @@ public class A3CAgent<T> : ReinforcementLearningAgentBase<T>
     {
         _globalPolicyNetwork = CreatePolicyNetwork();
         _globalValueNetwork = CreateValueNetwork();
+
+        // Register networks with base class
+        Networks.Add(_globalPolicyNetwork);
+        Networks.Add(_globalValueNetwork);
     }
 
-    private NeuralNetwork<T> CreatePolicyNetwork()
+    private INeuralNetwork<T> CreatePolicyNetwork()
     {
-        var network = new NeuralNetwork<T>();
+        var layers = new List<ILayer<T>>();
         int previousSize = _options.StateSize;
 
         foreach (var layerSize in _options.PolicyHiddenLayers)
         {
-            network.AddLayer(new DenseLayer<T>(previousSize, layerSize));
-            network.AddLayer(new ActivationLayer<T>(new ReLU<T>()));
+            layers.Add(new DenseLayer<T>(previousSize, layerSize, new ReLUActivation<T>()));
             previousSize = layerSize;
         }
 
         if (_options.IsContinuous)
         {
             // Output: mean and log_std for Gaussian policy
-            network.AddLayer(new DenseLayer<T>(previousSize, _options.ActionSize * 2));
+            layers.Add(new DenseLayer<T>(previousSize, _options.ActionSize * 2, new LinearActivation<T>()));
         }
         else
         {
             // Output: action probabilities
-            network.AddLayer(new DenseLayer<T>(previousSize, _options.ActionSize));
-            network.AddLayer(new ActivationLayer<T>(new Softmax<T>()));
+            layers.Add(new DenseLayer<T>(previousSize, _options.ActionSize, new SoftmaxActivation<T>()));
         }
 
-        return network;
+        var architecture = new NeuralNetworkArchitecture<T>
+        {
+            InputSize = _options.StateSize,
+            OutputSize = _options.IsContinuous ? _options.ActionSize * 2 : _options.ActionSize,
+            Layers = layers,
+            TaskType = TaskType.Regression
+        };
+
+        return new NeuralNetwork<T>(architecture, _options.ValueLossFunction);
     }
 
-    private NeuralNetwork<T> CreateValueNetwork()
+    private INeuralNetwork<T> CreateValueNetwork()
     {
-        var network = new NeuralNetwork<T>();
+        var layers = new List<ILayer<T>>();
         int previousSize = _options.StateSize;
 
         foreach (var layerSize in _options.ValueHiddenLayers)
         {
-            network.AddLayer(new DenseLayer<T>(previousSize, layerSize));
-            network.AddLayer(new ActivationLayer<T>(new ReLU<T>()));
+            layers.Add(new DenseLayer<T>(previousSize, layerSize, new ReLUActivation<T>()));
             previousSize = layerSize;
         }
 
-        network.AddLayer(new DenseLayer<T>(previousSize, 1));
+        layers.Add(new DenseLayer<T>(previousSize, 1, new LinearActivation<T>()));
 
-        return network;
+        var architecture = new NeuralNetworkArchitecture<T>
+        {
+            InputSize = _options.StateSize,
+            OutputSize = 1,
+            Layers = layers,
+            TaskType = TaskType.Regression
+        };
+
+        return new NeuralNetwork<T>(architecture, _options.ValueLossFunction);
     }
 
     public override Vector<T> SelectAction(Vector<T> state, bool training = true)
@@ -207,7 +235,7 @@ public class A3CAgent<T> : ReinforcementLearningAgentBase<T>
 
     private void RunWorker(Interfaces.IEnvironment<T> environment, int maxSteps, int workerId)
     {
-        // Create worker-local networks
+        // Create worker-local networks (not registered with Networks list)
         var localPolicy = CreatePolicyNetwork();
         var localValue = CreateValueNetwork();
 
@@ -255,7 +283,7 @@ public class A3CAgent<T> : ReinforcementLearningAgentBase<T>
         }
     }
 
-    private Vector<T> SelectActionWithLocalNetwork(Vector<T> state, NeuralNetwork<T> policy, bool training)
+    private Vector<T> SelectActionWithLocalNetwork(Vector<T> state, INeuralNetwork<T> policy, bool training)
     {
         var policyOutput = policy.Forward(state);
         // Simplified: reuse SelectAction logic but with local network output
@@ -263,7 +291,7 @@ public class A3CAgent<T> : ReinforcementLearningAgentBase<T>
         return SelectAction(state, training);
     }
 
-    private List<T> ComputeReturns(List<(Vector<T> state, Vector<T> action, T reward, bool done, T value)> trajectory, NeuralNetwork<T> valueNetwork)
+    private List<T> ComputeReturns(List<(Vector<T> state, Vector<T> action, T reward, bool done, T value)> trajectory, INeuralNetwork<T> valueNetwork)
     {
         var returns = new List<T>();
         T nextValue = NumOps.Zero;
@@ -321,15 +349,15 @@ public class A3CAgent<T> : ReinforcementLearningAgentBase<T>
         List<(Vector<T> state, Vector<T> action, T reward, bool done, T value)> trajectory,
         List<T> returns,
         List<T> advantages,
-        NeuralNetwork<T> localPolicy,
-        NeuralNetwork<T> localValue)
+        INeuralNetwork<T> localPolicy,
+        INeuralNetwork<T> localValue)
     {
         // Update policy network
         for (int i = 0; i < trajectory.Count; i++)
         {
             var advantage = advantages[i];
-            var policyGradient = new Vector<T>(localPolicy.GetLayers().Last() is ActivationLayer<T> ?
-                _options.ActionSize : _options.ActionSize * 2);
+            int policyOutputSize = _options.IsContinuous ? _options.ActionSize * 2 : _options.ActionSize;
+            var policyGradient = new Vector<T>(policyOutputSize);
 
             // Simplified gradient computation
             for (int j = 0; j < policyGradient.Length; j++)
@@ -353,19 +381,10 @@ public class A3CAgent<T> : ReinforcementLearningAgentBase<T>
         }
     }
 
-    private void CopyNetworkWeights(NeuralNetwork<T> source, NeuralNetwork<T> target)
+    private void CopyNetworkWeights(INeuralNetwork<T> source, INeuralNetwork<T> target)
     {
-        var sourceLayers = source.GetLayers();
-        var targetLayers = target.GetLayers();
-
-        for (int i = 0; i < sourceLayers.Count; i++)
-        {
-            if (sourceLayers[i] is DenseLayer<T> sourceLayer && targetLayers[i] is DenseLayer<T> targetLayer)
-            {
-                targetLayer.SetWeights(sourceLayer.GetWeights().Clone());
-                targetLayer.SetBiases(sourceLayer.GetBiases().Clone());
-            }
-        }
+        var sourceParams = source.GetFlattenedParameters();
+        target.UpdateParameters(sourceParams);
     }
 
     public override void StoreExperience(Vector<T> state, Vector<T> action, T reward, Vector<T> nextState, bool done)

@@ -1,4 +1,7 @@
+using AiDotNet.Interfaces;
+using AiDotNet.LinearAlgebra;
 using AiDotNet.LossFunctions;
+using AiDotNet.ReinforcementLearning.Agents;
 
 namespace AiDotNet.Models.Options;
 
@@ -15,56 +18,37 @@ namespace AiDotNet.Models.Options;
 /// 5. Distributional RL: Learns full distribution of returns (C51)
 /// 6. Noisy networks: Parameter noise for exploration
 /// </remarks>
-public class RainbowDQNOptions<T>
+public class RainbowDQNOptions<T> : ReinforcementLearningOptions<T>
 {
-    public int StateSize { get; set; }
-    public int ActionSize { get; set; }
-    public T LearningRate { get; set; }
-    public T DiscountFactor { get; set; }
-    public ILossFunction<T> LossFunction { get; set; } = new MeanSquaredError<T>();
-
-    // Epsilon-greedy parameters (optional, can use noisy networks instead)
-    public double EpsilonStart { get; set; } = 1.0;
-    public double EpsilonEnd { get; set; } = 0.01;
-    public double EpsilonDecay { get; set; } = 0.995;
-    public bool UseNoisyNetworks { get; set; } = true;
-
-    // Standard DQN parameters
-    public int BatchSize { get; set; } = 32;
-    public int ReplayBufferSize { get; set; } = 100000;
-    public int TargetUpdateFrequency { get; set; } = 1000;
-    public int WarmupSteps { get; set; } = 10000;
+    public int StateSize { get; init; }
+    public int ActionSize { get; init; }
+    public bool UseNoisyNetworks { get; init; } = true;
 
     // Dueling network architecture
-    public List<int> SharedLayers { get; set; } = [128];
-    public List<int> ValueStreamLayers { get; set; } = [128];
-    public List<int> AdvantageStreamLayers { get; set; } = [128];
+    public List<int> SharedLayers { get; init; } = [128];
+    public List<int> ValueStreamLayers { get; init; } = [128];
+    public List<int> AdvantageStreamLayers { get; init; } = [128];
 
-    // Prioritized experience replay parameters
-    public bool UsePrioritizedReplay { get; set; } = true;
-    public double PriorityAlpha { get; set; } = 0.6;
-    public double PriorityBeta { get; set; } = 0.4;
-    public double PriorityBetaIncrement { get; set; } = 0.001;
-    public double PriorityEpsilon { get; set; } = 1e-6;
+    // Prioritized experience replay parameters (base has UsePrioritizedReplay)
+    public double PriorityAlpha { get; init; } = 0.6;
+    public double PriorityBeta { get; init; } = 0.4;
+    public double PriorityBetaIncrement { get; init; } = 0.001;
+    public double PriorityEpsilon { get; init; } = 1e-6;
 
     // Multi-step learning parameters
-    public int NSteps { get; set; } = 3;
+    public int NSteps { get; init; } = 3;
 
     // Distributional RL (C51) parameters
-    public bool UseDistributional { get; set; } = true;
-    public int NumAtoms { get; set; } = 51;
-    public double VMin { get; set; } = -10.0;
-    public double VMax { get; set; } = 10.0;
+    public bool UseDistributional { get; init; } = true;
+    public int NumAtoms { get; init; } = 51;
+    public double VMin { get; init; } = -10.0;
+    public double VMax { get; init; } = 10.0;
 
     // Noisy networks parameters
-    public double NoisyNetSigma { get; set; } = 0.5;
+    public double NoisyNetSigma { get; init; } = 0.5;
 
-    public int? Seed { get; set; }
-
-    public RainbowDQNOptions()
-    {
-        var numOps = NumericOperations<T>.Instance;
-        LearningRate = numOps.FromDouble(0.0001);
-        DiscountFactor = numOps.FromDouble(0.99);
-    }
+    /// <summary>
+    /// The optimizer used for updating network parameters. If null, Adam optimizer will be used by default.
+    /// </summary>
+    public IOptimizer<T, Vector<T>, Vector<T>>? Optimizer { get; init; }
 }
