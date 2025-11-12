@@ -41,11 +41,13 @@ public class KnowledgeDistillationTrainer<T> : KnowledgeDistillationTrainerBase<
     /// </summary>
     /// <param name="teacher">The teacher model to learn from.</param>
     /// <param name="distillationStrategy">The strategy for computing distillation loss.</param>
+    /// <param name="checkpointConfig">Optional checkpoint configuration for automatic model saving during training.</param>
     /// <param name="seed">Optional random seed for reproducibility.</param>
     /// <remarks>
     /// <para><b>For Beginners:</b> Create a trainer by providing:
     /// 1. A trained teacher model (already performing well on your task)
-    /// 2. A distillation strategy (defines how to transfer knowledge)</para>
+    /// 2. A distillation strategy (defines how to transfer knowledge)
+    /// 3. Optional checkpoint configuration (for automatic model saving)</para>
     ///
     /// <para>Example:
     /// <code>
@@ -54,12 +56,28 @@ public class KnowledgeDistillationTrainer<T> : KnowledgeDistillationTrainerBase<
     /// var trainer = new KnowledgeDistillationTrainer&lt;double&gt;(teacher, distillationLoss);
     /// </code>
     /// </para>
+    ///
+    /// <para>Example with automatic checkpointing:
+    /// <code>
+    /// var checkpointConfig = new DistillationCheckpointConfig
+    /// {
+    ///     SaveEveryEpochs = 5,
+    ///     KeepBestN = 3
+    /// };
+    /// var trainer = new KnowledgeDistillationTrainer&lt;double&gt;(
+    ///     teacher,
+    ///     distillationLoss,
+    ///     checkpointConfig: checkpointConfig
+    /// );
+    /// </code>
+    /// </para>
     /// </remarks>
     public KnowledgeDistillationTrainer(
         ITeacherModel<Vector<T>, Vector<T>> teacher,
         IDistillationStrategy<T, Vector<T>> distillationStrategy,
+        DistillationCheckpointConfig? checkpointConfig = null,
         int? seed = null)
-        : base(teacher, distillationStrategy, seed)
+        : base(teacher, distillationStrategy, checkpointConfig, seed)
     {
     }
 

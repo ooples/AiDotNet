@@ -62,25 +62,15 @@ DistillationCheckpointManager<T>
 
 ## Quick Start: Automatic Checkpointing (Recommended)
 
-The easiest way to enable checkpointing is through automatic checkpointing built into the trainer. Simply configure the checkpoint settings and the trainer handles everything automatically.
+The easiest way to enable checkpointing is through automatic checkpointing built into the trainer. Simply pass the checkpoint configuration to the trainer constructor and the student model to the Train method.
 
 ### Automatic Checkpointing Example
 
 ```csharp
 using AiDotNet.KnowledgeDistillation;
 
-// Create trainer
-var teacher = LoadPretrainedTeacher();
-var student = CreateStudentModel();  // Must implement ICheckpointableModel
-var strategy = new ConfidenceBasedAdaptiveStrategy<double>();
-
-var trainer = new KnowledgeDistillationTrainer<double, Vector<double>, Vector<double>>(
-    teacher,
-    strategy
-);
-
-// Enable automatic checkpointing by setting CheckpointConfig
-trainer.CheckpointConfig = new DistillationCheckpointConfig
+// Create checkpoint configuration
+var checkpointConfig = new DistillationCheckpointConfig
 {
     CheckpointDirectory = "./checkpoints",
     SaveEveryEpochs = 5,          // Auto-save every 5 epochs
@@ -90,10 +80,20 @@ trainer.CheckpointConfig = new DistillationCheckpointConfig
     LowerIsBetter = true
 };
 
-// Set the student model (required for checkpointing)
-trainer.Student = student as ICheckpointableModel;
+// Create trainer with checkpoint config
+var teacher = LoadPretrainedTeacher();
+var strategy = new ConfidenceBasedAdaptiveStrategy<double>();
 
-// Train - checkpointing happens automatically!
+var trainer = new KnowledgeDistillationTrainer<double>(
+    teacher,
+    strategy,
+    checkpointConfig: checkpointConfig  // Pass config to constructor
+);
+
+// Create student model (must implement ICheckpointableModel)
+var student = CreateStudentModel();
+
+// Train - pass student to Train method for automatic checkpointing!
 trainer.Train(
     studentForward: student.Predict,
     studentBackward: student.ApplyGradient,
@@ -102,7 +102,8 @@ trainer.Train(
     epochs: 100,
     batchSize: 32,
     validationInputs: validationData,
-    validationLabels: validationLabels
+    validationLabels: validationLabels,
+    student: student as ICheckpointableModel  // Pass student for checkpointing
 );
 
 // After training completes, the best checkpoint is automatically loaded!
@@ -120,13 +121,13 @@ Console.WriteLine("Training complete. Best checkpoint automatically restored.");
 - ✅ Automatic best model selection
 - ✅ Automatic checkpoint pruning (keeps only best N)
 - ✅ Curriculum state preservation (if using curriculum strategies)
-- ✅ Clean, simple API
+- ✅ Clean, simple API following facade pattern
 
 ### Disabling Automatic Checkpointing
 
 ```csharp
-// Default: no checkpointing
-trainer.CheckpointConfig = null;  // or simply don't set it
+// Default: no checkpointing (don't pass checkpointConfig)
+var trainer = new KnowledgeDistillationTrainer<double>(teacher, strategy);
 
 // Training proceeds without checkpointing
 trainer.Train(...);
