@@ -3,6 +3,7 @@ using AiDotNet.LinearAlgebra;
 using AiDotNet.LossFunctions;
 using AiDotNet.Models;
 using AiDotNet.NeuralNetworks;
+using AiDotNet.ReinforcementLearning.Interfaces;
 
 namespace AiDotNet.ReinforcementLearning.Agents;
 
@@ -30,7 +31,7 @@ namespace AiDotNet.ReinforcementLearning.Agents;
 /// their own unique learning logic while sharing common functionality.
 /// </para>
 /// </remarks>
-public abstract class ReinforcementLearningAgentBase<T> : IDisposable
+public abstract class ReinforcementLearningAgentBase<T> : IRLAgent<T>, IDisposable
 {
     /// <summary>
     /// Numeric operations provider for type T.
@@ -106,6 +107,8 @@ public abstract class ReinforcementLearningAgentBase<T> : IDisposable
         RewardHistory = new List<T>();
     }
 
+    // ===== IRLAgent<T> Implementation =====
+
     /// <summary>
     /// Selects an action given the current state observation.
     /// </summary>
@@ -133,10 +136,119 @@ public abstract class ReinforcementLearningAgentBase<T> : IDisposable
     /// <summary>
     /// Resets episode-specific state (if any).
     /// </summary>
-    public virtual void Reset()
+    public virtual void ResetEpisode()
     {
         // Base implementation - can be overridden by derived classes
     }
+
+    // ===== IFullModel<T, Vector<T>, Vector<T>> Implementation =====
+
+    /// <summary>
+    /// Makes a prediction using the trained agent.
+    /// </summary>
+    public virtual Vector<T> Predict(Vector<T> input)
+    {
+        return SelectAction(input, training: false);
+    }
+
+    /// <summary>
+    /// Gets the default loss function for this agent.
+    /// </summary>
+    public virtual ILossFunction<T> DefaultLossFunction => LossFunction;
+
+    /// <summary>
+    /// Gets model metadata.
+    /// </summary>
+    public abstract ModelMetadata<T> GetModelMetadata();
+
+    /// <summary>
+    /// Trains the agent with supervised learning (not supported for RL agents).
+    /// </summary>
+    public virtual void Train(Vector<T> input, Vector<T> output)
+    {
+        throw new NotSupportedException(
+            "RL agents are trained via reinforcement learning using Train() method (no parameters), " +
+            "not supervised learning. Use BuildAsync(episodes) with an environment instead.");
+    }
+
+    /// <summary>
+    /// Serializes the agent to bytes.
+    /// </summary>
+    public abstract byte[] Serialize();
+
+    /// <summary>
+    /// Deserializes the agent from bytes.
+    /// </summary>
+    public abstract void Deserialize(byte[] data);
+
+    /// <summary>
+    /// Gets the agent's parameters.
+    /// </summary>
+    public abstract Matrix<T> GetParameters();
+
+    /// <summary>
+    /// Sets the agent's parameters.
+    /// </summary>
+    public abstract void SetParameters(Matrix<T> parameters);
+
+    /// <summary>
+    /// Gets the number of parameters in the agent.
+    /// </summary>
+    public virtual int ParameterCount
+    {
+        get
+        {
+            int count = 0;
+            foreach (var network in Networks)
+            {
+                count += network.ParameterCount;
+            }
+            return count;
+        }
+    }
+
+    /// <summary>
+    /// Gets the number of input features (state dimensions).
+    /// </summary>
+    public abstract int FeatureCount { get; }
+
+    /// <summary>
+    /// Gets the names of input features.
+    /// </summary>
+    public virtual string[] FeatureNames => Enumerable.Range(0, FeatureCount)
+        .Select(i => $"State_{i}")
+        .ToArray();
+
+    /// <summary>
+    /// Gets feature importance scores.
+    /// </summary>
+    public virtual Dictionary<string, T> GetFeatureImportance()
+    {
+        var importance = new Dictionary<string, T>();
+        for (int i = 0; i < FeatureCount; i++)
+        {
+            importance[$"State_{i}"] = NumOps.One;  // Placeholder
+        }
+        return importance;
+    }
+
+    /// <summary>
+    /// Clones the agent.
+    /// </summary>
+    public abstract IFullModel<T, Vector<T>, Vector<T>> Clone();
+
+    /// <summary>
+    /// Computes gradients for the agent.
+    /// </summary>
+    public abstract (Matrix<T> Gradients, T Loss) ComputeGradients(
+        Vector<T> input,
+        Vector<T> target,
+        ILossFunction<T>? lossFunction = null);
+
+    /// <summary>
+    /// Applies gradients to update the agent.
+    /// </summary>
+    public abstract void ApplyGradients(Matrix<T> gradients, T learningRate);
 
     /// <summary>
     /// Saves the agent's state to a file.

@@ -819,5 +819,113 @@ public enum ModelType
     /// - Efficient through sparse expert activation
     /// </para>
     /// </remarks>
-    MixtureOfExperts
+    MixtureOfExperts,
+
+    /// <summary>
+    /// A general reinforcement learning model type.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> Reinforcement Learning models learn through trial and error by interacting
+    /// with an environment. Unlike supervised learning (which learns from labeled examples), RL agents
+    /// learn from rewards and punishments. Think of training a dog - you give treats for good behavior
+    /// and corrections for bad behavior, and the dog learns what actions lead to rewards.
+    ///
+    /// RL has achieved remarkable successes:
+    /// - Playing games at superhuman level (AlphaGo, Atari games, Dota 2)
+    /// - Robotic control (walking, manipulation, assembly)
+    /// - Resource optimization (data center cooling, traffic control)
+    /// - Recommendation systems and personalization
+    /// </para>
+    /// </remarks>
+    ReinforcementLearning,
+
+    /// <summary>
+    /// Proximal Policy Optimization - a state-of-the-art policy gradient RL algorithm.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> PPO is one of the most popular RL algorithms today. It learns a policy
+    /// (strategy for choosing actions) by making small, safe updates to avoid catastrophic performance drops.
+    /// Think of it like making small course corrections while driving rather than sudden jerky turns.
+    ///
+    /// Used by: OpenAI's ChatGPT (RLHF), robotics systems, game AI
+    /// Strengths: Stable, sample-efficient, works well for continuous control
+    /// </para>
+    /// </remarks>
+    PPOAgent,
+
+    /// <summary>
+    /// Soft Actor-Critic - an off-policy algorithm combining maximum entropy RL with actor-critic.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> SAC encourages exploration by maximizing both reward and "entropy"
+    /// (randomness/exploration). It's like learning to play a game while also maintaining variety
+    /// in your strategies. This makes it very robust and sample-efficient for continuous control tasks.
+    ///
+    /// Used by: Robotic manipulation, autonomous vehicles, industrial control
+    /// Strengths: Very stable, excellent for continuous actions, sample-efficient
+    /// </para>
+    /// </remarks>
+    SACAgent,
+
+    /// <summary>
+    /// Deep Deterministic Policy Gradient - an actor-critic algorithm for continuous action spaces.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> DDPG learns policies for continuous control (like adjusting steering angle
+    /// or motor torque) rather than discrete choices (like "left" or "right"). It's the RL equivalent
+    /// of precision control versus binary decisions.
+    ///
+    /// Used by: Robotic control, autonomous vehicles, continuous resource allocation
+    /// Strengths: Handles continuous actions well, deterministic policies
+    /// </para>
+    /// </remarks>
+    DDPGAgent,
+
+    /// <summary>
+    /// Twin Delayed Deep Deterministic Policy Gradient - improved version of DDPG.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> TD3 improves DDPG by addressing overestimation bias (being too optimistic
+    /// about action values). It uses twin networks and delayed updates for more stable learning.
+    /// Think of it as DDPG with better safety checks and more conservative estimates.
+    ///
+    /// Used by: Advanced robotic control, simulated physics environments
+    /// Strengths: More stable than DDPG, reduced overestimation, better final performance
+    /// </para>
+    /// </remarks>
+    TD3Agent,
+
+    /// <summary>
+    /// Advantage Actor-Critic - a foundational policy gradient algorithm.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> A2C learns both a policy (actor) and a value function (critic).
+    /// The critic helps the actor learn more efficiently by providing better feedback.
+    /// It's like having a coach (critic) give you targeted advice rather than just "good" or "bad".
+    ///
+    /// Strengths: Foundation for many modern RL algorithms, good for parallel training
+    /// </para>
+    /// </remarks>
+    A2CAgent,
+
+    /// <summary>
+    /// Asynchronous Advantage Actor-Critic - parallel version of A2C.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> A3C runs multiple agents in parallel, each learning from different
+    /// experiences simultaneously. It's like having multiple students learn the same subject
+    /// independently, then sharing their knowledge. This speeds up learning significantly.
+    ///
+    /// Used by: Early DeepMind research, parallel game playing
+    /// Strengths: Efficient parallel training, works on CPU without GPUs
+    /// </para>
+    /// </remarks>
+    A3CAgent
 }
