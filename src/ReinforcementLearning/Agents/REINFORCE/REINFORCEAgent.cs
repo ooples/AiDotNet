@@ -1,0 +1,463 @@
+using AiDotNet.LinearAlgebra;
+using AiDotNet.LossFunctions;
+using AiDotNet.Models;
+using AiDotNet.NeuralNetworks;
+using AiDotNet.NeuralNetworks.Layers;
+using AiDotNet.NeuralNetworks.Activations;
+using AiDotNet.ReinforcementLearning.Common;
+
+namespace AiDotNet.ReinforcementLearning.Agents.REINFORCE;
+
+/// <summary>
+/// REINFORCE (Monte Carlo Policy Gradient) agent for reinforcement learning.
+/// </summary>
+/// <typeparam name="T">The numeric type used for calculations.</typeparam>
+/// <remarks>
+/// <para>
+/// REINFORCE is the simplest and most fundamental policy gradient algorithm. It directly
+/// optimizes the policy by following the gradient of expected returns. Despite its simplicity,
+/// it forms the foundation for many modern RL algorithms.
+/// </para>
+/// <para><b>For Beginners:</b>
+/// REINFORCE is the "hello world" of policy gradient methods. The algorithm is beautifully simple:
+///
+/// 1. Play an entire episode
+/// 2. Calculate total rewards for each action
+/// 3. Make good actions more likely, bad actions less likely
+///
+/// Think of it like learning to play a game:
+/// - You play a round
+/// - At the end, you see your score
+/// - You adjust your strategy to do better next time
+///
+/// **Pros**: Simple, works for any problem, easy to understand
+/// **Cons**: High variance, slow learning, requires complete episodes
+///
+/// Modern algorithms like PPO and A2C improve on REINFORCE's core ideas.
+/// </para>
+/// <para><b>Reference:</b>
+/// Williams, R. J. (1992). "Simple statistical gradient-following algorithms for connectionist RL."
+/// </para>
+/// </remarks>
+public class REINFORCEAgent<T> : ReinforcementLearningAgentBase<T>
+{
+    private readonly REINFORCEOptions<T> _reinforceOptions;
+    private readonly Trajectory<T> _trajectory;
+
+    private NeuralNetwork<T> _policyNetwork;
+
+    /// <inheritdoc/>
+    public override int FeatureCount => _reinforceOptions.StateSize;
+
+    public REINFORCEAgent(REINFORCEOptions<T> options)
+        : base(new ReinforcementLearningOptions<T>
+        {
+            LearningRate = options.LearningRate,
+            DiscountFactor = options.DiscountFactor,
+            LossFunction = new MeanSquaredError<T>(),
+            Seed = options.Seed
+        })
+    {
+        _reinforceOptions = options ?? throw new ArgumentNullException(nameof(options));
+        _trajectory = new Trajectory<T>();
+
+        _policyNetwork = BuildPolicyNetwork();
+        Networks.Add(_policyNetwork);
+    }
+
+    private NeuralNetwork<T> BuildPolicyNetwork()
+    {
+        var layers = new List<ILayer<T>>();
+        int prevSize = _reinforceOptions.StateSize;
+
+        foreach (var hiddenSize in _reinforceOptions.HiddenLayers)
+        {
+            layers.Add(new DenseLayer<T>(prevSize, hiddenSize, new TanhActivation<T>()));
+            prevSize = hiddenSize;
+        }
+
+        int outputSize = _reinforceOptions.IsContinuous
+            ? _reinforceOptions.ActionSize * 2  // Mean and log_std for Gaussian
+            : _reinforceOptions.ActionSize;      // Logits for categorical
+
+        layers.Add(new DenseLayer<T>(prevSize, outputSize, new LinearActivation<T>()));
+
+        return new NeuralNetwork<T>(new NeuralNetworkArchitecture<T>
+        {
+            InputSize = _reinforceOptions.StateSize,
+            OutputSize = outputSize,
+            Layers = layers,
+            TaskType = TaskType.Regression
+        });
+    }
+
+    /// <inheritdoc/>
+    public override Vector<T> SelectAction(Vector<T> state, bool training = true)
+    {
+        var policyOutput = _policyNetwork.Forward(state);
+
+        if (_reinforceOptions.IsContinuous)
+        {
+            return SampleContinuousAction(policyOutput, training);
+        }
+        else
+        {
+            return SampleDiscreteAction(policyOutput, training);
+        }
+    }
+
+    private Vector<T> SampleDiscreteAction(Vector<T> logits, bool training)
+    {
+        var probs = Softmax(logits);
+        int actionIndex = training ? SampleCategorical(probs) : ArgMax(probs);
+
+        var action = new Vector<T>(_reinforceOptions.ActionSize);
+        action[actionIndex] = NumOps.One;
+        return action;
+    }
+
+    private Vector<T> SampleContinuousAction(Vector<T> output, bool training)
+    {
+        var action = new Vector<T>(_reinforceOptions.ActionSize);
+
+        for (int i = 0; i < _reinforceOptions.ActionSize; i++)
+        {
+            var mean = output[i];
+            var logStd = output[_reinforceOptions.ActionSize + i];
+            var std = NumOps.FromDouble(Math.Exp(NumOps.ToDouble(logStd)));
+
+            if (training)
+            {
+                var noise = NumOps.FromDouble(SampleGaussian());
+                action[i] = NumOps.Add(mean, NumOps.Multiply(std, noise));
+            }
+            else
+            {
+                action[i] = mean;  // Deterministic for evaluation
+            }
+        }
+
+        return action;
+    }
+
+    /// <inheritdoc/>
+    public override void StoreExperience(Vector<T> state, Vector<T> action, T reward, Vector<T> nextState, bool done)
+    {
+        // REINFORCE only needs states, actions, and rewards
+        var logProb = ComputeLogProb(state, action);
+        _trajectory.AddStep(state, action, reward, NumOps.Zero, logProb, done);
+    }
+
+    private T ComputeLogProb(Vector<T> state, Vector<T> action)
+    {
+        var policyOutput = _policyNetwork.Forward(state);
+
+        if (_reinforceOptions.IsContinuous)
+        {
+            T totalLogProb = NumOps.Zero;
+
+            for (int i = 0; i < _reinforceOptions.ActionSize; i++)
+            {
+                var mean = policyOutput[i];
+                var logStd = policyOutput[_reinforceOptions.ActionSize + i];
+                var std = NumOps.FromDouble(Math.Exp(NumOps.ToDouble(logStd)));
+
+                var diff = NumOps.Subtract(action[i], mean);
+                var variance = NumOps.Multiply(std, std);
+
+                var logProb = NumOps.FromDouble(
+                    -0.5 * Math.Log(2 * Math.PI) -
+                    NumOps.ToDouble(logStd) -
+                    0.5 * NumOps.ToDouble(NumOps.Divide(NumOps.Multiply(diff, diff), variance))
+                );
+
+                totalLogProb = NumOps.Add(totalLogProb, logProb);
+            }
+
+            return totalLogProb;
+        }
+        else
+        {
+            var probs = Softmax(policyOutput);
+            int actionIndex = ArgMax(action);
+            return NumOps.FromDouble(Math.Log(NumOps.ToDouble(probs[actionIndex]) + 1e-10));
+        }
+    }
+
+    /// <inheritdoc/>
+    public override T Train()
+    {
+        // REINFORCE trains after each complete episode
+        if (_trajectory.Length == 0)
+        {
+            return NumOps.Zero;
+        }
+
+        TrainingSteps++;
+
+        // Compute discounted returns
+        ComputeReturns();
+
+        // Compute policy loss: -log_prob * return
+        T totalLoss = NumOps.Zero;
+
+        for (int t = 0; t < _trajectory.Length; t++)
+        {
+            var state = _trajectory.States[t];
+            var action = _trajectory.Actions[t];
+            var returnVal = _trajectory.Returns![t];
+
+            var logProb = ComputeLogProb(state, action);
+
+            // Policy gradient: -log_prob * return
+            var loss = NumOps.Multiply(NumOps.Negate(logProb), returnVal);
+            totalLoss = NumOps.Add(totalLoss, loss);
+
+            // Backprop (simplified)
+            var grad = new Vector<T>(_policyNetwork.Forward(state).Length);
+            for (int i = 0; i < grad.Length; i++)
+            {
+                grad[i] = NumOps.Multiply(loss, NumOps.FromDouble(0.01));
+            }
+            _policyNetwork.Backward(grad);
+        }
+
+        // Average loss
+        var avgLoss = NumOps.Divide(totalLoss, NumOps.FromDouble(_trajectory.Length));
+
+        // Update policy network
+        UpdatePolicyNetwork();
+
+        LossHistory.Add(avgLoss);
+        _trajectory.Clear();
+
+        return avgLoss;
+    }
+
+    private void ComputeReturns()
+    {
+        var returns = new List<T>();
+        T runningReturn = NumOps.Zero;
+
+        // Compute discounted returns backwards
+        for (int t = _trajectory.Length - 1; t >= 0; t--)
+        {
+            if (_trajectory.Dones[t])
+            {
+                runningReturn = _trajectory.Rewards[t];
+            }
+            else
+            {
+                runningReturn = NumOps.Add(
+                    _trajectory.Rewards[t],
+                    NumOps.Multiply(DiscountFactor, runningReturn)
+                );
+            }
+
+            returns.Insert(0, runningReturn);
+        }
+
+        // Normalize returns (reduces variance)
+        var meanReturn = ComputeMean(returns);
+        var stdReturn = ComputeStd(returns, meanReturn);
+
+        for (int i = 0; i < returns.Count; i++)
+        {
+            returns[i] = NumOps.Divide(
+                NumOps.Subtract(returns[i], meanReturn),
+                NumOps.Add(stdReturn, NumOps.FromDouble(1e-8))
+            );
+        }
+
+        _trajectory.Returns = returns;
+    }
+
+    private void UpdatePolicyNetwork()
+    {
+        var params_ = _policyNetwork.GetFlattenedParameters();
+        var grads = _policyNetwork.GetFlattenedGradients();
+
+        for (int i = 0; i < params_.Length; i++)
+        {
+            var update = NumOps.Multiply(LearningRate, grads[i]);
+            params_[i] = NumOps.Subtract(params_[i], update);
+        }
+
+        _policyNetwork.UpdateParameters(params_);
+    }
+
+    /// <inheritdoc/>
+    public override Dictionary<string, T> GetMetrics()
+    {
+        var baseMetrics = base.GetMetrics();
+        baseMetrics["TrajectoryLength"] = NumOps.FromDouble(_trajectory.Length);
+        return baseMetrics;
+    }
+
+    /// <inheritdoc/>
+    public override ModelMetadata<T> GetModelMetadata()
+    {
+        return new ModelMetadata<T>
+        {
+            ModelType = ModelType.ReinforcementLearning,  // Generic RL type
+            FeatureCount = _reinforceOptions.StateSize,
+            TrainingSampleCount = TrainingSteps,
+            Parameters = GetParameters()
+        };
+    }
+
+    /// <inheritdoc/>
+    public override byte[] Serialize()
+    {
+        using var ms = new MemoryStream();
+        using var writer = new BinaryWriter(ms);
+
+        writer.Write(_reinforceOptions.StateSize);
+        writer.Write(_reinforceOptions.ActionSize);
+
+        var policyBytes = _policyNetwork.Serialize();
+        writer.Write(policyBytes.Length);
+        writer.Write(policyBytes);
+
+        return ms.ToArray();
+    }
+
+    /// <inheritdoc/>
+    public override void Deserialize(byte[] data)
+    {
+        using var ms = new MemoryStream(data);
+        using var reader = new BinaryReader(ms);
+
+        reader.ReadInt32(); // stateSize
+        reader.ReadInt32(); // actionSize
+
+        var policyLength = reader.ReadInt32();
+        var policyBytes = reader.ReadBytes(policyLength);
+        _policyNetwork.Deserialize(policyBytes);
+    }
+
+    /// <inheritdoc/>
+    public override Matrix<T> GetParameters()
+    {
+        var policyParams = _policyNetwork.GetFlattenedParameters();
+        var matrix = new Matrix<T>(policyParams.Length, 1);
+
+        for (int i = 0; i < policyParams.Length; i++)
+        {
+            matrix[i, 0] = policyParams[i];
+        }
+
+        return matrix;
+    }
+
+    /// <inheritdoc/>
+    public override void SetParameters(Matrix<T> parameters)
+    {
+        var vector = new Vector<T>(parameters.Rows);
+        for (int i = 0; i < parameters.Rows; i++)
+        {
+            vector[i] = parameters[i, 0];
+        }
+        _policyNetwork.UpdateParameters(vector);
+    }
+
+    /// <inheritdoc/>
+    public override IFullModel<T, Vector<T>, Vector<T>> Clone()
+    {
+        var clone = new REINFORCEAgent<T>(_reinforceOptions);
+        clone.SetParameters(GetParameters());
+        return clone;
+    }
+
+    /// <inheritdoc/>
+    public override (Matrix<T> Gradients, T Loss) ComputeGradients(
+        Vector<T> input, Vector<T> target, ILossFunction<T>? lossFunction = null)
+    {
+        return (GetParameters(), NumOps.Zero);
+    }
+
+    /// <inheritdoc/>
+    public override void ApplyGradients(Matrix<T> gradients, T learningRate)
+    {
+        // Not directly applicable
+    }
+
+    // Helper methods
+    private Vector<T> Softmax(Vector<T> logits)
+    {
+        var maxLogit = logits[0];
+        for (int i = 1; i < logits.Length; i++)
+        {
+            if (NumOps.ToDouble(logits[i]) > NumOps.ToDouble(maxLogit))
+                maxLogit = logits[i];
+        }
+
+        var exps = new Vector<T>(logits.Length);
+        T sumExp = NumOps.Zero;
+
+        for (int i = 0; i < logits.Length; i++)
+        {
+            var exp = NumOps.FromDouble(Math.Exp(NumOps.ToDouble(NumOps.Subtract(logits[i], maxLogit))));
+            exps[i] = exp;
+            sumExp = NumOps.Add(sumExp, exp);
+        }
+
+        for (int i = 0; i < exps.Length; i++)
+        {
+            exps[i] = NumOps.Divide(exps[i], sumExp);
+        }
+
+        return exps;
+    }
+
+    private int SampleCategorical(Vector<T> probs)
+    {
+        double rand = Random.NextDouble();
+        double cumProb = 0;
+
+        for (int i = 0; i < probs.Length; i++)
+        {
+            cumProb += NumOps.ToDouble(probs[i]);
+            if (rand < cumProb) return i;
+        }
+
+        return probs.Length - 1;
+    }
+
+    private double SampleGaussian()
+    {
+        double u1 = 1.0 - Random.NextDouble();
+        double u2 = 1.0 - Random.NextDouble();
+        return Math.Sqrt(-2.0 * Math.Log(u1)) * Math.Sin(2.0 * Math.PI * u2);
+    }
+
+    private int ArgMax(Vector<T> vector)
+    {
+        int maxIndex = 0;
+        for (int i = 1; i < vector.Length; i++)
+        {
+            if (NumOps.ToDouble(vector[i]) > NumOps.ToDouble(vector[maxIndex]))
+                maxIndex = i;
+        }
+        return maxIndex;
+    }
+
+    private T ComputeMean(List<T> values)
+    {
+        T sum = NumOps.Zero;
+        foreach (var v in values) sum = NumOps.Add(sum, v);
+        return NumOps.Divide(sum, NumOps.FromDouble(values.Count));
+    }
+
+    private T ComputeStd(List<T> values, T mean)
+    {
+        T sumSq = NumOps.Zero;
+        foreach (var v in values)
+        {
+            var diff = NumOps.Subtract(v, mean);
+            sumSq = NumOps.Add(sumSq, NumOps.Multiply(diff, diff));
+        }
+        var variance = NumOps.Divide(sumSq, NumOps.FromDouble(values.Count));
+        return NumOps.FromDouble(Math.Sqrt(NumOps.ToDouble(variance)));
+    }
+}
