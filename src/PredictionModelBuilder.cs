@@ -897,7 +897,7 @@ public class PredictionModelBuilder<T, TInput, TOutput> : IPredictionModelBuilde
     /// <summary>
     /// Performs knowledge distillation training using the configured options.
     /// </summary>
-    private async Task<OptimizationResult<T, TInput, TOutput>> PerformKnowledgeDistillationAsync(
+    private Task<OptimizationResult<T, TInput, TOutput>> PerformKnowledgeDistillationAsync(
         IFullModel<T, TInput, TOutput> studentModel,
         IOptimizer<T, TInput, TOutput> optimizer,
         TInput XTrain,
@@ -933,18 +933,34 @@ public class PredictionModelBuilder<T, TInput, TOutput> : IPredictionModelBuilde
             }
             else if (options.Teachers != null && options.Teachers.Length > 0)
             {
-                // Use ensemble of teachers
+                // Use ensemble of teachers - validate and convert to Vector-specialized types
+                if (typeof(TInput) != typeof(Vector<T>) || typeof(TOutput) != typeof(Vector<T>))
+                    throw new InvalidOperationException(
+                        "Teachers array requires Vector<T> input/output types for distillation. " +
+                        "Ensure your model is configured with Vector<T> types.");
+                
+                var vectorTeachers = options.Teachers.Cast<ITeacherModel<Vector<T>, Vector<T>>>().ToArray();
                 teacher = KnowledgeDistillation.TeacherModelFactory<T>.CreateTeacher(
                     TeacherModelType.Ensemble,
-                    ensembleModels: options.Teachers,
+                    ensembleModels: vectorTeachers,
                     ensembleWeights: options.EnsembleWeights);
             }
             else if (options.TeacherForward != null)
             {
-                // Wrap forward function as teacher
+                // Wrap forward function as teacher - validate and convert to Vector-specialized types
+                if (typeof(TInput) != typeof(Vector<T>) || typeof(TOutput) != typeof(Vector<T>))
+                    throw new InvalidOperationException(
+                        "TeacherForward requires Vector<T> input/output types for distillation. " +
+                        "Ensure your model is configured with Vector<T> types.");
+                
                 int outputDim = options.OutputDimension ?? 10;
+                var vectorForward = options.TeacherForward as Func<Vector<T>, Vector<T>>;
+                if (vectorForward == null)
+                    throw new InvalidOperationException(
+                        "TeacherForward must be Func<Vector<T>, Vector<T>> for distillation.");
+                
                 teacher = new KnowledgeDistillation.TeacherModelWrapper<T>(
-                    options.TeacherForward,
+                    vectorForward,
                     outputDim);
             }
             else
@@ -1192,15 +1208,15 @@ public class PredictionModelBuilder<T, TInput, TOutput> : IPredictionModelBuilde
             }
 
             // Step 7: Return result using optimizer's infrastructure
-            return optimizer.Optimize(OptimizerHelper<T, TInput, TOutput>.CreateOptimizationInputData(
-                XTrain, yTrain, XVal, yVal, XTest, yTest));
+            return Task.FromResult(optimizer.Optimize(OptimizerHelper<T, TInput, TOutput>.CreateOptimizationInputData(
+                XTrain, yTrain, XVal, yVal, XTest, yTest)));
         }
         catch (Exception ex)
         {
             Console.WriteLine($"Error setting up knowledge distillation: {ex.Message}");
             Console.WriteLine("Falling back to standard training.");
-            return optimizer.Optimize(OptimizerHelper<T, TInput, TOutput>.CreateOptimizationInputData(
-                XTrain, yTrain, XVal, yVal, XTest, yTest));
+            return Task.FromResult(optimizer.Optimize(OptimizerHelper<T, TInput, TOutput>.CreateOptimizationInputData(
+                XTrain, yTrain, XVal, yVal, XTest, yTest)));
         }
     }
 
