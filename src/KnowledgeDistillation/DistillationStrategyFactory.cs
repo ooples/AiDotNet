@@ -100,9 +100,8 @@ public static class DistillationStrategyFactory<T>
         double temperature,
         double alpha)
     {
+        // Use constructor defaults for distanceWeight and angleWeight
         return new RelationalDistillationStrategy<T>(
-            distanceWeight: 0.5,
-            angleWeight: 0.5,
             temperature: temperature,
             alpha: alpha);
     }
@@ -112,11 +111,10 @@ public static class DistillationStrategyFactory<T>
         double alpha,
         ContrastiveMode mode)
     {
+        // Use constructor defaults for contrastiveWeight and negativesSampleSize
         return new ContrastiveDistillationStrategy<T>(
-            contrastiveWeight: 0.8,
             temperature: temperature,
             alpha: alpha,
-            negativesSampleSize: 1024,
             mode: mode);
     }
 
@@ -124,8 +122,8 @@ public static class DistillationStrategyFactory<T>
         double temperature,
         double alpha)
     {
+        // Use constructor defaults for similarityWeight
         return new SimilarityPreservingStrategy<T>(
-            similarityWeight: 0.5,
             temperature: temperature,
             alpha: alpha);
     }
@@ -134,10 +132,8 @@ public static class DistillationStrategyFactory<T>
         double temperature,
         double alpha)
     {
+        // Use constructor defaults for distributionWeight, mode, and mmdBandwidth
         return new ProbabilisticDistillationStrategy<T>(
-            distributionWeight: 0.5,
-            mode: ProbabilisticMode.MomentMatching,
-            mmdBandwidth: 1.0,
             temperature: temperature,
             alpha: alpha);
     }
@@ -146,10 +142,8 @@ public static class DistillationStrategyFactory<T>
         double temperature,
         double alpha)
     {
+        // Use constructor defaults for variationalWeight, mode, and betaIB
         return new VariationalDistillationStrategy<T>(
-            variationalWeight: 0.5,
-            mode: VariationalMode.LatentSpaceKL,
-            betaIB: 1.0,
             temperature: temperature,
             alpha: alpha);
     }
@@ -158,11 +152,8 @@ public static class DistillationStrategyFactory<T>
         double temperature,
         double alpha)
     {
+        // Use constructor defaults for factorWeight, mode, numFactors, and normalizeFactors
         return new FactorTransferDistillationStrategy<T>(
-            factorWeight: 0.5,
-            mode: FactorMode.LowRankApproximation,
-            numFactors: 32,
-            normalizeFactors: true,
             temperature: temperature,
             alpha: alpha);
     }
@@ -171,9 +162,8 @@ public static class DistillationStrategyFactory<T>
         double temperature,
         double alpha)
     {
+        // Use constructor defaults for selectivityWeight and metric
         return new NeuronSelectivityDistillationStrategy<T>(
-            selectivityWeight: 0.5,
-            metric: SelectivityMetric.Variance,
             temperature: temperature,
             alpha: alpha);
     }

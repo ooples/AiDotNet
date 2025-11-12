@@ -19,13 +19,27 @@ public static class TeacherModelFactory<T>
     /// <param name="ensembleModels">Optional: Array of models for ensemble (required for Ensemble type).</param>
     /// <param name="ensembleWeights">Optional: Weights for ensemble models.</param>
     /// <param name="outputDimension">Optional: Output dimension (inferred from model if not provided).</param>
+    /// <param name="onlineUpdateMode">Optional: Update mode for Online teacher (default: EMA).</param>
+    /// <param name="onlineUpdateRate">Optional: Update rate for Online teacher (default: 0.999).</param>
+    /// <param name="curriculumStrategy">Optional: Strategy for Curriculum teacher (default: EasyToHard).</param>
+    /// <param name="quantizationBits">Optional: Bits for Quantized teacher (default: 8, recommended for most cases).</param>
+    /// <param name="aggregationMode">Optional: Aggregation mode for Distributed teacher (default: Average).</param>
     /// <returns>A configured teacher model.</returns>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> All optional parameters have industry-standard recommended defaults.
+    /// You typically only need to specify teacherType and model.</para>
+    /// </remarks>
     public static ITeacherModel<Vector<T>, Vector<T>> CreateTeacher(
         TeacherModelType teacherType,
         IFullModel<T, Vector<T>, Vector<T>>? model = null,
         ITeacherModel<Vector<T>, Vector<T>>[]? ensembleModels = null,
         double[]? ensembleWeights = null,
-        int? outputDimension = null)
+        int? outputDimension = null,
+        OnlineUpdateMode onlineUpdateMode = OnlineUpdateMode.EMA,
+        double onlineUpdateRate = 0.999,
+        CurriculumStrategy curriculumStrategy = CurriculumStrategy.EasyToHard,
+        int quantizationBits = 8,
+        AggregationMode aggregationMode = AggregationMode.Average)
     {
         return teacherType switch
         {
@@ -35,11 +49,11 @@ public static class TeacherModelFactory<T>
             TeacherModelType.Transformer => CreateTransformerTeacher(model, outputDimension),
             TeacherModelType.MultiModal => CreateMultiModalTeacher(ensembleModels, ensembleWeights),
             TeacherModelType.Adaptive => CreateAdaptiveTeacher(model, outputDimension),
-            TeacherModelType.Online => CreateOnlineTeacher(model, outputDimension),
-            TeacherModelType.Curriculum => CreateCurriculumTeacher(model, outputDimension),
+            TeacherModelType.Online => CreateOnlineTeacher(model, outputDimension, onlineUpdateMode, onlineUpdateRate),
+            TeacherModelType.Curriculum => CreateCurriculumTeacher(model, outputDimension, curriculumStrategy),
             TeacherModelType.Self => CreateSelfTeacher(outputDimension ?? 10),
-            TeacherModelType.Quantized => CreateQuantizedTeacher(model, outputDimension),
-            TeacherModelType.Distributed => CreateDistributedTeacher(ensembleModels),
+            TeacherModelType.Quantized => CreateQuantizedTeacher(model, outputDimension, quantizationBits),
+            TeacherModelType.Distributed => CreateDistributedTeacher(ensembleModels, aggregationMode),
             _ => throw new ArgumentException($"Unknown teacher type: {teacherType}", nameof(teacherType))
         };
     }
@@ -127,7 +141,9 @@ public static class TeacherModelFactory<T>
 
     private static ITeacherModel<Vector<T>, Vector<T>> CreateOnlineTeacher(
         IFullModel<T, Vector<T>, Vector<T>>? model,
-        int? outputDimension)
+        int? outputDimension,
+        OnlineUpdateMode updateMode,
+        double updateRate)
     {
         if (model == null)
             throw new ArgumentException("Model is required for Online teacher type");
@@ -139,8 +155,8 @@ public static class TeacherModelFactory<T>
             model.Predict,
             (pred, target) => { }, // No-op update for now
             outputDimension.Value,
-            OnlineUpdateMode.EMA,
-            updateRate: 0.999);
+            updateMode,
+            updateRate: updateRate);
     }
 
     /// <summary>
@@ -157,15 +173,14 @@ public static class TeacherModelFactory<T>
     /// </remarks>
     private static ITeacherModel<Vector<T>, Vector<T>> CreateCurriculumTeacher(
         IFullModel<T, Vector<T>, Vector<T>>? model,
-        int? outputDimension)
+        int? outputDimension,
+        CurriculumStrategy strategy)
     {
         if (model == null)
             throw new ArgumentException("Model is required for Curriculum teacher type");
 
         var baseTeacher = new TeacherModelWrapper<T>(model);
-        return new CurriculumTeacherModel<T>(
-            baseTeacher,
-            CurriculumStrategy.EasyToHard);
+        return new CurriculumTeacherModel<T>(baseTeacher, strategy);
     }
 
     private static ITeacherModel<Vector<T>, Vector<T>> CreateSelfTeacher(int outputDimension)
@@ -175,21 +190,23 @@ public static class TeacherModelFactory<T>
 
     private static ITeacherModel<Vector<T>, Vector<T>> CreateQuantizedTeacher(
         IFullModel<T, Vector<T>, Vector<T>>? model,
-        int? outputDimension)
+        int? outputDimension,
+        int quantizationBits)
     {
         if (model == null)
             throw new ArgumentException("Model is required for Quantized teacher type");
 
         var baseTeacher = new TeacherModelWrapper<T>(model);
-        return new QuantizedTeacherModel<T>(baseTeacher, quantizationBits: 8);
+        return new QuantizedTeacherModel<T>(baseTeacher, quantizationBits: quantizationBits);
     }
 
     private static ITeacherModel<Vector<T>, Vector<T>> CreateDistributedTeacher(
-        ITeacherModel<Vector<T>, Vector<T>>[]? workers)
+        ITeacherModel<Vector<T>, Vector<T>>[]? workers,
+        AggregationMode aggregationMode)
     {
         if (workers == null || workers.Length == 0)
             throw new ArgumentException("Worker models are required for Distributed teacher type");
 
-        return new DistributedTeacherModel<T>(workers, AggregationMode.Average);
+        return new DistributedTeacherModel<T>(workers, aggregationMode);
     }
 }
