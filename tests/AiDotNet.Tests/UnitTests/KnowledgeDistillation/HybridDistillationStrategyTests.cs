@@ -1,3 +1,5 @@
+using AiDotNet.Interfaces;
+using AiDotNet.KnowledgeDistillation;
 using AiDotNet.KnowledgeDistillation.Strategies;
 using AiDotNet.LinearAlgebra;
 using Xunit;
@@ -14,14 +16,16 @@ public class HybridDistillationStrategyTests
     {
         // Arrange
         var strategy1 = new DistillationLoss<double>(temperature: 3.0, alpha: 0.3);
-        var strategy2 = new FeatureDistillationStrategy<double>(featureWeight: 0.5);
-        var strategies = new[] { strategy1, strategy2 };
-        var weights = new[] { 0.6, 0.4 };
+        var strategy2 = new DistillationLoss<double>(temperature: 2.0, alpha: 0.5);
+        var strategies = new (IDistillationStrategy<double, Vector<double>>, double)[] 
+        { 
+            (strategy1, 0.6), 
+            (strategy2, 0.4) 
+        };
 
         // Act
         var hybridStrategy = new HybridDistillationStrategy<double>(
             strategies,
-            weights,
             temperature: 3.0,
             alpha: 0.3);
 
@@ -36,38 +40,35 @@ public class HybridDistillationStrategyTests
     {
         // Arrange
         var strategy1 = new DistillationLoss<double>(temperature: 3.0, alpha: 0.3);
-        var strategy2 = new FeatureDistillationStrategy<double>(featureWeight: 0.5);
-        var strategies = new[] { strategy1, strategy2 };
-        var weights = new[] { 0.5, 0.3 }; // Sum = 0.8, not 1.0
+        var strategy2 = new DistillationLoss<double>(temperature: 2.0, alpha: 0.5);
+        var strategies = new (IDistillationStrategy<double, Vector<double>>, double)[] 
+        { 
+            (strategy1, 0.5), 
+            (strategy2, 0.3) 
+        }; // Sum = 0.8, not 1.0
 
         // Act & Assert
         Assert.Throws<ArgumentException>(() =>
-            new HybridDistillationStrategy<double>(strategies, weights));
+            new HybridDistillationStrategy<double>(strategies));
     }
 
     [Fact]
-    public void Constructor_WithMismatchedArrayLengths_ThrowsArgumentException()
+    public void Constructor_WithEmptyStrategies_ThrowsArgumentException()
     {
         // Arrange
-        var strategy1 = new DistillationLoss<double>(temperature: 3.0, alpha: 0.3);
-        var strategy2 = new FeatureDistillationStrategy<double>(featureWeight: 0.5);
-        var strategies = new[] { strategy1, strategy2 };
-        var weights = new[] { 1.0 }; // Only one weight for two strategies
+        var strategies = Array.Empty<(IDistillationStrategy<double, Vector<double>>, double)>();
 
         // Act & Assert
         Assert.Throws<ArgumentException>(() =>
-            new HybridDistillationStrategy<double>(strategies, weights));
+            new HybridDistillationStrategy<double>(strategies));
     }
 
     [Fact]
-    public void Constructor_WithNullStrategies_ThrowsArgumentNullException()
+    public void Constructor_WithNullStrategies_ThrowsArgumentException()
     {
-        // Arrange
-        var weights = new[] { 1.0 };
-
         // Act & Assert
-        Assert.Throws<ArgumentNullException>(() =>
-            new HybridDistillationStrategy<double>(null!, weights));
+        Assert.Throws<ArgumentException>(() =>
+            new HybridDistillationStrategy<double>(null!));
     }
 
     [Fact]
@@ -75,9 +76,8 @@ public class HybridDistillationStrategyTests
     {
         // Arrange
         var strategy1 = new DistillationLoss<double>(temperature: 3.0, alpha: 0.0);
-        var strategies = new[] { strategy1 };
-        var weights = new[] { 1.0 };
-        var hybridStrategy = new HybridDistillationStrategy<double>(strategies, weights);
+        var strategies = new (IDistillationStrategy<double, Vector<double>>, double)[] { (strategy1, 1.0) };
+        var hybridStrategy = new HybridDistillationStrategy<double>(strategies);
 
         var studentOutput = new Vector<double>(new[] { 2.0, 1.0, 0.5 });
         var teacherOutput = new Vector<double>(new[] { 2.0, 1.0, 0.5 });
@@ -94,9 +94,8 @@ public class HybridDistillationStrategyTests
     {
         // Arrange
         var strategy1 = new DistillationLoss<double>(temperature: 3.0, alpha: 0.0);
-        var strategies = new[] { strategy1 };
-        var weights = new[] { 1.0 };
-        var hybridStrategy = new HybridDistillationStrategy<double>(strategies, weights);
+        var strategies = new (IDistillationStrategy<double, Vector<double>>, double)[] { (strategy1, 1.0) };
+        var hybridStrategy = new HybridDistillationStrategy<double>(strategies);
 
         var studentOutput = new Vector<double>(new[] { 2.0, 1.0, 0.5 });
         var teacherOutput = new Vector<double>(new[] { 1.0, 2.0, 0.5 });
@@ -114,9 +113,12 @@ public class HybridDistillationStrategyTests
         // Arrange
         var strategy1 = new DistillationLoss<double>(temperature: 3.0, alpha: 0.0);
         var strategy2 = new DistillationLoss<double>(temperature: 1.0, alpha: 0.0);
-        var strategies = new[] { strategy1, strategy2 };
-        var weights = new[] { 0.5, 0.5 };
-        var hybridStrategy = new HybridDistillationStrategy<double>(strategies, weights);
+        var strategies = new (IDistillationStrategy<double, Vector<double>>, double)[] 
+        { 
+            (strategy1, 0.5), 
+            (strategy2, 0.5) 
+        };
+        var hybridStrategy = new HybridDistillationStrategy<double>(strategies);
 
         var studentOutput = new Vector<double>(new[] { 2.0, 1.0, 0.5 });
         var teacherOutput = new Vector<double>(new[] { 1.5, 1.5, 0.5 });
@@ -139,9 +141,8 @@ public class HybridDistillationStrategyTests
     {
         // Arrange
         var strategy1 = new DistillationLoss<double>(temperature: 3.0, alpha: 0.0);
-        var strategies = new[] { strategy1 };
-        var weights = new[] { 1.0 };
-        var hybridStrategy = new HybridDistillationStrategy<double>(strategies, weights);
+        var strategies = new (IDistillationStrategy<double, Vector<double>>, double)[] { (strategy1, 1.0) };
+        var hybridStrategy = new HybridDistillationStrategy<double>(strategies);
 
         var studentOutput = new Vector<double>(new[] { 2.0, 1.0, 0.5 });
         var teacherOutput = new Vector<double>(new[] { 2.0, 1.0, 0.5 });
@@ -163,9 +164,8 @@ public class HybridDistillationStrategyTests
     {
         // Arrange
         var strategy1 = new DistillationLoss<double>(temperature: 3.0, alpha: 0.0);
-        var strategies = new[] { strategy1 };
-        var weights = new[] { 1.0 };
-        var hybridStrategy = new HybridDistillationStrategy<double>(strategies, weights);
+        var strategies = new (IDistillationStrategy<double, Vector<double>>, double)[] { (strategy1, 1.0) };
+        var hybridStrategy = new HybridDistillationStrategy<double>(strategies);
 
         var studentOutput = new Vector<double>(new[] { 2.0, 1.0, 0.5 });
         var teacherOutput = new Vector<double>(new[] { 1.0, 2.0, 0.5 });
@@ -190,9 +190,8 @@ public class HybridDistillationStrategyTests
     {
         // Arrange
         var strategy1 = new DistillationLoss<double>(temperature: 3.0, alpha: 0.5);
-        var strategies = new[] { strategy1 };
-        var weights = new[] { 1.0 };
-        var hybridStrategy = new HybridDistillationStrategy<double>(strategies, weights);
+        var strategies = new (IDistillationStrategy<double, Vector<double>>, double)[] { (strategy1, 1.0) };
+        var hybridStrategy = new HybridDistillationStrategy<double>(strategies);
 
         var studentOutput = new Vector<double>(new[] { 2.0, 1.0, 0.5 });
         var teacherOutput = new Vector<double>(new[] { 1.5, 1.5, 0.5 });

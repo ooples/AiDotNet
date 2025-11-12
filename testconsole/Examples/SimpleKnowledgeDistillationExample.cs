@@ -21,13 +21,13 @@ public static class SimpleKnowledgeDistillationExample
         var (trainX, trainY, testX, testY) = LoadYourData();
 
         // 2. Get your trained teacher model (large, accurate model)
-        IFullModel<double, Vector<double>, Vector<double>> teacherModel = GetTeacherModel();
+        IFullModel<double, Matrix<double>, Vector<double>> teacherModel = GetTeacherModel();
 
         // 3. Create your student model (small, fast model)
-        IFullModel<double, Vector<double>, Vector<double>> studentModel = CreateStudentModel();
+        IFullModel<double, Matrix<double>, Vector<double>> studentModel = CreateStudentModel();
 
         // 4. Configure knowledge distillation
-        var kdOptions = new KnowledgeDistillationOptions<double, Vector<double>, Vector<double>>
+        var kdOptions = new KnowledgeDistillationOptions<double, Matrix<double>, Vector<double>>
         {
             TeacherModel = teacherModel,
             StrategyType = DistillationStrategyType.ResponseBased, // Standard KD
@@ -39,7 +39,7 @@ public static class SimpleKnowledgeDistillationExample
         };
 
         // 5. Train student with knowledge distillation
-        var result = await new PredictionModelBuilder<double, Vector<double>, Vector<double>>()
+        var result = await new PredictionModelBuilder<double, Matrix<double>, Vector<double>>()
             .ConfigureModel(studentModel)
             .ConfigureKnowledgeDistillation(kdOptions)
             .BuildAsync(trainX, trainY);
@@ -83,14 +83,14 @@ public static class SimpleKnowledgeDistillationExample
         return (trainX, trainY, testX, testY);
     }
 
-    private static IFullModel<double, Vector<double>, Vector<double>> GetTeacherModel()
+    private static IFullModel<double, Matrix<double>, Vector<double>> GetTeacherModel()
     {
         // Return your pre-trained teacher model
         // This is the large, accurate model you want to compress
         return new MockModel(inputDim: 20, outputDim: 10);
     }
 
-    private static IFullModel<double, Vector<double>, Vector<double>> CreateStudentModel()
+    private static IFullModel<double, Matrix<double>, Vector<double>> CreateStudentModel()
     {
         // Create your small student model
         // This is the model you want to deploy (10x smaller, 10x faster)
@@ -98,7 +98,7 @@ public static class SimpleKnowledgeDistillationExample
     }
 
     // Simple mock model for demo
-    private class MockModel : IFullModel<double, Vector<double>, Vector<double>>
+    private class MockModel : IFullModel<double, Matrix<double>, Vector<double>>
     {
         private readonly int _inputDim;
         private readonly int _outputDim;
@@ -110,7 +110,7 @@ public static class SimpleKnowledgeDistillationExample
             _outputDim = outputDim;
         }
 
-        public Vector<double> Predict(Vector<double> input)
+        public Vector<double> Predict(Matrix<double> input)
         {
             var output = new Vector<double>(_outputDim);
             double sum = 0;
@@ -124,7 +124,7 @@ public static class SimpleKnowledgeDistillationExample
             return output;
         }
 
-        public void Train(Vector<double> input, Vector<double> target) { }
+        public void Train(Matrix<double> input, Vector<double> target) { }
 
         public ModelMetadata<double> GetModelMetadata()
         {
@@ -140,8 +140,27 @@ public static class SimpleKnowledgeDistillationExample
         public ILossFunction<double> DefaultLossFunction => throw new NotImplementedException();
 
         public byte[] Serialize() => Array.Empty<byte>();
-
+        public void Deserialize(byte[] data) { }
+        public void SaveModel(string filePath) { }
+        public void LoadModel(string filePath) { }
         public void SaveState(Stream stream) { }
         public void LoadState(Stream stream) { }
+
+        public Vector<double> GetParameters() => new Vector<double>(0);
+        public void SetParameters(Vector<double> parameters) { }
+        public int ParameterCount => 0;
+        public IFullModel<double, Matrix<double>, Vector<double>> WithParameters(Vector<double> parameters) => this;
+
+        public IEnumerable<int> GetActiveFeatureIndices() => Enumerable.Range(0, _inputDim);
+        public void SetActiveFeatureIndices(IEnumerable<int> featureIndices) { }
+        public bool IsFeatureUsed(int featureIndex) => featureIndex < _inputDim;
+
+        public Dictionary<string, double> GetFeatureImportance() => new Dictionary<string, double>();
+
+        public IFullModel<double, Matrix<double>, Vector<double>> DeepCopy() => new MockModel(_inputDim, _outputDim);
+        public IFullModel<double, Matrix<double>, Vector<double>> Clone() => new MockModel(_inputDim, _outputDim);
+
+        public Vector<double> ComputeGradients(Matrix<double> input, Vector<double> target, ILossFunction<double>? lossFunction = null) => new Vector<double>(0);
+        public void ApplyGradients(Vector<double> gradients, double learningRate) { }
     }
 }

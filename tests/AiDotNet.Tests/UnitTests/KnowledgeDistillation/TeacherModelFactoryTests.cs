@@ -3,6 +3,8 @@ using AiDotNet.Interfaces;
 using AiDotNet.KnowledgeDistillation;
 using AiDotNet.KnowledgeDistillation.Teachers;
 using AiDotNet.LinearAlgebra;
+using AiDotNet.LossFunctions;
+using AiDotNet.Models;
 using Xunit;
 
 namespace AiDotNet.Tests.UnitTests.KnowledgeDistillation;
@@ -47,8 +49,8 @@ public class TeacherModelFactoryTests
         var model2 = new MockFullModel(inputDim: 10, outputDim: 5);
         var teachers = new[]
         {
-            new TeacherModelWrapper<double>(model1, outputDimension: 5),
-            new TeacherModelWrapper<double>(model2, outputDimension: 5)
+            new TeacherModelWrapper<double>(model1),
+            new TeacherModelWrapper<double>(model2)
         };
 
         // Act
@@ -113,8 +115,8 @@ public class TeacherModelFactoryTests
         var model2 = new MockFullModel(inputDim: 10, outputDim: 5);
         var teachers = new[]
         {
-            new TeacherModelWrapper<double>(model1, outputDimension: 5),
-            new TeacherModelWrapper<double>(model2, outputDimension: 5)
+            new TeacherModelWrapper<double>(model1),
+            new TeacherModelWrapper<double>(model2)
         };
 
         // Act
@@ -214,8 +216,8 @@ public class TeacherModelFactoryTests
         var model2 = new MockFullModel(inputDim: 10, outputDim: 5);
         var teachers = new[]
         {
-            new TeacherModelWrapper<double>(model1, outputDimension: 5),
-            new TeacherModelWrapper<double>(model2, outputDimension: 5)
+            new TeacherModelWrapper<double>(model1),
+            new TeacherModelWrapper<double>(model2)
         };
 
         // Act
@@ -262,13 +264,15 @@ public class TeacherModelFactoryTests
 
         public void Train(Vector<double> input, Vector<double> target) { }
 
-        public IDictionary<string, object?> GetMetadata()
+        public ModelMetadata<double> GetModelMetadata()
         {
-            return new Dictionary<string, object?>
+            var metadata = new ModelMetadata<double>
             {
-                ["InputDimension"] = _inputDim,
-                ["OutputDimension"] = _outputDim
+                FeatureCount = _inputDim,
+                Description = "Mock model for testing"
             };
+            metadata.SetProperty("OutputDimension", _outputDim);
+            return metadata;
         }
 
         public void SaveState(Stream stream) { }

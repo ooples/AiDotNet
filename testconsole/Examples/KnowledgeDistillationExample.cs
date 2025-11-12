@@ -3,6 +3,8 @@ using AiDotNet.Enums;
 using AiDotNet.Interfaces;
 using AiDotNet.KnowledgeDistillation;
 using AiDotNet.LinearAlgebra;
+using AiDotNet.LossFunctions;
+using AiDotNet.Models;
 using AiDotNet.Models.Options;
 
 namespace TestConsole.Examples;
@@ -72,7 +74,7 @@ public static class KnowledgeDistillationExample
         // ===================================================================
         Console.WriteLine("Step 4: Configuring knowledge distillation...");
 
-        var kdOptions = new KnowledgeDistillationOptions<double, Vector<double>, Vector<double>>
+        var kdOptions = new KnowledgeDistillationOptions<double, Matrix<double>, Vector<double>>
         {
             // Provide the teacher model
             TeacherModel = teacherModel,
@@ -110,7 +112,7 @@ public static class KnowledgeDistillationExample
         try
         {
             // Note: This uses the PredictionModelBuilder API
-            var result = await new PredictionModelBuilder<double, Vector<double>, Vector<double>>()
+            var result = await new PredictionModelBuilder<double, Matrix<double>, Vector<double>>()
                 .ConfigureModel(studentModel)
                 .ConfigureKnowledgeDistillation(kdOptions)
                 .BuildAsync(trainData, trainLabels);
@@ -213,12 +215,10 @@ public static class KnowledgeDistillationExample
     /// Creates a mock teacher model for demonstration.
     /// In production, this would be your trained, high-accuracy model.
     /// </summary>
-    private static IFullModel<double, Vector<double>, Vector<double>> CreateMockTeacherModel(
+    private static IFullModel<double, Matrix<double>, Vector<double>> CreateMockTeacherModel(
         int inputDim,
         int outputDim)
     {
-        // In a real scenario, you would return your trained teacher model here
-        // For demonstration, we create a simple mock
         return new MockModel(inputDim, outputDim, isLarge: true);
     }
 
@@ -226,7 +226,7 @@ public static class KnowledgeDistillationExample
     /// Creates a mock student model for demonstration.
     /// This is the small model you want to deploy.
     /// </summary>
-    private static IFullModel<double, Vector<double>, Vector<double>> CreateMockStudentModel(
+    private static IFullModel<double, Matrix<double>, Vector<double>> CreateMockStudentModel(
         int inputDim,
         int outputDim)
     {
@@ -295,7 +295,7 @@ public static class KnowledgeDistillationExample
     /// <summary>
     /// Mock model implementation for demonstration purposes.
     /// </summary>
-    private class MockModel : IFullModel<double, Vector<double>, Vector<double>>
+    private class MockModel : IFullModel<double, Matrix<double>, Vector<double>>
     {
         private readonly int _inputDim;
         private readonly int _outputDim;
@@ -310,51 +310,59 @@ public static class KnowledgeDistillationExample
             _random = new Random(isLarge ? 42 : 123);
         }
 
-        public Vector<double> Predict(Vector<double> input)
+        public Vector<double> Predict(Matrix<double> input)
         {
-            // Generate mock predictions
             var output = new Vector<double>(_outputDim);
             double sum = 0;
-
             for (int i = 0; i < _outputDim; i++)
             {
                 output[i] = _random.NextDouble();
                 sum += output[i];
             }
-
-            // Normalize to probabilities
             for (int i = 0; i < _outputDim; i++)
-            {
                 output[i] /= sum;
-            }
-
             return output;
         }
 
-        public void Train(Vector<double> input, Vector<double> target)
-        {
-            // Mock training - does nothing
-        }
+        public void Train(Matrix<double> input, Vector<double> target) { }
 
-        public IDictionary<string, object?> GetMetadata()
+        public ModelMetadata<double> GetModelMetadata()
         {
-            return new Dictionary<string, object?>
+            var metadata = new ModelMetadata<double>
             {
-                ["InputDimension"] = _inputDim,
-                ["OutputDimension"] = _outputDim,
-                ["IsLarge"] = _isLarge,
-                ["ParameterCount"] = _isLarge ? 1000 : 100
+                FeatureCount = _inputDim,
+                Description = _isLarge ? "Large teacher model" : "Small student model"
             };
+            metadata.SetProperty("OutputDimension", _outputDim);
+            metadata.SetProperty("IsLarge", _isLarge);
+            metadata.SetProperty("ParameterCount", _isLarge ? 1000 : 100);
+            return metadata;
         }
 
-        public void SaveState(Stream stream)
-        {
-            // Mock save
-        }
+        public ILossFunction<double> DefaultLossFunction => throw new NotImplementedException();
 
-        public void LoadState(Stream stream)
-        {
-            // Mock load
-        }
+        public byte[] Serialize() => Array.Empty<byte>();
+        public void Deserialize(byte[] data) { }
+        public void SaveModel(string filePath) { }
+        public void LoadModel(string filePath) { }
+        public void SaveState(Stream stream) { }
+        public void LoadState(Stream stream) { }
+
+        public Vector<double> GetParameters() => new Vector<double>(0);
+        public void SetParameters(Vector<double> parameters) { }
+        public int ParameterCount => _isLarge ? 1000 : 100;
+        public IFullModel<double, Matrix<double>, Vector<double>> WithParameters(Vector<double> parameters) => this;
+
+        public IEnumerable<int> GetActiveFeatureIndices() => Enumerable.Range(0, _inputDim);
+        public void SetActiveFeatureIndices(IEnumerable<int> featureIndices) { }
+        public bool IsFeatureUsed(int featureIndex) => featureIndex < _inputDim;
+
+        public Dictionary<string, double> GetFeatureImportance() => new Dictionary<string, double>();
+
+        public IFullModel<double, Matrix<double>, Vector<double>> DeepCopy() => new MockModel(_inputDim, _outputDim, _isLarge);
+        public IFullModel<double, Matrix<double>, Vector<double>> Clone() => new MockModel(_inputDim, _outputDim, _isLarge);
+
+        public Vector<double> ComputeGradients(Matrix<double> input, Vector<double> target, ILossFunction<double>? lossFunction = null) => new Vector<double>(0);
+        public void ApplyGradients(Vector<double> gradients, double learningRate) { }
     }
 }

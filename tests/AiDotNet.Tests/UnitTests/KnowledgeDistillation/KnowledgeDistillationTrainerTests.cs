@@ -206,9 +206,9 @@ public class KnowledgeDistillationTrainerTests
 
         // Act & Assert
         Assert.Throws<ArgumentException>(() =>
-            trainer.Train(studentForward, studentBackward, trainInputs, trainLabels, epochs: 0));
+            trainer.Train(studentForward, studentBackward, trainInputs, trainLabels, epochs: 0, batchSize: 1, null, null, null, null));
         Assert.Throws<ArgumentException>(() =>
-            trainer.Train(studentForward, studentBackward, trainInputs, trainLabels, epochs: -1));
+            trainer.Train(studentForward, studentBackward, trainInputs, trainLabels, epochs: -1, batchSize: 1, null, null, null, null));
     }
 
     [Fact]
@@ -286,13 +286,13 @@ public class KnowledgeDistillationTrainerTests
         {
             new Vector<double>(new[] { 0.5, 0.3, 0.2 }),
             new Vector<double>(new[] { 0.4, 0.4, 0.2 })
-        };
+        });
 
         var testLabels = new Vector<Vector<double>>(new[]
         {
             new Vector<double>(new[] { 1.0, 0.0, 0.0 }), // True class: 0
             new Vector<double>(new[] { 1.0, 0.0, 0.0 })  // True class: 0
-        };
+        });
 
         // Student always predicts class 2 (wrong)
         Func<Vector<double>, Vector<double>> studentForward = input =>
