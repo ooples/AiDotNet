@@ -2133,4 +2133,22 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
             offset += layerParams.Length;
         }
     }
+
+    /// <summary>
+    /// Saves the model's current state to a stream.
+    /// </summary>
+    /// <param name="stream">The stream to write the model state to.</param>
+    public virtual void SaveState(Stream stream)
+    {
+        throw new NotImplementedException("SaveState is not yet implemented for NeuralNetworkBase. Consider using explicit serialization of layer parameters.");
+    }
+
+    /// <summary>
+    /// Loads the model's state from a stream.
+    /// </summary>
+    /// <param name="stream">The stream to read the model state from.</param>
+    public virtual void LoadState(Stream stream)
+    {
+        throw new NotImplementedException("LoadState is not yet implemented for NeuralNetworkBase. Consider using explicit deserialization of layer parameters.");
+    }
 }

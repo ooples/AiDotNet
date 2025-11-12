@@ -1109,4 +1109,20 @@ public abstract class DecisionTreeRegressionBase<T> : ITreeBasedRegression<T>
         // Note: Actual tree parameter updates would require modifying node split points and leaf values
         // which is algorithm-specific and typically handled during the Train() method instead
     }
+
+    /// <summary>
+    /// Saves the model's current state to a stream.
+    /// </summary>
+    public virtual void SaveState(Stream stream)
+    {
+        throw new NotImplementedException("SaveState is not yet implemented for DecisionTreeRegressionBase. Consider serializing the tree structure explicitly.");
+    }
+
+    /// <summary>
+    /// Loads the model's state from a stream.
+    /// </summary>
+    public virtual void LoadState(Stream stream)
+    {
+        throw new NotImplementedException("LoadState is not yet implemented for DecisionTreeRegressionBase. Consider deserializing the tree structure explicitly.");
+    }
 }

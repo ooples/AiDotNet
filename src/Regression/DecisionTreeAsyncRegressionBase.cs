@@ -1002,4 +1002,20 @@ public abstract class AsyncDecisionTreeRegressionBase<T> : IAsyncTreeBasedModel<
         // No-op for async tree models - trees are trained via splitting algorithms
         // Derived classes like GradientBoostingRegression can override with proper gradient-based updates
     }
+
+    /// <summary>
+    /// Saves the model's current state to a stream.
+    /// </summary>
+    public virtual void SaveState(Stream stream)
+    {
+        throw new NotImplementedException("SaveState is not yet implemented for AsyncDecisionTreeRegressionBase. Consider serializing the tree structure explicitly.");
+    }
+
+    /// <summary>
+    /// Loads the model's state from a stream.
+    /// </summary>
+    public virtual void LoadState(Stream stream)
+    {
+        throw new NotImplementedException("LoadState is not yet implemented for AsyncDecisionTreeRegressionBase. Consider deserializing the tree structure explicitly.");
+    }
 }

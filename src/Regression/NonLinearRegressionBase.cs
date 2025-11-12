@@ -1108,4 +1108,20 @@ public abstract class NonLinearRegressionBase<T> : INonLinearRegression<T>
         // Use SetParameters to update all model state
         SetParameters(newParams);
     }
+
+    /// <summary>
+    /// Saves the model's current state to a stream.
+    /// </summary>
+    public virtual void SaveState(Stream stream)
+    {
+        throw new NotImplementedException("SaveState is not yet implemented for NonLinearRegressionBase. Consider using Serialize() method to get serialized data.");
+    }
+
+    /// <summary>
+    /// Loads the model's state from a stream.
+    /// </summary>
+    public virtual void LoadState(Stream stream)
+    {
+        throw new NotImplementedException("LoadState is not yet implemented for NonLinearRegressionBase. Consider using Deserialize() method with byte array.");
+    }
 }

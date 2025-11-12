@@ -348,5 +348,21 @@ public class ModelIndividual<T, TInput, TOutput, TGene> :
         _innerModel.ApplyGradients(gradients, learningRate);
     }
 
+    /// <summary>
+    /// Saves the model's current state to a stream.
+    /// </summary>
+    public void SaveState(Stream stream)
+    {
+        _innerModel.SaveState(stream);
+    }
+
+    /// <summary>
+    /// Loads the model's state from a stream.
+    /// </summary>
+    public void LoadState(Stream stream)
+    {
+        _innerModel.LoadState(stream);
+    }
+
     #endregion
 }
