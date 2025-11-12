@@ -109,11 +109,18 @@ public static class KnowledgeDistillationExample
 
         try
         {
-            // Note: This uses the PredictionModelBuilder API
+            // Convert Matrix<double> to Vector<double>[] for the builder
+            var trainInputs = new Vector<double>[trainData.Rows];
+            for (int i = 0; i < trainData.Rows; i++)
+            {
+                trainInputs[i] = trainData.GetRow(i);
+            }
+
+            // Note: This uses the PredictionModelBuilder API with converted data
             var result = await new PredictionModelBuilder<double, Vector<double>, Vector<double>>()
                 .ConfigureModel(studentModel)
                 .ConfigureKnowledgeDistillation(kdOptions)
-                .BuildAsync(trainData, trainLabels);
+                .BuildAsync(trainInputs, trainLabels);
 
             Console.WriteLine("  ✓ Knowledge distillation training completed!");
             Console.WriteLine();

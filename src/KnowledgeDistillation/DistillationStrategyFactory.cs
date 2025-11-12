@@ -47,7 +47,7 @@ public static class DistillationStrategyFactory<T>
             DistillationStrategyType.RelationBased => CreateRelationBasedStrategy(temperature, alpha),
             DistillationStrategyType.ContrastiveBased => CreateContrastiveStrategy(temperature, alpha, contrastiveMode ?? ContrastiveMode.InfoNCE),
             DistillationStrategyType.SimilarityPreserving => CreateSimilarityPreservingStrategy(temperature, alpha),
-            DistillationStrategyType.FlowBased => CreateProbabilisticStrategy(temperature, alpha), // Flow-based uses probabilistic
+            DistillationStrategyType.FlowBased => CreateFlowBasedStrategy(temperature, alpha), // FSP - Flow of Solution Procedure
             DistillationStrategyType.ProbabilisticTransfer => CreateProbabilisticStrategy(temperature, alpha),
             DistillationStrategyType.VariationalInformation => CreateVariationalStrategy(temperature, alpha),
             DistillationStrategyType.FactorTransfer => CreateFactorTransferStrategy(temperature, alpha),
@@ -164,6 +164,18 @@ public static class DistillationStrategyFactory<T>
     {
         // Use constructor defaults for selectivityWeight and metric
         return new NeuronSelectivityDistillationStrategy<T>(
+            temperature: temperature,
+            alpha: alpha);
+    }
+
+    private static IDistillationStrategy<T, Vector<T>> CreateFlowBasedStrategy(
+        double temperature,
+        double alpha)
+    {
+        // Flow of Solution Procedure (FSP) uses layer-pair flow matrices
+        // For now, use RelationalDistillationStrategy as it captures similar concepts
+        // TODO: Implement dedicated FlowBasedDistillationStrategy with FSP logic
+        return new RelationalDistillationStrategy<T>(
             temperature: temperature,
             alpha: alpha);
     }
