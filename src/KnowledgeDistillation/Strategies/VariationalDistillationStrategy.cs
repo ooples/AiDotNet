@@ -118,15 +118,49 @@ public class VariationalDistillationStrategy<T> : DistillationStrategyBase<T, Ve
     }
 
     /// <summary>
-    /// Computes variational loss using latent representations with mean and variance.
+    /// Computes variational distillation loss between student and teacher latent representations.
     /// </summary>
-    /// <param name="studentMean">Student's mean vector in latent space.</param>
-    /// <param name="studentLogVar">Student's log variance vector in latent space.</param>
-    /// <param name="teacherMean">Teacher's mean vector in latent space.</param>
-    /// <param name="teacherLogVar">Teacher's log variance vector in latent space.</param>
-    /// <returns>Variational loss based on selected mode.</returns>
+    /// <param name="studentMean">Mean vector of student's latent distribution (from encoder output).</param>
+    /// <param name="studentLogVar">Log variance vector of student's latent distribution (for numerical stability).</param>
+    /// <param name="teacherMean">Mean vector of teacher's latent distribution (from encoder output).</param>
+    /// <param name="teacherLogVar">Log variance vector of teacher's latent distribution (for numerical stability).</param>
+    /// <returns>Weighted variational loss (KL divergence or ELBO component).</returns>
     /// <remarks>
-    /// <para>Representations should be parameterized as Gaussian distributions with mean and log variance.
+    /// <para><b>ADVANCED/MANUAL API:</b> This method is for users who have models with explicit
+    /// encoder-decoder architectures producing Gaussian latent representations (e.g., VAEs, VQ-VAEs).</para>
+    ///
+    /// <para><b>When to use this:</b>
+    /// - Your model architecture has separate encoder/decoder components
+    /// - The encoder outputs mean and log-variance vectors (μ, log(σ²))
+    /// - You want to match latent space distributions between student and teacher
+    /// - You're implementing custom training loops (not using standard ComputeLoss/ComputeGradient)</para>
+    ///
+    /// <para><b>How to obtain the parameters:</b>
+    /// 1. Extract encoder from your model: `var encoder = model.GetEncoder();`
+    /// 2. Run input through encoder: `var (mean, logVar) = encoder.Encode(input);`
+    /// 3. Do this for both student and teacher models
+    /// 4. Call this method with the four vectors
+    /// 5. Combine the result with classical distillation loss:
+    ///    `totalLoss = classicalLoss + variationalLoss;`</para>
+    ///
+    /// <para><b>Example usage:</b>
+    /// <code>
+    /// // Extract encoder outputs
+    /// var (studentMean, studentLogVar) = studentVAE.Encode(input);
+    /// var (teacherMean, teacherLogVar) = teacherVAE.Encode(input);
+    ///
+    /// // Compute variational loss
+    /// var varLoss = strategy.ComputeVariationalLoss(
+    ///     studentMean, studentLogVar, teacherMean, teacherLogVar);
+    ///
+    /// // Combine with reconstruction/classification loss
+    /// var classicalLoss = strategy.ComputeLoss(studentOutput, teacherOutput, trueLabel);
+    /// var totalLoss = classicalLoss + varLoss;
+    /// </code></para>
+    ///
+    /// <para><b>Note:</b> For standard distillation (matching output predictions only), use the
+    /// regular <see cref="ComputeLoss"/> and <see cref="ComputeGradient"/> methods instead.
+    /// Representations should be parameterized as Gaussian distributions with mean and log variance.
     /// Log variance is used for numerical stability (variance must be positive).</para>
     /// </remarks>
     public T ComputeVariationalLoss(
