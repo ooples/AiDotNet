@@ -64,10 +64,7 @@ public class NeuronSelectivityDistillationStrategy<T> : DistillationStrategyBase
         else
         {
             finalLoss = softLoss;
-        }
-
-        // Apply selectivity weight reduction exactly once
-        return NumOps.Multiply(finalLoss, NumOps.FromDouble(1.0 - _selectivityWeight));
+        }        return finalLoss;
     }
 
     public override Vector<T> ComputeGradient(Vector<T> studentOutput, Vector<T> teacherOutput, Vector<T>? trueLabels = null)
@@ -277,3 +274,4 @@ public enum SelectivityMetric
     /// </summary>
     PeakToAverage
 }
+

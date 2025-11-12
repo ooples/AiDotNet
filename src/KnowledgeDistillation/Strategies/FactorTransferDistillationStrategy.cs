@@ -164,6 +164,25 @@ public class FactorTransferDistillationStrategy<T> : DistillationStrategyBase<T,
         if (studentFeatures.Length != teacherFeatures.Length)
             throw new ArgumentException("Student and teacher must have same batch size");
 
+            // Validate feature dimensions
+            if (studentFeatures.Length == 0 || teacherFeatures.Length == 0)
+                throw new ArgumentException("Feature arrays cannot be empty");
+
+            int studentDim = studentFeatures[0].Length;
+            int teacherDim = teacherFeatures[0].Length;
+
+            for (int i = 0; i < studentFeatures.Length; i++)
+            {
+                if (studentFeatures[i].Length != studentDim)
+                    throw new ArgumentException($"All student feature vectors must have the same length. Expected {studentDim}, got {studentFeatures[i].Length} at index {i}");
+                if (teacherFeatures[i].Length != teacherDim)
+                    throw new ArgumentException($"All teacher feature vectors must have the same length. Expected {teacherDim}, got {teacherFeatures[i].Length} at index {i}");
+                if (studentFeatures[i].Length != teacherFeatures[i].Length)
+                    throw new ArgumentException($"Student and teacher feature dimensions must match at index {i}. Student: {studentFeatures[i].Length}, Teacher: {teacherFeatures[i].Length}");
+                if (studentFeatures[i].Length == 0)
+                    throw new ArgumentException($"Feature vector at index {i} cannot be empty");
+            }
+
         if (studentFeatures.Length == 0)
             return NumOps.Zero;
 
@@ -552,3 +571,4 @@ public enum FactorMode
     /// </summary>
     FactorMatching
 }
+

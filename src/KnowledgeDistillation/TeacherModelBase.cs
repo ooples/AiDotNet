@@ -135,5 +135,52 @@ public abstract class TeacherModelBase<TInput, TOutput, T> : ITeacherModel<TInpu
         }
 
         return new Vector<T>(probabilities);
+    }    
+    /// <summary>
+    /// Applies temperature-scaled softmax to logits. Must be implemented by subclasses
+    /// based on their output type (Vector, Matrix, etc.).
+    /// </summary>
+    /// <param name="logits">Raw model outputs.</param>
+    /// <param name="temperature">Temperature for scaling.</param>
+    /// <returns>Probability distribution.</returns>
+    protected virtual TOutput ApplyTemperatureSoftmax(TOutput logits, double temperature)
+    {
+        // Default implementation for Vector<T>
+        if (logits is not Vector<T> vectorLogits)
+            throw new NotSupportedException(
+                $"Default softmax implementation only supports Vector<T>. Override ApplyTemperatureSoftmax for {typeof(TOutput).Name}.");
+
+        return (TOutput)(object)SoftmaxVector(vectorLogits, temperature);
     }
+
+    private Vector<T> SoftmaxVector(Vector<T> logits, double temperature)
+    {
+        int n = logits.Length;
+        var result = new Vector<T>(n);
+        var scaled = new T[n];
+
+        for (int i = 0; i < n; i++)
+            scaled[i] = NumOps.FromDouble(Convert.ToDouble(logits[i]) / temperature);
+
+        T maxLogit = scaled[0];
+        for (int i = 1; i < n; i++)
+            if (NumOps.GreaterThan(scaled[i], maxLogit))
+                maxLogit = scaled[i];
+
+        T sum = NumOps.Zero;
+        var expValues = new T[n];
+
+        for (int i = 0; i < n; i++)
+        {
+            double val = Convert.ToDouble(NumOps.Subtract(scaled[i], maxLogit));
+            expValues[i] = NumOps.FromDouble(Math.Exp(val));
+            sum = NumOps.Add(sum, expValues[i]);
+        }
+
+        for (int i = 0; i < n; i++)
+            result[i] = NumOps.Divide(expValues[i], sum);
+
+        return result;
+    }
+
 }
