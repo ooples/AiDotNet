@@ -76,7 +76,30 @@ public class SimilarityPreservingStrategy<T> : DistillationStrategyBase<T, Vecto
 
     public T ComputeSimilarityLoss(Vector<T>[] studentEmbeddings, Vector<T>[] teacherEmbeddings)
     {
+        if (studentEmbeddings == null) throw new ArgumentNullException(nameof(studentEmbeddings));
+        if (teacherEmbeddings == null) throw new ArgumentNullException(nameof(teacherEmbeddings));
+
+        if (studentEmbeddings.Length != teacherEmbeddings.Length)
+        {
+            throw new ArgumentException(
+                $"Student and teacher embedding batches must match. Student: {studentEmbeddings.Length}, Teacher: {teacherEmbeddings.Length}");
+        }
+
         int n = studentEmbeddings.Length;
+        if (n == 0)
+        {
+            return NumOps.Zero;
+        }
+
+        int expectedDim = studentEmbeddings[0].Length;
+        for (int i = 0; i < n; i++)
+        {
+            if (studentEmbeddings[i].Length != expectedDim || teacherEmbeddings[i].Length != expectedDim)
+            {
+                throw new ArgumentException("All embeddings must share the same dimensionality.");
+            }
+        }
+
         T totalLoss = NumOps.Zero;
         int pairCount = 0;
 

@@ -158,6 +158,9 @@ public class DistillationCheckpointManager<T>
         object? strategy,
         CheckpointMetadata metadata)
     {
+        // Persist batch counter for resume continuity
+        metadata.BatchCounter = _batchCounter;
+
         // Save student
         if (_config.SaveStudent && student != null)
         {
@@ -228,6 +231,9 @@ public class DistillationCheckpointManager<T>
         ICheckpointableModel? student = null,
         ICheckpointableModel? teacher = null)
     {
+        // Restore batch counter for resume continuity
+        _batchCounter = metadata.BatchCounter;
+
         // Load student
         if (student != null && metadata.StudentCheckpointPath != null)
         {
@@ -327,13 +333,18 @@ public class DistillationCheckpointManager<T>
             .OrderBy(c => _config.LowerIsBetter ? c.Metrics[_config.BestMetric] : -c.Metrics[_config.BestMetric])
             .ToList();
 
-        // Keep checkpoints without metrics
+        // Get checkpoints without metrics
         var withoutMetric = _savedCheckpoints
             .Where(c => !c.Metrics.ContainsKey(_config.BestMetric))
             .ToList();
 
-        // Delete checkpoints beyond KeepBestN
-        var toDelete = sorted.Skip(_config.KeepBestN).ToList();
+        // Include both sorted and without-metric checkpoints in pruning to match KeepBestN exactly
+        // Preserve best N sorted checkpoints, then fill remaining slots with without-metric checkpoints
+        var toKeep = sorted.Take(_config.KeepBestN)
+            .Concat(withoutMetric.Take(Math.Max(0, _config.KeepBestN - sorted.Count)))
+            .ToHashSet();
+
+        var toDelete = _savedCheckpoints.Where(c => !toKeep.Contains(c)).ToList();
 
         foreach (var checkpoint in toDelete)
         {
@@ -437,6 +448,11 @@ public class CheckpointMetadata
     /// Batch number when checkpoint was saved (if applicable).
     /// </summary>
     public int? Batch { get; set; }
+
+    /// <summary>
+    /// Batch counter value when checkpoint was saved (for resume continuity).
+    /// </summary>
+    public int BatchCounter { get; set; }
 
     /// <summary>
     /// Timestamp when checkpoint was created.
