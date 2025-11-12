@@ -417,8 +417,8 @@ for (int epoch = 0; epoch < 10; epoch++)
         var loss = strategy.ComputeLoss(studentLogits, teacherLogits);
         student.ApplyGradient(strategy.ComputeGradient(studentLogits, teacherLogits));
 
-        // Checkpoint every 1000 batches
-        if ((batch + 1) % 100 == 0)  // Validate every 100 batches
+        // Validate and checkpoint every 100 batches
+        if ((batch + 1) % 100 == 0)
         {
             double validationLoss = QuickValidation(student);
 

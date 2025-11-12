@@ -34,6 +34,9 @@ public interface ICheckpointableModel
     /// Saves the model's current state (parameters and configuration) to a stream.
     /// </summary>
     /// <param name="stream">The stream to write the model state to.</param>
+    /// <exception cref="ArgumentNullException">Thrown when stream is null.</exception>
+    /// <exception cref="ArgumentException">Thrown when stream is not writable.</exception>
+    /// <exception cref="InvalidOperationException">Thrown when model state cannot be serialized (e.g., uninitialized model).</exception>
     /// <remarks>
     /// <para>
     /// This method serializes all the information needed to recreate the model's current state,
@@ -50,6 +53,12 @@ public interface ICheckpointableModel
     /// You can later use LoadState to restore the model to this exact state.
     /// </para>
     /// <para>
+    /// <b>Stream Handling:</b>
+    /// - The stream position will be advanced by the number of bytes written
+    /// - The stream is flushed but not closed (caller must dispose)
+    /// - For file-based persistence, wrap in File.Create/FileStream
+    /// </para>
+    /// <para>
     /// <b>Usage:</b>
     /// <code>
     /// // Save to file
@@ -64,6 +73,9 @@ public interface ICheckpointableModel
     /// Loads the model's state (parameters and configuration) from a stream.
     /// </summary>
     /// <param name="stream">The stream to read the model state from.</param>
+    /// <exception cref="ArgumentNullException">Thrown when stream is null.</exception>
+    /// <exception cref="ArgumentException">Thrown when stream is not readable or contains invalid data.</exception>
+    /// <exception cref="InvalidOperationException">Thrown when deserialization fails or data is incompatible with model architecture.</exception>
     /// <remarks>
     /// <para>
     /// This method deserializes model state that was previously saved with SaveState,
@@ -78,6 +90,19 @@ public interface ICheckpointableModel
     /// - The model becomes identical to when SaveState was called
     ///
     /// After loading, the model can make predictions using the restored parameters.
+    /// </para>
+    /// <para>
+    /// <b>Stream Handling:</b>
+    /// - The stream position will be advanced by the number of bytes read
+    /// - The stream is not closed (caller must dispose)
+    /// - Stream data must match the format written by SaveState
+    /// </para>
+    /// <para>
+    /// <b>Versioning:</b>
+    /// Implementations should consider:
+    /// - Including format version number in serialized data
+    /// - Validating compatibility before deserialization
+    /// - Providing migration paths for old formats when possible
     /// </para>
     /// <para>
     /// <b>Usage:</b>
