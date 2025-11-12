@@ -116,17 +116,17 @@ public abstract class AdaptiveDistillationStrategyBase<T>
         double adaptiveTemp = ComputeAdaptiveTemperature(studentOutput, teacherOutput);
 
         // Compute soft loss with adaptive temperature
-        var studentSoft = Softmax(studentOutput, adaptiveTemp);
-        var teacherSoft = Softmax(teacherOutput, adaptiveTemp);
+        var studentSoft = DistillationHelper<T>.Softmax(studentOutput, adaptiveTemp);
+        var teacherSoft = DistillationHelper<T>.Softmax(teacherOutput, adaptiveTemp);
 
-        var softLoss = KLDivergence(teacherSoft, studentSoft);
+        var softLoss = DistillationHelper<T>.KLDivergence(teacherSoft, studentSoft);
         softLoss = NumOps.Multiply(softLoss, NumOps.FromDouble(adaptiveTemp * adaptiveTemp));
 
         // Add hard loss if labels provided
         if (trueLabels != null)
         {
-            var studentProbs = Softmax(studentOutput, temperature: 1.0);
-            var hardLoss = CrossEntropy(studentProbs, trueLabels);
+            var studentProbs = DistillationHelper<T>.Softmax(studentOutput, temperature: 1.0);
+            var hardLoss = DistillationHelper<T>.CrossEntropy(studentProbs, trueLabels);
 
             var alphaT = NumOps.FromDouble(Alpha);
             var oneMinusAlpha = NumOps.FromDouble(1.0 - Alpha);
@@ -154,8 +154,8 @@ public abstract class AdaptiveDistillationStrategyBase<T>
         double adaptiveTemp = ComputeAdaptiveTemperature(studentOutput, teacherOutput);
 
         // Soft gradient with adaptive temperature
-        var studentSoft = Softmax(studentOutput, adaptiveTemp);
-        var teacherSoft = Softmax(teacherOutput, adaptiveTemp);
+        var studentSoft = DistillationHelper<T>.Softmax(studentOutput, adaptiveTemp);
+        var teacherSoft = DistillationHelper<T>.Softmax(teacherOutput, adaptiveTemp);
 
         for (int i = 0; i < n; i++)
         {
@@ -166,7 +166,7 @@ public abstract class AdaptiveDistillationStrategyBase<T>
         // Add hard gradient if labels provided
         if (trueLabels != null)
         {
-            var studentProbs = Softmax(studentOutput, temperature: 1.0);
+            var studentProbs = DistillationHelper<T>.Softmax(studentOutput, temperature: 1.0);
 
             for (int i = 0; i < n; i++)
             {
@@ -197,7 +197,7 @@ public abstract class AdaptiveDistillationStrategyBase<T>
     /// </remarks>
     protected virtual double ComputePerformance(Vector<T> studentOutput, Vector<T>? trueLabel)
     {
-        var probs = Softmax(studentOutput, 1.0);
+        var probs = DistillationHelper<T>.Softmax(studentOutput, 1.0);
         return GetMaxConfidence(probs);
     }
 
@@ -271,60 +271,4 @@ public abstract class AdaptiveDistillationStrategyBase<T>
     {
         return Math.Max(MinTemperature, Math.Min(MaxTemperature, temperature));
     }
-
-    protected Vector<T> Softmax(Vector<T> logits, double temperature)
-    {
-        int n = logits.Length;
-        var result = new Vector<T>(n);
-        var scaled = new T[n];
-
-        for (int i = 0; i < n; i++)
-            scaled[i] = NumOps.FromDouble(Convert.ToDouble(logits[i]) / temperature);
-
-        T maxLogit = scaled[0];
-        for (int i = 1; i < n; i++)
-            if (NumOps.GreaterThan(scaled[i], maxLogit))
-                maxLogit = scaled[i];
-
-        T sum = NumOps.Zero;
-        var expValues = new T[n];
-
-        for (int i = 0; i < n; i++)
-        {
-            double val = Convert.ToDouble(NumOps.Subtract(scaled[i], maxLogit));
-            expValues[i] = NumOps.FromDouble(Math.Exp(val));
-            sum = NumOps.Add(sum, expValues[i]);
-        }
-
-        for (int i = 0; i < n; i++)
-        {
-            result[i] = NumOps.Divide(expValues[i], sum);
-        }
-
-        return result;
-    }
-
-    protected T CrossEntropy(Vector<T> predictions, Vector<T> targets)
-    {
-        T loss = NumOps.Zero;
-        for (int i = 0; i < predictions.Length; i++)
-        {
-            double pred = Math.Max(Convert.ToDouble(predictions[i]), 1e-10);
-            double target = Convert.ToDouble(targets[i]);
-            loss = NumOps.Add(loss, NumOps.FromDouble(-target * Math.Log(pred)));
-        }
-        return loss;
-    }
-
-    protected T KLDivergence(Vector<T> predictions, Vector<T> targets)
-    {
-        T kl = NumOps.Zero;
-        for (int i = 0; i < predictions.Length; i++)
-        {
-            double p = Math.Max(Convert.ToDouble(predictions[i]), 1e-10);
-            double q = Math.Max(Convert.ToDouble(targets[i]), 1e-10);
-            kl = NumOps.Add(kl, NumOps.FromDouble(q * Math.Log(q / p)));
-        }
-        return kl;
-    }}
-
+}

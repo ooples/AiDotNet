@@ -131,8 +131,6 @@ public class NeuronSelectivityDistillationStrategy<T> : DistillationStrategyBase
     /// </remarks>
     public T ComputeSelectivityLoss(Vector<T>[] studentActivations, Vector<T>[] teacherActivations)
     {
-        if (studentActivations == null) throw new ArgumentNullException(nameof(studentActivations));
-        if (teacherActivations == null) throw new ArgumentNullException(nameof(teacherActivations));
         if (studentActivations.Length != teacherActivations.Length)
             throw new ArgumentException("Student and teacher must have same batch size");
 
@@ -141,15 +139,6 @@ public class NeuronSelectivityDistillationStrategy<T> : DistillationStrategyBase
 
         int batchSize = studentActivations.Length;
         int numNeurons = studentActivations[0].Length;
-        
-        // Validate all activations have consistent dimensions
-        for (int i = 0; i < batchSize; i++)
-        {
-            if (studentActivations[i].Length != numNeurons)
-                throw new ArgumentException($"Student activation dimension mismatch at index {i}: expected {numNeurons}, got {studentActivations[i].Length}");
-            if (teacherActivations[i].Length != numNeurons)
-                throw new ArgumentException($"Teacher activation dimension mismatch at index {i}: expected {numNeurons}, got {teacherActivations[i].Length}");
-        }
 
         // Compute selectivity for each neuron
         var studentSelectivity = ComputeSelectivityScores(studentActivations, numNeurons);

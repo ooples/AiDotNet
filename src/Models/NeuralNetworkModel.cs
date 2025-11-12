@@ -655,8 +655,9 @@ public class NeuralNetworkModel<T> : IFullModel<T, Tensor<T>, Tensor<T>>
     public ModelMetadata<T> GetModelMetadata()
     {
         int[] layerSizes = Architecture.GetLayerSizes();
+        int outputDimension = Architecture.GetOutputShape()[0];
         
-        return new ModelMetadata<T>
+        var metadata = new ModelMetadata<T>
         {
             FeatureCount = FeatureCount,
             Complexity = Complexity,
@@ -673,6 +674,11 @@ public class NeuralNetworkModel<T> : IFullModel<T, Tensor<T>, Tensor<T>>
                 { "SupportsTraining", Network.SupportsTraining }
             }
         };
+        
+        metadata.SetProperty("OutputDimension", outputDimension);
+        metadata.SetProperty("NumClasses", outputDimension);
+        
+        return metadata;
     }
 
     /// <summary>
@@ -854,12 +860,8 @@ public class NeuralNetworkModel<T> : IFullModel<T, Tensor<T>, Tensor<T>>
     /// </remarks>
     public IFullModel<T, Tensor<T>, Tensor<T>> WithParameters(Vector<T> parameters)
     {
-        // Create a new model with the same architecture
-        var newModel = new NeuralNetworkModel<T>(Architecture);
-    
-        // Update the parameters of the new model
+        var newModel = new NeuralNetworkModel<T>(Architecture, _defaultLossFunction);
         newModel.Network.UpdateParameters(parameters);
-    
         return newModel;
     }
 
@@ -963,18 +965,12 @@ public class NeuralNetworkModel<T> : IFullModel<T, Tensor<T>, Tensor<T>>
     /// </remarks>
     public IFullModel<T, Tensor<T>, Tensor<T>> DeepCopy()
     {
-        // Create a new model with the same architecture
-        var copy = new NeuralNetworkModel<T>(Architecture);
-        
-        // Copy the network parameters
+        var copy = new NeuralNetworkModel<T>(Architecture, _defaultLossFunction);
         var parameters = Network.GetParameters();
         copy.Network.UpdateParameters(parameters);
-        
-        // Copy additional properties
         copy._learningRate = _learningRate;
         copy._isTrainingMode = _isTrainingMode;
         copy.Network.SetTrainingMode(_isTrainingMode);
-        
         return copy;
     }
 

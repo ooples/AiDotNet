@@ -79,4 +79,61 @@ public abstract class TeacherModelBase<TInput, TOutput, T> : ITeacherModel<TInpu
     {
         if (input == null) throw new ArgumentNullException(paramName);
     }
+
+    /// <summary>
+    /// Applies temperature-scaled softmax to logits.
+    /// </summary>
+    /// <param name="logits">Raw logits to convert to probabilities.</param>
+    /// <param name="temperature">Temperature parameter for softening (default: 1.0).</param>
+    /// <returns>Probability distribution over classes.</returns>
+    /// <remarks>
+    /// <para><b>Temperature Effects:</b>
+    /// - temperature = 1.0: Standard softmax (sharp distribution)
+    /// - temperature > 1.0: Softened distribution (more uniform, better for distillation)
+    /// - temperature < 1.0: Sharpened distribution (more peaked)</para>
+    ///
+    /// <para><b>Stability:</b> Uses LogSumExp trick to prevent numerical overflow/underflow.</para>
+    /// </remarks>
+    protected virtual Vector<T> Softmax(Vector<T> logits, double temperature = 1.0)
+    {
+        if (logits == null) throw new ArgumentNullException(nameof(logits));
+        if (temperature <= 0) throw new ArgumentOutOfRangeException(nameof(temperature), "Temperature must be positive");
+
+        var scaledLogits = new T[logits.Length];
+        var tempValue = NumOps.FromDouble(temperature);
+
+        for (int i = 0; i < logits.Length; i++)
+        {
+            scaledLogits[i] = NumOps.Divide(logits[i], tempValue);
+        }
+
+        // Find max logit for numerical stability
+        var maxLogit = scaledLogits[0];
+        for (int i = 1; i < scaledLogits.Length; i++)
+        {
+            if (NumOps.GreaterThanOrEquals(scaledLogits[i], maxLogit))
+            {
+                maxLogit = scaledLogits[i];
+            }
+        }
+
+        // Compute exp(logit - maxLogit) and sum
+        T sumExp = NumOps.Zero;
+        var expValues = new T[scaledLogits.Length];
+        for (int i = 0; i < scaledLogits.Length; i++)
+        {
+            var shifted = NumOps.Subtract(scaledLogits[i], maxLogit);
+            expValues[i] = NumOps.Exp(shifted);
+            sumExp = NumOps.Add(sumExp, expValues[i]);
+        }
+
+        // Normalize to get probabilities
+        var probabilities = new T[scaledLogits.Length];
+        for (int i = 0; i < scaledLogits.Length; i++)
+        {
+            probabilities[i] = NumOps.Divide(expValues[i], sumExp);
+        }
+
+        return new Vector<T>(probabilities);
+    }
 }
