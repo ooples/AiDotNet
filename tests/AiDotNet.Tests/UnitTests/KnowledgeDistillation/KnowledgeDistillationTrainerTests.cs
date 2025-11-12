@@ -255,13 +255,13 @@ public class KnowledgeDistillationTrainerTests
         {
             new Vector<double>(new[] { 0.5, 0.3, 0.2 }),
             new Vector<double>(new[] { 0.4, 0.4, 0.2 })
-        };
+        });
 
         var testLabels = new Vector<Vector<double>>(new[]
         {
             new Vector<double>(new[] { 1.0, 0.0, 0.0 }),
             new Vector<double>(new[] { 1.0, 0.0, 0.0 })
-        };
+        });
 
         // Student always predicts class 0 correctly
         Func<Vector<double>, Vector<double>> studentForward = input =>

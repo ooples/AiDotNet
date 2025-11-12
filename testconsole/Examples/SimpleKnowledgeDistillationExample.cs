@@ -2,6 +2,7 @@ using AiDotNet;
 using AiDotNet.Enums;
 using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
+using AiDotNet.Models;
 using AiDotNet.Models.Options;
 
 namespace TestConsole.Examples;
@@ -125,13 +126,20 @@ public static class SimpleKnowledgeDistillationExample
 
         public void Train(Vector<double> input, Vector<double> target) { }
 
-        public IDictionary<string, object?> GetMetadata()
+        public ModelMetadata<double> GetModelMetadata()
         {
-            return new Dictionary<string, object?>
+            var metadata = new ModelMetadata<double>
             {
-                ["OutputDimension"] = _outputDim
+                FeatureCount = _inputDim,
+                Description = "Mock model for distillation example"
             };
+            metadata.SetProperty("OutputDimension", _outputDim);
+            return metadata;
         }
+
+        public ILossFunction<double> DefaultLossFunction => throw new NotImplementedException();
+
+        public byte[] Serialize() => Array.Empty<byte>();
 
         public void SaveState(Stream stream) { }
         public void LoadState(Stream stream) { }
