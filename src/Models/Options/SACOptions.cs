@@ -1,6 +1,6 @@
 using AiDotNet.LossFunctions;
 
-namespace AiDotNet.ReinforcementLearning.Agents.SAC;
+namespace AiDotNet.Models.Options;
 
 /// <summary>
 /// Configuration options for Soft Actor-Critic (SAC) agents.
@@ -32,27 +32,27 @@ public class SACOptions<T>
     /// <summary>
     /// Size of the state observation space.
     /// </summary>
-    public int StateSize { get; init; }
+    public int StateSize { get; set; }
 
     /// <summary>
     /// Size of the continuous action space.
     /// </summary>
-    public int ActionSize { get; init; }
+    public int ActionSize { get; set; }
 
     /// <summary>
     /// Learning rate for policy network.
     /// </summary>
-    public T PolicyLearningRate { get; init; }
+    public T PolicyLearningRate { get; set; }
 
     /// <summary>
     /// Learning rate for Q-networks.
     /// </summary>
-    public T QLearningRate { get; init; }
+    public T QLearningRate { get; set; }
 
     /// <summary>
     /// Learning rate for temperature parameter (alpha).
     /// </summary>
-    public T AlphaLearningRate { get; init; }
+    public T AlphaLearningRate { get; set; }
 
     /// <summary>
     /// Discount factor (gamma) for future rewards.
@@ -60,7 +60,7 @@ public class SACOptions<T>
     /// <remarks>
     /// Typical values: 0.95-0.99.
     /// </remarks>
-    public T DiscountFactor { get; init; }
+    public T DiscountFactor { get; set; }
 
     /// <summary>
     /// Soft target update coefficient (tau).
@@ -69,7 +69,7 @@ public class SACOptions<T>
     /// Typical values: 0.005-0.01.
     /// Controls how quickly target networks track main networks.
     /// </remarks>
-    public T TargetUpdateTau { get; init; }
+    public T TargetUpdateTau { get; set; }
 
     /// <summary>
     /// Initial temperature (alpha) for entropy regularization.
@@ -79,7 +79,7 @@ public class SACOptions<T>
     /// Higher = more exploration.
     /// Can be automatically tuned if AutoTuneTemperature is true.
     /// </remarks>
-    public T InitialTemperature { get; init; }
+    public T InitialTemperature { get; set; }
 
     /// <summary>
     /// Whether to automatically tune the temperature parameter.
@@ -88,7 +88,7 @@ public class SACOptions<T>
     /// Recommended: true.
     /// Automatically adjusts exploration based on entropy target.
     /// </remarks>
-    public bool AutoTuneTemperature { get; init; } = true;
+    public bool AutoTuneTemperature { get; set; } = true;
 
     /// <summary>
     /// Target entropy for automatic temperature tuning.
@@ -97,7 +97,7 @@ public class SACOptions<T>
     /// Typical: -ActionSize (for continuous actions).
     /// If null, uses -ActionSize as default.
     /// </remarks>
-    public T? TargetEntropy { get; init; }
+    public T? TargetEntropy { get; set; }
 
     /// <summary>
     /// Mini-batch size for training.
@@ -105,7 +105,7 @@ public class SACOptions<T>
     /// <remarks>
     /// Typical values: 256-512.
     /// </remarks>
-    public int BatchSize { get; init; } = 256;
+    public int BatchSize { get; set; } = 256;
 
     /// <summary>
     /// Capacity of the experience replay buffer.
@@ -113,7 +113,7 @@ public class SACOptions<T>
     /// <remarks>
     /// Typical values: 100,000-1,000,000.
     /// </remarks>
-    public int ReplayBufferSize { get; init; } = 1000000;
+    public int ReplayBufferSize { get; set; } = 1000000;
 
     /// <summary>
     /// Number of warmup steps before starting training.
@@ -122,7 +122,7 @@ public class SACOptions<T>
     /// Typical values: 1,000-10,000.
     /// Collects random experiences before training begins.
     /// </remarks>
-    public int WarmupSteps { get; init; } = 10000;
+    public int WarmupSteps { get; set; } = 10000;
 
     /// <summary>
     /// Number of gradient steps per environment step.
@@ -131,58 +131,36 @@ public class SACOptions<T>
     /// Typical value: 1.
     /// Can be > 1 for faster learning from collected experiences.
     /// </remarks>
-    public int GradientSteps { get; init; } = 1;
+    public int GradientSteps { get; set; } = 1;
 
     /// <summary>
     /// Loss function for Q-networks (typically MSE).
     /// </summary>
-    public ILossFunction<T> QLossFunction { get; init; }
+    public ILossFunction<T> QLossFunction { get; set; } = new MeanSquaredError<T>();
 
     /// <summary>
     /// Hidden layer sizes for policy network.
     /// </summary>
-    public int[] PolicyHiddenLayers { get; init; } = new[] { 256, 256 };
+    public List<int> PolicyHiddenLayers { get; set; } = [256, 256];
 
     /// <summary>
     /// Hidden layer sizes for Q-networks.
     /// </summary>
-    public int[] QHiddenLayers { get; init; } = new[] { 256, 256 };
+    public List<int> QHiddenLayers { get; set; } = [256, 256];
 
     /// <summary>
     /// Random seed for reproducibility (optional).
     /// </summary>
-    public int? Seed { get; init; }
+    public int? Seed { get; set; }
 
-    /// <summary>
-    /// Creates default options for SAC with common hyperparameters.
-    /// </summary>
-    public static SACOptions<T> Default(
-        int stateSize,
-        int actionSize,
-        T policyLr,
-        T qLr,
-        T gamma)
+    public SACOptions()
     {
         var numOps = NumericOperations<T>.Instance;
-        return new SACOptions<T>
-        {
-            StateSize = stateSize,
-            ActionSize = actionSize,
-            PolicyLearningRate = policyLr,
-            QLearningRate = qLr,
-            AlphaLearningRate = numOps.FromDouble(0.0003),
-            DiscountFactor = gamma,
-            TargetUpdateTau = numOps.FromDouble(0.005),
-            InitialTemperature = numOps.FromDouble(0.2),
-            AutoTuneTemperature = true,
-            TargetEntropy = numOps.FromDouble(-actionSize),
-            BatchSize = 256,
-            ReplayBufferSize = 1000000,
-            WarmupSteps = 10000,
-            GradientSteps = 1,
-            QLossFunction = new MeanSquaredError<T>(),
-            PolicyHiddenLayers = new[] { 256, 256 },
-            QHiddenLayers = new[] { 256, 256 }
-        };
+        PolicyLearningRate = numOps.FromDouble(0.0003);
+        QLearningRate = numOps.FromDouble(0.0003);
+        AlphaLearningRate = numOps.FromDouble(0.0003);
+        DiscountFactor = numOps.FromDouble(0.99);
+        TargetUpdateTau = numOps.FromDouble(0.005);
+        InitialTemperature = numOps.FromDouble(0.2);
     }
 }

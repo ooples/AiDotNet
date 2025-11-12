@@ -1,6 +1,6 @@
 using AiDotNet.LossFunctions;
 
-namespace AiDotNet.ReinforcementLearning.Agents.DDPG;
+namespace AiDotNet.Models.Options;
 
 /// <summary>
 /// Configuration options for DDPG agent.
@@ -22,4 +22,13 @@ public class DDPGOptions<T>
     public List<int> ActorHiddenLayers { get; set; } = [400, 300];
     public List<int> CriticHiddenLayers { get; set; } = [400, 300];
     public int? Seed { get; set; }
+
+    public DDPGOptions()
+    {
+        var numOps = NumericOperations<T>.Instance;
+        ActorLearningRate = numOps.FromDouble(0.0001);
+        CriticLearningRate = numOps.FromDouble(0.001);
+        DiscountFactor = numOps.FromDouble(0.99);
+        TargetUpdateTau = numOps.FromDouble(0.001);
+    }
 }

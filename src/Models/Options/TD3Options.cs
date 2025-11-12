@@ -1,6 +1,6 @@
 using AiDotNet.LossFunctions;
 
-namespace AiDotNet.ReinforcementLearning.Agents.TD3;
+namespace AiDotNet.Models.Options;
 
 /// <summary>
 /// Configuration options for TD3 agent.
@@ -25,4 +25,13 @@ public class TD3Options<T>
     public List<int> ActorHiddenLayers { get; set; } = [256, 256];
     public List<int> CriticHiddenLayers { get; set; } = [256, 256];
     public int? Seed { get; set; }
+
+    public TD3Options()
+    {
+        var numOps = NumericOperations<T>.Instance;
+        ActorLearningRate = numOps.FromDouble(0.001);
+        CriticLearningRate = numOps.FromDouble(0.001);
+        DiscountFactor = numOps.FromDouble(0.99);
+        TargetUpdateTau = numOps.FromDouble(0.005);
+    }
 }

@@ -1,6 +1,6 @@
 using AiDotNet.LossFunctions;
 
-namespace AiDotNet.ReinforcementLearning.Agents.PPO;
+namespace AiDotNet.Models.Options;
 
 /// <summary>
 /// Configuration options for Proximal Policy Optimization (PPO) agents.
@@ -31,27 +31,27 @@ public class PPOOptions<T>
     /// <summary>
     /// Size of the state observation space.
     /// </summary>
-    public int StateSize { get; init; }
+    public int StateSize { get; set; }
 
     /// <summary>
     /// Number of possible actions (discrete) or action dimensions (continuous).
     /// </summary>
-    public int ActionSize { get; init; }
+    public int ActionSize { get; set; }
 
     /// <summary>
     /// Whether the action space is continuous (true) or discrete (false).
     /// </summary>
-    public bool IsContinuous { get; init; } = false;
+    public bool IsContinuous { get; set; } = false;
 
     /// <summary>
     /// Learning rate for the policy network.
     /// </summary>
-    public T PolicyLearningRate { get; init; }
+    public T PolicyLearningRate { get; set; }
 
     /// <summary>
     /// Learning rate for the value network.
     /// </summary>
-    public T ValueLearningRate { get; init; }
+    public T ValueLearningRate { get; set; }
 
     /// <summary>
     /// Discount factor (gamma) for future rewards.
@@ -59,7 +59,7 @@ public class PPOOptions<T>
     /// <remarks>
     /// Typical values: 0.95-0.99.
     /// </remarks>
-    public T DiscountFactor { get; init; }
+    public T DiscountFactor { get; set; }
 
     /// <summary>
     /// GAE (Generalized Advantage Estimation) lambda parameter.
@@ -69,7 +69,7 @@ public class PPOOptions<T>
     /// Controls bias-variance tradeoff in advantage estimation.
     /// Higher values = lower bias, higher variance.
     /// </remarks>
-    public T GaeLambda { get; init; }
+    public T GaeLambda { get; set; }
 
     /// <summary>
     /// PPO clipping parameter (epsilon).
@@ -79,7 +79,7 @@ public class PPOOptions<T>
     /// Limits how much the policy can change in one update.
     /// Smaller = more conservative updates, more stable.
     /// </remarks>
-    public T ClipEpsilon { get; init; }
+    public T ClipEpsilon { get; set; }
 
     /// <summary>
     /// Entropy coefficient for exploration.
@@ -89,7 +89,7 @@ public class PPOOptions<T>
     /// Encourages exploration by penalizing deterministic policies.
     /// Higher = more exploration.
     /// </remarks>
-    public T EntropyCoefficient { get; init; }
+    public T EntropyCoefficient { get; set; }
 
     /// <summary>
     /// Value function loss coefficient.
@@ -98,7 +98,7 @@ public class PPOOptions<T>
     /// Typical values: 0.5-1.0.
     /// Weight of value loss relative to policy loss.
     /// </remarks>
-    public T ValueLossCoefficient { get; init; }
+    public T ValueLossCoefficient { get; set; }
 
     /// <summary>
     /// Maximum gradient norm for gradient clipping.
@@ -107,7 +107,7 @@ public class PPOOptions<T>
     /// Typical values: 0.5-5.0.
     /// Prevents exploding gradients.
     /// </remarks>
-    public double MaxGradNorm { get; init; } = 0.5;
+    public double MaxGradNorm { get; set; } = 0.5;
 
     /// <summary>
     /// Number of steps to collect before each training update.
@@ -116,7 +116,7 @@ public class PPOOptions<T>
     /// Typical values: 128-2048.
     /// PPO collects trajectories, then trains on them.
     /// </remarks>
-    public int StepsPerUpdate { get; init; } = 2048;
+    public int StepsPerUpdate { get; set; } = 2048;
 
     /// <summary>
     /// Mini-batch size for training.
@@ -125,7 +125,7 @@ public class PPOOptions<T>
     /// Typical values: 32-256.
     /// Should divide StepsPerUpdate evenly.
     /// </remarks>
-    public int MiniBatchSize { get; init; } = 64;
+    public int MiniBatchSize { get; set; } = 64;
 
     /// <summary>
     /// Number of epochs to train on collected data.
@@ -134,59 +134,37 @@ public class PPOOptions<T>
     /// Typical values: 3-10.
     /// PPO reuses collected experiences multiple times.
     /// </remarks>
-    public int TrainingEpochs { get; init; } = 10;
+    public int TrainingEpochs { get; set; } = 10;
 
     /// <summary>
     /// Loss function for value network (typically MSE).
     /// </summary>
-    public ILossFunction<T> ValueLossFunction { get; init; }
+    public ILossFunction<T> ValueLossFunction { get; set; } = new MeanSquaredError<T>();
 
     /// <summary>
     /// Hidden layer sizes for policy network.
     /// </summary>
-    public int[] PolicyHiddenLayers { get; init; } = new[] { 64, 64 };
+    public List<int> PolicyHiddenLayers { get; set; } = [64, 64];
 
     /// <summary>
     /// Hidden layer sizes for value network.
     /// </summary>
-    public int[] ValueHiddenLayers { get; init; } = new[] { 64, 64 };
+    public List<int> ValueHiddenLayers { get; set; } = [64, 64];
 
     /// <summary>
     /// Random seed for reproducibility (optional).
     /// </summary>
-    public int? Seed { get; init; }
+    public int? Seed { get; set; }
 
-    /// <summary>
-    /// Creates default options for PPO with common hyperparameters.
-    /// </summary>
-    public static PPOOptions<T> Default(
-        int stateSize,
-        int actionSize,
-        T policyLr,
-        T valueLr,
-        T gamma,
-        bool isContinuous = false)
+    public PPOOptions()
     {
         var numOps = NumericOperations<T>.Instance;
-        return new PPOOptions<T>
-        {
-            StateSize = stateSize,
-            ActionSize = actionSize,
-            IsContinuous = isContinuous,
-            PolicyLearningRate = policyLr,
-            ValueLearningRate = valueLr,
-            DiscountFactor = gamma,
-            GaeLambda = numOps.FromDouble(0.95),
-            ClipEpsilon = numOps.FromDouble(0.2),
-            EntropyCoefficient = numOps.FromDouble(0.01),
-            ValueLossCoefficient = numOps.FromDouble(0.5),
-            MaxGradNorm = 0.5,
-            StepsPerUpdate = 2048,
-            MiniBatchSize = 64,
-            TrainingEpochs = 10,
-            ValueLossFunction = new MeanSquaredError<T>(),
-            PolicyHiddenLayers = new[] { 64, 64 },
-            ValueHiddenLayers = new[] { 64, 64 }
-        };
+        PolicyLearningRate = numOps.FromDouble(0.0003);
+        ValueLearningRate = numOps.FromDouble(0.001);
+        DiscountFactor = numOps.FromDouble(0.99);
+        GaeLambda = numOps.FromDouble(0.95);
+        ClipEpsilon = numOps.FromDouble(0.2);
+        EntropyCoefficient = numOps.FromDouble(0.01);
+        ValueLossCoefficient = numOps.FromDouble(0.5);
     }
 }

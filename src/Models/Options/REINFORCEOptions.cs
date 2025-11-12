@@ -1,4 +1,4 @@
-namespace AiDotNet.ReinforcementLearning.Agents.REINFORCE;
+namespace AiDotNet.Models.Options;
 
 /// <summary>
 /// Configuration options for REINFORCE agents.
@@ -24,24 +24,18 @@ namespace AiDotNet.ReinforcementLearning.Agents.REINFORCE;
 /// </remarks>
 public class REINFORCEOptions<T>
 {
-    public int StateSize { get; init; }
-    public int ActionSize { get; init; }
-    public bool IsContinuous { get; init; } = false;
-    public T LearningRate { get; init; }
-    public T DiscountFactor { get; init; }
-    public int[] HiddenLayers { get; init; } = new[] { 32, 32 };
-    public int? Seed { get; init; }
+    public int StateSize { get; set; }
+    public int ActionSize { get; set; }
+    public bool IsContinuous { get; set; } = false;
+    public T LearningRate { get; set; }
+    public T DiscountFactor { get; set; }
+    public List<int> HiddenLayers { get; set; } = [32, 32];
+    public int? Seed { get; set; }
 
-    public static REINFORCEOptions<T> Default(int stateSize, int actionSize, T learningRate, T gamma, bool isContinuous = false)
+    public REINFORCEOptions()
     {
-        return new REINFORCEOptions<T>
-        {
-            StateSize = stateSize,
-            ActionSize = actionSize,
-            IsContinuous = isContinuous,
-            LearningRate = learningRate,
-            DiscountFactor = gamma,
-            HiddenLayers = new[] { 32, 32 }
-        };
+        var numOps = NumericOperations<T>.Instance;
+        LearningRate = numOps.FromDouble(0.001);
+        DiscountFactor = numOps.FromDouble(0.99);
     }
 }
