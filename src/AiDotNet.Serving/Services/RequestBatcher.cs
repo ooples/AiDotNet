@@ -261,7 +261,10 @@ public class RequestBatcher : IRequestBatcher, IDisposable
         {
             while (requests.Count < optimalBatchSize && _priorityQueue.TryDequeue(out var request))
             {
-                requests.Add(request);
+                if (request != null)
+                {
+                    requests.Add(request);
+                }
             }
         }
         else

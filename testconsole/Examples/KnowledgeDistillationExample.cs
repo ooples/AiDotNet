@@ -301,6 +301,7 @@ public static class KnowledgeDistillationExample
         private readonly int _outputDim;
         private readonly bool _isLarge;
         private readonly Random _random;
+        private readonly ILossFunction<double> _defaultLossFunction;
 
         public MockModel(int inputDim, int outputDim, bool isLarge)
         {
@@ -308,6 +309,7 @@ public static class KnowledgeDistillationExample
             _outputDim = outputDim;
             _isLarge = isLarge;
             _random = new Random(isLarge ? 42 : 123);
+            _defaultLossFunction = new CrossEntropyLoss<double>();
         }
 
         public Vector<double> Predict(Matrix<double> input)
@@ -339,7 +341,7 @@ public static class KnowledgeDistillationExample
             return metadata;
         }
 
-        public ILossFunction<double> DefaultLossFunction => throw new NotImplementedException();
+        public ILossFunction<double> DefaultLossFunction => _defaultLossFunction;
 
         public byte[] Serialize() => Array.Empty<byte>();
         public void Deserialize(byte[] data) { }

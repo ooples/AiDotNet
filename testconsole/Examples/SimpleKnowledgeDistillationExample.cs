@@ -2,6 +2,7 @@ using AiDotNet;
 using AiDotNet.Enums;
 using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
+using AiDotNet.LossFunctions;
 using AiDotNet.Models;
 using AiDotNet.Models.Options;
 
@@ -103,11 +104,13 @@ public static class SimpleKnowledgeDistillationExample
         private readonly int _inputDim;
         private readonly int _outputDim;
         private readonly Random _random = new Random();
+        private readonly ILossFunction<double> _defaultLossFunction;
 
         public MockModel(int inputDim, int outputDim)
         {
             _inputDim = inputDim;
             _outputDim = outputDim;
+            _defaultLossFunction = new CrossEntropyLoss<double>();
         }
 
         public Vector<double> Predict(Matrix<double> input)
@@ -137,7 +140,7 @@ public static class SimpleKnowledgeDistillationExample
             return metadata;
         }
 
-        public ILossFunction<double> DefaultLossFunction => throw new NotImplementedException();
+        public ILossFunction<double> DefaultLossFunction => _defaultLossFunction;
 
         public byte[] Serialize() => Array.Empty<byte>();
         public void Deserialize(byte[] data) { }

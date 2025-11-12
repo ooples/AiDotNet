@@ -251,13 +251,13 @@ public class KnowledgeDistillationTrainerTests
         var distillationLoss = new DistillationLoss<double>();
         var trainer = new KnowledgeDistillationTrainer<double>(teacher, distillationLoss);
 
-        var testInputs = new Vector<Vector<double>>(new[]
+        var testInputs = new Vector<Vector<double>>(new Vector<double>[]
         {
             new Vector<double>(new[] { 0.5, 0.3, 0.2 }),
             new Vector<double>(new[] { 0.4, 0.4, 0.2 })
         });
 
-        var testLabels = new Vector<Vector<double>>(new[]
+        var testLabels = new Vector<Vector<double>>(new Vector<double>[]
         {
             new Vector<double>(new[] { 1.0, 0.0, 0.0 }),
             new Vector<double>(new[] { 1.0, 0.0, 0.0 })
@@ -282,13 +282,13 @@ public class KnowledgeDistillationTrainerTests
         var distillationLoss = new DistillationLoss<double>();
         var trainer = new KnowledgeDistillationTrainer<double>(teacher, distillationLoss);
 
-        var testInputs = new Vector<Vector<double>>(new[]
+        var testInputs = new Vector<Vector<double>>(new Vector<double>[]
         {
             new Vector<double>(new[] { 0.5, 0.3, 0.2 }),
             new Vector<double>(new[] { 0.4, 0.4, 0.2 })
         });
 
-        var testLabels = new Vector<Vector<double>>(new[]
+        var testLabels = new Vector<Vector<double>>(new Vector<double>[]
         {
             new Vector<double>(new[] { 1.0, 0.0, 0.0 }), // True class: 0
             new Vector<double>(new[] { 1.0, 0.0, 0.0 })  // True class: 0
