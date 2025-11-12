@@ -258,14 +258,26 @@ public class ExpertLayer<T> : LayerBase<T>
     /// <returns>The gradient of the loss with respect to the layer's input.</returns>
     /// <remarks>
     /// <para>
-    /// This method uses automatic differentiation to compute gradients. Specialized operations
-    /// are not yet available in TensorOperations, so this falls back to the manual implementation.
+    /// This method uses automatic differentiation by delegating to the autodiff implementations
+    /// of the constituent layers in this expert. Each sublayer will use its own autodiff if available.
     /// </para>
     /// </remarks>
     private Tensor<T> BackwardViaAutodiff(Tensor<T> outputGradient)
     {
-        // TODO: Specialized operation not yet available in TensorOperations
-        return BackwardManual(outputGradient);
+        // Apply the derivative of the expert's activation function
+        if (_lastPreActivationOutput == null)
+            throw new InvalidOperationException("Forward pass must be called before Backward pass.");
+
+        var gradient = ApplyActivationDerivative(_lastPreActivationOutput, outputGradient);
+
+        // Composite layer: backpropagate through layers in reverse order
+        // The sublayers will handle their own autodiff if they support it
+        for (int i = _layers.Count - 1; i >= 0; i--)
+        {
+            gradient = _layers[i].Backward(gradient);
+        }
+
+        return gradient;
     }
 
 

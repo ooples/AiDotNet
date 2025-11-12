@@ -656,14 +656,46 @@ public class MixtureOfExpertsLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     /// <returns>The gradient of the loss with respect to the layer's input.</returns>
     /// <remarks>
     /// <para>
-    /// This method uses automatic differentiation to compute gradients. Specialized operations
-    /// are not yet available in TensorOperations, so this falls back to the manual implementation.
+    /// This method uses automatic differentiation by delegating to the autodiff implementations
+    /// of the expert layers and router network. Each sublayer will use its own autodiff if available.
     /// </para>
     /// </remarks>
     private Tensor<T> BackwardViaAutodiff(Tensor<T> outputGradient)
     {
-        // TODO: Specialized operation not yet available in TensorOperations
-        return BackwardManual(outputGradient);
+        if (_lastInput == null || _lastRoutingWeights == null || _lastExpertOutputs == null || _lastRoutingLogits == null)
+            throw new InvalidOperationException("Forward pass must be called before backward pass.");
+
+        // Step 1: Apply activation derivative
+        var activationGradient = ApplyActivationDerivative(_lastInput, outputGradient);
+
+        // Step 2: Backpropagate through experts (composite - each expert handles its own autodiff)
+        var inputGradientFromExperts = new Tensor<T>(_lastInput.Shape);
+
+        for (int i = 0; i < _experts.Count; i++)
+        {
+            // Weight the gradient by the routing weight for this expert
+            var weightedGradient = WeightGradientByRouting(activationGradient, _lastRoutingWeights, i);
+
+            // Only backprop through expert if it was active
+            bool wasActive = _topK == 0 || IsExpertUsedInBatch(i);
+
+            if (wasActive)
+            {
+                var expertInputGradient = _experts[i].Backward(weightedGradient);
+                inputGradientFromExperts = inputGradientFromExperts.Add(expertInputGradient);
+            }
+        }
+
+        // Step 3: Compute router gradient
+        var routerGradient = ComputeRouterGradient(activationGradient, _lastExpertOutputs, _lastRoutingWeights, _lastRoutingLogits);
+
+        // Step 4: Backpropagate through router (will use its own autodiff)
+        var inputGradientFromRouter = _router.Backward(routerGradient);
+
+        // Step 5: Combine gradients from both paths
+        var totalInputGradient = inputGradientFromExperts.Add(inputGradientFromRouter);
+
+        return totalInputGradient;
     }
 
 

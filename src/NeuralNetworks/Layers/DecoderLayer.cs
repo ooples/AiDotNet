@@ -236,14 +236,24 @@ public class DecoderLayer<T> : LayerBase<T>
     /// <returns>The gradient of the loss with respect to the layer's input.</returns>
     /// <remarks>
     /// <para>
-    /// This method uses automatic differentiation to compute gradients. Transformer-specific operations
-    /// like attention mechanisms are not yet available in TensorOperations, so this falls back to the manual implementation.
+    /// This method uses automatic differentiation by delegating to the autodiff implementations
+    /// of the constituent layers (AttentionLayer, LayerNormalizationLayer, FeedForwardLayer).
+    /// Each sublayer will use its own autodiff implementation if available.
     /// </para>
     /// </remarks>
     private Tensor<T> BackwardViaAutodiff(Tensor<T> outputGradient)
     {
-        // TODO: Specialized operation not yet available in TensorOperations
-        return BackwardManual(outputGradient);
+        if (_lastInput == null || _lastEncoderOutput == null)
+            throw new InvalidOperationException("Forward pass must be called before backward pass.");
+
+        // Composite layer: just call Backward on each sublayer with UseAutodiff enabled
+        // The sublayers will handle their own autodiff if they support it
+        var (inputGradient, encoderOutputGradient) = BackwardInternal(outputGradient);
+        _lastInputGradient = inputGradient;
+        _lastEncoderOutputGradient = encoderOutputGradient;
+
+        // Concatenate the input gradient and encoder output gradient
+        return Tensor<T>.Concatenate(new[] { inputGradient, encoderOutputGradient }, 1);
     }
 
     /// <summary>
