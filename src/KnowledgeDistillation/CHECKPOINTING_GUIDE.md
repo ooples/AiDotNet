@@ -60,9 +60,83 @@ DistillationCheckpointManager<T>
 └─ GetBestCheckpoint() (query metadata)
 ```
 
-## Basic Usage
+## Quick Start: Automatic Checkpointing (Recommended)
 
-### Example 1: Simple Student Checkpointing
+The easiest way to enable checkpointing is through automatic checkpointing built into the trainer. Simply configure the checkpoint settings and the trainer handles everything automatically.
+
+### Automatic Checkpointing Example
+
+```csharp
+using AiDotNet.KnowledgeDistillation;
+
+// Create trainer
+var teacher = LoadPretrainedTeacher();
+var student = CreateStudentModel();  // Must implement ICheckpointableModel
+var strategy = new ConfidenceBasedAdaptiveStrategy<double>();
+
+var trainer = new KnowledgeDistillationTrainer<double, Vector<double>, Vector<double>>(
+    teacher,
+    strategy
+);
+
+// Enable automatic checkpointing by setting CheckpointConfig
+trainer.CheckpointConfig = new DistillationCheckpointConfig
+{
+    CheckpointDirectory = "./checkpoints",
+    SaveEveryEpochs = 5,          // Auto-save every 5 epochs
+    KeepBestN = 3,                // Keep only 3 best checkpoints
+    SaveStudent = true,
+    BestMetric = "validation_loss",
+    LowerIsBetter = true
+};
+
+// Set the student model (required for checkpointing)
+trainer.Student = student as ICheckpointableModel;
+
+// Train - checkpointing happens automatically!
+trainer.Train(
+    studentForward: student.Predict,
+    studentBackward: student.ApplyGradient,
+    trainInputs: trainingData,
+    trainLabels: trainingLabels,
+    epochs: 100,
+    batchSize: 32,
+    validationInputs: validationData,
+    validationLabels: validationLabels
+);
+
+// After training completes, the best checkpoint is automatically loaded!
+Console.WriteLine("Training complete. Best checkpoint automatically restored.");
+```
+
+**What happens automatically:**
+1. **OnTrainingStart**: Checkpoint manager is initialized
+2. **OnEpochEnd**: Checkpoints are saved based on your configuration
+3. **OnValidationComplete**: Validation metrics are tracked for best checkpoint selection
+4. **OnTrainingEnd**: Best checkpoint is automatically loaded
+
+**Benefits:**
+- ✅ Zero manual checkpoint management code
+- ✅ Automatic best model selection
+- ✅ Automatic checkpoint pruning (keeps only best N)
+- ✅ Curriculum state preservation (if using curriculum strategies)
+- ✅ Clean, simple API
+
+### Disabling Automatic Checkpointing
+
+```csharp
+// Default: no checkpointing
+trainer.CheckpointConfig = null;  // or simply don't set it
+
+// Training proceeds without checkpointing
+trainer.Train(...);
+```
+
+## Manual Checkpointing (Advanced)
+
+For advanced use cases where you need fine-grained control over checkpoint timing and logic, you can use the `DistillationCheckpointManager` directly.
+
+### Example 1: Simple Student Checkpointing (Manual)
 
 ```csharp
 using AiDotNet.KnowledgeDistillation;

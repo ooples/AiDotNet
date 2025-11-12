@@ -57,6 +57,47 @@ public abstract class KnowledgeDistillationTrainerBase<T, TInput, TOutput> : IKn
     public IDistillationStrategy<T, TOutput> DistillationStrategy { get; protected set; }
 
     /// <summary>
+    /// Gets or sets the checkpoint configuration for automatic model saving during training.
+    /// </summary>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> Set this property to enable automatic checkpointing.
+    /// If null (default), no automatic checkpointing occurs. If set, the trainer will automatically:
+    /// - Save checkpoints based on your configuration (e.g., every 5 epochs)
+    /// - Keep only the best N checkpoints to save disk space
+    /// - Load the best checkpoint after training completes</para>
+    ///
+    /// <para><b>Example:</b>
+    /// <code>
+    /// trainer.CheckpointConfig = new DistillationCheckpointConfig
+    /// {
+    ///     SaveEveryEpochs = 5,
+    ///     KeepBestN = 3,
+    ///     BestMetric = "validation_loss"
+    /// };
+    /// </code>
+    /// </para>
+    /// </remarks>
+    public DistillationCheckpointConfig? CheckpointConfig { get; set; }
+
+    /// <summary>
+    /// Gets or sets the student model for checkpointing.
+    /// </summary>
+    /// <remarks>
+    /// <para>Set this if you want automatic checkpointing. The student must implement
+    /// <see cref="ICheckpointableModel"/> for checkpoint saving/loading to work.</para>
+    /// </remarks>
+    public ICheckpointableModel? Student { get; set; }
+
+    /// <summary>
+    /// Gets the checkpoint manager (created automatically when CheckpointConfig is set).
+    /// </summary>
+    protected DistillationCheckpointManager<T>? CheckpointManager { get; private set; }
+
+    private double _lastValidationMetric;
+    private T _lastTrainingLoss;
+    private int _currentEpoch;
+
+    /// <summary>
     /// Initializes a new instance of the KnowledgeDistillationTrainerBase class.
     /// </summary>
     /// <param name="teacher">The teacher model.</param>
@@ -66,6 +107,9 @@ public abstract class KnowledgeDistillationTrainerBase<T, TInput, TOutput> : IKn
     /// <para><b>For Beginners:</b> The teacher and strategy are the core components:
     /// - Teacher: Provides the "expert" knowledge to transfer
     /// - Strategy: Defines how to measure and optimize the knowledge transfer</para>
+    ///
+    /// <para><b>Automatic Checkpointing:</b> To enable automatic checkpointing, set the
+    /// <see cref="CheckpointConfig"/> and <see cref="Student"/> properties after construction.</para>
     /// </remarks>
     protected KnowledgeDistillationTrainerBase(
         ITeacherModel<TInput, TOutput> teacher,
@@ -76,6 +120,7 @@ public abstract class KnowledgeDistillationTrainerBase<T, TInput, TOutput> : IKn
         DistillationStrategy = distillationStrategy ?? throw new ArgumentNullException(nameof(distillationStrategy));
         NumOps = MathHelper.GetNumericOperations<T>();
         Random = seed.HasValue ? new Random(seed.Value) : new Random();
+        _lastTrainingLoss = NumOps.Zero;
     }
 
     /// <summary>
@@ -422,10 +467,17 @@ public abstract class KnowledgeDistillationTrainerBase<T, TInput, TOutput> : IKn
     /// - Initialize EMA buffers (for self-distillation)
     /// - Setup curriculum schedules
     /// - Allocate temporary buffers</para>
+    ///
+    /// <para><b>Automatic Checkpointing:</b> If <see cref="CheckpointConfig"/> is set, this method
+    /// automatically initializes the checkpoint manager.</para>
     /// </remarks>
     protected virtual void OnTrainingStart(Vector<TInput> trainInputs, Vector<TOutput>? trainLabels)
     {
-        // Default: no-op, derived classes can override
+        // Initialize checkpoint manager if config is provided
+        if (CheckpointConfig != null)
+        {
+            CheckpointManager = new DistillationCheckpointManager<T>(CheckpointConfig);
+        }
     }
 
     /// <summary>
@@ -439,10 +491,29 @@ public abstract class KnowledgeDistillationTrainerBase<T, TInput, TOutput> : IKn
     /// - Save final checkpoints
     /// - Log final metrics
     /// - Free temporary resources</para>
+    ///
+    /// <para><b>Automatic Checkpointing:</b> If <see cref="CheckpointConfig"/> is set, this method
+    /// automatically loads the best checkpoint (based on validation metrics) after training completes.</para>
     /// </remarks>
     protected virtual void OnTrainingEnd(Vector<TInput> trainInputs, Vector<TOutput>? trainLabels)
     {
-        // Default: no-op, derived classes can override
+        // Load best checkpoint if checkpointing was enabled
+        if (CheckpointManager != null && Student != null)
+        {
+            var bestCheckpoint = CheckpointManager.LoadBestCheckpoint(
+                student: Student,
+                teacher: Teacher as ICheckpointableModel
+            );
+
+            if (bestCheckpoint != null)
+            {
+                Console.WriteLine($"[Checkpointing] Loaded best checkpoint from epoch {bestCheckpoint.Epoch}");
+                if (bestCheckpoint.Metrics.ContainsKey(CheckpointConfig!.BestMetric))
+                {
+                    Console.WriteLine($"[Checkpointing] Best {CheckpointConfig.BestMetric}: {bestCheckpoint.Metrics[CheckpointConfig.BestMetric]:F4}");
+                }
+            }
+        }
     }
 
     /// <summary>
@@ -478,6 +549,9 @@ public abstract class KnowledgeDistillationTrainerBase<T, TInput, TOutput> : IKn
     /// <para><b>IMPORTANT:</b> This base implementation calls Reset() on RelationalDistillationStrategy
     /// to flush partial batches and prevent buffer leakage between epochs. Derived classes should
     /// call base.OnEpochEnd() if they override this method.</para>
+    ///
+    /// <para><b>Automatic Checkpointing:</b> If <see cref="CheckpointConfig"/> is set, this method
+    /// automatically saves checkpoints based on your configuration.</para>
     /// </remarks>
     protected virtual void OnEpochEnd(int epoch, T avgLoss)
     {
@@ -486,6 +560,33 @@ public abstract class KnowledgeDistillationTrainerBase<T, TInput, TOutput> : IKn
         if (DistillationStrategy is Strategies.RelationalDistillationStrategy<T> relationalStrategy)
         {
             relationalStrategy.Reset();
+        }
+
+        // Track current state for checkpointing
+        _currentEpoch = epoch;
+        _lastTrainingLoss = avgLoss;
+
+        // Automatic checkpoint saving
+        if (CheckpointManager != null)
+        {
+            var metrics = new Dictionary<string, double>
+            {
+                { "training_loss", Convert.ToDouble(_lastTrainingLoss) }
+            };
+
+            // Include validation metric if available
+            if (_lastValidationMetric > 0)
+            {
+                metrics[CheckpointConfig!.BestMetric] = _lastValidationMetric;
+            }
+
+            CheckpointManager.SaveCheckpointIfNeeded(
+                epoch: epoch,
+                student: Student,
+                teacher: Teacher as ICheckpointableModel,
+                strategy: DistillationStrategy,
+                metrics: metrics
+            );
         }
     }
 
@@ -500,9 +601,13 @@ public abstract class KnowledgeDistillationTrainerBase<T, TInput, TOutput> : IKn
     /// - Implement early stopping
     /// - Track best model
     /// - Adjust hyperparameters based on validation performance</para>
+    ///
+    /// <para><b>Automatic Checkpointing:</b> If <see cref="CheckpointConfig"/> is set, this method
+    /// automatically tracks validation metrics for best checkpoint selection.</para>
     /// </remarks>
     protected virtual void OnValidationComplete(int epoch, double accuracy)
     {
-        // Default: no-op, derived classes can override
+        // Track validation metric for checkpointing
+        _lastValidationMetric = accuracy;
     }
 }
