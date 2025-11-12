@@ -172,10 +172,7 @@ public static class DistillationStrategyFactory<T>
         double temperature,
         double alpha)
     {
-        // Flow of Solution Procedure (FSP) uses layer-pair flow matrices
-        // For now, use RelationalDistillationStrategy as it captures similar concepts
-        // TODO: Implement dedicated FlowBasedDistillationStrategy with FSP logic
-        return new RelationalDistillationStrategy<T>(
+        return new FlowBasedDistillationStrategy<T>(
             temperature: temperature,
             alpha: alpha);
     }

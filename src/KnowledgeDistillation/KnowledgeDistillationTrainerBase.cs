@@ -151,13 +151,6 @@ public abstract class KnowledgeDistillationTrainerBase<T, TInput, TOutput> : IKn
         for (int i = 0; i < inputs.Length; i++)
         {
             var input = inputs[i];
-            TOutput? label = default;
-            bool hasLabel = false;
-            if (trueLabels != null)
-            {
-                label = trueLabels[i];
-                hasLabel = true;
-            }
 
             // Student forward pass
             var studentOutput = studentForward(input);
@@ -165,9 +158,11 @@ public abstract class KnowledgeDistillationTrainerBase<T, TInput, TOutput> : IKn
             // Get teacher predictions (may be cached or computed on-demand)
             var teacherOutput = GetTeacherPredictions(input, i);
 
-            // Compute loss and gradient
-            var loss = DistillationStrategy.ComputeLoss(studentOutput, teacherOutput, hasLabel ? label : default);
-            var gradient = DistillationStrategy.ComputeGradient(studentOutput, teacherOutput, hasLabel ? label : default);
+            // Compute loss and gradient - use default if no label provided
+            var labelToUse = (trueLabels != null && i < trueLabels.Length) ? trueLabels[i] : default(TOutput);
+
+            var loss = DistillationStrategy.ComputeLoss(studentOutput, teacherOutput, labelToUse);
+            var gradient = DistillationStrategy.ComputeGradient(studentOutput, teacherOutput, labelToUse);
 
             totalLoss = NumOps.Add(totalLoss, loss);
 
