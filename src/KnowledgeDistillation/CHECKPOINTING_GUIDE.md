@@ -4,6 +4,8 @@
 
 This guide explains how to use checkpointing during knowledge distillation training, including saving/loading student models, managing curriculum progress, and supporting multi-stage distillation.
 
+**Good News!** Checkpointing is now automatic for all models that implement `IFullModel` (which includes all neural networks, AutoML models, time series models, etc.). You don't need to implement any special interfaces or write checkpoint logic - it just works!
+
 ## Why Checkpointing Matters for Distillation
 
 ### 1. Training Resumption
@@ -40,15 +42,19 @@ Compare different approaches:
 
 ### Interfaces
 
-```
-ICheckpointableModel (stream-based, flexible)
-├─ SaveState(Stream stream)
-└─ LoadState(Stream stream)
+All models implementing `IFullModel` automatically support checkpointing through two serialization mechanisms:
 
-IModelSerializer (file-based, convenience)
-├─ SaveModel(string filePath)
-└─ LoadModel(string filePath)
 ```
+IFullModel (includes both ICheckpointableModel and IModelSerializer)
+├─ ICheckpointableModel (stream-based, flexible)
+│  ├─ SaveState(Stream stream)
+│  └─ LoadState(Stream stream)
+└─ IModelSerializer (file-based, convenience)
+   ├─ SaveModel(string filePath)
+   └─ LoadModel(string filePath)
+```
+
+This means **all** neural networks, AutoML models, time series models, expression trees, SuperNets, and custom models automatically support checkpointing without any additional code!
 
 ### Checkpoint Manager
 
@@ -90,8 +96,8 @@ var trainer = new KnowledgeDistillationTrainer<double>(
     checkpointConfig: checkpointConfig  // Pass config to constructor
 );
 
-// Create student model (must implement ICheckpointableModel)
-var student = CreateStudentModel();
+// Create student model (any IFullModel works - checkpointing is automatic!)
+var student = CreateStudentModel(); // NeuralNetworkModel, VectorModel, etc.
 
 // Train - pass student to Train method for automatic checkpointing!
 trainer.Train(
@@ -103,7 +109,7 @@ trainer.Train(
     batchSize: 32,
     validationInputs: validationData,
     validationLabels: validationLabels,
-    student: student as ICheckpointableModel  // Pass student for checkpointing
+    student: student  // Just pass the student - checkpointing is automatic!
 );
 
 // After training completes, the best checkpoint is automatically loaded!
@@ -189,7 +195,7 @@ for (int epoch = 0; epoch < 100; epoch++)
 
     bool saved = checkpointManager.SaveCheckpointIfNeeded(
         epoch: epoch,
-        student: student as ICheckpointableModel,  // Student must implement ICheckpointableModel
+        student: student,  // Any IFullModel works automatically!
         metrics: metrics
     );
 
@@ -201,7 +207,7 @@ for (int epoch = 0; epoch < 100; epoch++)
 
 // After training, load the best checkpoint
 Console.WriteLine("Loading best checkpoint...");
-var bestCheckpoint = checkpointManager.LoadBestCheckpoint(student as ICheckpointableModel);
+var bestCheckpoint = checkpointManager.LoadBestCheckpoint(student);
 if (bestCheckpoint != null)
 {
     Console.WriteLine($"Best checkpoint from epoch {bestCheckpoint.Epoch}");
