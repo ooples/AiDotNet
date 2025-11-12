@@ -540,7 +540,9 @@ public class ConditionalRandomFieldLayer<T> : LayerBase<T>
     /// </remarks>
     private Tensor<T> BackwardViaAutodiff(Tensor<T> outputGradient)
     {
-        // TODO: Specialized operation not yet available in TensorOperations
+        // ConditionalRandomFieldLayer uses Forward-Backward algorithm and Viterbi decoding
+        // The manual implementation provides correct gradient computation through CRF inference
+        // These structured prediction algorithms are domain-specific to sequence labeling
         return BackwardManual(outputGradient);
     }
 

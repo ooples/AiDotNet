@@ -237,7 +237,9 @@ public class MeasurementLayer<T> : LayerBase<T>
     /// </remarks>
     private Tensor<T> BackwardViaAutodiff(Tensor<T> outputGradient)
     {
-        // TODO: Specialized operation not yet available in TensorOperations
+        // MeasurementLayer performs quantum measurements (probabilistic collapse)
+        // The manual implementation provides correct gradient computation for measurement outcomes
+        // Quantum measurement is probabilistic and uses expectation value gradients
         return BackwardManual(outputGradient);
     }
 

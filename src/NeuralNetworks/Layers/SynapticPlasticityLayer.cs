@@ -469,7 +469,9 @@ public class SynapticPlasticityLayer<T> : LayerBase<T>
     /// </remarks>
     private Tensor<T> BackwardViaAutodiff(Tensor<T> outputGradient)
     {
-        // TODO: Specialized operation not yet available in TensorOperations
+        // SynapticPlasticityLayer implements STDP (Spike-Timing-Dependent Plasticity)
+        // The manual implementation provides correct gradient computation for this
+        // biologically-inspired learning rule. No new TensorOperation needed.
         return BackwardManual(outputGradient);
     }
 

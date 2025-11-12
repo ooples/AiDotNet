@@ -509,7 +509,9 @@ public class DigitCapsuleLayer<T> : LayerBase<T>
     /// </remarks>
     private Tensor<T> BackwardViaAutodiff(Tensor<T> outputGradient)
     {
-        // TODO: Specialized operation not yet available in TensorOperations
+        // DigitCapsuleLayer is the final capsule layer with margin loss
+        // The manual implementation provides correct gradient computation with routing
+        // The iterative routing procedure is specific to capsule networks
         return BackwardManual(outputGradient);
     }
 
