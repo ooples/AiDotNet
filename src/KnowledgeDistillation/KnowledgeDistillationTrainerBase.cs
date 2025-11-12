@@ -144,6 +144,7 @@ public abstract class KnowledgeDistillationTrainerBase<T, TInput, TOutput> : IKn
         if (studentForward == null) throw new ArgumentNullException(nameof(studentForward));
         if (studentBackward == null) throw new ArgumentNullException(nameof(studentBackward));
         if (inputs == null) throw new ArgumentNullException(nameof(inputs));
+        if (inputs.Length == 0) throw new ArgumentException("Input batch cannot be empty.", nameof(inputs));
 
         T totalLoss = NumOps.Zero;
 
@@ -232,6 +233,8 @@ public abstract class KnowledgeDistillationTrainerBase<T, TInput, TOutput> : IKn
             throw new ArgumentException("Inputs and labels must have the same length");
         if (validationInputs != null && validationLabels != null && validationInputs.Length != validationLabels.Length)
             throw new ArgumentException("Validation inputs and labels must have the same length");
+        if (trainInputs.Length == 0)
+            throw new ArgumentException("Training dataset cannot be empty.", nameof(trainInputs));
 
         // Store student reference for checkpointing
         _student = student;
@@ -587,7 +590,8 @@ public abstract class KnowledgeDistillationTrainerBase<T, TInput, TOutput> : IKn
             // Include validation metric if available
             if (_lastValidationMetric > 0)
             {
-                metrics[_checkpointConfig!.BestMetric] = _lastValidationMetric;
+                // Use "validation_accuracy" since _lastValidationMetric stores accuracy, not loss
+                metrics["validation_accuracy"] = _lastValidationMetric;
             }
 
             _checkpointManager.SaveCheckpointIfNeeded(
