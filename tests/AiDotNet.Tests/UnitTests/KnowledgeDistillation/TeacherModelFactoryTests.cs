@@ -80,7 +80,8 @@ public class TeacherModelFactoryTests
         // Act
         var teacher = TeacherModelFactory<double>.CreateTeacher(
             TeacherModelType.Pretrained,
-            model: mockModel);
+            model: mockModel,
+            outputDimension: 5);
 
         // Assert
         Assert.NotNull(teacher);
@@ -96,7 +97,8 @@ public class TeacherModelFactoryTests
         // Act
         var teacher = TeacherModelFactory<double>.CreateTeacher(
             TeacherModelType.Transformer,
-            model: mockModel);
+            model: mockModel,
+            outputDimension: 5);
 
         // Assert
         Assert.NotNull(teacher);
@@ -150,7 +152,8 @@ public class TeacherModelFactoryTests
         // Act
         var teacher = TeacherModelFactory<double>.CreateTeacher(
             TeacherModelType.Online,
-            model: mockModel);
+            model: mockModel,
+            outputDimension: 5);
 
         // Assert
         Assert.NotNull(teacher);

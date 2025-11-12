@@ -854,8 +854,8 @@ public class NeuralNetworkModel<T> : IFullModel<T, Tensor<T>, Tensor<T>>
     /// </remarks>
     public IFullModel<T, Tensor<T>, Tensor<T>> WithParameters(Vector<T> parameters)
     {
-        // Create a new model with the same architecture
-        var newModel = new NeuralNetworkModel<T>(Architecture);
+        // Create a new model with the same architecture and loss function
+        var newModel = new NeuralNetworkModel<T>(Architecture, _defaultLossFunction);
     
         // Update the parameters of the new model
         newModel.Network.UpdateParameters(parameters);
@@ -963,8 +963,8 @@ public class NeuralNetworkModel<T> : IFullModel<T, Tensor<T>, Tensor<T>>
     /// </remarks>
     public IFullModel<T, Tensor<T>, Tensor<T>> DeepCopy()
     {
-        // Create a new model with the same architecture
-        var copy = new NeuralNetworkModel<T>(Architecture);
+        // Create a new model with the same architecture and loss function
+        var copy = new NeuralNetworkModel<T>(Architecture, _defaultLossFunction);
         
         // Copy the network parameters
         var parameters = Network.GetParameters();

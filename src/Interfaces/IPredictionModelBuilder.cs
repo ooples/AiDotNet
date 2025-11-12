@@ -585,6 +585,24 @@ public interface IPredictionModelBuilder<T, TInput, TOutput>
     /// - DistilBERT: 40% smaller than BERT, 97% performance, 60% faster
     /// - MobileNet: Distilled from ResNet for mobile deployment
     /// - Edge AI: Deploy powerful models on resource-constrained devices
+    ///
+    /// <b>Quick Start Example:</b>
+    /// <code>
+    /// var distillationOptions = new KnowledgeDistillationOptions&lt;double, Vector&lt;double&gt;, Vector&lt;double&gt;&gt;
+    /// {
+    ///     TeacherModelType = TeacherModelType.NeuralNetwork,
+    ///     StrategyType = DistillationStrategyType.ResponseBased,
+    ///     Temperature = 3.0,
+    ///     Alpha = 0.3,
+    ///     Epochs = 20,
+    ///     BatchSize = 32
+    /// };
+    /// 
+    /// var builder = new PredictionModelBuilder&lt;double, Vector&lt;double&gt;, Vector&lt;double&gt;&gt;()
+    ///     .ConfigureKnowledgeDistillation(distillationOptions);
+    /// </code>
+    ///
+    /// <b>Note:</b> Current implementation requires student model to use Vector&lt;T&gt; for both input and output types.
     /// </remarks>
     /// <param name="options">The knowledge distillation configuration options.</param>
     /// <returns>The builder instance for method chaining.</returns>
