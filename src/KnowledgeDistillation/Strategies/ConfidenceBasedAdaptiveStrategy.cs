@@ -90,7 +90,7 @@ public class ConfidenceBasedAdaptiveStrategy<T> : AdaptiveDistillationStrategyBa
     public override double ComputeAdaptiveTemperature(Vector<T> studentOutput, Vector<T> teacherOutput)
     {
         // Convert to probabilities
-        var probs = Softmax(studentOutput, temperature: 1.0);
+        var probs = DistillationHelper<T>.Softmax(studentOutput, temperature: 1.0);
 
         // Get maximum probability (student's confidence)
         double confidence = GetMaxConfidence(probs);

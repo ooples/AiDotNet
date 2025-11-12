@@ -95,7 +95,7 @@ public class EntropyBasedAdaptiveStrategy<T> : AdaptiveDistillationStrategyBase<
     /// </remarks>
     protected override double ComputePerformance(Vector<T> studentOutput, Vector<T>? trueLabel)
     {
-        var probs = Softmax(studentOutput, 1.0);
+        var probs = DistillationHelper<T>.Softmax(studentOutput, 1.0);
         double entropy = ComputeEntropy(probs);
 
         // Convert entropy to performance score
@@ -129,7 +129,7 @@ public class EntropyBasedAdaptiveStrategy<T> : AdaptiveDistillationStrategyBase<
     public override double ComputeAdaptiveTemperature(Vector<T> studentOutput, Vector<T> teacherOutput)
     {
         // Convert to probabilities
-        var probs = Softmax(studentOutput, temperature: 1.0);
+        var probs = DistillationHelper<T>.Softmax(studentOutput, temperature: 1.0);
 
         // Compute normalized entropy [0, 1]
         double entropy = ComputeEntropy(probs);
