@@ -217,15 +217,15 @@ public static class DistillationStrategyFactory<T>
     /// <summary>
     /// Creates a strategy with custom parameters using a fluent builder pattern.
     /// </summary>
-    public static StrategyBuilder<T> Configure(DistillationStrategyType strategyType)
+    public static StrategyBuilder Configure(DistillationStrategyType strategyType)
     {
-        return new StrategyBuilder<T>(strategyType);
+        return new StrategyBuilder(strategyType);
     }
 
     /// <summary>
     /// Fluent builder for configuring distillation strategies with custom parameters.
     /// </summary>
-    public class StrategyBuilder<TNum>
+    public class StrategyBuilder
     {
         private readonly DistillationStrategyType _strategyType;
         private double _temperature = 3.0;
@@ -235,7 +235,7 @@ public static class DistillationStrategyFactory<T>
         private ContrastiveMode? _contrastiveMode;
         private Vector<string>? _featureLayerPairs;
         private Vector<string>? _attentionLayers;
-        private Vector<IDistillationStrategy<Vector<TNum>, TNum>>? _strategies;
+        private Vector<IDistillationStrategy<T, Vector<T>>>? _strategies;
         private Vector<double>? _strategyWeights;
 
         internal StrategyBuilder(DistillationStrategyType strategyType)
@@ -243,50 +243,50 @@ public static class DistillationStrategyFactory<T>
             _strategyType = strategyType;
         }
 
-        public StrategyBuilder<TNum> WithTemperature(double temperature)
+        public StrategyBuilder WithTemperature(double temperature)
         {
             _temperature = temperature;
             return this;
         }
 
-        public StrategyBuilder<TNum> WithAlpha(double alpha)
+        public StrategyBuilder WithAlpha(double alpha)
         {
             _alpha = alpha;
             return this;
         }
 
-        public StrategyBuilder<TNum> WithFeatureWeight(double weight)
+        public StrategyBuilder WithFeatureWeight(double weight)
         {
             _featureWeight = weight;
             return this;
         }
 
-        public StrategyBuilder<TNum> WithAttentionWeight(double weight)
+        public StrategyBuilder WithAttentionWeight(double weight)
         {
             _attentionWeight = weight;
             return this;
         }
 
-        public StrategyBuilder<TNum> WithContrastiveMode(ContrastiveMode mode)
+        public StrategyBuilder WithContrastiveMode(ContrastiveMode mode)
         {
             _contrastiveMode = mode;
             return this;
         }
 
-        public StrategyBuilder<TNum> WithFeatureLayerPairs(Vector<string> layerPairs)
+        public StrategyBuilder WithFeatureLayerPairs(Vector<string> layerPairs)
         {
             _featureLayerPairs = layerPairs;
             return this;
         }
 
-        public StrategyBuilder<TNum> WithAttentionLayers(Vector<string> layers)
+        public StrategyBuilder WithAttentionLayers(Vector<string> layers)
         {
             _attentionLayers = layers;
             return this;
         }
 
-        public StrategyBuilder<TNum> WithStrategies(
-            Vector<IDistillationStrategy<Vector<TNum>, TNum>> strategies,
+        public StrategyBuilder WithStrategies(
+            Vector<IDistillationStrategy<T, Vector<T>>> strategies,
             Vector<double>? weights = null)
         {
             _strategies = strategies;
@@ -294,7 +294,7 @@ public static class DistillationStrategyFactory<T>
             return this;
         }
 
-        public IDistillationStrategy<Vector<TNum>, TNum> Build()
+        public IDistillationStrategy<T, Vector<T>> Build()
         {
             return CreateStrategy(
                 _strategyType,
