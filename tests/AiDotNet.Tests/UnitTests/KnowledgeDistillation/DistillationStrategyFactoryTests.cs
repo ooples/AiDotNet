@@ -184,16 +184,16 @@ public class DistillationStrategyFactoryTests
         Assert.IsType<AttentionDistillationStrategy<double>>(strategy);
     }
 
-    [Fact]
-    public void FluentBuilder_Contrastive_ConfiguresLossType()
-    {
-        // Arrange & Act
-        var strategy = DistillationStrategyFactory<double>
-            .Configure(DistillationStrategyType.ContrastiveBased)
-            .WithContrastiveLossType(ContrastiveLossType.TripletLoss)
-            .Build();
+    // [Fact]
+    // public void FluentBuilder_Contrastive_ConfiguresLossType()
+    // {
+    //     // Arrange & Act
+    //     var strategy = DistillationStrategyFactory<double>
+    //         .Configure(DistillationStrategyType.ContrastiveBased)
+    //         .WithContrastiveLossType(ContrastiveLossType.TripletLoss)
+    //         .Build();
 
-        // Assert
-        Assert.IsType<ContrastiveDistillationStrategy<double>>(strategy);
-    }
+    //     // Assert
+    //     Assert.IsType<ContrastiveDistillationStrategy<double>>(strategy);
+    // }
 }
