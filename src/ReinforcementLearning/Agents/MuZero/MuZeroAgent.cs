@@ -39,7 +39,6 @@ namespace AiDotNet.ReinforcementLearning.Agents.MuZero;
 public class MuZeroAgent<T> : ReinforcementLearningAgentBase<T>
 {
     private readonly MuZeroOptions<T> _options;
-    private readonly INumericOperations<T> _numOps;
 
     // Three core networks
     private NeuralNetwork<T> _representationNetwork;  // h = f(observation)
@@ -47,25 +46,11 @@ public class MuZeroAgent<T> : ReinforcementLearningAgentBase<T>
     private NeuralNetwork<T> _predictionNetwork;  // (p, v) = f(h)
 
     private ReplayBuffer<T> _replayBuffer;
-    private Random _random;
     private int _updateCount;
-
-    // MCTS tree node (simplified)
-    private class MCTSNode
-    {
-        public Vector<T> HiddenState { get; set; } = null!;
-        public Dictionary<int, MCTSNode> Children { get; set; } = new();
-        public Dictionary<int, int> VisitCounts { get; set; } = new();
-        public Dictionary<int, T> QValues { get; set; } = new();
-        public T Value { get; set; }
-        public int TotalVisits { get; set; }
-    }
 
     public MuZeroAgent(MuZeroOptions<T> options) : base(options.ObservationSize, options.ActionSize)
     {
         _options = options;
-        _numOps = NumericOperations<T>.Instance;
-        _random = options.Seed.HasValue ? new Random(options.Seed.Value) : new Random();
         _updateCount = 0;
 
         InitializeNetworks();
@@ -117,7 +102,7 @@ public class MuZeroAgent<T> : ReinforcementLearningAgentBase<T>
             var policyValue = _predictionNetwork.Forward(hiddenState);
             int bestAction = ArgMax(ExtractPolicy(policyValue));
             var action = new Vector<T>(_options.ActionSize);
-            action[bestAction] = _numOps.One;
+            action[bestAction] = NumOps.One;
             return action;
         }
 
@@ -125,13 +110,13 @@ public class MuZeroAgent<T> : ReinforcementLearningAgentBase<T>
         int selectedAction = RunMCTS(hiddenState);
 
         var result = new Vector<T>(_options.ActionSize);
-        result[selectedAction] = _numOps.One;
+        result[selectedAction] = NumOps.One;
         return result;
     }
 
     private int RunMCTS(Vector<T> rootHiddenState)
     {
-        var root = new MCTSNode { HiddenState = rootHiddenState };
+        var root = new MCTSNode<T> { HiddenState = rootHiddenState };
 
         // Initialize root
         var rootPrediction = _predictionNetwork.Forward(rootHiddenState);
@@ -159,10 +144,10 @@ public class MuZeroAgent<T> : ReinforcementLearningAgentBase<T>
         return bestAction;
     }
 
-    private void SimulateFromNode(MCTSNode node)
+    private void SimulateFromNode(MCTSNode<T> node)
     {
         // Selection: traverse tree using PUCT
-        var path = new List<(MCTSNode node, int action)>();
+        var path = new List<(MCTSNode<T> node, int action)>();
         var currentNode = node;
 
         while (currentNode.Children.Count > 0)
@@ -199,7 +184,7 @@ public class MuZeroAgent<T> : ReinforcementLearningAgentBase<T>
             if (!pathNode.VisitCounts.ContainsKey(pathAction))
             {
                 pathNode.VisitCounts[pathAction] = 0;
-                pathNode.QValues[pathAction] = _numOps.Zero;
+                pathNode.QValues[pathAction] = NumOps.Zero;
             }
 
             pathNode.VisitCounts[pathAction]++;
@@ -207,19 +192,19 @@ public class MuZeroAgent<T> : ReinforcementLearningAgentBase<T>
 
             // Update Q-value: Q = (Q * n + v) / (n + 1)
             var oldQ = pathNode.QValues[pathAction];
-            var visitCount = _numOps.FromDouble(pathNode.VisitCounts[pathAction]);
-            var newQ = _numOps.Divide(
-                _numOps.Add(_numOps.Multiply(oldQ, visitCount), value),
-                _numOps.Add(visitCount, _numOps.One));
+            var visitCount = NumOps.FromDouble(pathNode.VisitCounts[pathAction]);
+            var newQ = NumOps.Divide(
+                NumOps.Add(NumOps.Multiply(oldQ, visitCount), value),
+                NumOps.Add(visitCount, NumOps.One));
 
             pathNode.QValues[pathAction] = newQ;
 
             // Discount value for parent
-            value = _numOps.Multiply(_options.DiscountFactor, value);
+            value = NumOps.Multiply(_options.DiscountFactor, value);
         }
     }
 
-    private int SelectActionPUCT(MCTSNode node)
+    private int SelectActionPUCT(MCTSNode<T> node)
     {
         // PUCT formula: Q(s,a) + c * P(s,a) * sqrt(N(s)) / (1 + N(s,a))
         var prediction = _predictionNetwork.Forward(node.HiddenState);
@@ -235,11 +220,11 @@ public class MuZeroAgent<T> : ReinforcementLearningAgentBase<T>
             double qValue = 0;
             if (node.QValues.ContainsKey(action))
             {
-                qValue = _numOps.ToDouble(node.QValues[action]);
+                qValue = NumOps.ToDouble(node.QValues[action]);
             }
 
             int visitCount = node.VisitCounts.ContainsKey(action) ? node.VisitCounts[action] : 0;
-            double prior = _numOps.ToDouble(policy[action]);
+            double prior = NumOps.ToDouble(policy[action]);
 
             double puctScore = qValue + _options.PUCTConstant * prior * sqrtTotalVisits / (1 + visitCount);
 
@@ -253,11 +238,11 @@ public class MuZeroAgent<T> : ReinforcementLearningAgentBase<T>
         return bestAction;
     }
 
-    private MCTSNode ExpandNode(MCTSNode parent, int action)
+    private MCTSNode ExpandNode(MCTSNode<T> parent, int action)
     {
         // Use dynamics network to predict next hidden state and reward
         var actionVec = new Vector<T>(_options.ActionSize);
-        actionVec[action] = _numOps.One;
+        actionVec[action] = NumOps.One;
 
         var dynamicsInput = ConcatenateVectors(parent.HiddenState, actionVec);
         var dynamicsOutput = _dynamicsNetwork.Forward(dynamicsInput);
@@ -273,7 +258,7 @@ public class MuZeroAgent<T> : ReinforcementLearningAgentBase<T>
         var prediction = _predictionNetwork.Forward(nextHiddenState);
         var value = ExtractValue(prediction);
 
-        return new MCTSNode
+        return new MCTSNode<T>
         {
             HiddenState = nextHiddenState,
             Value = value,
@@ -305,11 +290,11 @@ public class MuZeroAgent<T> : ReinforcementLearningAgentBase<T>
     {
         if (_replayBuffer.Count < _options.BatchSize)
         {
-            return _numOps.Zero;
+            return NumOps.Zero;
         }
 
         var batch = _replayBuffer.Sample(_options.BatchSize);
-        T totalLoss = _numOps.Zero;
+        T totalLoss = NumOps.Zero;
 
         foreach (var experience in batch)
         {
@@ -325,11 +310,11 @@ public class MuZeroAgent<T> : ReinforcementLearningAgentBase<T>
 
                 // Simplified target: use reward + discounted next value
                 var target = experience.done ? experience.reward :
-                    _numOps.Add(experience.reward, _numOps.Multiply(_options.DiscountFactor, predictedValue));
+                    NumOps.Add(experience.reward, NumOps.Multiply(_options.DiscountFactor, predictedValue));
 
-                var valueDiff = _numOps.Subtract(target, predictedValue);
-                var loss = _numOps.Multiply(valueDiff, valueDiff);
-                totalLoss = _numOps.Add(totalLoss, loss);
+                var valueDiff = NumOps.Subtract(target, predictedValue);
+                var loss = NumOps.Multiply(valueDiff, valueDiff);
+                totalLoss = NumOps.Add(totalLoss, loss);
 
                 // Backprop
                 var gradient = new Vector<T>(_options.ActionSize + 1);
@@ -354,7 +339,7 @@ public class MuZeroAgent<T> : ReinforcementLearningAgentBase<T>
 
         _updateCount++;
 
-        return _numOps.Divide(totalLoss, _numOps.FromDouble(batch.Count * _options.UnrollSteps));
+        return NumOps.Divide(totalLoss, NumOps.FromDouble(batch.Count * _options.UnrollSteps));
     }
 
     private Vector<T> ConcatenateVectors(Vector<T> a, Vector<T> b)
@@ -378,7 +363,7 @@ public class MuZeroAgent<T> : ReinforcementLearningAgentBase<T>
 
         for (int i = 1; i < values.Length; i++)
         {
-            if (_numOps.Compare(values[i], maxValue) > 0)
+            if (NumOps.Compare(values[i], maxValue) > 0)
             {
                 maxValue = values[i];
                 maxIndex = i;
@@ -392,8 +377,8 @@ public class MuZeroAgent<T> : ReinforcementLearningAgentBase<T>
     {
         return new Dictionary<string, T>
         {
-            ["updates"] = _numOps.FromDouble(_updateCount),
-            ["buffer_size"] = _numOps.FromDouble(_replayBuffer.Count)
+            ["updates"] = NumOps.FromDouble(_updateCount),
+            ["buffer_size"] = NumOps.FromDouble(_replayBuffer.Count)
         };
     }
 

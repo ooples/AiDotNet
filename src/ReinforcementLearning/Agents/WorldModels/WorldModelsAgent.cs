@@ -39,7 +39,6 @@ namespace AiDotNet.ReinforcementLearning.Agents.WorldModels;
 public class WorldModelsAgent<T> : ReinforcementLearningAgentBase<T>
 {
     private readonly WorldModelsOptions<T> _options;
-    private readonly INumericOperations<T> _numOps;
 
     // V: VAE for spatial compression
     private NeuralNetwork<T> _vaeEncoder;
@@ -53,7 +52,6 @@ public class WorldModelsAgent<T> : ReinforcementLearningAgentBase<T>
     private Matrix<T> _controllerWeights;
 
     private ReplayBuffer<T> _replayBuffer;
-    private Random _random;
     private int _updateCount;
 
     public WorldModelsAgent(WorldModelsOptions<T> options) : base(
@@ -61,8 +59,6 @@ public class WorldModelsAgent<T> : ReinforcementLearningAgentBase<T>
         options.ActionSize)
     {
         _options = options;
-        _numOps = NumericOperations<T>.Instance;
-        _random = options.Seed.HasValue ? new Random(options.Seed.Value) : new Random();
         _updateCount = 0;
 
         InitializeNetworks();
@@ -91,7 +87,7 @@ public class WorldModelsAgent<T> : ReinforcementLearningAgentBase<T>
         {
             for (int j = 0; j < _controllerWeights.Columns; j++)
             {
-                _controllerWeights[i, j] = _numOps.FromDouble((_random.NextDouble() - 0.5) * 0.1);
+                _controllerWeights[i, j] = NumOps.FromDouble((Random.NextDouble() - 0.5) * 0.1);
             }
         }
 
@@ -170,10 +166,10 @@ public class WorldModelsAgent<T> : ReinforcementLearningAgentBase<T>
         var action = new Vector<T>(_options.ActionSize);
         for (int i = 0; i < _options.ActionSize; i++)
         {
-            T sum = _numOps.Zero;
+            T sum = NumOps.Zero;
             for (int j = 0; j < controllerInput.Length; j++)
             {
-                sum = _numOps.Add(sum, _numOps.Multiply(controllerInput[j], _controllerWeights[j, i]));
+                sum = NumOps.Add(sum, NumOps.Multiply(controllerInput[j], _controllerWeights[j, i]));
             }
             action[i] = MathHelper.Tanh<T>(sum);
         }
@@ -207,32 +203,32 @@ public class WorldModelsAgent<T> : ReinforcementLearningAgentBase<T>
     {
         if (_replayBuffer.Count < _options.BatchSize)
         {
-            return _numOps.Zero;
+            return NumOps.Zero;
         }
 
-        T totalLoss = _numOps.Zero;
+        T totalLoss = NumOps.Zero;
 
         // Train VAE
         T vaeLoss = TrainVAE();
-        totalLoss = _numOps.Add(totalLoss, vaeLoss);
+        totalLoss = NumOps.Add(totalLoss, vaeLoss);
 
         // Train RNN
         T rnnLoss = TrainRNN();
-        totalLoss = _numOps.Add(totalLoss, rnnLoss);
+        totalLoss = NumOps.Add(totalLoss, rnnLoss);
 
         // Train Controller (evolution strategy - simplified to gradient-based)
         T controllerLoss = TrainController();
-        totalLoss = _numOps.Add(totalLoss, controllerLoss);
+        totalLoss = NumOps.Add(totalLoss, controllerLoss);
 
         _updateCount++;
 
-        return _numOps.Divide(totalLoss, _numOps.FromDouble(3));
+        return NumOps.Divide(totalLoss, NumOps.FromDouble(3));
     }
 
     private T TrainVAE()
     {
         var batch = _replayBuffer.Sample(_options.BatchSize);
-        T totalLoss = _numOps.Zero;
+        T totalLoss = NumOps.Zero;
 
         foreach (var experience in batch)
         {
@@ -248,31 +244,31 @@ public class WorldModelsAgent<T> : ReinforcementLearningAgentBase<T>
             var reconstruction = _vaeDecoder.Forward(latentSample);
 
             // Reconstruction loss (MSE)
-            T reconLoss = _numOps.Zero;
+            T reconLoss = NumOps.Zero;
             for (int i = 0; i < reconstruction.Length; i++)
             {
-                var diff = _numOps.Subtract(experience.observation[i], reconstruction[i]);
-                reconLoss = _numOps.Add(reconLoss, _numOps.Multiply(diff, diff));
+                var diff = NumOps.Subtract(experience.observation[i], reconstruction[i]);
+                reconLoss = NumOps.Add(reconLoss, NumOps.Multiply(diff, diff));
             }
 
             // KL divergence loss (simplified)
-            T klLoss = _numOps.Zero;
+            T klLoss = NumOps.Zero;
             for (int i = 0; i < latentMean.Length; i++)
             {
-                var meanSquared = _numOps.Multiply(latentMean[i], latentMean[i]);
+                var meanSquared = NumOps.Multiply(latentMean[i], latentMean[i]);
                 var variance = MathHelper.Exp(latentLogVar[i]);
-                klLoss = _numOps.Add(klLoss, _numOps.Add(meanSquared, _numOps.Add(variance, _numOps.Negate(latentLogVar[i]))));
+                klLoss = NumOps.Add(klLoss, NumOps.Add(meanSquared, NumOps.Add(variance, NumOps.Negate(latentLogVar[i]))));
             }
-            klLoss = _numOps.Multiply(_numOps.FromDouble(_options.VAEBeta * 0.5), klLoss);
+            klLoss = NumOps.Multiply(NumOps.FromDouble(_options.VAEBeta * 0.5), klLoss);
 
-            var loss = _numOps.Add(reconLoss, klLoss);
-            totalLoss = _numOps.Add(totalLoss, loss);
+            var loss = NumOps.Add(reconLoss, klLoss);
+            totalLoss = NumOps.Add(totalLoss, loss);
 
             // Backprop
             var gradient = new Vector<T>(reconstruction.Length);
             for (int i = 0; i < gradient.Length; i++)
             {
-                gradient[i] = _numOps.Subtract(reconstruction[i], experience.observation[i]);
+                gradient[i] = NumOps.Subtract(reconstruction[i], experience.observation[i]);
             }
 
             _vaeDecoder.Backward(gradient);
@@ -281,13 +277,13 @@ public class WorldModelsAgent<T> : ReinforcementLearningAgentBase<T>
             _vaeEncoder.UpdateWeights(_options.LearningRate);
         }
 
-        return _numOps.Divide(totalLoss, _numOps.FromDouble(batch.Count));
+        return NumOps.Divide(totalLoss, NumOps.FromDouble(batch.Count));
     }
 
     private T TrainRNN()
     {
         var batch = _replayBuffer.Sample(_options.BatchSize);
-        T totalLoss = _numOps.Zero;
+        T totalLoss = NumOps.Zero;
 
         foreach (var experience in batch)
         {
@@ -307,50 +303,50 @@ public class WorldModelsAgent<T> : ReinforcementLearningAgentBase<T>
             }
 
             // Prediction loss
-            T loss = _numOps.Zero;
+            T loss = NumOps.Zero;
             for (int i = 0; i < _options.LatentSize; i++)
             {
-                var diff = _numOps.Subtract(nextLatent[i], predictedNextLatent[i]);
-                loss = _numOps.Add(loss, _numOps.Multiply(diff, diff));
+                var diff = NumOps.Subtract(nextLatent[i], predictedNextLatent[i]);
+                loss = NumOps.Add(loss, NumOps.Multiply(diff, diff));
             }
 
-            totalLoss = _numOps.Add(totalLoss, loss);
+            totalLoss = NumOps.Add(totalLoss, loss);
 
             // Backprop
             var gradient = new Vector<T>(rnnOutput.Length);
             for (int i = 0; i < _options.LatentSize; i++)
             {
-                gradient[i] = _numOps.Subtract(predictedNextLatent[i], nextLatent[i]);
+                gradient[i] = NumOps.Subtract(predictedNextLatent[i], nextLatent[i]);
             }
 
             _rnnNetwork.Backward(gradient);
             _rnnNetwork.UpdateWeights(_options.LearningRate);
         }
 
-        return _numOps.Divide(totalLoss, _numOps.FromDouble(batch.Count));
+        return NumOps.Divide(totalLoss, NumOps.FromDouble(batch.Count));
     }
 
     private T TrainController()
     {
         // Simplified controller training (in practice, use CMA-ES)
         var batch = _replayBuffer.Sample(Math.Min(10, _replayBuffer.Count));
-        T totalReward = _numOps.Zero;
+        T totalReward = NumOps.Zero;
 
         foreach (var experience in batch)
         {
-            totalReward = _numOps.Add(totalReward, experience.reward);
+            totalReward = NumOps.Add(totalReward, experience.reward);
         }
 
         // Gradient update (simplified)
-        T avgReward = _numOps.Divide(totalReward, _numOps.FromDouble(batch.Count));
+        T avgReward = NumOps.Divide(totalReward, NumOps.FromDouble(batch.Count));
 
         // Small random perturbation to controller weights
         for (int i = 0; i < _controllerWeights.Rows; i++)
         {
             for (int j = 0; j < _controllerWeights.Columns; j++)
             {
-                var perturbation = _numOps.FromDouble((_random.NextDouble() - 0.5) * 0.01);
-                _controllerWeights[i, j] = _numOps.Add(_controllerWeights[i, j], _numOps.Multiply(avgReward, perturbation));
+                var perturbation = NumOps.FromDouble((Random.NextDouble() - 0.5) * 0.01);
+                _controllerWeights[i, j] = NumOps.Add(_controllerWeights[i, j], NumOps.Multiply(avgReward, perturbation));
             }
         }
 
@@ -382,9 +378,9 @@ public class WorldModelsAgent<T> : ReinforcementLearningAgentBase<T>
         var sample = new Vector<T>(_options.LatentSize);
         for (int i = 0; i < _options.LatentSize; i++)
         {
-            var std = MathHelper.Exp(_numOps.Divide(logVar[i], _numOps.FromDouble(2)));
-            var noise = MathHelper.GetNormalRandom<T>(_numOps.Zero, _numOps.One);
-            sample[i] = _numOps.Add(mean[i], _numOps.Multiply(std, noise));
+            var std = MathHelper.Exp(NumOps.Divide(logVar[i], NumOps.FromDouble(2)));
+            var noise = MathHelper.GetNormalRandom<T>(NumOps.Zero, NumOps.One);
+            sample[i] = NumOps.Add(mean[i], NumOps.Multiply(std, noise));
         }
         return sample;
     }
@@ -407,8 +403,8 @@ public class WorldModelsAgent<T> : ReinforcementLearningAgentBase<T>
     {
         return new Dictionary<string, T>
         {
-            ["updates"] = _numOps.FromDouble(_updateCount),
-            ["buffer_size"] = _numOps.FromDouble(_replayBuffer.Count)
+            ["updates"] = NumOps.FromDouble(_updateCount),
+            ["buffer_size"] = NumOps.FromDouble(_replayBuffer.Count)
         };
     }
 

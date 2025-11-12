@@ -37,21 +37,17 @@ namespace AiDotNet.ReinforcementLearning.Agents.TRPO;
 public class TRPOAgent<T> : ReinforcementLearningAgentBase<T>
 {
     private readonly TRPOOptions<T> _options;
-    private readonly INumericOperations<T> _numOps;
 
     private NeuralNetwork<T> _policyNetwork;
     private NeuralNetwork<T> _oldPolicyNetwork;  // For KL divergence
     private NeuralNetwork<T> _valueNetwork;
 
     private List<(Vector<T> state, Vector<T> action, T reward, bool done)> _trajectoryBuffer;
-    private Random _random;
     private int _updateCount;
 
     public TRPOAgent(TRPOOptions<T> options) : base(options.StateSize, options.ActionSize)
     {
         _options = options;
-        _numOps = NumericOperations<T>.Instance;
-        _random = options.Seed.HasValue ? new Random(options.Seed.Value) : new Random();
         _updateCount = 0;
         _trajectoryBuffer = new List<(Vector<T>, Vector<T>, T, bool)>();
 
@@ -124,7 +120,7 @@ public class TRPOAgent<T> : ReinforcementLearningAgentBase<T>
             {
                 mean[i] = policyOutput[i];
                 logStd[i] = policyOutput[_options.ActionSize + i];
-                logStd[i] = MathHelper.Clamp<T>(logStd[i], _numOps.FromDouble(-20), _numOps.FromDouble(2));
+                logStd[i] = MathHelper.Clamp<T>(logStd[i], NumOps.FromDouble(-20), NumOps.FromDouble(2));
             }
 
             if (!training)
@@ -136,8 +132,8 @@ public class TRPOAgent<T> : ReinforcementLearningAgentBase<T>
             for (int i = 0; i < _options.ActionSize; i++)
             {
                 var std = MathHelper.Exp(logStd[i]);
-                var noise = MathHelper.GetNormalRandom<T>(_numOps.Zero, _numOps.One);
-                action[i] = _numOps.Add(mean[i], _numOps.Multiply(std, noise));
+                var noise = MathHelper.GetNormalRandom<T>(NumOps.Zero, NumOps.One);
+                action[i] = NumOps.Add(mean[i], NumOps.Multiply(std, noise));
             }
 
             return action;
@@ -149,17 +145,17 @@ public class TRPOAgent<T> : ReinforcementLearningAgentBase<T>
             {
                 int bestAction = ArgMax(policyOutput);
                 var action = new Vector<T>(_options.ActionSize);
-                action[bestAction] = _numOps.One;
+                action[bestAction] = NumOps.One;
                 return action;
             }
 
             double[] probs = new double[_options.ActionSize];
             for (int i = 0; i < _options.ActionSize; i++)
             {
-                probs[i] = Convert.ToDouble(_numOps.ToDouble(policyOutput[i]));
+                probs[i] = Convert.ToDouble(NumOps.ToDouble(policyOutput[i]));
             }
 
-            double r = _random.NextDouble();
+            double r = Random.NextDouble();
             double cumulative = 0.0;
             int selectedAction = 0;
 
@@ -174,7 +170,7 @@ public class TRPOAgent<T> : ReinforcementLearningAgentBase<T>
             }
 
             var actionVec = new Vector<T>(_options.ActionSize);
-            actionVec[selectedAction] = _numOps.One;
+            actionVec[selectedAction] = NumOps.One;
             return actionVec;
         }
     }
@@ -194,7 +190,7 @@ public class TRPOAgent<T> : ReinforcementLearningAgentBase<T>
     {
         if (_trajectoryBuffer.Count == 0)
         {
-            return _numOps.Zero;
+            return NumOps.Zero;
         }
 
         // Compute returns and advantages
@@ -228,7 +224,7 @@ public class TRPOAgent<T> : ReinforcementLearningAgentBase<T>
 
         // Compute returns
         var returns = new List<T>();
-        T runningReturn = _numOps.Zero;
+        T runningReturn = NumOps.Zero;
 
         for (int i = rewards.Count - 1; i >= 0; i--)
         {
@@ -238,28 +234,28 @@ public class TRPOAgent<T> : ReinforcementLearningAgentBase<T>
             }
             else
             {
-                runningReturn = _numOps.Add(rewards[i], _numOps.Multiply(_options.DiscountFactor, runningReturn));
+                runningReturn = NumOps.Add(rewards[i], NumOps.Multiply(_options.DiscountFactor, runningReturn));
             }
             returns.Insert(0, runningReturn);
         }
 
         // Compute advantages using GAE
         var advantages = new List<T>();
-        T gaeAdvantage = _numOps.Zero;
+        T gaeAdvantage = NumOps.Zero;
 
         for (int i = rewards.Count - 1; i >= 0; i--)
         {
-            T nextValue = (i == rewards.Count - 1) ? _numOps.Zero : values[i + 1];
+            T nextValue = (i == rewards.Count - 1) ? NumOps.Zero : values[i + 1];
             if (_trajectoryBuffer[i].done)
             {
-                nextValue = _numOps.Zero;
+                nextValue = NumOps.Zero;
             }
 
-            var delta = _numOps.Add(rewards[i], _numOps.Multiply(_options.DiscountFactor, nextValue));
-            delta = _numOps.Subtract(delta, values[i]);
+            var delta = NumOps.Add(rewards[i], NumOps.Multiply(_options.DiscountFactor, nextValue));
+            delta = NumOps.Subtract(delta, values[i]);
 
-            gaeAdvantage = _numOps.Add(delta, _numOps.Multiply(_options.DiscountFactor,
-                _numOps.Multiply(_options.GaeLambda, gaeAdvantage)));
+            gaeAdvantage = NumOps.Add(delta, NumOps.Multiply(_options.DiscountFactor,
+                NumOps.Multiply(_options.GaeLambda, gaeAdvantage)));
 
             advantages.Insert(0, gaeAdvantage);
         }
@@ -268,11 +264,11 @@ public class TRPOAgent<T> : ReinforcementLearningAgentBase<T>
         var mean = StatisticsHelper<T>.CalculateMean(advantages.ToArray());
         var std = StatisticsHelper<T>.CalculateStandardDeviation(advantages.ToArray());
 
-        if (_numOps.Compare(std, _numOps.Zero) > 0)
+        if (NumOps.Compare(std, NumOps.Zero) > 0)
         {
             for (int i = 0; i < advantages.Count; i++)
             {
-                advantages[i] = _numOps.Divide(_numOps.Subtract(advantages[i], mean), std);
+                advantages[i] = NumOps.Divide(NumOps.Subtract(advantages[i], mean), std);
             }
         }
 
@@ -286,7 +282,7 @@ public class TRPOAgent<T> : ReinforcementLearningAgentBase<T>
             for (int i = 0; i < states.Count; i++)
             {
                 var predictedValue = _valueNetwork.Forward(states[i])[0];
-                var error = _numOps.Subtract(returns[i], predictedValue);
+                var error = NumOps.Subtract(returns[i], predictedValue);
 
                 var gradient = new Vector<T>(1);
                 gradient[0] = error;
@@ -316,17 +312,17 @@ public class TRPOAgent<T> : ReinforcementLearningAgentBase<T>
             // Compute KL divergence (simplified)
             var kl = ComputeKL(policyOutput, oldPolicyOutput);
 
-            if (_numOps.Compare(kl, _options.MaxKL) < 0)
+            if (NumOps.Compare(kl, _options.MaxKL) < 0)
             {
                 // Safe to update
                 var policyGradient = new Vector<T>(policyOutput.Length);
                 for (int j = 0; j < policyGradient.Length; j++)
                 {
-                    policyGradient[j] = _numOps.Multiply(advantage, _numOps.FromDouble(0.01));
+                    policyGradient[j] = NumOps.Multiply(advantage, NumOps.FromDouble(0.01));
                 }
 
                 _policyNetwork.Backward(policyGradient);
-                _policyNetwork.UpdateWeights(_numOps.FromDouble(0.001));  // Very small LR for trust region
+                _policyNetwork.UpdateWeights(NumOps.FromDouble(0.001));  // Very small LR for trust region
             }
         }
     }
@@ -335,18 +331,18 @@ public class TRPOAgent<T> : ReinforcementLearningAgentBase<T>
     {
         // Simplified KL divergence for discrete distributions
         // KL(old || new) = sum(old * log(old / new))
-        T kl = _numOps.Zero;
+        T kl = NumOps.Zero;
 
         for (int i = 0; i < newDist.Length; i++)
         {
             var oldProb = oldDist[i];
             var newProb = newDist[i];
 
-            if (_numOps.Compare(oldProb, _numOps.Zero) > 0 && _numOps.Compare(newProb, _numOps.Zero) > 0)
+            if (NumOps.Compare(oldProb, NumOps.Zero) > 0 && NumOps.Compare(newProb, NumOps.Zero) > 0)
             {
-                var ratio = _numOps.Divide(oldProb, newProb);
+                var ratio = NumOps.Divide(oldProb, newProb);
                 var logRatio = MathHelper.Log(ratio);
-                kl = _numOps.Add(kl, _numOps.Multiply(oldProb, logRatio));
+                kl = NumOps.Add(kl, NumOps.Multiply(oldProb, logRatio));
             }
         }
 
@@ -375,7 +371,7 @@ public class TRPOAgent<T> : ReinforcementLearningAgentBase<T>
 
         for (int i = 1; i < values.Length; i++)
         {
-            if (_numOps.Compare(values[i], maxValue) > 0)
+            if (NumOps.Compare(values[i], maxValue) > 0)
             {
                 maxValue = values[i];
                 maxIndex = i;
@@ -389,8 +385,8 @@ public class TRPOAgent<T> : ReinforcementLearningAgentBase<T>
     {
         return new Dictionary<string, T>
         {
-            ["updates"] = _numOps.FromDouble(_updateCount),
-            ["buffer_size"] = _numOps.FromDouble(_trajectoryBuffer.Count)
+            ["updates"] = NumOps.FromDouble(_updateCount),
+            ["buffer_size"] = NumOps.FromDouble(_trajectoryBuffer.Count)
         };
     }
 

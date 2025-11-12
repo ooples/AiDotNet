@@ -39,7 +39,6 @@ namespace AiDotNet.ReinforcementLearning.Agents.Dreamer;
 public class DreamerAgent<T> : ReinforcementLearningAgentBase<T>
 {
     private readonly DreamerOptions<T> _options;
-    private readonly INumericOperations<T> _numOps;
 
     // World model components
     private NeuralNetwork<T> _representationNetwork;  // Observation -> latent state
@@ -52,14 +51,11 @@ public class DreamerAgent<T> : ReinforcementLearningAgentBase<T>
     private NeuralNetwork<T> _valueNetwork;
 
     private ReplayBuffer<T> _replayBuffer;
-    private Random _random;
     private int _updateCount;
 
     public DreamerAgent(DreamerOptions<T> options) : base(options.ObservationSize, options.ActionSize)
     {
         _options = options;
-        _numOps = NumericOperations<T>.Instance;
-        _random = options.Seed.HasValue ? new Random(options.Seed.Value) : new Random();
         _updateCount = 0;
 
         InitializeNetworks();
@@ -138,9 +134,9 @@ public class DreamerAgent<T> : ReinforcementLearningAgentBase<T>
             // Add exploration noise
             for (int i = 0; i < action.Length; i++)
             {
-                var noise = MathHelper.GetNormalRandom<T>(_numOps.Zero, _numOps.FromDouble(0.1));
-                action[i] = _numOps.Add(action[i], noise);
-                action[i] = MathHelper.Clamp<T>(action[i], _numOps.FromDouble(-1), _numOps.FromDouble(1));
+                var noise = MathHelper.GetNormalRandom<T>(NumOps.Zero, NumOps.FromDouble(0.1));
+                action[i] = NumOps.Add(action[i], noise);
+                action[i] = MathHelper.Clamp<T>(action[i], NumOps.FromDouble(-1), NumOps.FromDouble(1));
             }
         }
 
@@ -156,7 +152,7 @@ public class DreamerAgent<T> : ReinforcementLearningAgentBase<T>
     {
         if (_replayBuffer.Count < _options.BatchSize)
         {
-            return _numOps.Zero;
+            return NumOps.Zero;
         }
 
         var batch = _replayBuffer.Sample(_options.BatchSize);
@@ -169,12 +165,12 @@ public class DreamerAgent<T> : ReinforcementLearningAgentBase<T>
 
         _updateCount++;
 
-        return _numOps.Add(worldModelLoss, policyLoss);
+        return NumOps.Add(worldModelLoss, policyLoss);
     }
 
     private T TrainWorldModel(List<(Vector<T> observation, Vector<T> action, T reward, Vector<T> nextObservation, bool done)> batch)
     {
-        T totalLoss = _numOps.Zero;
+        T totalLoss = NumOps.Zero;
 
         foreach (var experience in batch)
         {
@@ -187,33 +183,33 @@ public class DreamerAgent<T> : ReinforcementLearningAgentBase<T>
             var predictedNextLatent = _dynamicsNetwork.Forward(dynamicsInput);
 
             // Dynamics loss: predict next latent state
-            T dynamicsLoss = _numOps.Zero;
+            T dynamicsLoss = NumOps.Zero;
             for (int i = 0; i < predictedNextLatent.Length; i++)
             {
-                var diff = _numOps.Subtract(nextLatentState[i], predictedNextLatent[i]);
-                dynamicsLoss = _numOps.Add(dynamicsLoss, _numOps.Multiply(diff, diff));
+                var diff = NumOps.Subtract(nextLatentState[i], predictedNextLatent[i]);
+                dynamicsLoss = NumOps.Add(dynamicsLoss, NumOps.Multiply(diff, diff));
             }
 
             // Reward prediction loss
             var predictedReward = _rewardNetwork.Forward(latentState)[0];
-            var rewardDiff = _numOps.Subtract(experience.reward, predictedReward);
-            var rewardLoss = _numOps.Multiply(rewardDiff, rewardDiff);
+            var rewardDiff = NumOps.Subtract(experience.reward, predictedReward);
+            var rewardLoss = NumOps.Multiply(rewardDiff, rewardDiff);
 
             // Continue prediction loss (done = 0, continue = 1)
-            var continueTarget = experience.done ? _numOps.Zero : _numOps.One;
+            var continueTarget = experience.done ? NumOps.Zero : NumOps.One;
             var predictedContinue = _continueNetwork.Forward(latentState)[0];
-            var continueDiff = _numOps.Subtract(continueTarget, predictedContinue);
-            var continueLoss = _numOps.Multiply(continueDiff, continueDiff);
+            var continueDiff = NumOps.Subtract(continueTarget, predictedContinue);
+            var continueLoss = NumOps.Multiply(continueDiff, continueDiff);
 
             // Total world model loss
-            var loss = _numOps.Add(dynamicsLoss, _numOps.Add(rewardLoss, continueLoss));
-            totalLoss = _numOps.Add(totalLoss, loss);
+            var loss = NumOps.Add(dynamicsLoss, NumOps.Add(rewardLoss, continueLoss));
+            totalLoss = NumOps.Add(totalLoss, loss);
 
             // Backprop through world model
             var gradient = new Vector<T>(predictedNextLatent.Length);
             for (int i = 0; i < gradient.Length; i++)
             {
-                gradient[i] = _numOps.Subtract(predictedNextLatent[i], nextLatentState[i]);
+                gradient[i] = NumOps.Subtract(predictedNextLatent[i], nextLatentState[i]);
             }
 
             _dynamicsNetwork.Backward(gradient);
@@ -230,18 +226,18 @@ public class DreamerAgent<T> : ReinforcementLearningAgentBase<T>
             _continueNetwork.UpdateWeights(_options.LearningRate);
         }
 
-        return _numOps.Divide(totalLoss, _numOps.FromDouble(batch.Count));
+        return NumOps.Divide(totalLoss, NumOps.FromDouble(batch.Count));
     }
 
     private T TrainPolicy()
     {
         // Imagine trajectories using world model
-        T totalLoss = _numOps.Zero;
+        T totalLoss = NumOps.Zero;
 
         // Sample initial latent states from replay buffer
         if (_replayBuffer.Count < _options.BatchSize)
         {
-            return _numOps.Zero;
+            return NumOps.Zero;
         }
 
         var batch = _replayBuffer.Sample(_options.BatchSize);
@@ -255,8 +251,8 @@ public class DreamerAgent<T> : ReinforcementLearningAgentBase<T>
 
             // Update value network
             var predictedValue = _valueNetwork.Forward(latentState)[0];
-            var valueDiff = _numOps.Subtract(imaginedReturns, predictedValue);
-            var valueLoss = _numOps.Multiply(valueDiff, valueDiff);
+            var valueDiff = NumOps.Subtract(imaginedReturns, predictedValue);
+            var valueLoss = NumOps.Multiply(valueDiff, valueDiff);
 
             var valueGradient = new Vector<T>(1);
             valueGradient[0] = valueDiff;
@@ -268,22 +264,22 @@ public class DreamerAgent<T> : ReinforcementLearningAgentBase<T>
             var actorGradient = new Vector<T>(action.Length);
             for (int i = 0; i < actorGradient.Length; i++)
             {
-                actorGradient[i] = _numOps.Divide(valueDiff, _numOps.FromDouble(action.Length));
+                actorGradient[i] = NumOps.Divide(valueDiff, NumOps.FromDouble(action.Length));
             }
 
             _actorNetwork.Backward(actorGradient);
             _actorNetwork.UpdateWeights(_options.LearningRate);
 
-            totalLoss = _numOps.Add(totalLoss, valueLoss);
+            totalLoss = NumOps.Add(totalLoss, valueLoss);
         }
 
-        return _numOps.Divide(totalLoss, _numOps.FromDouble(batch.Count));
+        return NumOps.Divide(totalLoss, NumOps.FromDouble(batch.Count));
     }
 
     private T ImagineTrajectory(Vector<T> initialLatentState)
     {
         // Roll out imagined trajectory using world model
-        T imaginedReturn = _numOps.Zero;
+        T imaginedReturn = NumOps.Zero;
         var latentState = initialLatentState;
 
         for (int step = 0; step < _options.ImaginationHorizon; step++)
@@ -293,7 +289,7 @@ public class DreamerAgent<T> : ReinforcementLearningAgentBase<T>
 
             // Predict reward
             var reward = _rewardNetwork.Forward(latentState)[0];
-            imaginedReturn = _numOps.Add(imaginedReturn, reward);
+            imaginedReturn = NumOps.Add(imaginedReturn, reward);
 
             // Predict next latent state
             var dynamicsInput = ConcatenateVectors(latentState, action);
@@ -301,7 +297,7 @@ public class DreamerAgent<T> : ReinforcementLearningAgentBase<T>
 
             // Check if episode continues
             var continueProb = _continueNetwork.Forward(latentState)[0];
-            if (_numOps.Compare(continueProb, _numOps.FromDouble(0.5)) < 0)
+            if (NumOps.Compare(continueProb, NumOps.FromDouble(0.5)) < 0)
             {
                 break;
             }
@@ -328,8 +324,8 @@ public class DreamerAgent<T> : ReinforcementLearningAgentBase<T>
     {
         return new Dictionary<string, T>
         {
-            ["updates"] = _numOps.FromDouble(_updateCount),
-            ["buffer_size"] = _numOps.FromDouble(_replayBuffer.Count)
+            ["updates"] = NumOps.FromDouble(_updateCount),
+            ["buffer_size"] = NumOps.FromDouble(_replayBuffer.Count)
         };
     }
 

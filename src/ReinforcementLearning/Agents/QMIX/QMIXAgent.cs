@@ -38,7 +38,6 @@ namespace AiDotNet.ReinforcementLearning.Agents.QMIX;
 public class QMIXAgent<T> : ReinforcementLearningAgentBase<T>
 {
     private readonly QMIXOptions<T> _options;
-    private readonly INumericOperations<T> _numOps;
 
     // Per-agent Q-networks
     private List<NeuralNetwork<T>> _agentNetworks;
@@ -49,15 +48,12 @@ public class QMIXAgent<T> : ReinforcementLearningAgentBase<T>
     private NeuralNetwork<T> _targetMixingNetwork;
 
     private ReplayBuffer<T> _replayBuffer;
-    private Random _random;
     private double _epsilon;
     private int _stepCount;
 
     public QMIXAgent(QMIXOptions<T> options) : base(options.StateSize, options.ActionSize)
     {
         _options = options;
-        _numOps = NumericOperations<T>.Instance;
-        _random = options.Seed.HasValue ? new Random(options.Seed.Value) : new Random();
         _epsilon = options.EpsilonStart;
         _stepCount = 0;
 
@@ -139,12 +135,12 @@ public class QMIXAgent<T> : ReinforcementLearningAgentBase<T>
             throw new ArgumentException($"Invalid agent ID: {agentId}");
         }
 
-        if (training && _random.NextDouble() < _epsilon)
+        if (training && Random.NextDouble() < _epsilon)
         {
             // Random exploration
-            int randomAction = _random.Next(_options.ActionSize);
+            int randomAction = Random.Next(_options.ActionSize);
             var action = new Vector<T>(_options.ActionSize);
-            action[randomAction] = _numOps.One;
+            action[randomAction] = NumOps.One;
             return action;
         }
 
@@ -153,7 +149,7 @@ public class QMIXAgent<T> : ReinforcementLearningAgentBase<T>
         int bestAction = ArgMax(qValues);
 
         var result = new Vector<T>(_options.ActionSize);
-        result[bestAction] = _numOps.One;
+        result[bestAction] = NumOps.One;
         return result;
     }
 
@@ -198,11 +194,11 @@ public class QMIXAgent<T> : ReinforcementLearningAgentBase<T>
     {
         if (_replayBuffer.Count < _options.BatchSize)
         {
-            return _numOps.Zero;
+            return NumOps.Zero;
         }
 
         var batch = _replayBuffer.Sample(_options.BatchSize);
-        T totalLoss = _numOps.Zero;
+        T totalLoss = NumOps.Zero;
 
         foreach (var experience in batch)
         {
@@ -241,13 +237,13 @@ public class QMIXAgent<T> : ReinforcementLearningAgentBase<T>
             }
             else
             {
-                target = _numOps.Add(experience.reward, _numOps.Multiply(_options.DiscountFactor, targetTeamQ));
+                target = NumOps.Add(experience.reward, NumOps.Multiply(_options.DiscountFactor, targetTeamQ));
             }
 
             // TD error
-            var tdError = _numOps.Subtract(target, teamQ);
-            var loss = _numOps.Multiply(tdError, tdError);
-            totalLoss = _numOps.Add(totalLoss, loss);
+            var tdError = NumOps.Subtract(target, teamQ);
+            var loss = NumOps.Multiply(tdError, tdError);
+            totalLoss = NumOps.Add(totalLoss, loss);
 
             // Backpropagate through mixing network
             var mixingGradient = new Vector<T>(1);
@@ -260,7 +256,7 @@ public class QMIXAgent<T> : ReinforcementLearningAgentBase<T>
             {
                 var agentGradient = new Vector<T>(_options.ActionSize);
                 int actionIdx = ArgMax(agentActions[i]);
-                agentGradient[actionIdx] = _numOps.Divide(tdError, _numOps.FromDouble(_options.NumAgents));
+                agentGradient[actionIdx] = NumOps.Divide(tdError, NumOps.FromDouble(_options.NumAgents));
 
                 _agentNetworks[i].Backward(agentGradient);
                 _agentNetworks[i].UpdateWeights(_options.LearningRate);
@@ -277,7 +273,7 @@ public class QMIXAgent<T> : ReinforcementLearningAgentBase<T>
             }
         }
 
-        return _numOps.Divide(totalLoss, _numOps.FromDouble(batch.Count));
+        return NumOps.Divide(totalLoss, NumOps.FromDouble(batch.Count));
     }
 
     private (List<Vector<T>> agentStates, Vector<T> globalState, List<Vector<T>> agentActions) DecomposeJointState(
@@ -399,7 +395,7 @@ public class QMIXAgent<T> : ReinforcementLearningAgentBase<T>
 
         for (int i = 1; i < values.Length; i++)
         {
-            if (_numOps.Compare(values[i], maxValue) > 0)
+            if (NumOps.Compare(values[i], maxValue) > 0)
             {
                 maxValue = values[i];
                 maxIndex = i;
@@ -414,7 +410,7 @@ public class QMIXAgent<T> : ReinforcementLearningAgentBase<T>
         T maxValue = values[0];
         for (int i = 1; i < values.Length; i++)
         {
-            if (_numOps.Compare(values[i], maxValue) > 0)
+            if (NumOps.Compare(values[i], maxValue) > 0)
             {
                 maxValue = values[i];
             }
@@ -426,9 +422,9 @@ public class QMIXAgent<T> : ReinforcementLearningAgentBase<T>
     {
         return new Dictionary<string, T>
         {
-            ["steps"] = _numOps.FromDouble(_stepCount),
-            ["buffer_size"] = _numOps.FromDouble(_replayBuffer.Count),
-            ["epsilon"] = _numOps.FromDouble(_epsilon)
+            ["steps"] = NumOps.FromDouble(_stepCount),
+            ["buffer_size"] = NumOps.FromDouble(_replayBuffer.Count),
+            ["epsilon"] = NumOps.FromDouble(_epsilon)
         };
     }
 

@@ -37,32 +37,19 @@ namespace AiDotNet.ReinforcementLearning.Agents.DecisionTransformer;
 public class DecisionTransformerAgent<T> : ReinforcementLearningAgentBase<T>
 {
     private readonly DecisionTransformerOptions<T> _options;
-    private readonly INumericOperations<T> _numOps;
 
     private NeuralNetwork<T> _transformerNetwork;
     private List<(Vector<T> state, Vector<T> action, T reward, T returnToGo)> _trajectoryBuffer;
-    private Random _random;
     private int _updateCount;
 
-    // Context window for sequence modeling
-    private class SequenceContext
-    {
-        public List<Vector<T>> States { get; set; } = new();
-        public List<Vector<T>> Actions { get; set; } = new();
-        public List<T> ReturnsToGo { get; set; } = new();
-        public int Length => States.Count;
-    }
-
-    private SequenceContext _currentContext;
+    private SequenceContext<T> _currentContext;
 
     public DecisionTransformerAgent(DecisionTransformerOptions<T> options) : base(options.StateSize, options.ActionSize)
     {
         _options = options;
-        _numOps = NumericOperations<T>.Instance;
-        _random = options.Seed.HasValue ? new Random(options.Seed.Value) : new Random();
         _updateCount = 0;
         _trajectoryBuffer = new List<(Vector<T>, Vector<T>, T, T)>();
-        _currentContext = new SequenceContext();
+        _currentContext = new SequenceContext<T>();
 
         InitializeNetwork();
     }
@@ -105,12 +92,12 @@ public class DecisionTransformerAgent<T> : ReinforcementLearningAgentBase<T>
         foreach (var trajectory in trajectories)
         {
             // Compute returns-to-go for this trajectory
-            T returnToGo = _numOps.Zero;
+            T returnToGo = NumOps.Zero;
             var returnsToGo = new List<T>();
 
             for (int i = trajectory.Count - 1; i >= 0; i--)
             {
-                returnToGo = _numOps.Add(trajectory[i].reward, returnToGo);
+                returnToGo = NumOps.Add(trajectory[i].reward, returnToGo);
                 returnsToGo.Insert(0, returnToGo);
             }
 
@@ -129,7 +116,7 @@ public class DecisionTransformerAgent<T> : ReinforcementLearningAgentBase<T>
 
     public override Vector<T> SelectAction(Vector<T> state, bool training = true)
     {
-        return SelectActionWithReturn(state, _numOps.Zero, training);
+        return SelectActionWithReturn(state, NumOps.Zero, training);
     }
 
     /// <summary>
@@ -196,10 +183,10 @@ public class DecisionTransformerAgent<T> : ReinforcementLearningAgentBase<T>
     {
         if (_trajectoryBuffer.Count < _options.BatchSize)
         {
-            return _numOps.Zero;
+            return NumOps.Zero;
         }
 
-        T totalLoss = _numOps.Zero;
+        T totalLoss = NumOps.Zero;
 
         // Sample a batch
         var batch = SampleBatch(_options.BatchSize);
@@ -214,20 +201,20 @@ public class DecisionTransformerAgent<T> : ReinforcementLearningAgentBase<T>
             var predictedAction = _transformerNetwork.Forward(input);
 
             // Compute loss (MSE between predicted and target action)
-            T loss = _numOps.Zero;
+            T loss = NumOps.Zero;
             for (int i = 0; i < _options.ActionSize; i++)
             {
-                var diff = _numOps.Subtract(targetAction[i], predictedAction[i]);
-                loss = _numOps.Add(loss, _numOps.Multiply(diff, diff));
+                var diff = NumOps.Subtract(targetAction[i], predictedAction[i]);
+                loss = NumOps.Add(loss, NumOps.Multiply(diff, diff));
             }
 
-            totalLoss = _numOps.Add(totalLoss, loss);
+            totalLoss = NumOps.Add(totalLoss, loss);
 
             // Backward pass
             var gradient = new Vector<T>(_options.ActionSize);
             for (int i = 0; i < _options.ActionSize; i++)
             {
-                gradient[i] = _numOps.Subtract(predictedAction[i], targetAction[i]);
+                gradient[i] = NumOps.Subtract(predictedAction[i], targetAction[i]);
             }
 
             _transformerNetwork.Backward(gradient);
@@ -236,7 +223,7 @@ public class DecisionTransformerAgent<T> : ReinforcementLearningAgentBase<T>
 
         _updateCount++;
 
-        return _numOps.Divide(totalLoss, _numOps.FromDouble(batch.Count));
+        return NumOps.Divide(totalLoss, NumOps.FromDouble(batch.Count));
     }
 
     private List<(Vector<T> state, Vector<T> action, T reward, T returnToGo)> SampleBatch(int batchSize)
@@ -245,7 +232,7 @@ public class DecisionTransformerAgent<T> : ReinforcementLearningAgentBase<T>
 
         for (int i = 0; i < batchSize && i < _trajectoryBuffer.Count; i++)
         {
-            int idx = _random.Next(_trajectoryBuffer.Count);
+            int idx = Random.Next(_trajectoryBuffer.Count);
             batch.Add(_trajectoryBuffer[idx]);
         }
 
@@ -256,8 +243,8 @@ public class DecisionTransformerAgent<T> : ReinforcementLearningAgentBase<T>
     {
         return new Dictionary<string, T>
         {
-            ["updates"] = _numOps.FromDouble(_updateCount),
-            ["buffer_size"] = _numOps.FromDouble(_trajectoryBuffer.Count)
+            ["updates"] = NumOps.FromDouble(_updateCount),
+            ["buffer_size"] = NumOps.FromDouble(_trajectoryBuffer.Count)
         };
     }
 

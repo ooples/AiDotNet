@@ -35,28 +35,16 @@ namespace AiDotNet.ReinforcementLearning.Agents.A3C;
 public class A3CAgent<T> : ReinforcementLearningAgentBase<T>
 {
     private readonly A3COptions<T> _options;
-    private readonly INumericOperations<T> _numOps;
 
     private NeuralNetwork<T> _globalPolicyNetwork;
     private NeuralNetwork<T> _globalValueNetwork;
     private readonly object _globalLock = new();
 
-    private Random _random;
     private int _globalSteps;
-
-    // Worker-local networks (created per worker)
-    private class WorkerNetworks
-    {
-        public NeuralNetwork<T> PolicyNetwork { get; set; } = null!;
-        public NeuralNetwork<T> ValueNetwork { get; set; } = null!;
-        public List<(Vector<T> state, Vector<T> action, T reward, bool done, T value)> Trajectory { get; set; } = new();
-    }
 
     public A3CAgent(A3COptions<T> options) : base(options.StateSize, options.ActionSize)
     {
         _options = options;
-        _numOps = NumericOperations<T>.Instance;
-        _random = options.Seed.HasValue ? new Random(options.Seed.Value) : new Random();
         _globalSteps = 0;
 
         InitializeGlobalNetworks();
@@ -131,7 +119,7 @@ public class A3CAgent<T> : ReinforcementLearningAgentBase<T>
             {
                 mean[i] = policyOutput[i];
                 logStd[i] = policyOutput[_options.ActionSize + i];
-                logStd[i] = MathHelper.Clamp<T>(logStd[i], _numOps.FromDouble(-20), _numOps.FromDouble(2));
+                logStd[i] = MathHelper.Clamp<T>(logStd[i], NumOps.FromDouble(-20), NumOps.FromDouble(2));
             }
 
             if (!training)
@@ -143,8 +131,8 @@ public class A3CAgent<T> : ReinforcementLearningAgentBase<T>
             for (int i = 0; i < _options.ActionSize; i++)
             {
                 var std = MathHelper.Exp(logStd[i]);
-                var noise = MathHelper.GetNormalRandom<T>(_numOps.Zero, _numOps.One);
-                action[i] = _numOps.Add(mean[i], _numOps.Multiply(std, noise));
+                var noise = MathHelper.GetNormalRandom<T>(NumOps.Zero, NumOps.One);
+                action[i] = NumOps.Add(mean[i], NumOps.Multiply(std, noise));
             }
 
             return action;
@@ -159,7 +147,7 @@ public class A3CAgent<T> : ReinforcementLearningAgentBase<T>
                 T bestProb = policyOutput[0];
                 for (int i = 1; i < _options.ActionSize; i++)
                 {
-                    if (_numOps.Compare(policyOutput[i], bestProb) > 0)
+                    if (NumOps.Compare(policyOutput[i], bestProb) > 0)
                     {
                         bestProb = policyOutput[i];
                         bestAction = i;
@@ -167,7 +155,7 @@ public class A3CAgent<T> : ReinforcementLearningAgentBase<T>
                 }
 
                 var action = new Vector<T>(_options.ActionSize);
-                action[bestAction] = _numOps.One;
+                action[bestAction] = NumOps.One;
                 return action;
             }
 
@@ -175,10 +163,10 @@ public class A3CAgent<T> : ReinforcementLearningAgentBase<T>
             double[] probs = new double[_options.ActionSize];
             for (int i = 0; i < _options.ActionSize; i++)
             {
-                probs[i] = Convert.ToDouble(_numOps.ToDouble(policyOutput[i]));
+                probs[i] = Convert.ToDouble(NumOps.ToDouble(policyOutput[i]));
             }
 
-            double r = _random.NextDouble();
+            double r = Random.NextDouble();
             double cumulative = 0.0;
             int selectedAction = 0;
 
@@ -193,7 +181,7 @@ public class A3CAgent<T> : ReinforcementLearningAgentBase<T>
             }
 
             var actionVec = new Vector<T>(_options.ActionSize);
-            actionVec[selectedAction] = _numOps.One;
+            actionVec[selectedAction] = NumOps.One;
             return actionVec;
         }
     }
@@ -278,7 +266,7 @@ public class A3CAgent<T> : ReinforcementLearningAgentBase<T>
     private List<T> ComputeReturns(List<(Vector<T> state, Vector<T> action, T reward, bool done, T value)> trajectory, NeuralNetwork<T> valueNetwork)
     {
         var returns = new List<T>();
-        T nextValue = _numOps.Zero;
+        T nextValue = NumOps.Zero;
 
         if (trajectory.Count > 0 && !trajectory[trajectory.Count - 1].done)
         {
@@ -296,7 +284,7 @@ public class A3CAgent<T> : ReinforcementLearningAgentBase<T>
             }
             else
             {
-                runningReturn = _numOps.Add(exp.reward, _numOps.Multiply(_options.DiscountFactor, runningReturn));
+                runningReturn = NumOps.Add(exp.reward, NumOps.Multiply(_options.DiscountFactor, runningReturn));
             }
             returns.Insert(0, runningReturn);
         }
@@ -310,7 +298,7 @@ public class A3CAgent<T> : ReinforcementLearningAgentBase<T>
 
         for (int i = 0; i < trajectory.Count; i++)
         {
-            var advantage = _numOps.Subtract(returns[i], trajectory[i].value);
+            var advantage = NumOps.Subtract(returns[i], trajectory[i].value);
             advantages.Add(advantage);
         }
 
@@ -318,11 +306,11 @@ public class A3CAgent<T> : ReinforcementLearningAgentBase<T>
         var mean = StatisticsHelper<T>.CalculateMean(advantages.ToArray());
         var std = StatisticsHelper<T>.CalculateStandardDeviation(advantages.ToArray());
 
-        if (_numOps.Compare(std, _numOps.Zero) > 0)
+        if (NumOps.Compare(std, NumOps.Zero) > 0)
         {
             for (int i = 0; i < advantages.Count; i++)
             {
-                advantages[i] = _numOps.Divide(_numOps.Subtract(advantages[i], mean), std);
+                advantages[i] = NumOps.Divide(NumOps.Subtract(advantages[i], mean), std);
             }
         }
 
@@ -346,7 +334,7 @@ public class A3CAgent<T> : ReinforcementLearningAgentBase<T>
             // Simplified gradient computation
             for (int j = 0; j < policyGradient.Length; j++)
             {
-                policyGradient[j] = _numOps.Multiply(advantage, _numOps.FromDouble(0.1));
+                policyGradient[j] = NumOps.Multiply(advantage, NumOps.FromDouble(0.1));
             }
 
             _globalPolicyNetwork.Backward(policyGradient);
@@ -356,7 +344,7 @@ public class A3CAgent<T> : ReinforcementLearningAgentBase<T>
         // Update value network
         for (int i = 0; i < trajectory.Count; i++)
         {
-            var valueError = _numOps.Subtract(returns[i], trajectory[i].value);
+            var valueError = NumOps.Subtract(returns[i], trajectory[i].value);
             var valueGradient = new Vector<T>(1);
             valueGradient[0] = valueError;
 
@@ -388,14 +376,14 @@ public class A3CAgent<T> : ReinforcementLearningAgentBase<T>
     public override T Train()
     {
         // Use TrainAsync instead
-        return _numOps.Zero;
+        return NumOps.Zero;
     }
 
     public override Dictionary<string, T> GetMetrics()
     {
         return new Dictionary<string, T>
         {
-            ["global_steps"] = _numOps.FromDouble(_globalSteps)
+            ["global_steps"] = NumOps.FromDouble(_globalSteps)
         };
     }
 

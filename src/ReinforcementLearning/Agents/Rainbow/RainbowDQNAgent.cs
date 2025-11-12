@@ -38,12 +38,10 @@ namespace AiDotNet.ReinforcementLearning.Agents.Rainbow;
 public class RainbowDQNAgent<T> : ReinforcementLearningAgentBase<T>
 {
     private readonly RainbowDQNOptions<T> _options;
-    private readonly INumericOperations<T> _numOps;
 
     private NeuralNetwork<T> _onlineNetwork;
     private NeuralNetwork<T> _targetNetwork;
     private PrioritizedReplayBuffer<T> _replayBuffer;
-    private Random _random;
 
     private double _epsilon;
     private int _stepCount;
@@ -56,8 +54,6 @@ public class RainbowDQNAgent<T> : ReinforcementLearningAgentBase<T>
     public RainbowDQNAgent(RainbowDQNOptions<T> options) : base(options.StateSize, options.ActionSize)
     {
         _options = options;
-        _numOps = NumericOperations<T>.Instance;
-        _random = options.Seed.HasValue ? new Random(options.Seed.Value) : new Random();
         _stepCount = 0;
         _updateCount = 0;
         _epsilon = options.EpsilonStart;
@@ -131,12 +127,12 @@ public class RainbowDQNAgent<T> : ReinforcementLearningAgentBase<T>
         // Noisy networks provide exploration, so we can use less epsilon
         double actualEpsilon = _options.UseNoisyNetworks ? 0.0 : _epsilon;
 
-        if (training && _random.NextDouble() < actualEpsilon)
+        if (training && Random.NextDouble() < actualEpsilon)
         {
             // Random exploration
-            int randomAction = _random.Next(_options.ActionSize);
+            int randomAction = Random.Next(_options.ActionSize);
             var action = new Vector<T>(_options.ActionSize);
-            action[randomAction] = _numOps.One;
+            action[randomAction] = NumOps.One;
             return action;
         }
 
@@ -145,7 +141,7 @@ public class RainbowDQNAgent<T> : ReinforcementLearningAgentBase<T>
         int bestAction = ArgMax(qValues);
 
         var result = new Vector<T>(_options.ActionSize);
-        result[bestAction] = _numOps.One;
+        result[bestAction] = NumOps.One;
         return result;
     }
 
@@ -161,13 +157,13 @@ public class RainbowDQNAgent<T> : ReinforcementLearningAgentBase<T>
 
             for (int action = 0; action < _options.ActionSize; action++)
             {
-                T qValue = _numOps.Zero;
+                T qValue = NumOps.Zero;
                 for (int atom = 0; atom < _options.NumAtoms; atom++)
                 {
                     int idx = action * _options.NumAtoms + atom;
                     double z = _options.VMin + atom * deltaZ;
                     var prob = output[idx];
-                    qValue = _numOps.Add(qValue, _numOps.Multiply(prob, _numOps.FromDouble(z)));
+                    qValue = NumOps.Add(qValue, NumOps.Multiply(prob, NumOps.FromDouble(z)));
                 }
                 qValues[action] = qValue;
             }
@@ -219,13 +215,13 @@ public class RainbowDQNAgent<T> : ReinforcementLearningAgentBase<T>
         var firstState = _nStepBuffer[0].state;
         var firstAction = _nStepBuffer[0].action;
 
-        T nStepReturn = _numOps.Zero;
-        T discount = _numOps.One;
+        T nStepReturn = NumOps.Zero;
+        T discount = NumOps.One;
 
         for (int i = 0; i < _nStepBuffer.Count; i++)
         {
-            nStepReturn = _numOps.Add(nStepReturn, _numOps.Multiply(discount, _nStepBuffer[i].reward));
-            discount = _numOps.Multiply(discount, _options.DiscountFactor);
+            nStepReturn = NumOps.Add(nStepReturn, NumOps.Multiply(discount, _nStepBuffer[i].reward));
+            discount = NumOps.Multiply(discount, _options.DiscountFactor);
 
             if (_nStepBuffer[i].done)
             {
@@ -241,7 +237,7 @@ public class RainbowDQNAgent<T> : ReinforcementLearningAgentBase<T>
     {
         if (_replayBuffer.Count < _options.WarmupSteps || _replayBuffer.Count < _options.BatchSize)
         {
-            return _numOps.Zero;
+            return NumOps.Zero;
         }
 
         // Prioritized experience replay
@@ -250,13 +246,13 @@ public class RainbowDQNAgent<T> : ReinforcementLearningAgentBase<T>
             _options.PriorityAlpha,
             _beta);
 
-        T totalLoss = _numOps.Zero;
+        T totalLoss = NumOps.Zero;
         var priorities = new List<double>();
 
         for (int i = 0; i < batch.Count; i++)
         {
             var experience = batch[i];
-            var weight = _numOps.FromDouble(weights[i]);
+            var weight = NumOps.FromDouble(weights[i]);
 
             // Double Q-learning: use online network to select, target to evaluate
             var nextQValuesOnline = ComputeQValues(experience.nextState);
@@ -272,12 +268,12 @@ public class RainbowDQNAgent<T> : ReinforcementLearningAgentBase<T>
             }
             else
             {
-                var nStepDiscount = _numOps.One;
+                var nStepDiscount = NumOps.One;
                 for (int n = 0; n < _options.NSteps; n++)
                 {
-                    nStepDiscount = _numOps.Multiply(nStepDiscount, _options.DiscountFactor);
+                    nStepDiscount = NumOps.Multiply(nStepDiscount, _options.DiscountFactor);
                 }
-                target = _numOps.Add(experience.reward, _numOps.Multiply(nStepDiscount, targetQ));
+                target = NumOps.Add(experience.reward, NumOps.Multiply(nStepDiscount, targetQ));
             }
 
             // Current Q-value
@@ -286,14 +282,14 @@ public class RainbowDQNAgent<T> : ReinforcementLearningAgentBase<T>
             var currentQ = currentQValues[actionIndex];
 
             // TD error
-            var tdError = _numOps.Subtract(target, currentQ);
-            var loss = _numOps.Multiply(tdError, tdError);
-            loss = _numOps.Multiply(weight, loss);  // Importance sampling weight
+            var tdError = NumOps.Subtract(target, currentQ);
+            var loss = NumOps.Multiply(tdError, tdError);
+            loss = NumOps.Multiply(weight, loss);  // Importance sampling weight
 
-            totalLoss = _numOps.Add(totalLoss, loss);
+            totalLoss = NumOps.Add(totalLoss, loss);
 
             // Update priority
-            double priority = Math.Abs(_numOps.ToDouble(tdError));
+            double priority = Math.Abs(NumOps.ToDouble(tdError));
             priorities.Add(priority);
 
             // Backpropagate
@@ -314,7 +310,7 @@ public class RainbowDQNAgent<T> : ReinforcementLearningAgentBase<T>
 
         _updateCount++;
 
-        return _numOps.Divide(totalLoss, _numOps.FromDouble(batch.Count));
+        return NumOps.Divide(totalLoss, NumOps.FromDouble(batch.Count));
     }
 
     private Vector<T> ComputeQValuesFromNetwork(NeuralNetwork<T> network, Vector<T> state)
@@ -328,13 +324,13 @@ public class RainbowDQNAgent<T> : ReinforcementLearningAgentBase<T>
 
             for (int action = 0; action < _options.ActionSize; action++)
             {
-                T qValue = _numOps.Zero;
+                T qValue = NumOps.Zero;
                 for (int atom = 0; atom < _options.NumAtoms; atom++)
                 {
                     int idx = action * _options.NumAtoms + atom;
                     double z = _options.VMin + atom * deltaZ;
                     var prob = output[idx];
-                    qValue = _numOps.Add(qValue, _numOps.Multiply(prob, _numOps.FromDouble(z)));
+                    qValue = NumOps.Add(qValue, NumOps.Multiply(prob, NumOps.FromDouble(z)));
                 }
                 qValues[action] = qValue;
             }
@@ -367,7 +363,7 @@ public class RainbowDQNAgent<T> : ReinforcementLearningAgentBase<T>
 
         for (int i = 1; i < values.Length; i++)
         {
-            if (_numOps.Compare(values[i], maxValue) > 0)
+            if (NumOps.Compare(values[i], maxValue) > 0)
             {
                 maxValue = values[i];
                 maxIndex = i;
@@ -381,10 +377,10 @@ public class RainbowDQNAgent<T> : ReinforcementLearningAgentBase<T>
     {
         return new Dictionary<string, T>
         {
-            ["steps"] = _numOps.FromDouble(_stepCount),
-            ["updates"] = _numOps.FromDouble(_updateCount),
-            ["buffer_size"] = _numOps.FromDouble(_replayBuffer.Count),
-            ["epsilon"] = _numOps.FromDouble(_epsilon)
+            ["steps"] = NumOps.FromDouble(_stepCount),
+            ["updates"] = NumOps.FromDouble(_updateCount),
+            ["buffer_size"] = NumOps.FromDouble(_replayBuffer.Count),
+            ["epsilon"] = NumOps.FromDouble(_epsilon)
         };
     }
 

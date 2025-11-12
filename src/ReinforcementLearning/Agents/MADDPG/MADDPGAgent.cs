@@ -39,7 +39,6 @@ namespace AiDotNet.ReinforcementLearning.Agents.MADDPG;
 public class MADDPGAgent<T> : ReinforcementLearningAgentBase<T>
 {
     private readonly MADDPGOptions<T> _options;
-    private readonly INumericOperations<T> _numOps;
 
     // Networks for each agent
     private List<NeuralNetwork<T>> _actorNetworks;
@@ -48,14 +47,11 @@ public class MADDPGAgent<T> : ReinforcementLearningAgentBase<T>
     private List<NeuralNetwork<T>> _targetCriticNetworks;
 
     private ReplayBuffer<T> _replayBuffer;
-    private Random _random;
     private int _stepCount;
 
     public MADDPGAgent(MADDPGOptions<T> options) : base(options.StateSize, options.ActionSize)
     {
         _options = options;
-        _numOps = NumericOperations<T>.Instance;
-        _random = options.Seed.HasValue ? new Random(options.Seed.Value) : new Random();
         _stepCount = 0;
 
         InitializeNetworks();
@@ -148,9 +144,9 @@ public class MADDPGAgent<T> : ReinforcementLearningAgentBase<T>
             // Add exploration noise
             for (int i = 0; i < action.Length; i++)
             {
-                var noise = MathHelper.GetNormalRandom<T>(_numOps.Zero, _numOps.FromDouble(_options.ExplorationNoise));
-                action[i] = _numOps.Add(action[i], noise);
-                action[i] = MathHelper.Clamp<T>(action[i], _numOps.FromDouble(-1), _numOps.FromDouble(1));
+                var noise = MathHelper.GetNormalRandom<T>(NumOps.Zero, NumOps.FromDouble(_options.ExplorationNoise));
+                action[i] = NumOps.Add(action[i], noise);
+                action[i] = MathHelper.Clamp<T>(action[i], NumOps.FromDouble(-1), NumOps.FromDouble(1));
             }
         }
 
@@ -179,12 +175,12 @@ public class MADDPGAgent<T> : ReinforcementLearningAgentBase<T>
         var jointNextState = ConcatenateVectors(nextStates);
 
         // Use average reward (or could be agent-specific)
-        T avgReward = _numOps.Zero;
+        T avgReward = NumOps.Zero;
         foreach (var reward in rewards)
         {
-            avgReward = _numOps.Add(avgReward, reward);
+            avgReward = NumOps.Add(avgReward, reward);
         }
-        avgReward = _numOps.Divide(avgReward, _numOps.FromDouble(rewards.Count));
+        avgReward = NumOps.Divide(avgReward, NumOps.FromDouble(rewards.Count));
 
         _replayBuffer.Add(jointState, jointAction, avgReward, jointNextState, done);
         _stepCount++;
@@ -200,11 +196,11 @@ public class MADDPGAgent<T> : ReinforcementLearningAgentBase<T>
     {
         if (_replayBuffer.Count < _options.WarmupSteps || _replayBuffer.Count < _options.BatchSize)
         {
-            return _numOps.Zero;
+            return NumOps.Zero;
         }
 
         var batch = _replayBuffer.Sample(_options.BatchSize);
-        T totalLoss = _numOps.Zero;
+        T totalLoss = NumOps.Zero;
 
         // Update each agent's critic and actor
         for (int agentId = 0; agentId < _options.NumAgents; agentId++)
@@ -212,19 +208,19 @@ public class MADDPGAgent<T> : ReinforcementLearningAgentBase<T>
             T criticLoss = UpdateCritic(agentId, batch);
             T actorLoss = UpdateActor(agentId, batch);
 
-            totalLoss = _numOps.Add(totalLoss, _numOps.Add(criticLoss, actorLoss));
+            totalLoss = NumOps.Add(totalLoss, NumOps.Add(criticLoss, actorLoss));
 
             // Soft update target networks
             SoftUpdateTargetNetwork(_actorNetworks[agentId], _targetActorNetworks[agentId]);
             SoftUpdateTargetNetwork(_criticNetworks[agentId], _targetCriticNetworks[agentId]);
         }
 
-        return _numOps.Divide(totalLoss, _numOps.FromDouble(_options.NumAgents * 2));
+        return NumOps.Divide(totalLoss, NumOps.FromDouble(_options.NumAgents * 2));
     }
 
     private T UpdateCritic(int agentId, List<(Vector<T> state, Vector<T> action, T reward, Vector<T> nextState, bool done)> batch)
     {
-        T totalLoss = _numOps.Zero;
+        T totalLoss = NumOps.Zero;
 
         foreach (var experience in batch)
         {
@@ -238,16 +234,16 @@ public class MADDPGAgent<T> : ReinforcementLearningAgentBase<T>
             }
             else
             {
-                target = _numOps.Add(experience.reward, _numOps.Multiply(_options.DiscountFactor, targetQ));
+                target = NumOps.Add(experience.reward, NumOps.Multiply(_options.DiscountFactor, targetQ));
             }
 
             // Current Q-value
             var currentQ = _criticNetworks[agentId].Forward(ConcatenateStateAction(experience.state, experience.action))[0];
 
             // TD error
-            var error = _numOps.Subtract(target, currentQ);
-            var loss = _numOps.Multiply(error, error);
-            totalLoss = _numOps.Add(totalLoss, loss);
+            var error = NumOps.Subtract(target, currentQ);
+            var loss = NumOps.Multiply(error, error);
+            totalLoss = NumOps.Add(totalLoss, loss);
 
             // Backpropagate
             var gradient = new Vector<T>(1);
@@ -256,12 +252,12 @@ public class MADDPGAgent<T> : ReinforcementLearningAgentBase<T>
             _criticNetworks[agentId].UpdateWeights(_options.CriticLearningRate);
         }
 
-        return _numOps.Divide(totalLoss, _numOps.FromDouble(batch.Count));
+        return NumOps.Divide(totalLoss, NumOps.FromDouble(batch.Count));
     }
 
     private T UpdateActor(int agentId, List<(Vector<T> state, Vector<T> action, T reward, Vector<T> nextState, bool done)> batch)
     {
-        T totalLoss = _numOps.Zero;
+        T totalLoss = NumOps.Zero;
 
         foreach (var experience in batch)
         {
@@ -287,20 +283,20 @@ public class MADDPGAgent<T> : ReinforcementLearningAgentBase<T>
             var qValue = _criticNetworks[agentId].Forward(ConcatenateStateAction(experience.state, jointAction))[0];
 
             // Actor loss: maximize Q-value
-            totalLoss = _numOps.Add(totalLoss, _numOps.Negate(qValue));
+            totalLoss = NumOps.Add(totalLoss, NumOps.Negate(qValue));
 
             // Simplified gradient for actor
             var actorGradient = new Vector<T>(_options.ActionSize);
             for (int i = 0; i < _options.ActionSize; i++)
             {
-                actorGradient[i] = _numOps.Divide(qValue, _numOps.FromDouble(_options.ActionSize));
+                actorGradient[i] = NumOps.Divide(qValue, NumOps.FromDouble(_options.ActionSize));
             }
 
             _actorNetworks[agentId].Backward(actorGradient);
             _actorNetworks[agentId].UpdateWeights(_options.ActorLearningRate);
         }
 
-        return _numOps.Divide(totalLoss, _numOps.FromDouble(batch.Count));
+        return NumOps.Divide(totalLoss, NumOps.FromDouble(batch.Count));
     }
 
     private void SoftUpdateTargetNetwork(NeuralNetwork<T> source, NeuralNetwork<T> target)
@@ -317,23 +313,23 @@ public class MADDPGAgent<T> : ReinforcementLearningAgentBase<T>
                 var targetWeights = targetLayer.GetWeights();
                 var targetBiases = targetLayer.GetBiases();
 
-                var oneMinusTau = _numOps.Subtract(_numOps.One, _options.TargetUpdateTau);
+                var oneMinusTau = NumOps.Subtract(NumOps.One, _options.TargetUpdateTau);
 
                 for (int r = 0; r < targetWeights.Rows; r++)
                 {
                     for (int c = 0; c < targetWeights.Columns; c++)
                     {
-                        var sourceContrib = _numOps.Multiply(_options.TargetUpdateTau, sourceWeights[r, c]);
-                        var targetContrib = _numOps.Multiply(oneMinusTau, targetWeights[r, c]);
-                        targetWeights[r, c] = _numOps.Add(sourceContrib, targetContrib);
+                        var sourceContrib = NumOps.Multiply(_options.TargetUpdateTau, sourceWeights[r, c]);
+                        var targetContrib = NumOps.Multiply(oneMinusTau, targetWeights[r, c]);
+                        targetWeights[r, c] = NumOps.Add(sourceContrib, targetContrib);
                     }
                 }
 
                 for (int i = 0; i < targetBiases.Length; i++)
                 {
-                    var sourceContrib = _numOps.Multiply(_options.TargetUpdateTau, sourceBiases[i]);
-                    var targetContrib = _numOps.Multiply(oneMinusTau, targetBiases[i]);
-                    targetBiases[i] = _numOps.Add(sourceContrib, targetContrib);
+                    var sourceContrib = NumOps.Multiply(_options.TargetUpdateTau, sourceBiases[i]);
+                    var targetContrib = NumOps.Multiply(oneMinusTau, targetBiases[i]);
+                    targetBiases[i] = NumOps.Add(sourceContrib, targetContrib);
                 }
 
                 targetLayer.SetWeights(targetWeights);
@@ -398,8 +394,8 @@ public class MADDPGAgent<T> : ReinforcementLearningAgentBase<T>
     {
         return new Dictionary<string, T>
         {
-            ["steps"] = _numOps.FromDouble(_stepCount),
-            ["buffer_size"] = _numOps.FromDouble(_replayBuffer.Count)
+            ["steps"] = NumOps.FromDouble(_stepCount),
+            ["buffer_size"] = NumOps.FromDouble(_replayBuffer.Count)
         };
     }
 
