@@ -57,21 +57,17 @@ public class DistillationCheckpointManager<T>
     private int _batchCounter;
 
     /// <summary>
-    /// Gets the configuration for checkpoint management.
-    /// </summary>
-    public DistillationCheckpointConfig Config => _config;
-
-    /// <summary>
-    /// Gets metadata for all saved checkpoints.
-    /// </summary>
-    public IReadOnlyList<CheckpointMetadata> SavedCheckpoints => _savedCheckpoints.AsReadOnly();
-
-    /// <summary>
     /// Initializes a new instance of the DistillationCheckpointManager class.
     /// </summary>
-    public DistillationCheckpointManager(DistillationCheckpointConfig? config = null)
+    /// <param name="config">Configuration for checkpoint management.</param>
+    /// <exception cref="ArgumentNullException">Thrown when config is null.</exception>
+    /// <remarks>
+    /// <para><b>For Advanced Users:</b> This constructor requires explicit configuration.
+    /// All parameters have recommended defaults in <see cref="DistillationCheckpointConfig"/>.</para>
+    /// </remarks>
+    public DistillationCheckpointManager(DistillationCheckpointConfig config)
     {
-        _config = config ?? new DistillationCheckpointConfig();
+        _config = config ?? throw new ArgumentNullException(nameof(config));
         _savedCheckpoints = new List<CheckpointMetadata>();
         _batchCounter = 0;
 
@@ -86,9 +82,9 @@ public class DistillationCheckpointManager<T>
     }
 
     /// <summary>
-    /// Determines if a checkpoint should be saved based on current progress.
+    /// Determines if a checkpoint should be saved based on current progress (internal logic).
     /// </summary>
-    public bool ShouldSaveCheckpoint(int? epoch = null, int? batch = null)
+    private bool ShouldSaveCheckpoint(int? epoch = null, int? batch = null)
     {
         if (epoch.HasValue && _config.SaveEveryEpochs > 0)
         {
@@ -252,6 +248,11 @@ public class DistillationCheckpointManager<T>
     /// <summary>
     /// Gets the checkpoint with the best metric value.
     /// </summary>
+    /// <returns>Metadata of the best checkpoint, or null if no checkpoints exist.</returns>
+    /// <remarks>
+    /// <para><b>For Advanced Users:</b> Returns the checkpoint with the best validation metric
+    /// based on the configuration (e.g., lowest validation loss or highest accuracy).</para>
+    /// </remarks>
     public CheckpointMetadata? GetBestCheckpoint()
     {
         if (_savedCheckpoints.Count == 0)
@@ -271,6 +272,43 @@ public class DistillationCheckpointManager<T>
         return _config.LowerIsBetter
             ? checkpointsWithMetric.MinBy(c => c.Metrics[_config.BestMetric])
             : checkpointsWithMetric.MaxBy(c => c.Metrics[_config.BestMetric]);
+    }
+
+    /// <summary>
+    /// Gets the most recently saved checkpoint.
+    /// </summary>
+    /// <returns>Metadata of the most recent checkpoint, or null if no checkpoints exist.</returns>
+    /// <remarks>
+    /// <para><b>For Advanced Users:</b> Useful for resuming interrupted training from the last saved state.</para>
+    /// </remarks>
+    public CheckpointMetadata? GetMostRecentCheckpoint()
+    {
+        return _savedCheckpoints.OrderByDescending(c => c.Epoch).ThenByDescending(c => c.Batch).FirstOrDefault();
+    }
+
+    /// <summary>
+    /// Gets a checkpoint for a specific epoch.
+    /// </summary>
+    /// <param name="epoch">The epoch number to find.</param>
+    /// <returns>Metadata of the checkpoint at the specified epoch, or null if not found.</returns>
+    /// <remarks>
+    /// <para><b>For Advanced Users:</b> Returns the checkpoint saved at a specific epoch number.</para>
+    /// </remarks>
+    public CheckpointMetadata? GetCheckpointByEpoch(int epoch)
+    {
+        return _savedCheckpoints.FirstOrDefault(c => c.Epoch == epoch);
+    }
+
+    /// <summary>
+    /// Gets all saved checkpoint metadata as a readonly collection.
+    /// </summary>
+    /// <returns>Readonly list of all checkpoint metadata.</returns>
+    /// <remarks>
+    /// <para><b>For Advanced Users:</b> Provides read-only access to all saved checkpoints for custom queries.</para>
+    /// </remarks>
+    public IReadOnlyList<CheckpointMetadata> GetAllCheckpoints()
+    {
+        return _savedCheckpoints.AsReadOnly();
     }
 
     /// <summary>

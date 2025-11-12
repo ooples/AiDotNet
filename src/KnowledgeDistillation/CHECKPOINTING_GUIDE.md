@@ -360,10 +360,8 @@ var checkpointManager = new DistillationCheckpointManager<double>(checkpointConf
 var student = CreateStudentModel();
 int startEpoch = 0;
 
-// Try to load most recent checkpoint
-var recentCheckpoint = checkpointManager.SavedCheckpoints
-    .OrderByDescending(c => c.Epoch)
-    .FirstOrDefault();
+// Try to load most recent checkpoint (facade method)
+var recentCheckpoint = checkpointManager.GetMostRecentCheckpoint();
 
 if (recentCheckpoint != null)
 {
