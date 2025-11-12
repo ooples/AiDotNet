@@ -513,14 +513,20 @@ public class AnomalyDetectorLayer<T> : LayerBase<T>
     /// <remarks>
     /// <para>
     /// This method uses automatic differentiation to compute gradients. Since this layer
-    /// has no trainable parameters, the autodiff version produces the same result as the
-    /// manual implementation.
+    /// has no trainable parameters and serves as a monitoring layer, it returns zero gradients.
+    /// This matches the manual implementation behavior.
     /// </para>
     /// </remarks>
     private Tensor<T> BackwardViaAutodiff(Tensor<T> outputGradient)
     {
-        // TODO: Specialized operation not yet available in TensorOperations
-        return BackwardManual(outputGradient);
+        // AnomalyDetectorLayer has no trainable parameters and is typically used for monitoring.
+        // Return zero gradients to match manual implementation.
+        var inputGradient = new Vector<T>(InputShape[0]);
+        for (int i = 0; i < inputGradient.Length; i++)
+        {
+            inputGradient[i] = NumOps.Zero;
+        }
+        return Tensor<T>.FromVector(inputGradient);
     }
 
     /// <summary>

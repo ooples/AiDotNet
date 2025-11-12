@@ -5100,5 +5100,269 @@ public static class TensorOperations<T>
 
         return node;
     }
+
+    /// <summary>
+    /// Performs graph convolution operation for graph neural networks.
+    /// </summary>
+    /// <param name="input">Input node features of shape [batch, numNodes, inputFeatures]</param>
+    /// <param name="adjacency">Adjacency matrix of shape [batch, numNodes, numNodes]</param>
+    /// <param name="weights">Weight matrix of shape [inputFeatures, outputFeatures]</param>
+    /// <param name="bias">Optional bias vector of shape [outputFeatures]</param>
+    /// <returns>Output node features of shape [batch, numNodes, outputFeatures]</returns>
+    /// <remarks>
+    /// <para>
+    /// This operation implements graph convolution: output = adjacency @ (input @ weights) + bias.
+    /// It aggregates features from neighboring nodes according to the graph structure defined by the adjacency matrix.
+    /// </para>
+    /// <para>
+    /// Forward pass:
+    /// 1. Transform node features: X' = X @ W
+    /// 2. Aggregate via graph structure: output = A @ X'
+    /// 3. Add bias: output = output + b
+    /// </para>
+    /// <para>
+    /// Backward pass gradients:
+    /// - ∂L/∂X = A^T @ (∂L/∂out) @ W^T
+    /// - ∂L/∂W = X^T @ A^T @ (∂L/∂out)
+    /// - ∂L/∂b = sum(∂L/∂out) across batch and nodes
+    /// - ∂L/∂A = (∂L/∂out) @ (X @ W)^T
+    /// </para>
+    /// <para><b>For Beginners:</b> This operation helps neural networks learn from graph-structured data.
+    ///
+    /// Think of it like spreading information through a social network:
+    /// - Each person (node) has certain features
+    /// - The adjacency matrix shows who is connected to whom
+    /// - This operation lets each person's features be influenced by their connections
+    /// - The weights control how features are transformed during this process
+    /// </para>
+    /// </remarks>
+    public static ComputationNode<T> GraphConv(
+        ComputationNode<T> input,
+        ComputationNode<T> adjacency,
+        ComputationNode<T> weights,
+        ComputationNode<T>? bias = null)
+    {
+        var numOps = MathHelper.GetNumericOperations<T>();
+        var inputShape = input.Value.Shape;
+        var adjShape = adjacency.Value.Shape;
+        var weightsShape = weights.Value.Shape;
+
+        // Validate shapes
+        if (inputShape.Length != 3)
+            throw new ArgumentException("Input must be 3D tensor [batch, numNodes, inputFeatures]");
+        if (adjShape.Length != 3 || adjShape[1] != adjShape[2])
+            throw new ArgumentException("Adjacency must be 3D tensor [batch, numNodes, numNodes]");
+        if (weightsShape.Length != 2)
+            throw new ArgumentException("Weights must be 2D tensor [inputFeatures, outputFeatures]");
+        if (inputShape[0] != adjShape[0])
+            throw new ArgumentException($"Batch size mismatch: input {inputShape[0]} vs adjacency {adjShape[0]}");
+        if (inputShape[1] != adjShape[1])
+            throw new ArgumentException($"Number of nodes mismatch: input {inputShape[1]} vs adjacency {adjShape[1]}");
+        if (inputShape[2] != weightsShape[0])
+            throw new ArgumentException($"Feature size mismatch: input features {inputShape[2]} vs weights {weightsShape[0]}");
+        if (bias != null && (bias.Value.Shape.Length != 1 || bias.Value.Shape[0] != weightsShape[1]))
+            throw new ArgumentException($"Bias must be 1D tensor with {weightsShape[1]} elements");
+
+        int batchSize = inputShape[0];
+        int numNodes = inputShape[1];
+        int inputFeatures = inputShape[2];
+        int outputFeatures = weightsShape[1];
+
+        var output = new Tensor<T>([batchSize, numNodes, outputFeatures]);
+
+        // Forward pass: A @ (X @ W) + b
+        // Step 1: X @ W
+        var xw = new Tensor<T>([batchSize, numNodes, outputFeatures]);
+        for (int b = 0; b < batchSize; b++)
+        {
+            for (int n = 0; n < numNodes; n++)
+            {
+                for (int outF = 0; outF < outputFeatures; outF++)
+                {
+                    T sum = numOps.Zero;
+                    for (int inF = 0; inF < inputFeatures; inF++)
+                    {
+                        sum = numOps.Add(sum, numOps.Multiply(
+                            input.Value[b, n, inF],
+                            weights.Value[inF, outF]));
+                    }
+                    xw[b, n, outF] = sum;
+                }
+            }
+        }
+
+        // Step 2: A @ (X @ W)
+        for (int b = 0; b < batchSize; b++)
+        {
+            for (int i = 0; i < numNodes; i++)
+            {
+                for (int outF = 0; outF < outputFeatures; outF++)
+                {
+                    T sum = numOps.Zero;
+                    for (int j = 0; j < numNodes; j++)
+                    {
+                        sum = numOps.Add(sum, numOps.Multiply(
+                            adjacency.Value[b, i, j],
+                            xw[b, j, outF]));
+                    }
+                    output[b, i, outF] = sum;
+                }
+            }
+        }
+
+        // Step 3: Add bias
+        if (bias != null)
+        {
+            for (int b = 0; b < batchSize; b++)
+            {
+                for (int n = 0; n < numNodes; n++)
+                {
+                    for (int outF = 0; outF < outputFeatures; outF++)
+                    {
+                        output[b, n, outF] = numOps.Add(output[b, n, outF], bias.Value[outF]);
+                    }
+                }
+            }
+        }
+
+        // Backward function
+        void BackwardFunction(Tensor<T> gradient)
+        {
+            // Gradient w.r.t. input: A^T @ grad @ W^T
+            if (input.RequiresGradient)
+            {
+                var inputGradient = new Tensor<T>(inputShape);
+
+                for (int b = 0; b < batchSize; b++)
+                {
+                    for (int i = 0; i < numNodes; i++)
+                    {
+                        for (int inF = 0; inF < inputFeatures; inF++)
+                        {
+                            T sum = numOps.Zero;
+                            for (int j = 0; j < numNodes; j++)
+                            {
+                                for (int outF = 0; outF < outputFeatures; outF++)
+                                {
+                                    // A^T[i,j] = A[j,i]
+                                    sum = numOps.Add(sum, numOps.Multiply(
+                                        numOps.Multiply(adjacency.Value[b, j, i], gradient[b, j, outF]),
+                                        weights.Value[inF, outF]));
+                                }
+                            }
+                            inputGradient[b, i, inF] = sum;
+                        }
+                    }
+                }
+
+                if (input.Gradient == null)
+                    input.Gradient = inputGradient;
+                else
+                    input.Gradient = input.Gradient.Add(inputGradient);
+            }
+
+            // Gradient w.r.t. weights: X^T @ A^T @ grad
+            if (weights.RequiresGradient)
+            {
+                var weightsGradient = new Tensor<T>(weightsShape);
+
+                for (int inF = 0; inF < inputFeatures; inF++)
+                {
+                    for (int outF = 0; outF < outputFeatures; outF++)
+                    {
+                        T sum = numOps.Zero;
+                        for (int b = 0; b < batchSize; b++)
+                        {
+                            for (int i = 0; i < numNodes; i++)
+                            {
+                                for (int j = 0; j < numNodes; j++)
+                                {
+                                    // A^T[j,i] = A[i,j]
+                                    sum = numOps.Add(sum, numOps.Multiply(
+                                        numOps.Multiply(input.Value[b, j, inF], adjacency.Value[b, i, j]),
+                                        gradient[b, i, outF]));
+                                }
+                            }
+                        }
+                        weightsGradient[inF, outF] = sum;
+                    }
+                }
+
+                if (weights.Gradient == null)
+                    weights.Gradient = weightsGradient;
+                else
+                    weights.Gradient = weights.Gradient.Add(weightsGradient);
+            }
+
+            // Gradient w.r.t. bias: sum across batch and nodes
+            if (bias != null && bias.RequiresGradient)
+            {
+                var biasGradient = new Tensor<T>([outputFeatures]);
+
+                for (int outF = 0; outF < outputFeatures; outF++)
+                {
+                    T sum = numOps.Zero;
+                    for (int b = 0; b < batchSize; b++)
+                    {
+                        for (int n = 0; n < numNodes; n++)
+                        {
+                            sum = numOps.Add(sum, gradient[b, n, outF]);
+                        }
+                    }
+                    biasGradient[outF] = sum;
+                }
+
+                if (bias.Gradient == null)
+                    bias.Gradient = biasGradient;
+                else
+                    bias.Gradient = bias.Gradient.Add(biasGradient);
+            }
+
+            // Gradient w.r.t. adjacency: grad @ (X @ W)^T
+            if (adjacency.RequiresGradient)
+            {
+                var adjGradient = new Tensor<T>(adjShape);
+
+                for (int b = 0; b < batchSize; b++)
+                {
+                    for (int i = 0; i < numNodes; i++)
+                    {
+                        for (int j = 0; j < numNodes; j++)
+                        {
+                            T sum = numOps.Zero;
+                            for (int outF = 0; outF < outputFeatures; outF++)
+                            {
+                                sum = numOps.Add(sum, numOps.Multiply(
+                                    gradient[b, i, outF],
+                                    xw[b, j, outF]));
+                            }
+                            adjGradient[b, i, j] = sum;
+                        }
+                    }
+                }
+
+                if (adjacency.Gradient == null)
+                    adjacency.Gradient = adjGradient;
+                else
+                    adjacency.Gradient = adjacency.Gradient.Add(adjGradient);
+            }
+        }
+
+        var parents = new List<ComputationNode<T>> { input, adjacency, weights };
+        if (bias != null) parents.Add(bias);
+
+        var node = new ComputationNode<T>(
+            value: output,
+            requiresGradient: input.RequiresGradient || adjacency.RequiresGradient || weights.RequiresGradient || (bias?.RequiresGradient ?? false),
+            parents: parents,
+            backwardFunction: BackwardFunction,
+            name: null);
+
+        var tape = GradientTape<T>.Current;
+        if (tape != null && tape.IsRecording)
+            tape.RecordOperation(node);
+
+        return node;
+    }
 }
 }
