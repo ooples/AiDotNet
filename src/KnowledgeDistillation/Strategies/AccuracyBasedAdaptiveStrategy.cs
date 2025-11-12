@@ -92,7 +92,7 @@ public class AccuracyBasedAdaptiveStrategy<T> : AdaptiveDistillationStrategyBase
         if (trueLabel == null)
         {
             // Fall back to confidence-based if no label
-            var probs = Softmax(studentOutput, 1.0);
+            var probs = DistillationHelper<T>.Softmax(studentOutput, 1.0);
             return GetMaxConfidence(probs);
         }
 
@@ -124,7 +124,7 @@ public class AccuracyBasedAdaptiveStrategy<T> : AdaptiveDistillationStrategyBase
     {
         // We don't have sample index here, so use current confidence as proxy
         // In practice, UpdatePerformance should be called separately with the sample index
-        var probs = Softmax(studentOutput, temperature: 1.0);
+        var probs = DistillationHelper<T>.Softmax(studentOutput, temperature: 1.0);
         double currentConfidence = GetMaxConfidence(probs);
 
         // Use confidence as difficulty estimate

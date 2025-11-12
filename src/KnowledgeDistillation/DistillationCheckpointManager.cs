@@ -269,9 +269,26 @@ public class DistillationCheckpointManager<T>
             return _savedCheckpoints.Last(); // Return most recent if no metrics
         }
 
-        return _config.LowerIsBetter
-            ? checkpointsWithMetric.MinBy(c => c.Metrics[_config.BestMetric])
-            : checkpointsWithMetric.MaxBy(c => c.Metrics[_config.BestMetric]);
+        if (_config.LowerIsBetter)
+        {
+            var best = checkpointsWithMetric[0];
+            foreach (var c in checkpointsWithMetric)
+            {
+                if (c.Metrics[_config.BestMetric] < best.Metrics[_config.BestMetric])
+                    best = c;
+            }
+            return best;
+        }
+        else
+        {
+            var best = checkpointsWithMetric[0];
+            foreach (var c in checkpointsWithMetric)
+            {
+                if (c.Metrics[_config.BestMetric] > best.Metrics[_config.BestMetric])
+                    best = c;
+            }
+            return best;
+        }
     }
 
     /// <summary>

@@ -116,17 +116,17 @@ public abstract class AdaptiveDistillationStrategyBase<T>
         double adaptiveTemp = ComputeAdaptiveTemperature(studentOutput, teacherOutput);
 
         // Compute soft loss with adaptive temperature
-        var studentSoft = Softmax(studentOutput, adaptiveTemp);
-        var teacherSoft = Softmax(teacherOutput, adaptiveTemp);
+        var studentSoft = DistillationHelper<T>.Softmax(studentOutput, adaptiveTemp);
+        var teacherSoft = DistillationHelper<T>.Softmax(teacherOutput, adaptiveTemp);
 
-        var softLoss = KLDivergence(teacherSoft, studentSoft);
+        var softLoss = DistillationHelper<T>.KLDivergence(teacherSoft, studentSoft);
         softLoss = NumOps.Multiply(softLoss, NumOps.FromDouble(adaptiveTemp * adaptiveTemp));
 
         // Add hard loss if labels provided
         if (trueLabels != null)
         {
-            var studentProbs = Softmax(studentOutput, temperature: 1.0);
-            var hardLoss = CrossEntropy(studentProbs, trueLabels);
+            var studentProbs = DistillationHelper<T>.Softmax(studentOutput, temperature: 1.0);
+            var hardLoss = DistillationHelper<T>.CrossEntropy(studentProbs, trueLabels);
 
             var alphaT = NumOps.FromDouble(Alpha);
             var oneMinusAlpha = NumOps.FromDouble(1.0 - Alpha);
@@ -154,8 +154,8 @@ public abstract class AdaptiveDistillationStrategyBase<T>
         double adaptiveTemp = ComputeAdaptiveTemperature(studentOutput, teacherOutput);
 
         // Soft gradient with adaptive temperature
-        var studentSoft = Softmax(studentOutput, adaptiveTemp);
-        var teacherSoft = Softmax(teacherOutput, adaptiveTemp);
+        var studentSoft = DistillationHelper<T>.Softmax(studentOutput, adaptiveTemp);
+        var teacherSoft = DistillationHelper<T>.Softmax(teacherOutput, adaptiveTemp);
 
         for (int i = 0; i < n; i++)
         {
@@ -166,7 +166,7 @@ public abstract class AdaptiveDistillationStrategyBase<T>
         // Add hard gradient if labels provided
         if (trueLabels != null)
         {
-            var studentProbs = Softmax(studentOutput, temperature: 1.0);
+            var studentProbs = DistillationHelper<T>.Softmax(studentOutput, temperature: 1.0);
 
             for (int i = 0; i < n; i++)
             {
@@ -197,7 +197,7 @@ public abstract class AdaptiveDistillationStrategyBase<T>
     /// </remarks>
     protected virtual double ComputePerformance(Vector<T> studentOutput, Vector<T>? trueLabel)
     {
-        var probs = Softmax(studentOutput, 1.0);
+        var probs = DistillationHelper<T>.Softmax(studentOutput, 1.0);
         return GetMaxConfidence(probs);
     }
 

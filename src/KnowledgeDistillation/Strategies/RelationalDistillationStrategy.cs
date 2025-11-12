@@ -551,10 +551,9 @@ public class RelationalDistillationStrategy<T> : DistillationStrategyBase<T, Vec
     {
         if (studentEmbeddings.Length == 0 || teacherEmbeddings.Length == 0)
         {
-            // Return zero gradient for empty batch
-            int dim = studentEmbeddings.Length > 0 ? studentEmbeddings[0].Length :
+            int dimension = studentEmbeddings.Length > 0 ? studentEmbeddings[0].Length :
                      (teacherEmbeddings.Length > 0 ? teacherEmbeddings[0].Length : 0);
-            return new Vector<T>(dim);
+            return new Vector<T>(dimension);
         }
 
         int n = studentEmbeddings.Length;

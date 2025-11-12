@@ -897,7 +897,7 @@ public class PredictionModelBuilder<T, TInput, TOutput> : IPredictionModelBuilde
     /// <summary>
     /// Performs knowledge distillation training using the configured options.
     /// </summary>
-    private async Task<OptimizationResult<T, TInput, TOutput>> PerformKnowledgeDistillationAsync(
+    private Task<OptimizationResult<T, TInput, TOutput>> PerformKnowledgeDistillationAsync(
         IFullModel<T, TInput, TOutput> studentModel,
         IOptimizer<T, TInput, TOutput> optimizer,
         TInput XTrain,
@@ -933,18 +933,36 @@ public class PredictionModelBuilder<T, TInput, TOutput> : IPredictionModelBuilde
             }
             else if (options.Teachers != null && options.Teachers.Length > 0)
             {
-                // Use ensemble of teachers
+                var vectorTeachers = new ITeacherModel<Vector<T>, Vector<T>>[options.Teachers.Length];
+                for (int i = 0; i < options.Teachers.Length; i++)
+                {
+                    vectorTeachers[i] = (ITeacherModel<Vector<T>, Vector<T>>)(object)options.Teachers[i];
+                }
+                
+                double[]? ensembleWeights = null;
+                if (options.EnsembleWeights != null)
+                {
+                    ensembleWeights = options.EnsembleWeights;
+                }
+                
                 teacher = KnowledgeDistillation.TeacherModelFactory<T>.CreateTeacher(
                     TeacherModelType.Ensemble,
-                    ensembleModels: options.Teachers,
-                    ensembleWeights: options.EnsembleWeights);
+                    ensembleModels: vectorTeachers,
+                    ensembleWeights: ensembleWeights);
             }
             else if (options.TeacherForward != null)
             {
-                // Wrap forward function as teacher
                 int outputDim = options.OutputDimension ?? 10;
+                var teacherForward = options.TeacherForward;
+                Func<Vector<T>, Vector<T>> wrappedForward = input =>
+                {
+                    var result = teacherForward((TInput)(object)input);
+                    if (result == null)
+                        throw new InvalidOperationException("Teacher forward function returned null");
+                    return (Vector<T>)(object)result;
+                };
                 teacher = new KnowledgeDistillation.TeacherModelWrapper<T>(
-                    options.TeacherForward,
+                    wrappedForward,
                     outputDim);
             }
             else
@@ -978,34 +996,37 @@ public class PredictionModelBuilder<T, TInput, TOutput> : IPredictionModelBuilde
             var valMatrix = ConversionsHelper.ConvertToMatrix<T, TInput>(XVal);
             var valVector = ConversionsHelper.ConvertToVector<T, TOutput>(yVal);
 
-            var trainInputs = new Vector<T>[trainMatrix.Rows];
-            var trainLabels = new Vector<T>[trainMatrix.Rows];
+            var trainInputsArray = new Vector<T>[trainMatrix.Rows];
+            var trainLabelsArray = new Vector<T>[trainMatrix.Rows];
             for (int i = 0; i < trainMatrix.Rows; i++)
             {
-                trainInputs[i] = trainMatrix.GetRow(i);
-                // Create one-hot encoded labels
+                trainInputsArray[i] = trainMatrix.GetRow(i);
                 var oneHot = new Vector<T>(teacher.OutputDimension);
                 int labelIdx = (int)Convert.ToDouble(trainVector[i]);
                 if (labelIdx >= 0 && labelIdx < teacher.OutputDimension)
                     oneHot[labelIdx] = NumOps.One;
-                trainLabels[i] = oneHot;
+                trainLabelsArray[i] = oneHot;
             }
+            var trainInputs = new Vector<Vector<T>>(trainInputsArray);
+            var trainLabels = new Vector<Vector<T>>(trainLabelsArray);
 
-            Vector<T>[]? valInputs = null;
-            Vector<T>[]? valLabels = null;
+            Vector<Vector<T>>? valInputs = null;
+            Vector<Vector<T>>? valLabels = null;
             if (valMatrix.Rows > 0)
             {
-                valInputs = new Vector<T>[valMatrix.Rows];
-                valLabels = new Vector<T>[valMatrix.Rows];
+                var valInputsArray = new Vector<T>[valMatrix.Rows];
+                var valLabelsArray = new Vector<T>[valMatrix.Rows];
                 for (int i = 0; i < valMatrix.Rows; i++)
                 {
-                    valInputs[i] = valMatrix.GetRow(i);
+                    valInputsArray[i] = valMatrix.GetRow(i);
                     var oneHot = new Vector<T>(teacher.OutputDimension);
                     int labelIdx = (int)Convert.ToDouble(valVector[i]);
                     if (labelIdx >= 0 && labelIdx < teacher.OutputDimension)
                         oneHot[labelIdx] = NumOps.One;
-                    valLabels[i] = oneHot;
+                    valLabelsArray[i] = oneHot;
                 }
+                valInputs = new Vector<Vector<T>>(valInputsArray);
+                valLabels = new Vector<Vector<T>>(valLabelsArray);
             }
 
             // Step 5: Define forward and backward functions
@@ -1191,16 +1212,15 @@ public class PredictionModelBuilder<T, TInput, TOutput> : IPredictionModelBuilde
                 }
             }
 
-            // Step 7: Return result using optimizer's infrastructure
-            return optimizer.Optimize(OptimizerHelper<T, TInput, TOutput>.CreateOptimizationInputData(
-                XTrain, yTrain, XVal, yVal, XTest, yTest));
+            return Task.FromResult(optimizer.Optimize(OptimizerHelper<T, TInput, TOutput>.CreateOptimizationInputData(
+                XTrain, yTrain, XVal, yVal, XTest, yTest)));
         }
         catch (Exception ex)
         {
             Console.WriteLine($"Error setting up knowledge distillation: {ex.Message}");
             Console.WriteLine("Falling back to standard training.");
-            return optimizer.Optimize(OptimizerHelper<T, TInput, TOutput>.CreateOptimizationInputData(
-                XTrain, yTrain, XVal, yVal, XTest, yTest));
+            return Task.FromResult(optimizer.Optimize(OptimizerHelper<T, TInput, TOutput>.CreateOptimizationInputData(
+                XTrain, yTrain, XVal, yVal, XTest, yTest)));
         }
     }
 

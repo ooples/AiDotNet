@@ -130,17 +130,17 @@ public abstract class CurriculumDistillationStrategyBase<T>
         double curriculumTemp = ComputeCurriculumTemperature();
 
         // Compute soft loss with curriculum temperature
-        var studentSoft = Softmax(studentOutput, curriculumTemp);
-        var teacherSoft = Softmax(teacherOutput, curriculumTemp);
+        var studentSoft = DistillationHelper<T>.Softmax(studentOutput, curriculumTemp);
+        var teacherSoft = DistillationHelper<T>.Softmax(teacherOutput, curriculumTemp);
 
-        var softLoss = KLDivergence(teacherSoft, studentSoft);
+        var softLoss = DistillationHelper<T>.KLDivergence(teacherSoft, studentSoft);
         softLoss = NumOps.Multiply(softLoss, NumOps.FromDouble(curriculumTemp * curriculumTemp));
 
         // Add hard loss if labels provided
         if (trueLabels != null)
         {
-            var studentProbs = Softmax(studentOutput, temperature: 1.0);
-            var hardLoss = CrossEntropy(studentProbs, trueLabels);
+            var studentProbs = DistillationHelper<T>.Softmax(studentOutput, temperature: 1.0);
+            var hardLoss = DistillationHelper<T>.CrossEntropy(studentProbs, trueLabels);
 
             var alphaT = NumOps.FromDouble(Alpha);
             var oneMinusAlpha = NumOps.FromDouble(1.0 - Alpha);
@@ -168,8 +168,8 @@ public abstract class CurriculumDistillationStrategyBase<T>
         double curriculumTemp = ComputeCurriculumTemperature();
 
         // Soft gradient with curriculum temperature
-        var studentSoft = Softmax(studentOutput, curriculumTemp);
-        var teacherSoft = Softmax(teacherOutput, curriculumTemp);
+        var studentSoft = DistillationHelper<T>.Softmax(studentOutput, curriculumTemp);
+        var teacherSoft = DistillationHelper<T>.Softmax(teacherOutput, curriculumTemp);
 
         for (int i = 0; i < n; i++)
         {
@@ -180,7 +180,7 @@ public abstract class CurriculumDistillationStrategyBase<T>
         // Add hard gradient if labels provided
         if (trueLabels != null)
         {
-            var studentProbs = Softmax(studentOutput, temperature: 1.0);
+            var studentProbs = DistillationHelper<T>.Softmax(studentOutput, temperature: 1.0);
 
             for (int i = 0; i < n; i++)
             {

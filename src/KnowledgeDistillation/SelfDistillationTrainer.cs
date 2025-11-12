@@ -92,7 +92,7 @@ public class SelfDistillationTrainer<T> : KnowledgeDistillationTrainerBase<T, Ve
         IDistillationStrategy<T, Vector<T>> distillationStrategy,
         int generations = 1,
         int? seed = null)
-        : base(new SelfTeacherModelPlaceholder<T>(), distillationStrategy, seed)
+        : base(new SelfTeacherModelPlaceholder<T>(), distillationStrategy, checkpointConfig: null, seed: seed)
     {
         if (generations < 1)
             throw new ArgumentException("Generations must be at least 1", nameof(generations));
@@ -205,8 +205,7 @@ public class SelfDistillationTrainer<T> : KnowledgeDistillationTrainerBase<T, Ve
             // Cache predictions from previous generation (if not first generation)
             if (generation > 0)
             {
-                // Use reference equality comparer to map input instances to their predictions
-                var newPredictions = new Dictionary<Vector<T>, Vector<T>>(ReferenceEqualityComparer.Instance);
+                var newPredictions = new Dictionary<Vector<T>, Vector<T>>();
                 for (int i = 0; i < trainInputs.Length; i++)
                 {
                     var input = trainInputs[i];
@@ -216,7 +215,7 @@ public class SelfDistillationTrainer<T> : KnowledgeDistillationTrainerBase<T, Ve
                 // Apply EMA if enabled
                 if (UseEMA && _cachedTeacherPredictions != null)
                 {
-                    var blendedPredictions = new Dictionary<Vector<T>, Vector<T>>(ReferenceEqualityComparer.Instance);
+                    var blendedPredictions = new Dictionary<Vector<T>, Vector<T>>();
                     foreach (var kvp in newPredictions)
                     {
                         var input = kvp.Key;
