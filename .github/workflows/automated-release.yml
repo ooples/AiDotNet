@@ -195,13 +195,8 @@ jobs:
             echo EOF
           } >> $GITHUB_OUTPUT
 
-      - name: Create version tag
-        if: steps.version.outputs.should_release == 'true'
-        run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-          git tag -a "v${{ steps.version.outputs.version }}" -m "Release v${{ steps.version.outputs.version }}"
-          git push origin "v${{ steps.version.outputs.version }}"
+      # Tag will be created by the github-release job using the GitHub API
+      # This avoids repository rule restrictions on direct git tag pushes
 
       - name: Restore dependencies
         if: steps.version.outputs.should_release == 'true'
@@ -326,5 +321,7 @@ jobs:
           files: out/*.nupkg
           draft: false
           prerelease: false
+          make_latest: true
+          generate_release_notes: false
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
