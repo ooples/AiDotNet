@@ -69,7 +69,7 @@ public class KnowledgeDistillationOptions<T, TInput, TOutput>
     /// <para><b>For Ensemble Distillation:</b> Provide multiple teacher models.
     /// They will be automatically combined into an ensemble.</para>
     /// </remarks>
-    public Vector<ITeacherModel<TInput, TOutput>>? Teachers { get; set; }
+    public ITeacherModel<TInput, TOutput>[]? Teachers { get; set; }
 
     /// <summary>
     /// Gets or sets the teacher IFullModel (recommended approach).

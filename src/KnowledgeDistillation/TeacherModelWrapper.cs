@@ -99,30 +99,24 @@ public class TeacherModelWrapper<T> : ITeacherModel<Vector<T>, Vector<T>>
 
     private static int GetOutputDimensionFromModel(IFullModel<T, Vector<T>, Vector<T>> model)
     {
-        // Try to infer output dimension from model metadata
         var metadata = model.GetModelMetadata();
 
-        // Check if metadata contains output dimension/class count
-        if (metadata.TryGetValue("OutputDimension", out var outputDimValue))
+        if (metadata == null)
         {
-            if (outputDimValue is int && (int)outputDimValue > 0)
-                return (int)outputDimValue;
+            throw new InvalidOperationException(
+                "Model metadata is null. Cannot determine output dimension. " +
+                "Please use the constructor overload that explicitly specifies outputDimension.");
         }
 
-        if (metadata.TryGetValue("NumClasses", out var numClassesValue))
-        {
-            if (numClassesValue is int && (int)numClassesValue > 0)
-                return (int)numClassesValue;
-        }
+        if (metadata.Properties.TryGetValue("OutputDimension", out var outputDimValue) && outputDimValue is int outputDim && outputDim > 0)
+            return outputDim;
 
-        if (metadata.TryGetValue("ClassCount", out var classCountValue))
-        {
-            if (classCountValue is int && (int)classCountValue > 0)
-                return (int)classCountValue;
-        }
+        if (metadata.Properties.TryGetValue("NumClasses", out var numClassesValue) && numClassesValue is int numClasses && numClasses > 0)
+            return numClasses;
 
-        // If metadata doesn't contain dimension info, we cannot reliably determine output dimension
-        // Throw instead of guessing to prevent downstream errors with incorrect label sizes
+        if (metadata.Properties.TryGetValue("ClassCount", out var classCountValue) && classCountValue is int classCount && classCount > 0)
+            return classCount;
+
         throw new InvalidOperationException(
             "Cannot determine output dimension from model metadata. " +
             "Please use the constructor overload that explicitly specifies outputDimension, " +

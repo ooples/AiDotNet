@@ -588,7 +588,7 @@ public interface IPredictionModelBuilder<T, TInput, TOutput>
     ///
     /// <b>Quick Start Example:</b>
     /// <code>
-    /// var distillationOptions = new KnowledgeDistillationOptions&lt;double, Vector&lt;double&gt;, Vector&lt;double&gt;&gt;
+    /// var distillationOptions = new KnowledgeDistillationOptions&lt;double&gt;
     /// {
     ///     TeacherModelType = TeacherModelType.NeuralNetwork,
     ///     StrategyType = DistillationStrategyType.ResponseBased,

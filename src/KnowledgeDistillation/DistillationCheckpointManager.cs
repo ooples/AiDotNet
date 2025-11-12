@@ -1,6 +1,6 @@
 using AiDotNet.Interfaces;
 using AiDotNet.KnowledgeDistillation.Strategies;
-using System.Text.Json;
+using Newtonsoft.Json;
 
 namespace AiDotNet.KnowledgeDistillation;
 
@@ -188,7 +188,7 @@ public class DistillationCheckpointManager<T>
         if (_config.SaveMetadata)
         {
             string metadataPath = basePath + ".metadata.json";
-            var json = JsonSerializer.Serialize(metadata, new JsonSerializerOptions { WriteIndented = true });
+            var json = JsonConvert.SerializeObject(metadata, Formatting.Indented);
             File.WriteAllText(metadataPath, json);
         }
     }
@@ -391,7 +391,7 @@ public class DistillationCheckpointManager<T>
                 TotalSteps = curriculum.TotalSteps
             };
 
-            var json = JsonSerializer.Serialize(state, new JsonSerializerOptions { WriteIndented = true });
+            var json = JsonConvert.SerializeObject(state, Formatting.Indented);
             File.WriteAllText(path, json);
         }
     }
@@ -402,7 +402,7 @@ public class DistillationCheckpointManager<T>
         if (File.Exists(metadataIndexPath))
         {
             var json = File.ReadAllText(metadataIndexPath);
-            var checkpoints = JsonSerializer.Deserialize<List<CheckpointMetadata>>(json);
+            var checkpoints = JsonConvert.DeserializeObject<List<CheckpointMetadata>>(json);
             if (checkpoints != null)
             {
                 _savedCheckpoints.AddRange(checkpoints);
@@ -413,7 +413,7 @@ public class DistillationCheckpointManager<T>
     private void SaveCheckpointMetadata()
     {
         string metadataIndexPath = Path.Combine(_config.CheckpointDirectory, "checkpoint_index.json");
-        var json = JsonSerializer.Serialize(_savedCheckpoints, new JsonSerializerOptions { WriteIndented = true });
+        var json = JsonConvert.SerializeObject(_savedCheckpoints, Formatting.Indented);
         File.WriteAllText(metadataIndexPath, json);
     }
 }
