@@ -1,3 +1,5 @@
+using System;
+
 namespace AiDotNet.NumericOperations;
 
 /// <summary>
@@ -301,11 +303,11 @@ public class ByteOperations : INumericOperations<byte>
     /// <para><b>For Beginners:</b> This method multiplies a number by itself.
     /// 
     /// For example:
-    /// - Square of 2 is 4 (2 × 2)
-    /// - Square of 10 is 100 (10 × 10)
+    /// - Square of 2 is 4 (2 Ã— 2)
+    /// - Square of 10 is 100 (10 Ã— 10)
     /// 
     /// Because of byte limits:
-    /// - Square of 16 is 0 (16 × 16 = 256, which wraps to 0)
+    /// - Square of 16 is 0 (16 Ã— 16 = 256, which wraps to 0)
     /// - Any value of 16 or higher will wrap around when squared
     /// 
     /// Be careful when squaring larger byte values.
@@ -323,12 +325,12 @@ public class ByteOperations : INumericOperations<byte>
     /// This method calculates the exponential function (e^value) and rounds the result to the nearest integer.
     /// If the result exceeds 255, it is capped at 255.
     /// </para>
-    /// <para><b>For Beginners:</b> This method calculates the mathematical constant e (˜2.718) raised to a power.
+    /// <para><b>For Beginners:</b> This method calculates the mathematical constant e (â‰ˆ2.718) raised to a power.
     /// 
     /// For example:
-    /// - e^1 ˜ 2.718 (rounded to 3 as a byte)
-    /// - e^2 ˜ 7.389 (rounded to 7 as a byte)
-    /// - e^5 ˜ 148.413 (rounded to 148 as a byte)
+    /// - e^1 â‰ˆ 2.718 (rounded to 3 as a byte)
+    /// - e^2 â‰ˆ 7.389 (rounded to 7 as a byte)
+    /// - e^5 â‰ˆ 148.413 (rounded to 148 as a byte)
     /// 
     /// The result is limited to 255 (maximum byte value).
     /// This function grows very quickly, so even moderate input values will reach the maximum.
@@ -371,8 +373,8 @@ public class ByteOperations : INumericOperations<byte>
     /// <para><b>For Beginners:</b> This method raises one number to the power of another.
     /// 
     /// For example:
-    /// - 2 raised to power 3 is 8 (2³ = 2×2×2 = 8)
-    /// - 3 raised to power 2 is 9 (3² = 3×3 = 9)
+    /// - 2 raised to power 3 is 8 (2Â³ = 2 Ã— 2 Ã— 2 = 8)
+    /// - 3 raised to power 2 is 9 (3Â² = 3 Ã— 3 = 9)
     /// 
     /// Because of byte limits:
     /// - 2 raised to power 8 is 0 (28 = 256, which wraps to 0)
@@ -398,7 +400,7 @@ public class ByteOperations : INumericOperations<byte>
     /// The natural logarithm answers the question: "To what power must e be raised to get this number?"
     /// 
     /// For example:
-    /// - Log of 1 is 0 (e° = 1)
+    /// - Log of 1 is 0 (e^0 = 1)
     /// - Log of 3 is approximately 1.099 (truncated to 1 as a byte)
     /// - Log of 7 is approximately 1.946 (truncated to 1 as a byte)
     /// 
@@ -596,4 +598,51 @@ public class ByteOperations : INumericOperations<byte>
         if (value > 0) return 1;
         return 0;
     }
+
+
+    /// <summary>
+    /// Gets the number of bits used for precision in byte (8 bits).
+    /// </summary>
+    public int PrecisionBits => 8;
+
+    /// <summary>
+    /// Converts a byte value to float (FP32) precision.
+    /// </summary>
+    /// <param name="value">The byte value to convert.</param>
+    /// <returns>The value as a float.</returns>
+    public float ToFloat(byte value) => (float)value;
+
+    /// <summary>
+    /// Converts a float value to byte.
+    /// </summary>
+    /// <param name="value">The float value to convert.</param>
+    /// <returns>The value as a byte.</returns>
+    /// <remarks>
+    /// This conversion will round the float to the nearest integer and clamp it to the byte range [0, 255].
+    /// </remarks>
+    public byte FromFloat(float value) => (byte)MathExtensions.Clamp((int)Math.Round(value), byte.MinValue, byte.MaxValue);
+
+    /// <summary>
+    /// Converts a byte value to Half (FP16) precision.
+    /// </summary>
+    /// <param name="value">The byte value to convert.</param>
+    /// <returns>The value as a Half.</returns>
+    public Half ToHalf(byte value) => (Half)value;
+
+    /// <summary>
+    /// Converts a Half value to byte.
+    /// </summary>
+    /// <param name="value">The Half value to convert.</param>
+    /// <returns>The value as a byte.</returns>
+    /// <remarks>
+    /// This conversion will round the Half to the nearest integer and clamp it to the byte range [0, 255].
+    /// </remarks>
+    public byte FromHalf(Half value) => (byte)MathExtensions.Clamp((int)Math.Round((float)value), byte.MinValue, byte.MaxValue);
+
+    /// <summary>
+    /// Converts a byte value to double (FP64) precision.
+    /// </summary>
+    /// <param name="value">The byte value to convert.</param>
+    /// <returns>The value as a double.</returns>
+    public double ToDouble(byte value) => (double)value;
 }

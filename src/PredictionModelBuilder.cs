@@ -14,6 +14,7 @@ global using AiDotNet.LanguageModels;
 global using AiDotNet.Tools;
 global using AiDotNet.Models;
 global using AiDotNet.Enums;
+global using AiDotNet.MixedPrecision;
 
 namespace AiDotNet;
 
@@ -60,6 +61,7 @@ public class PredictionModelBuilder<T, TInput, TOutput> : IPredictionModelBuilde
     private AgentConfiguration<T>? _agentConfig;
     private AgentAssistanceOptions _agentOptions = AgentAssistanceOptions.Default;
     private KnowledgeDistillationOptions<T, TInput, TOutput>? _knowledgeDistillationOptions;
+    private MixedPrecisionConfig? _mixedPrecisionConfig;
 
     /// <summary>
     /// Configures which features (input variables) should be used in the model.
@@ -174,6 +176,82 @@ public class PredictionModelBuilder<T, TInput, TOutput> : IPredictionModelBuilde
     public IPredictionModelBuilder<T, TInput, TOutput> ConfigureOptimizer(IOptimizer<T, TInput, TOutput> optimizationAlgorithm)
     {
         _optimizer = optimizationAlgorithm;
+        return this;
+    }
+
+    /// <summary>
+    /// Enables mixed-precision training with optional configuration.
+    /// </summary>
+    /// <param name="config">Mixed-precision configuration (optional, uses defaults if null).</param>
+    /// <returns>This builder instance for method chaining.</returns>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> Mixed-precision training uses a combination of 16-bit (FP16) and 32-bit (FP32)
+    /// floating-point numbers during training. This provides:
+    ///
+    /// Benefits:
+    /// - **2-3x faster training** on modern GPUs with Tensor Cores (V100, A100, RTX 3000+)
+    /// - **~50% memory reduction** allows training larger models or using bigger batches
+    /// - **Maintained accuracy** through careful precision management and loss scaling
+    ///
+    /// <b>Requirements:</b>
+    /// Mixed-precision training has specific technical requirements:
+    ///
+    /// 1. **Type Constraint: float only**
+    ///    - Type parameter T must be float (FP32)
+    ///    - Cannot use double, decimal, or integer types
+    ///    - Reason: Mixed-precision converts between FP32 (float) and FP16 (Half) representations
+    ///
+    /// 2. **Gradient-Based Optimizers Only**
+    ///    - Requires optimizers that compute gradients (SGD, Adam, RMSProp, etc.)
+    ///    - Does NOT work with non-gradient methods (genetic algorithms, random search, Bayesian optimization)
+    ///    - Reason: Core techniques require gradient computation:
+    ///      * Loss scaling: Multiplies gradients to prevent underflow in FP16
+    ///      * Master weights: FP32 copy for accurate incremental gradient updates
+    ///      * Gradient accumulation: Accumulates tiny updates in FP32 precision
+    ///
+    /// 3. **Neural Networks (Recommended)**
+    ///    - Best suited for neural networks with large parameter counts
+    ///    - Can technically work with other gradient-based models, but benefits are minimal
+    ///    - Reason: Neural networks benefit from:
+    ///      * GPU Tensor Core acceleration for matrix operations (2-3x speedup)
+    ///      * Massive parameter counts (millions/billions) where 50% memory reduction matters
+    ///      * Robustness to small FP16 precision losses during training
+    ///
+    /// When to use:
+    /// - ✅ Neural networks trained with gradient-based optimizers (SGD, Adam, etc.)
+    /// - ✅ Large models (>100M parameters) on modern GPUs with Tensor Cores
+    /// - ✅ Memory-constrained scenarios where you need bigger batch sizes
+    /// - ❌ Non-gradient optimizers (evolutionary algorithms, random search)
+    /// - ❌ CPU-only training (minimal benefit without Tensor Cores)
+    /// - ❌ Very small models (<1M parameters) where memory isn't a concern
+    /// - ❌ Non-float types (double, decimal, int)
+    ///
+    /// <b>Technical Details:</b>
+    /// Mixed-precision maintains two copies of model parameters:
+    /// - Working weights (FP16): Used for forward/backward passes to save memory and increase speed
+    /// - Master weights (FP32): Used for optimizer updates to maintain precision over many iterations
+    ///
+    /// Loss scaling prevents gradient underflow by multiplying the loss by a large factor (e.g., 65536)
+    /// before backpropagation, then dividing gradients by the same factor before applying updates.
+    /// </para>
+    /// </remarks>
+    /// <example>
+    /// <code>
+    /// // Enable with default settings (recommended)
+    /// var result = await new PredictionModelBuilder&lt;float, Matrix&lt;float&gt;, Vector&lt;float&gt;&gt;()
+    ///     .ConfigureModel(network)
+    ///     .ConfigureOptimizer(optimizer)
+    ///     .ConfigureMixedPrecision()  // Enable mixed-precision
+    ///     .BuildAsync(trainingData, labels);
+    ///
+    /// // Or with custom configuration
+    /// builder.ConfigureMixedPrecision(MixedPrecisionConfig.Conservative());
+    /// </code>
+    /// </example>
+    public IPredictionModelBuilder<T, TInput, TOutput> ConfigureMixedPrecision(MixedPrecisionConfig? config = null)
+    {
+        _mixedPrecisionConfig = config ?? new MixedPrecisionConfig();
         return this;
     }
 
@@ -333,6 +411,31 @@ public class PredictionModelBuilder<T, TInput, TOutput> : IPredictionModelBuilde
         // Wrap model and optimizer for distributed training if configured
         IFullModel<T, TInput, TOutput> model = _model;
         IOptimizer<T, TInput, TOutput> finalOptimizer = optimizer;
+
+        // Enable mixed-precision training BEFORE distributed training wrapping (if configured)
+        // This ensures mixed-precision is applied to the base model/optimizer before any wrapping
+        if (_mixedPrecisionConfig != null)
+        {
+            // Verify T is float
+            if (typeof(T) != typeof(float))
+            {
+                throw new InvalidOperationException(
+                    $"Mixed-precision training requires T = float, got T = {typeof(T).Name}. " +
+                    $"Use PredictionModelBuilder<float, ...> to enable mixed-precision training.");
+            }
+
+            // Enable on neural network model if applicable
+            if (_model is NeuralNetworkBase<T> neuralNet)
+            {
+                neuralNet.EnableMixedPrecision(_mixedPrecisionConfig);
+            }
+
+            // Enable on gradient-based optimizer if applicable
+            if (optimizer is GradientBasedOptimizerBase<T, TInput, TOutput> gradOptimizer)
+            {
+                gradOptimizer.EnableMixedPrecision(_mixedPrecisionConfig);
+            }
+        }
 
         // Enable distributed training if backend or configuration was explicitly provided
         if (_distributedBackend != null || _distributedConfiguration != null)

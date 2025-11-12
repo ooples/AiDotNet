@@ -1,5 +1,6 @@
 using AiDotNet.Interpretability;
 using AiDotNet.Interfaces;
+using AiDotNet.MixedPrecision;
 
 namespace AiDotNet.NeuralNetworks;
 
@@ -14,7 +15,7 @@ namespace AiDotNet.NeuralNetworks;
 /// This class provides the foundation for building different types of neural networks.
 /// </para>
 /// </remarks>
-public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpretableModel<T>
+public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpretableModel<T>, IDisposable
 {
     /// <summary>
     /// The internal collection of layers that make up this neural network.
@@ -159,6 +160,29 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
     /// Null when invalid (layers modified).
     /// </summary>
     private int? _cachedParameterCount;
+
+    /// <summary>
+    /// Mixed-precision training context (null if mixed-precision is disabled).
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> Mixed-precision training uses both 16-bit (FP16) and 32-bit (FP32) floating-point
+    /// numbers to speed up training while maintaining accuracy. When enabled, this context manages the conversion
+    /// between different precisions and handles loss scaling to prevent numerical issues.
+    /// </para>
+    /// </remarks>
+    protected MixedPrecisionContext? _mixedPrecisionContext;
+
+    /// <summary>
+    /// Gets whether mixed-precision training is enabled.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> This property tells you if the network is using mixed-precision training.
+    /// Mixed-precision can provide 2-3x faster training on modern GPUs with Tensor Cores.
+    /// </para>
+    /// </remarks>
+    public bool IsMixedPrecisionEnabled => _mixedPrecisionContext != null;
 
     /// <summary>
     /// Creates a new neural network with the specified architecture.
@@ -896,6 +920,113 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
         {
             IsTrainingMode = isTraining;
         }
+    }
+
+    /// <summary>
+    /// Enables mixed-precision training for the neural network.
+    /// </summary>
+    /// <param name="config">Configuration for mixed-precision training (optional, uses defaults if null).</param>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> Mixed-precision training is a technique that uses a mix of 16-bit (FP16) and
+    /// 32-bit (FP32) floating-point numbers to train neural networks faster while maintaining accuracy.
+    ///
+    /// Benefits:
+    /// - **2-3x faster training** on modern GPUs with Tensor Cores (e.g., NVIDIA V100, A100, RTX 3000+)
+    /// - **~50% memory reduction** allows training larger models or using bigger batch sizes
+    /// - **Maintained accuracy** through careful use of FP32 for critical operations
+    ///
+    /// How it works:
+    /// 1. Forward pass: Computations done in FP16 (faster, less memory)
+    /// 2. Loss calculation: Done in FP32 (maintains numerical stability)
+    /// 3. Backward pass: Gradients computed in FP16
+    /// 4. Loss scaling: Prevents small gradients from becoming zero
+    /// 5. Parameter updates: Done in FP32 master weights (maintains precision)
+    ///
+    /// When to use:
+    /// - ✅ Training large models (>100M parameters)
+    /// - ✅ Using modern GPUs with Tensor Core support
+    /// - ✅ Memory-constrained scenarios
+    /// - ❌ CPU-only training (minimal benefit)
+    /// - ❌ Very small models (<1M parameters)
+    ///
+    /// Note: This feature requires that the network's numeric type T is float.
+    /// Mixed-precision training with Half or double is not supported.
+    /// </para>
+    /// </remarks>
+    /// <example>
+    /// <code>
+    /// // Enable with default settings (recommended for most cases)
+    /// network.EnableMixedPrecision();
+    ///
+    /// // Enable with custom configuration
+    /// var config = new MixedPrecisionConfig
+    /// {
+    ///     InitialLossScale = 4096.0,
+    ///     ScaleGrowthInterval = 2000
+    /// };
+    /// network.EnableMixedPrecision(config);
+    ///
+    /// // Enable with conservative settings for sensitive models
+    /// network.EnableMixedPrecision(MixedPrecisionConfig.Conservative());
+    /// </code>
+    /// </example>
+    /// <exception cref="NotSupportedException">Thrown when T is not float.</exception>
+    /// <exception cref="InvalidOperationException">Thrown when mixed-precision is already enabled.</exception>
+    internal virtual void EnableMixedPrecision(MixedPrecisionConfig? config = null)
+    {
+        // Check that T is float
+        if (typeof(T) != typeof(float))
+        {
+            throw new NotSupportedException(
+                $"Mixed-precision training is only supported for neural networks with type parameter float. " +
+                $"Current type: {typeof(T).Name}. " +
+                $"Create your network as NeuralNetwork<float> to use mixed-precision training.");
+        }
+
+        if (_mixedPrecisionContext != null)
+        {
+            throw new InvalidOperationException(
+                "Mixed-precision training is already enabled. Call DisableMixedPrecision() first if you want to change the configuration.");
+        }
+
+        _mixedPrecisionContext = new MixedPrecisionContext(config);
+    }
+
+    /// <summary>
+    /// Disables mixed-precision training and releases associated resources.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> This turns off mixed-precision training and returns the network to
+    /// standard FP32 training. This is useful for:
+    /// - Comparing performance with/without mixed-precision
+    /// - Debugging numerical issues
+    /// - Switching to FP32 training for the final epochs
+    /// </para>
+    /// </remarks>
+    internal virtual void DisableMixedPrecision()
+    {
+        if (_mixedPrecisionContext != null)
+        {
+            _mixedPrecisionContext.Dispose();
+            _mixedPrecisionContext = null;
+        }
+    }
+
+    /// <summary>
+    /// Gets the mixed-precision training context (if enabled).
+    /// </summary>
+    /// <returns>The mixed-precision context, or null if mixed-precision is disabled.</returns>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> This provides access to the mixed-precision training internals,
+    /// such as the current loss scale and overflow statistics. Useful for monitoring and debugging.
+    /// </para>
+    /// </remarks>
+    internal virtual MixedPrecisionContext? GetMixedPrecisionContext()
+    {
+        return _mixedPrecisionContext;
     }
 
     /// <summary>
@@ -2161,4 +2292,30 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
         if (data.Length == 0) throw new InvalidOperationException("Stream contains no data.");
         Deserialize(data);
     }
+
+    /// <summary>
+    /// Disposes resources used by the neural network.
+    /// </summary>
+    /// <remarks>
+    /// Ensures that the mixed-precision context is properly disposed if it was enabled.
+    /// </remarks>
+    public void Dispose()
+    {
+        Dispose(true);
+        GC.SuppressFinalize(this);
+    }
+
+    /// <summary>
+    /// Protected Dispose pattern implementation.
+    /// </summary>
+    /// <param name="disposing">True if called from Dispose(), false if called from finalizer.</param>
+    protected virtual void Dispose(bool disposing)
+    {
+        if (disposing)
+        {
+            // Dispose managed resources
+            DisableMixedPrecision();
+        }
+    }
+
 }

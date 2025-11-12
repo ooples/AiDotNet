@@ -2,6 +2,7 @@ using AiDotNet.Models.Results;
 using AiDotNet.DistributedTraining;
 using AiDotNet.Enums;
 using AiDotNet.Models;
+using AiDotNet.MixedPrecision;
 
 namespace AiDotNet.Interfaces;
 
@@ -563,6 +564,7 @@ public interface IPredictionModelBuilder<T, TInput, TOutput>
     IPredictionModelBuilder<T, TInput, TOutput> ConfigureCrossValidation(ICrossValidator<T, TInput, TOutput> crossValidator);
 
     /// <summary>
+    /// <summary>
     /// Configures knowledge distillation for training a smaller student model from a larger teacher model.
     /// </summary>
     /// <remarks>
@@ -592,7 +594,65 @@ public interface IPredictionModelBuilder<T, TInput, TOutput>
         KnowledgeDistillationOptions<T, TInput, TOutput> options);
 
     /// <summary>
-    /// Asynchronously builds a meta-trained model that can quickly adapt to new tasks.
+    /// Configures mixed-precision training for faster training on GPUs with Tensor Cores.
+    /// </summary>
+    /// <remarks>
+    /// Mixed-precision training uses FP16 (half precision) for computations and FP32 (single precision)
+    /// for master weights, providing 2-3x training speedup and ~50% memory reduction on modern GPUs.
+    ///
+    /// <b>For Beginners:</b> Mixed-precision training makes your model train faster on modern GPUs
+    /// (NVIDIA V100, A100, H100, RTX 3000+) by using lower precision numbers for some calculations.
+    /// This gives you:
+    /// - 2-3x faster training
+    /// - ~50% less memory usage
+    /// - Same model accuracy
+    ///
+    /// <b>Requirements:</b>
+    /// Mixed-precision training has specific technical requirements:
+    ///
+    /// 1. **Type Constraint: float only**
+    ///    - Type parameter T must be float (FP32)
+    ///    - Cannot use double, decimal, or integer types
+    ///    - Reason: Mixed-precision converts between FP32 (float) and FP16 (Half) representations
+    ///
+    /// 2. **Gradient-Based Optimizers Only**
+    ///    - Requires optimizers that compute gradients (SGD, Adam, RMSProp, etc.)
+    ///    - Does NOT work with non-gradient methods (genetic algorithms, random search, Bayesian optimization)
+    ///    - Reason: Requires gradient computation for loss scaling, master weights, and gradient accumulation
+    ///
+    /// 3. **Neural Networks (Recommended)**
+    ///    - Best suited for neural networks with large parameter counts
+    ///    - GPU with Tensor Core support (V100, A100, H100, RTX 3000/4000+)
+    ///
+    /// Only enable this if you have:
+    /// - A neural network trained with gradient-based optimizer
+    /// - Float as your numeric type (T = float)
+    /// - A GPU with Tensor Core support
+    ///
+    /// For CPU training, older GPUs, or non-gradient optimizers, this provides no benefit.
+    ///
+    /// Example usage:
+    /// <code>
+    /// var model = builder
+    ///     .ConfigureModel(myNetwork)
+    ///     .ConfigureOptimizer(myOptimizer)
+    ///     .ConfigureMixedPrecision()  // Use default settings
+    ///     .Build(xTrain, yTrain);
+    ///
+    /// // Or with custom configuration
+    /// var model = builder
+    ///     .ConfigureModel(myNetwork)
+    ///     .ConfigureOptimizer(myOptimizer)
+    ///     .ConfigureMixedPrecision(MixedPrecisionConfig.Conservative())
+    ///     .Build(xTrain, yTrain);
+    /// </code>
+    /// </remarks>
+    /// <param name="config">Optional mixed-precision configuration. If null, uses default settings.</param>
+    /// <returns>The builder instance for method chaining.</returns>
+    IPredictionModelBuilder<T, TInput, TOutput> ConfigureMixedPrecision(MixedPrecisionConfig? config = null);
+
+    /// <summary>
+    /// Asynchronously builds a meta-trained model thatcan quickly adapt to new tasks.
     /// </summary>
     /// <remarks>
     /// <para>
