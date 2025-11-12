@@ -200,7 +200,23 @@ public class ProbabilisticDistillationStrategy<T> : DistillationStrategyBase<T, 
         // MMD² = E[k(x,x')] - 2E[k(x,y)] + E[k(y,y')]
         // where x~student, y~teacher
 
+        if (studentPredictions == null) throw new ArgumentNullException(nameof(studentPredictions));
+        if (teacherPredictions == null) throw new ArgumentNullException(nameof(teacherPredictions));
+        if (studentPredictions.Length != teacherPredictions.Length)
+            throw new ArgumentException($"Prediction batch size mismatch: student={studentPredictions.Length}, teacher={teacherPredictions.Length}");
+        
         int n = studentPredictions.Length;
+        if (n > 0)
+        {
+            int expectedDim = studentPredictions[0].Length;
+            for (int i = 0; i < n; i++)
+            {
+                if (studentPredictions[i].Length != expectedDim)
+                    throw new ArgumentException($"Student prediction dimension mismatch at index {i}");
+                if (teacherPredictions[i].Length != expectedDim)
+                    throw new ArgumentException($"Teacher prediction dimension mismatch at index {i}");
+            }
+        }
 
         // E[k(x,x')] - student vs student
         T studentKernel = ComputeAverageKernel(studentPredictions, studentPredictions);

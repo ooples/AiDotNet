@@ -216,6 +216,16 @@ public class FactorTransferDistillationStrategy<T> : DistillationStrategyBase<T,
         // Paraphraser approach: Learn to match factorized representations
         // Simplified version: Extract factors and match with L2 + cosine similarity
 
+        if (studentFeatures == null) throw new ArgumentNullException(nameof(studentFeatures));
+        if (teacherFeatures == null) throw new ArgumentNullException(nameof(teacherFeatures));
+        if (studentFeatures.Length != teacherFeatures.Length)
+            throw new ArgumentException($"Batch size mismatch: student={studentFeatures.Length}, teacher={teacherFeatures.Length}");
+        if (studentFeatures.Length > 0 && teacherFeatures.Length > 0)
+        {
+            if (studentFeatures[0].Length != teacherFeatures[0].Length)
+                throw new ArgumentException($"Feature dimension mismatch: student={studentFeatures[0].Length}, teacher={teacherFeatures[0].Length}");
+        }
+
         var studentFactors = ExtractFactors(studentFeatures, _numFactors);
         var teacherFactors = ExtractFactors(teacherFeatures, _numFactors);
 
