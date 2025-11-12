@@ -315,4 +315,16 @@ public abstract class AdaptiveDistillationStrategyBase<T>
         }
         return loss;
     }
-}
+
+    protected T KLDivergence(Vector<T> predictions, Vector<T> targets)
+    {
+        T kl = NumOps.Zero;
+        for (int i = 0; i < predictions.Length; i++)
+        {
+            double p = Math.Max(Convert.ToDouble(predictions[i]), 1e-10);
+            double q = Math.Max(Convert.ToDouble(targets[i]), 1e-10);
+            kl = NumOps.Add(kl, NumOps.FromDouble(q * Math.Log(q / p)));
+        }
+        return kl;
+    }}
+

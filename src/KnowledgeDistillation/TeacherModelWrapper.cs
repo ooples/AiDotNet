@@ -110,8 +110,9 @@ public class TeacherModelWrapper<T> : ITeacherModel<Vector<T>, Vector<T>>
             if (metadata.TryGetValue("NumClasses", out var numClassesValue) && numClassesValue is int numClasses && numClasses > 0)
                 return numClasses;
 
-        if (metadata.TryGetValue("ClassCount", out var classCountValue) && classCountValue is int classCount && classCount > 0)
-            return classCount;
+            if (metadata.TryGetValue("ClassCount", out var classCountValue) && classCountValue is int classCount && classCount > 0)
+                return classCount;
+        }
 
         // If metadata doesn't contain dimension info, we cannot reliably determine output dimension
         // Throw instead of guessing to prevent downstream errors with incorrect label sizes

@@ -276,8 +276,8 @@ public class DistillationCheckpointManager<T>
         }
 
         return _config.LowerIsBetter
-            ? checkpointsWithMetric.MinBy(c => c.Metrics[_config.BestMetric])
-            : checkpointsWithMetric.MaxBy(c => c.Metrics[_config.BestMetric]);
+            ? checkpointsWithMetric.OrderBy(c => c.Metrics[_config.BestMetric]).First()
+            : checkpointsWithMetric.OrderByDescending(c => c.Metrics[_config.BestMetric]).First();
     }
 
     /// <summary>
@@ -342,7 +342,7 @@ public class DistillationCheckpointManager<T>
         // Preserve best N sorted checkpoints, then fill remaining slots with without-metric checkpoints
         var toKeep = sorted.Take(_config.KeepBestN)
             .Concat(withoutMetric.Take(Math.Max(0, _config.KeepBestN - sorted.Count)))
-            .ToHashSet();
+            .ToList();
 
         var toDelete = _savedCheckpoints.Where(c => !toKeep.Contains(c)).ToList();
 
