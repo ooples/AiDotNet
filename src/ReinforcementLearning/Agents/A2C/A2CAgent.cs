@@ -5,6 +5,7 @@ using AiDotNet.NeuralNetworks;
 using AiDotNet.NeuralNetworks.Layers;
 using AiDotNet.NeuralNetworks.Activations;
 using AiDotNet.ReinforcementLearning.Common;
+using AiDotNet.Helpers;
 
 namespace AiDotNet.ReinforcementLearning.Agents.A2C;
 
@@ -144,7 +145,8 @@ public class A2CAgent<T> : ReinforcementLearningAgentBase<T>
 
             if (training)
             {
-                var noise = NumOps.FromDouble(SampleGaussian());
+                // Sample from Gaussian using MathHelper
+                var noise = MathHelper.GetNormalRandom<T>(NumOps.Zero, NumOps.One);
                 action[i] = NumOps.Add(mean, NumOps.Multiply(std, noise));
             }
             else
@@ -288,9 +290,12 @@ public class A2CAgent<T> : ReinforcementLearningAgentBase<T>
             advantages.Insert(0, advantage);
         }
 
-        // Normalize advantages
-        var meanAdv = ComputeMean(advantages);
-        var stdAdv = ComputeStd(advantages, meanAdv);
+        // Normalize advantages using StatisticsHelper
+        var stdAdv = StatisticsHelper<T>.CalculateStandardDeviation(advantages);
+        T meanAdv = NumOps.Zero;
+        foreach (var adv in advantages)
+            meanAdv = NumOps.Add(meanAdv, adv);
+        meanAdv = NumOps.Divide(meanAdv, NumOps.FromDouble(advantages.Count));
 
         for (int i = 0; i < advantages.Count; i++)
         {
@@ -519,13 +524,6 @@ public class A2CAgent<T> : ReinforcementLearningAgentBase<T>
         return probs.Length - 1;
     }
 
-    private double SampleGaussian()
-    {
-        double u1 = 1.0 - Random.NextDouble();
-        double u2 = 1.0 - Random.NextDouble();
-        return Math.Sqrt(-2.0 * Math.Log(u1)) * Math.Sin(2.0 * Math.PI * u2);
-    }
-
     private int ArgMax(Vector<T> vector)
     {
         int maxIndex = 0;
@@ -535,24 +533,5 @@ public class A2CAgent<T> : ReinforcementLearningAgentBase<T>
                 maxIndex = i;
         }
         return maxIndex;
-    }
-
-    private T ComputeMean(List<T> values)
-    {
-        T sum = NumOps.Zero;
-        foreach (var v in values) sum = NumOps.Add(sum, v);
-        return NumOps.Divide(sum, NumOps.FromDouble(values.Count));
-    }
-
-    private T ComputeStd(List<T> values, T mean)
-    {
-        T sumSq = NumOps.Zero;
-        foreach (var v in values)
-        {
-            var diff = NumOps.Subtract(v, mean);
-            sumSq = NumOps.Add(sumSq, NumOps.Multiply(diff, diff));
-        }
-        var variance = NumOps.Divide(sumSq, NumOps.FromDouble(values.Count));
-        return NumOps.FromDouble(Math.Sqrt(NumOps.ToDouble(variance)));
     }
 }

@@ -5,6 +5,7 @@ using AiDotNet.NeuralNetworks;
 using AiDotNet.NeuralNetworks.Layers;
 using AiDotNet.NeuralNetworks.Activations;
 using AiDotNet.ReinforcementLearning.ReplayBuffers;
+using AiDotNet.Helpers;
 
 namespace AiDotNet.ReinforcementLearning.Agents.SAC;
 
@@ -164,24 +165,24 @@ public class SACAgent<T> : ReinforcementLearningAgentBase<T>
             var mean = policyOutput[i];
             var logStd = policyOutput[_sacOptions.ActionSize + i];
 
-            // Clip log_std for numerical stability
-            logStd = Clip(logStd, NumOps.FromDouble(-20), NumOps.FromDouble(2));
+            // Clip log_std for numerical stability using MathHelper
+            logStd = MathHelper.Clamp<T>(logStd, NumOps.FromDouble(-20), NumOps.FromDouble(2));
             var std = NumOps.FromDouble(Math.Exp(NumOps.ToDouble(logStd)));
 
             if (training)
             {
-                // Sample from Gaussian
-                var noise = NumOps.FromDouble(SampleGaussian());
+                // Sample from Gaussian using MathHelper
+                var noise = MathHelper.GetNormalRandom<T>(NumOps.Zero, NumOps.One);
                 var rawAction = NumOps.Add(mean, NumOps.Multiply(std, noise));
 
-                // Apply tanh squashing
-                action[i] = NumOps.FromDouble(Math.Tanh(NumOps.ToDouble(rawAction)));
+                // Apply tanh squashing using MathHelper
+                action[i] = MathHelper.Tanh<T>(rawAction);
 
                 // Compute log prob with tanh correction
                 var gaussianLogProb = NumOps.FromDouble(
                     -0.5 * Math.Log(2 * Math.PI) -
                     NumOps.ToDouble(logStd) -
-                    0.5 * NumOps.ToDouble(noise) * NumOps.ToDouble(noise)
+                    0.5 * NumOps.ToDouble(NumOps.Multiply(noise, noise))
                 );
 
                 // Tanh correction: log(1 - tanh^2(x))
@@ -194,8 +195,8 @@ public class SACAgent<T> : ReinforcementLearningAgentBase<T>
             }
             else
             {
-                // Deterministic: use mean
-                action[i] = NumOps.FromDouble(Math.Tanh(NumOps.ToDouble(mean)));
+                // Deterministic: use mean with tanh using MathHelper
+                action[i] = MathHelper.Tanh<T>(mean);
             }
         }
 
@@ -263,10 +264,10 @@ public class SACAgent<T> : ReinforcementLearningAgentBase<T>
             // Concatenate next state and next action for Q-networks
             var nextStateAction = ConcatenateStateAction(exp.NextState, nextAction);
 
-            // Target Q = min(Q1_target, Q2_target)
+            // Target Q = min(Q1_target, Q2_target) using MathHelper
             var q1Target = _q1TargetNetwork.Forward(nextStateAction)[0];
             var q2Target = _q2TargetNetwork.Forward(nextStateAction)[0];
-            var minQTarget = Min(q1Target, q2Target);
+            var minQTarget = MathHelper.Min<T>(q1Target, q2Target);
 
             // Add entropy term
             var alpha = NumOps.FromDouble(Math.Exp(NumOps.ToDouble(_logAlpha)));
@@ -326,11 +327,11 @@ public class SACAgent<T> : ReinforcementLearningAgentBase<T>
             var policyOutput = _policyNetwork.Forward(exp.State);
             var (action, logProb) = SampleAction(policyOutput, training: true);
 
-            // Compute Q-values
+            // Compute Q-values using MathHelper for min
             var stateAction = ConcatenateStateAction(exp.State, action);
             var q1 = _q1Network.Forward(stateAction)[0];
             var q2 = _q2Network.Forward(stateAction)[0];
-            var minQ = Min(q1, q2);
+            var minQ = MathHelper.Min<T>(q1, q2);
 
             // Policy loss: alpha * log_prob - Q
             var alpha = NumOps.FromDouble(Math.Exp(NumOps.ToDouble(_logAlpha)));
@@ -571,21 +572,5 @@ public class SACAgent<T> : ReinforcementLearningAgentBase<T>
     private void CopyNetworkWeights(NeuralNetwork<T> source, NeuralNetwork<T> target)
     {
         target.UpdateParameters(source.GetFlattenedParameters());
-    }
-
-    private double SampleGaussian()
-    {
-        double u1 = 1.0 - Random.NextDouble();
-        double u2 = 1.0 - Random.NextDouble();
-        return Math.Sqrt(-2.0 * Math.Log(u1)) * Math.Sin(2.0 * Math.PI * u2);
-    }
-
-    private T Min(T a, T b) => NumOps.ToDouble(a) < NumOps.ToDouble(b) ? a : b;
-
-    private T Clip(T value, T min, T max)
-    {
-        if (NumOps.ToDouble(value) < NumOps.ToDouble(min)) return min;
-        if (NumOps.ToDouble(value) > NumOps.ToDouble(max)) return max;
-        return value;
     }
 }
