@@ -1059,8 +1059,11 @@ public class PredictionModelBuilder<T, TInput, TOutput> : IPredictionModelBuilde
                 int outputDim = options.OutputDimension ?? 10;
                 var vectorForward = options.TeacherForward as Func<Vector<T>, Vector<T>>;
                 if (vectorForward == null)
+                {
+                    // Last resort: convert if possible - but this should never happen with type validation above
                     throw new InvalidOperationException(
-                        "TeacherForward must be Func<Vector<T>, Vector<T>> for distillation.");
+                        "TeacherForward type mismatch. Expected Func<Vector<T>, Vector<T>>.");
+                }
                 
                 teacher = new KnowledgeDistillation.TeacherModelWrapper<T>(
                     vectorForward,
@@ -1091,14 +1094,14 @@ public class PredictionModelBuilder<T, TInput, TOutput> : IPredictionModelBuilde
             Console.WriteLine($"  Batch Size: {options.BatchSize}");
             Console.WriteLine();
 
-            // Step 4: Prepare training data - convert to Vector<T>[] arrays
+            // Step 4: Prepare training data - convert to Vector<Vector<T>>
             var trainMatrix = ConversionsHelper.ConvertToMatrix<T, TInput>(XTrain);
             var trainVector = ConversionsHelper.ConvertToVector<T, TOutput>(yTrain);
             var valMatrix = ConversionsHelper.ConvertToMatrix<T, TInput>(XVal);
             var valVector = ConversionsHelper.ConvertToVector<T, TOutput>(yVal);
 
-            var trainInputs = new Vector<T>[trainMatrix.Rows];
-            var trainLabels = new Vector<T>[trainMatrix.Rows];
+            var trainInputs = new Vector<Vector<T>>(trainMatrix.Rows);
+            var trainLabels = new Vector<Vector<T>>(trainMatrix.Rows);
             for (int i = 0; i < trainMatrix.Rows; i++)
             {
                 trainInputs[i] = trainMatrix.GetRow(i);
@@ -1110,12 +1113,12 @@ public class PredictionModelBuilder<T, TInput, TOutput> : IPredictionModelBuilde
                 trainLabels[i] = oneHot;
             }
 
-            Vector<T>[]? valInputs = null;
-            Vector<T>[]? valLabels = null;
+            Vector<Vector<T>>? valInputs = null;
+            Vector<Vector<T>>? valLabels = null;
             if (valMatrix.Rows > 0)
             {
-                valInputs = new Vector<T>[valMatrix.Rows];
-                valLabels = new Vector<T>[valMatrix.Rows];
+                valInputs = new Vector<Vector<T>>(valMatrix.Rows);
+                valLabels = new Vector<Vector<T>>(valMatrix.Rows);
                 for (int i = 0; i < valMatrix.Rows; i++)
                 {
                     valInputs[i] = valMatrix.GetRow(i);

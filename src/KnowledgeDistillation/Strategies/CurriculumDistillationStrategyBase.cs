@@ -210,4 +210,60 @@ public abstract class CurriculumDistillationStrategyBase<T>
     {
         return Math.Max(MinTemperature, Math.Min(MaxTemperature, temperature));
     }
+
+    protected Vector<T> Softmax(Vector<T> logits, double temperature)
+    {
+        int n = logits.Length;
+        var result = new Vector<T>(n);
+        var scaled = new T[n];
+
+        for (int i = 0; i < n; i++)
+            scaled[i] = NumOps.FromDouble(Convert.ToDouble(logits[i]) / temperature);
+
+        T maxLogit = scaled[0];
+        for (int i = 1; i < n; i++)
+            if (NumOps.GreaterThan(scaled[i], maxLogit))
+                maxLogit = scaled[i];
+
+        T sum = NumOps.Zero;
+        var expValues = new T[n];
+
+        for (int i = 0; i < n; i++)
+        {
+            double val = Convert.ToDouble(NumOps.Subtract(scaled[i], maxLogit));
+            expValues[i] = NumOps.FromDouble(Math.Exp(val));
+            sum = NumOps.Add(sum, expValues[i]);
+        }
+
+        for (int i = 0; i < n; i++)
+        {
+            result[i] = NumOps.Divide(expValues[i], sum);
+        }
+
+        return result;
+    }
+
+    protected T CrossEntropy(Vector<T> predictions, Vector<T> targets)
+    {
+        T loss = NumOps.Zero;
+        for (int i = 0; i < predictions.Length; i++)
+        {
+            double pred = Math.Max(Convert.ToDouble(predictions[i]), 1e-10);
+            double target = Convert.ToDouble(targets[i]);
+            loss = NumOps.Add(loss, NumOps.FromDouble(-target * Math.Log(pred)));
+        }
+        return loss;
+    }
+
+    protected T KLDivergence(Vector<T> predictions, Vector<T> targets)
+    {
+        T kl = NumOps.Zero;
+        for (int i = 0; i < predictions.Length; i++)
+        {
+            double p = Math.Max(Convert.ToDouble(predictions[i]), 1e-10);
+            double q = Math.Max(Convert.ToDouble(targets[i]), 1e-10);
+            kl = NumOps.Add(kl, NumOps.FromDouble(q * Math.Log(q / p)));
+        }
+        return kl;
+    }
 }

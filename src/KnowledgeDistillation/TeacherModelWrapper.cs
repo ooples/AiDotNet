@@ -99,15 +99,16 @@ public class TeacherModelWrapper<T> : ITeacherModel<Vector<T>, Vector<T>>
 
     private static int GetOutputDimensionFromModel(IFullModel<T, Vector<T>, Vector<T>> model)
     {
-        // Try to infer output dimension from model metadata
-        var metadata = model.GetMetadata();
+        // Try to infer output dimension from model - use direct cast or reflection
+        if (model is IMetadataProvider metadataProvider)
+        {
+            var metadata = metadataProvider.GetMetadata();
+            
+            if (metadata.TryGetValue("OutputDimension", out var outputDimValue) && outputDimValue is int outputDim && outputDim > 0)
+                return outputDim;
 
-        // Check if metadata contains output dimension/class count
-        if (metadata.TryGetValue("OutputDimension", out var outputDimValue) && outputDimValue is int outputDim && outputDim > 0)
-            return outputDim;
-
-        if (metadata.TryGetValue("NumClasses", out var numClassesValue) && numClassesValue is int numClasses && numClasses > 0)
-            return numClasses;
+            if (metadata.TryGetValue("NumClasses", out var numClassesValue) && numClassesValue is int numClasses && numClasses > 0)
+                return numClasses;
 
         if (metadata.TryGetValue("ClassCount", out var classCountValue) && classCountValue is int classCount && classCount > 0)
             return classCount;
