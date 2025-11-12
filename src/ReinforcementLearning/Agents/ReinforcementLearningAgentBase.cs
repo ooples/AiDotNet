@@ -44,11 +44,6 @@ public abstract class ReinforcementLearningAgentBase<T> : IRLAgent<T>, IDisposab
     protected readonly Random Random;
 
     /// <summary>
-    /// The primary neural network(s) used by this agent.
-    /// </summary>
-    protected readonly List<INeuralNetwork<T>> Networks;
-
-    /// <summary>
     /// Loss function used for training.
     /// </summary>
     protected readonly ILossFunction<T> LossFunction;
@@ -97,7 +92,6 @@ public abstract class ReinforcementLearningAgentBase<T> : IRLAgent<T>, IDisposab
         Options = options ?? throw new ArgumentNullException(nameof(options));
         NumOps = NumericOperations<T>.Instance;
         Random = options.Seed.HasValue ? new Random(options.Seed.Value) : new Random();
-        Networks = new List<INeuralNetwork<T>>();
         LossFunction = options.LossFunction;
         LearningRate = options.LearningRate;
         DiscountFactor = options.DiscountFactor;
@@ -194,18 +188,11 @@ public abstract class ReinforcementLearningAgentBase<T> : IRLAgent<T>, IDisposab
     /// <summary>
     /// Gets the number of parameters in the agent.
     /// </summary>
-    public virtual int ParameterCount
-    {
-        get
-        {
-            int count = 0;
-            foreach (var network in Networks)
-            {
-                count += network.ParameterCount;
-            }
-            return count;
-        }
-    }
+    /// <remarks>
+    /// Deep RL agents return parameter counts from neural networks.
+    /// Classical RL agents (tabular, linear) may have different implementations.
+    /// </remarks>
+    public abstract int ParameterCount { get; }
 
     /// <summary>
     /// Gets the number of input features (state dimensions).
@@ -298,13 +285,6 @@ public abstract class ReinforcementLearningAgentBase<T> : IRLAgent<T>, IDisposab
     /// </summary>
     public virtual void Dispose()
     {
-        foreach (var network in Networks)
-        {
-            if (network is IDisposable disposable)
-            {
-                disposable.Dispose();
-            }
-        }
         GC.SuppressFinalize(this);
     }
 }

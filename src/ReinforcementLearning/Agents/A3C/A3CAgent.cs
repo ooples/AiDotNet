@@ -34,7 +34,7 @@ namespace AiDotNet.ReinforcementLearning.Agents.A3C;
 /// Famous for: DeepMind's breakthrough (2016), enables CPU-only training
 /// </para>
 /// </remarks>
-public class A3CAgent<T> : ReinforcementLearningAgentBase<T>
+public class A3CAgent<T> : DeepReinforcementLearningAgentBase<T>
 {
     private readonly A3COptions<T> _options;
     private readonly IOptimizer<T, Vector<T>, Vector<T>> _optimizer;
@@ -73,58 +73,58 @@ public class A3CAgent<T> : ReinforcementLearningAgentBase<T>
 
     private INeuralNetwork<T> CreatePolicyNetwork()
     {
-        var layers = new List<ILayer<T>>();
-        int previousSize = _options.StateSize;
-
-        foreach (var layerSize in _options.PolicyHiddenLayers)
-        {
-            layers.Add(new DenseLayer<T>(previousSize, layerSize, new ReLUActivation<T>()));
-            previousSize = layerSize;
-        }
-
-        if (_options.IsContinuous)
-        {
-            // Output: mean and log_std for Gaussian policy
-            layers.Add(new DenseLayer<T>(previousSize, _options.ActionSize * 2, new LinearActivation<T>()));
-        }
-        else
-        {
-            // Output: action probabilities
-            layers.Add(new DenseLayer<T>(previousSize, _options.ActionSize, new SoftmaxActivation<T>()));
-        }
+        int outputSize = _options.IsContinuous ? _options.ActionSize * 2 : _options.ActionSize;
 
         var architecture = new NeuralNetworkArchitecture<T>
         {
             InputSize = _options.StateSize,
-            OutputSize = _options.IsContinuous ? _options.ActionSize * 2 : _options.ActionSize,
-            Layers = layers,
+            OutputSize = outputSize,
             TaskType = TaskType.Regression
         };
 
+        // Use LayerHelper to create production-ready network layers
+        var layers = LayerHelper<T>.CreateDefaultFeedForwardLayers(
+            architecture,
+            hiddenLayerCount: _options.PolicyHiddenLayers.Count,
+            hiddenLayerSize: _options.PolicyHiddenLayers.FirstOrDefault() > 0 ? _options.PolicyHiddenLayers.First() : 128
+        ).ToList();
+
+        // Override output layer activation for continuous vs discrete actions
+        if (!_options.IsContinuous)
+        {
+            // For discrete actions, replace final layer with softmax activation
+            var lastLayer = layers[layers.Count - 1];
+            if (lastLayer is DenseLayer<T> denseLayer)
+            {
+                layers[layers.Count - 1] = new DenseLayer<T>(
+                    denseLayer.GetWeights().Rows,
+                    outputSize,
+                    new SoftmaxActivation<T>()
+                );
+            }
+        }
+
+        architecture.Layers = layers;
         return new NeuralNetwork<T>(architecture, _options.ValueLossFunction);
     }
 
     private INeuralNetwork<T> CreateValueNetwork()
     {
-        var layers = new List<ILayer<T>>();
-        int previousSize = _options.StateSize;
-
-        foreach (var layerSize in _options.ValueHiddenLayers)
-        {
-            layers.Add(new DenseLayer<T>(previousSize, layerSize, new ReLUActivation<T>()));
-            previousSize = layerSize;
-        }
-
-        layers.Add(new DenseLayer<T>(previousSize, 1, new LinearActivation<T>()));
-
         var architecture = new NeuralNetworkArchitecture<T>
         {
             InputSize = _options.StateSize,
             OutputSize = 1,
-            Layers = layers,
             TaskType = TaskType.Regression
         };
 
+        // Use LayerHelper to create production-ready network layers
+        var layers = LayerHelper<T>.CreateDefaultFeedForwardLayers(
+            architecture,
+            hiddenLayerCount: _options.ValueHiddenLayers.Count,
+            hiddenLayerSize: _options.ValueHiddenLayers.FirstOrDefault() > 0 ? _options.ValueHiddenLayers.First() : 128
+        );
+
+        architecture.Layers = layers.ToList();
         return new NeuralNetwork<T>(architecture, _options.ValueLossFunction);
     }
 
