@@ -1,3 +1,4 @@
+using System;
 namespace AiDotNet.NumericOperations;
 
 /// <summary>
@@ -67,7 +68,7 @@ public class Int32Operations : INumericOperations<int>
     /// This method performs multiplication of two integer values and returns their product.
     /// Multiplication is used extensively in neural networks, particularly for weight applications.
     /// </para>
-    /// <para><b>For Beginners:</b> This method multiplies two numbers together, like 2 × 4 = 8.
+    /// <para><b>For Beginners:</b> This method multiplies two numbers together, like 2 Ã— 4 = 8.
     /// 
     /// In neural networks, multiplication is often used when:
     /// - Applying weights to inputs
@@ -92,9 +93,9 @@ public class Int32Operations : INumericOperations<int>
     /// <para><b>For Beginners:</b> This method divides the first number by the second, but drops any remainder.
     /// 
     /// For example:
-    /// - 10 ÷ 2 = 5 (exact division, no remainder)
-    /// - 7 ÷ 2 = 3 (not 3.5, because integers can't store decimals)
-    /// - 5 ÷ 10 = 0 (less than 1, so the integer result is 0)
+    /// - 10 / 2 = 5 (exact division, no remainder)
+    /// - 7 / 2 = 3 (not 3.5, because integers can't store decimals)
+    /// - 5 / 10 = 0 (less than 1, so the integer result is 0)
     /// 
     /// This is different from regular division you might do with a calculator because:
     /// - It only gives you the whole number part of the answer
@@ -184,8 +185,8 @@ public class Int32Operations : INumericOperations<int>
     /// 
     /// The square root of a number is a value that, when multiplied by itself, gives the original number.
     /// For example:
-    /// - The square root of 9 is 3 (because 3 × 3 = 9)
-    /// - The square root of 16 is 4 (because 4 × 4 = 16)
+    /// - The square root of 9 is 3 (because 3 Ã— 3 = 9)
+    /// - The square root of 16 is 4 (because 4 Ã— 4 = 16)
     /// - The square root of 2 would be approximately 1.414, but this method returns 1 (the whole number part only)
     /// 
     /// This method drops any decimal part of the result, so:
@@ -318,9 +319,9 @@ public class Int32Operations : INumericOperations<int>
     /// <para><b>For Beginners:</b> This method multiplies a number by itself.
     /// 
     /// For example:
-    /// - Square(4) returns 16 (4 × 4 = 16)
-    /// - Square(-3) returns 9 (-3 × -3 = 9)
-    /// - Square(0) returns 0 (0 × 0 = 0)
+    /// - Square(4) returns 16 (4 Ã— 4 = 16)
+    /// - Square(-3) returns 9 (-3 Ã— -3 = 9)
+    /// - Square(0) returns 0 (0 Ã— 0 = 0)
     /// 
     /// In neural networks, squaring is commonly used for:
     /// - Calculating squared errors (a measure of how far predictions are from actual values)
@@ -347,10 +348,10 @@ public class Int32Operations : INumericOperations<int>
     /// 
     /// In mathematics, "e" is a special number (approximately 2.71828) that appears naturally in many calculations.
     /// This method computes e^value and rounds to the nearest whole number:
-    /// - Exp(1) returns 3 (e¹ ˜ 2.71828, rounded to 3)
-    /// - Exp(2) returns 7 (e² ˜ 7.38906, rounded to 7)
-    /// - Exp(0) returns 1 (e° = 1)
-    /// - Exp(-1) returns 0 (e?¹ ˜ 0.36788, rounded to 0)
+    /// - Exp(1) â‰ˆ 3 (e^1 â‰ˆ 2.71828, rounded to 3)
+    /// - Exp(2) â‰ˆ 7 (e^2 â‰ˆ 7.38906, rounded to 7)
+    /// - Exp(0) returns 1 (e^ = 1)
+    /// - Exp(-1) returns 0 (e^-1 â‰ˆ 0.36788, rounded to 0)
     /// 
     /// Because integers can't store decimal values, this operation loses precision compared to
     /// its floating-point equivalent. It's generally more common to use floating-point types
@@ -397,10 +398,10 @@ public class Int32Operations : INumericOperations<int>
     /// <para><b>For Beginners:</b> This method raises a number to a power and gives a whole number result.
     /// 
     /// For example:
-    /// - Power(2, 3) returns 8 (2³ = 2×2×2 = 8)
-    /// - Power(3, 2) returns 9 (3² = 3×3 = 9)
+    /// - Power(2, 3) returns 8 (2Â² = 2 Ã— 2Ã—2 = 8)
+    /// - Power(3, 2) returns 9 (3Â² = 3 Ã— 3 = 9)
     /// - Power(5, 0) returns 1 (any number raised to the power of 0 is 1)
-    /// - Power(2, -1) returns 0 (2?¹ = 1/2 = 0.5, but as an integer this becomes 0)
+    /// - Power(2, -1) returns 0 (2^-1 = 1/2 = 0.5, but as an integer this becomes 0)
     /// 
     /// In neural networks, power functions with integer results might be used for:
     /// - Implementing certain discrete activation functions
@@ -426,9 +427,9 @@ public class Int32Operations : INumericOperations<int>
     /// <para><b>For Beginners:</b> This method calculates the natural logarithm of a number and gives a whole number result.
     /// 
     /// The natural logarithm tells you what power you need to raise "e" to get your number:
-    /// - Log(3) returns 1 (because e¹ ˜ 2.718, and the integer result of ln(3) ˜ 1.099 is 1)
-    /// - Log(10) returns 2 (because ln(10) ˜ 2.303)
-    /// - Log(1) returns 0 (because e° = 1)
+    /// - Log(3) returns 1 (because e^ â‰ˆ 2.718, and the integer result of ln(3) â‰ˆ 1.099 is 1)
+    /// - Log(10) returns 2 (because ln(10) â‰ˆ 2.303)
+    /// - Log(1) returns 0 (because e^ = 1)
     /// 
     /// This integer version of logarithm loses a lot of precision compared to its floating-point
     /// equivalent. In neural networks, it's generally better to use floating-point types for
@@ -668,4 +669,50 @@ public class Int32Operations : INumericOperations<int>
 
         return 0;
     }
+
+    /// <summary>
+    /// Gets the number of bits used for precision in int (32 bits).
+    /// </summary>
+    public int PrecisionBits => 32;
+
+    /// <summary>
+    /// Converts an int value to float (FP32) precision.
+    /// </summary>
+    /// <param name="value">The int value to convert.</param>
+    /// <returns>The value as a float.</returns>
+    public float ToFloat(int value) => (float)value;
+
+    /// <summary>
+    /// Converts a float value to int.
+    /// </summary>
+    /// <param name="value">The float value to convert.</param>
+    /// <returns>The value as an int.</returns>
+    /// <remarks>
+    /// This conversion will round the float to the nearest integer and clamp it to the int range.
+    /// </remarks>
+    public int FromFloat(float value) => (int)MathExtensions.Clamp((long)Math.Round(value), int.MinValue, int.MaxValue);
+
+    /// <summary>
+    /// Converts an int value to Half (FP16) precision.
+    /// </summary>
+    /// <param name="value">The int value to convert.</param>
+    /// <returns>The value as a Half.</returns>
+    public Half ToHalf(int value) => (Half)value;
+
+    /// <summary>
+    /// Converts a Half value to int.
+    /// </summary>
+    /// <param name="value">The Half value to convert.</param>
+    /// <returns>The value as an int.</returns>
+    /// <remarks>
+    /// This conversion will round the Half to the nearest integer.
+    /// </remarks>
+    public int FromHalf(Half value) => (int)Math.Round((float)value);
+
+    /// <summary>
+    /// Converts an int value to double (FP64) precision.
+    /// </summary>
+    /// <param name="value">The int value to convert.</param>
+    /// <returns>The value as a double.</returns>
+    public double ToDouble(int value) => (double)value;
 }

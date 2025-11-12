@@ -1,4 +1,8 @@
 using AiDotNet.Models.Results;
+using AiDotNet.DistributedTraining;
+using AiDotNet.Enums;
+using AiDotNet.Models;
+using AiDotNet.MixedPrecision;
 
 namespace AiDotNet.Interfaces;
 
@@ -188,23 +192,6 @@ public interface IPredictionModelBuilder<T, TInput, TOutput>
     IPredictionModelBuilder<T, TInput, TOutput> ConfigureOutlierRemoval(IOutlierRemoval<T, TInput, TOutput> outlierRemoval);
 
     /// <summary>
-    /// Builds a predictive model using the configured components and training data.
-    /// </summary>
-    /// <remarks>
-    /// This method takes the input features and target values and creates a trained model
-    /// ready to make predictions.
-    /// 
-    /// <b>For Beginners:</b> After configuring all the components of your model, this method actually 
-    /// creates and trains the model using your data. It's like pressing "Start" after setting up 
-    /// all your preferences. The model will learn patterns from your training data so it can make 
-    /// predictions later.
-    /// </remarks>
-    /// <param name="x">The input features matrix, where each row is a data point and each column is a feature.</param>
-    /// <param name="y">The target values vector that the model will learn to predict.</param>
-    /// <returns>A trained predictive model ready to make predictions.</returns>
-    PredictionModelResult<T, TInput, TOutput> Build(TInput x, TOutput y);
-
-    /// <summary>
     /// Uses a trained model to make predictions on new data.
     /// </summary>
     /// <remarks>
@@ -383,6 +370,36 @@ public interface IPredictionModelBuilder<T, TInput, TOutput>
         IEnumerable<IQueryProcessor>? queryProcessors = null);
 
     /// <summary>
+    /// Configures AI agent assistance during model building and inference.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> Agent assistance adds AI-powered help during model creation.
+    /// The agent can analyze your data, suggest which model type to use, recommend hyperparameters,
+    /// and provide insights about feature importance.
+    ///
+    /// The configuration is stored securely and will be reused during inference if you call AskAsync() on the trained model.
+    /// </para>
+    /// <para>
+    /// Example usage:
+    /// <code>
+    /// var agentConfig = new AgentConfiguration&lt;double&gt;
+    /// {
+    ///     ApiKey = "sk-...",
+    ///     Provider = LLMProvider.OpenAI,
+    ///     IsEnabled = true
+    /// };
+    ///
+    /// var builder = new PredictionModelBuilder&lt;double, Matrix&lt;double&gt;, Vector&lt;double&gt;&gt;()
+    ///     .ConfigureAgentAssistance(agentConfig);
+    /// </code>
+    /// </para>
+    /// </remarks>
+    /// <param name="configuration">The agent configuration containing API keys, provider settings, and options.</param>
+    /// <returns>The builder instance for method chaining.</returns>
+    IPredictionModelBuilder<T, TInput, TOutput> ConfigureAgentAssistance(AgentConfiguration<T> configuration);
+
+    /// <summary>
     /// Configures a meta-learning algorithm (MAML, Reptile, SEAL) for training models that can quickly adapt to new tasks.
     /// </summary>
     /// <remarks>
@@ -397,6 +414,114 @@ public interface IPredictionModelBuilder<T, TInput, TOutput>
     /// <param name="metaLearner">The meta-learning algorithm to use (e.g., ReptileTrainer with its episodic data loader).</param>
     /// <returns>The builder instance for method chaining.</returns>
     IPredictionModelBuilder<T, TInput, TOutput> ConfigureMetaLearning(IMetaLearner<T, TInput, TOutput> metaLearner);
+
+    /// <summary>
+    /// Configures distributed training across multiple GPUs or machines.
+    /// </summary>
+    /// <param name="backend">Communication backend to use. If null, uses InMemoryCommunicationBackend.</param>
+    /// <param name="strategy">Distributed training strategy. Default is FSDP.</param>
+    /// <param name="autoSyncGradients">Whether to automatically synchronize gradients. Default is true.</param>
+    /// <param name="minimumParameterGroupSize">Minimum parameter group size for communication. Default is 1024.</param>
+    /// <param name="enableGradientCompression">Whether to enable gradient compression. Default is false.</param>
+    /// <returns>This builder instance for method chaining.</returns>
+    /// <remarks>
+    /// <para>
+    /// When distributed training is configured, the builder automatically wraps the model and optimizer
+    /// with their distributed counterparts based on the chosen strategy. This enables:
+    /// - Training models too large to fit on a single GPU
+    /// - Faster training by distributing work across multiple processes
+    /// - Automatic gradient synchronization and parameter sharding
+    /// </para>
+    /// <para>
+    /// <b>Important:</b> The strategy parameter controls BOTH the model and optimizer as a matched pair.
+    /// You cannot mix and match strategies between model and optimizer because they must be compatible:
+    /// </para>
+    /// <para>
+    /// - <b>DDP</b> → Uses DDPModel + DDPOptimizer (replicated parameters, AllReduce gradients)
+    /// </para>
+    /// <para>
+    /// - <b>FSDP</b> → Uses FSDPModel + FSDPOptimizer (fully sharded parameters)
+    /// </para>
+    /// <para>
+    /// - <b>ZeRO1/2/3</b> → Uses matching ZeRO models + optimizers (progressive sharding)
+    /// </para>
+    /// <para>
+    /// - <b>PipelineParallel</b> → Uses PipelineParallelModel + PipelineParallelOptimizer
+    /// </para>
+    /// <para>
+    /// - <b>TensorParallel</b> → Uses TensorParallelModel + TensorParallelOptimizer
+    /// </para>
+    /// <para>
+    /// - <b>Hybrid</b> → Uses HybridShardedModel + HybridShardedOptimizer (3D parallelism)
+    /// </para>
+    /// <para>
+    /// This design follows industry standards (PyTorch DDP/FSDP, DeepSpeed ZeRO, Megatron-LM) where
+    /// the distributed training strategy is a cohesive unit that applies to both model and optimizer.
+    /// Mixing strategies would cause incompatibilities - for example, a DDP model (replicated parameters)
+    /// cannot work with an FSDP optimizer (expects sharded parameters).
+    /// </para>
+    /// <para>
+    /// <b>For Beginners:</b> Call this method to enable distributed training across multiple GPUs.
+    /// You can use it with no parameters for sensible defaults, or customize each aspect.
+    /// The strategy you choose automatically configures both the model and optimizer to work together.
+    /// </para>
+    /// <para>
+    /// <b>Beginner Usage (no parameters):</b>
+    /// <code>
+    /// var result = builder
+    ///     .ConfigureModel(myModel)
+    ///     .ConfigureDistributedTraining()  // InMemory backend, DDP strategy
+    ///     .Build(xTrain, yTrain);
+    /// </code>
+    /// </para>
+    /// <para>
+    /// <b>Intermediate Usage (specify backend):</b>
+    /// <code>
+    /// var backend = new MPICommunicationBackend&lt;double&gt;();
+    /// var result = builder
+    ///     .ConfigureModel(myModel)
+    ///     .ConfigureDistributedTraining(backend)  // MPI backend, DDP strategy
+    ///     .Build(xTrain, yTrain);
+    /// </code>
+    /// </para>
+    /// <para>
+    /// <b>Advanced Usage (specify strategy):</b>
+    /// <code>
+    /// var result = builder
+    ///     .ConfigureModel(myModel)
+    ///     .ConfigureDistributedTraining(
+    ///         backend: new NCCLCommunicationBackend&lt;double&gt;(),
+    ///         strategy: DistributedStrategy.FSDP)  // Use FSDP instead of DDP
+    ///     .Build(xTrain, yTrain);
+    /// </code>
+    /// </para>
+    /// <para>
+    /// <b>Expert Usage (full control):</b>
+    /// <code>
+    /// var backend = new NCCLCommunicationBackend&lt;double&gt;();
+    /// var config = new ShardingConfiguration&lt;double&gt;(backend)
+    /// {
+    ///     AutoSyncGradients = true,
+    ///     MinimumParameterGroupSize = 2048,
+    ///     EnableGradientCompression = true
+    /// };
+    /// var result = builder
+    ///     .ConfigureDistributedTraining(
+    ///         backend: backend,
+    ///         strategy: DistributedStrategy.ZeRO2,
+    ///         configuration: config)  // Full control over all options
+    ///     .Build(xTrain, yTrain);
+    /// </code>
+    /// </para>
+    /// </remarks>
+    /// <param name="backend">Communication backend. If null, uses InMemoryCommunicationBackend.</param>
+    /// <param name="strategy">Distributed training strategy. Default is DDP (most common).</param>
+    /// <param name="configuration">Sharding configuration. If null, created from backend with defaults.</param>
+    /// <returns>This builder instance for method chaining.</returns>
+    IPredictionModelBuilder<T, TInput, TOutput> ConfigureDistributedTraining(
+        ICommunicationBackend<T>? backend = null,
+        DistributedStrategy strategy = DistributedStrategy.DDP,
+        IShardingConfiguration<T>? configuration = null);
 
     /// <summary>
     /// Configures the model evaluator component for comprehensive model evaluation and cross-validation.
@@ -439,7 +564,65 @@ public interface IPredictionModelBuilder<T, TInput, TOutput>
     IPredictionModelBuilder<T, TInput, TOutput> ConfigureCrossValidation(ICrossValidator<T, TInput, TOutput> crossValidator);
 
     /// <summary>
-    /// Builds a meta-trained model that can quickly adapt to new tasks.
+    /// Configures mixed-precision training for faster training on GPUs with Tensor Cores.
+    /// </summary>
+    /// <remarks>
+    /// Mixed-precision training uses FP16 (half precision) for computations and FP32 (single precision)
+    /// for master weights, providing 2-3x training speedup and ~50% memory reduction on modern GPUs.
+    ///
+    /// <b>For Beginners:</b> Mixed-precision training makes your model train faster on modern GPUs
+    /// (NVIDIA V100, A100, H100, RTX 3000+) by using lower precision numbers for some calculations.
+    /// This gives you:
+    /// - 2-3x faster training
+    /// - ~50% less memory usage
+    /// - Same model accuracy
+    ///
+    /// <b>Requirements:</b>
+    /// Mixed-precision training has specific technical requirements:
+    ///
+    /// 1. **Type Constraint: float only**
+    ///    - Type parameter T must be float (FP32)
+    ///    - Cannot use double, decimal, or integer types
+    ///    - Reason: Mixed-precision converts between FP32 (float) and FP16 (Half) representations
+    ///
+    /// 2. **Gradient-Based Optimizers Only**
+    ///    - Requires optimizers that compute gradients (SGD, Adam, RMSProp, etc.)
+    ///    - Does NOT work with non-gradient methods (genetic algorithms, random search, Bayesian optimization)
+    ///    - Reason: Requires gradient computation for loss scaling, master weights, and gradient accumulation
+    ///
+    /// 3. **Neural Networks (Recommended)**
+    ///    - Best suited for neural networks with large parameter counts
+    ///    - GPU with Tensor Core support (V100, A100, H100, RTX 3000/4000+)
+    ///
+    /// Only enable this if you have:
+    /// - A neural network trained with gradient-based optimizer
+    /// - Float as your numeric type (T = float)
+    /// - A GPU with Tensor Core support
+    ///
+    /// For CPU training, older GPUs, or non-gradient optimizers, this provides no benefit.
+    ///
+    /// Example usage:
+    /// <code>
+    /// var model = builder
+    ///     .ConfigureModel(myNetwork)
+    ///     .ConfigureOptimizer(myOptimizer)
+    ///     .ConfigureMixedPrecision()  // Use default settings
+    ///     .Build(xTrain, yTrain);
+    ///
+    /// // Or with custom configuration
+    /// var model = builder
+    ///     .ConfigureModel(myNetwork)
+    ///     .ConfigureOptimizer(myOptimizer)
+    ///     .ConfigureMixedPrecision(MixedPrecisionConfig.Conservative())
+    ///     .Build(xTrain, yTrain);
+    /// </code>
+    /// </remarks>
+    /// <param name="config">Optional mixed-precision configuration. If null, uses default settings.</param>
+    /// <returns>The builder instance for method chaining.</returns>
+    IPredictionModelBuilder<T, TInput, TOutput> ConfigureMixedPrecision(MixedPrecisionConfig? config = null);
+
+    /// <summary>
+    /// Asynchronously builds a meta-trained model that can quickly adapt to new tasks.
     /// </summary>
     /// <remarks>
     /// <para>
@@ -448,13 +631,49 @@ public interface IPredictionModelBuilder<T, TInput, TOutput>
     /// to new tasks with just a few examples.
     /// </para>
     /// <para>
-    /// <b>For Beginners:</b> Use this method when you've configured meta-learning.
-    /// Unlike Build(x, y) which trains on one dataset, this trains your model to be good
+    /// <b>For Beginners:</b> Use this method when you've configured meta-learning and agent assistance.
+    /// Unlike BuildAsync(x, y) which trains on one dataset, this trains your model to be good
     /// at learning NEW tasks quickly. The training data comes from the episodic data loader
     /// you configured in your meta-learner.
     /// </para>
     /// </remarks>
-    /// <returns>A meta-trained model with rapid adaptation capabilities.</returns>
+    /// <returns>A task that represents the asynchronous operation, containing the meta-trained model.</returns>
     /// <exception cref="InvalidOperationException">Thrown if ConfigureMetaLearning has not been called.</exception>
-    PredictionModelResult<T, TInput, TOutput> Build();
+    Task<PredictionModelResult<T, TInput, TOutput>> BuildAsync();
+
+    /// <summary>
+    /// Asynchronously builds a predictive model using the provided input features and output values.
+    /// If agent assistance is enabled, the agent will help with model selection and hyperparameter tuning.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// This method trains your AI model on your specific dataset. It can leverage agent assistance
+    /// to help select appropriate models and tune hyperparameters based on your data characteristics.
+    /// </para>
+    /// <para>
+    /// <b>For Beginners:</b> This method trains your AI model using the data you provide.
+    /// It's the async version that works with agent assistance features.
+    /// </para>
+    /// <para>
+    /// Example with agent assistance:
+    /// <code>
+    /// var agentConfig = new AgentConfiguration&lt;double&gt;
+    /// {
+    ///     ApiKey = "sk-...",
+    ///     Provider = LLMProvider.OpenAI,
+    ///     IsEnabled = true
+    /// };
+    ///
+    /// var result = await new PredictionModelBuilder&lt;double, Matrix&lt;double&gt;, Vector&lt;double&gt;&gt;()
+    ///     .ConfigureAgentAssistance(agentConfig)
+    ///     .BuildAsync(housingData, prices);
+    /// </code>
+    /// </para>
+    /// </remarks>
+    /// <param name="x">Matrix of input features (required).</param>
+    /// <param name="y">Vector of output values (required).</param>
+    /// <returns>A task that represents the asynchronous operation, containing the trained model.</returns>
+    /// <exception cref="ArgumentException">Thrown when the number of rows in the features matrix doesn't match the length of the output vector.</exception>
+    /// <exception cref="InvalidOperationException">Thrown when no model has been specified for regular training.</exception>
+    Task<PredictionModelResult<T, TInput, TOutput>> BuildAsync(TInput x, TOutput y);
 }

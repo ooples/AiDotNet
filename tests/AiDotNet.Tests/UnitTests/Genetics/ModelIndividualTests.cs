@@ -7,6 +7,7 @@ using AiDotNet.Enums;
 using AiDotNet.Genetics;
 using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
+using AiDotNet.LossFunctions;
 using AiDotNet.Models;
 
 namespace AiDotNet.Tests.UnitTests.Genetics
@@ -153,6 +154,23 @@ namespace AiDotNet.Tests.UnitTests.Genetics
             public void LoadModel(string filePath)
             {
                 Deserialize(File.ReadAllBytes(filePath));
+            }
+
+            // IGradientComputable implementation
+            public ILossFunction<double> DefaultLossFunction => new MeanSquaredErrorLoss<double>();
+
+            public Vector<double> ComputeGradients(double[] input, double[] target, ILossFunction<double>? lossFunction = null)
+            {
+                return new Vector<double>(ParameterCount);
+            }
+
+            public void ApplyGradients(Vector<double> gradients, double learningRate)
+            {
+                // Mock implementation - simple parameter update
+                for (int i = 0; i < Math.Min(gradients.Length, _parameters.Length); i++)
+                {
+                    _parameters[i] -= learningRate * gradients[i];
+                }
             }
         }
 

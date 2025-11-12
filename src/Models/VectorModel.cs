@@ -90,36 +90,54 @@ public class VectorModel<T> : IFullModel<T, Matrix<T>, Vector<T>>, IInterpretabl
     private Dictionary<string, T>? _cachedFeatureImportance;
 
     /// <summary>
+    /// The default loss function used by this model for gradient computation.
+    /// </summary>
+    private readonly ILossFunction<T> _defaultLossFunction;
+
+    /// <summary>
     /// Initializes a new instance of the VectorModel class with the specified coefficients.
     /// </summary>
     /// <param name="coefficients">The vector of coefficients for the model.</param>
+    /// <param name="lossFunction">Optional loss function to use for training. If null, uses Mean Squared Error (MSE) for regression.</param>
     /// <remarks>
     /// <para>
-    /// This constructor creates a new VectorModel instance with the specified coefficients. The coefficients vector 
-    /// determines the number of features the model expects and how it weights each feature when making predictions. 
-    /// This constructor is useful when creating a model with predetermined coefficients or when creating a new model 
+    /// This constructor creates a new VectorModel instance with the specified coefficients. The coefficients vector
+    /// determines the number of features the model expects and how it weights each feature when making predictions.
+    /// This constructor is useful when creating a model with predetermined coefficients or when creating a new model
     /// as part of genetic algorithm operations.
     /// </para>
     /// <para><b>For Beginners:</b> This constructor creates a new linear model with the specified weights.
-    /// 
+    ///
     /// When creating a VectorModel:
     /// - You provide a vector of coefficients (weights)
     /// - The length of this vector determines how many input features the model expects
     /// - The values determine how each feature affects the prediction
-    /// 
+    ///
     /// This constructor is used when:
     /// - Creating a model with specific, known coefficients
     /// - Creating a model as part of a genetic algorithm
     /// - Copying or modifying an existing model
-    /// 
+    ///
     /// For example: new VectorModel<double>(new Vector<double>([2.5, -1.3, 0.7]))
     /// creates a model that expects 3 features with the specified weights.
     /// </para>
     /// </remarks>
-    public VectorModel(Vector<T> coefficients)
+    public VectorModel(Vector<T> coefficients, ILossFunction<T>? lossFunction = null)
     {
         Coefficients = coefficients ?? throw new ArgumentNullException(nameof(coefficients));
+        _defaultLossFunction = lossFunction ?? new MeanSquaredErrorLoss<T>();
     }
+
+    /// <summary>
+    /// Gets the default loss function used by this model for gradient computation.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// For VectorModel (linear regression), the default loss function is Mean Squared Error (MSE),
+    /// which is the standard loss function for regression problems.
+    /// </para>
+    /// </remarks>
+    public ILossFunction<T> DefaultLossFunction => _defaultLossFunction;
 
     /// <summary>
     /// Gets the number of features used by the model.
@@ -234,6 +252,106 @@ public class VectorModel<T> : IFullModel<T, Matrix<T>, Vector<T>>, IInterpretabl
     }
 
     /// <summary>
+    /// Computes gradients of the loss function with respect to model parameters WITHOUT updating parameters.
+    /// </summary>
+    /// <param name="input">The input data matrix.</param>
+    /// <param name="target">The target/expected output vector.</param>
+    /// <param name="lossFunction">The loss function to use. If null, uses the model's default loss function.</param>
+    /// <returns>A vector containing gradients with respect to all model parameters (coefficients).</returns>
+    /// <exception cref="ArgumentNullException">If input or target is null.</exception>
+    /// <exception cref="ArgumentException">If input and target dimensions don't match.</exception>
+    /// <remarks>
+    /// <para>
+    /// This method computes the gradient of the loss function with respect to the model's coefficients.
+    /// For a linear model: y_pred = coefficients · x
+    /// The gradient is computed as: ∂L/∂coefficients = (1/n) * X^T * ∂L/∂y_pred
+    /// </para>
+    /// <para><b>For Beginners:</b>
+    /// This calculates how to adjust each coefficient to reduce the prediction error,
+    /// but it doesn't actually change the coefficients. This is useful for:
+    /// - Distributed training: average gradients from multiple machines before updating
+    /// - Custom optimization: use advanced optimizers like Adam or RMSprop
+    /// - Analysis: understand which coefficients need the most adjustment
+    /// </para>
+    /// </remarks>
+    public Vector<T> ComputeGradients(Matrix<T> input, Vector<T> target, ILossFunction<T>? lossFunction = null)
+    {
+        if (input == null)
+            throw new ArgumentNullException(nameof(input));
+        if (target == null)
+            throw new ArgumentNullException(nameof(target));
+        if (input.Rows != target.Length)
+            throw new ArgumentException($"Input rows ({input.Rows}) must match target length ({target.Length})");
+        if (input.Columns != Coefficients.Length)
+            throw new ArgumentException($"Input columns ({input.Columns}) must match coefficient count ({Coefficients.Length})");
+
+        var loss = lossFunction ?? DefaultLossFunction;
+
+        // Forward pass: compute predictions
+        var predictions = PredictInternal(input);
+
+        // Compute loss gradient w.r.t. predictions: ∂L/∂y_pred
+        var predictionGradient = loss.CalculateDerivative(predictions, target);
+
+        // Compute gradient w.r.t. coefficients: ∂L/∂coefficients = (1/n) * X^T * ∂L/∂y_pred
+        var gradients = new Vector<T>(Coefficients.Length);
+        for (int j = 0; j < Coefficients.Length; j++)
+        {
+            T sum = _numOps.Zero;
+            for (int i = 0; i < input.Rows; i++)
+            {
+                // gradient[j] += input[i,j] * predictionGradient[i]
+                sum = _numOps.Add(sum, _numOps.Multiply(input[i, j], predictionGradient[i]));
+            }
+            // Average over all samples
+            gradients[j] = _numOps.Divide(sum, _numOps.FromDouble(input.Rows));
+        }
+
+        return gradients;
+    }
+
+    /// <summary>
+    /// Applies pre-computed gradients to update the model parameters (coefficients).
+    /// </summary>
+    /// <param name="gradients">The gradient vector to apply.</param>
+    /// <param name="learningRate">The learning rate for the update.</param>
+    /// <exception cref="ArgumentNullException">If gradients is null.</exception>
+    /// <exception cref="ArgumentException">If gradient vector length doesn't match coefficient count.</exception>
+    /// <remarks>
+    /// <para>
+    /// Updates coefficients using: coefficients = coefficients - learningRate * gradients
+    /// </para>
+    /// <para><b>For Beginners:</b>
+    /// After computing gradients (seeing which direction to adjust each coefficient),
+    /// this method actually adjusts them. The learning rate controls how big of an adjustment to make.
+    ///
+    /// In distributed training, this applies the averaged gradients from multiple machines
+    /// to ensure all machines keep their models synchronized.
+    /// </para>
+    /// </remarks>
+    public void ApplyGradients(Vector<T> gradients, T learningRate)
+    {
+        if (gradients == null)
+            throw new ArgumentNullException(nameof(gradients));
+        if (gradients.Length != Coefficients.Length)
+        {
+            throw new ArgumentException(
+                $"Gradient vector length ({gradients.Length}) must match coefficient count ({Coefficients.Length})",
+                nameof(gradients));
+        }
+
+        // Apply gradient descent: coefficients = coefficients - learningRate * gradients
+        for (int i = 0; i < Coefficients.Length; i++)
+        {
+            T update = _numOps.Multiply(learningRate, gradients[i]);
+            Coefficients[i] = _numOps.Subtract(Coefficients[i], update);
+        }
+
+        // Invalidate cached feature importance since coefficients changed
+        _cachedFeatureImportance = null;
+    }
+
+    /// <summary>
     /// Evaluates the model for a given input vector.
     /// </summary>
     /// <param name="input">The input vector.</param>
@@ -254,10 +372,10 @@ public class VectorModel<T> : IFullModel<T, Matrix<T>, Vector<T>>, IInterpretabl
     /// - Throws an error if the input has the wrong number of features
     /// 
     /// This is the core of how a linear model works - it's just a weighted sum:
-    /// prediction = (input1 � coefficient1) + (input2 � coefficient2) + ...
-    /// 
+    /// prediction = (input1 × coefficient1) + (input2 × coefficient2) + ...
+    ///
     /// For example, with coefficients [50000, 100, 20000] and input [3, 1500, 2],
-    /// the prediction would be: 3�50000 + 1500�100 + 2�20000 = 350,000
+    /// the prediction would be: 3×50000 + 1500×100 + 2×20000 = 350,000
     /// </para>
     /// </remarks>
     public T Evaluate(Vector<T> input)

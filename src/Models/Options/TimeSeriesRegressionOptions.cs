@@ -105,4 +105,24 @@ public class TimeSeriesRegressionOptions<T> : RegressionOptions<T>
     /// Unless you're familiar with the different methods, starting with ARIMA is usually a good choice.</para>
     /// </remarks>
     public TimeSeriesModelType ModelType { get; set; } = TimeSeriesModelType.ARIMA;
+
+    /// <summary>
+    /// Gets or sets the loss function used for gradient computation and model training.
+    /// </summary>
+    /// <value>The loss function, defaulting to null (which will use MeanSquaredErrorLoss).</value>
+    /// <remarks>
+    /// <para>
+    /// The loss function determines how the model measures prediction errors during training.
+    /// Different loss functions are appropriate for different types of problems and data characteristics.
+    /// If null, the model will use Mean Squared Error (MSE) as the default loss function.
+    /// </para>
+    /// <para><b>For Beginners:</b> This determines how the model measures its mistakes during training.
+    /// The default (null) uses Mean Squared Error, which works well for most time series forecasting tasks.
+    /// You can provide a custom loss function if you have specific requirements, such as:
+    /// - MeanAbsoluteErrorLoss for robustness to outliers
+    /// - HuberLoss for a balance between MSE and MAE
+    /// - Custom loss functions for domain-specific error metrics
+    /// </para>
+    /// </remarks>
+    public ILossFunction<T>? LossFunction { get; set; } = null;
 }

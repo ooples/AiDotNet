@@ -12,8 +12,72 @@ namespace AiDotNet.NeuralNetworks.Layers;
 /// several friends for advice on a decision - each person might notice different important factors.
 /// </para>
 /// </remarks>
-public class MultiHeadAttentionLayer<T> : LayerBase<T>
+public class MultiHeadAttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
 {
+    /// <summary>
+    /// Gets or sets whether auxiliary loss (attention regularization) should be used during training.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Attention regularization includes entropy regularization per head and head diversity penalties.
+    /// This prevents attention collapse and encourages heads to learn different patterns.
+    /// </para>
+    /// <para><b>For Beginners:</b> This helps ensure attention heads learn diverse patterns.
+    ///
+    /// Multi-head attention works best when each head specializes in different aspects:
+    /// - Without regularization: Heads might learn redundant patterns
+    /// - With regularization: Each head focuses on unique relationships
+    ///
+    /// Two types of regularization:
+    /// 1. Entropy: Prevents attention from being too sharp (focused on one position)
+    /// 2. Diversity: Prevents heads from being too similar to each other
+    ///
+    /// This helps the model:
+    /// - Learn more robust representations
+    /// - Utilize all attention heads effectively
+    /// - Improve generalization to new data
+    /// </para>
+    /// </remarks>
+    public bool UseAuxiliaryLoss { get; set; } = false;
+
+    /// <summary>
+    /// Gets or sets the weight for the attention entropy auxiliary loss.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// This weight controls how much attention entropy regularization contributes to the total loss.
+    /// Typical values range from 0.001 to 0.01.
+    /// </para>
+    /// <para><b>For Beginners:</b> This controls how much we encourage diverse attention patterns.
+    ///
+    /// Common values:
+    /// - 0.005 (default): Balanced entropy regularization
+    /// - 0.001-0.003: Light regularization
+    /// - 0.008-0.01: Strong regularization
+    ///
+    /// Higher values encourage more distributed attention.
+    /// </para>
+    /// </remarks>
+    public T AuxiliaryLossWeight { get; set; }
+
+    /// <summary>
+    /// Gets or sets the weight for head diversity penalty.
+    /// </summary>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> This encourages different heads to learn different patterns.
+    ///
+    /// Common values:
+    /// - 0.01 (default): Moderate diversity encouragement
+    /// - 0.005-0.008: Light diversity
+    /// - 0.015-0.02: Strong diversity
+    /// </para>
+    /// </remarks>
+    public T HeadDiversityWeight { get; set; }
+
+    private T _lastEntropyLoss;
+    private T _lastDiversityLoss;
+    private List<Tensor<T>>? _lastHeadOutputs = null;
+
     /// <summary>
     /// Weights used to transform input into query representations.
     /// </summary>
@@ -116,6 +180,12 @@ public class MultiHeadAttentionLayer<T> : LayerBase<T>
     public MultiHeadAttentionLayer(int sequenceLength, int embeddingDimension, int headCount, IActivationFunction<T>? activationFunction = null)
         : base([sequenceLength, embeddingDimension], [sequenceLength, embeddingDimension], activationFunction ?? new IdentityActivation<T>())
     {
+        // Initialize auxiliary loss fields first so compiler knows they're set
+        AuxiliaryLossWeight = NumOps.FromDouble(0.005);
+        HeadDiversityWeight = NumOps.FromDouble(0.01);
+        _lastEntropyLoss = NumOps.Zero;
+        _lastDiversityLoss = NumOps.Zero;
+
         _headCount = headCount;
         _headDimension = embeddingDimension / headCount;
 
@@ -138,6 +208,12 @@ public class MultiHeadAttentionLayer<T> : LayerBase<T>
     public MultiHeadAttentionLayer(int sequenceLength, int embeddingDimension, int headCount, IVectorActivationFunction<T>? vectorActivationFunction = null)
         : base([sequenceLength, embeddingDimension], [sequenceLength, embeddingDimension], vectorActivationFunction ?? new IdentityActivation<T>())
     {
+        // Initialize auxiliary loss fields first so compiler knows they're set
+        AuxiliaryLossWeight = NumOps.FromDouble(0.005);
+        HeadDiversityWeight = NumOps.FromDouble(0.01);
+        _lastEntropyLoss = NumOps.Zero;
+        _lastDiversityLoss = NumOps.Zero;
+
         _headCount = headCount;
         _headDimension = embeddingDimension / headCount;
 
@@ -184,6 +260,203 @@ public class MultiHeadAttentionLayer<T> : LayerBase<T>
     }
 
     /// <summary>
+    /// Computes the auxiliary loss for attention regularization (entropy + head diversity).
+    /// </summary>
+    /// <returns>The computed attention regularization auxiliary loss.</returns>
+    /// <remarks>
+    /// <para>
+    /// This method computes two types of regularization:
+    /// 1. Attention Entropy: Encourages attention to be distributed (not too peaked)
+    /// 2. Head Diversity: Encourages different heads to learn different patterns
+    /// Formula: L = entropy_weight * Σ_heads H(attention) + diversity_weight * Σ_pairs CosineSim(head_i, head_j)
+    /// </para>
+    /// <para><b>For Beginners:</b> This calculates penalties to improve attention quality.
+    ///
+    /// Attention regularization works by:
+    /// 1. Measuring attention entropy for each head (prevents over-focusing)
+    /// 2. Measuring similarity between different heads (prevents redundancy)
+    /// 3. Combining these into a single auxiliary loss
+    ///
+    /// This helps because:
+    /// - Prevents attention from collapsing to single positions
+    /// - Ensures different heads specialize in different patterns
+    /// - Improves model robustness and interpretability
+    ///
+    /// The auxiliary loss is minimized during training alongside the main task loss.
+    /// </para>
+    /// </remarks>
+    public T ComputeAuxiliaryLoss()
+    {
+        if (!UseAuxiliaryLoss || _lastAttentionScores == null)
+        {
+            _lastEntropyLoss = NumOps.Zero;
+            _lastDiversityLoss = NumOps.Zero;
+            return NumOps.Zero;
+        }
+
+        T totalLoss = NumOps.Zero;
+
+        // 1. Compute entropy regularization per head
+        // H = -Σ(p * log(p)) for attention weights
+        // We want to maximize entropy (minimize -H), so we negate
+        T totalEntropy = NumOps.Zero;
+        int batchSize = _lastAttentionScores.Shape[0];
+        int sequenceLength = _lastAttentionScores.Shape[2];
+
+        for (int b = 0; b < batchSize; b++)
+        {
+            for (int h = 0; h < _headCount; h++)
+            {
+                T headEntropy = NumOps.Zero;
+                for (int i = 0; i < sequenceLength; i++)
+                {
+                    for (int j = 0; j < sequenceLength; j++)
+                    {
+                        // Get attention weight for this head using correct indexing
+                        T attnWeight = _lastAttentionScores[new int[] { b, h, i, j }];
+
+                        // Skip zero or very small values to avoid log(0)
+                        if (NumOps.LessThan(attnWeight, NumOps.FromDouble(1e-10)))
+                            continue;
+
+                        // H = -Σ(p * log(p))
+                        T logWeight = NumOps.Log(attnWeight);
+                        T term = NumOps.Multiply(attnWeight, logWeight);
+                        headEntropy = NumOps.Subtract(headEntropy, term);
+                    }
+                }
+                // We want to maximize entropy, so minimize -entropy
+                totalEntropy = NumOps.Subtract(totalEntropy, headEntropy);
+            }
+        }
+
+        _lastEntropyLoss = totalEntropy;
+        totalLoss = NumOps.Add(totalLoss, NumOps.Multiply(AuxiliaryLossWeight, totalEntropy));
+
+        // 2. Compute head diversity penalty
+        // Penalize high cosine similarity between head outputs
+        if (_lastHeadOutputs != null && _lastHeadOutputs.Count == _headCount)
+        {
+            T diversityPenalty = NumOps.Zero;
+            int pairCount = 0;
+
+            for (int i = 0; i < _headCount; i++)
+            {
+                for (int j = i + 1; j < _headCount; j++)
+                {
+                    // Compute cosine similarity between head outputs
+                    T similarity = ComputeCosineSimilarity(_lastHeadOutputs[i], _lastHeadOutputs[j]);
+                    diversityPenalty = NumOps.Add(diversityPenalty, similarity);
+                    pairCount++;
+                }
+            }
+
+            if (pairCount > 0)
+            {
+                diversityPenalty = NumOps.Divide(diversityPenalty, NumOps.FromDouble(pairCount));
+            }
+
+            _lastDiversityLoss = diversityPenalty;
+            totalLoss = NumOps.Add(totalLoss, NumOps.Multiply(HeadDiversityWeight, diversityPenalty));
+        }
+
+        return totalLoss;
+    }
+
+    /// <summary>
+    /// Computes cosine similarity between two tensors.
+    /// </summary>
+    private T ComputeCosineSimilarity(Tensor<T> a, Tensor<T> b)
+    {
+        var vecA = a.ToVector();
+        var vecB = b.ToVector();
+
+        T dotProduct = NumOps.Zero;
+        T normA = NumOps.Zero;
+        T normB = NumOps.Zero;
+
+        for (int i = 0; i < vecA.Length; i++)
+        {
+            dotProduct = NumOps.Add(dotProduct, NumOps.Multiply(vecA[i], vecB[i]));
+            normA = NumOps.Add(normA, NumOps.Multiply(vecA[i], vecA[i]));
+            normB = NumOps.Add(normB, NumOps.Multiply(vecB[i], vecB[i]));
+        }
+
+        normA = NumOps.Sqrt(normA);
+        normB = NumOps.Sqrt(normB);
+
+        T denominator = NumOps.Multiply(normA, normB);
+        if (NumOps.Equals(denominator, NumOps.Zero))
+            return NumOps.Zero;
+
+        return NumOps.Divide(dotProduct, denominator);
+    }
+
+    /// <summary>
+    /// Gets diagnostic information about the attention regularization auxiliary loss.
+    /// </summary>
+    /// <returns>A dictionary containing diagnostic information about attention regularization.</returns>
+    /// <remarks>
+    /// <para>
+    /// This method returns detailed diagnostics about attention regularization, including
+    /// entropy loss, diversity loss, and configuration parameters.
+    /// This information is useful for monitoring training progress and debugging.
+    /// </para>
+    /// <para><b>For Beginners:</b> This provides information about how attention regularization is working.
+    ///
+    /// The diagnostics include:
+    /// - Total entropy loss (how distributed attention patterns are)
+    /// - Total diversity loss (how different heads are from each other)
+    /// - Weights applied to each loss component
+    /// - Whether regularization is enabled
+    /// - Number of attention heads
+    ///
+    /// This helps you:
+    /// - Monitor if attention is becoming too sharp or redundant
+    /// - Debug issues with head specialization
+    /// - Understand the impact of regularization on learning
+    ///
+    /// You can use this information to adjust regularization weights for better results.
+    /// </para>
+    /// </remarks>
+    public Dictionary<string, string> GetAuxiliaryLossDiagnostics()
+    {
+        return new Dictionary<string, string>
+        {
+            { "TotalEntropyLoss", System.Convert.ToString(_lastEntropyLoss) ?? "0" },
+            { "TotalDiversityLoss", System.Convert.ToString(_lastDiversityLoss) ?? "0" },
+            { "EntropyWeight", System.Convert.ToString(AuxiliaryLossWeight) ?? "0.005" },
+            { "DiversityWeight", System.Convert.ToString(HeadDiversityWeight) ?? "0.01" },
+            { "UseAttentionRegularization", UseAuxiliaryLoss.ToString() },
+            { "NumberOfHeads", _headCount.ToString() },
+            { "AttentionScoresCached", (_lastAttentionScores != null).ToString() },
+            { "HeadOutputsCached", (_lastHeadOutputs != null).ToString() }
+        };
+    }
+
+    /// <summary>
+    /// Gets diagnostic information about this component's state and behavior.
+    /// Overrides <see cref="LayerBase{T}.GetDiagnostics"/> to include auxiliary loss diagnostics.
+    /// </summary>
+    /// <returns>
+    /// A dictionary containing diagnostic metrics including both base layer diagnostics and
+    /// auxiliary loss diagnostics from <see cref="GetAuxiliaryLossDiagnostics"/>.
+    /// </returns>
+    public override Dictionary<string, string> GetDiagnostics()
+    {
+        var diagnostics = base.GetDiagnostics();
+
+        // Merge auxiliary loss diagnostics
+        var auxDiagnostics = GetAuxiliaryLossDiagnostics();
+        foreach (var kvp in auxDiagnostics)
+        {
+            diagnostics[kvp.Key] = kvp.Value;
+        }
+
+        return diagnostics;
+    }
+
+    /// <summary>
     /// Performs the forward pass of the multi-head attention layer.
     /// </summary>
     /// <param name="input">The input tensor.</param>
@@ -224,6 +497,18 @@ public class MultiHeadAttentionLayer<T> : LayerBase<T>
         _lastAttentionScores = attentionWeights;
 
         var attentionOutput = attentionWeights.Multiply(values);
+
+        // Cache per-head outputs for head diversity loss computation
+        // Shape before transpose: [batchSize, headCount, sequenceLength, headDimension]
+        _lastHeadOutputs = new List<Tensor<T>>(_headCount);
+        for (int h = 0; h < _headCount; h++)
+        {
+            // Extract output for head h: [batchSize, sequenceLength, headDimension]
+            var headOutput = attentionOutput.Slice(1, h, h + 1);  // Slice along head dimension
+            headOutput = headOutput.Reshape(batchSize, sequenceLength, _headDimension);
+            _lastHeadOutputs.Add(headOutput);
+        }
+
         attentionOutput = attentionOutput.Transpose([0, 2, 1, 3]).Reshape(batchSize, sequenceLength, embeddingDimension);
 
         var output = attentionOutput.Multiply(_outputWeights).Add(_outputBias);
@@ -482,6 +767,7 @@ public class MultiHeadAttentionLayer<T> : LayerBase<T>
         _lastInput = null;
         _lastOutput = null;
         _lastAttentionScores = null;
+        _lastHeadOutputs = null;  // Clear per-head output cache
 
         _queryWeightsGradient = null;
         _keyWeightsGradient = null;
