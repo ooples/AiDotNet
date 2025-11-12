@@ -1008,7 +1008,11 @@ public abstract class AsyncDecisionTreeRegressionBase<T> : IAsyncTreeBasedModel<
     /// </summary>
     public virtual void SaveState(Stream stream)
     {
-        throw new NotImplementedException("SaveState is not yet implemented for AsyncDecisionTreeRegressionBase. Consider serializing the tree structure explicitly.");
+        if (stream == null) throw new ArgumentNullException(nameof(stream));
+        if (!stream.CanWrite) throw new ArgumentException("Stream must be writable.", nameof(stream));
+        var data = Serialize();
+        stream.Write(data, 0, data.Length);
+        stream.Flush();
     }
 
     /// <summary>
@@ -1016,6 +1020,12 @@ public abstract class AsyncDecisionTreeRegressionBase<T> : IAsyncTreeBasedModel<
     /// </summary>
     public virtual void LoadState(Stream stream)
     {
-        throw new NotImplementedException("LoadState is not yet implemented for AsyncDecisionTreeRegressionBase. Consider deserializing the tree structure explicitly.");
+        if (stream == null) throw new ArgumentNullException(nameof(stream));
+        if (!stream.CanRead) throw new ArgumentException("Stream must be readable.", nameof(stream));
+        using var ms = new MemoryStream();
+        stream.CopyTo(ms);
+        var data = ms.ToArray();
+        if (data.Length == 0) throw new InvalidOperationException("Stream contains no data.");
+        Deserialize(data);
     }
 }
