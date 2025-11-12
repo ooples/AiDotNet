@@ -722,6 +722,48 @@ public enum ModelType
 
     DeepQNetwork,
 
+    /// <summary>
+    /// Double Deep Q-Network - addresses overestimation bias in DQN.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> Double DQN fixes a problem in standard DQN where Q-values are often
+    /// too optimistic. It uses two networks to make more realistic value estimates - one picks
+    /// the best action, another evaluates it. This leads to more stable and accurate learning.
+    ///
+    /// Strengths: More accurate Q-values, better final performance, same complexity as DQN
+    /// </para>
+    /// </remarks>
+    DoubleDQN,
+
+    /// <summary>
+    /// Dueling Deep Q-Network - separates value and advantage estimation.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> Dueling DQN splits Q-values into two parts: the value of being in a state
+    /// (how good is this situation?) and the advantage of each action (how much better is this action
+    /// than average?). This makes learning more efficient, especially when many actions have similar values.
+    ///
+    /// Strengths: Faster learning, better performance, especially useful when actions don't always matter
+    /// </para>
+    /// </remarks>
+    DuelingDQN,
+
+    /// <summary>
+    /// Rainbow DQN - combines six DQN improvements into one powerful algorithm.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> Rainbow combines Double DQN, Dueling DQN, Prioritized Replay,
+    /// Multi-step Learning, Distributional RL, and Noisy Networks. It's like taking the best features
+    /// from six different DQN variants and putting them together. Currently the strongest DQN variant.
+    ///
+    /// Strengths: State-of-the-art performance, combines multiple improvements, excellent sample efficiency
+    /// </para>
+    /// </remarks>
+    RainbowDQN,
+
     GenerativeAdversarialNetwork,
 
     NeuralTuringMachine,
@@ -927,5 +969,144 @@ public enum ModelType
     /// Strengths: Efficient parallel training, works on CPU without GPUs
     /// </para>
     /// </remarks>
-    A3CAgent
+    A3CAgent,
+
+    /// <summary>
+    /// Trust Region Policy Optimization - ensures safe, monotonic policy improvements.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> TRPO guarantees that each policy update improves performance (monotonic improvement)
+    /// by limiting how much the policy can change. It's like taking safe, guaranteed steps forward rather than
+    /// potentially risky big leaps. PPO was developed as a simpler alternative to TRPO.
+    ///
+    /// Strengths: Guaranteed improvement, very stable, excellent for continuous control
+    /// </para>
+    /// </remarks>
+    TRPOAgent,
+
+    /// <summary>
+    /// REINFORCE (Monte Carlo Policy Gradient) - the foundational policy gradient algorithm.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> REINFORCE is the simplest policy gradient method. It plays full episodes,
+    /// then updates the policy to make good actions more likely. Simple but can be slow and high-variance.
+    ///
+    /// Strengths: Simple to understand and implement, works for any differentiable policy
+    /// </para>
+    /// </remarks>
+    REINFORCEAgent,
+
+    /// <summary>
+    /// Conservative Q-Learning - offline RL algorithm that avoids out-of-distribution actions.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> CQL is designed for offline RL (learning from fixed datasets without interaction).
+    /// It penalizes Q-values for actions not seen in the dataset, preventing the agent from being overconfident
+    /// about unfamiliar actions. Useful for learning from historical data.
+    ///
+    /// Strengths: Safe offline learning, works with fixed datasets, prevents distributional shift
+    /// </para>
+    /// </remarks>
+    CQLAgent,
+
+    /// <summary>
+    /// Implicit Q-Learning - another offline RL approach using expectile regression.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> IQL avoids explicitly computing policy constraints, making it simpler and
+    /// more stable than some other offline RL methods. It learns Q-values and policies separately,
+    /// which can be more robust.
+    ///
+    /// Strengths: Simple, stable, good offline RL performance
+    /// </para>
+    /// </remarks>
+    IQLAgent,
+
+    /// <summary>
+    /// Decision Transformer - treats RL as a sequence modeling problem using transformers.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> Decision Transformer uses the transformer architecture (from language models)
+    /// to predict actions conditioned on desired returns. Instead of learning values or policies directly,
+    /// it learns to generate action sequences that lead to target rewards.
+    ///
+    /// Strengths: Leverages powerful transformer architecture, good offline performance, can condition on returns
+    /// </para>
+    /// </remarks>
+    DecisionTransformer,
+
+    /// <summary>
+    /// Multi-Agent DDPG - extends DDPG to multi-agent cooperative/competitive settings.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> MADDPG allows multiple agents to learn simultaneously in shared environments.
+    /// Each agent has its own policy but can observe others during training. Used for cooperative tasks
+    /// (team coordination) or competitive tasks (games, negotiations).
+    ///
+    /// Strengths: Handles multi-agent scenarios, centralized training with decentralized execution
+    /// </para>
+    /// </remarks>
+    MADDPGAgent,
+
+    /// <summary>
+    /// QMIX - value-based multi-agent RL that factorizes joint action-values.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> QMIX learns how to coordinate multiple agents by factorizing the joint
+    /// Q-function into individual agent Q-functions. It's particularly good for cooperative multi-agent
+    /// tasks where agents need to work together.
+    ///
+    /// Strengths: Efficient multi-agent coordination, monotonic value factorization
+    /// </para>
+    /// </remarks>
+    QMIXAgent,
+
+    /// <summary>
+    /// Dreamer - model-based RL that learns a world model and plans in latent space.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> Dreamer learns a model of the environment (how the world works), then
+    /// "dreams" about possible futures to plan actions. This allows learning from imagined experiences,
+    /// making it very sample-efficient.
+    ///
+    /// Strengths: Very sample-efficient, learns world models, can plan ahead
+    /// </para>
+    /// </remarks>
+    DreamerAgent,
+
+    /// <summary>
+    /// MuZero - combines tree search with learned models, mastering games without knowing rules.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> MuZero (from DeepMind) learns to play games at superhuman levels without
+    /// being told the rules. It learns a model of the game dynamics and uses tree search (like AlphaZero)
+    /// to plan. Famous for mastering Chess, Go, Shogi, and Atari.
+    ///
+    /// Strengths: State-of-the-art game playing, model-based planning, no need for known dynamics
+    /// </para>
+    /// </remarks>
+    MuZeroAgent,
+
+    /// <summary>
+    /// World Models - learns compressed spatial and temporal representations for model-based RL.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> World Models learns a compact representation of the environment and trains
+    /// agents entirely inside this learned "world model". It can train much faster by learning in
+    /// simulation rather than real environments.
+    ///
+    /// Strengths: Fast training in learned models, good for visual environments, interpretable latent space
+    /// </para>
+    /// </remarks>
+    WorldModelsAgent
 }
