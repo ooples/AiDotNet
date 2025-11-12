@@ -68,7 +68,7 @@ public class VariationalDistillationStrategy<T> : DistillationStrategyBase<T, Ve
         var studentSoft = Softmax(studentOutput, Temperature);
         var teacherSoft = Softmax(teacherOutput, Temperature);
         var softLoss = KLDivergence(teacherSoft, studentSoft);
-        softLoss = NumOps.Multiply(softLoss, NumOps.FromDouble(Temperature * Temperature * (1.0 - _variationalWeight)));
+        softLoss = NumOps.Multiply(softLoss, NumOps.FromDouble(Temperature * Temperature));
 
         if (trueLabels != null)
         {
@@ -78,7 +78,7 @@ public class VariationalDistillationStrategy<T> : DistillationStrategyBase<T, Ve
             var combinedLoss = NumOps.Add(
                 NumOps.Multiply(NumOps.FromDouble(Alpha), hardLoss),
                 NumOps.Multiply(NumOps.FromDouble(1.0 - Alpha), softLoss));
-            return NumOps.Multiply(combinedLoss, NumOps.FromDouble(1.0 - _variationalWeight));
+            return combinedLoss;
         }
 
         return softLoss;
@@ -97,7 +97,7 @@ public class VariationalDistillationStrategy<T> : DistillationStrategyBase<T, Ve
         for (int i = 0; i < n; i++)
         {
             var diff = NumOps.Subtract(studentSoft[i], teacherSoft[i]);
-            gradient[i] = NumOps.Multiply(diff, NumOps.FromDouble(Temperature * Temperature * (1.0 - _variationalWeight)));
+            gradient[i] = NumOps.Multiply(diff, NumOps.FromDouble(Temperature * Temperature));
         }
 
         if (trueLabels != null)
@@ -109,8 +109,8 @@ public class VariationalDistillationStrategy<T> : DistillationStrategyBase<T, Ve
             {
                 var hardGrad = NumOps.Subtract(studentProbs[i], trueLabels[i]);
                 gradient[i] = NumOps.Add(
-                    NumOps.Multiply(NumOps.FromDouble(Alpha * (1.0 - _variationalWeight)), hardGrad),
-                    NumOps.Multiply(NumOps.FromDouble((1.0 - Alpha) * (1.0 - _variationalWeight)), gradient[i]));
+                    NumOps.Multiply(NumOps.FromDouble(Alpha), hardGrad),
+                    NumOps.Multiply(NumOps.FromDouble(1.0 - Alpha), gradient[i]));
             }
         }
 
