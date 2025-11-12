@@ -81,7 +81,8 @@ public abstract class CurriculumDistillationStrategyBase<T>
     /// </summary>
     public virtual void UpdateProgress(int step)
     {
-        _currentStep = Math.Max(0, Math.Min(step, TotalSteps - 1));
+        // Don't clamp to TotalSteps - 1; allow reaching TotalSteps for full 100% progress
+        _currentStep = Math.Max(0, Math.Min(step, TotalSteps));
     }
 
     /// <summary>

@@ -75,9 +75,10 @@ public static class TeacherModelFactory<T>
         if (ensembleModels == null || ensembleModels.Length == 0)
             throw new ArgumentException("Ensemble models are required for Ensemble teacher type");
 
-        var aggregation = ensembleWeights != null
+        // Use plain average when no weights are supplied
+        var aggregation = ensembleWeights != null && ensembleWeights.Length > 0
             ? EnsembleAggregationMode.WeightedAverage
-            : EnsembleAggregationMode.WeightedAverage;
+            : EnsembleAggregationMode.Average;
 
         return new EnsembleTeacherModel<T>(ensembleModels, ensembleWeights, aggregation);
     }
@@ -112,6 +113,9 @@ public static class TeacherModelFactory<T>
     {
         if (modalityTeachers == null || modalityTeachers.Length == 0)
             throw new ArgumentException("Modality teachers are required for MultiModal teacher type");
+        if (modalityWeights != null && modalityWeights.Length != modalityTeachers.Length)
+            throw new ArgumentException(
+                $"Modality weights length ({modalityWeights.Length}) must match modality teachers length ({modalityTeachers.Length})");
 
         return new MultiModalTeacherModel<T>(modalityTeachers, modalityWeights);
     }

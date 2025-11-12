@@ -148,9 +148,11 @@ public class HardToEasyCurriculumStrategy<T> : CurriculumDistillationStrategyBas
         if (difficulty == null)
             return true;
 
-        // Hard-to-Easy: Include samples with difficulty ≥ (1 - current progress)
-        // Progress 0.0 → only hardest samples (difficulty ≥ 1.0)
-        // Progress 1.0 → all samples (difficulty ≥ 0.0)
+        // Hard-to-Easy: Include samples with difficulty >= (1 - current progress)
+        // Progress 0.0 → only hardest samples (difficulty >= 1.0, threshold = 1.0)
+        // Progress 0.5 → medium samples (difficulty >= 0.5, threshold = 0.5)  
+        // Progress 1.0 → all samples (difficulty >= 0.0, threshold = 0.0)
+        // With progress now able to reach exactly 1.0, threshold can reach 0.0
         double threshold = 1.0 - CurriculumProgress;
         return difficulty.Value >= threshold;
     }

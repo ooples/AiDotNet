@@ -30,11 +30,16 @@ public class TransformerTeacherModel<T> : TeacherModelBase<Vector<T>, Vector<T>,
     /// </summary>
     /// <param name="forwardFunc">Function that performs forward pass and returns logits.</param>
     /// <param name="outputDimension">The number of output dimensions.</param>
+    /// <exception cref="ArgumentNullException">Thrown when forwardFunc is null.</exception>
+    /// <exception cref="ArgumentOutOfRangeException">Thrown when outputDimension is not positive.</exception>
     public TransformerTeacherModel(
         Func<Vector<T>, Vector<T>> forwardFunc,
         int outputDimension)
     {
         _forwardFunc = forwardFunc ?? throw new ArgumentNullException(nameof(forwardFunc));
+        if (outputDimension <= 0)
+            throw new ArgumentOutOfRangeException(nameof(outputDimension), 
+                "Output dimension must be positive.");
         _outputDim = outputDimension;
     }
 

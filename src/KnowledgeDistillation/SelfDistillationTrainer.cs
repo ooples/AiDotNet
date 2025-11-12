@@ -66,7 +66,19 @@ public class SelfDistillationTrainer<T> : KnowledgeDistillationTrainerBase<T, Ve
     /// <summary>
     /// Gets or sets the EMA decay rate (default 0.99). Higher values give more weight to history.
     /// </summary>
-    public double EMADecay { get; set; }
+    /// <exception cref="ArgumentOutOfRangeException">Thrown when value is not between 0 and 1.</exception>
+    public double EMADecay 
+    { 
+        get => _emaDecay;
+        set
+        {
+            if (value <= 0 || value >= 1)
+                throw new ArgumentOutOfRangeException(nameof(value), 
+                    "EMADecay must be between 0 and 1 (exclusive). Typical values are 0.9-0.999.");
+            _emaDecay = value;
+        }
+    }
+    private double _emaDecay = 0.99;
 
     /// <summary>
     /// Initializes a new instance of the SelfDistillationTrainer class.
@@ -77,8 +89,9 @@ public class SelfDistillationTrainer<T> : KnowledgeDistillationTrainerBase<T, Ve
     /// <param name="seed">Optional random seed for reproducibility.</param>
     /// <remarks>
     /// <para><b>For Beginners:</b> Generations control how many times the model relearns from itself:
-    /// - 1 generation: Train normally, then retrain with self as teacher
-    /// - 2 generations: Do it twice (teacher → student1 → student2)
+    /// - 1 generation: Train normally (standard training, no self-distillation)
+    /// - 2 generations: Train, then retrain using self as teacher (first self-distillation)
+    /// - 3 generations: Train → self-teach → self-teach again
     /// - More generations: Diminishing returns, usually not worth it beyond 2-3</para>
     ///
     /// <para>Example:
