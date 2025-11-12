@@ -100,36 +100,24 @@ public class TeacherModelWrapper<T> : ITeacherModel<Vector<T>, Vector<T>>
     private static int GetOutputDimensionFromModel(IFullModel<T, Vector<T>, Vector<T>> model)
     {
         // Try to infer output dimension from model metadata
-        try
-        {
-            var metadata = model.GetMetadata();
+        var metadata = model.GetMetadata();
 
-            // Check if metadata contains output dimension/class count
-            if (metadata.TryGetValue("OutputDimension", out var outputDimValue) && outputDimValue is int outputDim && outputDim > 0)
-                return outputDim;
+        // Check if metadata contains output dimension/class count
+        if (metadata.TryGetValue("OutputDimension", out var outputDimValue) && outputDimValue is int outputDim && outputDim > 0)
+            return outputDim;
 
-            if (metadata.TryGetValue("NumClasses", out var numClassesValue) && numClassesValue is int numClasses && numClasses > 0)
-                return numClasses;
+        if (metadata.TryGetValue("NumClasses", out var numClassesValue) && numClassesValue is int numClasses && numClasses > 0)
+            return numClasses;
 
-            if (metadata.TryGetValue("ClassCount", out var classCountValue) && classCountValue is int classCount && classCount > 0)
-                return classCount;
+        if (metadata.TryGetValue("ClassCount", out var classCountValue) && classCountValue is int classCount && classCount > 0)
+            return classCount;
 
-            // If metadata doesn't contain dimension info, try inferring from a dummy prediction
-            // Create a minimal dummy input vector (size 1) to get output shape
-            var dummyInput = new Vector<T>(1);
-            var dummyOutput = model.Predict(dummyInput);
-
-            if (dummyOutput != null && dummyOutput.Length > 0)
-                return dummyOutput.Length;
-
-            // Ultimate fallback if all else fails
-            return 10; // Common default for classification (e.g., CIFAR-10)
-        }
-        catch
-        {
-            // If any error occurs during inference, use reasonable default
-            return 10; // Common default for classification tasks
-        }
+        // If metadata doesn't contain dimension info, we cannot reliably determine output dimension
+        // Throw instead of guessing to prevent downstream errors with incorrect label sizes
+        throw new InvalidOperationException(
+            "Cannot determine output dimension from model metadata. " +
+            "Please use the constructor overload that explicitly specifies outputDimension, " +
+            "or ensure the model's GetMetadata() returns 'OutputDimension', 'NumClasses', or 'ClassCount'.");
     }
 
     /// <summary>
