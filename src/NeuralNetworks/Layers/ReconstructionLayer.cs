@@ -309,14 +309,17 @@ public class ReconstructionLayer<T> : LayerBase<T>
     /// <returns>The gradient of the loss with respect to the layer's input.</returns>
     /// <remarks>
     /// <para>
-    /// This method uses automatic differentiation to compute gradients. Specialized operations
-    /// are not yet available in TensorOperations, so this falls back to the manual implementation.
+    /// This method uses automatic differentiation by delegating to the autodiff implementations
+    /// of the three constituent FullyConnectedLayers. Each sublayer will use its own autodiff implementation.
     /// </para>
     /// </remarks>
     private Tensor<T> BackwardViaAutodiff(Tensor<T> outputGradient)
     {
-        // TODO: Specialized operation not yet available in TensorOperations
-        return BackwardManual(outputGradient);
+        // Composite layer: just call Backward on each sublayer with UseAutodiff enabled
+        // The sublayers will handle their own autodiff if they support it
+        var gradient = _fc3.Backward(outputGradient);
+        gradient = _fc2.Backward(gradient);
+        return _fc1.Backward(gradient);
     }
 
 
