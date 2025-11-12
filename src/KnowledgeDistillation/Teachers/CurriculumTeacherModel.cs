@@ -29,14 +29,11 @@ public class CurriculumTeacherModel<T> : TeacherModelBase<Vector<T>, Vector<T>, 
     /// Initializes a new instance of the CurriculumTeacherModel class.
     /// </summary>
     /// <param name="baseTeacher">The underlying teacher model.</param>
-    /// <param name="strategy">Curriculum strategy (kept for backward compatibility, not used).</param>
-    public CurriculumTeacherModel(
-        ITeacherModel<Vector<T>, Vector<T>> baseTeacher,
-        CurriculumStrategy strategy = CurriculumStrategy.EasyToHard)
+    public CurriculumTeacherModel(ITeacherModel<Vector<T>, Vector<T>> baseTeacher)
     {
         _baseTeacher = baseTeacher ?? throw new ArgumentNullException(nameof(baseTeacher));
-        // Note: strategy parameter maintained for backward compatibility but curriculum
-        // logic should be implemented in the training strategy, not the teacher
+        // Note: Curriculum logic is implemented in CurriculumDistillationStrategy,
+        // not in the teacher model. This is a simple wrapper around the base teacher.
     }
 
     /// <summary>

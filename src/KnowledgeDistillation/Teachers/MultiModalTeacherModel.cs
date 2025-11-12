@@ -71,13 +71,20 @@ public class MultiModalTeacherModel<T> : TeacherModelBase<Vector<T>, Vector<T>, 
         int n = _modalityTeachers[0].OutputDimension;
         var combined = new Vector<T>(n);
 
+        // Cache logits from each teacher to avoid repeated calls
+        var teacherLogits = new Vector<T>[_modalityTeachers.Length];
+        for (int i = 0; i < _modalityTeachers.Length; i++)
+        {
+            teacherLogits[i] = _modalityTeachers[i].GetLogits(input);
+        }
+
+        // Combine weighted logits
         for (int j = 0; j < n; j++)
         {
             T sum = NumOps.Zero;
             for (int i = 0; i < _modalityTeachers.Length; i++)
             {
-                var logits = _modalityTeachers[i].GetLogits(input);
-                var weighted = NumOps.Multiply(logits[j], NumOps.FromDouble(_modalityWeights[i]));
+                var weighted = NumOps.Multiply(teacherLogits[i][j], NumOps.FromDouble(_modalityWeights[i]));
                 sum = NumOps.Add(sum, weighted);
             }
             combined[j] = sum;

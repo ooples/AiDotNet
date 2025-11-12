@@ -885,7 +885,7 @@ public class PredictionModelBuilder<T, TInput, TOutput> : IPredictionModelBuilde
     public IPredictionModelBuilder<T, TInput, TOutput> ConfigureKnowledgeDistillation(
         KnowledgeDistillationOptions<T, TInput, TOutput> options)
     {
-        ArgumentNullException.ThrowIfNull(options);
+        if (options == null) throw new ArgumentNullException(nameof(options));
         _knowledgeDistillationOptions = options;
         return this;
     }
