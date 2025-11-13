@@ -220,17 +220,13 @@ public class A3CAgent<T> : DeepReinforcementLearningAgentBase<T>
     /// </summary>
     public async Task TrainAsync(Interfaces.IEnvironment<T> environment, int maxSteps)
     {
-        // For simplicity, we'll run workers sequentially
-        // In a full implementation, use Task.WhenAll with parallel workers
-        var workers = new List<Task>();
-
+        // Run workers sequentially to avoid concurrent environment access
+        // The environment is not thread-safe, so we cannot run workers in parallel
+        // In a full implementation, each worker would need its own environment instance
         for (int i = 0; i < _options.NumWorkers; i++)
         {
-            int workerId = i;
-            workers.Add(Task.Run(() => RunWorker(environment, maxSteps, workerId)));
+            await Task.Run(() => RunWorker(environment, maxSteps, i));
         }
-
-        await Task.WhenAll(workers);
     }
 
     private void RunWorker(Interfaces.IEnvironment<T> environment, int maxSteps, int workerId)
