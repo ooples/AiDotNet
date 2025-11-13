@@ -343,15 +343,16 @@ public class TRPOAgent<T> : DeepReinforcementLearningAgentBase<T>
 
             if (NumOps.Compare(kl, _options.MaxKL) < 0)
             {
-                // Safe to update
-                var policyGradient = new Vector<T>(policyOutput.Length);
-                for (int j = 0; j < policyGradient.Length; j++)
-                {
-                    policyGradient[j] = NumOps.Multiply(advantage, NumOps.FromDouble(0.01));
-                }
-
-                _policyNetwork.Backward(policyGradient);
-                _policyNetwork.UpdateWeights(NumOps.FromDouble(0.001));  // Very small LR for trust region
+                // TODO: Implement proper TRPO policy gradient
+                // The gradient should be based on the log-likelihood ratio:
+                // ∇θ [π_θ(a_t|s_t) / π_θ_old(a_t|s_t)] * A(s_t, a_t)
+                // Current placeholder gradient doesn't use:
+                // - The recorded action a_t
+                // - The old/new action log-probabilities
+                // - The importance sampling ratio
+                throw new NotImplementedException(
+                    "TRPO policy update requires proper implementation of " +
+                    "importance-weighted policy gradient within trust region.");
             }
         }
     }
