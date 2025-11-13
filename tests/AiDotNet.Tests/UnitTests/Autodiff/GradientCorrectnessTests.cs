@@ -117,7 +117,7 @@ public class GradientCorrectnessTests
     {
         // Arrange
         var shape = new[] { 2, 6 };
-        var layer = new ActivationLayer<float>(shape, new SigmoidActivation<float>());
+        var layer = new ActivationLayer<float>(shape, (IActivationFunction<float>)new SigmoidActivation<float>());
 
         var input = new Tensor<float>(shape);
         var random = new Random(42);
@@ -160,7 +160,7 @@ public class GradientCorrectnessTests
     {
         // Arrange
         var shape = new[] { 3, 4 };
-        var layer = new ActivationLayer<float>(shape, new TanhActivation<float>());
+        var layer = new ActivationLayer<float>(shape, (IActivationFunction<float>)new TanhActivation<float>());
 
         var input = new Tensor<float>(shape);
         var random = new Random(42);
@@ -251,8 +251,8 @@ public class GradientCorrectnessTests
         const double dropoutRate = 0.3;
         var shape = new[] { 5, 10 };
 
-        var layer = new DropoutLayer<float>(shape, (float)dropoutRate);
-        layer.IsTraining = true; // Enable dropout
+        var layer = new DropoutLayer<float>(dropoutRate);
+        layer.SetTrainingMode(true); // Enable dropout
 
         var input = new Tensor<float>(shape);
         var random = new Random(42);
@@ -307,7 +307,7 @@ public class GradientCorrectnessTests
     {
         // Arrange
         var shape = new[] { 4, 6 };
-        var layer = new AddLayer<float>(shape);
+        var layer = new AddLayer<float>(new[] { shape, shape }, (IActivationFunction<float>?)null);
 
         var input1 = CreateRandomTensor(shape);
         var input2 = CreateRandomTensor(shape);
@@ -346,7 +346,7 @@ public class GradientCorrectnessTests
     {
         // Arrange
         var shape = new[] { 3, 5 };
-        var layer = new MultiplyLayer<float>(shape);
+        var layer = new MultiplyLayer<float>(new[] { shape, shape }, (IActivationFunction<float>?)null);
 
         var input1 = CreateRandomTensor(shape);
         var input2 = CreateRandomTensor(shape);
@@ -385,7 +385,7 @@ public class GradientCorrectnessTests
         // Arrange
         var shape = new[] { 2, 8 };
         var innerLayer = new DenseLayer<float>(8, 8, (IActivationFunction<float>)new ReLUActivation<float>());
-        var layer = new ResidualLayer<float>(shape, innerLayer);
+        var layer = new ResidualLayer<float>(shape, innerLayer, (IActivationFunction<float>?)null);
 
         var input = CreateRandomTensor(shape);
         var outputGradient = CreateRandomTensor(shape);
@@ -403,7 +403,7 @@ public class GradientCorrectnessTests
         layer.UseAutodiff = true;
         innerLayer.UseAutodiff = true;
         layer.Forward(input);
-        var autodiffGradient = layer.Backward(outputGradient, null);
+        var autodiffGradient = layer.Backward(outputGradient);
 
         // Assert
         Assert.Equal(manualGradient.Shape, autodiffGradient.Shape);

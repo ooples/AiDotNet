@@ -1,6 +1,7 @@
 using AiDotNet.LinearAlgebra;
 using AiDotNet.NeuralNetworks.Layers;
 using AiDotNet.ActivationFunctions;
+using AiDotNet.Interfaces;
 using BenchmarkDotNet.Attributes;
 using BenchmarkDotNet.Running;
 
@@ -48,7 +49,7 @@ public class AutodiffPerformanceBenchmarks
         // Setup ActivationLayer
         _activationLayer = new ActivationLayer<float>(
             new[] { BatchSize, FeatureSize },
-            new ReLUActivation<float>());
+            (IActivationFunction<float>)new ReLUActivation<float>());
         _activationInput = CreateRandomTensor(new[] { BatchSize, FeatureSize }, random);
         _activationOutputGradient = CreateRandomTensor(new[] { BatchSize, FeatureSize }, random);
 
@@ -58,8 +59,8 @@ public class AutodiffPerformanceBenchmarks
         _batchNormOutputGradient = CreateRandomTensor(new[] { BatchSize, FeatureSize }, random);
 
         // Setup DropoutLayer
-        _dropoutLayer = new DropoutLayer<float>(new[] { BatchSize, FeatureSize }, 0.5f);
-        _dropoutLayer.IsTraining = true;
+        _dropoutLayer = new DropoutLayer<float>(0.5);
+        _dropoutLayer.SetTrainingMode(true);
         _dropoutInput = CreateRandomTensor(new[] { BatchSize, FeatureSize }, random);
         _dropoutOutputGradient = CreateRandomTensor(new[] { BatchSize, FeatureSize }, random);
     }
@@ -164,13 +165,14 @@ public class AutodiffPerformanceBenchmarks
 
     /// <summary>
     /// Run all benchmarks.
-    /// Usage: dotnet run -c Release --project AiDotNet.Tests --filter "*AutodiffPerformanceBenchmarks*"
+    /// Usage: Use BenchmarkDotNet CLI or invoke BenchmarkRunner.Run manually
+    /// Note: Main method commented out to avoid conflicts with test project entry point
     /// </summary>
-    public static void Main(string[] args)
-    {
-        var summary = BenchmarkRunner.Run<AutodiffPerformanceBenchmarks>();
-        Console.WriteLine(summary);
-    }
+    //public static void Main(string[] args)
+    //{
+    //    var summary = BenchmarkRunner.Run<AutodiffPerformanceBenchmarks>();
+    //    Console.WriteLine(summary);
+    //}
 }
 
 /// <summary>
