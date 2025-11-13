@@ -160,7 +160,7 @@ public class NStepQLearningAgent<T> : ReinforcementLearningAgentBase<T>
 
     public override ModelMetadata<T> GetModelMetadata()
     {
-        return new ModelMetadata<T> { ModelType = "NStepQLearning", InputSize = _options.StateSize, OutputSize = _options.ActionSize, ParameterCount = ParameterCount };
+        return new ModelMetadata<T> { ModelType = ModelType.ReinforcementLearning, FeatureCount = this.FeatureCount, Complexity = ParameterCount };
     }
 
     public override int ParameterCount => _qTable.Count * _options.ActionSize;
