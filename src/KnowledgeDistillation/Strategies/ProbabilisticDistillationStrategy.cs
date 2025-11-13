@@ -106,6 +106,15 @@ public class ProbabilisticDistillationStrategy<T> : DistillationStrategyBase<T>
 
     public override Matrix<T> ComputeGradient(Matrix<T> studentBatchOutput, Matrix<T> teacherBatchOutput, Matrix<T>? trueLabelsBatch = null)
     {
+        if (_distributionWeight > 0)
+        {
+            throw new NotSupportedException(
+                "Gradient computation for distributional loss is not yet supported. " +
+                "The analytical gradients for moment matching, MMD, and entropy-based " +
+                "distributional objectives require mode-specific derivations. " +
+                "Set distributionWeight to 0 to use standard KD gradients only.");
+        }
+
         ValidateOutputDimensions(studentBatchOutput, teacherBatchOutput);
         ValidateLabelDimensions(studentBatchOutput, trueLabelsBatch);
 
@@ -138,12 +147,9 @@ public class ProbabilisticDistillationStrategy<T> : DistillationStrategyBase<T>
                     var hardGrad = NumOps.Subtract(studentProbs[i], trueLabels[i]);
 
                     // Combined gradient: Alpha * hardGrad + (1 - Alpha) * softGrad
-                    var combined = NumOps.Add(
+                    gradient[i] = NumOps.Add(
                         NumOps.Multiply(NumOps.FromDouble(Alpha), hardGrad),
                         NumOps.Multiply(NumOps.FromDouble(1.0 - Alpha), softGrad));
-
-                    // Apply distribution weight reduction exactly once
-                    gradient[i] = NumOps.Multiply(combined, NumOps.FromDouble(1.0 - _distributionWeight));
                 }
             }
             else
@@ -152,10 +158,7 @@ public class ProbabilisticDistillationStrategy<T> : DistillationStrategyBase<T>
                 {
                     // Soft gradient (temperature-scaled)
                     var softGrad = NumOps.Subtract(studentSoft[i], teacherSoft[i]);
-                    softGrad = NumOps.Multiply(softGrad, NumOps.FromDouble(Temperature * Temperature));
-
-                    // Apply distribution weight reduction exactly once
-                    gradient[i] = NumOps.Multiply(softGrad, NumOps.FromDouble(1.0 - _distributionWeight));
+                    gradient[i] = NumOps.Multiply(softGrad, NumOps.FromDouble(Temperature * Temperature));
                 }
             }
 
