@@ -64,20 +64,22 @@ namespace AiDotNet.KnowledgeDistillation.Strategies;
 /// - Tian et al. (2020). Contrastive Representation Distillation. ICLR.
 /// - Chen et al. (2020). A Simple Framework for Contrastive Learning of Visual Representations. ICML.</para>
 /// </remarks>
-public class ContrastiveDistillationStrategy<T> : DistillationStrategyBase<T>
+public class ContrastiveDistillationStrategy<T> : DistillationStrategyBase<T>, IIntermediateActivationStrategy<T>
 {
     private readonly double _contrastiveWeight;
     private readonly int _negativesSampleSize;
     private readonly ContrastiveMode _mode;
+    private readonly string _embeddingLayerName;
 
     /// <summary>
     /// Initializes a new instance of the ContrastiveDistillationStrategy class.
     /// </summary>
+    /// <param name="embeddingLayerName">Name of the layer to extract embeddings from (e.g., "layer_before_classifier").</param>
     /// <param name="contrastiveWeight">Weight for contrastive loss vs standard output loss (default: 0.8).</param>
     /// <param name="temperature">Temperature for contrastive softmax (default: 0.07).</param>
     /// <param name="alpha">Balance between hard and soft loss (default: 0.2).</param>
     /// <param name="negativesSampleSize">Number of negative samples to use (default: 1024).</param>
-    /// <param name="mode">Contrastive mode (default: InfoNCE).</param>
+    /// <param name="mode">Contrastive mode (default: NTXent for label-free operation).</param>
     /// <remarks>
     /// <para><b>For Beginners:</b> Configure how much to weight contrastive learning:</para>
     /// <para>- contrastiveWeight 0.6-0.9: More focus on learning representations
@@ -87,6 +89,7 @@ public class ContrastiveDistillationStrategy<T> : DistillationStrategyBase<T>
     /// <para>Example:
     /// <code>
     /// var strategy = new ContrastiveDistillationStrategy&lt;double&gt;(
+    ///     embeddingLayerName: "embedding_layer",
     ///     contrastiveWeight: 0.8,  // 80% contrastive, 20% standard
     ///     temperature: 0.07,        // Standard for contrastive learning
     ///     alpha: 0.2,              // Mostly teacher knowledge
@@ -96,18 +99,22 @@ public class ContrastiveDistillationStrategy<T> : DistillationStrategyBase<T>
     /// </para>
     /// </remarks>
     public ContrastiveDistillationStrategy(
+        string embeddingLayerName = "embeddings",
         double contrastiveWeight = 0.8,
         double temperature = 0.07,
         double alpha = 0.2,
         int negativesSampleSize = 1024,
-        ContrastiveMode mode = ContrastiveMode.InfoNCE)
+        ContrastiveMode mode = ContrastiveMode.NTXent)
         : base(temperature, alpha)
     {
+        if (string.IsNullOrWhiteSpace(embeddingLayerName))
+            throw new ArgumentException("Embedding layer name cannot be null or whitespace", nameof(embeddingLayerName));
         if (contrastiveWeight < 0 || contrastiveWeight > 1)
             throw new ArgumentException("Contrastive weight must be between 0 and 1", nameof(contrastiveWeight));
         if (negativesSampleSize < 1)
             throw new ArgumentException("Negatives sample size must be at least 1", nameof(negativesSampleSize));
 
+        _embeddingLayerName = embeddingLayerName;
         _contrastiveWeight = contrastiveWeight;
         _negativesSampleSize = negativesSampleSize;
         _mode = mode;
@@ -268,6 +275,68 @@ public class ContrastiveDistillationStrategy<T> : DistillationStrategyBase<T>
 
         // Apply contrastive weight
         return NumOps.Multiply(totalLoss, NumOps.FromDouble(_contrastiveWeight));
+    }
+
+    /// <summary>
+    /// Computes intermediate activation loss by matching embedding space structure between teacher and student.
+    /// </summary>
+    /// <param name="studentIntermediateActivations">Student's intermediate layer activations (must include embedding layer).</param>
+    /// <param name="teacherIntermediateActivations">Teacher's intermediate layer activations (must include embedding layer).</param>
+    /// <returns>The contrastive loss (already weighted by contrastiveWeight).</returns>
+    /// <remarks>
+    /// <para>This implements the IIntermediateActivationStrategy interface to properly integrate
+    /// contrastive learning into the training loop. The loss is computed from embeddings stored
+    /// in the intermediate activations for the layer specified in the constructor.</para>
+    ///
+    /// <para>Uses NTXent mode by default as it doesn't require labels. Each teacher-student pair
+    /// for the same sample is treated as a positive pair, while other samples are negatives.</para>
+    ///
+    /// <para>If the embedding layer is not found, returns zero loss.</para>
+    /// </remarks>
+    public T ComputeIntermediateLoss(
+        IntermediateActivations<T> studentIntermediateActivations,
+        IntermediateActivations<T> teacherIntermediateActivations)
+    {
+        if (studentIntermediateActivations == null)
+            throw new ArgumentNullException(nameof(studentIntermediateActivations));
+        if (teacherIntermediateActivations == null)
+            throw new ArgumentNullException(nameof(teacherIntermediateActivations));
+
+        var studentMatrix = studentIntermediateActivations.Get(_embeddingLayerName);
+        var teacherMatrix = teacherIntermediateActivations.Get(_embeddingLayerName);
+
+        // If layer not found, return zero loss
+        if (studentMatrix == null || teacherMatrix == null)
+            return NumOps.Zero;
+
+        // Validate dimensions match
+        if (studentMatrix.Rows != teacherMatrix.Rows || studentMatrix.Columns != teacherMatrix.Columns)
+        {
+            throw new ArgumentException(
+                $"Student and teacher embedding dimensions must match for layer '{_embeddingLayerName}'. " +
+                $"Student: [{studentMatrix.Rows} x {studentMatrix.Columns}], " +
+                $"Teacher: [{teacherMatrix.Rows} x {teacherMatrix.Columns}]");
+        }
+
+        int batchSize = studentMatrix.Rows;
+        if (batchSize == 0)
+            return NumOps.Zero;
+
+        // Convert matrices to vector arrays for contrastive loss computation
+        var studentEmbeddings = new Vector<T>[batchSize];
+        var teacherEmbeddings = new Vector<T>[batchSize];
+
+        for (int i = 0; i < batchSize; i++)
+        {
+            studentEmbeddings[i] = studentMatrix.GetRow(i);
+            teacherEmbeddings[i] = teacherMatrix.GetRow(i);
+        }
+
+        // Use NTXent mode since we don't have labels in IntermediateActivations
+        T contrastiveLoss = ComputeNTXentLoss(studentEmbeddings, teacherEmbeddings);
+
+        // Apply contrastive weight
+        return NumOps.Multiply(contrastiveLoss, NumOps.FromDouble(_contrastiveWeight));
     }
 
     /// <summary>
