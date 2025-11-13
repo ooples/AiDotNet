@@ -294,7 +294,7 @@ public void OperationName_AutodiffGradients_MatchNumericalGradients()
 
 ## Current Branch Status
 
-```
+```bash
 branch: claude/autodiff-layer-integration-011CV1K5xX5dTYfGRXKXodCN
 status: Clean, all changes committed and pushed
 latest commit: "feat: Update UpsamplingLayer to use Upsample operation"
