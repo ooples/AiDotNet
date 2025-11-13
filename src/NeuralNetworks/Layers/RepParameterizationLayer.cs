@@ -18,7 +18,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
 /// - It remembers how it generated these samples so it can learn during training
 /// 
 /// For example, in a VAE generating faces:
-/// - Input might represent "average nose size is 5 with variation of ±2"
+/// - Input might represent "average nose size is 5 with variation of Â±2"
 /// - This layer randomly picks a specific nose size (like 6.3) based on those statistics
 /// - But it does this in a way that allows the network to learn better statistics
 /// 
@@ -206,6 +206,18 @@ public class RepParameterizationLayer<T> : LayerBase<T>
     /// </remarks>
     public override Tensor<T> Backward(Tensor<T> outputGradient)
     {
+        return UseAutodiff
+            ? BackwardViaAutodiff(outputGradient)
+            : BackwardManual(outputGradient);
+    }
+
+    /// <summary>
+    /// Manual backward pass implementation using optimized gradient calculations.
+    /// </summary>
+    /// <param name="outputGradient">The gradient of the loss with respect to the layer's output.</param>
+    /// <returns>The gradient of the loss with respect to the layer's input.</returns>
+    private Tensor<T> BackwardManual(Tensor<T> outputGradient)
+    {
         if (_lastMean == null || _lastLogVar == null || _lastEpsilon == null)
             throw new InvalidOperationException("Forward pass must be called before backward pass.");
         int batchSize = outputGradient.Shape[0];
@@ -229,6 +241,117 @@ public class RepParameterizationLayer<T> : LayerBase<T>
         }
         return inputGradient;
     }
+
+    /// <summary>
+    /// Backward pass implementation using automatic differentiation.
+    /// </summary>
+    /// <param name="outputGradient">The gradient of the loss with respect to the layer's output.</param>
+    /// <returns>The gradient of the loss with respect to the layer's input.</returns>
+    /// <remarks>
+    /// <para>
+    /// This method uses automatic differentiation to compute gradients through the reparameterization trick.
+    /// The operations (Exp, Multiply, Add) are all available in TensorOperations.
+    /// </para>
+    /// </remarks>
+    private Tensor<T> BackwardViaAutodiff(Tensor<T> outputGradient)
+    {
+        if (_lastMean == null || _lastLogVar == null || _lastEpsilon == null)
+            throw new InvalidOperationException("Forward pass must be called before backward pass.");
+
+        int batchSize = _lastMean.Shape[0];
+        int latentSize = _lastMean.Shape[1];
+
+        // Create computation nodes for mean, logvar, and epsilon
+        var meanNode = Autodiff.TensorOperations<T>.Variable(
+            _lastMean,
+            "mean",
+            requiresGradient: true);
+
+        var logVarNode = Autodiff.TensorOperations<T>.Variable(
+            _lastLogVar,
+            "logvar",
+            requiresGradient: true);
+
+        var epsilonNode = Autodiff.TensorOperations<T>.Variable(
+            _lastEpsilon,
+            "epsilon",
+            requiresGradient: false);  // epsilon is random, no gradient needed
+
+        // Forward pass: output = mean + exp(logvar * 0.5) * epsilon
+        // Step 1: logvar * 0.5
+        var halfConstant = new Tensor<T>(_lastLogVar.Shape);
+        for (int i = 0; i < halfConstant.Length; i++)
+            halfConstant[i] = NumOps.FromDouble(0.5);
+        var halfNode = Autodiff.TensorOperations<T>.Constant(halfConstant);
+        var logVarHalfNode = Autodiff.TensorOperations<T>.ElementwiseMultiply(logVarNode, halfNode);
+
+        // Step 2: exp(logvar * 0.5) = std
+        var stdNode = Autodiff.TensorOperations<T>.Exp(logVarHalfNode);
+
+        // Step 3: std * epsilon
+        var stdEpsilonNode = Autodiff.TensorOperations<T>.ElementwiseMultiply(stdNode, epsilonNode);
+
+        // Step 4: mean + std * epsilon
+        var outputNode = Autodiff.TensorOperations<T>.Add(meanNode, stdEpsilonNode);
+
+        // Set the output gradient
+        outputNode.Gradient = outputGradient;
+
+        // Perform backward pass
+        var topoOrder = GetTopologicalOrder(outputNode);
+        for (int i = topoOrder.Count - 1; i >= 0; i--)
+        {
+            var node = topoOrder[i];
+            if (node.RequiresGradient && node.BackwardFunction != null && node.Gradient != null)
+            {
+                node.BackwardFunction(node.Gradient);
+            }
+        }
+
+        // Reconstruct input gradient by concatenating mean and logvar gradients
+        var inputGradient = new Tensor<T>([batchSize, latentSize * 2]);
+        var meanGrad = meanNode.Gradient ?? throw new InvalidOperationException("Mean gradient not computed");
+        var logVarGrad = logVarNode.Gradient ?? throw new InvalidOperationException("LogVar gradient not computed");
+
+        for (int i = 0; i < batchSize; i++)
+        {
+            for (int j = 0; j < latentSize; j++)
+            {
+                inputGradient[i, j] = meanGrad[i, j];  // First half: mean gradients
+                inputGradient[i, j + latentSize] = logVarGrad[i, j];  // Second half: logvar gradients
+            }
+        }
+
+        return inputGradient;
+    }
+
+    /// <summary>
+    /// Gets the computation nodes in topological order for backward pass.
+    /// </summary>
+    /// <param name="outputNode">The output node to start from.</param>
+    /// <returns>List of nodes in topological order.</returns>
+    private List<Autodiff.ComputationNode<T>> GetTopologicalOrder(Autodiff.ComputationNode<T> outputNode)
+    {
+        var visited = new HashSet<Autodiff.ComputationNode<T>>();
+        var order = new List<Autodiff.ComputationNode<T>>();
+
+        void Visit(Autodiff.ComputationNode<T> node)
+        {
+            if (visited.Contains(node)) return;
+            visited.Add(node);
+
+            foreach (var parent in node.Parents)
+            {
+                Visit(parent);
+            }
+
+            order.Add(node);
+        }
+
+        Visit(outputNode);
+        return order;
+    }
+
 
     /// <summary>
     /// Updates the parameters of the reparameterization layer.
