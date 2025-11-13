@@ -266,14 +266,14 @@ public class DDPGAgent<T> : DeepReinforcementLearningAgentBase<T>
             // Actor loss is negative Q-value (we want to maximize Q)
             totalLoss = NumOps.Subtract(totalLoss, q);
 
-            // Simplified gradient computation for actor
-            var gradOutput = new Vector<T>(_options.ActionSize);
-            for (int i = 0; i < gradOutput.Length; i++)
-            {
-                gradOutput[i] = NumOps.Multiply(NumOps.FromDouble(-0.01), q);
-            }
-
-            _actorNetwork.Backward(gradOutput);
+            // TODO: Implement proper deterministic policy gradient
+            // The correct approach is:
+            // 1. Backpropagate dQ/da through critic network (starting from Q output)
+            // 2. Feed that gradient into actor's backward pass
+            // Current placeholder gradient (-0.01 * q for all dimensions) doesn't
+            // provide any directional information for improving the policy
+            throw new NotImplementedException(
+                "DDPG actor update requires backpropagating ∂Q/∂a through critic network.");
         }
 
         // Update actor weights
