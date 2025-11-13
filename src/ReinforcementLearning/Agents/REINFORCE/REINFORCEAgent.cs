@@ -216,12 +216,52 @@ public class REINFORCEAgent<T> : DeepReinforcementLearningAgentBase<T>
             var loss = NumOps.Multiply(NumOps.Negate(logProb), returnVal);
             totalLoss = NumOps.Add(totalLoss, loss);
 
-            // TODO: Implement proper REINFORCE gradient: ∇θ log π(a|s) * G_t
-            // This requires computing the gradient of log-probability with respect to policy parameters
-            // The current placeholder gradient does not depend on the chosen action or policy output
-            throw new NotImplementedException(
-                "REINFORCE policy gradient requires proper implementation of ∇θ log π(a|s). " +
-                "Current placeholder gradient provides no learning signal.");
+            // Compute output gradient for REINFORCE: ∇ loss w.r.t. policy output
+            // For discrete: gradient is -G_t * (1_{a=a_t} - π(a|s)) for each action
+            // For continuous: gradient depends on distribution type
+            var policyOutput = _policyNetwork.Forward(state);
+            var outputGradient = new Vector<T>(policyOutput.Length);
+            
+            if (_options.IsContinuous)
+            {
+                // Continuous action space: Gaussian policy with mean and log_std
+                // Output is [mean_1, ..., mean_n, log_std_1, ..., log_std_n]
+                int actionSize = _options.ActionSize;
+                for (int i = 0; i < actionSize; i++)
+                {
+                    var mean = policyOutput[i];
+                    var logStd = policyOutput[actionSize + i];
+                    var std = MathHelper.Exp(logStd);
+                    
+                    // Gradient of -log π(a|s) * G_t w.r.t. mean: -(a - μ) / σ² * G_t
+                    var actionDiff = NumOps.Subtract(action[i], mean);
+                    var stdSquared = NumOps.Multiply(std, std);
+                    outputGradient[i] = NumOps.Negate(
+                        NumOps.Multiply(returnVal, NumOps.Divide(actionDiff, stdSquared)));
+                    
+                    // Gradient w.r.t. log_std: -((a-μ)² / σ² - 1) * G_t
+                    var normalizedDiff = NumOps.Divide(actionDiff, std);
+                    var term = NumOps.Subtract(NumOps.Multiply(normalizedDiff, normalizedDiff), NumOps.One);
+                    outputGradient[actionSize + i] = NumOps.Negate(NumOps.Multiply(returnVal, term));
+                }
+            }
+            else
+            {
+                // Discrete action space: softmax policy
+                // Gradient: -G_t * (1_{a=a_t} - softmax(logits))
+                var softmax = ComputeSoftmax(policyOutput);
+                int selectedAction = GetDiscreteAction(action);
+                
+                for (int i = 0; i < policyOutput.Length; i++)
+                {
+                    var indicator = (i == selectedAction) ? NumOps.One : NumOps.Zero;
+                    var grad = NumOps.Subtract(indicator, softmax[i]);
+                    outputGradient[i] = NumOps.Negate(NumOps.Multiply(returnVal, grad));
+                }
+            }
+            
+            // Backpropagate through policy network
+            _policyNetwork.Backward(outputGradient);
         }
 
         // Average loss
@@ -439,4 +479,42 @@ public class REINFORCEAgent<T> : DeepReinforcementLearningAgentBase<T>
         }
         return maxIndex;
     }
+
+    private Vector<T> ComputeSoftmax(Vector<T> logits)
+    {
+        var softmax = new Vector<T>(logits.Length);
+        T maxLogit = logits[0];
+        for (int i = 1; i < logits.Length; i++)
+        {
+            if (NumOps.Compare(logits[i], maxLogit) > 0)
+                maxLogit = logits[i];
+        }
+        
+        T sumExp = NumOps.Zero;
+        for (int i = 0; i < logits.Length; i++)
+        {
+            var exp = MathHelper.Exp(NumOps.Subtract(logits[i], maxLogit));
+            softmax[i] = exp;
+            sumExp = NumOps.Add(sumExp, exp);
+        }
+        
+        for (int i = 0; i < softmax.Length; i++)
+        {
+            softmax[i] = NumOps.Divide(softmax[i], sumExp);
+        }
+        
+        return softmax;
+    }
+    
+    private int GetDiscreteAction(Vector<T> action)
+    {
+        // Find the index of the action (assumes one-hot encoding or argmax)
+        for (int i = 0; i < action.Length; i++)
+        {
+            if (NumOps.Compare(action[i], NumOps.FromDouble(0.5)) > 0)
+                return i;
+        }
+        return 0;
+    }
+
 }
