@@ -41,45 +41,56 @@ public class NeuronSelectivityDistillationStrategy<T> : DistillationStrategyBase
         _metric = metric;
     }
 
-    public override T ComputeLoss(Vector<T> studentOutput, Vector<T> teacherOutput, Vector<T>? trueLabels = null)
+    public override T ComputeLoss(Matrix<T> studentBatchOutput, Matrix<T> teacherBatchOutput, Matrix<T>? trueLabelsBatch = null)
     {
-        ValidateOutputDimensions(studentOutput, teacherOutput, v => v.Length);
+        ValidateOutputDimensions(studentBatchOutput, teacherBatchOutput);
+        ValidateLabelDimensions(studentBatchOutput, trueLabelsBatch);
 
         // NOTE: This method computes ONLY the standard distillation loss from final layer outputs.
         // Neuron selectivity requires batch-level intermediate activations, which cannot be computed
-        // from single-sample final outputs. To use neuron selectivity distillation:
+        // from final outputs alone. To use neuron selectivity distillation:
         //   1. Collect intermediate layer activations for an entire batch
         //   2. Call ComputeSelectivityLoss() with batch activations
         //   3. Manually combine: totalLoss = standardLoss + selectivityLoss
         // See ComputeSelectivityLoss() documentation for details.
 
-        // Standard distillation loss (soft targets with temperature scaling)
-        var studentSoft = Softmax(studentOutput, Temperature);
-        var teacherSoft = Softmax(teacherOutput, Temperature);
-        var softLoss = KLDivergence(teacherSoft, studentSoft);
-        softLoss = NumOps.Multiply(softLoss, NumOps.FromDouble(Temperature * Temperature));
+        int batchSize = studentBatchOutput.RowCount;
+        T totalLoss = NumOps.Zero;
 
-        T finalLoss;
-        if (trueLabels != null)
+        for (int r = 0; r < batchSize; r++)
         {
-            ValidateLabelDimensions(studentOutput, trueLabels, v => v.Length);
-            var studentProbs = Softmax(studentOutput, 1.0);
-            var hardLoss = CrossEntropy(studentProbs, trueLabels);
-            finalLoss = NumOps.Add(
-                NumOps.Multiply(NumOps.FromDouble(Alpha), hardLoss),
-                NumOps.Multiply(NumOps.FromDouble(1.0 - Alpha), softLoss));
-        }
-        else
-        {
-            finalLoss = softLoss;
+            Vector<T> studentRow = studentBatchOutput.GetRow(r);
+            Vector<T> teacherRow = teacherBatchOutput.GetRow(r);
+            Vector<T>? labelRow = trueLabelsBatch?.GetRow(r);
+
+            // Standard distillation loss (soft targets with temperature scaling)
+            var studentSoft = Softmax(studentRow, Temperature);
+            var teacherSoft = Softmax(teacherRow, Temperature);
+            var softLoss = KLDivergence(teacherSoft, studentSoft);
+            softLoss = NumOps.Multiply(softLoss, NumOps.FromDouble(Temperature * Temperature));
+
+            if (labelRow != null)
+            {
+                var studentProbs = Softmax(studentRow, 1.0);
+                var hardLoss = CrossEntropy(studentProbs, labelRow);
+                var sampleLoss = NumOps.Add(
+                    NumOps.Multiply(NumOps.FromDouble(Alpha), hardLoss),
+                    NumOps.Multiply(NumOps.FromDouble(1.0 - Alpha), softLoss));
+                totalLoss = NumOps.Add(totalLoss, sampleLoss);
+            }
+            else
+            {
+                totalLoss = NumOps.Add(totalLoss, softLoss);
+            }
         }
 
-        return finalLoss;
+        return NumOps.Divide(totalLoss, NumOps.FromDouble(batchSize));
     }
 
-    public override Vector<T> ComputeGradient(Vector<T> studentOutput, Vector<T> teacherOutput, Vector<T>? trueLabels = null)
+    public override Matrix<T> ComputeGradient(Matrix<T> studentBatchOutput, Matrix<T> teacherBatchOutput, Matrix<T>? trueLabelsBatch = null)
     {
-        ValidateOutputDimensions(studentOutput, teacherOutput, v => v.Length);
+        ValidateOutputDimensions(studentBatchOutput, teacherBatchOutput);
+        ValidateLabelDimensions(studentBatchOutput, trueLabelsBatch);
 
         // NOTE: This method computes ONLY the standard distillation gradient for final layer outputs.
         // Neuron selectivity gradients require batch-level intermediate activations and are computed
@@ -89,44 +100,61 @@ public class NeuronSelectivityDistillationStrategy<T> : DistillationStrategyBase
         //   3. Combine with gradients from this method
         // The framework's trainer handles this automatically when using ComputeSelectivityLoss().
 
-        int n = studentOutput.Length;
-        var gradient = new Vector<T>(n);
+        int batchSize = studentBatchOutput.RowCount;
+        int numClasses = studentBatchOutput.ColumnCount;
+        var gradient = new Matrix<T>(batchSize, numClasses);
 
-        var studentSoft = Softmax(studentOutput, Temperature);
-        var teacherSoft = Softmax(teacherOutput, Temperature);
-
-        if (trueLabels != null)
+        for (int r = 0; r < batchSize; r++)
         {
-            ValidateLabelDimensions(studentOutput, trueLabels, v => v.Length);
-            var studentProbs = Softmax(studentOutput, 1.0);
+            Vector<T> studentRow = studentBatchOutput.GetRow(r);
+            Vector<T> teacherRow = teacherBatchOutput.GetRow(r);
+            Vector<T>? labelRow = trueLabelsBatch?.GetRow(r);
 
-            for (int i = 0; i < n; i++)
+            var studentSoft = Softmax(studentRow, Temperature);
+            var teacherSoft = Softmax(teacherRow, Temperature);
+
+            if (labelRow != null)
             {
-                // Soft gradient (temperature-scaled)
-                var softGrad = NumOps.Subtract(studentSoft[i], teacherSoft[i]);
-                softGrad = NumOps.Multiply(softGrad, NumOps.FromDouble(Temperature * Temperature));
+                var studentProbs = Softmax(studentRow, 1.0);
 
-                // Hard gradient
-                var hardGrad = NumOps.Subtract(studentProbs[i], trueLabels[i]);
+                for (int c = 0; c < numClasses; c++)
+                {
+                    // Soft gradient (temperature-scaled)
+                    var softGrad = NumOps.Subtract(studentSoft[c], teacherSoft[c]);
+                    softGrad = NumOps.Multiply(softGrad, NumOps.FromDouble(Temperature * Temperature));
 
-                // Combined gradient: Alpha * hardGrad + (1 - Alpha) * softGrad
-                var combined = NumOps.Add(
-                    NumOps.Multiply(NumOps.FromDouble(Alpha), hardGrad),
-                    NumOps.Multiply(NumOps.FromDouble(1.0 - Alpha), softGrad));
+                    // Hard gradient
+                    var hardGrad = NumOps.Subtract(studentProbs[c], labelRow[c]);
 
-                // Apply selectivity weight reduction exactly once
-                gradient[i] = NumOps.Multiply(combined, NumOps.FromDouble(1.0 - _selectivityWeight));
+                    // Combined gradient: Alpha * hardGrad + (1 - Alpha) * softGrad
+                    var combined = NumOps.Add(
+                        NumOps.Multiply(NumOps.FromDouble(Alpha), hardGrad),
+                        NumOps.Multiply(NumOps.FromDouble(1.0 - Alpha), softGrad));
+
+                    // Apply selectivity weight reduction exactly once
+                    gradient[r, c] = NumOps.Multiply(combined, NumOps.FromDouble(1.0 - _selectivityWeight));
+                }
+            }
+            else
+            {
+                for (int c = 0; c < numClasses; c++)
+                {
+                    // Soft gradient (temperature-scaled)
+                    var softGrad = NumOps.Subtract(studentSoft[c], teacherSoft[c]);
+                    softGrad = NumOps.Multiply(softGrad, NumOps.FromDouble(Temperature * Temperature));
+
+                    gradient[r, c] = softGrad;
+                }
             }
         }
-        else
-        {
-            for (int i = 0; i < n; i++)
-            {
-                // Soft gradient (temperature-scaled)
-                var softGrad = NumOps.Subtract(studentSoft[i], teacherSoft[i]);
-                softGrad = NumOps.Multiply(softGrad, NumOps.FromDouble(Temperature * Temperature));
 
-                gradient[i] = softGrad;
+        // Average gradients over batch
+        T oneOverBatchSize = NumOps.Divide(NumOps.One, NumOps.FromDouble(batchSize));
+        for (int r = 0; r < batchSize; r++)
+        {
+            for (int c = 0; c < numClasses; c++)
+            {
+                gradient[r, c] = NumOps.Multiply(gradient[r, c], oneOverBatchSize);
             }
         }
 
