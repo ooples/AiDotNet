@@ -1035,7 +1035,18 @@ public class PredictionModelBuilder<T, TInput, TOutput> : IPredictionModelBuilde
             }
 
             // Step 5: Define forward and backward functions
-            Func<Vector<T>, Vector<T>> studentForward = input => vectorStudentModel.Predict(input);
+            // Forward function must save activations for backprop
+            Func<Vector<T>, Vector<T>> studentForward = input =>
+            {
+                if (vectorStudentModel is NeuralNetworkModel<T> nnModel)
+                {
+                    // Use ForwardWithMemory() to save activations for backpropagation
+                    var output = nnModel.Network.ForwardWithMemory(Tensor<T>.FromVector(input));
+                    return output.ToVector();
+                }
+                // Fallback for non-NeuralNetworkModel (shouldn't happen given validation above)
+                return vectorStudentModel.Predict(input);
+            };
 
             // Prepare backward function for parameter updates during distillation training
             // This function receives output gradients from distillation strategy and applies them to the model
