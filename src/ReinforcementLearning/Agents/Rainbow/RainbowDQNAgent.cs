@@ -110,7 +110,7 @@ public class RainbowDQNAgent<T> : DeepReinforcementLearningAgentBase<T>
 
     private void InitializeReplayBuffer()
     {
-        _replayBuffer = new PrioritizedReplayBuffer<T>(Options.ReplayBufferSize);
+        _replayBuffer = new PrioritizedReplayBuffer<T>(_options.ReplayBufferSize);
     }
 
     public override Vector<T> SelectAction(Vector<T> state, bool training = true)
@@ -192,7 +192,7 @@ public class RainbowDQNAgent<T> : DeepReinforcementLearningAgentBase<T>
         // Decay epsilon
         if (!_options.UseNoisyNetworks)
         {
-            _epsilon = Math.Max(Options.EpsilonEnd, _epsilon * Options.EpsilonDecay);
+            _epsilon = Math.Max(_options.EpsilonEnd, _epsilon * _options.EpsilonDecay);
         }
 
         // Increase beta for importance sampling
@@ -224,14 +224,14 @@ public class RainbowDQNAgent<T> : DeepReinforcementLearningAgentBase<T>
 
     public override T Train()
     {
-        if (_replayBuffer.Count < Options.WarmupSteps || _replayBuffer.Count < Options.BatchSize)
+        if (_replayBuffer.Count < _options.WarmupSteps || _replayBuffer.Count < _options.BatchSize)
         {
             return NumOps.Zero;
         }
 
         // Prioritized experience replay
         var (batch, indices, weights) = _replayBuffer.Sample(
-            Options.BatchSize,
+            _options.BatchSize,
             _options.PriorityAlpha,
             _beta);
 
@@ -292,7 +292,7 @@ public class RainbowDQNAgent<T> : DeepReinforcementLearningAgentBase<T>
         _replayBuffer.UpdatePriorities(indices, priorities, _options.PriorityEpsilon);
 
         // Update target network
-        if (_stepCount % Options.TargetUpdateFrequency == 0)
+        if (_stepCount % _options.TargetUpdateFrequency == 0)
         {
             CopyNetworkWeights(_onlineNetwork, _targetNetwork);
         }

@@ -39,8 +39,8 @@ public class QMIXOptions<T> : ReinforcementLearningOptions<T>
     public int GlobalStateSize { get; init; }  // Global state for mixing network
 
     // Network architectures
-    public List<int> AgentHiddenLayers { get; init; } = [64];
-    public List<int> MixingHiddenLayers { get; init; } = [32];
+    public List<int> AgentHiddenLayers { get; init; } = new List<int> { 64 };
+    public List<int> MixingHiddenLayers { get; init; } = new List<int> { 32 };
 
     /// <summary>
     /// The optimizer used for updating network parameters. If null, Adam optimizer will be used by default.

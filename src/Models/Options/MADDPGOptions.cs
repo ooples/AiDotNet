@@ -43,8 +43,8 @@ public class MADDPGOptions<T> : ReinforcementLearningOptions<T>
     // MADDPG-specific
     public double ExplorationNoise { get; init; } = 0.1;
 
-    public List<int> ActorHiddenLayers { get; init; } = [128, 128];
-    public List<int> CriticHiddenLayers { get; init; } = [128, 128];
+    public List<int> ActorHiddenLayers { get; init; } = new List<int> { 128, 128 };
+    public List<int> CriticHiddenLayers { get; init; } = new List<int> { 128, 128 };
 
     /// <summary>
     /// The optimizer used for updating network parameters. If null, Adam optimizer will be used by default.

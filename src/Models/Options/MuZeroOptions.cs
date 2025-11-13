@@ -38,9 +38,9 @@ public class MuZeroOptions<T> : ReinforcementLearningOptions<T>
 
     // Network architecture
     public int LatentStateSize { get; init; } = 256;
-    public List<int> RepresentationLayers { get; init; } = [256, 256];
-    public List<int> DynamicsLayers { get; init; } = [256, 256];
-    public List<int> PredictionLayers { get; init; } = [256, 256];
+    public List<int> RepresentationLayers { get; init; } = new List<int> { 256, 256 };
+    public List<int> DynamicsLayers { get; init; } = new List<int> { 256, 256 };
+    public List<int> PredictionLayers { get; init; } = new List<int> { 256, 256 };
 
     // MCTS parameters
     public int NumSimulations { get; init; } = 50;

@@ -40,7 +40,7 @@ public class WorldModelsOptions<T> : ReinforcementLearningOptions<T>
 
     // VAE parameters
     public int LatentSize { get; init; } = 32;
-    public List<int> VAEEncoderChannels { get; init; } = [32, 64, 128, 256];
+    public List<int> VAEEncoderChannels { get; init; } = new List<int> { 32, 64, 128, 256 };
     public double VAEBeta { get; init; } = 1.0;  // KL weight
 
     // MDN-RNN parameters
@@ -50,7 +50,7 @@ public class WorldModelsOptions<T> : ReinforcementLearningOptions<T>
     public double Temperature { get; init; } = 1.0;
 
     // Controller parameters
-    public List<int> ControllerLayers { get; init; } = [32];
+    public List<int> ControllerLayers { get; init; } = new List<int> { 32 };
 
     // Training parameters
     public int VAEEpochs { get; init; } = 10;

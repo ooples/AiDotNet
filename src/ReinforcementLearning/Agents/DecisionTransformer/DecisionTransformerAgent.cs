@@ -270,7 +270,7 @@ public class DecisionTransformerAgent<T> : DeepReinforcementLearningAgentBase<T>
 
     public override void ResetEpisode()
     {
-        _currentContext = new SequenceContext();
+        _currentContext = new SequenceContext<T>();
     }
 
     public override Vector<T> Predict(Vector<T> input)
@@ -287,5 +287,99 @@ public class DecisionTransformerAgent<T> : DeepReinforcementLearningAgentBase<T>
     {
         Train();
         return Task.CompletedTask;
+    }
+
+    public override ModelMetadata<T> GetModelMetadata()
+    {
+        return new ModelMetadata<T>
+        {
+            ModelType = "DecisionTransformer",
+            InputSize = _options.StateSize,
+            OutputSize = _options.ActionSize,
+            ParameterCount = ParameterCount
+        };
+    }
+
+    public override int FeatureCount => _options.StateSize;
+
+    public override byte[] Serialize()
+    {
+        throw new NotImplementedException("DecisionTransformer serialization not yet implemented");
+    }
+
+    public override void Deserialize(byte[] data)
+    {
+        throw new NotImplementedException("DecisionTransformer deserialization not yet implemented");
+    }
+
+    public override Matrix<T> GetParameters()
+    {
+        var params = _transformerNetwork.GetFlattenedParameters();
+        return new Matrix<T>(new[] { params });
+    }
+
+    public override void SetParameters(Matrix<T> parameters)
+    {
+        var params = new Vector<T>(parameters.Columns);
+        for (int i = 0; i < parameters.Columns; i++)
+        {
+            params[i] = parameters[0, i];
+        }
+        _transformerNetwork.UpdateParameters(params);
+    }
+
+    public override IFullModel<T, Vector<T>, Vector<T>> Clone()
+    {
+        return new DecisionTransformerAgent<T>(_options, _optimizer);
+    }
+
+    public override (Matrix<T> Gradients, T Loss) ComputeGradients(
+        Vector<T> input,
+        Vector<T> target,
+        ILossFunction<T>? lossFunction = null)
+    {
+        var prediction = Predict(input);
+        var usedLossFunction = lossFunction ?? LossFunction;
+        var loss = usedLossFunction.ComputeLoss(new Matrix<T>(new[] { prediction }), new Matrix<T>(new[] { target }));
+
+        var gradient = usedLossFunction.ComputeDerivative(new Matrix<T>(new[] { prediction }), new Matrix<T>(new[] { target }));
+        return (gradient, loss);
+    }
+
+    public override void ApplyGradients(Matrix<T> gradients, T learningRate)
+    {
+        _transformerNetwork.Backward(new Vector<T>(gradients.GetRow(0)));
+        _transformerNetwork.UpdateWeights(learningRate);
+    }
+
+    public override void Save(string filepath)
+    {
+        var data = Serialize();
+        System.IO.File.WriteAllBytes(filepath, data);
+    }
+
+    public override void Load(string filepath)
+    {
+        var data = System.IO.File.ReadAllBytes(filepath);
+        Deserialize(data);
+    }
+}
+
+/// <summary>
+/// Helper class to maintain sequence context for Decision Transformer.
+/// </summary>
+internal class SequenceContext<T>
+{
+    public List<Vector<T>> States { get; set; }
+    public List<Vector<T>> Actions { get; set; }
+    public List<T> ReturnsToGo { get; set; }
+
+    public int Length => States.Count;
+
+    public SequenceContext()
+    {
+        States = new List<Vector<T>>();
+        Actions = new List<Vector<T>>();
+        ReturnsToGo = new List<T>();
     }
 }

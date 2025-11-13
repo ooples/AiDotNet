@@ -430,4 +430,100 @@ public class TRPOAgent<T> : DeepReinforcementLearningAgentBase<T>
         Train();
         return Task.CompletedTask;
     }
+
+    public override ModelMetadata<T> GetModelMetadata()
+    {
+        return new ModelMetadata<T>
+        {
+            ModelType = "TRPO",
+            InputSize = _options.StateSize,
+            OutputSize = _options.ActionSize,
+            ParameterCount = ParameterCount
+        };
+    }
+
+    public override int FeatureCount => _options.StateSize;
+
+    public override byte[] Serialize()
+    {
+        throw new NotImplementedException("TRPO serialization not yet implemented");
+    }
+
+    public override void Deserialize(byte[] data)
+    {
+        throw new NotImplementedException("TRPO deserialization not yet implemented");
+    }
+
+    public override Matrix<T> GetParameters()
+    {
+        var policyParams = _policyNetwork.GetFlattenedParameters();
+        var valueParams = _valueNetwork.GetFlattenedParameters();
+
+        var combinedParams = new Vector<T>(policyParams.Length + valueParams.Length);
+        for (int i = 0; i < policyParams.Length; i++)
+        {
+            combinedParams[i] = policyParams[i];
+        }
+        for (int i = 0; i < valueParams.Length; i++)
+        {
+            combinedParams[policyParams.Length + i] = valueParams[i];
+        }
+
+        return new Matrix<T>(new[] { combinedParams });
+    }
+
+    public override void SetParameters(Matrix<T> parameters)
+    {
+        int policyParamCount = _policyNetwork.ParameterCount;
+        var policyParams = new Vector<T>(policyParamCount);
+        var valueParams = new Vector<T>(parameters.Columns - policyParamCount);
+
+        for (int i = 0; i < policyParamCount; i++)
+        {
+            policyParams[i] = parameters[0, i];
+        }
+        for (int i = 0; i < valueParams.Length; i++)
+        {
+            valueParams[i] = parameters[0, policyParamCount + i];
+        }
+
+        _policyNetwork.UpdateParameters(policyParams);
+        _valueNetwork.UpdateParameters(valueParams);
+    }
+
+    public override IFullModel<T, Vector<T>, Vector<T>> Clone()
+    {
+        return new TRPOAgent<T>(_options, _optimizer);
+    }
+
+    public override (Matrix<T> Gradients, T Loss) ComputeGradients(
+        Vector<T> input,
+        Vector<T> target,
+        ILossFunction<T>? lossFunction = null)
+    {
+        var prediction = Predict(input);
+        var usedLossFunction = lossFunction ?? LossFunction;
+        var loss = usedLossFunction.ComputeLoss(new Matrix<T>(new[] { prediction }), new Matrix<T>(new[] { target }));
+
+        var gradient = usedLossFunction.ComputeDerivative(new Matrix<T>(new[] { prediction }), new Matrix<T>(new[] { target }));
+        return (gradient, loss);
+    }
+
+    public override void ApplyGradients(Matrix<T> gradients, T learningRate)
+    {
+        _policyNetwork.Backward(new Vector<T>(gradients.GetRow(0)));
+        _policyNetwork.UpdateWeights(learningRate);
+    }
+
+    public override void Save(string filepath)
+    {
+        var data = Serialize();
+        System.IO.File.WriteAllBytes(filepath, data);
+    }
+
+    public override void Load(string filepath)
+    {
+        var data = System.IO.File.ReadAllBytes(filepath);
+        Deserialize(data);
+    }
 }

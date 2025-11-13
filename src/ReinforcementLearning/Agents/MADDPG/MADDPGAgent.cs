@@ -421,4 +421,123 @@ public class MADDPGAgent<T> : DeepReinforcementLearningAgentBase<T>
         Train();
         return Task.CompletedTask;
     }
+
+    public override ModelMetadata<T> GetModelMetadata()
+    {
+        return new ModelMetadata<T>
+        {
+            ModelType = "MADDPG",
+            InputSize = _options.StateSize,
+            OutputSize = _options.ActionSize,
+            ParameterCount = ParameterCount
+        };
+    }
+
+    public override int FeatureCount => _options.StateSize;
+
+    public override byte[] Serialize()
+    {
+        throw new NotImplementedException("MADDPG serialization not yet implemented");
+    }
+
+    public override void Deserialize(byte[] data)
+    {
+        throw new NotImplementedException("MADDPG deserialization not yet implemented");
+    }
+
+    public override Matrix<T> GetParameters()
+    {
+        var allParams = new List<T>();
+
+        foreach (var network in _actorNetworks)
+        {
+            var netParams = network.GetFlattenedParameters();
+            for (int i = 0; i < netParams.Length; i++)
+            {
+                allParams.Add(netParams[i]);
+            }
+        }
+
+        foreach (var network in _criticNetworks)
+        {
+            var netParams = network.GetFlattenedParameters();
+            for (int i = 0; i < netParams.Length; i++)
+            {
+                allParams.Add(netParams[i]);
+            }
+        }
+
+        var paramVector = new Vector<T>(allParams.Count);
+        for (int i = 0; i < allParams.Count; i++)
+        {
+            paramVector[i] = allParams[i];
+        }
+
+        return new Matrix<T>(new[] { paramVector });
+    }
+
+    public override void SetParameters(Matrix<T> parameters)
+    {
+        int offset = 0;
+
+        foreach (var network in _actorNetworks)
+        {
+            int paramCount = network.ParameterCount;
+            var netParams = new Vector<T>(paramCount);
+            for (int i = 0; i < paramCount; i++)
+            {
+                netParams[i] = parameters[0, offset + i];
+            }
+            network.UpdateParameters(netParams);
+            offset += paramCount;
+        }
+
+        foreach (var network in _criticNetworks)
+        {
+            int paramCount = network.ParameterCount;
+            var netParams = new Vector<T>(paramCount);
+            for (int i = 0; i < paramCount; i++)
+            {
+                netParams[i] = parameters[0, offset + i];
+            }
+            network.UpdateParameters(netParams);
+            offset += paramCount;
+        }
+    }
+
+    public override IFullModel<T, Vector<T>, Vector<T>> Clone()
+    {
+        return new MADDPGAgent<T>(_options, _optimizer);
+    }
+
+    public override (Matrix<T> Gradients, T Loss) ComputeGradients(
+        Vector<T> input,
+        Vector<T> target,
+        ILossFunction<T>? lossFunction = null)
+    {
+        var prediction = Predict(input);
+        var usedLossFunction = lossFunction ?? LossFunction;
+        var loss = usedLossFunction.ComputeLoss(new Matrix<T>(new[] { prediction }), new Matrix<T>(new[] { target }));
+
+        var gradient = usedLossFunction.ComputeDerivative(new Matrix<T>(new[] { prediction }), new Matrix<T>(new[] { target }));
+        return (gradient, loss);
+    }
+
+    public override void ApplyGradients(Matrix<T> gradients, T learningRate)
+    {
+        _actorNetworks[0].Backward(new Vector<T>(gradients.GetRow(0)));
+        _actorNetworks[0].UpdateWeights(learningRate);
+    }
+
+    public override void Save(string filepath)
+    {
+        var data = Serialize();
+        System.IO.File.WriteAllBytes(filepath, data);
+    }
+
+    public override void Load(string filepath)
+    {
+        var data = System.IO.File.ReadAllBytes(filepath);
+        Deserialize(data);
+    }
 }
