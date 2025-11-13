@@ -315,7 +315,17 @@ public class DuelingDQNAgent<T> : DeepReinforcementLearningAgentBase<T>
     /// <inheritdoc/>
     public override void ApplyGradients(Matrix<T> gradients, T learningRate)
     {
-        _qNetwork.SetFlattenedParameters(gradients);
+        var currentParams = _qNetwork.GetFlattenedParameters();
+        var newParams = new Vector<T>(currentParams.Length);
+
+        for (int i = 0; i < currentParams.Length; i++)
+        {
+            var gradValue = (i < gradients.Rows) ? gradients[i, 0] : NumOps.Zero;
+            var update = NumOps.Multiply(learningRate, gradValue);
+            newParams[i] = NumOps.Subtract(currentParams[i], update);
+        }
+
+        _qNetwork.SetFlattenedParameters(newParams);
     }
 
     // Helper methods
