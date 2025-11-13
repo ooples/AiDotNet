@@ -7,6 +7,7 @@ using AiDotNet.NeuralNetworks.Layers;
 using AiDotNet.NeuralNetworks.Activations;
 using AiDotNet.ReinforcementLearning.ReplayBuffers;
 using AiDotNet.Helpers;
+using AiDotNet.Optimizers;
 
 namespace AiDotNet.ReinforcementLearning.Agents.MADDPG;
 
@@ -36,22 +37,31 @@ namespace AiDotNet.ReinforcementLearning.Agents.MADDPG;
 /// Examples: Robot swarms, traffic control, multi-player games
 /// </para>
 /// </remarks>
-public class MADDPGAgent<T> : ReinforcementLearningAgentBase<T>
+public class MADDPGAgent<T> : DeepReinforcementLearningAgentBase<T>
 {
     private readonly MADDPGOptions<T> _options;
+    private readonly IOptimizer<T, Vector<T>, Vector<T>> _optimizer;
 
     // Networks for each agent
-    private List<NeuralNetwork<T>> _actorNetworks;
-    private List<NeuralNetwork<T>> _targetActorNetworks;
-    private List<NeuralNetwork<T>> _criticNetworks;
-    private List<NeuralNetwork<T>> _targetCriticNetworks;
+    private List<INeuralNetwork<T>> _actorNetworks;
+    private List<INeuralNetwork<T>> _targetActorNetworks;
+    private List<INeuralNetwork<T>> _criticNetworks;
+    private List<INeuralNetwork<T>> _targetCriticNetworks;
 
     private ReplayBuffer<T> _replayBuffer;
     private int _stepCount;
 
-    public MADDPGAgent(MADDPGOptions<T> options) : base(options.StateSize, options.ActionSize)
+    public MADDPGAgent(MADDPGOptions<T> options, IOptimizer<T, Vector<T>, Vector<T>>? optimizer = null)
+        : base(options)
     {
-        _options = options;
+        _options = options ?? throw new ArgumentNullException(nameof(options));
+        _optimizer = optimizer ?? options.Optimizer ?? new AdamOptimizer<T, Vector<T>, Vector<T>>(this, new AdamOptimizerOptions<T, Vector<T>, Vector<T>>
+        {
+            LearningRate = 0.001,
+            Beta1 = 0.9,
+            Beta2 = 0.999,
+            Epsilon = 1e-8
+        });
         _stepCount = 0;
 
         InitializeNetworks();
@@ -60,10 +70,10 @@ public class MADDPGAgent<T> : ReinforcementLearningAgentBase<T>
 
     private void InitializeNetworks()
     {
-        _actorNetworks = new List<NeuralNetwork<T>>();
-        _targetActorNetworks = new List<NeuralNetwork<T>>();
-        _criticNetworks = new List<NeuralNetwork<T>>();
-        _targetCriticNetworks = new List<NeuralNetwork<T>>();
+        _actorNetworks = new List<INeuralNetwork<T>>();
+        _targetActorNetworks = new List<INeuralNetwork<T>>();
+        _criticNetworks = new List<INeuralNetwork<T>>();
+        _targetCriticNetworks = new List<INeuralNetwork<T>>();
 
         for (int i = 0; i < _options.NumAgents; i++)
         {
@@ -82,44 +92,67 @@ public class MADDPGAgent<T> : ReinforcementLearningAgentBase<T>
 
             _criticNetworks.Add(critic);
             _targetCriticNetworks.Add(targetCritic);
+
+            // Register networks with base class
+            Networks.Add(actor);
+            Networks.Add(targetActor);
+            Networks.Add(critic);
+            Networks.Add(targetCritic);
         }
     }
 
-    private NeuralNetwork<T> CreateActorNetwork()
+    private INeuralNetwork<T> CreateActorNetwork()
     {
-        var network = new NeuralNetwork<T>();
-        int previousSize = _options.StateSize;
-
-        foreach (var layerSize in _options.ActorHiddenLayers)
+        var architecture = new NeuralNetworkArchitecture<T>
         {
-            network.AddLayer(new DenseLayer<T>(previousSize, layerSize));
-            network.AddLayer(new ActivationLayer<T>(new ReLU<T>()));
-            previousSize = layerSize;
+            InputSize = _options.StateSize,
+            OutputSize = _options.ActionSize,
+            TaskType = TaskType.Regression
+        };
+
+        // Use LayerHelper to create production-ready network layers
+        var layers = LayerHelper<T>.CreateDefaultFeedForwardLayers(
+            architecture,
+            hiddenLayerCount: _options.ActorHiddenLayers.Count,
+            hiddenLayerSize: _options.ActorHiddenLayers.FirstOrDefault() > 0 ? _options.ActorHiddenLayers.First() : 128
+        ).ToList();
+
+        // Override final activation to Tanh for continuous actions
+        var lastLayer = layers[layers.Count - 1];
+        if (lastLayer is DenseLayer<T> denseLayer)
+        {
+            layers[layers.Count - 1] = new DenseLayer<T>(
+                denseLayer.GetWeights().Rows,
+                _options.ActionSize,
+                new TanhActivation<T>()
+            );
         }
 
-        network.AddLayer(new DenseLayer<T>(previousSize, _options.ActionSize));
-        network.AddLayer(new ActivationLayer<T>(new Tanh<T>()));
-
-        return network;
+        architecture.Layers = layers;
+        return new NeuralNetwork<T>(architecture, _options.LossFunction);
     }
 
-    private NeuralNetwork<T> CreateCriticNetwork()
+    private INeuralNetwork<T> CreateCriticNetwork()
     {
-        var network = new NeuralNetwork<T>();
         // Centralized critic: observes all agents' states and actions
         int inputSize = (_options.StateSize + _options.ActionSize) * _options.NumAgents;
-        int previousSize = inputSize;
 
-        foreach (var layerSize in _options.CriticHiddenLayers)
+        var architecture = new NeuralNetworkArchitecture<T>
         {
-            network.AddLayer(new DenseLayer<T>(previousSize, layerSize));
-            network.AddLayer(new ActivationLayer<T>(new ReLU<T>()));
-            previousSize = layerSize;
-        }
+            InputSize = inputSize,
+            OutputSize = 1,
+            TaskType = TaskType.Regression
+        };
 
-        network.AddLayer(new DenseLayer<T>(previousSize, 1));
+        // Use LayerHelper to create production-ready network layers
+        var layers = LayerHelper<T>.CreateDefaultFeedForwardLayers(
+            architecture,
+            hiddenLayerCount: _options.CriticHiddenLayers.Count,
+            hiddenLayerSize: _options.CriticHiddenLayers.FirstOrDefault() > 0 ? _options.CriticHiddenLayers.First() : 128
+        );
 
-        return network;
+        architecture.Layers = layers.ToList();
+        return new NeuralNetwork<T>(architecture, _options.LossFunction);
     }
 
     private void InitializeReplayBuffer()
@@ -299,58 +332,27 @@ public class MADDPGAgent<T> : ReinforcementLearningAgentBase<T>
         return NumOps.Divide(totalLoss, NumOps.FromDouble(batch.Count));
     }
 
-    private void SoftUpdateTargetNetwork(NeuralNetwork<T> source, NeuralNetwork<T> target)
+    private void SoftUpdateTargetNetwork(INeuralNetwork<T> source, INeuralNetwork<T> target)
     {
-        var sourceLayers = source.GetLayers();
-        var targetLayers = target.GetLayers();
+        var sourceParams = source.GetFlattenedParameters();
+        var targetParams = target.GetFlattenedParameters();
 
-        for (int i = 0; i < sourceLayers.Count; i++)
+        var oneMinusTau = NumOps.Subtract(NumOps.One, _options.TargetUpdateTau);
+
+        for (int i = 0; i < sourceParams.Length; i++)
         {
-            if (sourceLayers[i] is DenseLayer<T> sourceLayer && targetLayers[i] is DenseLayer<T> targetLayer)
-            {
-                var sourceWeights = sourceLayer.GetWeights();
-                var sourceBiases = sourceLayer.GetBiases();
-                var targetWeights = targetLayer.GetWeights();
-                var targetBiases = targetLayer.GetBiases();
-
-                var oneMinusTau = NumOps.Subtract(NumOps.One, _options.TargetUpdateTau);
-
-                for (int r = 0; r < targetWeights.Rows; r++)
-                {
-                    for (int c = 0; c < targetWeights.Columns; c++)
-                    {
-                        var sourceContrib = NumOps.Multiply(_options.TargetUpdateTau, sourceWeights[r, c]);
-                        var targetContrib = NumOps.Multiply(oneMinusTau, targetWeights[r, c]);
-                        targetWeights[r, c] = NumOps.Add(sourceContrib, targetContrib);
-                    }
-                }
-
-                for (int i = 0; i < targetBiases.Length; i++)
-                {
-                    var sourceContrib = NumOps.Multiply(_options.TargetUpdateTau, sourceBiases[i]);
-                    var targetContrib = NumOps.Multiply(oneMinusTau, targetBiases[i]);
-                    targetBiases[i] = NumOps.Add(sourceContrib, targetContrib);
-                }
-
-                targetLayer.SetWeights(targetWeights);
-                targetLayer.SetBiases(targetBiases);
-            }
+            var sourceContrib = NumOps.Multiply(_options.TargetUpdateTau, sourceParams[i]);
+            var targetContrib = NumOps.Multiply(oneMinusTau, targetParams[i]);
+            targetParams[i] = NumOps.Add(sourceContrib, targetContrib);
         }
+
+        target.UpdateParameters(targetParams);
     }
 
-    private void CopyNetworkWeights(NeuralNetwork<T> source, NeuralNetwork<T> target)
+    private void CopyNetworkWeights(INeuralNetwork<T> source, INeuralNetwork<T> target)
     {
-        var sourceLayers = source.GetLayers();
-        var targetLayers = target.GetLayers();
-
-        for (int i = 0; i < sourceLayers.Count; i++)
-        {
-            if (sourceLayers[i] is DenseLayer<T> sourceLayer && targetLayers[i] is DenseLayer<T> targetLayer)
-            {
-                targetLayer.SetWeights(sourceLayer.GetWeights().Clone());
-                targetLayer.SetBiases(sourceLayer.GetBiases().Clone());
-            }
-        }
+        var sourceParams = source.GetFlattenedParameters();
+        target.UpdateParameters(sourceParams);
     }
 
     private Vector<T> ConcatenateVectors(List<Vector<T>> vectors)

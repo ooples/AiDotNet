@@ -1,3 +1,4 @@
+using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
 using AiDotNet.Models;
 using AiDotNet.Models.Options;
@@ -5,6 +6,7 @@ using AiDotNet.NeuralNetworks;
 using AiDotNet.NeuralNetworks.Layers;
 using AiDotNet.NeuralNetworks.Activations;
 using AiDotNet.Helpers;
+using AiDotNet.Optimizers;
 
 namespace AiDotNet.ReinforcementLearning.Agents.DecisionTransformer;
 
@@ -34,19 +36,28 @@ namespace AiDotNet.ReinforcementLearning.Agents.DecisionTransformer;
 /// Famous for: Berkeley/Meta research simplifying RL to sequence modeling
 /// </para>
 /// </remarks>
-public class DecisionTransformerAgent<T> : ReinforcementLearningAgentBase<T>
+public class DecisionTransformerAgent<T> : DeepReinforcementLearningAgentBase<T>
 {
     private readonly DecisionTransformerOptions<T> _options;
+    private readonly IOptimizer<T, Vector<T>, Vector<T>> _optimizer;
 
-    private NeuralNetwork<T> _transformerNetwork;
+    private INeuralNetwork<T> _transformerNetwork;
     private List<(Vector<T> state, Vector<T> action, T reward, T returnToGo)> _trajectoryBuffer;
     private int _updateCount;
 
     private SequenceContext<T> _currentContext;
 
-    public DecisionTransformerAgent(DecisionTransformerOptions<T> options) : base(options.StateSize, options.ActionSize)
+    public DecisionTransformerAgent(DecisionTransformerOptions<T> options, IOptimizer<T, Vector<T>, Vector<T>>? optimizer = null)
+        : base(options)
     {
-        _options = options;
+        _options = options ?? throw new ArgumentNullException(nameof(options));
+        _optimizer = optimizer ?? options.Optimizer ?? new AdamOptimizer<T, Vector<T>, Vector<T>>(this, new AdamOptimizerOptions<T, Vector<T>, Vector<T>>
+        {
+            LearningRate = 0.001,
+            Beta1 = 0.9,
+            Beta2 = 0.999,
+            Epsilon = 1e-8
+        });
         _updateCount = 0;
         _trajectoryBuffer = new List<(Vector<T>, Vector<T>, T, T)>();
         _currentContext = new SequenceContext<T>();
@@ -56,31 +67,40 @@ public class DecisionTransformerAgent<T> : ReinforcementLearningAgentBase<T>
 
     private void InitializeNetwork()
     {
-        // Simplified transformer: state/action/return embeddings + feedforward layers
-        _transformerNetwork = new NeuralNetwork<T>();
-
         // Input: concatenated [return_to_go, state, previous_action]
         int inputSize = 1 + _options.StateSize + _options.ActionSize;
-        int previousSize = inputSize;
 
-        // Embedding layer
-        _transformerNetwork.AddLayer(new DenseLayer<T>(previousSize, _options.EmbeddingDim));
-        _transformerNetwork.AddLayer(new ActivationLayer<T>(new ReLU<T>()));
-        previousSize = _options.EmbeddingDim;
-
-        // Simplified transformer blocks (using feedforward layers to approximate attention)
-        for (int layer = 0; layer < _options.NumLayers; layer++)
+        var architecture = new NeuralNetworkArchitecture<T>
         {
-            // Attention approximation via dense layers
-            _transformerNetwork.AddLayer(new DenseLayer<T>(previousSize, _options.EmbeddingDim * 2));
-            _transformerNetwork.AddLayer(new ActivationLayer<T>(new ReLU<T>()));
-            _transformerNetwork.AddLayer(new DenseLayer<T>(_options.EmbeddingDim * 2, _options.EmbeddingDim));
-            _transformerNetwork.AddLayer(new ActivationLayer<T>(new ReLU<T>()));
+            InputSize = inputSize,
+            OutputSize = _options.ActionSize,
+            TaskType = TaskType.Regression
+        };
+
+        // Use LayerHelper to create production-ready network layers
+        // For DecisionTransformer, use feedforward layers to approximate the transformer
+        var layers = LayerHelper<T>.CreateDefaultFeedForwardLayers(
+            architecture,
+            hiddenLayerCount: _options.NumLayers,
+            hiddenLayerSize: _options.EmbeddingDim
+        ).ToList();
+
+        // Override final activation to Tanh for continuous actions
+        var lastLayer = layers[layers.Count - 1];
+        if (lastLayer is DenseLayer<T> denseLayer)
+        {
+            layers[layers.Count - 1] = new DenseLayer<T>(
+                denseLayer.GetWeights().Rows,
+                _options.ActionSize,
+                new TanhActivation<T>()
+            );
         }
 
-        // Output head for action prediction
-        _transformerNetwork.AddLayer(new DenseLayer<T>(_options.EmbeddingDim, _options.ActionSize));
-        _transformerNetwork.AddLayer(new ActivationLayer<T>(new Tanh<T>()));
+        architecture.Layers = layers;
+        _transformerNetwork = new NeuralNetwork<T>(architecture, _options.LossFunction);
+
+        // Register network with base class
+        Networks.Add(_transformerNetwork);
     }
 
     /// <summary>

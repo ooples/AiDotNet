@@ -7,6 +7,7 @@ using AiDotNet.NeuralNetworks.Layers;
 using AiDotNet.NeuralNetworks.Activations;
 using AiDotNet.ReinforcementLearning.ReplayBuffers;
 using AiDotNet.Helpers;
+using AiDotNet.Optimizers;
 
 namespace AiDotNet.ReinforcementLearning.Agents.QMIX;
 
@@ -35,25 +36,34 @@ namespace AiDotNet.ReinforcementLearning.Agents.QMIX;
 /// Famous for: StarCraft II micromanagement, cooperative games
 /// </para>
 /// </remarks>
-public class QMIXAgent<T> : ReinforcementLearningAgentBase<T>
+public class QMIXAgent<T> : DeepReinforcementLearningAgentBase<T>
 {
     private readonly QMIXOptions<T> _options;
+    private readonly IOptimizer<T, Vector<T>, Vector<T>> _optimizer;
 
     // Per-agent Q-networks
-    private List<NeuralNetwork<T>> _agentNetworks;
-    private List<NeuralNetwork<T>> _targetAgentNetworks;
+    private List<INeuralNetwork<T>> _agentNetworks;
+    private List<INeuralNetwork<T>> _targetAgentNetworks;
 
     // Mixing network (combines agent Q-values)
-    private NeuralNetwork<T> _mixingNetwork;
-    private NeuralNetwork<T> _targetMixingNetwork;
+    private INeuralNetwork<T> _mixingNetwork;
+    private INeuralNetwork<T> _targetMixingNetwork;
 
     private ReplayBuffer<T> _replayBuffer;
     private double _epsilon;
     private int _stepCount;
 
-    public QMIXAgent(QMIXOptions<T> options) : base(options.StateSize, options.ActionSize)
+    public QMIXAgent(QMIXOptions<T> options, IOptimizer<T, Vector<T>, Vector<T>>? optimizer = null)
+        : base(options)
     {
-        _options = options;
+        _options = options ?? throw new ArgumentNullException(nameof(options));
+        _optimizer = optimizer ?? options.Optimizer ?? new AdamOptimizer<T, Vector<T>, Vector<T>>(this, new AdamOptimizerOptions<T, Vector<T>, Vector<T>>
+        {
+            LearningRate = 0.001,
+            Beta1 = 0.9,
+            Beta2 = 0.999,
+            Epsilon = 1e-8
+        });
         _epsilon = options.EpsilonStart;
         _stepCount = 0;
 
@@ -63,8 +73,8 @@ public class QMIXAgent<T> : ReinforcementLearningAgentBase<T>
 
     private void InitializeNetworks()
     {
-        _agentNetworks = new List<NeuralNetwork<T>>();
-        _targetAgentNetworks = new List<NeuralNetwork<T>>();
+        _agentNetworks = new List<INeuralNetwork<T>>();
+        _targetAgentNetworks = new List<INeuralNetwork<T>>();
 
         // Create Q-network for each agent
         for (int i = 0; i < _options.NumAgents; i++)
@@ -75,49 +85,59 @@ public class QMIXAgent<T> : ReinforcementLearningAgentBase<T>
 
             _agentNetworks.Add(agentNet);
             _targetAgentNetworks.Add(targetAgentNet);
+
+            // Register agent networks with base class
+            Networks.Add(agentNet);
+            Networks.Add(targetAgentNet);
         }
 
         // Create mixing networks
         _mixingNetwork = CreateMixingNetwork();
         _targetMixingNetwork = CreateMixingNetwork();
         CopyNetworkWeights(_mixingNetwork, _targetMixingNetwork);
+
+        // Register mixing networks with base class
+        Networks.Add(_mixingNetwork);
+        Networks.Add(_targetMixingNetwork);
     }
 
-    private NeuralNetwork<T> CreateAgentNetwork()
+    private INeuralNetwork<T> CreateAgentNetwork()
     {
-        var network = new NeuralNetwork<T>();
-        int previousSize = _options.StateSize;
-
-        foreach (var layerSize in _options.AgentHiddenLayers)
+        var architecture = new NeuralNetworkArchitecture<T>
         {
-            network.AddLayer(new DenseLayer<T>(previousSize, layerSize));
-            network.AddLayer(new ActivationLayer<T>(new ReLU<T>()));
-            previousSize = layerSize;
-        }
+            InputSize = _options.StateSize,
+            OutputSize = _options.ActionSize,
+            TaskType = TaskType.Regression
+        };
 
-        network.AddLayer(new DenseLayer<T>(previousSize, _options.ActionSize));
+        // Use LayerHelper to create Q-network layers
+        var layers = LayerHelper<T>.CreateDefaultDeepQNetworkLayers(architecture);
 
-        return network;
+        architecture.Layers = layers.ToList();
+        return new NeuralNetwork<T>(architecture, _options.LossFunction);
     }
 
-    private NeuralNetwork<T> CreateMixingNetwork()
+    private INeuralNetwork<T> CreateMixingNetwork()
     {
         // Mixing network: (agent Q-values, global state) -> team Q-value
-        var network = new NeuralNetwork<T>();
         int inputSize = _options.NumAgents + _options.GlobalStateSize;
-        int previousSize = inputSize;
 
-        foreach (var layerSize in _options.MixingHiddenLayers)
+        var architecture = new NeuralNetworkArchitecture<T>
         {
-            network.AddLayer(new DenseLayer<T>(previousSize, layerSize));
-            network.AddLayer(new ActivationLayer<T>(new ReLU<T>()));
-            previousSize = layerSize;
-        }
+            InputSize = inputSize,
+            OutputSize = 1,
+            TaskType = TaskType.Regression
+        };
 
-        // Output: single team Q-value
-        network.AddLayer(new DenseLayer<T>(previousSize, 1));
+        // Use LayerHelper to create production-ready network layers
+        var layers = LayerHelper<T>.CreateDefaultFeedForwardLayers(
+            architecture,
+            hiddenLayerCount: _options.MixingHiddenLayers.Count,
+            hiddenLayerSize: _options.MixingHiddenLayers.FirstOrDefault() > 0 ? _options.MixingHiddenLayers.First() : 64
+        );
 
-        return network;
+        architecture.Layers = layers.ToList();
+        return new NeuralNetwork<T>(architecture, _options.LossFunction);
     }
 
     private void InitializeReplayBuffer()
@@ -373,19 +393,10 @@ public class QMIXAgent<T> : ReinforcementLearningAgentBase<T>
         return result;
     }
 
-    private void CopyNetworkWeights(NeuralNetwork<T> source, NeuralNetwork<T> target)
+    private void CopyNetworkWeights(INeuralNetwork<T> source, INeuralNetwork<T> target)
     {
-        var sourceLayers = source.GetLayers();
-        var targetLayers = target.GetLayers();
-
-        for (int i = 0; i < sourceLayers.Count; i++)
-        {
-            if (sourceLayers[i] is DenseLayer<T> sourceLayer && targetLayers[i] is DenseLayer<T> targetLayer)
-            {
-                targetLayer.SetWeights(sourceLayer.GetWeights().Clone());
-                targetLayer.SetBiases(sourceLayer.GetBiases().Clone());
-            }
-        }
+        var sourceParams = source.GetFlattenedParameters();
+        target.UpdateParameters(sourceParams);
     }
 
     private int ArgMax(Vector<T> values)

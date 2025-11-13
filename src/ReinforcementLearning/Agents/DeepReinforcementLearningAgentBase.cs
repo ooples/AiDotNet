@@ -56,7 +56,7 @@ public abstract class DeepReinforcementLearningAgentBase<T> : ReinforcementLearn
     /// - SAC: 4+ networks (policy, two Q-networks, two target Q-networks)
     /// </para>
     /// </remarks>
-    protected readonly List<INeuralNetwork<T>> Networks;
+    protected List<INeuralNetwork<T>> Networks;
 
     /// <summary>
     /// Initializes a new instance of the DeepReinforcementLearningAgentBase class.

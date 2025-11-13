@@ -1,3 +1,4 @@
+using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
 using AiDotNet.Models;
 using AiDotNet.Models.Options;
@@ -5,6 +6,7 @@ using AiDotNet.NeuralNetworks;
 using AiDotNet.NeuralNetworks.Layers;
 using AiDotNet.NeuralNetworks.Activations;
 using AiDotNet.Helpers;
+using AiDotNet.Optimizers;
 
 namespace AiDotNet.ReinforcementLearning.Agents.TRPO;
 
@@ -34,20 +36,29 @@ namespace AiDotNet.ReinforcementLearning.Agents.TRPO;
 /// Famous for: OpenAI robotics, predecessor to PPO (which simplified TRPO)
 /// </para>
 /// </remarks>
-public class TRPOAgent<T> : ReinforcementLearningAgentBase<T>
+public class TRPOAgent<T> : DeepReinforcementLearningAgentBase<T>
 {
     private readonly TRPOOptions<T> _options;
+    private readonly IOptimizer<T, Vector<T>, Vector<T>> _optimizer;
 
-    private NeuralNetwork<T> _policyNetwork;
-    private NeuralNetwork<T> _oldPolicyNetwork;  // For KL divergence
-    private NeuralNetwork<T> _valueNetwork;
+    private INeuralNetwork<T> _policyNetwork;
+    private INeuralNetwork<T> _oldPolicyNetwork;  // For KL divergence
+    private INeuralNetwork<T> _valueNetwork;
 
     private List<(Vector<T> state, Vector<T> action, T reward, bool done)> _trajectoryBuffer;
     private int _updateCount;
 
-    public TRPOAgent(TRPOOptions<T> options) : base(options.StateSize, options.ActionSize)
+    public TRPOAgent(TRPOOptions<T> options, IOptimizer<T, Vector<T>, Vector<T>>? optimizer = null)
+        : base(options)
     {
-        _options = options;
+        _options = options ?? throw new ArgumentNullException(nameof(options));
+        _optimizer = optimizer ?? options.Optimizer ?? new AdamOptimizer<T, Vector<T>, Vector<T>>(this, new AdamOptimizerOptions<T, Vector<T>, Vector<T>>
+        {
+            LearningRate = 0.001,
+            Beta1 = 0.9,
+            Beta2 = 0.999,
+            Epsilon = 1e-8
+        });
         _updateCount = 0;
         _trajectoryBuffer = new List<(Vector<T>, Vector<T>, T, bool)>();
 
@@ -61,50 +72,68 @@ public class TRPOAgent<T> : ReinforcementLearningAgentBase<T>
         _valueNetwork = CreateValueNetwork();
 
         CopyNetworkWeights(_policyNetwork, _oldPolicyNetwork);
+
+        // Register networks with base class
+        Networks.Add(_policyNetwork);
+        Networks.Add(_oldPolicyNetwork);
+        Networks.Add(_valueNetwork);
     }
 
-    private NeuralNetwork<T> CreatePolicyNetwork()
+    private INeuralNetwork<T> CreatePolicyNetwork()
     {
-        var network = new NeuralNetwork<T>();
-        int previousSize = _options.StateSize;
+        int outputSize = _options.IsContinuous ? _options.ActionSize * 2 : _options.ActionSize;
 
-        foreach (var layerSize in _options.PolicyHiddenLayers)
+        var architecture = new NeuralNetworkArchitecture<T>
         {
-            network.AddLayer(new DenseLayer<T>(previousSize, layerSize));
-            network.AddLayer(new ActivationLayer<T>(new Tanh<T>()));
-            previousSize = layerSize;
+            InputSize = _options.StateSize,
+            OutputSize = outputSize,
+            TaskType = TaskType.Regression
+        };
+
+        // Use LayerHelper to create production-ready network layers
+        var layers = LayerHelper<T>.CreateDefaultFeedForwardLayers(
+            architecture,
+            hiddenLayerCount: _options.PolicyHiddenLayers.Count,
+            hiddenLayerSize: _options.PolicyHiddenLayers.FirstOrDefault() > 0 ? _options.PolicyHiddenLayers.First() : 128
+        ).ToList();
+
+        // Override output layer activation for continuous vs discrete actions
+        if (!_options.IsContinuous)
+        {
+            // For discrete actions, replace final layer with softmax activation
+            var lastLayer = layers[layers.Count - 1];
+            if (lastLayer is DenseLayer<T> denseLayer)
+            {
+                layers[layers.Count - 1] = new DenseLayer<T>(
+                    denseLayer.GetWeights().Rows,
+                    outputSize,
+                    new SoftmaxActivation<T>()
+                );
+            }
         }
 
-        if (_options.IsContinuous)
-        {
-            // Output: mean and log_std
-            network.AddLayer(new DenseLayer<T>(previousSize, _options.ActionSize * 2));
-        }
-        else
-        {
-            // Output: action probabilities
-            network.AddLayer(new DenseLayer<T>(previousSize, _options.ActionSize));
-            network.AddLayer(new ActivationLayer<T>(new Softmax<T>()));
-        }
-
-        return network;
+        architecture.Layers = layers;
+        return new NeuralNetwork<T>(architecture, _options.ValueLossFunction);
     }
 
-    private NeuralNetwork<T> CreateValueNetwork()
+    private INeuralNetwork<T> CreateValueNetwork()
     {
-        var network = new NeuralNetwork<T>();
-        int previousSize = _options.StateSize;
-
-        foreach (var layerSize in _options.ValueHiddenLayers)
+        var architecture = new NeuralNetworkArchitecture<T>
         {
-            network.AddLayer(new DenseLayer<T>(previousSize, layerSize));
-            network.AddLayer(new ActivationLayer<T>(new Tanh<T>()));
-            previousSize = layerSize;
-        }
+            InputSize = _options.StateSize,
+            OutputSize = 1,
+            TaskType = TaskType.Regression
+        };
 
-        network.AddLayer(new DenseLayer<T>(previousSize, 1));
+        // Use LayerHelper to create production-ready network layers
+        var layers = LayerHelper<T>.CreateDefaultFeedForwardLayers(
+            architecture,
+            hiddenLayerCount: _options.ValueHiddenLayers.Count,
+            hiddenLayerSize: _options.ValueHiddenLayers.FirstOrDefault() > 0 ? _options.ValueHiddenLayers.First() : 128
+        );
 
-        return network;
+        architecture.Layers = layers.ToList();
+        return new NeuralNetwork<T>(architecture, _options.ValueLossFunction);
     }
 
     public override Vector<T> SelectAction(Vector<T> state, bool training = true)
@@ -349,19 +378,10 @@ public class TRPOAgent<T> : ReinforcementLearningAgentBase<T>
         return kl;
     }
 
-    private void CopyNetworkWeights(NeuralNetwork<T> source, NeuralNetwork<T> target)
+    private void CopyNetworkWeights(INeuralNetwork<T> source, INeuralNetwork<T> target)
     {
-        var sourceLayers = source.GetLayers();
-        var targetLayers = target.GetLayers();
-
-        for (int i = 0; i < sourceLayers.Count; i++)
-        {
-            if (sourceLayers[i] is DenseLayer<T> sourceLayer && targetLayers[i] is DenseLayer<T> targetLayer)
-            {
-                targetLayer.SetWeights(sourceLayer.GetWeights().Clone());
-                targetLayer.SetBiases(sourceLayer.GetBiases().Clone());
-            }
-        }
+        var sourceParams = source.GetFlattenedParameters();
+        target.UpdateParameters(sourceParams);
     }
 
     private int ArgMax(Vector<T> values)

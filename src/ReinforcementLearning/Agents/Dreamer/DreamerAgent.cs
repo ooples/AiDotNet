@@ -1,3 +1,4 @@
+using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
 using AiDotNet.Models;
 using AiDotNet.Models.Options;
@@ -6,6 +7,7 @@ using AiDotNet.NeuralNetworks.Layers;
 using AiDotNet.NeuralNetworks.Activations;
 using AiDotNet.ReinforcementLearning.ReplayBuffers;
 using AiDotNet.Helpers;
+using AiDotNet.Optimizers;
 
 namespace AiDotNet.ReinforcementLearning.Agents.Dreamer;
 
@@ -36,26 +38,35 @@ namespace AiDotNet.ReinforcementLearning.Agents.Dreamer;
 /// Advantages: Sample efficient, works with images, enables planning
 /// </para>
 /// </remarks>
-public class DreamerAgent<T> : ReinforcementLearningAgentBase<T>
+public class DreamerAgent<T> : DeepReinforcementLearningAgentBase<T>
 {
     private readonly DreamerOptions<T> _options;
+    private readonly IOptimizer<T, Vector<T>, Vector<T>> _optimizer;
 
     // World model components
-    private NeuralNetwork<T> _representationNetwork;  // Observation -> latent state
-    private NeuralNetwork<T> _dynamicsNetwork;  // (latent state, action) -> next latent state
-    private NeuralNetwork<T> _rewardNetwork;  // latent state -> reward
-    private NeuralNetwork<T> _continueNetwork;  // latent state -> continue probability
+    private INeuralNetwork<T> _representationNetwork;  // Observation -> latent state
+    private INeuralNetwork<T> _dynamicsNetwork;  // (latent state, action) -> next latent state
+    private INeuralNetwork<T> _rewardNetwork;  // latent state -> reward
+    private INeuralNetwork<T> _continueNetwork;  // latent state -> continue probability
 
     // Actor-critic for policy learning
-    private NeuralNetwork<T> _actorNetwork;
-    private NeuralNetwork<T> _valueNetwork;
+    private INeuralNetwork<T> _actorNetwork;
+    private INeuralNetwork<T> _valueNetwork;
 
     private ReplayBuffer<T> _replayBuffer;
     private int _updateCount;
 
-    public DreamerAgent(DreamerOptions<T> options) : base(options.ObservationSize, options.ActionSize)
+    public DreamerAgent(DreamerOptions<T> options, IOptimizer<T, Vector<T>, Vector<T>>? optimizer = null)
+        : base(options)
     {
-        _options = options;
+        _options = options ?? throw new ArgumentNullException(nameof(options));
+        _optimizer = optimizer ?? options.Optimizer ?? new AdamOptimizer<T, Vector<T>, Vector<T>>(this, new AdamOptimizerOptions<T, Vector<T>, Vector<T>>
+        {
+            LearningRate = 0.001,
+            Beta1 = 0.9,
+            Beta2 = 0.999,
+            Epsilon = 1e-8
+        });
         _updateCount = 0;
 
         InitializeNetworks();
