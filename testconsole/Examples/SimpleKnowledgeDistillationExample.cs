@@ -149,9 +149,9 @@ public static class SimpleKnowledgeDistillationExample
         public void SaveState(Stream stream) { }
         public void LoadState(Stream stream) { }
 
-        public Vector<double> GetParameters() => new Vector<double>(0);
+        public Vector<double> GetParameters() => new Vector<double>(ParameterCount);
         public void SetParameters(Vector<double> parameters) { }
-        public int ParameterCount => 0;
+        public int ParameterCount => _inputDim * _outputDim;  // Realistic parameter count for a simple linear model
         public IFullModel<double, Matrix<double>, Vector<double>> WithParameters(Vector<double> parameters) => this;
 
         public IEnumerable<int> GetActiveFeatureIndices() => Enumerable.Range(0, _inputDim);
@@ -162,8 +162,8 @@ public static class SimpleKnowledgeDistillationExample
 
         public IFullModel<double, Matrix<double>, Vector<double>> DeepCopy() => new MockModel(_inputDim, _outputDim);
         public IFullModel<double, Matrix<double>, Vector<double>> Clone() => new MockModel(_inputDim, _outputDim);
-
-        public Vector<double> ComputeGradients(Matrix<double> input, Vector<double> target, ILossFunction<double>? lossFunction = null) => new Vector<double>(0);
+
+        public Vector<double> ComputeGradients(Matrix<double> input, Vector<double> target, ILossFunction<double>? lossFunction = null) => new Vector<double>(ParameterCount);
         public void ApplyGradients(Vector<double> gradients, double learningRate) { }
     }
 }

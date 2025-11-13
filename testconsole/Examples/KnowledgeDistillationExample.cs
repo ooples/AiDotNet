@@ -350,7 +350,7 @@ public static class KnowledgeDistillationExample
         public void SaveState(Stream stream) { }
         public void LoadState(Stream stream) { }
 
-        public Vector<double> GetParameters() => new Vector<double>(0);
+        public Vector<double> GetParameters() => new Vector<double>(ParameterCount);
         public void SetParameters(Vector<double> parameters) { }
         public int ParameterCount => _isLarge ? 1000 : 100;
         public IFullModel<double, Matrix<double>, Vector<double>> WithParameters(Vector<double> parameters) => this;
@@ -364,7 +364,7 @@ public static class KnowledgeDistillationExample
         public IFullModel<double, Matrix<double>, Vector<double>> DeepCopy() => new MockModel(_inputDim, _outputDim, _isLarge);
         public IFullModel<double, Matrix<double>, Vector<double>> Clone() => new MockModel(_inputDim, _outputDim, _isLarge);
 
-        public Vector<double> ComputeGradients(Matrix<double> input, Vector<double> target, ILossFunction<double>? lossFunction = null) => new Vector<double>(0);
+        public Vector<double> ComputeGradients(Matrix<double> input, Vector<double> target, ILossFunction<double>? lossFunction = null) => new Vector<double>(ParameterCount);
         public void ApplyGradients(Vector<double> gradients, double learningRate) { }
     }
 }
