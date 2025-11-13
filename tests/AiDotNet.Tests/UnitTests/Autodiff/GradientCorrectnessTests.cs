@@ -1,3 +1,5 @@
+using AiDotNet.LinearAlgebra;
+using AiDotNet.Autodiff;
 using AiDotNet.NeuralNetworks.Layers;
 using AiDotNet.ActivationFunctions;
 using Xunit;
@@ -517,12 +519,12 @@ public class GradientCorrectnessTests
         var outputGradient = CreateRandomTensor(shape);
 
         // Act - Autodiff gradients
-        using (var tape = new Autodiff.GradientTape<float>())
+        using (var tape = new GradientTape<float>())
         {
-            var inputNode = Autodiff.TensorOperations<float>.Variable(input, "input", requiresGradient: true);
+            var inputNode = TensorOperations<float>.Variable(input, "input", requiresGradient: true);
             tape.Watch(inputNode);
 
-            var output = Autodiff.TensorOperations<float>.Softmax(inputNode, axis: -1);
+            var output = TensorOperations<float>.Softmax(inputNode, axis: -1);
             output.Gradient = outputGradient;
 
             // Backward pass
@@ -547,14 +549,14 @@ public class GradientCorrectnessTests
                 // Forward + epsilon
                 var inputPlus = input.Clone();
                 inputPlus[i] += epsilon;
-                var nodePlus = Autodiff.TensorOperations<float>.Variable(inputPlus, requiresGradient: false);
-                var outputPlus = Autodiff.TensorOperations<float>.Softmax(nodePlus, axis: -1);
+                var nodePlus = TensorOperations<float>.Variable(inputPlus, requiresGradient: false);
+                var outputPlus = TensorOperations<float>.Softmax(nodePlus, axis: -1);
 
                 // Forward - epsilon
                 var inputMinus = input.Clone();
                 inputMinus[i] -= epsilon;
-                var nodeMinus = Autodiff.TensorOperations<float>.Variable(inputMinus, requiresGradient: false);
-                var outputMinus = Autodiff.TensorOperations<float>.Softmax(nodeMinus, axis: -1);
+                var nodeMinus = TensorOperations<float>.Variable(inputMinus, requiresGradient: false);
+                var outputMinus = TensorOperations<float>.Softmax(nodeMinus, axis: -1);
 
                 // Numerical gradient
                 float gradSum = 0;
@@ -592,12 +594,12 @@ public class GradientCorrectnessTests
         outputGradient[0, 0, 1, 1] = 4.0f;
 
         // Act
-        using (var tape = new Autodiff.GradientTape<float>())
+        using (var tape = new GradientTape<float>())
         {
-            var inputNode = Autodiff.TensorOperations<float>.Variable(input, "input", requiresGradient: true);
+            var inputNode = TensorOperations<float>.Variable(input, "input", requiresGradient: true);
             tape.Watch(inputNode);
 
-            var output = Autodiff.TensorOperations<float>.MaxPool2D(inputNode, new int[] { 2, 2 });
+            var output = TensorOperations<float>.MaxPool2D(inputNode, new int[] { 2, 2 });
             output.Gradient = outputGradient;
 
             // Backward pass
@@ -635,12 +637,12 @@ public class GradientCorrectnessTests
         outputGradient[0, 0, 1, 1] = 16.0f; // Will be distributed as 4.0 to each
 
         // Act
-        using (var tape = new Autodiff.GradientTape<float>())
+        using (var tape = new GradientTape<float>())
         {
-            var inputNode = Autodiff.TensorOperations<float>.Variable(input, "input", requiresGradient: true);
+            var inputNode = TensorOperations<float>.Variable(input, "input", requiresGradient: true);
             tape.Watch(inputNode);
 
-            var output = Autodiff.TensorOperations<float>.AvgPool2D(inputNode, new int[] { 2, 2 });
+            var output = TensorOperations<float>.AvgPool2D(inputNode, new int[] { 2, 2 });
             output.Gradient = outputGradient;
 
             // Backward pass
@@ -678,15 +680,15 @@ public class GradientCorrectnessTests
         var outputGradient = CreateRandomTensor(new int[] { 2, 7 }); // 3 + 4 = 7
 
         // Act
-        using (var tape = new Autodiff.GradientTape<float>())
+        using (var tape = new GradientTape<float>())
         {
-            var node1 = Autodiff.TensorOperations<float>.Variable(input1, "input1", requiresGradient: true);
-            var node2 = Autodiff.TensorOperations<float>.Variable(input2, "input2", requiresGradient: true);
+            var node1 = TensorOperations<float>.Variable(input1, "input1", requiresGradient: true);
+            var node2 = TensorOperations<float>.Variable(input2, "input2", requiresGradient: true);
             tape.Watch(node1);
             tape.Watch(node2);
 
-            var nodes = new List<Autodiff.ComputationNode<float>> { node1, node2 };
-            var output = Autodiff.TensorOperations<float>.Concat(nodes, axis: 1);
+            var nodes = new List<ComputationNode<float>> { node1, node2 };
+            var output = TensorOperations<float>.Concat(nodes, axis: 1);
             output.Gradient = outputGradient;
 
             // Backward pass
@@ -731,12 +733,12 @@ public class GradientCorrectnessTests
         var outputGradient = CreateRandomTensor(new int[] { 5, 8 }); // 3+2 rows, 4+4 cols
 
         // Act
-        using (var tape = new Autodiff.GradientTape<float>())
+        using (var tape = new GradientTape<float>())
         {
-            var inputNode = Autodiff.TensorOperations<float>.Variable(input, "input", requiresGradient: true);
+            var inputNode = TensorOperations<float>.Variable(input, "input", requiresGradient: true);
             tape.Watch(inputNode);
 
-            var output = Autodiff.TensorOperations<float>.Pad(inputNode, padWidth, 0f);
+            var output = TensorOperations<float>.Pad(inputNode, padWidth, 0f);
             output.Gradient = outputGradient;
 
             // Backward pass
@@ -768,12 +770,12 @@ public class GradientCorrectnessTests
     /// <summary>
     /// Gets topological order for gradient computation.
     /// </summary>
-    private static List<Autodiff.ComputationNode<T>> GetTopologicalOrder<T>(Autodiff.ComputationNode<T> root)
+    private static List<ComputationNode<T>> GetTopologicalOrder<T>(ComputationNode<T> root)
     {
-        var visited = new HashSet<Autodiff.ComputationNode<T>>();
-        var result = new List<Autodiff.ComputationNode<T>>();
+        var visited = new HashSet<ComputationNode<T>>();
+        var result = new List<ComputationNode<T>>();
 
-        var stack = new Stack<(Autodiff.ComputationNode<T> node, bool processed)>();
+        var stack = new Stack<(ComputationNode<T> node, bool processed)>();
         stack.Push((root, false));
 
         while (stack.Count > 0)
@@ -816,16 +818,16 @@ public class GradientCorrectnessTests
         var outputGradient = CreateRandomTensor(shape);
 
         // Act - Autodiff gradients
-        using (var tape = new Autodiff.GradientTape<float>())
+        using (var tape = new GradientTape<float>())
         {
-            var inputNode = Autodiff.TensorOperations<float>.Variable(input, "input", requiresGradient: true);
-            var gammaNode = Autodiff.TensorOperations<float>.Variable(gamma, "gamma", requiresGradient: true);
-            var betaNode = Autodiff.TensorOperations<float>.Variable(beta, "beta", requiresGradient: true);
+            var inputNode = TensorOperations<float>.Variable(input, "input", requiresGradient: true);
+            var gammaNode = TensorOperations<float>.Variable(gamma, "gamma", requiresGradient: true);
+            var betaNode = TensorOperations<float>.Variable(beta, "beta", requiresGradient: true);
             tape.Watch(inputNode);
             tape.Watch(gammaNode);
             tape.Watch(betaNode);
 
-            var output = Autodiff.TensorOperations<float>.LayerNorm(inputNode, new int[] { features }, gammaNode, betaNode);
+            var output = TensorOperations<float>.LayerNorm(inputNode, new int[] { features }, gammaNode, betaNode);
             output.Gradient = outputGradient;
 
             // Backward pass
@@ -850,18 +852,18 @@ public class GradientCorrectnessTests
                 // Forward + epsilon
                 var inputPlus = input.Clone();
                 inputPlus[i] += epsilon;
-                var nodePlus = Autodiff.TensorOperations<float>.Variable(inputPlus, requiresGradient: false);
-                var gammaNodePlus = Autodiff.TensorOperations<float>.Variable(gamma, requiresGradient: false);
-                var betaNodePlus = Autodiff.TensorOperations<float>.Variable(beta, requiresGradient: false);
-                var outputPlus = Autodiff.TensorOperations<float>.LayerNorm(nodePlus, new int[] { features }, gammaNodePlus, betaNodePlus);
+                var nodePlus = TensorOperations<float>.Variable(inputPlus, requiresGradient: false);
+                var gammaNodePlus = TensorOperations<float>.Variable(gamma, requiresGradient: false);
+                var betaNodePlus = TensorOperations<float>.Variable(beta, requiresGradient: false);
+                var outputPlus = TensorOperations<float>.LayerNorm(nodePlus, new int[] { features }, gammaNodePlus, betaNodePlus);
 
                 // Forward - epsilon
                 var inputMinus = input.Clone();
                 inputMinus[i] -= epsilon;
-                var nodeMinus = Autodiff.TensorOperations<float>.Variable(inputMinus, requiresGradient: false);
-                var gammaNodeMinus = Autodiff.TensorOperations<float>.Variable(gamma, requiresGradient: false);
-                var betaNodeMinus = Autodiff.TensorOperations<float>.Variable(beta, requiresGradient: false);
-                var outputMinus = Autodiff.TensorOperations<float>.LayerNorm(nodeMinus, new int[] { features }, gammaNodeMinus, betaNodeMinus);
+                var nodeMinus = TensorOperations<float>.Variable(inputMinus, requiresGradient: false);
+                var gammaNodeMinus = TensorOperations<float>.Variable(gamma, requiresGradient: false);
+                var betaNodeMinus = TensorOperations<float>.Variable(beta, requiresGradient: false);
+                var outputMinus = TensorOperations<float>.LayerNorm(nodeMinus, new int[] { features }, gammaNodeMinus, betaNodeMinus);
 
                 // Numerical gradient
                 float gradSum = 0;
@@ -897,16 +899,16 @@ public class GradientCorrectnessTests
         var outputGradient = CreateRandomTensor(shape);
 
         // Act - Autodiff gradients (training mode)
-        using (var tape = new Autodiff.GradientTape<float>())
+        using (var tape = new GradientTape<float>())
         {
-            var inputNode = Autodiff.TensorOperations<float>.Variable(input, "input", requiresGradient: true);
-            var gammaNode = Autodiff.TensorOperations<float>.Variable(gamma, "gamma", requiresGradient: true);
-            var betaNode = Autodiff.TensorOperations<float>.Variable(beta, "beta", requiresGradient: true);
+            var inputNode = TensorOperations<float>.Variable(input, "input", requiresGradient: true);
+            var gammaNode = TensorOperations<float>.Variable(gamma, "gamma", requiresGradient: true);
+            var betaNode = TensorOperations<float>.Variable(beta, "beta", requiresGradient: true);
             tape.Watch(inputNode);
             tape.Watch(gammaNode);
             tape.Watch(betaNode);
 
-            var output = Autodiff.TensorOperations<float>.BatchNorm(
+            var output = TensorOperations<float>.BatchNorm(
                 inputNode, gammaNode, betaNode, null, null, training: true);
             output.Gradient = outputGradient;
 
@@ -932,19 +934,19 @@ public class GradientCorrectnessTests
                 // Forward + epsilon
                 var inputPlus = input.Clone();
                 inputPlus[i] += epsilon;
-                var nodePlus = Autodiff.TensorOperations<float>.Variable(inputPlus, requiresGradient: false);
-                var gammaNodePlus = Autodiff.TensorOperations<float>.Variable(gamma, requiresGradient: false);
-                var betaNodePlus = Autodiff.TensorOperations<float>.Variable(beta, requiresGradient: false);
-                var outputPlus = Autodiff.TensorOperations<float>.BatchNorm(
+                var nodePlus = TensorOperations<float>.Variable(inputPlus, requiresGradient: false);
+                var gammaNodePlus = TensorOperations<float>.Variable(gamma, requiresGradient: false);
+                var betaNodePlus = TensorOperations<float>.Variable(beta, requiresGradient: false);
+                var outputPlus = TensorOperations<float>.BatchNorm(
                     nodePlus, gammaNodePlus, betaNodePlus, null, null, training: true);
 
                 // Forward - epsilon
                 var inputMinus = input.Clone();
                 inputMinus[i] -= epsilon;
-                var nodeMinus = Autodiff.TensorOperations<float>.Variable(inputMinus, requiresGradient: false);
-                var gammaNodeMinus = Autodiff.TensorOperations<float>.Variable(gamma, requiresGradient: false);
-                var betaNodeMinus = Autodiff.TensorOperations<float>.Variable(beta, requiresGradient: false);
-                var outputMinus = Autodiff.TensorOperations<float>.BatchNorm(
+                var nodeMinus = TensorOperations<float>.Variable(inputMinus, requiresGradient: false);
+                var gammaNodeMinus = TensorOperations<float>.Variable(gamma, requiresGradient: false);
+                var betaNodeMinus = TensorOperations<float>.Variable(beta, requiresGradient: false);
+                var outputMinus = TensorOperations<float>.BatchNorm(
                     nodeMinus, gammaNodeMinus, betaNodeMinus, null, null, training: true);
 
                 // Numerical gradient

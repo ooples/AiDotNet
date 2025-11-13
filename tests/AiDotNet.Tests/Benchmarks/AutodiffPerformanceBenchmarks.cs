@@ -1,3 +1,4 @@
+using AiDotNet.LinearAlgebra;
 using AiDotNet.NeuralNetworks.Layers;
 using AiDotNet.ActivationFunctions;
 using BenchmarkDotNet.Attributes;
