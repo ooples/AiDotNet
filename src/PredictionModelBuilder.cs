@@ -1340,9 +1340,14 @@ public class PredictionModelBuilder<T, TInput, TOutput> : IPredictionModelBuilde
                 }
             }
 
-            // Step 7: Return result using optimizer's infrastructure
-            return Task.FromResult(optimizer.Optimize(OptimizerHelper<T, TInput, TOutput>.CreateOptimizationInputData(
-                XTrain, yTrain, XVal, yVal, XTest, yTest)));
+            // Step 7: Return result from KD-trained model (don't re-optimize)
+            // Model is already trained via knowledge distillation, just wrap it in result
+            var result = new OptimizationResult<T, TInput, TOutput>
+            {
+                BestSolution = studentModel,
+                BestFitnessScore = NumOps.FromDouble(0.0) // Score tracking happened during KD training
+            };
+            return Task.FromResult(result);
         }
         catch (Exception ex)
         {
