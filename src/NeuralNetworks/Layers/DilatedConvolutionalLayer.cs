@@ -13,11 +13,11 @@ namespace AiDotNet.NeuralNetworks.Layers;
 /// <para><b>For Beginners:</b> A dilated convolutional layer is like looking at an image with a special magnifying glass.
 /// 
 /// Regular convolutions look at pixels that are right next to each other, like this:
-/// - Looking at a 3×3 area of an image (9 adjacent pixels)
+/// - Looking at a 3ï¿½3 area of an image (9 adjacent pixels)
 /// 
 /// Dilated convolutions skip some pixels, creating gaps, like this:
 /// - With dilation=2, it looks at pixels with a gap of 1 pixel between them
-/// - The 3×3 filter now covers a 5×5 area (still using only 9 values)
+/// - The 3ï¿½3 filter now covers a 5ï¿½5 area (still using only 9 values)
 /// 
 /// Benefits:
 /// - Sees a larger area without needing more computing power
@@ -79,16 +79,16 @@ public class DilatedConvolutionalLayer<T> : LayerBase<T>
     /// <remarks>
     /// <para>
     /// This field represents the size of the square filter used in the convolution operation.
-    /// Common kernel sizes are 3×3, 5×5, and 7×7.
+    /// Common kernel sizes are 3ï¿½3, 5ï¿½5, and 7ï¿½7.
     /// </para>
     /// <para><b>For Beginners:</b> This is the size of the "window" that looks at the input data.
     /// 
     /// The kernel size determines how much local context is considered:
-    /// - Small kernels (3×3): Look at very local patterns
-    /// - Larger kernels (7×7): Look at wider patterns
+    /// - Small kernels (3ï¿½3): Look at very local patterns
+    /// - Larger kernels (7ï¿½7): Look at wider patterns
     /// 
-    /// For example, with a 3×3 kernel, each output value is calculated by looking at 
-    /// a 3×3 grid of input values (accounting for dilation).
+    /// For example, with a 3ï¿½3 kernel, each output value is calculated by looking at 
+    /// a 3ï¿½3 grid of input values (accounting for dilation).
     /// </para>
     /// </remarks>
     private readonly int _kernelSize;
@@ -113,7 +113,7 @@ public class DilatedConvolutionalLayer<T> : LayerBase<T>
     /// - Reduce computation time
     /// - Can lose some information
     /// 
-    /// For example, with stride=2, a 100×100 image would become roughly 50×50 after the convolution.
+    /// For example, with stride=2, a 100ï¿½100 image would become roughly 50ï¿½50 after the convolution.
     /// </para>
     /// </remarks>
     private readonly int _stride;
@@ -134,7 +134,7 @@ public class DilatedConvolutionalLayer<T> : LayerBase<T>
     /// - With padding, the output can stay the same size as the input
     /// - It helps the network pay attention to features at the edges
     /// 
-    /// For example, with padding=1 and a 3×3 kernel, a single row of zeros is added 
+    /// For example, with padding=1 and a 3ï¿½3 kernel, a single row of zeros is added 
     /// around the entire input before applying the convolution.
     /// </para>
     /// </remarks>
@@ -161,7 +161,7 @@ public class DilatedConvolutionalLayer<T> : LayerBase<T>
     /// - Captures long-range dependencies
     /// - Efficient way to increase the "field of view"
     /// 
-    /// For example, a 3×3 filter with dilation=2 would cover a 5×5 area,
+    /// For example, a 3ï¿½3 filter with dilation=2 would cover a 5ï¿½5 area,
     /// but still only use 9 values from that area.
     /// </para>
     /// </remarks>
@@ -344,12 +344,12 @@ public class DilatedConvolutionalLayer<T> : LayerBase<T>
     /// The layer automatically initializes the filters with small random values
     /// that are carefully scaled to work well with training.
     /// 
-    /// Example: For processing 32×32 color images with 16 filters of size 3×3 and dilation of 2:
+    /// Example: For processing 32ï¿½32 color images with 16 filters of size 3ï¿½3 and dilation of 2:
     /// ```csharp
     /// var convLayer = new DilatedConvolutionalLayer<float>(
     ///     inputDepth: 3,           // RGB input
     ///     outputDepth: 16,         // 16 different feature detectors
-    ///     kernelSize: 3,           // 3×3 filters
+    ///     kernelSize: 3,           // 3ï¿½3 filters
     ///     inputHeight: 32,         // Image height
     ///     inputWidth: 32,          // Image width
     ///     dilation: 2,             // Look at every other pixel
@@ -560,12 +560,12 @@ public class DilatedConvolutionalLayer<T> : LayerBase<T>
     /// <exception cref="InvalidOperationException">Thrown when backward is called before forward.</exception>
     /// <remarks>
     /// <para>
-    /// This method implements the backward pass (backpropagation) of the dilated convolutional layer. 
+    /// This method implements the backward pass (backpropagation) of the dilated convolutional layer.
     /// It computes the gradients of the loss with respect to the layer's weights, biases, and inputs.
     /// These gradients are used to update the parameters during training.
     /// </para>
     /// <para><b>For Beginners:</b> This is where the layer learns from its mistakes during training.
-    /// 
+    ///
     /// During the backward pass:
     /// 1. The layer receives information about how its output contributed to errors
     /// 2. It calculates three things:
@@ -573,12 +573,25 @@ public class DilatedConvolutionalLayer<T> : LayerBase<T>
     ///    - How to adjust each bias value (bias gradients)
     ///    - How the error flows back to the previous layer (input gradients)
     /// 3. These gradients are used to update the filters and biases
-    /// 
+    ///
     /// The dilation is also taken into account when calculating these gradients,
     /// ensuring that the learning process understands the dilated nature of the convolution.
     /// </para>
     /// </remarks>
     public override Tensor<T> Backward(Tensor<T> outputGradient)
+    {
+        return UseAutodiff
+            ? BackwardViaAutodiff(outputGradient)
+            : BackwardManual(outputGradient);
+    }
+
+    /// <summary>
+    /// Manual backward pass implementation using optimized gradient calculations.
+    /// </summary>
+    /// <param name="outputGradient">The gradient of the loss with respect to the layer's output.</param>
+    /// <returns>The gradient of the loss with respect to the layer's input.</returns>
+    /// <exception cref="InvalidOperationException">Thrown when backward is called before forward.</exception>
+    private Tensor<T> BackwardManual(Tensor<T> outputGradient)
     {
         if (_lastInput == null || _lastOutput == null)
         {
@@ -636,6 +649,237 @@ public class DilatedConvolutionalLayer<T> : LayerBase<T>
         _biasGradients = biasGradients;
 
         return inputGradients;
+    }
+
+    /// <summary>
+    /// Backward pass implementation using automatic differentiation.
+    /// </summary>
+    /// <param name="outputGradient">The gradient of the loss with respect to the layer's output.</param>
+    /// <returns>The gradient of the loss with respect to the layer's input.</returns>
+    /// <remarks>
+    /// <para>
+    /// This method uses automatic differentiation to compute gradients using DilatedConv2D operation.
+    /// The layer uses NHWC format [batch, H, W, channels], while TensorOperations uses NCHW format,
+    /// so format conversion is performed.
+    /// </para>
+    /// <para>
+    /// This provides:
+    /// - Automatic gradient computation through the computation graph
+    /// - Verification of manual gradient implementations
+    /// - Support for rapid prototyping with custom modifications
+    /// </para>
+    /// </remarks>
+    private Tensor<T> BackwardViaAutodiff(Tensor<T> outputGradient)
+    {
+        if (_lastInput == null)
+            throw new InvalidOperationException("Forward pass must be called before backward pass.");
+
+        // Convert from NHWC [batch, H, W, channels] to NCHW [batch, channels, H, W]
+        var inputNCHW = ConvertNHWCtoNCHW(_lastInput);
+        var kernelNCHW = ConvertKernelToNCHW(_kernels);
+
+        // Create computation nodes
+        var inputNode = Autodiff.TensorOperations<T>.Variable(inputNCHW, "input", requiresGradient: true);
+        var kernelNode = Autodiff.TensorOperations<T>.Variable(kernelNCHW, "kernel", requiresGradient: true);
+        var biasNode = Autodiff.TensorOperations<T>.Variable(ConvertVectorToTensor(_biases), "bias", requiresGradient: true);
+
+        // Forward pass using autodiff DilatedConv2D operation
+        var outputNode = Autodiff.TensorOperations<T>.DilatedConv2D(
+            inputNode,
+            kernelNode,
+            biasNode,
+            stride: new int[] { _stride, _stride },
+            padding: new int[] { _padding, _padding },
+            dilation: new int[] { _dilation, _dilation });
+
+        // Apply activation function
+        outputNode = ApplyActivationAutodiff(outputNode);
+
+        // Convert output gradient from NHWC to NCHW
+        var outputGradientNCHW = ConvertNHWCtoNCHW(outputGradient);
+
+        // Perform backward pass
+        outputNode.Gradient = outputGradientNCHW;
+        var topoOrder = GetTopologicalOrder(outputNode);
+        for (int i = topoOrder.Count - 1; i >= 0; i--)
+        {
+            var node = topoOrder[i];
+            if (node.RequiresGradient && node.BackwardFunction != null && node.Gradient != null)
+            {
+                node.BackwardFunction(node.Gradient);
+            }
+        }
+
+        // Update parameter gradients
+        if (kernelNode.Gradient != null)
+            _kernelGradients = ConvertKernelFromNCHW(kernelNode.Gradient);
+
+        if (biasNode.Gradient != null)
+            _biasGradients = ConvertTensorToVector(biasNode.Gradient);
+
+        // Convert input gradient from NCHW back to NHWC
+        var inputGradientNCHW = inputNode.Gradient ?? throw new InvalidOperationException("Gradient computation failed.");
+        return ConvertNCHWtoNHWC(inputGradientNCHW);
+    }
+
+    /// <summary>
+    /// Converts tensor from NHWC [batch, H, W, channels] to NCHW [batch, channels, H, W] format.
+    /// </summary>
+    private Tensor<T> ConvertNHWCtoNCHW(Tensor<T> nhwc)
+    {
+        int batch = nhwc.Shape[0];
+        int height = nhwc.Shape[1];
+        int width = nhwc.Shape[2];
+        int channels = nhwc.Shape[3];
+
+        var nchw = new Tensor<T>([batch, channels, height, width]);
+        for (int b = 0; b < batch; b++)
+            for (int c = 0; c < channels; c++)
+                for (int h = 0; h < height; h++)
+                    for (int w = 0; w < width; w++)
+                        nchw[b, c, h, w] = nhwc[b, h, w, c];
+
+        return nchw;
+    }
+
+    /// <summary>
+    /// Converts tensor from NCHW [batch, channels, H, W] to NHWC [batch, H, W, channels] format.
+    /// </summary>
+    private Tensor<T> ConvertNCHWtoNHWC(Tensor<T> nchw)
+    {
+        int batch = nchw.Shape[0];
+        int channels = nchw.Shape[1];
+        int height = nchw.Shape[2];
+        int width = nchw.Shape[3];
+
+        var nhwc = new Tensor<T>([batch, height, width, channels]);
+        for (int b = 0; b < batch; b++)
+            for (int h = 0; h < height; h++)
+                for (int w = 0; w < width; w++)
+                    for (int c = 0; c < channels; c++)
+                        nhwc[b, h, w, c] = nchw[b, c, h, w];
+
+        return nhwc;
+    }
+
+    /// <summary>
+    /// Converts kernel from [outputDepth, inputDepth, kH, kW] to [outputDepth, inputDepth, kH, kW] format.
+    /// </summary>
+    private Tensor<T> ConvertKernelToNCHW(Tensor<T> kernel)
+    {
+        // Already in the correct format
+        return kernel;
+    }
+
+    /// <summary>
+    /// Converts kernel from NCHW back to original format.
+    /// </summary>
+    private Tensor<T> ConvertKernelFromNCHW(Tensor<T> kernel)
+    {
+        // Already in the correct format
+        return kernel;
+    }
+
+    /// <summary>
+    /// Converts vector to 1D tensor.
+    /// </summary>
+    private Tensor<T> ConvertVectorToTensor(Vector<T> vector)
+    {
+        var tensor = new Tensor<T>([vector.Length]);
+        for (int i = 0; i < vector.Length; i++)
+            tensor[i] = vector[i];
+        return tensor;
+    }
+
+    /// <summary>
+    /// Converts 1D tensor to vector.
+    /// </summary>
+    private Vector<T> ConvertTensorToVector(Tensor<T> tensor)
+    {
+        var vector = new Vector<T>(tensor.Shape[0]);
+        for (int i = 0; i < tensor.Shape[0]; i++)
+            vector[i] = tensor[i];
+        return vector;
+    }
+
+    /// <summary>
+    /// Applies activation function using autodiff operations.
+    /// </summary>
+    private Autodiff.ComputationNode<T> ApplyActivationAutodiff(Autodiff.ComputationNode<T> input)
+    {
+        // Apply the appropriate activation function
+        if (UsingVectorActivation)
+        {
+            if (VectorActivation is ReLUActivation<T>)
+                return Autodiff.TensorOperations<T>.ReLU(input);
+            else if (VectorActivation is SigmoidActivation<T>)
+                return Autodiff.TensorOperations<T>.Sigmoid(input);
+            else if (VectorActivation is TanhActivation<T>)
+                return Autodiff.TensorOperations<T>.Tanh(input);
+            else
+            {
+                var activationType = VectorActivation?.GetType().Name ?? "Unknown";
+                throw new NotSupportedException($"Activation {activationType} not yet supported in autodiff");
+            }
+        }
+        else
+        {
+            if (ScalarActivation is ReLUActivation<T>)
+                return Autodiff.TensorOperations<T>.ReLU(input);
+            else if (ScalarActivation is SigmoidActivation<T>)
+                return Autodiff.TensorOperations<T>.Sigmoid(input);
+            else if (ScalarActivation is TanhActivation<T>)
+                return Autodiff.TensorOperations<T>.Tanh(input);
+            else
+            {
+                var activationType = ScalarActivation?.GetType().Name ?? "Unknown";
+                throw new NotSupportedException($"Activation {activationType} not yet supported in autodiff");
+            }
+        }
+    }
+
+    /// <summary>
+    /// Gets the topological order of nodes in the computation graph.
+    /// </summary>
+    /// <param name="root">The root node of the computation graph.</param>
+    /// <returns>A list of nodes in topological order.</returns>
+    private List<Autodiff.ComputationNode<T>> GetTopologicalOrder(Autodiff.ComputationNode<T> root)
+    {
+        var visited = new HashSet<Autodiff.ComputationNode<T>>();
+        var result = new List<Autodiff.ComputationNode<T>>();
+
+        var stack = new Stack<(Autodiff.ComputationNode<T> node, bool processed)>();
+        stack.Push((root, false));
+
+        while (stack.Count > 0)
+        {
+            var (node, processed) = stack.Pop();
+
+            if (visited.Contains(node))
+            {
+                continue;
+            }
+
+            if (processed)
+            {
+                visited.Add(node);
+                result.Add(node);
+            }
+            else
+            {
+                stack.Push((node, true));
+
+                foreach (var parent in node.Parents)
+                {
+                    if (!visited.Contains(parent))
+                    {
+                        stack.Push((parent, false));
+                    }
+                }
+            }
+        }
+
+        return result;
     }
 
     /// <summary>
@@ -719,7 +963,7 @@ public class DilatedConvolutionalLayer<T> : LayerBase<T>
     /// - How big the stride is
     /// 
     /// For example:
-    /// - With a 32×32 input, 3×3 kernel, stride of 1, padding of 1, and dilation of 1:
+    /// - With a 32ï¿½32 input, 3ï¿½3 kernel, stride of 1, padding of 1, and dilation of 1:
     ///   Output size = (32 + 2*1 - 1*(3-1) - 1)/1 + 1 = 32
     ///   (The output stays the same size as the input)
     /// 

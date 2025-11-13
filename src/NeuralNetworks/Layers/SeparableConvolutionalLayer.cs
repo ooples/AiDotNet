@@ -47,10 +47,10 @@ public class SeparableConvolutionalLayer<T> : LayerBase<T>
     /// </summary>
     /// <remarks>
     /// <para>
-    /// These 1×1 kernels are applied after the depthwise convolution to combine information across channels.
+    /// These 1ï¿½1 kernels are applied after the depthwise convolution to combine information across channels.
     /// The shape is [inputDepth, 1, 1, outputDepth], which means they only operate across the channel dimension.
     /// </para>
-    /// <para><b>For Beginners:</b> These are tiny filters (just 1×1 in size) that combine information
+    /// <para><b>For Beginners:</b> These are tiny filters (just 1ï¿½1 in size) that combine information
     /// from all the input channels to create new feature maps. They don't look at spatial patterns
     /// (that's what the depthwise kernels do) but instead mix information between channels.
     /// </para>
@@ -184,8 +184,8 @@ public class SeparableConvolutionalLayer<T> : LayerBase<T>
     /// It determines the receptive field size for the depthwise convolution operation.
     /// </para>
     /// <para><b>For Beginners:</b> This is the size of the "window" that slides over the input data.
-    /// Larger values (like 5×5 or 7×7) can detect bigger patterns, while smaller values (like 3×3)
-    /// focus on fine details. Most common CNN layers use 3×3 kernels.
+    /// Larger values (like 5ï¿½5 or 7ï¿½7) can detect bigger patterns, while smaller values (like 3ï¿½3)
+    /// focus on fine details. Most common CNN layers use 3ï¿½3 kernels.
     /// </para>
     /// </remarks>
     private readonly int _kernelSize;
@@ -309,7 +309,7 @@ public class SeparableConvolutionalLayer<T> : LayerBase<T>
     /// The parameters control how the layer processes data:
     /// - inputShape: The size and structure of the incoming data (like image dimensions)
     /// - outputDepth: How many different features the layer will look for
-    /// - kernelSize: The size of the "window" that slides over the input (e.g., 3×3 or 5×5)
+    /// - kernelSize: The size of the "window" that slides over the input (e.g., 3ï¿½3 or 5ï¿½5)
     /// - stride: How many pixels to move the window each step (smaller = more overlap)
     /// - padding: Whether to add extra space around the input edges
     /// - scalarActivation: A function that adds non-linearity (helping the network learn complex patterns)
@@ -413,7 +413,7 @@ public class SeparableConvolutionalLayer<T> : LayerBase<T>
     /// - The height and width get smaller based on the kernel size, stride, and padding
     /// - The depth changes to match the outputDepth parameter
     /// 
-    /// For example, with a 28×28 image input, a 3×3 kernel, stride of 1, and no padding:
+    /// For example, with a 28ï¿½28 image input, a 3ï¿½3 kernel, stride of 1, and no padding:
     /// - Output height: (28 - 3 + 0) / 1 + 1 = 26
     /// - Output width: (28 - 3 + 0) / 1 + 1 = 26
     /// - So the output shape would be [batch, 26, 26, outputDepth]
@@ -514,7 +514,7 @@ public class SeparableConvolutionalLayer<T> : LayerBase<T>
     ///    - Captures spatial patterns within each channel independently
     ///
     /// 2. Pointwise convolution: Combines results across all channels
-    ///    - Uses 1×1 filters to mix information between channels
+    ///    - Uses 1ï¿½1 filters to mix information between channels
     ///    - Creates new feature maps that combine information from all inputs
     ///    - Adds bias values to each output channel
     ///
@@ -603,21 +603,33 @@ public class SeparableConvolutionalLayer<T> : LayerBase<T>
     /// </para>
     /// <para><b>For Beginners:</b> This method is used during training to calculate how the layer's inputs
     /// and parameters should change to reduce errors.
-    /// 
+    ///
     /// The backward pass:
     /// 1. Starts with gradients (error signals) from the next layer
     /// 2. Computes how to adjust the layer's parameters (kernels and biases)
     /// 3. Calculates how to adjust the input that was received
-    /// 
+    ///
     /// This happens in reverse order compared to the forward pass:
     /// - First backpropagates through the pointwise convolution
     /// - Then backpropagates through the depthwise convolution
-    /// 
+    ///
     /// The calculated gradients are stored for later use when updating the parameters,
     /// and the input gradient is returned to continue the backpropagation process.
     /// </para>
     /// </remarks>
     public override Tensor<T> Backward(Tensor<T> outputGradient)
+    {
+        return UseAutodiff
+            ? BackwardViaAutodiff(outputGradient)
+            : BackwardManual(outputGradient);
+    }
+
+    /// <summary>
+    /// Manual backward pass implementation using optimized gradient calculations.
+    /// </summary>
+    /// <param name="outputGradient">The gradient of the loss with respect to the layer's output.</param>
+    /// <returns>The gradient of the loss with respect to the layer's input.</returns>
+    private Tensor<T> BackwardManual(Tensor<T> outputGradient)
     {
         if (_lastInput == null || _lastOutput == null)
             throw new InvalidOperationException("Forward pass must be called before backward pass.");
@@ -691,6 +703,297 @@ public class SeparableConvolutionalLayer<T> : LayerBase<T>
         }
 
         return inputGradient;
+    }
+
+    /// <summary>
+    /// Backward pass implementation using automatic differentiation.
+    /// </summary>
+    /// <param name="outputGradient">The gradient of the loss with respect to the layer's output.</param>
+    /// <returns>The gradient of the loss with respect to the layer's input.</returns>
+    /// <remarks>
+    /// <para>
+    /// This method uses automatic differentiation to compute gradients. Currently, separable convolution operations
+    /// are not yet available in TensorOperations, so this method falls back to the manual implementation.
+    /// </para>
+    /// <para>
+    /// Once separable convolution operations are added to TensorOperations, this method will provide:
+    /// - Automatic gradient computation through the computation graph
+    /// - Verification of manual gradient implementations
+    /// - Support for rapid prototyping with custom modifications
+    /// </para>
+    /// </remarks>
+    private Tensor<T> BackwardViaAutodiff(Tensor<T> outputGradient)
+    {
+        if (_lastInput == null)
+            throw new InvalidOperationException("Forward pass must be called before backward pass.");
+
+        // Convert from NHWC [batch, H, W, channels] to NCHW [batch, channels, H, W]
+        var inputNCHW = ConvertNHWCtoNCHW(_lastInput);
+        var depthwiseKernelNCHW = ConvertDepthwiseKernelToNCHW(_depthwiseKernels);
+        var pointwiseKernelNCHW = ConvertPointwiseKernelToNCHW(_pointwiseKernels);
+
+        // Create computation nodes
+        var inputNode = Autodiff.TensorOperations<T>.Variable(inputNCHW, "input", requiresGradient: true);
+        var depthwiseKernelNode = Autodiff.TensorOperations<T>.Variable(depthwiseKernelNCHW, "depthwise_kernel", requiresGradient: true);
+        var pointwiseKernelNode = Autodiff.TensorOperations<T>.Variable(pointwiseKernelNCHW, "pointwise_kernel", requiresGradient: true);
+        var biasNode = Autodiff.TensorOperations<T>.Variable(ConvertVectorToTensor(_biases), "bias", requiresGradient: true);
+
+        // Forward pass using autodiff operations
+        // Step 1: Depthwise convolution (no bias)
+        var depthwiseOutput = Autodiff.TensorOperations<T>.DepthwiseConv2D(
+            inputNode,
+            depthwiseKernelNode,
+            bias: null,
+            stride: new int[] { _stride, _stride },
+            padding: new int[] { _padding, _padding });
+
+        // Step 2: Pointwise convolution (1x1 conv with bias)
+        var pointwiseOutput = Autodiff.TensorOperations<T>.Conv2D(
+            depthwiseOutput,
+            pointwiseKernelNode,
+            biasNode,
+            stride: new int[] { 1, 1 },
+            padding: new int[] { 0, 0 });
+
+        // Apply activation function
+        var activatedOutput = ApplyActivationAutodiff(pointwiseOutput);
+
+        // Convert output gradient from NHWC to NCHW
+        var outputGradientNCHW = ConvertNHWCtoNCHW(outputGradient);
+
+        // Perform backward pass
+        activatedOutput.Gradient = outputGradientNCHW;
+        var topoOrder = GetTopologicalOrder(activatedOutput);
+        for (int i = topoOrder.Count - 1; i >= 0; i--)
+        {
+            var node = topoOrder[i];
+            if (node.RequiresGradient && node.BackwardFunction != null && node.Gradient != null)
+            {
+                node.BackwardFunction(node.Gradient);
+            }
+        }
+
+        // Update parameter gradients
+        if (depthwiseKernelNode.Gradient != null)
+            _depthwiseKernelsGradient = ConvertDepthwiseKernelFromNCHW(depthwiseKernelNode.Gradient);
+
+        if (pointwiseKernelNode.Gradient != null)
+            _pointwiseKernelsGradient = ConvertPointwiseKernelFromNCHW(pointwiseKernelNode.Gradient);
+
+        if (biasNode.Gradient != null)
+            _biasesGradient = ConvertTensorToVector(biasNode.Gradient);
+
+        // Convert input gradient from NCHW back to NHWC
+        var inputGradientNCHW = inputNode.Gradient ?? throw new InvalidOperationException("Gradient computation failed.");
+        return ConvertNCHWtoNHWC(inputGradientNCHW);
+    }
+
+    /// <summary>
+    /// Converts tensor from NHWC [batch, H, W, channels] to NCHW [batch, channels, H, W] format.
+    /// </summary>
+    private Tensor<T> ConvertNHWCtoNCHW(Tensor<T> nhwc)
+    {
+        int batch = nhwc.Shape[0];
+        int height = nhwc.Shape[1];
+        int width = nhwc.Shape[2];
+        int channels = nhwc.Shape[3];
+
+        var nchw = new Tensor<T>([batch, channels, height, width]);
+        for (int b = 0; b < batch; b++)
+            for (int c = 0; c < channels; c++)
+                for (int h = 0; h < height; h++)
+                    for (int w = 0; w < width; w++)
+                        nchw[b, c, h, w] = nhwc[b, h, w, c];
+
+        return nchw;
+    }
+
+    /// <summary>
+    /// Converts tensor from NCHW [batch, channels, H, W] to NHWC [batch, H, W, channels] format.
+    /// </summary>
+    private Tensor<T> ConvertNCHWtoNHWC(Tensor<T> nchw)
+    {
+        int batch = nchw.Shape[0];
+        int channels = nchw.Shape[1];
+        int height = nchw.Shape[2];
+        int width = nchw.Shape[3];
+
+        var nhwc = new Tensor<T>([batch, height, width, channels]);
+        for (int b = 0; b < batch; b++)
+            for (int h = 0; h < height; h++)
+                for (int w = 0; w < width; w++)
+                    for (int c = 0; c < channels; c++)
+                        nhwc[b, h, w, c] = nchw[b, c, h, w];
+
+        return nhwc;
+    }
+
+    /// <summary>
+    /// Converts depthwise kernel from [inputDepth, kernelSize, kernelSize, 1] to [inputDepth, 1, kernelSize, kernelSize] format.
+    /// </summary>
+    private Tensor<T> ConvertDepthwiseKernelToNCHW(Tensor<T> kernel)
+    {
+        int inputDepth = kernel.Shape[0];
+        int kernelSize = kernel.Shape[1];
+
+        var nchw = new Tensor<T>([inputDepth, 1, kernelSize, kernelSize]);
+        for (int d = 0; d < inputDepth; d++)
+            for (int kh = 0; kh < kernelSize; kh++)
+                for (int kw = 0; kw < kernelSize; kw++)
+                    nchw[d, 0, kh, kw] = kernel[d, kh, kw, 0];
+
+        return nchw;
+    }
+
+    /// <summary>
+    /// Converts depthwise kernel from [inputDepth, 1, kernelSize, kernelSize] back to [inputDepth, kernelSize, kernelSize, 1] format.
+    /// </summary>
+    private Tensor<T> ConvertDepthwiseKernelFromNCHW(Tensor<T> kernel)
+    {
+        int inputDepth = kernel.Shape[0];
+        int kernelSize = kernel.Shape[2];
+
+        var nhwc = new Tensor<T>([inputDepth, kernelSize, kernelSize, 1]);
+        for (int d = 0; d < inputDepth; d++)
+            for (int kh = 0; kh < kernelSize; kh++)
+                for (int kw = 0; kw < kernelSize; kw++)
+                    nhwc[d, kh, kw, 0] = kernel[d, 0, kh, kw];
+
+        return nhwc;
+    }
+
+    /// <summary>
+    /// Converts pointwise kernel from [inputDepth, 1, 1, outputDepth] to [outputDepth, inputDepth, 1, 1] format.
+    /// </summary>
+    private Tensor<T> ConvertPointwiseKernelToNCHW(Tensor<T> kernel)
+    {
+        int inputDepth = kernel.Shape[0];
+        int outputDepth = kernel.Shape[3];
+
+        var nchw = new Tensor<T>([outputDepth, inputDepth, 1, 1]);
+        for (int od = 0; od < outputDepth; od++)
+            for (int id = 0; id < inputDepth; id++)
+                nchw[od, id, 0, 0] = kernel[id, 0, 0, od];
+
+        return nchw;
+    }
+
+    /// <summary>
+    /// Converts pointwise kernel from [outputDepth, inputDepth, 1, 1] back to [inputDepth, 1, 1, outputDepth] format.
+    /// </summary>
+    private Tensor<T> ConvertPointwiseKernelFromNCHW(Tensor<T> kernel)
+    {
+        int outputDepth = kernel.Shape[0];
+        int inputDepth = kernel.Shape[1];
+
+        var nhwc = new Tensor<T>([inputDepth, 1, 1, outputDepth]);
+        for (int id = 0; id < inputDepth; id++)
+            for (int od = 0; od < outputDepth; od++)
+                nhwc[id, 0, 0, od] = kernel[od, id, 0, 0];
+
+        return nhwc;
+    }
+
+    /// <summary>
+    /// Converts vector to 1D tensor.
+    /// </summary>
+    private Tensor<T> ConvertVectorToTensor(Vector<T> vector)
+    {
+        var tensor = new Tensor<T>([vector.Length]);
+        for (int i = 0; i < vector.Length; i++)
+            tensor[i] = vector[i];
+        return tensor;
+    }
+
+    /// <summary>
+    /// Converts 1D tensor to vector.
+    /// </summary>
+    private Vector<T> ConvertTensorToVector(Tensor<T> tensor)
+    {
+        var vector = new Vector<T>(tensor.Shape[0]);
+        for (int i = 0; i < tensor.Shape[0]; i++)
+            vector[i] = tensor[i];
+        return vector;
+    }
+
+    /// <summary>
+    /// Applies activation function using autodiff operations.
+    /// </summary>
+    private Autodiff.ComputationNode<T> ApplyActivationAutodiff(Autodiff.ComputationNode<T> input)
+    {
+        // Apply the appropriate activation function
+        if (UsingVectorActivation)
+        {
+            if (VectorActivation is ReLUActivation<T>)
+                return Autodiff.TensorOperations<T>.ReLU(input);
+            else if (VectorActivation is SigmoidActivation<T>)
+                return Autodiff.TensorOperations<T>.Sigmoid(input);
+            else if (VectorActivation is TanhActivation<T>)
+                return Autodiff.TensorOperations<T>.Tanh(input);
+            else
+            {
+                var activationType = VectorActivation?.GetType().Name ?? "Unknown";
+                throw new NotSupportedException($"Activation {activationType} not yet supported in autodiff");
+            }
+        }
+        else
+        {
+            if (ScalarActivation is ReLUActivation<T>)
+                return Autodiff.TensorOperations<T>.ReLU(input);
+            else if (ScalarActivation is SigmoidActivation<T>)
+                return Autodiff.TensorOperations<T>.Sigmoid(input);
+            else if (ScalarActivation is TanhActivation<T>)
+                return Autodiff.TensorOperations<T>.Tanh(input);
+            else
+            {
+                var activationType = ScalarActivation?.GetType().Name ?? "Unknown";
+                throw new NotSupportedException($"Activation {activationType} not yet supported in autodiff");
+            }
+        }
+    }
+
+    /// <summary>
+    /// Gets the topological order of nodes in the computation graph.
+    /// </summary>
+    /// <param name="root">The root node of the computation graph.</param>
+    /// <returns>A list of nodes in topological order.</returns>
+    private List<Autodiff.ComputationNode<T>> GetTopologicalOrder(Autodiff.ComputationNode<T> root)
+    {
+        var visited = new HashSet<Autodiff.ComputationNode<T>>();
+        var result = new List<Autodiff.ComputationNode<T>>();
+
+        var stack = new Stack<(Autodiff.ComputationNode<T> node, bool processed)>();
+        stack.Push((root, false));
+
+        while (stack.Count > 0)
+        {
+            var (node, processed) = stack.Pop();
+
+            if (visited.Contains(node))
+            {
+                continue;
+            }
+
+            if (processed)
+            {
+                visited.Add(node);
+                result.Add(node);
+            }
+            else
+            {
+                stack.Push((node, true));
+
+                foreach (var parent in node.Parents)
+                {
+                    if (!visited.Contains(parent))
+                    {
+                        stack.Push((parent, false));
+                    }
+                }
+            }
+        }
+
+        return result;
     }
 
     /// <summary>

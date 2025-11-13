@@ -181,6 +181,18 @@ public class ContinuumMemorySystemLayer<T> : LayerBase<T>
 
     public override Tensor<T> Backward(Tensor<T> outputGradient)
     {
+        return UseAutodiff
+            ? BackwardViaAutodiff(outputGradient)
+            : BackwardManual(outputGradient);
+    }
+
+    /// <summary>
+    /// Manual backward pass implementation using optimized gradient calculations.
+    /// </summary>
+    /// <param name="outputGradient">The gradient of the loss with respect to the layer's output.</param>
+    /// <returns>The gradient of the loss with respect to the layer's input.</returns>
+    private Tensor<T> BackwardManual(Tensor<T> outputGradient)
+    {
         if (outputGradient == null)
             throw new ArgumentNullException(nameof(outputGradient));
 
@@ -227,6 +239,88 @@ public class ContinuumMemorySystemLayer<T> : LayerBase<T>
         }
 
         return gradient;
+    }
+
+    /// <summary>
+    /// Backward pass implementation using automatic differentiation.
+    /// </summary>
+    /// <param name="outputGradient">The gradient of the loss with respect to the layer's output.</param>
+    /// <returns>The gradient of the loss with respect to the layer's input.</returns>
+    /// <remarks>
+    /// <para>
+    /// This method uses automatic differentiation by delegating to each DenseLayer's own
+    /// autodiff implementation. Since ContinuumMemorySystemLayer is a composite layer that
+    /// chains multiple DenseLayer instances, we enable autodiff on each block and let them
+    /// compute their own gradients.
+    /// </para>
+    /// </remarks>
+    private Tensor<T> BackwardViaAutodiff(Tensor<T> outputGradient)
+    {
+        if (outputGradient == null)
+            throw new ArgumentNullException(nameof(outputGradient));
+
+        var gradient = outputGradient;
+
+        // Enable autodiff on all MLP blocks
+        bool[] originalAutodiffSettings = new bool[_mlpBlocks.Length];
+        for (int i = 0; i < _mlpBlocks.Length; i++)
+        {
+            originalAutodiffSettings[i] = _mlpBlocks[i].UseAutodiff;
+            _mlpBlocks[i].UseAutodiff = true;
+        }
+
+        try
+        {
+            // Backprop through chain in reverse order using autodiff
+            for (int level = _mlpBlocks.Length - 1; level >= 0; level--)
+            {
+                if (_mlpBlocks[level] == null)
+                    throw new InvalidOperationException($"MLP block at level {level} is null");
+
+                // Let the DenseLayer use its own autodiff implementation
+                gradient = _mlpBlocks[level].Backward(gradient);
+
+                // Accumulate gradients for this level
+                var mlpGradient = _mlpBlocks[level].GetParameterGradients();
+                if (mlpGradient != null && mlpGradient.Length > 0)
+                {
+                    if (mlpGradient.Length != _accumulatedGradients[level].Length)
+                    {
+                        throw new InvalidOperationException(
+                            $"Gradient length mismatch at level {level}: expected {_accumulatedGradients[level].Length}, got {mlpGradient.Length}");
+                    }
+
+                    for (int i = 0; i < mlpGradient.Length; i++)
+                    {
+                        _accumulatedGradients[level][i] = _numOps.Add(
+                            _accumulatedGradients[level][i],
+                            mlpGradient[i]);
+                    }
+                }
+
+                _stepCounters[level]++;
+
+                // Update parameters when step count reaches chunk size
+                if (_stepCounters[level] >= _chunkSizes[level])
+                {
+                    UpdateLevelParameters(level);
+                    _stepCounters[level] = 0;
+
+                    // Reset gradient accumulation
+                    _accumulatedGradients[level] = new Vector<T>(_accumulatedGradients[level].Length);
+                }
+            }
+
+            return gradient;
+        }
+        finally
+        {
+            // Restore original autodiff settings
+            for (int i = 0; i < _mlpBlocks.Length; i++)
+            {
+                _mlpBlocks[i].UseAutodiff = originalAutodiffSettings[i];
+            }
+        }
     }
 
     private void UpdateLevelParameters(int level)

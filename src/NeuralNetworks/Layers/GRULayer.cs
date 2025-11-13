@@ -616,17 +616,43 @@ public class GRULayer<T> : LayerBase<T>
     /// </para>
     /// <para><b>For Beginners:</b> This method is used during training to calculate how the layer's input
     /// and parameters should change to reduce errors.
-    /// 
+    ///
     /// During the backward pass:
     /// 1. The layer receives information about how its output should change to reduce the overall error
     /// 2. It calculates how each of its weights and biases should change to produce better output
     /// 3. It calculates how its input should change, which will be used by earlier layers
-    /// 
+    ///
     /// This complex calculation essentially runs the GRU's logic in reverse, tracking how
     /// changes to the output would affect each internal part of the layer.
     /// </para>
     /// </remarks>
     public override Tensor<T> Backward(Tensor<T> outputGradient)
+    {
+        return UseAutodiff
+            ? BackwardViaAutodiff(outputGradient)
+            : BackwardManual(outputGradient);
+    }
+
+    /// <summary>
+    /// Manual backward pass implementation using Backpropagation Through Time (BPTT) for GRU.
+    /// </summary>
+    /// <param name="outputGradient">The gradient of the loss with respect to the layer's output.</param>
+    /// <returns>The gradient of the loss with respect to the layer's input.</returns>
+    /// <remarks>
+    /// <para>
+    /// This method implements the backward pass using manual gradient calculations optimized for
+    /// GRU networks. It performs backpropagation through time (BPTT), processing the
+    /// sequence in reverse order and computing gradients for all gate parameters (reset, update)
+    /// and hidden states.
+    /// </para>
+    /// <para>
+    /// Autodiff Note: GRU backward pass involves complex interactions between reset and update gates.
+    /// Implementing this with automatic differentiation would require handling temporal dependencies
+    /// and gate-specific gradient flows. The manual implementation provides efficient and correct
+    /// gradient calculations for all GRU components.
+    /// </para>
+    /// </remarks>
+    private Tensor<T> BackwardManual(Tensor<T> outputGradient)
     {
         if (_lastInput == null || _lastHiddenState == null || _lastZ == null || _lastR == null || _lastH == null)
             throw new InvalidOperationException("Forward pass must be called before backward pass.");
@@ -1175,12 +1201,12 @@ public class GRULayer<T> : LayerBase<T>
     /// pass to calculate gradients. It supports both element-wise and vector activation functions.
     /// </para>
     /// <para><b>For Beginners:</b> This method calculates how sensitive the activation function is to changes.
-    /// 
+    ///
     /// During backpropagation (learning):
     /// - We need to know how much a small change in input affects the output
     /// - This method calculates that sensitivity for either the gate functions or the main activation
     /// - It's a crucial part of the math that allows neural networks to learn
-    /// 
+    ///
     /// Think of it as measuring the "slope" of the activation function at each point,
     /// which tells us how to adjust the parameters to improve the network's performance.
     /// </para>
@@ -1203,5 +1229,262 @@ public class GRULayer<T> : LayerBase<T>
         }
 
         throw new InvalidOperationException("No activation function specified.");
+    }
+
+    /// <summary>
+    /// Backward pass implementation using automatic differentiation.
+    /// </summary>
+    /// <param name="outputGradient">The gradient of the loss with respect to the layer's output.</param>
+    /// <returns>The gradient of the loss with respect to the layer's input.</returns>
+    /// <remarks>
+    /// <para>
+    /// This method uses automatic differentiation to compute gradients for the GRU layer.
+    /// It processes one timestep at a time through the recurrent computation, building the
+    /// computation graph and then backpropagating through it using automatic differentiation.
+    /// </para>
+    /// <para>
+    /// Note: For simplicity, this implementation currently processes only the last timestep
+    /// when not returning sequences. Full BPTT through all timesteps via autodiff would
+    /// require more complex graph construction and is left to future enhancements.
+    /// </para>
+    /// </remarks>
+    private Tensor<T> BackwardViaAutodiff(Tensor<T> outputGradient)
+    {
+        if (_lastInput == null || _lastHiddenState == null || _lastZ == null || _lastR == null || _lastH == null)
+            throw new InvalidOperationException("Forward pass must be called before backward pass.");
+
+        int batchSize = _lastInput.Shape[0];
+        int sequenceLength = _lastInput.Shape[1];
+
+        // Convert weight matrices and biases to tensors
+        var WzTensor = MatrixToTensor(_Wz);
+        var WrTensor = MatrixToTensor(_Wr);
+        var WhTensor = MatrixToTensor(_Wh);
+        var UzTensor = MatrixToTensor(_Uz);
+        var UrTensor = MatrixToTensor(_Ur);
+        var UhTensor = MatrixToTensor(_Uh);
+        var bzTensor = VectorToTensor(_bz);
+        var brTensor = VectorToTensor(_br);
+        var bhTensor = VectorToTensor(_bh);
+
+        // For simplicity, we process the last timestep only
+        // Full BPTT through all timesteps would require building a larger computation graph
+        var xt = _lastInput.Slice(1, sequenceLength - 1, sequenceLength).Reshape([batchSize, _inputSize]);
+
+        // Get previous hidden state
+        Tensor<T> h_prev;
+        if (sequenceLength > 1 && _allHiddenStates != null && _allHiddenStates.Count >= sequenceLength - 1)
+        {
+            h_prev = _allHiddenStates[sequenceLength - 2];
+        }
+        else
+        {
+            h_prev = new Tensor<T>([batchSize, _hiddenSize]);
+        }
+
+        // Create computation nodes for inputs and parameters
+        var input = Autodiff.TensorOperations<T>.Variable(xt, "input", requiresGradient: true);
+        var hiddenPrev = Autodiff.TensorOperations<T>.Variable(h_prev, "hidden_prev", requiresGradient: false);
+
+        var Wz = Autodiff.TensorOperations<T>.Variable(WzTensor, "Wz", requiresGradient: true);
+        var Wr = Autodiff.TensorOperations<T>.Variable(WrTensor, "Wr", requiresGradient: true);
+        var Wh = Autodiff.TensorOperations<T>.Variable(WhTensor, "Wh", requiresGradient: true);
+        var Uz = Autodiff.TensorOperations<T>.Variable(UzTensor, "Uz", requiresGradient: true);
+        var Ur = Autodiff.TensorOperations<T>.Variable(UrTensor, "Ur", requiresGradient: true);
+        var Uh = Autodiff.TensorOperations<T>.Variable(UhTensor, "Uh", requiresGradient: true);
+        var bz = Autodiff.TensorOperations<T>.Variable(bzTensor, "bz", requiresGradient: true);
+        var br = Autodiff.TensorOperations<T>.Variable(brTensor, "br", requiresGradient: true);
+        var bh = Autodiff.TensorOperations<T>.Variable(bhTensor, "bh", requiresGradient: true);
+
+        // Broadcast biases
+        var bzBroadcast = BroadcastVector(bz.Value, batchSize);
+        var brBroadcast = BroadcastVector(br.Value, batchSize);
+        var bhBroadcast = BroadcastVector(bh.Value, batchSize);
+        var bzNode = Autodiff.TensorOperations<T>.Variable(bzBroadcast, "bz_broadcast", requiresGradient: false);
+        var brNode = Autodiff.TensorOperations<T>.Variable(brBroadcast, "br_broadcast", requiresGradient: false);
+        var bhNode = Autodiff.TensorOperations<T>.Variable(bhBroadcast, "bh_broadcast", requiresGradient: false);
+
+        // Compute update gate: z = sigmoid(xt @ Wz.T + h_prev @ Uz.T + bz)
+        var WzT = Autodiff.TensorOperations<T>.Transpose(Wz);
+        var UzT = Autodiff.TensorOperations<T>.Transpose(Uz);
+        var z_matmul1 = Autodiff.TensorOperations<T>.MatrixMultiply(input, WzT);
+        var z_matmul2 = Autodiff.TensorOperations<T>.MatrixMultiply(hiddenPrev, UzT);
+        var z_sum = Autodiff.TensorOperations<T>.Add(z_matmul1, z_matmul2);
+        var z_preact = Autodiff.TensorOperations<T>.Add(z_sum, bzNode);
+        var z = Autodiff.TensorOperations<T>.Sigmoid(z_preact);
+
+        // Compute reset gate: r = sigmoid(xt @ Wr.T + h_prev @ Ur.T + br)
+        var WrT = Autodiff.TensorOperations<T>.Transpose(Wr);
+        var UrT = Autodiff.TensorOperations<T>.Transpose(Ur);
+        var r_matmul1 = Autodiff.TensorOperations<T>.MatrixMultiply(input, WrT);
+        var r_matmul2 = Autodiff.TensorOperations<T>.MatrixMultiply(hiddenPrev, UrT);
+        var r_sum = Autodiff.TensorOperations<T>.Add(r_matmul1, r_matmul2);
+        var r_preact = Autodiff.TensorOperations<T>.Add(r_sum, brNode);
+        var r = Autodiff.TensorOperations<T>.Sigmoid(r_preact);
+
+        // Compute candidate hidden state: h_candidate = tanh(xt @ Wh.T + (r * h_prev) @ Uh.T + bh)
+        var WhT = Autodiff.TensorOperations<T>.Transpose(Wh);
+        var UhT = Autodiff.TensorOperations<T>.Transpose(Uh);
+        var h_matmul1 = Autodiff.TensorOperations<T>.MatrixMultiply(input, WhT);
+        var r_times_h = Autodiff.TensorOperations<T>.ElementwiseMultiply(r, hiddenPrev);
+        var h_matmul2 = Autodiff.TensorOperations<T>.MatrixMultiply(r_times_h, UhT);
+        var h_sum = Autodiff.TensorOperations<T>.Add(h_matmul1, h_matmul2);
+        var h_preact = Autodiff.TensorOperations<T>.Add(h_sum, bhNode);
+        var h_candidate = Autodiff.TensorOperations<T>.Tanh(h_preact);
+
+        // Compute final hidden state: h = z * h_prev + (1 - z) * h_candidate
+        var z_times_h_prev = Autodiff.TensorOperations<T>.ElementwiseMultiply(z, hiddenPrev);
+        var one_minus_z = Autodiff.TensorOperations<T>.Subtract(
+            Autodiff.TensorOperations<T>.Constant(CreateOnesLike(z.Value)),
+            z
+        );
+        var one_minus_z_times_h_cand = Autodiff.TensorOperations<T>.ElementwiseMultiply(one_minus_z, h_candidate);
+        var h_new = Autodiff.TensorOperations<T>.Add(z_times_h_prev, one_minus_z_times_h_cand);
+
+        // Set output gradient
+        var outputGradFlat = outputGradient.Shape.Length == 2
+            ? outputGradient
+            : outputGradient.Reshape([batchSize, _hiddenSize]);
+        h_new.Gradient = outputGradFlat;
+
+        // Perform topological sort and backward pass
+        var topoOrder = GetTopologicalOrder(h_new);
+
+        for (int i = topoOrder.Count - 1; i >= 0; i--)
+        {
+            var node = topoOrder[i];
+            if (node.RequiresGradient && node.BackwardFunction != null && node.Gradient != null)
+            {
+                node.BackwardFunction(node.Gradient);
+            }
+        }
+
+        // Extract and accumulate gradients
+        if (Wz.Gradient != null) _dWz = (_dWz ?? new Tensor<T>([_hiddenSize, _inputSize])).Add(Wz.Gradient);
+        if (Wr.Gradient != null) _dWr = (_dWr ?? new Tensor<T>([_hiddenSize, _inputSize])).Add(Wr.Gradient);
+        if (Wh.Gradient != null) _dWh = (_dWh ?? new Tensor<T>([_hiddenSize, _inputSize])).Add(Wh.Gradient);
+        if (Uz.Gradient != null) _dUz = (_dUz ?? new Tensor<T>([_hiddenSize, _hiddenSize])).Add(Uz.Gradient);
+        if (Ur.Gradient != null) _dUr = (_dUr ?? new Tensor<T>([_hiddenSize, _hiddenSize])).Add(Ur.Gradient);
+        if (Uh.Gradient != null) _dUh = (_dUh ?? new Tensor<T>([_hiddenSize, _hiddenSize])).Add(Uh.Gradient);
+        if (bz.Gradient != null) _dbz = (_dbz ?? new Tensor<T>([_hiddenSize])).Add(bz.Gradient.Sum([0]));
+        if (br.Gradient != null) _dbr = (_dbr ?? new Tensor<T>([_hiddenSize])).Add(br.Gradient.Sum([0]));
+        if (bh.Gradient != null) _dbh = (_dbh ?? new Tensor<T>([_hiddenSize])).Add(bh.Gradient.Sum([0]));
+
+        // Return input gradient reshaped to match input shape
+        var inputGrad = input.Gradient ?? new Tensor<T>([batchSize, _inputSize]);
+        var fullInputGrad = new Tensor<T>([batchSize, sequenceLength, _inputSize]);
+
+        // Copy gradient to the last timestep position
+        for (int b = 0; b < batchSize; b++)
+        {
+            for (int f = 0; f < _inputSize; f++)
+            {
+                fullInputGrad[b, sequenceLength - 1, f] = inputGrad[b, f];
+            }
+        }
+
+        return fullInputGrad;
+    }
+
+    /// <summary>
+    /// Gets the topological order of nodes in the computation graph.
+    /// </summary>
+    private List<Autodiff.ComputationNode<T>> GetTopologicalOrder(Autodiff.ComputationNode<T> root)
+    {
+        var visited = new HashSet<Autodiff.ComputationNode<T>>();
+        var result = new List<Autodiff.ComputationNode<T>>();
+
+        var stack = new Stack<(Autodiff.ComputationNode<T> node, bool processed)>();
+        stack.Push((root, false));
+
+        while (stack.Count > 0)
+        {
+            var (node, processed) = stack.Pop();
+
+            if (visited.Contains(node))
+            {
+                continue;
+            }
+
+            if (processed)
+            {
+                visited.Add(node);
+                result.Add(node);
+            }
+            else
+            {
+                stack.Push((node, true));
+                foreach (var parent in node.Parents)
+                {
+                    if (!visited.Contains(parent))
+                    {
+                        stack.Push((parent, false));
+                    }
+                }
+            }
+        }
+
+        return result;
+    }
+
+    /// <summary>
+    /// Converts a Matrix to a 2D Tensor.
+    /// </summary>
+    private Tensor<T> MatrixToTensor(Matrix<T> matrix)
+    {
+        var tensor = new Tensor<T>([matrix.Rows, matrix.Columns]);
+        for (int i = 0; i < matrix.Rows; i++)
+        {
+            for (int j = 0; j < matrix.Columns; j++)
+            {
+                tensor[i, j] = matrix[i, j];
+            }
+        }
+        return tensor;
+    }
+
+    /// <summary>
+    /// Converts a Vector to a 1D Tensor.
+    /// </summary>
+    private Tensor<T> VectorToTensor(Vector<T> vector)
+    {
+        var tensor = new Tensor<T>([vector.Length]);
+        for (int i = 0; i < vector.Length; i++)
+        {
+            tensor[i] = vector[i];
+        }
+        return tensor;
+    }
+
+    /// <summary>
+    /// Broadcasts a 1D vector across the batch dimension.
+    /// </summary>
+    private Tensor<T> BroadcastVector(Tensor<T> vector, int batchSize)
+    {
+        var vectorLength = vector.Length;
+        var broadcasted = new Tensor<T>([batchSize, vectorLength]);
+
+        for (int i = 0; i < batchSize; i++)
+        {
+            for (int j = 0; j < vectorLength; j++)
+            {
+                broadcasted[i, j] = vector[j];
+            }
+        }
+
+        return broadcasted;
+    }
+
+    /// <summary>
+    /// Creates a tensor of ones with the same shape as the input tensor.
+    /// </summary>
+    private Tensor<T> CreateOnesLike(Tensor<T> tensor)
+    {
+        var ones = new Tensor<T>(tensor.Shape);
+        for (int i = 0; i < ones.Length; i++)
+        {
+            ones[i] = NumOps.One;
+        }
+        return ones;
     }
 }

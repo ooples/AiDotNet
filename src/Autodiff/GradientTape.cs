@@ -118,6 +118,24 @@ public class GradientTape<T> : IDisposable
     private bool _disposed;
 
     /// <summary>
+    /// Caches topological orders for graph structures to avoid recomputation.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// The cache maps from a graph signature (based on node structure) to the
+    /// precomputed topological order. This significantly improves performance
+    /// for persistent tapes when computing gradients multiple times with the
+    /// same graph structure.
+    /// </para>
+    /// <para>
+    /// Graph caching is automatically enabled for persistent tapes and disabled
+    /// for single-use tapes, providing optimal performance without requiring
+    /// user configuration.
+    /// </para>
+    /// </remarks>
+    private Dictionary<string, List<ComputationNode<T>>>? _graphCache;
+
+    /// <summary>
     /// Initializes a new instance of the <see cref="GradientTape{T}"/> class.
     /// </summary>
     /// <param name="persistent">Whether the tape should persist after first use.</param>
@@ -126,6 +144,10 @@ public class GradientTape<T> : IDisposable
     /// Creates a new gradient tape and pushes it onto the thread-local tape stack,
     /// making it the active tape for this thread. All operations performed within
     /// the scope of this tape will be recorded for automatic differentiation.
+    /// </para>
+    /// <para>
+    /// Graph caching is automatically enabled for persistent tapes to optimize
+    /// performance when computing gradients multiple times.
     /// </para>
     /// <para><b>For Beginners:</b> This creates a new recording session.
     ///
@@ -143,6 +165,13 @@ public class GradientTape<T> : IDisposable
         IsRecording = true;
         Persistent = persistent;
         _hasBeenUsed = false;
+
+        // Automatically enable graph caching for persistent tapes
+        // This provides optimal performance without requiring user configuration
+        if (persistent)
+        {
+            _graphCache = new Dictionary<string, List<ComputationNode<T>>>();
+        }
 
         // Push onto tape stack
         if (_tapeStack == null)
@@ -219,6 +248,99 @@ public class GradientTape<T> : IDisposable
         {
             _operations.Add(node);
         }
+    }
+
+    /// <summary>
+    /// Computes a signature for the computation graph to enable caching.
+    /// </summary>
+    /// <param name="target">The target node of the computation graph.</param>
+    /// <returns>A string signature representing the graph structure.</returns>
+    /// <remarks>
+    /// The signature is based on the structure of the computation graph, including
+    /// the relationships between nodes. Identical graph structures produce identical
+    /// signatures, enabling cache hits.
+    /// </remarks>
+    private string ComputeGraphSignature(ComputationNode<T> target)
+    {
+        // Use a hash-based signature of the node IDs and their relationships
+        var visited = new HashSet<ComputationNode<T>>();
+        var signatureBuilder = new System.Text.StringBuilder();
+
+        void BuildSignature(ComputationNode<T> node)
+        {
+            if (visited.Contains(node))
+            {
+                return;
+            }
+
+            visited.Add(node);
+
+            // Add node hash code and parent count to signature
+            signatureBuilder.Append($"{node.GetHashCode()}:{node.Parents.Count};");
+
+            foreach (var parent in node.Parents)
+            {
+                BuildSignature(parent);
+            }
+        }
+
+        BuildSignature(target);
+        return signatureBuilder.ToString();
+    }
+
+    /// <summary>
+    /// Performs a topological sort of the computation graph rooted at the target node.
+    /// </summary>
+    /// <param name="target">The target node to start the topological sort from.</param>
+    /// <returns>A list of nodes in topological order.</returns>
+    /// <remarks>
+    /// <para>
+    /// This is an optimized version of topological sort that can be cached and reused
+    /// for identical graph structures. The algorithm uses iterative DFS to avoid
+    /// stack overflow for deep graphs.
+    /// </para>
+    /// </remarks>
+    private List<ComputationNode<T>> ComputeTopologicalOrder(ComputationNode<T> target)
+    {
+        var visited = new HashSet<ComputationNode<T>>();
+        var result = new List<ComputationNode<T>>();
+
+        // Use iterative DFS with explicit stack to avoid stack overflow for deep graphs
+        var stack = new Stack<(ComputationNode<T> node, bool processed)>();
+        stack.Push((target, false));
+
+        while (stack.Count > 0)
+        {
+            var (node, processed) = stack.Pop();
+
+            if (visited.Contains(node))
+            {
+                continue;
+            }
+
+            if (processed)
+            {
+                // All parents have been visited, add to result
+                visited.Add(node);
+                result.Add(node);
+            }
+            else
+            {
+                // Mark for processing after parents
+                stack.Push((node, true));
+
+                // Push parents onto stack (they will be processed first)
+                foreach (var parent in node.Parents)
+                {
+                    if (!visited.Contains(parent))
+                    {
+                        stack.Push((parent, false));
+                    }
+                }
+            }
+        }
+
+        return result;
     }
 
     /// <summary>
@@ -336,7 +458,33 @@ public class GradientTape<T> : IDisposable
         }
 
         // Perform backward pass from target
-        target.Backward();
+        // For persistent tapes, use graph caching optimization automatically
+        if (_graphCache != null)
+        {
+            // Use cached topological order if available
+            string graphSignature = ComputeGraphSignature(target);
+            List<ComputationNode<T>> topoOrder;
+
+            if (_graphCache.TryGetValue(graphSignature, out var cachedOrder))
+            {
+                // Cache hit - reuse cached topological order
+                topoOrder = cachedOrder;
+            }
+            else
+            {
+                // Cache miss - compute and cache topological order
+                topoOrder = ComputeTopologicalOrder(target);
+                _graphCache[graphSignature] = topoOrder;
+            }
+
+            // Execute cached backward pass
+            PerformBackwardPass(target, topoOrder);
+        }
+        else
+        {
+            // Standard backward pass without caching (for non-persistent tapes)
+            target.Backward();
+        }
 
         // Restore recording state
         if (!createGraph && wasRecording)
@@ -362,6 +510,46 @@ public class GradientTape<T> : IDisposable
         }
 
         return result;
+    }
+
+    /// <summary>
+    /// Performs the backward pass using a precomputed topological order.
+    /// </summary>
+    /// <param name="target">The target node to start backward pass from.</param>
+    /// <param name="topoOrder">The precomputed topological order of nodes.</param>
+    /// <remarks>
+    /// <para>
+    /// This method executes the backward pass without recomputing the topological sort,
+    /// which is the primary performance benefit of graph caching. It mimics the behavior
+    /// of ComputationNode.Backward() but uses the cached node order.
+    /// </para>
+    /// </remarks>
+    private void PerformBackwardPass(ComputationNode<T> target, List<ComputationNode<T>> topoOrder)
+    {
+        // Clear all gradients in the topological order to ensure clean state
+        // This is critical for multiple backward passes (persistent tapes, higher-order gradients)
+        foreach (var node in topoOrder)
+        {
+            node.Gradient = null;
+        }
+
+        // Initialize root gradient to ones (for final node)
+        target.Gradient = new Tensor<T>(target.Value.Shape);
+        var numOps = Helpers.MathHelper.GetNumericOperations<T>();
+        for (int i = 0; i < target.Gradient.Length; i++)
+        {
+            target.Gradient[i] = numOps.One;
+        }
+
+        // Execute backward pass in reverse topological order
+        for (int i = topoOrder.Count - 1; i >= 0; i--)
+        {
+            var node = topoOrder[i];
+            if (node.RequiresGradient && node.BackwardFunction != null && node.Gradient != null)
+            {
+                node.BackwardFunction(node.Gradient);
+            }
+        }
     }
 
     /// <summary>
@@ -416,6 +604,7 @@ public class GradientTape<T> : IDisposable
     {
         _operations.Clear();
         _watchedNodes.Clear();
+        _graphCache?.Clear();
         _hasBeenUsed = false;
         IsRecording = true;
     }
@@ -465,6 +654,7 @@ public class GradientTape<T> : IDisposable
         {
             _operations.Clear();
             _watchedNodes.Clear();
+            _graphCache?.Clear();
         }
 
         _disposed = true;
