@@ -103,6 +103,15 @@ public class FlowBasedDistillationStrategy<T> : DistillationStrategyBase<T>
             }
         }
 
+        var batchScale = NumOps.FromDouble(batchSize);
+        for (int r = 0; r < batchSize; r++)
+        {
+            for (int c = 0; c < outputDim; c++)
+            {
+                batchGradient[r, c] = NumOps.Divide(batchGradient[r, c], batchScale);
+            }
+        }
+
         return batchGradient;
     }
 
