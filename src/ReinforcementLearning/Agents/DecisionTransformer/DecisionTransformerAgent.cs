@@ -365,7 +365,3 @@ public class DecisionTransformerAgent<T> : DeepReinforcementLearningAgentBase<T>
     }
 }
 
-/// <summary>
-/// Helper class to maintain sequence context for Decision Transformer.
-/// </summary>
-}
