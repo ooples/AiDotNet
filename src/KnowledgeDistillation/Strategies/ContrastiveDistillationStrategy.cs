@@ -414,9 +414,12 @@ public class ContrastiveDistillationStrategy<T> : DistillationStrategyBase<T>, I
 
             if (negativeIdx == -1) continue;
 
-            // Triplet loss: max(0, d(anchor,positive) - d(anchor,negative) + margin)
-            double posDist = EuclideanDistance(studentEmbs[i], studentEmbs[positiveIdx]);
-            double negDist = EuclideanDistance(studentEmbs[i], studentEmbs[negativeIdx]);
+            // Teacher-guided triplet loss:
+            // Positive distance: student to its corresponding teacher
+            // Negative distance: student to teacher of different class
+            // This ensures student embeddings align with teacher's embedding space
+            double posDist = EuclideanDistance(studentEmbs[i], teacherEmbs[i]);
+            double negDist = EuclideanDistance(studentEmbs[i], teacherEmbs[negativeIdx]);
             double loss = Math.Max(0, posDist - negDist + margin);
 
             totalLoss = NumOps.Add(totalLoss, NumOps.FromDouble(loss));
