@@ -277,7 +277,7 @@ public class LSTDAgent<T> : ReinforcementLearningAgentBase<T>
     public override Vector<T> Predict(Vector<T> input) => SelectAction(input, false);
     public override Task<Vector<T>> PredictAsync(Vector<T> input) => Task.FromResult(Predict(input));
     public override Task TrainAsync() { Train(); return Task.CompletedTask; }
-    public override ModelMetadata<T> GetModelMetadata() => new ModelMetadata<T> { ModelType = "LSTD", InputSize = _options.FeatureSize, OutputSize = _options.ActionSize, ParameterCount = ParameterCount };
+    public override ModelMetadata<T> GetModelMetadata() => new ModelMetadata<T> { ModelType = ModelType.ReinforcementLearning, FeatureCount = this.FeatureCount, Complexity = ParameterCount };
     public override int ParameterCount => _options.ActionSize * _options.FeatureSize;
     public override int FeatureCount => _options.FeatureSize;
     public override byte[] Serialize() => throw new NotImplementedException();
