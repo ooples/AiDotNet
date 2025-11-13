@@ -94,6 +94,8 @@ public class AttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     /// Stores the last computed attention entropy for diagnostics.
     /// </summary>
     private T _lastAttentionEntropy;
+    private bool _lastWasCrossAttention;
+    private bool _lastUsedMask;
 
     /// <summary>
     /// Gets or sets whether to use auxiliary loss (attention entropy regularization) during training.

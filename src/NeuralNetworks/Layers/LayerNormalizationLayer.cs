@@ -464,19 +464,6 @@ public class LayerNormalizationLayer<T> : LayerBase<T>
     }
 
     /// <summary>
-    /// Converts a Vector to a 1D Tensor.
-    /// </summary>
-    private Tensor<T> VectorToTensor(Vector<T> vector)
-    {
-        var tensor = new Tensor<T>(new int[] { vector.Length });
-        for (int i = 0; i < vector.Length; i++)
-        {
-            tensor[i] = vector[i];
-        }
-        return tensor;
-    }
-
-    /// <summary>
     /// Broadcasts a 1D vector across the batch dimension to create a 2D tensor.
     /// </summary>
 
