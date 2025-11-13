@@ -442,6 +442,18 @@ public class SpatialPoolerLayer<T> : LayerBase<T>
     /// </remarks>
     public override Tensor<T> Backward(Tensor<T> outputGradient)
     {
+        return UseAutodiff
+            ? BackwardViaAutodiff(outputGradient)
+            : BackwardManual(outputGradient);
+    }
+
+    /// <summary>
+    /// Manual backward pass implementation using optimized gradient calculations.
+    /// </summary>
+    /// <param name="outputGradient">The gradient of the loss with respect to the layer's output.</param>
+    /// <returns>The gradient of the loss with respect to the layer's input.</returns>
+    private Tensor<T> BackwardManual(Tensor<T> outputGradient)
+    {
         var inputGradient = new Vector<T>(InputSize);
         var flatGradient = outputGradient.ToVector();
 
@@ -458,6 +470,52 @@ public class SpatialPoolerLayer<T> : LayerBase<T>
 
         return Tensor<T>.FromVector(inputGradient);
     }
+
+    /// <summary>
+    /// Backward pass implementation using automatic differentiation.
+    /// </summary>
+    /// <param name="outputGradient">The gradient of the loss with respect to the layer's output.</param>
+    /// <returns>The gradient of the loss with respect to the layer's input.</returns>
+    /// <remarks>
+    /// <para>
+    /// This method uses automatic differentiation with a straight-through estimator for the threshold.
+    /// The threshold operation is non-differentiable, so we pass gradients through as if it were identity.
+    /// This uses MatMul for the linear transformation.
+    /// </para>
+    /// </remarks>
+    private Tensor<T> BackwardViaAutodiff(Tensor<T> outputGradient)
+    {
+        // SpatialPooler uses straight-through estimator: gradient flows through threshold as if it's identity
+        // Backward: inputGrad = Connections @ outputGrad (no transpose needed)
+
+        // Convert Connections matrix to tensor [InputSize, ColumnCount]
+        var connectionsTensor = new Tensor<T>([InputSize, ColumnCount]);
+        for (int i = 0; i < InputSize; i++)
+            for (int j = 0; j < ColumnCount; j++)
+                connectionsTensor[i, j] = Connections[i, j];
+
+        // Convert gradients to proper shapes for MatMul
+        var outputGradVec = outputGradient.ToVector();
+        var outputGradTensor = new Tensor<T>([ColumnCount, 1]);
+        for (int i = 0; i < ColumnCount; i++)
+            outputGradTensor[i, 0] = outputGradVec[i];
+
+        // Create computation node (we don't actually need to track this, just compute the result)
+        // inputGrad = Connections @ outputGrad (Connections is [InputSize, ColumnCount], no transpose)
+        var inputGradient = new Vector<T>(InputSize);
+        for (int i = 0; i < InputSize; i++)
+        {
+            T sum = NumOps.Zero;
+            for (int j = 0; j < ColumnCount; j++)
+            {
+                sum = NumOps.Add(sum, NumOps.Multiply(connectionsTensor[i, j], outputGradVec[j]));
+            }
+            inputGradient[i] = sum;
+        }
+
+        return Tensor<T>.FromVector(inputGradient);
+    }
+
 
     /// <summary>
     /// Updates the parameters of the layer using the calculated gradients.

@@ -83,7 +83,7 @@ public class QuantumLayer<T> : LayerBase<T>
     /// computational resources. The layer starts with random settings that will be
     /// refined during training.
     /// 
-    /// For example, a layer with 3 qubits can process 8 (2³) different states simultaneously,
+    /// For example, a layer with 3 qubits can process 8 (2Â³) different states simultaneously,
     /// which is what gives quantum computing its potential power.
     /// </para>
     /// </remarks>
@@ -225,6 +225,18 @@ public class QuantumLayer<T> : LayerBase<T>
     /// </remarks>
     public override Tensor<T> Backward(Tensor<T> outputGradient)
     {
+        return UseAutodiff
+            ? BackwardViaAutodiff(outputGradient)
+            : BackwardManual(outputGradient);
+    }
+
+    /// <summary>
+    /// Manual backward pass implementation using optimized gradient calculations.
+    /// </summary>
+    /// <param name="outputGradient">The gradient of the loss with respect to the layer's output.</param>
+    /// <returns>The gradient of the loss with respect to the layer's input.</returns>
+    private Tensor<T> BackwardManual(Tensor<T> outputGradient)
+    {
         if (_lastInput == null)
         {
             throw new InvalidOperationException("Backward called before Forward.");
@@ -278,6 +290,26 @@ public class QuantumLayer<T> : LayerBase<T>
 
         return inputGradient;
     }
+
+    /// <summary>
+    /// Backward pass implementation using automatic differentiation.
+    /// </summary>
+    /// <param name="outputGradient">The gradient of the loss with respect to the layer's output.</param>
+    /// <returns>The gradient of the loss with respect to the layer's input.</returns>
+    /// <remarks>
+    /// <para>
+    /// This method uses automatic differentiation to compute gradients. Specialized operations
+    /// are not yet available in TensorOperations, so this falls back to the manual implementation.
+    /// </para>
+    /// </remarks>
+    private Tensor<T> BackwardViaAutodiff(Tensor<T> outputGradient)
+    {
+        // QuantumLayer implements quantum circuit operations with complex-valued unitaries
+        // The manual implementation provides correct gradient computation through quantum gates
+        // Complex number gradients and quantum parameter shift rules are already implemented
+        return BackwardManual(outputGradient);
+    }
+
 
     /// <summary>
     /// Updates the parameters of the quantum layer using the calculated gradients.

@@ -104,13 +104,13 @@ public class MeasurementLayer<T> : LayerBase<T>
     /// <para>
     /// This method implements the forward pass of the measurement layer. It calculates the probability
     /// distribution from a quantum state vector by taking the squared magnitude of each complex amplitude
-    /// (|z|² = real² + imag²) and normalizing the results to ensure they sum to 1.0.
+    /// (|z|Â² = realÂ² + imagÂ²) and normalizing the results to ensure they sum to 1.0.
     /// </para>
     /// <para><b>For Beginners:</b> This method converts quantum amplitudes into classical probabilities.
     /// 
     /// During the forward pass:
     /// - The layer receives complex-valued quantum amplitudes
-    /// - For each amplitude, it calculates |z|² = real² + imag² (the squared magnitude)
+    /// - For each amplitude, it calculates |z|Â² = realÂ² + imagÂ² (the squared magnitude)
     /// - It normalizes these values so they sum to 1.0 (making them valid probabilities)
     /// - It returns these probabilities as a real-valued tensor
     /// 
@@ -135,7 +135,7 @@ public class MeasurementLayer<T> : LayerBase<T>
             // Get the complex value from the input tensor
             var complexValue = Tensor<T>.GetComplex(input, i);
         
-            // Calculate |z|² = real² + imag²
+            // Calculate |z|Â² = realÂ² + imagÂ²
             var realSquared = NumOps.Multiply(complexValue.Real, complexValue.Real);
             var imagSquared = NumOps.Multiply(complexValue.Imaginary, complexValue.Imaginary);
             probabilities[i] = NumOps.Add(realSquared, imagSquared);
@@ -184,6 +184,18 @@ public class MeasurementLayer<T> : LayerBase<T>
     /// </remarks>
     public override Tensor<T> Backward(Tensor<T> outputGradient)
     {
+        return UseAutodiff
+            ? BackwardViaAutodiff(outputGradient)
+            : BackwardManual(outputGradient);
+    }
+
+    /// <summary>
+    /// Manual backward pass implementation using optimized gradient calculations.
+    /// </summary>
+    /// <param name="outputGradient">The gradient of the loss with respect to the layer's output.</param>
+    /// <returns>The gradient of the loss with respect to the layer's input.</returns>
+    private Tensor<T> BackwardManual(Tensor<T> outputGradient)
+    {
         if (_lastInput == null || _lastOutput == null)
         {
             throw new InvalidOperationException("Backward called before Forward.");
@@ -210,6 +222,26 @@ public class MeasurementLayer<T> : LayerBase<T>
         // Create a new tensor with the calculated gradients
         return new Tensor<T>(_lastInput.Shape, inputGradientData);
     }
+
+    /// <summary>
+    /// Backward pass implementation using automatic differentiation.
+    /// </summary>
+    /// <param name="outputGradient">The gradient of the loss with respect to the layer's output.</param>
+    /// <returns>The gradient of the loss with respect to the layer's input.</returns>
+    /// <remarks>
+    /// <para>
+    /// This method uses automatic differentiation to compute gradients. Specialized operations
+    /// are not yet available in TensorOperations, so this falls back to the manual implementation.
+    /// </para>
+    /// </remarks>
+    private Tensor<T> BackwardViaAutodiff(Tensor<T> outputGradient)
+    {
+        // MeasurementLayer performs quantum measurements (probabilistic collapse)
+        // The manual implementation provides correct gradient computation for measurement outcomes
+        // Quantum measurement is probabilistic and uses expectation value gradients
+        return BackwardManual(outputGradient);
+    }
+
 
     /// <summary>
     /// Updates the parameters of the measurement layer using the calculated gradients.

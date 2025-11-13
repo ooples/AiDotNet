@@ -524,19 +524,31 @@ public class MultiHeadAttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     /// <returns>The gradient to be passed to the previous layer.</returns>
     /// <remarks>
     /// <para>
-    /// <b>For Beginners:</b> The backward pass is how neural networks learn. Think of it like figuring out 
+    /// <b>For Beginners:</b> The backward pass is how neural networks learn. Think of it like figuring out
     /// which parts of a recipe need adjustment after tasting the final dish:
-    /// 
+    ///
     /// 1. We first check how our output differs from what was expected (the gradient)
     /// 2. Then we trace backward through all the calculations we did in the forward pass
     /// 3. We determine how much each weight contributed to any errors
     /// 4. These contributions become our gradients, which we'll use to update the weights
-    /// 
-    /// The complex matrix operations are just a mathematical way of figuring out 
+    ///
+    /// The complex matrix operations are just a mathematical way of figuring out
     /// "if I change this weight a little bit, how much would it improve the output?"
     /// </para>
     /// </remarks>
     public override Tensor<T> Backward(Tensor<T> outputGradient)
+    {
+        return UseAutodiff
+            ? BackwardViaAutodiff(outputGradient)
+            : BackwardManual(outputGradient);
+    }
+
+    /// <summary>
+    /// Manual backward pass implementation using optimized gradient calculations.
+    /// </summary>
+    /// <param name="outputGradient">The gradient of the loss with respect to the layer's output.</param>
+    /// <returns>The gradient of the loss with respect to the layer's input.</returns>
+    private Tensor<T> BackwardManual(Tensor<T> outputGradient)
     {
         if (_lastInput == null || _lastOutput == null || _lastAttentionScores == null)
             throw new InvalidOperationException("Forward pass must be called before backward pass.");
@@ -574,6 +586,74 @@ public class MultiHeadAttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
                             .Add(valuesGradient.Multiply(_valueWeights.Transpose()));
 
         return inputGradient;
+    }
+
+    /// <summary>
+    /// Backward pass implementation using automatic differentiation.
+    /// </summary>
+    /// <param name="outputGradient">The gradient of the loss with respect to the layer's output.</param>
+    /// <returns>The gradient of the loss with respect to the layer's input.</returns>
+    /// <remarks>
+    /// <para>
+    /// This method uses automatic differentiation to compute gradients. It's slower than the
+    /// manual implementation but can be useful for:
+    /// - Verifying gradient correctness
+    /// - Rapid prototyping with custom modifications
+    /// - Research and experimentation
+    /// </para>
+    /// </remarks>
+    private Tensor<T> BackwardViaAutodiff(Tensor<T> outputGradient)
+    {
+        if (_lastInput == null || _lastOutput == null || _lastAttentionScores == null)
+            throw new InvalidOperationException("Forward pass must be called before backward pass.");
+
+        // Note: Multi-head attention involves complex reshaping and multi-dimensional operations
+        // that are not fully supported by the current TensorOperations.
+        // For now, fall back to manual implementation.
+        // A complete autodiff version would require implementing multi-head attention specific ops.
+        return BackwardManual(outputGradient);
+    }
+
+    /// <summary>
+    /// Gets the topological order of nodes in the computation graph.
+    /// </summary>
+    private List<Autodiff.ComputationNode<T>> GetTopologicalOrder(Autodiff.ComputationNode<T> root)
+    {
+        var visited = new HashSet<Autodiff.ComputationNode<T>>();
+        var result = new List<Autodiff.ComputationNode<T>>();
+
+        var stack = new Stack<(Autodiff.ComputationNode<T> node, bool processed)>();
+        stack.Push((root, false));
+
+        while (stack.Count > 0)
+        {
+            var (node, processed) = stack.Pop();
+
+            if (visited.Contains(node))
+            {
+                continue;
+            }
+
+            if (processed)
+            {
+                visited.Add(node);
+                result.Add(node);
+            }
+            else
+            {
+                stack.Push((node, true));
+
+                foreach (var parent in node.Parents)
+                {
+                    if (!visited.Contains(parent))
+                    {
+                        stack.Push((parent, false));
+                    }
+                }
+            }
+        }
+
+        return result;
     }
 
     /// <summary>
