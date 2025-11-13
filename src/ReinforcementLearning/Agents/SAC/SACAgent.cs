@@ -207,7 +207,7 @@ public class SACAgent<T> : DeepReinforcementLearningAgentBase<T>
     /// <inheritdoc/>
     public override void StoreExperience(Vector<T> state, Vector<T> action, T reward, Vector<T> nextState, bool done)
     {
-        _replayBuffer.Add(new Experience<T>(state, action, reward, nextState, done));
+        _replayBuffer.Add(new ReplayBuffers.Experience<T>(state, action, reward, nextState, done));
     }
 
     /// <inheritdoc/>
@@ -252,7 +252,7 @@ public class SACAgent<T> : DeepReinforcementLearningAgentBase<T>
         return avgLoss;
     }
 
-    private T UpdateCritics(List<Experience<T>> batch)
+    private T UpdateCritics(List<ReplayBuffers.Experience<T>> batch)
     {
         T totalQLoss = NumOps.Zero;
 
@@ -318,7 +318,7 @@ public class SACAgent<T> : DeepReinforcementLearningAgentBase<T>
         return NumOps.Divide(totalQLoss, NumOps.FromDouble(batch.Count * 2));
     }
 
-    private T UpdateActor(List<Experience<T>> batch)
+    private T UpdateActor(List<ReplayBuffers.Experience<T>> batch)
     {
         T totalPolicyLoss = NumOps.Zero;
 
@@ -417,7 +417,7 @@ public class SACAgent<T> : DeepReinforcementLearningAgentBase<T>
         return gradient;
     }
 
-    private void UpdateTemperature(List<Experience<T>> batch)
+    private void UpdateTemperature(List<ReplayBuffers.Experience<T>> batch)
     {
         if (!_sacOptions.AutoTuneTemperature) return;
 
