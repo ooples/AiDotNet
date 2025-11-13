@@ -343,18 +343,158 @@ public class TRPOAgent<T> : DeepReinforcementLearningAgentBase<T>
 
             if (NumOps.Compare(kl, _options.MaxKL) < 0)
             {
-                // TODO: Implement proper TRPO policy gradient
-                // The gradient should be based on the log-likelihood ratio:
-                // ∇θ [π_θ(a_t|s_t) / π_θ_old(a_t|s_t)] * A(s_t, a_t)
-                // Current placeholder gradient doesn't use:
-                // - The recorded action a_t
-                // - The old/new action log-probabilities
-                // - The importance sampling ratio
-                throw new NotImplementedException(
-                    "TRPO policy update requires proper implementation of " +
-                    "importance-weighted policy gradient within trust region.");
+                // Compute TRPO policy gradient with importance weighting
+                // Gradient: ∇θ [π_θ(a|s) / π_θ_old(a|s)] * A(s,a)
+                var action = actions[i];
+                var importanceRatio = ComputeImportanceRatio(policyOutput, oldPolicyOutput, action);
+                var weightedAdvantage = NumOps.Multiply(importanceRatio, advantage);
+                
+                var policyGradient = ComputeTRPOPolicyGradient(policyOutput, action, weightedAdvantage);
+                _policyNetwork.Backward(policyGradient);
             }
         }
+    }
+
+
+    private T ComputeImportanceRatio(Vector<T> newPolicyOutput, Vector<T> oldPolicyOutput, Vector<T> action)
+    {
+        // Importance ratio: π_θ(a|s) / π_θ_old(a|s)
+        // For discrete actions: ratio = softmax_new(a) / softmax_old(a)
+        // For continuous actions: ratio = exp(log_prob_new - log_prob_old)
+        
+        if (_options.ActionSize == newPolicyOutput.Length)
+        {
+            // Discrete action space
+            var newProbs = ComputeSoftmax(newPolicyOutput);
+            var oldProbs = ComputeSoftmax(oldPolicyOutput);
+            var actionIdx = GetDiscreteAction(action);
+            
+            var ratio = NumOps.Divide(newProbs[actionIdx], 
+                                      NumOps.Add(oldProbs[actionIdx], NumOps.FromDouble(1e-8)));
+            return ratio;
+        }
+        else
+        {
+            // Continuous action space: Gaussian policy
+            int actionDim = newPolicyOutput.Length / 2;
+            T logRatioSum = NumOps.Zero;
+            
+            for (int i = 0; i < actionDim; i++)
+            {
+                var newMean = newPolicyOutput[i];
+                var newLogStd = newPolicyOutput[actionDim + i];
+                var oldMean = oldPolicyOutput[i];
+                var oldLogStd = oldPolicyOutput[actionDim + i];
+                
+                var newStd = NumOps.FromDouble(Math.Exp(NumOps.ToDouble(newLogStd)));
+                var oldStd = NumOps.FromDouble(Math.Exp(NumOps.ToDouble(oldLogStd)));
+                
+                var actionVal = action[i];
+                
+                // Log probability = -0.5 * ((a - μ) / σ)² - log(σ) - 0.5 * log(2π)
+                var newDiff = NumOps.Subtract(actionVal, newMean);
+                var oldDiff = NumOps.Subtract(actionVal, oldMean);
+                
+                var newLogProb = NumOps.Subtract(
+                    NumOps.Multiply(NumOps.FromDouble(-0.5), 
+                        NumOps.Divide(NumOps.Multiply(newDiff, newDiff), 
+                            NumOps.Multiply(newStd, newStd))),
+                    newLogStd);
+                    
+                var oldLogProb = NumOps.Subtract(
+                    NumOps.Multiply(NumOps.FromDouble(-0.5), 
+                        NumOps.Divide(NumOps.Multiply(oldDiff, oldDiff), 
+                            NumOps.Multiply(oldStd, oldStd))),
+                    oldLogStd);
+                
+                logRatioSum = NumOps.Add(logRatioSum, NumOps.Subtract(newLogProb, oldLogProb));
+            }
+            
+            return NumOps.FromDouble(Math.Exp(NumOps.ToDouble(logRatioSum)));
+        }
+    }
+    
+    private Vector<T> ComputeTRPOPolicyGradient(Vector<T> policyOutput, Vector<T> action, T weightedAdvantage)
+    {
+        // TRPO policy gradient: ∇θ log π(a|s) * [ratio * advantage]
+        // This is similar to standard policy gradient but weighted by importance ratio
+        
+        if (_options.ActionSize == policyOutput.Length)
+        {
+            // Discrete action space
+            var softmax = ComputeSoftmax(policyOutput);
+            var actionIdx = GetDiscreteAction(action);
+            
+            var gradient = new Vector<T>(policyOutput.Length);
+            for (int i = 0; i < policyOutput.Length; i++)
+            {
+                var indicator = (i == actionIdx) ? NumOps.One : NumOps.Zero;
+                var grad = NumOps.Subtract(indicator, softmax[i]);
+                gradient[i] = NumOps.Negate(NumOps.Multiply(weightedAdvantage, grad));
+            }
+            return gradient;
+        }
+        else
+        {
+            // Continuous action space: Gaussian policy
+            int actionDim = policyOutput.Length / 2;
+            var gradient = new Vector<T>(policyOutput.Length);
+            
+            for (int i = 0; i < actionDim; i++)
+            {
+                var mean = policyOutput[i];
+                var logStd = policyOutput[actionDim + i];
+                var std = NumOps.FromDouble(Math.Exp(NumOps.ToDouble(logStd)));
+                var actionDiff = NumOps.Subtract(action[i], mean);
+                var stdSquared = NumOps.Multiply(std, std);
+                
+                gradient[i] = NumOps.Negate(
+                    NumOps.Multiply(weightedAdvantage, NumOps.Divide(actionDiff, stdSquared)));
+                
+                var stdGrad = NumOps.Subtract(
+                    NumOps.Divide(NumOps.Multiply(actionDiff, actionDiff), stdSquared),
+                    NumOps.One);
+                gradient[actionDim + i] = NumOps.Negate(NumOps.Multiply(weightedAdvantage, stdGrad));
+            }
+            return gradient;
+        }
+    }
+    
+    private Vector<T> ComputeSoftmax(Vector<T> logits)
+    {
+        var max = logits[0];
+        for (int i = 1; i < logits.Length; i++)
+            if (NumOps.ToDouble(logits[i]) > NumOps.ToDouble(max))
+                max = logits[i];
+        
+        var expSum = NumOps.Zero;
+        var exps = new Vector<T>(logits.Length);
+        for (int i = 0; i < logits.Length; i++)
+        {
+            exps[i] = NumOps.FromDouble(Math.Exp(NumOps.ToDouble(NumOps.Subtract(logits[i], max))));
+            expSum = NumOps.Add(expSum, exps[i]);
+        }
+        
+        var softmax = new Vector<T>(logits.Length);
+        for (int i = 0; i < logits.Length; i++)
+            softmax[i] = NumOps.Divide(exps[i], expSum);
+        
+        return softmax;
+    }
+    
+    private int GetDiscreteAction(Vector<T> actionVector)
+    {
+        int maxIdx = 0;
+        T maxVal = actionVector[0];
+        for (int i = 1; i < actionVector.Length; i++)
+        {
+            if (NumOps.ToDouble(actionVector[i]) > NumOps.ToDouble(maxVal))
+            {
+                maxVal = actionVector[i];
+                maxIdx = i;
+            }
+        }
+        return maxIdx;
     }
 
     private T ComputeKL(Vector<T> newDist, Vector<T> oldDist)
@@ -447,12 +587,46 @@ public class TRPOAgent<T> : DeepReinforcementLearningAgentBase<T>
 
     public override byte[] Serialize()
     {
-        throw new NotImplementedException("TRPO serialization not yet implemented");
+        using var ms = new MemoryStream();
+        using var writer = new BinaryWriter(ms);
+        
+        // Serialize policy network
+        var policyBytes = _policyNetwork.Serialize();
+        writer.Write(policyBytes.Length);
+        writer.Write(policyBytes);
+        
+        // Serialize value network
+        var valueBytes = _valueNetwork.Serialize();
+        writer.Write(valueBytes.Length);
+        writer.Write(valueBytes);
+        
+        // Serialize old policy network
+        var oldPolicyBytes = _oldPolicyNetwork.Serialize();
+        writer.Write(oldPolicyBytes.Length);
+        writer.Write(oldPolicyBytes);
+        
+        return ms.ToArray();
     }
 
     public override void Deserialize(byte[] data)
     {
-        throw new NotImplementedException("TRPO deserialization not yet implemented");
+        using var ms = new MemoryStream(data);
+        using var reader = new BinaryReader(ms);
+        
+        // Deserialize policy network
+        var policyLength = reader.ReadInt32();
+        var policyBytes = reader.ReadBytes(policyLength);
+        _policyNetwork.Deserialize(policyBytes);
+        
+        // Deserialize value network
+        var valueLength = reader.ReadInt32();
+        var valueBytes = reader.ReadBytes(valueLength);
+        _valueNetwork.Deserialize(valueBytes);
+        
+        // Deserialize old policy network
+        var oldPolicyLength = reader.ReadInt32();
+        var oldPolicyBytes = reader.ReadBytes(oldPolicyLength);
+        _oldPolicyNetwork.Deserialize(oldPolicyBytes);
     }
 
     public override Matrix<T> GetParameters()
