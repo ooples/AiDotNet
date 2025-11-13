@@ -324,12 +324,12 @@ public abstract class KnowledgeDistillationTrainerBase<T, TInput, TOutput> : IKn
     /// <param name="studentForward">Function to perform forward pass through student model.</param>
     /// <param name="inputs">Evaluation input data.</param>
     /// <param name="trueLabels">True labels for evaluation.</param>
-    /// <returns>Accuracy as a percentage (0-100).</returns>
+    /// <returns>Accuracy as a fraction (0-1).</returns>
     /// <remarks>
     /// <para><b>For Beginners:</b> Evaluation measures how well the student performs:
     /// - For each input, get student's prediction
     /// - Compare with true label (argmax for classification)
-    /// - Calculate percentage of correct predictions</para>
+    /// - Calculate fraction of correct predictions</para>
     ///
     /// <para>This is used to monitor training progress and detect overfitting.</para>
     /// </remarks>
