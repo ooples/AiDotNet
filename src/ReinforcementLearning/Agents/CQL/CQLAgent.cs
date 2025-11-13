@@ -255,15 +255,22 @@ public class CQLAgent<T> : DeepReinforcementLearningAgentBase<T>
             var q2Loss = _numOps.Multiply(q2Error, q2Error);
             q2Loss = _numOps.Add(q2Loss, cqlPenalty);
 
-            // Backpropagate Q1
+            // Backpropagate Q1: MSE gradient + CQL penalty gradient
+            // MSE: -2 * (target - pred), CQL penalty: -alpha/2 (derivative of -Q(s,a_data))
+            var q1MseGrad = _numOps.Multiply(_numOps.FromDouble(-2.0), q1Error);
+            var q1CqlGrad = _numOps.Multiply(_numOps.FromDouble(-0.5), _options.CQLAlpha);
+            var q1TotalGrad = _numOps.Add(q1MseGrad, q1CqlGrad);
             var q1ErrorVec = new Vector<T>(1);
-            q1ErrorVec[0] = q1Error;
+            q1ErrorVec[0] = q1TotalGrad;
             _q1Network.Backward(q1ErrorVec);
             _q1Network.UpdateWeights(_options.QLearningRate);
 
-            // Backpropagate Q2
+            // Backpropagate Q2: MSE gradient + CQL penalty gradient
+            var q2MseGrad = _numOps.Multiply(_numOps.FromDouble(-2.0), q2Error);
+            var q2CqlGrad = _numOps.Multiply(_numOps.FromDouble(-0.5), _options.CQLAlpha);
+            var q2TotalGrad = _numOps.Add(q2MseGrad, q2CqlGrad);
             var q2ErrorVec = new Vector<T>(1);
-            q2ErrorVec[0] = q2Error;
+            q2ErrorVec[0] = q2TotalGrad;
             _q2Network.Backward(q2ErrorVec);
             _q2Network.UpdateWeights(_options.QLearningRate);
 
