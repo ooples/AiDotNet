@@ -28,6 +28,9 @@ public class SimilarityPreservingStrategy<T> : DistillationStrategyBase<T>
         int batchSize = studentBatchOutput.Rows;
         T totalLoss = NumOps.Zero;
 
+        var studentEmbeddings = new Vector<T>[batchSize];
+        var teacherEmbeddings = new Vector<T>[batchSize];
+
         for (int r = 0; r < batchSize; r++)
         {
             Vector<T> studentOutput = studentBatchOutput.GetRow(r);
@@ -36,6 +39,10 @@ public class SimilarityPreservingStrategy<T> : DistillationStrategyBase<T>
 
             var studentSoft = DistillationHelper<T>.Softmax(studentOutput, Temperature);
             var teacherSoft = DistillationHelper<T>.Softmax(teacherOutput, Temperature);
+
+            studentEmbeddings[r] = studentSoft;
+            teacherEmbeddings[r] = teacherSoft;
+
             var softLoss = DistillationHelper<T>.KLDivergence(teacherSoft, studentSoft);
             softLoss = NumOps.Multiply(softLoss, NumOps.FromDouble(Temperature * Temperature));
 
@@ -56,7 +63,12 @@ public class SimilarityPreservingStrategy<T> : DistillationStrategyBase<T>
             totalLoss = NumOps.Add(totalLoss, sampleLoss);
         }
 
-        return NumOps.Divide(totalLoss, NumOps.FromDouble(batchSize));
+        var standardLoss = NumOps.Divide(totalLoss, NumOps.FromDouble(batchSize));
+        var similarityLoss = ComputeSimilarityLoss(studentEmbeddings, teacherEmbeddings);
+
+        return NumOps.Add(
+            NumOps.Multiply(standardLoss, NumOps.FromDouble(1.0 - _similarityWeight)),
+            similarityLoss);
     }
 
     public override Matrix<T> ComputeGradient(Matrix<T> studentBatchOutput, Matrix<T> teacherBatchOutput, Matrix<T>? trueLabelsBatch = null)
@@ -68,6 +80,9 @@ public class SimilarityPreservingStrategy<T> : DistillationStrategyBase<T>
         int outputDim = studentBatchOutput.Columns;
         var gradientBatch = new Matrix<T>(batchSize, outputDim);
 
+        var studentEmbeddings = new Vector<T>[batchSize];
+        var teacherEmbeddings = new Vector<T>[batchSize];
+
         for (int r = 0; r < batchSize; r++)
         {
             Vector<T> studentOutput = studentBatchOutput.GetRow(r);
@@ -77,6 +92,9 @@ public class SimilarityPreservingStrategy<T> : DistillationStrategyBase<T>
             var gradient = new Vector<T>(outputDim);
             var studentSoft = DistillationHelper<T>.Softmax(studentOutput, Temperature);
             var teacherSoft = DistillationHelper<T>.Softmax(teacherOutput, Temperature);
+
+            studentEmbeddings[r] = studentSoft;
+            teacherEmbeddings[r] = teacherSoft;
 
             for (int i = 0; i < outputDim; i++)
             {
@@ -98,6 +116,21 @@ public class SimilarityPreservingStrategy<T> : DistillationStrategyBase<T>
             }
 
             gradientBatch.SetRow(r, gradient);
+        }
+
+        if (_similarityWeight > 0)
+        {
+            var similarityGradient = ComputeSimilarityGradient(studentEmbeddings, teacherEmbeddings);
+
+            for (int r = 0; r < batchSize; r++)
+            {
+                for (int c = 0; c < outputDim; c++)
+                {
+                    var standardGrad = NumOps.Multiply(gradientBatch[r, c], NumOps.FromDouble(1.0 - _similarityWeight));
+                    var simGrad = NumOps.Multiply(similarityGradient[r, c], NumOps.FromDouble(_similarityWeight));
+                    gradientBatch[r, c] = NumOps.Add(standardGrad, simGrad);
+                }
+            }
         }
 
         return gradientBatch;
@@ -163,7 +196,65 @@ public class SimilarityPreservingStrategy<T> : DistillationStrategyBase<T>
         return Convert.ToDouble(dot) / (Math.Sqrt(Convert.ToDouble(norm1)) * Math.Sqrt(Convert.ToDouble(norm2)) + Epsilon);
     }
 
+    private Matrix<T> ComputeSimilarityGradient(Vector<T>[] studentEmbeddings, Vector<T>[] teacherEmbeddings)
+    {
+        int n = studentEmbeddings.Length;
+        int dim = studentEmbeddings[0].Length;
 
+        var gradients = new Matrix<T>(n, dim);
+
+        int pairCount = 0;
+        for (int i = 0; i < n; i++)
+        {
+            for (int j = i + 1; j < n; j++)
+            {
+                pairCount++;
+            }
+        }
+
+        if (pairCount == 0)
+            return gradients;
+
+        for (int i = 0; i < n; i++)
+        {
+            for (int j = 0; j < n; j++)
+            {
+                if (i == j) continue;
+
+                double teacherSim = CosineSimilarity(teacherEmbeddings[i], teacherEmbeddings[j]);
+                double studentSim = CosineSimilarity(studentEmbeddings[i], studentEmbeddings[j]);
+
+                double simDiff = teacherSim - studentSim;
+
+                double dot = 0, norm_i = 0, norm_j = 0;
+                for (int k = 0; k < dim; k++)
+                {
+                    double ei_k = Convert.ToDouble(studentEmbeddings[i][k]);
+                    double ej_k = Convert.ToDouble(studentEmbeddings[j][k]);
+                    dot += ei_k * ej_k;
+                    norm_i += ei_k * ei_k;
+                    norm_j += ej_k * ej_k;
+                }
+
+                norm_i = Math.Sqrt(norm_i);
+                norm_j = Math.Sqrt(norm_j);
+
+                for (int k = 0; k < dim; k++)
+                {
+                    double ei_k = Convert.ToDouble(studentEmbeddings[i][k]);
+                    double ej_k = Convert.ToDouble(studentEmbeddings[j][k]);
+
+                    double dSim_dEi = (ej_k / (norm_i * norm_j + Epsilon)) - (dot / (norm_i * norm_i * norm_i * norm_j + Epsilon)) * ei_k;
+
+                    double grad = -2.0 * simDiff * dSim_dEi / pairCount;
+
+                    gradients[i, k] = NumOps.Add(gradients[i, k], NumOps.FromDouble(grad));
+                }
+            }
+        }
+
+        return gradients;
+    }
 
 }
 
