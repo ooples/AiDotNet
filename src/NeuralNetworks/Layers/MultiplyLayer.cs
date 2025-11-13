@@ -331,6 +331,12 @@ public class MultiplyLayer<T> : LayerBase<T>
             throw new InvalidOperationException("Forward pass must be called before backward pass.");
         }
 
+        // If vector activation is configured, fall back to manual path
+        if (VectorActivation != null)
+        {
+            return BackwardManual(outputGradient);
+        }
+
         // Convert to computation nodes
         var inputNode = Autodiff.TensorOperations<T>.Variable(_lastInputs[0], "input_0", requiresGradient: true);
 

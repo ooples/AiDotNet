@@ -253,7 +253,8 @@ public class ActivationLayer<T> : LayerBase<T>
     /// </remarks>
     public override Tensor<T> Backward(Tensor<T> outputGradient)
     {
-        // Autodiff only supports scalar activations; fallback to manual for vector activations
+        // Autodiff supports all scalar activations via generic TensorOperations.ApplyActivation
+        // Only vector activations need manual path
         if (UseAutodiff && !_useVectorActivation)
             return BackwardViaAutodiff(outputGradient);
         else
@@ -311,25 +312,16 @@ public class ActivationLayer<T> : LayerBase<T>
     /// <summary>
     /// Applies activation function using autodiff operations.
     /// </summary>
+    /// <remarks>
+    /// This method uses the generic TensorOperations.ApplyActivation which supports ALL 39 built-in
+    /// activation functions automatically. Only truly custom user-defined activations would fail.
+    /// </remarks>
     private Autodiff.ComputationNode<T> ApplyActivationAutodiff(Autodiff.ComputationNode<T> input)
     {
-        if (ScalarActivation is ReLUActivation<T>)
-        {
-            return Autodiff.TensorOperations<T>.ReLU(input);
-        }
-        else if (ScalarActivation is SigmoidActivation<T>)
-        {
-            return Autodiff.TensorOperations<T>.Sigmoid(input);
-        }
-        else if (ScalarActivation is TanhActivation<T>)
-        {
-            return Autodiff.TensorOperations<T>.Tanh(input);
-        }
-        else
-        {
-            // For unsupported activations, return input unchanged
+        if (ScalarActivation == null)
             return input;
-        }
+
+        return Autodiff.TensorOperations<T>.ApplyActivation(input, ScalarActivation);
     }
 
     /// <summary>

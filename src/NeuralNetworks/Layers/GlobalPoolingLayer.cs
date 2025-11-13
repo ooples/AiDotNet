@@ -450,12 +450,20 @@ public class GlobalPoolingLayer<T> : LayerBase<T>
         if (_lastInput == null)
             throw new InvalidOperationException("Forward pass must be called before backward pass.");
 
+        // If vector activation is configured, fall back to manual path
+        if (VectorActivation != null)
+        {
+            return BackwardManual(outputGradient);
+        }
+
         // Convert input to computation node
         var inputNode = Autodiff.TensorOperations<T>.Variable(_lastInput, "input", requiresGradient: true);
 
         // Apply global pooling using reduce operations
         // Global pooling reduces over spatial dimensions (height and width), keeping channels
-        var axes = new int[] { 2, 3 }; // Reduce over height and width dimensions
+        // Input format is NHWC: [batch, height, width, channels]
+        // So we reduce over dimensions 1 (height) and 2 (width), not 2 and 3
+        var axes = new int[] { 1, 2 }; // Reduce over height and width dimensions (corrected from {2, 3})
 
         Autodiff.ComputationNode<T> outputNode;
         if (_poolingType == PoolingType.Max)
@@ -470,9 +478,12 @@ public class GlobalPoolingLayer<T> : LayerBase<T>
         // Remove the spatial dimensions to match expected output shape
         var squeezed = Autodiff.TensorOperations<T>.Reshape(outputNode, OutputShape);
 
+        // Apply activation if present
+        var activated = ApplyScalarActivationAutodiff(squeezed);
+
         // Perform backward pass
-        squeezed.Gradient = outputGradient;
-        var topoOrder = GetTopologicalOrder(squeezed);
+        activated.Gradient = outputGradient;
+        var topoOrder = GetTopologicalOrder(activated);
         for (int i = topoOrder.Count - 1; i >= 0; i--)
         {
             var node = topoOrder[i];
@@ -483,6 +494,20 @@ public class GlobalPoolingLayer<T> : LayerBase<T>
         }
 
         return inputNode.Gradient ?? throw new InvalidOperationException("Gradient computation failed.");
+    }
+
+    /// <summary>
+    /// Applies scalar activation function with autodiff support.
+    /// </summary>
+    /// <param name="input">The input computation node.</param>
+    /// <returns>The activated computation node, or the input unchanged if no scalar activation is configured.</returns>
+    private Autodiff.ComputationNode<T> ApplyScalarActivationAutodiff(Autodiff.ComputationNode<T> input)
+    {
+        if (ScalarActivation == null)
+            return input;
+
+        // Use generic activation support - works for ALL 39 built-in activations
+        return Autodiff.TensorOperations<T>.ApplyActivation(input, ScalarActivation);
     }
 
     /// <summary>

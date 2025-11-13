@@ -364,10 +364,19 @@ public class ResidualLayer<T> : LayerBase<T>
             }
         }
 
-        // Route gradient to inner layer if present
+        // Route gradient to inner layer if present and accumulate with skip connection gradient
         if (_innerLayer != null && innerNode != null && innerNode.Gradient != null)
         {
-            _innerLayer.Backward(innerNode.Gradient);
+            // Get gradient from inner layer backward pass
+            var innerGradient = _innerLayer.Backward(innerNode.Gradient);
+
+            // Sum skip connection gradient (input.Gradient) with inner branch gradient
+            // Both branches contribute to the input gradient in a residual connection
+            if (input.Gradient != null)
+            {
+                return input.Gradient.Add(innerGradient);
+            }
+            return innerGradient;
         }
 
         return input.Gradient!;

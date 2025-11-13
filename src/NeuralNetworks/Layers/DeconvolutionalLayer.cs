@@ -662,7 +662,14 @@ public class DeconvolutionalLayer<T> : LayerBase<T>
         );
 
         // Apply activation if present
-        var activated = ApplyScalarActivationAutodiff(deconvOutput);
+        // If vector activation is configured, fall back to manual path
+        Autodiff.ComputationNode<T> activated;
+        if (VectorActivation != null)
+        {
+            // Vector activations not supported in autodiff - use manual path
+            return BackwardManual(outputGradient);
+        }
+        activated = ApplyScalarActivationAutodiff(deconvOutput);
 
         // Perform backward pass
         activated.Gradient = outputGradient;
@@ -697,14 +704,8 @@ public class DeconvolutionalLayer<T> : LayerBase<T>
         if (ScalarActivation == null)
             return input;
 
-        if (ScalarActivation is ReLUActivation<T>)
-            return Autodiff.TensorOperations<T>.ReLU(input);
-        else if (ScalarActivation is SigmoidActivation<T>)
-            return Autodiff.TensorOperations<T>.Sigmoid(input);
-        else if (ScalarActivation is TanhActivation<T>)
-            return Autodiff.TensorOperations<T>.Tanh(input);
-        else
-            throw new NotSupportedException($"Activation {ScalarActivation.GetType().Name} not supported in autodiff mode");
+        // Use generic activation support - works for ALL 39 built-in activations
+        return Autodiff.TensorOperations<T>.ApplyActivation(input, ScalarActivation);
     }
 
     /// <summary>

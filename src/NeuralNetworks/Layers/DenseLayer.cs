@@ -725,10 +725,10 @@ public class DenseLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         var weightsTransposed = Autodiff.TensorOperations<T>.Transpose(weights);
         var matmul = Autodiff.TensorOperations<T>.MatrixMultiply(input, weightsTransposed);
 
-        // Broadcast biases across batch dimension
-        var biasesBroadcast = BroadcastBiases(biases.Value, batchSize);
-        var biasNode = Autodiff.TensorOperations<T>.Variable(biasesBroadcast, "biases_broadcast", requiresGradient: false);
-        var output = Autodiff.TensorOperations<T>.Add(matmul, biasNode);
+        // Add biases directly - autodiff Add operation handles broadcasting and gradient reduction
+        // matmul is [batchSize, outputSize], biases is [outputSize]
+        // Add broadcasts biases and reduces gradients automatically
+        var output = Autodiff.TensorOperations<T>.Add(matmul, biases);
 
         // Apply activation using autodiff
         var activated = ApplyActivationAutodiff(output);

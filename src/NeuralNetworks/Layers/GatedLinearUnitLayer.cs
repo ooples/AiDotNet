@@ -590,16 +590,23 @@ public class GatedLinearUnitLayer<T> : LayerBase<T>
 
         // Create computation graph
         var input = Autodiff.TensorOperations<T>.Variable(_lastInput, "input", requiresGradient: true);
+
+        // Weights are stored as [outputDim, inputDim] but autodiff expects [inputDim, outputDim]
+        // Transpose before creating variables
         var linearWeights = Autodiff.TensorOperations<T>.Variable(MatrixToTensor(_linearWeights), "linearWeights", requiresGradient: true);
         var gateWeights = Autodiff.TensorOperations<T>.Variable(MatrixToTensor(_gateWeights), "gateWeights", requiresGradient: true);
         var linearBias = Autodiff.TensorOperations<T>.Variable(VectorToTensor(_linearBias), "linearBias", requiresGradient: true);
         var gateBias = Autodiff.TensorOperations<T>.Variable(VectorToTensor(_gateBias), "gateBias", requiresGradient: true);
 
+        // Transpose weights for correct matrix multiplication: input [batch, inputDim] × weights^T [inputDim, outputDim]
+        var linearWeightsTransposed = Autodiff.TensorOperations<T>.Transpose(linearWeights);
+        var gateWeightsTransposed = Autodiff.TensorOperations<T>.Transpose(gateWeights);
+
         // Forward computation
-        var linearOutput = Autodiff.TensorOperations<T>.MatrixMultiply(input, linearWeights);
+        var linearOutput = Autodiff.TensorOperations<T>.MatrixMultiply(input, linearWeightsTransposed);
         linearOutput = Autodiff.TensorOperations<T>.Add(linearOutput, linearBias);
 
-        var gateOutput = Autodiff.TensorOperations<T>.MatrixMultiply(input, gateWeights);
+        var gateOutput = Autodiff.TensorOperations<T>.MatrixMultiply(input, gateWeightsTransposed);
         gateOutput = Autodiff.TensorOperations<T>.Add(gateOutput, gateBias);
         gateOutput = ApplyActivationAutodiff(gateOutput);
 
@@ -618,6 +625,7 @@ public class GatedLinearUnitLayer<T> : LayerBase<T>
         }
 
         // Extract gradients
+        // The Transpose operation's backward pass automatically transposes gradients back to [outputDim, inputDim]
         _linearWeightsGradient = TensorToMatrix(linearWeights.Gradient!);
         _gateWeightsGradient = TensorToMatrix(gateWeights.Gradient!);
         _linearBiasGradient = TensorToVector(linearBias.Gradient!);

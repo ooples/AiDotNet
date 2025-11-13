@@ -486,7 +486,7 @@ public class SpatialPoolerLayer<T> : LayerBase<T>
     private Tensor<T> BackwardViaAutodiff(Tensor<T> outputGradient)
     {
         // SpatialPooler uses straight-through estimator: gradient flows through threshold as if it's identity
-        // Backward: inputGrad = Connections^T @ outputGrad
+        // Backward: inputGrad = Connections @ outputGrad (no transpose needed)
 
         // Convert Connections matrix to tensor [InputSize, ColumnCount]
         var connectionsTensor = new Tensor<T>([InputSize, ColumnCount]);
@@ -501,7 +501,7 @@ public class SpatialPoolerLayer<T> : LayerBase<T>
             outputGradTensor[i, 0] = outputGradVec[i];
 
         // Create computation node (we don't actually need to track this, just compute the result)
-        // inputGrad = Connections^T @ outputGrad = Connections^T @ outputGradient
+        // inputGrad = Connections @ outputGrad (Connections is [InputSize, ColumnCount], no transpose)
         var inputGradient = new Vector<T>(InputSize);
         for (int i = 0; i < InputSize; i++)
         {

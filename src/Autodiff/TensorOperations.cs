@@ -5315,4 +5315,75 @@ public static class TensorOperations<T>
             ExtractPaddedDataRecursive(source, dest, padding, destIndices, sourceIndices, dimension + 1);
         }
     }
+
+    /// <summary>
+    /// Applies a generic activation function (scalar or element-wise) with automatic differentiation.
+    /// </summary>
+    /// <param name="input">The input computation node.</param>
+    /// <param name="activation">The activation function to apply.</param>
+    /// <returns>A new computation node with the activation applied.</returns>
+    /// <remarks>
+    /// <para>
+    /// This method provides generic autodiff support for ANY activation function that implements
+    /// IActivationFunction{T}. It works by applying the activation function element-wise during
+    /// the forward pass, then using the activation's ComputeDerivative method during backpropagation.
+    /// </para>
+    /// <para>
+    /// This means ALL 39 built-in activation functions automatically work with autodiff,
+    /// and only truly custom user-defined activations (that don't inherit from ActivationFunctionBase)
+    /// would fail.
+    /// </para>
+    /// </remarks>
+    public static ComputationNode<T> ApplyActivation(
+        ComputationNode<T> input,
+        Interfaces.IActivationFunction<T> activation)
+    {
+        if (activation == null)
+            throw new ArgumentNullException(nameof(activation));
+
+        // Forward pass: apply activation element-wise
+        var result = input.Value.Transform((x, _) => activation.Activate(x));
+
+        // Backward function: use activation's derivative
+        void BackwardFunction(Tensor<T> gradient)
+        {
+            if (input.RequiresGradient)
+            {
+                // Compute derivative at each point: grad_in = grad_out * f'(input)
+                var gradA = new Tensor<T>(gradient.Shape);
+                var numOps = MathHelper.GetNumericOperations<T>();
+                for (int i = 0; i < gradient.Length; i++)
+                {
+                    var derivative = activation.Derivative(input.Value[i]);
+                    gradA[i] = numOps.Multiply(gradient[i], derivative);
+                }
+
+                if (input.Gradient == null)
+                {
+                    input.Gradient = gradA;
+                }
+                else
+                {
+                    var existingGradient = input.Gradient;
+                    if (existingGradient != null)
+                    {
+                        input.Gradient = existingGradient.Add(gradA);
+                    }
+                }
+            }
+        }
+
+        var node = new ComputationNode<T>(
+            value: result,
+            requiresGradient: input.RequiresGradient,
+            parents: new List<ComputationNode<T>> { input },
+            backwardFunction: BackwardFunction,
+            name: null);
+
+        var tape = GradientTape<T>.Current;
+        if (tape != null && tape.IsRecording)
+            tape.RecordOperation(node);
+
+        return node;
+    }
 }
