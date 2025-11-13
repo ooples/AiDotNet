@@ -24,16 +24,8 @@ public class FlowBasedDistillationStrategy<T> : DistillationStrategyBase<T>
 
     public override T ComputeLoss(Matrix<T> studentBatchOutput, Matrix<T> teacherBatchOutput, Matrix<T>? trueLabelsBatch = null)
     {
-        ValidateOutputDimensions(studentBatchOutput, teacherBatchOutput, m => m.Rows * m.Columns);
-
-        if (studentBatchOutput == null) throw new ArgumentNullException(nameof(studentBatchOutput));
-        if (teacherBatchOutput == null) throw new ArgumentNullException(nameof(teacherBatchOutput));
-
-        if (studentBatchOutput.Rows != teacherBatchOutput.Rows || studentBatchOutput.Columns != teacherBatchOutput.Columns)
-            throw new ArgumentException("Student and teacher batch outputs must have matching dimensions");
-
-        if (trueLabelsBatch != null && (trueLabelsBatch.Rows != studentBatchOutput.Rows || trueLabelsBatch.Columns != studentBatchOutput.Columns))
-            throw new ArgumentException("Batch labels must match student output dimensions");
+        ValidateOutputDimensions(studentBatchOutput, teacherBatchOutput);
+        ValidateLabelDimensions(studentBatchOutput, trueLabelsBatch);
 
         int batchSize = studentBatchOutput.Rows;
         T totalLoss = NumOps.Zero;
@@ -68,16 +60,8 @@ public class FlowBasedDistillationStrategy<T> : DistillationStrategyBase<T>
 
     public override Matrix<T> ComputeGradient(Matrix<T> studentBatchOutput, Matrix<T> teacherBatchOutput, Matrix<T>? trueLabelsBatch = null)
     {
-        ValidateOutputDimensions(studentBatchOutput, teacherBatchOutput, m => m.Rows * m.Columns);
-
-        if (studentBatchOutput == null) throw new ArgumentNullException(nameof(studentBatchOutput));
-        if (teacherBatchOutput == null) throw new ArgumentNullException(nameof(teacherBatchOutput));
-
-        if (studentBatchOutput.Rows != teacherBatchOutput.Rows || studentBatchOutput.Columns != teacherBatchOutput.Columns)
-            throw new ArgumentException("Student and teacher batch outputs must have matching dimensions");
-
-        if (trueLabelsBatch != null && (trueLabelsBatch.Rows != studentBatchOutput.Rows || trueLabelsBatch.Columns != studentBatchOutput.Columns))
-            throw new ArgumentException("Batch labels must match student output dimensions");
+        ValidateOutputDimensions(studentBatchOutput, teacherBatchOutput);
+        ValidateLabelDimensions(studentBatchOutput, trueLabelsBatch);
 
         int batchSize = studentBatchOutput.Rows;
         int outputDim = studentBatchOutput.Columns;

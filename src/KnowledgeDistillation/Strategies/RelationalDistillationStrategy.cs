@@ -79,15 +79,6 @@ public class RelationalDistillationStrategy<T> : DistillationStrategyBase<T>
     private readonly int _maxSamplesPerBatch;
     private readonly RelationalDistanceMetric _distanceMetric;
 
-    // Batch accumulation buffers for relational loss computation
-    private readonly List<Vector<T>> _batchStudentOutputs = new();
-    private readonly List<Vector<T>> _batchTeacherOutputs = new();
-    private T _accumulatedRelationalLoss = default!;
-    private Vector<T>? _cachedRelationalGradient = null; // Cached average gradient for amortization
-    private int _samplesSinceRelationalCompute = 0;
-    private int _actualBatchCountForAmortization = 0; // Tracks actual count used for loss computation
-    private readonly int _relationalBatchSize;
-
     /// <summary>
     /// Initializes a new instance of the RelationalDistillationStrategy class.
     /// </summary>
@@ -147,66 +138,19 @@ public class RelationalDistillationStrategy<T> : DistillationStrategyBase<T>
         _angleWeight = angleWeight;
         _maxSamplesPerBatch = maxSamplesPerBatch;
         _distanceMetric = distanceMetric;
-        _relationalBatchSize = maxSamplesPerBatch;
-        _accumulatedRelationalLoss = NumOps.Zero;
     }
 
     /// <summary>
-    /// Resets the strategy's internal state, flushing any partial batches and clearing buffers.
+    /// Resets the strategy's internal state.
     /// </summary>
     /// <remarks>
-    /// <para><b>IMPORTANT:</b> This method MUST be called at epoch boundaries to prevent:
-    /// 1. Partial batches leaking into the next epoch
-    /// 2. Incorrect amortization using configured batch size instead of actual count</para>
-    ///
-    /// <para><b>For Beginners:</b> This cleans up leftover data from the current epoch
-    /// so it doesn't contaminate the next epoch. Think of it as "starting fresh" for each epoch.</para>
-    ///
-    /// <para><b>When to Call:</b>
-    /// - At the end of each training epoch
-    /// - Before evaluation
-    /// - When switching between training and validation data</para>
-    ///
-    /// <para><b>What It Does:</b>
-    /// 1. If there are buffered samples (partial batch), computes final relational loss
-    ///    using actual buffer count (not configured batch size)
-    /// 2. Stores that final loss contribution for amortization
-    /// 3. Clears all accumulation buffers
-    /// 4. Resets counters to initial state</para>
-    ///
-    /// <para><b>Integration with Trainer:</b>
-    /// The trainer should call this method in OnEpochEnd() to ensure proper state management.</para>
+    /// <para><b>Note:</b> With Matrix&lt;T&gt; batch processing, this strategy no longer maintains
+    /// state between calls, so Reset() is a no-op. It's kept for compatibility with the trainer's
+    /// OnEpochEnd() which calls Reset() on all strategies.</para>
     /// </remarks>
     public void Reset()
     {
-        // If there are buffered samples, compute final relational loss and gradient with actual count
-        if (_batchStudentOutputs.Count > 0)
-        {
-            // Compute relational loss for the partial batch
-            _accumulatedRelationalLoss = ComputeRelationalLoss(
-                _batchStudentOutputs.ToArray(),
-                _batchTeacherOutputs.ToArray());
-
-            // Compute average relational gradient for the batch
-            _cachedRelationalGradient = ComputeAverageRelationalGradientForBatch(
-                _batchStudentOutputs.ToArray(),
-                _batchTeacherOutputs.ToArray());
-
-            // Track actual count for proper amortization (not the configured batch size)
-            _actualBatchCountForAmortization = _batchStudentOutputs.Count;
-            _samplesSinceRelationalCompute = 0;
-        }
-        else
-        {
-            // No buffered samples, reset to initial state
-            _accumulatedRelationalLoss = NumOps.Zero;
-            _cachedRelationalGradient = null;
-            _actualBatchCountForAmortization = 0;
-        }
-
-        // Clear all buffers
-        _batchStudentOutputs.Clear();
-        _batchTeacherOutputs.Clear();
+        // No-op: Matrix<T> batch processing doesn't maintain state between batches
     }
 
     /// <summary>

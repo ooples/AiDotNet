@@ -56,7 +56,7 @@ public class IntermediateActivations<T>
     /// </summary>
     /// <param name="layerName">The name or identifier of the layer.</param>
     /// <returns>The activation matrix for this layer, or null if the layer was not found.</returns>
-    public Matrix<T> Get(string layerName)
+    public Matrix<T>? Get(string layerName)
     {
         return _activations.TryGetValue(layerName, out var activations) ? activations : null;
     }

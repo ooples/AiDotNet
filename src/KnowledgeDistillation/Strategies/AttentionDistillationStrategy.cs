@@ -136,7 +136,7 @@ public class AttentionDistillationStrategy<T> : DistillationStrategyBase<T>
     /// </remarks>
     public override T ComputeLoss(Matrix<T> studentBatchOutput, Matrix<T> teacherBatchOutput, Matrix<T>? trueLabelsBatch = null)
     {
-        ValidateOutputDimensions(studentBatchOutput, teacherBatchOutput, m => m.Rows * m.Columns);
+        ValidateOutputDimensions(studentBatchOutput, teacherBatchOutput);
 
         if (studentBatchOutput == null) throw new ArgumentNullException(nameof(studentBatchOutput));
         if (teacherBatchOutput == null) throw new ArgumentNullException(nameof(teacherBatchOutput));
@@ -193,7 +193,7 @@ public class AttentionDistillationStrategy<T> : DistillationStrategyBase<T>
     /// </summary>
     public override Matrix<T> ComputeGradient(Matrix<T> studentBatchOutput, Matrix<T> teacherBatchOutput, Matrix<T>? trueLabelsBatch = null)
     {
-        ValidateOutputDimensions(studentBatchOutput, teacherBatchOutput, m => m.Rows * m.Columns);
+        ValidateOutputDimensions(studentBatchOutput, teacherBatchOutput);
 
         if (studentBatchOutput == null) throw new ArgumentNullException(nameof(studentBatchOutput));
         if (teacherBatchOutput == null) throw new ArgumentNullException(nameof(teacherBatchOutput));
@@ -324,7 +324,7 @@ public class AttentionDistillationStrategy<T> : DistillationStrategyBase<T>
                 return ComputeMSE(studentAttention, teacherAttention);
 
             case AttentionMatchingMode.KL:
-                return KLDivergence(teacherAttention, studentAttention);
+                return DistillationHelper<T>.KLDivergence(teacherAttention, studentAttention);
 
             case AttentionMatchingMode.Cosine:
                 return ComputeCosineLoss(studentAttention, teacherAttention);

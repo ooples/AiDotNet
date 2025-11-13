@@ -64,7 +64,7 @@ public class DistillationForwardResult<T>
     /// <para>Use this constructor for standard response-based distillation that only needs final outputs.</para>
     /// </remarks>
     public DistillationForwardResult(Matrix<T> finalOutput)
-        : this(finalOutput, null)
+        : this(finalOutput, new IntermediateActivations<T>())
     {
     }
 

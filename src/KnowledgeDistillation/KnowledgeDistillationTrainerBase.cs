@@ -164,31 +164,96 @@ public abstract class KnowledgeDistillationTrainerBase<T, TInput, TOutput> : IKn
         if (inputs == null) throw new ArgumentNullException(nameof(inputs));
         if (inputs.Length == 0) throw new ArgumentException("Input batch cannot be empty.", nameof(inputs));
 
-        T totalLoss = NumOps.Zero;
+        int batchSize = inputs.Length;
 
-        for (int i = 0; i < inputs.Length; i++)
+        // Assume TOutput is Vector<T> for batch processing
+        if (typeof(TOutput) != typeof(Vector<T>))
+        {
+            throw new NotSupportedException(
+                $"Batch processing requires TOutput to be Vector<T>, but got {typeof(TOutput).Name}");
+        }
+
+        // Collect all outputs into matrices
+        var studentOutputsList = new List<Vector<T>>(batchSize);
+        var teacherOutputsList = new List<Vector<T>>(batchSize);
+
+        for (int i = 0; i < batchSize; i++)
         {
             var input = inputs[i];
 
             // Student forward pass
             var studentOutput = studentForward(input);
+            if (studentOutput is not null and Vector<T> studentVec)
+            {
+                studentOutputsList.Add(studentVec);
+            }
+            else
+            {
+                throw new InvalidOperationException(
+                    $"Student forward pass returned invalid output type at index {i}");
+            }
 
-            // Get teacher predictions (may be cached or computed on-demand)
+            // Get teacher predictions
             var teacherOutput = GetTeacherPredictions(input, i);
-
-            // Compute loss and gradient - use default if no label provided
-            var labelToUse = (trueLabels != null && i < trueLabels.Length) ? trueLabels[i] : default(TOutput);
-
-            var loss = DistillationStrategy.ComputeLoss(studentOutput, teacherOutput, labelToUse);
-            var gradient = DistillationStrategy.ComputeGradient(studentOutput, teacherOutput, labelToUse);
-
-            totalLoss = NumOps.Add(totalLoss, loss);
-
-            // Student backward pass
-            studentBackward(gradient);
+            if (teacherOutput is not null and Vector<T> teacherVec)
+            {
+                teacherOutputsList.Add(teacherVec);
+            }
+            else
+            {
+                throw new InvalidOperationException(
+                    $"Teacher forward pass returned invalid output type at index {i}");
+            }
         }
 
-        return NumOps.Divide(totalLoss, NumOps.FromDouble(inputs.Length));
+        // Convert lists to matrices
+        int outputDim = studentOutputsList[0].Length;
+        var studentBatchMatrix = new Matrix<T>(batchSize, outputDim);
+        var teacherBatchMatrix = new Matrix<T>(batchSize, outputDim);
+
+        for (int r = 0; r < batchSize; r++)
+        {
+            for (int c = 0; c < outputDim; c++)
+            {
+                studentBatchMatrix[r, c] = studentOutputsList[r][c];
+                teacherBatchMatrix[r, c] = teacherOutputsList[r][c];
+            }
+        }
+
+        // Convert labels to matrix if provided
+        Matrix<T>? labelsBatchMatrix = null;
+        if (trueLabels != null && trueLabels.Length > 0)
+        {
+            labelsBatchMatrix = new Matrix<T>(batchSize, outputDim);
+            for (int r = 0; r < batchSize; r++)
+            {
+                if (trueLabels[r] is not null and Vector<T> labelVec)
+                {
+                    for (int c = 0; c < outputDim; c++)
+                    {
+                        labelsBatchMatrix[r, c] = labelVec[c];
+                    }
+                }
+                else
+                {
+                    throw new InvalidOperationException(
+                        $"Label at index {r} has invalid type");
+                }
+            }
+        }
+
+        // Compute loss and gradient for entire batch
+        var batchLoss = DistillationStrategy.ComputeLoss(studentBatchMatrix, teacherBatchMatrix, labelsBatchMatrix);
+        var batchGradient = DistillationStrategy.ComputeGradient(studentBatchMatrix, teacherBatchMatrix, labelsBatchMatrix);
+
+        // Apply gradients to each sample
+        for (int i = 0; i < batchSize; i++)
+        {
+            var sampleGradient = batchGradient.GetRow(i);
+            studentBackward((TOutput)(object)sampleGradient);
+        }
+
+        return batchLoss;
     }
 
     /// <summary>
@@ -297,15 +362,75 @@ public abstract class KnowledgeDistillationTrainerBase<T, TInput, TOutput> : IKn
                 // Compute validation loss for early stopping
                 if (_useEarlyStopping)
                 {
-                    T totalValLoss = NumOps.Zero;
-                    for (int i = 0; i < validationInputs.Length; i++)
+                    // Collect validation outputs into matrices
+                    int valSize = validationInputs.Length;
+                    var valStudentOutputs = new List<Vector<T>>(valSize);
+                    var valTeacherOutputs = new List<Vector<T>>(valSize);
+
+                    for (int i = 0; i < valSize; i++)
                     {
                         var studentOutput = studentForward(validationInputs[i]);
+                        if (studentOutput is not null and Vector<T> studentVec)
+                        {
+                            valStudentOutputs.Add(studentVec);
+                        }
+                        else
+                        {
+                            throw new InvalidOperationException(
+                                $"Validation student output at index {i} has invalid type");
+                        }
+
                         var teacherOutput = GetTeacherPredictions(validationInputs[i], i);
-                        var sampleLoss = DistillationStrategy.ComputeLoss(studentOutput, teacherOutput, validationLabels[i]);
-                        totalValLoss = NumOps.Add(totalValLoss, sampleLoss);
+                        if (teacherOutput is not null and Vector<T> teacherVec)
+                        {
+                            valTeacherOutputs.Add(teacherVec);
+                        }
+                        else
+                        {
+                            throw new InvalidOperationException(
+                                $"Validation teacher output at index {i} has invalid type");
+                        }
                     }
-                    _lastValidationLoss = Convert.ToDouble(NumOps.Divide(totalValLoss, NumOps.FromDouble(validationInputs.Length)));
+
+                    // Convert to matrices
+                    int valOutputDim = valStudentOutputs[0].Length;
+                    var valStudentMatrix = new Matrix<T>(valSize, valOutputDim);
+                    var valTeacherMatrix = new Matrix<T>(valSize, valOutputDim);
+
+                    for (int r = 0; r < valSize; r++)
+                    {
+                        for (int c = 0; c < valOutputDim; c++)
+                        {
+                            valStudentMatrix[r, c] = valStudentOutputs[r][c];
+                            valTeacherMatrix[r, c] = valTeacherOutputs[r][c];
+                        }
+                    }
+
+                    // Convert labels to matrix
+                    Matrix<T>? valLabelsMatrix = null;
+                    if (validationLabels != null && validationLabels.Length > 0)
+                    {
+                        valLabelsMatrix = new Matrix<T>(valSize, valOutputDim);
+                        for (int r = 0; r < valSize; r++)
+                        {
+                            if (validationLabels[r] is not null and Vector<T> labelVec)
+                            {
+                                for (int c = 0; c < valOutputDim; c++)
+                                {
+                                    valLabelsMatrix[r, c] = labelVec[c];
+                                }
+                            }
+                            else
+                            {
+                                throw new InvalidOperationException(
+                                    $"Validation label at index {r} has invalid type");
+                            }
+                        }
+                    }
+
+                    // Compute validation loss on entire batch
+                    var valLoss = DistillationStrategy.ComputeLoss(valStudentMatrix, valTeacherMatrix, valLabelsMatrix);
+                    _lastValidationLoss = Convert.ToDouble(valLoss);
 
                     // Check early stopping
                     if (_bestMonitoredMetric - _lastValidationLoss > _earlyStoppingMinDelta)
