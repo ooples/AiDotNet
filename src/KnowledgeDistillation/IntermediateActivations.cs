@@ -56,10 +56,13 @@ public class IntermediateActivations<T>
     /// Retrieves intermediate activations for a specific layer.
     /// </summary>
     /// <param name="layerName">The name or identifier of the layer.</param>
-    /// <returns>The activation matrix for this layer, or null if the layer was not found.</returns>
+    /// <returns>A defensive copy of the activation matrix, or null if the layer was not found.</returns>
+    /// <remarks>
+    /// Returns a cloned matrix to prevent external mutations from corrupting stored activations.
+    /// </remarks>
     public Matrix<T>? Get(string layerName)
     {
-        return _activations.TryGetValue(layerName, out var activations) ? activations : null;
+        return _activations.TryGetValue(layerName, out var activations) ? activations.Clone() : null;
     }
 
     /// <summary>
