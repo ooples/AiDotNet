@@ -58,7 +58,7 @@ namespace AiDotNet.KnowledgeDistillation.Strategies;
 /// Transfer Learning" (Yim et al., CVPR 2017). The paper shows FSP matrices capture the
 /// "flow of solution procedure" - how the network transforms information step by step.</para>
 /// </remarks>
-public class FlowBasedDistillationStrategy<T> : DistillationStrategyBase<T, Vector<T>>
+public class FlowBasedDistillationStrategy<T> : DistillationStrategyBase<T>
 {
     private readonly double _flowWeight;
 

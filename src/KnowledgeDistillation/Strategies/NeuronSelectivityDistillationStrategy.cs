@@ -22,7 +22,7 @@ namespace AiDotNet.KnowledgeDistillation.Strategies;
 /// 2. Sparsity (what percentage of time the neuron is active)
 /// 3. Peak-to-average ratio (how peaked the activation distribution is)</para>
 /// </remarks>
-public class NeuronSelectivityDistillationStrategy<T> : DistillationStrategyBase<T, Vector<T>>
+public class NeuronSelectivityDistillationStrategy<T> : DistillationStrategyBase<T>
 {
     private readonly double _selectivityWeight;
     private readonly SelectivityMetric _metric;
@@ -45,12 +45,15 @@ public class NeuronSelectivityDistillationStrategy<T> : DistillationStrategyBase
     {
         ValidateOutputDimensions(studentOutput, teacherOutput, v => v.Length);
 
-        // TODO: This strategy currently only implements standard distillation loss
-        // The selectivity component is not implemented. Need to:
-        // 1. Compute selectivity loss from intermediate activations
-        // 2. Combine with standard distillation loss using _selectivityWeight
-        
-        // Standard distillation loss
+        // NOTE: This method computes ONLY the standard distillation loss from final layer outputs.
+        // Neuron selectivity requires batch-level intermediate activations, which cannot be computed
+        // from single-sample final outputs. To use neuron selectivity distillation:
+        //   1. Collect intermediate layer activations for an entire batch
+        //   2. Call ComputeSelectivityLoss() with batch activations
+        //   3. Manually combine: totalLoss = standardLoss + selectivityLoss
+        // See ComputeSelectivityLoss() documentation for details.
+
+        // Standard distillation loss (soft targets with temperature scaling)
         var studentSoft = Softmax(studentOutput, Temperature);
         var teacherSoft = Softmax(teacherOutput, Temperature);
         var softLoss = KLDivergence(teacherSoft, studentSoft);
@@ -69,18 +72,23 @@ public class NeuronSelectivityDistillationStrategy<T> : DistillationStrategyBase
         else
         {
             finalLoss = softLoss;
-        }        return finalLoss;
+        }
+
+        return finalLoss;
     }
 
     public override Vector<T> ComputeGradient(Vector<T> studentOutput, Vector<T> teacherOutput, Vector<T>? trueLabels = null)
     {
         ValidateOutputDimensions(studentOutput, teacherOutput, v => v.Length);
 
-        // TODO: This strategy currently only implements standard distillation gradient
-        // The selectivity gradient is not implemented. Need to:
-        // 1. Compute selectivity gradient from intermediate activations
-        // 2. Combine with standard gradient using _selectivityWeight
-        
+        // NOTE: This method computes ONLY the standard distillation gradient for final layer outputs.
+        // Neuron selectivity gradients require batch-level intermediate activations and are computed
+        // separately. For custom training loops that need selectivity gradients:
+        //   1. Use ComputeSelectivityLoss() to compute the selectivity component
+        //   2. Compute gradients via automatic differentiation or numerical methods
+        //   3. Combine with gradients from this method
+        // The framework's trainer handles this automatically when using ComputeSelectivityLoss().
+
         int n = studentOutput.Length;
         var gradient = new Vector<T>(n);
 

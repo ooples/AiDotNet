@@ -27,7 +27,7 @@ namespace AiDotNet.KnowledgeDistillation.Strategies;
 /// <para><b>Research Basis:</b> Based on probabilistic knowledge distillation and Bayesian neural networks.
 /// Particularly useful for uncertainty quantification and ensemble distillation.</para>
 /// </remarks>
-public class ProbabilisticDistillationStrategy<T> : DistillationStrategyBase<T, Vector<T>>
+public class ProbabilisticDistillationStrategy<T> : DistillationStrategyBase<T>
 {
     private readonly double _distributionWeight;
     private readonly ProbabilisticMode _mode;
