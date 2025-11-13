@@ -1019,15 +1019,14 @@ public class PredictionModelBuilder<T, TInput, TOutput> : IPredictionModelBuilde
 
         var NumOps = MathHelper.GetNumericOperations<T>();
 
-        // Validate that we have Vector types (required for current KD implementation)
-        if (studentModel is not IFullModel<T, Vector<T>, Vector<T>> vectorStudentModel)
-            throw new InvalidOperationException(
-                "Knowledge distillation currently requires Vector<T> input/output types. " +
-                "Please configure your model with Vector<T> types for distillation.");
+        // Get a reference input for shape conversions (needed for Matrix<T> and Tensor<T>)
+        // Use InputHelper to extract a single sample from the training data
+        TInput referenceInput = InputHelper<T, TInput>.GetItem(XTrain, 0);
 
         try
         {
             // Step 1: Create teacher model using factory
+            // Trainer expects Vector<T> for single samples, but options.TeacherModel uses TInput/TOutput (dataset types)
             ITeacherModel<Vector<T>, Vector<T>> teacher;
             if (options.TeacherModel != null)
             {
@@ -1037,49 +1036,61 @@ public class PredictionModelBuilder<T, TInput, TOutput> : IPredictionModelBuilde
                         "OutputDimension is required when using TeacherModel. " +
                         "Please specify options.OutputDimension explicitly.");
 
+                // Adapter function: IFullModel<T, TInput, TOutput>.Predict -> Func<Vector<T>, Vector<T>>
+                Func<Vector<T>, Vector<T>> adaptedTeacherPredict = inputSampleVector =>
+                {
+                    // Convert trainer's Vector<T> (single sample) to teacher's TInput type
+                    TInput teacherInput = ConversionsHelper.ConvertVectorToInput<T, TInput>(inputSampleVector, referenceInput);
+                    // Call teacher's predict method with TInput
+                    TOutput teacherOutput = options.TeacherModel.Predict(teacherInput);
+                    // Convert teacher's TOutput back to trainer's Vector<T>
+                    return ConversionsHelper.ConvertToVector<T, TOutput>(teacherOutput);
+                };
+
                 teacher = new KnowledgeDistillation.TeacherModelWrapper<T>(
-                    ((IFullModel<T, Vector<T>, Vector<T>>)options.TeacherModel).Predict,
+                    adaptedTeacherPredict,
                     options.OutputDimension.Value);
             }
             else if (options.Teachers != null && options.Teachers.Length > 0)
             {
-                // Use ensemble of teachers - validate and convert to Vector-specialized types
-                if (typeof(TInput) != typeof(Vector<T>) || typeof(TOutput) != typeof(Vector<T>))
-                    throw new InvalidOperationException(
-                        "Teachers array requires Vector<T> input/output types for distillation. " +
-                        "Ensure your model is configured with Vector<T> types.");
-                
-                var vectorTeachers = options.Teachers.Cast<ITeacherModel<Vector<T>, Vector<T>>>().ToArray();
+                // Adapt each teacher in the ensemble to work with Vector<T> samples
+                var adaptedTeachers = options.Teachers.Select(t =>
+                {
+                    Func<Vector<T>, Vector<T>> adaptedPredict = inputSampleVector =>
+                    {
+                        TInput teacherInput = ConversionsHelper.ConvertVectorToInput<T, TInput>(inputSampleVector, referenceInput);
+                        TOutput teacherOutput = t.GetLogits(teacherInput);
+                        return ConversionsHelper.ConvertToVector<T, TOutput>(teacherOutput);
+                    };
+                    return new KnowledgeDistillation.TeacherModelWrapper<T>(adaptedPredict, t.OutputDimension);
+                }).ToArray();
+
                 teacher = KnowledgeDistillation.TeacherModelFactory<T>.CreateTeacher(
                     TeacherModelType.Ensemble,
-                    ensembleModels: vectorTeachers,
+                    ensembleModels: adaptedTeachers,
                     ensembleWeights: options.EnsembleWeights ?? Array.Empty<double>());
             }
             else if (options.TeacherForward != null)
             {
-                // Wrap forward function as teacher - validate and convert to Vector-specialized types
-                if (typeof(TInput) != typeof(Vector<T>) || typeof(TOutput) != typeof(Vector<T>))
-                    throw new InvalidOperationException(
-                        "TeacherForward requires Vector<T> input/output types for distillation. " +
-                        "Ensure your model is configured with Vector<T> types.");
-                
                 if (!options.OutputDimension.HasValue)
                     throw new InvalidOperationException(
                         "OutputDimension is required when using TeacherForward. " +
                         "Please specify options.OutputDimension explicitly.");
 
-                int outputDim = options.OutputDimension.Value;
-                var vectorForward = options.TeacherForward as Func<Vector<T>, Vector<T>>;
-                if (vectorForward == null)
+                // Adapter function: Func<TInput, TOutput> -> Func<Vector<T>, Vector<T>>
+                Func<Vector<T>, Vector<T>> adaptedTeacherForward = inputSampleVector =>
                 {
-                    // Last resort: convert if possible - but this should never happen with type validation above
-                    throw new InvalidOperationException(
-                        "TeacherForward type mismatch. Expected Func<Vector<T>, Vector<T>>.");
-                }
-                
+                    // Convert trainer's Vector<T> (single sample) to teacher's TInput type
+                    TInput teacherInput = ConversionsHelper.ConvertVectorToInput<T, TInput>(inputSampleVector, referenceInput);
+                    // Call teacher's forward function with TInput
+                    TOutput teacherOutput = options.TeacherForward(teacherInput);
+                    // Convert teacher's TOutput back to trainer's Vector<T>
+                    return ConversionsHelper.ConvertToVector<T, TOutput>(teacherOutput);
+                };
+
                 teacher = new KnowledgeDistillation.TeacherModelWrapper<T>(
-                    vectorForward,
-                    outputDim);
+                    adaptedTeacherForward,
+                    options.OutputDimension.Value);
             }
             else
             {
@@ -1144,16 +1155,22 @@ public class PredictionModelBuilder<T, TInput, TOutput> : IPredictionModelBuilde
 
             // Step 5: Define forward and backward functions
             // Forward function must save activations for backprop
+            // Convert Vector<T> (from KD trainer) → TInput → model.Predict → TOutput → Vector<T>
             Func<Vector<T>, Vector<T>> studentForward = input =>
             {
-                if (vectorStudentModel is NeuralNetworkModel<T> nnModel)
+                // Convert KD trainer's Vector<T> to model's TInput type using reference for shape
+                TInput modelInput = ConversionsHelper.ConvertVectorToInput<T, TInput>(input, referenceInput);
+
+                if (studentModel is NeuralNetworkModel<T> nnModel)
                 {
                     // Use ForwardWithMemory() to save activations for backpropagation
                     var output = nnModel.Network.ForwardWithMemory(Tensor<T>.FromVector(input));
                     return output.ToVector();
                 }
-                // Fallback for non-NeuralNetworkModel (shouldn't happen given validation above)
-                return vectorStudentModel.Predict(input);
+
+                // Fallback for non-NeuralNetworkModel: call Predict and convert result
+                TOutput modelOutput = studentModel.Predict(modelInput);
+                return ConversionsHelper.ConvertToVector<T, TOutput>(modelOutput);
             };
 
             // Prepare backward function for parameter updates during distillation training
@@ -1161,11 +1178,11 @@ public class PredictionModelBuilder<T, TInput, TOutput> : IPredictionModelBuilde
             Action<Vector<T>> studentBackward = gradient =>
             {
                 // Cast to NeuralNetworkModel to access backpropagation methods
-                if (vectorStudentModel is not NeuralNetworkModel<T> nnModel)
+                if (studentModel is not NeuralNetworkModel<T> nnModel)
                 {
                     throw new InvalidOperationException(
                         "Knowledge distillation requires a NeuralNetworkModel for gradient backpropagation. " +
-                        $"Current model type: {vectorStudentModel.GetType().Name}");
+                        $"Current model type: {studentModel.GetType().Name}");
                 }
 
                 try
@@ -1277,7 +1294,7 @@ public class PredictionModelBuilder<T, TInput, TOutput> : IPredictionModelBuilde
                                 if (trainLoss <= bestValLoss)
                                 {
                                     checkpointPath = Path.Combine(checkpointDir, "best_model.bin");
-                                    if (vectorStudentModel is ICheckpointableModel checkpointable)
+                                    if (studentModel is ICheckpointableModel checkpointable)
                                     {
                                         using var stream = File.Create(checkpointPath);
                                         checkpointable.SaveState(stream);
@@ -1285,14 +1302,14 @@ public class PredictionModelBuilder<T, TInput, TOutput> : IPredictionModelBuilde
                                     }
                                     else
                                     {
-                                        Console.WriteLine($"    ⚠ Checkpointing not supported by model type {vectorStudentModel.GetType().Name}");
+                                        Console.WriteLine($"    ⚠ Checkpointing not supported by model type {studentModel.GetType().Name}");
                                     }
                                 }
                             }
                             else
                             {
                                 checkpointPath = Path.Combine(checkpointDir, $"model_epoch_{epoch + 1}.bin");
-                                if (vectorStudentModel is ICheckpointableModel checkpointable)
+                                if (studentModel is ICheckpointableModel checkpointable)
                                 {
                                     using var stream = File.Create(checkpointPath);
                                     checkpointable.SaveState(stream);
@@ -1300,7 +1317,7 @@ public class PredictionModelBuilder<T, TInput, TOutput> : IPredictionModelBuilde
                                 }
                                 else
                                 {
-                                    Console.WriteLine($"    ⚠ Checkpointing not supported by model type {vectorStudentModel.GetType().Name}");
+                                    Console.WriteLine($"    ⚠ Checkpointing not supported by model type {studentModel.GetType().Name}");
                                 }
                             }
                         }
@@ -1322,7 +1339,7 @@ public class PredictionModelBuilder<T, TInput, TOutput> : IPredictionModelBuilde
                 {
                     try
                     {
-                        if (vectorStudentModel is ICheckpointableModel checkpointable)
+                        if (studentModel is ICheckpointableModel checkpointable)
                         {
                             using var stream = File.OpenRead(bestCheckpoint);
                             checkpointable.LoadState(stream);
@@ -1330,7 +1347,7 @@ public class PredictionModelBuilder<T, TInput, TOutput> : IPredictionModelBuilde
                         }
                         else
                         {
-                            Console.WriteLine($"⚠ Checkpointing not supported by model type {vectorStudentModel.GetType().Name}");
+                            Console.WriteLine($"⚠ Checkpointing not supported by model type {studentModel.GetType().Name}");
                         }
                     }
                     catch (Exception ex)
