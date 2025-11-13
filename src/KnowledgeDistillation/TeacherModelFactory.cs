@@ -141,8 +141,10 @@ public static class TeacherModelFactory<T>
     {
         if (model == null)
             throw new ArgumentException("Model is required for Adaptive teacher type");
+        if (!outputDimension.HasValue)
+            throw new ArgumentException("Output dimension is required for Adaptive teacher type");
 
-        var baseTeacher = new TeacherModelWrapper<T>(model);
+        var baseTeacher = new TeacherModelWrapper<T>(model.Predict, outputDimension.Value);
         return new AdaptiveTeacherModel<T>(baseTeacher);
     }
 
@@ -185,8 +187,10 @@ public static class TeacherModelFactory<T>
     {
         if (model == null)
             throw new ArgumentException("Model is required for Curriculum teacher type");
+        if (!outputDimension.HasValue)
+            throw new ArgumentException("Output dimension is required for Curriculum teacher type");
 
-        var baseTeacher = new TeacherModelWrapper<T>(model);
+        var baseTeacher = new TeacherModelWrapper<T>(model.Predict, outputDimension.Value);
         // Note: CurriculumStrategy is no longer used in the constructor
         // Curriculum logic is implemented in CurriculumDistillationStrategy
         return new CurriculumTeacherModel<T>(baseTeacher);
@@ -204,8 +208,10 @@ public static class TeacherModelFactory<T>
     {
         if (model == null)
             throw new ArgumentException("Model is required for Quantized teacher type");
+        if (!outputDimension.HasValue)
+            throw new ArgumentException("Output dimension is required for Quantized teacher type");
 
-        var baseTeacher = new TeacherModelWrapper<T>(model);
+        var baseTeacher = new TeacherModelWrapper<T>(model.Predict, outputDimension.Value);
         return new QuantizedTeacherModel<T>(baseTeacher, quantizationBits: quantizationBits);
     }
 
