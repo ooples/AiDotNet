@@ -115,7 +115,11 @@ public abstract class KnowledgeDistillationTrainerBase<T, TInput, TOutput> : IKn
         DistillationStrategy = distillationStrategy ?? throw new ArgumentNullException(nameof(distillationStrategy));
         _checkpointConfig = checkpointConfig;
         NumOps = MathHelper.GetNumericOperations<T>();
+#if NET6_0_OR_GREATER
+        Random = seed.HasValue ? new Random(seed.Value) : Random.Shared;
+#else
         Random = seed.HasValue ? new Random(seed.Value) : new Random();
+#endif
         _lastTrainingLoss = NumOps.Zero;
     }
 
@@ -353,7 +357,7 @@ public abstract class KnowledgeDistillationTrainerBase<T, TInput, TOutput> : IKn
                 correct++;
         }
 
-        return (double)correct / inputs.Length * 100.0;
+        return (double)correct / inputs.Length;
     }
 
     /// <summary>
