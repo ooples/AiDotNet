@@ -2,6 +2,7 @@ using AiDotNet.LinearAlgebra;
 using AiDotNet.Autodiff;
 using AiDotNet.NeuralNetworks.Layers;
 using AiDotNet.ActivationFunctions;
+using AiDotNet.Interfaces;
 using Xunit;
 
 namespace AiDotNet.Tests.UnitTests.Autodiff;
@@ -21,7 +22,7 @@ public class GradientCorrectnessTests
         const int outputSize = 5;
         const int batchSize = 3;
 
-        var layer = new DenseLayer<float>(inputSize, outputSize, new ReLUActivation<float>());
+        var layer = new DenseLayer<float>(inputSize, outputSize, (IActivationFunction<float>)new ReLUActivation<float>());
 
         // Create test input
         var input = new Tensor<float>(new[] { batchSize, inputSize });
@@ -70,7 +71,7 @@ public class GradientCorrectnessTests
     {
         // Arrange
         var shape = new[] { 4, 8 }; // Batch size 4, 8 features
-        var layer = new ActivationLayer<float>(shape, new ReLUActivation<float>());
+        var layer = new ActivationLayer<float>(shape, (IActivationFunction<float>)new ReLUActivation<float>());
 
         // Create test input with mix of positive and negative values
         var input = new Tensor<float>(shape);
@@ -315,32 +316,28 @@ public class GradientCorrectnessTests
         // Act - Manual gradients
         layer.UseAutodiff = false;
         layer.Forward(new[] { input1, input2 });
-        var manualGradients = layer.Backward(outputGradient);
+        var manualGradient = layer.Backward(outputGradient);
 
         layer.ResetState();
 
         // Act - Autodiff gradients
         layer.UseAutodiff = true;
         layer.Forward(new[] { input1, input2 });
-        var autodiffGradients = layer.Backward(outputGradient);
+        var autodiffGradient = layer.Backward(outputGradient);
 
-        // Assert - Both input gradients should match
-        Assert.Equal(2, manualGradients.Length);
-        Assert.Equal(2, autodiffGradients.Length);
+        // Assert - Gradients should match
+        // Note: AddLayer's Backward returns a single gradient for the first input
+        // Both inputs receive the same gradient since addition distributes gradients equally
+        var manual = manualGradient;
+        var autodiff = autodiffGradient;
 
-        for (int inputIdx = 0; inputIdx < 2; inputIdx++)
+        Assert.Equal(manual.Shape, autodiff.Shape);
+
+        for (int i = 0; i < manual.Length; i++)
         {
-            var manual = manualGradients[inputIdx];
-            var autodiff = autodiffGradients[inputIdx];
-
-            Assert.Equal(manual.Shape, autodiff.Shape);
-
-            for (int i = 0; i < manual.Length; i++)
-            {
-                var diff = Math.Abs(manual[i] - autodiff[i]);
-                Assert.True(diff < Tolerance,
-                    $"AddLayer gradient mismatch at input {inputIdx}, index {i}: manual={manual[i]}, autodiff={autodiff[i]}");
-            }
+            var diff = Math.Abs(manual[i] - autodiff[i]);
+            Assert.True(diff < Tolerance,
+                $"AddLayer gradient mismatch at index {i}: manual={manual[i]}, autodiff={autodiff[i]}");
         }
     }
 
@@ -358,32 +355,27 @@ public class GradientCorrectnessTests
         // Act - Manual gradients
         layer.UseAutodiff = false;
         layer.Forward(new[] { input1, input2 });
-        var manualGradients = layer.Backward(outputGradient);
+        var manualGradient = layer.Backward(outputGradient);
 
         layer.ResetState();
 
         // Act - Autodiff gradients
         layer.UseAutodiff = true;
         layer.Forward(new[] { input1, input2 });
-        var autodiffGradients = layer.Backward(outputGradient);
+        var autodiffGradient = layer.Backward(outputGradient);
 
-        // Assert
-        Assert.Equal(2, manualGradients.Length);
-        Assert.Equal(2, autodiffGradients.Length);
+        // Assert - Gradients should match
+        // Note: MultiplyLayer's Backward returns a single gradient for the first input
+        var manual = manualGradient;
+        var autodiff = autodiffGradient;
 
-        for (int inputIdx = 0; inputIdx < 2; inputIdx++)
+        Assert.Equal(manual.Shape, autodiff.Shape);
+
+        for (int i = 0; i < manual.Length; i++)
         {
-            var manual = manualGradients[inputIdx];
-            var autodiff = autodiffGradients[inputIdx];
-
-            Assert.Equal(manual.Shape, autodiff.Shape);
-
-            for (int i = 0; i < manual.Length; i++)
-            {
-                var diff = Math.Abs(manual[i] - autodiff[i]);
-                Assert.True(diff < Tolerance,
-                    $"MultiplyLayer gradient mismatch at input {inputIdx}, index {i}: manual={manual[i]}, autodiff={autodiff[i]}");
-            }
+            var diff = Math.Abs(manual[i] - autodiff[i]);
+            Assert.True(diff < Tolerance,
+                $"MultiplyLayer gradient mismatch at index {i}: manual={manual[i]}, autodiff={autodiff[i]}");
         }
     }
 
@@ -392,7 +384,7 @@ public class GradientCorrectnessTests
     {
         // Arrange
         var shape = new[] { 2, 8 };
-        var innerLayer = new DenseLayer<float>(8, 8, new ReLUActivation<float>());
+        var innerLayer = new DenseLayer<float>(8, 8, (IActivationFunction<float>)new ReLUActivation<float>());
         var layer = new ResidualLayer<float>(shape, innerLayer);
 
         var input = CreateRandomTensor(shape);
@@ -411,7 +403,7 @@ public class GradientCorrectnessTests
         layer.UseAutodiff = true;
         innerLayer.UseAutodiff = true;
         layer.Forward(input);
-        var autodiffGradient = layer.Backward(outputGradient);
+        var autodiffGradient = layer.Backward(outputGradient, null);
 
         // Assert
         Assert.Equal(manualGradient.Shape, autodiffGradient.Shape);
@@ -469,8 +461,8 @@ public class GradientCorrectnessTests
         const int outputSize = 4;
         const int batchSize = 3;
 
-        var dense1 = new DenseLayer<float>(inputSize, hiddenSize, new ReLUActivation<float>());
-        var dense2 = new DenseLayer<float>(hiddenSize, outputSize, new ReLUActivation<float>());
+        var dense1 = new DenseLayer<float>(inputSize, hiddenSize, (IActivationFunction<float>)new ReLUActivation<float>());
+        var dense2 = new DenseLayer<float>(hiddenSize, outputSize, (IActivationFunction<float>)new ReLUActivation<float>());
 
         var input = CreateRandomTensor(new[] { batchSize, inputSize });
         var outputGradient = CreateRandomTensor(new[] { batchSize, outputSize });

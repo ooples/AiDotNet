@@ -41,7 +41,7 @@ public class AutodiffPerformanceBenchmarks
         var random = new Random(42);
 
         // Setup DenseLayer
-        _denseLayer = new DenseLayer<float>(InputSize, OutputSize, new ReLUActivation<float>());
+        _denseLayer = new DenseLayer<float>(InputSize, OutputSize, (IActivationFunction<float>)new ReLUActivation<float>());
         _denseInput = CreateRandomTensor(new[] { BatchSize, InputSize }, random);
         _denseOutputGradient = CreateRandomTensor(new[] { BatchSize, OutputSize }, random);
 
