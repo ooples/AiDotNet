@@ -255,16 +255,33 @@ public class A2CAgent<T> : DeepReinforcementLearningAgentBase<T>
             )
         );
 
-        // TODO: Implement proper backpropagation before updating networks
-        // Currently missing: _policyNetwork.Backward() and _valueNetwork.Backward()
-        // The gradients accessed by Update*Network() methods will be stale/zero
-        // Proper implementation requires:
-        // 1. Compute policy gradient: ∇θ log π(a|s) * advantage
-        // 2. Compute value gradient: ∇φ (V(s) - return)^2
-        // 3. Call Backward() on both networks
-        // 4. Then call Update*Network()
-        throw new NotImplementedException(
-            "A2C requires proper backpropagation implementation before network updates.");
+        // Backpropagate through policy and value networks
+        // We accumulate gradients over the batch before updating
+        for (int i = 0; i < _trajectory.Length; i++)
+        {
+            var state = _trajectory.States[i];
+            var action = _trajectory.Actions[i];
+            var advantage = _trajectory.Advantages![i];
+            var targetReturn = _trajectory.Returns![i];
+            
+            // Policy gradient: compute ∇ loss w.r.t. policy output
+            var policyOutput = _policyNetwork.Forward(state);
+            var policyGradient = ComputePolicyOutputGradient(policyOutput, action, advantage);
+            _policyNetwork.Backward(policyGradient);
+            
+            // Value gradient: ∇ MSE w.r.t. value output = 2 * (V - target) / batchSize
+            var predictedValue = _valueNetwork.Forward(state)[0];
+            var valueDiff = NumOps.Subtract(predictedValue, targetReturn);
+            var valueGradient = new Vector<T>(1);
+            valueGradient[0] = NumOps.Divide(
+                NumOps.Multiply(NumOps.FromDouble(2.0), valueDiff),
+                NumOps.FromDouble(_trajectory.Length));
+            _valueNetwork.Backward(valueGradient);
+        }
+        
+        // Now update network parameters using accumulated gradients
+        UpdatePolicyNetwork();
+        UpdateValueNetwork();
 
         LossHistory.Add(totalLoss);
         _trajectory.Clear();
@@ -542,4 +559,85 @@ public class A2CAgent<T> : DeepReinforcementLearningAgentBase<T>
         }
         return maxIndex;
     }
+
+    private Vector<T> ComputePolicyOutputGradient(Vector<T> policyOutput, Vector<T> action, T advantage)
+    {
+        var gradient = new Vector<T>(policyOutput.Length);
+        var scaledAdvantage = NumOps.Divide(advantage, NumOps.FromDouble(_trajectory.Length));
+        
+        if (_a2cOptions.IsContinuous)
+        {
+            // Continuous: Gaussian policy [mean, log_std]
+            int actionSize = _a2cOptions.ActionSize;
+            for (int i = 0; i < actionSize; i++)
+            {
+                var mean = policyOutput[i];
+                var logStd = policyOutput[actionSize + i];
+                var std = MathHelper.Exp(logStd);
+                var actionDiff = NumOps.Subtract(action[i], mean);
+                var stdSquared = NumOps.Multiply(std, std);
+                
+                // ∇μ: -(a - μ) / σ² * advantage
+                gradient[i] = NumOps.Negate(
+                    NumOps.Multiply(scaledAdvantage, NumOps.Divide(actionDiff, stdSquared)));
+                    
+                // ∇log_σ: -((a-μ)² / σ² - 1) * advantage
+                var normalizedDiff = NumOps.Divide(actionDiff, std);
+                var term = NumOps.Subtract(NumOps.Multiply(normalizedDiff, normalizedDiff), NumOps.One);
+                gradient[actionSize + i] = NumOps.Negate(NumOps.Multiply(scaledAdvantage, term));
+            }
+        }
+        else
+        {
+            // Discrete: softmax policy
+            var softmax = ComputeSoftmax(policyOutput);
+            int selectedAction = GetDiscreteAction(action);
+            
+            for (int i = 0; i < policyOutput.Length; i++)
+            {
+                var indicator = (i == selectedAction) ? NumOps.One : NumOps.Zero;
+                var grad = NumOps.Subtract(indicator, softmax[i]);
+                gradient[i] = NumOps.Negate(NumOps.Multiply(scaledAdvantage, grad));
+            }
+        }
+        
+        return gradient;
+    }
+    
+    private Vector<T> ComputeSoftmax(Vector<T> logits)
+    {
+        var softmax = new Vector<T>(logits.Length);
+        T maxLogit = logits[0];
+        for (int i = 1; i < logits.Length; i++)
+        {
+            if (NumOps.Compare(logits[i], maxLogit) > 0)
+                maxLogit = logits[i];
+        }
+        
+        T sumExp = NumOps.Zero;
+        for (int i = 0; i < logits.Length; i++)
+        {
+            var exp = MathHelper.Exp(NumOps.Subtract(logits[i], maxLogit));
+            softmax[i] = exp;
+            sumExp = NumOps.Add(sumExp, exp);
+        }
+        
+        for (int i = 0; i < softmax.Length; i++)
+        {
+            softmax[i] = NumOps.Divide(softmax[i], sumExp);
+        }
+        
+        return softmax;
+    }
+    
+    private int GetDiscreteAction(Vector<T> action)
+    {
+        for (int i = 0; i < action.Length; i++)
+        {
+            if (NumOps.Compare(action[i], NumOps.FromDouble(0.5)) > 0)
+                return i;
+        }
+        return 0;
+    }
+
 }
