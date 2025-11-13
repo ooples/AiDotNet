@@ -13,7 +13,6 @@ public class DistillationStrategyFactoryTests
 {
     [Theory]
     [InlineData(DistillationStrategyType.ResponseBased)]
-    [InlineData(DistillationStrategyType.FeatureBased)]
     [InlineData(DistillationStrategyType.AttentionBased)]
     [InlineData(DistillationStrategyType.RelationBased)]
     [InlineData(DistillationStrategyType.ContrastiveBased)]
@@ -50,15 +49,15 @@ public class DistillationStrategyFactoryTests
     }
 
     [Fact]
-    public void CreateStrategy_FeatureBased_ReturnsFeatureDistillationStrategy()
+    public void CreateStrategy_FeatureBased_ThrowsNotSupportedException()
     {
-        // Arrange & Act
-        var strategy = DistillationStrategyFactory<double>.CreateStrategy(
-            DistillationStrategyType.FeatureBased,
-            featureWeight: 0.7);
+        // Arrange & Act & Assert
+        var ex = Assert.Throws<NotSupportedException>(() =>
+            DistillationStrategyFactory<double>.CreateStrategy(
+                DistillationStrategyType.FeatureBased,
+                featureWeight: 0.7));
 
-        // Assert
-        Assert.IsType<FeatureDistillationStrategy<double>>(strategy);
+        Assert.Contains("FeatureDistillationStrategy requires layer-specific feature extraction", ex.Message);
     }
 
     [Fact]
@@ -159,16 +158,16 @@ public class DistillationStrategyFactoryTests
     }
 
     [Fact]
-    public void FluentBuilder_FeatureBased_ConfiguresFeatureWeight()
+    public void FluentBuilder_FeatureBased_ThrowsNotSupportedException()
     {
-        // Arrange & Act
-        var strategy = DistillationStrategyFactory<double>
-            .Configure(DistillationStrategyType.FeatureBased)
-            .WithFeatureWeight(0.8)
-            .Build();
+        // Arrange & Act & Assert
+        var ex = Assert.Throws<NotSupportedException>(() =>
+            DistillationStrategyFactory<double>
+                .Configure(DistillationStrategyType.FeatureBased)
+                .WithFeatureWeight(0.8)
+                .Build());
 
-        // Assert
-        Assert.IsType<FeatureDistillationStrategy<double>>(strategy);
+        Assert.Contains("FeatureDistillationStrategy requires layer-specific feature extraction", ex.Message);
     }
 
     [Fact]
