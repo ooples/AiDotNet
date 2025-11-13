@@ -49,8 +49,8 @@ public class TeacherModelFactoryTests
         var model2 = new MockFullModel(inputDim: 10, outputDim: 5);
         var teachers = new[]
         {
-            new TeacherModelWrapper<double>(model1),
-            new TeacherModelWrapper<double>(model2)
+            new TeacherModelWrapper<double>(model1.Predict, outputDimension: 5),
+            new TeacherModelWrapper<double>(model2.Predict, outputDimension: 5)
         };
 
         // Act
@@ -115,8 +115,8 @@ public class TeacherModelFactoryTests
         var model2 = new MockFullModel(inputDim: 10, outputDim: 5);
         var teachers = new[]
         {
-            new TeacherModelWrapper<double>(model1),
-            new TeacherModelWrapper<double>(model2)
+            new TeacherModelWrapper<double>(model1.Predict, outputDimension: 5),
+            new TeacherModelWrapper<double>(model2.Predict, outputDimension: 5)
         };
 
         // Act
@@ -216,8 +216,8 @@ public class TeacherModelFactoryTests
         var model2 = new MockFullModel(inputDim: 10, outputDim: 5);
         var teachers = new[]
         {
-            new TeacherModelWrapper<double>(model1),
-            new TeacherModelWrapper<double>(model2)
+            new TeacherModelWrapper<double>(model1.Predict, outputDimension: 5),
+            new TeacherModelWrapper<double>(model2.Predict, outputDimension: 5)
         };
 
         // Act
