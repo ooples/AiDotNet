@@ -93,5 +93,5 @@ public interface IKnowledgeDistillationTrainer<T, TInput, TOutput>
     /// <summary>
     /// Gets the distillation strategy used for computing loss and gradients.
     /// </summary>
-    IDistillationStrategy<T, TOutput> DistillationStrategy { get; }
+    IDistillationStrategy<T> DistillationStrategy { get; }
 }
