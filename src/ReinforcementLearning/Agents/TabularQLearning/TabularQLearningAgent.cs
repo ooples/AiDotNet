@@ -1,0 +1,268 @@
+using AiDotNet.LinearAlgebra;
+using AiDotNet.Models;
+using AiDotNet.Models.Options;
+
+namespace AiDotNet.ReinforcementLearning.Agents.TabularQLearning;
+
+/// <summary>
+/// Tabular Q-Learning agent using lookup table for Q-values.
+/// </summary>
+/// <typeparam name="T">The numeric type used for calculations.</typeparam>
+/// <remarks>
+/// <para>
+/// Tabular Q-Learning is the foundational RL algorithm that maintains a table
+/// of Q-values for each state-action pair. No neural networks required.
+/// </para>
+/// <para><b>For Beginners:</b>
+/// Q-Learning is like creating a cheat sheet: for every situation (state) and
+/// action you could take, you write down how good that choice is (Q-value).
+/// Over time, you update this sheet based on actual rewards you receive.
+///
+/// Key features:
+/// - **Off-Policy**: Learns optimal policy while following exploratory policy
+/// - **Tabular**: Uses lookup table, no function approximation
+/// - **Model-Free**: Doesn't need to know environment dynamics
+/// - **Value-Based**: Learns action values, derives policy from them
+///
+/// Perfect for: Small discrete state/action spaces (grid worlds, simple games)
+/// Famous for: Watkins 1989, the foundation of modern RL
+/// </para>
+/// </remarks>
+public class TabularQLearningAgent<T> : ReinforcementLearningAgentBase<T>
+{
+    private TabularQLearningOptions<T> _options;
+    private Dictionary<string, Dictionary<int, T>> _qTable;
+    private double _epsilon;
+
+    public TabularQLearningAgent(TabularQLearningOptions<T> options)
+        : base(options)
+    {
+        if (options == null)
+        {
+            throw new ArgumentNullException(nameof(options));
+        }
+
+        _options = options;
+        _qTable = new Dictionary<string, Dictionary<int, T>>();
+        _epsilon = _options.EpsilonStart;
+    }
+
+    public override Vector<T> SelectAction(Vector<T> state, bool training = true)
+    {
+        string stateKey = VectorToStateKey(state);
+
+        // Epsilon-greedy exploration
+        if (training && Random.NextDouble() < _epsilon)
+        {
+            // Random action
+            int randomAction = Random.Next(_options.ActionSize);
+            var action = new Vector<T>(_options.ActionSize);
+            action[randomAction] = NumOps.One;
+            return action;
+        }
+
+        // Greedy action selection
+        int bestAction = GetBestAction(stateKey);
+        var result = new Vector<T>(_options.ActionSize);
+        result[bestAction] = NumOps.One;
+        return result;
+    }
+
+    public override void StoreExperience(Vector<T> state, Vector<T> action, T reward, Vector<T> nextState, bool done)
+    {
+        string stateKey = VectorToStateKey(state);
+        string nextStateKey = VectorToStateKey(nextState);
+        int actionIndex = GetActionIndex(action);
+
+        // Ensure state exists in Q-table
+        EnsureStateExists(stateKey);
+        EnsureStateExists(nextStateKey);
+
+        // Q-Learning update: Q(s,a) ← Q(s,a) + α[r + γ max Q(s',a') - Q(s,a)]
+        T currentQ = _qTable[stateKey][actionIndex];
+        T maxNextQ = done ? NumOps.Zero : GetMaxQValue(nextStateKey);
+
+        T target = NumOps.Add(reward, NumOps.Multiply(DiscountFactor, maxNextQ));
+        T tdError = NumOps.Subtract(target, currentQ);
+        T update = NumOps.Multiply(LearningRate, tdError);
+
+        _qTable[stateKey][actionIndex] = NumOps.Add(currentQ, update);
+
+        // Decay epsilon
+        _epsilon = Math.Max(_options.EpsilonEnd, _epsilon * _options.EpsilonDecay);
+    }
+
+    public override T Train()
+    {
+        // Tabular Q-learning updates immediately in StoreExperience
+        // No separate training step needed
+        return NumOps.Zero;
+    }
+
+    private string VectorToStateKey(Vector<T> state)
+    {
+        // Convert state vector to string key for dictionary
+        var parts = new string[state.Length];
+        for (int i = 0; i < state.Length; i++)
+        {
+            parts[i] = NumOps.ToDouble(state[i]).ToString("F4");
+        }
+        return string.Join(",", parts);
+    }
+
+    private int GetActionIndex(Vector<T> action)
+    {
+        for (int i = 0; i < action.Length; i++)
+        {
+            if (NumOps.Compare(action[i], NumOps.Zero) > 0)
+            {
+                return i;
+            }
+        }
+        return 0;
+    }
+
+    private void EnsureStateExists(string stateKey)
+    {
+        if (!_qTable.ContainsKey(stateKey))
+        {
+            _qTable[stateKey] = new Dictionary<int, T>();
+            for (int a = 0; a < _options.ActionSize; a++)
+            {
+                _qTable[stateKey][a] = NumOps.Zero;
+            }
+        }
+    }
+
+    private int GetBestAction(string stateKey)
+    {
+        EnsureStateExists(stateKey);
+
+        int bestAction = 0;
+        T bestValue = _qTable[stateKey][0];
+
+        for (int a = 1; a < _options.ActionSize; a++)
+        {
+            if (NumOps.Compare(_qTable[stateKey][a], bestValue) > 0)
+            {
+                bestValue = _qTable[stateKey][a];
+                bestAction = a;
+            }
+        }
+
+        return bestAction;
+    }
+
+    private T GetMaxQValue(string stateKey)
+    {
+        EnsureStateExists(stateKey);
+
+        T maxValue = _qTable[stateKey][0];
+        for (int a = 1; a < _options.ActionSize; a++)
+        {
+            if (NumOps.Compare(_qTable[stateKey][a], maxValue) > 0)
+            {
+                maxValue = _qTable[stateKey][a];
+            }
+        }
+
+        return maxValue;
+    }
+
+    public override ModelMetadata<T> GetModelMetadata()
+    {
+        return new ModelMetadata<T>
+        {
+            ModelType = "TabularQLearning",
+            InputSize = _options.StateSize,
+            OutputSize = _options.ActionSize,
+            ParameterCount = ParameterCount
+        };
+    }
+
+    public override int ParameterCount => _qTable.Count * _options.ActionSize;
+
+    public override int FeatureCount => _options.StateSize;
+
+    public override byte[] Serialize()
+    {
+        throw new NotImplementedException("Tabular Q-Learning serialization not yet implemented");
+    }
+
+    public override void Deserialize(byte[] data)
+    {
+        throw new NotImplementedException("Tabular Q-Learning deserialization not yet implemented");
+    }
+
+    public override Matrix<T> GetParameters()
+    {
+        // Flatten Q-table into matrix
+        int stateCount = _qTable.Count;
+        var parameters = new Matrix<T>(stateCount, _options.ActionSize);
+
+        int row = 0;
+        foreach (var stateQValues in _qTable.Values)
+        {
+            for (int action = 0; action < _options.ActionSize; action++)
+            {
+                parameters[row, action] = stateQValues[action];
+            }
+            row++;
+        }
+
+        return parameters;
+    }
+
+    public override void SetParameters(Matrix<T> parameters)
+    {
+        // Reconstruct Q-table from matrix
+        _qTable.Clear();
+
+        int row = 0;
+        var stateKeys = _qTable.Keys.ToList();
+        for (int i = 0; i < Math.Min(parameters.Rows, stateKeys.Count); i++)
+        {
+            var qValues = new Dictionary<int, T>();
+            for (int action = 0; action < _options.ActionSize; action++)
+            {
+                qValues[action] = parameters[row, action];
+            }
+            _qTable[stateKeys[i]] = qValues;
+            row++;
+        }
+    }
+
+    public override IFullModel<T, Vector<T>, Vector<T>> Clone()
+    {
+        var clone = new TabularQLearningAgent<T>(_options);
+        clone._qTable = new Dictionary<string, Dictionary<int, T>>(_qTable);
+        clone._epsilon = _epsilon;
+        return clone;
+    }
+
+    public override (Matrix<T> Gradients, T Loss) ComputeGradients(
+        Vector<T> input,
+        Vector<T> target,
+        ILossFunction<T>? lossFunction = null)
+    {
+        // Tabular methods don't use gradients
+        return (new Matrix<T>(1, 1), NumOps.Zero);
+    }
+
+    public override void ApplyGradients(Matrix<T> gradients, T learningRate)
+    {
+        // Tabular methods don't use gradients
+    }
+
+    public override void Save(string filepath)
+    {
+        var data = Serialize();
+        System.IO.File.WriteAllBytes(filepath, data);
+    }
+
+    public override void Load(string filepath)
+    {
+        var data = System.IO.File.ReadAllBytes(filepath);
+        Deserialize(data);
+    }
+}
