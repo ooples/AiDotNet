@@ -336,11 +336,14 @@ public class CQLAgent<T> : DeepReinforcementLearningAgentBase<T>
             qGrad[0] = _numOps.One;
             var actionGrad = _q1Network.Backward(qGrad);
 
-            // Extract action part of gradient
+            // Extract action part of gradient and negate for gradient ascent (maximize Q)
             var policyGrad = new Vector<T>(_options.ActionSize * 2);
             for (int i = 0; i < _options.ActionSize; i++)
             {
-                policyGrad[i] = actionGrad[_options.StateSize + i];
+                // Negate gradient for ascent on Q-value
+                policyGrad[i] = _numOps.Negate(actionGrad[_options.StateSize + i]);
+                // Set log-sigma gradients to zero (exploration is handled separately)
+                policyGrad[_options.ActionSize + i] = _numOps.Zero;
             }
 
             _policyNetwork.Backward(policyGrad);
