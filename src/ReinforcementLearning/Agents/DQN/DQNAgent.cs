@@ -55,22 +55,9 @@ public class DQNAgent<T> : DeepReinforcementLearningAgentBase<T>
     /// </summary>
     /// <param name="options">Configuration options for the DQN agent.</param>
     public DQNAgent(DQNOptions<T> options)
-        : base(new ReinforcementLearningOptions<T>
-        {
-            LearningRate = options.LearningRate,
-            DiscountFactor = options.DiscountFactor,
-            LossFunction = options.LossFunction,
-            Seed = options.Seed,
-            BatchSize = options.BatchSize,
-            ReplayBufferSize = options.ReplayBufferSize,
-            TargetUpdateFrequency = options.TargetUpdateFrequency,
-            WarmupSteps = options.WarmupSteps,
-            EpsilonStart = options.EpsilonStart,
-            EpsilonEnd = options.EpsilonEnd,
-            EpsilonDecay = options.EpsilonDecay
-        })
+        : base(CreateBaseOptions(options))
     {
-        _dqnOptions = options ?? throw new ArgumentNullException(nameof(options));
+        _dqnOptions = options;
         _replayBuffer = new UniformReplayBuffer<T>(options.ReplayBufferSize, options.Seed);
         _epsilon = options.EpsilonStart;
         _steps = 0;
@@ -87,6 +74,30 @@ public class DQNAgent<T> : DeepReinforcementLearningAgentBase<T>
         // Register networks with base class
         Networks.Add(_qNetwork);
         Networks.Add(_targetNetwork);
+    }
+
+
+    private static ReinforcementLearningOptions<T> CreateBaseOptions(DQNOptions<T> options)
+    {
+        if (options == null)
+        {
+            throw new ArgumentNullException(nameof(options));
+        }
+
+        return new ReinforcementLearningOptions<T>
+        {
+            LearningRate = options.LearningRate,
+            DiscountFactor = options.DiscountFactor,
+            LossFunction = options.LossFunction,
+            Seed = options.Seed,
+            BatchSize = options.BatchSize,
+            ReplayBufferSize = options.ReplayBufferSize,
+            TargetUpdateFrequency = options.TargetUpdateFrequency,
+            WarmupSteps = options.WarmupSteps,
+            EpsilonStart = options.EpsilonStart,
+            EpsilonEnd = options.EpsilonEnd,
+            EpsilonDecay = options.EpsilonDecay
+        };
     }
 
     private NeuralNetwork<T> BuildQNetwork()
