@@ -80,7 +80,7 @@ public class UniformReplayBufferTests
         var batch = buffer.Sample(batchSize: 10);
 
         // Assert
-        Assert.Equal(10, batch.Length);
+        Assert.Equal(10, batch.Count);
     }
 
     [Fact]
