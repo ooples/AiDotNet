@@ -9,6 +9,19 @@ namespace AiDotNet.Tests.UnitTests.KnowledgeDistillation;
 /// </summary>
 public class DistillationLossTests
 {
+    /// <summary>
+    /// Helper method to convert a Vector to a single-row Matrix for batch processing API.
+    /// </summary>
+    private Matrix<double> MatrixFromVector(Vector<double> vector)
+    {
+        var matrix = new Matrix<double>(1, vector.Length);
+        for (int i = 0; i < vector.Length; i++)
+        {
+            matrix[0, i] = vector[i];
+        }
+        return matrix;
+    }
+
     [Fact]
     public void Constructor_WithValidParameters_InitializesCorrectly()
     {
@@ -43,10 +56,12 @@ public class DistillationLossTests
         // Arrange
         var studentLogits = new Vector<double>(new[] { 2.0, 1.0, 0.5 });
         var teacherLogits = new Vector<double>(new[] { 2.0, 1.0, 0.5 });
+        var studentBatch = MatrixFromVector(studentLogits);
+        var teacherBatch = MatrixFromVector(teacherLogits);
         var distillationLoss = new DistillationLoss<double>(temperature: 3.0, alpha: 0.0);
 
         // Act
-        var loss = distillationLoss.ComputeLoss(studentLogits, teacherLogits, trueLabels: null);
+        var loss = distillationLoss.ComputeLoss(studentBatch, teacherBatch, null);
 
         // Assert
         // Identical logits should produce identical soft predictions, resulting in KL divergence ≈ 0
@@ -59,10 +74,12 @@ public class DistillationLossTests
         // Arrange
         var studentLogits = new Vector<double>(new[] { 1.0, 2.0, 0.5 });
         var teacherLogits = new Vector<double>(new[] { 2.5, 1.0, 0.3 });
+        var studentBatch = MatrixFromVector(studentLogits);
+        var teacherBatch = MatrixFromVector(teacherLogits);
         var distillationLoss = new DistillationLoss<double>(temperature: 3.0, alpha: 0.0);
 
         // Act
-        var loss = distillationLoss.ComputeLoss(studentLogits, teacherLogits, trueLabels: null);
+        var loss = distillationLoss.ComputeLoss(studentBatch, teacherBatch, null);
 
         // Assert
         // Different logits should produce non-zero loss
@@ -75,13 +92,15 @@ public class DistillationLossTests
         // Arrange
         var studentLogits = new Vector<double>(new[] { 10.0, 1.0, 0.1 });
         var teacherLogits = new Vector<double>(new[] { 9.0, 1.5, 0.2 });
+        var studentBatch = MatrixFromVector(studentLogits);
+        var teacherBatch = MatrixFromVector(teacherLogits);
 
         var lowTempLoss = new DistillationLoss<double>(temperature: 1.0, alpha: 0.0);
         var highTempLoss = new DistillationLoss<double>(temperature: 5.0, alpha: 0.0);
 
         // Act
-        var lowLoss = lowTempLoss.ComputeLoss(studentLogits, teacherLogits, trueLabels: null);
-        var highLoss = highTempLoss.ComputeLoss(studentLogits, teacherLogits, trueLabels: null);
+        var lowLoss = lowTempLoss.ComputeLoss(studentBatch, teacherBatch, null);
+        var highLoss = highTempLoss.ComputeLoss(studentBatch, teacherBatch, null);
 
         // Assert
         // High temperature loss should be smaller because distributions are softer and closer
@@ -96,13 +115,16 @@ public class DistillationLossTests
         var studentLogits = new Vector<double>(new[] { 1.0, 2.0, 0.5 });
         var teacherLogits = new Vector<double>(new[] { 1.5, 1.8, 0.6 });
         var trueLabels = new Vector<double>(new[] { 0.0, 1.0, 0.0 }); // Class 1 is correct
+        var studentBatch = MatrixFromVector(studentLogits);
+        var teacherBatch = MatrixFromVector(teacherLogits);
+        var labelsBatch = MatrixFromVector(trueLabels);
 
         var distillationLoss = new DistillationLoss<double>(temperature: 3.0, alpha: 0.5);
         var softOnlyLoss = new DistillationLoss<double>(temperature: 3.0, alpha: 0.0);
 
         // Act
-        var combinedLoss = distillationLoss.ComputeLoss(studentLogits, teacherLogits, trueLabels);
-        var softLoss = softOnlyLoss.ComputeLoss(studentLogits, teacherLogits, trueLabels: null);
+        var combinedLoss = distillationLoss.ComputeLoss(studentBatch, teacherBatch, labelsBatch);
+        var softLoss = softOnlyLoss.ComputeLoss(studentBatch, teacherBatch, null);
 
         // Assert
         // Combined loss should be different from soft-only loss
@@ -116,11 +138,13 @@ public class DistillationLossTests
         // Arrange
         var studentLogits = new Vector<double>(new[] { 1.0, 2.0, 0.5 });
         var teacherLogits = new Vector<double>(new[] { 1.5, 1.8 }); // Different length
+        var studentBatch = MatrixFromVector(studentLogits);
+        var teacherBatch = MatrixFromVector(teacherLogits);
         var distillationLoss = new DistillationLoss<double>();
 
         // Act & Assert
         Assert.Throws<ArgumentException>(() =>
-            distillationLoss.ComputeLoss(studentLogits, teacherLogits, trueLabels: null));
+            distillationLoss.ComputeLoss(studentBatch, teacherBatch, null));
     }
 
     [Fact]
@@ -129,14 +153,17 @@ public class DistillationLossTests
         // Arrange
         var studentLogits = new Vector<double>(new[] { 1.0, 2.0, 0.5 });
         var teacherLogits = new Vector<double>(new[] { 1.5, 1.8, 0.6 });
+        var studentBatch = MatrixFromVector(studentLogits);
+        var teacherBatch = MatrixFromVector(teacherLogits);
         var distillationLoss = new DistillationLoss<double>(temperature: 3.0, alpha: 0.0);
 
         // Act
-        var gradient = distillationLoss.ComputeGradient(studentLogits, teacherLogits, trueLabels: null);
+        var gradient = distillationLoss.ComputeGradient(studentBatch, teacherBatch, null);
 
         // Assert
         Assert.NotNull(gradient);
-        Assert.Equal(studentLogits.Length, gradient.Length);
+        Assert.Equal(1, gradient.Rows); // Single sample batch
+        Assert.Equal(studentLogits.Length, gradient.Columns);
     }
 
     [Fact]
@@ -145,17 +172,19 @@ public class DistillationLossTests
         // Arrange
         var studentLogits = new Vector<double>(new[] { 2.0, 1.0, 0.5 });
         var teacherLogits = new Vector<double>(new[] { 2.0, 1.0, 0.5 });
+        var studentBatch = MatrixFromVector(studentLogits);
+        var teacherBatch = MatrixFromVector(teacherLogits);
         var distillationLoss = new DistillationLoss<double>(temperature: 3.0, alpha: 0.0);
 
         // Act
-        var gradient = distillationLoss.ComputeGradient(studentLogits, teacherLogits, trueLabels: null);
+        var gradient = distillationLoss.ComputeGradient(studentBatch, teacherBatch, null);
 
         // Assert
         // Gradients should be very close to zero for identical predictions
-        for (int i = 0; i < gradient.Length; i++)
+        for (int i = 0; i < gradient.Columns; i++)
         {
-            Assert.True(Math.Abs(gradient[i]) < 1e-6,
-                $"Expected gradient[{i}] close to 0, but got {gradient[i]}");
+            Assert.True(Math.Abs(gradient[0, i]) < 1e-6,
+                $"Expected gradient[0, {i}] close to 0, but got {gradient[0, i]}");
         }
     }
 
@@ -166,20 +195,23 @@ public class DistillationLossTests
         var studentLogits = new Vector<double>(new[] { 1.0, 2.0, 0.5 });
         var teacherLogits = new Vector<double>(new[] { 1.5, 1.8, 0.6 });
         var trueLabels = new Vector<double>(new[] { 0.0, 1.0, 0.0 });
+        var studentBatch = MatrixFromVector(studentLogits);
+        var teacherBatch = MatrixFromVector(teacherLogits);
+        var labelsBatch = MatrixFromVector(trueLabels);
 
         var combinedGradLoss = new DistillationLoss<double>(temperature: 3.0, alpha: 0.5);
         var softOnlyLoss = new DistillationLoss<double>(temperature: 3.0, alpha: 0.0);
 
         // Act
-        var combinedGrad = combinedGradLoss.ComputeGradient(studentLogits, teacherLogits, trueLabels);
-        var softGrad = softOnlyLoss.ComputeGradient(studentLogits, teacherLogits, trueLabels: null);
+        var combinedGrad = combinedGradLoss.ComputeGradient(studentBatch, teacherBatch, labelsBatch);
+        var softGrad = softOnlyLoss.ComputeGradient(studentBatch, teacherBatch, null);
 
         // Assert
         // Combined gradient should differ from soft-only gradient
         bool isDifferent = false;
-        for (int i = 0; i < combinedGrad.Length; i++)
+        for (int i = 0; i < combinedGrad.Columns; i++)
         {
-            if (Math.Abs(combinedGrad[i] - softGrad[i]) > 1e-6)
+            if (Math.Abs(combinedGrad[0, i] - softGrad[0, i]) > 1e-6)
             {
                 isDifferent = true;
                 break;
@@ -194,18 +226,20 @@ public class DistillationLossTests
         // Arrange
         var studentLogits = new Vector<double>(new[] { 1.0, 2.0, 0.5 });
         var teacherLogits = new Vector<double>(new[] { 1.5, 1.8, 0.6 });
+        var studentBatch = MatrixFromVector(studentLogits);
+        var teacherBatch = MatrixFromVector(teacherLogits);
         var temperature = 3.0;
         var distillationLoss = new DistillationLoss<double>(temperature, alpha: 0.0);
 
         // Act
-        var gradient = distillationLoss.ComputeGradient(studentLogits, teacherLogits, trueLabels: null);
+        var gradient = distillationLoss.ComputeGradient(studentBatch, teacherBatch, null);
 
         // Assert
         // Gradient magnitudes should be reasonable (not exploding or vanishing)
-        for (int i = 0; i < gradient.Length; i++)
+        for (int i = 0; i < gradient.Columns; i++)
         {
-            double gradVal = gradient[i];
-            Assert.True(Math.Abs(gradVal) < 100, $"Gradient should not explode: gradient[{i}] = {gradVal}");
+            double gradVal = gradient[0, i];
+            Assert.True(Math.Abs(gradVal) < 100, $"Gradient should not explode: gradient[0, {i}] = {gradVal}");
         }
     }
 
@@ -215,15 +249,17 @@ public class DistillationLossTests
         // Arrange
         var studentLogits = new Vector<double>(new[] { 1.0, 2.0, 0.5 });
         var teacherLogits = new Vector<double>(new[] { 1.5, 1.8, 0.6 });
+        var studentBatch = MatrixFromVector(studentLogits);
+        var teacherBatch = MatrixFromVector(teacherLogits);
 
         var loss1 = new DistillationLoss<double>(temperature: 1.0, alpha: 0.0);
         var loss3 = new DistillationLoss<double>(temperature: 3.0, alpha: 0.0);
         var loss5 = new DistillationLoss<double>(temperature: 5.0, alpha: 0.0);
 
         // Act
-        var l1 = loss1.ComputeLoss(studentLogits, teacherLogits, trueLabels: null);
-        var l3 = loss3.ComputeLoss(studentLogits, teacherLogits, trueLabels: null);
-        var l5 = loss5.ComputeLoss(studentLogits, teacherLogits, trueLabels: null);
+        var l1 = loss1.ComputeLoss(studentBatch, teacherBatch, null);
+        var l3 = loss3.ComputeLoss(studentBatch, teacherBatch, null);
+        var l5 = loss5.ComputeLoss(studentBatch, teacherBatch, null);
 
         // Assert
         // Loss is scaled by T^2, but KL divergence also changes with T
