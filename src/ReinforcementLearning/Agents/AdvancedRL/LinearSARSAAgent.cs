@@ -119,7 +119,7 @@ public class LinearSARSAAgent<T> : ReinforcementLearningAgentBase<T>
         for (int a = 1; a < _options.ActionSize; a++)
         {
             T value = ComputeQValue(state, a);
-            if (NumOps.Compare(value, bestValue) > 0)
+            if (NumOps.GreaterThan(value, bestValue))
             {
                 bestValue = value;
                 bestAction = a;
@@ -166,13 +166,15 @@ public class LinearSARSAAgent<T> : ReinforcementLearningAgentBase<T>
 
     public override Matrix<T> GetParameters()
     {
-        var p = new List<T>();
+        int paramCount = _options.ActionSize * _options.FeatureSize;
+        var vector = new Vector<T>(paramCount);
+        int idx = 0;
+
         for (int a = 0; a < _options.ActionSize; a++)
             for (int f = 0; f < _options.FeatureSize; f++)
-                p.Add(_weights[a, f]);
-        var v = new Vector<T>(p.Count);
-        for (int i = 0; i < p.Count; i++) v[i] = p[i];
-        return new Matrix<T>(new[] { v });
+                vector[idx++] = _weights[a, f];
+
+        return new Matrix<T>(new[] { vector });
     }
 
     public override void SetParameters(Matrix<T> parameters)
@@ -190,8 +192,8 @@ public class LinearSARSAAgent<T> : ReinforcementLearningAgentBase<T>
     {
         var pred = Predict(input);
         var lf = lossFunction ?? LossFunction;
-        var loss = lf.ComputeLoss(new Matrix<T>(new[] { pred }), new Matrix<T>(new[] { target }));
-        var grad = lf.ComputeDerivative(new Matrix<T>(new[] { pred }), new Matrix<T>(new[] { target }));
+        var loss = lf.CalculateLoss(new Matrix<T>(new[] { pred }), new Matrix<T>(new[] { target }));
+        var grad = lf.CalculateDerivative(new Matrix<T>(new[] { pred }), new Matrix<T>(new[] { target }));
         return (grad, loss);
     }
 

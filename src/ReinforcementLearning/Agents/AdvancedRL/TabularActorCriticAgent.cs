@@ -93,7 +93,7 @@ public class TabularActorCriticAgent<T> : ReinforcementLearningAgentBase<T>
         T maxPref = preferences[0];
         for (int i = 1; i < preferences.Count; i++)
         {
-            if (NumOps.Compare(preferences[i], maxPref) > 0)
+            if (NumOps.GreaterThan(preferences[i], maxPref))
             {
                 maxPref = preferences[i];
             }
@@ -118,7 +118,7 @@ public class TabularActorCriticAgent<T> : ReinforcementLearningAgentBase<T>
     }
 
     private string GetStateKey(Vector<T> state) => string.Join(",", Enumerable.Range(0, state.Length).Select(i => NumOps.ToDouble(state[i]).ToString("F4")));
-    private int ArgMax(Vector<T> values) { int maxIndex = 0; T maxValue = values[0]; for (int i = 1; i < values.Length; i++) if (NumOps.Compare(values[i], maxValue) > 0) { maxValue = values[i]; maxIndex = i; } return maxIndex; }
+    private int ArgMax(Vector<T> values) { int maxIndex = 0; T maxValue = values[0]; for (int i = 1; i < values.Length; i++) if (NumOps.GreaterThan(values[i], maxValue)) { maxValue = values[i]; maxIndex = i; } return maxIndex; }
 
     public override Dictionary<string, T> GetMetrics() => new Dictionary<string, T> { ["states_visited"] = NumOps.FromDouble(_valueTable.Count) };
     public override void ResetEpisode() { }
@@ -130,10 +130,47 @@ public class TabularActorCriticAgent<T> : ReinforcementLearningAgentBase<T>
     public override int FeatureCount => _options.StateSize;
     public override byte[] Serialize() => throw new NotImplementedException();
     public override void Deserialize(byte[] data) => throw new NotImplementedException();
-    public override Matrix<T> GetParameters() { var p = new List<T>(); foreach (var v in _valueTable.Values) p.Add(v); foreach (var s in _policy) foreach (var a in s.Value) p.Add(a.Value); if (p.Count == 0) p.Add(NumOps.Zero); var v = new Vector<T>(p.Count); for (int i = 0; i < p.Count; i++) v[i] = p[i]; return new Matrix<T>(new[] { v }); }
-    public override void SetParameters(Matrix<T> parameters) { int idx = 0; foreach (var s in _valueTable.Keys.ToList()) if (idx < parameters.Columns) _valueTable[s] = parameters[0, idx++]; foreach (var s in _policy.ToList()) for (int a = 0; a < _options.ActionSize; a++) if (idx < parameters.Columns) _policy[s.Key][a] = parameters[0, idx++]; }
+    public override Matrix<T> GetParameters()
+    {
+        int paramCount = _valueTable.Count + (_policy.Count * _options.ActionSize);
+        if (paramCount == 0) paramCount = 1;
+
+        var vector = new Vector<T>(paramCount);
+        int idx = 0;
+
+        foreach (var v in _valueTable.Values)
+            vector[idx++] = v;
+
+        foreach (var s in _policy)
+            foreach (var a in s.Value)
+                vector[idx++] = a.Value;
+
+        if (idx == 0)
+            vector[0] = NumOps.Zero;
+
+        return new Matrix<T>(new[] { vector });
+    }
+    public override void SetParameters(Matrix<T> parameters)
+    {
+        int idx = 0;
+        foreach (var s in _valueTable.Keys.ToList())
+            if (idx < parameters.Columns)
+                _valueTable[s] = parameters[0, idx++];
+
+        foreach (var s in _policy.ToList())
+            for (int a = 0; a < _options.ActionSize; a++)
+                if (idx < parameters.Columns)
+                    _policy[s.Key][a] = parameters[0, idx++];
+    }
     public override IFullModel<T, Vector<T>, Vector<T>> Clone() => new TabularActorCriticAgent<T>(_options);
-    public override (Matrix<T> Gradients, T Loss) ComputeGradients(Vector<T> input, Vector<T> target, ILossFunction<T>? lossFunction = null) { var pred = Predict(input); var lf = lossFunction ?? LossFunction; var loss = lf.ComputeLoss(new Matrix<T>(new[] { pred }), new Matrix<T>(new[] { target })); var grad = lf.ComputeDerivative(new Matrix<T>(new[] { pred }), new Matrix<T>(new[] { target })); return (grad, loss); }
+    public override (Matrix<T> Gradients, T Loss) ComputeGradients(Vector<T> input, Vector<T> target, ILossFunction<T>? lossFunction = null)
+    {
+        var pred = Predict(input);
+        var lf = lossFunction ?? LossFunction;
+        var loss = lf.CalculateLoss(new Matrix<T>(new[] { pred }), new Matrix<T>(new[] { target }));
+        var grad = lf.CalculateDerivative(new Matrix<T>(new[] { pred }), new Matrix<T>(new[] { target }));
+        return (grad, loss);
+    }
     public override void ApplyGradients(Matrix<T> gradients, T learningRate) { }
     public override void Save(string filepath) { var data = Serialize(); System.IO.File.WriteAllBytes(filepath, data); }
     public override void Load(string filepath) { var data = System.IO.File.ReadAllBytes(filepath); Deserialize(data); }
