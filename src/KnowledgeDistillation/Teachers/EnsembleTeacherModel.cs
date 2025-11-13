@@ -190,15 +190,15 @@ public class EnsembleTeacherModel<T> : TeacherModelBase<Vector<T>, Vector<T>, T>
                 break;
 
             case EnsembleAggregationMode.GeometricMean:
-                // Geometric mean: (x1 * x2 * ... * xn)^(1/n)
-                // For numerical stability, use log space: exp(mean(log(xi)))
+                // Weighted geometric mean: (x1^w1 * x2^w2 * ... * xn^wn)
+                // For numerical stability, use log space: exp(sum(wi * log(xi)))
                 for (int i = 0; i < n; i++)
                 {
                     double logSum = 0;
                     for (int t = 0; t < _teachers.Length; t++)
                     {
                         double val = Convert.ToDouble(teacherLogits[t][i]);
-                        logSum += Math.Log(Math.Abs(val) + 1e-10) * _weights![t];
+                        logSum += _weights![t] * Math.Log(Math.Abs(val) + 1e-10);
                     }
                     result[i] = NumOps.FromDouble(Math.Exp(logSum));
                 }
