@@ -99,6 +99,7 @@ public class TeacherModelWrapper<T> : ITeacherModel<Vector<T>, Vector<T>>
 
     private static int GetOutputDimensionFromModel(IFullModel<T, Vector<T>, Vector<T>> model)
     {
+        // Use IModel.GetModelMetadata() interface method (not reflection)
         var metadata = model.GetModelMetadata();
 
         if (metadata == null)
