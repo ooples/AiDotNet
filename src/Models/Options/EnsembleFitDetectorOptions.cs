@@ -32,7 +32,7 @@ public class EnsembleFitDetectorOptions
     /// each of the others. If you leave this empty (the default), all experts' opinions are treated equally.
     /// You might want to adjust these weights if you know certain detectors work better for your type of data.</para>
     /// </remarks>
-    public List<double> DetectorWeights { get; set; } = [];
+    public List<double> DetectorWeights { get; set; } = new List<int> {  };
 
     /// <summary>
     /// Gets or sets the maximum number of algorithm recommendations to return.

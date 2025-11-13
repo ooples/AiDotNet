@@ -50,8 +50,8 @@ public class CQLOptions<T>
     public int BufferSize { get; set; } = 1000000;
     public int GradientSteps { get; set; } = 1;
     public ILossFunction<T> QLossFunction { get; set; } = new MeanSquaredError<T>();
-    public List<int> PolicyHiddenLayers { get; set; } = [256, 256];
-    public List<int> QHiddenLayers { get; set; } = [256, 256];
+    public List<int> PolicyHiddenLayers { get; set; } = new List<int> { 256, 256 };
+    public List<int> QHiddenLayers { get; set; } = new List<int> { 256, 256 };
     public int? Seed { get; set; }
 
     public CQLOptions()

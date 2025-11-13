@@ -141,12 +141,12 @@ public class SACOptions<T>
     /// <summary>
     /// Hidden layer sizes for policy network.
     /// </summary>
-    public List<int> PolicyHiddenLayers { get; set; } = [256, 256];
+    public List<int> PolicyHiddenLayers { get; set; } = new List<int> { 256, 256 };
 
     /// <summary>
     /// Hidden layer sizes for Q-networks.
     /// </summary>
-    public List<int> QHiddenLayers { get; set; } = [256, 256];
+    public List<int> QHiddenLayers { get; set; } = new List<int> { 256, 256 };
 
     /// <summary>
     /// Random seed for reproducibility (optional).

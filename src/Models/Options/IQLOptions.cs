@@ -46,9 +46,9 @@ public class IQLOptions<T>
     public int BatchSize { get; set; } = 256;
     public int BufferSize { get; set; } = 1000000;
     public ILossFunction<T> QLossFunction { get; set; } = new MeanSquaredError<T>();
-    public List<int> PolicyHiddenLayers { get; set; } = [256, 256];
-    public List<int> QHiddenLayers { get; set; } = [256, 256];
-    public List<int> ValueHiddenLayers { get; set; } = [256, 256];
+    public List<int> PolicyHiddenLayers { get; set; } = new List<int> { 256, 256 };
+    public List<int> QHiddenLayers { get; set; } = new List<int> { 256, 256 };
+    public List<int> ValueHiddenLayers { get; set; } = new List<int> { 256, 256 };
     public int? Seed { get; set; }
 
     public IQLOptions()

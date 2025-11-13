@@ -25,9 +25,9 @@ public class RainbowDQNOptions<T> : ReinforcementLearningOptions<T>
     public bool UseNoisyNetworks { get; init; } = true;
 
     // Dueling network architecture
-    public List<int> SharedLayers { get; init; } = [128];
-    public List<int> ValueStreamLayers { get; init; } = [128];
-    public List<int> AdvantageStreamLayers { get; init; } = [128];
+    public List<int> SharedLayers { get; init; } = new List<int> { 128 };
+    public List<int> ValueStreamLayers { get; init; } = new List<int> { 128 };
+    public List<int> AdvantageStreamLayers { get; init; } = new List<int> { 128 };
 
     // Prioritized experience replay parameters (base has UsePrioritizedReplay)
     public double PriorityAlpha { get; init; } = 0.6;

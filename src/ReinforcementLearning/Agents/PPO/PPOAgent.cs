@@ -87,7 +87,7 @@ public class PPOAgent<T> : DeepReinforcementLearningAgentBase<T>
         // Hidden layers
         foreach (var hiddenSize in _ppoOptions.PolicyHiddenLayers)
         {
-            layers.Add(new DenseLayer<T>(prevSize, hiddenSize, new TanhActivation<T>()));
+            layers.Add(new DenseLayer<T>(prevSize, hiddenSize, (IActivationFunction<T>)new TanhActivation<T>()));
             prevSize = hiddenSize;
         }
 
@@ -95,12 +95,12 @@ public class PPOAgent<T> : DeepReinforcementLearningAgentBase<T>
         if (_ppoOptions.IsContinuous)
         {
             // For continuous: output mean and log_std for Gaussian policy
-            layers.Add(new DenseLayer<T>(prevSize, _ppoOptions.ActionSize * 2, new LinearActivation<T>()));
+            layers.Add(new DenseLayer<T>(prevSize, _ppoOptions.ActionSize * 2, (IActivationFunction<T>)new LinearActivation<T>()));
         }
         else
         {
             // For discrete: output action logits (softmax applied later)
-            layers.Add(new DenseLayer<T>(prevSize, _ppoOptions.ActionSize, new LinearActivation<T>()));
+            layers.Add(new DenseLayer<T>(prevSize, _ppoOptions.ActionSize, (IActivationFunction<T>)new LinearActivation<T>()));
         }
 
         var architecture = new NeuralNetworkArchitecture<T>
@@ -122,12 +122,12 @@ public class PPOAgent<T> : DeepReinforcementLearningAgentBase<T>
         // Hidden layers
         foreach (var hiddenSize in _ppoOptions.ValueHiddenLayers)
         {
-            layers.Add(new DenseLayer<T>(prevSize, hiddenSize, new TanhActivation<T>()));
+            layers.Add(new DenseLayer<T>(prevSize, hiddenSize, (IActivationFunction<T>)new TanhActivation<T>()));
             prevSize = hiddenSize;
         }
 
         // Output layer (single value)
-        layers.Add(new DenseLayer<T>(prevSize, 1, new LinearActivation<T>()));
+        layers.Add(new DenseLayer<T>(prevSize, 1, (IActivationFunction<T>)new LinearActivation<T>()));
 
         var architecture = new NeuralNetworkArchitecture<T>
         {

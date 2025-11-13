@@ -29,7 +29,7 @@ public class REINFORCEOptions<T>
     public bool IsContinuous { get; set; } = false;
     public T LearningRate { get; set; }
     public T DiscountFactor { get; set; }
-    public List<int> HiddenLayers { get; set; } = [32, 32];
+    public List<int> HiddenLayers { get; set; } = new List<int> { 32, 32 };
     public int? Seed { get; set; }
 
     public REINFORCEOptions()

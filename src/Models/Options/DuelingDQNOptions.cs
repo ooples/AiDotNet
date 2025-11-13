@@ -20,9 +20,9 @@ public class DuelingDQNOptions<T>
     public int ReplayBufferSize { get; set; } = 10000;
     public int TargetUpdateFrequency { get; set; } = 1000;
     public int WarmupSteps { get; set; } = 1000;
-    public List<int> SharedLayers { get; set; } = [128];
-    public List<int> ValueStreamLayers { get; set; } = [128];
-    public List<int> AdvantageStreamLayers { get; set; } = [128];
+    public List<int> SharedLayers { get; set; } = new List<int> { 128 };
+    public List<int> ValueStreamLayers { get; set; } = new List<int> { 128 };
+    public List<int> AdvantageStreamLayers { get; set; } = new List<int> { 128 };
     public int? Seed { get; set; }
 
     public DuelingDQNOptions()

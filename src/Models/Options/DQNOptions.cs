@@ -20,7 +20,7 @@ public class DQNOptions<T>
     public int TargetUpdateFrequency { get; set; } = 1000;
     public int WarmupSteps { get; set; } = 1000;
     public ILossFunction<T> LossFunction { get; set; } = new MeanSquaredError<T>();
-    public List<int> HiddenLayers { get; set; } = [128, 128];
+    public List<int> HiddenLayers { get; set; } = new List<int> { 128, 128 };
     public int? Seed { get; set; }
 
     public DQNOptions()

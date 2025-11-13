@@ -71,12 +71,12 @@ public class A2CAgent<T> : DeepReinforcementLearningAgentBase<T>
 
         foreach (var hiddenSize in _a2cOptions.PolicyHiddenLayers)
         {
-            layers.Add(new DenseLayer<T>(prevSize, hiddenSize, new TanhActivation<T>()));
+            layers.Add(new DenseLayer<T>(prevSize, hiddenSize, (IActivationFunction<T>)new TanhActivation<T>()));
             prevSize = hiddenSize;
         }
 
         int outputSize = _a2cOptions.IsContinuous ? _a2cOptions.ActionSize * 2 : _a2cOptions.ActionSize;
-        layers.Add(new DenseLayer<T>(prevSize, outputSize, new LinearActivation<T>()));
+        layers.Add(new DenseLayer<T>(prevSize, outputSize, (IActivationFunction<T>)new LinearActivation<T>()));
 
         return new NeuralNetwork<T>(new NeuralNetworkArchitecture<T>
         {
@@ -94,11 +94,11 @@ public class A2CAgent<T> : DeepReinforcementLearningAgentBase<T>
 
         foreach (var hiddenSize in _a2cOptions.ValueHiddenLayers)
         {
-            layers.Add(new DenseLayer<T>(prevSize, hiddenSize, new TanhActivation<T>()));
+            layers.Add(new DenseLayer<T>(prevSize, hiddenSize, (IActivationFunction<T>)new TanhActivation<T>()));
             prevSize = hiddenSize;
         }
 
-        layers.Add(new DenseLayer<T>(prevSize, 1, new LinearActivation<T>()));
+        layers.Add(new DenseLayer<T>(prevSize, 1, (IActivationFunction<T>)new LinearActivation<T>()));
 
         return new NeuralNetwork<T>(new NeuralNetworkArchitecture<T>
         {

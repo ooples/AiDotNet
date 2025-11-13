@@ -20,7 +20,7 @@ public class DoubleDQNOptions<T>
     public int ReplayBufferSize { get; set; } = 10000;
     public int TargetUpdateFrequency { get; set; } = 1000;
     public int WarmupSteps { get; set; } = 1000;
-    public List<int> HiddenLayers { get; set; } = [64, 64];
+    public List<int> HiddenLayers { get; set; } = new List<int> { 64, 64 };
     public int? Seed { get; set; }
 
     public DoubleDQNOptions()

@@ -34,8 +34,8 @@ public class A2COptions<T>
     public T ValueLossCoefficient { get; set; }
     public int StepsPerUpdate { get; set; } = 5;
     public ILossFunction<T> ValueLossFunction { get; set; } = new MeanSquaredError<T>();
-    public List<int> PolicyHiddenLayers { get; set; } = [64, 64];
-    public List<int> ValueHiddenLayers { get; set; } = [64, 64];
+    public List<int> PolicyHiddenLayers { get; set; } = new List<int> { 64, 64 };
+    public List<int> ValueHiddenLayers { get; set; } = new List<int> { 64, 64 };
     public int? Seed { get; set; }
 
     public A2COptions()

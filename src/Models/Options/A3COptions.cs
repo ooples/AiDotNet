@@ -44,8 +44,8 @@ public class A3COptions<T> : ReinforcementLearningOptions<T>
     public int TMax { get; init; } = 5;  // Steps before updating global network
 
     public ILossFunction<T> ValueLossFunction { get; init; } = new MeanSquaredError<T>();
-    public List<int> PolicyHiddenLayers { get; init; } = [128, 128];
-    public List<int> ValueHiddenLayers { get; init; } = [128, 128];
+    public List<int> PolicyHiddenLayers { get; init; } = new List<int> { 128, 128 };
+    public List<int> ValueHiddenLayers { get; init; } = new List<int> { 128, 128 };
 
     /// <summary>
     /// The optimizer used for updating network parameters. If null, Adam optimizer will be used by default.

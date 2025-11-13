@@ -144,12 +144,12 @@ public class PPOOptions<T>
     /// <summary>
     /// Hidden layer sizes for policy network.
     /// </summary>
-    public List<int> PolicyHiddenLayers { get; set; } = [64, 64];
+    public List<int> PolicyHiddenLayers { get; set; } = new List<int> { 64, 64 };
 
     /// <summary>
     /// Hidden layer sizes for value network.
     /// </summary>
-    public List<int> ValueHiddenLayers { get; set; } = [64, 64];
+    public List<int> ValueHiddenLayers { get; set; } = new List<int> { 64, 64 };
 
     /// <summary>
     /// Random seed for reproducibility (optional).

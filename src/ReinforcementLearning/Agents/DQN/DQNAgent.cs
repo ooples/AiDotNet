@@ -110,12 +110,12 @@ public class DQNAgent<T> : DeepReinforcementLearningAgentBase<T>
         // Hidden layers
         foreach (var hiddenSize in _dqnOptions.HiddenLayers)
         {
-            layers.Add(new DenseLayer<T>(prevSize, hiddenSize, new ReLUActivation<T>()));
+            layers.Add(new DenseLayer<T>(prevSize, hiddenSize, (IActivationFunction<T>)new ReLUActivation<T>()));
             prevSize = hiddenSize;
         }
 
         // Output layer (Q-values for each action)
-        layers.Add(new DenseLayer<T>(prevSize, _dqnOptions.ActionSize, new LinearActivation<T>()));
+        layers.Add(new DenseLayer<T>(prevSize, _dqnOptions.ActionSize, (IActivationFunction<T>)new LinearActivation<T>()));
 
         // Create architecture
         var architecture = new NeuralNetworkArchitecture<T>
