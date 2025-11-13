@@ -138,7 +138,7 @@ public class TRPOAgent<T> : DeepReinforcementLearningAgentBase<T>
 
     public override Vector<T> SelectAction(Vector<T> state, bool training = true)
     {
-        var policyOutput = _policyNetwork.Forward(state);
+        var policyOutput = _policyNetwork.Predict(state);
 
         if (_options.IsContinuous)
         {
@@ -248,7 +248,7 @@ public class TRPOAgent<T> : DeepReinforcementLearningAgentBase<T>
             states.Add(state);
             actions.Add(action);
             rewards.Add(reward);
-            values.Add(_valueNetwork.Forward(state)[0]);
+            values.Add(_valueNetwork.Predict(state)[0]);
         }
 
         // Compute returns
@@ -293,7 +293,7 @@ public class TRPOAgent<T> : DeepReinforcementLearningAgentBase<T>
         var mean = StatisticsHelper<T>.CalculateMean(advantages.ToArray());
         var std = StatisticsHelper<T>.CalculateStandardDeviation(advantages.ToArray());
 
-        if (NumOps.Compare(std, NumOps.Zero) > 0)
+        if (NumOps.GreaterThan(std, NumOps.Zero))
         {
             for (int i = 0; i < advantages.Count; i++)
             {
@@ -310,7 +310,7 @@ public class TRPOAgent<T> : DeepReinforcementLearningAgentBase<T>
         {
             for (int i = 0; i < states.Count; i++)
             {
-                var predictedValue = _valueNetwork.Forward(states[i])[0];
+                var predictedValue = _valueNetwork.Predict(states[i])[0];
                 var error = NumOps.Subtract(returns[i], predictedValue);
 
                 var gradient = new Vector<T>(1);
@@ -335,13 +335,13 @@ public class TRPOAgent<T> : DeepReinforcementLearningAgentBase<T>
             var advantage = advantages[i];
 
             // Compute policy gradient (simplified)
-            var policyOutput = _policyNetwork.Forward(states[i]);
-            var oldPolicyOutput = _oldPolicyNetwork.Forward(states[i]);
+            var policyOutput = _policyNetwork.Predict(states[i]);
+            var oldPolicyOutput = _oldPolicyNetwork.Predict(states[i]);
 
             // Compute KL divergence (simplified)
             var kl = ComputeKL(policyOutput, oldPolicyOutput);
 
-            if (NumOps.Compare(kl, _options.MaxKL) < 0)
+            if (NumOps.LessThan(kl, _options.MaxKL))
             {
                 // Compute TRPO policy gradient with importance weighting
                 // Gradient: ∇θ [π_θ(a|s) / π_θ_old(a|s)] * A(s,a)
@@ -508,7 +508,7 @@ public class TRPOAgent<T> : DeepReinforcementLearningAgentBase<T>
             var oldProb = oldDist[i];
             var newProb = newDist[i];
 
-            if (NumOps.Compare(oldProb, NumOps.Zero) > 0 && NumOps.Compare(newProb, NumOps.Zero) > 0)
+            if (NumOps.GreaterThan(oldProb, NumOps.Zero) && NumOps.GreaterThan(newProb, NumOps.Zero))
             {
                 var ratio = NumOps.Divide(oldProb, newProb);
                 var logRatio = MathHelper.Log(ratio);
@@ -521,7 +521,7 @@ public class TRPOAgent<T> : DeepReinforcementLearningAgentBase<T>
 
     private void CopyNetworkWeights(INeuralNetwork<T> source, INeuralNetwork<T> target)
     {
-        var sourceParams = source.GetFlattenedParameters();
+        var sourceParams = source.GetParameters();
         target.UpdateParameters(sourceParams);
     }
 
@@ -532,7 +532,7 @@ public class TRPOAgent<T> : DeepReinforcementLearningAgentBase<T>
 
         for (int i = 1; i < values.Length; i++)
         {
-            if (NumOps.Compare(values[i], maxValue) > 0)
+            if (NumOps.GreaterThan(values[i], maxValue))
             {
                 maxValue = values[i];
                 maxIndex = i;
@@ -631,8 +631,8 @@ public class TRPOAgent<T> : DeepReinforcementLearningAgentBase<T>
 
     public override Matrix<T> GetParameters()
     {
-        var policyParams = _policyNetwork.GetFlattenedParameters();
-        var valueParams = _valueNetwork.GetFlattenedParameters();
+        var policyParams = _policyNetwork.GetParameters();
+        var valueParams = _valueNetwork.GetParameters();
 
         var combinedParams = new Vector<T>(policyParams.Length + valueParams.Length);
         for (int i = 0; i < policyParams.Length; i++)
@@ -678,9 +678,9 @@ public class TRPOAgent<T> : DeepReinforcementLearningAgentBase<T>
     {
         var prediction = Predict(input);
         var usedLossFunction = lossFunction ?? LossFunction;
-        var loss = usedLossFunction.ComputeLoss(new Matrix<T>(new[] { prediction }), new Matrix<T>(new[] { target }));
+        var loss = usedLossFunction.CalculateLoss(new Matrix<T>(new[] { prediction }), new Matrix<T>(new[] { target }));
 
-        var gradient = usedLossFunction.ComputeDerivative(new Matrix<T>(new[] { prediction }), new Matrix<T>(new[] { target }));
+        var gradient = usedLossFunction.CalculateDerivative(new Matrix<T>(new[] { prediction }), new Matrix<T>(new[] { target }));
         return (gradient, loss);
     }
 

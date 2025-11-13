@@ -54,7 +54,7 @@ public class OffPolicyMonteCarloAgent<T> : ReinforcementLearningAgentBase<T>
 
             for (int a = 1; a < _options.ActionSize; a++)
             {
-                if (NumOps.Compare(_qTable[stateKey][a], bestValue) > 0)
+                if (NumOps.GreaterThan(_qTable[stateKey][a], bestValue))
                 {
                     bestValue = _qTable[stateKey][a];
                     selectedAction = a;
@@ -133,7 +133,7 @@ public class OffPolicyMonteCarloAgent<T> : ReinforcementLearningAgentBase<T>
 
         for (int a = 1; a < _options.ActionSize; a++)
         {
-            if (NumOps.Compare(_qTable[stateKey][a], bestValue) > 0)
+            if (NumOps.GreaterThan(_qTable[stateKey][a], bestValue))
             {
                 bestValue = _qTable[stateKey][a];
                 greedyAction = a;
@@ -172,7 +172,7 @@ public class OffPolicyMonteCarloAgent<T> : ReinforcementLearningAgentBase<T>
 
         for (int i = 1; i < values.Length; i++)
         {
-            if (NumOps.Compare(values[i], maxValue) > 0)
+            if (NumOps.GreaterThan(values[i], maxValue))
             {
                 maxValue = values[i];
                 maxIndex = i;
@@ -290,9 +290,9 @@ public class OffPolicyMonteCarloAgent<T> : ReinforcementLearningAgentBase<T>
     {
         var prediction = Predict(input);
         var usedLossFunction = lossFunction ?? LossFunction;
-        var loss = usedLossFunction.ComputeLoss(new Matrix<T>(new[] { prediction }), new Matrix<T>(new[] { target }));
+        var loss = usedLossFunction.CalculateLoss(new Matrix<T>(new[] { prediction }), new Matrix<T>(new[] { target }));
 
-        var gradient = usedLossFunction.ComputeDerivative(new Matrix<T>(new[] { prediction }), new Matrix<T>(new[] { target }));
+        var gradient = usedLossFunction.CalculateDerivative(new Matrix<T>(new[] { prediction }), new Matrix<T>(new[] { target }));
         return (gradient, loss);
     }
 

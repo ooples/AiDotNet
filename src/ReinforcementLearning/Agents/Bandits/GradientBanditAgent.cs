@@ -97,7 +97,7 @@ public class GradientBanditAgent<T> : ReinforcementLearningAgentBase<T>
         T maxPref = preferences[0];
         for (int i = 1; i < preferences.Length; i++)
         {
-            if (NumOps.Compare(preferences[i], maxPref) > 0)
+            if (NumOps.GreaterThan(preferences[i], maxPref))
             {
                 maxPref = preferences[i];
             }
@@ -131,7 +131,7 @@ public class GradientBanditAgent<T> : ReinforcementLearningAgentBase<T>
         T maxValue = values[0];
         for (int i = 1; i < values.Length; i++)
         {
-            if (NumOps.Compare(values[i], maxValue) > 0)
+            if (NumOps.GreaterThan(values[i], maxValue))
             {
                 maxValue = values[i];
                 maxIndex = i;
@@ -174,7 +174,7 @@ public class GradientBanditAgent<T> : ReinforcementLearningAgentBase<T>
     public override Matrix<T> GetParameters() => new Matrix<T>(new[] { _preferences });
     public override void SetParameters(Matrix<T> parameters) { for (int i = 0; i < _options.NumArms && i < parameters.Columns; i++) _preferences[i] = parameters[0, i]; }
     public override IFullModel<T, Vector<T>, Vector<T>> Clone() => new GradientBanditAgent<T>(_options);
-    public override (Matrix<T> Gradients, T Loss) ComputeGradients(Vector<T> input, Vector<T> target, ILossFunction<T>? lossFunction = null) { var pred = Predict(input); var lf = lossFunction ?? LossFunction; var loss = lf.ComputeLoss(new Matrix<T>(new[] { pred }), new Matrix<T>(new[] { target })); var grad = lf.ComputeDerivative(new Matrix<T>(new[] { pred }), new Matrix<T>(new[] { target })); return (grad, loss); }
+    public override (Matrix<T> Gradients, T Loss) ComputeGradients(Vector<T> input, Vector<T> target, ILossFunction<T>? lossFunction = null) { var pred = Predict(input); var lf = lossFunction ?? LossFunction; var loss = lf.CalculateLoss(new Matrix<T>(new[] { pred }), new Matrix<T>(new[] { target })); var grad = lf.CalculateDerivative(new Matrix<T>(new[] { pred }), new Matrix<T>(new[] { target })); return (grad, loss); }
     public override void ApplyGradients(Matrix<T> gradients, T learningRate) { }
     public override void Save(string filepath) { var data = Serialize(); System.IO.File.WriteAllBytes(filepath, data); }
     public override void Load(string filepath) { var data = System.IO.File.ReadAllBytes(filepath); Deserialize(data); }

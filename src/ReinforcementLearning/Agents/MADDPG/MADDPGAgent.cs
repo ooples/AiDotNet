@@ -334,8 +334,8 @@ public class MADDPGAgent<T> : DeepReinforcementLearningAgentBase<T>
 
     private void SoftUpdateTargetNetwork(INeuralNetwork<T> source, INeuralNetwork<T> target)
     {
-        var sourceParams = source.GetFlattenedParameters();
-        var targetParams = target.GetFlattenedParameters();
+        var sourceParams = source.GetParameters();
+        var targetParams = target.GetParameters();
 
         var oneMinusTau = NumOps.Subtract(NumOps.One, _options.TargetUpdateTau);
 
@@ -351,7 +351,7 @@ public class MADDPGAgent<T> : DeepReinforcementLearningAgentBase<T>
 
     private void CopyNetworkWeights(INeuralNetwork<T> source, INeuralNetwork<T> target)
     {
-        var sourceParams = source.GetFlattenedParameters();
+        var sourceParams = source.GetParameters();
         target.UpdateParameters(sourceParams);
     }
 
@@ -451,7 +451,7 @@ public class MADDPGAgent<T> : DeepReinforcementLearningAgentBase<T>
 
         foreach (var network in _actorNetworks)
         {
-            var netParams = network.GetFlattenedParameters();
+            var netParams = network.GetParameters();
             for (int i = 0; i < netParams.Length; i++)
             {
                 allParams.Add(netParams[i]);
@@ -460,7 +460,7 @@ public class MADDPGAgent<T> : DeepReinforcementLearningAgentBase<T>
 
         foreach (var network in _criticNetworks)
         {
-            var netParams = network.GetFlattenedParameters();
+            var netParams = network.GetParameters();
             for (int i = 0; i < netParams.Length; i++)
             {
                 allParams.Add(netParams[i]);
@@ -517,9 +517,9 @@ public class MADDPGAgent<T> : DeepReinforcementLearningAgentBase<T>
     {
         var prediction = Predict(input);
         var usedLossFunction = lossFunction ?? LossFunction;
-        var loss = usedLossFunction.ComputeLoss(new Matrix<T>(new[] { prediction }), new Matrix<T>(new[] { target }));
+        var loss = usedLossFunction.CalculateLoss(new Matrix<T>(new[] { prediction }), new Matrix<T>(new[] { target }));
 
-        var gradient = usedLossFunction.ComputeDerivative(new Matrix<T>(new[] { prediction }), new Matrix<T>(new[] { target }));
+        var gradient = usedLossFunction.CalculateDerivative(new Matrix<T>(new[] { prediction }), new Matrix<T>(new[] { target }));
         return (gradient, loss);
     }
 

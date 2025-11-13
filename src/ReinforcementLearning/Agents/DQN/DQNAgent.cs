@@ -143,7 +143,7 @@ public class DQNAgent<T> : DeepReinforcementLearningAgentBase<T>
         }
 
         // Greedy action (exploitation)
-        var qValues = _qNetwork.Forward(state);
+        var qValues = _qNetwork.Predict(state);
         int bestAction = ArgMax(qValues);
 
         var greedyAction = new Vector<T>(_dqnOptions.ActionSize);
@@ -188,14 +188,14 @@ public class DQNAgent<T> : DeepReinforcementLearningAgentBase<T>
             else
             {
                 // Non-terminal: Q-value = reward + gamma * max(Q(next_state))
-                var nextQValues = _targetNetwork.Forward(experience.NextState);
+                var nextQValues = _targetNetwork.Predict(experience.NextState);
                 var maxNextQ = Max(nextQValues);
                 target = NumOps.Add(experience.Reward,
                     NumOps.Multiply(DiscountFactor, maxNextQ));
             }
 
             // Get current Q-value for the action taken
-            var currentQValues = _qNetwork.Forward(experience.State);
+            var currentQValues = _qNetwork.Predict(experience.State);
             int actionIndex = ArgMax(experience.Action);
 
             // Create target Q-values (same as current, except for the action taken)
@@ -203,7 +203,7 @@ public class DQNAgent<T> : DeepReinforcementLearningAgentBase<T>
             targetQValues[actionIndex] = target;
 
             // Compute loss
-            var loss = LossFunction.ComputeLoss(currentQValues, targetQValues);
+            var loss = LossFunction.CalculateLoss(currentQValues, targetQValues);
             totalLoss = NumOps.Add(totalLoss, loss);
 
             // Backpropagate
@@ -211,7 +211,7 @@ public class DQNAgent<T> : DeepReinforcementLearningAgentBase<T>
             _qNetwork.Backward(gradients);
 
             // Update weights using learning rate
-            var parameters = _qNetwork.GetFlattenedParameters();
+            var parameters = _qNetwork.GetParameters();
             var gradientVector = _qNetwork.GetFlattenedGradients();
 
             for (int i = 0; i < parameters.Length; i++)
@@ -316,7 +316,7 @@ public class DQNAgent<T> : DeepReinforcementLearningAgentBase<T>
     /// <inheritdoc/>
     public override Matrix<T> GetParameters()
     {
-        var qNetworkParams = _qNetwork.GetFlattenedParameters();
+        var qNetworkParams = _qNetwork.GetParameters();
         var matrix = new Matrix<T>(qNetworkParams.Length, 1);
         for (int i = 0; i < qNetworkParams.Length; i++)
         {
@@ -369,8 +369,8 @@ public class DQNAgent<T> : DeepReinforcementLearningAgentBase<T>
         ILossFunction<T>? lossFunction = null)
     {
         var loss = lossFunction ?? LossFunction;
-        var output = _qNetwork.Forward(input);
-        var lossValue = loss.ComputeLoss(output, target);
+        var output = _qNetwork.Predict(input);
+        var lossValue = loss.CalculateLoss(output, target);
         var gradient = loss.ComputeGradient(output, target);
 
         _qNetwork.Backward(gradient);
@@ -398,7 +398,7 @@ public class DQNAgent<T> : DeepReinforcementLearningAgentBase<T>
 
     private void CopyNetworkWeights(NeuralNetwork<T> source, NeuralNetwork<T> target)
     {
-        var sourceParams = source.GetFlattenedParameters();
+        var sourceParams = source.GetParameters();
         target.UpdateParameters(sourceParams);
     }
 

@@ -126,7 +126,7 @@ public class DynaQAgent<T> : ReinforcementLearningAgentBase<T>
         T bestVal = _qTable[stateKey][0];
         for (int a = 1; a < _options.ActionSize; a++)
         {
-            if (NumOps.Compare(_qTable[stateKey][a], bestVal) > 0)
+            if (NumOps.GreaterThan(_qTable[stateKey][a], bestVal))
             {
                 bestVal = _qTable[stateKey][a];
                 best = a;
@@ -141,7 +141,7 @@ public class DynaQAgent<T> : ReinforcementLearningAgentBase<T>
         T max = _qTable[stateKey][0];
         for (int a = 1; a < _options.ActionSize; a++)
         {
-            if (NumOps.Compare(_qTable[stateKey][a], max) > 0)
+            if (NumOps.GreaterThan(_qTable[stateKey][a], max))
             {
                 max = _qTable[stateKey][a];
             }
@@ -155,7 +155,7 @@ public class DynaQAgent<T> : ReinforcementLearningAgentBase<T>
         T maxValue = values[0];
         for (int i = 1; i < values.Length; i++)
         {
-            if (NumOps.Compare(values[i], maxValue) > 0)
+            if (NumOps.GreaterThan(values[i], maxValue))
             {
                 maxValue = values[i];
                 maxIndex = i;
@@ -208,8 +208,8 @@ public class DynaQAgent<T> : ReinforcementLearningAgentBase<T>
     {
         var pred = Predict(input);
         var lf = lossFunction ?? LossFunction;
-        var loss = lf.ComputeLoss(new Matrix<T>(new[] { pred }), new Matrix<T>(new[] { target }));
-        var grad = lf.ComputeDerivative(new Matrix<T>(new[] { pred }), new Matrix<T>(new[] { target }));
+        var loss = lf.CalculateLoss(new Matrix<T>(new[] { pred }), new Matrix<T>(new[] { target }));
+        var grad = lf.CalculateDerivative(new Matrix<T>(new[] { pred }), new Matrix<T>(new[] { target }));
         return (grad, loss);
     }
 

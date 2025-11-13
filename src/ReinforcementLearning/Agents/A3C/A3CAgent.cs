@@ -134,7 +134,7 @@ public class A3CAgent<T> : DeepReinforcementLearningAgentBase<T>
 
         lock (_globalLock)
         {
-            policyOutput = _globalPolicyNetwork.Forward(state);
+            policyOutput = _globalPolicyNetwork.Predict(state);
         }
 
         if (_options.IsContinuous)
@@ -175,7 +175,7 @@ public class A3CAgent<T> : DeepReinforcementLearningAgentBase<T>
                 T bestProb = policyOutput[0];
                 for (int i = 1; i < _options.ActionSize; i++)
                 {
-                    if (NumOps.Compare(policyOutput[i], bestProb) > 0)
+                    if (NumOps.GreaterThan(policyOutput[i], bestProb))
                     {
                         bestProb = policyOutput[i];
                         bestAction = i;
@@ -330,7 +330,7 @@ public class A3CAgent<T> : DeepReinforcementLearningAgentBase<T>
         var mean = StatisticsHelper<T>.CalculateMean(advantages.ToArray());
         var std = StatisticsHelper<T>.CalculateStandardDeviation(advantages.ToArray());
 
-        if (NumOps.Compare(std, NumOps.Zero) > 0)
+        if (NumOps.GreaterThan(std, NumOps.Zero))
         {
             for (int i = 0; i < advantages.Count; i++)
             {
@@ -467,7 +467,7 @@ public class A3CAgent<T> : DeepReinforcementLearningAgentBase<T>
     
     private void UpdateNetworkParameters(INeuralNetwork<T> globalNetwork, INeuralNetwork<T> localNetwork, T learningRate)
     {
-        var globalParams = globalNetwork.GetFlattenedParameters();
+        var globalParams = globalNetwork.GetParameters();
         var localGrads = localNetwork.GetFlattenedGradients();
         
         for (int i = 0; i < globalParams.Length; i++)
@@ -481,7 +481,7 @@ public class A3CAgent<T> : DeepReinforcementLearningAgentBase<T>
 
     private void CopyNetworkWeights(INeuralNetwork<T> source, INeuralNetwork<T> target)
     {
-        var sourceParams = source.GetFlattenedParameters();
+        var sourceParams = source.GetParameters();
         target.UpdateParameters(sourceParams);
     }
 

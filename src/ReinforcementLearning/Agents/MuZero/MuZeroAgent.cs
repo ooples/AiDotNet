@@ -94,12 +94,12 @@ public class MuZeroAgent<T> : DeepReinforcementLearningAgentBase<T>
     public override Vector<T> SelectAction(Vector<T> observation, bool training = true)
     {
         // Encode observation to hidden state
-        var hiddenState = _representationNetwork.Forward(observation);
+        var hiddenState = _representationNetwork.Predict(observation);
 
         if (!training)
         {
             // Greedy: just use policy network
-            var policyValue = _predictionNetwork.Forward(hiddenState);
+            var policyValue = _predictionNetwork.Predict(hiddenState);
             int bestAction = ArgMax(ExtractPolicy(policyValue));
             var action = new Vector<T>(_options.ActionSize);
             action[bestAction] = NumOps.One;
@@ -119,7 +119,7 @@ public class MuZeroAgent<T> : DeepReinforcementLearningAgentBase<T>
         var root = new MCTSNode<T> { HiddenState = rootHiddenState };
 
         // Initialize root
-        var rootPrediction = _predictionNetwork.Forward(rootHiddenState);
+        var rootPrediction = _predictionNetwork.Predict(rootHiddenState);
         root.Value = ExtractValue(rootPrediction);
 
         // Run simulations
@@ -207,7 +207,7 @@ public class MuZeroAgent<T> : DeepReinforcementLearningAgentBase<T>
     private int SelectActionPUCT(MCTSNode<T> node)
     {
         // PUCT formula: Q(s,a) + c * P(s,a) * sqrt(N(s)) / (1 + N(s,a))
-        var prediction = _predictionNetwork.Forward(node.HiddenState);
+        var prediction = _predictionNetwork.Predict(node.HiddenState);
         var policy = ExtractPolicy(prediction);
 
         double bestScore = double.NegativeInfinity;
@@ -245,7 +245,7 @@ public class MuZeroAgent<T> : DeepReinforcementLearningAgentBase<T>
         actionVec[action] = NumOps.One;
 
         var dynamicsInput = ConcatenateVectors(parent.HiddenState, actionVec);
-        var dynamicsOutput = _dynamicsNetwork.Forward(dynamicsInput);
+        var dynamicsOutput = _dynamicsNetwork.Predict(dynamicsInput);
 
         // Extract next hidden state and reward
         var nextHiddenState = new Vector<T>(_options.LatentStateSize);
@@ -255,7 +255,7 @@ public class MuZeroAgent<T> : DeepReinforcementLearningAgentBase<T>
         }
 
         // Get value from prediction network
-        var prediction = _predictionNetwork.Forward(nextHiddenState);
+        var prediction = _predictionNetwork.Predict(nextHiddenState);
         var value = ExtractValue(prediction);
 
         return new MCTSNode<T>
@@ -299,13 +299,13 @@ public class MuZeroAgent<T> : DeepReinforcementLearningAgentBase<T>
         foreach (var experience in batch)
         {
             // Encode observation
-            var hiddenState = _representationNetwork.Forward(experience.observation);
+            var hiddenState = _representationNetwork.Predict(experience.observation);
 
             // Unroll K steps
             for (int k = 0; k < _options.UnrollSteps; k++)
             {
                 // Prediction loss
-                var prediction = _predictionNetwork.Forward(hiddenState);
+                var prediction = _predictionNetwork.Predict(hiddenState);
                 var predictedValue = ExtractValue(prediction);
 
                 // Simplified target: use reward + discounted next value
@@ -326,7 +326,7 @@ public class MuZeroAgent<T> : DeepReinforcementLearningAgentBase<T>
                 // Dynamics step
                 var actionVec = experience.action;
                 var dynamicsInput = ConcatenateVectors(hiddenState, actionVec);
-                var dynamicsOutput = _dynamicsNetwork.Forward(dynamicsInput);
+                var dynamicsOutput = _dynamicsNetwork.Predict(dynamicsInput);
 
                 // Extract next hidden state
                 hiddenState = new Vector<T>(_options.LatentStateSize);
@@ -363,7 +363,7 @@ public class MuZeroAgent<T> : DeepReinforcementLearningAgentBase<T>
 
         for (int i = 1; i < values.Length; i++)
         {
-            if (NumOps.Compare(values[i], maxValue) > 0)
+            if (NumOps.GreaterThan(values[i], maxValue))
             {
                 maxValue = values[i];
                 maxIndex = i;
@@ -432,7 +432,7 @@ public class MuZeroAgent<T> : DeepReinforcementLearningAgentBase<T>
 
         foreach (var network in Networks)
         {
-            var netParams = network.GetFlattenedParameters();
+            var netParams = network.GetParameters();
             for (int i = 0; i < netParams.Length; i++)
             {
                 allParams.Add(netParams[i]);
@@ -477,9 +477,9 @@ public class MuZeroAgent<T> : DeepReinforcementLearningAgentBase<T>
     {
         var prediction = Predict(input);
         var usedLossFunction = lossFunction ?? LossFunction;
-        var loss = usedLossFunction.ComputeLoss(new Matrix<T>(new[] { prediction }), new Matrix<T>(new[] { target }));
+        var loss = usedLossFunction.CalculateLoss(new Matrix<T>(new[] { prediction }), new Matrix<T>(new[] { target }));
 
-        var gradient = usedLossFunction.ComputeDerivative(new Matrix<T>(new[] { prediction }), new Matrix<T>(new[] { target }));
+        var gradient = usedLossFunction.CalculateDerivative(new Matrix<T>(new[] { prediction }), new Matrix<T>(new[] { target }));
         return (gradient, loss);
     }
 

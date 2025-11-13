@@ -128,7 +128,7 @@ public class ModifiedPolicyIterationAgent<T> : ReinforcementLearningAgentBase<T>
             {
                 T actionValue = ComputeActionValue(stateKey, a);
 
-                if (NumOps.Compare(actionValue, bestValue) > 0)
+                if (NumOps.GreaterThan(actionValue, bestValue))
                 {
                     bestValue = actionValue;
                     bestAction = a;
@@ -182,7 +182,7 @@ public class ModifiedPolicyIterationAgent<T> : ReinforcementLearningAgentBase<T>
 
         for (int i = 1; i < values.Length; i++)
         {
-            if (NumOps.Compare(values[i], maxValue) > 0)
+            if (NumOps.GreaterThan(values[i], maxValue))
             {
                 maxValue = values[i];
                 maxIndex = i;
@@ -294,9 +294,9 @@ public class ModifiedPolicyIterationAgent<T> : ReinforcementLearningAgentBase<T>
     {
         var prediction = Predict(input);
         var usedLossFunction = lossFunction ?? LossFunction;
-        var loss = usedLossFunction.ComputeLoss(new Matrix<T>(new[] { prediction }), new Matrix<T>(new[] { target }));
+        var loss = usedLossFunction.CalculateLoss(new Matrix<T>(new[] { prediction }), new Matrix<T>(new[] { target }));
 
-        var gradient = usedLossFunction.ComputeDerivative(new Matrix<T>(new[] { prediction }), new Matrix<T>(new[] { target }));
+        var gradient = usedLossFunction.CalculateDerivative(new Matrix<T>(new[] { prediction }), new Matrix<T>(new[] { target }));
         return (gradient, loss);
     }
 

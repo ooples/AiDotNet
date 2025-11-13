@@ -143,7 +143,7 @@ public class PPOAgent<T> : DeepReinforcementLearningAgentBase<T>
     /// <inheritdoc/>
     public override Vector<T> SelectAction(Vector<T> state, bool training = true)
     {
-        var policyOutput = _policyNetwork.Forward(state);
+        var policyOutput = _policyNetwork.Predict(state);
 
         if (_ppoOptions.IsContinuous)
         {
@@ -211,7 +211,7 @@ public class PPOAgent<T> : DeepReinforcementLearningAgentBase<T>
     public override void StoreExperience(Vector<T> state, Vector<T> action, T reward, Vector<T> nextState, bool done)
     {
         // Get value estimate for current state
-        var valueOutput = _valueNetwork.Forward(state);
+        var valueOutput = _valueNetwork.Predict(state);
         var value = valueOutput[0];
 
         // Get log probability of action
@@ -222,7 +222,7 @@ public class PPOAgent<T> : DeepReinforcementLearningAgentBase<T>
 
     private T ComputeLogProb(Vector<T> state, Vector<T> action)
     {
-        var policyOutput = _policyNetwork.Forward(state);
+        var policyOutput = _policyNetwork.Predict(state);
 
         if (_ppoOptions.IsContinuous)
         {
@@ -404,7 +404,7 @@ public class PPOAgent<T> : DeepReinforcementLearningAgentBase<T>
             policyLoss = NumOps.Subtract(policyLoss, minSurr);  // Negative for gradient ascent
 
             // Value loss
-            var valueOutput = _valueNetwork.Forward(state);
+            var valueOutput = _valueNetwork.Predict(state);
             var predictedValue = valueOutput[0];
             var valueDiff = NumOps.Subtract(predictedValue, targetReturn);
             valueLoss = NumOps.Add(valueLoss, NumOps.Multiply(valueDiff, valueDiff));
@@ -437,7 +437,7 @@ public class PPOAgent<T> : DeepReinforcementLearningAgentBase<T>
 
     private T ComputeEntropy(Vector<T> state)
     {
-        var policyOutput = _policyNetwork.Forward(state);
+        var policyOutput = _policyNetwork.Predict(state);
 
         if (_ppoOptions.IsContinuous)
         {
@@ -478,7 +478,7 @@ public class PPOAgent<T> : DeepReinforcementLearningAgentBase<T>
     private void UpdatePolicyNetwork(List<int> batchIndices)
     {
         // Simplified gradient update - in practice would use proper optimizer
-        var params_ = _policyNetwork.GetFlattenedParameters();
+        var params_ = _policyNetwork.GetParameters();
 
         // Compute gradients (simplified)
         foreach (var idx in batchIndices)
@@ -488,7 +488,7 @@ public class PPOAgent<T> : DeepReinforcementLearningAgentBase<T>
             var advantage = _trajectory.Advantages![idx];
 
             // Forward pass
-            _policyNetwork.Forward(state);
+            _policyNetwork.Predict(state);
 
             // Backward pass (simplified)
             var gradOutput = action.Clone();
@@ -514,14 +514,14 @@ public class PPOAgent<T> : DeepReinforcementLearningAgentBase<T>
     private void UpdateValueNetwork(List<int> batchIndices)
     {
         // Simplified gradient update
-        var params_ = _valueNetwork.GetFlattenedParameters();
+        var params_ = _valueNetwork.GetParameters();
 
         foreach (var idx in batchIndices)
         {
             var state = _trajectory.States[idx];
             var targetReturn = _trajectory.Returns![idx];
 
-            var valueOutput = _valueNetwork.Forward(state);
+            var valueOutput = _valueNetwork.Predict(state);
             var predicted = valueOutput[0];
 
             var target = new Vector<T>(1);
@@ -604,8 +604,8 @@ public class PPOAgent<T> : DeepReinforcementLearningAgentBase<T>
     /// <inheritdoc/>
     public override Matrix<T> GetParameters()
     {
-        var policyParams = _policyNetwork.GetFlattenedParameters();
-        var valueParams = _valueNetwork.GetFlattenedParameters();
+        var policyParams = _policyNetwork.GetParameters();
+        var valueParams = _valueNetwork.GetParameters();
 
         var totalParams = policyParams.Length + valueParams.Length;
         var matrix = new Matrix<T>(totalParams, 1);
@@ -622,8 +622,8 @@ public class PPOAgent<T> : DeepReinforcementLearningAgentBase<T>
     /// <inheritdoc/>
     public override void SetParameters(Matrix<T> parameters)
     {
-        var policyParams = _policyNetwork.GetFlattenedParameters();
-        var valueParams = _valueNetwork.GetFlattenedParameters();
+        var policyParams = _policyNetwork.GetParameters();
+        var valueParams = _valueNetwork.GetParameters();
 
         var policyVector = new Vector<T>(policyParams.Length);
         var valueVector = new Vector<T>(valueParams.Length);

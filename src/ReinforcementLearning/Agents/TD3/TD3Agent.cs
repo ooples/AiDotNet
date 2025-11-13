@@ -126,7 +126,7 @@ public class TD3Agent<T> : DeepReinforcementLearningAgentBase<T>
 
     public override Vector<T> SelectAction(Vector<T> state, bool training = true)
     {
-        var action = _actorNetwork.Forward(state);
+        var action = _actorNetwork.Predict(state);
 
         if (training)
         {
@@ -181,7 +181,7 @@ public class TD3Agent<T> : DeepReinforcementLearningAgentBase<T>
         foreach (var experience in batch)
         {
             // Compute target Q-value with target policy smoothing
-            var nextAction = _targetActorNetwork.Forward(experience.nextState);
+            var nextAction = _targetActorNetwork.Predict(experience.nextState);
 
             // Add clipped noise to target action (target policy smoothing)
             for (int i = 0; i < nextAction.Length; i++)
@@ -196,8 +196,8 @@ public class TD3Agent<T> : DeepReinforcementLearningAgentBase<T>
             var nextStateAction = ConcatenateStateAction(experience.nextState, nextAction);
 
             // Compute twin Q-targets and take minimum (clipped double Q-learning)
-            var q1Target = _targetCritic1Network.Forward(nextStateAction)[0];
-            var q2Target = _targetCritic2Network.Forward(nextStateAction)[0];
+            var q1Target = _targetCritic1Network.Predict(nextStateAction)[0];
+            var q2Target = _targetCritic2Network.Predict(nextStateAction)[0];
             var minQTarget = MathHelper.Min<T>(q1Target, q2Target);
 
             // Compute TD target
@@ -216,7 +216,7 @@ public class TD3Agent<T> : DeepReinforcementLearningAgentBase<T>
             var stateAction = ConcatenateStateAction(experience.state, experience.action);
 
             // Update Critic 1
-            var q1Value = _critic1Network.Forward(stateAction)[0];
+            var q1Value = _critic1Network.Predict(stateAction)[0];
             var q1Error = _numOps.Subtract(targetQ, q1Value);
             var q1ErrorVec = new Vector<T>(1);
             q1ErrorVec[0] = q1Error;
@@ -224,7 +224,7 @@ public class TD3Agent<T> : DeepReinforcementLearningAgentBase<T>
             _critic1Network.UpdateWeights(_options.CriticLearningRate);
 
             // Update Critic 2
-            var q2Value = _critic2Network.Forward(stateAction)[0];
+            var q2Value = _critic2Network.Predict(stateAction)[0];
             var q2Error = _numOps.Subtract(targetQ, q2Value);
             var q2ErrorVec = new Vector<T>(1);
             q2ErrorVec[0] = q2Error;
@@ -245,13 +245,13 @@ public class TD3Agent<T> : DeepReinforcementLearningAgentBase<T>
         foreach (var experience in batch)
         {
             // Compute action from current policy
-            var action = _actorNetwork.Forward(experience.state);
+            var action = _actorNetwork.Predict(experience.state);
 
             // Concatenate state and action
             var stateAction = ConcatenateStateAction(experience.state, action);
 
             // Compute Q-value from critic 1 (use only one critic for policy gradient)
-            var qValue = _critic1Network.Forward(stateAction)[0];
+            var qValue = _critic1Network.Predict(stateAction)[0];
 
             // Policy gradient: maximize Q-value, so negate for gradient ascent
             var policyGradient = new Vector<T>(1);

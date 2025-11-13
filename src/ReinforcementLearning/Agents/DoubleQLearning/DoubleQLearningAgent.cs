@@ -148,7 +148,7 @@ public class DoubleQLearningAgent<T> : ReinforcementLearningAgentBase<T>
     {
         for (int i = 0; i < action.Length; i++)
         {
-            if (NumOps.Compare(action[i], NumOps.Zero) > 0)
+            if (NumOps.GreaterThan(action[i], NumOps.Zero))
             {
                 return i;
             }
@@ -179,7 +179,7 @@ public class DoubleQLearningAgent<T> : ReinforcementLearningAgentBase<T>
         for (int a = 1; a < _options.ActionSize; a++)
         {
             T sumValue = NumOps.Add(_qTable1[stateKey][a], _qTable2[stateKey][a]);
-            if (NumOps.Compare(sumValue, bestValue) > 0)
+            if (NumOps.GreaterThan(sumValue, bestValue))
             {
                 bestValue = sumValue;
                 bestAction = a;
@@ -195,7 +195,7 @@ public class DoubleQLearningAgent<T> : ReinforcementLearningAgentBase<T>
 
         for (int a = 1; a < _options.ActionSize; a++)
         {
-            if (NumOps.Compare(qTable[stateKey][a], bestValue) > 0)
+            if (NumOps.GreaterThan(qTable[stateKey][a], bestValue))
             {
                 bestValue = qTable[stateKey][a];
                 bestAction = a;

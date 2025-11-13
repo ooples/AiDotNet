@@ -147,7 +147,7 @@ public class IQLAgent<T> : DeepReinforcementLearningAgentBase<T>
 
     public override Vector<T> SelectAction(Vector<T> state, bool training = true)
     {
-        var policyOutput = _policyNetwork.Forward(state);
+        var policyOutput = _policyNetwork.Predict(state);
 
         // Extract mean and log_std
         var mean = new Vector<T>(_options.ActionSize);
@@ -228,12 +228,12 @@ public class IQLAgent<T> : DeepReinforcementLearningAgentBase<T>
         {
             // Compute Q-values for current state-action
             var stateAction = ConcatenateStateAction(experience.state, experience.action);
-            var q1Value = _q1Network.Forward(stateAction)[0];
-            var q2Value = _q2Network.Forward(stateAction)[0];
+            var q1Value = _q1Network.Predict(stateAction)[0];
+            var q2Value = _q2Network.Predict(stateAction)[0];
             var qValue = MathHelper.Min<T>(q1Value, q2Value);
 
             // Compute current value estimate
-            var vValue = _valueNetwork.Forward(experience.state)[0];
+            var vValue = _valueNetwork.Predict(experience.state)[0];
 
             // Expectile regression loss
             var diff = _numOps.Subtract(qValue, vValue);
@@ -288,14 +288,14 @@ public class IQLAgent<T> : DeepReinforcementLearningAgentBase<T>
             }
             else
             {
-                var nextValue = _targetValueNetwork.Forward(experience.nextState)[0];
+                var nextValue = _targetValueNetwork.Predict(experience.nextState)[0];
                 targetQ = _numOps.Add(experience.reward, _numOps.Multiply(_options.DiscountFactor, nextValue));
             }
 
             var stateAction = ConcatenateStateAction(experience.state, experience.action);
 
             // Update Q1
-            var q1Value = _q1Network.Forward(stateAction)[0];
+            var q1Value = _q1Network.Predict(stateAction)[0];
             var q1Error = _numOps.Subtract(targetQ, q1Value);
             var q1Loss = _numOps.Multiply(q1Error, q1Error);
 
@@ -307,7 +307,7 @@ public class IQLAgent<T> : DeepReinforcementLearningAgentBase<T>
             _q1Network.UpdateWeights(_options.QLearningRate);
 
             // Update Q2
-            var q2Value = _q2Network.Forward(stateAction)[0];
+            var q2Value = _q2Network.Predict(stateAction)[0];
             var q2Error = _numOps.Subtract(targetQ, q2Value);
             var q2Loss = _numOps.Multiply(q2Error, q2Error);
 
@@ -332,11 +332,11 @@ public class IQLAgent<T> : DeepReinforcementLearningAgentBase<T>
         {
             // Compute advantage: A(s,a) = Q(s,a) - V(s)
             var stateAction = ConcatenateStateAction(experience.state, experience.action);
-            var q1Value = _q1Network.Forward(stateAction)[0];
-            var q2Value = _q2Network.Forward(stateAction)[0];
+            var q1Value = _q1Network.Predict(stateAction)[0];
+            var q2Value = _q2Network.Predict(stateAction)[0];
             var qValue = MathHelper.Min<T>(q1Value, q2Value);
 
-            var vValue = _valueNetwork.Forward(experience.state)[0];
+            var vValue = _valueNetwork.Predict(experience.state)[0];
             var advantage = _numOps.Subtract(qValue, vValue);
 
             // Advantage-weighted regression: exp(advantage / temperature) * log_prob(a|s)

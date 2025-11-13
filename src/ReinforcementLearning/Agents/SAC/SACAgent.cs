@@ -151,7 +151,7 @@ public class SACAgent<T> : DeepReinforcementLearningAgentBase<T>
     /// <inheritdoc/>
     public override Vector<T> SelectAction(Vector<T> state, bool training = true)
     {
-        var policyOutput = _policyNetwork.Forward(state);
+        var policyOutput = _policyNetwork.Predict(state);
         var (action, _) = SampleAction(policyOutput, training);
         return action;
     }
@@ -259,15 +259,15 @@ public class SACAgent<T> : DeepReinforcementLearningAgentBase<T>
         foreach (var exp in batch)
         {
             // Compute target Q-value
-            var nextPolicyOutput = _policyNetwork.Forward(exp.NextState);
+            var nextPolicyOutput = _policyNetwork.Predict(exp.NextState);
             var (nextAction, nextLogProb) = SampleAction(nextPolicyOutput, training: true);
 
             // Concatenate next state and next action for Q-networks
             var nextStateAction = ConcatenateStateAction(exp.NextState, nextAction);
 
             // Target Q = min(Q1_target, Q2_target) using MathHelper
-            var q1Target = _q1TargetNetwork.Forward(nextStateAction)[0];
-            var q2Target = _q2TargetNetwork.Forward(nextStateAction)[0];
+            var q1Target = _q1TargetNetwork.Predict(nextStateAction)[0];
+            var q2Target = _q2TargetNetwork.Predict(nextStateAction)[0];
             var minQTarget = MathHelper.Min<T>(q1Target, q2Target);
 
             // Add entropy term
@@ -290,15 +290,15 @@ public class SACAgent<T> : DeepReinforcementLearningAgentBase<T>
             var stateAction = ConcatenateStateAction(exp.State, exp.Action);
 
             // Q1 update
-            var q1Pred = _q1Network.Forward(stateAction)[0];
+            var q1Pred = _q1Network.Predict(stateAction)[0];
             var q1Target_vec = new Vector<T>(1) { [0] = targetQ };
             var q1Pred_vec = new Vector<T>(1) { [0] = q1Pred };
-            var q1Loss = _sacOptions.QLossFunction.ComputeLoss(q1Pred_vec, q1Target_vec);
+            var q1Loss = _sacOptions.QLossFunction.CalculateLoss(q1Pred_vec, q1Target_vec);
 
             // Q2 update
-            var q2Pred = _q2Network.Forward(stateAction)[0];
+            var q2Pred = _q2Network.Predict(stateAction)[0];
             var q2Pred_vec = new Vector<T>(1) { [0] = q2Pred };
-            var q2Loss = _sacOptions.QLossFunction.ComputeLoss(q2Pred_vec, q1Target_vec);
+            var q2Loss = _sacOptions.QLossFunction.CalculateLoss(q2Pred_vec, q1Target_vec);
 
             totalQLoss = NumOps.Add(totalQLoss, NumOps.Add(q1Loss, q2Loss));
 
@@ -325,13 +325,13 @@ public class SACAgent<T> : DeepReinforcementLearningAgentBase<T>
         foreach (var exp in batch)
         {
             // Sample action from current policy
-            var policyOutput = _policyNetwork.Forward(exp.State);
+            var policyOutput = _policyNetwork.Predict(exp.State);
             var (action, logProb) = SampleAction(policyOutput, training: true);
 
             // Compute Q-values using MathHelper for min
             var stateAction = ConcatenateStateAction(exp.State, action);
-            var q1 = _q1Network.Forward(stateAction)[0];
-            var q2 = _q2Network.Forward(stateAction)[0];
+            var q1 = _q1Network.Predict(stateAction)[0];
+            var q2 = _q2Network.Predict(stateAction)[0];
             var minQ = MathHelper.Min<T>(q1, q2);
 
             // Policy loss: alpha * log_prob - Q
@@ -425,7 +425,7 @@ public class SACAgent<T> : DeepReinforcementLearningAgentBase<T>
 
         foreach (var exp in batch)
         {
-            var policyOutput = _policyNetwork.Forward(exp.State);
+            var policyOutput = _policyNetwork.Predict(exp.State);
             var (_, logProb) = SampleAction(policyOutput, training: true);
             totalEntropy = NumOps.Add(totalEntropy, logProb);
         }
@@ -452,8 +452,8 @@ public class SACAgent<T> : DeepReinforcementLearningAgentBase<T>
 
     private void SoftUpdateNetwork(NeuralNetwork<T> source, NeuralNetwork<T> target)
     {
-        var sourceParams = source.GetFlattenedParameters();
-        var targetParams = target.GetFlattenedParameters();
+        var sourceParams = source.GetParameters();
+        var targetParams = target.GetParameters();
 
         var tau = _sacOptions.TargetUpdateTau;
         var oneMinusTau = NumOps.Subtract(NumOps.One, tau);
@@ -471,7 +471,7 @@ public class SACAgent<T> : DeepReinforcementLearningAgentBase<T>
 
     private void UpdateNetworkParameters(NeuralNetwork<T> network, T learningRate)
     {
-        var params_ = network.GetFlattenedParameters();
+        var params_ = network.GetParameters();
         var grads = network.GetFlattenedGradients();
 
         for (int i = 0; i < params_.Length; i++)
@@ -567,9 +567,9 @@ public class SACAgent<T> : DeepReinforcementLearningAgentBase<T>
     /// <inheritdoc/>
     public override Matrix<T> GetParameters()
     {
-        var policyParams = _policyNetwork.GetFlattenedParameters();
-        var q1Params = _q1Network.GetFlattenedParameters();
-        var q2Params = _q2Network.GetFlattenedParameters();
+        var policyParams = _policyNetwork.GetParameters();
+        var q1Params = _q1Network.GetParameters();
+        var q2Params = _q2Network.GetParameters();
 
         var total = policyParams.Length + q1Params.Length + q2Params.Length;
         var matrix = new Matrix<T>(total, 1);
@@ -585,9 +585,9 @@ public class SACAgent<T> : DeepReinforcementLearningAgentBase<T>
     /// <inheritdoc/>
     public override void SetParameters(Matrix<T> parameters)
     {
-        var policyParams = _policyNetwork.GetFlattenedParameters();
-        var q1Params = _q1Network.GetFlattenedParameters();
-        var q2Params = _q2Network.GetFlattenedParameters();
+        var policyParams = _policyNetwork.GetParameters();
+        var q1Params = _q1Network.GetParameters();
+        var q2Params = _q2Network.GetParameters();
 
         int idx = 0;
         var policyVec = new Vector<T>(policyParams.Length);
@@ -631,7 +631,7 @@ public class SACAgent<T> : DeepReinforcementLearningAgentBase<T>
     // Helper methods
     private void CopyNetworkWeights(NeuralNetwork<T> source, NeuralNetwork<T> target)
     {
-        target.UpdateParameters(source.GetFlattenedParameters());
+        target.UpdateParameters(source.GetParameters());
     }
 
     /// <inheritdoc/>

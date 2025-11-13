@@ -167,7 +167,7 @@ public class DecisionTransformerAgent<T> : DeepReinforcementLearningAgentBase<T>
         var input = ConcatenateInputs(targetReturn, state, previousAction);
 
         // Predict action
-        var actionOutput = _transformerNetwork.Forward(input);
+        var actionOutput = _transformerNetwork.Predict(input);
 
         // Store action in context
         _currentContext.Actions.Add(actionOutput);
@@ -218,7 +218,7 @@ public class DecisionTransformerAgent<T> : DeepReinforcementLearningAgentBase<T>
             var input = ConcatenateInputs(returnToGo, state, previousAction);
 
             // Forward pass
-            var predictedAction = _transformerNetwork.Forward(input);
+            var predictedAction = _transformerNetwork.Predict(input);
 
             // Compute loss (MSE between predicted and target action)
             T loss = NumOps.Zero;
@@ -314,7 +314,7 @@ public class DecisionTransformerAgent<T> : DeepReinforcementLearningAgentBase<T>
 
     public override Matrix<T> GetParameters()
     {
-        var networkParams = _transformerNetwork.GetFlattenedParameters();
+        var networkParams = _transformerNetwork.GetParameters();
         return new Matrix<T>(new[] { networkParams });
     }
 
@@ -340,9 +340,9 @@ public class DecisionTransformerAgent<T> : DeepReinforcementLearningAgentBase<T>
     {
         var prediction = Predict(input);
         var usedLossFunction = lossFunction ?? LossFunction;
-        var loss = usedLossFunction.ComputeLoss(new Matrix<T>(new[] { prediction }), new Matrix<T>(new[] { target }));
+        var loss = usedLossFunction.CalculateLoss(new Matrix<T>(new[] { prediction }), new Matrix<T>(new[] { target }));
 
-        var gradient = usedLossFunction.ComputeDerivative(new Matrix<T>(new[] { prediction }), new Matrix<T>(new[] { target }));
+        var gradient = usedLossFunction.CalculateDerivative(new Matrix<T>(new[] { prediction }), new Matrix<T>(new[] { target }));
         return (gradient, loss);
     }
 

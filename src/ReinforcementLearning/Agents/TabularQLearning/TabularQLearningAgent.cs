@@ -114,7 +114,7 @@ public class TabularQLearningAgent<T> : ReinforcementLearningAgentBase<T>
     {
         for (int i = 0; i < action.Length; i++)
         {
-            if (NumOps.Compare(action[i], NumOps.Zero) > 0)
+            if (NumOps.GreaterThan(action[i], NumOps.Zero))
             {
                 return i;
             }
@@ -143,7 +143,7 @@ public class TabularQLearningAgent<T> : ReinforcementLearningAgentBase<T>
 
         for (int a = 1; a < _options.ActionSize; a++)
         {
-            if (NumOps.Compare(_qTable[stateKey][a], bestValue) > 0)
+            if (NumOps.GreaterThan(_qTable[stateKey][a], bestValue))
             {
                 bestValue = _qTable[stateKey][a];
                 bestAction = a;
@@ -160,7 +160,7 @@ public class TabularQLearningAgent<T> : ReinforcementLearningAgentBase<T>
         T maxValue = _qTable[stateKey][0];
         for (int a = 1; a < _options.ActionSize; a++)
         {
-            if (NumOps.Compare(_qTable[stateKey][a], maxValue) > 0)
+            if (NumOps.GreaterThan(_qTable[stateKey][a], maxValue))
             {
                 maxValue = _qTable[stateKey][a];
             }

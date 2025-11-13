@@ -112,7 +112,7 @@ public class A2CAgent<T> : DeepReinforcementLearningAgentBase<T>
     /// <inheritdoc/>
     public override Vector<T> SelectAction(Vector<T> state, bool training = true)
     {
-        var policyOutput = _policyNetwork.Forward(state);
+        var policyOutput = _policyNetwork.Predict(state);
 
         if (_a2cOptions.IsContinuous)
         {
@@ -162,14 +162,14 @@ public class A2CAgent<T> : DeepReinforcementLearningAgentBase<T>
     /// <inheritdoc/>
     public override void StoreExperience(Vector<T> state, Vector<T> action, T reward, Vector<T> nextState, bool done)
     {
-        var value = _valueNetwork.Forward(state)[0];
+        var value = _valueNetwork.Predict(state)[0];
         var logProb = ComputeLogProb(state, action);
         _trajectory.AddStep(state, action, reward, value, logProb, done);
     }
 
     private T ComputeLogProb(Vector<T> state, Vector<T> action)
     {
-        var policyOutput = _policyNetwork.Forward(state);
+        var policyOutput = _policyNetwork.Predict(state);
 
         if (_a2cOptions.IsContinuous)
         {
@@ -232,7 +232,7 @@ public class A2CAgent<T> : DeepReinforcementLearningAgentBase<T>
                 NumOps.Multiply(logProb, advantage));
 
             // Value loss: (V - return)^2
-            var predictedValue = _valueNetwork.Forward(state)[0];
+            var predictedValue = _valueNetwork.Predict(state)[0];
             var valueDiff = NumOps.Subtract(predictedValue, targetReturn);
             valueLoss = NumOps.Add(valueLoss,
                 NumOps.Multiply(valueDiff, valueDiff));
@@ -265,12 +265,12 @@ public class A2CAgent<T> : DeepReinforcementLearningAgentBase<T>
             var targetReturn = _trajectory.Returns![i];
             
             // Policy gradient: compute ∇ loss w.r.t. policy output
-            var policyOutput = _policyNetwork.Forward(state);
+            var policyOutput = _policyNetwork.Predict(state);
             var policyGradient = ComputePolicyOutputGradient(policyOutput, action, advantage);
             _policyNetwork.Backward(policyGradient);
             
             // Value gradient: ∇ MSE w.r.t. value output = 2 * (V - target) / batchSize
-            var predictedValue = _valueNetwork.Forward(state)[0];
+            var predictedValue = _valueNetwork.Predict(state)[0];
             var valueDiff = NumOps.Subtract(predictedValue, targetReturn);
             var valueGradient = new Vector<T>(1);
             valueGradient[0] = NumOps.Divide(
@@ -336,7 +336,7 @@ public class A2CAgent<T> : DeepReinforcementLearningAgentBase<T>
 
     private void UpdatePolicyNetwork()
     {
-        var params_ = _policyNetwork.GetFlattenedParameters();
+        var params_ = _policyNetwork.GetParameters();
         var grads = _policyNetwork.GetFlattenedGradients();
 
         for (int i = 0; i < params_.Length; i++)
@@ -350,7 +350,7 @@ public class A2CAgent<T> : DeepReinforcementLearningAgentBase<T>
 
     private void UpdateValueNetwork()
     {
-        var params_ = _valueNetwork.GetFlattenedParameters();
+        var params_ = _valueNetwork.GetParameters();
         var grads = _valueNetwork.GetFlattenedGradients();
 
         for (int i = 0; i < params_.Length; i++)
@@ -364,7 +364,7 @@ public class A2CAgent<T> : DeepReinforcementLearningAgentBase<T>
 
     private T ComputeEntropy(Vector<T> state)
     {
-        var policyOutput = _policyNetwork.Forward(state);
+        var policyOutput = _policyNetwork.Predict(state);
 
         if (_a2cOptions.IsContinuous)
         {
@@ -456,8 +456,8 @@ public class A2CAgent<T> : DeepReinforcementLearningAgentBase<T>
     /// <inheritdoc/>
     public override Matrix<T> GetParameters()
     {
-        var policyParams = _policyNetwork.GetFlattenedParameters();
-        var valueParams = _valueNetwork.GetFlattenedParameters();
+        var policyParams = _policyNetwork.GetParameters();
+        var valueParams = _valueNetwork.GetParameters();
 
         var total = policyParams.Length + valueParams.Length;
         var matrix = new Matrix<T>(total, 1);
@@ -472,8 +472,8 @@ public class A2CAgent<T> : DeepReinforcementLearningAgentBase<T>
     /// <inheritdoc/>
     public override void SetParameters(Matrix<T> parameters)
     {
-        var policyParams = _policyNetwork.GetFlattenedParameters();
-        var valueParams = _valueNetwork.GetFlattenedParameters();
+        var policyParams = _policyNetwork.GetParameters();
+        var valueParams = _valueNetwork.GetParameters();
 
         var policyVector = new Vector<T>(policyParams.Length);
         var valueVector = new Vector<T>(valueParams.Length);
@@ -610,7 +610,7 @@ public class A2CAgent<T> : DeepReinforcementLearningAgentBase<T>
         T maxLogit = logits[0];
         for (int i = 1; i < logits.Length; i++)
         {
-            if (NumOps.Compare(logits[i], maxLogit) > 0)
+            if (NumOps.GreaterThan(logits[i], maxLogit))
                 maxLogit = logits[i];
         }
         

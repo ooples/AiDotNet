@@ -155,7 +155,7 @@ public class DDPGAgent<T> : DeepReinforcementLearningAgentBase<T>
     /// <inheritdoc/>
     public override Vector<T> SelectAction(Vector<T> state, bool training = true)
     {
-        var action = _actorNetwork.Forward(state);
+        var action = _actorNetwork.Predict(state);
 
         if (training)
         {
@@ -215,9 +215,9 @@ public class DDPGAgent<T> : DeepReinforcementLearningAgentBase<T>
         foreach (var exp in batch)
         {
             // Compute target Q-value
-            var nextAction = _actorTargetNetwork.Forward(exp.NextState);
+            var nextAction = _actorTargetNetwork.Predict(exp.NextState);
             var nextStateAction = ConcatenateStateAction(exp.NextState, nextAction);
-            var nextQ = _criticTargetNetwork.Forward(nextStateAction)[0];
+            var nextQ = _criticTargetNetwork.Predict(nextStateAction)[0];
 
             T targetQ;
             if (exp.Done)
@@ -231,12 +231,12 @@ public class DDPGAgent<T> : DeepReinforcementLearningAgentBase<T>
 
             // Compute current Q-value
             var stateAction = ConcatenateStateAction(exp.State, exp.Action);
-            var currentQ = _criticNetwork.Forward(stateAction)[0];
+            var currentQ = _criticNetwork.Predict(stateAction)[0];
 
             // Compute loss
             var target = new Vector<T>(1) { [0] = targetQ };
             var prediction = new Vector<T>(1) { [0] = currentQ };
-            var loss = _options.CriticLossFunction.ComputeLoss(prediction, target);
+            var loss = _options.CriticLossFunction.CalculateLoss(prediction, target);
             totalLoss = NumOps.Add(totalLoss, loss);
 
             // Backprop
@@ -257,11 +257,11 @@ public class DDPGAgent<T> : DeepReinforcementLearningAgentBase<T>
         foreach (var exp in batch)
         {
             // Compute action from actor
-            var action = _actorNetwork.Forward(exp.State);
+            var action = _actorNetwork.Predict(exp.State);
 
             // Compute Q-value for this action
             var stateAction = ConcatenateStateAction(exp.State, action);
-            var q = _criticNetwork.Forward(stateAction)[0];
+            var q = _criticNetwork.Predict(stateAction)[0];
 
             // Actor loss is negative Q-value (we want to maximize Q)
             totalLoss = NumOps.Subtract(totalLoss, q);
@@ -317,8 +317,8 @@ public class DDPGAgent<T> : DeepReinforcementLearningAgentBase<T>
 
     private void SoftUpdateNetwork(NeuralNetwork<T> source, NeuralNetwork<T> target)
     {
-        var sourceParams = source.GetFlattenedParameters();
-        var targetParams = target.GetFlattenedParameters();
+        var sourceParams = source.GetParameters();
+        var targetParams = target.GetParameters();
 
         var tau = _options.TargetUpdateTau;
         var oneMinusTau = NumOps.Subtract(NumOps.One, tau);
@@ -336,7 +336,7 @@ public class DDPGAgent<T> : DeepReinforcementLearningAgentBase<T>
 
     private void UpdateNetworkParameters(NeuralNetwork<T> network, T learningRate)
     {
-        var params_ = network.GetFlattenedParameters();
+        var params_ = network.GetParameters();
         var grads = network.GetFlattenedGradients();
 
         for (int i = 0; i < params_.Length; i++)
@@ -428,8 +428,8 @@ public class DDPGAgent<T> : DeepReinforcementLearningAgentBase<T>
     /// <inheritdoc/>
     public override Matrix<T> GetParameters()
     {
-        var actorParams = _actorNetwork.GetFlattenedParameters();
-        var criticParams = _criticNetwork.GetFlattenedParameters();
+        var actorParams = _actorNetwork.GetParameters();
+        var criticParams = _criticNetwork.GetParameters();
 
         var total = actorParams.Length + criticParams.Length;
         var matrix = new Matrix<T>(total, 1);
@@ -444,8 +444,8 @@ public class DDPGAgent<T> : DeepReinforcementLearningAgentBase<T>
     /// <inheritdoc/>
     public override void SetParameters(Matrix<T> parameters)
     {
-        var actorParams = _actorNetwork.GetFlattenedParameters();
-        var criticParams = _criticNetwork.GetFlattenedParameters();
+        var actorParams = _actorNetwork.GetParameters();
+        var criticParams = _criticNetwork.GetParameters();
 
         int idx = 0;
         var actorVec = new Vector<T>(actorParams.Length);
@@ -488,7 +488,7 @@ public class DDPGAgent<T> : DeepReinforcementLearningAgentBase<T>
 
     private void CopyNetworkWeights(NeuralNetwork<T> source, NeuralNetwork<T> target)
     {
-        target.UpdateParameters(source.GetFlattenedParameters());
+        target.UpdateParameters(source.GetParameters());
     }
 }
 

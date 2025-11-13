@@ -135,10 +135,10 @@ public class DreamerAgent<T> : DeepReinforcementLearningAgentBase<T>
     public override Vector<T> SelectAction(Vector<T> observation, bool training = true)
     {
         // Encode observation to latent state
-        var latentState = _representationNetwork.Forward(observation);
+        var latentState = _representationNetwork.Predict(observation);
 
         // Select action from policy
-        var action = _actorNetwork.Forward(latentState);
+        var action = _actorNetwork.Predict(latentState);
 
         if (training)
         {
@@ -186,12 +186,12 @@ public class DreamerAgent<T> : DeepReinforcementLearningAgentBase<T>
         foreach (var experience in batch)
         {
             // Encode observations to latent states
-            var latentState = _representationNetwork.Forward(experience.observation);
-            var nextLatentState = _representationNetwork.Forward(experience.nextObservation);
+            var latentState = _representationNetwork.Predict(experience.observation);
+            var nextLatentState = _representationNetwork.Predict(experience.nextObservation);
 
             // Predict next latent from dynamics model
             var dynamicsInput = ConcatenateVectors(latentState, experience.action);
-            var predictedNextLatent = _dynamicsNetwork.Forward(dynamicsInput);
+            var predictedNextLatent = _dynamicsNetwork.Predict(dynamicsInput);
 
             // Dynamics loss: predict next latent state
             T dynamicsLoss = NumOps.Zero;
@@ -202,13 +202,13 @@ public class DreamerAgent<T> : DeepReinforcementLearningAgentBase<T>
             }
 
             // Reward prediction loss
-            var predictedReward = _rewardNetwork.Forward(latentState)[0];
+            var predictedReward = _rewardNetwork.Predict(latentState)[0];
             var rewardDiff = NumOps.Subtract(experience.reward, predictedReward);
             var rewardLoss = NumOps.Multiply(rewardDiff, rewardDiff);
 
             // Continue prediction loss (done = 0, continue = 1)
             var continueTarget = experience.done ? NumOps.Zero : NumOps.One;
-            var predictedContinue = _continueNetwork.Forward(latentState)[0];
+            var predictedContinue = _continueNetwork.Predict(latentState)[0];
             var continueDiff = NumOps.Subtract(continueTarget, predictedContinue);
             var continueLoss = NumOps.Multiply(continueDiff, continueDiff);
 
@@ -255,13 +255,13 @@ public class DreamerAgent<T> : DeepReinforcementLearningAgentBase<T>
 
         foreach (var experience in batch)
         {
-            var latentState = _representationNetwork.Forward(experience.observation);
+            var latentState = _representationNetwork.Predict(experience.observation);
 
             // Imagine future trajectory
             var imaginedReturns = ImagineTrajectory(latentState);
 
             // Update value network
-            var predictedValue = _valueNetwork.Forward(latentState)[0];
+            var predictedValue = _valueNetwork.Predict(latentState)[0];
             var valueDiff = NumOps.Subtract(imaginedReturns, predictedValue);
             var valueLoss = NumOps.Multiply(valueDiff, valueDiff);
 
@@ -271,7 +271,7 @@ public class DreamerAgent<T> : DeepReinforcementLearningAgentBase<T>
             _valueNetwork.UpdateWeights(_options.LearningRate);
 
             // Update actor to maximize value
-            var action = _actorNetwork.Forward(latentState);
+            var action = _actorNetwork.Predict(latentState);
             var actorGradient = new Vector<T>(action.Length);
             for (int i = 0; i < actorGradient.Length; i++)
             {
@@ -296,18 +296,18 @@ public class DreamerAgent<T> : DeepReinforcementLearningAgentBase<T>
         for (int step = 0; step < _options.ImaginationHorizon; step++)
         {
             // Select action
-            var action = _actorNetwork.Forward(latentState);
+            var action = _actorNetwork.Predict(latentState);
 
             // Predict reward
-            var reward = _rewardNetwork.Forward(latentState)[0];
+            var reward = _rewardNetwork.Predict(latentState)[0];
             imaginedReturn = NumOps.Add(imaginedReturn, reward);
 
             // Predict next latent state
             var dynamicsInput = ConcatenateVectors(latentState, action);
-            latentState = _dynamicsNetwork.Forward(dynamicsInput);
+            latentState = _dynamicsNetwork.Predict(dynamicsInput);
 
             // Check if episode continues
-            var continueProb = _continueNetwork.Forward(latentState)[0];
+            var continueProb = _continueNetwork.Predict(latentState)[0];
             if (NumOps.Compare(continueProb, NumOps.FromDouble(0.5)) < 0)
             {
                 break;
@@ -390,7 +390,7 @@ public class DreamerAgent<T> : DeepReinforcementLearningAgentBase<T>
 
         foreach (var network in Networks)
         {
-            var netParams = network.GetFlattenedParameters();
+            var netParams = network.GetParameters();
             for (int i = 0; i < netParams.Length; i++)
             {
                 allParams.Add(netParams[i]);
@@ -435,9 +435,9 @@ public class DreamerAgent<T> : DeepReinforcementLearningAgentBase<T>
     {
         var prediction = Predict(input);
         var usedLossFunction = lossFunction ?? LossFunction;
-        var loss = usedLossFunction.ComputeLoss(new Matrix<T>(new[] { prediction }), new Matrix<T>(new[] { target }));
+        var loss = usedLossFunction.CalculateLoss(new Matrix<T>(new[] { prediction }), new Matrix<T>(new[] { target }));
 
-        var gradient = usedLossFunction.ComputeDerivative(new Matrix<T>(new[] { prediction }), new Matrix<T>(new[] { target }));
+        var gradient = usedLossFunction.CalculateDerivative(new Matrix<T>(new[] { prediction }), new Matrix<T>(new[] { target }));
         return (gradient, loss);
     }
 

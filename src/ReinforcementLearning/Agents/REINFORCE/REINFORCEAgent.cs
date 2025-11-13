@@ -96,7 +96,7 @@ public class REINFORCEAgent<T> : DeepReinforcementLearningAgentBase<T>
     /// <inheritdoc/>
     public override Vector<T> SelectAction(Vector<T> state, bool training = true)
     {
-        var policyOutput = _policyNetwork.Forward(state);
+        var policyOutput = _policyNetwork.Predict(state);
 
         if (_reinforceOptions.IsContinuous)
         {
@@ -153,7 +153,7 @@ public class REINFORCEAgent<T> : DeepReinforcementLearningAgentBase<T>
 
     private T ComputeLogProb(Vector<T> state, Vector<T> action)
     {
-        var policyOutput = _policyNetwork.Forward(state);
+        var policyOutput = _policyNetwork.Predict(state);
 
         if (_reinforceOptions.IsContinuous)
         {
@@ -219,7 +219,7 @@ public class REINFORCEAgent<T> : DeepReinforcementLearningAgentBase<T>
             // Compute output gradient for REINFORCE: ∇ loss w.r.t. policy output
             // For discrete: gradient is -G_t * (1_{a=a_t} - π(a|s)) for each action
             // For continuous: gradient depends on distribution type
-            var policyOutput = _policyNetwork.Forward(state);
+            var policyOutput = _policyNetwork.Predict(state);
             var outputGradient = new Vector<T>(policyOutput.Length);
             
             if (_options.IsContinuous)
@@ -319,7 +319,7 @@ public class REINFORCEAgent<T> : DeepReinforcementLearningAgentBase<T>
 
     private void UpdatePolicyNetwork()
     {
-        var params_ = _policyNetwork.GetFlattenedParameters();
+        var params_ = _policyNetwork.GetParameters();
         var grads = _policyNetwork.GetFlattenedGradients();
 
         for (int i = 0; i < params_.Length; i++)
@@ -384,7 +384,7 @@ public class REINFORCEAgent<T> : DeepReinforcementLearningAgentBase<T>
     /// <inheritdoc/>
     public override Matrix<T> GetParameters()
     {
-        var policyParams = _policyNetwork.GetFlattenedParameters();
+        var policyParams = _policyNetwork.GetParameters();
         var matrix = new Matrix<T>(policyParams.Length, 1);
 
         for (int i = 0; i < policyParams.Length; i++)
@@ -486,7 +486,7 @@ public class REINFORCEAgent<T> : DeepReinforcementLearningAgentBase<T>
         T maxLogit = logits[0];
         for (int i = 1; i < logits.Length; i++)
         {
-            if (NumOps.Compare(logits[i], maxLogit) > 0)
+            if (NumOps.GreaterThan(logits[i], maxLogit))
                 maxLogit = logits[i];
         }
         

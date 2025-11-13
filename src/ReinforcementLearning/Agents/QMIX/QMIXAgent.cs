@@ -237,7 +237,7 @@ public class QMIXAgent<T> : DeepReinforcementLearningAgentBase<T>
 
             // Mix agent Q-values to get team Q-value
             var mixingInput = ConcatenateMixingInput(agentQValues, globalState);
-            var teamQ = _mixingNetwork.Forward(mixingInput)[0];
+            var teamQ = _mixingNetwork.Predict(mixingInput)[0];
 
             // Compute target team Q-value
             var nextAgentQValues = new List<T>();
@@ -248,7 +248,7 @@ public class QMIXAgent<T> : DeepReinforcementLearningAgentBase<T>
             }
 
             var targetMixingInput = ConcatenateMixingInput(nextAgentQValues, nextGlobalState);
-            var targetTeamQ = _targetMixingNetwork.Forward(targetMixingInput)[0];
+            var targetTeamQ = _targetMixingNetwork.Predict(targetMixingInput)[0];
 
             T target;
             if (experience.done)
@@ -395,7 +395,7 @@ public class QMIXAgent<T> : DeepReinforcementLearningAgentBase<T>
 
     private void CopyNetworkWeights(INeuralNetwork<T> source, INeuralNetwork<T> target)
     {
-        var sourceParams = source.GetFlattenedParameters();
+        var sourceParams = source.GetParameters();
         target.UpdateParameters(sourceParams);
     }
 
@@ -406,7 +406,7 @@ public class QMIXAgent<T> : DeepReinforcementLearningAgentBase<T>
 
         for (int i = 1; i < values.Length; i++)
         {
-            if (NumOps.Compare(values[i], maxValue) > 0)
+            if (NumOps.GreaterThan(values[i], maxValue))
             {
                 maxValue = values[i];
                 maxIndex = i;
@@ -421,7 +421,7 @@ public class QMIXAgent<T> : DeepReinforcementLearningAgentBase<T>
         T maxValue = values[0];
         for (int i = 1; i < values.Length; i++)
         {
-            if (NumOps.Compare(values[i], maxValue) > 0)
+            if (NumOps.GreaterThan(values[i], maxValue))
             {
                 maxValue = values[i];
             }
@@ -489,14 +489,14 @@ public class QMIXAgent<T> : DeepReinforcementLearningAgentBase<T>
 
         foreach (var network in _agentNetworks)
         {
-            var netParams = network.GetFlattenedParameters();
+            var netParams = network.GetParameters();
             for (int i = 0; i < netParams.Length; i++)
             {
                 allParams.Add(netParams[i]);
             }
         }
 
-        var mixingParams = _mixingNetwork.GetFlattenedParameters();
+        var mixingParams = _mixingNetwork.GetParameters();
         for (int i = 0; i < mixingParams.Length; i++)
         {
             allParams.Add(mixingParams[i]);
@@ -548,9 +548,9 @@ public class QMIXAgent<T> : DeepReinforcementLearningAgentBase<T>
     {
         var prediction = Predict(input);
         var usedLossFunction = lossFunction ?? LossFunction;
-        var loss = usedLossFunction.ComputeLoss(new Matrix<T>(new[] { prediction }), new Matrix<T>(new[] { target }));
+        var loss = usedLossFunction.CalculateLoss(new Matrix<T>(new[] { prediction }), new Matrix<T>(new[] { target }));
 
-        var gradient = usedLossFunction.ComputeDerivative(new Matrix<T>(new[] { prediction }), new Matrix<T>(new[] { target }));
+        var gradient = usedLossFunction.CalculateDerivative(new Matrix<T>(new[] { prediction }), new Matrix<T>(new[] { target }));
         return (gradient, loss);
     }
 

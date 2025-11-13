@@ -176,7 +176,7 @@ public class WorldModelsAgent<T> : DeepReinforcementLearningAgentBase<T>
 
         // Update RNN hidden state for next step
         var rnnInput = ConcatenateVectors(ConcatenateVectors(latentMean, action), _rnnHiddenState);
-        var rnnOutput = _rnnNetwork.Forward(rnnInput);
+        var rnnOutput = _rnnNetwork.Predict(rnnInput);
 
         // Extract new hidden state
         int hiddenOffset = _options.LatentSize * _options.NumMixtures;
@@ -293,7 +293,7 @@ public class WorldModelsAgent<T> : DeepReinforcementLearningAgentBase<T>
 
             // Predict next latent using RNN
             var rnnInput = ConcatenateVectors(ConcatenateVectors(currentLatent, experience.action), _rnnHiddenState);
-            var rnnOutput = _rnnNetwork.Forward(rnnInput);
+            var rnnOutput = _rnnNetwork.Predict(rnnInput);
 
             // Extract predicted next latent
             var predictedNextLatent = new Vector<T>(_options.LatentSize);
@@ -458,7 +458,7 @@ public class WorldModelsAgent<T> : DeepReinforcementLearningAgentBase<T>
 
         foreach (var network in Networks)
         {
-            var netParams = network.GetFlattenedParameters();
+            var netParams = network.GetParameters();
             for (int i = 0; i < netParams.Length; i++)
             {
                 allParams.Add(netParams[i]);
@@ -503,9 +503,9 @@ public class WorldModelsAgent<T> : DeepReinforcementLearningAgentBase<T>
     {
         var prediction = Predict(input);
         var usedLossFunction = lossFunction ?? LossFunction;
-        var loss = usedLossFunction.ComputeLoss(new Matrix<T>(new[] { prediction }), new Matrix<T>(new[] { target }));
+        var loss = usedLossFunction.CalculateLoss(new Matrix<T>(new[] { prediction }), new Matrix<T>(new[] { target }));
 
-        var gradient = usedLossFunction.ComputeDerivative(new Matrix<T>(new[] { prediction }), new Matrix<T>(new[] { target }));
+        var gradient = usedLossFunction.CalculateDerivative(new Matrix<T>(new[] { prediction }), new Matrix<T>(new[] { target }));
         return (gradient, loss);
     }
 

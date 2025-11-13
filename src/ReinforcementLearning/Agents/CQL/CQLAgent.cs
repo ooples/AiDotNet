@@ -132,7 +132,7 @@ public class CQLAgent<T> : DeepReinforcementLearningAgentBase<T>
 
     public override Vector<T> SelectAction(Vector<T> state, bool training = true)
     {
-        var policyOutput = _policyNetwork.Forward(state);
+        var policyOutput = _policyNetwork.Predict(state);
 
         // Extract mean and log_std
         var mean = new Vector<T>(_options.ActionSize);
@@ -220,8 +220,8 @@ public class CQLAgent<T> : DeepReinforcementLearningAgentBase<T>
             var nextAction = SelectAction(experience.nextState, training: true);
             var nextStateAction = ConcatenateStateAction(experience.nextState, nextAction);
 
-            var q1TargetValue = _targetQ1Network.Forward(nextStateAction)[0];
-            var q2TargetValue = _targetQ2Network.Forward(nextStateAction)[0];
+            var q1TargetValue = _targetQ1Network.Predict(nextStateAction)[0];
+            var q2TargetValue = _targetQ2Network.Predict(nextStateAction)[0];
             var minQTarget = MathHelper.Min<T>(q1TargetValue, q2TargetValue);
 
             // Compute entropy term (simplified)
@@ -240,8 +240,8 @@ public class CQLAgent<T> : DeepReinforcementLearningAgentBase<T>
 
             // Compute current Q-values
             var stateAction = ConcatenateStateAction(experience.state, experience.action);
-            var q1Value = _q1Network.Forward(stateAction)[0];
-            var q2Value = _q2Network.Forward(stateAction)[0];
+            var q1Value = _q1Network.Predict(stateAction)[0];
+            var q2Value = _q2Network.Predict(stateAction)[0];
 
             // CQL Conservative penalty: penalize Q-values for random/OOD actions
             var cqlPenalty = ComputeCQLPenalty(experience.state, experience.action, q1Value, q2Value);
@@ -298,8 +298,8 @@ public class CQLAgent<T> : DeepReinforcementLearningAgentBase<T>
             }
 
             var stateAction = ConcatenateStateAction(state, randomAction);
-            var q1Random = _q1Network.Forward(stateAction)[0];
-            var q2Random = _q2Network.Forward(stateAction)[0];
+            var q1Random = _q1Network.Predict(stateAction)[0];
+            var q2Random = _q2Network.Predict(stateAction)[0];
 
             var avgQRandom = _numOps.Divide(_numOps.Add(q1Random, q2Random), _numOps.FromDouble(2));
             randomQSum = _numOps.Add(randomQSum, avgQRandom);
@@ -322,8 +322,8 @@ public class CQLAgent<T> : DeepReinforcementLearningAgentBase<T>
             var action = SelectAction(experience.state, training: true);
             var stateAction = ConcatenateStateAction(experience.state, action);
 
-            var q1Value = _q1Network.Forward(stateAction)[0];
-            var q2Value = _q2Network.Forward(stateAction)[0];
+            var q1Value = _q1Network.Predict(stateAction)[0];
+            var q2Value = _q2Network.Predict(stateAction)[0];
             var minQ = MathHelper.Min<T>(q1Value, q2Value);
 
             // Policy loss: -Q(s,a) + alpha * entropy (simplified)
