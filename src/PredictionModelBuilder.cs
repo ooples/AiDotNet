@@ -1174,10 +1174,20 @@ public class PredictionModelBuilder<T, TInput, TOutput> : IPredictionModelBuilde
             }
 
             // Step 5: Define forward and backward functions
-            // Forward function must save activations for backprop
+            // Storage for per-sample inputs to enable forward pass replay during backprop
+            // Use a queue to match forward inputs with backward gradients in FIFO order
+            var inputQueue = new Queue<Vector<T>>();
+
+            // Forward function must save activations for backprop AND capture inputs for replay
             // Convert Vector<T> (from KD trainer) → TInput → model.Predict → TOutput → Vector<T>
-            Func<Vector<T>, Vector<T>> studentForward = input =>
+            Func<Vector<T>, Vector<T>> studentForwardCapturing = input =>
             {
+                // Capture input for forward replay in backward pass (FIFO queue)
+                var capturedInput = new Vector<T>(input.Length);
+                for (int i = 0; i < input.Length; i++)
+                    capturedInput[i] = input[i];
+                inputQueue.Enqueue(capturedInput);
+
                 // Convert KD trainer's Vector<T> to model's TInput type using reference for shape
                 TInput modelInput = ConversionsHelper.ConvertVectorToInput<T, TInput>(input, referenceInput);
 
@@ -1207,6 +1217,16 @@ public class PredictionModelBuilder<T, TInput, TOutput> : IPredictionModelBuilde
 
                 try
                 {
+                    // CRITICAL FIX: Replay forward pass to restore correct activations before backprop
+                    // The KD trainer calls forward for all batch samples first, which overwrites
+                    // the activation memory. We must dequeue and rerun forward with the matching input
+                    // to ensure Backpropagate uses the correct activations for this specific sample.
+                    if (inputQueue.Count > 0)
+                    {
+                        var matchingInput = inputQueue.Dequeue();
+                        nnModel.Network.ForwardWithMemory(Tensor<T>.FromVector(matchingInput));
+                    }
+
                     // Step 1: Backpropagate output gradient through network to compute parameter gradients
                     nnModel.Network.Backpropagate(Tensor<T>.FromVector(gradient));
 
@@ -1251,7 +1271,7 @@ public class PredictionModelBuilder<T, TInput, TOutput> : IPredictionModelBuilde
             // Step 5: Run knowledge distillation training
             Console.WriteLine("Training student model with knowledge distillation...");
             trainer.Train(
-                studentForward,
+                studentForwardCapturing,
                 studentBackward,
                 trainInputs,
                 trainLabels,
