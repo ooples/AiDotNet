@@ -348,33 +348,17 @@ public class A3CAgent<T> : DeepReinforcementLearningAgentBase<T>
         INeuralNetwork<T> localPolicy,
         INeuralNetwork<T> localValue)
     {
-        // Update policy network
-        for (int i = 0; i < trajectory.Count; i++)
-        {
-            var advantage = advantages[i];
-            int policyOutputSize = _options.IsContinuous ? _options.ActionSize * 2 : _options.ActionSize;
-            var policyGradient = new Vector<T>(policyOutputSize);
-
-            // Simplified gradient computation
-            for (int j = 0; j < policyGradient.Length; j++)
-            {
-                policyGradient[j] = NumOps.Multiply(advantage, NumOps.FromDouble(0.1));
-            }
-
-            _globalPolicyNetwork.Backward(policyGradient);
-            _globalPolicyNetwork.UpdateWeights(_options.PolicyLearningRate);
-        }
-
-        // Update value network
-        for (int i = 0; i < trajectory.Count; i++)
-        {
-            var valueError = NumOps.Subtract(returns[i], trajectory[i].value);
-            var valueGradient = new Vector<T>(1);
-            valueGradient[0] = valueError;
-
-            _globalValueNetwork.Backward(valueGradient);
-            _globalValueNetwork.UpdateWeights(_options.ValueLearningRate);
-        }
+        // TODO: Implement proper A3C gradient computation
+        // Policy gradient should be: ∇θ log π(a|s) * advantage
+        // Value gradient should be: ∇φ (V(s) - return)^2
+        // Current placeholder gradients don't depend on:
+        // - The actual action taken
+        // - The policy network output (logits/mean/std)
+        // - The sampled action probability
+        // This makes learning impossible.
+        throw new NotImplementedException(
+            "A3C requires proper implementation of policy gradient (∇θ log π(a|s) * advantage) " +
+            "and value gradient (derivative of MSE loss).");
     }
 
     private void CopyNetworkWeights(INeuralNetwork<T> source, INeuralNetwork<T> target)
