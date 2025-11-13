@@ -165,7 +165,21 @@ public class PrioritizedSweepingAgent<T> : ReinforcementLearningAgentBase<T>
     public override int FeatureCount => _options.StateSize;
     public override byte[] Serialize() => throw new NotImplementedException();
     public override void Deserialize(byte[] data) => throw new NotImplementedException();
-    public override Matrix<T> GetParameters() { var p = new List<T>(); foreach (var s in _qTable) foreach (var a in s.Value) p.Add(a.Value); if (p.Count == 0) p.Add(NumOps.Zero); var v = new Vector<T>(p.Count); for (int i = 0; i < p.Count; i++) v[i] = p[i]; return new Matrix<T>(new[] { v }); }
+    public override Matrix<T> GetParameters()
+    {
+        int paramCount = _qTable.Count > 0 ? _qTable.Count * _options.ActionSize : 1;
+        var v = new Vector<T>(paramCount);
+        int idx = 0;
+
+        foreach (var s in _qTable)
+            foreach (var a in s.Value)
+                v[idx++] = a.Value;
+
+        if (idx == 0)
+            v[0] = NumOps.Zero;
+
+        return new Matrix<T>(new[] { v });
+    }
     public override void SetParameters(Matrix<T> parameters) { int idx = 0; foreach (var s in _qTable.ToList()) for (int a = 0; a < _options.ActionSize; a++) if (idx < parameters.Columns) _qTable[s.Key][a] = parameters[0, idx++]; }
     public override IFullModel<T, Vector<T>, Vector<T>> Clone() => new PrioritizedSweepingAgent<T>(_options);
     public override (Matrix<T> Gradients, T Loss) ComputeGradients(Vector<T> input, Vector<T> target, ILossFunction<T>? lossFunction = null) { var pred = Predict(input); var lf = lossFunction ?? LossFunction; var loss = lf.CalculateLoss(new Matrix<T>(new[] { pred }), new Matrix<T>(new[] { target })); var grad = lf.CalculateDerivative(new Matrix<T>(new[] { pred }), new Matrix<T>(new[] { target })); return (grad, loss); }
