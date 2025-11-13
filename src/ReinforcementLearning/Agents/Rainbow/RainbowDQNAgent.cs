@@ -1,13 +1,11 @@
 using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
-using AiDotNet.LossFunctions;
 using AiDotNet.Models;
 using AiDotNet.Models.Options;
 using AiDotNet.NeuralNetworks;
-using AiDotNet.NeuralNetworks.Layers;
-using AiDotNet.NeuralNetworks.Activations;
-using AiDotNet.ReinforcementLearning.ReplayBuffers;
 using AiDotNet.Helpers;
+using AiDotNet.Optimizers;
+using AiDotNet.ReinforcementLearning.ReplayBuffers;
 
 namespace AiDotNet.ReinforcementLearning.Agents.Rainbow;
 
@@ -35,12 +33,13 @@ namespace AiDotNet.ReinforcementLearning.Agents.Rainbow;
 /// Famous for: DeepMind's combination achieving human-level Atari performance
 /// </para>
 /// </remarks>
-public class RainbowDQNAgent<T> : ReinforcementLearningAgentBase<T>
+public class RainbowDQNAgent<T> : DeepReinforcementLearningAgentBase<T>
 {
-    private readonly RainbowDQNOptions<T> _options;
+    private RainbowDQNOptions<T> _options;
+    private IOptimizer<T, Vector<T>, Vector<T>> _optimizer;
 
-    private NeuralNetwork<T> _onlineNetwork;
-    private NeuralNetwork<T> _targetNetwork;
+    private INeuralNetwork<T> _onlineNetwork;
+    private INeuralNetwork<T> _targetNetwork;
     private PrioritizedReplayBuffer<T> _replayBuffer;
 
     private double _epsilon;
@@ -51,9 +50,23 @@ public class RainbowDQNAgent<T> : ReinforcementLearningAgentBase<T>
     // N-step buffer
     private List<(Vector<T> state, Vector<T> action, T reward, Vector<T> nextState, bool done)> _nStepBuffer;
 
-    public RainbowDQNAgent(RainbowDQNOptions<T> options) : base(options.StateSize, options.ActionSize)
+    public RainbowDQNAgent(RainbowDQNOptions<T> options, IOptimizer<T, Vector<T>, Vector<T>>? optimizer = null)
+        : base(options)
     {
+        if (options == null)
+        {
+            throw new ArgumentNullException(nameof(options));
+        }
+
         _options = options;
+        _optimizer = optimizer ?? options.Optimizer ?? new AdamOptimizer<T, Vector<T>, Vector<T>>(this, new AdamOptimizerOptions<T, Vector<T>, Vector<T>>
+        {
+            LearningRate = 0.0001,
+            Beta1 = 0.9,
+            Beta2 = 0.999,
+            Epsilon = 1e-8
+        });
+
         _stepCount = 0;
         _updateCount = 0;
         _epsilon = options.EpsilonStart;
@@ -69,57 +82,35 @@ public class RainbowDQNAgent<T> : ReinforcementLearningAgentBase<T>
         _onlineNetwork = CreateDuelingNetwork();
         _targetNetwork = CreateDuelingNetwork();
         CopyNetworkWeights(_onlineNetwork, _targetNetwork);
+
+        // Register networks with base class
+        Networks.Add(_onlineNetwork);
+        Networks.Add(_targetNetwork);
     }
 
-    private NeuralNetwork<T> CreateDuelingNetwork()
+    private INeuralNetwork<T> CreateDuelingNetwork()
     {
-        var network = new NeuralNetwork<T>();
-        int previousSize = _options.StateSize;
+        int outputSize = _options.UseDistributional
+            ? _options.ActionSize * _options.NumAtoms
+            : _options.ActionSize;
 
-        // Shared layers
-        foreach (var layerSize in _options.SharedLayers)
+        var architecture = new NeuralNetworkArchitecture<T>
         {
-            network.AddLayer(new DenseLayer<T>(previousSize, layerSize));
+            InputSize = _options.StateSize,
+            OutputSize = outputSize,
+            TaskType = TaskType.Regression
+        };
 
-            if (_options.UseNoisyNetworks)
-            {
-                // Add noise to weights for exploration (simplified)
-                network.AddLayer(new ActivationLayer<T>(new ReLU<T>()));
-            }
-            else
-            {
-                network.AddLayer(new ActivationLayer<T>(new ReLU<T>()));
-            }
-            previousSize = layerSize;
-        }
+        // Use LayerHelper for production-ready network
+        var layers = LayerHelper<T>.CreateDefaultDeepQNetworkLayers(architecture);
 
-        // Dueling architecture: separate value and advantage streams
-        // Value stream
-        int valueSize = previousSize;
-        foreach (var layerSize in _options.ValueStreamLayers)
-        {
-            network.AddLayer(new DenseLayer<T>(valueSize, layerSize));
-            network.AddLayer(new ActivationLayer<T>(new ReLU<T>()));
-            valueSize = layerSize;
-        }
-
-        if (_options.UseDistributional)
-        {
-            // Distributional RL: output atoms for each action
-            network.AddLayer(new DenseLayer<T>(previousSize, _options.ActionSize * _options.NumAtoms));
-        }
-        else
-        {
-            // Standard Q-values
-            network.AddLayer(new DenseLayer<T>(previousSize, _options.ActionSize));
-        }
-
-        return network;
+        architecture.Layers = layers.ToList();
+        return new NeuralNetwork<T>(architecture, LossFunction);
     }
 
     private void InitializeReplayBuffer()
     {
-        _replayBuffer = new PrioritizedReplayBuffer<T>(_options.ReplayBufferSize);
+        _replayBuffer = new PrioritizedReplayBuffer<T>(Options.ReplayBufferSize);
     }
 
     public override Vector<T> SelectAction(Vector<T> state, bool training = true)
@@ -170,10 +161,8 @@ public class RainbowDQNAgent<T> : ReinforcementLearningAgentBase<T>
 
             return qValues;
         }
-        else
-        {
-            return output;
-        }
+
+        return output;
     }
 
     public override void StoreExperience(Vector<T> state, Vector<T> action, T reward, Vector<T> nextState, bool done)
@@ -203,7 +192,7 @@ public class RainbowDQNAgent<T> : ReinforcementLearningAgentBase<T>
         // Decay epsilon
         if (!_options.UseNoisyNetworks)
         {
-            _epsilon = Math.Max(_options.EpsilonEnd, _epsilon * _options.EpsilonDecay);
+            _epsilon = Math.Max(Options.EpsilonEnd, _epsilon * Options.EpsilonDecay);
         }
 
         // Increase beta for importance sampling
@@ -221,7 +210,7 @@ public class RainbowDQNAgent<T> : ReinforcementLearningAgentBase<T>
         for (int i = 0; i < _nStepBuffer.Count; i++)
         {
             nStepReturn = NumOps.Add(nStepReturn, NumOps.Multiply(discount, _nStepBuffer[i].reward));
-            discount = NumOps.Multiply(discount, _options.DiscountFactor);
+            discount = NumOps.Multiply(discount, DiscountFactor);
 
             if (_nStepBuffer[i].done)
             {
@@ -235,14 +224,14 @@ public class RainbowDQNAgent<T> : ReinforcementLearningAgentBase<T>
 
     public override T Train()
     {
-        if (_replayBuffer.Count < _options.WarmupSteps || _replayBuffer.Count < _options.BatchSize)
+        if (_replayBuffer.Count < Options.WarmupSteps || _replayBuffer.Count < Options.BatchSize)
         {
             return NumOps.Zero;
         }
 
         // Prioritized experience replay
         var (batch, indices, weights) = _replayBuffer.Sample(
-            _options.BatchSize,
+            Options.BatchSize,
             _options.PriorityAlpha,
             _beta);
 
@@ -271,7 +260,7 @@ public class RainbowDQNAgent<T> : ReinforcementLearningAgentBase<T>
                 var nStepDiscount = NumOps.One;
                 for (int n = 0; n < _options.NSteps; n++)
                 {
-                    nStepDiscount = NumOps.Multiply(nStepDiscount, _options.DiscountFactor);
+                    nStepDiscount = NumOps.Multiply(nStepDiscount, DiscountFactor);
                 }
                 target = NumOps.Add(experience.reward, NumOps.Multiply(nStepDiscount, targetQ));
             }
@@ -296,14 +285,14 @@ public class RainbowDQNAgent<T> : ReinforcementLearningAgentBase<T>
             var gradient = new Vector<T>(_options.ActionSize);
             gradient[actionIndex] = tdError;
             _onlineNetwork.Backward(gradient);
-            _onlineNetwork.UpdateWeights(_options.LearningRate);
+            _onlineNetwork.UpdateWeights(LearningRate);
         }
 
         // Update priorities in replay buffer
         _replayBuffer.UpdatePriorities(indices, priorities, _options.PriorityEpsilon);
 
         // Update target network
-        if (_stepCount % _options.TargetUpdateFrequency == 0)
+        if (_stepCount % Options.TargetUpdateFrequency == 0)
         {
             CopyNetworkWeights(_onlineNetwork, _targetNetwork);
         }
@@ -313,7 +302,7 @@ public class RainbowDQNAgent<T> : ReinforcementLearningAgentBase<T>
         return NumOps.Divide(totalLoss, NumOps.FromDouble(batch.Count));
     }
 
-    private Vector<T> ComputeQValuesFromNetwork(NeuralNetwork<T> network, Vector<T> state)
+    private Vector<T> ComputeQValuesFromNetwork(INeuralNetwork<T> network, Vector<T> state)
     {
         var output = network.Forward(state);
 
@@ -341,19 +330,10 @@ public class RainbowDQNAgent<T> : ReinforcementLearningAgentBase<T>
         return output;
     }
 
-    private void CopyNetworkWeights(NeuralNetwork<T> source, NeuralNetwork<T> target)
+    private void CopyNetworkWeights(INeuralNetwork<T> source, INeuralNetwork<T> target)
     {
-        var sourceLayers = source.GetLayers();
-        var targetLayers = target.GetLayers();
-
-        for (int i = 0; i < sourceLayers.Count; i++)
-        {
-            if (sourceLayers[i] is DenseLayer<T> sourceLayer && targetLayers[i] is DenseLayer<T> targetLayer)
-            {
-                targetLayer.SetWeights(sourceLayer.GetWeights().Clone());
-                targetLayer.SetBiases(sourceLayer.GetBiases().Clone());
-            }
-        }
+        var sourceParams = source.GetFlattenedParameters();
+        target.UpdateParameters(sourceParams);
     }
 
     private int ArgMax(Vector<T> values)
@@ -375,13 +355,12 @@ public class RainbowDQNAgent<T> : ReinforcementLearningAgentBase<T>
 
     public override Dictionary<string, T> GetMetrics()
     {
-        return new Dictionary<string, T>
-        {
-            ["steps"] = NumOps.FromDouble(_stepCount),
-            ["updates"] = NumOps.FromDouble(_updateCount),
-            ["buffer_size"] = NumOps.FromDouble(_replayBuffer.Count),
-            ["epsilon"] = NumOps.FromDouble(_epsilon)
-        };
+        var baseMetrics = base.GetMetrics();
+        baseMetrics["steps"] = NumOps.FromDouble(_stepCount);
+        baseMetrics["updates"] = NumOps.FromDouble(_updateCount);
+        baseMetrics["buffer_size"] = NumOps.FromDouble(_replayBuffer.Count);
+        baseMetrics["epsilon"] = NumOps.FromDouble(_epsilon);
+        return baseMetrics;
     }
 
     public override void ResetEpisode()
@@ -389,19 +368,99 @@ public class RainbowDQNAgent<T> : ReinforcementLearningAgentBase<T>
         _nStepBuffer.Clear();
     }
 
-    public override Vector<T> Predict(Vector<T> input)
+    public override ModelMetadata<T> GetModelMetadata()
     {
-        return SelectAction(input, training: false);
+        return new ModelMetadata<T>
+        {
+            ModelType = "RainbowDQN",
+            InputSize = _options.StateSize,
+            OutputSize = _options.ActionSize,
+            ParameterCount = ParameterCount
+        };
     }
 
-    public override Task<Vector<T>> PredictAsync(Vector<T> input)
+    public override byte[] Serialize()
     {
-        return Task.FromResult(Predict(input));
+        throw new NotImplementedException("RainbowDQN serialization not yet implemented");
     }
 
-    public override Task TrainAsync()
+    public override void Deserialize(byte[] data)
     {
-        Train();
-        return Task.CompletedTask;
+        throw new NotImplementedException("RainbowDQN deserialization not yet implemented");
+    }
+
+    public override Matrix<T> GetParameters()
+    {
+        var onlineParams = _onlineNetwork.GetFlattenedParameters();
+        var targetParams = _targetNetwork.GetFlattenedParameters();
+
+        var combinedParams = new Vector<T>(onlineParams.Length + targetParams.Length);
+        for (int i = 0; i < onlineParams.Length; i++)
+        {
+            combinedParams[i] = onlineParams[i];
+        }
+        for (int i = 0; i < targetParams.Length; i++)
+        {
+            combinedParams[onlineParams.Length + i] = targetParams[i];
+        }
+
+        return new Matrix<T>(new[] { combinedParams });
+    }
+
+    public override void SetParameters(Matrix<T> parameters)
+    {
+        int onlineParamCount = _onlineNetwork.ParameterCount;
+        var onlineParams = new Vector<T>(onlineParamCount);
+        var targetParams = new Vector<T>(parameters.Columns - onlineParamCount);
+
+        for (int i = 0; i < onlineParamCount; i++)
+        {
+            onlineParams[i] = parameters[0, i];
+        }
+        for (int i = 0; i < targetParams.Length; i++)
+        {
+            targetParams[i] = parameters[0, onlineParamCount + i];
+        }
+
+        _onlineNetwork.UpdateParameters(onlineParams);
+        _targetNetwork.UpdateParameters(targetParams);
+    }
+
+    public override int FeatureCount => _options.StateSize;
+
+    public override IFullModel<T, Vector<T>, Vector<T>> Clone()
+    {
+        return new RainbowDQNAgent<T>(_options, _optimizer);
+    }
+
+    public override (Matrix<T> Gradients, T Loss) ComputeGradients(
+        Vector<T> input,
+        Vector<T> target,
+        ILossFunction<T>? lossFunction = null)
+    {
+        var prediction = Predict(input);
+        var usedLossFunction = lossFunction ?? LossFunction;
+        var loss = usedLossFunction.ComputeLoss(new Matrix<T>(new[] { prediction }), new Matrix<T>(new[] { target }));
+
+        var gradient = usedLossFunction.ComputeDerivative(new Matrix<T>(new[] { prediction }), new Matrix<T>(new[] { target }));
+        return (gradient, loss);
+    }
+
+    public override void ApplyGradients(Matrix<T> gradients, T learningRate)
+    {
+        _onlineNetwork.Backward(new Vector<T>(gradients.GetRow(0)));
+        _onlineNetwork.UpdateWeights(learningRate);
+    }
+
+    public override void Save(string filepath)
+    {
+        var data = Serialize();
+        System.IO.File.WriteAllBytes(filepath, data);
+    }
+
+    public override void Load(string filepath)
+    {
+        var data = System.IO.File.ReadAllBytes(filepath);
+        Deserialize(data);
     }
 }
