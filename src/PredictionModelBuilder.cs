@@ -911,6 +911,11 @@ public class PredictionModelBuilder<T, TInput, TOutput> : IPredictionModelBuilde
             throw new InvalidOperationException("Knowledge distillation options not configured");
 
         var options = _knowledgeDistillationOptions;
+        
+        // If no validation data provided, disable validation before calling Validate()
+        if (options.ValidationInputs == null)
+            options.ValidateAfterEpoch = false;
+            
         options.Validate(); // Validate all options before training
 
         var NumOps = MathHelper.GetNumericOperations<T>();
