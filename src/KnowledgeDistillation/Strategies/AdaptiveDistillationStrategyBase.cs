@@ -21,7 +21,7 @@ namespace AiDotNet.KnowledgeDistillation.Strategies;
 /// - Helper methods for confidence, entropy, and accuracy calculations</para>
 /// </remarks>
 public abstract class AdaptiveDistillationStrategyBase<T>
-    : DistillationStrategyBase<T, Vector<T>>, IAdaptiveDistillationStrategy<T>
+    : DistillationStrategyBase<T>, IAdaptiveDistillationStrategy<T>
 {
     private readonly Dictionary<int, double> _studentPerformance;
 
@@ -105,83 +105,118 @@ public abstract class AdaptiveDistillationStrategyBase<T>
     public abstract double ComputeAdaptiveTemperature(Vector<T> studentOutput, Vector<T> teacherOutput);
 
     /// <summary>
-    /// Computes distillation loss with adaptive temperature.
+    /// Computes distillation loss with adaptive temperature for a batch.
     /// </summary>
-    public override T ComputeLoss(Vector<T> studentOutput, Vector<T> teacherOutput, Vector<T>? trueLabels = null)
+    public override T ComputeLoss(Matrix<T> studentBatchOutput, Matrix<T> teacherBatchOutput, Matrix<T>? trueLabelsBatch = null)
     {
-        ValidateOutputDimensions(studentOutput, teacherOutput, v => v.Length);
-        ValidateLabelDimensions(studentOutput, trueLabels, v => v.Length);
+        ValidateOutputDimensions(studentBatchOutput, teacherBatchOutput);
+        ValidateLabelDimensions(studentBatchOutput, trueLabelsBatch);
 
-        // Compute adaptive temperature for this sample
-        double adaptiveTemp = ComputeAdaptiveTemperature(studentOutput, teacherOutput);
+        int batchSize = studentBatchOutput.RowCount;
+        T totalLoss = NumOps.Zero;
 
-        // Compute soft loss with adaptive temperature
-        var studentSoft = DistillationHelper<T>.Softmax(studentOutput, adaptiveTemp);
-        var teacherSoft = DistillationHelper<T>.Softmax(teacherOutput, adaptiveTemp);
-
-        var softLoss = DistillationHelper<T>.KLDivergence(teacherSoft, studentSoft);
-        softLoss = NumOps.Multiply(softLoss, NumOps.FromDouble(adaptiveTemp * adaptiveTemp));
-
-        // Add hard loss if labels provided
-        if (trueLabels != null)
+        for (int r = 0; r < batchSize; r++)
         {
-            var studentProbs = DistillationHelper<T>.Softmax(studentOutput, temperature: 1.0);
-            var hardLoss = DistillationHelper<T>.CrossEntropy(studentProbs, trueLabels);
+            Vector<T> studentRow = studentBatchOutput.GetRow(r);
+            Vector<T> teacherRow = teacherBatchOutput.GetRow(r);
+            Vector<T>? labelRow = trueLabelsBatch?.GetRow(r);
 
-            var alphaT = NumOps.FromDouble(Alpha);
-            var oneMinusAlpha = NumOps.FromDouble(1.0 - Alpha);
+            // Compute adaptive temperature for this sample
+            double adaptiveTemp = ComputeAdaptiveTemperature(studentRow, teacherRow);
 
-            return NumOps.Add(
-                NumOps.Multiply(alphaT, hardLoss),
-                NumOps.Multiply(oneMinusAlpha, softLoss));
+            // Compute soft loss with adaptive temperature
+            var studentSoft = DistillationHelper<T>.Softmax(studentRow, adaptiveTemp);
+            var teacherSoft = DistillationHelper<T>.Softmax(teacherRow, adaptiveTemp);
+
+            var softLoss = DistillationHelper<T>.KLDivergence(teacherSoft, studentSoft);
+            softLoss = NumOps.Multiply(softLoss, NumOps.FromDouble(adaptiveTemp * adaptiveTemp));
+
+            // Add hard loss if labels provided
+            if (labelRow != null)
+            {
+                var studentProbs = DistillationHelper<T>.Softmax(studentRow, temperature: 1.0);
+                var hardLoss = DistillationHelper<T>.CrossEntropy(studentProbs, labelRow);
+
+                var alphaT = NumOps.FromDouble(Alpha);
+                var oneMinusAlpha = NumOps.FromDouble(1.0 - Alpha);
+
+                var sampleLoss = NumOps.Add(
+                    NumOps.Multiply(alphaT, hardLoss),
+                    NumOps.Multiply(oneMinusAlpha, softLoss));
+
+                totalLoss = NumOps.Add(totalLoss, sampleLoss);
+            }
+            else
+            {
+                totalLoss = NumOps.Add(totalLoss, softLoss);
+            }
         }
 
-        return softLoss;
+        // Return average loss over batch
+        return NumOps.Divide(totalLoss, NumOps.FromDouble(batchSize));
     }
 
     /// <summary>
-    /// Computes gradient with adaptive temperature.
+    /// Computes gradient with adaptive temperature for a batch.
     /// </summary>
-    public override Vector<T> ComputeGradient(Vector<T> studentOutput, Vector<T> teacherOutput, Vector<T>? trueLabels = null)
+    public override Matrix<T> ComputeGradient(Matrix<T> studentBatchOutput, Matrix<T> teacherBatchOutput, Matrix<T>? trueLabelsBatch = null)
     {
-        ValidateOutputDimensions(studentOutput, teacherOutput, v => v.Length);
-        ValidateLabelDimensions(studentOutput, trueLabels, v => v.Length);
+        ValidateOutputDimensions(studentBatchOutput, teacherBatchOutput);
+        ValidateLabelDimensions(studentBatchOutput, trueLabelsBatch);
 
-        int n = studentOutput.Length;
-        var gradient = new Vector<T>(n);
+        int batchSize = studentBatchOutput.RowCount;
+        int numClasses = studentBatchOutput.ColumnCount;
+        var gradient = new Matrix<T>(batchSize, numClasses);
 
-        // Compute adaptive temperature for this sample
-        double adaptiveTemp = ComputeAdaptiveTemperature(studentOutput, teacherOutput);
-
-        // Soft gradient with adaptive temperature
-        var studentSoft = DistillationHelper<T>.Softmax(studentOutput, adaptiveTemp);
-        var teacherSoft = DistillationHelper<T>.Softmax(teacherOutput, adaptiveTemp);
-
-        for (int i = 0; i < n; i++)
+        for (int r = 0; r < batchSize; r++)
         {
-            var diff = NumOps.Subtract(studentSoft[i], teacherSoft[i]);
-            gradient[i] = NumOps.Multiply(diff, NumOps.FromDouble(adaptiveTemp * adaptiveTemp));
-        }
+            Vector<T> studentRow = studentBatchOutput.GetRow(r);
+            Vector<T> teacherRow = teacherBatchOutput.GetRow(r);
+            Vector<T>? labelRow = trueLabelsBatch?.GetRow(r);
 
-        // Add hard gradient if labels provided
-        if (trueLabels != null)
-        {
-            var studentProbs = DistillationHelper<T>.Softmax(studentOutput, temperature: 1.0);
+            // Compute adaptive temperature for this sample
+            double adaptiveTemp = ComputeAdaptiveTemperature(studentRow, teacherRow);
 
-            for (int i = 0; i < n; i++)
+            // Soft gradient with adaptive temperature
+            var studentSoft = DistillationHelper<T>.Softmax(studentRow, adaptiveTemp);
+            var teacherSoft = DistillationHelper<T>.Softmax(teacherRow, adaptiveTemp);
+
+            for (int c = 0; c < numClasses; c++)
             {
-                var hardGrad = NumOps.Subtract(studentProbs[i], trueLabels[i]);
-                var alphaWeighted = NumOps.Multiply(hardGrad, NumOps.FromDouble(Alpha));
-                var softWeighted = NumOps.Multiply(gradient[i], NumOps.FromDouble(1.0 - Alpha));
-                gradient[i] = NumOps.Add(alphaWeighted, softWeighted);
+                var diff = NumOps.Subtract(studentSoft[c], teacherSoft[c]);
+                gradient[r, c] = NumOps.Multiply(diff, NumOps.FromDouble(adaptiveTemp * adaptiveTemp));
+            }
+
+            // Add hard gradient if labels provided
+            if (labelRow != null)
+            {
+                var studentProbs = DistillationHelper<T>.Softmax(studentRow, temperature: 1.0);
+
+                for (int c = 0; c < numClasses; c++)
+                {
+                    var hardGrad = NumOps.Subtract(studentProbs[c], labelRow[c]);
+                    var alphaWeighted = NumOps.Multiply(hardGrad, NumOps.FromDouble(Alpha));
+                    var softWeighted = NumOps.Multiply(gradient[r, c], NumOps.FromDouble(1.0 - Alpha));
+                    gradient[r, c] = NumOps.Add(alphaWeighted, softWeighted);
+                }
+            }
+            else
+            {
+                // Scale by (1 - alpha) if no hard loss
+                for (int c = 0; c < numClasses; c++)
+                {
+                    gradient[r, c] = NumOps.Multiply(gradient[r, c], NumOps.FromDouble(1.0 - Alpha));
+                }
             }
         }
-        else
+
+        // Average gradients over batch
+        T oneOverBatchSize = NumOps.Divide(NumOps.One, NumOps.FromDouble(batchSize));
+        for (int r = 0; r < batchSize; r++)
         {
-            // Scale by (1 - alpha) if no hard loss
-            for (int i = 0; i < n; i++)
+            for (int c = 0; c < numClasses; c++)
             {
-                gradient[i] = NumOps.Multiply(gradient[i], NumOps.FromDouble(1.0 - Alpha));
+                gradient[r, c] = NumOps.Multiply(gradient[r, c], oneOverBatchSize);
             }
         }
 
