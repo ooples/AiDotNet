@@ -39,9 +39,9 @@ namespace AiDotNet.ReinforcementLearning.Agents.SAC;
 /// Haarnoja et al., "Soft Actor-Critic: Off-Policy Maximum Entropy Deep RL with a Stochastic Actor", 2018.
 /// </para>
 /// </remarks>
-public class SACAgent<T> : ReinforcementLearningAgentBase<T>
+public class SACAgent<T> : DeepReinforcementLearningAgentBase<T>
 {
-    private readonly SACOptions<T> _sacOptions;
+    private SACOptions<T> _sacOptions;
     private readonly UniformReplayBuffer<T> _replayBuffer;
 
     private NeuralNetwork<T> _policyNetwork;      // Actor (stochastic policy)

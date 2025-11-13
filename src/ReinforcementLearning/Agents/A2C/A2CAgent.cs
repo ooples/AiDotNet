@@ -34,9 +34,9 @@ namespace AiDotNet.ReinforcementLearning.Agents.A2C;
 /// Mnih et al., "Asynchronous Methods for Deep Reinforcement Learning", 2016 (describes A3C, A2C is the synchronous version).
 /// </para>
 /// </remarks>
-public class A2CAgent<T> : ReinforcementLearningAgentBase<T>
+public class A2CAgent<T> : DeepReinforcementLearningAgentBase<T>
 {
-    private readonly A2COptions<T> _a2cOptions;
+    private A2COptions<T> _a2cOptions;
     private readonly Trajectory<T> _trajectory;
 
     private NeuralNetwork<T> _policyNetwork;

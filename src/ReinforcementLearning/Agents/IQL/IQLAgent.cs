@@ -39,9 +39,9 @@ namespace AiDotNet.ReinforcementLearning.Agents.IQL;
 /// - Good for offline datasets with diverse quality
 /// </para>
 /// </remarks>
-public class IQLAgent<T> : ReinforcementLearningAgentBase<T>
+public class IQLAgent<T> : DeepReinforcementLearningAgentBase<T>
 {
-    private readonly IQLOptions<T> _options;
+    private IQLOptions<T> _options;
     private readonly INumericOperations<T> _numOps;
 
     private NeuralNetwork<T> _policyNetwork;

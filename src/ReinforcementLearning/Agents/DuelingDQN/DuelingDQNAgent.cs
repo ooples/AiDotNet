@@ -41,9 +41,9 @@ namespace AiDotNet.ReinforcementLearning.Agents.DuelingDQN;
 /// Wang et al., "Dueling Network Architectures for Deep RL", 2016.
 /// </para>
 /// </remarks>
-public class DuelingDQNAgent<T> : ReinforcementLearningAgentBase<T>
+public class DuelingDQNAgent<T> : DeepReinforcementLearningAgentBase<T>
 {
-    private readonly DuelingDQNOptions<T> _options;
+    private DuelingDQNOptions<T> _options;
     private readonly UniformReplayBuffer<T> _replayBuffer;
 
     private DuelingNetwork<T> _qNetwork;

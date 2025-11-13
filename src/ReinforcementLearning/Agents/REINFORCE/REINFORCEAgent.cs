@@ -41,9 +41,9 @@ namespace AiDotNet.ReinforcementLearning.Agents.REINFORCE;
 /// Williams, R. J. (1992). "Simple statistical gradient-following algorithms for connectionist RL."
 /// </para>
 /// </remarks>
-public class REINFORCEAgent<T> : ReinforcementLearningAgentBase<T>
+public class REINFORCEAgent<T> : DeepReinforcementLearningAgentBase<T>
 {
-    private readonly REINFORCEOptions<T> _reinforceOptions;
+    private REINFORCEOptions<T> _reinforceOptions;
     private readonly Trajectory<T> _trajectory;
 
     private NeuralNetwork<T> _policyNetwork;

@@ -37,9 +37,9 @@ namespace AiDotNet.ReinforcementLearning.Agents.DQN;
 /// Mnih, V., et al. (2015). "Human-level control through deep reinforcement learning." Nature.
 /// </para>
 /// </remarks>
-public class DQNAgent<T> : ReinforcementLearningAgentBase<T>
+public class DQNAgent<T> : DeepReinforcementLearningAgentBase<T>
 {
-    private readonly DQNOptions<T> _dqnOptions;
+    private DQNOptions<T> _dqnOptions;
     private readonly UniformReplayBuffer<T> _replayBuffer;
 
     private NeuralNetwork<T> _qNetwork;

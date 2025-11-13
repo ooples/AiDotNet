@@ -35,9 +35,9 @@ namespace AiDotNet.ReinforcementLearning.Agents.CQL;
 /// - Robotics from demonstration datasets
 /// </para>
 /// </remarks>
-public class CQLAgent<T> : ReinforcementLearningAgentBase<T>
+public class CQLAgent<T> : DeepReinforcementLearningAgentBase<T>
 {
-    private readonly CQLOptions<T> _options;
+    private CQLOptions<T> _options;
     private readonly INumericOperations<T> _numOps;
 
     private NeuralNetwork<T> _policyNetwork;

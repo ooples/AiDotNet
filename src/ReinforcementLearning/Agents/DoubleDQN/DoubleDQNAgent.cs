@@ -38,9 +38,9 @@ namespace AiDotNet.ReinforcementLearning.Agents.DoubleDQN;
 /// van Hasselt et al., "Deep Reinforcement Learning with Double Q-learning", 2015.
 /// </para>
 /// </remarks>
-public class DoubleDQNAgent<T> : ReinforcementLearningAgentBase<T>
+public class DoubleDQNAgent<T> : DeepReinforcementLearningAgentBase<T>
 {
-    private readonly DoubleDQNOptions<T> _options;
+    private DoubleDQNOptions<T> _options;
     private readonly UniformReplayBuffer<T> _replayBuffer;
 
     private NeuralNetwork<T> _qNetwork;

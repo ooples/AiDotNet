@@ -37,9 +37,9 @@ namespace AiDotNet.ReinforcementLearning.Agents.TD3;
 /// Used by: Robotic control, autonomous systems, continuous optimization
 /// </para>
 /// </remarks>
-public class TD3Agent<T> : ReinforcementLearningAgentBase<T>
+public class TD3Agent<T> : DeepReinforcementLearningAgentBase<T>
 {
-    private readonly TD3Options<T> _options;
+    private TD3Options<T> _options;
     private readonly INumericOperations<T> _numOps;
 
     private NeuralNetwork<T> _actorNetwork;

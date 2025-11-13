@@ -40,9 +40,9 @@ namespace AiDotNet.ReinforcementLearning.Agents.PPO;
 /// Schulman, J., et al. (2017). "Proximal Policy Optimization Algorithms." arXiv:1707.06347.
 /// </para>
 /// </remarks>
-public class PPOAgent<T> : ReinforcementLearningAgentBase<T>
+public class PPOAgent<T> : DeepReinforcementLearningAgentBase<T>
 {
-    private readonly PPOOptions<T> _ppoOptions;
+    private PPOOptions<T> _ppoOptions;
     private readonly Trajectory<T> _trajectory;
 
     private NeuralNetwork<T> _policyNetwork;

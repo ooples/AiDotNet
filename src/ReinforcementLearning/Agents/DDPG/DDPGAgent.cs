@@ -41,9 +41,9 @@ namespace AiDotNet.ReinforcementLearning.Agents.DDPG;
 /// Lillicrap et al., "Continuous control with deep reinforcement learning", 2015.
 /// </para>
 /// </remarks>
-public class DDPGAgent<T> : ReinforcementLearningAgentBase<T>
+public class DDPGAgent<T> : DeepReinforcementLearningAgentBase<T>
 {
-    private readonly DDPGOptions<T> _options;
+    private DDPGOptions<T> _options;
     private readonly UniformReplayBuffer<T> _replayBuffer;
     private readonly OrnsteinUhlenbeckNoise<T> _noise;
 
