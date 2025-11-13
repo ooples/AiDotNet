@@ -268,6 +268,8 @@ public class AttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     public override Tensor<T> Forward(Tensor<T> input)
     {
         _lastInput = input;
+        _lastWasCrossAttention = false;
+        _lastUsedMask = false;
 
         var Q = input.Multiply(_Wq);
         var K = input.Multiply(_Wk);
@@ -397,6 +399,8 @@ public class AttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     /// <returns>The output tensor after applying cross-attention.</returns>
     private Tensor<T> ForwardCrossAttention(Tensor<T> queryInput, Tensor<T> keyValueInput, Tensor<T>? mask)
     {
+        _lastWasCrossAttention = true;
+        _lastUsedMask = mask != null;
         _lastInput = queryInput;  // Store the query input for backward pass
 
         var Q = queryInput.Multiply(_Wq);
@@ -442,7 +446,8 @@ public class AttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     /// </remarks>
     public override Tensor<T> Backward(Tensor<T> outputGradient)
     {
-        if (UseAutodiff)
+        // Autodiff doesn't support cross-attention or masked attention yet
+        if (UseAutodiff && !_lastWasCrossAttention && !_lastUsedMask)
             return BackwardViaAutodiff(outputGradient);
         else
             return BackwardManual(outputGradient);
@@ -903,5 +908,7 @@ public class AttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     {
         _lastInput = null;
         _lastAttentionWeights = null;
+        _lastWasCrossAttention = false;
+        _lastUsedMask = false;
     }
 }
