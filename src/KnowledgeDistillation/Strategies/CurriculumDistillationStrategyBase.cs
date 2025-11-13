@@ -215,14 +215,6 @@ public abstract class CurriculumDistillationStrategyBase<T>
                     gradient[i] = NumOps.Add(alphaWeighted, softWeighted);
                 }
             }
-            else
-            {
-                // Scale by (1 - alpha) if no hard loss
-                for (int i = 0; i < outputDim; i++)
-                {
-                    gradient[i] = NumOps.Multiply(gradient[i], NumOps.FromDouble(1.0 - Alpha));
-                }
-            }
 
             gradientBatch.SetRow(r, gradient);
         }
