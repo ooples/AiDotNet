@@ -15,6 +15,7 @@ global using AiDotNet.Tools;
 global using AiDotNet.Models;
 global using AiDotNet.Enums;
 global using AiDotNet.MixedPrecision;
+global using AiDotNet.KnowledgeDistillation;
 
 namespace AiDotNet;
 
@@ -1104,10 +1105,29 @@ public class PredictionModelBuilder<T, TInput, TOutput> : IPredictionModelBuilde
                 temperature: options.Temperature,
                 alpha: options.Alpha);
 
-            // Step 3: Create trainer
+            // Step 3: Create checkpoint configuration from options
+            DistillationCheckpointConfig? checkpointConfig = null;
+            if (options.SaveCheckpoints)
+            {
+                checkpointConfig = new DistillationCheckpointConfig
+                {
+                    CheckpointDirectory = options.CheckpointDirectory ?? "./checkpoints",
+                    SaveEveryEpochs = options.CheckpointFrequency,
+                    KeepBestN = options.SaveOnlyBestCheckpoint ? 1 : 0,
+                    SaveStudent = true,
+                    BestMetric = "validation_loss",
+                    LowerIsBetter = true
+                };
+            }
+
+            // Step 4: Create trainer with early stopping and checkpointing configuration
             var trainer = new KnowledgeDistillation.KnowledgeDistillationTrainer<T>(
                 teacher,
-                strategy);
+                strategy,
+                checkpointConfig: checkpointConfig,
+                useEarlyStopping: options.UseEarlyStopping,
+                earlyStoppingMinDelta: options.EarlyStoppingMinDelta,
+                earlyStoppingPatience: options.EarlyStoppingPatience);
 
             Console.WriteLine($"Starting Knowledge Distillation:");
             Console.WriteLine($"  Strategy: {options.StrategyType}");
@@ -1228,16 +1248,7 @@ public class PredictionModelBuilder<T, TInput, TOutput> : IPredictionModelBuilde
                 }
             };
 
-            // Step 6: Setup early stopping and checkpointing
-            double bestValLoss = double.MaxValue;
-            int patienceCounter = 0;
-            string checkpointDir = options.CheckpointDirectory ?? "./checkpoints";
-            if (options.SaveCheckpoints && !Directory.Exists(checkpointDir))
-            {
-                Directory.CreateDirectory(checkpointDir);
-            }
-
-            // Step 7: Run knowledge distillation training with monitoring
+            // Step 5: Run knowledge distillation training
             Console.WriteLine("Training student model with knowledge distillation...");
             trainer.Train(
                 studentForward,
@@ -1247,115 +1258,7 @@ public class PredictionModelBuilder<T, TInput, TOutput> : IPredictionModelBuilde
                 epochs: options.Epochs,
                 batchSize: options.BatchSize,
                 validationInputs: valInputs,
-                validationLabels: valLabels,
-                onEpochComplete: (epoch, avgLoss) =>
-                {
-                    double valAcc = 0;
-                    // NOTE: avgLoss is the TRAINING loss, not validation loss
-                    double trainLoss = Convert.ToDouble(avgLoss);
-
-                    if (valInputs != null && valLabels != null)
-                    {
-                        valAcc = Convert.ToDouble(trainer.Evaluate(studentForward, valInputs, valLabels));
-                    }
-
-                    Console.WriteLine($"  Epoch {epoch + 1}/{options.Epochs}: Train Loss = {trainLoss:F4}, Val Acc = {valAcc:F2}");
-
-                    // TODO: Early stopping is currently ineffective because:
-                    // 1. It compares training loss instead of validation loss
-                    // 2. The trainer's epoch loop doesn't support breaking early
-                    // This needs to be redesigned with proper cancellation token support
-                    if (options.UseEarlyStopping && valInputs != null)
-                    {
-                        if (bestValLoss - trainLoss > options.EarlyStoppingMinDelta)
-                        {
-                            bestValLoss = trainLoss;
-                            patienceCounter = 0;
-                            Console.WriteLine($"    → New best training loss: {bestValLoss:F4}");
-                        }
-                        else
-                        {
-                            patienceCounter++;
-                            if (patienceCounter >= options.EarlyStoppingPatience)
-                            {
-                                Console.WriteLine($"    → Early stopping triggered (patience: {options.EarlyStoppingPatience}) - but training will continue (not implemented)");
-                            }
-                        }
-                    }
-
-                    // Checkpointing logic
-                    if (options.SaveCheckpoints && (epoch + 1) % options.CheckpointFrequency == 0)
-                    {
-                        try
-                        {
-                            string checkpointPath;
-                            if (options.SaveOnlyBestCheckpoint)
-                            {
-                                if (trainLoss <= bestValLoss)
-                                {
-                                    checkpointPath = Path.Combine(checkpointDir, "best_model.bin");
-                                    if (studentModel is ICheckpointableModel checkpointable)
-                                    {
-                                        using var stream = File.Create(checkpointPath);
-                                        checkpointable.SaveState(stream);
-                                        Console.WriteLine($"    → Checkpoint saved: {checkpointPath}");
-                                    }
-                                    else
-                                    {
-                                        Console.WriteLine($"    ⚠ Checkpointing not supported by model type {studentModel.GetType().Name}");
-                                    }
-                                }
-                            }
-                            else
-                            {
-                                checkpointPath = Path.Combine(checkpointDir, $"model_epoch_{epoch + 1}.bin");
-                                if (studentModel is ICheckpointableModel checkpointable)
-                                {
-                                    using var stream = File.Create(checkpointPath);
-                                    checkpointable.SaveState(stream);
-                                    Console.WriteLine($"    → Checkpoint saved: {checkpointPath}");
-                                }
-                                else
-                                {
-                                    Console.WriteLine($"    ⚠ Checkpointing not supported by model type {studentModel.GetType().Name}");
-                                }
-                            }
-                        }
-                        catch (Exception ex)
-                        {
-                            Console.WriteLine($"    ⚠ Failed to save checkpoint: {ex.Message}");
-                        }
-                    }
-                });
-
-            Console.WriteLine();
-            Console.WriteLine("✓ Knowledge Distillation training completed successfully!");
-
-            // Load best checkpoint if enabled
-            if (options.SaveCheckpoints && options.SaveOnlyBestCheckpoint)
-            {
-                string bestCheckpoint = Path.Combine(checkpointDir, "best_model.bin");
-                if (File.Exists(bestCheckpoint))
-                {
-                    try
-                    {
-                        if (studentModel is ICheckpointableModel checkpointable)
-                        {
-                            using var stream = File.OpenRead(bestCheckpoint);
-                            checkpointable.LoadState(stream);
-                            Console.WriteLine($"✓ Loaded best checkpoint (val loss: {bestValLoss:F4})");
-                        }
-                        else
-                        {
-                            Console.WriteLine($"⚠ Checkpointing not supported by model type {studentModel.GetType().Name}");
-                        }
-                    }
-                    catch (Exception ex)
-                    {
-                        Console.WriteLine($"⚠ Failed to load best checkpoint: {ex.Message}");
-                    }
-                }
-            }
+                validationLabels: valLabels);
 
             // Step 7: Return result from KD-trained model (don't re-optimize)
             // Model is already trained via knowledge distillation, just wrap it in result

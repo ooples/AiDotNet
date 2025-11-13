@@ -76,8 +76,11 @@ public class KnowledgeDistillationTrainer<T> : KnowledgeDistillationTrainerBase<
         ITeacherModel<Vector<T>, Vector<T>> teacher,
         IDistillationStrategy<T, Vector<T>> distillationStrategy,
         DistillationCheckpointConfig? checkpointConfig = null,
+        bool useEarlyStopping = false,
+        double earlyStoppingMinDelta = 0.001,
+        int earlyStoppingPatience = 5,
         int? seed = null)
-        : base(teacher, distillationStrategy, checkpointConfig, seed)
+        : base(teacher, distillationStrategy, checkpointConfig, useEarlyStopping, earlyStoppingMinDelta, earlyStoppingPatience, seed)
     {
     }
 

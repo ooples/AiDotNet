@@ -72,8 +72,14 @@ public abstract class KnowledgeDistillationTrainerBase<T, TInput, TOutput> : IKn
     private ICheckpointableModel? _student;
 
     private double _lastValidationMetric;
+    private double _lastValidationLoss;
     private T _lastTrainingLoss;
     private int _currentEpoch;
+    private double _bestMonitoredMetric;
+    private int _patienceCounter;
+    private readonly bool _useEarlyStopping;
+    private readonly double _earlyStoppingMinDelta;
+    private readonly int _earlyStoppingPatience;
 
     /// <summary>
     /// Initializes a new instance of the KnowledgeDistillationTrainerBase class.
@@ -81,6 +87,9 @@ public abstract class KnowledgeDistillationTrainerBase<T, TInput, TOutput> : IKn
     /// <param name="teacher">The teacher model.</param>
     /// <param name="distillationStrategy">The distillation strategy.</param>
     /// <param name="checkpointConfig">Optional checkpoint configuration for automatic model saving during training.</param>
+    /// <param name="useEarlyStopping">Enable early stopping based on validation loss.</param>
+    /// <param name="earlyStoppingMinDelta">Minimum improvement required to count as progress.</param>
+    /// <param name="earlyStoppingPatience">Number of epochs without improvement before stopping.</param>
     /// <param name="seed">Optional random seed for reproducibility.</param>
     /// <remarks>
     /// <para><b>For Beginners:</b> The teacher and strategy are the core components:
@@ -109,18 +118,23 @@ public abstract class KnowledgeDistillationTrainerBase<T, TInput, TOutput> : IKn
         ITeacherModel<TInput, TOutput> teacher,
         IDistillationStrategy<T, TOutput> distillationStrategy,
         DistillationCheckpointConfig? checkpointConfig = null,
+        bool useEarlyStopping = false,
+        double earlyStoppingMinDelta = 0.001,
+        int earlyStoppingPatience = 10,
         int? seed = null)
     {
         Teacher = teacher ?? throw new ArgumentNullException(nameof(teacher));
         DistillationStrategy = distillationStrategy ?? throw new ArgumentNullException(nameof(distillationStrategy));
         _checkpointConfig = checkpointConfig;
+        _useEarlyStopping = useEarlyStopping;
+        _earlyStoppingMinDelta = earlyStoppingMinDelta;
+        _earlyStoppingPatience = earlyStoppingPatience;
+        _bestMonitoredMetric = double.MaxValue;
+        _patienceCounter = 0;
         NumOps = MathHelper.GetNumericOperations<T>();
-#if NET6_0_OR_GREATER
-        Random = seed.HasValue ? new Random(seed.Value) : Random.Shared;
-#else
         Random = seed.HasValue ? new Random(seed.Value) : new Random();
-#endif
         _lastTrainingLoss = NumOps.Zero;
+        _lastValidationLoss = double.MaxValue;
     }
 
     /// <summary>
@@ -278,7 +292,50 @@ public abstract class KnowledgeDistillationTrainerBase<T, TInput, TOutput> : IKn
             if (validationInputs != null && validationLabels != null)
             {
                 var valAccuracy = Evaluate(studentForward, validationInputs, validationLabels);
+                _lastValidationMetric = valAccuracy;
+
+                // Compute validation loss for early stopping
+                if (_useEarlyStopping)
+                {
+                    T totalValLoss = NumOps.Zero;
+                    for (int i = 0; i < validationInputs.Length; i++)
+                    {
+                        var studentOutput = studentForward(validationInputs[i]);
+                        var teacherOutput = GetTeacherPredictions(validationInputs[i], i);
+                        var sampleLoss = DistillationStrategy.ComputeLoss(studentOutput, teacherOutput, validationLabels[i]);
+                        totalValLoss = NumOps.Add(totalValLoss, sampleLoss);
+                    }
+                    _lastValidationLoss = Convert.ToDouble(NumOps.Divide(totalValLoss, NumOps.FromDouble(validationInputs.Length)));
+
+                    // Check early stopping
+                    if (_bestMonitoredMetric - _lastValidationLoss > _earlyStoppingMinDelta)
+                    {
+                        _bestMonitoredMetric = _lastValidationLoss;
+                        _patienceCounter = 0;
+                    }
+                    else
+                    {
+                        _patienceCounter++;
+                        if (_patienceCounter >= _earlyStoppingPatience)
+                        {
+                            Console.WriteLine($"Early stopping triggered at epoch {epoch + 1}. Validation loss has not improved for {_earlyStoppingPatience} epochs.");
+                            OnValidationComplete(epoch, valAccuracy);
+                            OnEpochEnd(epoch, avgEpochLoss);
+                            onEpochComplete?.Invoke(epoch, avgEpochLoss);
+                            break;
+                        }
+                    }
+                }
+
                 OnValidationComplete(epoch, valAccuracy);
+
+                // Console output for epoch progress
+                Console.WriteLine($"  Epoch {epoch + 1}/{epochs}: Train Loss = {Convert.ToDouble(avgEpochLoss):F4}, Val Acc = {valAccuracy:F2}");
+            }
+            else
+            {
+                // Console output for epoch progress (no validation)
+                Console.WriteLine($"  Epoch {epoch + 1}/{epochs}: Train Loss = {Convert.ToDouble(avgEpochLoss):F4}");
             }
 
             // Custom logic after epoch
@@ -290,6 +347,9 @@ public abstract class KnowledgeDistillationTrainerBase<T, TInput, TOutput> : IKn
 
         // Cleanup after training
         OnTrainingEnd(trainInputs, trainLabels);
+
+        Console.WriteLine();
+        Console.WriteLine("Knowledge Distillation training completed successfully!");
     }
 
     /// <summary>
