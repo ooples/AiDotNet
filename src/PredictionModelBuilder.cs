@@ -1057,7 +1057,12 @@ public class PredictionModelBuilder<T, TInput, TOutput> : IPredictionModelBuilde
                         "TeacherForward requires Vector<T> input/output types for distillation. " +
                         "Ensure your model is configured with Vector<T> types.");
                 
-                int outputDim = options.OutputDimension ?? 10;
+                if (!options.OutputDimension.HasValue)
+                    throw new InvalidOperationException(
+                        "OutputDimension is required when using TeacherForward. " +
+                        "Please specify options.OutputDimension explicitly.");
+
+                int outputDim = options.OutputDimension.Value;
                 var vectorForward = options.TeacherForward as Func<Vector<T>, Vector<T>>;
                 if (vectorForward == null)
                 {
