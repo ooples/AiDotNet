@@ -1227,30 +1227,34 @@ public class PredictionModelBuilder<T, TInput, TOutput> : IPredictionModelBuilde
                 onEpochComplete: (epoch, avgLoss) =>
                 {
                     double valAcc = 0;
-                    double valLoss = Convert.ToDouble(avgLoss);
+                    // NOTE: avgLoss is the TRAINING loss, not validation loss
+                    double trainLoss = Convert.ToDouble(avgLoss);
 
                     if (valInputs != null && valLabels != null)
                     {
                         valAcc = Convert.ToDouble(trainer.Evaluate(studentForward, valInputs, valLabels));
                     }
 
-                    Console.WriteLine($"  Epoch {epoch + 1}/{options.Epochs}: Loss = {valLoss:F4}, Val Acc = {valAcc:F2}%");
+                    Console.WriteLine($"  Epoch {epoch + 1}/{options.Epochs}: Train Loss = {trainLoss:F4}, Val Acc = {valAcc:F2}");
 
-                    // Early stopping logic
+                    // TODO: Early stopping is currently ineffective because:
+                    // 1. It compares training loss instead of validation loss
+                    // 2. The trainer's epoch loop doesn't support breaking early
+                    // This needs to be redesigned with proper cancellation token support
                     if (options.UseEarlyStopping && valInputs != null)
                     {
-                        if (bestValLoss - valLoss > options.EarlyStoppingMinDelta)
+                        if (bestValLoss - trainLoss > options.EarlyStoppingMinDelta)
                         {
-                            bestValLoss = valLoss;
+                            bestValLoss = trainLoss;
                             patienceCounter = 0;
-                            Console.WriteLine($"    → New best validation loss: {bestValLoss:F4}");
+                            Console.WriteLine($"    → New best training loss: {bestValLoss:F4}");
                         }
                         else
                         {
                             patienceCounter++;
                             if (patienceCounter >= options.EarlyStoppingPatience)
                             {
-                                Console.WriteLine($"    → Early stopping triggered (patience: {options.EarlyStoppingPatience})");
+                                Console.WriteLine($"    → Early stopping triggered (patience: {options.EarlyStoppingPatience}) - but training will continue (not implemented)");
                             }
                         }
                     }
@@ -1263,7 +1267,7 @@ public class PredictionModelBuilder<T, TInput, TOutput> : IPredictionModelBuilde
                             string checkpointPath;
                             if (options.SaveOnlyBestCheckpoint)
                             {
-                                if (valLoss <= bestValLoss)
+                                if (trainLoss <= bestValLoss)
                                 {
                                     checkpointPath = Path.Combine(checkpointDir, "best_model.bin");
                                     if (vectorStudentModel is ICheckpointableModel checkpointable)
