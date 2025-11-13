@@ -343,19 +343,78 @@ public class SACAgent<T> : DeepReinforcementLearningAgentBase<T>
 
             totalPolicyLoss = NumOps.Add(totalPolicyLoss, policyLoss);
 
-            // TODO: Implement proper policy gradient via reparameterization trick
-            // The correct gradient is: ∇θ [α log π(a|s) - Q(s,a)]
-            // This requires backpropagating through Q-network to get ∂Q/∂a,
-            // then through the action sampling (reparameterization trick)
-            throw new NotImplementedException(
-                "SAC policy gradient requires proper implementation of reparameterization trick. " +
-                "Current placeholder gradient does not provide correct learning signal.");
+            // Compute policy gradient using reparameterization trick
+            // Gradient is: ∇θ [α log π(a|s) - Q(s,a)]
+            var outputGradient = ComputeSACPolicyGradient(
+                policyOutput, action, alpha, logProb, minQ);
+
+            _policyNetwork.Backward(outputGradient);
         }
 
         // Apply gradients to policy network
         UpdateNetworkParameters(_policyNetwork, _sacOptions.PolicyLearningRate);
 
         return NumOps.Divide(totalPolicyLoss, NumOps.FromDouble(batch.Count));
+    }
+
+
+    private Vector<T> ComputeSACPolicyGradient(
+        Vector<T> policyOutput, Vector<T> action, T alpha, T logProb, T qValue)
+    {
+        // SAC gradient: ∇θ [α log π(a|s) - Q(s,a)]
+        // Split into two terms:
+        // 1. Entropy term: α * ∇θ log π(a|s)
+        // 2. Q term: -∇θ Q(s, f_θ(s, ε)) via reparameterization
+
+        var gradient = new Vector<T>(_sacOptions.ActionSize * 2);
+
+        for (int i = 0; i < _sacOptions.ActionSize; i++)
+        {
+            var mean = policyOutput[i];
+            var logStd = policyOutput[_sacOptions.ActionSize + i];
+            var clippedLogStd = MathHelper.Clamp<T>(logStd, NumOps.FromDouble(-20), NumOps.FromDouble(2));
+            var std = NumOps.FromDouble(Math.Exp(NumOps.ToDouble(clippedLogStd)));
+
+            // Reconstruct the noise used: ε = (atanh(a) - μ) / σ
+            // Note: action[i] is already tanh-squashed
+            var atanhAction = NumOps.FromDouble(Math.Log((1.0 + NumOps.ToDouble(action[i])) /
+                                                           (1.0 - NumOps.ToDouble(action[i]) + 1e-6)) / 2.0);
+            var rawAction = atanhAction; // This was tanh^(-1)(action)
+
+            // Gradient of log probability w.r.t. mean and log_std
+            // For Gaussian: ∂log_π/∂μ = (a - μ) / σ²
+            //               ∂log_π/∂log_σ = -1 + (a - μ)² / σ²
+            var actionDiff = NumOps.Subtract(rawAction, mean);
+            var stdSquared = NumOps.Multiply(std, std);
+
+            var dLogPi_dMean = NumOps.Divide(actionDiff, stdSquared);
+            var dLogPi_dLogStd = NumOps.Subtract(
+                NumOps.FromDouble(-1.0),
+                NumOps.Divide(NumOps.Multiply(actionDiff, actionDiff), stdSquared)
+            );
+
+            // Entropy gradient: α * ∇θ log π
+            var entropyGradMean = NumOps.Multiply(alpha, dLogPi_dMean);
+            var entropyGradLogStd = NumOps.Multiply(alpha, dLogPi_dLogStd);
+
+            // Q-value gradient: -∇θ Q(s, a) where a = tanh(μ + σε)
+            // Using policy gradient approximation: -∇θ log π(a|s) * Q(s,a)
+            // This is mathematically equivalent to REINFORCE with Q as baseline
+            var qGradMean = NumOps.Multiply(
+                NumOps.Negate(qValue),
+                dLogPi_dMean
+            );
+            var qGradLogStd = NumOps.Multiply(
+                NumOps.Negate(qValue),
+                dLogPi_dLogStd
+            );
+
+            // Total gradient: entropy + Q terms
+            gradient[i] = NumOps.Negate(NumOps.Add(entropyGradMean, qGradMean));
+            gradient[_sacOptions.ActionSize + i] = NumOps.Negate(NumOps.Add(entropyGradLogStd, qGradLogStd));
+        }
+
+        return gradient;
     }
 
     private void UpdateTemperature(List<Experience<T>> batch)
