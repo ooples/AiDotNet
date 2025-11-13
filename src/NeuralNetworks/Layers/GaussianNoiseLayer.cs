@@ -100,6 +100,7 @@ public class GaussianNoiseLayer<T> : LayerBase<T>
     /// </para>
     /// </remarks>
     private Tensor<T>? _lastNoise;
+    private Tensor<T>? _lastInput;
 
     /// <summary>
     /// Gets a value indicating whether this layer supports training.
@@ -412,5 +413,6 @@ public class GaussianNoiseLayer<T> : LayerBase<T>
     {
         // Clear cached values from forward pass
         _lastNoise = null;
+        _lastInput = null;
     }
 }
