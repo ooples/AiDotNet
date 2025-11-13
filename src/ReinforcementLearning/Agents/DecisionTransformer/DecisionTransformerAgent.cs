@@ -38,8 +38,8 @@ namespace AiDotNet.ReinforcementLearning.Agents.DecisionTransformer;
 /// </remarks>
 public class DecisionTransformerAgent<T> : DeepReinforcementLearningAgentBase<T>
 {
-    private readonly DecisionTransformerOptions<T> _options;
-    private readonly IOptimizer<T, Vector<T>, Vector<T>> _optimizer;
+    private DecisionTransformerOptions<T> _options;
+    private IOptimizer<T, Vector<T>, Vector<T>> _optimizer;
 
     private INeuralNetwork<T> _transformerNetwork;
     private List<(Vector<T> state, Vector<T> action, T reward, T returnToGo)> _trajectoryBuffer;

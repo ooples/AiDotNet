@@ -38,8 +38,8 @@ namespace AiDotNet.ReinforcementLearning.Agents.QMIX;
 /// </remarks>
 public class QMIXAgent<T> : DeepReinforcementLearningAgentBase<T>
 {
-    private readonly QMIXOptions<T> _options;
-    private readonly IOptimizer<T, Vector<T>, Vector<T>> _optimizer;
+    private QMIXOptions<T> _options;
+    private IOptimizer<T, Vector<T>, Vector<T>> _optimizer;
 
     // Per-agent Q-networks
     private List<INeuralNetwork<T>> _agentNetworks;

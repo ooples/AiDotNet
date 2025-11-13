@@ -40,8 +40,8 @@ namespace AiDotNet.ReinforcementLearning.Agents.Dreamer;
 /// </remarks>
 public class DreamerAgent<T> : DeepReinforcementLearningAgentBase<T>
 {
-    private readonly DreamerOptions<T> _options;
-    private readonly IOptimizer<T, Vector<T>, Vector<T>> _optimizer;
+    private DreamerOptions<T> _options;
+    private IOptimizer<T, Vector<T>, Vector<T>> _optimizer;
 
     // World model components
     private INeuralNetwork<T> _representationNetwork;  // Observation -> latent state

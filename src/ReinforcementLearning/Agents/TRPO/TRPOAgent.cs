@@ -38,8 +38,8 @@ namespace AiDotNet.ReinforcementLearning.Agents.TRPO;
 /// </remarks>
 public class TRPOAgent<T> : DeepReinforcementLearningAgentBase<T>
 {
-    private readonly TRPOOptions<T> _options;
-    private readonly IOptimizer<T, Vector<T>, Vector<T>> _optimizer;
+    private TRPOOptions<T> _options;
+    private IOptimizer<T, Vector<T>, Vector<T>> _optimizer;
 
     private INeuralNetwork<T> _policyNetwork;
     private INeuralNetwork<T> _oldPolicyNetwork;  // For KL divergence

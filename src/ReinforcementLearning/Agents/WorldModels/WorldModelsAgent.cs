@@ -36,9 +36,9 @@ namespace AiDotNet.ReinforcementLearning.Agents.WorldModels;
 /// Famous for: Car racing from pixels with limited environment samples
 /// </para>
 /// </remarks>
-public class WorldModelsAgent<T> : ReinforcementLearningAgentBase<T>
+public class WorldModelsAgent<T> : DeepReinforcementLearningAgentBase<T>
 {
-    private readonly WorldModelsOptions<T> _options;
+    private WorldModelsOptions<T> _options;
 
     // V: VAE for spatial compression
     private NeuralNetwork<T> _vaeEncoder;

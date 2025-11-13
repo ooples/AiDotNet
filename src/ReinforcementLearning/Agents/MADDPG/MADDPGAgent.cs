@@ -39,8 +39,8 @@ namespace AiDotNet.ReinforcementLearning.Agents.MADDPG;
 /// </remarks>
 public class MADDPGAgent<T> : DeepReinforcementLearningAgentBase<T>
 {
-    private readonly MADDPGOptions<T> _options;
-    private readonly IOptimizer<T, Vector<T>, Vector<T>> _optimizer;
+    private MADDPGOptions<T> _options;
+    private IOptimizer<T, Vector<T>, Vector<T>> _optimizer;
 
     // Networks for each agent
     private List<INeuralNetwork<T>> _actorNetworks;

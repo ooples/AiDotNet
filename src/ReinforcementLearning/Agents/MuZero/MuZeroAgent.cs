@@ -36,9 +36,9 @@ namespace AiDotNet.ReinforcementLearning.Agents.MuZero;
 /// Famous for: Superhuman Atari/board games without knowing rules
 /// </para>
 /// </remarks>
-public class MuZeroAgent<T> : ReinforcementLearningAgentBase<T>
+public class MuZeroAgent<T> : DeepReinforcementLearningAgentBase<T>
 {
-    private readonly MuZeroOptions<T> _options;
+    private MuZeroOptions<T> _options;
 
     // Three core networks
     private NeuralNetwork<T> _representationNetwork;  // h = f(observation)
