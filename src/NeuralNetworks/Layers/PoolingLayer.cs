@@ -326,10 +326,9 @@ public class PoolingLayer<T> : LayerBase<T>
     /// </remarks>
     public override Tensor<T> Backward(Tensor<T> outputGradient)
     {
-        if (UseAutodiff)
-            return BackwardViaAutodiff(outputGradient);
-        else
-            return BackwardManual(outputGradient);
+        return UseAutodiff
+            ? BackwardViaAutodiff(outputGradient)
+            : BackwardManual(outputGradient);
     }
 
     /// <summary>
