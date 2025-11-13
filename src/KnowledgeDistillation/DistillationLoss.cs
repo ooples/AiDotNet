@@ -39,7 +39,7 @@ namespace AiDotNet.KnowledgeDistillation;
 /// <para><b>References:</b>
 /// - Hinton, G., Vinyals, O., & Dean, J. (2015). Distilling the Knowledge in a Neural Network. arXiv:1503.02531</para>
 /// </remarks>
-public class DistillationLoss<T> : DistillationStrategyBase<T, Vector<T>>
+public class DistillationLoss<T> : DistillationStrategyBase<T>
 {
     /// <summary>
     /// Initializes a new instance of the DistillationLoss class.
@@ -63,9 +63,9 @@ public class DistillationLoss<T> : DistillationStrategyBase<T, Vector<T>>
     /// <summary>
     /// Computes the combined distillation loss (soft loss from teacher + hard loss from true labels).
     /// </summary>
-    /// <param name="studentLogits">The student model's raw outputs (logits) before softmax.</param>
-    /// <param name="teacherLogits">The teacher model's raw outputs (logits) before softmax.</param>
-    /// <param name="trueLabels">Ground truth labels as one-hot vectors (optional). If null, only soft loss is computed.</param>
+    /// <param name="studentBatchOutput">The student model's raw outputs (logits) before softmax.</param>
+    /// <param name="teacherBatchOutput">The teacher model's raw outputs (logits) before softmax.</param>
+    /// <param name="trueLabelsBatch">Ground truth labels as one-hot vectors (optional). If null, only soft loss is computed.</param>
     /// <returns>The total distillation loss combining soft and hard components.</returns>
     /// <remarks>
     /// <para><b>For Beginners:</b> This is the main loss function that guides student training.
@@ -77,32 +77,47 @@ public class DistillationLoss<T> : DistillationStrategyBase<T, Vector<T>>
     /// distributions are. When the student's soft predictions match the teacher's, KL divergence
     /// approaches zero.</para>
     /// </remarks>
-    public override T ComputeLoss(Vector<T> studentLogits, Vector<T> teacherLogits, Vector<T>? trueLabels = null)
+    public override T ComputeLoss(Matrix<T> studentBatchOutput, Matrix<T> teacherBatchOutput, Matrix<T>? trueLabelsBatch = null)
     {
-        ValidateOutputDimensions(studentLogits, teacherLogits, v => v.Length);
-        ValidateLabelDimensions(studentLogits, trueLabels, v => v.Length);
+        ValidateOutputDimensions(studentBatchOutput, teacherBatchOutput);
+        ValidateLabelDimensions(studentBatchOutput, trueLabelsBatch);
+
+        int batchSize = studentBatchOutput.RowCount;
 
         // Compute soft loss: KL divergence between temperature-scaled distributions
-        var studentSoft = Softmax(studentLogits, Temperature);
-        var teacherSoft = Softmax(teacherLogits, Temperature);
+        Matrix<T> studentSoft = Softmax(studentBatchOutput, Temperature);
+        Matrix<T> teacherSoft = Softmax(teacherBatchOutput, Temperature);
 
-        var softLoss = KLDivergence(teacherSoft, studentSoft);
+        Vector<T> softLossesPerSample = KLDivergence(teacherSoft, studentSoft);
 
         // Scale by T² to balance gradient magnitudes
         // This is crucial: without T² scaling, the soft loss gradients would be too small
-        softLoss = NumOps.Multiply(softLoss, NumOps.FromDouble(Temperature * Temperature));
+        T softLoss = NumOps.Zero;
+        T tSquared = NumOps.FromDouble(Temperature * Temperature);
+        for (int i = 0; i < batchSize; i++)
+        {
+            softLoss = NumOps.Add(softLoss, NumOps.Multiply(softLossesPerSample[i], tSquared));
+        }
+        softLoss = NumOps.Divide(softLoss, NumOps.FromDouble(batchSize)); // Average over batch
 
         // If we have true labels, add hard loss
-        if (trueLabels != null)
+        if (trueLabelsBatch != null)
         {
-            var studentProbs = Softmax(studentLogits, temperature: 1.0);
-            var hardLoss = CrossEntropy(studentProbs, trueLabels);
+            Matrix<T> studentProbs = Softmax(studentBatchOutput, temperature: 1.0);
+            Vector<T> hardLossesPerSample = CrossEntropy(studentProbs, trueLabelsBatch);
+
+            T hardLoss = NumOps.Zero;
+            for (int i = 0; i < batchSize; i++)
+            {
+                hardLoss = NumOps.Add(hardLoss, hardLossesPerSample[i]);
+            }
+            hardLoss = NumOps.Divide(hardLoss, NumOps.FromDouble(batchSize)); // Average over batch
 
             // Combine: α × hard_loss + (1 - α) × soft_loss
-            var alphaT = NumOps.FromDouble(Alpha);
-            var oneMinusAlpha = NumOps.FromDouble(1.0 - Alpha);
+            T alphaT = NumOps.FromDouble(Alpha);
+            T oneMinusAlpha = NumOps.FromDouble(1.0 - Alpha);
 
-            var totalLoss = NumOps.Add(
+            T totalLoss = NumOps.Add(
                 NumOps.Multiply(alphaT, hardLoss),
                 NumOps.Multiply(oneMinusAlpha, softLoss)
             );
@@ -116,10 +131,10 @@ public class DistillationLoss<T> : DistillationStrategyBase<T, Vector<T>>
     /// <summary>
     /// Computes the gradient of the distillation loss for backpropagation.
     /// </summary>
-    /// <param name="studentLogits">The student model's raw outputs (logits).</param>
-    /// <param name="teacherLogits">The teacher model's raw outputs (logits).</param>
-    /// <param name="trueLabels">Ground truth labels (optional).</param>
-    /// <returns>Gradient vector with respect to student logits.</returns>
+    /// <param name="studentBatchOutput">The student model's raw outputs (logits).</param>
+    /// <param name="teacherBatchOutput">The teacher model's raw outputs (logits).</param>
+    /// <param name="trueLabelsBatch">Ground truth labels (optional).</param>
+    /// <returns>Gradient matrix with respect to student logits.</returns>
     /// <remarks>
     /// <para><b>For Beginners:</b> The gradient tells us how to adjust the student's parameters
     /// to reduce the loss. It points in the direction that increases loss, so we subtract it
@@ -129,46 +144,69 @@ public class DistillationLoss<T> : DistillationStrategyBase<T, Vector<T>>
     /// The hard gradient: (student_probs - true_labels)
     /// Combined gradient: α × hard_grad + (1 - α) × soft_grad</para>
     /// </remarks>
-    public override Vector<T> ComputeGradient(Vector<T> studentLogits, Vector<T> teacherLogits, Vector<T>? trueLabels = null)
+    public override Matrix<T> ComputeGradient(Matrix<T> studentBatchOutput, Matrix<T> teacherBatchOutput, Matrix<T>? trueLabelsBatch = null)
     {
-        ValidateOutputDimensions(studentLogits, teacherLogits, v => v.Length);
-        ValidateLabelDimensions(studentLogits, trueLabels, v => v.Length);
+        ValidateOutputDimensions(studentBatchOutput, teacherBatchOutput);
+        ValidateLabelDimensions(studentBatchOutput, trueLabelsBatch);
 
-        int n = studentLogits.Length;
-        var gradient = new Vector<T>(n);
+        int batchSize = studentBatchOutput.RowCount;
+        int numClasses = studentBatchOutput.ColumnCount;
+
+        Matrix<T> gradient = new Matrix<T>(batchSize, numClasses);
 
         // Soft gradient: ∂L_soft/∂logits = (student_soft - teacher_soft) × T²
-        var studentSoft = Softmax(studentLogits, Temperature);
-        var teacherSoft = Softmax(teacherLogits, Temperature);
+        Matrix<T> studentSoft = Softmax(studentBatchOutput, Temperature);
+        Matrix<T> teacherSoft = Softmax(teacherBatchOutput, Temperature);
 
-        for (int i = 0; i < n; i++)
+        T tSquared = NumOps.FromDouble(Temperature * Temperature);
+
+        for (int r = 0; r < batchSize; r++)
         {
-            var diff = NumOps.Subtract(studentSoft[i], teacherSoft[i]);
-            gradient[i] = NumOps.Multiply(diff, NumOps.FromDouble(Temperature * Temperature));
+            for (int c = 0; c < numClasses; c++)
+            {
+                T diff = NumOps.Subtract(studentSoft[r, c], teacherSoft[r, c]);
+                gradient[r, c] = NumOps.Multiply(diff, tSquared);
+            }
         }
 
         // If we have true labels, add hard gradient
-        if (trueLabels != null)
+        if (trueLabelsBatch != null)
         {
-            var studentProbs = Softmax(studentLogits, temperature: 1.0);
-            var hardGradient = new Vector<T>(n);
+            Matrix<T> studentProbs = Softmax(studentBatchOutput, temperature: 1.0);
+            Matrix<T> hardGradient = new Matrix<T>(batchSize, numClasses);
 
             // Hard gradient: ∂L_hard/∂logits = student_probs - true_labels
-            for (int i = 0; i < n; i++)
+            for (int r = 0; r < batchSize; r++)
             {
-                hardGradient[i] = NumOps.Subtract(studentProbs[i], trueLabels[i]);
+                for (int c = 0; c < numClasses; c++)
+                {
+                    hardGradient[r, c] = NumOps.Subtract(studentProbs[r, c], trueLabelsBatch[r, c]);
+                }
             }
 
             // Combine gradients: α × hard_grad + (1 - α) × soft_grad
-            var alphaT = NumOps.FromDouble(Alpha);
-            var oneMinusAlpha = NumOps.FromDouble(1.0 - Alpha);
+            T alphaT = NumOps.FromDouble(Alpha);
+            T oneMinusAlpha = NumOps.FromDouble(1.0 - Alpha);
 
-            for (int i = 0; i < n; i++)
+            for (int r = 0; r < batchSize; r++)
             {
-                gradient[i] = NumOps.Add(
-                    NumOps.Multiply(alphaT, hardGradient[i]),
-                    NumOps.Multiply(oneMinusAlpha, gradient[i])
-                );
+                for (int c = 0; c < numClasses; c++)
+                {
+                    gradient[r, c] = NumOps.Add(
+                        NumOps.Multiply(alphaT, hardGradient[r, c]),
+                        NumOps.Multiply(oneMinusAlpha, gradient[r, c])
+                    );
+                }
+            }
+        }
+
+        // Average gradients over the batch
+        T oneOverBatchSize = NumOps.Divide(NumOps.One, NumOps.FromDouble(batchSize));
+        for (int r = 0; r < batchSize; r++)
+        {
+            for (int c = 0; c < numClasses; c++)
+            {
+                gradient[r, c] = NumOps.Multiply(gradient[r, c], oneOverBatchSize);
             }
         }
 
@@ -178,9 +216,9 @@ public class DistillationLoss<T> : DistillationStrategyBase<T, Vector<T>>
     /// <summary>
     /// Applies softmax function with temperature scaling to convert logits to probabilities.
     /// </summary>
-    /// <param name="logits">Raw network outputs before activation.</param>
+    /// <param name="logits">Raw network outputs before activation. Shape: [batch_size x num_classes]</param>
     /// <param name="temperature">Temperature parameter for softening the distribution.</param>
-    /// <returns>Probability distribution summing to 1.</returns>
+    /// <returns>Probability distribution matrix. Shape: [batch_size x num_classes]</returns>
     /// <remarks>
     /// <para><b>For Beginners:</b> Softmax converts raw scores (logits) into probabilities that sum to 1.
     /// Temperature scaling modifies this process:
@@ -189,42 +227,49 @@ public class DistillationLoss<T> : DistillationStrategyBase<T, Vector<T>>
     ///
     /// <para>We use the "max subtraction trick" for numerical stability to avoid overflow in exp().</para>
     /// </remarks>
-    private Vector<T> Softmax(Vector<T> logits, double temperature)
+    private Matrix<T> Softmax(Matrix<T> logits, double temperature)
     {
-        int n = logits.Length;
-        var result = new Vector<T>(n);
+        int batchSize = logits.RowCount;
+        int numClasses = logits.ColumnCount;
+        Matrix<T> result = new Matrix<T>(batchSize, numClasses);
 
-        // Divide logits by temperature
-        var scaledLogits = new T[n];
-        for (int i = 0; i < n; i++)
+        for (int r = 0; r < batchSize; r++)
         {
-            double val = Convert.ToDouble(logits[i]) / temperature;
-            scaledLogits[i] = NumOps.FromDouble(val);
-        }
+            // Extract row for processing
+            Vector<T> rowLogits = logits.GetRow(r);
 
-        // Find max for numerical stability (prevents overflow in exp)
-        T maxLogit = scaledLogits[0];
-        for (int i = 1; i < n; i++)
-        {
-            if (NumOps.GreaterThan(scaledLogits[i], maxLogit))
-                maxLogit = scaledLogits[i];
-        }
+            // Divide logits by temperature
+            T[] scaledLogits = new T[numClasses];
+            for (int i = 0; i < numClasses; i++)
+            {
+                double val = Convert.ToDouble(rowLogits[i]) / temperature;
+                scaledLogits[i] = NumOps.FromDouble(val);
+            }
 
-        // Compute exp(logit - max) and sum
-        T sum = NumOps.Zero;
-        var expValues = new T[n];
+            // Find max for numerical stability (prevents overflow in exp)
+            T maxLogit = scaledLogits[0];
+            for (int i = 1; i < numClasses; i++)
+            {
+                if (NumOps.GreaterThan(scaledLogits[i], maxLogit))
+                    maxLogit = scaledLogits[i];
+            }
 
-        for (int i = 0; i < n; i++)
-        {
-            double val = Convert.ToDouble(NumOps.Subtract(scaledLogits[i], maxLogit));
-            expValues[i] = NumOps.FromDouble(Math.Exp(val));
-            sum = NumOps.Add(sum, expValues[i]);
-        }
+            // Compute exp(logit - max) and sum
+            T sum = NumOps.Zero;
+            T[] expValues = new T[numClasses];
 
-        // Normalize to get probabilities
-        for (int i = 0; i < n; i++)
-        {
-            result[i] = NumOps.Divide(expValues[i], sum);
+            for (int i = 0; i < numClasses; i++)
+            {
+                double val = Convert.ToDouble(NumOps.Subtract(scaledLogits[i], maxLogit));
+                expValues[i] = NumOps.FromDouble(Math.Exp(val));
+                sum = NumOps.Add(sum, expValues[i]);
+            }
+
+            // Normalize to get probabilities and set row in result matrix
+            for (int i = 0; i < numClasses; i++)
+            {
+                result[r, i] = NumOps.Divide(expValues[i], sum);
+            }
         }
 
         return result;
@@ -233,9 +278,9 @@ public class DistillationLoss<T> : DistillationStrategyBase<T, Vector<T>>
     /// <summary>
     /// Computes Kullback-Leibler divergence: KL(p || q) = sum(p * log(p / q)).
     /// </summary>
-    /// <param name="p">The "true" distribution (teacher soft predictions).</param>
-    /// <param name="q">The "approximate" distribution (student soft predictions).</param>
-    /// <returns>KL divergence value (always non-negative, 0 when distributions match).</returns>
+    /// <param name="p">The "true" distribution (teacher soft predictions). Shape: [batch_size x num_classes]</param>
+    /// <param name="q">The "approximate" distribution (student soft predictions). Shape: [batch_size x num_classes]</param>
+    /// <returns>Vector of KL divergence values, one for each sample in the batch.</returns>
     /// <remarks>
     /// <para><b>For Beginners:</b> KL divergence measures how different two probability distributions are.
     /// - KL = 0 means the distributions are identical
@@ -244,32 +289,41 @@ public class DistillationLoss<T> : DistillationStrategyBase<T, Vector<T>>
     /// <para>Unlike symmetric distance metrics, KL divergence is asymmetric: KL(p||q) ≠ KL(q||p).
     /// In distillation, we use KL(teacher || student) to make the student match the teacher.</para>
     /// </remarks>
-    private T KLDivergence(Vector<T> p, Vector<T> q)
+    private Vector<T> KLDivergence(Matrix<T> p, Matrix<T> q)
     {
-        T divergence = NumOps.Zero;
-        const double epsilon = 1e-10; // Small value to avoid log(0)
+        int batchSize = p.RowCount;
+        int numClasses = p.ColumnCount;
+        Vector<T> divergences = new Vector<T>(batchSize);
 
-        for (int i = 0; i < p.Length; i++)
+        for (int r = 0; r < batchSize; r++)
         {
-            double pVal = Convert.ToDouble(p[i]);
-            double qVal = Convert.ToDouble(q[i]);
+            T divergence = NumOps.Zero;
+            // Small value to avoid log(0)
+            const double epsilon = Epsilon;
 
-            if (pVal > epsilon) // Only compute where p is non-zero
+            for (int i = 0; i < numClasses; i++)
             {
-                double contrib = pVal * Math.Log(pVal / (qVal + epsilon));
-                divergence = NumOps.Add(divergence, NumOps.FromDouble(contrib));
+                double pVal = Convert.ToDouble(p[r, i]);
+                double qVal = Convert.ToDouble(q[r, i]);
+
+                if (pVal > epsilon) // Only compute where p is non-zero
+                {
+                    double contrib = pVal * Math.Log(pVal / (qVal + epsilon));
+                    divergence = NumOps.Add(divergence, NumOps.FromDouble(contrib));
+                }
             }
+            divergences[r] = divergence;
         }
 
-        return divergence;
+        return divergences;
     }
 
     /// <summary>
     /// Computes cross-entropy loss: H(true_labels, predictions) = -sum(true_labels * log(predictions)).
     /// </summary>
-    /// <param name="predictions">Predicted probability distribution.</param>
-    /// <param name="trueLabels">True labels as one-hot vectors.</param>
-    /// <returns>Cross-entropy loss value.</returns>
+    /// <param name="predictions">Predicted probability distribution. Shape: [batch_size x num_classes]</param>
+    /// <param name="trueLabels">True labels as one-hot vectors. Shape: [batch_size x num_classes]</param>
+    /// <returns>Vector of cross-entropy loss values, one for each sample in the batch.</returns>
     /// <remarks>
     /// <para><b>For Beginners:</b> Cross-entropy measures how well predictions match true labels.
     /// - Lower cross-entropy means better predictions
@@ -279,23 +333,32 @@ public class DistillationLoss<T> : DistillationStrategyBase<T, Vector<T>>
     /// <para>Example: If true label is class 1 (one-hot: [0, 1, 0]) and prediction is [0.1, 0.8, 0.1],
     /// cross-entropy = -log(0.8) ≈ 0.22. If prediction were [0.1, 0.3, 0.6], cross-entropy = -log(0.3) ≈ 1.2 (worse).</para>
     /// </remarks>
-    private T CrossEntropy(Vector<T> predictions, Vector<T> trueLabels)
+    private Vector<T> CrossEntropy(Matrix<T> predictions, Matrix<T> trueLabels)
     {
-        T entropy = NumOps.Zero;
-        const double epsilon = 1e-10; // Small value to avoid log(0)
+        int batchSize = predictions.RowCount;
+        int numClasses = predictions.ColumnCount;
+        Vector<T> entropies = new Vector<T>(batchSize);
 
-        for (int i = 0; i < predictions.Length; i++)
+        for (int r = 0; r < batchSize; r++)
         {
-            double pred = Convert.ToDouble(predictions[i]);
-            double label = Convert.ToDouble(trueLabels[i]);
+            T entropy = NumOps.Zero;
+            // Small value to avoid log(0)
+            const double epsilon = Epsilon;
 
-            if (label > epsilon) // Only compute where label is non-zero
+            for (int i = 0; i < numClasses; i++)
             {
-                double contrib = -label * Math.Log(pred + epsilon);
-                entropy = NumOps.Add(entropy, NumOps.FromDouble(contrib));
+                double pred = Convert.ToDouble(predictions[r, i]);
+                double label = Convert.ToDouble(trueLabels[r, i]);
+
+                if (label > epsilon) // Only compute where label is non-zero
+                {
+                    double contrib = -label * Math.Log(pred + epsilon);
+                    entropy = NumOps.Add(entropy, NumOps.FromDouble(contrib));
+                }
             }
+            entropies[r] = entropy;
         }
 
-        return entropy;
+        return entropies;
     }
 }

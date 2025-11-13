@@ -1,5 +1,6 @@
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
+using AiDotNet.LinearAlgebra;
 
 namespace AiDotNet.KnowledgeDistillation;
 
@@ -8,7 +9,6 @@ namespace AiDotNet.KnowledgeDistillation;
 /// Provides common functionality for computing losses and gradients in student-teacher training.
 /// </summary>
 /// <typeparam name="T">The numeric type for calculations (e.g., double, float).</typeparam>
-/// <typeparam name="TOutput">The output data type (typically Vector&lt;T&gt; or Matrix&lt;T&gt; of logits).</typeparam>
 /// <remarks>
 /// <para><b>For Beginners:</b> A distillation strategy defines how to measure the difference
 /// between student and teacher predictions. This base class provides common functionality that
@@ -24,10 +24,13 @@ namespace AiDotNet.KnowledgeDistillation;
 /// <para>This base class ensures all strategies handle temperature and alpha consistently,
 /// while allowing flexibility in how loss is computed.</para>
 ///
+/// <para><b>Batch Processing:</b> All strategies now operate on batches (Matrix&lt;T&gt;) for efficiency.
+/// Each row in the matrices represents one sample in the batch.</para>
+///
 /// <para><b>Template Method Pattern:</b> The base class defines the structure (properties, validation),
 /// and subclasses implement the specifics (loss computation logic).</para>
 /// </remarks>
-public abstract class DistillationStrategyBase<T, TOutput> : IDistillationStrategy<T, TOutput>
+public abstract class DistillationStrategyBase<T> : IDistillationStrategy<T>
 {
     /// <summary>
     /// Numeric operations for the specified type T.
@@ -101,71 +104,88 @@ public abstract class DistillationStrategyBase<T, TOutput> : IDistillationStrate
     }
 
     /// <summary>
-    /// Computes the distillation loss between student and teacher outputs.
+    /// Computes the distillation loss between student and teacher batch outputs.
     /// </summary>
-    /// <param name="studentOutput">The student model's output (logits).</param>
-    /// <param name="teacherOutput">The teacher model's output (logits).</param>
-    /// <param name="trueLabels">Ground truth labels (optional).</param>
-    /// <returns>The computed distillation loss value.</returns>
+    /// <param name="studentBatchOutput">The student model's output logits for a batch. Shape: [batch_size x num_classes]</param>
+    /// <param name="teacherBatchOutput">The teacher model's output logits for a batch. Shape: [batch_size x num_classes]</param>
+    /// <param name="trueLabelsBatch">Ground truth labels for the batch (optional). Shape: [batch_size x num_classes]</param>
+    /// <returns>The computed distillation loss value (scalar) for the batch.</returns>
     /// <remarks>
     /// <para><b>For Implementers:</b> Override this method to define your strategy's loss computation.
     /// The base class handles temperature and alpha; you focus on the loss calculation logic.</para>
+    ///
+    /// <para><b>Batch Processing:</b> The loss should be computed over all samples in the batch
+    /// and typically averaged. Each row in the input matrices represents one sample.</para>
     /// </remarks>
-    public abstract T ComputeLoss(TOutput studentOutput, TOutput teacherOutput, TOutput? trueLabels = default);
+    public abstract T ComputeLoss(Matrix<T> studentBatchOutput, Matrix<T> teacherBatchOutput, Matrix<T>? trueLabelsBatch = null);
 
     /// <summary>
     /// Computes the gradient of the distillation loss for backpropagation.
     /// </summary>
-    /// <param name="studentOutput">The student model's output (logits).</param>
-    /// <param name="teacherOutput">The teacher model's output (logits).</param>
-    /// <param name="trueLabels">Ground truth labels (optional).</param>
-    /// <returns>The gradient of the loss with respect to student outputs.</returns>
+    /// <param name="studentBatchOutput">The student model's output logits for a batch. Shape: [batch_size x num_classes]</param>
+    /// <param name="teacherBatchOutput">The teacher model's output logits for a batch. Shape: [batch_size x num_classes]</param>
+    /// <param name="trueLabelsBatch">Ground truth labels for the batch (optional). Shape: [batch_size x num_classes]</param>
+    /// <returns>The gradient of the loss with respect to student outputs. Shape: [batch_size x num_classes]</returns>
     /// <remarks>
     /// <para><b>For Implementers:</b> Override this method to compute gradients for your strategy.
     /// The gradient should match the loss computation in ComputeLoss.</para>
+    ///
+    /// <para><b>Batch Processing:</b> Returns a gradient matrix with the same shape as the input,
+    /// one gradient row for each sample in the batch.</para>
     /// </remarks>
-    public abstract TOutput ComputeGradient(TOutput studentOutput, TOutput teacherOutput, TOutput? trueLabels = default);
+    public abstract Matrix<T> ComputeGradient(Matrix<T> studentBatchOutput, Matrix<T> teacherBatchOutput, Matrix<T>? trueLabelsBatch = null);
 
     /// <summary>
-    /// Validates that student and teacher outputs have matching dimensions.
+    /// Validates that student and teacher batch outputs have matching dimensions.
     /// </summary>
-    /// <param name="studentOutput">Student output to validate.</param>
-    /// <param name="teacherOutput">Teacher output to validate.</param>
-    /// <param name="getDimension">Function to extract dimension from output.</param>
+    /// <param name="studentBatchOutput">Student batch output to validate.</param>
+    /// <param name="teacherBatchOutput">Teacher batch output to validate.</param>
+    /// <exception cref="ArgumentNullException">Thrown when outputs are null.</exception>
     /// <exception cref="ArgumentException">Thrown when dimensions don't match.</exception>
-    protected void ValidateOutputDimensions(TOutput studentOutput, TOutput teacherOutput, Func<TOutput, int> getDimension)
+    /// <remarks>
+    /// <para>Checks both batch size (rows) and output dimension (columns) match between student and teacher.</para>
+    /// </remarks>
+    protected void ValidateOutputDimensions(Matrix<T> studentBatchOutput, Matrix<T> teacherBatchOutput)
     {
-        if (studentOutput == null) throw new ArgumentNullException(nameof(studentOutput));
-        if (teacherOutput == null) throw new ArgumentNullException(nameof(teacherOutput));
+        if (studentBatchOutput == null) throw new ArgumentNullException(nameof(studentBatchOutput));
+        if (teacherBatchOutput == null) throw new ArgumentNullException(nameof(teacherBatchOutput));
 
-        int studentDim = getDimension(studentOutput);
-        int teacherDim = getDimension(teacherOutput);
-
-        if (studentDim != teacherDim)
+        if (studentBatchOutput.RowCount != teacherBatchOutput.RowCount)
         {
             throw new ArgumentException(
-                $"Student and teacher output dimensions must match. Student: {studentDim}, Teacher: {teacherDim}");
+                $"Student and teacher batch sizes must match. Student: {studentBatchOutput.RowCount}, Teacher: {teacherBatchOutput.RowCount}");
+        }
+
+        if (studentBatchOutput.ColumnCount != teacherBatchOutput.ColumnCount)
+        {
+            throw new ArgumentException(
+                $"Student and teacher output dimensions must match. Student: {studentBatchOutput.ColumnCount}, Teacher: {teacherBatchOutput.ColumnCount}");
         }
     }
 
     /// <summary>
-    /// Validates that outputs and labels have matching dimensions (if labels are provided).
+    /// Validates that batch outputs and labels have matching dimensions (if labels are provided).
     /// </summary>
-    /// <param name="output">Output to validate.</param>
-    /// <param name="labels">Labels to validate (can be null).</param>
-    /// <param name="getDimension">Function to extract dimension.</param>
+    /// <param name="batchOutput">Batch output to validate.</param>
+    /// <param name="labelsBatch">Labels batch to validate (can be null).</param>
     /// <exception cref="ArgumentException">Thrown when dimensions don't match.</exception>
-    protected void ValidateLabelDimensions(TOutput output, TOutput? labels, Func<TOutput, int> getDimension)
+    /// <remarks>
+    /// <para>If labels are null, validation is skipped (for pure soft distillation without labels).</para>
+    /// </remarks>
+    protected void ValidateLabelDimensions(Matrix<T> batchOutput, Matrix<T>? labelsBatch)
     {
-        if (labels == null) return;
+        if (labelsBatch == null) return;
 
-        int outputDim = getDimension(output);
-        int labelDim = getDimension(labels);
-
-        if (outputDim != labelDim)
+        if (batchOutput.RowCount != labelsBatch.RowCount)
         {
             throw new ArgumentException(
-                $"Output and label dimensions must match. Output: {outputDim}, Labels: {labelDim}");
+                $"Output and label batch sizes must match. Output: {batchOutput.RowCount}, Labels: {labelsBatch.RowCount}");
+        }
+
+        if (batchOutput.ColumnCount != labelsBatch.ColumnCount)
+        {
+            throw new ArgumentException(
+                $"Output and label dimensions must match. Output: {batchOutput.ColumnCount}, Labels: {labelsBatch.ColumnCount}");
         }
     }
 

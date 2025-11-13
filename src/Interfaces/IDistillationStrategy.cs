@@ -49,7 +49,7 @@ public interface IDistillationStrategy<T>
     ///
     /// <para><b>Batch Processing:</b> The loss is typically averaged over all samples in the batch.</para>
     /// </remarks>
-    T ComputeLoss(Matrix<T> studentBatchOutput, Matrix<T> teacherBatchOutput, Matrix<T> trueLabelsBatch = null);
+    T ComputeLoss(Matrix<T> studentBatchOutput, Matrix<T> teacherBatchOutput, Matrix<T>? trueLabelsBatch = null);
 
     /// <summary>
     /// Computes the gradient of the distillation loss for backpropagation.
@@ -69,7 +69,7 @@ public interface IDistillationStrategy<T>
     /// <para><b>Batch Processing:</b> Returns a gradient matrix with the same shape as the input,
     /// one gradient row for each sample in the batch.</para>
     /// </remarks>
-    Matrix<T> ComputeGradient(Matrix<T> studentBatchOutput, Matrix<T> teacherBatchOutput, Matrix<T> trueLabelsBatch = null);
+    Matrix<T> ComputeGradient(Matrix<T> studentBatchOutput, Matrix<T> teacherBatchOutput, Matrix<T>? trueLabelsBatch = null);
 
     /// <summary>
     /// Gets or sets the temperature parameter for softening probability distributions.
