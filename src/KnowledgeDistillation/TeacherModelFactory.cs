@@ -51,7 +51,9 @@ public static class TeacherModelFactory<T>
             TeacherModelType.Adaptive => CreateAdaptiveTeacher(model, outputDimension),
             TeacherModelType.Online => CreateOnlineTeacher(model, outputDimension, onlineUpdateMode, onlineUpdateRate),
             TeacherModelType.Curriculum => CreateCurriculumTeacher(model, outputDimension, curriculumStrategy),
-            TeacherModelType.Self => CreateSelfTeacher(outputDimension ?? 10),
+            TeacherModelType.Self => outputDimension.HasValue
+                ? CreateSelfTeacher(outputDimension.Value)
+                : throw new ArgumentException("Output dimension is required for Self teacher type"),
             TeacherModelType.Quantized => CreateQuantizedTeacher(model, outputDimension, quantizationBits),
             TeacherModelType.Distributed => CreateDistributedTeacher(ensembleModels, aggregationMode),
             _ => throw new ArgumentException($"Unknown teacher type: {teacherType}", nameof(teacherType))
@@ -64,8 +66,10 @@ public static class TeacherModelFactory<T>
     {
         if (model == null)
             throw new ArgumentException("Model is required for NeuralNetwork teacher type");
+        if (!outputDimension.HasValue)
+            throw new ArgumentException("Output dimension is required for NeuralNetwork teacher type");
 
-        return new TeacherModelWrapper<T>(model);
+        return new TeacherModelWrapper<T>(model.Predict, outputDimension.Value);
     }
 
     private static ITeacherModel<Vector<T>, Vector<T>> CreateEnsembleTeacher(
