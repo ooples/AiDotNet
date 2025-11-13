@@ -151,9 +151,16 @@ public static class TeacherModelFactory<T>
             throw new ArgumentException("Output dimension is required for Online teacher type");
 
         // Online teacher needs forward and update functions
+        // Use the model's ApplyGradients for online adaptation
+        var numOps = Helpers.MathHelper.GetNumericOperations<T>();
         return new OnlineTeacherModel<T>(
             model.Predict,
-            (pred, target) => { }, // No-op update for now
+            (pred, target) =>
+            {
+                // Compute gradient from prediction error and apply it
+                var gradients = model.ComputeGradients(pred, target);
+                model.ApplyGradients(gradients, numOps.FromDouble(updateRate));
+            },
             outputDimension.Value,
             updateMode,
             updateRate: updateRate);
