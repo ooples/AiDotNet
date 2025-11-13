@@ -348,17 +348,135 @@ public class A3CAgent<T> : DeepReinforcementLearningAgentBase<T>
         INeuralNetwork<T> localPolicy,
         INeuralNetwork<T> localValue)
     {
-        // TODO: Implement proper A3C gradient computation
-        // Policy gradient should be: ∇θ log π(a|s) * advantage
-        // Value gradient should be: ∇φ (V(s) - return)^2
-        // Current placeholder gradients don't depend on:
-        // - The actual action taken
-        // - The policy network output (logits/mean/std)
-        // - The sampled action probability
-        // This makes learning impossible.
-        throw new NotImplementedException(
-            "A3C requires proper implementation of policy gradient (∇θ log π(a|s) * advantage) " +
-            "and value gradient (derivative of MSE loss).");
+        // Implement A3C gradient computation
+        // Policy gradient: ∇θ log π(a|s) * advantage
+        // Value gradient: ∇φ (V(s) - return)^2
+        
+        for (int i = 0; i < trajectory.Count; i++)
+        {
+            var exp = trajectory[i];
+            var advantage = advantages[i];
+            var targetReturn = returns[i];
+            
+            // Compute policy gradient
+            var policyOutput = localPolicy.Forward(exp.state);
+            var policyGradient = ComputeA3CPolicyGradient(policyOutput, exp.action, advantage);
+            localPolicy.Backward(policyGradient);
+            
+            // Compute value gradient
+            var predictedValue = localValue.Forward(exp.state)[0];
+            var valueDiff = NumOps.Subtract(predictedValue, targetReturn);
+            var valueGradient = new Vector<T>(1);
+            valueGradient[0] = NumOps.Divide(
+                NumOps.Multiply(NumOps.FromDouble(2.0), valueDiff),
+                NumOps.FromDouble(trajectory.Count));
+            localValue.Backward(valueGradient);
+        }
+        
+        // Update global networks with local gradients
+        UpdateNetworkParameters(_policyNetwork, localPolicy, _a3cOptions.PolicyLearningRate);
+        UpdateNetworkParameters(_valueNetwork, localValue, _a3cOptions.ValueLearningRate);
+    }
+
+
+    private Vector<T> ComputeA3CPolicyGradient(Vector<T> policyOutput, Vector<T> action, T advantage)
+    {
+        // A3C uses same policy gradient as A2C: ∇θ log π(a|s) * advantage
+        // Supports both continuous (Gaussian) and discrete (Softmax) policies
+        
+        if (_a3cOptions.ActionSize == policyOutput.Length)
+        {
+            // Discrete action space: softmax policy
+            var softmax = ComputeSoftmax(policyOutput);
+            var selectedAction = GetDiscreteAction(action);
+            
+            var gradient = new Vector<T>(policyOutput.Length);
+            for (int i = 0; i < policyOutput.Length; i++)
+            {
+                var indicator = (i == selectedAction) ? NumOps.One : NumOps.Zero;
+                var grad = NumOps.Subtract(indicator, softmax[i]);
+                gradient[i] = NumOps.Negate(NumOps.Multiply(advantage, grad));
+            }
+            return gradient;
+        }
+        else
+        {
+            // Continuous action space: Gaussian policy
+            int actionDim = policyOutput.Length / 2;
+            var gradient = new Vector<T>(policyOutput.Length);
+            
+            for (int i = 0; i < actionDim; i++)
+            {
+                var mean = policyOutput[i];
+                var logStd = policyOutput[actionDim + i];
+                var std = NumOps.FromDouble(Math.Exp(NumOps.ToDouble(logStd)));
+                var actionDiff = NumOps.Subtract(action[i], mean);
+                var stdSquared = NumOps.Multiply(std, std);
+                
+                // ∇mean = -(a - μ) / σ² * advantage
+                gradient[i] = NumOps.Negate(
+                    NumOps.Multiply(advantage, NumOps.Divide(actionDiff, stdSquared)));
+                
+                // ∇log_std = -((a - μ)² / σ² - 1) * advantage
+                var stdGrad = NumOps.Subtract(
+                    NumOps.Divide(NumOps.Multiply(actionDiff, actionDiff), stdSquared),
+                    NumOps.One);
+                gradient[actionDim + i] = NumOps.Negate(NumOps.Multiply(advantage, stdGrad));
+            }
+            return gradient;
+        }
+    }
+    
+    private Vector<T> ComputeSoftmax(Vector<T> logits)
+    {
+        var max = logits[0];
+        for (int i = 1; i < logits.Length; i++)
+            if (NumOps.ToDouble(logits[i]) > NumOps.ToDouble(max))
+                max = logits[i];
+        
+        var expSum = NumOps.Zero;
+        var exps = new Vector<T>(logits.Length);
+        for (int i = 0; i < logits.Length; i++)
+        {
+            exps[i] = NumOps.FromDouble(Math.Exp(NumOps.ToDouble(NumOps.Subtract(logits[i], max))));
+            expSum = NumOps.Add(expSum, exps[i]);
+        }
+        
+        var softmax = new Vector<T>(logits.Length);
+        for (int i = 0; i < logits.Length; i++)
+            softmax[i] = NumOps.Divide(exps[i], expSum);
+        
+        return softmax;
+    }
+    
+    private int GetDiscreteAction(Vector<T> actionVector)
+    {
+        // Action vector for discrete actions is one-hot encoded
+        int maxIdx = 0;
+        T maxVal = actionVector[0];
+        for (int i = 1; i < actionVector.Length; i++)
+        {
+            if (NumOps.ToDouble(actionVector[i]) > NumOps.ToDouble(maxVal))
+            {
+                maxVal = actionVector[i];
+                maxIdx = i;
+            }
+        }
+        return maxIdx;
+    }
+    
+    private void UpdateNetworkParameters(INeuralNetwork<T> globalNetwork, INeuralNetwork<T> localNetwork, T learningRate)
+    {
+        var globalParams = globalNetwork.GetFlattenedParameters();
+        var localGrads = localNetwork.GetFlattenedGradients();
+        
+        for (int i = 0; i < globalParams.Length; i++)
+        {
+            var update = NumOps.Multiply(learningRate, localGrads[i]);
+            globalParams[i] = NumOps.Subtract(globalParams[i], update);
+        }
+        
+        globalNetwork.UpdateParameters(globalParams);
     }
 
     private void CopyNetworkWeights(INeuralNetwork<T> source, INeuralNetwork<T> target)
