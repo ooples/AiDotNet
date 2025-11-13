@@ -25,33 +25,35 @@ public class SimilarityPreservingStrategy<T> : DistillationStrategyBase<T>
         ValidateOutputDimensions(studentBatchOutput, teacherBatchOutput);
         ValidateLabelDimensions(studentBatchOutput, trueLabelsBatch);
 
-        int batchSize = studentBatchOutput.RowCount;
+        int batchSize = studentBatchOutput.Rows;
         T totalLoss = NumOps.Zero;
 
         for (int r = 0; r < batchSize; r++)
         {
-            Vector<T> studentRow = studentBatchOutput.GetRow(r);
-            Vector<T> teacherRow = teacherBatchOutput.GetRow(r);
-            Vector<T>? labelRow = trueLabelsBatch?.GetRow(r);
+            Vector<T> studentOutput = studentBatchOutput.GetRow(r);
+            Vector<T> teacherOutput = teacherBatchOutput.GetRow(r);
+            Vector<T>? trueLabels = trueLabelsBatch?.GetRow(r);
 
-            var studentSoft = Softmax(studentRow, Temperature);
-            var teacherSoft = Softmax(teacherRow, Temperature);
-            var softLoss = KLDivergence(teacherSoft, studentSoft);
+            var studentSoft = DistillationHelper<T>.Softmax(studentOutput, Temperature);
+            var teacherSoft = DistillationHelper<T>.Softmax(teacherOutput, Temperature);
+            var softLoss = DistillationHelper<T>.KLDivergence(teacherSoft, studentSoft);
             softLoss = NumOps.Multiply(softLoss, NumOps.FromDouble(Temperature * Temperature));
 
-            if (labelRow != null)
+            T sampleLoss;
+            if (trueLabels != null)
             {
-                var studentProbs = Softmax(studentRow, 1.0);
-                var hardLoss = CrossEntropy(studentProbs, labelRow);
-                var sampleLoss = NumOps.Add(
+                var studentProbs = DistillationHelper<T>.Softmax(studentOutput, 1.0);
+                var hardLoss = DistillationHelper<T>.CrossEntropy(studentProbs, trueLabels);
+                sampleLoss = NumOps.Add(
                     NumOps.Multiply(NumOps.FromDouble(Alpha), hardLoss),
                     NumOps.Multiply(NumOps.FromDouble(1.0 - Alpha), softLoss));
-                totalLoss = NumOps.Add(totalLoss, sampleLoss);
             }
             else
             {
-                totalLoss = NumOps.Add(totalLoss, softLoss);
+                sampleLoss = softLoss;
             }
+
+            totalLoss = NumOps.Add(totalLoss, sampleLoss);
         }
 
         return NumOps.Divide(totalLoss, NumOps.FromDouble(batchSize));
@@ -62,78 +64,72 @@ public class SimilarityPreservingStrategy<T> : DistillationStrategyBase<T>
         ValidateOutputDimensions(studentBatchOutput, teacherBatchOutput);
         ValidateLabelDimensions(studentBatchOutput, trueLabelsBatch);
 
-        int batchSize = studentBatchOutput.RowCount;
-        int numClasses = studentBatchOutput.ColumnCount;
-        var gradient = new Matrix<T>(batchSize, numClasses);
+        int batchSize = studentBatchOutput.Rows;
+        int outputDim = studentBatchOutput.Columns;
+        var gradientBatch = new Matrix<T>(batchSize, outputDim);
 
         for (int r = 0; r < batchSize; r++)
         {
-            Vector<T> studentRow = studentBatchOutput.GetRow(r);
-            Vector<T> teacherRow = teacherBatchOutput.GetRow(r);
-            Vector<T>? labelRow = trueLabelsBatch?.GetRow(r);
+            Vector<T> studentOutput = studentBatchOutput.GetRow(r);
+            Vector<T> teacherOutput = teacherBatchOutput.GetRow(r);
+            Vector<T>? trueLabels = trueLabelsBatch?.GetRow(r);
 
-            var studentSoft = Softmax(studentRow, Temperature);
-            var teacherSoft = Softmax(teacherRow, Temperature);
+            var gradient = new Vector<T>(outputDim);
+            var studentSoft = DistillationHelper<T>.Softmax(studentOutput, Temperature);
+            var teacherSoft = DistillationHelper<T>.Softmax(teacherOutput, Temperature);
 
-            for (int c = 0; c < numClasses; c++)
+            for (int i = 0; i < outputDim; i++)
             {
-                var diff = NumOps.Subtract(studentSoft[c], teacherSoft[c]);
-                gradient[r, c] = NumOps.Multiply(diff, NumOps.FromDouble(Temperature * Temperature));
+                var diff = NumOps.Subtract(studentSoft[i], teacherSoft[i]);
+                gradient[i] = NumOps.Multiply(diff, NumOps.FromDouble(Temperature * Temperature));
             }
 
-            if (labelRow != null)
+            if (trueLabels != null)
             {
-                var studentProbs = Softmax(studentRow, 1.0);
+                var studentProbs = DistillationHelper<T>.Softmax(studentOutput, 1.0);
 
-                for (int c = 0; c < numClasses; c++)
+                for (int i = 0; i < outputDim; i++)
                 {
-                    var hardGrad = NumOps.Subtract(studentProbs[c], labelRow[c]);
-                    gradient[r, c] = NumOps.Add(
+                    var hardGrad = NumOps.Subtract(studentProbs[i], trueLabels[i]);
+                    gradient[i] = NumOps.Add(
                         NumOps.Multiply(NumOps.FromDouble(Alpha), hardGrad),
-                        NumOps.Multiply(NumOps.FromDouble(1.0 - Alpha), gradient[r, c]));
+                        NumOps.Multiply(NumOps.FromDouble(1.0 - Alpha), gradient[i]));
                 }
             }
+
+            gradientBatch.SetRow(r, gradient);
         }
 
-        // Average gradients over batch
-        T oneOverBatchSize = NumOps.Divide(NumOps.One, NumOps.FromDouble(batchSize));
-        for (int r = 0; r < batchSize; r++)
-        {
-            for (int c = 0; c < numClasses; c++)
-            {
-                gradient[r, c] = NumOps.Multiply(gradient[r, c], oneOverBatchSize);
-            }
-        }
-
-        return gradient;
+        return gradientBatch;
     }
 
     public T ComputeSimilarityLoss(Vector<T>[] studentEmbeddings, Vector<T>[] teacherEmbeddings)
     {
-        if (studentEmbeddings == null) throw new ArgumentNullException(nameof(studentEmbeddings));
-        if (teacherEmbeddings == null) throw new ArgumentNullException(nameof(teacherEmbeddings));
-
+        if (studentEmbeddings == null || teacherEmbeddings == null)
+            throw new ArgumentNullException("Embeddings cannot be null");
         if (studentEmbeddings.Length != teacherEmbeddings.Length)
+            throw new ArgumentException("Student and teacher must have same batch size");
+        
+        // Validate all vectors have same dimensions
+        if (studentEmbeddings.Length > 0)
         {
-            throw new ArgumentException(
-                $"Student and teacher embedding batches must match. Student: {studentEmbeddings.Length}, Teacher: {teacherEmbeddings.Length}");
-        }
-
-        int n = studentEmbeddings.Length;
-        if (n == 0)
-        {
-            return NumOps.Zero;
-        }
-
-        int expectedDim = studentEmbeddings[0].Length;
-        for (int i = 0; i < n; i++)
-        {
-            if (studentEmbeddings[i].Length != expectedDim || teacherEmbeddings[i].Length != expectedDim)
+            int studentDim = studentEmbeddings[0].Length;
+            int teacherDim = teacherEmbeddings[0].Length;
+            
+            for (int i = 0; i < studentEmbeddings.Length; i++)
             {
-                throw new ArgumentException("All embeddings must share the same dimensionality.");
+                if (studentEmbeddings[i].Length != studentDim)
+                    throw new ArgumentException($"All student embeddings must have same dimension. Expected {studentDim}, got {studentEmbeddings[i].Length} at index {i}");
+                if (teacherEmbeddings[i].Length != teacherDim)
+                    throw new ArgumentException($"All teacher embeddings must have same dimension. Expected {teacherDim}, got {teacherEmbeddings[i].Length} at index {i}");
+                if (studentEmbeddings[i].Length != teacherEmbeddings[i].Length)
+                    throw new ArgumentException($"Student and teacher embeddings must have matching dimensions. Got student={studentEmbeddings[i].Length}, teacher={teacherEmbeddings[i].Length} at index {i}");
+                if (studentEmbeddings[i].Length == 0)
+                    throw new ArgumentException($"Embedding vectors cannot be empty at index {i}");
             }
         }
-
+        
+        int n = studentEmbeddings.Length;
         T totalLoss = NumOps.Zero;
         int pairCount = 0;
 
@@ -167,71 +163,8 @@ public class SimilarityPreservingStrategy<T> : DistillationStrategyBase<T>
         return Convert.ToDouble(dot) / (Math.Sqrt(Convert.ToDouble(norm1)) * Math.Sqrt(Convert.ToDouble(norm2)) + Epsilon);
     }
 
-    private Vector<T> Softmax(Vector<T> logits, double temperature)
-    {
-        int n = logits.Length;
-        var result = new Vector<T>(n);
-        var scaled = new T[n];
 
-        for (int i = 0; i < n; i++)
-            scaled[i] = NumOps.FromDouble(Convert.ToDouble(logits[i]) / temperature);
 
-        T maxLogit = scaled[0];
-        for (int i = 1; i < n; i++)
-            if (NumOps.GreaterThan(scaled[i], maxLogit))
-                maxLogit = scaled[i];
-
-        T sum = NumOps.Zero;
-        var expValues = new T[n];
-
-        for (int i = 0; i < n; i++)
-        {
-            double val = Convert.ToDouble(NumOps.Subtract(scaled[i], maxLogit));
-            expValues[i] = NumOps.FromDouble(Math.Exp(val));
-            sum = NumOps.Add(sum, expValues[i]);
-        }
-
-        for (int i = 0; i < n; i++)
-            result[i] = NumOps.Divide(expValues[i], sum);
-
-        return result;
-    }
-
-    private T KLDivergence(Vector<T> p, Vector<T> q)
-    {
-        T divergence = NumOps.Zero;
-
-        for (int i = 0; i < p.Length; i++)
-        {
-            double pVal = Convert.ToDouble(p[i]);
-            double qVal = Convert.ToDouble(q[i]);
-
-            if (pVal > Epsilon)
-            {
-                double contrib = pVal * Math.Log(pVal / (qVal + Epsilon));
-                divergence = NumOps.Add(divergence, NumOps.FromDouble(contrib));
-            }
-        }
-
-        return divergence;
-    }
-
-    private T CrossEntropy(Vector<T> predictions, Vector<T> trueLabels)
-    {
-        T entropy = NumOps.Zero;
-
-        for (int i = 0; i < predictions.Length; i++)
-        {
-            double pred = Convert.ToDouble(predictions[i]);
-            double label = Convert.ToDouble(trueLabels[i]);
-
-            if (label > Epsilon)
-            {
-                double contrib = -label * Math.Log(pred + Epsilon);
-                entropy = NumOps.Add(entropy, NumOps.FromDouble(contrib));
-            }
-        }
-
-        return entropy;
-    }
 }
+
+

@@ -79,6 +79,14 @@ public class RelationalDistillationStrategy<T> : DistillationStrategyBase<T>
     private readonly int _maxSamplesPerBatch;
     private readonly RelationalDistanceMetric _distanceMetric;
 
+    // Batch accumulation buffers for relational loss computation
+    private readonly List<Vector<T>> _batchStudentOutputs = new();
+    private readonly List<Vector<T>> _batchTeacherOutputs = new();
+    private T _accumulatedRelationalLoss = default!;
+    private Vector<T>? _cachedRelationalGradient = null; // Cached average gradient for amortization
+    private int _samplesSinceRelationalCompute = 0;
+    private int _actualBatchCountForAmortization = 0; // Tracks actual count used for loss computation
+    private readonly int _relationalBatchSize;
 
     /// <summary>
     /// Initializes a new instance of the RelationalDistillationStrategy class.
@@ -139,234 +147,305 @@ public class RelationalDistillationStrategy<T> : DistillationStrategyBase<T>
         _angleWeight = angleWeight;
         _maxSamplesPerBatch = maxSamplesPerBatch;
         _distanceMetric = distanceMetric;
+        _relationalBatchSize = maxSamplesPerBatch;
+        _accumulatedRelationalLoss = NumOps.Zero;
     }
 
-
     /// <summary>
-    /// Computes combined output loss and relational loss for a batch.
+    /// Resets the strategy's internal state, flushing any partial batches and clearing buffers.
     /// </summary>
     /// <remarks>
-    /// <para>This method computes both standard distillation loss and relational loss
-    /// directly on the batch. Relational loss is computed from the entire batch and
-    /// distributed equally across all samples, fixing the previous bug where relational
-    /// loss was applied to the wrong samples.</para>
+    /// <para><b>IMPORTANT:</b> This method MUST be called at epoch boundaries to prevent:
+    /// 1. Partial batches leaking into the next epoch
+    /// 2. Incorrect amortization using configured batch size instead of actual count</para>
+    ///
+    /// <para><b>For Beginners:</b> This cleans up leftover data from the current epoch
+    /// so it doesn't contaminate the next epoch. Think of it as "starting fresh" for each epoch.</para>
+    ///
+    /// <para><b>When to Call:</b>
+    /// - At the end of each training epoch
+    /// - Before evaluation
+    /// - When switching between training and validation data</para>
+    ///
+    /// <para><b>What It Does:</b>
+    /// 1. If there are buffered samples (partial batch), computes final relational loss
+    ///    using actual buffer count (not configured batch size)
+    /// 2. Stores that final loss contribution for amortization
+    /// 3. Clears all accumulation buffers
+    /// 4. Resets counters to initial state</para>
+    ///
+    /// <para><b>Integration with Trainer:</b>
+    /// The trainer should call this method in OnEpochEnd() to ensure proper state management.</para>
+    /// </remarks>
+    public void Reset()
+    {
+        // If there are buffered samples, compute final relational loss and gradient with actual count
+        if (_batchStudentOutputs.Count > 0)
+        {
+            // Compute relational loss for the partial batch
+            _accumulatedRelationalLoss = ComputeRelationalLoss(
+                _batchStudentOutputs.ToArray(),
+                _batchTeacherOutputs.ToArray());
+
+            // Compute average relational gradient for the batch
+            _cachedRelationalGradient = ComputeAverageRelationalGradientForBatch(
+                _batchStudentOutputs.ToArray(),
+                _batchTeacherOutputs.ToArray());
+
+            // Track actual count for proper amortization (not the configured batch size)
+            _actualBatchCountForAmortization = _batchStudentOutputs.Count;
+            _samplesSinceRelationalCompute = 0;
+        }
+        else
+        {
+            // No buffered samples, reset to initial state
+            _accumulatedRelationalLoss = NumOps.Zero;
+            _cachedRelationalGradient = null;
+            _actualBatchCountForAmortization = 0;
+        }
+
+        // Clear all buffers
+        _batchStudentOutputs.Clear();
+        _batchTeacherOutputs.Clear();
+    }
+
+    /// <summary>
+    /// Computes combined output loss and relational loss.
+    /// </summary>
+    /// <remarks>
+    /// <para>This method accumulates student/teacher outputs and computes relational loss
+    /// when a batch is complete. The relational loss is then amortized across subsequent samples.</para>
+    ///
+    /// <para><b>CRITICAL:</b> Call Reset() at epoch boundaries to prevent buffer leakage.</para>
     /// </remarks>
     public override T ComputeLoss(Matrix<T> studentBatchOutput, Matrix<T> teacherBatchOutput, Matrix<T>? trueLabelsBatch = null)
     {
         ValidateOutputDimensions(studentBatchOutput, teacherBatchOutput);
         ValidateLabelDimensions(studentBatchOutput, trueLabelsBatch);
 
-        int batchSize = studentBatchOutput.RowCount;
+        int batchSize = studentBatchOutput.Rows;
         T totalLoss = NumOps.Zero;
 
-        // Compute standard distillation loss for each sample
+        // Collect all batch outputs for relational loss computation
+        var studentOutputs = new Vector<T>[batchSize];
+        var teacherOutputs = new Vector<T>[batchSize];
         for (int r = 0; r < batchSize; r++)
         {
-            Vector<T> studentRow = studentBatchOutput.GetRow(r);
-            Vector<T> teacherRow = teacherBatchOutput.GetRow(r);
-            Vector<T>? labelRow = trueLabelsBatch?.GetRow(r);
+            studentOutputs[r] = studentBatchOutput.GetRow(r);
+            teacherOutputs[r] = teacherBatchOutput.GetRow(r);
+        }
 
-            // Standard distillation loss (soft targets with temperature scaling)
-            var studentSoft = Softmax(studentRow, Temperature);
-            var teacherSoft = Softmax(teacherRow, Temperature);
-            var softLoss = KLDivergence(teacherSoft, studentSoft);
+        // Compute relational loss once for entire batch
+        T relationalLoss = ComputeRelationalLoss(studentOutputs, teacherOutputs);
+
+        // Compute standard loss for each sample and add amortized relational loss
+        for (int r = 0; r < batchSize; r++)
+        {
+            Vector<T> studentOutput = studentOutputs[r];
+            Vector<T> teacherOutput = teacherOutputs[r];
+            Vector<T>? trueLabels = trueLabelsBatch?.GetRow(r);
+
+            // Standard distillation loss
+            var studentSoft = DistillationHelper<T>.Softmax(studentOutput, Temperature);
+            var teacherSoft = DistillationHelper<T>.Softmax(teacherOutput, Temperature);
+            var softLoss = DistillationHelper<T>.KLDivergence(teacherSoft, studentSoft);
             softLoss = NumOps.Multiply(softLoss, NumOps.FromDouble(Temperature * Temperature));
 
-            if (labelRow != null)
+            T baseLoss;
+            if (trueLabels != null)
             {
-                var studentProbs = Softmax(studentRow, 1.0);
-                var hardLoss = CrossEntropy(studentProbs, labelRow);
-                var sampleLoss = NumOps.Add(
-                    NumOps.Multiply(NumOps.FromDouble(Alpha), hardLoss),
-                    NumOps.Multiply(NumOps.FromDouble(1.0 - Alpha), softLoss));
-                totalLoss = NumOps.Add(totalLoss, sampleLoss);
+                var studentProbs = DistillationHelper<T>.Softmax(studentOutput, 1.0);
+                var hardLoss = DistillationHelper<T>.CrossEntropy(studentProbs, trueLabels);
+
+                var alphaT = NumOps.FromDouble(Alpha);
+                var oneMinusAlpha = NumOps.FromDouble(1.0 - Alpha);
+
+                baseLoss = NumOps.Add(
+                    NumOps.Multiply(alphaT, hardLoss),
+                    NumOps.Multiply(oneMinusAlpha, softLoss));
             }
             else
             {
-                totalLoss = NumOps.Add(totalLoss, softLoss);
+                baseLoss = softLoss;
             }
+
+            // Add amortized relational loss
+            T relationalContribution = NumOps.Divide(relationalLoss, NumOps.FromDouble(batchSize));
+            T sampleLoss = NumOps.Add(baseLoss, relationalContribution);
+
+            totalLoss = NumOps.Add(totalLoss, sampleLoss);
         }
 
-        // Compute relational loss for the entire batch
-        var studentEmbeddings = new Vector<T>[batchSize];
-        var teacherEmbeddings = new Vector<T>[batchSize];
-        for (int r = 0; r < batchSize; r++)
-        {
-            studentEmbeddings[r] = studentBatchOutput.GetRow(r);
-            teacherEmbeddings[r] = teacherBatchOutput.GetRow(r);
-        }
-
-        T relationalLoss = ComputeRelationalLoss(studentEmbeddings, teacherEmbeddings);
-
-        // Add relational loss to total (already accounts for batch size internally)
-        totalLoss = NumOps.Add(totalLoss, NumOps.Multiply(relationalLoss, NumOps.FromDouble(batchSize)));
-
-        // Return average loss over batch
         return NumOps.Divide(totalLoss, NumOps.FromDouble(batchSize));
     }
 
     /// <summary>
-    /// Computes gradient of combined output loss and relational loss for a batch.
+    /// Computes gradient of combined output loss and relational loss.
     /// </summary>
     /// <remarks>
     /// <para>The gradient includes both the standard distillation gradient and the relational gradient
-    /// computed from pairwise distances and angular relationships in the batch.</para>
+    /// computed from pairwise distances and angular relationships in the accumulated batch.</para>
     /// </remarks>
     public override Matrix<T> ComputeGradient(Matrix<T> studentBatchOutput, Matrix<T> teacherBatchOutput, Matrix<T>? trueLabelsBatch = null)
     {
         ValidateOutputDimensions(studentBatchOutput, teacherBatchOutput);
         ValidateLabelDimensions(studentBatchOutput, trueLabelsBatch);
 
-        int batchSize = studentBatchOutput.RowCount;
-        int numClasses = studentBatchOutput.ColumnCount;
-        var gradient = new Matrix<T>(batchSize, numClasses);
+        int batchSize = studentBatchOutput.Rows;
+        int outputDim = studentBatchOutput.Columns;
+        var gradientBatch = new Matrix<T>(batchSize, outputDim);
 
-        // Compute standard distillation gradient for each sample
+        // Collect all batch outputs for relational gradient computation
+        var studentOutputs = new Vector<T>[batchSize];
+        var teacherOutputs = new Vector<T>[batchSize];
         for (int r = 0; r < batchSize; r++)
         {
-            Vector<T> studentRow = studentBatchOutput.GetRow(r);
-            Vector<T> teacherRow = teacherBatchOutput.GetRow(r);
-            Vector<T>? labelRow = trueLabelsBatch?.GetRow(r);
+            studentOutputs[r] = studentBatchOutput.GetRow(r);
+            teacherOutputs[r] = teacherBatchOutput.GetRow(r);
+        }
 
-            var studentSoft = Softmax(studentRow, Temperature);
-            var teacherSoft = Softmax(teacherRow, Temperature);
+        // Compute average relational gradient for the batch
+        var avgRelationalGradient = ComputeAverageRelationalGradientForBatch(studentOutputs, teacherOutputs);
 
-            for (int c = 0; c < numClasses; c++)
+        for (int r = 0; r < batchSize; r++)
+        {
+            Vector<T> studentOutput = studentOutputs[r];
+            Vector<T> teacherOutput = teacherOutputs[r];
+            Vector<T>? trueLabels = trueLabelsBatch?.GetRow(r);
+
+            var gradient = new Vector<T>(outputDim);
+
+            // Standard soft gradient
+            var studentSoft = DistillationHelper<T>.Softmax(studentOutput, Temperature);
+            var teacherSoft = DistillationHelper<T>.Softmax(teacherOutput, Temperature);
+
+            for (int i = 0; i < outputDim; i++)
             {
-                var diff = NumOps.Subtract(studentSoft[c], teacherSoft[c]);
-                gradient[r, c] = NumOps.Multiply(diff, NumOps.FromDouble(Temperature * Temperature));
+                var diff = NumOps.Subtract(studentSoft[i], teacherSoft[i]);
+                gradient[i] = NumOps.Multiply(diff, NumOps.FromDouble(Temperature * Temperature));
             }
 
-            if (labelRow != null)
+            // Add hard gradient if labels provided
+            if (trueLabels != null)
             {
-                var studentProbs = Softmax(studentRow, 1.0);
+                var studentProbs = DistillationHelper<T>.Softmax(studentOutput, 1.0);
+                var hardGradient = new Vector<T>(outputDim);
 
-                for (int c = 0; c < numClasses; c++)
+                for (int i = 0; i < outputDim; i++)
                 {
-                    var hardGrad = NumOps.Subtract(studentProbs[c], labelRow[c]);
-                    gradient[r, c] = NumOps.Add(
-                        NumOps.Multiply(NumOps.FromDouble(Alpha), hardGrad),
-                        NumOps.Multiply(NumOps.FromDouble(1.0 - Alpha), gradient[r, c]));
+                    hardGradient[i] = NumOps.Subtract(studentProbs[i], trueLabels[i]);
+                }
+
+                var alphaT = NumOps.FromDouble(Alpha);
+                var oneMinusAlpha = NumOps.FromDouble(1.0 - Alpha);
+
+                for (int i = 0; i < outputDim; i++)
+                {
+                    gradient[i] = NumOps.Add(
+                        NumOps.Multiply(alphaT, hardGradient[i]),
+                        NumOps.Multiply(oneMinusAlpha, gradient[i]));
                 }
             }
-        }
 
-        // Compute relational gradients for the entire batch
-        var studentEmbeddings = new Vector<T>[batchSize];
-        var teacherEmbeddings = new Vector<T>[batchSize];
-        for (int r = 0; r < batchSize; r++)
-        {
-            studentEmbeddings[r] = studentBatchOutput.GetRow(r);
-            teacherEmbeddings[r] = teacherBatchOutput.GetRow(r);
-        }
-
-        // Add relational gradient contribution to each sample
-        var relationalGradients = ComputeBatchRelationalGradients(studentEmbeddings, teacherEmbeddings);
-        for (int r = 0; r < batchSize; r++)
-        {
-            for (int c = 0; c < numClasses; c++)
+            // Add amortized relational gradient
+            for (int i = 0; i < outputDim; i++)
             {
-                gradient[r, c] = NumOps.Add(gradient[r, c], relationalGradients[r][c]);
+                gradient[i] = NumOps.Add(gradient[i], avgRelationalGradient[i]);
             }
+
+            gradientBatch.SetRow(r, gradient);
         }
 
-        // Average gradients over batch
-        T oneOverBatchSize = NumOps.Divide(NumOps.One, NumOps.FromDouble(batchSize));
-        for (int r = 0; r < batchSize; r++)
-        {
-            for (int c = 0; c < numClasses; c++)
-            {
-                gradient[r, c] = NumOps.Multiply(gradient[r, c], oneOverBatchSize);
-            }
-        }
-
-        return gradient;
+        return gradientBatch;
     }
 
     /// <summary>
-    /// Computes relational gradients for all samples in a batch.
+    /// Computes gradient of relational loss with respect to a single student output.
     /// </summary>
-    /// <param name="studentEmbeddings">Student's output embeddings/features for batch.</param>
-    /// <param name="teacherEmbeddings">Teacher's output embeddings/features for batch.</param>
-    /// <returns>Array of gradient vectors, one for each sample in the batch.</returns>
-    private Vector<T>[] ComputeBatchRelationalGradients(Vector<T>[] studentEmbeddings, Vector<T>[] teacherEmbeddings)
+    /// <param name="currentStudentOutput">The current sample's student output.</param>
+    /// <param name="currentTeacherOutput">The current sample's teacher output.</param>
+    /// <param name="batchStudentOutputs">Accumulated batch of student outputs.</param>
+    /// <param name="batchTeacherOutputs">Accumulated batch of teacher outputs.</param>
+    /// <returns>Gradient vector for the current sample.</returns>
+    /// <remarks>
+    /// <para>This computes ∂L_relational/∂studentOutput for all pairs and triplets involving
+    /// the current sample in the batch.</para>
+    /// </remarks>
+    private Vector<T> ComputeRelationalGradient(
+        Vector<T> currentStudentOutput,
+        Vector<T> currentTeacherOutput,
+        List<Vector<T>> batchStudentOutputs,
+        List<Vector<T>> batchTeacherOutputs)
     {
-        int n = studentEmbeddings.Length;
-        if (n == 0)
-            return new Vector<T>[0];
+        int dim = currentStudentOutput.Length;
+        var gradient = new Vector<T>(dim);
 
-        int dim = studentEmbeddings[0].Length;
-        var gradients = new Vector<T>[n];
-
-        // Initialize all gradients to zero
-        for (int i = 0; i < n; i++)
+        // Initialize gradient to zero
+        for (int i = 0; i < dim; i++)
         {
-            gradients[i] = new Vector<T>(dim);
-            for (int d = 0; d < dim; d++)
-            {
-                gradients[i][d] = NumOps.Zero;
-            }
+            gradient[i] = NumOps.Zero;
         }
 
-        if (n < 2)
-            return gradients;
+        if (batchStudentOutputs.Count < 2)
+            return gradient;
 
-        // Compute distance-wise gradients for all pairs
+        int currentIdx = batchStudentOutputs.Count - 1; // Current sample is last in batch
+
+        // Distance-wise gradient: for all pairs involving current sample
         if (_distanceWeight > 0)
         {
-            for (int i = 0; i < n; i++)
+            for (int j = 0; j < batchStudentOutputs.Count - 1; j++)
             {
-                for (int j = 0; j < n; j++)
+                var distGrad = ComputePairwiseDistanceGradient(
+                    currentStudentOutput,
+                    batchStudentOutputs[j],
+                    currentTeacherOutput,
+                    batchTeacherOutputs[j]);
+
+                for (int k = 0; k < dim; k++)
                 {
-                    if (i == j) continue;
-
-                    var distGrad = ComputePairwiseDistanceGradient(
-                        studentEmbeddings[i],
-                        studentEmbeddings[j],
-                        teacherEmbeddings[i],
-                        teacherEmbeddings[j]);
-
-                    for (int d = 0; d < dim; d++)
-                    {
-                        var weighted = NumOps.Multiply(distGrad[d], NumOps.FromDouble(_distanceWeight));
-                        gradients[i][d] = NumOps.Add(gradients[i][d], weighted);
-                    }
+                    var weighted = NumOps.Multiply(distGrad[k], NumOps.FromDouble(_distanceWeight));
+                    gradient[k] = NumOps.Add(gradient[k], weighted);
                 }
             }
         }
 
-        // Compute angle-wise gradients for triplets
-        if (_angleWeight > 0 && n >= 3)
+        // Angle-wise gradient: for triplets involving current sample
+        // (Simplified - only consider a subset of triplets for efficiency)
+        if (_angleWeight > 0 && batchStudentOutputs.Count >= 3)
         {
-            int maxTriplets = Math.Min(10, n);
-            for (int i = 0; i < n; i++)
+            int maxTriplets = Math.Min(10, batchStudentOutputs.Count - 1);
+            for (int t = 0; t < maxTriplets; t++)
             {
-                for (int t = 0; t < maxTriplets; t++)
+                if (t >= batchStudentOutputs.Count - 1)
+                    break;
+
+                int j = t;
+                int k = (t + 1) % (batchStudentOutputs.Count - 1);
+
+                var angleGrad = ComputeTripletAngleGradient(
+                    currentStudentOutput,
+                    batchStudentOutputs[j],
+                    batchStudentOutputs[k],
+                    currentTeacherOutput,
+                    batchTeacherOutputs[j],
+                    batchTeacherOutputs[k]);
+
+                for (int d = 0; d < dim; d++)
                 {
-                    int j = (i + t + 1) % n;
-                    int k = (i + t + 2) % n;
-
-                    if (j == i || k == i || j == k)
-                        continue;
-
-                    var angleGrad = ComputeTripletAngleGradient(
-                        studentEmbeddings[i],
-                        studentEmbeddings[j],
-                        studentEmbeddings[k],
-                        teacherEmbeddings[i],
-                        teacherEmbeddings[j],
-                        teacherEmbeddings[k]);
-
-                    for (int d = 0; d < dim; d++)
-                    {
-                        var weighted = NumOps.Multiply(angleGrad[d], NumOps.FromDouble(_angleWeight));
-                        gradients[i][d] = NumOps.Add(gradients[i][d], weighted);
-                    }
+                    var weighted = NumOps.Multiply(angleGrad[d], NumOps.FromDouble(_angleWeight));
+                    gradient[d] = NumOps.Add(gradient[d], weighted);
                 }
             }
         }
 
-        return gradients;
+        // Normalize by batch size
+        for (int i = 0; i < dim; i++)
+        {
+            gradient[i] = NumOps.Divide(gradient[i], NumOps.FromDouble(batchStudentOutputs.Count));
+        }
+
+        return gradient;
     }
 
     /// <summary>
@@ -451,6 +530,109 @@ public class RelationalDistillationStrategy<T> : DistillationStrategyBase<T>
         return gradient;
     }
 
+    /// <summary>
+    /// Computes the average relational gradient for all samples in a batch.
+    /// </summary>
+    /// <param name="studentEmbeddings">Student's output embeddings/features for batch.</param>
+    /// <param name="teacherEmbeddings">Teacher's output embeddings/features for batch.</param>
+    /// <returns>Average relational gradient vector to be distributed across samples.</returns>
+    /// <remarks>
+    /// <para>This method computes relational gradients for all samples in the batch and averages
+    /// them to produce a single gradient that can be applied to subsequent samples receiving the
+    /// amortized relational loss. This ensures gradient-loss consistency.</para>
+    /// </remarks>
+    private Vector<T> ComputeAverageRelationalGradientForBatch(Vector<T>[] studentEmbeddings, Vector<T>[] teacherEmbeddings)
+    {
+        if (studentEmbeddings.Length == 0 || teacherEmbeddings.Length == 0)
+        {
+            int dimension = studentEmbeddings.Length > 0 ? studentEmbeddings[0].Length :
+                     (teacherEmbeddings.Length > 0 ? teacherEmbeddings[0].Length : 0);
+            return new Vector<T>(dimension);
+        }
+
+        int n = studentEmbeddings.Length;
+        int dim = studentEmbeddings[0].Length;
+        var sumGradient = new Vector<T>(dim);
+
+        // Initialize to zero
+        for (int i = 0; i < dim; i++)
+        {
+            sumGradient[i] = NumOps.Zero;
+        }
+
+        // Compute gradient for each sample in the batch and accumulate
+        for (int sampleIdx = 0; sampleIdx < n; sampleIdx++)
+        {
+            var sampleGrad = new Vector<T>(dim);
+            for (int i = 0; i < dim; i++)
+            {
+                sampleGrad[i] = NumOps.Zero;
+            }
+
+            // Distance-wise gradient: for all pairs involving this sample
+            if (_distanceWeight > 0)
+            {
+                for (int j = 0; j < n; j++)
+                {
+                    if (j == sampleIdx) continue;
+
+                    var distGrad = ComputePairwiseDistanceGradient(
+                        studentEmbeddings[sampleIdx],
+                        studentEmbeddings[j],
+                        teacherEmbeddings[sampleIdx],
+                        teacherEmbeddings[j]);
+
+                    for (int k = 0; k < dim; k++)
+                    {
+                        var weighted = NumOps.Multiply(distGrad[k], NumOps.FromDouble(_distanceWeight));
+                        sampleGrad[k] = NumOps.Add(sampleGrad[k], weighted);
+                    }
+                }
+            }
+
+            // Angle-wise gradient: for triplets involving this sample
+            if (_angleWeight > 0 && n >= 3)
+            {
+                int maxTriplets = Math.Min(10, n - 1);
+                for (int t = 0; t < maxTriplets; t++)
+                {
+                    int j = (sampleIdx + t + 1) % n;
+                    int k = (sampleIdx + t + 2) % n;
+
+                    if (j == sampleIdx || k == sampleIdx || j == k)
+                        continue;
+
+                    var angleGrad = ComputeTripletAngleGradient(
+                        studentEmbeddings[sampleIdx],
+                        studentEmbeddings[j],
+                        studentEmbeddings[k],
+                        teacherEmbeddings[sampleIdx],
+                        teacherEmbeddings[j],
+                        teacherEmbeddings[k]);
+
+                    for (int d = 0; d < dim; d++)
+                    {
+                        var weighted = NumOps.Multiply(angleGrad[d], NumOps.FromDouble(_angleWeight));
+                        sampleGrad[d] = NumOps.Add(sampleGrad[d], weighted);
+                    }
+                }
+            }
+
+            // Add this sample's gradient to the sum
+            for (int i = 0; i < dim; i++)
+            {
+                sumGradient[i] = NumOps.Add(sumGradient[i], sampleGrad[i]);
+            }
+        }
+
+        // Average across all samples
+        for (int i = 0; i < dim; i++)
+        {
+            sumGradient[i] = NumOps.Divide(sumGradient[i], NumOps.FromDouble(n));
+        }
+
+        return sumGradient;
+    }
 
     /// <summary>
     /// Computes relational knowledge distillation loss for a batch of samples.
@@ -484,6 +666,25 @@ public class RelationalDistillationStrategy<T> : DistillationStrategyBase<T>
             throw new ArgumentException("Student and teacher must have same number of samples");
         if (studentEmbeddings.Length < 2)
             return NumOps.Zero; // Need at least 2 samples for relations
+
+        // Validate all vectors have same dimensions
+        if (studentEmbeddings.Length > 0)
+        {
+            int studentDim = studentEmbeddings[0].Length;
+            int teacherDim = teacherEmbeddings[0].Length;
+            
+            for (int i = 0; i < studentEmbeddings.Length; i++)
+            {
+                if (studentEmbeddings[i].Length != studentDim)
+                    throw new ArgumentException($"All student embeddings must have same dimension. Expected {studentDim}, got {studentEmbeddings[i].Length} at index {i}");
+                if (teacherEmbeddings[i].Length != teacherDim)
+                    throw new ArgumentException($"All teacher embeddings must have same dimension. Expected {teacherDim}, got {teacherEmbeddings[i].Length} at index {i}");
+                if (studentEmbeddings[i].Length != teacherEmbeddings[i].Length)
+                    throw new ArgumentException($"Student and teacher embeddings must have matching dimensions. Got student={studentEmbeddings[i].Length}, teacher={teacherEmbeddings[i].Length} at index {i}");
+                if (studentEmbeddings[i].Length == 0)
+                    throw new ArgumentException($"Embedding vectors cannot be empty at index {i}");
+            }
+        }
 
         int n = Math.Min(studentEmbeddings.Length, _maxSamplesPerBatch);
         T totalLoss = NumOps.Zero;
@@ -697,79 +898,8 @@ public class RelationalDistillationStrategy<T> : DistillationStrategyBase<T>
         return NumOps.FromDouble(Math.Sqrt(Convert.ToDouble(sum)));
     }
 
-    private Vector<T> Softmax(Vector<T> logits, double temperature)
-    {
-        int n = logits.Length;
-        var result = new Vector<T>(n);
 
-        var scaledLogits = new T[n];
-        for (int i = 0; i < n; i++)
-        {
-            scaledLogits[i] = NumOps.FromDouble(Convert.ToDouble(logits[i]) / temperature);
-        }
 
-        T maxLogit = scaledLogits[0];
-        for (int i = 1; i < n; i++)
-        {
-            if (NumOps.GreaterThan(scaledLogits[i], maxLogit))
-                maxLogit = scaledLogits[i];
-        }
-
-        T sum = NumOps.Zero;
-        var expValues = new T[n];
-
-        for (int i = 0; i < n; i++)
-        {
-            double val = Convert.ToDouble(NumOps.Subtract(scaledLogits[i], maxLogit));
-            expValues[i] = NumOps.FromDouble(Math.Exp(val));
-            sum = NumOps.Add(sum, expValues[i]);
-        }
-
-        for (int i = 0; i < n; i++)
-        {
-            result[i] = NumOps.Divide(expValues[i], sum);
-        }
-
-        return result;
-    }
-
-    private T KLDivergence(Vector<T> p, Vector<T> q)
-    {
-        T divergence = NumOps.Zero;
-
-        for (int i = 0; i < p.Length; i++)
-        {
-            double pVal = Convert.ToDouble(p[i]);
-            double qVal = Convert.ToDouble(q[i]);
-
-            if (pVal > Epsilon)
-            {
-                double contrib = pVal * Math.Log(pVal / (qVal + Epsilon));
-                divergence = NumOps.Add(divergence, NumOps.FromDouble(contrib));
-            }
-        }
-
-        return divergence;
-    }
-
-    private T CrossEntropy(Vector<T> predictions, Vector<T> trueLabels)
-    {
-        T entropy = NumOps.Zero;
-
-        for (int i = 0; i < predictions.Length; i++)
-        {
-            double pred = Convert.ToDouble(predictions[i]);
-            double label = Convert.ToDouble(trueLabels[i]);
-
-            if (label > Epsilon)
-            {
-                double contrib = -label * Math.Log(pred + Epsilon);
-                entropy = NumOps.Add(entropy, NumOps.FromDouble(contrib));
-            }
-        }
-
-        return entropy;
-    }
 }
 
 /// <summary>
@@ -792,3 +922,5 @@ public enum RelationalDistanceMetric
     /// </summary>
     Manhattan
 }
+
+

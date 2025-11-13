@@ -74,15 +74,16 @@ public class HybridDistillationStrategy<T> : DistillationStrategyBase<T>
     /// <summary>
     /// Computes combined loss from all strategies.
     /// </summary>
-    public override T ComputeLoss(Vector<T> studentOutput, Vector<T> teacherOutput, Vector<T>? trueLabels = null)
+    public override T ComputeLoss(Matrix<T> studentBatchOutput, Matrix<T> teacherBatchOutput, Matrix<T>? trueLabelsBatch = null)
     {
-        ValidateOutputDimensions(studentOutput, teacherOutput, v => v.Length);
+        ValidateOutputDimensions(studentBatchOutput, teacherBatchOutput);
+        ValidateLabelDimensions(studentBatchOutput, trueLabelsBatch);
 
         T totalLoss = NumOps.Zero;
 
         foreach (var (strategy, weight) in _strategies)
         {
-            T strategyLoss = strategy.ComputeLoss(studentOutput, teacherOutput, trueLabels);
+            T strategyLoss = strategy.ComputeLoss(studentBatchOutput, teacherBatchOutput, trueLabelsBatch);
             T weightedLoss = NumOps.Multiply(strategyLoss, NumOps.FromDouble(weight));
             totalLoss = NumOps.Add(totalLoss, weightedLoss);
         }
@@ -93,27 +94,35 @@ public class HybridDistillationStrategy<T> : DistillationStrategyBase<T>
     /// <summary>
     /// Computes combined gradient from all strategies.
     /// </summary>
-    public override Vector<T> ComputeGradient(Vector<T> studentOutput, Vector<T> teacherOutput, Vector<T>? trueLabels = null)
+    public override Matrix<T> ComputeGradient(Matrix<T> studentBatchOutput, Matrix<T> teacherBatchOutput, Matrix<T>? trueLabelsBatch = null)
     {
-        ValidateOutputDimensions(studentOutput, teacherOutput, v => v.Length);
+        ValidateOutputDimensions(studentBatchOutput, teacherBatchOutput);
+        ValidateLabelDimensions(studentBatchOutput, trueLabelsBatch);
 
-        int n = studentOutput.Length;
-        var totalGradient = new Vector<T>(n);
+        int batchSize = studentBatchOutput.Rows;
+        int outputDim = studentBatchOutput.Columns;
+        var totalGradient = new Matrix<T>(batchSize, outputDim);
 
         // Initialize to zero
-        for (int i = 0; i < n; i++)
+        for (int r = 0; r < batchSize; r++)
         {
-            totalGradient[i] = NumOps.Zero;
+            for (int c = 0; c < outputDim; c++)
+            {
+                totalGradient[r, c] = NumOps.Zero;
+            }
         }
 
         foreach (var (strategy, weight) in _strategies)
         {
-            var strategyGradient = strategy.ComputeGradient(studentOutput, teacherOutput, trueLabels);
+            var strategyGradient = strategy.ComputeGradient(studentBatchOutput, teacherBatchOutput, trueLabelsBatch);
 
-            for (int i = 0; i < n; i++)
+            for (int r = 0; r < batchSize; r++)
             {
-                T weightedGrad = NumOps.Multiply(strategyGradient[i], NumOps.FromDouble(weight));
-                totalGradient[i] = NumOps.Add(totalGradient[i], weightedGrad);
+                for (int c = 0; c < outputDim; c++)
+                {
+                    T weightedGrad = NumOps.Multiply(strategyGradient[r, c], NumOps.FromDouble(weight));
+                    totalGradient[r, c] = NumOps.Add(totalGradient[r, c], weightedGrad);
+                }
             }
         }
 

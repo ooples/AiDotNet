@@ -102,7 +102,7 @@ public class SelfDistillationTrainer<T> : KnowledgeDistillationTrainerBase<T, Ve
     /// </para>
     /// </remarks>
     public SelfDistillationTrainer(
-        IDistillationStrategy<T, Vector<T>> distillationStrategy,
+        IDistillationStrategy<T> distillationStrategy,
         int generations = 1,
         int? seed = null)
         : base(new SelfTeacherModelPlaceholder<T>(), distillationStrategy, checkpointConfig: null, seed: seed)

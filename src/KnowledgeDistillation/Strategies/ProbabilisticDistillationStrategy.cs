@@ -52,82 +52,107 @@ public class ProbabilisticDistillationStrategy<T> : DistillationStrategyBase<T>
         _mmdBandwidth = mmdBandwidth;
     }
 
-    public override T ComputeLoss(Vector<T> studentOutput, Vector<T> teacherOutput, Vector<T>? trueLabels = null)
+    public override T ComputeLoss(Matrix<T> studentBatchOutput, Matrix<T> teacherBatchOutput, Matrix<T>? trueLabelsBatch = null)
     {
-        ValidateOutputDimensions(studentOutput, teacherOutput, v => v.Length);
+        ValidateOutputDimensions(studentBatchOutput, teacherBatchOutput);
+        ValidateLabelDimensions(studentBatchOutput, trueLabelsBatch);
 
-        // Standard distillation loss
-        var studentSoft = Softmax(studentOutput, Temperature);
-        var teacherSoft = Softmax(teacherOutput, Temperature);
-        var softLoss = KLDivergence(teacherSoft, studentSoft);
-        softLoss = NumOps.Multiply(softLoss, NumOps.FromDouble(Temperature * Temperature));
+        int batchSize = studentBatchOutput.Rows;
+        T totalLoss = NumOps.Zero;
 
-        T finalLoss;
-        if (trueLabels != null)
+        for (int r = 0; r < batchSize; r++)
         {
-            ValidateLabelDimensions(studentOutput, trueLabels, v => v.Length);
-            var studentProbs = Softmax(studentOutput, 1.0);
-            var hardLoss = CrossEntropy(studentProbs, trueLabels);
-            finalLoss = NumOps.Add(
-                NumOps.Multiply(NumOps.FromDouble(Alpha), hardLoss),
-                NumOps.Multiply(NumOps.FromDouble(1.0 - Alpha), softLoss));
-        }
-        else
-        {
-            finalLoss = softLoss;
+            Vector<T> studentOutput = studentBatchOutput.GetRow(r);
+            Vector<T> teacherOutput = teacherBatchOutput.GetRow(r);
+            Vector<T>? trueLabels = trueLabelsBatch?.GetRow(r);
+
+            // Standard distillation loss
+            var studentSoft = DistillationHelper<T>.Softmax(studentOutput, Temperature);
+            var teacherSoft = DistillationHelper<T>.Softmax(teacherOutput, Temperature);
+            var softLoss = DistillationHelper<T>.KLDivergence(teacherSoft, studentSoft);
+            softLoss = NumOps.Multiply(softLoss, NumOps.FromDouble(Temperature * Temperature));
+
+            T sampleLoss;
+            if (trueLabels != null)
+            {
+                var studentProbs = DistillationHelper<T>.Softmax(studentOutput, 1.0);
+                var hardLoss = DistillationHelper<T>.CrossEntropy(studentProbs, trueLabels);
+                sampleLoss = NumOps.Add(
+                    NumOps.Multiply(NumOps.FromDouble(Alpha), hardLoss),
+                    NumOps.Multiply(NumOps.FromDouble(1.0 - Alpha), softLoss));
+            }
+            else
+            {
+                sampleLoss = softLoss;
+            }
+
+            // Apply distribution weight reduction exactly once
+            sampleLoss = NumOps.Multiply(sampleLoss, NumOps.FromDouble(1.0 - _distributionWeight));
+            totalLoss = NumOps.Add(totalLoss, sampleLoss);
         }
 
-        // Apply distribution weight reduction exactly once
-        return NumOps.Multiply(finalLoss, NumOps.FromDouble(1.0 - _distributionWeight));
+        return NumOps.Divide(totalLoss, NumOps.FromDouble(batchSize));
     }
 
-    public override Vector<T> ComputeGradient(Vector<T> studentOutput, Vector<T> teacherOutput, Vector<T>? trueLabels = null)
+    public override Matrix<T> ComputeGradient(Matrix<T> studentBatchOutput, Matrix<T> teacherBatchOutput, Matrix<T>? trueLabelsBatch = null)
     {
-        ValidateOutputDimensions(studentOutput, teacherOutput, v => v.Length);
+        ValidateOutputDimensions(studentBatchOutput, teacherBatchOutput);
+        ValidateLabelDimensions(studentBatchOutput, trueLabelsBatch);
 
-        int n = studentOutput.Length;
-        var gradient = new Vector<T>(n);
+        int batchSize = studentBatchOutput.Rows;
+        int outputDim = studentBatchOutput.Columns;
+        var gradientBatch = new Matrix<T>(batchSize, outputDim);
 
-        var studentSoft = Softmax(studentOutput, Temperature);
-        var teacherSoft = Softmax(teacherOutput, Temperature);
-
-        if (trueLabels != null)
+        for (int r = 0; r < batchSize; r++)
         {
-            ValidateLabelDimensions(studentOutput, trueLabels, v => v.Length);
-            var studentProbs = Softmax(studentOutput, 1.0);
+            Vector<T> studentOutput = studentBatchOutput.GetRow(r);
+            Vector<T> teacherOutput = teacherBatchOutput.GetRow(r);
+            Vector<T>? trueLabels = trueLabelsBatch?.GetRow(r);
 
-            for (int i = 0; i < n; i++)
+            var gradient = new Vector<T>(outputDim);
+
+            var studentSoft = DistillationHelper<T>.Softmax(studentOutput, Temperature);
+            var teacherSoft = DistillationHelper<T>.Softmax(teacherOutput, Temperature);
+
+            if (trueLabels != null)
             {
-                // Soft gradient (temperature-scaled)
-                var softGrad = NumOps.Subtract(studentSoft[i], teacherSoft[i]);
-                softGrad = NumOps.Multiply(softGrad, NumOps.FromDouble(Temperature * Temperature));
+                var studentProbs = DistillationHelper<T>.Softmax(studentOutput, 1.0);
 
-                // Hard gradient
-                var hardGrad = NumOps.Subtract(studentProbs[i], trueLabels[i]);
+                for (int i = 0; i < outputDim; i++)
+                {
+                    // Soft gradient (temperature-scaled)
+                    var softGrad = NumOps.Subtract(studentSoft[i], teacherSoft[i]);
+                    softGrad = NumOps.Multiply(softGrad, NumOps.FromDouble(Temperature * Temperature));
 
-                // Combined gradient: Alpha * hardGrad + (1 - Alpha) * softGrad
-                var combined = NumOps.Add(
-                    NumOps.Multiply(NumOps.FromDouble(Alpha), hardGrad),
-                    NumOps.Multiply(NumOps.FromDouble(1.0 - Alpha), softGrad));
+                    // Hard gradient
+                    var hardGrad = NumOps.Subtract(studentProbs[i], trueLabels[i]);
 
-                // Apply distribution weight reduction exactly once
-                gradient[i] = NumOps.Multiply(combined, NumOps.FromDouble(1.0 - _distributionWeight));
+                    // Combined gradient: Alpha * hardGrad + (1 - Alpha) * softGrad
+                    var combined = NumOps.Add(
+                        NumOps.Multiply(NumOps.FromDouble(Alpha), hardGrad),
+                        NumOps.Multiply(NumOps.FromDouble(1.0 - Alpha), softGrad));
+
+                    // Apply distribution weight reduction exactly once
+                    gradient[i] = NumOps.Multiply(combined, NumOps.FromDouble(1.0 - _distributionWeight));
+                }
             }
-        }
-        else
-        {
-            for (int i = 0; i < n; i++)
+            else
             {
-                // Soft gradient (temperature-scaled)
-                var softGrad = NumOps.Subtract(studentSoft[i], teacherSoft[i]);
-                softGrad = NumOps.Multiply(softGrad, NumOps.FromDouble(Temperature * Temperature));
+                for (int i = 0; i < outputDim; i++)
+                {
+                    // Soft gradient (temperature-scaled)
+                    var softGrad = NumOps.Subtract(studentSoft[i], teacherSoft[i]);
+                    softGrad = NumOps.Multiply(softGrad, NumOps.FromDouble(Temperature * Temperature));
 
-                // Apply distribution weight reduction exactly once
-                gradient[i] = NumOps.Multiply(softGrad, NumOps.FromDouble(1.0 - _distributionWeight));
+                    // Apply distribution weight reduction exactly once
+                    gradient[i] = NumOps.Multiply(softGrad, NumOps.FromDouble(1.0 - _distributionWeight));
+                }
             }
+
+            gradientBatch.SetRow(r, gradient);
         }
 
-        return gradient;
+        return gradientBatch;
     }
 
     /// <summary>
@@ -200,23 +225,7 @@ public class ProbabilisticDistillationStrategy<T> : DistillationStrategyBase<T>
         // MMD² = E[k(x,x')] - 2E[k(x,y)] + E[k(y,y')]
         // where x~student, y~teacher
 
-        if (studentPredictions == null) throw new ArgumentNullException(nameof(studentPredictions));
-        if (teacherPredictions == null) throw new ArgumentNullException(nameof(teacherPredictions));
-        if (studentPredictions.Length != teacherPredictions.Length)
-            throw new ArgumentException($"Prediction batch size mismatch: student={studentPredictions.Length}, teacher={teacherPredictions.Length}");
-        
         int n = studentPredictions.Length;
-        if (n > 0)
-        {
-            int expectedDim = studentPredictions[0].Length;
-            for (int i = 0; i < n; i++)
-            {
-                if (studentPredictions[i].Length != expectedDim)
-                    throw new ArgumentException($"Student prediction dimension mismatch at index {i}");
-                if (teacherPredictions[i].Length != expectedDim)
-                    throw new ArgumentException($"Teacher prediction dimension mismatch at index {i}");
-            }
-        }
 
         // E[k(x,x')] - student vs student
         T studentKernel = ComputeAverageKernel(studentPredictions, studentPredictions);
@@ -350,61 +359,8 @@ public class ProbabilisticDistillationStrategy<T> : DistillationStrategyBase<T>
         return entropy;
     }
 
-    private Vector<T> Softmax(Vector<T> logits, double temperature)
-    {
-        int n = logits.Length;
-        var result = new Vector<T>(n);
-        var scaled = new T[n];
 
-        for (int i = 0; i < n; i++)
-            scaled[i] = NumOps.FromDouble(Convert.ToDouble(logits[i]) / temperature);
 
-        T maxLogit = scaled[0];
-        for (int i = 1; i < n; i++)
-            if (NumOps.GreaterThan(scaled[i], maxLogit))
-                maxLogit = scaled[i];
-
-        T sum = NumOps.Zero;
-        var expValues = new T[n];
-
-        for (int i = 0; i < n; i++)
-        {
-            double val = Convert.ToDouble(NumOps.Subtract(scaled[i], maxLogit));
-            expValues[i] = NumOps.FromDouble(Math.Exp(val));
-            sum = NumOps.Add(sum, expValues[i]);
-        }
-
-        for (int i = 0; i < n; i++)
-            result[i] = NumOps.Divide(expValues[i], sum);
-
-        return result;
-    }
-
-    private T KLDivergence(Vector<T> p, Vector<T> q)
-    {
-        T divergence = NumOps.Zero;
-        for (int i = 0; i < p.Length; i++)
-        {
-            double pVal = Convert.ToDouble(p[i]);
-            double qVal = Convert.ToDouble(q[i]);
-            if (pVal > Epsilon)
-                divergence = NumOps.Add(divergence, NumOps.FromDouble(pVal * Math.Log(pVal / (qVal + Epsilon))));
-        }
-        return divergence;
-    }
-
-    private T CrossEntropy(Vector<T> predictions, Vector<T> trueLabels)
-    {
-        T entropy = NumOps.Zero;
-        for (int i = 0; i < predictions.Length; i++)
-        {
-            double pred = Convert.ToDouble(predictions[i]);
-            double label = Convert.ToDouble(trueLabels[i]);
-            if (label > Epsilon)
-                entropy = NumOps.Add(entropy, NumOps.FromDouble(-label * Math.Log(pred + Epsilon)));
-        }
-        return entropy;
-    }
 }
 
 public enum ProbabilisticMode
@@ -424,3 +380,5 @@ public enum ProbabilisticMode
     /// </summary>
     EntropyTransfer
 }
+
+

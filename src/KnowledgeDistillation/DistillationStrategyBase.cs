@@ -150,16 +150,16 @@ public abstract class DistillationStrategyBase<T> : IDistillationStrategy<T>
         if (studentBatchOutput == null) throw new ArgumentNullException(nameof(studentBatchOutput));
         if (teacherBatchOutput == null) throw new ArgumentNullException(nameof(teacherBatchOutput));
 
-        if (studentBatchOutput.RowCount != teacherBatchOutput.RowCount)
+        if (studentBatchOutput.Rows != teacherBatchOutput.Rows)
         {
             throw new ArgumentException(
-                $"Student and teacher batch sizes must match. Student: {studentBatchOutput.RowCount}, Teacher: {teacherBatchOutput.RowCount}");
+                $"Student and teacher batch sizes must match. Student: {studentBatchOutput.Rows}, Teacher: {teacherBatchOutput.Rows}");
         }
 
-        if (studentBatchOutput.ColumnCount != teacherBatchOutput.ColumnCount)
+        if (studentBatchOutput.Columns != teacherBatchOutput.Columns)
         {
             throw new ArgumentException(
-                $"Student and teacher output dimensions must match. Student: {studentBatchOutput.ColumnCount}, Teacher: {teacherBatchOutput.ColumnCount}");
+                $"Student and teacher output dimensions must match. Student: {studentBatchOutput.Columns}, Teacher: {teacherBatchOutput.Columns}");
         }
     }
 
@@ -176,16 +176,16 @@ public abstract class DistillationStrategyBase<T> : IDistillationStrategy<T>
     {
         if (labelsBatch == null) return;
 
-        if (batchOutput.RowCount != labelsBatch.RowCount)
+        if (batchOutput.Rows != labelsBatch.Rows)
         {
             throw new ArgumentException(
-                $"Output and label batch sizes must match. Output: {batchOutput.RowCount}, Labels: {labelsBatch.RowCount}");
+                $"Output and label batch sizes must match. Output: {batchOutput.Rows}, Labels: {labelsBatch.Rows}");
         }
 
-        if (batchOutput.ColumnCount != labelsBatch.ColumnCount)
+        if (batchOutput.Columns != labelsBatch.Columns)
         {
             throw new ArgumentException(
-                $"Output and label dimensions must match. Output: {batchOutput.ColumnCount}, Labels: {labelsBatch.ColumnCount}");
+                $"Output and label dimensions must match. Output: {batchOutput.Columns}, Labels: {labelsBatch.Columns}");
         }
     }
 

@@ -82,7 +82,7 @@ public class DistillationLoss<T> : DistillationStrategyBase<T>
         ValidateOutputDimensions(studentBatchOutput, teacherBatchOutput);
         ValidateLabelDimensions(studentBatchOutput, trueLabelsBatch);
 
-        int batchSize = studentBatchOutput.RowCount;
+        int batchSize = studentBatchOutput.Rows;
 
         // Compute soft loss: KL divergence between temperature-scaled distributions
         Matrix<T> studentSoft = Softmax(studentBatchOutput, Temperature);
@@ -149,8 +149,8 @@ public class DistillationLoss<T> : DistillationStrategyBase<T>
         ValidateOutputDimensions(studentBatchOutput, teacherBatchOutput);
         ValidateLabelDimensions(studentBatchOutput, trueLabelsBatch);
 
-        int batchSize = studentBatchOutput.RowCount;
-        int numClasses = studentBatchOutput.ColumnCount;
+        int batchSize = studentBatchOutput.Rows;
+        int numClasses = studentBatchOutput.Columns;
 
         Matrix<T> gradient = new Matrix<T>(batchSize, numClasses);
 
@@ -229,8 +229,8 @@ public class DistillationLoss<T> : DistillationStrategyBase<T>
     /// </remarks>
     private Matrix<T> Softmax(Matrix<T> logits, double temperature)
     {
-        int batchSize = logits.RowCount;
-        int numClasses = logits.ColumnCount;
+        int batchSize = logits.Rows;
+        int numClasses = logits.Columns;
         Matrix<T> result = new Matrix<T>(batchSize, numClasses);
 
         for (int r = 0; r < batchSize; r++)
@@ -291,8 +291,8 @@ public class DistillationLoss<T> : DistillationStrategyBase<T>
     /// </remarks>
     private Vector<T> KLDivergence(Matrix<T> p, Matrix<T> q)
     {
-        int batchSize = p.RowCount;
-        int numClasses = p.ColumnCount;
+        int batchSize = p.Rows;
+        int numClasses = p.Columns;
         Vector<T> divergences = new Vector<T>(batchSize);
 
         for (int r = 0; r < batchSize; r++)
@@ -335,8 +335,8 @@ public class DistillationLoss<T> : DistillationStrategyBase<T>
     /// </remarks>
     private Vector<T> CrossEntropy(Matrix<T> predictions, Matrix<T> trueLabels)
     {
-        int batchSize = predictions.RowCount;
-        int numClasses = predictions.ColumnCount;
+        int batchSize = predictions.Rows;
+        int numClasses = predictions.Columns;
         Vector<T> entropies = new Vector<T>(batchSize);
 
         for (int r = 0; r < batchSize; r++)

@@ -122,10 +122,10 @@ public class AttentionDistillationStrategy<T> : DistillationStrategyBase<T>
     /// <summary>
     /// Computes combined distillation loss (output loss + attention loss).
     /// </summary>
-    /// <param name="studentOutput">Student's output logits.</param>
-    /// <param name="teacherOutput">Teacher's output logits.</param>
-    /// <param name="trueLabels">Optional ground truth labels.</param>
-    /// <returns>Combined loss value.</returns>
+    /// <param name="studentBatchOutput">Student batch output [batchSize x outputDim].</param>
+    /// <param name="teacherBatchOutput">Teacher batch output [batchSize x outputDim].</param>
+    /// <param name="trueLabelsBatch">Optional batch labels [batchSize x outputDim].</param>
+    /// <returns>Average loss across the batch.</returns>
     /// <remarks>
     /// <para><b>For Beginners:</b> This combines two types of loss:
     /// 1. Standard distillation loss on final outputs
@@ -136,49 +136,56 @@ public class AttentionDistillationStrategy<T> : DistillationStrategyBase<T>
     /// </remarks>
     public override T ComputeLoss(Matrix<T> studentBatchOutput, Matrix<T> teacherBatchOutput, Matrix<T>? trueLabelsBatch = null)
     {
-        ValidateOutputDimensions(studentBatchOutput, teacherBatchOutput);
-        ValidateLabelDimensions(studentBatchOutput, trueLabelsBatch);
+        ValidateOutputDimensions(studentBatchOutput, teacherBatchOutput, m => m.Rows * m.Columns);
 
-        int batchSize = studentBatchOutput.RowCount;
+        if (studentBatchOutput == null) throw new ArgumentNullException(nameof(studentBatchOutput));
+        if (teacherBatchOutput == null) throw new ArgumentNullException(nameof(teacherBatchOutput));
+
+        if (studentBatchOutput.Rows != teacherBatchOutput.Rows || studentBatchOutput.Columns != teacherBatchOutput.Columns)
+            throw new ArgumentException("Student and teacher batch outputs must have matching dimensions");
+
+        if (trueLabelsBatch != null && (trueLabelsBatch.Rows != studentBatchOutput.Rows || trueLabelsBatch.Columns != studentBatchOutput.Columns))
+            throw new ArgumentException("Batch labels must match student output dimensions");
+
+        int batchSize = studentBatchOutput.Rows;
         T totalLoss = NumOps.Zero;
+
+        // This method only computes output loss
+        // Attention loss must be computed separately via ComputeAttentionLoss
+        // and manually combined by the user
 
         for (int r = 0; r < batchSize; r++)
         {
-            Vector<T> studentOutput = studentBatchOutput.GetRow(r);
-            Vector<T> teacherOutput = teacherBatchOutput.GetRow(r);
-            Vector<T>? trueLabels = trueLabelsBatch?.GetRow(r);
+            Vector<T> studentRow = studentBatchOutput.GetRow(r);
+            Vector<T> teacherRow = teacherBatchOutput.GetRow(r);
+            Vector<T>? labelRow = trueLabelsBatch?.GetRow(r);
 
-        // This method only computes output loss
-        // Attention loss is computed separately via ComputeAttentionLoss
-        // and combined externally
+            // Soft loss with temperature scaling
+            var studentSoft = DistillationHelper<T>.Softmax(studentRow, Temperature);
+            var teacherSoft = DistillationHelper<T>.Softmax(teacherRow, Temperature);
+            var softLoss = DistillationHelper<T>.KLDivergence(teacherSoft, studentSoft);
+            softLoss = NumOps.Multiply(softLoss, NumOps.FromDouble(Temperature * Temperature));
 
-        // Soft loss with temperature scaling
-        var studentSoft = Softmax(studentOutput, Temperature);
-        var teacherSoft = Softmax(teacherOutput, Temperature);
-        var softLoss = KLDivergence(teacherSoft, studentSoft);
-        softLoss = NumOps.Multiply(softLoss, NumOps.FromDouble(Temperature * Temperature));
+            T sampleLoss = softLoss;
 
-        // Hard loss if labels provided
-        if (trueLabels != null)
-        {
-            ValidateLabelDimensions(studentOutput, trueLabels, v => v.Length);
-            var studentProbs = Softmax(studentOutput, 1.0);
-            var hardLoss = CrossEntropy(studentProbs, trueLabels);
+            // Hard loss if labels provided
+            if (labelRow != null)
+            {
+                var studentProbs = DistillationHelper<T>.Softmax(studentRow, 1.0);
+                var hardLoss = DistillationHelper<T>.CrossEntropy(studentProbs, labelRow);
 
-            var alphaT = NumOps.FromDouble(Alpha);
-            var oneMinusAlpha = NumOps.FromDouble(1.0 - Alpha);
+                var alphaT = NumOps.FromDouble(Alpha);
+                var oneMinusAlpha = NumOps.FromDouble(1.0 - Alpha);
 
-            var combinedLoss = NumOps.Add(
-                NumOps.Multiply(alphaT, hardLoss),
-                NumOps.Multiply(oneMinusAlpha, softLoss));
+                sampleLoss = NumOps.Add(
+                    NumOps.Multiply(alphaT, hardLoss),
+                    NumOps.Multiply(oneMinusAlpha, softLoss));
+            }
 
-            // Scale by (1 - attentionWeight) to leave room for attention loss
-            combinedLoss = NumOps.Multiply(combinedLoss, NumOps.FromDouble(1.0 - _attentionWeight));
-            return combinedLoss;
+            totalLoss = NumOps.Add(totalLoss, sampleLoss);
         }
 
-        // Scale soft loss by (1 - attentionWeight)
-        return NumOps.Multiply(softLoss, NumOps.FromDouble(1.0 - _attentionWeight));
+        return NumOps.Divide(totalLoss, NumOps.FromDouble(batchSize));
     }
 
     /// <summary>
@@ -186,62 +193,77 @@ public class AttentionDistillationStrategy<T> : DistillationStrategyBase<T>
     /// </summary>
     public override Matrix<T> ComputeGradient(Matrix<T> studentBatchOutput, Matrix<T> teacherBatchOutput, Matrix<T>? trueLabelsBatch = null)
     {
-        ValidateOutputDimensions(studentBatchOutput, teacherBatchOutput);
-        ValidateLabelDimensions(studentBatchOutput, trueLabelsBatch);
+        ValidateOutputDimensions(studentBatchOutput, teacherBatchOutput, m => m.Rows * m.Columns);
 
-        int batchSize = studentBatchOutput.RowCount;
-        T totalLoss = NumOps.Zero;
+        if (studentBatchOutput == null) throw new ArgumentNullException(nameof(studentBatchOutput));
+        if (teacherBatchOutput == null) throw new ArgumentNullException(nameof(teacherBatchOutput));
+
+        if (studentBatchOutput.Rows != teacherBatchOutput.Rows || studentBatchOutput.Columns != teacherBatchOutput.Columns)
+            throw new ArgumentException("Student and teacher batch outputs must have matching dimensions");
+
+        if (trueLabelsBatch != null && (trueLabelsBatch.Rows != studentBatchOutput.Rows || trueLabelsBatch.Columns != studentBatchOutput.Columns))
+            throw new ArgumentException("Batch labels must match student output dimensions");
+
+        int batchSize = studentBatchOutput.Rows;
+        int outputDim = studentBatchOutput.Columns;
+        var batchGradient = new Matrix<T>(batchSize, outputDim);
 
         for (int r = 0; r < batchSize; r++)
         {
-            Vector<T> studentOutput = studentBatchOutput.GetRow(r);
-            Vector<T> teacherOutput = teacherBatchOutput.GetRow(r);
-            Vector<T>? trueLabels = trueLabelsBatch?.GetRow(r);
+            Vector<T> studentRow = studentBatchOutput.GetRow(r);
+            Vector<T> teacherRow = teacherBatchOutput.GetRow(r);
+            Vector<T>? labelRow = trueLabelsBatch?.GetRow(r);
 
-        int n = studentOutput.Length;
-        var gradient = new Vector<T>(n);
+            int n = studentRow.Length;
+            var gradient = new Vector<T>(n);
 
-        // Soft gradient
-        var studentSoft = Softmax(studentOutput, Temperature);
-        var teacherSoft = Softmax(teacherOutput, Temperature);
-
-        for (int i = 0; i < n; i++)
-        {
-            var diff = NumOps.Subtract(studentSoft[i], teacherSoft[i]);
-            gradient[i] = NumOps.Multiply(diff, NumOps.FromDouble(Temperature * Temperature));
-        }
-
-        // Add hard gradient if labels provided
-        if (trueLabels != null)
-        {
-            ValidateLabelDimensions(studentOutput, trueLabels, v => v.Length);
-            var studentProbs = Softmax(studentOutput, 1.0);
-            var hardGradient = new Vector<T>(n);
+            // Soft gradient
+            var studentSoft = DistillationHelper<T>.Softmax(studentRow, Temperature);
+            var teacherSoft = DistillationHelper<T>.Softmax(teacherRow, Temperature);
 
             for (int i = 0; i < n; i++)
             {
-                hardGradient[i] = NumOps.Subtract(studentProbs[i], trueLabels[i]);
+                var diff = NumOps.Subtract(studentSoft[i], teacherSoft[i]);
+                gradient[i] = NumOps.Multiply(diff, NumOps.FromDouble(Temperature * Temperature));
             }
 
-            var alphaT = NumOps.FromDouble(Alpha);
-            var oneMinusAlpha = NumOps.FromDouble(1.0 - Alpha);
+            // Add hard gradient if labels provided
+            if (labelRow != null)
+            {
+                var studentProbs = DistillationHelper<T>.Softmax(studentRow, 1.0);
+                var hardGradient = new Vector<T>(n);
 
+                for (int i = 0; i < n; i++)
+                {
+                    hardGradient[i] = NumOps.Subtract(studentProbs[i], labelRow[i]);
+                }
+
+                var alphaT = NumOps.FromDouble(Alpha);
+                var oneMinusAlpha = NumOps.FromDouble(1.0 - Alpha);
+
+                for (int i = 0; i < n; i++)
+                {
+                    gradient[i] = NumOps.Add(
+                        NumOps.Multiply(alphaT, hardGradient[i]),
+                        NumOps.Multiply(oneMinusAlpha, gradient[i]));
+                }
+            }
+
+            // Scale by (1 - attentionWeight)
+            var scale = NumOps.FromDouble(1.0 - _attentionWeight);
             for (int i = 0; i < n; i++)
             {
-                gradient[i] = NumOps.Add(
-                    NumOps.Multiply(alphaT, hardGradient[i]),
-                    NumOps.Multiply(oneMinusAlpha, gradient[i]));
+                gradient[i] = NumOps.Multiply(gradient[i], scale);
+            }
+
+            // Store in batch gradient matrix
+            for (int c = 0; c < outputDim; c++)
+            {
+                batchGradient[r, c] = gradient[c];
             }
         }
 
-        // Scale by (1 - attentionWeight)
-        var scale = NumOps.FromDouble(1.0 - _attentionWeight);
-        for (int i = 0; i < n; i++)
-        {
-            gradient[i] = NumOps.Multiply(gradient[i], scale);
-        }
-
-        return gradient;
+        return batchGradient;
     }
 
     /// <summary>
@@ -350,79 +372,8 @@ public class AttentionDistillationStrategy<T> : DistillationStrategyBase<T>
         return NumOps.FromDouble(loss);
     }
 
-    private Vector<T> Softmax(Vector<T> logits, double temperature)
-    {
-        int n = logits.Length;
-        var result = new Vector<T>(n);
 
-        var scaledLogits = new T[n];
-        for (int i = 0; i < n; i++)
-        {
-            scaledLogits[i] = NumOps.FromDouble(Convert.ToDouble(logits[i]) / temperature);
-        }
 
-        T maxLogit = scaledLogits[0];
-        for (int i = 1; i < n; i++)
-        {
-            if (NumOps.GreaterThan(scaledLogits[i], maxLogit))
-                maxLogit = scaledLogits[i];
-        }
-
-        T sum = NumOps.Zero;
-        var expValues = new T[n];
-
-        for (int i = 0; i < n; i++)
-        {
-            double val = Convert.ToDouble(NumOps.Subtract(scaledLogits[i], maxLogit));
-            expValues[i] = NumOps.FromDouble(Math.Exp(val));
-            sum = NumOps.Add(sum, expValues[i]);
-        }
-
-        for (int i = 0; i < n; i++)
-        {
-            result[i] = NumOps.Divide(expValues[i], sum);
-        }
-
-        return result;
-    }
-
-    private T KLDivergence(Vector<T> p, Vector<T> q)
-    {
-        T divergence = NumOps.Zero;
-
-        for (int i = 0; i < p.Length; i++)
-        {
-            double pVal = Convert.ToDouble(p[i]);
-            double qVal = Convert.ToDouble(q[i]);
-
-            if (pVal > Epsilon)
-            {
-                double contrib = pVal * Math.Log(pVal / (qVal + Epsilon));
-                divergence = NumOps.Add(divergence, NumOps.FromDouble(contrib));
-            }
-        }
-
-        return divergence;
-    }
-
-    private T CrossEntropy(Vector<T> predictions, Vector<T> trueLabels)
-    {
-        T entropy = NumOps.Zero;
-
-        for (int i = 0; i < predictions.Length; i++)
-        {
-            double pred = Convert.ToDouble(predictions[i]);
-            double label = Convert.ToDouble(trueLabels[i]);
-
-            if (label > Epsilon)
-            {
-                double contrib = -label * Math.Log(pred + Epsilon);
-                entropy = NumOps.Add(entropy, NumOps.FromDouble(contrib));
-            }
-        }
-
-        return entropy;
-    }
 }
 
 /// <summary>
@@ -445,3 +396,5 @@ public enum AttentionMatchingMode
     /// </summary>
     Cosine
 }
+
+

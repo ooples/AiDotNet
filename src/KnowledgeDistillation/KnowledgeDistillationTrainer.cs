@@ -74,7 +74,7 @@ public class KnowledgeDistillationTrainer<T> : KnowledgeDistillationTrainerBase<
     /// </remarks>
     public KnowledgeDistillationTrainer(
         ITeacherModel<Vector<T>, Vector<T>> teacher,
-        IDistillationStrategy<T, Vector<T>> distillationStrategy,
+        IDistillationStrategy<T> distillationStrategy,
         DistillationCheckpointConfig? checkpointConfig = null,
         bool useEarlyStopping = false,
         double earlyStoppingMinDelta = 0.001,

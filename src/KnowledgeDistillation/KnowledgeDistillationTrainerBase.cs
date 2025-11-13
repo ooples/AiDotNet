@@ -54,7 +54,7 @@ public abstract class KnowledgeDistillationTrainerBase<T, TInput, TOutput> : IKn
     /// <summary>
     /// Gets the distillation strategy for computing loss and gradients.
     /// </summary>
-    public IDistillationStrategy<T, TOutput> DistillationStrategy { get; protected set; }
+    public IDistillationStrategy<T> DistillationStrategy { get; protected set; }
 
     /// <summary>
     /// Checkpoint configuration for automatic model saving during training (internal).
@@ -116,7 +116,7 @@ public abstract class KnowledgeDistillationTrainerBase<T, TInput, TOutput> : IKn
     /// </remarks>
     protected KnowledgeDistillationTrainerBase(
         ITeacherModel<TInput, TOutput> teacher,
-        IDistillationStrategy<T, TOutput> distillationStrategy,
+        IDistillationStrategy<T> distillationStrategy,
         DistillationCheckpointConfig? checkpointConfig = null,
         bool useEarlyStopping = false,
         double earlyStoppingMinDelta = 0.001,

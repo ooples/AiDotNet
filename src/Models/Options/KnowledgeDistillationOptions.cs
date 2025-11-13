@@ -119,7 +119,7 @@ public class KnowledgeDistillationOptions<T, TInput, TOutput>
     /// <para><b>For Advanced Users:</b> Provide a custom distillation strategy.
     /// If null, one will be created based on StrategyType.</para>
     /// </remarks>
-    public IDistillationStrategy<TOutput, T>? Strategy { get; set; }
+    public IDistillationStrategy<T>? Strategy { get; set; }
 
     /// <summary>
     /// Gets or sets the temperature for softmax scaling.

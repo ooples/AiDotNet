@@ -1,0 +1,502 @@
+Found 10 unresolved review comments
+
+1. Thread ID: PRRT_kwDOKSXUF85huXSu
+   File: src/KnowledgeDistillation/Strategies/RelationalDistillationStrategy.cs:301
+   Comment:
+_⚠️ Potential issue_ | _🔴 Critical_
+
+<details>
+<summary>🧩 Analysis chain</summary>
+
+**Relational loss/gradients are still applied to the wrong samples**
+
+You compute batch relational terms when the batch fills, then amortize them over the next N per-sample calls. Earlier samples that formed the batch receive only “in-batch” partial gradients, not the finalized amortized contribution; subsequent samples (from the next batch) receive the cached average. This misaligns loss and gradient with contributing samples and weakens RKD.
+
+Recommendation:
+- Switch trainer/strategy API to batch-level for RKD (return per-sample losses/gradients for the same batch), or
+- Cache per-sample RKD gradients for the completed batch (array of Vector<T>, not a single average), then apply them to the next N calls strictly corresponding to those batch slots (and clear afterward). Document the approximation if batch API changes are not possible.
+
+This is a correctness concern for RKD signal strength. 
+
+
+
+
+Also applies to: 295-366
+
+---
+
+🏁 Script executed:
+
+```shell
+#!/bin/bash
+# Examine the full RelationalDistillationStrategy.cs file to understand amortization logic
+fd -t f "RelationalDistillationStrategy.cs" -x cat {}
+```
+
+Length of output: 38351
+
+---
+
+🏁 Script executed:
+
+```shell
+#!/bin/bash
+# Search for usages of RelationalDistillationStrategy and calls to ComputeLoss/ComputeGradient
+# to understand the execution order and trainer integration
+rg -n "RelationalDistillationStrategy|ComputeLoss|ComputeGradient" --type cs -B2 -A2 | head -100
+```
+
+Length of output: 9504
+
+---
+
+</parameter>
+</invoke>
+
+---
+
+🏁 Script executed:
+
+```shell
+#!/bin/bash
+# Search for trainer integration and Reset() calls
+fd -t f "*.cs" -x rg -l "Reset\(\)" {} \; | xargs -I {} sh -c 'echo "=== {} ===" && rg -n "Reset|ComputeLoss|ComputeGradient" -B3 -A3 {}'
+```
+
+Length of output: 283
+
+---
+
+🏁 Script executed:
+
+```shell
+#!/bin/bash
+# Search for Reset() calls and usage patterns
+rg -n "\.Reset\(\)" --type cs -B5 -A5
+```
+
+Length of output: 13009
+
+---
+
+
+
+</details>
+
+**Relational loss and gradients are indeed misaligned between batch computation and sample application**
+
+The review concern is valid. Here's the verified issue:
+
+**Execution Timeline (batch_size=32):**
+- **Samples 0-31:** Accumulated in buffers. When 31st sample added, relational loss computed on batch[0..31], then buffers cleared.
+- **Sample 31's gradient:** Cannot use Path 1 in `ComputeGradient` (buffers empty after `ComputeLoss`), so it gets zero relational gradient or stale cached gradient.
+- **Samples 32-63:** Receive amortized relational gradient computed from batch[0..31]—not from samples that contribute to *their* relationships.
+
+This causes:
+1. **Temporal misalignment:** Samples forming a batch don't uniformly receive their own relational loss signal.
+2. **Cross-batch leakage:** Relational knowledge from batch N applied to batch N+1.
+3. **Weakened RKD signal:** Loss-gradient consistency is broken; the gradient doesn't match the sample that incurred the loss.
+
+The `Reset()` call at epoch boundaries (verified in `KnowledgeDistillationTrainerBase.cs:570`) flushes partial batches but doesn't address the within-epoch misalignment.
+
+**Recommendation from original review remains sound:** Cache per-sample relational gradients (array, not average) and apply them to the exact samples that computed the batch, or refactor to batch-level API.
+
+<!-- fingerprinting:phantom:poseidon:chinchilla -->
+
+<!-- This is an auto-generated comment by CodeRabbit -->
+================================================================================
+
+2. Thread ID: PRRT_kwDOKSXUF85huXTg
+   File: src/PredictionModelBuilder.cs:1027
+   Comment:
+_🛠️ Refactor suggestion_ | _🟠 Major_
+
+**KD hard‑requires Vector<T> model types; clashes with builder’s Matrix path**
+
+The cast to IFullModel<T, Vector<T>, Vector<T>> forbids Matrix‑based students. Combined with BuildAsync’s early ConvertToMatrix, users can’t satisfy both. This blocks valid scenarios (e.g., Matrix<double> inputs).
+
+Options:
+- Support Matrix students: adapt studentForward via ConversionsHelper.ConvertVectorToInputWithoutReference<T,TInput>() and call studentModel.Predict(TInput) without the hard cast; update backward to use model training APIs.
+- Or route to KD path before ConvertToMatrix and document TInput=Vector<T> requirement (breaking for Matrix users, but consistent).
+Which direction do you prefer?
+
+<details>
+<summary>🤖 Prompt for AI Agents</summary>
+
+```
+In src/PredictionModelBuilder.cs around lines 1021 to 1026, the code hard-casts
+the student model to IFullModel<T, Vector<T>, Vector<T>> which prevents
+Matrix-based student models and conflicts with the earlier ConvertToMatrix path;
+instead, remove the hard cast and implement a studentForward that accepts the
+already-constructed Vector<T> and converts it to the student model's TInput via
+ConversionsHelper.ConvertVectorToInputWithoutReference<T,TInput>(), call
+studentModel.Predict(TInput) (or the appropriate Predict method) and ensure the
+backward/training path uses the model's training API with TInput/TOutput types;
+update types and null checks accordingly so both Vector and Matrix student
+models are supported without changing the outer ConvertToMatrix ordering.
+```
+
+</details>
+
+<!-- fingerprinting:phantom:poseidon:chinchilla -->
+
+<!-- This is an auto-generated comment by CodeRabbit -->
+================================================================================
+
+3. Thread ID: PRRT_kwDOKSXUF85huXTo
+   File: src/PredictionModelBuilder.cs:1272
+   Comment:
+_⚠️ Potential issue_ | _🟠 Major_
+
+**Early stopping is ineffective and uses the wrong metric**
+
+- It compares training loss (avgLoss) but labels it “val loss”.
+- It never stops training (only logs).
+
+Wire early stopping to actual validation loss and enforce stopping.
+
+Suggested approach:
+- Compute validation loss inside the callback by averaging DistillationStrategy.ComputeLoss over (valInputs,valLabels) with teacher logits.
+- Add a stop flag the trainer honors, or refactor to loop epochs externally (call Train with epochs:1 in a for-loop) and break when patience exhausted.
+
+<!-- fingerprinting:phantom:poseidon:chinchilla -->
+
+<!-- This is an auto-generated comment by CodeRabbit -->
+================================================================================
+
+4. Thread ID: PRRT_kwDOKSXUF85hxJ4T
+   File: src/KnowledgeDistillation/Strategies/NeuronSelectivityDistillationStrategy.cs:163
+   Comment:
+_⚠️ Potential issue_ | _🟠 Major_
+
+**Add dimension validation for activation vectors.**
+
+`ComputeSelectivityLoss` validates batch size (line 141) but doesn't verify that all activation vectors have consistent dimensions. If vectors have varying lengths, `ComputeSelectivityScores` will use an incorrect `numNeurons` value or cause index-out-of-range errors.
+
+Previous review comments flagged this and it was marked as addressed, but the validation is still missing.
+
+
+Add validation after line 148:
+
+```diff
+         int batchSize = studentActivations.Length;
+         int numNeurons = studentActivations[0].Length;
++        
++        // Validate all activation vectors have consistent dimensions
++        for (int i = 0; i < batchSize; i++)
++        {
++            if (studentActivations[i].Length != numNeurons)
++                throw new ArgumentException(
++                    $"All student activation vectors must have the same length. Expected {numNeurons}, got {studentActivations[i].Length} at index {i}");
++            if (teacherActivations[i].Length != numNeurons)
++                throw new ArgumentException(
++                    $"All teacher activation vectors must have the same length. Expected {numNeurons}, got {teacherActivations[i].Length} at index {i}");
++            if (studentActivations[i].Length != teacherActivations[i].Length)
++                throw new ArgumentException(
++                    $"Student and teacher activation dimensions must match at index {i}. Student: {studentActivations[i].Length}, Teacher: {teacherActivations[i].Length}");
++            if (studentActivations[i].Length == 0)
++                throw new ArgumentException($"Activation vector at index {i} cannot be empty");
++        }
+ 
+         // Compute selectivity for each neuron
+```
+
+<!-- suggestion_start -->
+
+<details>
+<summary>📝 Committable suggestion</summary>
+
+> ‼️ **IMPORTANT**
+> Carefully review the code before committing. Ensure that it accurately replaces the highlighted code, contains no missing lines, and has no issues with indentation. Thoroughly test & benchmark the code to ensure it meets the requirements.
+
+```suggestion
+    public T ComputeSelectivityLoss(Vector<T>[] studentActivations, Vector<T>[] teacherActivations)
+    {
+        if (studentActivations.Length != teacherActivations.Length)
+            throw new ArgumentException("Student and teacher must have same batch size");
+
+        if (studentActivations.Length == 0)
+            return NumOps.Zero;
+
+        int batchSize = studentActivations.Length;
+        int numNeurons = studentActivations[0].Length;
+        
+        // Validate all activation vectors have consistent dimensions
+        for (int i = 0; i < batchSize; i++)
+        {
+            if (studentActivations[i].Length != numNeurons)
+                throw new ArgumentException(
+                    $"All student activation vectors must have the same length. Expected {numNeurons}, got {studentActivations[i].Length} at index {i}");
+            if (teacherActivations[i].Length != numNeurons)
+                throw new ArgumentException(
+                    $"All teacher activation vectors must have the same length. Expected {numNeurons}, got {teacherActivations[i].Length} at index {i}");
+            if (studentActivations[i].Length != teacherActivations[i].Length)
+                throw new ArgumentException(
+                    $"Student and teacher activation dimensions must match at index {i}. Student: {studentActivations[i].Length}, Teacher: {teacherActivations[i].Length}");
+            if (studentActivations[i].Length == 0)
+                throw new ArgumentException($"Activation vector at index {i} cannot be empty");
+        }
+
+        // Compute selectivity for each neuron
+        var studentSelectivity = ComputeSelectivityScores(studentActivations, numNeurons);
+        var teacherSelectivity = ComputeSelectivityScores(teacherActivations, numNeurons);
+
+        // MSE between selectivity scores
+        T loss = NumOps.Zero;
+        for (int i = 0; i < numNeurons; i++)
+        {
+            var diff = studentSelectivity[i] - teacherSelectivity[i];
+            loss = NumOps.Add(loss, NumOps.FromDouble(diff * diff));
+        }
+
+        loss = NumOps.Divide(loss, NumOps.FromDouble(numNeurons));
+        return NumOps.Multiply(loss, NumOps.FromDouble(_selectivityWeight));
+    }
+```
+
+</details>
+
+<!-- suggestion_end -->
+
+<details>
+<summary>🤖 Prompt for AI Agents</summary>
+
+```
+In src/KnowledgeDistillation/Strategies/NeuronSelectivityDistillationStrategy.cs
+around lines 139 to 164, the ComputeSelectivityLoss method is missing validation
+to ensure all activation vectors have consistent dimensions. After line 148
+where numNeurons is determined from studentActivations[0].Length, add a loop or
+LINQ check to validate that all vectors in both studentActivations and
+teacherActivations have the same length as numNeurons. If any vector has a
+different length, throw an ArgumentException with a descriptive message to
+prevent index-out-of-range errors and ensure ComputeSelectivityScores receives
+correct dimensions.
+```
+
+</details>
+
+<!-- This is an auto-generated comment by CodeRabbit -->
+================================================================================
+
+5. Thread ID: PRRT_kwDOKSXUF85hxJ4g
+   File: src/KnowledgeDistillation/Strategies/RelationalDistillationStrategy.cs:301
+   Comment:
+_⚠️ Potential issue_ | _🔴 Critical_
+
+**CRITICAL: Developer acknowledges the bug flagged in past reviews remains unfixed.**
+
+The TODO comment at lines 274-287 explicitly states the same critical issue raised in all previous review comments: relational loss is computed on samples 1-N but applied to samples N+1 to 2N. This breaks the fundamental contract of distillation and renders RKD ineffective.
+
+**Timeline for batch_size=32:**
+- Samples 1-31: Accumulate in buffers, return with NO relational loss
+- Sample 32: Triggers relational computation, receives 1/32 of loss, buffers cleared
+- Samples 33-64: Receive remaining 31/32 of loss computed from samples 1-32
+
+This misalignment was flagged in every past review comment (all marked "✅ Addressed") yet the TODO proves it remains unresolved. Issue #408 requires functional RKD; this implementation cannot satisfy that requirement.
+
+**Required fix (as TODO notes):** Architectural change to apply relational loss to the samples that generated it, either by:
+- Switching to true batch-level API (return losses for entire batch simultaneously)
+- Buffering individual sample losses and retroactively adding relational contribution once batch completes
+
+<!-- This is an auto-generated comment by CodeRabbit -->
+================================================================================
+
+6. Thread ID: PRRT_kwDOKSXUF85hxJ4p
+   File: src/KnowledgeDistillation/Strategies/RelationalDistillationStrategy.cs:381
+   Comment:
+_⚠️ Potential issue_ | _🔴 Critical_
+
+**Relational gradient suffers from same sample misalignment and uses improper averaging.**
+
+Two issues compound the architectural problem:
+
+1. **Temporal misalignment:** Path 1 (lines 354-367) computes gradient while the batch is accumulating. When sample 32 arrives and `ComputeLoss` clears the buffers, `ComputeGradient` for sample 32 cannot use Path 1 (buffers empty) and falls back to Path 2, applying the cached gradient from the *previous* batch. Samples 33-64 also use Path 2, receiving gradients computed from batch 1-32.
+
+2. **Averaging approximation:** `_cachedRelationalGradient` (line 237) is an average across all batch samples (from `ComputeAverageRelationalGradientForBatch`). RKD gradients are sample-specific—each sample's gradient should reflect its unique position in the relational graph (which pairs/triplets it participates in). Applying the same averaged gradient to all samples discards this structural information and weakens the RKD signal.
+
+**Correct approach:** Cache per-sample relational gradients (array of `Vector<T>`, not a single average) and apply each to its corresponding sample.
+
+<!-- This is an auto-generated comment by CodeRabbit -->
+================================================================================
+
+7. Thread ID: PRRT_kwDOKSXUF85hxJ4r
+   File: src/KnowledgeDistillation/Strategies/RelationalDistillationStrategy.cs:551
+   Comment:
+_🛠️ Refactor suggestion_ | _🟠 Major_
+
+**Numerical gradient approximation is computationally expensive and less accurate.**
+
+Computing angle gradients via finite differences (lines 532-551) requires O(d) angle computations per triplet, where d is the embedding dimension. For d=512 and a batch of 32 samples with 10 triplets per sample (line 438), this results in ~163,000 angle computations per batch.
+
+Analytical gradients for cosine-based angles can be derived using the chain rule on `acos(dot(u,v) / (||u|| ||v||))` and would be:
+- Faster: single pass instead of d passes
+- More accurate: no epsilon approximation error
+- Numerically stable: can handle edge cases explicitly
+
+
+
+Consider implementing analytical angle gradients:
+
+```csharp
+// Analytical gradient of angle(i,j,k) w.r.t. point i
+private Vector<T> ComputeTripletAngleGradientAnalytical(...)
+{
+    var ji = Subtract(vi, vj);
+    var jk = Subtract(vk, vj);
+    T dot = DotProduct(ji, jk);
+    T normJi = Norm(ji);
+    T normJk = Norm(jk);
+    
+    // ∂angle/∂vi = -1/sqrt(1-cos²) * ∂cos/∂vi
+    // where ∂cos/∂vi = jk/(||ji||||jk||) - cos*ji/||ji||²
+    // ... (expand chain rule)
+}
+```
+
+<!-- This is an auto-generated comment by CodeRabbit -->
+================================================================================
+
+8. Thread ID: PRRT_kwDOKSXUF85hygTv
+   File: src/KnowledgeDistillation/Strategies/NeuronSelectivityDistillationStrategy.cs:42
+   Comment:
+_⚠️ Potential issue_ | _🟠 Major_
+
+**Incomplete implementation still creates misleading API.**
+
+The constructor validates `selectivityWeight` (lines 37-38), but this parameter has no effect on training:
+- `ComputeLoss` (lines 44-73) returns the standard distillation loss without any selectivity component
+- `ComputeGradient` (lines 75-126) inconsistently applies selectivity scaling only in one branch (line 110) while omitting it in another (line 121)
+- `ComputeSelectivityLoss` exists but is never called by either method
+
+The TODOs (lines 48-51, 79-82) acknowledge this, but the public API doesn't signal that selectivity is non-functional.
+
+**Options to resolve:**
+1. **Complete the implementation**: Call `ComputeSelectivityLoss` from within `ComputeLoss` and `ComputeGradient`, properly blending selectivity loss/gradients with the standard distillation components.
+2. **Mark as work-in-progress**: Add `[Obsolete("Selectivity integration not yet implemented")]` or make the class internal with clear documentation.
+3. **Fail explicitly**: Throw `NotImplementedException` in the constructor when `selectivityWeight != 0`.
+
+
+
+<details>
+<summary>🤖 Prompt for AI Agents</summary>
+
+```
+In src/KnowledgeDistillation/Strategies/NeuronSelectivityDistillationStrategy.cs
+around lines 30-42 and 44-126, the constructor accepts and validates a
+selectivityWeight parameter but this parameter has no effect: ComputeLoss
+ignores it completely, ComputeGradient applies it inconsistently only in one
+branch, and ComputeSelectivityLoss is never called. Choose one approach to fix:
+either complete the implementation by calling ComputeSelectivityLoss from
+ComputeLoss and ComputeGradient and properly integrating the selectivity
+loss/gradient with the standard distillation components using the
+selectivityWeight, or mark the class with [Obsolete] and document that
+selectivity is not yet functional, or throw NotImplementedException in the
+constructor when selectivityWeight is non-zero to make the limitation explicit.
+```
+
+</details>
+
+
+
+Also applies to: 44-126
+
+<details>
+<summary>🤖 Prompt for AI Agents</summary>
+
+```
+In src/KnowledgeDistillation/Strategies/NeuronSelectivityDistillationStrategy.cs
+around lines 30-42 and 44-126: the ctor validates selectivityWeight but that
+weight is never applied — ComputeLoss returns only the standard distillation
+loss and ComputeGradient only inconsistently scales selectivity in one branch
+while ComputeSelectivityLoss is never used. Fix by fully integrating
+selectivity: in ComputeLoss compute the standard distillation loss, compute
+selectivity loss via ComputeSelectivityLoss, and return a weighted blend (1 -
+_selectivityWeight) * distillationLoss + _selectivityWeight * selectivityLoss;
+in ComputeGradient compute gradients for both the distillation and selectivity
+terms, scale each gradient by the same weights and sum them so both branches
+apply the selectivity scaling consistently (remove the TODOs), and ensure
+ComputeSelectivityLoss is invoked where needed; alternatively if you prefer not
+to implement now, make the class internal or mark it [Obsolete] or throw
+NotImplementedException when selectivityWeight != 0 to make the limitation
+explicit.
+```
+
+</details>
+
+<!-- This is an auto-generated comment by CodeRabbit -->
+================================================================================
+
+9. Thread ID: PRRT_kwDOKSXUF85hygUB
+   File: src/PredictionModelBuilder.cs:1267
+   Comment:
+_⚠️ Potential issue_ | _🟠 Major_
+
+**Early stopping is non-functional and uses wrong metric**
+
+The early stopping implementation has multiple issues that make it ineffective:
+
+1. **Uses training loss instead of validation loss**: The variable `bestValLoss` actually stores training loss (line 1244), making the comparison meaningless for detecting overfitting.
+
+2. **Cannot stop training**: The trainer's epoch loop doesn't support early termination, so even when patience is exhausted, training continues (acknowledged in the TODO).
+
+3. **Misleading variable names**: `bestValLoss` stores `trainLoss`, confusing the logic.
+
+Either:
+- **Remove this feature** until proper validation loss tracking and cancellation tokens are implemented, or
+- **Fix the implementation** by computing actual validation loss and implementing early termination via `CancellationToken` or external epoch loop.
+
+Shipping incomplete features with TODOs risks user confusion when the documented feature doesn't work as expected.
+
+<details>
+<summary>🤖 Prompt for AI Agents</summary>
+
+```
+In src/PredictionModelBuilder.cs around lines 1236 to 1256, the early-stopping
+block is non-functional and uses the wrong metric; either remove it or implement
+it correctly: compute actual validation loss (run validation dataset when
+valInputs != null), rename variables (e.g., bestValLoss) so they store
+validation loss, initialize bestValLoss from the first validation evaluation,
+compare current valLoss to bestValLoss using EarlyStoppingMinDelta, reset
+patienceCounter on improvement and increment otherwise, and when patience is
+exceeded signal termination by using a CancellationToken (propagate a
+CancellationToken into the trainer's epoch loop or set a shared cancel flag that
+the epoch loop checks and breaks) and log a clear message; if you choose to
+remove it, delete this block and any related options usage until proper
+validation-loss tracking and cancellation support are implemented.
+```
+
+</details>
+
+<!-- This is an auto-generated comment by CodeRabbit -->
+================================================================================
+
+10. Thread ID: PRRT_kwDOKSXUF85hygUI
+   File: src/PredictionModelBuilder.cs:1311
+   Comment:
+_⚠️ Potential issue_ | _🟠 Major_
+
+**Checkpointing uses training loss to select best model**
+
+The checkpoint logic saves the "best" model based on training loss (line 1266: `if (trainLoss <= bestValLoss)`), which defeats the purpose of keeping the best checkpoint. Training loss can continue decreasing while the model overfits.
+
+Either:
+- Compute validation loss inside the callback and use that for best model selection, or
+- Document clearly that "best" is based on training loss (not typical practice)
+
+Example fix:
+```diff
+                 if (valInputs != null && valLabels != null)
+                 {
+                     valAcc = Convert.ToDouble(trainer.Evaluate(studentForward, valInputs, valLabels));
++                    // Compute validation loss for proper best-model tracking
++                    // (validation loss implementation needed here)
+                 }
+```
+
+
+
+> Committable suggestion skipped: line range outside the PR's diff.
+
+<!-- This is an auto-generated comment by CodeRabbit -->
+================================================================================
+
