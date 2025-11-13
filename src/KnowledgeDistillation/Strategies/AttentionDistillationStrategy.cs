@@ -54,7 +54,7 @@ namespace AiDotNet.KnowledgeDistillation.Strategies;
 /// - Jiao et al. (2020). TinyBERT: Distilling BERT for Natural Language Understanding. EMNLP.
 /// - Wang et al. (2020). MiniLM: Deep Self-Attention Distillation for Task-Agnostic Compression.</para>
 /// </remarks>
-public class AttentionDistillationStrategy<T> : DistillationStrategyBase<T>
+public class AttentionDistillationStrategy<T> : DistillationStrategyBase<T>, IIntermediateActivationStrategy<T>
 {
     private readonly string[] _attentionLayers;
     private readonly double _attentionWeight;
@@ -306,6 +306,83 @@ public class AttentionDistillationStrategy<T> : DistillationStrategyBase<T>
 
         // Average across layers
         totalLoss = NumOps.Divide(totalLoss, NumOps.FromDouble(_attentionLayers.Length));
+
+        // Apply attention weight
+        totalLoss = NumOps.Multiply(totalLoss, NumOps.FromDouble(_attentionWeight));
+
+        return totalLoss;
+    }
+
+    /// <summary>
+    /// Computes intermediate activation loss by matching attention patterns between teacher and student.
+    /// </summary>
+    /// <param name="studentIntermediateActivations">Student's intermediate layer activations (must include attention layers).</param>
+    /// <param name="teacherIntermediateActivations">Teacher's intermediate layer activations (must include attention layers).</param>
+    /// <returns>The attention matching loss (already weighted by attentionWeight).</returns>
+    /// <remarks>
+    /// <para>This implements the IIntermediateActivationStrategy interface to properly integrate
+    /// attention matching into the training loop. The loss is computed from attention patterns stored
+    /// in the intermediate activations for layers specified in the constructor.</para>
+    ///
+    /// <para>If any target layer is not found, it is skipped. Returns zero if no layers are found.</para>
+    /// </remarks>
+    public T ComputeIntermediateLoss(
+        IntermediateActivations<T> studentIntermediateActivations,
+        IntermediateActivations<T> teacherIntermediateActivations)
+    {
+        if (studentIntermediateActivations == null)
+            throw new ArgumentNullException(nameof(studentIntermediateActivations));
+        if (teacherIntermediateActivations == null)
+            throw new ArgumentNullException(nameof(teacherIntermediateActivations));
+
+        T totalLoss = NumOps.Zero;
+        int layersFound = 0;
+
+        foreach (var layerName in _attentionLayers)
+        {
+            var studentMatrix = studentIntermediateActivations.Get(layerName);
+            var teacherMatrix = teacherIntermediateActivations.Get(layerName);
+
+            // Skip if layer not found in either model
+            if (studentMatrix == null || teacherMatrix == null)
+                continue;
+
+            // Validate dimensions match
+            if (studentMatrix.Rows != teacherMatrix.Rows || studentMatrix.Columns != teacherMatrix.Columns)
+            {
+                throw new ArgumentException(
+                    $"Student and teacher attention dimensions must match for layer '{layerName}'. " +
+                    $"Student: [{studentMatrix.Rows} x {studentMatrix.Columns}], " +
+                    $"Teacher: [{teacherMatrix.Rows} x {teacherMatrix.Columns}]");
+            }
+
+            int batchSize = studentMatrix.Rows;
+            if (batchSize == 0)
+                continue;
+
+            // Average attention matching loss across all samples in batch
+            T layerBatchLoss = NumOps.Zero;
+            for (int sampleIdx = 0; sampleIdx < batchSize; sampleIdx++)
+            {
+                var studentAttention = studentMatrix.GetRow(sampleIdx);
+                var teacherAttention = teacherMatrix.GetRow(sampleIdx);
+
+                T sampleLoss = ComputeAttentionMatchingLoss(studentAttention, teacherAttention);
+                layerBatchLoss = NumOps.Add(layerBatchLoss, sampleLoss);
+            }
+
+            // Average over batch
+            layerBatchLoss = NumOps.Divide(layerBatchLoss, NumOps.FromDouble(batchSize));
+            totalLoss = NumOps.Add(totalLoss, layerBatchLoss);
+            layersFound++;
+        }
+
+        // Return zero if no layers found
+        if (layersFound == 0)
+            return NumOps.Zero;
+
+        // Average across layers
+        totalLoss = NumOps.Divide(totalLoss, NumOps.FromDouble(layersFound));
 
         // Apply attention weight
         totalLoss = NumOps.Multiply(totalLoss, NumOps.FromDouble(_attentionWeight));
