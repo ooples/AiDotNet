@@ -158,8 +158,8 @@ public class PrioritizedSweepingAgent<T> : ReinforcementLearningAgentBase<T>
     public override Dictionary<string, T> GetMetrics() => new Dictionary<string, T> { ["states_visited"] = NumOps.FromDouble(_qTable.Count), ["model_size"] = NumOps.FromDouble(_model.Count), ["queue_size"] = NumOps.FromDouble(_priorityQueue.Count), ["epsilon"] = NumOps.FromDouble(_epsilon) };
     public override void ResetEpisode() { }
     public override Vector<T> Predict(Vector<T> input) => SelectAction(input, false);
-    public override Task<Vector<T>> PredictAsync(Vector<T> input) => Task.FromResult(Predict(input));
-    public override Task TrainAsync() { Train(); return Task.CompletedTask; }
+    public Task<Vector<T>> PredictAsync(Vector<T> input) => Task.FromResult(Predict(input));
+    public Task TrainAsync() { Train(); return Task.CompletedTask; }
     public override ModelMetadata<T> GetModelMetadata() => new ModelMetadata<T> { ModelType = ModelType.ReinforcementLearning, FeatureCount = this.FeatureCount, Complexity = ParameterCount };
     public override int ParameterCount => _qTable.Count * _options.ActionSize;
     public override int FeatureCount => _options.StateSize;

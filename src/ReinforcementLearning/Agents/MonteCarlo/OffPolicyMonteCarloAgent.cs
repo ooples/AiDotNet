@@ -201,12 +201,12 @@ public class OffPolicyMonteCarloAgent<T> : ReinforcementLearningAgentBase<T>
         return SelectAction(input, training: false);
     }
 
-    public override Task<Vector<T>> PredictAsync(Vector<T> input)
+    public Task<Vector<T>> PredictAsync(Vector<T> input)
     {
         return Task.FromResult(Predict(input));
     }
 
-    public override Task TrainAsync()
+    public Task TrainAsync()
     {
         Train();
         return Task.CompletedTask;

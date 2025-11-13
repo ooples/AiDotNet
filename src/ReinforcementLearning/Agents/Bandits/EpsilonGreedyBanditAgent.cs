@@ -94,8 +94,8 @@ public class EpsilonGreedyBanditAgent<T> : ReinforcementLearningAgentBase<T>
     }
 
     public override Vector<T> Predict(Vector<T> input) => SelectAction(input, false);
-    public override Task<Vector<T>> PredictAsync(Vector<T> input) => Task.FromResult(Predict(input));
-    public override Task TrainAsync() { Train(); return Task.CompletedTask; }
+    public Task<Vector<T>> PredictAsync(Vector<T> input) => Task.FromResult(Predict(input));
+    public Task TrainAsync() { Train(); return Task.CompletedTask; }
     public override ModelMetadata<T> GetModelMetadata() => new ModelMetadata<T> { ModelType = ModelType.ReinforcementLearning, FeatureCount = this.FeatureCount, Complexity = ParameterCount };
     public override int ParameterCount => _options.NumArms;
     public override int FeatureCount => 1;
