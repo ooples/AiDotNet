@@ -216,13 +216,12 @@ public class REINFORCEAgent<T> : DeepReinforcementLearningAgentBase<T>
             var loss = NumOps.Multiply(NumOps.Negate(logProb), returnVal);
             totalLoss = NumOps.Add(totalLoss, loss);
 
-            // Backprop (simplified)
-            var grad = new Vector<T>(_policyNetwork.Forward(state).Length);
-            for (int i = 0; i < grad.Length; i++)
-            {
-                grad[i] = NumOps.Multiply(loss, NumOps.FromDouble(0.01));
-            }
-            _policyNetwork.Backward(grad);
+            // TODO: Implement proper REINFORCE gradient: ∇θ log π(a|s) * G_t
+            // This requires computing the gradient of log-probability with respect to policy parameters
+            // The current placeholder gradient does not depend on the chosen action or policy output
+            throw new NotImplementedException(
+                "REINFORCE policy gradient requires proper implementation of ∇θ log π(a|s). " +
+                "Current placeholder gradient provides no learning signal.");
         }
 
         // Average loss
