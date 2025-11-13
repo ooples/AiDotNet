@@ -517,4 +517,19 @@ public class REINFORCEAgent<T> : DeepReinforcementLearningAgentBase<T>
         return 0;
     }
 
+
+    /// <inheritdoc/>
+    public override void Save(string filepath)
+    {
+        var data = Serialize();
+        System.IO.File.WriteAllBytes(filepath, data);
+    }
+
+    /// <inheritdoc/>
+    public override void Load(string filepath)
+    {
+        var data = System.IO.File.ReadAllBytes(filepath);
+        Deserialize(data);
+    }
+
 }

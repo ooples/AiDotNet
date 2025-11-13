@@ -633,4 +633,19 @@ public class SACAgent<T> : DeepReinforcementLearningAgentBase<T>
     {
         target.UpdateParameters(source.GetFlattenedParameters());
     }
+
+    /// <inheritdoc/>
+    public override void Save(string filepath)
+    {
+        var data = Serialize();
+        System.IO.File.WriteAllBytes(filepath, data);
+    }
+
+    /// <inheritdoc/>
+    public override void Load(string filepath)
+    {
+        var data = System.IO.File.ReadAllBytes(filepath);
+        Deserialize(data);
+    }
+
 }
