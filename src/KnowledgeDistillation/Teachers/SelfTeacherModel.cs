@@ -20,6 +20,24 @@ public class SelfTeacherModel<T> : TeacherModelBase<Vector<T>, Vector<T>, T>
 
     public void CachePredictions(Vector<T>[] predictions)
     {
+        if (predictions == null)
+            throw new ArgumentNullException(nameof(predictions));
+
+        if (predictions.Length == 0)
+            throw new ArgumentException("Predictions array cannot be empty", nameof(predictions));
+
+        // Validate all predictions have correct dimension
+        for (int i = 0; i < predictions.Length; i++)
+        {
+            if (predictions[i] == null)
+                throw new ArgumentException($"Prediction at index {i} is null", nameof(predictions));
+
+            if (predictions[i].Length != _outputDim)
+                throw new ArgumentException(
+                    $"Prediction at index {i} has dimension {predictions[i].Length}, expected {_outputDim}",
+                    nameof(predictions));
+        }
+
         _cachedPredictions = predictions;
     }
 
