@@ -134,9 +134,19 @@ public class AttentionDistillationStrategy<T> : DistillationStrategyBase<T>
     /// <para>Formula: L = (1 - w) × L_output + w × L_attention
     /// where w is attentionWeight.</para>
     /// </remarks>
-    public override T ComputeLoss(Vector<T> studentOutput, Vector<T> teacherOutput, Vector<T>? trueLabels = null)
+    public override T ComputeLoss(Matrix<T> studentBatchOutput, Matrix<T> teacherBatchOutput, Matrix<T>? trueLabelsBatch = null)
     {
-        ValidateOutputDimensions(studentOutput, teacherOutput, v => v.Length);
+        ValidateOutputDimensions(studentBatchOutput, teacherBatchOutput);
+        ValidateLabelDimensions(studentBatchOutput, trueLabelsBatch);
+
+        int batchSize = studentBatchOutput.RowCount;
+        T totalLoss = NumOps.Zero;
+
+        for (int r = 0; r < batchSize; r++)
+        {
+            Vector<T> studentOutput = studentBatchOutput.GetRow(r);
+            Vector<T> teacherOutput = teacherBatchOutput.GetRow(r);
+            Vector<T>? trueLabels = trueLabelsBatch?.GetRow(r);
 
         // This method only computes output loss
         // Attention loss is computed separately via ComputeAttentionLoss
@@ -174,9 +184,19 @@ public class AttentionDistillationStrategy<T> : DistillationStrategyBase<T>
     /// <summary>
     /// Computes gradient of the combined loss.
     /// </summary>
-    public override Vector<T> ComputeGradient(Vector<T> studentOutput, Vector<T> teacherOutput, Vector<T>? trueLabels = null)
+    public override Matrix<T> ComputeGradient(Matrix<T> studentBatchOutput, Matrix<T> teacherBatchOutput, Matrix<T>? trueLabelsBatch = null)
     {
-        ValidateOutputDimensions(studentOutput, teacherOutput, v => v.Length);
+        ValidateOutputDimensions(studentBatchOutput, teacherBatchOutput);
+        ValidateLabelDimensions(studentBatchOutput, trueLabelsBatch);
+
+        int batchSize = studentBatchOutput.RowCount;
+        T totalLoss = NumOps.Zero;
+
+        for (int r = 0; r < batchSize; r++)
+        {
+            Vector<T> studentOutput = studentBatchOutput.GetRow(r);
+            Vector<T> teacherOutput = teacherBatchOutput.GetRow(r);
+            Vector<T>? trueLabels = trueLabelsBatch?.GetRow(r);
 
         int n = studentOutput.Length;
         var gradient = new Vector<T>(n);
