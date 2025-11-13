@@ -45,6 +45,11 @@ public class NeuronSelectivityDistillationStrategy<T> : DistillationStrategyBase
     {
         ValidateOutputDimensions(studentOutput, teacherOutput, v => v.Length);
 
+        // TODO: This strategy currently only implements standard distillation loss
+        // The selectivity component is not implemented. Need to:
+        // 1. Compute selectivity loss from intermediate activations
+        // 2. Combine with standard distillation loss using _selectivityWeight
+        
         // Standard distillation loss
         var studentSoft = Softmax(studentOutput, Temperature);
         var teacherSoft = Softmax(teacherOutput, Temperature);
@@ -71,6 +76,11 @@ public class NeuronSelectivityDistillationStrategy<T> : DistillationStrategyBase
     {
         ValidateOutputDimensions(studentOutput, teacherOutput, v => v.Length);
 
+        // TODO: This strategy currently only implements standard distillation gradient
+        // The selectivity gradient is not implemented. Need to:
+        // 1. Compute selectivity gradient from intermediate activations
+        // 2. Combine with standard gradient using _selectivityWeight
+        
         int n = studentOutput.Length;
         var gradient = new Vector<T>(n);
 
