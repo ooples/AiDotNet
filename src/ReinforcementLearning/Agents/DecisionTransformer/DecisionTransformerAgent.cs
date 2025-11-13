@@ -368,18 +368,4 @@ public class DecisionTransformerAgent<T> : DeepReinforcementLearningAgentBase<T>
 /// <summary>
 /// Helper class to maintain sequence context for Decision Transformer.
 /// </summary>
-internal class SequenceContext<T>
-{
-    public List<Vector<T>> States { get; set; }
-    public List<Vector<T>> Actions { get; set; }
-    public List<T> ReturnsToGo { get; set; }
-
-    public int Length => States.Count;
-
-    public SequenceContext()
-    {
-        States = new List<Vector<T>>();
-        Actions = new List<Vector<T>>();
-        ReturnsToGo = new List<T>();
-    }
 }

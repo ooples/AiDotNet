@@ -208,7 +208,7 @@ public class DDPGAgent<T> : DeepReinforcementLearningAgentBase<T>
         return totalLoss;
     }
 
-    private T UpdateCritic(List<Experience<T>> batch)
+    private T UpdateCritic(List<ReplayBuffers.Experience<T>> batch)
     {
         T totalLoss = NumOps.Zero;
 
@@ -250,7 +250,7 @@ public class DDPGAgent<T> : DeepReinforcementLearningAgentBase<T>
         return NumOps.Divide(totalLoss, NumOps.FromDouble(batch.Count));
     }
 
-    private T UpdateActor(List<Experience<T>> batch)
+    private T UpdateActor(List<ReplayBuffers.Experience<T>> batch)
     {
         T totalLoss = NumOps.Zero;
 
