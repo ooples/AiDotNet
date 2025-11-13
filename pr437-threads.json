@@ -1,2 +1,0 @@
-gh: Could not resolve to a Repository with the name 'cheat/AiDotNet'.
-{"data":{"repository":null},"errors":[{"type":"NOT_FOUND","path":["repository"],"locations":[{"line":2,"column":3}],"message":"Could not resolve to a Repository with the name 'cheat/AiDotNet'."}]}
