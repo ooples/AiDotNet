@@ -56,7 +56,30 @@ public class DoubleDQNAgent<T> : DeepReinforcementLearningAgentBase<T>
     /// </summary>
     /// <param name="options">Configuration options for the Double DQN agent.</param>
     public DoubleDQNAgent(DoubleDQNOptions<T> options)
-        : base(new ReinforcementLearningOptions<T>
+        : base(CreateBaseOptions(options))
+    {
+        _options = options;
+        _replayBuffer = new UniformReplayBuffer<T>(options.ReplayBufferSize, options.Seed);
+        _epsilon = options.EpsilonStart;
+        _steps = 0;
+
+        _qNetwork = BuildQNetwork();
+        _targetNetwork = BuildQNetwork();
+        CopyNetworkWeights(_qNetwork, _targetNetwork);
+
+        Networks.Add(_qNetwork);
+        Networks.Add(_targetNetwork);
+    }
+
+
+    private static ReinforcementLearningOptions<T> CreateBaseOptions(DoubleDQNOptions<T> options)
+    {
+        if (options == null)
+        {
+            throw new ArgumentNullException(nameof(options));
+        }
+
+        return new ReinforcementLearningOptions<T>
         {
             LearningRate = options.LearningRate,
             DiscountFactor = options.DiscountFactor,
@@ -69,19 +92,7 @@ public class DoubleDQNAgent<T> : DeepReinforcementLearningAgentBase<T>
             EpsilonStart = options.EpsilonStart,
             EpsilonEnd = options.EpsilonEnd,
             EpsilonDecay = options.EpsilonDecay
-        })
-    {
-        _options = options ?? throw new ArgumentNullException(nameof(options));
-        _replayBuffer = new UniformReplayBuffer<T>(options.ReplayBufferSize, options.Seed);
-        _epsilon = options.EpsilonStart;
-        _steps = 0;
-
-        _qNetwork = BuildQNetwork();
-        _targetNetwork = BuildQNetwork();
-        CopyNetworkWeights(_qNetwork, _targetNetwork);
-
-        Networks.Add(_qNetwork);
-        Networks.Add(_targetNetwork);
+        };
     }
 
     private NeuralNetwork<T> BuildQNetwork()
@@ -295,6 +306,7 @@ public class DoubleDQNAgent<T> : DeepReinforcementLearningAgentBase<T>
             vector[i] = parameters[i, 0];
         }
         _qNetwork.UpdateParameters(vector);
+        CopyNetworkWeights(_qNetwork, _targetNetwork);
     }
 
     /// <inheritdoc/>
