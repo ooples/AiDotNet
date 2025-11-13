@@ -42,19 +42,4 @@ public class LinearSARSAOptions<T> : ReinforcementLearningOptions<T>
     /// Size of the action space (number of possible actions).
     /// </summary>
     public int ActionSize { get; init; }
-
-    /// <summary>
-    /// Initial exploration rate (epsilon for epsilon-greedy).
-    /// </summary>
-    public double EpsilonStart { get; init; } = 1.0;
-
-    /// <summary>
-    /// Final exploration rate after decay.
-    /// </summary>
-    public double EpsilonEnd { get; init; } = 0.01;
-
-    /// <summary>
-    /// Epsilon decay rate per episode.
-    /// </summary>
-    public double EpsilonDecay { get; init; } = 0.995;
 }
