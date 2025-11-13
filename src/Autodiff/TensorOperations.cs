@@ -391,7 +391,36 @@ public static class TensorOperations<T>
                 {
                     gradA[i] = numOps.Divide(gradient[i], b.Value[i]);
                 }
-                a.Gradient = a.Gradient?.Add(gradA) ?? gradA;
+                if (a.Gradient == null)
+
+                {
+
+                    a.Gradient = gradA;
+
+                }
+
+                else
+
+
+                {
+
+
+                    var existingGradient = a.Gradient;
+
+
+                    if (existingGradient != null)
+
+
+                    {
+
+
+                        a.Gradient = existingGradient.Add(gradA);
+
+
+                    }
+
+
+                }
             }
 
             // ∂(a/b)/∂b = -a/b²
@@ -404,7 +433,36 @@ public static class TensorOperations<T>
                     var numerator = numOps.Multiply(gradient[i], a.Value[i]);
                     gradB[i] = numOps.Negate(numOps.Divide(numerator, bSquared[i]));
                 }
-                b.Gradient = b.Gradient?.Add(gradB) ?? gradB;
+                if (b.Gradient == null)
+
+                {
+
+                    b.Gradient = gradB;
+
+                }
+
+                else
+
+
+                {
+
+
+                    var existingGradient = b.Gradient;
+
+
+                    if (existingGradient != null)
+
+
+                    {
+
+
+                        b.Gradient = existingGradient.Add(gradB);
+
+
+                    }
+
+
+                }
             }
         }
 
@@ -465,7 +523,47 @@ public static class TensorOperations<T>
                 });
                 gradA = gradA.ElementwiseMultiply(gradient);
 
-                a.Gradient = a.Gradient?.Add(gradA) ?? gradA;
+                if (a.Gradient == null)
+
+
+                {
+
+
+                    a.Gradient = gradA;
+
+
+                }
+
+
+                else
+
+
+
+                {
+
+
+
+                    var existingGradient = a.Gradient;
+
+
+
+                    if (existingGradient != null)
+
+
+
+                    {
+
+
+
+                        a.Gradient = existingGradient.Add(gradA);
+
+
+
+                    }
+
+
+
+                }
             }
         }
 
@@ -515,7 +613,47 @@ public static class TensorOperations<T>
                 // ∂(e^a)/∂a = e^a = result
                 var gradA = gradient.ElementwiseMultiply(result);
 
-                a.Gradient = a.Gradient?.Add(gradA) ?? gradA;
+                if (a.Gradient == null)
+
+
+                {
+
+
+                    a.Gradient = gradA;
+
+
+                }
+
+
+                else
+
+
+
+                {
+
+
+
+                    var existingGradient = a.Gradient;
+
+
+
+                    if (existingGradient != null)
+
+
+
+                    {
+
+
+
+                        a.Gradient = existingGradient.Add(gradA);
+
+
+
+                    }
+
+
+
+                }
             }
         }
 
@@ -568,7 +706,47 @@ public static class TensorOperations<T>
                     gradA[i] = numOps.Divide(gradient[i], a.Value[i]);
                 }
 
-                a.Gradient = a.Gradient?.Add(gradA) ?? gradA;
+                if (a.Gradient == null)
+
+
+                {
+
+
+                    a.Gradient = gradA;
+
+
+                }
+
+
+                else
+
+
+
+                {
+
+
+
+                    var existingGradient = a.Gradient;
+
+
+
+                    if (existingGradient != null)
+
+
+
+                    {
+
+
+
+                        a.Gradient = existingGradient.Add(gradA);
+
+
+
+                    }
+
+
+
+                }
             }
         }
 
@@ -622,7 +800,47 @@ public static class TensorOperations<T>
                     gradA[i] = numOps.Divide(gradient[i], twoTimesResult);
                 }
 
-                a.Gradient = a.Gradient?.Add(gradA) ?? gradA;
+                if (a.Gradient == null)
+
+
+                {
+
+
+                    a.Gradient = gradA;
+
+
+                }
+
+
+                else
+
+
+
+                {
+
+
+
+                    var existingGradient = a.Gradient;
+
+
+
+                    if (existingGradient != null)
+
+
+
+                    {
+
+
+
+                        a.Gradient = existingGradient.Add(gradA);
+
+
+
+                    }
+
+
+
+                }
             }
         }
 
@@ -673,7 +891,47 @@ public static class TensorOperations<T>
                 var oneMinusSquared = resultSquared.Transform((x, _) => numOps.Subtract(numOps.One, x));
                 var gradA = gradient.ElementwiseMultiply(oneMinusSquared);
 
-                a.Gradient = a.Gradient?.Add(gradA) ?? gradA;
+                if (a.Gradient == null)
+
+
+                {
+
+
+                    a.Gradient = gradA;
+
+
+                }
+
+
+                else
+
+
+
+                {
+
+
+
+                    var existingGradient = a.Gradient;
+
+
+
+                    if (existingGradient != null)
+
+
+
+                    {
+
+
+
+                        a.Gradient = existingGradient.Add(gradA);
+
+
+
+                    }
+
+
+
+                }
             }
         }
 
@@ -724,7 +982,47 @@ public static class TensorOperations<T>
                 var derivative = result.ElementwiseMultiply(oneMinusResult);
                 var gradA = gradient.ElementwiseMultiply(derivative);
 
-                a.Gradient = a.Gradient?.Add(gradA) ?? gradA;
+                if (a.Gradient == null)
+
+
+                {
+
+
+                    a.Gradient = gradA;
+
+
+                }
+
+
+                else
+
+
+
+                {
+
+
+
+                    var existingGradient = a.Gradient;
+
+
+
+                    if (existingGradient != null)
+
+
+
+                    {
+
+
+
+                        a.Gradient = existingGradient.Add(gradA);
+
+
+
+                    }
+
+
+
+                }
             }
         }
 
@@ -779,7 +1077,47 @@ public static class TensorOperations<T>
                     numOps.GreaterThan(x, numOps.Zero) ? numOps.One : numOps.Zero);
                 var gradA = gradient.ElementwiseMultiply(mask);
 
-                a.Gradient = a.Gradient?.Add(gradA) ?? gradA;
+                if (a.Gradient == null)
+
+
+                {
+
+
+                    a.Gradient = gradA;
+
+
+                }
+
+
+                else
+
+
+
+                {
+
+
+
+                    var existingGradient = a.Gradient;
+
+
+
+                    if (existingGradient != null)
+
+
+
+                    {
+
+
+
+                        a.Gradient = existingGradient.Add(gradA);
+
+
+
+                    }
+
+
+
+                }
             }
         }
 
@@ -826,7 +1164,47 @@ public static class TensorOperations<T>
                 // ∂(-a)/∂a = -1
                 var gradA = gradient.Transform((x, _) => numOps.Negate(x));
 
-                a.Gradient = a.Gradient?.Add(gradA) ?? gradA;
+                if (a.Gradient == null)
+
+
+                {
+
+
+                    a.Gradient = gradA;
+
+
+                }
+
+
+                else
+
+
+
+                {
+
+
+
+                    var existingGradient = a.Gradient;
+
+
+
+                    if (existingGradient != null)
+
+
+
+                    {
+
+
+
+                        a.Gradient = existingGradient.Add(gradA);
+
+
+
+                    }
+
+
+
+                }
             }
         }
 
@@ -871,7 +1249,47 @@ public static class TensorOperations<T>
                 var bTransposed = b.Value.Transpose();
                 var gradA = gradient.MatrixMultiply(bTransposed);
 
-                a.Gradient = a.Gradient?.Add(gradA) ?? gradA;
+                if (a.Gradient == null)
+
+
+                {
+
+
+                    a.Gradient = gradA;
+
+
+                }
+
+
+                else
+
+
+
+                {
+
+
+
+                    var existingGradient = a.Gradient;
+
+
+
+                    if (existingGradient != null)
+
+
+
+                    {
+
+
+
+                        a.Gradient = existingGradient.Add(gradA);
+
+
+
+                    }
+
+
+
+                }
             }
 
             // ∂(A·B)/∂B = A^T·gradOut
@@ -880,7 +1298,47 @@ public static class TensorOperations<T>
                 var aTransposed = a.Value.Transpose();
                 var gradB = aTransposed.MatrixMultiply(gradient);
 
-                b.Gradient = b.Gradient?.Add(gradB) ?? gradB;
+                if (b.Gradient == null)
+
+
+                {
+
+
+                    b.Gradient = gradB;
+
+
+                }
+
+
+                else
+
+
+
+                {
+
+
+
+                    var existingGradient = b.Gradient;
+
+
+
+                    if (existingGradient != null)
+
+
+
+                    {
+
+
+
+                        b.Gradient = existingGradient.Add(gradB);
+
+
+
+                    }
+
+
+
+                }
             }
         }
 
@@ -922,7 +1380,47 @@ public static class TensorOperations<T>
                 // ∂(A^T)/∂A = gradOut^T
                 var gradA = gradient.Transpose();
 
-                a.Gradient = a.Gradient?.Add(gradA) ?? gradA;
+                if (a.Gradient == null)
+
+
+                {
+
+
+                    a.Gradient = gradA;
+
+
+                }
+
+
+                else
+
+
+
+                {
+
+
+
+                    var existingGradient = a.Gradient;
+
+
+
+                    if (existingGradient != null)
+
+
+
+                    {
+
+
+
+                        a.Gradient = existingGradient.Add(gradA);
+
+
+
+                    }
+
+
+
+                }
             }
         }
 
@@ -1053,7 +1551,47 @@ public static class TensorOperations<T>
                     }
                 }
 
-                a.Gradient = a.Gradient?.Add(gradA) ?? gradA;
+                if (a.Gradient == null)
+
+
+                {
+
+
+                    a.Gradient = gradA;
+
+
+                }
+
+
+                else
+
+
+
+                {
+
+
+
+                    var existingGradient = a.Gradient;
+
+
+
+                    if (existingGradient != null)
+
+
+
+                    {
+
+
+
+                        a.Gradient = existingGradient.Add(gradA);
+
+
+
+                    }
+
+
+
+                }
             }
         }
 
@@ -1108,7 +1646,47 @@ public static class TensorOperations<T>
                     gradA[i] = gradValue;
                 }
 
-                a.Gradient = a.Gradient?.Add(gradA) ?? gradA;
+                if (a.Gradient == null)
+
+
+                {
+
+
+                    a.Gradient = gradA;
+
+
+                }
+
+
+                else
+
+
+
+                {
+
+
+
+                    var existingGradient = a.Gradient;
+
+
+
+                    if (existingGradient != null)
+
+
+
+                    {
+
+
+
+                        a.Gradient = existingGradient.Add(gradA);
+
+
+
+                    }
+
+
+
+                }
             }
         }
 
@@ -1154,7 +1732,47 @@ public static class TensorOperations<T>
                 // ∂(Reshape(A))/∂A = Reshape(gradOut, originalShape)
                 var gradA = gradient.Reshape(originalShape);
 
-                a.Gradient = a.Gradient?.Add(gradA) ?? gradA;
+                if (a.Gradient == null)
+
+
+                {
+
+
+                    a.Gradient = gradA;
+
+
+                }
+
+
+                else
+
+
+
+                {
+
+
+
+                    var existingGradient = a.Gradient;
+
+
+
+                    if (existingGradient != null)
+
+
+
+                    {
+
+
+
+                        a.Gradient = existingGradient.Add(gradA);
+
+
+
+                    }
+
+
+
+                }
             }
         }
 
@@ -1266,7 +1884,47 @@ public static class TensorOperations<T>
                         }
                     }
 
-                    a.Gradient = a.Gradient?.Add(gradA) ?? gradA;
+                    if (a.Gradient == null)
+
+
+                    {
+
+
+                        a.Gradient = gradA;
+
+
+                    }
+
+
+                    else
+
+
+
+                    {
+
+
+
+                        var existingGradient = a.Gradient;
+
+
+
+                        if (existingGradient != null)
+
+
+
+                        {
+
+
+
+                            a.Gradient = existingGradient.Add(gradA);
+
+
+
+                        }
+
+
+
+                    }
                 }
             }
 
@@ -1579,7 +2237,47 @@ public static class TensorOperations<T>
                         }
                     }
 
-                    a.Gradient = a.Gradient?.Add(gradA) ?? gradA;
+                    if (a.Gradient == null)
+
+
+                    {
+
+
+                        a.Gradient = gradA;
+
+
+                    }
+
+
+                    else
+
+
+
+                    {
+
+
+
+                        var existingGradient = a.Gradient;
+
+
+
+                        if (existingGradient != null)
+
+
+
+                        {
+
+
+
+                            a.Gradient = existingGradient.Add(gradA);
+
+
+
+                        }
+
+
+
+                    }
                 }
             }
 
@@ -1743,7 +2441,47 @@ public static class TensorOperations<T>
                     }
                 }
 
-                a.Gradient = a.Gradient?.Add(gradA) ?? gradA;
+                if (a.Gradient == null)
+
+
+                {
+
+
+                    a.Gradient = gradA;
+
+
+                }
+
+
+                else
+
+
+
+                {
+
+
+
+                    var existingGradient = a.Gradient;
+
+
+
+                    if (existingGradient != null)
+
+
+
+                    {
+
+
+
+                        a.Gradient = existingGradient.Add(gradA);
+
+
+
+                    }
+
+
+
+                }
             }
         }
 
@@ -1887,7 +2625,47 @@ public static class TensorOperations<T>
                     }
                 }
 
-                a.Gradient = a.Gradient?.Add(gradA) ?? gradA;
+                if (a.Gradient == null)
+
+
+                {
+
+
+                    a.Gradient = gradA;
+
+
+                }
+
+
+                else
+
+
+
+                {
+
+
+
+                    var existingGradient = a.Gradient;
+
+
+
+                    if (existingGradient != null)
+
+
+
+                    {
+
+
+
+                        a.Gradient = existingGradient.Add(gradA);
+
+
+
+                    }
+
+
+
+                }
             }
         }
 
@@ -2024,7 +2802,47 @@ public static class TensorOperations<T>
                         gradGamma[f] = sum;
                     }
 
-                    gamma.Gradient = gamma.Gradient?.Add(gradGamma) ?? gradGamma;
+                    if (gamma.Gradient == null)
+
+
+                    {
+
+
+                        gamma.Gradient = gradGamma;
+
+
+                    }
+
+
+                    else
+
+
+
+                    {
+
+
+
+                        var existingGradient = gamma.Gradient;
+
+
+
+                        if (existingGradient != null)
+
+
+
+                        {
+
+
+
+                            gamma.Gradient = existingGradient.Add(gradGamma);
+
+
+
+                        }
+
+
+
+                    }
                 }
 
                 if (beta.RequiresGradient)
@@ -2040,7 +2858,47 @@ public static class TensorOperations<T>
                         gradBeta[f] = sum;
                     }
 
-                    beta.Gradient = beta.Gradient?.Add(gradBeta) ?? gradBeta;
+                    if (beta.Gradient == null)
+
+
+                    {
+
+
+                        beta.Gradient = gradBeta;
+
+
+                    }
+
+
+                    else
+
+
+
+                    {
+
+
+
+                        var existingGradient = beta.Gradient;
+
+
+
+                        if (existingGradient != null)
+
+
+
+                        {
+
+
+
+                            beta.Gradient = existingGradient.Add(gradBeta);
+
+
+
+                        }
+
+
+
+                    }
                 }
 
                 // Gradient for input
@@ -2085,7 +2943,47 @@ public static class TensorOperations<T>
                         }
                     }
 
-                    a.Gradient = a.Gradient?.Add(gradA) ?? gradA;
+                    if (a.Gradient == null)
+
+
+                    {
+
+
+                        a.Gradient = gradA;
+
+
+                    }
+
+
+                    else
+
+
+
+                    {
+
+
+
+                        var existingGradient = a.Gradient;
+
+
+
+                        if (existingGradient != null)
+
+
+
+                        {
+
+
+
+                            a.Gradient = existingGradient.Add(gradA);
+
+
+
+                        }
+
+
+
+                    }
                 }
             }
 
@@ -2271,7 +3169,47 @@ public static class TensorOperations<T>
                             }
                         }
 
-                        a.Gradient = a.Gradient?.Add(gradA) ?? gradA;
+                        if (a.Gradient == null)
+
+
+                        {
+
+
+                            a.Gradient = gradA;
+
+
+                        }
+
+
+                        else
+
+
+
+                        {
+
+
+
+                            var existingGradient = a.Gradient;
+
+
+
+                            if (existingGradient != null)
+
+
+
+                            {
+
+
+
+                                a.Gradient = existingGradient.Add(gradA);
+
+
+
+                            }
+
+
+
+                        }
                     }
                     return;
                 }
@@ -2292,7 +3230,47 @@ public static class TensorOperations<T>
                         gradGamma[f] = sum;
                     }
 
-                    gamma.Gradient = gamma.Gradient?.Add(gradGamma) ?? gradGamma;
+                    if (gamma.Gradient == null)
+
+
+                    {
+
+
+                        gamma.Gradient = gradGamma;
+
+
+                    }
+
+
+                    else
+
+
+
+                    {
+
+
+
+                        var existingGradient = gamma.Gradient;
+
+
+
+                        if (existingGradient != null)
+
+
+
+                        {
+
+
+
+                            gamma.Gradient = existingGradient.Add(gradGamma);
+
+
+
+                        }
+
+
+
+                    }
                 }
 
                 if (beta.RequiresGradient)
@@ -2308,7 +3286,47 @@ public static class TensorOperations<T>
                         gradBeta[f] = sum;
                     }
 
-                    beta.Gradient = beta.Gradient?.Add(gradBeta) ?? gradBeta;
+                    if (beta.Gradient == null)
+
+
+                    {
+
+
+                        beta.Gradient = gradBeta;
+
+
+                    }
+
+
+                    else
+
+
+
+                    {
+
+
+
+                        var existingGradient = beta.Gradient;
+
+
+
+                        if (existingGradient != null)
+
+
+
+                        {
+
+
+
+                            beta.Gradient = existingGradient.Add(gradBeta);
+
+
+
+                        }
+
+
+
+                    }
                 }
 
                 // Gradient for input (complex due to batch statistics)
@@ -2353,7 +3371,47 @@ public static class TensorOperations<T>
                         }
                     }
 
-                    a.Gradient = a.Gradient?.Add(gradA) ?? gradA;
+                    if (a.Gradient == null)
+
+
+                    {
+
+
+                        a.Gradient = gradA;
+
+
+                    }
+
+
+                    else
+
+
+
+                    {
+
+
+
+                        var existingGradient = a.Gradient;
+
+
+
+                        if (existingGradient != null)
+
+
+
+                        {
+
+
+
+                            a.Gradient = existingGradient.Add(gradA);
+
+
+
+                        }
+
+
+
+                    }
                 }
             }
 
@@ -2552,7 +3610,47 @@ public static class TensorOperations<T>
                     }
                 }
 
-                input.Gradient = input.Gradient?.Add(gradInput) ?? gradInput;
+                if (input.Gradient == null)
+
+
+                {
+
+
+                    input.Gradient = gradInput;
+
+
+                }
+
+
+                else
+
+
+
+                {
+
+
+
+                    var existingGradient = input.Gradient;
+
+
+
+                    if (existingGradient != null)
+
+
+
+                    {
+
+
+
+                        input.Gradient = existingGradient.Add(gradInput);
+
+
+
+                    }
+
+
+
+                }
             }
 
             // Gradient w.r.t. kernel
@@ -2596,7 +3694,47 @@ public static class TensorOperations<T>
                     }
                 }
 
-                kernel.Gradient = kernel.Gradient?.Add(gradKernel) ?? gradKernel;
+                if (kernel.Gradient == null)
+
+
+                {
+
+
+                    kernel.Gradient = gradKernel;
+
+
+                }
+
+
+                else
+
+
+
+                {
+
+
+
+                    var existingGradient = kernel.Gradient;
+
+
+
+                    if (existingGradient != null)
+
+
+
+                    {
+
+
+
+                        kernel.Gradient = existingGradient.Add(gradKernel);
+
+
+
+                    }
+
+
+
+                }
             }
 
             // Gradient w.r.t. bias
@@ -2620,7 +3758,47 @@ public static class TensorOperations<T>
                     gradBias[oc] = sum;
                 }
 
-                bias.Gradient = bias.Gradient?.Add(gradBias) ?? gradBias;
+                if (bias.Gradient == null)
+
+
+                {
+
+
+                    bias.Gradient = gradBias;
+
+
+                }
+
+
+                else
+
+
+
+                {
+
+
+
+                    var existingGradient = bias.Gradient;
+
+
+
+                    if (existingGradient != null)
+
+
+
+                    {
+
+
+
+                        bias.Gradient = existingGradient.Add(gradBias);
+
+
+
+                    }
+
+
+
+                }
             }
         }
 
@@ -2808,7 +3986,47 @@ public static class TensorOperations<T>
                     }
                 }
 
-                input.Gradient = input.Gradient?.Add(gradInput) ?? gradInput;
+                if (input.Gradient == null)
+
+
+                {
+
+
+                    input.Gradient = gradInput;
+
+
+                }
+
+
+                else
+
+
+
+                {
+
+
+
+                    var existingGradient = input.Gradient;
+
+
+
+                    if (existingGradient != null)
+
+
+
+                    {
+
+
+
+                        input.Gradient = existingGradient.Add(gradInput);
+
+
+
+                    }
+
+
+
+                }
             }
 
             // Gradient w.r.t. kernel
@@ -2851,7 +4069,47 @@ public static class TensorOperations<T>
                     }
                 }
 
-                kernel.Gradient = kernel.Gradient?.Add(gradKernel) ?? gradKernel;
+                if (kernel.Gradient == null)
+
+
+                {
+
+
+                    kernel.Gradient = gradKernel;
+
+
+                }
+
+
+                else
+
+
+
+                {
+
+
+
+                    var existingGradient = kernel.Gradient;
+
+
+
+                    if (existingGradient != null)
+
+
+
+                    {
+
+
+
+                        kernel.Gradient = existingGradient.Add(gradKernel);
+
+
+
+                    }
+
+
+
+                }
             }
 
             // Gradient w.r.t. bias
@@ -2875,7 +4133,47 @@ public static class TensorOperations<T>
                     gradBias[oc] = sum;
                 }
 
-                bias.Gradient = bias.Gradient?.Add(gradBias) ?? gradBias;
+                if (bias.Gradient == null)
+
+
+                {
+
+
+                    bias.Gradient = gradBias;
+
+
+                }
+
+
+                else
+
+
+
+                {
+
+
+
+                    var existingGradient = bias.Gradient;
+
+
+
+                    if (existingGradient != null)
+
+
+
+                    {
+
+
+
+                        bias.Gradient = existingGradient.Add(gradBias);
+
+
+
+                    }
+
+
+
+                }
             }
         }
 
@@ -3000,7 +4298,47 @@ public static class TensorOperations<T>
                 gradInput[inIndices] = numOps.Add(gradInput[inIndices], gradient[outIndices]);
             }
 
-            a.Gradient = a.Gradient?.Add(gradInput) ?? gradInput;
+            if (a.Gradient == null)
+
+
+            {
+
+
+                a.Gradient = gradInput;
+
+
+            }
+
+
+            else
+
+
+
+            {
+
+
+
+                var existingGradient = a.Gradient;
+
+
+
+                if (existingGradient != null)
+
+
+
+                {
+
+
+
+                    a.Gradient = existingGradient.Add(gradInput);
+
+
+
+                }
+
+
+
+            }
         }
 
         var node = new ComputationNode<T>(
@@ -3137,7 +4475,47 @@ public static class TensorOperations<T>
 
             BroadcastGrad(new int[inputShape.Length], 0, new int[outputShape.Count]);
 
-            a.Gradient = a.Gradient?.Add(gradInput) ?? gradInput;
+            if (a.Gradient == null)
+
+
+            {
+
+
+                a.Gradient = gradInput;
+
+
+            }
+
+
+            else
+
+
+
+            {
+
+
+
+                var existingGradient = a.Gradient;
+
+
+
+                if (existingGradient != null)
+
+
+
+                {
+
+
+
+                    a.Gradient = existingGradient.Add(gradInput);
+
+
+
+                }
+
+
+
+            }
         }
 
         var node = new ComputationNode<T>(
@@ -4380,7 +5758,47 @@ public static class TensorOperations<T>
                 }
             });
 
-            input.Gradient = input.Gradient?.Add(inputGradient) ?? inputGradient;
+            if (input.Gradient == null)
+
+
+            {
+
+
+                input.Gradient = inputGradient;
+
+
+            }
+
+
+            else
+
+
+
+            {
+
+
+
+                var existingGradient = input.Gradient;
+
+
+
+                if (existingGradient != null)
+
+
+
+                {
+
+
+
+                    input.Gradient = existingGradient.Add(inputGradient);
+
+
+
+                }
+
+
+
+            }
         }
 
         var node = new ComputationNode<T>(
@@ -4516,7 +5934,47 @@ public static class TensorOperations<T>
                     }
                 }
 
-                input.Gradient = input.Gradient?.Add(inputGradient) ?? inputGradient;
+                if (input.Gradient == null)
+
+
+                {
+
+
+                    input.Gradient = inputGradient;
+
+
+                }
+
+
+                else
+
+
+
+                {
+
+
+
+                    var existingGradient = input.Gradient;
+
+
+
+                    if (existingGradient != null)
+
+
+
+                    {
+
+
+
+                        input.Gradient = existingGradient.Add(inputGradient);
+
+
+
+                    }
+
+
+
+                }
             }
 
             // Gradients w.r.t. centers
@@ -4550,7 +6008,47 @@ public static class TensorOperations<T>
                     }
                 }
 
-                centers.Gradient = centers.Gradient?.Add(centersGradient) ?? centersGradient;
+                if (centers.Gradient == null)
+
+
+                {
+
+
+                    centers.Gradient = centersGradient;
+
+
+                }
+
+
+                else
+
+
+
+                {
+
+
+
+                    var existingGradient = centers.Gradient;
+
+
+
+                    if (existingGradient != null)
+
+
+
+                    {
+
+
+
+                        centers.Gradient = existingGradient.Add(centersGradient);
+
+
+
+                    }
+
+
+
+                }
             }
 
             // Gradients w.r.t. epsilons
@@ -4575,7 +6073,47 @@ public static class TensorOperations<T>
                     }
                 }
 
-                epsilons.Gradient = epsilons.Gradient?.Add(epsilonsGradient) ?? epsilonsGradient;
+                if (epsilons.Gradient == null)
+
+
+                {
+
+
+                    epsilons.Gradient = epsilonsGradient;
+
+
+                }
+
+
+                else
+
+
+
+                {
+
+
+
+                    var existingGradient = epsilons.Gradient;
+
+
+
+                    if (existingGradient != null)
+
+
+
+                    {
+
+
+
+                        epsilons.Gradient = existingGradient.Add(epsilonsGradient);
+
+
+
+                    }
+
+
+
+                }
             }
         }
 
@@ -4719,7 +6257,47 @@ public static class TensorOperations<T>
                 }
             }
 
-            theta.Gradient = theta.Gradient?.Add(thetaGradient) ?? thetaGradient;
+            if (theta.Gradient == null)
+
+
+            {
+
+
+                theta.Gradient = thetaGradient;
+
+
+            }
+
+
+            else
+
+
+
+            {
+
+
+
+                var existingGradient = theta.Gradient;
+
+
+
+                if (existingGradient != null)
+
+
+
+                {
+
+
+
+                    theta.Gradient = existingGradient.Add(thetaGradient);
+
+
+
+                }
+
+
+
+            }
         }
 
         var node = new ComputationNode<T>(
@@ -4910,7 +6488,47 @@ public static class TensorOperations<T>
                     }
                 }
 
-                input.Gradient = input.Gradient?.Add(inputGradient) ?? inputGradient;
+                if (input.Gradient == null)
+
+
+                {
+
+
+                    input.Gradient = inputGradient;
+
+
+                }
+
+
+                else
+
+
+
+                {
+
+
+
+                    var existingGradient = input.Gradient;
+
+
+
+                    if (existingGradient != null)
+
+
+
+                    {
+
+
+
+                        input.Gradient = existingGradient.Add(inputGradient);
+
+
+
+                    }
+
+
+
+                }
             }
 
             // Gradient w.r.t. grid
@@ -4966,7 +6584,47 @@ public static class TensorOperations<T>
                     }
                 }
 
-                grid.Gradient = grid.Gradient?.Add(gridGradient) ?? gridGradient;
+                if (grid.Gradient == null)
+
+
+                {
+
+
+                    grid.Gradient = gridGradient;
+
+
+                }
+
+
+                else
+
+
+
+                {
+
+
+
+                    var existingGradient = grid.Gradient;
+
+
+
+                    if (existingGradient != null)
+
+
+
+                    {
+
+
+
+                        grid.Gradient = existingGradient.Add(gridGradient);
+
+
+
+                    }
+
+
+
+                }
             }
         }
 
@@ -5138,7 +6796,47 @@ public static class TensorOperations<T>
                     }
                 }
 
-                input.Gradient = input.Gradient?.Add(inputGradient) ?? inputGradient;
+                if (input.Gradient == null)
+
+
+                {
+
+
+                    input.Gradient = inputGradient;
+
+
+                }
+
+
+                else
+
+
+
+                {
+
+
+
+                    var existingGradient = input.Gradient;
+
+
+
+                    if (existingGradient != null)
+
+
+
+                    {
+
+
+
+                        input.Gradient = existingGradient.Add(inputGradient);
+
+
+
+                    }
+
+
+
+                }
             }
 
             // Gradient w.r.t. weights: X^T @ A^T @ grad
@@ -5168,7 +6866,47 @@ public static class TensorOperations<T>
                     }
                 }
 
-                weights.Gradient = weights.Gradient?.Add(weightsGradient) ?? weightsGradient;
+                if (weights.Gradient == null)
+
+
+                {
+
+
+                    weights.Gradient = weightsGradient;
+
+
+                }
+
+
+                else
+
+
+
+                {
+
+
+
+                    var existingGradient = weights.Gradient;
+
+
+
+                    if (existingGradient != null)
+
+
+
+                    {
+
+
+
+                        weights.Gradient = existingGradient.Add(weightsGradient);
+
+
+
+                    }
+
+
+
+                }
             }
 
             // Gradient w.r.t. bias: sum across batch and nodes
@@ -5189,7 +6927,47 @@ public static class TensorOperations<T>
                     biasGradient[outF] = sum;
                 }
 
-                bias.Gradient = bias.Gradient?.Add(biasGradient) ?? biasGradient;
+                if (bias.Gradient == null)
+
+
+                {
+
+
+                    bias.Gradient = biasGradient;
+
+
+                }
+
+
+                else
+
+
+
+                {
+
+
+
+                    var existingGradient = bias.Gradient;
+
+
+
+                    if (existingGradient != null)
+
+
+
+                    {
+
+
+
+                        bias.Gradient = existingGradient.Add(biasGradient);
+
+
+
+                    }
+
+
+
+                }
             }
 
             // Gradient w.r.t. adjacency: grad @ (X @ W)^T
@@ -5215,7 +6993,47 @@ public static class TensorOperations<T>
                     }
                 }
 
-                adjacency.Gradient = adjacency.Gradient?.Add(adjGradient) ?? adjGradient;
+                if (adjacency.Gradient == null)
+
+
+                {
+
+
+                    adjacency.Gradient = adjGradient;
+
+
+                }
+
+
+                else
+
+
+
+                {
+
+
+
+                    var existingGradient = adjacency.Gradient;
+
+
+
+                    if (existingGradient != null)
+
+
+
+                    {
+
+
+
+                        adjacency.Gradient = existingGradient.Add(adjGradient);
+
+
+
+                    }
+
+
+
+                }
             }
         }
 

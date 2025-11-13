@@ -1175,7 +1175,10 @@ public class DepthwiseSeparableConvolutionalLayer<T> : LayerBase<T>
             else if (VectorActivation is TanhActivation<T>)
                 return Autodiff.TensorOperations<T>.Tanh(input);
             else
-                throw new NotSupportedException($"Activation {VectorActivation.GetType().Name} not yet supported in autodiff");
+            {
+                var activationType = VectorActivation?.GetType().Name ?? "Unknown";
+                throw new NotSupportedException($"Activation {activationType} not yet supported in autodiff");
+            }
         }
         else
         {
@@ -1186,7 +1189,10 @@ public class DepthwiseSeparableConvolutionalLayer<T> : LayerBase<T>
             else if (ScalarActivation is TanhActivation<T>)
                 return Autodiff.TensorOperations<T>.Tanh(input);
             else
-                throw new NotSupportedException($"Activation {ScalarActivation.GetType().Name} not yet supported in autodiff");
+            {
+                var activationType = ScalarActivation?.GetType().Name ?? "Unknown";
+                throw new NotSupportedException($"Activation {activationType} not yet supported in autodiff");
+            }
         }
     }
 
