@@ -205,11 +205,13 @@ public class TeacherModelFactoryTests
         // Act
         var teacher = TeacherModelFactory<double>.CreateTeacher(
             TeacherModelType.Quantized,
-            model: mockModel);
+            model: mockModel,
+            outputDimension: 5);
 
         // Assert
         Assert.NotNull(teacher);
         Assert.IsType<QuantizedTeacherModel<double>>(teacher);
+        Assert.Equal(5, teacher.OutputDimension);
     }
 
     [Fact]
