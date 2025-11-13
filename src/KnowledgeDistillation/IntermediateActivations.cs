@@ -1,5 +1,6 @@
 using AiDotNet.LinearAlgebra;
 using System.Collections.Generic;
+using System.Linq;
 
 namespace AiDotNet.KnowledgeDistillation;
 
@@ -66,8 +67,10 @@ public class IntermediateActivations<T>
     /// </summary>
     /// <remarks>
     /// <para>Key = layer name, Value = activation matrix.</para>
+    /// <para><b>Note:</b> Returns defensive copies of matrices to prevent external mutation.</para>
     /// </remarks>
-    public IReadOnlyDictionary<string, Matrix<T>> AllActivations => _activations;
+    public IReadOnlyDictionary<string, Matrix<T>> AllActivations =>
+        _activations.ToDictionary(kvp => kvp.Key, kvp => kvp.Value.Clone());
 
     /// <summary>
     /// Checks if activations exist for a specific layer.
