@@ -255,9 +255,16 @@ public class A2CAgent<T> : DeepReinforcementLearningAgentBase<T>
             )
         );
 
-        // Update networks (simplified gradient application)
-        UpdatePolicyNetwork();
-        UpdateValueNetwork();
+        // TODO: Implement proper backpropagation before updating networks
+        // Currently missing: _policyNetwork.Backward() and _valueNetwork.Backward()
+        // The gradients accessed by Update*Network() methods will be stale/zero
+        // Proper implementation requires:
+        // 1. Compute policy gradient: ∇θ log π(a|s) * advantage
+        // 2. Compute value gradient: ∇φ (V(s) - return)^2
+        // 3. Call Backward() on both networks
+        // 4. Then call Update*Network()
+        throw new NotImplementedException(
+            "A2C requires proper backpropagation implementation before network updates.");
 
         LossHistory.Add(totalLoss);
         _trajectory.Clear();
