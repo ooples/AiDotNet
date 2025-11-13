@@ -98,8 +98,7 @@ public class NeuronSelectivityDistillationStrategy<T> : DistillationStrategyBase
                     NumOps.Multiply(NumOps.FromDouble(Alpha), hardGrad),
                     NumOps.Multiply(NumOps.FromDouble(1.0 - Alpha), softGrad));
 
-                // Apply selectivity weight reduction exactly once
-                gradient[i] = NumOps.Multiply(combined, NumOps.FromDouble(1.0 - _selectivityWeight));
+                gradient[i] = combined;
             }
         }
         else
@@ -110,8 +109,7 @@ public class NeuronSelectivityDistillationStrategy<T> : DistillationStrategyBase
                 var softGrad = NumOps.Subtract(studentSoft[i], teacherSoft[i]);
                 softGrad = NumOps.Multiply(softGrad, NumOps.FromDouble(Temperature * Temperature));
 
-                // Apply selectivity weight reduction exactly once
-                gradient[i] = NumOps.Multiply(softGrad, NumOps.FromDouble(1.0 - _selectivityWeight));
+                gradient[i] = softGrad;
             }
         }
 
