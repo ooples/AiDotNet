@@ -285,7 +285,8 @@ public class AddLayer<T> : LayerBase<T>
     /// </remarks>
     public override Tensor<T> Backward(Tensor<T> outputGradient)
     {
-        if (UseAutodiff)
+        // Autodiff only supports scalar activations; fallback to manual for vector activations
+        if (UseAutodiff && !UsingVectorActivation)
             return BackwardViaAutodiff(outputGradient);
         else
             return BackwardManual(outputGradient);
