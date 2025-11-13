@@ -299,8 +299,10 @@ public class IQLAgent<T> : DeepReinforcementLearningAgentBase<T>
             var q1Error = _numOps.Subtract(targetQ, q1Value);
             var q1Loss = _numOps.Multiply(q1Error, q1Error);
 
+            // MSE gradient: -2 * (target - prediction)
+            var q1Grad = _numOps.Multiply(_numOps.FromDouble(-2.0), q1Error);
             var q1ErrorVec = new Vector<T>(1);
-            q1ErrorVec[0] = q1Error;
+            q1ErrorVec[0] = q1Grad;
             _q1Network.Backward(q1ErrorVec);
             _q1Network.UpdateWeights(_options.QLearningRate);
 
@@ -309,8 +311,10 @@ public class IQLAgent<T> : DeepReinforcementLearningAgentBase<T>
             var q2Error = _numOps.Subtract(targetQ, q2Value);
             var q2Loss = _numOps.Multiply(q2Error, q2Error);
 
+            // MSE gradient: -2 * (target - prediction)
+            var q2Grad = _numOps.Multiply(_numOps.FromDouble(-2.0), q2Error);
             var q2ErrorVec = new Vector<T>(1);
-            q2ErrorVec[0] = q2Error;
+            q2ErrorVec[0] = q2Grad;
             _q2Network.Backward(q2ErrorVec);
             _q2Network.UpdateWeights(_options.QLearningRate);
 
