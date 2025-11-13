@@ -1,0 +1,175 @@
+using AiDotNet.Interfaces;
+using AiDotNet.LinearAlgebra;
+using AiDotNet.Models;
+using AiDotNet.Models.Options;
+
+namespace AiDotNet.ReinforcementLearning.Agents.Planning;
+
+/// <summary>
+/// Prioritized Sweeping agent that focuses planning on high-priority state-actions.
+/// </summary>
+/// <typeparam name="T">The numeric type used for calculations.</typeparam>
+public class PrioritizedSweepingAgent<T> : ReinforcementLearningAgentBase<T>
+{
+    private PrioritizedSweepingOptions<T> _options;
+    private Dictionary<string, Dictionary<int, T>> _qTable;
+    private Dictionary<string, Dictionary<int, (string nextState, T reward)>> _model;
+    private Dictionary<string, List<(string predecessor, int action)>> _predecessors;
+    private SortedSet<(double priority, string state, int action)> _priorityQueue;
+    private double _epsilon;
+
+    public PrioritizedSweepingAgent(PrioritizedSweepingOptions<T> options) : base(options)
+    {
+        _options = options ?? throw new ArgumentNullException(nameof(options));
+        _qTable = new Dictionary<string, Dictionary<int, T>>();
+        _model = new Dictionary<string, Dictionary<int, (string, T)>>();
+        _predecessors = new Dictionary<string, List<(string, int)>>();
+        _priorityQueue = new SortedSet<(double, string, int)>(Comparer<(double, string, int)>.Create((a, b) =>
+        {
+            int cmp = b.Item1.CompareTo(a.Item1);  // Descending priority
+            if (cmp != 0) return cmp;
+            cmp = string.CompareOrdinal(a.Item2, b.Item2);
+            if (cmp != 0) return cmp;
+            return a.Item3.CompareTo(b.Item3);
+        }));
+        _epsilon = options.EpsilonStart;
+    }
+
+    public override Vector<T> SelectAction(Vector<T> state, bool training = true)
+    {
+        EnsureStateExists(state);
+        string stateKey = GetStateKey(state);
+        int selectedAction = (training && Random.NextDouble() < _epsilon) ? Random.Next(_options.ActionSize) : GetGreedyAction(stateKey);
+        var result = new Vector<T>(_options.ActionSize);
+        result[selectedAction] = NumOps.One;
+        return result;
+    }
+
+    public override void StoreExperience(Vector<T> state, Vector<T> action, T reward, Vector<T> nextState, bool done)
+    {
+        string stateKey = GetStateKey(state);
+        string nextStateKey = GetStateKey(nextState);
+        int actionIndex = ArgMax(action);
+
+        EnsureStateExists(state);
+        EnsureStateExists(nextState);
+
+        // Model learning
+        if (!_model.ContainsKey(stateKey))
+        {
+            _model[stateKey] = new Dictionary<int, (string, T)>();
+        }
+        _model[stateKey][actionIndex] = (nextStateKey, reward);
+
+        // Track predecessors
+        if (!_predecessors.ContainsKey(nextStateKey))
+        {
+            _predecessors[nextStateKey] = new List<(string, int)>();
+        }
+        var pred = (stateKey, actionIndex);
+        if (!_predecessors[nextStateKey].Contains(pred))
+        {
+            _predecessors[nextStateKey].Add(pred);
+        }
+
+        // Compute priority (TD error)
+        T currentQ = _qTable[stateKey][actionIndex];
+        T maxNextQ = GetMaxQValue(nextStateKey);
+        T target = done ? reward : NumOps.Add(reward, NumOps.Multiply(DiscountFactor, maxNextQ));
+        T delta = NumOps.Subtract(target, currentQ);
+        double priority = Math.Abs(NumOps.ToDouble(delta));
+
+        // Add to priority queue if above threshold
+        if (priority > _options.PriorityThreshold)
+        {
+            _priorityQueue.Add((priority, stateKey, actionIndex));
+        }
+
+        // Planning: process high-priority updates
+        int plannedUpdates = 0;
+        while (_priorityQueue.Count > 0 && plannedUpdates < _options.PlanningSteps)
+        {
+            var (p, s, a) = _priorityQueue.Min;
+            _priorityQueue.Remove(_priorityQueue.Min);
+
+            if (_model.ContainsKey(s) && _model[s].ContainsKey(a))
+            {
+                var (nextS, r) = _model[s][a];
+
+                // Update Q-value
+                T q = _qTable[s][a];
+                T maxQ = GetMaxQValue(nextS);
+                T t = NumOps.Add(r, NumOps.Multiply(DiscountFactor, maxQ));
+                T d = NumOps.Subtract(t, q);
+                _qTable[s][a] = NumOps.Add(q, NumOps.Multiply(LearningRate, d));
+
+                // Update predecessors
+                if (_predecessors.ContainsKey(s))
+                {
+                    foreach (var (predState, predAction) in _predecessors[s])
+                    {
+                        if (_model.ContainsKey(predState) && _model[predState].ContainsKey(predAction))
+                        {
+                            var (predNextState, predReward) = _model[predState][predAction];
+                            T predQ = _qTable[predState][predAction];
+                            T predMaxQ = GetMaxQValue(predNextState);
+                            T predTarget = NumOps.Add(predReward, NumOps.Multiply(DiscountFactor, predMaxQ));
+                            T predDelta = NumOps.Subtract(predTarget, predQ);
+                            double predPriority = Math.Abs(NumOps.ToDouble(predDelta));
+
+                            if (predPriority > _options.PriorityThreshold)
+                            {
+                                _priorityQueue.Add((predPriority, predState, predAction));
+                            }
+                        }
+                    }
+                }
+            }
+
+            plannedUpdates++;
+        }
+
+        if (done)
+        {
+            _epsilon = Math.Max(_options.EpsilonEnd, _epsilon * _options.EpsilonDecay);
+        }
+    }
+
+    public override T Train() => NumOps.Zero;
+
+    private void EnsureStateExists(Vector<T> state)
+    {
+        string stateKey = GetStateKey(state);
+        if (!_qTable.ContainsKey(stateKey))
+        {
+            _qTable[stateKey] = new Dictionary<int, T>();
+            for (int a = 0; a < _options.ActionSize; a++)
+            {
+                _qTable[stateKey][a] = NumOps.Zero;
+            }
+        }
+    }
+
+    private string GetStateKey(Vector<T> state) => string.Join(",", Enumerable.Range(0, state.Length).Select(i => NumOps.ToDouble(state[i]).ToString("F4")));
+    private int GetGreedyAction(string stateKey) { int best = 0; T bestVal = _qTable[stateKey][0]; for (int a = 1; a < _options.ActionSize; a++) if (NumOps.Compare(_qTable[stateKey][a], bestVal) > 0) { bestVal = _qTable[stateKey][a]; best = a; } return best; }
+    private T GetMaxQValue(string stateKey) { if (!_qTable.ContainsKey(stateKey)) return NumOps.Zero; T max = _qTable[stateKey][0]; for (int a = 1; a < _options.ActionSize; a++) if (NumOps.Compare(_qTable[stateKey][a], max) > 0) max = _qTable[stateKey][a]; return max; }
+    private int ArgMax(Vector<T> values) { int maxIndex = 0; T maxValue = values[0]; for (int i = 1; i < values.Length; i++) if (NumOps.Compare(values[i], maxValue) > 0) { maxValue = values[i]; maxIndex = i; } return maxIndex; }
+
+    public override Dictionary<string, T> GetMetrics() => new Dictionary<string, T> { ["states_visited"] = NumOps.FromDouble(_qTable.Count), ["model_size"] = NumOps.FromDouble(_model.Count), ["queue_size"] = NumOps.FromDouble(_priorityQueue.Count), ["epsilon"] = NumOps.FromDouble(_epsilon) };
+    public override void ResetEpisode() { }
+    public override Vector<T> Predict(Vector<T> input) => SelectAction(input, false);
+    public override Task<Vector<T>> PredictAsync(Vector<T> input) => Task.FromResult(Predict(input));
+    public override Task TrainAsync() { Train(); return Task.CompletedTask; }
+    public override ModelMetadata<T> GetModelMetadata() => new ModelMetadata<T> { ModelType = "PrioritizedSweeping", InputSize = _options.StateSize, OutputSize = _options.ActionSize, ParameterCount = ParameterCount };
+    public override int ParameterCount => _qTable.Count * _options.ActionSize;
+    public override int FeatureCount => _options.StateSize;
+    public override byte[] Serialize() => throw new NotImplementedException();
+    public override void Deserialize(byte[] data) => throw new NotImplementedException();
+    public override Matrix<T> GetParameters() { var p = new List<T>(); foreach (var s in _qTable) foreach (var a in s.Value) p.Add(a.Value); if (p.Count == 0) p.Add(NumOps.Zero); var v = new Vector<T>(p.Count); for (int i = 0; i < p.Count; i++) v[i] = p[i]; return new Matrix<T>(new[] { v }); }
+    public override void SetParameters(Matrix<T> parameters) { int idx = 0; foreach (var s in _qTable.ToList()) for (int a = 0; a < _options.ActionSize; a++) if (idx < parameters.Columns) _qTable[s.Key][a] = parameters[0, idx++]; }
+    public override IFullModel<T, Vector<T>, Vector<T>> Clone() => new PrioritizedSweepingAgent<T>(_options);
+    public override (Matrix<T> Gradients, T Loss) ComputeGradients(Vector<T> input, Vector<T> target, ILossFunction<T>? lossFunction = null) { var pred = Predict(input); var lf = lossFunction ?? LossFunction; var loss = lf.ComputeLoss(new Matrix<T>(new[] { pred }), new Matrix<T>(new[] { target })); var grad = lf.ComputeDerivative(new Matrix<T>(new[] { pred }), new Matrix<T>(new[] { target })); return (grad, loss); }
+    public override void ApplyGradients(Matrix<T> gradients, T learningRate) { }
+    public override void Save(string filepath) { var data = Serialize(); System.IO.File.WriteAllBytes(filepath, data); }
+    public override void Load(string filepath) { var data = System.IO.File.ReadAllBytes(filepath); Deserialize(data); }
+}
