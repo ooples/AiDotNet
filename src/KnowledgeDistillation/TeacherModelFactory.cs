@@ -79,10 +79,10 @@ public static class TeacherModelFactory<T>
         if (ensembleModels == null || ensembleModels.Length == 0)
             throw new ArgumentException("Ensemble models are required for Ensemble teacher type");
 
-        // WeightedAverage with null weights will use uniform weights (handled by constructor)
+        // WeightedAverage with null/empty weights uses uniform weights (equal average)
         return new EnsembleTeacherModel<T>(
-            ensembleModels, 
-            ensembleWeights, 
+            ensembleModels,
+            ensembleWeights,
             EnsembleAggregationMode.WeightedAverage);
     }
 

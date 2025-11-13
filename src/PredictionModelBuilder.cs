@@ -1069,7 +1069,7 @@ public class PredictionModelBuilder<T, TInput, TOutput> : IPredictionModelBuilde
                 teacher = KnowledgeDistillation.TeacherModelFactory<T>.CreateTeacher(
                     TeacherModelType.Ensemble,
                     ensembleModels: adaptedTeachers,
-                    ensembleWeights: options.EnsembleWeights ?? Array.Empty<double>());
+                    ensembleWeights: options.EnsembleWeights != null ? (double[])options.EnsembleWeights : null);
             }
             else if (options.TeacherForward != null)
             {
