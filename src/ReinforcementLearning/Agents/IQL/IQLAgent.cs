@@ -241,9 +241,13 @@ public class IQLAgent<T> : DeepReinforcementLearningAgentBase<T>
 
             totalLoss = _numOps.Add(totalLoss, loss);
 
-            // Backpropagate
+            // Backpropagate: derivative of expectile loss w.r.t. v is -2 * weight * (q - v)
+            var isNegative = _numOps.Compare(diff, _numOps.Zero) < 0;
+            var weight = isNegative ? _numOps.FromDouble(1.0 - _options.Expectile) : _numOps.FromDouble(_options.Expectile);
+            var gradValue = _numOps.Multiply(_numOps.FromDouble(-2.0), _numOps.Multiply(weight, diff));
+            
             var gradient = new Vector<T>(1);
-            gradient[0] = diff;
+            gradient[0] = gradValue;
             _valueNetwork.Backward(gradient);
             _valueNetwork.UpdateWeights(_options.ValueLearningRate);
         }
