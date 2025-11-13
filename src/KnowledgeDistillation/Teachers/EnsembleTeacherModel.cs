@@ -190,15 +190,24 @@ public class EnsembleTeacherModel<T> : TeacherModelBase<Vector<T>, Vector<T>, T>
                 break;
 
             case EnsembleAggregationMode.GeometricMean:
-                // Weighted geometric mean: (x1^w1 * x2^w2 * ... * xn^wn)
-                // For numerical stability, use log space: exp(sum(wi * log(xi)))
+                // Weighted geometric mean of probabilities (not raw logits)
+                // Step 1: Convert each teacher's logits to probabilities via softmax
+                var teacherProbs = new Vector<T>[_teachers.Length];
+                for (int t = 0; t < _teachers.Length; t++)
+                {
+                    teacherProbs[t] = Softmax(teacherLogits[t]);
+                }
+
+                // Step 2: Compute weighted geometric mean of probabilities
+                // Using log space for numerical stability: exp(sum(wi * log(pi)))
                 for (int i = 0; i < n; i++)
                 {
                     double logSum = 0;
                     for (int t = 0; t < _teachers.Length; t++)
                     {
-                        double val = Convert.ToDouble(teacherLogits[t][i]);
-                        logSum += _weights![t] * Math.Log(Math.Abs(val) + 1e-10);
+                        double prob = Convert.ToDouble(teacherProbs[t][i]);
+                        // Add small epsilon to avoid log(0)
+                        logSum += _weights![t] * Math.Log(prob + 1e-10);
                     }
                     result[i] = NumOps.FromDouble(Math.Exp(logSum));
                 }
@@ -237,6 +246,40 @@ public class EnsembleTeacherModel<T> : TeacherModelBase<Vector<T>, Vector<T>, T>
 
             default:
                 throw new NotImplementedException($"Aggregation mode {_aggregationMode} not implemented");
+        }
+
+        return result;
+    }
+
+    /// <summary>
+    /// Applies softmax to convert logits to probabilities.
+    /// </summary>
+    private Vector<T> Softmax(Vector<T> logits)
+    {
+        int n = logits.Length;
+        var result = new Vector<T>(n);
+
+        // Find max for numerical stability
+        double max = Convert.ToDouble(logits[0]);
+        for (int i = 1; i < n; i++)
+        {
+            double val = Convert.ToDouble(logits[i]);
+            if (val > max) max = val;
+        }
+
+        // Compute exp(logit - max) and sum
+        double sum = 0;
+        var expValues = new double[n];
+        for (int i = 0; i < n; i++)
+        {
+            expValues[i] = Math.Exp(Convert.ToDouble(logits[i]) - max);
+            sum += expValues[i];
+        }
+
+        // Normalize to get probabilities
+        for (int i = 0; i < n; i++)
+        {
+            result[i] = NumOps.FromDouble(expValues[i] / sum);
         }
 
         return result;
