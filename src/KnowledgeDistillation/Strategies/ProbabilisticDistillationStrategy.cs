@@ -106,21 +106,15 @@ public class ProbabilisticDistillationStrategy<T> : DistillationStrategyBase<T>
 
     public override Matrix<T> ComputeGradient(Matrix<T> studentBatchOutput, Matrix<T> teacherBatchOutput, Matrix<T>? trueLabelsBatch = null)
     {
-        if (_distributionWeight > 0)
-        {
-            throw new NotSupportedException(
-                "Gradient computation for distributional loss is not yet supported. " +
-                "The analytical gradients for moment matching, MMD, and entropy-based " +
-                "distributional objectives require mode-specific derivations. " +
-                "Set distributionWeight to 0 to use standard KD gradients only.");
-        }
-
         ValidateOutputDimensions(studentBatchOutput, teacherBatchOutput);
         ValidateLabelDimensions(studentBatchOutput, trueLabelsBatch);
 
         int batchSize = studentBatchOutput.Rows;
         int outputDim = studentBatchOutput.Columns;
         var gradientBatch = new Matrix<T>(batchSize, outputDim);
+
+        var studentSoftBatch = new Vector<T>[batchSize];
+        var teacherSoftBatch = new Vector<T>[batchSize];
 
         for (int r = 0; r < batchSize; r++)
         {
@@ -132,6 +126,9 @@ public class ProbabilisticDistillationStrategy<T> : DistillationStrategyBase<T>
 
             var studentSoft = DistillationHelper<T>.Softmax(studentOutput, Temperature);
             var teacherSoft = DistillationHelper<T>.Softmax(teacherOutput, Temperature);
+
+            studentSoftBatch[r] = studentSoft;
+            teacherSoftBatch[r] = teacherSoft;
 
             if (trueLabels != null)
             {
@@ -163,6 +160,21 @@ public class ProbabilisticDistillationStrategy<T> : DistillationStrategyBase<T>
             }
 
             gradientBatch.SetRow(r, gradient);
+        }
+
+        if (_distributionWeight > 0)
+        {
+            var distributionalGradient = ComputeDistributionalGradient(studentSoftBatch, teacherSoftBatch);
+
+            for (int r = 0; r < batchSize; r++)
+            {
+                for (int c = 0; c < outputDim; c++)
+                {
+                    var standardGrad = NumOps.Multiply(gradientBatch[r, c], NumOps.FromDouble(1.0 - _distributionWeight));
+                    var distGrad = NumOps.Multiply(distributionalGradient[r, c], NumOps.FromDouble(_distributionWeight));
+                    gradientBatch[r, c] = NumOps.Add(standardGrad, distGrad);
+                }
+            }
         }
 
         return gradientBatch;
@@ -372,7 +384,112 @@ public class ProbabilisticDistillationStrategy<T> : DistillationStrategyBase<T>
         return entropy;
     }
 
+    private Matrix<T> ComputeDistributionalGradient(Vector<T>[] studentSoft, Vector<T>[] teacherSoft)
+    {
+        return _mode switch
+        {
+            ProbabilisticMode.MomentMatching => ComputeMomentMatchingGradient(studentSoft, teacherSoft),
+            ProbabilisticMode.MaximumMeanDiscrepancy => ComputeMMDGradient(studentSoft, teacherSoft),
+            ProbabilisticMode.EntropyTransfer => ComputeEntropyGradient(studentSoft, teacherSoft),
+            _ => throw new NotImplementedException($"Mode {_mode} not implemented")
+        };
+    }
 
+    private Matrix<T> ComputeMomentMatchingGradient(Vector<T>[] studentSoft, Vector<T>[] teacherSoft)
+    {
+        int batchSize = studentSoft.Length;
+        int numClasses = studentSoft[0].Length;
+
+        var studentMeans = ComputeMeans(studentSoft, numClasses);
+        var teacherMeans = ComputeMeans(teacherSoft, numClasses);
+        var studentVars = ComputeVariances(studentSoft, studentMeans, numClasses);
+        var teacherVars = ComputeVariances(teacherSoft, teacherMeans, numClasses);
+
+        var gradient = new Matrix<T>(batchSize, numClasses);
+
+        for (int sampleIdx = 0; sampleIdx < batchSize; sampleIdx++)
+        {
+            for (int classIdx = 0; classIdx < numClasses; classIdx++)
+            {
+                double p_i = Convert.ToDouble(studentSoft[sampleIdx][classIdx]);
+
+                double meanGrad = (studentMeans[classIdx] - teacherMeans[classIdx]) / (batchSize * numClasses);
+
+                double centered = p_i - studentMeans[classIdx];
+                double varGrad = 2.0 * centered * (studentVars[classIdx] - teacherVars[classIdx]) / (batchSize * numClasses);
+
+                double totalGrad = 0.5 * meanGrad + 0.5 * varGrad;
+
+                gradient[sampleIdx, classIdx] = NumOps.FromDouble(totalGrad);
+            }
+        }
+
+        return gradient;
+    }
+
+    private Matrix<T> ComputeMMDGradient(Vector<T>[] studentSoft, Vector<T>[] teacherSoft)
+    {
+        int batchSize = studentSoft.Length;
+        int numClasses = studentSoft[0].Length;
+
+        var gradient = new Matrix<T>(batchSize, numClasses);
+
+        for (int i = 0; i < batchSize; i++)
+        {
+            for (int classIdx = 0; classIdx < numClasses; classIdx++)
+            {
+                double gradSum = 0;
+
+                for (int j = 0; j < batchSize; j++)
+                {
+                    if (i != j)
+                    {
+                        double k_ij = RBFKernel(studentSoft[i], studentSoft[j]);
+                        double diff_ij = Convert.ToDouble(studentSoft[i][classIdx]) - Convert.ToDouble(studentSoft[j][classIdx]);
+                        gradSum += 2.0 * k_ij * diff_ij / (_mmdBandwidth * _mmdBandwidth);
+                    }
+
+                    double k_it = RBFKernel(studentSoft[i], teacherSoft[j]);
+                    double diff_it = Convert.ToDouble(studentSoft[i][classIdx]) - Convert.ToDouble(teacherSoft[j][classIdx]);
+                    gradSum -= 2.0 * k_it * diff_it / (_mmdBandwidth * _mmdBandwidth);
+                }
+
+                gradSum /= (batchSize * batchSize);
+                gradient[i, classIdx] = NumOps.FromDouble(gradSum);
+            }
+        }
+
+        return gradient;
+    }
+
+    private Matrix<T> ComputeEntropyGradient(Vector<T>[] studentSoft, Vector<T>[] teacherSoft)
+    {
+        int batchSize = studentSoft.Length;
+        int numClasses = studentSoft[0].Length;
+
+        var gradient = new Matrix<T>(batchSize, numClasses);
+
+        for (int sampleIdx = 0; sampleIdx < batchSize; sampleIdx++)
+        {
+            double studentEntropy = ComputeEntropy(studentSoft[sampleIdx]);
+            double teacherEntropy = ComputeEntropy(teacherSoft[sampleIdx]);
+
+            double entropyDiff = studentEntropy - teacherEntropy;
+
+            for (int classIdx = 0; classIdx < numClasses; classIdx++)
+            {
+                double p_i = Convert.ToDouble(studentSoft[sampleIdx][classIdx]);
+
+                double entropyGrad = -(1.0 + Math.Log(p_i + Epsilon));
+
+                double totalGrad = 2.0 * entropyDiff * entropyGrad / batchSize;
+
+                gradient[sampleIdx, classIdx] = NumOps.FromDouble(totalGrad);
+            }
+        }
+
+        return gradient;
+    }
 
 }
 
