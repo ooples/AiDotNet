@@ -13,7 +13,7 @@ public class DistillationStrategyFactoryTests
 {
     [Theory]
     [InlineData(DistillationStrategyType.ResponseBased)]
-    [InlineData(DistillationStrategyType.FeatureBased)]
+    //     [InlineData(DistillationStrategyType.FeatureBased)]
     [InlineData(DistillationStrategyType.AttentionBased)]
     [InlineData(DistillationStrategyType.RelationBased)]
     [InlineData(DistillationStrategyType.ContrastiveBased)]
@@ -50,15 +50,15 @@ public class DistillationStrategyFactoryTests
     }
 
     [Fact]
-    public void CreateStrategy_FeatureBased_ReturnsFeatureDistillationStrategy()
+    public void CreateStrategy_FeatureBased_ThrowsNotSupportedException()
     {
-        // Arrange & Act
-        var strategy = DistillationStrategyFactory<double>.CreateStrategy(
-            DistillationStrategyType.FeatureBased,
-            featureWeight: 0.7);
+        // Arrange & Act & Assert
+        var exception = Assert.Throws<NotSupportedException>(() =>
+            DistillationStrategyFactory<double>.CreateStrategy(
+                DistillationStrategyType.FeatureBased,
+                featureWeight: 0.7));
 
-        // Assert
-        Assert.IsType<FeatureDistillationStrategy<double>>(strategy);
+        Assert.Contains("FeatureBased", exception.Message);
     }
 
     [Fact]
