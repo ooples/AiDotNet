@@ -238,12 +238,12 @@ public class DenseLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     /// <para><b>For Beginners:</b> This tells you how many individual numbers the layer can adjust during training.
     /// 
     /// The parameter count:
-    /// - Equals (number of inputs � number of outputs) + number of outputs
+    /// - Equals (number of inputs × number of outputs) + number of outputs
     /// - First part counts the weights, second part counts the biases
     /// - Higher numbers mean more flexibility but also more risk of overfitting
-    /// 
+    ///
     /// For example, a dense layer with 100 inputs and 50 outputs would have
-    /// 100 � 50 = 5,000 weights plus 50 biases, for a total of 5,050 parameters.
+    /// 100 × 50 = 5,000 weights plus 50 biases, for a total of 5,050 parameters.
     /// </para>
     /// </remarks>
     public override int ParameterCount => (_weights.Rows * _weights.Columns) + _biases.Length;
@@ -292,7 +292,7 @@ public class DenseLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     /// - What mathematical function to apply to the results (activation)
     /// 
     /// For example, a layer with inputSize=784 and outputSize=10 could connect the flattened
-    /// pixels of a 28�28 image to 10 output neurons (one for each digit 0-9).
+    /// pixels of a 28×28 image to 10 output neurons (one for each digit 0-9).
     /// 
     /// The layer automatically initializes all the weights and biases with carefully chosen
     /// starting values that help with training.

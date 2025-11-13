@@ -1524,7 +1524,7 @@ public class SpikingLayer<T> : LayerBase<T>
     /// After calculating how the weights and biases should change in the backward pass:
     /// 1. The method applies these changes using the learning rate to control their size
     /// 2. For each weight and bias:
-    ///    - Compute the update as learning rate � gradient
+    ///    - Compute the update as learning rate × gradient
     ///    - Subtract this update from the current value (moving in the opposite direction of the gradient)
     ///    - Reset the gradient accumulator to zero for the next batch
     /// 

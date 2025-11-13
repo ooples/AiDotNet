@@ -280,7 +280,7 @@ public class SelfAttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     /// - embeddingDimension might be 768 (the number of features per word/token)
     /// - Using 8 attention heads lets the model focus on 8 different types of relationships
     /// 
-    /// The embedding dimension must be divisible by the number of heads (e.g., 768 � 8 = 96),
+    /// The embedding dimension must be divisible by the number of heads (e.g., 768 ÷ 8 = 96),
     /// so each head has the same dimension.
     /// </para>
     /// </remarks>
@@ -849,7 +849,7 @@ public class SelfAttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     /// - It triggers the creation of all the weight matrices with proper initial values
     /// 
     /// The head dimension calculation is important - if you have an embedding size of 512 and
-    /// 8 attention heads, each head will have a dimension of 64 (512 � 8). This allows each
+    /// 8 attention heads, each head will have a dimension of 64 (512 ÷ 8). This allows each
     /// head to specialize in different aspects of the input sequence.
     ///
     /// This method throws an error if the embedding dimension isn't divisible by the head count
