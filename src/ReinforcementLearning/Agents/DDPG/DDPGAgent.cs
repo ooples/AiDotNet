@@ -446,13 +446,17 @@ public class DDPGAgent<T> : DeepReinforcementLearningAgentBase<T>
     public override (Matrix<T> Gradients, T Loss) ComputeGradients(
         Vector<T> input, Vector<T> target, ILossFunction<T>? lossFunction = null)
     {
-        return (GetParameters(), NumOps.Zero);
+        throw new NotSupportedException(
+            "DDPG uses actor-critic training via Train() method. " +
+            "Direct gradient computation through this interface is not applicable.");
     }
 
     /// <inheritdoc/>
     public override void ApplyGradients(Matrix<T> gradients, T learningRate)
     {
-        // Not directly applicable for DDPG
+        throw new NotSupportedException(
+            "DDPG uses actor-critic training via Train() method. " +
+            "Direct gradient application through this interface is not applicable.");
     }
 
     private void CopyNetworkWeights(NeuralNetwork<T> source, NeuralNetwork<T> target)
