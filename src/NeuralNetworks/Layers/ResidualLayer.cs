@@ -332,10 +332,12 @@ public class ResidualLayer<T> : LayerBase<T>
 
         // Compute inner layer output if present
         Autodiff.ComputationNode<T> result;
+        Autodiff.ComputationNode<T>? innerNode = null;
         if (_innerLayer != null)
         {
             var innerOutput = _innerLayer.Forward(_lastInput);
-            var innerNode = Autodiff.TensorOperations<T>.Variable(innerOutput, "inner_output", requiresGradient: false);
+            // Allow gradients to flow through inner layer output
+            innerNode = Autodiff.TensorOperations<T>.Variable(innerOutput, "inner_output", requiresGradient: true);
             // output = input + innerOutput
             result = Autodiff.TensorOperations<T>.Add(input, innerNode);
         }
@@ -361,6 +363,12 @@ public class ResidualLayer<T> : LayerBase<T>
             {
                 node.BackwardFunction(node.Gradient);
             }
+        }
+
+        // Route gradient to inner layer if present
+        if (_innerLayer != null && innerNode != null && innerNode.Gradient != null)
+        {
+            _innerLayer.Backward(innerNode.Gradient);
         }
 
         return input.Gradient!;
