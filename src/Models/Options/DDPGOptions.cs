@@ -14,13 +14,13 @@ public class DDPGOptions<T>
     public T CriticLearningRate { get; set; }
     public T DiscountFactor { get; set; }
     public T TargetUpdateTau { get; set; }
-    public ILossFunction<T> CriticLossFunction { get; set; } = new MeanSquaredError<T>();
+    public ILossFunction<T> CriticLossFunction { get; set; } = new MeanSquaredErrorLoss<T>();
     public int BatchSize { get; set; } = 64;
     public int ReplayBufferSize { get; set; } = 1000000;
     public int WarmupSteps { get; set; } = 1000;
     public double ExplorationNoise { get; set; } = 0.1;
-    public List<int> ActorHiddenLayers { get; set; } = [400, 300];
-    public List<int> CriticHiddenLayers { get; set; } = [400, 300];
+    public List<int> ActorHiddenLayers { get; set; } = new List<int> { 400, 300 };
+    public List<int> CriticHiddenLayers { get; set; } = new List<int> { 400, 300 };
     public int? Seed { get; set; }
 
     public DDPGOptions()
