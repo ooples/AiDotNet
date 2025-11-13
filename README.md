@@ -97,39 +97,65 @@ Install-Package AiDotNet
 Here's a simple example to get you started with neural network classification:
 
 ```csharp
-using AiDotNet.NeuralNetworks;
+using AiDotNet.Enums;
 using AiDotNet.LinearAlgebra;
+using AiDotNet.NeuralNetworks;
 
-// Create training data (XOR problem)
-var trainingData = new double[,]
+// Create training data (XOR problem - classic neural network example)
+var xorData = new double[,]
 {
-    { 0, 0 },
-    { 0, 1 },
-    { 1, 0 },
-    { 1, 1 }
+    { 0, 0 },  // Input: [0, 0]
+    { 0, 1 },  // Input: [0, 1]
+    { 1, 0 },  // Input: [1, 0]
+    { 1, 1 }   // Input: [1, 1]
 };
 
-var trainingLabels = new double[,]
+var xorLabels = new double[,]
 {
-    { 0 },
-    { 1 },
-    { 1 },
-    { 0 }
+    { 0 },  // Expected output: 0
+    { 1 },  // Expected output: 1
+    { 1 },  // Expected output: 1
+    { 0 }   // Expected output: 0
 };
 
-// Build and train a neural network
-var model = new PredictionModelBuilder()
-    .AddNeuralNetworkLayer(2, 4)  // Input layer: 2 inputs, 4 neurons
-    .AddNeuralNetworkLayer(4, 1)  // Output layer: 4 inputs, 1 output
-    .WithLearningRate(0.1)
-    .WithEpochs(1000)
-    .Build();
+// Convert to tensors (required format for neural network)
+var features = new Tensor<double>(new int[] { 4, 2 }); // 4 samples, 2 features
+var labels = new Tensor<double>(new int[] { 4, 1 });   // 4 samples, 1 output
 
-model.Train(trainingData, trainingLabels);
+for (int i = 0; i < 4; i++)
+{
+    for (int j = 0; j < 2; j++)
+        features[new int[] { i, j }] = xorData[i, j];
+    
+    labels[new int[] { i, 0 }] = xorLabels[i, 0];
+}
+
+// Create neural network architecture
+var architecture = new NeuralNetworkArchitecture<double>(
+    inputFeatures: 2,
+    numClasses: 1,
+    complexity: NetworkComplexity.Medium
+);
+
+// Initialize and train the network
+var neuralNetwork = new NeuralNetwork<double>(architecture);
+
+for (int epoch = 0; epoch < 1000; epoch++)
+{
+    neuralNetwork.Train(features, labels);
+    
+    if (epoch % 200 == 0)
+    {
+        double loss = neuralNetwork.GetLastLoss();
+        Console.WriteLine($"Epoch {epoch}: Loss = {loss:F4}");
+    }
+}
 
 // Make predictions
-var prediction = model.Predict(new double[] { 1, 0 });
-Console.WriteLine($"Prediction for [1, 0]: {prediction[0]}");
+var predictions = neuralNetwork.Predict(features);
+Console.WriteLine($"
+Prediction for [1, 0]: {predictions[new int[] { 2, 0 }]:F2}");
+Console.WriteLine($"Prediction for [1, 1]: {predictions[new int[] { 3, 0 }]:F2}");
 ```
 
 ## Examples
