@@ -1,5 +1,6 @@
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
+using AiDotNet.KnowledgeDistillation;
 using AiDotNet.LinearAlgebra;
 
 namespace AiDotNet.KnowledgeDistillation.Strategies;
@@ -22,39 +23,52 @@ namespace AiDotNet.KnowledgeDistillation.Strategies;
 /// 2. Sparsity (what percentage of time the neuron is active)
 /// 3. Peak-to-average ratio (how peaked the activation distribution is)</para>
 ///
-/// <para><b>IMPORTANT - Two-Step Usage Pattern:</b> This strategy requires intermediate layer activations,
-/// which are not available through the standard IDistillationStrategy interface methods. Use as follows:</para>
+/// <para><b>Usage Pattern:</b> This strategy implements both standard output-based distillation and
+/// intermediate activation-based selectivity matching. Use as follows:</para>
 ///
-/// <para><b>Step 1:</b> Call ComputeLoss/ComputeGradient for standard distillation on final outputs (this provides
-/// the base distillation loss using the teacher's output distribution).</para>
-///
-/// <para><b>Step 2:</b> Separately collect intermediate layer activations during the forward pass, then call
-/// ComputeSelectivityLoss to compute the selectivity matching loss. Combine this with the base loss using
-/// the selectivityWeight parameter:
+/// <para><b>Standard Usage (via IDistillationStrategy):</b>
 /// <code>
-/// T baseLoss = strategy.ComputeLoss(studentOutput, teacherOutput, labels);
-/// T selectivityLoss = strategy.ComputeSelectivityLoss(studentActivations, teacherActivations);
-/// T totalLoss = baseLoss + selectivityLoss;  // selectivityLoss is already weighted
+/// T outputLoss = strategy.ComputeLoss(studentOutput, teacherOutput, labels);
+/// Matrix&lt;T&gt; outputGrad = strategy.ComputeGradient(studentOutput, teacherOutput, labels);
 /// </code></para>
 ///
-/// <para>The selectivityWeight and metric parameters are used by ComputeSelectivityLoss, not by the
-/// standard interface methods.</para>
+/// <para><b>With Intermediate Activations (via IIntermediateActivationStrategy):</b>
+/// <code>
+/// // Collect activations during forward pass
+/// var studentActivations = new IntermediateActivations&lt;T&gt;();
+/// studentActivations.Add("layer3", studentLayer3Output);
+///
+/// var teacherActivations = new IntermediateActivations&lt;T&gt;();
+/// teacherActivations.Add("layer3", teacherLayer3Output);
+///
+/// // Compute combined loss
+/// T outputLoss = strategy.ComputeLoss(studentOutput, teacherOutput, labels);
+/// T selectivityLoss = strategy.ComputeIntermediateLoss(studentActivations, teacherActivations);
+/// T totalLoss = outputLoss + selectivityLoss; // selectivityLoss is already weighted
+/// </code></para>
+///
+/// <para>The selectivityWeight and metric parameters control the intermediate activation loss component.</para>
 /// </remarks>
-public class NeuronSelectivityDistillationStrategy<T> : DistillationStrategyBase<T>
+public class NeuronSelectivityDistillationStrategy<T> : DistillationStrategyBase<T>, IIntermediateActivationStrategy<T>
 {
     private readonly double _selectivityWeight;
     private readonly SelectivityMetric _metric;
+    private readonly string _targetLayerName;
 
     public NeuronSelectivityDistillationStrategy(
+        string targetLayerName = "default",
         double selectivityWeight = 0.5,
         SelectivityMetric metric = SelectivityMetric.Variance,
         double temperature = 3.0,
         double alpha = 0.3)
         : base(temperature, alpha)
     {
+        if (string.IsNullOrWhiteSpace(targetLayerName))
+            throw new ArgumentException("Target layer name cannot be null or whitespace", nameof(targetLayerName));
         if (selectivityWeight < 0 || selectivityWeight > 1)
             throw new ArgumentException("Selectivity weight must be between 0 and 1", nameof(selectivityWeight));
 
+        _targetLayerName = targetLayerName;
         _selectivityWeight = selectivityWeight;
         _metric = metric;
     }
@@ -279,8 +293,62 @@ public class NeuronSelectivityDistillationStrategy<T> : DistillationStrategyBase
         return max / (avg + 1e-10);
     }
 
+    /// <summary>
+    /// Computes intermediate activation loss by matching neuron selectivity between teacher and student.
+    /// </summary>
+    /// <param name="studentIntermediateActivations">Student's intermediate layer activations.</param>
+    /// <param name="teacherIntermediateActivations">Teacher's intermediate layer activations.</param>
+    /// <returns>The selectivity matching loss (already weighted by selectivityWeight).</returns>
+    /// <remarks>
+    /// <para>This implements the IIntermediateActivationStrategy interface to properly integrate
+    /// selectivity matching into the training loop. The loss is computed from the activations of
+    /// the layer specified by targetLayerName in the constructor.</para>
+    ///
+    /// <para>If the target layer is not found in the activation dictionaries, returns zero loss.</para>
+    /// </remarks>
+    public T ComputeIntermediateLoss(
+        IntermediateActivations<T> studentIntermediateActivations,
+        IntermediateActivations<T> teacherIntermediateActivations)
+    {
+        if (studentIntermediateActivations == null)
+            throw new ArgumentNullException(nameof(studentIntermediateActivations));
+        if (teacherIntermediateActivations == null)
+            throw new ArgumentNullException(nameof(teacherIntermediateActivations));
 
+        // Get activations for the target layer
+        var studentMatrix = studentIntermediateActivations.Get(_targetLayerName);
+        var teacherMatrix = teacherIntermediateActivations.Get(_targetLayerName);
 
+        // If layer not found, return zero loss
+        if (studentMatrix == null || teacherMatrix == null)
+            return NumOps.Zero;
+
+        // Validate dimensions match
+        if (studentMatrix.Rows != teacherMatrix.Rows || studentMatrix.Columns != teacherMatrix.Columns)
+        {
+            throw new ArgumentException(
+                $"Student and teacher activation dimensions must match for layer '{_targetLayerName}'. " +
+                $"Student: [{studentMatrix.Rows} x {studentMatrix.Columns}], " +
+                $"Teacher: [{teacherMatrix.Rows} x {teacherMatrix.Columns}]");
+        }
+
+        int batchSize = studentMatrix.Rows;
+        if (batchSize == 0)
+            return NumOps.Zero;
+
+        // Convert Matrix<T> rows to Vector<T>[] for ComputeSelectivityLoss
+        var studentActivations = new Vector<T>[batchSize];
+        var teacherActivations = new Vector<T>[batchSize];
+
+        for (int i = 0; i < batchSize; i++)
+        {
+            studentActivations[i] = studentMatrix.GetRow(i);
+            teacherActivations[i] = teacherMatrix.GetRow(i);
+        }
+
+        // Compute selectivity loss (already weighted by _selectivityWeight)
+        return ComputeSelectivityLoss(studentActivations, teacherActivations);
+    }
 }
 
 public enum SelectivityMetric
