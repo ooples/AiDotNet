@@ -60,6 +60,9 @@ public class ProbabilisticDistillationStrategy<T> : DistillationStrategyBase<T>
         int batchSize = studentBatchOutput.Rows;
         T totalLoss = NumOps.Zero;
 
+        var studentSoftBatch = new Vector<T>[batchSize];
+        var teacherSoftBatch = new Vector<T>[batchSize];
+
         for (int r = 0; r < batchSize; r++)
         {
             Vector<T> studentOutput = studentBatchOutput.GetRow(r);
@@ -69,6 +72,10 @@ public class ProbabilisticDistillationStrategy<T> : DistillationStrategyBase<T>
             // Standard distillation loss
             var studentSoft = DistillationHelper<T>.Softmax(studentOutput, Temperature);
             var teacherSoft = DistillationHelper<T>.Softmax(teacherOutput, Temperature);
+
+            studentSoftBatch[r] = studentSoft;
+            teacherSoftBatch[r] = teacherSoft;
+
             var softLoss = DistillationHelper<T>.KLDivergence(teacherSoft, studentSoft);
             softLoss = NumOps.Multiply(softLoss, NumOps.FromDouble(Temperature * Temperature));
 
@@ -86,12 +93,15 @@ public class ProbabilisticDistillationStrategy<T> : DistillationStrategyBase<T>
                 sampleLoss = softLoss;
             }
 
-            // Apply distribution weight reduction exactly once
-            sampleLoss = NumOps.Multiply(sampleLoss, NumOps.FromDouble(1.0 - _distributionWeight));
             totalLoss = NumOps.Add(totalLoss, sampleLoss);
         }
 
-        return NumOps.Divide(totalLoss, NumOps.FromDouble(batchSize));
+        var standardLoss = NumOps.Divide(totalLoss, NumOps.FromDouble(batchSize));
+        var distributionLoss = ComputeDistributionalLoss(studentSoftBatch, teacherSoftBatch);
+
+        return NumOps.Add(
+            NumOps.Multiply(standardLoss, NumOps.FromDouble(1.0 - _distributionWeight)),
+            distributionLoss);
     }
 
     public override Matrix<T> ComputeGradient(Matrix<T> studentBatchOutput, Matrix<T> teacherBatchOutput, Matrix<T>? trueLabelsBatch = null)
