@@ -21,6 +21,24 @@ namespace AiDotNet.KnowledgeDistillation.Strategies;
 /// 1. Activation variance (how much neuron output varies across samples)
 /// 2. Sparsity (what percentage of time the neuron is active)
 /// 3. Peak-to-average ratio (how peaked the activation distribution is)</para>
+///
+/// <para><b>IMPORTANT - Two-Step Usage Pattern:</b> This strategy requires intermediate layer activations,
+/// which are not available through the standard IDistillationStrategy interface methods. Use as follows:</para>
+///
+/// <para><b>Step 1:</b> Call ComputeLoss/ComputeGradient for standard distillation on final outputs (this provides
+/// the base distillation loss using the teacher's output distribution).</para>
+///
+/// <para><b>Step 2:</b> Separately collect intermediate layer activations during the forward pass, then call
+/// ComputeSelectivityLoss to compute the selectivity matching loss. Combine this with the base loss using
+/// the selectivityWeight parameter:
+/// <code>
+/// T baseLoss = strategy.ComputeLoss(studentOutput, teacherOutput, labels);
+/// T selectivityLoss = strategy.ComputeSelectivityLoss(studentActivations, teacherActivations);
+/// T totalLoss = baseLoss + selectivityLoss;  // selectivityLoss is already weighted
+/// </code></para>
+///
+/// <para>The selectivityWeight and metric parameters are used by ComputeSelectivityLoss, not by the
+/// standard interface methods.</para>
 /// </remarks>
 public class NeuronSelectivityDistillationStrategy<T> : DistillationStrategyBase<T>
 {
@@ -41,6 +59,14 @@ public class NeuronSelectivityDistillationStrategy<T> : DistillationStrategyBase
         _metric = metric;
     }
 
+    /// <summary>
+    /// Computes the base distillation loss on final outputs.
+    /// </summary>
+    /// <remarks>
+    /// This method implements standard distillation loss (soft + hard loss) on final outputs.
+    /// It does NOT include the selectivity component, which requires intermediate activations.
+    /// Use ComputeSelectivityLoss separately and combine the losses manually. See class remarks for usage pattern.
+    /// </remarks>
     public override T ComputeLoss(Matrix<T> studentBatchOutput, Matrix<T> teacherBatchOutput, Matrix<T>? trueLabelsBatch = null)
     {
         ValidateOutputDimensions(studentBatchOutput, teacherBatchOutput);
@@ -49,11 +75,8 @@ public class NeuronSelectivityDistillationStrategy<T> : DistillationStrategyBase
         int batchSize = studentBatchOutput.Rows;
         T totalLoss = NumOps.Zero;
 
-        // TODO: This strategy currently only implements standard distillation loss
-        // The selectivity component is not implemented. Need to:
-        // 1. Compute selectivity loss from intermediate activations
-        // 2. Combine with standard distillation loss using _selectivityWeight
-
+        // Standard distillation loss on final outputs
+        // Selectivity loss requires intermediate activations - use ComputeSelectivityLoss separately
         for (int r = 0; r < batchSize; r++)
         {
             Vector<T> studentOutput = studentBatchOutput.GetRow(r);
@@ -86,6 +109,15 @@ public class NeuronSelectivityDistillationStrategy<T> : DistillationStrategyBase
         return NumOps.Divide(totalLoss, NumOps.FromDouble(batchSize));
     }
 
+    /// <summary>
+    /// Computes the gradient of the base distillation loss on final outputs.
+    /// </summary>
+    /// <remarks>
+    /// This method implements standard distillation gradient (soft + hard) on final outputs.
+    /// It does NOT include the selectivity gradient, which requires intermediate activations.
+    /// Selectivity gradients must be computed separately and backpropagated through the network.
+    /// See class remarks for usage pattern.
+    /// </remarks>
     public override Matrix<T> ComputeGradient(Matrix<T> studentBatchOutput, Matrix<T> teacherBatchOutput, Matrix<T>? trueLabelsBatch = null)
     {
         ValidateOutputDimensions(studentBatchOutput, teacherBatchOutput);
@@ -95,11 +127,8 @@ public class NeuronSelectivityDistillationStrategy<T> : DistillationStrategyBase
         int outputDim = studentBatchOutput.Columns;
         var gradientBatch = new Matrix<T>(batchSize, outputDim);
 
-        // TODO: This strategy currently only implements standard distillation gradient
-        // The selectivity gradient is not implemented. Need to:
-        // 1. Compute selectivity gradient from intermediate activations
-        // 2. Combine with standard gradient using _selectivityWeight
-
+        // Standard distillation gradient on final outputs
+        // Selectivity gradients require intermediate activations and must be backpropagated separately
         for (int r = 0; r < batchSize; r++)
         {
             Vector<T> studentOutput = studentBatchOutput.GetRow(r);
