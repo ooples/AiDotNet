@@ -45,7 +45,7 @@ public class TRPOAgent<T> : DeepReinforcementLearningAgentBase<T>
     private INeuralNetwork<T> _oldPolicyNetwork;  // For KL divergence
     private INeuralNetwork<T> _valueNetwork;
 
-    private List<(Vector<T> state, Vector<T> action, T reward, bool done)> _trajectoryBuffer;
+    private List<(Vector<T> state, Vector<T> action, T reward, Vector<T> nextState, bool done)> _trajectoryBuffer;
     private int _updateCount;
 
     public TRPOAgent(TRPOOptions<T> options, IOptimizer<T, Vector<T>, Vector<T>>? optimizer = null)
@@ -60,7 +60,7 @@ public class TRPOAgent<T> : DeepReinforcementLearningAgentBase<T>
             Epsilon = 1e-8
         });
         _updateCount = 0;
-        _trajectoryBuffer = new List<(Vector<T>, Vector<T>, T, bool)>();
+        _trajectoryBuffer = new List<(Vector<T>, Vector<T>, T, Vector<T>, bool)>();
 
         InitializeNetworks();
     }
@@ -206,7 +206,7 @@ public class TRPOAgent<T> : DeepReinforcementLearningAgentBase<T>
 
     public override void StoreExperience(Vector<T> state, Vector<T> action, T reward, Vector<T> nextState, bool done)
     {
-        _trajectoryBuffer.Add((state, action, reward, done));
+        _trajectoryBuffer.Add((state, action, reward, nextState, done));
 
         if (_trajectoryBuffer.Count >= _options.StepsPerUpdate)
         {
