@@ -347,9 +347,14 @@ public class DoubleDQNAgent<T> : DeepReinforcementLearningAgentBase<T>
         var gradient = loss.ComputeGradient(output, target);
 
         _qNetwork.Backward(gradient);
-        var gradients = GetParameters();
+        var gradientVector = _qNetwork.GetFlattenedGradients();
+        var gradientMatrix = new Matrix<T>(gradientVector.Length, 1);
+        for (int i = 0; i < gradientVector.Length; i++)
+        {
+            gradientMatrix[i, 0] = gradientVector[i];
+        }
 
-        return (gradients, lossValue);
+        return (gradientMatrix, lossValue);
     }
 
     /// <inheritdoc/>
