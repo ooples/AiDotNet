@@ -1,3 +1,5 @@
+using System;
+
 namespace AiDotNet.NumericOperations;
 
 /// <summary>
@@ -212,8 +214,8 @@ public class UIntOperations : INumericOperations<uint>
     /// The square root of a number is another number that, when multiplied by itself, gives the original number.
     /// 
     /// For example:
-    /// - Sqrt(4) returns 2 (because 2 × 2 = 4)
-    /// - Sqrt(9) returns 3 (because 3 × 3 = 9)
+    /// - Sqrt(4) returns 2 (because 2 Ã— 2 = 4)
+    /// - Sqrt(9) returns 3 (because 3 Ã— 3 = 9)
     /// - Sqrt(10) returns 3 (because the true square root is approximately 3.16, but as a uint it's rounded down to 3)
     /// 
     /// Unlike with signed numbers, you don't need to worry about negative inputs since uint values are always positive.
@@ -328,8 +330,8 @@ public class UIntOperations : INumericOperations<uint>
     /// <para><b>For Beginners:</b> This method multiplies a number by itself.
     /// 
     /// For example:
-    /// - Square(4) returns 16 (because 4 × 4 = 16)
-    /// - Square(10) returns 100 (because 10 × 10 = 100)
+    /// - Square(4) returns 16 (because 4 Ã— 4 = 16)
+    /// - Square(10) returns 100 (because 10 Ã— 10 = 100)
     /// 
     /// Be careful with larger numbers! Squaring even moderate values can easily exceed the uint range:
     /// - Square(100,000) would be 10,000,000,000, which is outside the uint range, so the result will be incorrect
@@ -355,11 +357,11 @@ public class UIntOperations : INumericOperations<uint>
     /// those involving growth or decay.
     /// 
     /// For example:
-    /// - Exp(1) returns 3 (because e^1 ˜ 2.71828, rounded to 3 as a uint)
-    /// - Exp(2) returns 7 (because e^2 ˜ 7.38906, rounded to 7 as a uint)
+    /// - Exp(1) returns 3 (because e^1 Ã— 2.71828, rounded to 3 as a uint)
+    /// - Exp(2) returns 7 (because e^2 Ã— 7.38906, rounded to 7 as a uint)
     /// 
     /// For larger input values, the result grows very quickly:
-    /// - Exp(10) returns 22,026 (because e^10 ˜ 22,026.47)
+    /// - Exp(10) returns 22,026 (because e^10 Ã— 22,026.47)
     /// - Exp(30) or higher will return 4,294,967,295 (the maximum uint value) because the true result would be too large
     /// 
     /// This function is useful in calculations involving:
@@ -406,8 +408,8 @@ public class UIntOperations : INumericOperations<uint>
     /// <para><b>For Beginners:</b> This method multiplies a number by itself a specified number of times.
     /// 
     /// For example:
-    /// - Power(2, 3) returns 8 (because 2³ = 2 × 2 × 2 = 8)
-    /// - Power(3, 2) returns 9 (because 3² = 3 × 3 = 9)
+    /// - Power(2, 3) returns 8 (because 2Â² = 2 Ã— 2 â‰ˆ 2 = 8)
+    /// - Power(3, 2) returns 9 (because 3Â² = 3 Ã— 3 = 9)
     /// - Power(5, 0) returns 1 (any number raised to the power of 0 is 1)
     /// 
     /// Be careful with larger values! The result can quickly exceed the uint range:
@@ -439,13 +441,13 @@ public class UIntOperations : INumericOperations<uint>
     /// 
     /// For example:
     /// - Log(1) returns 0 (because e^0 = 1)
-    /// - Log(3) returns 1 (because e^1 ˜ 2.71828, and when cast to a uint, the decimal part is dropped)
-    /// - Log(10) returns 2 (because e^2.303 ˜ 10, and when cast to a uint, the decimal part is dropped)
+    /// - Log(3) returns 1 (because e^1 Ã— 2.71828, and when cast to a uint, the decimal part is dropped)
+    /// - Log(10) returns 2 (because e^2.303 Ã— 10, and when cast to a uint, the decimal part is dropped)
     /// 
     /// Important notes:
     /// - The logarithm of zero is not defined mathematically, so Log(0) will return 0
     /// - Logarithm results are usually decimals, but they'll be converted to whole numbers when stored as uints
-    /// - Even for very large inputs, the result is relatively small (e.g., Log(4294967295) ˜ 22)
+    /// - Even for very large inputs, the result is relatively small (e.g., Log(4294967295) â‰ˆ 22)
     /// </para>
     /// </remarks>
     public uint Log(uint value) => (uint)Math.Log(value);
@@ -668,4 +670,34 @@ public class UIntOperations : INumericOperations<uint>
         if (value > 0) return 1U;
         return 0U;
     }
+
+    /// <summary>
+    /// Gets the number of bits used for precision in uint (32 bits).
+    /// </summary>
+    public int PrecisionBits => 32;
+
+    /// <summary>
+    /// Converts a uint value to float (FP32) precision.
+    /// </summary>
+    public float ToFloat(uint value) => (float)value;
+
+    /// <summary>
+    /// Converts a float value to uint.
+    /// </summary>
+    public uint FromFloat(float value) => (uint)MathExtensions.Clamp((long)Math.Round(value), uint.MinValue, uint.MaxValue);
+
+    /// <summary>
+    /// Converts a uint value to Half (FP16) precision.
+    /// </summary>
+    public Half ToHalf(uint value) => (Half)value;
+
+    /// <summary>
+    /// Converts a Half value to uint.
+    /// </summary>
+    public uint FromHalf(Half value) => (uint)MathExtensions.Clamp((long)Math.Round((float)value), uint.MinValue, uint.MaxValue);
+
+    /// <summary>
+    /// Converts a uint value to double (FP64) precision.
+    /// </summary>
+    public double ToDouble(uint value) => (double)value;
 }
