@@ -138,11 +138,13 @@ public class TeacherModelFactoryTests
         // Act
         var teacher = TeacherModelFactory<double>.CreateTeacher(
             TeacherModelType.Adaptive,
-            model: mockModel);
+            model: mockModel,
+            outputDimension: 5);
 
         // Assert
         Assert.NotNull(teacher);
         Assert.IsType<AdaptiveTeacherModel<double>>(teacher);
+        Assert.Equal(5, teacher.OutputDimension);
     }
 
     [Fact]
@@ -171,11 +173,13 @@ public class TeacherModelFactoryTests
         // Act
         var teacher = TeacherModelFactory<double>.CreateTeacher(
             TeacherModelType.Curriculum,
-            model: mockModel);
+            model: mockModel,
+            outputDimension: 5);
 
         // Assert
         Assert.NotNull(teacher);
         Assert.IsType<CurriculumTeacherModel<double>>(teacher);
+        Assert.Equal(5, teacher.OutputDimension);
     }
 
     [Fact]
