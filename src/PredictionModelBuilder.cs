@@ -1031,9 +1031,15 @@ public class PredictionModelBuilder<T, TInput, TOutput> : IPredictionModelBuilde
             ITeacherModel<Vector<T>, Vector<T>> teacher;
             if (options.TeacherModel != null)
             {
-                // Wrap IFullModel as teacher
+                // Wrap IFullModel as teacher - requires explicit output dimension
+                if (!options.OutputDimension.HasValue)
+                    throw new InvalidOperationException(
+                        "OutputDimension is required when using TeacherModel. " +
+                        "Please specify options.OutputDimension explicitly.");
+
                 teacher = new KnowledgeDistillation.TeacherModelWrapper<T>(
-                    (IFullModel<T, Vector<T>, Vector<T>>)options.TeacherModel);
+                    ((IFullModel<T, Vector<T>, Vector<T>>)options.TeacherModel).Predict,
+                    options.OutputDimension.Value);
             }
             else if (options.Teachers != null && options.Teachers.Length > 0)
             {

@@ -66,65 +66,6 @@ public class TeacherModelWrapper<T> : ITeacherModel<Vector<T>, Vector<T>>
     }
 
     /// <summary>
-    /// Initializes a new instance of the TeacherModelWrapper class from an IFullModel.
-    /// </summary>
-    /// <param name="model">The trained IFullModel to wrap as a teacher.</param>
-    /// <remarks>
-    /// <para><b>For Beginners:</b> This is the recommended way to create a teacher - pass your trained
-    /// IFullModel directly and it will be automatically adapted for distillation.</para>
-    ///
-    /// <para><b>Architecture Note:</b> This constructor creates a lightweight adapter that bridges
-    /// IFullModel to ITeacherModel. It simply delegates GetLogits() to the model's Predict() method.</para>
-    ///
-    /// <para>Example usage:
-    /// <code>
-    /// // After training your model
-    /// IFullModel&lt;double, Vector&lt;double&gt;, Vector&lt;double&gt;&gt; trainedModel = ...;
-    ///
-    /// // Wrap it as a teacher
-    /// var teacher = new TeacherModelWrapper&lt;double&gt;(trainedModel);
-    ///
-    /// // Now use it for distillation
-    /// var distillationLoss = new DistillationLoss&lt;double&gt;(temperature: 3.0, alpha: 0.3);
-    /// var trainer = new KnowledgeDistillationTrainer&lt;double&gt;(teacher, distillationLoss);
-    /// </code>
-    /// </para>
-    /// </remarks>
-    public TeacherModelWrapper(IFullModel<T, Vector<T>, Vector<T>> model)
-        : this(
-            forwardFunc: input => model.Predict(input),
-            outputDimension: GetOutputDimensionFromModel(model))
-    {
-    }
-
-    private static int GetOutputDimensionFromModel(IFullModel<T, Vector<T>, Vector<T>> model)
-    {
-        // Use IModel.GetModelMetadata() interface method (not reflection)
-        var metadata = model.GetModelMetadata();
-
-        if (metadata == null)
-        {
-            throw new InvalidOperationException(
-                "Model metadata is null. Cannot determine output dimension. " +
-                "Please use the constructor overload that explicitly specifies outputDimension.");
-        }
-
-        if (metadata.Properties.TryGetValue("OutputDimension", out var outputDimValue) && outputDimValue is int outputDim && outputDim > 0)
-            return outputDim;
-
-        if (metadata.Properties.TryGetValue("NumClasses", out var numClassesValue) && numClassesValue is int numClasses && numClasses > 0)
-            return numClasses;
-
-        if (metadata.Properties.TryGetValue("ClassCount", out var classCountValue) && classCountValue is int classCount && classCount > 0)
-            return classCount;
-
-        throw new InvalidOperationException(
-            "Cannot determine output dimension from model metadata. " +
-            "Please use the constructor overload that explicitly specifies outputDimension, " +
-            "or ensure the model's GetModelMetadata() returns 'OutputDimension', 'NumClasses', or 'ClassCount'.");
-    }
-
-    /// <summary>
     /// Gets the teacher's raw logits (pre-softmax outputs) for the given input.
     /// </summary>
     /// <param name="input">The input data to process.</param>
