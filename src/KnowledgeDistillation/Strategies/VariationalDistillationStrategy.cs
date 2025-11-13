@@ -60,26 +60,42 @@ public class VariationalDistillationStrategy<T> : DistillationStrategyBase<T>
         _betaIB = betaIB;
     }
 
-    public override T ComputeLoss(Vector<T> studentOutput, Vector<T> teacherOutput, Vector<T>? trueLabels = null)
+    public override T ComputeLoss(Matrix<T> studentBatchOutput, Matrix<T> teacherBatchOutput, Matrix<T>? trueLabelsBatch = null)
     {
-        ValidateOutputDimensions(studentOutput, teacherOutput, v => v.Length);
+        ValidateOutputDimensions(studentBatchOutput, teacherBatchOutput);
+        ValidateLabelDimensions(studentBatchOutput, trueLabelsBatch);
 
-        // Standard distillation loss (weighted)
-        var studentSoft = Softmax(studentOutput, Temperature);
-        var teacherSoft = Softmax(teacherOutput, Temperature);
-        var softLoss = KLDivergence(teacherSoft, studentSoft);
-        softLoss = NumOps.Multiply(softLoss, NumOps.FromDouble(Temperature * Temperature));
+        int batchSize = studentBatchOutput.RowCount;
+        T totalLoss = NumOps.Zero;
 
-        if (trueLabels != null)
+        for (int r = 0; r < batchSize; r++)
         {
-            ValidateLabelDimensions(studentOutput, trueLabels, v => v.Length);
-            var studentProbs = Softmax(studentOutput, 1.0);
-            var hardLoss = CrossEntropy(studentProbs, trueLabels);
-            var combinedLoss = NumOps.Add(
-                NumOps.Multiply(NumOps.FromDouble(Alpha), hardLoss),
-                NumOps.Multiply(NumOps.FromDouble(1.0 - Alpha), softLoss));
-            return combinedLoss;
+            Vector<T> studentRow = studentBatchOutput.GetRow(r);
+            Vector<T> teacherRow = teacherBatchOutput.GetRow(r);
+            Vector<T>? labelRow = trueLabelsBatch?.GetRow(r);
+
+            var studentSoft = Softmax(studentRow, Temperature);
+            var teacherSoft = Softmax(teacherRow, Temperature);
+            var softLoss = KLDivergence(teacherSoft, studentSoft);
+            softLoss = NumOps.Multiply(softLoss, NumOps.FromDouble(Temperature * Temperature));
+
+            if (labelRow != null)
+            {
+                var studentProbs = Softmax(studentRow, 1.0);
+                var hardLoss = CrossEntropy(studentProbs, labelRow);
+                var sampleLoss = NumOps.Add(
+                    NumOps.Multiply(NumOps.FromDouble(Alpha), hardLoss),
+                    NumOps.Multiply(NumOps.FromDouble(1.0 - Alpha), softLoss));
+                totalLoss = NumOps.Add(totalLoss, sampleLoss);
+            }
+            else
+            {
+                totalLoss = NumOps.Add(totalLoss, softLoss);
+            }
         }
+
+        return NumOps.Divide(totalLoss, NumOps.FromDouble(batchSize));
+    }
 
         return softLoss;
     }

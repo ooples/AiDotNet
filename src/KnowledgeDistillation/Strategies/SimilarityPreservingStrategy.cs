@@ -20,54 +20,88 @@ public class SimilarityPreservingStrategy<T> : DistillationStrategyBase<T>
         _similarityWeight = similarityWeight;
     }
 
-    public override T ComputeLoss(Vector<T> studentOutput, Vector<T> teacherOutput, Vector<T>? trueLabels = null)
+    public override T ComputeLoss(Matrix<T> studentBatchOutput, Matrix<T> teacherBatchOutput, Matrix<T>? trueLabelsBatch = null)
     {
-        ValidateOutputDimensions(studentOutput, teacherOutput, v => v.Length);
+        ValidateOutputDimensions(studentBatchOutput, teacherBatchOutput);
+        ValidateLabelDimensions(studentBatchOutput, trueLabelsBatch);
 
-        var studentSoft = Softmax(studentOutput, Temperature);
-        var teacherSoft = Softmax(teacherOutput, Temperature);
-        var softLoss = KLDivergence(teacherSoft, studentSoft);
-        softLoss = NumOps.Multiply(softLoss, NumOps.FromDouble(Temperature * Temperature));
+        int batchSize = studentBatchOutput.RowCount;
+        T totalLoss = NumOps.Zero;
 
-        if (trueLabels != null)
+        for (int r = 0; r < batchSize; r++)
         {
-            ValidateLabelDimensions(studentOutput, trueLabels, v => v.Length);
-            var studentProbs = Softmax(studentOutput, 1.0);
-            var hardLoss = CrossEntropy(studentProbs, trueLabels);
-            return NumOps.Add(
-                NumOps.Multiply(NumOps.FromDouble(Alpha), hardLoss),
-                NumOps.Multiply(NumOps.FromDouble(1.0 - Alpha), softLoss));
+            Vector<T> studentRow = studentBatchOutput.GetRow(r);
+            Vector<T> teacherRow = teacherBatchOutput.GetRow(r);
+            Vector<T>? labelRow = trueLabelsBatch?.GetRow(r);
+
+            var studentSoft = Softmax(studentRow, Temperature);
+            var teacherSoft = Softmax(teacherRow, Temperature);
+            var softLoss = KLDivergence(teacherSoft, studentSoft);
+            softLoss = NumOps.Multiply(softLoss, NumOps.FromDouble(Temperature * Temperature));
+
+            if (labelRow != null)
+            {
+                var studentProbs = Softmax(studentRow, 1.0);
+                var hardLoss = CrossEntropy(studentProbs, labelRow);
+                var sampleLoss = NumOps.Add(
+                    NumOps.Multiply(NumOps.FromDouble(Alpha), hardLoss),
+                    NumOps.Multiply(NumOps.FromDouble(1.0 - Alpha), softLoss));
+                totalLoss = NumOps.Add(totalLoss, sampleLoss);
+            }
+            else
+            {
+                totalLoss = NumOps.Add(totalLoss, softLoss);
+            }
         }
 
-        return softLoss;
+        return NumOps.Divide(totalLoss, NumOps.FromDouble(batchSize));
     }
 
-    public override Vector<T> ComputeGradient(Vector<T> studentOutput, Vector<T> teacherOutput, Vector<T>? trueLabels = null)
+    public override Matrix<T> ComputeGradient(Matrix<T> studentBatchOutput, Matrix<T> teacherBatchOutput, Matrix<T>? trueLabelsBatch = null)
     {
-        ValidateOutputDimensions(studentOutput, teacherOutput, v => v.Length);
+        ValidateOutputDimensions(studentBatchOutput, teacherBatchOutput);
+        ValidateLabelDimensions(studentBatchOutput, trueLabelsBatch);
 
-        int n = studentOutput.Length;
-        var gradient = new Vector<T>(n);
-        var studentSoft = Softmax(studentOutput, Temperature);
-        var teacherSoft = Softmax(teacherOutput, Temperature);
+        int batchSize = studentBatchOutput.RowCount;
+        int numClasses = studentBatchOutput.ColumnCount;
+        var gradient = new Matrix<T>(batchSize, numClasses);
 
-        for (int i = 0; i < n; i++)
+        for (int r = 0; r < batchSize; r++)
         {
-            var diff = NumOps.Subtract(studentSoft[i], teacherSoft[i]);
-            gradient[i] = NumOps.Multiply(diff, NumOps.FromDouble(Temperature * Temperature));
+            Vector<T> studentRow = studentBatchOutput.GetRow(r);
+            Vector<T> teacherRow = teacherBatchOutput.GetRow(r);
+            Vector<T>? labelRow = trueLabelsBatch?.GetRow(r);
+
+            var studentSoft = Softmax(studentRow, Temperature);
+            var teacherSoft = Softmax(teacherRow, Temperature);
+
+            for (int c = 0; c < numClasses; c++)
+            {
+                var diff = NumOps.Subtract(studentSoft[c], teacherSoft[c]);
+                gradient[r, c] = NumOps.Multiply(diff, NumOps.FromDouble(Temperature * Temperature));
+            }
+
+            if (labelRow != null)
+            {
+                var studentProbs = Softmax(studentRow, 1.0);
+
+                for (int c = 0; c < numClasses; c++)
+                {
+                    var hardGrad = NumOps.Subtract(studentProbs[c], labelRow[c]);
+                    gradient[r, c] = NumOps.Add(
+                        NumOps.Multiply(NumOps.FromDouble(Alpha), hardGrad),
+                        NumOps.Multiply(NumOps.FromDouble(1.0 - Alpha), gradient[r, c]));
+                }
+            }
         }
 
-        if (trueLabels != null)
+        // Average gradients over batch
+        T oneOverBatchSize = NumOps.Divide(NumOps.One, NumOps.FromDouble(batchSize));
+        for (int r = 0; r < batchSize; r++)
         {
-            ValidateLabelDimensions(studentOutput, trueLabels, v => v.Length);
-            var studentProbs = Softmax(studentOutput, 1.0);
-
-            for (int i = 0; i < n; i++)
+            for (int c = 0; c < numClasses; c++)
             {
-                var hardGrad = NumOps.Subtract(studentProbs[i], trueLabels[i]);
-                gradient[i] = NumOps.Add(
-                    NumOps.Multiply(NumOps.FromDouble(Alpha), hardGrad),
-                    NumOps.Multiply(NumOps.FromDouble(1.0 - Alpha), gradient[i]));
+                gradient[r, c] = NumOps.Multiply(gradient[r, c], oneOverBatchSize);
             }
         }
 
