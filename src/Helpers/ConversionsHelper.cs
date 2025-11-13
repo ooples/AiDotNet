@@ -89,6 +89,16 @@ public static class ConversionsHelper
             // For scalar output (binary classification), create 2-element vector
             var numOps = MathHelper.GetNumericOperations<T>();
             var one = numOps.FromDouble(1.0);
+            var zero = numOps.FromDouble(0.0);
+
+            // Validate scalar is a valid probability in [0, 1]
+            if (numOps.LessThan(scalar, zero) || numOps.GreaterThan(scalar, one))
+            {
+                throw new ArgumentException(
+                    $"Scalar output must be a probability in [0, 1] for binary classification conversion. " +
+                    $"Got value outside valid range. Consider using Vector<T> or T[] for non-probability outputs.");
+            }
+
             var complement = numOps.Subtract(one, scalar);
             return new Vector<T>(new[] { complement, scalar });
         }
