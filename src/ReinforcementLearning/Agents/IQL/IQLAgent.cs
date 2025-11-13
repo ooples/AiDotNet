@@ -3,7 +3,7 @@ using AiDotNet.Models;
 using AiDotNet.Models.Options;
 using AiDotNet.NeuralNetworks;
 using AiDotNet.NeuralNetworks.Layers;
-using AiDotNet.NeuralNetworks.Activations;
+using AiDotNet.ActivationFunctions;
 using AiDotNet.ReinforcementLearning.ReplayBuffers;
 using AiDotNet.Helpers;
 
