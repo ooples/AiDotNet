@@ -480,21 +480,6 @@ public class LayerNormalizationLayer<T> : LayerBase<T>
     /// <summary>
     /// Broadcasts a 1D vector across the batch dimension to create a 2D tensor.
     /// </summary>
-    private Tensor<T> BroadcastVector(Tensor<T> vector, int batchSize)
-    {
-        var featureSize = vector.Length;
-        var broadcasted = new Tensor<T>(new int[] { batchSize, featureSize });
-
-        for (int i = 0; i < batchSize; i++)
-        {
-            for (int j = 0; j < featureSize; j++)
-            {
-                broadcasted[i, j] = vector[j];
-            }
-        }
-
-        return broadcasted;
-    }
 
     /// <summary>
     /// Updates the parameters of the layer using the calculated gradients.
