@@ -1,10 +1,12 @@
+using AiDotNet.KnowledgeDistillation;
+using AiDotNet.LinearAlgebra;
+
 namespace AiDotNet.Interfaces;
 
 /// <summary>
 /// Defines a strategy for computing knowledge distillation loss between student and teacher models.
 /// </summary>
 /// <typeparam name="T">The numeric type for calculations (e.g., double, float).</typeparam>
-/// <typeparam name="TOutput">The output data type (typically Vector&lt;T&gt; or Matrix&lt;T&gt; of logits).</typeparam>
 /// <remarks>
 /// <para><b>For Beginners:</b> A distillation strategy determines how to measure the difference
 /// between what the student predicts and what the teacher predicts. Different strategies can
@@ -19,19 +21,23 @@ namespace AiDotNet.Interfaces;
 ///
 /// <para>This combination allows the student to both get the right answers (hard loss) and
 /// learn the teacher's reasoning (soft loss).</para>
+///
+/// <para><b>Batch Processing:</b> This interface operates on batches (Matrix&lt;T&gt;) for efficiency.
+/// Each row in the matrices represents one sample in the batch.</para>
 /// </remarks>
-public interface IDistillationStrategy<T, TOutput>
+public interface IDistillationStrategy<T>
 {
     /// <summary>
-    /// Computes the distillation loss between student and teacher outputs.
+    /// Computes the distillation loss between student and teacher batch outputs.
     /// </summary>
-    /// <param name="studentOutput">The student model's output (logits).</param>
-    /// <param name="teacherOutput">The teacher model's output (logits).</param>
-    /// <param name="trueLabels">Ground truth labels (optional, can be null for unsupervised distillation).</param>
-    /// <returns>The computed distillation loss value.</returns>
+    /// <param name="studentBatchOutput">The student model's output logits for a batch. Shape: [batch_size x num_classes]</param>
+    /// <param name="teacherBatchOutput">The teacher model's output logits for a batch. Shape: [batch_size x num_classes]</param>
+    /// <param name="trueLabelsBatch">Ground truth labels for the batch (optional). Shape: [batch_size x num_classes]</param>
+    /// <returns>The computed distillation loss value (scalar) for the batch.</returns>
     /// <remarks>
     /// <para><b>For Beginners:</b> This calculates how different the student's predictions are
-    /// from the teacher's predictions. A lower loss means the student is learning well from the teacher.</para>
+    /// from the teacher's predictions across an entire batch of samples. A lower loss means
+    /// the student is learning well from the teacher.</para>
     ///
     /// <para>The formula typically used is:
     /// Total Loss = α × Hard Loss + (1 - α) × Soft Loss
@@ -40,16 +46,18 @@ public interface IDistillationStrategy<T, TOutput>
     /// - Hard Loss: Cross-entropy between student predictions and true labels
     /// - Soft Loss: KL divergence between student and teacher (with temperature scaling)
     /// - α (alpha): Balance parameter (typically 0.3-0.5)</para>
+    ///
+    /// <para><b>Batch Processing:</b> The loss is typically averaged over all samples in the batch.</para>
     /// </remarks>
-    T ComputeLoss(TOutput studentOutput, TOutput teacherOutput, TOutput? trueLabels = default);
+    T ComputeLoss(Matrix<T> studentBatchOutput, Matrix<T> teacherBatchOutput, Matrix<T> trueLabelsBatch = null);
 
     /// <summary>
     /// Computes the gradient of the distillation loss for backpropagation.
     /// </summary>
-    /// <param name="studentOutput">The student model's output (logits).</param>
-    /// <param name="teacherOutput">The teacher model's output (logits).</param>
-    /// <param name="trueLabels">Ground truth labels (optional).</param>
-    /// <returns>The gradient of the loss with respect to student outputs.</returns>
+    /// <param name="studentBatchOutput">The student model's output logits for a batch. Shape: [batch_size x num_classes]</param>
+    /// <param name="teacherBatchOutput">The teacher model's output logits for a batch. Shape: [batch_size x num_classes]</param>
+    /// <param name="trueLabelsBatch">Ground truth labels for the batch (optional). Shape: [batch_size x num_classes]</param>
+    /// <returns>The gradient of the loss with respect to student outputs. Shape: [batch_size x num_classes]</returns>
     /// <remarks>
     /// <para><b>For Beginners:</b> Gradients tell us how to adjust the student model's parameters
     /// to reduce the loss. They point in the direction of steepest increase in loss, so we move
@@ -57,8 +65,11 @@ public interface IDistillationStrategy<T, TOutput>
     ///
     /// <para>The gradient combines information from both the teacher (soft targets) and the
     /// true labels (hard targets), helping the student learn from both sources.</para>
+    ///
+    /// <para><b>Batch Processing:</b> Returns a gradient matrix with the same shape as the input,
+    /// one gradient row for each sample in the batch.</para>
     /// </remarks>
-    TOutput ComputeGradient(TOutput studentOutput, TOutput teacherOutput, TOutput? trueLabels = default);
+    Matrix<T> ComputeGradient(Matrix<T> studentBatchOutput, Matrix<T> teacherBatchOutput, Matrix<T> trueLabelsBatch = null);
 
     /// <summary>
     /// Gets or sets the temperature parameter for softening probability distributions.
