@@ -27,7 +27,7 @@ public static class DistillationStrategyFactory<T>
     /// <param name="strategies">Vector of strategies to combine (for hybrid).</param>
     /// <param name="strategyWeights">Weights for combined strategies (for hybrid).</param>
     /// <returns>A configured distillation strategy.</returns>
-    public static IDistillationStrategy<T, Vector<T>> CreateStrategy(
+    public static IDistillationStrategy<T> CreateStrategy(
         DistillationStrategyType strategyType,
         double temperature = 3.0,
         double alpha = 0.3,
@@ -36,7 +36,7 @@ public static class DistillationStrategyFactory<T>
         ContrastiveMode? contrastiveMode = null,
         Vector<string>? featureLayerPairs = null,
         Vector<string>? attentionLayers = null,
-        Vector<IDistillationStrategy<T, Vector<T>>>? strategies = null,
+        Vector<IDistillationStrategy<T>>? strategies = null,
         Vector<double>? strategyWeights = null)
     {
         return strategyType switch
@@ -58,14 +58,14 @@ public static class DistillationStrategyFactory<T>
         };
     }
 
-    private static IDistillationStrategy<T, Vector<T>> CreateResponseBasedStrategy(
+    private static IDistillationStrategy<T> CreateResponseBasedStrategy(
         double temperature,
         double alpha)
     {
         return new DistillationLoss<T>(temperature, alpha);
     }
 
-    private static IDistillationStrategy<T, Vector<T>> CreateFeatureBasedStrategy(
+    private static IDistillationStrategy<T> CreateFeatureBasedStrategy(
         Vector<string>? layerPairs,
         double featureWeight)
     {
@@ -76,7 +76,7 @@ public static class DistillationStrategyFactory<T>
             "through the factory. Create it directly: new FeatureDistillationStrategy<T>(layerPairs, featureWeight)");
     }
 
-    private static IDistillationStrategy<T, Vector<T>> CreateAttentionBasedStrategy(
+    private static IDistillationStrategy<T> CreateAttentionBasedStrategy(
         Vector<string>? attentionLayers,
         double temperature,
         double alpha,
@@ -96,7 +96,7 @@ public static class DistillationStrategyFactory<T>
             matchingMode: AttentionMatchingMode.MSE);
     }
 
-    private static IDistillationStrategy<T, Vector<T>> CreateRelationBasedStrategy(
+    private static IDistillationStrategy<T> CreateRelationBasedStrategy(
         double temperature,
         double alpha)
     {
@@ -106,7 +106,7 @@ public static class DistillationStrategyFactory<T>
             alpha: alpha);
     }
 
-    private static IDistillationStrategy<T, Vector<T>> CreateContrastiveStrategy(
+    private static IDistillationStrategy<T> CreateContrastiveStrategy(
         double temperature,
         double alpha,
         ContrastiveMode mode)
@@ -118,7 +118,7 @@ public static class DistillationStrategyFactory<T>
             mode: mode);
     }
 
-    private static IDistillationStrategy<T, Vector<T>> CreateSimilarityPreservingStrategy(
+    private static IDistillationStrategy<T> CreateSimilarityPreservingStrategy(
         double temperature,
         double alpha)
     {
@@ -128,7 +128,7 @@ public static class DistillationStrategyFactory<T>
             alpha: alpha);
     }
 
-    private static IDistillationStrategy<T, Vector<T>> CreateProbabilisticStrategy(
+    private static IDistillationStrategy<T> CreateProbabilisticStrategy(
         double temperature,
         double alpha)
     {
@@ -138,7 +138,7 @@ public static class DistillationStrategyFactory<T>
             alpha: alpha);
     }
 
-    private static IDistillationStrategy<T, Vector<T>> CreateVariationalStrategy(
+    private static IDistillationStrategy<T> CreateVariationalStrategy(
         double temperature,
         double alpha)
     {
@@ -148,7 +148,7 @@ public static class DistillationStrategyFactory<T>
             alpha: alpha);
     }
 
-    private static IDistillationStrategy<T, Vector<T>> CreateFactorTransferStrategy(
+    private static IDistillationStrategy<T> CreateFactorTransferStrategy(
         double temperature,
         double alpha)
     {
@@ -158,7 +158,7 @@ public static class DistillationStrategyFactory<T>
             alpha: alpha);
     }
 
-    private static IDistillationStrategy<T, Vector<T>> CreateNeuronSelectivityStrategy(
+    private static IDistillationStrategy<T> CreateNeuronSelectivityStrategy(
         double temperature,
         double alpha)
     {
@@ -168,7 +168,7 @@ public static class DistillationStrategyFactory<T>
             alpha: alpha);
     }
 
-    private static IDistillationStrategy<T, Vector<T>> CreateFlowBasedStrategy(
+    private static IDistillationStrategy<T> CreateFlowBasedStrategy(
         double temperature,
         double alpha)
     {
@@ -177,14 +177,14 @@ public static class DistillationStrategyFactory<T>
             alpha: alpha);
     }
 
-    private static IDistillationStrategy<T, Vector<T>> CreateHybridStrategy(
+    private static IDistillationStrategy<T> CreateHybridStrategy(
         double temperature,
         double alpha,
-        Vector<IDistillationStrategy<T, Vector<T>>>? strategies,
+        Vector<IDistillationStrategy<T>>? strategies,
         Vector<double>? strategyWeights)
     {
         // Create tuple array from strategies and weights
-        (IDistillationStrategy<T, Vector<T>> Strategy, double Weight)[] strategyTuples;
+        (IDistillationStrategy<T> Strategy, double Weight)[] strategyTuples;
 
         if (strategies == null || strategies.Length == 0)
         {
@@ -244,7 +244,7 @@ public static class DistillationStrategyFactory<T>
         private ContrastiveMode? _contrastiveMode;
         private Vector<string>? _featureLayerPairs;
         private Vector<string>? _attentionLayers;
-        private Vector<IDistillationStrategy<T, Vector<T>>>? _strategies;
+        private Vector<IDistillationStrategy<T>>? _strategies;
         private Vector<double>? _strategyWeights;
 
         internal StrategyBuilder(DistillationStrategyType strategyType)
@@ -295,7 +295,7 @@ public static class DistillationStrategyFactory<T>
         }
 
         public StrategyBuilder WithStrategies(
-            Vector<IDistillationStrategy<T, Vector<T>>> strategies,
+            Vector<IDistillationStrategy<T>> strategies,
             Vector<double>? weights = null)
         {
             _strategies = strategies;
@@ -303,7 +303,7 @@ public static class DistillationStrategyFactory<T>
             return this;
         }
 
-        public IDistillationStrategy<T, Vector<T>> Build()
+        public IDistillationStrategy<T> Build()
         {
             return CreateStrategy(
                 _strategyType,
