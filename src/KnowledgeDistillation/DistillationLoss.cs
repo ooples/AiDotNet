@@ -189,46 +189,6 @@ public class DistillationLoss<T> : DistillationStrategyBase<T, Vector<T>>
     ///
     /// <para>We use the "max subtraction trick" for numerical stability to avoid overflow in exp().</para>
     /// </remarks>
-    private Vector<T> Softmax(Vector<T> logits, double temperature)
-    {
-        int n = logits.Length;
-        var result = new Vector<T>(n);
-
-        // Divide logits by temperature
-        var scaledLogits = new T[n];
-        for (int i = 0; i < n; i++)
-        {
-            double val = Convert.ToDouble(logits[i]) / temperature;
-            scaledLogits[i] = NumOps.FromDouble(val);
-        }
-
-        // Find max for numerical stability (prevents overflow in exp)
-        T maxLogit = scaledLogits[0];
-        for (int i = 1; i < n; i++)
-        {
-            if (NumOps.GreaterThan(scaledLogits[i], maxLogit))
-                maxLogit = scaledLogits[i];
-        }
-
-        // Compute exp(logit - max) and sum
-        T sum = NumOps.Zero;
-        var expValues = new T[n];
-
-        for (int i = 0; i < n; i++)
-        {
-            double val = Convert.ToDouble(NumOps.Subtract(scaledLogits[i], maxLogit));
-            expValues[i] = NumOps.FromDouble(Math.Exp(val));
-            sum = NumOps.Add(sum, expValues[i]);
-        }
-
-        // Normalize to get probabilities
-        for (int i = 0; i < n; i++)
-        {
-            result[i] = NumOps.Divide(expValues[i], sum);
-        }
-
-        return result;
-    }
 
     /// <summary>
     /// Computes Kullback-Leibler divergence: KL(p || q) = sum(p * log(p / q)).
@@ -244,25 +204,6 @@ public class DistillationLoss<T> : DistillationStrategyBase<T, Vector<T>>
     /// <para>Unlike symmetric distance metrics, KL divergence is asymmetric: KL(p||q) ≠ KL(q||p).
     /// In distillation, we use KL(teacher || student) to make the student match the teacher.</para>
     /// </remarks>
-    private T KLDivergence(Vector<T> p, Vector<T> q)
-    {
-        T divergence = NumOps.Zero;
-        const double epsilon = 1e-10; // Small value to avoid log(0)
-
-        for (int i = 0; i < p.Length; i++)
-        {
-            double pVal = Convert.ToDouble(p[i]);
-            double qVal = Convert.ToDouble(q[i]);
-
-            if (pVal > epsilon) // Only compute where p is non-zero
-            {
-                double contrib = pVal * Math.Log(pVal / (qVal + epsilon));
-                divergence = NumOps.Add(divergence, NumOps.FromDouble(contrib));
-            }
-        }
-
-        return divergence;
-    }
 
     /// <summary>
     /// Computes cross-entropy loss: H(true_labels, predictions) = -sum(true_labels * log(predictions)).
@@ -279,23 +220,6 @@ public class DistillationLoss<T> : DistillationStrategyBase<T, Vector<T>>
     /// <para>Example: If true label is class 1 (one-hot: [0, 1, 0]) and prediction is [0.1, 0.8, 0.1],
     /// cross-entropy = -log(0.8) ≈ 0.22. If prediction were [0.1, 0.3, 0.6], cross-entropy = -log(0.3) ≈ 1.2 (worse).</para>
     /// </remarks>
-    private T CrossEntropy(Vector<T> predictions, Vector<T> trueLabels)
-    {
-        T entropy = NumOps.Zero;
-        const double epsilon = 1e-10; // Small value to avoid log(0)
-
-        for (int i = 0; i < predictions.Length; i++)
-        {
-            double pred = Convert.ToDouble(predictions[i]);
-            double label = Convert.ToDouble(trueLabels[i]);
-
-            if (label > epsilon) // Only compute where label is non-zero
-            {
-                double contrib = -label * Math.Log(pred + epsilon);
-                entropy = NumOps.Add(entropy, NumOps.FromDouble(contrib));
-            }
-        }
-
-        return entropy;
-    }
 }
+
+

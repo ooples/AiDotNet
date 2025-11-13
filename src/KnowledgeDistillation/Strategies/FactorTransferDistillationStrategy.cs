@@ -167,6 +167,22 @@ public class FactorTransferDistillationStrategy<T> : DistillationStrategyBase<T,
         if (studentFeatures.Length == 0)
             return NumOps.Zero;
 
+        // Validate feature dimensions
+        int studentDim = studentFeatures[0].Length;
+        int teacherDim = teacherFeatures[0].Length;
+        
+        for (int i = 0; i < studentFeatures.Length; i++)
+        {
+            if (studentFeatures[i].Length != studentDim)
+                throw new ArgumentException($"All student features must have same dimension. Expected {studentDim}, got {studentFeatures[i].Length} at index {i}");
+            if (teacherFeatures[i].Length != teacherDim)
+                throw new ArgumentException($"All teacher features must have same dimension. Expected {teacherDim}, got {teacherFeatures[i].Length} at index {i}");
+            if (studentFeatures[i].Length != teacherFeatures[i].Length)
+                throw new ArgumentException($"Student and teacher features must have matching dimensions. Got student={studentFeatures[i].Length}, teacher={teacherFeatures[i].Length} at index {i}");
+            if (studentFeatures[i].Length == 0)
+                throw new ArgumentException($"Feature vectors cannot be empty at index {i}");
+        }
+
         T loss = _mode switch
         {
             FactorMode.LowRankApproximation => ComputeLowRankLoss(studentFeatures, teacherFeatures),
@@ -478,61 +494,8 @@ public class FactorTransferDistillationStrategy<T> : DistillationStrategyBase<T,
         return Convert.ToDouble(dot) / (Math.Sqrt(Convert.ToDouble(norm1)) * Math.Sqrt(Convert.ToDouble(norm2)) + Epsilon);
     }
 
-    private Vector<T> Softmax(Vector<T> logits, double temperature)
-    {
-        int n = logits.Length;
-        var result = new Vector<T>(n);
-        var scaled = new T[n];
 
-        for (int i = 0; i < n; i++)
-            scaled[i] = NumOps.FromDouble(Convert.ToDouble(logits[i]) / temperature);
 
-        T maxLogit = scaled[0];
-        for (int i = 1; i < n; i++)
-            if (NumOps.GreaterThan(scaled[i], maxLogit))
-                maxLogit = scaled[i];
-
-        T sum = NumOps.Zero;
-        var expValues = new T[n];
-
-        for (int i = 0; i < n; i++)
-        {
-            double val = Convert.ToDouble(NumOps.Subtract(scaled[i], maxLogit));
-            expValues[i] = NumOps.FromDouble(Math.Exp(val));
-            sum = NumOps.Add(sum, expValues[i]);
-        }
-
-        for (int i = 0; i < n; i++)
-            result[i] = NumOps.Divide(expValues[i], sum);
-
-        return result;
-    }
-
-    private T KLDivergence(Vector<T> p, Vector<T> q)
-    {
-        T divergence = NumOps.Zero;
-        for (int i = 0; i < p.Length; i++)
-        {
-            double pVal = Convert.ToDouble(p[i]);
-            double qVal = Convert.ToDouble(q[i]);
-            if (pVal > Epsilon)
-                divergence = NumOps.Add(divergence, NumOps.FromDouble(pVal * Math.Log(pVal / (qVal + Epsilon))));
-        }
-        return divergence;
-    }
-
-    private T CrossEntropy(Vector<T> predictions, Vector<T> trueLabels)
-    {
-        T entropy = NumOps.Zero;
-        for (int i = 0; i < predictions.Length; i++)
-        {
-            double pred = Convert.ToDouble(predictions[i]);
-            double label = Convert.ToDouble(trueLabels[i]);
-            if (label > Epsilon)
-                entropy = NumOps.Add(entropy, NumOps.FromDouble(-label * Math.Log(pred + Epsilon)));
-        }
-        return entropy;
-    }
 }
 
 public enum FactorMode
@@ -552,3 +515,5 @@ public enum FactorMode
     /// </summary>
     FactorMatching
 }
+
+

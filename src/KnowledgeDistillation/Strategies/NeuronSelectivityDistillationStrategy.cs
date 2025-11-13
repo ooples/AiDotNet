@@ -66,8 +66,7 @@ public class NeuronSelectivityDistillationStrategy<T> : DistillationStrategyBase
             finalLoss = softLoss;
         }
 
-        // Apply selectivity weight reduction exactly once
-        return NumOps.Multiply(finalLoss, NumOps.FromDouble(1.0 - _selectivityWeight));
+        return finalLoss;
     }
 
     public override Vector<T> ComputeGradient(Vector<T> studentOutput, Vector<T> teacherOutput, Vector<T>? trueLabels = null)
@@ -203,61 +202,8 @@ public class NeuronSelectivityDistillationStrategy<T> : DistillationStrategyBase
         return max / (avg + 1e-10);
     }
 
-    private Vector<T> Softmax(Vector<T> logits, double temperature)
-    {
-        int n = logits.Length;
-        var result = new Vector<T>(n);
-        var scaled = new T[n];
 
-        for (int i = 0; i < n; i++)
-            scaled[i] = NumOps.FromDouble(Convert.ToDouble(logits[i]) / temperature);
 
-        T maxLogit = scaled[0];
-        for (int i = 1; i < n; i++)
-            if (NumOps.GreaterThan(scaled[i], maxLogit))
-                maxLogit = scaled[i];
-
-        T sum = NumOps.Zero;
-        var expValues = new T[n];
-
-        for (int i = 0; i < n; i++)
-        {
-            double val = Convert.ToDouble(NumOps.Subtract(scaled[i], maxLogit));
-            expValues[i] = NumOps.FromDouble(Math.Exp(val));
-            sum = NumOps.Add(sum, expValues[i]);
-        }
-
-        for (int i = 0; i < n; i++)
-            result[i] = NumOps.Divide(expValues[i], sum);
-
-        return result;
-    }
-
-    private T KLDivergence(Vector<T> p, Vector<T> q)
-    {
-        T divergence = NumOps.Zero;
-        for (int i = 0; i < p.Length; i++)
-        {
-            double pVal = Convert.ToDouble(p[i]);
-            double qVal = Convert.ToDouble(q[i]);
-            if (pVal > Epsilon)
-                divergence = NumOps.Add(divergence, NumOps.FromDouble(pVal * Math.Log(pVal / (qVal + Epsilon))));
-        }
-        return divergence;
-    }
-
-    private T CrossEntropy(Vector<T> predictions, Vector<T> trueLabels)
-    {
-        T entropy = NumOps.Zero;
-        for (int i = 0; i < predictions.Length; i++)
-        {
-            double pred = Convert.ToDouble(predictions[i]);
-            double label = Convert.ToDouble(trueLabels[i]);
-            if (label > Epsilon)
-                entropy = NumOps.Add(entropy, NumOps.FromDouble(-label * Math.Log(pred + Epsilon)));
-        }
-        return entropy;
-    }
 }
 
 public enum SelectivityMetric
@@ -277,3 +223,5 @@ public enum SelectivityMetric
     /// </summary>
     PeakToAverage
 }
+
+

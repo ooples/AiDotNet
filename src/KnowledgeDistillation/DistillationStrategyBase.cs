@@ -1,5 +1,6 @@
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
+using AiDotNet.LinearAlgebra;
 
 namespace AiDotNet.KnowledgeDistillation;
 
@@ -170,7 +171,91 @@ public abstract class DistillationStrategyBase<T, TOutput> : IDistillationStrate
     }
 
     /// <summary>
+    /// Applies temperature-scaled softmax to logits.
+    /// </summary>
+    /// <param name="logits">Raw logits to convert to probabilities.</param>
+    /// <param name="temperature">Temperature parameter for softening.</param>
+    /// <returns>Probability distribution.</returns>
+    protected Vector<T> Softmax(Vector<T> logits, double temperature)
+    {
+        if (logits == null) throw new ArgumentNullException(nameof(logits));
+        if (temperature <= 0) throw new ArgumentOutOfRangeException(nameof(temperature), "Temperature must be positive");
+
+        int n = logits.Length;
+        var result = new Vector<T>(n);
+        var scaled = new T[n];
+
+        for (int i = 0; i < n; i++)
+            scaled[i] = NumOps.FromDouble(Convert.ToDouble(logits[i]) / temperature);
+
+        T maxLogit = scaled[0];
+        for (int i = 1; i < n; i++)
+            if (NumOps.GreaterThan(scaled[i], maxLogit))
+                maxLogit = scaled[i];
+
+        T sum = NumOps.Zero;
+        var expValues = new T[n];
+
+        for (int i = 0; i < n; i++)
+        {
+            double val = Convert.ToDouble(NumOps.Subtract(scaled[i], maxLogit));
+            expValues[i] = NumOps.FromDouble(Math.Exp(val));
+            sum = NumOps.Add(sum, expValues[i]);
+        }
+
+        for (int i = 0; i < n; i++)
+            result[i] = NumOps.Divide(expValues[i], sum);
+
+        return result;
+    }
+    /// <summary>
+    /// Computes KL divergence between two probability distributions.
+    /// </summary>
+    protected T KLDivergence(Vector<T> p, Vector<T> q)
+    {
+        T divergence = NumOps.Zero;
+
+        for (int i = 0; i < p.Length; i++)
+        {
+            double pVal = Convert.ToDouble(p[i]);
+            double qVal = Convert.ToDouble(q[i]);
+
+            if (pVal > Epsilon)
+            {
+                double contrib = pVal * Math.Log(pVal / (qVal + Epsilon));
+                divergence = NumOps.Add(divergence, NumOps.FromDouble(contrib));
+            }
+        }
+
+        return divergence;
+    }
+
+    /// <summary>
+    /// Computes cross-entropy loss between predictions and labels.
+    /// </summary>
+    protected T CrossEntropy(Vector<T> predictions, Vector<T> trueLabels)
+    {
+        T entropy = NumOps.Zero;
+
+        for (int i = 0; i < predictions.Length; i++)
+        {
+            double pred = Convert.ToDouble(predictions[i]);
+            double label = Convert.ToDouble(trueLabels[i]);
+
+            if (label > Epsilon)
+            {
+                double contrib = -label * Math.Log(pred + Epsilon);
+                entropy = NumOps.Add(entropy, NumOps.FromDouble(contrib));
+            }
+        }
+
+        return entropy;
+    }
+    /// <summary>
     /// Gets the epsilon value for numerical stability (to avoid log(0), division by zero, etc.).
     /// </summary>
     protected const double Epsilon = 1e-10;
 }
+
+
+

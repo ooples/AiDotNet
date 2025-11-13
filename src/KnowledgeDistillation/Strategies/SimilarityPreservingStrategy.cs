@@ -76,6 +76,30 @@ public class SimilarityPreservingStrategy<T> : DistillationStrategyBase<T, Vecto
 
     public T ComputeSimilarityLoss(Vector<T>[] studentEmbeddings, Vector<T>[] teacherEmbeddings)
     {
+        if (studentEmbeddings == null || teacherEmbeddings == null)
+            throw new ArgumentNullException("Embeddings cannot be null");
+        if (studentEmbeddings.Length != teacherEmbeddings.Length)
+            throw new ArgumentException("Student and teacher must have same batch size");
+        
+        // Validate all vectors have same dimensions
+        if (studentEmbeddings.Length > 0)
+        {
+            int studentDim = studentEmbeddings[0].Length;
+            int teacherDim = teacherEmbeddings[0].Length;
+            
+            for (int i = 0; i < studentEmbeddings.Length; i++)
+            {
+                if (studentEmbeddings[i].Length != studentDim)
+                    throw new ArgumentException($"All student embeddings must have same dimension. Expected {studentDim}, got {studentEmbeddings[i].Length} at index {i}");
+                if (teacherEmbeddings[i].Length != teacherDim)
+                    throw new ArgumentException($"All teacher embeddings must have same dimension. Expected {teacherDim}, got {teacherEmbeddings[i].Length} at index {i}");
+                if (studentEmbeddings[i].Length != teacherEmbeddings[i].Length)
+                    throw new ArgumentException($"Student and teacher embeddings must have matching dimensions. Got student={studentEmbeddings[i].Length}, teacher={teacherEmbeddings[i].Length} at index {i}");
+                if (studentEmbeddings[i].Length == 0)
+                    throw new ArgumentException($"Embedding vectors cannot be empty at index {i}");
+            }
+        }
+        
         int n = studentEmbeddings.Length;
         T totalLoss = NumOps.Zero;
         int pairCount = 0;
@@ -110,71 +134,8 @@ public class SimilarityPreservingStrategy<T> : DistillationStrategyBase<T, Vecto
         return Convert.ToDouble(dot) / (Math.Sqrt(Convert.ToDouble(norm1)) * Math.Sqrt(Convert.ToDouble(norm2)) + Epsilon);
     }
 
-    private Vector<T> Softmax(Vector<T> logits, double temperature)
-    {
-        int n = logits.Length;
-        var result = new Vector<T>(n);
-        var scaled = new T[n];
 
-        for (int i = 0; i < n; i++)
-            scaled[i] = NumOps.FromDouble(Convert.ToDouble(logits[i]) / temperature);
 
-        T maxLogit = scaled[0];
-        for (int i = 1; i < n; i++)
-            if (NumOps.GreaterThan(scaled[i], maxLogit))
-                maxLogit = scaled[i];
-
-        T sum = NumOps.Zero;
-        var expValues = new T[n];
-
-        for (int i = 0; i < n; i++)
-        {
-            double val = Convert.ToDouble(NumOps.Subtract(scaled[i], maxLogit));
-            expValues[i] = NumOps.FromDouble(Math.Exp(val));
-            sum = NumOps.Add(sum, expValues[i]);
-        }
-
-        for (int i = 0; i < n; i++)
-            result[i] = NumOps.Divide(expValues[i], sum);
-
-        return result;
-    }
-
-    private T KLDivergence(Vector<T> p, Vector<T> q)
-    {
-        T divergence = NumOps.Zero;
-
-        for (int i = 0; i < p.Length; i++)
-        {
-            double pVal = Convert.ToDouble(p[i]);
-            double qVal = Convert.ToDouble(q[i]);
-
-            if (pVal > Epsilon)
-            {
-                double contrib = pVal * Math.Log(pVal / (qVal + Epsilon));
-                divergence = NumOps.Add(divergence, NumOps.FromDouble(contrib));
-            }
-        }
-
-        return divergence;
-    }
-
-    private T CrossEntropy(Vector<T> predictions, Vector<T> trueLabels)
-    {
-        T entropy = NumOps.Zero;
-
-        for (int i = 0; i < predictions.Length; i++)
-        {
-            double pred = Convert.ToDouble(predictions[i]);
-            double label = Convert.ToDouble(trueLabels[i]);
-
-            if (label > Epsilon)
-            {
-                double contrib = -label * Math.Log(pred + Epsilon);
-                entropy = NumOps.Add(entropy, NumOps.FromDouble(contrib));
-            }
-        }
-
-        return entropy;
-    }
 }
+
+

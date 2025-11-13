@@ -139,8 +139,8 @@ public class AttentionDistillationStrategy<T> : DistillationStrategyBase<T, Vect
         ValidateOutputDimensions(studentOutput, teacherOutput, v => v.Length);
 
         // This method only computes output loss
-        // Attention loss is computed separately via ComputeAttentionLoss
-        // and combined externally
+        // Attention loss must be computed separately via ComputeAttentionLoss
+        // and manually combined by the user
 
         // Soft loss with temperature scaling
         var studentSoft = Softmax(studentOutput, Temperature);
@@ -158,17 +158,12 @@ public class AttentionDistillationStrategy<T> : DistillationStrategyBase<T, Vect
             var alphaT = NumOps.FromDouble(Alpha);
             var oneMinusAlpha = NumOps.FromDouble(1.0 - Alpha);
 
-            var combinedLoss = NumOps.Add(
+            return NumOps.Add(
                 NumOps.Multiply(alphaT, hardLoss),
                 NumOps.Multiply(oneMinusAlpha, softLoss));
-
-            // Scale by (1 - attentionWeight) to leave room for attention loss
-            combinedLoss = NumOps.Multiply(combinedLoss, NumOps.FromDouble(1.0 - _attentionWeight));
-            return combinedLoss;
         }
 
-        // Scale soft loss by (1 - attentionWeight)
-        return NumOps.Multiply(softLoss, NumOps.FromDouble(1.0 - _attentionWeight));
+        return softLoss;
     }
 
     /// <summary>
@@ -330,79 +325,8 @@ public class AttentionDistillationStrategy<T> : DistillationStrategyBase<T, Vect
         return NumOps.FromDouble(loss);
     }
 
-    private Vector<T> Softmax(Vector<T> logits, double temperature)
-    {
-        int n = logits.Length;
-        var result = new Vector<T>(n);
 
-        var scaledLogits = new T[n];
-        for (int i = 0; i < n; i++)
-        {
-            scaledLogits[i] = NumOps.FromDouble(Convert.ToDouble(logits[i]) / temperature);
-        }
 
-        T maxLogit = scaledLogits[0];
-        for (int i = 1; i < n; i++)
-        {
-            if (NumOps.GreaterThan(scaledLogits[i], maxLogit))
-                maxLogit = scaledLogits[i];
-        }
-
-        T sum = NumOps.Zero;
-        var expValues = new T[n];
-
-        for (int i = 0; i < n; i++)
-        {
-            double val = Convert.ToDouble(NumOps.Subtract(scaledLogits[i], maxLogit));
-            expValues[i] = NumOps.FromDouble(Math.Exp(val));
-            sum = NumOps.Add(sum, expValues[i]);
-        }
-
-        for (int i = 0; i < n; i++)
-        {
-            result[i] = NumOps.Divide(expValues[i], sum);
-        }
-
-        return result;
-    }
-
-    private T KLDivergence(Vector<T> p, Vector<T> q)
-    {
-        T divergence = NumOps.Zero;
-
-        for (int i = 0; i < p.Length; i++)
-        {
-            double pVal = Convert.ToDouble(p[i]);
-            double qVal = Convert.ToDouble(q[i]);
-
-            if (pVal > Epsilon)
-            {
-                double contrib = pVal * Math.Log(pVal / (qVal + Epsilon));
-                divergence = NumOps.Add(divergence, NumOps.FromDouble(contrib));
-            }
-        }
-
-        return divergence;
-    }
-
-    private T CrossEntropy(Vector<T> predictions, Vector<T> trueLabels)
-    {
-        T entropy = NumOps.Zero;
-
-        for (int i = 0; i < predictions.Length; i++)
-        {
-            double pred = Convert.ToDouble(predictions[i]);
-            double label = Convert.ToDouble(trueLabels[i]);
-
-            if (label > Epsilon)
-            {
-                double contrib = -label * Math.Log(pred + Epsilon);
-                entropy = NumOps.Add(entropy, NumOps.FromDouble(contrib));
-            }
-        }
-
-        return entropy;
-    }
 }
 
 /// <summary>
@@ -425,3 +349,5 @@ public enum AttentionMatchingMode
     /// </summary>
     Cosine
 }
+
+

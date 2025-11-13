@@ -393,79 +393,8 @@ public class ContrastiveDistillationStrategy<T> : DistillationStrategyBase<T, Ve
         return Math.Sqrt(Convert.ToDouble(sumSq));
     }
 
-    private Vector<T> Softmax(Vector<T> logits, double temperature)
-    {
-        int n = logits.Length;
-        var result = new Vector<T>(n);
 
-        var scaledLogits = new T[n];
-        for (int i = 0; i < n; i++)
-        {
-            scaledLogits[i] = NumOps.FromDouble(Convert.ToDouble(logits[i]) / temperature);
-        }
 
-        T maxLogit = scaledLogits[0];
-        for (int i = 1; i < n; i++)
-        {
-            if (NumOps.GreaterThan(scaledLogits[i], maxLogit))
-                maxLogit = scaledLogits[i];
-        }
-
-        T sum = NumOps.Zero;
-        var expValues = new T[n];
-
-        for (int i = 0; i < n; i++)
-        {
-            double val = Convert.ToDouble(NumOps.Subtract(scaledLogits[i], maxLogit));
-            expValues[i] = NumOps.FromDouble(Math.Exp(val));
-            sum = NumOps.Add(sum, expValues[i]);
-        }
-
-        for (int i = 0; i < n; i++)
-        {
-            result[i] = NumOps.Divide(expValues[i], sum);
-        }
-
-        return result;
-    }
-
-    private T KLDivergence(Vector<T> p, Vector<T> q)
-    {
-        T divergence = NumOps.Zero;
-
-        for (int i = 0; i < p.Length; i++)
-        {
-            double pVal = Convert.ToDouble(p[i]);
-            double qVal = Convert.ToDouble(q[i]);
-
-            if (pVal > Epsilon)
-            {
-                double contrib = pVal * Math.Log(pVal / (qVal + Epsilon));
-                divergence = NumOps.Add(divergence, NumOps.FromDouble(contrib));
-            }
-        }
-
-        return divergence;
-    }
-
-    private T CrossEntropy(Vector<T> predictions, Vector<T> trueLabels)
-    {
-        T entropy = NumOps.Zero;
-
-        for (int i = 0; i < predictions.Length; i++)
-        {
-            double pred = Convert.ToDouble(predictions[i]);
-            double label = Convert.ToDouble(trueLabels[i]);
-
-            if (label > Epsilon)
-            {
-                double contrib = -label * Math.Log(pred + Epsilon);
-                entropy = NumOps.Add(entropy, NumOps.FromDouble(contrib));
-            }
-        }
-
-        return entropy;
-    }
 }
 
 /// <summary>
@@ -488,3 +417,5 @@ public enum ContrastiveMode
     /// </summary>
     NTXent
 }
+
+

@@ -1,0 +1,226 @@
+{
+  "data": {
+    "repository": {
+      "pullRequest": {
+        "reviewThreads": {
+          "nodes": [
+            {
+              "id": "PRRT_kwDOKSXUF85huXSq",
+              "isResolved": false,
+              "comments": {
+                "nodes": [
+                  {
+                    "id": "PRRC_kwDOKSXUF86WLjTO",
+                    "body": "_ΓÜá∩╕Å Potential issue_ | _≡ƒƒá Major_\n\n**Gradient scaling mirrors the same issue**\n\nYou scale the gradient by (1 ΓêÆ selectivityWeight) without adding any selectivity gradient, further weakening optimization.\n\nInterim fix consistent with the loss change:\n\n```diff\n-                // Apply selectivity weight reduction exactly once\n-                gradient[i] = NumOps.Multiply(combined, NumOps.FromDouble(1.0 - _selectivityWeight));\n+                gradient[i] = combined;\n@@\n-                // Apply selectivity weight reduction exactly once\n-                gradient[i] = NumOps.Multiply(softGrad, NumOps.FromDouble(1.0 - _selectivityWeight));\n+                gradient[i] = softGrad;\n```\n\n<!-- fingerprinting:phantom:poseidon:chinchilla -->\n\n<!-- This is an auto-generated comment by CodeRabbit -->",
+                    "createdAt": "2025-11-12T19:55:34Z",
+                    "path": "src/KnowledgeDistillation/Strategies/NeuronSelectivityDistillationStrategy.cs",
+                    "position": 113
+                  }
+                ]
+              }
+            },
+            {
+              "id": "PRRT_kwDOKSXUF85huXSu",
+              "isResolved": false,
+              "comments": {
+                "nodes": [
+                  {
+                    "id": "PRRC_kwDOKSXUF86WLjTW",
+                    "body": "_ΓÜá∩╕Å Potential issue_ | _≡ƒö┤ Critical_\n\n<details>\n<summary>≡ƒº⌐ Analysis chain</summary>\n\n**Relational loss/gradients are still applied to the wrong samples**\n\nYou compute batch relational terms when the batch fills, then amortize them over the next N per-sample calls. Earlier samples that formed the batch receive only ΓÇ£in-batchΓÇ¥ partial gradients, not the finalized amortized contribution; subsequent samples (from the next batch) receive the cached average. This misaligns loss and gradient with contributing samples and weakens RKD.\n\nRecommendation:\n- Switch trainer/strategy API to batch-level for RKD (return per-sample losses/gradients for the same batch), or\n- Cache per-sample RKD gradients for the completed batch (array of Vector<T>, not a single average), then apply them to the next N calls strictly corresponding to those batch slots (and clear afterward). Document the approximation if batch API changes are not possible.\n\nThis is a correctness concern for RKD signal strength. \n\n\n\n\nAlso applies to: 295-366\n\n---\n\n≡ƒÅü Script executed:\n\n```shell\n#!/bin/bash\n# Examine the full RelationalDistillationStrategy.cs file to understand amortization logic\nfd -t f \"RelationalDistillationStrategy.cs\" -x cat {}\n```\n\nLength of output: 38351\n\n---\n\n≡ƒÅü Script executed:\n\n```shell\n#!/bin/bash\n# Search for usages of RelationalDistillationStrategy and calls to ComputeLoss/ComputeGradient\n# to understand the execution order and trainer integration\nrg -n \"RelationalDistillationStrategy|ComputeLoss|ComputeGradient\" --type cs -B2 -A2 | head -100\n```\n\nLength of output: 9504\n\n---\n\n</parameter>\n</invoke>\n\n---\n\n≡ƒÅü Script executed:\n\n```shell\n#!/bin/bash\n# Search for trainer integration and Reset() calls\nfd -t f \"*.cs\" -x rg -l \"Reset\\(\\)\" {} \\; | xargs -I {} sh -c 'echo \"=== {} ===\" && rg -n \"Reset|ComputeLoss|ComputeGradient\" -B3 -A3 {}'\n```\n\nLength of output: 283\n\n---\n\n≡ƒÅü Script executed:\n\n```shell\n#!/bin/bash\n# Search for Reset() calls and usage patterns\nrg -n \"\\.Reset\\(\\)\" --type cs -B5 -A5\n```\n\nLength of output: 13009\n\n---\n\n\n\n</details>\n\n**Relational loss and gradients are indeed misaligned between batch computation and sample application**\n\nThe review concern is valid. Here's the verified issue:\n\n**Execution Timeline (batch_size=32):**\n- **Samples 0-31:** Accumulated in buffers. When 31st sample added, relational loss computed on batch[0..31], then buffers cleared.\n- **Sample 31's gradient:** Cannot use Path 1 in `ComputeGradient` (buffers empty after `ComputeLoss`), so it gets zero relational gradient or stale cached gradient.\n- **Samples 32-63:** Receive amortized relational gradient computed from batch[0..31]ΓÇönot from samples that contribute to *their* relationships.\n\nThis causes:\n1. **Temporal misalignment:** Samples forming a batch don't uniformly receive their own relational loss signal.\n2. **Cross-batch leakage:** Relational knowledge from batch N applied to batch N+1.\n3. **Weakened RKD signal:** Loss-gradient consistency is broken; the gradient doesn't match the sample that incurred the loss.\n\nThe `Reset()` call at epoch boundaries (verified in `KnowledgeDistillationTrainerBase.cs:570`) flushes partial batches but doesn't address the within-epoch misalignment.\n\n**Recommendation from original review remains sound:** Cache per-sample relational gradients (array, not average) and apply them to the exact samples that computed the batch, or refactor to batch-level API.\n\n<!-- fingerprinting:phantom:poseidon:chinchilla -->\n\n<!-- This is an auto-generated comment by CodeRabbit -->",
+                    "createdAt": "2025-11-12T19:55:34Z",
+                    "path": "src/KnowledgeDistillation/Strategies/RelationalDistillationStrategy.cs",
+                    "position": 286
+                  }
+                ]
+              }
+            },
+            {
+              "id": "PRRT_kwDOKSXUF85huXS1",
+              "isResolved": false,
+              "comments": {
+                "nodes": [
+                  {
+                    "id": "PRRC_kwDOKSXUF86WLjTe",
+                    "body": "_ΓÜá∩╕Å Potential issue_ | _≡ƒö┤ Critical_\n\n**Stop wiring the online teacher with a no-op updater.**\n\n`CreateOnlineTeacher` still passes `(pred, target) => { }` into `OnlineTeacherModel`. That teacher will never adapt, so every ΓÇ£onlineΓÇ¥ training session silently degenerates into a static teacher. This violates the contract of the online variant and repeats the functional bug we previously called out. Please surface a real update delegate (e.g., supplied by the caller or exposed from the model) or refuse to build this teacher until one is provided.\n\n<details>\n<summary>≡ƒñû Prompt for AI Agents</summary>\n\n```\nIn src/KnowledgeDistillation/TeacherModelFactory.cs around lines 146 to 164, the\nOnline teacher is being constructed with a no-op updater which prevents any\nonline adaptation; replace the empty update delegate with a real updater by\neither (a) obtaining the update function from the provided IFullModel (e.g.,\nmodel.Update or a similar method exposed by the model) and pass it into\nOnlineTeacherModel, or (b) change the factory signature to require an\nAction<Vector<T>, Vector<T>> updateDelegate parameter (or Func/appropriate\ndelegate) and throw an ArgumentException if it is null so the factory refuses to\nbuild an online teacher without a valid updater; ensure the chosen updater\nmatches the OnlineTeacherModel delegate signature and wire through\nupdateMode/updateRate unchanged.\n```\n\n</details>\n\n<!-- fingerprinting:phantom:medusa:sabertoothed -->\n\n<!-- This is an auto-generated comment by CodeRabbit -->",
+                    "createdAt": "2025-11-12T19:55:34Z",
+                    "path": "src/KnowledgeDistillation/TeacherModelFactory.cs",
+                    "position": 164
+                  }
+                ]
+              }
+            },
+            {
+              "id": "PRRT_kwDOKSXUF85huXS9",
+              "isResolved": false,
+              "comments": {
+                "nodes": [
+                  {
+                    "id": "PRRC_kwDOKSXUF86WLjTo",
+                    "body": "_ΓÜá∩╕Å Potential issue_ | _≡ƒö┤ Critical_\n\n**DonΓÇÖt rely on metadata reflection for output size.**\n\n`GetOutputDimensionFromModel` now throws for any `IFullModel` that doesnΓÇÖt implement a `GetMetadata()` method returning a specific `Dictionary<string, object>`. The factory (`TeacherModelFactory.CreateNeuralNetworkTeacher`, `CreateAdaptiveTeacher`, etc.) still builds wrappers via `new TeacherModelWrapper<T>(model)`, so common models that previously worked will now fail immediately. Please accept an explicit `outputDimension` (and update the factory to pass it) or keep a robust fallbackΓÇöotherwise the default instantiation path is broken.\n\n<!-- fingerprinting:phantom:medusa:sabertoothed -->\n\n<!-- This is an auto-generated comment by CodeRabbit -->",
+                    "createdAt": "2025-11-12T19:55:35Z",
+                    "path": "src/KnowledgeDistillation/TeacherModelWrapper.cs",
+                    "position": 135
+                  }
+                ]
+              }
+            },
+            {
+              "id": "PRRT_kwDOKSXUF85huXTD",
+              "isResolved": false,
+              "comments": {
+                "nodes": [
+                  {
+                    "id": "PRRC_kwDOKSXUF86WLjTt",
+                    "body": "_ΓÜá∩╕Å Potential issue_ | _≡ƒƒá Major_\n\n**Fix geometric-mean aggregation ΓÇö itΓÇÖs still wrong.**\n\nThis branch continues to apply `Math.Log(Math.Abs(logit))` on raw logits and multiplies by an overall sign. Taking logs of logits destroys their scale (and flips negatives to positives), so the ensemble invents confidence patterns that no teacher produced. Please convert logits to probabilities (or log-probabilities via softmax) before computing a geometric mean, as previously requested.\n\n<details>\n<summary>≡ƒñû Prompt for AI Agents</summary>\n\n```\nIn src/KnowledgeDistillation/Teachers/EnsembleTeacherModel.cs around lines 205\nto 221, the geometric-mean branch is wrong because it takes logs of raw logits\nand tracks a sign; instead convert each teacher's logits to probabilities (or\nlog-probabilities via softmax) first, then compute the weighted mean of\nlog-probabilities (i.e. sum(weights * log(p_i))) to implement the geometric mean\nin probability space, use a small epsilon to avoid log(0), and finally\nexponentiate (or normalize/convert back to logits) as needed for result storage;\nremove the sign-tracking and direct Math.Log(Math.Abs(logit)) usage and ensure\nweights are applied to the per-teacher log-probabilities.\n```\n\n</details>\n\n<!-- fingerprinting:phantom:medusa:sabertoothed -->\n\n<!-- This is an auto-generated comment by CodeRabbit -->",
+                    "createdAt": "2025-11-12T19:55:35Z",
+                    "path": "src/KnowledgeDistillation/Teachers/EnsembleTeacherModel.cs",
+                    "position": 221
+                  }
+                ]
+              }
+            },
+            {
+              "id": "PRRT_kwDOKSXUF85huXTM",
+              "isResolved": false,
+              "comments": {
+                "nodes": [
+                  {
+                    "id": "PRRC_kwDOKSXUF86WLjT4",
+                    "body": "_ΓÜá∩╕Å Potential issue_ | _≡ƒƒá Major_\n\n**Validate cached vector dimensions before storing.**\n\n`CachePredictions` only checks for nulls/empties. If any cached vectorΓÇÖs length differs from `_outputDim`, later consumers (and KD trainers) will index past the end or combine mismatched logits, yielding runtime exceptions or garbage gradients. Please enforce `predictions[i].Length == _outputDim` (and guard against negative indices in `GetCachedPrediction`).\n\n<details>\n<summary>≡ƒñû Prompt for AI Agents</summary>\n\n```\nIn src/KnowledgeDistillation/Teachers/SelfTeacherModel.cs around lines 27 to 44,\nthe CachePredictions method currently only checks for null/empty vectors but\ndoes not validate that each prediction vector length matches the expected\n_outputDim (and callers like GetCachedPrediction should also guard against\nnegative indices); update CachePredictions to throw an ArgumentException if any\npredictions[i].Length != _outputDim with a clear message including the index and\nexpected dimension, and also add a guard in GetCachedPrediction to validate the\nrequested index is within [0, _cachedPredictions.Length) (throw\nArgumentOutOfRangeException for negative or out-of-range indices) before\nindexing into the array.\n```\n\n</details>\n\n<!-- fingerprinting:phantom:medusa:sabertoothed -->\n\n<!-- This is an auto-generated comment by CodeRabbit -->",
+                    "createdAt": "2025-11-12T19:55:35Z",
+                    "path": "src/KnowledgeDistillation/Teachers/SelfTeacherModel.cs",
+                    "position": 44
+                  }
+                ]
+              }
+            },
+            {
+              "id": "PRRT_kwDOKSXUF85huXTW",
+              "isResolved": false,
+              "comments": {
+                "nodes": [
+                  {
+                    "id": "PRRC_kwDOKSXUF86WLjUE",
+                    "body": "_ΓÜá∩╕Å Potential issue_ | _≡ƒö┤ Critical_\n\n**Do not call options.Validate() here (throws with default settings)**\n\nValidate() requires ValidationInputs when ValidateAfterEpoch=true (default). At this point options has no validation data, so this will throw on typical usage.\n\nApply one of:\n- Minimal: remove validation here and perform targeted checks (ranges, positivity) locally.\n\n```diff\n-        options.Validate(); // Validate all options before training\n+        // Defer full options.Validate(); trainer already validates shapes at runtime.\n+        // TODO: Optionally validate only numeric ranges here.\n```\n\n- Or populate options.ValidationInputs/Labels from valInputs/valLabels before calling Validate (move Validate below where those are available).\n\n<details>\n<summary>≡ƒñû Prompt for AI Agents</summary>\n\n```\nIn src/PredictionModelBuilder.cs around lines 1016 to 1018, do not call\noptions.Validate() there because Validate() requires ValidationInputs when\nValidateAfterEpoch=true (the default) and options currently has no validation\ndata which will throw; either remove this Validate() call and instead perform\nminimal local checks (e.g., numeric ranges, non-negative values, required\nfields) at this location, or move the Validate() call to after\nvalInputs/valLabels have been assigned to options.ValidationInputs/Labels so\nfull validation runs only when validation data exists.\n```\n\n</details>\n\n<!-- fingerprinting:phantom:poseidon:chinchilla -->\n\n<!-- This is an auto-generated comment by CodeRabbit -->",
+                    "createdAt": "2025-11-12T19:55:35Z",
+                    "path": "src/PredictionModelBuilder.cs",
+                    "position": 141
+                  }
+                ]
+              }
+            },
+            {
+              "id": "PRRT_kwDOKSXUF85huXTg",
+              "isResolved": false,
+              "comments": {
+                "nodes": [
+                  {
+                    "id": "PRRC_kwDOKSXUF86WLjUR",
+                    "body": "_≡ƒ¢á∩╕Å Refactor suggestion_ | _≡ƒƒá Major_\n\n**KD hardΓÇærequires Vector<T> model types; clashes with builderΓÇÖs Matrix path**\n\nThe cast to IFullModel<T, Vector<T>, Vector<T>> forbids MatrixΓÇæbased students. Combined with BuildAsyncΓÇÖs early ConvertToMatrix, users canΓÇÖt satisfy both. This blocks valid scenarios (e.g., Matrix<double> inputs).\n\nOptions:\n- Support Matrix students: adapt studentForward via ConversionsHelper.ConvertVectorToInputWithoutReference<T,TInput>() and call studentModel.Predict(TInput) without the hard cast; update backward to use model training APIs.\n- Or route to KD path before ConvertToMatrix and document TInput=Vector<T> requirement (breaking for Matrix users, but consistent).\nWhich direction do you prefer?\n\n<details>\n<summary>≡ƒñû Prompt for AI Agents</summary>\n\n```\nIn src/PredictionModelBuilder.cs around lines 1021 to 1026, the code hard-casts\nthe student model to IFullModel<T, Vector<T>, Vector<T>> which prevents\nMatrix-based student models and conflicts with the earlier ConvertToMatrix path;\ninstead, remove the hard cast and implement a studentForward that accepts the\nalready-constructed Vector<T> and converts it to the student model's TInput via\nConversionsHelper.ConvertVectorToInputWithoutReference<T,TInput>(), call\nstudentModel.Predict(TInput) (or the appropriate Predict method) and ensure the\nbackward/training path uses the model's training API with TInput/TOutput types;\nupdate types and null checks accordingly so both Vector and Matrix student\nmodels are supported without changing the outer ConvertToMatrix ordering.\n```\n\n</details>\n\n<!-- fingerprinting:phantom:poseidon:chinchilla -->\n\n<!-- This is an auto-generated comment by CodeRabbit -->",
+                    "createdAt": "2025-11-12T19:55:35Z",
+                    "path": "src/PredictionModelBuilder.cs",
+                    "position": 149
+                  }
+                ]
+              }
+            },
+            {
+              "id": "PRRT_kwDOKSXUF85huXTj",
+              "isResolved": false,
+              "comments": {
+                "nodes": [
+                  {
+                    "id": "PRRC_kwDOKSXUF86WLjUV",
+                    "body": "_ΓÜá∩╕Å Potential issue_ | _≡ƒƒá Major_\n\n**Backprop likely lacks forward memory; avoid Predict() for training**\n\nstudentBackward calls Network.Backpropagate expecting a prior forward-with-memory. studentForward uses vectorStudentModel.Predict, which typically runs inference without caching activations.\n\nRefactor studentForward to use a training forward that records activations (e.g., nnModel.Network.ForwardWithMemory or equivalent), and base studentBackward on that same pass; or switch to the modelΓÇÖs ComputeGradients/ApplyGradients API for correctness.\n\n<!-- fingerprinting:phantom:poseidon:chinchilla -->\n\n<!-- This is an auto-generated comment by CodeRabbit -->",
+                    "createdAt": "2025-11-12T19:55:35Z",
+                    "path": "src/PredictionModelBuilder.cs",
+                    "position": 313
+                  }
+                ]
+              }
+            },
+            {
+              "id": "PRRT_kwDOKSXUF85huXTo",
+              "isResolved": false,
+              "comments": {
+                "nodes": [
+                  {
+                    "id": "PRRC_kwDOKSXUF86WLjUd",
+                    "body": "_ΓÜá∩╕Å Potential issue_ | _≡ƒƒá Major_\n\n**Early stopping is ineffective and uses the wrong metric**\n\n- It compares training loss (avgLoss) but labels it ΓÇ£val lossΓÇ¥.\n- It never stops training (only logs).\n\nWire early stopping to actual validation loss and enforce stopping.\n\nSuggested approach:\n- Compute validation loss inside the callback by averaging DistillationStrategy.ComputeLoss over (valInputs,valLabels) with teacher logits.\n- Add a stop flag the trainer honors, or refactor to loop epochs externally (call Train with epochs:1 in a for-loop) and break when patience exhausted.\n\n<!-- fingerprinting:phantom:poseidon:chinchilla -->\n\n<!-- This is an auto-generated comment by CodeRabbit -->",
+                    "createdAt": "2025-11-12T19:55:35Z",
+                    "path": "src/PredictionModelBuilder.cs",
+                    "position": 368
+                  }
+                ]
+              }
+            },
+            {
+              "id": "PRRT_kwDOKSXUF85huXTt",
+              "isResolved": false,
+              "comments": {
+                "nodes": [
+                  {
+                    "id": "PRRC_kwDOKSXUF86WLjUm",
+                    "body": "_ΓÜá∩╕Å Potential issue_ | _≡ƒƒá Major_\n\n**Mock model exposes inconsistent parameter shapes.**\n\n`ParameterCount` advertises 100/1000 parameters, yet `GetParameters()` and `ApplyGradients()` operate on zero-length vectors. The KD builder relies on these APIs during training; this mismatch will either throw (shape checks) or silently skip updates. Please return a vector whose length matches `ParameterCount` (and honour it in `ApplyGradients`).\n\n<details>\n<summary>≡ƒñû Prompt for AI Agents</summary>\n\n```\nIn testconsole/Examples/KnowledgeDistillationExample.cs around lines 295-369,\nthe MockModel advertises ParameterCount of 100/1000 but GetParameters,\nComputeGradients and ApplyGradients use/return zero-length vectors causing shape\nmismatches; fix by adding an internal parameters array/Vector<double> sized to\nParameterCount set in the constructor, have GetParameters return a copy of that\nvector, SetParameters validate length and copy values, ComputeGradients return a\nvector of length ParameterCount (e.g., zeros or mock gradients of same length),\nand implement ApplyGradients to update the internal parameters element-wise\nusing the provided gradients and learningRate; also ensure DeepCopy/Clone create\nnew MockModel instances that copy the parameter values.\n```\n\n</details>\n\n<!-- fingerprinting:phantom:medusa:sabertoothed -->\n\n<!-- This is an auto-generated comment by CodeRabbit -->",
+                    "createdAt": "2025-11-12T19:55:36Z",
+                    "path": "testconsole/Examples/KnowledgeDistillationExample.cs",
+                    "position": 369
+                  }
+                ]
+              }
+            },
+            {
+              "id": "PRRT_kwDOKSXUF85huXTy",
+              "isResolved": false,
+              "comments": {
+                "nodes": [
+                  {
+                    "id": "PRRC_kwDOKSXUF86WLjUs",
+                    "body": "_ΓÜá∩╕Å Potential issue_ | _≡ƒö┤ Critical_\n\n**Example wonΓÇÖt run with current KD path (Matrix student vs VectorΓÇæonly KD)**\n\nKD helper casts the student to IFullModel<ΓÇª, Vector<T>, Vector<T>>. This example uses Matrix<double> inputs, so ConfigureKnowledgeDistillation ΓåÆ BuildAsync will throw.\n\nEither:\n- Update example to Vector<T> student/builder (shown below), or\n- Extend KD to support Matrix students (preferred for usability).\n\nVectorΓÇæbased example adjustments:\n\n```diff\n-IFullModel<double, Matrix<double>, Vector<double>> teacherModel = GetTeacherModel();\n-IFullModel<double, Matrix<double>, Vector<double>> studentModel = CreateStudentModel();\n-var kdOptions = new KnowledgeDistillationOptions<double, Matrix<double>, Vector<double>>\n+IFullModel<double, Vector<double>, Vector<double>> teacherModel = GetTeacherModel();\n+IFullModel<double, Vector<double>, Vector<double>> studentModel = CreateStudentModel();\n+var kdOptions = new KnowledgeDistillationOptions<double, Vector<double>, Vector<double>>\n@@\n-var result = await new PredictionModelBuilder<double, Matrix<double>, Vector<double>>()\n+var result = await new PredictionModelBuilder<double, Vector<double>, Vector<double>>()\n```\n\nYouΓÇÖll also need LoadYourData/GetTeacherModel/CreateStudentModel to use Vector<double> inputs (or switch the KD implementation to accept Matrix).\n\n\n> Committable suggestion skipped: line range outside the PR's diff.\n\n<details>\n<summary>≡ƒñû Prompt for AI Agents</summary>\n\n```\ntestconsole/Examples/SimpleKnowledgeDistillationExample.cs lines 25-46: the\nexample configures knowledge distillation but uses Matrix<double> for model\ninputs while the KD helper currently casts the student to IFullModel<ΓÇª,\nVector<T>, Vector<T>>, causing BuildAsync to throw; fix by either (A) updating\nthis example and its helper data/model factory methods (LoadYourData,\nGetTeacherModel, CreateStudentModel) to use Vector<double> everywhere so the\nstudent/teacher generics match the KD API, or (B) extend the KD implementation\nto accept Matrix<T> students by changing the KD helper/generic signatures and\ninternal cast to support IFullModel<T, Matrix<T>, Vector<T>> (and update\nloss/forward code that assumes Vector inputs accordingly) ΓÇö pick one approach\nand make the corresponding changes consistently across the example and KD code.\n```\n\n</details>\n\n<!-- fingerprinting:phantom:poseidon:chinchilla -->\n\n<!-- This is an auto-generated comment by CodeRabbit -->",
+                    "createdAt": "2025-11-12T19:55:36Z",
+                    "path": "testconsole/Examples/SimpleKnowledgeDistillationExample.cs",
+                    "position": 46
+                  }
+                ]
+              }
+            },
+            {
+              "id": "PRRT_kwDOKSXUF85huXT6",
+              "isResolved": false,
+              "comments": {
+                "nodes": [
+                  {
+                    "id": "PRRC_kwDOKSXUF86WLjU3",
+                    "body": "_ΓÜá∩╕Å Potential issue_ | _≡ƒö┤ Critical_\n\n**Remove FeatureBased expectations or assert the thrown exception.**\n\n`DistillationStrategyFactory.CreateStrategy(DistillationStrategyType.FeatureBased, ΓÇª)` still throws `NotSupportedException`. These tests now call it in `CreateStrategy_WithAllStrategyTypes` and `CreateStrategy_FeatureBased_ReturnsFeatureDistillationStrategy`, so the suite fails before any assertions run. Please either skip FeatureBased here or assert the expected exception instead of `Assert.IsType`.\n\n<details>\n<summary>≡ƒñû Prompt for AI Agents</summary>\n\n```\nIn\ntests/AiDotNet.Tests/UnitTests/KnowledgeDistillation/DistillationStrategyFactoryTests.cs\naround lines 14 to 85, the FeatureBased strategy is not supported and\nCreateStrategy throws NotSupportedException, so remove FeatureBased from the\nTheory InlineData list (so CreateStrategy_WithAllStrategyTypes won't invoke it)\nand modify the FeatureBased-specific test to expect the exception (replace the\nAssert.IsType assertion with Assert.Throws<NotSupportedException>(() =>\nDistillationStrategyFactory<double>.CreateStrategy(DistillationStrategyType.FeatureBased,\nfeatureWeight: 0.7))); this keeps the rest of the parameterized test intact and\ndocuments the unsupported behavior.\n```\n\n</details>\n\n<!-- fingerprinting:phantom:medusa:sabertoothed -->\n\n<!-- This is an auto-generated comment by CodeRabbit -->",
+                    "createdAt": "2025-11-12T19:55:36Z",
+                    "path": "tests/AiDotNet.Tests/UnitTests/KnowledgeDistillation/DistillationStrategyFactoryTests.cs",
+                    "position": 85
+                  }
+                ]
+              }
+            },
+            {
+              "id": "PRRT_kwDOKSXUF85huXUB",
+              "isResolved": false,
+              "comments": {
+                "nodes": [
+                  {
+                    "id": "PRRC_kwDOKSXUF86WLjVA",
+                    "body": "_ΓÜá∩╕Å Potential issue_ | _≡ƒö┤ Critical_\n\n<details>\n<summary>≡ƒº⌐ Analysis chain</summary>\n\n**Evaluate() scale mismatch? Tests assume 0..1, impl may return 0..100**\n\nThe test asserts 0.5 and 0ΓëñaccΓëñ1. The trainer baseΓÇÖs Evaluate in snippets returns percentage├ù100. Please verify and align either the test or implementation.\n\n\nIf it returns 0..100, update tests to expect 50.0 and adjust the range to 0..100; otherwise keep current tests and change Evaluate to normalize 0..1.\n\n---\n\n≡ƒÅü Script executed:\n\n```shell\n#!/bin/bash\n# Inspect Evaluate implementation to confirm scale\nrg -nP --type=cs -C2 '\\bdouble\\s+Evaluate\\s*\\(.*Vector<.*>\\s+inputs.*\\)\\s*\\{' src/KnowledgeDistillation/KnowledgeDistillationTrainerBase.cs\nrg -nP --type=cs -C3 'return\\s*\\(double\\)\\s*correct\\s*/\\s*inputs\\.Length' src/KnowledgeDistillation/KnowledgeDistillationTrainerBase.cs\n```\n\nLength of output: 146\n\n---\n\n\n\n</details>\n\n**Evaluate() returns 0..100 but test expects 0..1ΓÇöfix required**\n\nVerification confirmed: line 356 in KnowledgeDistillationTrainerBase.cs returns `(double)correct / inputs.Length * 100.0`, which scales to 0..100. The test expects 0..1 range and will fail. Either update the test to expect 50.0 and range 0..100, or normalize Evaluate() to return 0..1.\n\n<details>\n<summary>≡ƒñû Prompt for AI Agents</summary>\n\n```\nIn\ntests/AiDotNet.Tests/UnitTests/KnowledgeDistillation/KnowledgeDistillationTrainerTests.cs\naround lines 214-244, the test expects Evaluate() to return accuracy in 0..1 but\nKnowledgeDistillationTrainerBase.cs line 356 currently returns a percentage\n(correct/inputs.Length * 100.0); change Evaluate() to return a normalized\nfraction by removing the multiplication by 100 (i.e., return (double)correct /\ninputs.Length) so the method returns 0..1 and the existing test assertions\nremain valid.\n```\n\n</details>\n\n<!-- fingerprinting:phantom:poseidon:chinchilla -->\n\n<!-- This is an auto-generated comment by CodeRabbit -->",
+                    "createdAt": "2025-11-12T19:55:36Z",
+                    "path": "tests/AiDotNet.Tests/UnitTests/KnowledgeDistillation/KnowledgeDistillationTrainerTests.cs",
+                    "position": 244
+                  }
+                ]
+              }
+            }
+          ],
+          "pageInfo": {
+            "hasNextPage": false,
+            "endCursor": "Y3Vyc29yOnYyOpK0MjAyNS0xMS0xMlQxOTo1NTozNlrOYbl1AQ=="
+          }
+        }
+      }
+    }
+  }
+}
