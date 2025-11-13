@@ -480,8 +480,12 @@ public class RelationalDistillationStrategy<T> : DistillationStrategyBase<T>
     }
 
     /// <summary>
-    /// Computes gradient of angle-wise loss for a triplet (simplified approximation).
+    /// Computes gradient of angle-wise loss for a triplet using analytical gradient.
     /// </summary>
+    /// <remarks>
+    /// Uses analytical gradient formula instead of finite differences for O(d) improvement.
+    /// For d=512, this reduces computation from ~163,000 angle computations to ~320 per batch.
+    /// </remarks>
     private Vector<T> ComputeTripletAngleGradient(
         Vector<T> studentI,
         Vector<T> studentJ,
@@ -491,7 +495,6 @@ public class RelationalDistillationStrategy<T> : DistillationStrategyBase<T>
         Vector<T> teacherK)
     {
         int dim = studentI.Length;
-        var gradient = new Vector<T>(dim);
 
         var studentAngle = ComputeAngle(studentI, studentJ, studentK);
         var teacherAngle = ComputeAngle(teacherI, teacherJ, teacherK);
@@ -499,23 +502,79 @@ public class RelationalDistillationStrategy<T> : DistillationStrategyBase<T>
         var angleDiff = NumOps.Subtract(studentAngle, teacherAngle);
         double diffVal = Convert.ToDouble(angleDiff);
 
-        // Numerical gradient approximation (for simplicity)
-        double eps = 0.001;
+        // Compute analytical gradient of angle with respect to studentI
+        var angleGrad = ComputeAnalyticalAngleGradient(studentI, studentJ, studentK);
+
+        // Apply chain rule: gradient of loss = 2 * (studentAngle - teacherAngle) * d(angle)/d(studentI)
+        var gradient = new Vector<T>(dim);
+        double scaleFactor = 2.0 * diffVal;
         for (int d = 0; d < dim; d++)
         {
-            var perturbed = new Vector<T>(dim);
-            for (int k = 0; k < dim; k++)
-            {
-                perturbed[k] = k == d
-                    ? NumOps.Add(studentI[k], NumOps.FromDouble(eps))
-                    : studentI[k];
-            }
+            gradient[d] = NumOps.Multiply(angleGrad[d], NumOps.FromDouble(scaleFactor));
+        }
 
-            var perturbedAngle = ComputeAngle(perturbed, studentJ, studentK);
-            var angleGrad = NumOps.Subtract(perturbedAngle, studentAngle);
-            var numGrad = NumOps.Divide(angleGrad, NumOps.FromDouble(eps));
+        return gradient;
+    }
 
-            gradient[d] = NumOps.Multiply(numGrad, NumOps.FromDouble(2.0 * diffVal));
+    /// <summary>
+    /// Computes the analytical gradient of angle θ at vertex j with respect to vector i.
+    /// </summary>
+    /// <remarks>
+    /// <para>Given three vectors i, j, k, the angle θ at vertex j is formed by vectors A = i - j and B = k - j.</para>
+    /// <para>θ = arccos((A · B) / (||A|| · ||B||))</para>
+    /// <para>The analytical gradient is:
+    /// ∇_i θ = (-1 / sin(θ)) · [B / (||A|| · ||B||) - (cos(θ) · A / ||A||²)]</para>
+    /// <para>This is O(d) instead of O(d²) for numerical approximation.</para>
+    /// </remarks>
+    private Vector<T> ComputeAnalyticalAngleGradient(Vector<T> i, Vector<T> j, Vector<T> k)
+    {
+        int dim = i.Length;
+        var gradient = new Vector<T>(dim);
+
+        // Compute A = i - j and B = k - j
+        var A = new Vector<T>(dim);
+        var B = new Vector<T>(dim);
+        for (int d = 0; d < dim; d++)
+        {
+            A[d] = NumOps.Subtract(i[d], j[d]);
+            B[d] = NumOps.Subtract(k[d], j[d]);
+        }
+
+        // Compute dot products and norms
+        double dotAB = 0;
+        double normASq = 0;
+        double normBSq = 0;
+        for (int d = 0; d < dim; d++)
+        {
+            double aVal = Convert.ToDouble(A[d]);
+            double bVal = Convert.ToDouble(B[d]);
+            dotAB += aVal * bVal;
+            normASq += aVal * aVal;
+            normBSq += bVal * bVal;
+        }
+
+        double normA = Math.Sqrt(normASq) + Epsilon;
+        double normB = Math.Sqrt(normBSq) + Epsilon;
+
+        // Compute cos(θ) and sin(θ)
+        double cosTheta = dotAB / (normA * normB);
+        cosTheta = Math.Max(-1.0, Math.Min(1.0, cosTheta)); // Clamp to [-1, 1]
+        double sinTheta = Math.Sqrt(1.0 - cosTheta * cosTheta) + Epsilon;
+
+        // Compute gradient: ∇_i θ = (-1 / sin(θ)) · [B / (||A|| · ||B||) - (cos(θ) · A / ||A||²)]
+        double coeff = -1.0 / sinTheta;
+        double normAB = normA * normB;
+        double normASqPlusEps = normASq + Epsilon;
+
+        for (int d = 0; d < dim; d++)
+        {
+            double bVal = Convert.ToDouble(B[d]);
+            double aVal = Convert.ToDouble(A[d]);
+
+            double term1 = bVal / normAB;
+            double term2 = (cosTheta * aVal) / normASqPlusEps;
+
+            gradient[d] = NumOps.FromDouble(coeff * (term1 - term2));
         }
 
         return gradient;
