@@ -178,11 +178,7 @@ public abstract class AdaptiveDistillationStrategyBase<T>
         }
         else
         {
-            // Scale by (1 - alpha) if no hard loss
-            for (int i = 0; i < n; i++)
-            {
-                gradient[i] = NumOps.Multiply(gradient[i], NumOps.FromDouble(1.0 - Alpha));
-            }
+            // No extra scaling when no hard loss; gradient matches loss = softLoss
         }
 
         return gradient;
