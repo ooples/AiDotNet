@@ -57,18 +57,9 @@ public class DDPGAgent<T> : DeepReinforcementLearningAgentBase<T>
     public override int FeatureCount => _options.StateSize;
 
     public DDPGAgent(DDPGOptions<T> options)
-        : base(new ReinforcementLearningOptions<T>
-        {
-            LearningRate = options.ActorLearningRate,
-            DiscountFactor = options.DiscountFactor,
-            LossFunction = options.CriticLossFunction,
-            Seed = options.Seed,
-            BatchSize = options.BatchSize,
-            ReplayBufferSize = options.ReplayBufferSize,
-            WarmupSteps = options.WarmupSteps
-        })
+        : base(CreateBaseOptions(options))
     {
-        _options = options ?? throw new ArgumentNullException(nameof(options));
+        _options = options;
         _replayBuffer = new UniformReplayBuffer<T>(options.ReplayBufferSize, options.Seed);
         _noise = new OrnsteinUhlenbeckNoise<T>(options.ActionSize, NumOps, Random, options.ExplorationNoise);
         _steps = 0;
@@ -87,6 +78,26 @@ public class DDPGAgent<T> : DeepReinforcementLearningAgentBase<T>
         Networks.Add(_actorTargetNetwork);
         Networks.Add(_criticNetwork);
         Networks.Add(_criticTargetNetwork);
+    }
+
+
+    private static ReinforcementLearningOptions<T> CreateBaseOptions(DDPGOptions<T> options)
+    {
+        if (options == null)
+        {
+            throw new ArgumentNullException(nameof(options));
+        }
+
+        return new ReinforcementLearningOptions<T>
+        {
+            LearningRate = options.ActorLearningRate,
+            DiscountFactor = options.DiscountFactor,
+            LossFunction = options.CriticLossFunction,
+            Seed = options.Seed,
+            BatchSize = options.BatchSize,
+            ReplayBufferSize = options.ReplayBufferSize,
+            WarmupSteps = options.WarmupSteps
+        };
     }
 
     private NeuralNetwork<T> BuildActorNetwork()
