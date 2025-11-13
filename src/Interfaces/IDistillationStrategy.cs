@@ -24,6 +24,10 @@ namespace AiDotNet.Interfaces;
 ///
 /// <para><b>Batch Processing:</b> This interface operates on batches (Matrix&lt;T&gt;) for efficiency.
 /// Each row in the matrices represents one sample in the batch.</para>
+///
+/// <para><b>Interface Design Note:</b> This interface uses a single type parameter &lt;T&gt; for
+/// numeric operations. All input/output types are Matrix&lt;T&gt; for batch processing. There is no
+/// second type parameter TOutput - the output type is always Matrix&lt;T&gt; for gradients and T for loss values.</para>
 /// </remarks>
 public interface IDistillationStrategy<T>
 {
