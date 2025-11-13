@@ -354,6 +354,247 @@ public class NeuronSelectivityDistillationStrategy<T> : DistillationStrategyBase
         // Compute selectivity loss (already weighted by _selectivityWeight)
         return ComputeSelectivityLoss(studentActivations, teacherActivations);
     }
+
+    /// <summary>
+    /// Computes gradients of intermediate activation loss with respect to student activations.
+    /// </summary>
+    /// <param name="studentIntermediateActivations">Student's intermediate layer activations.</param>
+    /// <param name="teacherIntermediateActivations">Teacher's intermediate layer activations.</param>
+    /// <returns>Gradients for the target layer (already weighted by selectivityWeight).</returns>
+    /// <remarks>
+    /// <para>Computes analytical gradients for selectivity loss based on the chosen metric.
+    /// For Variance metric, uses ∂var/∂a = (2/B) * (a - mean).
+    /// For Sparsity and PeakToAverage, uses numerical approximation due to non-differentiable operations.</para>
+    /// </remarks>
+    public IntermediateActivations<T> ComputeIntermediateGradient(
+        IntermediateActivations<T> studentIntermediateActivations,
+        IntermediateActivations<T> teacherIntermediateActivations)
+    {
+        if (studentIntermediateActivations == null)
+            throw new ArgumentNullException(nameof(studentIntermediateActivations));
+        if (teacherIntermediateActivations == null)
+            throw new ArgumentNullException(nameof(teacherIntermediateActivations));
+
+        var gradients = new IntermediateActivations<T>();
+
+        var studentMatrix = studentIntermediateActivations.Get(_targetLayerName);
+        var teacherMatrix = teacherIntermediateActivations.Get(_targetLayerName);
+
+        // If layer not found, return empty gradients
+        if (studentMatrix == null || teacherMatrix == null)
+            return gradients;
+
+        // Validate dimensions match
+        if (studentMatrix.Rows != teacherMatrix.Rows || studentMatrix.Columns != teacherMatrix.Columns)
+        {
+            throw new ArgumentException(
+                $"Student and teacher activation dimensions must match for layer '{_targetLayerName}'. " +
+                $"Student: [{studentMatrix.Rows} x {studentMatrix.Columns}], " +
+                $"Teacher: [{teacherMatrix.Rows} x {teacherMatrix.Columns}]");
+        }
+
+        int batchSize = studentMatrix.Rows;
+        if (batchSize == 0)
+            return gradients;
+
+        int numNeurons = studentMatrix.Columns;
+        if (numNeurons == 0)
+            return gradients;
+
+        // Convert matrices to vector arrays
+        var studentActivations = new Vector<T>[batchSize];
+        var teacherActivations = new Vector<T>[batchSize];
+
+        for (int i = 0; i < batchSize; i++)
+        {
+            studentActivations[i] = studentMatrix.GetRow(i);
+            teacherActivations[i] = teacherMatrix.GetRow(i);
+        }
+
+        // Compute selectivity scores
+        var studentSelectivity = ComputeSelectivityScores(studentActivations, numNeurons);
+        var teacherSelectivity = ComputeSelectivityScores(teacherActivations, numNeurons);
+
+        // Compute gradients based on metric
+        var gradientMatrix = new Matrix<T>(batchSize, numNeurons);
+
+        switch (_metric)
+        {
+            case SelectivityMetric.Variance:
+                ComputeVarianceGradient(studentActivations, studentSelectivity, teacherSelectivity, gradientMatrix);
+                break;
+
+            case SelectivityMetric.Sparsity:
+                ComputeSparsityGradient(studentActivations, studentSelectivity, teacherSelectivity, gradientMatrix);
+                break;
+
+            case SelectivityMetric.PeakToAverage:
+                ComputePeakToAverageGradient(studentActivations, studentSelectivity, teacherSelectivity, gradientMatrix);
+                break;
+
+            default:
+                throw new NotImplementedException($"Gradient for metric {_metric} not implemented");
+        }
+
+        // Scale by selectivity weight
+        for (int r = 0; r < batchSize; r++)
+        {
+            for (int c = 0; c < numNeurons; c++)
+            {
+                gradientMatrix[r, c] = NumOps.Multiply(gradientMatrix[r, c], NumOps.FromDouble(_selectivityWeight));
+            }
+        }
+
+        gradients.Add(_targetLayerName, gradientMatrix);
+        return gradients;
+    }
+
+    /// <summary>
+    /// Computes gradient for variance-based selectivity loss.
+    /// </summary>
+    /// <remarks>
+    /// For variance metric: var_i = (1/B) * Σ_j (a_ji - μ_i)²
+    /// Gradient: ∂L/∂a_ji = (2/N) * (studentVar_i - teacherVar_i) * (2/B) * (a_ji - μ_i)
+    /// where N = numNeurons, B = batchSize
+    /// </remarks>
+    private void ComputeVarianceGradient(
+        Vector<T>[] studentActivations,
+        double[] studentSelectivity,
+        double[] teacherSelectivity,
+        Matrix<T> gradientMatrix)
+    {
+        int batchSize = studentActivations.Length;
+        int numNeurons = studentActivations[0].Length;
+
+        // For each neuron, compute mean and gradient contribution
+        for (int neuronIdx = 0; neuronIdx < numNeurons; neuronIdx++)
+        {
+            // Compute mean activation for this neuron
+            double mean = 0;
+            for (int sampleIdx = 0; sampleIdx < batchSize; sampleIdx++)
+            {
+                mean += Convert.ToDouble(studentActivations[sampleIdx][neuronIdx]);
+            }
+            mean /= batchSize;
+
+            // Selectivity difference for this neuron
+            double selectivityDiff = studentSelectivity[neuronIdx] - teacherSelectivity[neuronIdx];
+
+            // Gradient scale: (2/N) * selectivityDiff * (2/B) = (4 / (N*B)) * selectivityDiff
+            double gradScale = (4.0 / (numNeurons * batchSize)) * selectivityDiff;
+
+            // For each sample, compute gradient contribution
+            for (int sampleIdx = 0; sampleIdx < batchSize; sampleIdx++)
+            {
+                double activation = Convert.ToDouble(studentActivations[sampleIdx][neuronIdx]);
+                double grad = gradScale * (activation - mean);
+                gradientMatrix[sampleIdx, neuronIdx] = NumOps.FromDouble(grad);
+            }
+        }
+    }
+
+    /// <summary>
+    /// Computes gradient for sparsity-based selectivity loss.
+    /// </summary>
+    /// <remarks>
+    /// Sparsity is based on percentage of near-zero activations, which is non-differentiable.
+    /// Uses smooth approximation: sigmoid(-k * (|a| - threshold)) where k controls steepness.
+    /// This makes activations near threshold contribute more to sparsity gradient.
+    /// </remarks>
+    private void ComputeSparsityGradient(
+        Vector<T>[] studentActivations,
+        double[] studentSelectivity,
+        double[] teacherSelectivity,
+        Matrix<T> gradientMatrix)
+    {
+        int batchSize = studentActivations.Length;
+        int numNeurons = studentActivations[0].Length;
+        double threshold = 0.01;
+        double k = 100.0; // Steepness of sigmoid approximation
+
+        for (int neuronIdx = 0; neuronIdx < numNeurons; neuronIdx++)
+        {
+            double selectivityDiff = studentSelectivity[neuronIdx] - teacherSelectivity[neuronIdx];
+            double gradScale = (2.0 / numNeurons) * selectivityDiff;
+
+            for (int sampleIdx = 0; sampleIdx < batchSize; sampleIdx++)
+            {
+                double activation = Convert.ToDouble(studentActivations[sampleIdx][neuronIdx]);
+                double absActivation = Math.Abs(activation);
+
+                // Gradient of sigmoid approximation
+                double sigmoidArg = -k * (absActivation - threshold);
+                double sigmoidVal = 1.0 / (1.0 + Math.Exp(-sigmoidArg));
+                double sigmoidGrad = k * sigmoidVal * (1.0 - sigmoidVal);
+
+                // Gradient w.r.t. activation (chain rule through abs)
+                double grad = gradScale * sigmoidGrad * (activation >= 0 ? 1.0 : -1.0) / batchSize;
+                gradientMatrix[sampleIdx, neuronIdx] = NumOps.FromDouble(grad);
+            }
+        }
+    }
+
+    /// <summary>
+    /// Computes gradient for peak-to-average ratio selectivity loss.
+    /// </summary>
+    /// <remarks>
+    /// PeakToAverage: r_i = max_j(a_ji) / (avg_j(a_ji) + ε)
+    /// For the max element: ∂r_i/∂a_ji = 1 / (avg + ε)
+    /// For non-max elements: ∂r_i/∂a_ji = -max / ((avg + ε)² * B)
+    /// </remarks>
+    private void ComputePeakToAverageGradient(
+        Vector<T>[] studentActivations,
+        double[] studentSelectivity,
+        double[] teacherSelectivity,
+        Matrix<T> gradientMatrix)
+    {
+        int batchSize = studentActivations.Length;
+        int numNeurons = studentActivations[0].Length;
+        double epsilon = 1e-10;
+
+        for (int neuronIdx = 0; neuronIdx < numNeurons; neuronIdx++)
+        {
+            // Find max and average for this neuron
+            double maxVal = double.MinValue;
+            int maxIdx = 0;
+            double sum = 0;
+
+            for (int sampleIdx = 0; sampleIdx < batchSize; sampleIdx++)
+            {
+                double activation = Convert.ToDouble(studentActivations[sampleIdx][neuronIdx]);
+                sum += activation;
+                if (activation > maxVal)
+                {
+                    maxVal = activation;
+                    maxIdx = sampleIdx;
+                }
+            }
+
+            double avg = sum / batchSize;
+            double avgPlusEps = avg + epsilon;
+
+            double selectivityDiff = studentSelectivity[neuronIdx] - teacherSelectivity[neuronIdx];
+            double gradScale = (2.0 / numNeurons) * selectivityDiff;
+
+            // Gradient for each sample
+            for (int sampleIdx = 0; sampleIdx < batchSize; sampleIdx++)
+            {
+                double grad;
+                if (sampleIdx == maxIdx)
+                {
+                    // Gradient for max element: ∂(max/avg)/∂max = 1/avg
+                    grad = gradScale * (1.0 / avgPlusEps);
+                }
+                else
+                {
+                    // Gradient for non-max: ∂(max/avg)/∂a = -max / (avg² * B)
+                    grad = gradScale * (-maxVal / (avgPlusEps * avgPlusEps * batchSize));
+                }
+
+                gradientMatrix[sampleIdx, neuronIdx] = NumOps.FromDouble(grad);
+            }
+        }
+    }
 }
 
 public enum SelectivityMetric

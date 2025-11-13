@@ -89,4 +89,45 @@ public interface IIntermediateActivationStrategy<T>
     T ComputeIntermediateLoss(
         IntermediateActivations<T> studentIntermediateActivations,
         IntermediateActivations<T> teacherIntermediateActivations);
+
+    /// <summary>
+    /// Computes gradients of the intermediate activation loss with respect to student activations.
+    /// </summary>
+    /// <param name="studentIntermediateActivations">Student's intermediate activations for a batch.</param>
+    /// <param name="teacherIntermediateActivations">Teacher's intermediate activations for a batch.</param>
+    /// <returns>Gradients for each intermediate layer (same structure as studentIntermediateActivations).</returns>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> This method computes how much to adjust each neuron's activation
+    /// in the student's intermediate layers to better match the teacher. These gradients get backpropagated
+    /// through the student network during training.</para>
+    ///
+    /// <para><b>How It's Used:</b>
+    /// After computing intermediate loss, the trainer needs gradients to update the student model.
+    /// This method provides those gradients layer by layer.</para>
+    ///
+    /// <para><b>Example Calculation:</b>
+    /// <code>
+    /// // In training loop (backward pass)
+    /// var intermediateGradients = advancedStrategy.ComputeIntermediateGradient(
+    ///     studentResult.IntermediateActivations,
+    ///     teacherResult.IntermediateActivations);
+    ///
+    /// // Backpropagate through student network using these gradients
+    /// student.BackpropagateFromIntermediateLayers(intermediateGradients);
+    /// </code>
+    /// </para>
+    ///
+    /// <para><b>Implementation Requirements:</b>
+    /// - Return gradients only for layers where loss was computed
+    /// - Gradient matrices must match activation dimensions (batch x features)
+    /// - Gradients should be already weighted (include strategy weight in computation)
+    /// - Return empty IntermediateActivations if no gradients (edge case)</para>
+    ///
+    /// <para><b>Mathematical Notes:</b>
+    /// For MSE loss on layer activations: ∂L/∂student = (student - teacher) / batchSize
+    /// For other losses, compute derivative analytically and return proper gradients.</para>
+    /// </remarks>
+    IntermediateActivations<T> ComputeIntermediateGradient(
+        IntermediateActivations<T> studentIntermediateActivations,
+        IntermediateActivations<T> teacherIntermediateActivations);
 }

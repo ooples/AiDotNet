@@ -494,7 +494,209 @@ public class ContrastiveDistillationStrategy<T> : DistillationStrategyBase<T>, I
         return Math.Sqrt(Convert.ToDouble(sumSq));
     }
 
+    /// <summary>
+    /// Computes gradients of intermediate activation loss with respect to student embeddings.
+    /// </summary>
+    /// <param name="studentIntermediateActivations">Student's intermediate layer activations (must include embedding layer).</param>
+    /// <param name="teacherIntermediateActivations">Teacher's intermediate layer activations (must include embedding layer).</param>
+    /// <returns>Gradients for the embedding layer (already weighted by contrastiveWeight).</returns>
+    /// <remarks>
+    /// <para>Computes analytical gradients for NT-Xent loss with respect to student embeddings.
+    /// Uses cosine similarity gradients derived from the quotient rule.</para>
+    ///
+    /// <para>For NT-Xent loss L_i = -sim(s_i, t_i)/τ + log(Σ_j exp(sim(s_i, t_j)/τ)),
+    /// the gradient involves both positive and negative pair contributions.</para>
+    /// </remarks>
+    public IntermediateActivations<T> ComputeIntermediateGradient(
+        IntermediateActivations<T> studentIntermediateActivations,
+        IntermediateActivations<T> teacherIntermediateActivations)
+    {
+        if (studentIntermediateActivations == null)
+            throw new ArgumentNullException(nameof(studentIntermediateActivations));
+        if (teacherIntermediateActivations == null)
+            throw new ArgumentNullException(nameof(teacherIntermediateActivations));
 
+        var gradients = new IntermediateActivations<T>();
+
+        var studentMatrix = studentIntermediateActivations.Get(_embeddingLayerName);
+        var teacherMatrix = teacherIntermediateActivations.Get(_embeddingLayerName);
+
+        // If layer not found, return empty gradients
+        if (studentMatrix == null || teacherMatrix == null)
+            return gradients;
+
+        // Validate dimensions match
+        if (studentMatrix.Rows != teacherMatrix.Rows || studentMatrix.Columns != teacherMatrix.Columns)
+        {
+            throw new ArgumentException(
+                $"Student and teacher embedding dimensions must match for layer '{_embeddingLayerName}'. " +
+                $"Student: [{studentMatrix.Rows} x {studentMatrix.Columns}], " +
+                $"Teacher: [{teacherMatrix.Rows} x {teacherMatrix.Columns}]");
+        }
+
+        int batchSize = studentMatrix.Rows;
+        if (batchSize == 0)
+            return gradients;
+
+        int embeddingDim = studentMatrix.Columns;
+
+        // Convert matrices to vector arrays for gradient computation
+        var studentEmbeddings = new Vector<T>[batchSize];
+        var teacherEmbeddings = new Vector<T>[batchSize];
+
+        for (int i = 0; i < batchSize; i++)
+        {
+            studentEmbeddings[i] = studentMatrix.GetRow(i);
+            teacherEmbeddings[i] = teacherMatrix.GetRow(i);
+        }
+
+        // Compute NT-Xent gradients for each sample
+        var gradientMatrix = new Matrix<T>(batchSize, embeddingDim);
+
+        for (int i = 0; i < batchSize; i++)
+        {
+            var sampleGradient = ComputeNTXentGradient(studentEmbeddings, teacherEmbeddings, i);
+            gradientMatrix.SetRow(i, sampleGradient);
+        }
+
+        // Average over batch
+        for (int r = 0; r < batchSize; r++)
+        {
+            for (int c = 0; c < embeddingDim; c++)
+            {
+                gradientMatrix[r, c] = NumOps.Divide(gradientMatrix[r, c], NumOps.FromDouble(batchSize));
+            }
+        }
+
+        // Scale by contrastive weight
+        for (int r = 0; r < batchSize; r++)
+        {
+            for (int c = 0; c < embeddingDim; c++)
+            {
+                gradientMatrix[r, c] = NumOps.Multiply(gradientMatrix[r, c], NumOps.FromDouble(_contrastiveWeight));
+            }
+        }
+
+        gradients.Add(_embeddingLayerName, gradientMatrix);
+        return gradients;
+    }
+
+    /// <summary>
+    /// Computes NT-Xent gradient for a single sample.
+    /// </summary>
+    /// <param name="studentEmbeddings">All student embeddings in the batch.</param>
+    /// <param name="teacherEmbeddings">All teacher embeddings in the batch.</param>
+    /// <param name="anchorIdx">Index of the anchor sample to compute gradient for.</param>
+    /// <returns>Gradient vector with respect to student embedding at anchorIdx.</returns>
+    /// <remarks>
+    /// <para>NT-Xent loss for sample i: L_i = -sim(s_i, t_i)/τ + log(Σ_j exp(sim(s_i, t_j)/τ))</para>
+    ///
+    /// <para>Gradient: ∂L_i/∂s_i = (-∂sim(s_i, t_i)/∂s_i + Σ_j softmax_j * ∂sim(s_i, t_j)/∂s_i) / τ</para>
+    ///
+    /// <para>Where softmax_j = exp(sim(s_i, t_j)/τ) / Σ_k exp(sim(s_i, t_k)/τ)</para>
+    /// </remarks>
+    private Vector<T> ComputeNTXentGradient(Vector<T>[] studentEmbeddings, Vector<T>[] teacherEmbeddings, int anchorIdx)
+    {
+        int batchSize = studentEmbeddings.Length;
+        int embeddingDim = studentEmbeddings[anchorIdx].Length;
+        var gradient = new Vector<T>(embeddingDim);
+
+        var studentAnchor = studentEmbeddings[anchorIdx];
+
+        // Compute similarities and softmax weights for all teacher embeddings
+        double[] similarities = new double[batchSize];
+        double[] expSims = new double[batchSize];
+        double sumExpSims = 0;
+
+        for (int j = 0; j < batchSize; j++)
+        {
+            similarities[j] = CosineSimilarity(studentAnchor, teacherEmbeddings[j]);
+            expSims[j] = Math.Exp(similarities[j] / Temperature);
+            sumExpSims += expSims[j];
+        }
+
+        // Compute softmax weights
+        double[] softmaxWeights = new double[batchSize];
+        for (int j = 0; j < batchSize; j++)
+        {
+            softmaxWeights[j] = expSims[j] / (sumExpSims + Epsilon);
+        }
+
+        // Compute gradient: -∂sim(s_i, t_i)/∂s_i + Σ_j softmax_j * ∂sim(s_i, t_j)/∂s_i
+        // Gradient of positive term (i == anchorIdx)
+        var positiveGrad = ComputeCosineSimilarityGradient(studentAnchor, teacherEmbeddings[anchorIdx]);
+
+        // Negate for the positive term contribution
+        for (int d = 0; d < embeddingDim; d++)
+        {
+            gradient[d] = NumOps.Multiply(positiveGrad[d], NumOps.FromDouble(-1.0));
+        }
+
+        // Add weighted gradients from all pairs
+        for (int j = 0; j < batchSize; j++)
+        {
+            var pairGrad = ComputeCosineSimilarityGradient(studentAnchor, teacherEmbeddings[j]);
+
+            for (int d = 0; d < embeddingDim; d++)
+            {
+                var weightedGrad = NumOps.Multiply(pairGrad[d], NumOps.FromDouble(softmaxWeights[j]));
+                gradient[d] = NumOps.Add(gradient[d], weightedGrad);
+            }
+        }
+
+        // Scale by 1/temperature
+        for (int d = 0; d < embeddingDim; d++)
+        {
+            gradient[d] = NumOps.Divide(gradient[d], NumOps.FromDouble(Temperature));
+        }
+
+        return gradient;
+    }
+
+    /// <summary>
+    /// Computes gradient of cosine similarity with respect to the first vector.
+    /// </summary>
+    /// <param name="student">Student embedding (variable with respect to which we compute gradient).</param>
+    /// <param name="teacher">Teacher embedding (constant).</param>
+    /// <returns>Gradient ∂sim(student, teacher)/∂student.</returns>
+    /// <remarks>
+    /// <para>For cosine similarity sim(s, t) = dot(s, t) / (||s|| * ||t||),
+    /// the gradient is: ∂sim/∂s_i = (t_i / (||s|| * ||t||)) - (dot(s, t) * s_i) / (||s||³ * ||t||)</para>
+    /// </remarks>
+    private Vector<T> ComputeCosineSimilarityGradient(Vector<T> student, Vector<T> teacher)
+    {
+        int dim = student.Length;
+        var gradient = new Vector<T>(dim);
+
+        // Compute dot product and norms
+        T dot = NumOps.Zero;
+        T normStudent = NumOps.Zero;
+        T normTeacher = NumOps.Zero;
+
+        for (int i = 0; i < dim; i++)
+        {
+            dot = NumOps.Add(dot, NumOps.Multiply(student[i], teacher[i]));
+            normStudent = NumOps.Add(normStudent, NumOps.Multiply(student[i], student[i]));
+            normTeacher = NumOps.Add(normTeacher, NumOps.Multiply(teacher[i], teacher[i]));
+        }
+
+        double dotVal = Convert.ToDouble(dot);
+        double normS = Math.Sqrt(Convert.ToDouble(normStudent)) + Epsilon;
+        double normT = Math.Sqrt(Convert.ToDouble(normTeacher)) + Epsilon;
+
+        // Compute gradient for each dimension
+        for (int i = 0; i < dim; i++)
+        {
+            double s_i = Convert.ToDouble(student[i]);
+            double t_i = Convert.ToDouble(teacher[i]);
+
+            // ∂sim/∂s_i = (t_i / (||s|| * ||t||)) - (dot * s_i) / (||s||³ * ||t||)
+            double grad = (t_i / (normS * normT)) - (dotVal * s_i) / (normS * normS * normS * normT);
+            gradient[i] = NumOps.FromDouble(grad);
+        }
+
+        return gradient;
+    }
 
 }
 

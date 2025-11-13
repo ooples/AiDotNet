@@ -449,7 +449,165 @@ public class AttentionDistillationStrategy<T> : DistillationStrategyBase<T>, IIn
         return NumOps.FromDouble(loss);
     }
 
+    /// <summary>
+    /// Computes gradients of intermediate activation loss with respect to student activations.
+    /// </summary>
+    /// <param name="studentIntermediateActivations">Student's intermediate layer activations.</param>
+    /// <param name="teacherIntermediateActivations">Teacher's intermediate layer activations.</param>
+    /// <returns>Gradients for each attention layer (already weighted by attentionWeight).</returns>
+    public IntermediateActivations<T> ComputeIntermediateGradient(
+        IntermediateActivations<T> studentIntermediateActivations,
+        IntermediateActivations<T> teacherIntermediateActivations)
+    {
+        if (studentIntermediateActivations == null)
+            throw new ArgumentNullException(nameof(studentIntermediateActivations));
+        if (teacherIntermediateActivations == null)
+            throw new ArgumentNullException(nameof(teacherIntermediateActivations));
 
+        var gradients = new IntermediateActivations<T>();
+        int layersFound = 0;
+
+        foreach (var layerName in _attentionLayers)
+        {
+            var studentMatrix = studentIntermediateActivations.Get(layerName);
+            var teacherMatrix = teacherIntermediateActivations.Get(layerName);
+
+            // Skip if layer not found in either model
+            if (studentMatrix == null || teacherMatrix == null)
+                continue;
+
+            // Validate dimensions match
+            if (studentMatrix.Rows != teacherMatrix.Rows || studentMatrix.Columns != teacherMatrix.Columns)
+            {
+                throw new ArgumentException(
+                    $"Student and teacher activation dimensions must match for layer '{layerName}'. " +
+                    $"Student: [{studentMatrix.Rows} x {studentMatrix.Columns}], " +
+                    $"Teacher: [{teacherMatrix.Rows} x {teacherMatrix.Columns}]");
+            }
+
+            int batchSize = studentMatrix.Rows;
+            if (batchSize == 0)
+                continue;
+
+            int attentionDim = studentMatrix.Columns;
+            var layerGradient = new Matrix<T>(batchSize, attentionDim);
+
+            // Compute gradient for each sample in batch
+            for (int sampleIdx = 0; sampleIdx < batchSize; sampleIdx++)
+            {
+                var studentAttention = studentMatrix.GetRow(sampleIdx);
+                var teacherAttention = teacherMatrix.GetRow(sampleIdx);
+
+                var sampleGradient = ComputeAttentionMatchingGradient(studentAttention, teacherAttention);
+                layerGradient.SetRow(sampleIdx, sampleGradient);
+            }
+
+            // Average over batch and layers (will divide by layersFound at the end)
+            for (int r = 0; r < batchSize; r++)
+            {
+                for (int c = 0; c < attentionDim; c++)
+                {
+                    layerGradient[r, c] = NumOps.Divide(layerGradient[r, c], NumOps.FromDouble(batchSize));
+                }
+            }
+
+            gradients.Add(layerName, layerGradient);
+            layersFound++;
+        }
+
+        // If no layers found, return empty gradients
+        if (layersFound == 0)
+            return gradients;
+
+        // Scale by 1/layersFound to average across layers, and by attentionWeight
+        var totalScale = _attentionWeight / layersFound;
+        foreach (var layerName in _attentionLayers)
+        {
+            var layerGrad = gradients.Get(layerName);
+            if (layerGrad != null)
+            {
+                for (int r = 0; r < layerGrad.Rows; r++)
+                {
+                    for (int c = 0; c < layerGrad.Columns; c++)
+                    {
+                        layerGrad[r, c] = NumOps.Multiply(layerGrad[r, c], NumOps.FromDouble(totalScale));
+                    }
+                }
+            }
+        }
+
+        return gradients;
+    }
+
+    /// <summary>
+    /// Computes gradient of attention matching loss for a single sample.
+    /// </summary>
+    private Vector<T> ComputeAttentionMatchingGradient(Vector<T> studentAttention, Vector<T> teacherAttention)
+    {
+        var gradient = new Vector<T>(studentAttention.Length);
+
+        switch (_matchingMode)
+        {
+            case AttentionMatchingMode.MSE:
+                // MSE gradient: ∂L/∂student = 2 * (student - teacher) / dim
+                for (int i = 0; i < studentAttention.Length; i++)
+                {
+                    var diff = NumOps.Subtract(studentAttention[i], teacherAttention[i]);
+                    gradient[i] = NumOps.Multiply(NumOps.FromDouble(2.0 / studentAttention.Length), diff);
+                }
+                break;
+
+            case AttentionMatchingMode.KL:
+                // KL divergence gradient: ∂L/∂student = log(student/teacher) + 1
+                // This assumes student and teacher are probability distributions
+                for (int i = 0; i < studentAttention.Length; i++)
+                {
+                    double s = Convert.ToDouble(studentAttention[i]) + Epsilon;
+                    double t = Convert.ToDouble(teacherAttention[i]) + Epsilon;
+                    double grad = Math.Log(s / t) + 1.0;
+                    gradient[i] = NumOps.FromDouble(grad);
+                }
+                break;
+
+            case AttentionMatchingMode.Cosine:
+                // Cosine loss gradient: ∂(1 - cos)/∂student
+                // cos(s,t) = dot(s,t) / (||s|| * ||t||)
+                // ∂cos/∂s_i = (t_i / (||s|| * ||t||)) - (dot(s,t) * s_i) / (||s||^3 * ||t||)
+
+                T dot = NumOps.Zero;
+                T normStudent = NumOps.Zero;
+                T normTeacher = NumOps.Zero;
+
+                for (int i = 0; i < studentAttention.Length; i++)
+                {
+                    dot = NumOps.Add(dot, NumOps.Multiply(studentAttention[i], teacherAttention[i]));
+                    normStudent = NumOps.Add(normStudent, NumOps.Multiply(studentAttention[i], studentAttention[i]));
+                    normTeacher = NumOps.Add(normTeacher, NumOps.Multiply(teacherAttention[i], teacherAttention[i]));
+                }
+
+                double dotVal = Convert.ToDouble(dot);
+                double normS = Math.Sqrt(Convert.ToDouble(normStudent)) + Epsilon;
+                double normT = Math.Sqrt(Convert.ToDouble(normTeacher)) + Epsilon;
+
+                for (int i = 0; i < studentAttention.Length; i++)
+                {
+                    double s_i = Convert.ToDouble(studentAttention[i]);
+                    double t_i = Convert.ToDouble(teacherAttention[i]);
+
+                    // ∂cos/∂s_i
+                    double dcos_dsi = (t_i / (normS * normT)) - (dotVal * s_i) / (normS * normS * normS * normT);
+
+                    // Loss is (1 - cos), so ∂L/∂s_i = -∂cos/∂s_i
+                    gradient[i] = NumOps.FromDouble(-dcos_dsi);
+                }
+                break;
+
+            default:
+                throw new NotImplementedException($"Gradient for matching mode {_matchingMode} not implemented");
+        }
+
+        return gradient;
+    }
 
 }
 
