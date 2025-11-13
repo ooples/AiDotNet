@@ -3026,7 +3026,7 @@ public static class TensorOperations<T>
         var maxIndices = new Dictionary<string, int[]>();
 
         // Compute forward pass: find max values
-        void ComputeMax(int[] currentIndices, int dim, int[] outputIndices)
+        void ComputeMax(int[] currentIndices, int dim, int[] outputIndices, int outDim)
         {
             if (dim == inputShape.Length)
             {
@@ -3056,23 +3056,22 @@ public static class TensorOperations<T>
                 for (int i = 0; i < inputShape[dim]; i++)
                 {
                     currentIndices[dim] = i;
-                    ComputeMax(currentIndices, dim + 1, outputIndices);
+                    ComputeMax(currentIndices, dim + 1, outputIndices, outDim);
                 }
             }
             else
             {
                 // Keep this dimension
-                int outIdx = outputIndices[0];
                 for (int i = 0; i < inputShape[dim]; i++)
                 {
                     currentIndices[dim] = i;
-                    outputIndices[outIdx] = i;
-                    ComputeMax(currentIndices, dim + 1, outputIndices);
+                    outputIndices[outDim] = i;
+                    ComputeMax(currentIndices, dim + 1, outputIndices, outDim + 1);
                 }
             }
         }
 
-        ComputeMax(new int[inputShape.Length], 0, new int[outputShape.Count]);
+        ComputeMax(new int[inputShape.Length], 0, new int[outputShape.Count], 0);
 
         // Backward function
         void BackwardFunction(Tensor<T> gradient)
