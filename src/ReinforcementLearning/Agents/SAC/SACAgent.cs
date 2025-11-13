@@ -343,13 +343,13 @@ public class SACAgent<T> : DeepReinforcementLearningAgentBase<T>
 
             totalPolicyLoss = NumOps.Add(totalPolicyLoss, policyLoss);
 
-            // Backprop policy (simplified)
-            var grad = new Vector<T>(policyOutput.Length);
-            for (int i = 0; i < grad.Length; i++)
-            {
-                grad[i] = NumOps.Multiply(policyLoss, NumOps.FromDouble(0.01)); // Simplified gradient
-            }
-            _policyNetwork.Backward(grad);
+            // TODO: Implement proper policy gradient via reparameterization trick
+            // The correct gradient is: ∇θ [α log π(a|s) - Q(s,a)]
+            // This requires backpropagating through Q-network to get ∂Q/∂a,
+            // then through the action sampling (reparameterization trick)
+            throw new NotImplementedException(
+                "SAC policy gradient requires proper implementation of reparameterization trick. " +
+                "Current placeholder gradient does not provide correct learning signal.");
         }
 
         // Apply gradients to policy network
