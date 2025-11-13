@@ -489,13 +489,12 @@ internal class OrnsteinUhlenbeckNoise<T>
 
         for (int i = 0; i < _size; i++)
         {
-            var dx = _numOps.Subtract(
-                _numOps.Multiply(_numOps.FromDouble(-_theta), _state[i]),
-                _numOps.Multiply(_numOps.FromDouble(_sigma),
-                    MathHelper.GetNormalRandom<T>(_numOps.Zero, _numOps.One))
-            );
+            var drift = _numOps.Multiply(_numOps.FromDouble(-_theta), _state[i]);
+            var diffusion = _numOps.Multiply(_numOps.FromDouble(_sigma),
+                MathHelper.GetNormalRandom<T>(_numOps.Zero, _numOps.One));
+            var dx = _numOps.Add(drift, diffusion);
 
-            _state[i] = NumOps.Add(_state[i], dx);
+            _state[i] = _numOps.Add(_state[i], dx);
             noise[i] = _state[i];
         }
 
