@@ -173,19 +173,6 @@ public class EnsembleTeacherModel<T> : TeacherModelBase<Vector<T>, Vector<T>, T>
 
         switch (_aggregationMode)
         {
-            case EnsembleAggregationMode.Average:
-                // Simple average (equal weights)
-                for (int i = 0; i < n; i++)
-                {
-                    T sum = NumOps.Zero;
-                    for (int t = 0; t < _teachers.Length; t++)
-                    {
-                        sum = NumOps.Add(sum, teacherLogits[t][i]);
-                    }
-                    result[i] = NumOps.Divide(sum, NumOps.FromDouble(_teachers.Length));
-                }
-                break;
-
             case EnsembleAggregationMode.WeightedAverage:
                 // Weighted average of logits
                 for (int i = 0; i < n; i++)
@@ -203,20 +190,17 @@ public class EnsembleTeacherModel<T> : TeacherModelBase<Vector<T>, Vector<T>, T>
                 break;
 
             case EnsembleAggregationMode.GeometricMean:
-                // Geometric mean: (x1 * x2 * ... * xn)^(1/n)
-                // For numerical stability, use log space: exp(mean(log(xi)))
-                // For logits (which can be negative), track sign separately
+                // Weighted geometric mean: (x1^w1 * x2^w2 * ... * xn^wn)
+                // For numerical stability, use log space: exp(sum(wi * log(xi)))
                 for (int i = 0; i < n; i++)
                 {
                     double logSum = 0;
-                    int sign = 1;
                     for (int t = 0; t < _teachers.Length; t++)
                     {
                         double val = Convert.ToDouble(teacherLogits[t][i]);
-                        if (val < 0) sign *= -1;  // Track overall sign
-                        logSum += Math.Log(Math.Abs(val) + 1e-10) * _weights![t];
+                        logSum += _weights![t] * Math.Log(Math.Abs(val) + 1e-10);
                     }
-                    result[i] = NumOps.FromDouble(sign * Math.Exp(logSum));
+                    result[i] = NumOps.FromDouble(Math.Exp(logSum));
                 }
                 break;
 
@@ -321,11 +305,6 @@ public class EnsembleTeacherModel<T> : TeacherModelBase<Vector<T>, Vector<T>, T>
 /// </summary>
 public enum EnsembleAggregationMode
 {
-    /// <summary>
-    /// Simple average of teacher logits (equal weights).
-    /// </summary>
-    Average,
-
     /// <summary>
     /// Weighted average of teacher logits (most common).
     /// </summary>
