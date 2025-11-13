@@ -421,12 +421,59 @@ public class RelationalDistillationStrategy<T> : DistillationStrategyBase<T>
             gradScale = 2.0 * Math.Sign(diffVal); // Linear region
         }
 
-        // Gradient of distance w.r.t. studentI
-        double distVal = Convert.ToDouble(studentDist) + Epsilon;
-        for (int k = 0; k < dim; k++)
+        // Compute gradient of distance metric w.r.t. studentI
+        switch (_distanceMetric)
         {
-            double component = Convert.ToDouble(NumOps.Subtract(studentI[k], studentJ[k]));
-            gradient[k] = NumOps.FromDouble(gradScale * component / distVal);
+            case RelationalDistanceMetric.Euclidean:
+                // ∇||x-y|| = (x-y) / ||x-y||
+                double euclideanDist = Convert.ToDouble(studentDist) + Epsilon;
+                for (int k = 0; k < dim; k++)
+                {
+                    double component = Convert.ToDouble(NumOps.Subtract(studentI[k], studentJ[k]));
+                    gradient[k] = NumOps.FromDouble(gradScale * component / euclideanDist);
+                }
+                break;
+
+            case RelationalDistanceMetric.Cosine:
+                // ∇(1 - cos(x,y)) = ∇(1 - (x·y)/(||x|| ||y||))
+                // = -[(y/||x|| ||y||) - (x·y)x/(||x||^3 ||y||)]
+                double dot = 0;
+                double norm1Sq = 0;
+                double norm2Sq = 0;
+                for (int k = 0; k < dim; k++)
+                {
+                    double xi = Convert.ToDouble(studentI[k]);
+                    double xj = Convert.ToDouble(studentJ[k]);
+                    dot += xi * xj;
+                    norm1Sq += xi * xi;
+                    norm2Sq += xj * xj;
+                }
+                double norm1 = Math.Sqrt(norm1Sq) + Epsilon;
+                double norm2 = Math.Sqrt(norm2Sq) + Epsilon;
+                double denom = norm1 * norm2;
+
+                for (int k = 0; k < dim; k++)
+                {
+                    double xi = Convert.ToDouble(studentI[k]);
+                    double xj = Convert.ToDouble(studentJ[k]);
+                    // Gradient component: -(xj/(||x|| ||y||) - (x·y)xi/(||x||^3 ||y||))
+                    double grad = -(xj / denom - (dot * xi) / (norm1Sq * denom));
+                    gradient[k] = NumOps.FromDouble(gradScale * grad);
+                }
+                break;
+
+            case RelationalDistanceMetric.Manhattan:
+                // ∇Σ|x_i - y_i| = sign(x_i - y_i) for each component
+                for (int k = 0; k < dim; k++)
+                {
+                    double component = Convert.ToDouble(NumOps.Subtract(studentI[k], studentJ[k]));
+                    double sign = component > 0 ? 1.0 : (component < 0 ? -1.0 : 0.0);
+                    gradient[k] = NumOps.FromDouble(gradScale * sign);
+                }
+                break;
+
+            default:
+                throw new NotImplementedException($"Gradient for distance metric {_distanceMetric} not implemented");
         }
 
         return gradient;
