@@ -57,6 +57,8 @@ public class SelfTeacherModel<T> : TeacherModelBase<Vector<T>, Vector<T>, T>
     /// </remarks>
     public Vector<T> GetCachedPrediction(int index)
     {
+        if (index < 0)
+            throw new ArgumentOutOfRangeException(nameof(index), "Index must be non-negative");
         if (_cachedPredictions == null || index >= _cachedPredictions.Length)
             throw new InvalidOperationException("Predictions not cached or index out of range");
         return _cachedPredictions[index];
