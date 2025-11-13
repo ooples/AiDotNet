@@ -214,6 +214,11 @@ public class NeuronSelectivityDistillationStrategy<T> : DistillationStrategyBase
         int batchSize = studentActivations.Length;
         int numNeurons = studentActivations[0].Length;
 
+        if (numNeurons == 0)
+            throw new ArgumentException(
+                "Activation vectors cannot be empty. Each vector must have at least one neuron.",
+                nameof(studentActivations));
+
         // Validate all activation vectors have consistent dimensions
         for (int i = 0; i < batchSize; i++)
         {
