@@ -314,18 +314,18 @@ public class DecisionTransformerAgent<T> : DeepReinforcementLearningAgentBase<T>
 
     public override Matrix<T> GetParameters()
     {
-        var params = _transformerNetwork.GetFlattenedParameters();
-        return new Matrix<T>(new[] { params });
+        var networkParams = _transformerNetwork.GetFlattenedParameters();
+        return new Matrix<T>(new[] { networkParams });
     }
 
     public override void SetParameters(Matrix<T> parameters)
     {
-        var params = new Vector<T>(parameters.Columns);
+        var networkParams = new Vector<T>(parameters.Columns);
         for (int i = 0; i < parameters.Columns; i++)
         {
-            params[i] = parameters[0, i];
+            networkParams[i] = parameters[0, i];
         }
-        _transformerNetwork.UpdateParameters(params);
+        _transformerNetwork.UpdateParameters(networkParams);
     }
 
     public override IFullModel<T, Vector<T>, Vector<T>> Clone()

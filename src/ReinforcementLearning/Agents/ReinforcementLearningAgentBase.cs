@@ -343,7 +343,7 @@ public class ReinforcementLearningOptions<T>
     /// <summary>
     /// Final exploration rate.
     /// </summary>
-    public double EpsilonEnd { get; init} = 0.01;
+    public double EpsilonEnd { get; init; } = 0.01;
 
     /// <summary>
     /// Exploration decay rate.
