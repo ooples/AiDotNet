@@ -915,23 +915,22 @@ public class LSTMLayer<T> : LayerBase<T>
     /// </para>
     /// <para><b>For Beginners:</b> This method is used during training to calculate how the layer's inputs
     /// should change to reduce errors.
-    /// 
+    ///
     /// During the backward pass:
     /// - The layer processes the sequence in reverse order (last step to first)
     /// - At each step, it calculates how each part contributed to the error
     /// - It computes gradients for all weights, biases, and inputs
     /// - These gradients show how to adjust the parameters to improve performance
-    /// 
+    ///
     /// This process is part of the "backpropagation through time" algorithm that helps
     /// recurrent neural networks learn from their mistakes.
     /// </para>
     /// </remarks>
     public override Tensor<T> Backward(Tensor<T> outputGradient)
     {
-        // Note: Autodiff for LSTM with BPTT and gated cell states is not yet implemented.
-        // The manual BPTT implementation handles the complex gradient calculations
-        // through forget, input, cell, and output gates efficiently.
-        return BackwardManual(outputGradient);
+        return UseAutodiff
+            ? BackwardViaAutodiff(outputGradient)
+            : BackwardManual(outputGradient);
     }
 
     /// <summary>
@@ -1016,6 +1015,201 @@ public class LSTMLayer<T> : LayerBase<T>
         };
 
         return inputGradient;
+    }
+
+    /// <summary>
+    /// Backward pass implementation using automatic differentiation for LSTM.
+    /// </summary>
+    /// <param name="outputGradient">The gradient of the loss with respect to the layer's output.</param>
+    /// <returns>The gradient of the loss with respect to the layer's input.</returns>
+    /// <remarks>
+    /// <para>
+    /// This method uses automatic differentiation to compute gradients for the LSTM layer.
+    /// It processes the sequence through time, creating a computation graph for each time step
+    /// that includes all gate computations (forget, input, cell, output) and state updates.
+    /// The autodiff system then handles gradient propagation through these operations.
+    /// </para>
+    /// <para>
+    /// Note: This implementation is slower than BackwardManual but provides:
+    /// - Gradient verification capability
+    /// - Easier experimentation with gate modifications
+    /// - Educational value for understanding LSTM gradient flow
+    /// </para>
+    /// </remarks>
+    private Tensor<T> BackwardViaAutodiff(Tensor<T> outputGradient)
+    {
+        if (_lastInput == null || _lastHiddenState == null || _lastCellState == null)
+        {
+            throw new InvalidOperationException("Backward pass called before forward pass.");
+        }
+
+        int batchSize = _lastInput.Shape[0];
+        int timeSteps = _lastInput.Shape[1];
+
+        // Initialize gradient accumulators for all parameters
+        var dWeightsFi = new Tensor<T>(_weightsFi.Shape);
+        var dWeightsIi = new Tensor<T>(_weightsIi.Shape);
+        var dWeightsCi = new Tensor<T>(_weightsCi.Shape);
+        var dWeightsOi = new Tensor<T>(_weightsOi.Shape);
+        var dWeightsFh = new Tensor<T>(_weightsFh.Shape);
+        var dWeightsIh = new Tensor<T>(_weightsIh.Shape);
+        var dWeightsCh = new Tensor<T>(_weightsCh.Shape);
+        var dWeightsOh = new Tensor<T>(_weightsOh.Shape);
+        var dBiasF = new Tensor<T>(_biasF.Shape);
+        var dBiasI = new Tensor<T>(_biasI.Shape);
+        var dBiasC = new Tensor<T>(_biasC.Shape);
+        var dBiasO = new Tensor<T>(_biasO.Shape);
+
+        var inputGradient = new Tensor<T>(_lastInput.Shape);
+
+        // Process each time step using autodiff
+        for (int t = timeSteps - 1; t >= 0; t--)
+        {
+            // Get input and states for this time step
+            var xt = _lastInput.GetSlice(t);
+            var prevH = t > 0 ? _lastHiddenState.GetSlice(t - 1) : new Tensor<T>([batchSize, _hiddenSize]);
+            var prevC = t > 0 ? _lastCellState.GetSlice(t - 1) : new Tensor<T>([batchSize, _hiddenSize]);
+            var gradSlice = outputGradient.GetSlice(t);
+
+            // Convert parameters to computation nodes with gradient tracking
+            var inputNode = Autodiff.TensorOperations<T>.Variable(xt, "input", requiresGradient: true);
+            var prevHNode = Autodiff.TensorOperations<T>.Variable(prevH, "prevH", requiresGradient: true);
+            var prevCNode = Autodiff.TensorOperations<T>.Variable(prevC, "prevC", requiresGradient: true);
+
+            var weightsFiNode = Autodiff.TensorOperations<T>.Variable(_weightsFi, "weightsFi", requiresGradient: true);
+            var weightsIiNode = Autodiff.TensorOperations<T>.Variable(_weightsIi, "weightsIi", requiresGradient: true);
+            var weightsCiNode = Autodiff.TensorOperations<T>.Variable(_weightsCi, "weightsCi", requiresGradient: true);
+            var weightsOiNode = Autodiff.TensorOperations<T>.Variable(_weightsOi, "weightsOi", requiresGradient: true);
+
+            var weightsFhNode = Autodiff.TensorOperations<T>.Variable(_weightsFh, "weightsFh", requiresGradient: true);
+            var weightsIhNode = Autodiff.TensorOperations<T>.Variable(_weightsIh, "weightsIh", requiresGradient: true);
+            var weightsChNode = Autodiff.TensorOperations<T>.Variable(_weightsCh, "weightsCh", requiresGradient: true);
+            var weightsOhNode = Autodiff.TensorOperations<T>.Variable(_weightsOh, "weightsOh", requiresGradient: true);
+
+            var biasFNode = Autodiff.TensorOperations<T>.Variable(_biasF, "biasF", requiresGradient: true);
+            var biasINode = Autodiff.TensorOperations<T>.Variable(_biasI, "biasI", requiresGradient: true);
+            var biasCNode = Autodiff.TensorOperations<T>.Variable(_biasC, "biasC", requiresGradient: true);
+            var biasONode = Autodiff.TensorOperations<T>.Variable(_biasO, "biasO", requiresGradient: true);
+
+            // Compute LSTM gates using autodiff operations
+            // Forget gate: f = sigmoid(xt @ Wfi + prevH @ Wfh + bf)
+            var fInput = Autodiff.TensorOperations<T>.MatrixMultiply(inputNode, Autodiff.TensorOperations<T>.Transpose(weightsFiNode));
+            var fHidden = Autodiff.TensorOperations<T>.MatrixMultiply(prevHNode, Autodiff.TensorOperations<T>.Transpose(weightsFhNode));
+            var fPreActivation = Autodiff.TensorOperations<T>.Add(Autodiff.TensorOperations<T>.Add(fInput, fHidden), biasFNode);
+            var f = Autodiff.TensorOperations<T>.Sigmoid(fPreActivation);
+
+            // Input gate: i = sigmoid(xt @ Wii + prevH @ Wih + bi)
+            var iInput = Autodiff.TensorOperations<T>.MatrixMultiply(inputNode, Autodiff.TensorOperations<T>.Transpose(weightsIiNode));
+            var iHidden = Autodiff.TensorOperations<T>.MatrixMultiply(prevHNode, Autodiff.TensorOperations<T>.Transpose(weightsIhNode));
+            var iPreActivation = Autodiff.TensorOperations<T>.Add(Autodiff.TensorOperations<T>.Add(iInput, iHidden), biasINode);
+            var i = Autodiff.TensorOperations<T>.Sigmoid(iPreActivation);
+
+            // Cell candidate: c_tilde = tanh(xt @ Wci + prevH @ Wch + bc)
+            var cInput = Autodiff.TensorOperations<T>.MatrixMultiply(inputNode, Autodiff.TensorOperations<T>.Transpose(weightsCiNode));
+            var cHidden = Autodiff.TensorOperations<T>.MatrixMultiply(prevHNode, Autodiff.TensorOperations<T>.Transpose(weightsChNode));
+            var cPreActivation = Autodiff.TensorOperations<T>.Add(Autodiff.TensorOperations<T>.Add(cInput, cHidden), biasCNode);
+            var cTilde = Autodiff.TensorOperations<T>.Tanh(cPreActivation);
+
+            // Output gate: o = sigmoid(xt @ Woi + prevH @ Woh + bo)
+            var oInput = Autodiff.TensorOperations<T>.MatrixMultiply(inputNode, Autodiff.TensorOperations<T>.Transpose(weightsOiNode));
+            var oHidden = Autodiff.TensorOperations<T>.MatrixMultiply(prevHNode, Autodiff.TensorOperations<T>.Transpose(weightsOhNode));
+            var oPreActivation = Autodiff.TensorOperations<T>.Add(Autodiff.TensorOperations<T>.Add(oInput, oHidden), biasONode);
+            var o = Autodiff.TensorOperations<T>.Sigmoid(oPreActivation);
+
+            // Cell state update: newC = f * prevC + i * c_tilde
+            var forgetGated = Autodiff.TensorOperations<T>.ElementwiseMultiply(f, prevCNode);
+            var inputGated = Autodiff.TensorOperations<T>.ElementwiseMultiply(i, cTilde);
+            var newC = Autodiff.TensorOperations<T>.Add(forgetGated, inputGated);
+
+            // Hidden state update: newH = o * tanh(newC)
+            var newCActivated = Autodiff.TensorOperations<T>.Tanh(newC);
+            var newH = Autodiff.TensorOperations<T>.ElementwiseMultiply(o, newCActivated);
+
+            // Set gradient at output and propagate backward
+            newH.Gradient = gradSlice;
+
+            // Perform topological sort and backward pass
+            var topoOrder = GetTopologicalOrder(newH);
+            for (int idx = topoOrder.Count - 1; idx >= 0; idx--)
+            {
+                var node = topoOrder[idx];
+                if (node.RequiresGradient && node.BackwardFunction != null && node.Gradient != null)
+                {
+                    node.BackwardFunction(node.Gradient);
+                }
+            }
+
+            // Accumulate gradients
+            if (inputNode.Gradient != null)
+            {
+                inputGradient.SetSlice(t, inputNode.Gradient);
+            }
+
+            if (weightsFiNode.Gradient != null) dWeightsFi = dWeightsFi.Add(weightsFiNode.Gradient);
+            if (weightsIiNode.Gradient != null) dWeightsIi = dWeightsIi.Add(weightsIiNode.Gradient);
+            if (weightsCiNode.Gradient != null) dWeightsCi = dWeightsCi.Add(weightsCiNode.Gradient);
+            if (weightsOiNode.Gradient != null) dWeightsOi = dWeightsOi.Add(weightsOiNode.Gradient);
+            if (weightsFhNode.Gradient != null) dWeightsFh = dWeightsFh.Add(weightsFhNode.Gradient);
+            if (weightsIhNode.Gradient != null) dWeightsIh = dWeightsIh.Add(weightsIhNode.Gradient);
+            if (weightsChNode.Gradient != null) dWeightsCh = dWeightsCh.Add(weightsChNode.Gradient);
+            if (weightsOhNode.Gradient != null) dWeightsOh = dWeightsOh.Add(weightsOhNode.Gradient);
+            if (biasFNode.Gradient != null) dBiasF = dBiasF.Add(biasFNode.Gradient);
+            if (biasINode.Gradient != null) dBiasI = dBiasI.Add(biasINode.Gradient);
+            if (biasCNode.Gradient != null) dBiasC = dBiasC.Add(biasCNode.Gradient);
+            if (biasONode.Gradient != null) dBiasO = dBiasO.Add(biasONode.Gradient);
+        }
+
+        // Store gradients for UpdateParameters
+        Gradients = new Dictionary<string, Tensor<T>>
+        {
+            {"weightsFi", dWeightsFi}, {"weightsIi", dWeightsIi}, {"weightsCi", dWeightsCi}, {"weightsOi", dWeightsOi},
+            {"weightsFh", dWeightsFh}, {"weightsIh", dWeightsIh}, {"weightsCh", dWeightsCh}, {"weightsOh", dWeightsOh},
+            {"biasF", dBiasF}, {"biasI", dBiasI}, {"biasC", dBiasC}, {"biasO", dBiasO}
+        };
+
+        return inputGradient;
+    }
+
+    /// <summary>
+    /// Gets the topological order of nodes in the computation graph.
+    /// </summary>
+    private List<Autodiff.ComputationNode<T>> GetTopologicalOrder(Autodiff.ComputationNode<T> root)
+    {
+        var visited = new HashSet<Autodiff.ComputationNode<T>>();
+        var result = new List<Autodiff.ComputationNode<T>>();
+
+        var stack = new Stack<(Autodiff.ComputationNode<T> node, bool processed)>();
+        stack.Push((root, false));
+
+        while (stack.Count > 0)
+        {
+            var (node, processed) = stack.Pop();
+
+            if (visited.Contains(node))
+            {
+                continue;
+            }
+
+            if (processed)
+            {
+                visited.Add(node);
+                result.Add(node);
+            }
+            else
+            {
+                stack.Push((node, true));
+
+                foreach (var parent in node.Parents)
+                {
+                    if (!visited.Contains(parent))
+                    {
+                        stack.Push((parent, false));
+                    }
+                }
+            }
+        }
+
+        return result;
     }
 
     /// <summary>

@@ -521,22 +521,71 @@ public class ConvLSTMLayer<T> : LayerBase<T>
     /// 5. Stores gradients for later use in parameter updates
     /// </para>
     /// <para><b>For Beginners:</b> This method figures out how to improve the layer during training.
-    /// 
+    ///
     /// During the backward pass:
     /// - The layer receives information about how to adjust its output to reduce errors
     /// - It works backwards through the sequence (from the most recent frame to the earliest)
     /// - It calculates how each of its internal values (weights and biases) should change
     /// - It also calculates how the input should have been different to reduce errors
-    /// 
+    ///
     /// Think of it like a coach reviewing a game film backwards, noting what each player
     /// should have done differently at each moment to get a better outcome.
     /// </para>
     /// </remarks>
     public override Tensor<T> Backward(Tensor<T> outputGradient)
     {
-        // Note: Autodiff for ConvLSTM with BPTT, convolutional operations, and gated cell states is not yet implemented.
-        // The manual BPTT implementation handles the complex gradient calculations through
-        // convolutional gates (forget, input, cell, output) and spatial-temporal dependencies efficiently.
+        return UseAutodiff
+            ? BackwardViaAutodiff(outputGradient)
+            : BackwardManual(outputGradient);
+    }
+
+    /// <summary>
+    /// Backward pass implementation using automatic differentiation.
+    /// </summary>
+    /// <param name="outputGradient">The gradient of the loss with respect to the layer's output.</param>
+    /// <returns>The gradient of the loss with respect to the layer's input.</returns>
+    /// <remarks>
+    /// <para>
+    /// ConvLSTM autodiff implementation note: This layer combines several complex operations:
+    /// 1. Backpropagation Through Time (BPTT) across multiple timesteps
+    /// 2. Four convolutional gates (forget, input, cell, output) at each timestep
+    /// 3. Hidden state and cell state propagation through time
+    /// 4. Spatial convolutions at each gate operation
+    /// 5. Complex gradient flow through temporal and spatial dependencies
+    /// </para>
+    /// <para>
+    /// A full autodiff implementation would require:
+    /// - Creating computation graphs for each timestep's forward pass
+    /// - Properly handling gradient accumulation across timesteps
+    /// - Managing Conv2D operations with proper padding and stride handling
+    /// - Coordinating gradients between hidden/cell states across time
+    /// - Handling the interaction between sigmoid gates and tanh activations
+    /// </para>
+    /// <para>
+    /// Due to this complexity, the current implementation falls back to the optimized manual
+    /// BPTT implementation, which correctly handles all these gradient flows efficiently.
+    /// Future work could implement this using TensorOperations<T>.Conv2D and proper
+    /// temporal unrolling in the computation graph.
+    /// </para>
+    /// </remarks>
+    private Tensor<T> BackwardViaAutodiff(Tensor<T> outputGradient)
+    {
+        // ConvLSTM autodiff with BPTT is highly complex due to:
+        // 1. Temporal unrolling across multiple timesteps
+        // 2. Four convolutional gates per timestep (forget, input, cell, output)
+        // 3. Gradient flow through hidden and cell states across time
+        // 4. Spatial convolutions at each gate operation
+        // 5. Complex interaction between gate activations (sigmoid) and cell activations (tanh)
+        //
+        // A proper implementation would need to:
+        // - Build computation graph for each timestep using TensorOperations<T>.Conv2D
+        // - Handle Conv2D operations with correct padding, stride, and channel dimensions
+        // - Accumulate gradients across timesteps for shared parameters
+        // - Propagate gradients backward through time for hidden/cell states
+        // - Coordinate between 8 weight tensors (4 input + 4 hidden) and 4 bias tensors
+        //
+        // For now, fall back to the efficient manual BPTT implementation.
+        // TODO: Implement full autodiff version using TensorOperations<T> operations
         return BackwardManual(outputGradient);
     }
 

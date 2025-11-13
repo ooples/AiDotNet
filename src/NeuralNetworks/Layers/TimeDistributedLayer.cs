@@ -328,7 +328,7 @@ public class TimeDistributedLayer<T> : LayerBase<T>
     /// </para>
     /// <para><b>For Beginners:</b> This method is used during training to calculate how the layer's input
     /// should change to reduce errors.
-    /// 
+    ///
     /// During the backward pass:
     /// 1. The layer receives information about how its output should change (outputGradient)
     /// 2. It first adjusts this gradient based on the activation function
@@ -337,12 +337,31 @@ public class TimeDistributedLayer<T> : LayerBase<T>
     ///    - It passes that gradient backward through the inner layer
     ///    - It collects the resulting input gradient
     /// 4. All the individual input gradients are combined back into a sequence
-    /// 
+    ///
     /// This process tells the layer how its inputs should change to reduce errors,
     /// while maintaining the same time-step-by-time-step processing as the forward pass.
     /// </para>
     /// </remarks>
     public override Tensor<T> Backward(Tensor<T> outputGradient)
+    {
+        return UseAutodiff
+            ? BackwardViaAutodiff(outputGradient)
+            : BackwardManual(outputGradient);
+    }
+
+    /// <summary>
+    /// Performs the backward pass using manual gradient computation.
+    /// </summary>
+    /// <param name="outputGradient">The gradient of the loss with respect to the layer's output.</param>
+    /// <returns>The gradient of the loss with respect to the layer's input.</returns>
+    /// <exception cref="InvalidOperationException">Thrown when trying to perform a backward pass before a forward pass.</exception>
+    /// <remarks>
+    /// <para>
+    /// This is the original optimized manual implementation that directly computes gradients by iterating
+    /// through each time step and delegating to the inner layer's backward pass.
+    /// </para>
+    /// </remarks>
+    private Tensor<T> BackwardManual(Tensor<T> outputGradient)
     {
         // Note: TimeDistributedLayer delegates backward pass to the inner layer at each time step.
         // Autodiff support is handled by the inner layer. This wrapper layer simply manages
@@ -371,6 +390,67 @@ public class TimeDistributedLayer<T> : LayerBase<T>
         {
             var stepOutputGradient = outputGradient.Slice(0, t, 1);
             var stepInputGradient = _innerLayer.Backward(stepOutputGradient);
+            inputGradient.SetSlice(0, t, stepInputGradient);
+        }
+
+        return inputGradient;
+    }
+
+    /// <summary>
+    /// Performs the backward pass using automatic differentiation.
+    /// </summary>
+    /// <param name="outputGradient">The gradient of the loss with respect to the layer's output.</param>
+    /// <returns>The gradient of the loss with respect to the layer's input.</returns>
+    /// <exception cref="InvalidOperationException">Thrown when trying to perform a backward pass before a forward pass.</exception>
+    /// <remarks>
+    /// <para>
+    /// This implementation uses the TensorOperations autodiff framework to compute gradients automatically.
+    /// Since TimeDistributedLayer is a wrapper that applies the inner layer independently to each timestep,
+    /// the autodiff implementation simply delegates gradient computation to the inner layer for each timestep,
+    /// similar to the manual implementation. The inner layer is responsible for building its own computation
+    /// graph when autodiff is enabled.
+    /// </para>
+    /// <para>
+    /// Note: TimeDistributedLayer does not build a unified computation graph across all timesteps because:
+    /// 1. Each timestep is processed independently with no temporal dependencies
+    /// 2. The inner layer builds its own computation graph when it uses autodiff
+    /// 3. Slicing operations are not differentiable in the current TensorOperations framework
+    /// Therefore, this autodiff path effectively delegates to the inner layer's autodiff implementation
+    /// per timestep, while handling the activation function derivatives at the wrapper level.
+    /// </para>
+    /// </remarks>
+    private Tensor<T> BackwardViaAutodiff(Tensor<T> outputGradient)
+    {
+        if (_lastInput == null || _lastOutput == null)
+        {
+            throw new InvalidOperationException("Forward pass must be called before backward pass.");
+        }
+
+        int timeSteps = _lastInput.Shape[0];
+        int batchSize = _lastInput.Shape[1];
+
+        // Allocate input gradient tensor
+        var inputGradient = new Tensor<T>(_lastInput.Shape);
+
+        // Apply activation derivative to output gradient
+        if (ScalarActivation != null)
+        {
+            outputGradient = outputGradient.ElementwiseMultiply(_lastOutput.Transform((x, _) => ScalarActivation.Derivative(x)));
+        }
+        else if (VectorActivation != null)
+        {
+            outputGradient = outputGradient.ElementwiseMultiply(VectorActivation.Derivative(_lastOutput));
+        }
+
+        // For each timestep, propagate gradient through inner layer
+        // The inner layer will use autodiff if it has UseAutodiff enabled
+        for (int t = 0; t < timeSteps; t++)
+        {
+            var stepOutputGradient = outputGradient.Slice(0, t, 1);
+
+            // Delegate to inner layer's Backward, which will use autodiff if enabled
+            var stepInputGradient = _innerLayer.Backward(stepOutputGradient);
+
             inputGradient.SetSlice(0, t, stepInputGradient);
         }
 

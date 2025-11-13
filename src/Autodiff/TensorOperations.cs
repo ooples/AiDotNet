@@ -5134,4 +5134,185 @@ public static class TensorOperations<T>
             tape.RecordOperation(node);
         return node;
     }
+
+    /// <summary>
+    /// Pads a tensor with zeros along specified dimensions.
+    /// </summary>
+    /// <param name="a">The input computation node to pad.</param>
+    /// <param name="padding">Array specifying padding amount for each dimension (applied symmetrically on both sides).</param>
+    /// <returns>A new computation node containing the padded tensor.</returns>
+    /// <remarks>
+    /// <para>
+    /// This method pads the input tensor by adding zeros around each dimension.
+    /// The padding array specifies how many zeros to add on BOTH sides of each dimension.
+    /// For example, padding[1] = 2 means add 2 zeros on the left AND 2 zeros on the right of dimension 1.
+    /// </para>
+    /// <para>
+    /// The backward function for padding simply extracts the non-padded region from the output gradient,
+    /// since ∂(pad(x))/∂x is an extraction operation that removes the padded regions.
+    /// </para>
+    /// <para><b>For Beginners:</b> Padding adds a border of zeros around your data.
+    ///
+    /// For padding (output = pad(input, [p0, p1, ...])):
+    /// - The forward pass creates a larger tensor and copies input to the center
+    /// - Padding p on dimension d means: add p zeros on left, p zeros on right
+    /// - The backward pass extracts the center region from the gradient (removes the padding)
+    ///
+    /// This is commonly used in convolutional neural networks to preserve spatial dimensions.
+    /// </para>
+    /// </remarks>
+    public static ComputationNode<T> Pad(ComputationNode<T> a, int[] padding)
+    {
+        var numOps = MathHelper.GetNumericOperations<T>();
+        var inputShape = a.Value.Shape;
+
+        if (padding.Length != inputShape.Length)
+            throw new ArgumentException($"Padding array length ({padding.Length}) must match input rank ({inputShape.Length})");
+
+        // Calculate output shape: each dimension grows by 2 * padding[i]
+        var outputShape = new int[inputShape.Length];
+        for (int i = 0; i < inputShape.Length; i++)
+        {
+            outputShape[i] = inputShape[i] + 2 * padding[i];
+        }
+
+        // Forward pass: Create padded tensor and copy input data to center
+        var result = new Tensor<T>(outputShape);
+        // result is already zero-initialized, so we only need to copy the input data
+
+        // For 4D tensors (typical in CNNs): [batch, height, width, channels]
+        if (inputShape.Length == 4)
+        {
+            int batchSize = inputShape[0];
+            int inputHeight = inputShape[1];
+            int inputWidth = inputShape[2];
+            int channels = inputShape[3];
+
+            for (int b = 0; b < batchSize; b++)
+            {
+                for (int h = 0; h < inputHeight; h++)
+                {
+                    for (int w = 0; w < inputWidth; w++)
+                    {
+                        for (int c = 0; c < channels; c++)
+                        {
+                            result[b + padding[0], h + padding[1], w + padding[2], c + padding[3]] =
+                                a.Value[b, h, w, c];
+                        }
+                    }
+                }
+            }
+        }
+        else
+        {
+            // General N-dimensional padding (slower but works for any rank)
+            CopyPaddedDataRecursive(a.Value, result, padding, new int[inputShape.Length], new int[outputShape.Length], 0);
+        }
+
+        // Backward function: Extract the non-padded region from the output gradient
+        void BackwardFunction(Tensor<T> gradient)
+        {
+            if (a.RequiresGradient)
+            {
+                // The gradient for the input is just the center region of the output gradient
+                // (removing the padded borders)
+                var gradA = new Tensor<T>(inputShape);
+
+                if (inputShape.Length == 4)
+                {
+                    int batchSize = inputShape[0];
+                    int inputHeight = inputShape[1];
+                    int inputWidth = inputShape[2];
+                    int channels = inputShape[3];
+
+                    for (int b = 0; b < batchSize; b++)
+                    {
+                        for (int h = 0; h < inputHeight; h++)
+                        {
+                            for (int w = 0; w < inputWidth; w++)
+                            {
+                                for (int c = 0; c < channels; c++)
+                                {
+                                    gradA[b, h, w, c] = gradient[b + padding[0], h + padding[1], w + padding[2], c + padding[3]];
+                                }
+                            }
+                        }
+                    }
+                }
+                else
+                {
+                    // General N-dimensional unpadding
+                    ExtractPaddedDataRecursive(gradient, gradA, padding, new int[inputShape.Length], new int[outputShape.Length], 0);
+                }
+
+                if (a.Gradient == null)
+                {
+                    a.Gradient = gradA;
+                }
+                else
+                {
+                    var existingGradient = a.Gradient;
+                    if (existingGradient != null)
+                    {
+                        a.Gradient = existingGradient.Add(gradA);
+                    }
+                }
+            }
+        }
+
+        var node = new ComputationNode<T>(
+            value: result,
+            requiresGradient: a.RequiresGradient,
+            parents: new List<ComputationNode<T>> { a },
+            backwardFunction: BackwardFunction,
+            name: null);
+
+        var tape = GradientTape<T>.Current;
+        if (tape != null && tape.IsRecording)
+            tape.RecordOperation(node);
+
+        return node;
+    }
+
+    /// <summary>
+    /// Helper method to recursively copy data from source to padded destination tensor.
+    /// </summary>
+    private static void CopyPaddedDataRecursive(Tensor<T> source, Tensor<T> dest, int[] padding,
+        int[] sourceIndices, int[] destIndices, int dimension)
+    {
+        if (dimension == source.Shape.Length)
+        {
+            // Base case: copy the value
+            dest[destIndices] = source[sourceIndices];
+            return;
+        }
+
+        for (int i = 0; i < source.Shape[dimension]; i++)
+        {
+            sourceIndices[dimension] = i;
+            destIndices[dimension] = i + padding[dimension];
+            CopyPaddedDataRecursive(source, dest, padding, sourceIndices, destIndices, dimension + 1);
+        }
+    }
+
+    /// <summary>
+    /// Helper method to recursively extract data from padded source to unpadded destination tensor.
+    /// </summary>
+    private static void ExtractPaddedDataRecursive(Tensor<T> source, Tensor<T> dest, int[] padding,
+        int[] destIndices, int[] sourceIndices, int dimension)
+    {
+        if (dimension == dest.Shape.Length)
+        {
+            // Base case: copy the value
+            dest[destIndices] = source[sourceIndices];
+            return;
+        }
+
+        for (int i = 0; i < dest.Shape[dimension]; i++)
+        {
+            destIndices[dimension] = i;
+            sourceIndices[dimension] = i + padding[dimension];
+            ExtractPaddedDataRecursive(source, dest, padding, destIndices, sourceIndices, dimension + 1);
+        }
+    }
 }
