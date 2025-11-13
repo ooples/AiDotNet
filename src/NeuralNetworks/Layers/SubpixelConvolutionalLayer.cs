@@ -737,7 +737,7 @@ public class SubpixelConvolutionalLayer<T> : LayerBase<T>
         var inputNode = Autodiff.TensorOperations<T>.Variable(_lastInput, "input", requiresGradient: true);
 
         // Apply pixel shuffle operation
-        var outputNode = Autodiff.TensorOperations<T>.PixelShuffle(inputNode, UpscaleFactor);
+        var outputNode = Autodiff.TensorOperations<T>.PixelShuffle(inputNode, _upscaleFactor);
 
         // Perform backward pass
         outputNode.Gradient = outputGradient;

@@ -446,7 +446,7 @@ public class BatchNormalizationLayer<T> : LayerBase<T>
             runningMeanTensor,
             runningVarTensor,
             IsTrainingMode,
-            _epsilon
+            NumOps.ToDouble(_epsilon)
         );
 
         // Perform backward pass
@@ -466,6 +466,32 @@ public class BatchNormalizationLayer<T> : LayerBase<T>
         _betaGradient = TensorToVector(betaNode.Gradient ?? throw new InvalidOperationException("Beta gradient is null."));
 
         return inputNode.Gradient ?? throw new InvalidOperationException("Gradient computation failed.");
+    }
+
+    /// <summary>
+    /// Converts a Vector to a 1D Tensor.
+    /// </summary>
+    private Tensor<T> VectorToTensor(Vector<T> vector)
+    {
+        var tensor = new Tensor<T>(new int[] { vector.Length });
+        for (int i = 0; i < vector.Length; i++)
+        {
+            tensor[i] = vector[i];
+        }
+        return tensor;
+    }
+
+    /// <summary>
+    /// Converts a 1D Tensor to a Vector.
+    /// </summary>
+    private Vector<T> TensorToVector(Tensor<T> tensor)
+    {
+        var vector = new Vector<T>(tensor.Length);
+        for (int i = 0; i < tensor.Length; i++)
+        {
+            vector[i] = tensor[i];
+        }
+        return vector;
     }
 
     /// <summary>
@@ -508,19 +534,6 @@ public class BatchNormalizationLayer<T> : LayerBase<T>
         }
 
         return result;
-    }
-
-    /// <summary>
-    /// Converts a Vector to a 1D Tensor.
-    /// </summary>
-    private Tensor<T> VectorToTensor(Vector<T> vector)
-    {
-        var tensor = new Tensor<T>(new int[] { vector.Length });
-        for (int i = 0; i < vector.Length; i++)
-        {
-            tensor[i] = vector[i];
-        }
-        return tensor;
     }
 
     /// <summary>

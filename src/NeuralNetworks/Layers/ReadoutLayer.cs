@@ -344,7 +344,7 @@ public class ReadoutLayer<T> : LayerBase<T>
             requiresGradient: true);
 
         // Forward pass: output = weights * input + bias
-        var matmulNode = Autodiff.TensorOperations<T>.MatMul(weightsNode, Autodiff.TensorOperations<T>.Transpose(inputNode));
+        var matmulNode = Autodiff.TensorOperations<T>.MatrixMultiply(weightsNode, Autodiff.TensorOperations<T>.Transpose(inputNode));
 
         // Reshape matmul result from [outputSize, 1] to [outputSize]
         var matmulFlat = new Tensor<T>([_weights.Rows]);

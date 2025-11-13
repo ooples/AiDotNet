@@ -363,7 +363,7 @@ public class LayerNormalizationLayer<T> : LayerBase<T>
 
         // Use LayerNorm operation for full gradient computation
         var normalizedShape = new int[] { featureSize };
-        var output = Autodiff.TensorOperations<T>.LayerNorm(input, normalizedShape, gammaNode, betaNode, _epsilon);
+        var output = Autodiff.TensorOperations<T>.LayerNorm(input, normalizedShape, gammaNode, betaNode, NumOps.ToDouble(_epsilon));
 
         // Set the gradient at the output
         output.Gradient = outputGradient;

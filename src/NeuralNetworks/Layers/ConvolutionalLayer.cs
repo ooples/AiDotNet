@@ -200,6 +200,16 @@ public class ConvolutionalLayer<T> : LayerBase<T>
     private Vector<T> _biases;
 
     /// <summary>
+    /// Gradient of the kernels computed during backpropagation via autodiff.
+    /// </summary>
+    private Tensor<T>? _kernelsGradient;
+
+    /// <summary>
+    /// Gradient of the biases computed during backpropagation via autodiff.
+    /// </summary>
+    private Vector<T>? _biasesGradient;
+
+    /// <summary>
     /// Stored input data from the most recent forward pass, used for backpropagation.
     /// </summary>
     /// <remarks>

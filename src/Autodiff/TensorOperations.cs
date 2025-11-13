@@ -1360,14 +1360,14 @@ public static class TensorOperations<T>
             result = new Tensor<T>(new int[] { rows, totalCols });
 
             int colOffset = 0;
-            foreach (var node in nodes)
+            foreach (var inputNode in nodes)
             {
-                int cols = node.Value.Shape[1];
+                int cols = inputNode.Value.Shape[1];
                 for (int r = 0; r < rows; r++)
                 {
                     for (int c = 0; c < cols; c++)
                     {
-                        result[r, colOffset + c] = node.Value[r, c];
+                        result[r, colOffset + c] = inputNode.Value[r, c];
                     }
                 }
                 colOffset += cols;
@@ -1381,14 +1381,14 @@ public static class TensorOperations<T>
             result = new Tensor<T>(new int[] { totalRows, cols });
 
             int rowOffset = 0;
-            foreach (var node in nodes)
+            foreach (var inputNode in nodes)
             {
-                int rows = node.Value.Shape[0];
+                int rows = inputNode.Value.Shape[0];
                 for (int r = 0; r < rows; r++)
                 {
                     for (int c = 0; c < cols; c++)
                     {
-                        result[rowOffset + r, c] = node.Value[r, c];
+                        result[rowOffset + r, c] = inputNode.Value[r, c];
                     }
                 }
                 rowOffset += rows;
@@ -1431,9 +1431,14 @@ public static class TensorOperations<T>
                     }
 
                     if (nodes[i].Gradient == null)
+                    {
                         nodes[i].Gradient = gradPart;
+                    }
                     else
-                        nodes[i].Gradient = nodes[i].Gradient.Add(gradPart);
+                    {
+                        var existingGradient = nodes[i].Gradient;
+                        nodes[i].Gradient = existingGradient.Add(gradPart);
+                    }
 
                     colOffset += cols;
                 }
@@ -1462,9 +1467,14 @@ public static class TensorOperations<T>
                     }
 
                     if (nodes[i].Gradient == null)
+                    {
                         nodes[i].Gradient = gradPart;
+                    }
                     else
-                        nodes[i].Gradient = nodes[i].Gradient.Add(gradPart);
+                    {
+                        var existingGradient = nodes[i].Gradient;
+                        nodes[i].Gradient = existingGradient.Add(gradPart);
+                    }
 
                     rowOffset += rows;
                 }
@@ -3048,7 +3058,7 @@ public static class TensorOperations<T>
             outputShape.Add(1);
 
         var result = new Tensor<T>(outputShape.ToArray());
-        var divisor = numOps.FromInt(reduceCount);
+        var divisor = numOps.FromDouble((double)reduceCount);
 
         // Compute forward pass: sum and then divide
         void ComputeSum(int[] currentIndices, int dim, int[] outputIndices)
@@ -4495,7 +4505,7 @@ public static class TensorOperations<T>
                         gradScale = numOps.Multiply(gradScale, grad);
 
                         // Scale by (input - center) / distance to get gradient direction
-                        T invDistance = numOps.IsZero(distance) ? numOps.Zero : numOps.Divide(numOps.One, distance);
+                        T invDistance = numOps.Equals(distance, numOps.Zero) ? numOps.Zero : numOps.Divide(numOps.One, distance);
 
                         for (int i = 0; i < inputSize; i++)
                         {
@@ -4529,7 +4539,7 @@ public static class TensorOperations<T>
                             numOps.Multiply(distance, outputVal));
                         gradScale = numOps.Multiply(gradScale, grad);
 
-                        T invDistance = numOps.IsZero(distance) ? numOps.Zero : numOps.Divide(numOps.One, distance);
+                        T invDistance = numOps.Equals(distance, numOps.Zero) ? numOps.Zero : numOps.Divide(numOps.One, distance);
 
                         for (int i = 0; i < inputSize; i++)
                         {
@@ -4824,10 +4834,10 @@ public static class TensorOperations<T>
                     T wy0 = numOps.Subtract(numOps.One, wy1);
 
                     // Clamp weights to [0, 1]
-                    wx0 = numOps.IsNegative(wx0) ? numOps.Zero : wx0;
-                    wx1 = numOps.IsNegative(wx1) ? numOps.Zero : wx1;
-                    wy0 = numOps.IsNegative(wy0) ? numOps.Zero : wy0;
-                    wy1 = numOps.IsNegative(wy1) ? numOps.Zero : wy1;
+                    wx0 = numOps.LessThan(wx0, numOps.Zero) ? numOps.Zero : wx0;
+                    wx1 = numOps.LessThan(wx1, numOps.Zero) ? numOps.Zero : wx1;
+                    wy0 = numOps.LessThan(wy0, numOps.Zero) ? numOps.Zero : wy0;
+                    wy1 = numOps.LessThan(wy1, numOps.Zero) ? numOps.Zero : wy1;
 
                     T w00 = numOps.Multiply(wx0, wy0);
                     T w01 = numOps.Multiply(wx1, wy0);

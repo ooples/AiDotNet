@@ -917,7 +917,7 @@ public class SpatialTransformerLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
                     {
                         avgGrad = NumOps.Add(avgGrad, thetaNode.Gradient[b, i, j]);
                     }
-                    thetaGrad[0, i * 3 + j] = NumOps.Divide(avgGrad, NumOps.FromInt(batchSize));
+                    thetaGrad[0, i * 3 + j] = NumOps.Divide(avgGrad, NumOps.FromDouble((double)batchSize));
                 }
             }
 
