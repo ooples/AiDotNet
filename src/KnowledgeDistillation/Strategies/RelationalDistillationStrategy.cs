@@ -271,6 +271,21 @@ public class RelationalDistillationStrategy<T> : DistillationStrategyBase<T, Vec
             baseLoss = softLoss;
         }
 
+        // TODO: CRITICAL BUG - Relational loss is applied to the wrong samples!
+        // Current flow:
+        // 1. Accumulate samples 1-32, compute relational loss on THESE samples
+        // 2. Apply that loss to samples 33-64 (WRONG!)
+        // 
+        // Correct approach:
+        // 1. Accumulate samples 1-32
+        // 2. Compute relational loss
+        // 3. Apply that loss back to samples 1-32 (requires buffering/delayed gradient application)
+        // 
+        // This requires architectural changes:
+        // - Buffer the individual losses for the batch
+        // - After batch is complete, add relational component to THOSE buffered losses
+        // - Or redesign to work at batch level instead of sample level
+        
         // Add amortized relational loss (distributed across batch samples)
         // Use actual batch count for proper amortization, not configured batch size
         T relationalContribution = NumOps.Zero;
