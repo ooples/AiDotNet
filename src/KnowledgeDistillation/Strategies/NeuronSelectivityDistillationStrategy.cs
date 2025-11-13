@@ -171,6 +171,22 @@ public class NeuronSelectivityDistillationStrategy<T> : DistillationStrategyBase
         int batchSize = studentActivations.Length;
         int numNeurons = studentActivations[0].Length;
 
+        // Validate all activation vectors have consistent dimensions
+        for (int i = 0; i < batchSize; i++)
+        {
+            if (studentActivations[i].Length != numNeurons)
+                throw new ArgumentException(
+                    $"Student activation vector at index {i} has dimension {studentActivations[i].Length}, " +
+                    $"but expected {numNeurons} (from activation 0). All activation vectors must have the same dimension.",
+                    nameof(studentActivations));
+
+            if (teacherActivations[i].Length != numNeurons)
+                throw new ArgumentException(
+                    $"Teacher activation vector at index {i} has dimension {teacherActivations[i].Length}, " +
+                    $"but expected {numNeurons} (from activation 0). All activation vectors must have the same dimension.",
+                    nameof(teacherActivations));
+        }
+
         // Compute selectivity for each neuron
         var studentSelectivity = ComputeSelectivityScores(studentActivations, numNeurons);
         var teacherSelectivity = ComputeSelectivityScores(teacherActivations, numNeurons);

@@ -1,0 +1,43 @@
+Total threads: 144
+Unresolved threads: 8
+
+--- Unresolved Comment 1 ---
+Thread ID: PRRT_kwDOKSXUF85hxJ4T
+File: src/KnowledgeDistillation/Strategies/NeuronSelectivityDistillationStrategy.cs:188
+Comment: _⚠️ Potential issue_ | _🟠 Major_  **Add dimension validation for activation vectors.**  `ComputeSelectivityLoss` validates batch size (line 141) but doesn't verify that all activation vectors have consistent dimensions. If vectors have varying lengths, `ComputeSelectivityScores` will use an incorrect `numNeurons` value or cause index-out-of-range errors.  Previous review comments flagged this and 
+
+--- Unresolved Comment 2 ---
+Thread ID: PRRT_kwDOKSXUF85hxJ4r
+File: src/KnowledgeDistillation/Strategies/RelationalDistillationStrategy.cs:474
+Comment: _🛠️ Refactor suggestion_ | _🟠 Major_  **Numerical gradient approximation is computationally expensive and less accurate.**  Computing angle gradients via finite differences (lines 532-551) requires O(d) angle computations per triplet, where d is the embedding dimension. For d=512 and a batch of 32 samples with 10 triplets per sample (line 438), this results in ~163,000 angle computations per batch
+
+--- Unresolved Comment 3 ---
+Thread ID: PRRT_kwDOKSXUF85hygTv
+File: src/KnowledgeDistillation/Strategies/NeuronSelectivityDistillationStrategy.cs:42
+Comment: _⚠️ Potential issue_ | _🟠 Major_  **Incomplete implementation still creates misleading API.**  The constructor validates `selectivityWeight` (lines 37-38), but this parameter has no effect on training: - `ComputeLoss` (lines 44-73) returns the standard distillation loss without any selectivity component - `ComputeGradient` (lines 75-126) inconsistently applies selectivity scaling only in one branc
+
+--- Unresolved Comment 4 ---
+Thread ID: PRRT_kwDOKSXUF85hzI2F
+File: src/KnowledgeDistillation/Teachers/EnsembleTeacherModel.cs:214
+Comment: _⚠️ Potential issue_ | _🟠 Major_  **Geometric mean must stay in logit space**  This branch converts logits → probabilities, averages them, then returns probabilities. Distillation losses expect logits; running softmax on these probabilities produces a very different distribution (e.g., softmax([0.9, 0.1]) ≈ [0.69, 0.31] instead of the intended [0.9, 0.1]). Keep the aggregation in log space (or ren
+
+--- Unresolved Comment 5 ---
+Thread ID: PRRT_kwDOKSXUF85hzI2M
+File: src/PredictionModelBuilder.cs:1072
+Comment: _⚠️ Potential issue_ | _🟠 Major_  **Do not force empty weight arrays for ensembles**  Passing `Array.Empty<double>()` when no weights are provided causes `EnsembleTeacherModel` to throw (length mismatch) instead of defaulting to uniform weights. Let the factory see `null` so it can apply its built-in defaults.  ```diff -                    ensembleWeights: options.EnsembleWeights ?? Array.Empty<do
+
+--- Unresolved Comment 6 ---
+Thread ID: PRRT_kwDOKSXUF85hzlTV
+File: src/Interfaces/IDistillationStrategy.cs:101
+Comment: _⚠️ Potential issue_ | _🔴 Critical_  <details> <summary>🧩 Analysis chain</summary>  **Interface design creates implementation confusion.**  The interface declares a single type parameter `IDistillationStrategy<T>` with `Matrix<T>` methods, but:  1. Past review comments indicated the factory and trainers expect `IDistillationStrategy<T, TOutput>` (two type parameters) 2. New implementations like `H
+
+--- Unresolved Comment 7 ---
+Thread ID: PRRT_kwDOKSXUF85hzlUb
+File: src/KnowledgeDistillation/Strategies/NeuronSelectivityDistillationStrategy.cs:188
+Comment: _⚠️ Potential issue_ | _🟠 Major_  **Validate activation dimensions before iterating**  `numNeurons` is inferred from `studentActivations[0]`, yet later loops index every activation vector using that length. If any student/teacher activation has a mismatched dimension, this will throw at runtime. Add explicit validation (mirroring the checks in `FactorTransferDistillationStrategy`) to ensure every 
+
+--- Unresolved Comment 8 ---
+Thread ID: PRRT_kwDOKSXUF85hzlUm
+File: src/KnowledgeDistillation/Strategies/RelationalDistillationStrategy.cs:431
+Comment: _⚠️ Potential issue_ | _🔴 Critical_  **Respect the chosen distance metric when computing gradients**  `ComputePairwiseDistanceGradient` always returns the Euclidean gradient, yet `_distanceMetric` allows Cosine and Manhattan. As soon as a caller selects a non-Euclidean metric, the gradient becomes mathematically wrong (e.g., cosine gradients are not proportional to `(student_i - student_j)/‖studen
+
