@@ -272,9 +272,12 @@ public class CodeExecutionVerifier<T>
             process.BeginOutputReadLine();
             process.BeginErrorReadLine();
 
-            // Wait with timeout
+            // Wait with timeout (net462: WaitForExit returns void, not bool)
             bool finished = await Task.Run(() =>
-                process.WaitForExit(_timeoutMilliseconds),
+            {
+                process.WaitForExit(_timeoutMilliseconds);
+                return process.HasExited;
+            },
                 cancellationToken
             );
 
