@@ -57,6 +57,9 @@ public class GSM8KDataLoader
 
     public static Task<List<GSM8KProblem>> LoadFromJsonArrayAsync(string filePath)
     {
+        if (!File.Exists(filePath))
+            throw new FileNotFoundException($"GSM8K data file not found: {filePath}");
+
         var json = File.ReadAllText(filePath); // net462 compatible
         var data = JArray.Parse(json); // Use Newtonsoft.Json
 
