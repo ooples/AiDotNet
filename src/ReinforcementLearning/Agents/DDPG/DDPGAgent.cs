@@ -250,7 +250,6 @@ public class DDPGAgent<T> : DeepReinforcementLearningAgentBase<T>
 
             // Backprop
             var gradient = _options.CriticLossFunction.CalculateDerivative(prediction, target);
-            _criticNetwork.Backpropagate(gradient);
             var gradientTensor = Tensor<T>.FromVector(gradient);
         }
 

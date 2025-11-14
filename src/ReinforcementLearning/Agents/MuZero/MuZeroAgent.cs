@@ -219,7 +219,7 @@ public class MuZeroAgent<T> : DeepReinforcementLearningAgentBase<T>
             pathNode.QValues[pathAction] = newQ;
 
             // Discount value for parent
-            value = NumOps.Multiply(_options.DiscountFactor, value);
+            value = NumOps.Multiply(DiscountFactor, value);
         }
     }
 
@@ -338,7 +338,7 @@ public class MuZeroAgent<T> : DeepReinforcementLearningAgentBase<T>
 
                 // Simplified target: use reward + discounted next value
                 var target = experience.Done ? experience.Reward :
-                    NumOps.Add(experience.Reward, NumOps.Multiply(_options.DiscountFactor, predictedValue));
+                    NumOps.Add(experience.Reward, NumOps.Multiply(DiscountFactor, predictedValue));
 
                 var valueDiff = NumOps.Subtract(target, predictedValue);
                 var loss = NumOps.Multiply(valueDiff, valueDiff);

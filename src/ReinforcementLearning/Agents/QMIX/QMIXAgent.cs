@@ -291,7 +291,7 @@ public class QMIXAgent<T> : DeepReinforcementLearningAgentBase<T>
             }
             else
             {
-                target = NumOps.Add(experience.Reward, NumOps.Multiply(_options.DiscountFactor, targetTeamQ));
+                target = NumOps.Add(experience.Reward, NumOps.Multiply(DiscountFactor, targetTeamQ));
             }
 
             // TD error
@@ -311,7 +311,7 @@ public class QMIXAgent<T> : DeepReinforcementLearningAgentBase<T>
             for (int j = 0; j < mixingParams.Length; j++)
             {
                 mixingParams[j] = NumOps.Subtract(mixingParams[j],
-                    NumOps.Multiply(_options.LearningRate, mixingGrads[j]));
+                    NumOps.Multiply(LearningRate, mixingGrads[j]));
             }
             _mixingNetwork.UpdateParameters(mixingParams);
 
@@ -332,7 +332,7 @@ public class QMIXAgent<T> : DeepReinforcementLearningAgentBase<T>
                 for (int j = 0; j < agentParams.Length; j++)
                 {
                     agentParams[j] = NumOps.Subtract(agentParams[j],
-                        NumOps.Multiply(_options.LearningRate, agentGrads[j]));
+                        NumOps.Multiply(LearningRate, agentGrads[j]));
                 }
                 _agentNetworks[i].UpdateParameters(agentParams);
             }

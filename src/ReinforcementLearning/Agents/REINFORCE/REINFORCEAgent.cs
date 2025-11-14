@@ -75,7 +75,7 @@ public class REINFORCEAgent<T> : DeepReinforcementLearningAgentBase<T>
 
         foreach (var hiddenSize in _reinforceOptions.HiddenLayers)
         {
-            layers.Add(new DenseLayer<T>(prevSize, hiddenSize, new TanhActivation<T>()));
+            layers.Add(new DenseLayer<T>(prevSize, hiddenSize, (IActivationFunction<T>)new TanhActivation<T>()));
             prevSize = hiddenSize;
         }
 
@@ -83,7 +83,7 @@ public class REINFORCEAgent<T> : DeepReinforcementLearningAgentBase<T>
             ? _reinforceOptions.ActionSize * 2  // Mean and log_std for Gaussian
             : _reinforceOptions.ActionSize;      // Logits for categorical
 
-        layers.Add(new DenseLayer<T>(prevSize, outputSize, new IdentityActivation<T>()));
+        layers.Add(new DenseLayer<T>(prevSize, outputSize, (IActivationFunction<T>)new IdentityActivation<T>()));
 
         var architecture = new NeuralNetworkArchitecture<T>(
             inputType: InputType.OneDimensional,

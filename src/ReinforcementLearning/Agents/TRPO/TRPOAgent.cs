@@ -257,6 +257,10 @@ public class TRPOAgent<T> : DeepReinforcementLearningAgentBase<T>
         var rewards = new List<T>();
         var values = new List<T>();
 
+        // Cache options values to avoid nullable warnings
+        T discountFactor = DiscountFactor;
+        T gaeLambda = _options.GaeLambda;
+
         foreach (var (state, action, reward, nextState, done) in _trajectoryBuffer)
         {
             states.Add(state);
@@ -279,7 +283,7 @@ public class TRPOAgent<T> : DeepReinforcementLearningAgentBase<T>
             }
             else
             {
-                runningReturn = NumOps.Add(rewards[i], NumOps.Multiply(_options.DiscountFactor, runningReturn));
+                runningReturn = NumOps.Add(rewards[i], NumOps.Multiply(discountFactor, runningReturn));
             }
             returns.Insert(0, runningReturn);
         }
@@ -296,18 +300,15 @@ public class TRPOAgent<T> : DeepReinforcementLearningAgentBase<T>
                 nextValue = NumOps.Zero;
             }
 
-            var delta = NumOps.Add(rewards[i], NumOps.Multiply(_options.DiscountFactor, nextValue));
+            var delta = NumOps.Add(rewards[i], NumOps.Multiply(discountFactor, nextValue));
             delta = NumOps.Subtract(delta, values[i]);
 
-            gaeAdvantage = NumOps.Add(delta, NumOps.Multiply(_options.DiscountFactor,
-                NumOps.Multiply(_options.GaeLambda, gaeAdvantage)));
+            gaeAdvantage = NumOps.Add(delta, NumOps.Multiply(discountFactor,
+                NumOps.Multiply(gaeLambda, gaeAdvantage)));
 
             advantages.Insert(0, gaeAdvantage);
         }
-
-        // Normalize advantages
-        var mean = StatisticsHelper<T>.CalculateMean(advantages.ToArray());
-        var std = StatisticsHelper<T>.CalculateStandardDeviation(advantages.ToArray());
+        // Normalize advantages        var mean = StatisticsHelper<T>.CalculateMean(advantages.ToArray());        var std = StatisticsHelper<T>.CalculateStandardDeviation(advantages.ToArray());
 
         if (NumOps.GreaterThan(std, NumOps.Zero))
         {
