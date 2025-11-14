@@ -10,6 +10,8 @@ namespace AiDotNet.ReinforcementLearning.Policies.Exploration
     /// <typeparam name="T">The numeric type used for calculations.</typeparam>
     public class GaussianNoiseExploration<T> : IExplorationStrategy<T>
     {
+        private static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();
+
         private double _noiseStdDev;
         private readonly double _noiseDecay;
         private readonly double _minNoise;
@@ -32,8 +34,10 @@ namespace AiDotNet.ReinforcementLearning.Policies.Exploration
                 double u2 = random.NextDouble();
                 double noise = Math.Sqrt(-2.0 * Math.Log(u1)) * Math.Cos(2.0 * Math.PI * u2) * _noiseStdDev;
 
-                double actionValue = NumOps<T>.ToDouble(policyAction[i]) + noise;
-                noisyAction[i] = NumOps<T>.FromDouble(Math.Clamp(actionValue, -1.0, 1.0));
+                double actionValue = NumOps.ToDouble(policyAction[i]) + noise;
+                // Clamp to [-1, 1] (Math.Clamp not available in net462)
+                double clampedValue = Math.Max(-1.0, Math.Min(1.0, actionValue));
+                noisyAction[i] = NumOps.FromDouble(clampedValue);
             }
 
             return noisyAction;

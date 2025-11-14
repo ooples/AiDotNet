@@ -10,6 +10,8 @@ namespace AiDotNet.ReinforcementLearning.Policies.Exploration
     /// <typeparam name="T">The numeric type used for calculations.</typeparam>
     public class EpsilonGreedyExploration<T> : IExplorationStrategy<T>
     {
+        private static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();
+
         private double _epsilon;
         private readonly double _epsilonStart;
         private readonly double _epsilonEnd;
@@ -30,7 +32,7 @@ namespace AiDotNet.ReinforcementLearning.Policies.Exploration
                 // Random action
                 int randomActionIndex = random.Next(actionSpaceSize);
                 var randomAction = new Vector<T>(actionSpaceSize);
-                randomAction[randomActionIndex] = NumOps<T>.One;
+                randomAction[randomActionIndex] = NumOps.One;
                 return randomAction;
             }
 
