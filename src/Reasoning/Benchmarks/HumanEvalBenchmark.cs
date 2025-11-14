@@ -74,6 +74,22 @@ public class HumanEvalBenchmark<T> : IBenchmark<T>
         // Load problems
         var problems = await LoadProblemsAsync(sampleSize);
 
+        // Guard against empty problem sets
+        if (problems.Count == 0)
+        {
+            return new BenchmarkResult<T>
+            {
+                BenchmarkName = BenchmarkName,
+                TotalEvaluated = 0,
+                CorrectCount = 0,
+                Accuracy = _numOps.Zero,
+                ConfidenceScores = new Vector<T>(0),
+                AverageConfidence = _numOps.Zero,
+                TotalDuration = TimeSpan.Zero,
+                ProblemResults = new List<ProblemEvaluation<T>>()
+            };
+        }
+
         var result = new BenchmarkResult<T>
         {
             BenchmarkName = BenchmarkName,
