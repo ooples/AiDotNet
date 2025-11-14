@@ -3,7 +3,7 @@ using AiDotNet.LinearAlgebra;
 using AiDotNet.Reasoning.Benchmarks.Models;
 using System.Diagnostics;
 using System.Text;
-using System.Text.Json;
+using Newtonsoft.Json;
 
 namespace AiDotNet.Reasoning.Benchmarks;
 
@@ -379,14 +379,14 @@ What is the transformation rule? Provide the output grid.",
             if (match.Success)
             {
                 string jsonArray = match.Value;
-                var grid = JsonSerializer.Deserialize<int[][]>(jsonArray);
+                var grid = JsonConvert.DeserializeObject<int[][]>(jsonArray);
                 return grid;
             }
 
             // Try parsing the entire text as JSON
             if (text.TrimStart().StartsWith("["))
             {
-                var grid = JsonSerializer.Deserialize<int[][]>(text);
+                var grid = JsonConvert.DeserializeObject<int[][]>(text);
                 return grid;
             }
         }

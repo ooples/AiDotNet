@@ -1,7 +1,7 @@
 using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
 using AiDotNet.Reasoning.Models;
-using System.Text.Json;
+using Newtonsoft.Json;
 
 namespace AiDotNet.Reasoning.Training;
 
@@ -260,14 +260,15 @@ public class TrainingDataCollector<T>
     /// </summary>
     public async Task SaveToFileAsync(string filePath, CancellationToken cancellationToken = default)
     {
-        var options = new JsonSerializerOptions
+        var settings = new JsonSerializerSettings
         {
-            WriteIndented = true,
-            DefaultIgnoreCondition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull
+            Formatting = Formatting.Indented,
+            NullValueHandling = NullValueHandling.Ignore
         };
 
-        var json = JsonSerializer.Serialize(_samples, options);
-        await File.WriteAllTextAsync(filePath, json, cancellationToken);
+        var json = JsonConvert.SerializeObject(_samples, settings);
+        File.WriteAllText(filePath, json);  // net462 compatible
+        await Task.CompletedTask;  // Maintain async signature
     }
 
     /// <summary>
@@ -278,14 +279,16 @@ public class TrainingDataCollector<T>
         if (!File.Exists(filePath))
             throw new FileNotFoundException($"Training data file not found: {filePath}");
 
-        var json = await File.ReadAllTextAsync(filePath, cancellationToken);
-        var samples = JsonSerializer.Deserialize<List<TrainingSample<T>>>(json);
+        var json = File.ReadAllText(filePath);  // net462 compatible
+        var samples = JsonConvert.DeserializeObject<List<TrainingSample<T>>>(json);
 
         if (samples != null)
         {
             _samples.Clear();
             _samples.AddRange(samples);
         }
+
+        await Task.CompletedTask;  // Maintain async signature
     }
 
     /// <summary>
@@ -309,13 +312,14 @@ public class TrainingDataCollector<T>
         List<TrainingSample<T>> samples,
         CancellationToken cancellationToken)
     {
-        var options = new JsonSerializerOptions
+        var settings = new JsonSerializerSettings
         {
-            WriteIndented = true
+            Formatting = Formatting.Indented
         };
 
-        var json = JsonSerializer.Serialize(samples, options);
-        await File.WriteAllTextAsync(filePath, json, cancellationToken);
+        var json = JsonConvert.SerializeObject(samples, settings);
+        File.WriteAllText(filePath, json);  // net462 compatible
+        await Task.CompletedTask;  // Maintain async signature
     }
 
     private DataStatistics<T> CalculateStatistics()

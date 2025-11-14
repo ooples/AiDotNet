@@ -182,10 +182,10 @@ public class LogicalReasoner<T>
         var result = await strategy.ReasonAsync(enhancedProblem, config, cancellationToken);
 
         // Check for contradictions
-        if (result.Success && result.Chain != null && _contradictionDetector != null)
+        if (result.Success && result.ReasoningChain != null && _contradictionDetector != null)
         {
             var contradictions = await _contradictionDetector.DetectContradictionsAsync(
-                result.Chain,
+                result.ReasoningChain,
                 cancellationToken
             );
 

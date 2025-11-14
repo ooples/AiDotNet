@@ -303,32 +303,34 @@ Solve this problem systematically:";
         ReasoningConfig config,
         CancellationToken cancellationToken)
     {
-        if (_criticModel == null || result.Chain == null)
+        if (_criticModel == null || result.ReasoningChain == null)
             return result;
 
         // Build validation context
         var context = new ReasoningContext
         {
-            OriginalQuery = $"Validate scientific solution in {domain}",
-            Requirements = new List<string>
+            Query = $"Validate scientific solution in {domain}",
+            Domain = domain,
+            PreviousSteps = new List<string>
             {
-                "Physical plausibility",
-                "Correct units and dimensions",
-                "Proper formula application",
-                "Logical consistency",
-                "Numerical accuracy"
+                "Check physical plausibility",
+                "Verify units and dimensions",
+                "Validate formula application",
+                "Assess logical consistency",
+                "Confirm numerical accuracy"
             }
         };
 
         // Critique the solution
-        foreach (var step in result.Chain.Steps)
+        foreach (var step in result.ReasoningChain.Steps)
         {
             var critique = await _criticModel.CritiqueStepAsync(step, context, cancellationToken);
 
-            if (Convert.ToDouble(critique.OverallScore) < 0.6)
+            if (Convert.ToDouble(critique.Score) < 0.6)
             {
                 // Add warning to result
-                result.Metadata["validation_warning"] = $"Step {step.StepNumber}: {critique.MainWeakness}";
+                string weakness = critique.Weaknesses.Count > 0 ? critique.Weaknesses[0] : "Quality threshold not met";
+                result.Metadata["validation_warning"] = $"Step {step.StepNumber}: {weakness}";
             }
         }
 

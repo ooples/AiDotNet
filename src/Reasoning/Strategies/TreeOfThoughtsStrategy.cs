@@ -265,7 +265,7 @@ public class TreeOfThoughtsStrategy<T> : ReasoningStrategyBase<T>
             return "No solution found";
 
         // If the last node is marked as terminal, use its thought
-        var lastNode = path[^1];
+        var lastNode = path[path.Count - 1];  // net462: can't use ^1
         if (lastNode.IsTerminal)
         {
             return lastNode.Thought;

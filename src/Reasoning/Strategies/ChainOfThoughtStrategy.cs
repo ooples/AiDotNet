@@ -370,7 +370,7 @@ Maximum {config.MaxSteps} steps. Think step by step.";
         // If no explicit final answer, use the last step's content
         if (steps.Count > 0)
         {
-            return steps[^1].Content;
+            return steps[steps.Count - 1].Content;  // net462: can't use ^1
         }
 
         // Last resort: return the whole response

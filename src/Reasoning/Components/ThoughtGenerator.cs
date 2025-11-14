@@ -169,7 +169,7 @@ Generate exactly {numThoughts} diverse thoughts:";
         var thoughts = new List<string>();
 
         // Split by numbered list patterns
-        var lines = response.Split('\n', StringSplitOptions.RemoveEmptyEntries);
+        var lines = response.Split(new[] { '\n' }, StringSplitOptions.RemoveEmptyEntries);
 
         foreach (var line in lines)
         {

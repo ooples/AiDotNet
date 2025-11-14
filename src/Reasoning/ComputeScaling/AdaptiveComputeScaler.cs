@@ -160,7 +160,7 @@ public class AdaptiveComputeScaler<T>
         string lower = problem.ToLowerInvariant();
 
         // Factor 1: Length (longer = potentially harder)
-        int wordCount = problem.Split(' ', StringSplitOptions.RemoveEmptyEntries).Length;
+        int wordCount = problem.Split(new[] { ' ' }, StringSplitOptions.RemoveEmptyEntries).Length;
         difficulty += Math.Min(0.3, wordCount / 200.0); // Up to 0.3 based on length
 
         // Factor 2: Complexity keywords
@@ -176,8 +176,8 @@ public class AdaptiveComputeScaler<T>
         // Factor 3: Multi-step indicators
         int questionMarks = problem.Count(c => c == '?');
         int steps = Math.Max(
-            problem.Split("step", StringSplitOptions.RemoveEmptyEntries).Length - 1,
-            problem.Split("first", StringSplitOptions.RemoveEmptyEntries).Length - 1
+            problem.Split(new[] { "step" }, StringSplitOptions.RemoveEmptyEntries).Length - 1,
+            problem.Split(new[] { "first" }, StringSplitOptions.RemoveEmptyEntries).Length - 1
         );
 
         difficulty += Math.Min(0.2, (questionMarks + steps) * 0.05); // Up to 0.2

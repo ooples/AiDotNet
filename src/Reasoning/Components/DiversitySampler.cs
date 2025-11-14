@@ -212,8 +212,11 @@ public class DiversitySampler<T> : IDiversitySampler<T>
         var domains1 = new HashSet<string>();
         var domains2 = new HashSet<string>();
 
-        foreach (var (domain, keywords) in domainKeywords)
+        foreach (var kvp in domainKeywords)
         {
+            string domain = kvp.Key;
+            HashSet<string> keywords = kvp.Value;
+
             if (keywords.Any(k => text1.Contains(k)))
             {
                 domains1.Add(domain);

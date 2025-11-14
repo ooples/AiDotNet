@@ -121,8 +121,10 @@ public class BenchmarkResult<T>
         if (AccuracyByCategory.Count > 0)
         {
             sb.AppendLine("\nAccuracy by Category:");
-            foreach (var (category, accuracy) in AccuracyByCategory.OrderByDescending(kvp => Convert.ToDouble(kvp.Value)))
+            foreach (var kvp in AccuracyByCategory.OrderByDescending(kvp => Convert.ToDouble(kvp.Value)))
             {
+                string category = kvp.Key;
+                T accuracy = kvp.Value;
                 sb.AppendLine($"  {category}: {Convert.ToDouble(accuracy):P1}");
             }
         }

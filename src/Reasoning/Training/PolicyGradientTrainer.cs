@@ -372,9 +372,9 @@ public class PolicyGradientTrainer<T>
 
         // Advantage = Return - Baseline
         var advantages = new List<T>();
-        for (int i = 0; i < returns.Dimension; i++)
+        for (int i = 0; i < returns.Length; i++)
         {
-            T advantage = _numOps.Subtract(returns[i], _baseline[i % _baseline.Dimension]);
+            T advantage = _numOps.Subtract(returns[i], _baseline[i % _baseline.Length]);
             advantages.Add(advantage);
         }
 
@@ -393,7 +393,7 @@ public class PolicyGradientTrainer<T>
         double alpha = 0.1;  // Smoothing factor
 
         var updated = new List<T>();
-        for (int i = 0; i < Math.Min(returns.Dimension, _baseline.Dimension); i++)
+        for (int i = 0; i < Math.Min(returns.Length, _baseline.Length); i++)
         {
             double oldVal = Convert.ToDouble(_baseline[i]);
             double newVal = Convert.ToDouble(returns[i]);
@@ -413,7 +413,7 @@ public class PolicyGradientTrainer<T>
         double totalLoss = 0.0;
         for (int i = 0; i < chains.Count; i++)
         {
-            double advantage = Convert.ToDouble(advantages[i % advantages.Dimension]);
+            double advantage = Convert.ToDouble(advantages[i % advantages.Length]);
             double chainScore = Convert.ToDouble(chains[i].OverallScore);
 
             // Negative log likelihood weighted by advantage
@@ -431,7 +431,7 @@ public class PolicyGradientTrainer<T>
         double totalEntropy = 0.0;
         foreach (var chain in chains)
         {
-            if (chain.StepScores.Dimension > 0)
+            if (chain.StepScores.Length > 0)
             {
                 foreach (var score in chain.StepScores)
                 {

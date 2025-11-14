@@ -369,19 +369,19 @@ public class ReinforcementLearner<T>
             {
                 var result = await _reasoningStrategy.ReasonAsync(problem, cancellationToken: cancellationToken);
 
-                if (result.Chain != null)
+                if (result.ReasoningChain != null)
                 {
-                    chains.Add(result.Chain);
+                    chains.Add(result.ReasoningChain);
                     answers.Add(answer);
 
                     // Collect training sample
-                    var reward = await _rewardModel.CalculateChainRewardAsync(result.Chain, answer, cancellationToken);
-                    var outcomeReward = await _rewardModel.CalculateChainRewardAsync(result.Chain, answer, cancellationToken);
+                    var reward = await _rewardModel.CalculateChainRewardAsync(result.ReasoningChain, answer, cancellationToken);
+                    var outcomeReward = await _rewardModel.CalculateChainRewardAsync(result.ReasoningChain, answer, cancellationToken);
 
                     _dataCollector.AddSample(new TrainingSample<T>
                     {
                         Problem = problem,
-                        ReasoningChain = result.Chain,
+                        ReasoningChain = result.ReasoningChain,
                         CorrectAnswer = answer,
                         ChainReward = reward,
                         OutcomeReward = outcomeReward
@@ -434,7 +434,7 @@ public class ReinforcementLearner<T>
             async (problem) =>
             {
                 var result = await _reasoningStrategy.ReasonAsync(problem, cancellationToken: cancellationToken);
-                return result.Chain ?? new ReasoningChain<T>();
+                return result.ReasoningChain ?? new ReasoningChain<T>();
             },
             cancellationToken
         );
@@ -450,9 +450,9 @@ public class ReinforcementLearner<T>
         for (int i = 0; i < count; i++)
         {
             var result = await _reasoningStrategy.ReasonAsync(problem, cancellationToken: cancellationToken);
-            if (result.Chain != null)
+            if (result.ReasoningChain != null)
             {
-                chains.Add(result.Chain);
+                chains.Add(result.ReasoningChain);
             }
         }
 

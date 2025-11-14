@@ -274,7 +274,7 @@ public class MATHBenchmark<T> : IBenchmark<T>
         var matches = Regex.Matches(text, @"-?[\d,]+\.?\d*|[a-z]\^?\d*");
         if (matches.Count > 0)
         {
-            return matches[^1].Value.Trim();
+            return matches[matches.Count - 1].Value.Trim();  // net462: can't use ^1
         }
 
         return null;

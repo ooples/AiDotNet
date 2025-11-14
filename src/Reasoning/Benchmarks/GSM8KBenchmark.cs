@@ -315,7 +315,7 @@ public class GSM8KBenchmark<T> : IBenchmark<T>
             return null;
 
         // Take the last number (usually the final answer)
-        string number = matches[^1].Value.Replace(",", "");
+        string number = matches[matches.Count - 1].Value.Replace(",", "");  // net462: can't use ^1
 
         return number;
     }
