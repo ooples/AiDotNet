@@ -148,19 +148,19 @@ public class TabularActorCriticAgent<T> : ReinforcementLearningAgentBase<T>
         if (idx == 0)
             vector[0] = NumOps.Zero;
 
-        return new Matrix<T>(new[] { vector });
+        return vector;
     }
     public override void SetParameters(Vector<T> parameters)
     {
         int idx = 0;
         foreach (var s in _valueTable.Keys.ToList())
-            if (idx < parameters.Columns)
-                _valueTable[s] = parameters[0, idx++];
+            if (idx < parameters.Length)
+                _valueTable[s] = parameters[idx++];
 
         foreach (var s in _policy.ToList())
             for (int a = 0; a < _options.ActionSize; a++)
-                if (idx < parameters.Columns)
-                    _policy[s.Key][a] = parameters[0, idx++];
+                if (idx < parameters.Length)
+                    _policy[s.Key][a] = parameters[idx++];
     }
     public override IFullModel<T, Vector<T>, Vector<T>> Clone() => new TabularActorCriticAgent<T>(_options);
     public override (Vector<T> Gradients, T Loss) ComputeGradients(Vector<T> input, Vector<T> target, ILossFunction<T>? lossFunction = null)

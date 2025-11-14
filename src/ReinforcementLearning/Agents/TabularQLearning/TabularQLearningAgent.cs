@@ -196,18 +196,17 @@ public class TabularQLearningAgent<T> : ReinforcementLearningAgentBase<T>
 
     public override Vector<T> GetParameters()
     {
-        // Flatten Q-table into matrix
+        // Flatten Q-table into vector
         int stateCount = _qTable.Count;
-        var parameters = new Matrix<T>(stateCount, _options.ActionSize);
+        var parameters = new Vector<T>(stateCount * _options.ActionSize);
 
-        int row = 0;
+        int idx = 0;
         foreach (var stateQValues in _qTable.Values)
         {
             for (int action = 0; action < _options.ActionSize; action++)
             {
-                parameters[row, action] = stateQValues[action];
+                parameters[idx++] = stateQValues[action];
             }
-            row++;
         }
 
         return parameters;
@@ -215,20 +214,21 @@ public class TabularQLearningAgent<T> : ReinforcementLearningAgentBase<T>
 
     public override void SetParameters(Vector<T> parameters)
     {
-        // Reconstruct Q-table from matrix
+        // Reconstruct Q-table from vector
         _qTable.Clear();
 
-        int row = 0;
         var stateKeys = _qTable.Keys.ToList();
-        for (int i = 0; i < Math.Min(parameters.Rows, stateKeys.Count); i++)
+        int maxStates = parameters.Length / _options.ActionSize;
+
+        for (int i = 0; i < Math.Min(maxStates, stateKeys.Count); i++)
         {
             var qValues = new Dictionary<int, T>();
             for (int action = 0; action < _options.ActionSize; action++)
             {
-                qValues[action] = parameters[row, action];
+                int idx = i * _options.ActionSize + action;
+                qValues[action] = parameters[idx];
             }
             _qTable[stateKeys[i]] = qValues;
-            row++;
         }
     }
 

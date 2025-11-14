@@ -445,7 +445,7 @@ public class MuZeroAgent<T> : DeepReinforcementLearningAgentBase<T>
             paramVector[i] = allParams[i];
         }
 
-        return new Matrix<T>(new[] { paramVector });
+        return paramVector;
     }
 
     public override void SetParameters(Vector<T> parameters)
@@ -458,7 +458,7 @@ public class MuZeroAgent<T> : DeepReinforcementLearningAgentBase<T>
             var netParams = new Vector<T>(paramCount);
             for (int i = 0; i < paramCount; i++)
             {
-                netParams[i] = parameters[0, offset + i];
+                netParams[i] = parameters[offset + i];
             }
             network.UpdateParameters(netParams);
             offset += paramCount;
@@ -477,19 +477,24 @@ public class MuZeroAgent<T> : DeepReinforcementLearningAgentBase<T>
     {
         var prediction = Predict(input);
         var usedLossFunction = lossFunction ?? LossFunction;
-        var loss = usedLossFunction.CalculateLoss(new Matrix<T>(new[] { prediction }), new Matrix<T>(new[] { target }));
+        var loss = usedLossFunction.CalculateLoss(prediction, target);
 
-        var gradient = usedLossFunction.CalculateDerivative(new Matrix<T>(new[] { prediction }), new Matrix<T>(new[] { target }));
+        var gradient = usedLossFunction.ComputeGradient(prediction, target);
         return (gradient, loss);
     }
 
     public override void ApplyGradients(Vector<T> gradients, T learningRate)
     {
-        if (Networks.Count > 0)
+        var currentParams = GetParameters();
+        var newParams = new Vector<T>(currentParams.Length);
+
+        for (int i = 0; i < currentParams.Length; i++)
         {
-            Networks[0].Backward(new Vector<T>(gradients.GetRow(0)));
-            Networks[0].UpdateWeights(learningRate);
+            var update = NumOps.Multiply(learningRate, gradients[i]);
+            newParams[i] = NumOps.Subtract(currentParams[i], update);
         }
+
+        SetParameters(newParams);
     }
 
     public override void SaveModel(string filepath)

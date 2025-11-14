@@ -404,22 +404,22 @@ public class RainbowDQNAgent<T> : DeepReinforcementLearningAgentBase<T>
             combinedParams[onlineParams.Length + i] = targetParams[i];
         }
 
-        return new Matrix<T>(new[] { combinedParams });
+        return combinedParams;
     }
 
     public override void SetParameters(Vector<T> parameters)
     {
         int onlineParamCount = _onlineNetwork.ParameterCount;
         var onlineParams = new Vector<T>(onlineParamCount);
-        var targetParams = new Vector<T>(parameters.Columns - onlineParamCount);
+        var targetParams = new Vector<T>(parameters.Length - onlineParamCount);
 
         for (int i = 0; i < onlineParamCount; i++)
         {
-            onlineParams[i] = parameters[0, i];
+            onlineParams[i] = parameters[i];
         }
         for (int i = 0; i < targetParams.Length; i++)
         {
-            targetParams[i] = parameters[0, onlineParamCount + i];
+            targetParams[i] = parameters[onlineParamCount + i];
         }
 
         _onlineNetwork.UpdateParameters(onlineParams);
@@ -442,13 +442,14 @@ public class RainbowDQNAgent<T> : DeepReinforcementLearningAgentBase<T>
         var usedLossFunction = lossFunction ?? LossFunction;
         var loss = usedLossFunction.CalculateLoss(new Matrix<T>(new[] { prediction }), new Matrix<T>(new[] { target }));
 
-        var gradient = usedLossFunction.CalculateDerivative(new Matrix<T>(new[] { prediction }), new Matrix<T>(new[] { target }));
+        var gradientMatrix = usedLossFunction.CalculateDerivative(new Matrix<T>(new[] { prediction }), new Matrix<T>(new[] { target }));
+        var gradient = new Vector<T>(gradientMatrix.GetRow(0));
         return (gradient, loss);
     }
 
     public override void ApplyGradients(Vector<T> gradients, T learningRate)
     {
-        _onlineNetwork.Backward(new Vector<T>(gradients.GetRow(0)));
+        _onlineNetwork.Backward(gradients);
         _onlineNetwork.UpdateWeights(learningRate);
     }
 

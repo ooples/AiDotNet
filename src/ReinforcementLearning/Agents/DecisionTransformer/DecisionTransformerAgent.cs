@@ -314,18 +314,12 @@ public class DecisionTransformerAgent<T> : DeepReinforcementLearningAgentBase<T>
 
     public override Vector<T> GetParameters()
     {
-        var networkParams = _transformerNetwork.GetParameters();
-        return new Matrix<T>(new[] { networkParams });
+        return _transformerNetwork.GetParameters();
     }
 
     public override void SetParameters(Vector<T> parameters)
     {
-        var networkParams = new Vector<T>(parameters.Columns);
-        for (int i = 0; i < parameters.Columns; i++)
-        {
-            networkParams[i] = parameters[0, i];
-        }
-        _transformerNetwork.UpdateParameters(networkParams);
+        _transformerNetwork.UpdateParameters(parameters);
     }
 
     public override IFullModel<T, Vector<T>, Vector<T>> Clone()
@@ -340,15 +334,15 @@ public class DecisionTransformerAgent<T> : DeepReinforcementLearningAgentBase<T>
     {
         var prediction = Predict(input);
         var usedLossFunction = lossFunction ?? LossFunction;
-        var loss = usedLossFunction.CalculateLoss(new Matrix<T>(new[] { prediction }), new Matrix<T>(new[] { target }));
+        var loss = usedLossFunction.CalculateLoss(prediction, target);
 
-        var gradient = usedLossFunction.CalculateDerivative(new Matrix<T>(new[] { prediction }), new Matrix<T>(new[] { target }));
+        var gradient = usedLossFunction.ComputeGradient(prediction, target);
         return (gradient, loss);
     }
 
     public override void ApplyGradients(Vector<T> gradients, T learningRate)
     {
-        _transformerNetwork.Backward(new Vector<T>(gradients.GetRow(0)));
+        _transformerNetwork.Backward(gradients);
         _transformerNetwork.UpdateWeights(learningRate);
     }
 

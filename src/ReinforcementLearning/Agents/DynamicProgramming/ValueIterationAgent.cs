@@ -235,6 +235,7 @@ public class ValueIterationAgent<T> : ReinforcementLearningAgentBase<T>
 
     public override Vector<T> GetParameters()
     {
+        // Flatten value table into vector
         var paramsList = new List<T>();
         foreach (var value in _valueTable.Values)
         {
@@ -252,17 +253,18 @@ public class ValueIterationAgent<T> : ReinforcementLearningAgentBase<T>
             paramsVector[i] = paramsList[i];
         }
 
-        return new Matrix<T>(new[] { paramsVector });
+        return paramsVector;
     }
 
     public override void SetParameters(Vector<T> parameters)
     {
+        // Reconstruct value table from vector
         int index = 0;
         foreach (var stateKey in _valueTable.Keys.ToList())
         {
-            if (index < parameters.Columns)
+            if (index < parameters.Length)
             {
-                _valueTable[stateKey] = parameters[0, index];
+                _valueTable[stateKey] = parameters[index];
                 index++;
             }
         }

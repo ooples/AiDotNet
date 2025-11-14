@@ -198,30 +198,36 @@ public class ExpectedSARSAAgent<T> : ReinforcementLearningAgentBase<T>
 
     public override Vector<T> GetParameters()
     {
-        int stateCount = Math.Max(_qTable.Count, 1);
-        var parameters = new Matrix<T>(stateCount, _options.ActionSize);
-        int row = 0;
+        int stateCount = _qTable.Count;
+        var parameters = new Vector<T>(stateCount * _options.ActionSize);
+
+        int idx = 0;
         foreach (var stateQValues in _qTable.Values)
         {
             for (int action = 0; action < _options.ActionSize; action++)
             {
-                parameters[row, action] = stateQValues[action];
+                parameters[idx++] = stateQValues[action];
             }
-            row++;
         }
+
         return parameters;
     }
 
     public override void SetParameters(Vector<T> parameters)
     {
+        // Reconstruct Q-table from vector
         _qTable.Clear();
+
         var stateKeys = _qTable.Keys.ToList();
-        for (int i = 0; i < Math.Min(parameters.Rows, stateKeys.Count); i++)
+        int maxStates = parameters.Length / _options.ActionSize;
+
+        for (int i = 0; i < Math.Min(maxStates, stateKeys.Count); i++)
         {
             var qValues = new Dictionary<int, T>();
             for (int action = 0; action < _options.ActionSize; action++)
             {
-                qValues[action] = parameters[i, action];
+                int idx = i * _options.ActionSize + action;
+                qValues[action] = parameters[idx];
             }
             _qTable[stateKeys[i]] = qValues;
         }

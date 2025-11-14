@@ -259,7 +259,7 @@ public class OffPolicyMonteCarloAgent<T> : ReinforcementLearningAgentBase<T>
             paramsVector[i] = paramsList[i];
         }
 
-        return new Matrix<T>(new[] { paramsVector });
+        return paramsVector;
     }
 
     public override void SetParameters(Vector<T> parameters)
@@ -269,9 +269,9 @@ public class OffPolicyMonteCarloAgent<T> : ReinforcementLearningAgentBase<T>
         {
             for (int a = 0; a < _options.ActionSize; a++)
             {
-                if (index < parameters.Columns)
+                if (index < parameters.Length)
                 {
-                    _qTable[stateEntry.Key][a] = parameters[0, index];
+                    _qTable[stateEntry.Key][a] = parameters[index];
                     index++;
                 }
             }

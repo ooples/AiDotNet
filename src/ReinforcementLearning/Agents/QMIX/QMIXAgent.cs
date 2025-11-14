@@ -508,7 +508,7 @@ public class QMIXAgent<T> : DeepReinforcementLearningAgentBase<T>
             paramVector[i] = allParams[i];
         }
 
-        return new Matrix<T>(new[] { paramVector });
+        return paramVector;
     }
 
     public override void SetParameters(Vector<T> parameters)
@@ -521,7 +521,7 @@ public class QMIXAgent<T> : DeepReinforcementLearningAgentBase<T>
             var netParams = new Vector<T>(paramCount);
             for (int i = 0; i < paramCount; i++)
             {
-                netParams[i] = parameters[0, offset + i];
+                netParams[i] = parameters[offset + i];
             }
             network.UpdateParameters(netParams);
             offset += paramCount;
@@ -531,7 +531,7 @@ public class QMIXAgent<T> : DeepReinforcementLearningAgentBase<T>
         var mixingParams = new Vector<T>(mixingParamCount);
         for (int i = 0; i < mixingParamCount; i++)
         {
-            mixingParams[i] = parameters[0, offset + i];
+            mixingParams[i] = parameters[offset + i];
         }
         _mixingNetwork.UpdateParameters(mixingParams);
     }
@@ -550,13 +550,14 @@ public class QMIXAgent<T> : DeepReinforcementLearningAgentBase<T>
         var usedLossFunction = lossFunction ?? LossFunction;
         var loss = usedLossFunction.CalculateLoss(new Matrix<T>(new[] { prediction }), new Matrix<T>(new[] { target }));
 
-        var gradient = usedLossFunction.CalculateDerivative(new Matrix<T>(new[] { prediction }), new Matrix<T>(new[] { target }));
+        var gradientMatrix = usedLossFunction.CalculateDerivative(new Matrix<T>(new[] { prediction }), new Matrix<T>(new[] { target }));
+        var gradient = new Vector<T>(gradientMatrix.GetRow(0));
         return (gradient, loss);
     }
 
     public override void ApplyGradients(Vector<T> gradients, T learningRate)
     {
-        _agentNetworks[0].Backward(new Vector<T>(gradients.GetRow(0)));
+        _agentNetworks[0].Backward(gradients);
         _agentNetworks[0].UpdateWeights(learningRate);
     }
 

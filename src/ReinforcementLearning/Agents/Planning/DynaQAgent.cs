@@ -190,7 +190,7 @@ public class DynaQAgent<T> : ReinforcementLearningAgentBase<T>
         if (p.Count == 0) p.Add(NumOps.Zero);
         var v = new Vector<T>(p.Count);
         for (int i = 0; i < p.Count; i++) v[i] = p[i];
-        return new Matrix<T>(new[] { v });
+        return v;
     }
 
     public override void SetParameters(Vector<T> parameters)
@@ -198,8 +198,8 @@ public class DynaQAgent<T> : ReinforcementLearningAgentBase<T>
         int idx = 0;
         foreach (var s in _qTable.ToList())
             for (int a = 0; a < _options.ActionSize; a++)
-                if (idx < parameters.Columns)
-                    _qTable[s.Key][a] = parameters[0, idx++];
+                if (idx < parameters.Length)
+                    _qTable[s.Key][a] = parameters[idx++];
     }
 
     public override IFullModel<T, Vector<T>, Vector<T>> Clone() => new DynaQAgent<T>(_options);

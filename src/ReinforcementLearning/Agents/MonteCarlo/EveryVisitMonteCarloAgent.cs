@@ -149,21 +149,44 @@ public class EveryVisitMonteCarloAgent<T> : ReinforcementLearningAgentBase<T>
 
     public override Vector<T> GetParameters()
     {
-        int stateCount = Math.Max(_qTable.Count, 1);
-        var parameters = new Matrix<T>(stateCount, _options.ActionSize);
-        int row = 0;
-        foreach (var stateQValues in _qTable.Values)
+        var paramsList = new List<T>();
+        foreach (var stateEntry in _qTable)
         {
-            for (int action = 0; action < _options.ActionSize; action++)
+            foreach (var actionValue in stateEntry.Value)
             {
-                parameters[row, action] = stateQValues[action];
+                paramsList.Add(actionValue.Value);
             }
-            row++;
         }
-        return parameters;
+
+        if (paramsList.Count == 0)
+        {
+            paramsList.Add(NumOps.Zero);
+        }
+
+        var paramsVector = new Vector<T>(paramsList.Count);
+        for (int i = 0; i < paramsList.Count; i++)
+        {
+            paramsVector[i] = paramsList[i];
+        }
+
+        return paramsVector;
     }
 
-    public override void SetParameters(Vector<T> parameters) { _qTable.Clear(); }
+    public override void SetParameters(Vector<T> parameters)
+    {
+        int index = 0;
+        foreach (var stateEntry in _qTable.ToList())
+        {
+            for (int a = 0; a < _options.ActionSize; a++)
+            {
+                if (index < parameters.Length)
+                {
+                    _qTable[stateEntry.Key][a] = parameters[index];
+                    index++;
+                }
+            }
+        }
+    }
     public override IFullModel<T, Vector<T>, Vector<T>> Clone()
     {
         var clone = new EveryVisitMonteCarloAgent<T>(_options);

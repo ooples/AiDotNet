@@ -471,7 +471,7 @@ public class WorldModelsAgent<T> : DeepReinforcementLearningAgentBase<T>
             paramVector[i] = allParams[i];
         }
 
-        return new Matrix<T>(new[] { paramVector });
+        return paramVector;
     }
 
     public override void SetParameters(Vector<T> parameters)
@@ -484,7 +484,7 @@ public class WorldModelsAgent<T> : DeepReinforcementLearningAgentBase<T>
             var netParams = new Vector<T>(paramCount);
             for (int i = 0; i < paramCount; i++)
             {
-                netParams[i] = parameters[0, offset + i];
+                netParams[i] = parameters[offset + i];
             }
             network.UpdateParameters(netParams);
             offset += paramCount;
@@ -493,7 +493,7 @@ public class WorldModelsAgent<T> : DeepReinforcementLearningAgentBase<T>
 
     public override IFullModel<T, Vector<T>, Vector<T>> Clone()
     {
-        return new WorldModelsAgent<T>(_options, _optimizer);
+        return new WorldModelsAgent<T>(_options);
     }
 
     public override (Vector<T> Gradients, T Loss) ComputeGradients(
@@ -503,9 +503,9 @@ public class WorldModelsAgent<T> : DeepReinforcementLearningAgentBase<T>
     {
         var prediction = Predict(input);
         var usedLossFunction = lossFunction ?? LossFunction;
-        var loss = usedLossFunction.CalculateLoss(new Matrix<T>(new[] { prediction }), new Matrix<T>(new[] { target }));
+        var loss = usedLossFunction.CalculateLoss(prediction, target);
 
-        var gradient = usedLossFunction.CalculateDerivative(new Matrix<T>(new[] { prediction }), new Matrix<T>(new[] { target }));
+        var gradient = usedLossFunction.ComputeGradient(prediction, target);
         return (gradient, loss);
     }
 
@@ -513,7 +513,7 @@ public class WorldModelsAgent<T> : DeepReinforcementLearningAgentBase<T>
     {
         if (Networks.Count > 0)
         {
-            Networks[0].Backward(new Vector<T>(gradients.GetRow(0)));
+            Networks[0].Backward(gradients);
             Networks[0].UpdateWeights(learningRate);
         }
     }

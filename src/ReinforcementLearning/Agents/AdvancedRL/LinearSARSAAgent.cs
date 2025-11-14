@@ -174,7 +174,7 @@ public class LinearSARSAAgent<T> : ReinforcementLearningAgentBase<T>
             for (int f = 0; f < _options.FeatureSize; f++)
                 vector[idx++] = _weights[a, f];
 
-        return new Matrix<T>(new[] { vector });
+        return vector;
     }
 
     public override void SetParameters(Vector<T> parameters)
@@ -182,8 +182,8 @@ public class LinearSARSAAgent<T> : ReinforcementLearningAgentBase<T>
         int idx = 0;
         for (int a = 0; a < _options.ActionSize; a++)
             for (int f = 0; f < _options.FeatureSize; f++)
-                if (idx < parameters.Columns)
-                    _weights[a, f] = parameters[0, idx++];
+                if (idx < parameters.Length)
+                    _weights[a, f] = parameters[idx++];
     }
 
     public override IFullModel<T, Vector<T>, Vector<T>> Clone() => new LinearSARSAAgent<T>(_options);

@@ -230,26 +230,29 @@ public class DoubleQLearningAgent<T> : ReinforcementLearningAgentBase<T>
 
     public override Vector<T> GetParameters()
     {
+        // Flatten both Q-tables into vector using linear indexing
+        // Vector size: stateCount * 2 * actionSize
         int stateCount = Math.Max(_qTable1.Count, 1);
-        var parameters = new Matrix<T>(stateCount * 2, _options.ActionSize);
+        int vectorSize = stateCount * 2 * _options.ActionSize;
+        var parameters = new Vector<T>(vectorSize);
 
-        int row = 0;
+        // Fill _qTable1 values (indices 0 to stateCount*actionSize-1)
+        int idx = 0;
         foreach (var stateQValues in _qTable1.Values)
         {
             for (int action = 0; action < _options.ActionSize; action++)
             {
-                parameters[row, action] = stateQValues[action];
+                parameters[idx++] = stateQValues[action];
             }
-            row++;
         }
 
+        // Fill _qTable2 values (indices stateCount*actionSize to stateCount*2*actionSize-1)
         foreach (var stateQValues in _qTable2.Values)
         {
             for (int action = 0; action < _options.ActionSize; action++)
             {
-                parameters[row, action] = stateQValues[action];
+                parameters[idx++] = stateQValues[action];
             }
-            row++;
         }
 
         return parameters;
@@ -257,8 +260,40 @@ public class DoubleQLearningAgent<T> : ReinforcementLearningAgentBase<T>
 
     public override void SetParameters(Vector<T> parameters)
     {
+        // Save state keys before clearing
+        var stateKeys = _qTable1.Keys.ToList();
+
+        // Clear both tables
         _qTable1.Clear();
         _qTable2.Clear();
+
+        // Reconstruct both Q-tables from flattened vector
+        int maxStates = parameters.Length / (2 * _options.ActionSize);
+        int stateCount = Math.Min(maxStates, stateKeys.Count);
+
+        // Reconstruct _qTable1 (indices 0 to stateCount*actionSize-1)
+        for (int i = 0; i < stateCount; i++)
+        {
+            var qValues = new Dictionary<int, T>();
+            for (int action = 0; action < _options.ActionSize; action++)
+            {
+                int idx = i * _options.ActionSize + action;
+                qValues[action] = parameters[idx];
+            }
+            _qTable1[stateKeys[i]] = qValues;
+        }
+
+        // Reconstruct _qTable2 (indices stateCount*actionSize to stateCount*2*actionSize-1)
+        for (int i = 0; i < stateCount; i++)
+        {
+            var qValues = new Dictionary<int, T>();
+            for (int action = 0; action < _options.ActionSize; action++)
+            {
+                int idx = stateCount * _options.ActionSize + i * _options.ActionSize + action;
+                qValues[action] = parameters[idx];
+            }
+            _qTable2[stateKeys[i]] = qValues;
+        }
     }
 
     public override IFullModel<T, Vector<T>, Vector<T>> Clone()

@@ -644,22 +644,22 @@ public class TRPOAgent<T> : DeepReinforcementLearningAgentBase<T>
             combinedParams[policyParams.Length + i] = valueParams[i];
         }
 
-        return new Matrix<T>(new[] { combinedParams });
+        return combinedParams;
     }
 
     public override void SetParameters(Vector<T> parameters)
     {
         int policyParamCount = _policyNetwork.ParameterCount;
         var policyParams = new Vector<T>(policyParamCount);
-        var valueParams = new Vector<T>(parameters.Columns - policyParamCount);
+        var valueParams = new Vector<T>(parameters.Length - policyParamCount);
 
         for (int i = 0; i < policyParamCount; i++)
         {
-            policyParams[i] = parameters[0, i];
+            policyParams[i] = parameters[i];
         }
         for (int i = 0; i < valueParams.Length; i++)
         {
-            valueParams[i] = parameters[0, policyParamCount + i];
+            valueParams[i] = parameters[policyParamCount + i];
         }
 
         _policyNetwork.UpdateParameters(policyParams);
@@ -680,13 +680,14 @@ public class TRPOAgent<T> : DeepReinforcementLearningAgentBase<T>
         var usedLossFunction = lossFunction ?? LossFunction;
         var loss = usedLossFunction.CalculateLoss(new Matrix<T>(new[] { prediction }), new Matrix<T>(new[] { target }));
 
-        var gradient = usedLossFunction.CalculateDerivative(new Matrix<T>(new[] { prediction }), new Matrix<T>(new[] { target }));
+        var gradientMatrix = usedLossFunction.CalculateDerivative(new Matrix<T>(new[] { prediction }), new Matrix<T>(new[] { target }));
+        var gradient = new Vector<T>(gradientMatrix.GetRow(0));
         return (gradient, loss);
     }
 
     public override void ApplyGradients(Vector<T> gradients, T learningRate)
     {
-        _policyNetwork.Backward(new Vector<T>(gradients.GetRow(0)));
+        _policyNetwork.Backward(gradients);
         _policyNetwork.UpdateWeights(learningRate);
     }
 

@@ -141,9 +141,9 @@ public class ThompsonSamplingAgent<T> : ReinforcementLearningAgentBase<T>
             v[idx++] = NumOps.FromDouble(_successCounts[i]);
             v[idx++] = NumOps.FromDouble(_failureCounts[i]);
         }
-        return new Matrix<T>(new[] { v });
+        return v;
     }
-    public override void SetParameters(Vector<T> parameters) { int idx = 0; for (int i = 0; i < _options.NumArms && idx + 1 < parameters.Columns; i++) { _successCounts[i] = (int)NumOps.ToDouble(parameters[0, idx++]); _failureCounts[i] = (int)NumOps.ToDouble(parameters[0, idx++]); } }
+    public override void SetParameters(Vector<T> parameters) { int idx = 0; for (int i = 0; i < _options.NumArms && idx + 1 < parameters.Length; i++) { _successCounts[i] = (int)NumOps.ToDouble(parameters[idx++]); _failureCounts[i] = (int)NumOps.ToDouble(parameters[idx++]); } }
     public override IFullModel<T, Vector<T>, Vector<T>> Clone() => new ThompsonSamplingAgent<T>(_options);
     public override (Vector<T> Gradients, T Loss) ComputeGradients(Vector<T> input, Vector<T> target, ILossFunction<T>? lossFunction = null) { var pred = Predict(input); var lf = lossFunction ?? LossFunction; var loss = lf.CalculateLoss(new Matrix<T>(new[] { pred }), new Matrix<T>(new[] { target })); var grad = lf.CalculateDerivative(new Matrix<T>(new[] { pred }), new Matrix<T>(new[] { target })); return (grad, loss); }
     public override void ApplyGradients(Vector<T> gradients, T learningRate) { }
