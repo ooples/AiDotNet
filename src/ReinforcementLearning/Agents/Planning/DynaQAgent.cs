@@ -208,8 +208,8 @@ public class DynaQAgent<T> : ReinforcementLearningAgentBase<T>
     {
         var pred = Predict(input);
         var lf = lossFunction ?? LossFunction;
-        var loss = lf.CalculateLoss(new Matrix<T>(new[] { pred }), new Matrix<T>(new[] { target }));
-        var grad = lf.CalculateDerivative(new Matrix<T>(new[] { pred }), new Matrix<T>(new[] { target }));
+        var loss = lf.CalculateLoss(pred, target);
+        var grad = lf.CalculateDerivative(pred, target);
         return grad;
     }
 
