@@ -1,3 +1,5 @@
+using AiDotNet.Autodiff;
+
 namespace AiDotNet.NeuralNetworks.Layers;
 
 /// <summary>
@@ -445,22 +447,279 @@ public class MemoryWriteLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     /// use in the parameter update step.
     /// </para>
     /// <para><b>For Beginners:</b> This method calculates how all parameters should change to reduce errors.
-    /// 
+    ///
     /// During the backward pass:
     /// - The layer receives gradients indicating how the output (updated memory) should change
     /// - It calculates how each weight, bias, and input value should change
     /// - These gradients are used later to update the parameters during training
-    /// 
+    ///
     /// The backward pass is complex because it needs to:
     /// - Calculate gradients for query, key, and value weights
     /// - Calculate gradients for the output weights and bias
     /// - Handle the chain rule through the softmax attention mechanism
     /// - Combine gradients from multiple paths
-    /// 
+    ///
     /// This process enables the layer to learn more effective memory writing strategies over time.
     /// </para>
     /// </remarks>
     public override Tensor<T> Backward(Tensor<T> outputGradient)
+    {
+        return UseAutodiff
+            ? BackwardViaAutodiff(outputGradient)
+            : BackwardManual(outputGradient);
+    }
+
+    /// <summary>
+    /// Backward pass implementation using automatic differentiation.
+    /// </summary>
+    /// <param name="outputGradient">The gradient of the loss with respect to the layer's output.</param>
+    /// <returns>The gradient of the loss with respect to the layer's input.</returns>
+    /// <remarks>
+    /// <para>
+    /// This method implements the backward pass using automatic differentiation through the
+    /// TensorOperations API. It recreates the forward computation graph including attention
+    /// mechanism, query-key-value transformations, and output projection, then manually
+    /// propagates gradients through the computation graph.
+    /// </para>
+    /// <para>
+    /// The autodiff implementation:
+    /// - Converts all cached inputs and parameters to ComputationNodes
+    /// - Replays the forward pass computation using autodiff operations
+    /// - Manually sets the output gradient and propagates it backward
+    /// - Extracts parameter gradients and input gradient from the computation graph
+    /// </para>
+    /// </remarks>
+    private Tensor<T> BackwardViaAutodiff(Tensor<T> outputGradient)
+    {
+        if (_lastInput == null || _lastMemory == null || _lastOutput == null)
+            throw new InvalidOperationException("Forward pass must be called before backward pass.");
+
+        // Convert Matrix and Vector to Tensor
+        var queryWeightsTensor = MatrixToTensor(_queryWeights);
+        var keyWeightsTensor = MatrixToTensor(_keyWeights);
+        var valueWeightsTensor = MatrixToTensor(_valueWeights);
+        var outputWeightsTensor = MatrixToTensor(_outputWeights);
+        var outputBiasTensor = VectorToTensor(_outputBias);
+
+        // Convert inputs and parameters to computation nodes
+        var inputNode = TensorOperations<T>.Variable(_lastInput, "input", requiresGradient: true);
+        var memoryNode = TensorOperations<T>.Variable(_lastMemory, "memory", requiresGradient: false);
+
+        var queryWeightsNode = TensorOperations<T>.Variable(queryWeightsTensor, "queryWeights", requiresGradient: true);
+        var keyWeightsNode = TensorOperations<T>.Variable(keyWeightsTensor, "keyWeights", requiresGradient: true);
+        var valueWeightsNode = TensorOperations<T>.Variable(valueWeightsTensor, "valueWeights", requiresGradient: true);
+        var outputWeightsNode = TensorOperations<T>.Variable(outputWeightsTensor, "outputWeights", requiresGradient: true);
+        var outputBiasNode = TensorOperations<T>.Variable(outputBiasTensor, "outputBias", requiresGradient: true);
+
+        // Replay forward pass using autodiff operations
+        // 1. Compute queries, keys, and values
+        var queries = TensorOperations<T>.MatrixMultiply(inputNode, queryWeightsNode);
+        var keys = TensorOperations<T>.MatrixMultiply(inputNode, keyWeightsNode);
+        var values = TensorOperations<T>.MatrixMultiply(inputNode, valueWeightsNode);
+
+        // 2. Compute attention scores: queries × memory^T
+        var memoryTransposed = TensorOperations<T>.Transpose(memoryNode);
+        var attentionScores = TensorOperations<T>.MatrixMultiply(queries, memoryTransposed);
+
+        // 3. Scale attention scores by sqrt(key_dim)
+        double scaleFactor = 1.0 / Math.Sqrt(keys.Value.Shape[1]);
+        var scaleTensor = new Tensor<T>(new int[] { 1 });
+        scaleTensor[0] = NumOps.FromDouble(scaleFactor);
+        var scaleConstant = TensorOperations<T>.Constant(scaleTensor, "scale");
+        var scaledAttention = TensorOperations<T>.ElementwiseMultiply(attentionScores, scaleConstant);
+
+        // 4. Apply softmax to get attention weights
+        var attentionWeights = TensorOperations<T>.Softmax(scaledAttention, axis: -1);
+
+        // 5. Compute write values: values × attentionWeights
+        var writeValues = TensorOperations<T>.ElementwiseMultiply(values, attentionWeights);
+
+        // 6. Apply output transformation: writeValues × outputWeights + outputBias
+        var outputBeforeActivation = TensorOperations<T>.MatrixMultiply(writeValues, outputWeightsNode);
+
+        // Broadcast bias across batch dimension
+        var batchSize = _lastInput.Shape[0];
+        var biasesBroadcast = BroadcastBiases(outputBiasTensor, batchSize);
+        var biasNode = TensorOperations<T>.Variable(biasesBroadcast, "biases_broadcast", requiresGradient: false);
+        var output = TensorOperations<T>.Add(outputBeforeActivation, biasNode);
+
+        // Manually propagate gradients
+        output.Gradient = outputGradient;
+
+        // Perform topological sort and backward pass
+        var topoOrder = GetTopologicalOrder(output);
+
+        // Execute backward pass in reverse topological order
+        for (int i = topoOrder.Count - 1; i >= 0; i--)
+        {
+            var node = topoOrder[i];
+            if (node.RequiresGradient && node.BackwardFunction != null && node.Gradient != null)
+            {
+                node.BackwardFunction(node.Gradient);
+            }
+        }
+
+        // Extract gradients for parameters
+        _queryWeightsGradient = TensorToMatrix(queryWeightsNode.Gradient!);
+        _keyWeightsGradient = TensorToMatrix(keyWeightsNode.Gradient!);
+        _valueWeightsGradient = TensorToMatrix(valueWeightsNode.Gradient!);
+        _outputWeightsGradient = TensorToMatrix(outputWeightsNode.Gradient!);
+        _outputBiasGradient = TensorToVector(outputBiasNode.Gradient!);
+
+        // Return input gradient
+        if (inputNode.Gradient == null)
+            throw new InvalidOperationException("Input gradient was not computed.");
+
+        return inputNode.Gradient;
+    }
+
+    /// <summary>
+    /// Converts a Matrix to a 2D Tensor.
+    /// </summary>
+    private Tensor<T> MatrixToTensor(Matrix<T> matrix)
+    {
+        var tensor = new Tensor<T>(new int[] { matrix.Rows, matrix.Columns });
+        for (int i = 0; i < matrix.Rows; i++)
+        {
+            for (int j = 0; j < matrix.Columns; j++)
+            {
+                tensor[i, j] = matrix[i, j];
+            }
+        }
+        return tensor;
+    }
+
+    /// <summary>
+    /// Converts a Vector to a 1D Tensor.
+    /// </summary>
+    private Tensor<T> VectorToTensor(Vector<T> vector)
+    {
+        var tensor = new Tensor<T>(new int[] { vector.Length });
+        for (int i = 0; i < vector.Length; i++)
+        {
+            tensor[i] = vector[i];
+        }
+        return tensor;
+    }
+
+    /// <summary>
+    /// Converts a 2D Tensor to a Matrix.
+    /// </summary>
+    private Matrix<T> TensorToMatrix(Tensor<T> tensor)
+    {
+        if (tensor.Rank != 2)
+            throw new ArgumentException("Tensor must be 2D to convert to Matrix");
+
+        var matrix = new Matrix<T>(tensor.Shape[0], tensor.Shape[1]);
+        for (int i = 0; i < tensor.Shape[0]; i++)
+        {
+            for (int j = 0; j < tensor.Shape[1]; j++)
+            {
+                matrix[i, j] = tensor[i, j];
+            }
+        }
+        return matrix;
+    }
+
+    /// <summary>
+    /// Converts a 1D Tensor to a Vector.
+    /// </summary>
+    private Vector<T> TensorToVector(Tensor<T> tensor)
+    {
+        int length = tensor.Length;
+        var vector = new Vector<T>(length);
+
+        for (int i = 0; i < length; i++)
+        {
+            vector[i] = tensor[i];
+        }
+
+        return vector;
+    }
+
+    /// <summary>
+    /// Broadcasts a bias vector across the batch dimension.
+    /// </summary>
+    private Tensor<T> BroadcastBiases(Tensor<T> biases, int batchSize)
+    {
+        int outputDim = biases.Length;
+        var broadcast = new Tensor<T>(new int[] { batchSize, outputDim });
+
+        for (int b = 0; b < batchSize; b++)
+        {
+            for (int o = 0; o < outputDim; o++)
+            {
+                broadcast[b, o] = biases[o];
+            }
+        }
+
+        return broadcast;
+    }
+
+    /// <summary>
+    /// Gets the topological order of nodes in the computation graph.
+    /// </summary>
+    private List<Autodiff.ComputationNode<T>> GetTopologicalOrder(Autodiff.ComputationNode<T> root)
+    {
+        var visited = new HashSet<Autodiff.ComputationNode<T>>();
+        var result = new List<Autodiff.ComputationNode<T>>();
+
+        var stack = new Stack<(Autodiff.ComputationNode<T> node, bool processed)>();
+        stack.Push((root, false));
+
+        while (stack.Count > 0)
+        {
+            var (node, processed) = stack.Pop();
+
+            if (visited.Contains(node))
+            {
+                continue;
+            }
+
+            if (processed)
+            {
+                visited.Add(node);
+                result.Add(node);
+            }
+            else
+            {
+                stack.Push((node, true));
+
+                if (node.Parents != null)
+                {
+                    foreach (var parent in node.Parents)
+                    {
+                        if (!visited.Contains(parent))
+                        {
+                            stack.Push((parent, false));
+                        }
+                    }
+                }
+            }
+        }
+
+        return result;
+    }
+
+    /// <summary>
+    /// Manual backward pass implementation for memory write layer with attention.
+    /// </summary>
+    /// <param name="outputGradient">The gradient of the loss with respect to the layer's output.</param>
+    /// <returns>The gradient of the loss with respect to the layer's input.</returns>
+    /// <remarks>
+    /// <para>
+    /// This method implements the backward pass using manual gradient calculations for
+    /// attention-based memory writing. It computes gradients through the attention mechanism,
+    /// including softmax, query/key/value transformations, and output projection.
+    /// </para>
+    /// <para>
+    /// Autodiff Note: The memory write operation involves complex attention mechanisms with
+    /// softmax over attention scores, query-key-value structure, and multiple weight matrices.
+    /// The manual implementation provides efficient gradient calculations for all components
+    /// of the attention-based memory update.
+    /// </para>
+    /// </remarks>
+    private Tensor<T> BackwardManual(Tensor<T> outputGradient)
     {
         if (_lastInput == null || _lastMemory == null || _lastOutput == null || _lastAttentionScores == null)
             throw new InvalidOperationException("Forward pass must be called before backward pass.");

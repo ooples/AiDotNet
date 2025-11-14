@@ -220,6 +220,18 @@ public class ExpertLayer<T> : LayerBase<T>
     /// </remarks>
     public override Tensor<T> Backward(Tensor<T> outputGradient)
     {
+        return UseAutodiff
+            ? BackwardViaAutodiff(outputGradient)
+            : BackwardManual(outputGradient);
+    }
+
+    /// <summary>
+    /// Manual backward pass implementation using optimized gradient calculations.
+    /// </summary>
+    /// <param name="outputGradient">The gradient of the loss with respect to the layer's output.</param>
+    /// <returns>The gradient of the loss with respect to the layer's input.</returns>
+    private Tensor<T> BackwardManual(Tensor<T> outputGradient)
+    {
         // Apply the derivative of the expert's activation function
         // Use the stored pre-activation output from the forward pass
         if (_lastPreActivationOutput == null)
@@ -237,6 +249,36 @@ public class ExpertLayer<T> : LayerBase<T>
 
         return gradient;
     }
+
+    /// <summary>
+    /// Backward pass implementation using automatic differentiation.
+    /// </summary>
+    /// <param name="outputGradient">The gradient of the loss with respect to the layer's output.</param>
+    /// <returns>The gradient of the loss with respect to the layer's input.</returns>
+    /// <remarks>
+    /// <para>
+    /// This method uses automatic differentiation by delegating to the autodiff implementations
+    /// of the constituent layers in this expert. Each sublayer will use its own autodiff if available.
+    /// </para>
+    /// </remarks>
+    private Tensor<T> BackwardViaAutodiff(Tensor<T> outputGradient)
+    {
+        // Apply the derivative of the expert's activation function
+        if (_lastPreActivationOutput == null)
+            throw new InvalidOperationException("Forward pass must be called before Backward pass.");
+
+        var gradient = ApplyActivationDerivative(_lastPreActivationOutput, outputGradient);
+
+        // Composite layer: backpropagate through layers in reverse order
+        // The sublayers will handle their own autodiff if they support it
+        for (int i = _layers.Count - 1; i >= 0; i--)
+        {
+            gradient = _layers[i].Backward(gradient);
+        }
+
+        return gradient;
+    }
+
 
     /// <summary>
     /// Updates all trainable parameters in all layers using the specified learning rate.

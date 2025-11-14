@@ -94,6 +94,8 @@ public class AttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     /// Stores the last computed attention entropy for diagnostics.
     /// </summary>
     private T _lastAttentionEntropy;
+    private bool _lastWasCrossAttention;
+    private bool _lastUsedMask;
 
     /// <summary>
     /// Gets or sets whether to use auxiliary loss (attention entropy regularization) during training.
@@ -268,6 +270,8 @@ public class AttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     public override Tensor<T> Forward(Tensor<T> input)
     {
         _lastInput = input;
+        _lastWasCrossAttention = false;
+        _lastUsedMask = false;
 
         var Q = input.Multiply(_Wq);
         var K = input.Multiply(_Wk);
@@ -397,6 +401,8 @@ public class AttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     /// <returns>The output tensor after applying cross-attention.</returns>
     private Tensor<T> ForwardCrossAttention(Tensor<T> queryInput, Tensor<T> keyValueInput, Tensor<T>? mask)
     {
+        _lastWasCrossAttention = true;
+        _lastUsedMask = mask != null;
         _lastInput = queryInput;  // Store the query input for backward pass
 
         var Q = queryInput.Multiply(_Wq);
@@ -432,15 +438,29 @@ public class AttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     /// the gradients of the loss with respect to the layer's parameters and input.
     /// </para>
     /// <para><b>For Beginners:</b> This is how the layer learns from its mistakes.
-    /// 
+    ///
     /// The method takes the gradient of the error with respect to the layer's output and works backwards to figure out:
     /// 1. How much each weight contributed to the error (stored in _dWq, _dWk, _dWv)
     /// 2. How the input itself contributed to the error (the returned value)
-    /// 
+    ///
     /// This information is then used to update the weights and improve the layer's performance.
     /// </para>
     /// </remarks>
     public override Tensor<T> Backward(Tensor<T> outputGradient)
+    {
+        // Autodiff doesn't support cross-attention or masked attention yet
+        if (UseAutodiff && !_lastWasCrossAttention && !_lastUsedMask)
+            return BackwardViaAutodiff(outputGradient);
+        else
+            return BackwardManual(outputGradient);
+    }
+
+    /// <summary>
+    /// Manual backward pass implementation using optimized gradient calculations.
+    /// </summary>
+    /// <param name="outputGradient">The gradient of the loss with respect to the layer's output.</param>
+    /// <returns>The gradient of the loss with respect to the layer's input.</returns>
+    private Tensor<T> BackwardManual(Tensor<T> outputGradient)
     {
         if (_lastInput == null || _lastAttentionWeights == null)
             throw new InvalidOperationException("Forward pass must be called before backward pass.");
@@ -468,6 +488,159 @@ public class AttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
                     .Add(dV.Multiply(_Wv.Transpose([1, 0])));
 
         return dinput;
+    }
+
+    /// <summary>
+    /// Backward pass implementation using automatic differentiation.
+    /// </summary>
+    /// <param name="outputGradient">The gradient of the loss with respect to the layer's output.</param>
+    /// <returns>The gradient of the loss with respect to the layer's input.</returns>
+    /// <remarks>
+    /// <para>
+    /// This method uses automatic differentiation to compute gradients. It's slower than the
+    /// manual implementation but can be useful for:
+    /// - Verifying gradient correctness
+    /// - Rapid prototyping with custom modifications
+    /// - Research and experimentation
+    /// </para>
+    /// </remarks>
+    private Tensor<T> BackwardViaAutodiff(Tensor<T> outputGradient)
+    {
+        if (_lastInput == null || _lastAttentionWeights == null)
+            throw new InvalidOperationException("Forward pass must be called before backward pass.");
+
+        // Create computation graph
+        var input = Autodiff.TensorOperations<T>.Variable(_lastInput, "input", requiresGradient: true);
+        var Wq = Autodiff.TensorOperations<T>.Variable(_Wq, "Wq", requiresGradient: true);
+        var Wk = Autodiff.TensorOperations<T>.Variable(_Wk, "Wk", requiresGradient: true);
+        var Wv = Autodiff.TensorOperations<T>.Variable(_Wv, "Wv", requiresGradient: true);
+
+        // Forward computation using autodiff ops
+        // Q = input @ Wq, K = input @ Wk, V = input @ Wv
+        var Q = Autodiff.TensorOperations<T>.MatrixMultiply(input, Wq);
+        var K = Autodiff.TensorOperations<T>.MatrixMultiply(input, Wk);
+        var V = Autodiff.TensorOperations<T>.MatrixMultiply(input, Wv);
+
+        // Attention scores = Q @ K^T
+        var K_T = Autodiff.TensorOperations<T>.Transpose(K);
+        var attentionScores = Autodiff.TensorOperations<T>.MatrixMultiply(Q, K_T);
+
+        // Apply scaling
+        var scaleFactor = NumOps.Sqrt(NumOps.FromDouble(_Wk.Shape[_Wk.Shape.Length - 1]));
+        var scale = NumOps.Divide(NumOps.One, scaleFactor);
+        var scaleTensor = CreateScalarTensor(scale, attentionScores.Value.Shape);
+        var scaleNode = Autodiff.TensorOperations<T>.Variable(scaleTensor, "scale", requiresGradient: false);
+        var scaledScores = Autodiff.TensorOperations<T>.ElementwiseMultiply(attentionScores, scaleNode);
+
+        // Apply activation (softmax approximation using available ops)
+        var attentionWeights = ApplyActivationAutodiff(scaledScores);
+
+        // Output = attentionWeights @ V
+        var output = Autodiff.TensorOperations<T>.MatrixMultiply(attentionWeights, V);
+
+        // Set gradient and perform backward pass
+        output.Gradient = outputGradient;
+
+        var topoOrder = GetTopologicalOrder(output);
+        for (int i = topoOrder.Count - 1; i >= 0; i--)
+        {
+            var node = topoOrder[i];
+            if (node.RequiresGradient && node.BackwardFunction != null && node.Gradient != null)
+            {
+                node.BackwardFunction(node.Gradient);
+            }
+        }
+
+        // Extract gradients
+        _dWq = Wq.Gradient!;
+        _dWk = Wk.Gradient!;
+        _dWv = Wv.Gradient!;
+
+        return input.Gradient!;
+    }
+
+    /// <summary>
+    /// Gets the topological order of nodes in the computation graph.
+    /// </summary>
+    private List<Autodiff.ComputationNode<T>> GetTopologicalOrder(Autodiff.ComputationNode<T> root)
+    {
+        var visited = new HashSet<Autodiff.ComputationNode<T>>();
+        var result = new List<Autodiff.ComputationNode<T>>();
+
+        var stack = new Stack<(Autodiff.ComputationNode<T> node, bool processed)>();
+        stack.Push((root, false));
+
+        while (stack.Count > 0)
+        {
+            var (node, processed) = stack.Pop();
+
+            if (visited.Contains(node))
+            {
+                continue;
+            }
+
+            if (processed)
+            {
+                visited.Add(node);
+                result.Add(node);
+            }
+            else
+            {
+                stack.Push((node, true));
+
+                foreach (var parent in node.Parents)
+                {
+                    if (!visited.Contains(parent))
+                    {
+                        stack.Push((parent, false));
+                    }
+                }
+            }
+        }
+
+        return result;
+    }
+
+    /// <summary>
+    /// Applies activation function using autodiff operations.
+    /// </summary>
+    private Autodiff.ComputationNode<T> ApplyActivationAutodiff(Autodiff.ComputationNode<T> input)
+    {
+        if (ScalarActivation is ReLUActivation<T>)
+        {
+            return Autodiff.TensorOperations<T>.ReLU(input);
+        }
+        else if (ScalarActivation is SigmoidActivation<T>)
+        {
+            return Autodiff.TensorOperations<T>.Sigmoid(input);
+        }
+        else if (ScalarActivation is TanhActivation<T>)
+        {
+            return Autodiff.TensorOperations<T>.Tanh(input);
+        }
+        else if (ScalarActivation is SoftmaxActivation<T>)
+        {
+            // Use Softmax operation for attention weights normalization
+            return Autodiff.TensorOperations<T>.Softmax(input, axis: -1);
+        }
+        else
+        {
+            // For unsupported activations, fallback to manual implementation
+            throw new NotSupportedException($"Activation {ScalarActivation?.GetType().Name} not supported in autodiff mode");
+        }
+    }
+
+    /// <summary>
+    /// Creates a tensor filled with a scalar value.
+    /// </summary>
+    private Tensor<T> CreateScalarTensor(T value, int[] shape)
+    {
+        var tensor = new Tensor<T>(shape);
+        for (int i = 0; i < tensor.Length; i++)
+        {
+            tensor[i] = value;
+        }
+        return tensor;
     }
 
     /// <summary>
@@ -737,5 +910,7 @@ public class AttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     {
         _lastInput = null;
         _lastAttentionWeights = null;
+        _lastWasCrossAttention = false;
+        _lastUsedMask = false;
     }
 }
