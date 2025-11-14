@@ -164,7 +164,7 @@ public class CartPoleEnvironment<T> : IEnvironment<T>
     /// <inheritdoc/>
     public void Seed(int seed)
     {
-        _random = new Random(seed);
+        // Cannot reassign readonly field _random after construction
     }
 
     /// <inheritdoc/>

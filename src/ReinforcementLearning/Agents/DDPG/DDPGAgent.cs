@@ -180,7 +180,7 @@ public class DDPGAgent<T> : DeepReinforcementLearningAgentBase<T>
     /// <inheritdoc/>
     public override void StoreExperience(Vector<T> state, Vector<T> action, T reward, Vector<T> nextState, bool done)
     {
-        _replayBuffer.Add(new Experience<T>(new ReplayBuffers.Experience<T>(state, action, reward, nextState, done)));
+        _replayBuffer.Add(new ReplayBuffers.Experience<T>(state, action, reward, nextState, done));
     }
 
     /// <inheritdoc/>
@@ -251,6 +251,7 @@ public class DDPGAgent<T> : DeepReinforcementLearningAgentBase<T>
             // Backprop
             var gradient = _options.CriticLossFunction.CalculateDerivative(prediction, target);
             _criticNetwork.Backpropagate(gradient);
+            var gradientTensor = Tensor<T>.FromVector(gradient);
         }
 
         // Update critic weights
@@ -284,7 +285,8 @@ public class DDPGAgent<T> : DeepReinforcementLearningAgentBase<T>
             // Simplified: Use policy gradient with Q-value as advantage
             // This approximates the true DPG but works within current architecture
             var outputGradient = ComputeDDPGPolicyGradient(action, q);
-            _actorNetwork.Backpropagate(outputGradient);
+            var outputGradientTensor = Tensor<T>.FromVector(outputGradient);
+            _actorNetwork.Backpropagate(outputGradientTensor);
         }
 
         // Update actor weights

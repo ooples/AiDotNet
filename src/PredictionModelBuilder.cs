@@ -687,7 +687,7 @@ public class PredictionModelBuilder<T, TInput, TOutput> : IPredictionModelBuilde
 
         // Create optimization result for RL training
         var optimizationResult = new OptimizationResult<T, TInput, TOutput>(
-            bestModel: _model,
+            model: _model,
             fitness: episodeRewards,
             parameters: null,
             convergenceData: losses
