@@ -327,6 +327,9 @@ public class OutcomeRewardModel<T> : IRewardModel<T>
         if (_chatModel == null)
             return 0.0;
 
+        // Check cancellation before making LLM call
+        cancellationToken.ThrowIfCancellationRequested();
+
         string prompt = $@"Compare these two answers and rate their semantic similarity on a scale of 0.0 to 1.0.
 1.0 means they express the same answer/meaning.
 0.0 means they are completely different or contradictory.
@@ -339,6 +342,9 @@ Respond with ONLY a number between 0.0 and 1.0, nothing else.";
         try
         {
             string response = await _chatModel.GenerateResponseAsync(prompt);
+
+            // Check cancellation after LLM call
+            cancellationToken.ThrowIfCancellationRequested();
 
             // Extract number from response
             var match = Regex.Match(response, @"([0-1]\.?\d*)");
