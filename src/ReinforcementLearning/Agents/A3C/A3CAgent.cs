@@ -77,7 +77,7 @@ public class A3CAgent<T> : DeepReinforcementLearningAgentBase<T>
 
         var architecture = new NeuralNetworkArchitecture<T>
         {
-            TaskType = TaskType.Regression
+            TaskType = NeuralNetworkTaskType.Regression
         };
 
         // Use LayerHelper to create production-ready network layers
@@ -110,7 +110,7 @@ public class A3CAgent<T> : DeepReinforcementLearningAgentBase<T>
     {
         var architecture = new NeuralNetworkArchitecture<T>
         {
-            TaskType = TaskType.Regression
+            TaskType = NeuralNetworkTaskType.Regression
         };
 
         // Use LayerHelper to create production-ready network layers

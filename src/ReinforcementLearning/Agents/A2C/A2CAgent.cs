@@ -81,7 +81,7 @@ public class A2CAgent<T> : DeepReinforcementLearningAgentBase<T>
         return new NeuralNetwork<T>(new NeuralNetworkArchitecture<T>
         {
             Layers = layers,
-            TaskType = TaskType.Regression
+            TaskType = NeuralNetworkTaskType.Regression
         });
     }
 
@@ -101,7 +101,7 @@ public class A2CAgent<T> : DeepReinforcementLearningAgentBase<T>
         return new NeuralNetwork<T>(new NeuralNetworkArchitecture<T>
         {
             Layers = layers,
-            TaskType = TaskType.Regression
+            TaskType = NeuralNetworkTaskType.Regression
         }, _a2cOptions.ValueLossFunction);
     }
 

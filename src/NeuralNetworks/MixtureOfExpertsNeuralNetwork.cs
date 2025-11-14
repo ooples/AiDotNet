@@ -454,7 +454,7 @@ public class MixtureOfExpertsNeuralNetwork<T> : NeuralNetworkBase<T>
                 { "LoadBalancingWeight", _options.LoadBalancingWeight },
                 { "LayerCount", Layers.Count },
                 { "LayerTypes", Layers.Select(l => l.GetType().Name).ToArray() },
-                { "TaskType", Architecture.TaskType.ToString() },
+                { "TaskType", Architecture.NeuralNetworkTaskType.ToString() },
                 { "ParameterCount", GetParameterCount() }
             },
             ModelData = this.Serialize()

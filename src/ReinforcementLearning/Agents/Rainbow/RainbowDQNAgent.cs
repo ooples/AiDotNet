@@ -96,7 +96,7 @@ public class RainbowDQNAgent<T> : DeepReinforcementLearningAgentBase<T>
 
         var architecture = new NeuralNetworkArchitecture<T>
         {
-            TaskType = TaskType.Regression
+            TaskType = NeuralNetworkTaskType.Regression
         };
 
         // Use LayerHelper for production-ready network

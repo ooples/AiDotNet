@@ -87,7 +87,7 @@ public class REINFORCEAgent<T> : DeepReinforcementLearningAgentBase<T>
         return new NeuralNetwork<T>(new NeuralNetworkArchitecture<T>
         {
             Layers = layers,
-            TaskType = TaskType.Regression
+            TaskType = NeuralNetworkTaskType.Regression
         });
     }
 

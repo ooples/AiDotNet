@@ -111,7 +111,7 @@ public class DoubleDQNAgent<T> : DeepReinforcementLearningAgentBase<T>
         var architecture = new NeuralNetworkArchitecture<T>
         {
             Layers = layers,
-            TaskType = TaskType.Regression
+            TaskType = NeuralNetworkTaskType.Regression
         };
 
         return new NeuralNetwork<T>(architecture, _options.LossFunction);

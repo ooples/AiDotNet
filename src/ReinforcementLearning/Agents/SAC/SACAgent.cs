@@ -113,7 +113,7 @@ public class SACAgent<T> : DeepReinforcementLearningAgentBase<T>
         var architecture = new NeuralNetworkArchitecture<T>
         {
             Layers = layers,
-            TaskType = TaskType.Regression
+            TaskType = NeuralNetworkTaskType.Regression
         };
 
         return new NeuralNetwork<T>(architecture);
@@ -138,7 +138,7 @@ public class SACAgent<T> : DeepReinforcementLearningAgentBase<T>
         var architecture = new NeuralNetworkArchitecture<T>
         {
             Layers = layers,
-            TaskType = TaskType.Regression
+            TaskType = NeuralNetworkTaskType.Regression
         };
 
         return new NeuralNetwork<T>(architecture, _sacOptions.QLossFunction);

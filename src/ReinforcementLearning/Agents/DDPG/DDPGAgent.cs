@@ -117,7 +117,7 @@ public class DDPGAgent<T> : DeepReinforcementLearningAgentBase<T>
         var architecture = new NeuralNetworkArchitecture<T>
         {
             Layers = layers,
-            TaskType = TaskType.Regression
+            TaskType = NeuralNetworkTaskType.Regression
         };
 
         return new NeuralNetwork<T>(architecture);
@@ -142,7 +142,7 @@ public class DDPGAgent<T> : DeepReinforcementLearningAgentBase<T>
         var architecture = new NeuralNetworkArchitecture<T>
         {
             Layers = layers,
-            TaskType = TaskType.Regression
+            TaskType = NeuralNetworkTaskType.Regression
         };
 
         return new NeuralNetwork<T>(architecture, _options.CriticLossFunction);
