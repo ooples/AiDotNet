@@ -90,7 +90,7 @@ public abstract class ReinforcementLearningAgentBase<T> : IRLAgent<T>, IDisposab
     protected ReinforcementLearningAgentBase(ReinforcementLearningOptions<T> options)
     {
         Options = options ?? throw new ArgumentNullException(nameof(options));
-        NumOps = NumericOperations<T>.Instance;
+        NumOps = MathHelper.GetNumericOperations<T>();
         Random = options.Seed.HasValue ? new Random(options.Seed.Value) : new Random();
         LossFunction = options.LossFunction;
         LearningRate = options.LearningRate;

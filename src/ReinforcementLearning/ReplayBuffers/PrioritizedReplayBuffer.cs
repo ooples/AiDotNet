@@ -28,7 +28,7 @@ public class PrioritizedReplayBuffer<T>
         _priorities = new List<double>(capacity);
         _position = 0;
         _maxPriority = 1.0;
-        _numOps = NumericOperations<T>.Instance;
+        _numOps = MathHelper.GetNumericOperations<T>();
     }
 
     public void Add(Vector<T> state, Vector<T> action, T reward, Vector<T> nextState, bool done)

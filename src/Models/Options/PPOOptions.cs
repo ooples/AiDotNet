@@ -158,7 +158,7 @@ public class PPOOptions<T>
 
     public PPOOptions()
     {
-        var numOps = NumericOperations<T>.Instance;
+        var numOps = MathHelper.GetNumericOperations<T>();
         PolicyLearningRate = numOps.FromDouble(0.0003);
         ValueLearningRate = numOps.FromDouble(0.001);
         DiscountFactor = numOps.FromDouble(0.99);

@@ -608,7 +608,7 @@ public class PredictionModelBuilder<T, TInput, TOutput> : IPredictionModelBuilde
         var episodeLengths = new List<int>();
         var losses = new List<T>();
 
-        var numOps = NumericOperations<T>.Instance;
+        var numOps = MathHelper.GetNumericOperations<T>();
 
         if (verbose)
         {

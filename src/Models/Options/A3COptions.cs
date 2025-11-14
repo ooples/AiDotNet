@@ -54,7 +54,7 @@ public class A3COptions<T> : ReinforcementLearningOptions<T>
 
     public A3COptions()
     {
-        var numOps = NumericOperations<T>.Instance;
+        var numOps = MathHelper.GetNumericOperations<T>();
         PolicyLearningRate = numOps.FromDouble(0.0001);
         ValueLearningRate = numOps.FromDouble(0.0005);
         EntropyCoefficient = numOps.FromDouble(0.01);

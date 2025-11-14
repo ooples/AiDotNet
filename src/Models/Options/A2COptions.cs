@@ -40,7 +40,7 @@ public class A2COptions<T>
 
     public A2COptions()
     {
-        var numOps = NumericOperations<T>.Instance;
+        var numOps = MathHelper.GetNumericOperations<T>();
         PolicyLearningRate = numOps.FromDouble(0.0007);
         ValueLearningRate = numOps.FromDouble(0.001);
         DiscountFactor = numOps.FromDouble(0.99);

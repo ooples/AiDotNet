@@ -76,7 +76,7 @@ public class CartPoleEnvironment<T> : IEnvironment<T>
     /// <param name="seed">Optional random seed for reproducibility.</param>
     public CartPoleEnvironment(int maxSteps = 500, int? seed = null)
     {
-        _numOps = NumericOperations<T>.Instance;
+        _numOps = MathHelper.GetNumericOperations<T>();
         _random = seed.HasValue ? new Random(seed.Value) : new Random();
         _maxSteps = maxSteps;
         _totalMass = _massCart + _massPole;

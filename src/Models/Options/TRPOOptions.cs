@@ -60,7 +60,7 @@ public class TRPOOptions<T> : ReinforcementLearningOptions<T>
 
     public TRPOOptions()
     {
-        var numOps = NumericOperations<T>.Instance;
+        var numOps = MathHelper.GetNumericOperations<T>();
         ValueLearningRate = numOps.FromDouble(0.001);
         GaeLambda = numOps.FromDouble(0.95);
         MaxKL = numOps.FromDouble(0.01);

@@ -1,0 +1,79 @@
+{
+  "total_errors": 1927,
+  "unique_files": 70,
+  "error_types": [
+    {
+      "code": "CS1503",
+      "count": 1060,
+      "description": "Wrong argument type (Vector vs Tensor)",
+      "easy_fix": false
+    },
+    {
+      "code": "CS1061",
+      "count": 902,
+      "description": "Missing method/property (Forward→Predict, lowercase property names)",
+      "easy_fix": true
+    },
+    {
+      "code": "CS0117",
+      "count": 376,
+      "description": "Missing static member (MathHelper.Exp→NumOps.Exp)",
+      "easy_fix": true
+    },
+    {
+      "code": "CS0200",
+      "count": 252,
+      "description": "Readonly property assignment",
+      "easy_fix": false
+    },
+    {
+      "code": "CS8618",
+      "count": 236,
+      "description": "Non-nullable field not initialized",
+      "easy_fix": false
+    },
+    {
+      "code": "CS1729",
+      "count": 172,
+      "description": "Wrong constructor arguments",
+      "easy_fix": false
+    },
+    {
+      "code": "CS0246",
+      "count": 168,
+      "description": "Type not found",
+      "easy_fix": true
+    },
+    {
+      "code": "CS0029",
+      "count": 140,
+      "description": "Cannot implicitly convert type",
+      "easy_fix": false
+    },
+    {
+      "code": "CS0103",
+      "count": 120,
+      "description": "Name does not exist",
+      "easy_fix": true
+    },
+    {
+      "code": "CS0121",
+      "count": 104,
+      "description": "Ambiguous DenseLayer constructor call",
+      "easy_fix": true
+    },
+    {
+      "code": "CS0307",
+      "count": 92,
+      "description": "Namespace used with type arguments (NumericOperations)",
+      "easy_fix": true
+    }
+  ],
+  "affected_files": [
+    "src/Models/Options/*Options.cs (19 files)",
+    "src/PredictionModelBuilder.cs",
+    "src/ReinforcementLearning/Agents/**/*.cs (48 agent files)",
+    "src/ReinforcementLearning/Environments/CartPoleEnvironment.cs",
+    "src/ReinforcementLearning/ReplayBuffers/PrioritizedReplayBuffer.cs"
+  ]
+}

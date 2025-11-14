@@ -57,7 +57,7 @@ public class TD3Agent<T> : DeepReinforcementLearningAgentBase<T>
     public TD3Agent(TD3Options<T> options) : base(options.StateSize, options.ActionSize)
     {
         _options = options;
-        _numOps = NumericOperations<T>.Instance;
+        _numOps = MathHelper.GetNumericOperations<T>();
         _random = options.Seed.HasValue ? new Random(options.Seed.Value) : new Random();
         _stepCount = 0;
         _updateCount = 0;

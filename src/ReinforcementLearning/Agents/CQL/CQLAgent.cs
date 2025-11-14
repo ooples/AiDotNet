@@ -55,7 +55,7 @@ public class CQLAgent<T> : DeepReinforcementLearningAgentBase<T>
     public CQLAgent(CQLOptions<T> options) : base(options.StateSize, options.ActionSize)
     {
         _options = options;
-        _numOps = NumericOperations<T>.Instance;
+        _numOps = MathHelper.GetNumericOperations<T>();
         _random = options.Seed.HasValue ? new Random(options.Seed.Value) : new Random();
         _updateCount = 0;
 

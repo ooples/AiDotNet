@@ -25,7 +25,7 @@ public class DDPGOptions<T>
 
     public DDPGOptions()
     {
-        var numOps = NumericOperations<T>.Instance;
+        var numOps = MathHelper.GetNumericOperations<T>();
         ActorLearningRate = numOps.FromDouble(0.0001);
         CriticLearningRate = numOps.FromDouble(0.001);
         DiscountFactor = numOps.FromDouble(0.99);

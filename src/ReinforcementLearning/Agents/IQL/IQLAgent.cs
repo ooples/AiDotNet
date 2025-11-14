@@ -58,7 +58,7 @@ public class IQLAgent<T> : DeepReinforcementLearningAgentBase<T>
     public IQLAgent(IQLOptions<T> options) : base(options.StateSize, options.ActionSize)
     {
         _options = options;
-        _numOps = NumericOperations<T>.Instance;
+        _numOps = MathHelper.GetNumericOperations<T>();
         _random = options.Seed.HasValue ? new Random(options.Seed.Value) : new Random();
         _updateCount = 0;
 
@@ -714,14 +714,14 @@ public class IQLAgent<T> : DeepReinforcementLearningAgentBase<T>
                 {
                     for (int c = 0; c < weights.Columns; c++)
                     {
-                        writer.Write(NumericOperations<T>.Instance.ToDouble(weights[r, c]));
+                        writer.Write(MathHelper.GetNumericOperations<T>().ToDouble(weights[r, c]));
                     }
                 }
 
                 writer.Write(biases.Length);
                 foreach (var bias in biases)
                 {
-                    writer.Write(NumericOperations<T>.Instance.ToDouble(bias));
+                    writer.Write(MathHelper.GetNumericOperations<T>().ToDouble(bias));
                 }
             }
         }

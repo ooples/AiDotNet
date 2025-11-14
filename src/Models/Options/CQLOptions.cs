@@ -56,7 +56,7 @@ public class CQLOptions<T>
 
     public CQLOptions()
     {
-        var numOps = NumericOperations<T>.Instance;
+        var numOps = MathHelper.GetNumericOperations<T>();
         PolicyLearningRate = numOps.FromDouble(0.0003);
         QLearningRate = numOps.FromDouble(0.0003);
         AlphaLearningRate = numOps.FromDouble(0.0003);

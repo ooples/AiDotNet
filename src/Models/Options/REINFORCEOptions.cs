@@ -34,7 +34,7 @@ public class REINFORCEOptions<T>
 
     public REINFORCEOptions()
     {
-        var numOps = NumericOperations<T>.Instance;
+        var numOps = MathHelper.GetNumericOperations<T>();
         LearningRate = numOps.FromDouble(0.001);
         DiscountFactor = numOps.FromDouble(0.99);
     }
