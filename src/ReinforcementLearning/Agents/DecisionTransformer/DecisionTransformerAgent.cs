@@ -256,7 +256,7 @@ public class DecisionTransformerAgent<T> : DeepReinforcementLearningAgentBase<T>
             var parameters = _transformerNetwork.GetParameters();
             for (int i = 0; i < parameters.Length; i++)
             {
-                var update = NumOps.Multiply(_options.LearningRate, gradient[i % gradient.Length]);
+                var update = NumOps.Multiply(LearningRate, gradient[i % gradient.Length]);
                 parameters[i] = NumOps.Subtract(parameters[i], update);
             }
             _transformerNetwork.UpdateParameters(parameters);

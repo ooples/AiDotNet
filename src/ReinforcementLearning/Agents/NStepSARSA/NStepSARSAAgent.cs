@@ -194,7 +194,7 @@ public class NStepSARSAAgent<T> : ReinforcementLearningAgentBase<T>
     {
         return new ModelMetadata<T>
         {
-            ModelType = "NStepSARSA",
+            ModelType = ModelType.ReinforcementLearning,
         };
     }
 

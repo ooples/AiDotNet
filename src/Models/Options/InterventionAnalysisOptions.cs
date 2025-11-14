@@ -113,7 +113,7 @@ public class InterventionAnalysisOptions<T, TInput, TOutput> : TimeSeriesRegress
     /// The model will then estimate how much each intervention actually affected your time series,
     /// accounting for other factors like seasonal patterns and existing trends.</para>
     /// </remarks>
-    public List<InterventionInfo> Interventions { get; set; } = new List<int> {  };
+    public List<InterventionInfo> Interventions { get; set; } = new List<InterventionInfo>();
 
     /// <summary>
     /// Gets or sets the optimizer used to find the best parameters for the intervention analysis model.

@@ -587,6 +587,7 @@ public class PredictionModelBuilder<T, TInput, TOutput> : IPredictionModelBuilde
     /// </code>
     /// </para>
     /// </remarks>
+#pragma warning disable CS1998
     public async Task<PredictionModelResult<T, TInput, TOutput>> BuildAsync(int episodes, bool verbose = true)
     {
         // RL TRAINING PATH - requires ConfigureEnvironment() and an RL agent
@@ -686,12 +687,10 @@ public class PredictionModelBuilder<T, TInput, TOutput> : IPredictionModelBuilde
         }
 
         // Create optimization result for RL training
-        var optimizationResult = new OptimizationResult<T, TInput, TOutput>(
-            model: _model,
-            fitness: episodeRewards,
-            parameters: null,
-            convergenceData: losses
-        );
+        var optimizationResult = new OptimizationResult<T, TInput, TOutput>
+        {
+            BestSolution = _model
+        };
 
         // Create normalization info (RL doesn't use normalization like supervised learning)
         var normInfo = new NormalizationInfo<T, TInput, TOutput>();

@@ -275,7 +275,7 @@ public class MADDPGAgent<T> : DeepReinforcementLearningAgentBase<T>
             }
             else
             {
-                target = NumOps.Add(experience.Reward, NumOps.Multiply(_options.DiscountFactor, targetQ));
+                target = NumOps.Add(experience.Reward, NumOps.Multiply(DiscountFactor, targetQ));
             }
 
             // Current Q-value

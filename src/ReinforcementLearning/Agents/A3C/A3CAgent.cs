@@ -314,7 +314,7 @@ public class A3CAgent<T> : DeepReinforcementLearningAgentBase<T>
             }
             else
             {
-                runningReturn = NumOps.Add(exp.reward, NumOps.Multiply(_options.DiscountFactor, runningReturn));
+                runningReturn = NumOps.Add(exp.reward, NumOps.Multiply(DiscountFactor, runningReturn));
             }
             returns.Insert(0, runningReturn);
         }

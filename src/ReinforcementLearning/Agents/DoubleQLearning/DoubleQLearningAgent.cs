@@ -208,7 +208,7 @@ public class DoubleQLearningAgent<T> : ReinforcementLearningAgentBase<T>
     {
         return new ModelMetadata<T>
         {
-            ModelType = "DoubleQLearning",
+            ModelType = ModelType.ReinforcementLearning,
         };
     }
 
