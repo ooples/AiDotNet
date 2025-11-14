@@ -176,7 +176,9 @@ public class DecisionTransformerAgent<T> : DeepReinforcementLearningAgentBase<T>
         var input = ConcatenateInputs(targetReturn, state, previousAction);
 
         // Predict action
-        var actionOutput = _transformerNetwork.Predict(input);
+        var inputTensor = Tensor<T>.FromVector(input);
+        var actionOutputTensor = _transformerNetwork.Predict(inputTensor);
+        var actionOutput = actionOutputTensor.ToVector();
 
         // Store action in context
         _currentContext.Actions.Add(actionOutput);
@@ -227,7 +229,9 @@ public class DecisionTransformerAgent<T> : DeepReinforcementLearningAgentBase<T>
             var input = ConcatenateInputs(returnToGo, state, previousAction);
 
             // Forward pass
-            var predictedAction = _transformerNetwork.Predict(input);
+            var inputTensor = Tensor<T>.FromVector(input);
+            var predictedActionTensor = _transformerNetwork.Predict(inputTensor);
+            var predictedAction = predictedActionTensor.ToVector();
 
             // Compute loss (MSE between predicted and target action)
             T loss = NumOps.Zero;
@@ -246,8 +250,16 @@ public class DecisionTransformerAgent<T> : DeepReinforcementLearningAgentBase<T>
                 gradient[i] = NumOps.Subtract(predictedAction[i], targetAction[i]);
             }
 
-            _transformerNetwork.Backpropagate(gradient);
-            _transformerNetwork.UpdateParameters(_options.LearningRate);
+            var gradientTensor = Tensor<T>.FromVector(gradient);
+            _transformerNetwork.Backpropagate(gradientTensor);
+
+            var parameters = _transformerNetwork.GetParameters();
+            for (int i = 0; i < parameters.Length; i++)
+            {
+                var update = NumOps.Multiply(_options.LearningRate, gradient[i % gradient.Length]);
+                parameters[i] = NumOps.Subtract(parameters[i], update);
+            }
+            _transformerNetwork.UpdateParameters(parameters);
         }
 
         _updateCount++;
@@ -302,7 +314,7 @@ public class DecisionTransformerAgent<T> : DeepReinforcementLearningAgentBase<T>
     {
         return new ModelMetadata<T>
         {
-            ModelType = "DecisionTransformer",
+            ModelType = ModelType.DecisionTransformer,
         };
     }
 
@@ -348,8 +360,16 @@ public class DecisionTransformerAgent<T> : DeepReinforcementLearningAgentBase<T>
 
     public override void ApplyGradients(Vector<T> gradients, T learningRate)
     {
-        _transformerNetwork.Backpropagate(gradients);
-        _transformerNetwork.UpdateParameters(learningRate);
+        var gradientsTensor = Tensor<T>.FromVector(gradients);
+        _transformerNetwork.Backpropagate(gradientsTensor);
+
+        var parameters = _transformerNetwork.GetParameters();
+        for (int i = 0; i < parameters.Length; i++)
+        {
+            var update = NumOps.Multiply(learningRate, gradients[i % gradients.Length]);
+            parameters[i] = NumOps.Subtract(parameters[i], update);
+        }
+        _transformerNetwork.UpdateParameters(parameters);
     }
 
     public override void SaveModel(string filepath)
