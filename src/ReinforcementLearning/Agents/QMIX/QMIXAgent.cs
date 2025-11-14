@@ -49,7 +49,7 @@ public class QMIXAgent<T> : DeepReinforcementLearningAgentBase<T>
     private INeuralNetwork<T> _mixingNetwork;
     private INeuralNetwork<T> _targetMixingNetwork;
 
-    private ReplayBuffer<T> _replayBuffer;
+    private UniformReplayBuffer<T> _replayBuffer;
     private double _epsilon;
     private int _stepCount;
 
@@ -142,7 +142,7 @@ public class QMIXAgent<T> : DeepReinforcementLearningAgentBase<T>
 
     private void InitializeReplayBuffer()
     {
-        _replayBuffer = new ReplayBuffer<T>(_options.ReplayBufferSize);
+        _replayBuffer = new UniformReplayBuffer<T>(_options.ReplayBufferSize);
     }
 
     /// <summary>

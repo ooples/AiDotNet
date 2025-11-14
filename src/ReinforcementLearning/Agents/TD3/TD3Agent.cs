@@ -49,7 +49,7 @@ public class TD3Agent<T> : DeepReinforcementLearningAgentBase<T>
     private NeuralNetwork<T> _targetCritic1Network;
     private NeuralNetwork<T> _targetCritic2Network;
 
-    private ReplayBuffer<T> _replayBuffer;
+    private UniformReplayBuffer<T> _replayBuffer;
     private Random _random;
     private int _stepCount;
     private int _updateCount;
@@ -121,7 +121,7 @@ public class TD3Agent<T> : DeepReinforcementLearningAgentBase<T>
 
     private void InitializeReplayBuffer()
     {
-        _replayBuffer = new ReplayBuffer<T>(_options.ReplayBufferSize);
+        _replayBuffer = new UniformReplayBuffer<T>(_options.ReplayBufferSize);
     }
 
     public override Vector<T> SelectAction(Vector<T> state, bool training = true)

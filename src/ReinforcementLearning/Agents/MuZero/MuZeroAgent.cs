@@ -45,7 +45,7 @@ public class MuZeroAgent<T> : DeepReinforcementLearningAgentBase<T>
     private NeuralNetwork<T> _dynamicsNetwork;  // (h', r) = g(h, action)
     private NeuralNetwork<T> _predictionNetwork;  // (p, v) = f(h)
 
-    private ReplayBuffer<T> _replayBuffer;
+    private UniformReplayBuffer<T> _replayBuffer;
     private int _updateCount;
 
     public MuZeroAgent(MuZeroOptions<T> options) : base(options.ObservationSize, options.ActionSize)
@@ -88,7 +88,7 @@ public class MuZeroAgent<T> : DeepReinforcementLearningAgentBase<T>
 
     private void InitializeReplayBuffer()
     {
-        _replayBuffer = new ReplayBuffer<T>(_options.ReplayBufferSize);
+        _replayBuffer = new UniformReplayBuffer<T>(_options.ReplayBufferSize);
     }
 
     public override Vector<T> SelectAction(Vector<T> observation, bool training = true)
@@ -238,7 +238,7 @@ public class MuZeroAgent<T> : DeepReinforcementLearningAgentBase<T>
         return bestAction;
     }
 
-    private MCTSNode ExpandNode(MCTSNode<T> parent, int action)
+    private MCTSNode<T> ExpandNode(MCTSNode<T> parent, int action)
     {
         // Use dynamics network to predict next hidden state and reward
         var actionVec = new Vector<T>(_options.ActionSize);

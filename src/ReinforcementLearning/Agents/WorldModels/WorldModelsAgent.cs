@@ -51,7 +51,7 @@ public class WorldModelsAgent<T> : DeepReinforcementLearningAgentBase<T>
     // C: Controller (simple linear policy)
     private Matrix<T> _controllerWeights;
 
-    private ReplayBuffer<T> _replayBuffer;
+    private UniformReplayBuffer<T> _replayBuffer;
     private int _updateCount;
 
     public WorldModelsAgent(WorldModelsOptions<T> options) : base(
@@ -150,7 +150,7 @@ public class WorldModelsAgent<T> : DeepReinforcementLearningAgentBase<T>
 
     private void InitializeReplayBuffer()
     {
-        _replayBuffer = new ReplayBuffer<T>(_options.ReplayBufferSize);
+        _replayBuffer = new UniformReplayBuffer<T>(_options.ReplayBufferSize);
     }
 
     public override Vector<T> SelectAction(Vector<T> observation, bool training = true)

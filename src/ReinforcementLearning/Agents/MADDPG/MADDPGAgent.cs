@@ -48,7 +48,7 @@ public class MADDPGAgent<T> : DeepReinforcementLearningAgentBase<T>
     private List<INeuralNetwork<T>> _criticNetworks;
     private List<INeuralNetwork<T>> _targetCriticNetworks;
 
-    private ReplayBuffer<T> _replayBuffer;
+    private UniformReplayBuffer<T> _replayBuffer;
     private int _stepCount;
 
     public MADDPGAgent(MADDPGOptions<T> options, IOptimizer<T, Vector<T>, Vector<T>>? optimizer = null)
@@ -157,7 +157,7 @@ public class MADDPGAgent<T> : DeepReinforcementLearningAgentBase<T>
 
     private void InitializeReplayBuffer()
     {
-        _replayBuffer = new ReplayBuffer<T>(_options.ReplayBufferSize);
+        _replayBuffer = new UniformReplayBuffer<T>(_options.ReplayBufferSize);
     }
 
     /// <summary>

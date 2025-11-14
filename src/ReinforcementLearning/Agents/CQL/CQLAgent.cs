@@ -46,7 +46,7 @@ public class CQLAgent<T> : DeepReinforcementLearningAgentBase<T>
     private NeuralNetwork<T> _targetQ1Network;
     private NeuralNetwork<T> _targetQ2Network;
 
-    private ReplayBuffer<T> _offlineBuffer;  // Fixed offline dataset
+    private UniformReplayBuffer<T> _offlineBuffer;  // Fixed offline dataset
     private Random _random;
     private T _logAlpha;
     private T _alpha;
@@ -116,7 +116,7 @@ public class CQLAgent<T> : DeepReinforcementLearningAgentBase<T>
 
     private void InitializeBuffer()
     {
-        _offlineBuffer = new ReplayBuffer<T>(_options.BufferSize);
+        _offlineBuffer = new UniformReplayBuffer<T>(_options.BufferSize);
     }
 
     /// <summary>

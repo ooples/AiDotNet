@@ -53,7 +53,7 @@ public class DreamerAgent<T> : DeepReinforcementLearningAgentBase<T>
     private INeuralNetwork<T> _actorNetwork;
     private INeuralNetwork<T> _valueNetwork;
 
-    private ReplayBuffer<T> _replayBuffer;
+    private UniformReplayBuffer<T> _replayBuffer;
     private int _updateCount;
 
     public DreamerAgent(DreamerOptions<T> options, IOptimizer<T, Vector<T>, Vector<T>>? optimizer = null)
@@ -129,7 +129,7 @@ public class DreamerAgent<T> : DeepReinforcementLearningAgentBase<T>
 
     private void InitializeReplayBuffer()
     {
-        _replayBuffer = new ReplayBuffer<T>(_options.ReplayBufferSize);
+        _replayBuffer = new UniformReplayBuffer<T>(_options.ReplayBufferSize);
     }
 
     public override Vector<T> SelectAction(Vector<T> observation, bool training = true)

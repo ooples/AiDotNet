@@ -50,7 +50,7 @@ public class IQLAgent<T> : DeepReinforcementLearningAgentBase<T>
     private NeuralNetwork<T> _q2Network;
     private NeuralNetwork<T> _targetValueNetwork;
 
-    private ReplayBuffer<T> _offlineBuffer;
+    private UniformReplayBuffer<T> _offlineBuffer;
     private Random _random;
     private int _updateCount;
 
@@ -131,7 +131,7 @@ public class IQLAgent<T> : DeepReinforcementLearningAgentBase<T>
 
     private void InitializeBuffer()
     {
-        _offlineBuffer = new ReplayBuffer<T>(_options.BufferSize);
+        _offlineBuffer = new UniformReplayBuffer<T>(_options.BufferSize);
     }
 
     /// <summary>
