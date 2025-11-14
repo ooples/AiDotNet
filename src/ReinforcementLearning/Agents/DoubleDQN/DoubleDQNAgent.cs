@@ -144,7 +144,7 @@ public class DoubleDQNAgent<T> : DeepReinforcementLearningAgentBase<T>
     /// <inheritdoc/>
     public override void StoreExperience(Vector<T> state, Vector<T> action, T reward, Vector<T> nextState, bool done)
     {
-        _replayBuffer.Add(new ReinforcementLearning.ReplayBuffers.Experience<T>(state, action, reward, nextState, done));
+        _replayBuffer.Add(new Experience<T>(new ReinforcementLearning.ReplayBuffers.Experience<T>(state, action, reward, nextState, done)));
     }
 
     /// <inheritdoc/>

@@ -6,6 +6,8 @@ using AiDotNet.NeuralNetworks.Layers;
 using AiDotNet.ActivationFunctions;
 using AiDotNet.ReinforcementLearning.ReplayBuffers;
 using AiDotNet.Helpers;
+using AiDotNet.Enums;
+using AiDotNet.LossFunctions;
 using System.IO;
 
 namespace AiDotNet.ReinforcementLearning.Agents.IQL;
@@ -55,7 +57,7 @@ public class IQLAgent<T> : DeepReinforcementLearningAgentBase<T>
     private Random _random;
     private int _updateCount;
 
-    public IQLAgent(IQLOptions<T> options) : base(options.StateSize, options.ActionSize)
+    public IQLAgent(IQLOptions<T> options) : base(options)
     {
         _options = options;
         _numOps = MathHelper.GetNumericOperations<T>();
@@ -140,7 +142,7 @@ public class IQLAgent<T> : DeepReinforcementLearningAgentBase<T>
     {
         foreach (var transition in dataset)
         {
-            _offlineBuffer.Add(transition.state, transition.action, transition.reward, transition.nextState, transition.done);
+            _offlineBuffer.Add(new Experience<T>(transition.state, transition.action, transition.reward, transition.nextState, transition.done));
         }
     }
 
@@ -185,7 +187,7 @@ public class IQLAgent<T> : DeepReinforcementLearningAgentBase<T>
     public override void StoreExperience(Vector<T> state, Vector<T> action, T reward, Vector<T> nextState, bool done)
     {
         // IQL is offline - data is loaded beforehand
-        _offlineBuffer.Add(state, action, reward, nextState, done);
+        _offlineBuffer.Add(new Experience<T>(state, action, reward, nextState, done));
     }
 
     public override T Train()

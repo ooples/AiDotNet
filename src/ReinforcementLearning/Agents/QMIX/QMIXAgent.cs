@@ -7,6 +7,8 @@ using AiDotNet.NeuralNetworks.Layers;
 using AiDotNet.ActivationFunctions;
 using AiDotNet.ReinforcementLearning.ReplayBuffers;
 using AiDotNet.Helpers;
+using AiDotNet.Enums;
+using AiDotNet.LossFunctions;
 using AiDotNet.Optimizers;
 
 namespace AiDotNet.ReinforcementLearning.Agents.QMIX;
@@ -215,7 +217,7 @@ public class QMIXAgent<T> : DeepReinforcementLearningAgentBase<T>
         var jointAction = ConcatenateVectors(agentActions);
         var jointNextState = ConcatenateWithGlobal(nextAgentStates, nextGlobalState);
 
-        _replayBuffer.Add(jointState, jointAction, teamReward, jointNextState, done);
+        _replayBuffer.Add(new Experience<T>(jointState, jointAction, teamReward, jointNextState, done));
         _stepCount++;
 
         // Decay epsilon
@@ -224,7 +226,7 @@ public class QMIXAgent<T> : DeepReinforcementLearningAgentBase<T>
 
     public override void StoreExperience(Vector<T> state, Vector<T> action, T reward, Vector<T> nextState, bool done)
     {
-        _replayBuffer.Add(state, action, reward, nextState, done);
+        _replayBuffer.Add(new Experience<T>(state, action, reward, nextState, done));
         _stepCount++;
         _epsilon = Math.Max(_options.EpsilonEnd, _epsilon * _options.EpsilonDecay);
     }

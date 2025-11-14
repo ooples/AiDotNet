@@ -4,6 +4,8 @@ using AiDotNet.Models;
 using AiDotNet.Models.Options;
 using AiDotNet.NeuralNetworks;
 using AiDotNet.Helpers;
+using AiDotNet.Enums;
+using AiDotNet.LossFunctions;
 using AiDotNet.Optimizers;
 using AiDotNet.ReinforcementLearning.ReplayBuffers;
 
@@ -179,13 +181,13 @@ public class RainbowDQNAgent<T> : DeepReinforcementLearningAgentBase<T>
     public override void StoreExperience(Vector<T> state, Vector<T> action, T reward, Vector<T> nextState, bool done)
     {
         // N-step learning: accumulate transitions
-        _nStepBuffer.Add((state, action, reward, nextState, done));
+        _nStepBuffer.Add(new Experience<T>((state, action, reward, nextState, done)));
 
         if (_nStepBuffer.Count >= _options.NSteps || done)
         {
             // Compute n-step return
             var (nStepState, nStepAction, nStepReturn, nStepNextState, nStepDone) = ComputeNStepReturn();
-            _replayBuffer.Add(nStepState, nStepAction, nStepReturn, nStepNextState, nStepDone);
+            _replayBuffer.Add(new Experience<T>(nStepState, nStepAction, nStepReturn, nStepNextState, nStepDone));
 
             // Clear n-step buffer on episode end
             if (done)

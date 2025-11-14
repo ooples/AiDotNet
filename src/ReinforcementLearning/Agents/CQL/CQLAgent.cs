@@ -7,6 +7,7 @@ using AiDotNet.NeuralNetworks.Layers;
 using AiDotNet.ActivationFunctions;
 using AiDotNet.ReinforcementLearning.ReplayBuffers;
 using AiDotNet.Helpers;
+using AiDotNet.Enums;
 
 namespace AiDotNet.ReinforcementLearning.Agents.CQL;
 

@@ -6,6 +6,8 @@ using AiDotNet.NeuralNetworks.Layers;
 using AiDotNet.ActivationFunctions;
 using AiDotNet.ReinforcementLearning.ReplayBuffers;
 using AiDotNet.Helpers;
+using AiDotNet.Enums;
+using AiDotNet.LossFunctions;
 
 namespace AiDotNet.ReinforcementLearning.Agents.MuZero;
 
@@ -281,7 +283,7 @@ public class MuZeroAgent<T> : DeepReinforcementLearningAgentBase<T>
 
     public override void StoreExperience(Vector<T> observation, Vector<T> action, T reward, Vector<T> nextObservation, bool done)
     {
-        _replayBuffer.Add(observation, action, reward, nextObservation, done);
+        _replayBuffer.Add(new Experience<T>(observation, action, reward, nextObservation, done));
     }
 
     public override T Train()

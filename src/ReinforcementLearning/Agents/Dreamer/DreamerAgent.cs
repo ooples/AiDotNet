@@ -7,6 +7,8 @@ using AiDotNet.NeuralNetworks.Layers;
 using AiDotNet.ActivationFunctions;
 using AiDotNet.ReinforcementLearning.ReplayBuffers;
 using AiDotNet.Helpers;
+using AiDotNet.Enums;
+using AiDotNet.LossFunctions;
 using AiDotNet.Optimizers;
 
 namespace AiDotNet.ReinforcementLearning.Agents.Dreamer;
@@ -154,7 +156,7 @@ public class DreamerAgent<T> : DeepReinforcementLearningAgentBase<T>
 
     public override void StoreExperience(Vector<T> observation, Vector<T> action, T reward, Vector<T> nextObservation, bool done)
     {
-        _replayBuffer.Add(observation, action, reward, nextObservation, done);
+        _replayBuffer.Add(new Experience<T>(observation, action, reward, nextObservation, done));
     }
 
     public override T Train()

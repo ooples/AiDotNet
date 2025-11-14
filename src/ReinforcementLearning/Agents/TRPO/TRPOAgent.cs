@@ -6,6 +6,8 @@ using AiDotNet.NeuralNetworks;
 using AiDotNet.NeuralNetworks.Layers;
 using AiDotNet.ActivationFunctions;
 using AiDotNet.Helpers;
+using AiDotNet.Enums;
+using AiDotNet.LossFunctions;
 using AiDotNet.Optimizers;
 
 namespace AiDotNet.ReinforcementLearning.Agents.TRPO;
@@ -218,7 +220,7 @@ public class TRPOAgent<T> : DeepReinforcementLearningAgentBase<T>
 
     public override void StoreExperience(Vector<T> state, Vector<T> action, T reward, Vector<T> nextState, bool done)
     {
-        _trajectoryBuffer.Add((state, action, reward, nextState, done));
+        _trajectoryBuffer.Add(new Experience<T>((state, action, reward, nextState, done)));
 
         if (_trajectoryBuffer.Count >= _options.StepsPerUpdate)
         {

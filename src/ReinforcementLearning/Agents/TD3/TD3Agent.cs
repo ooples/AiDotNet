@@ -174,7 +174,7 @@ public class TD3Agent<T> : DeepReinforcementLearningAgentBase<T>
 
     public override void StoreExperience(Vector<T> state, Vector<T> action, T reward, Vector<T> nextState, bool done)
     {
-        _replayBuffer.Add(state, action, reward, nextState, done);
+        _replayBuffer.Add(new Experience<T>(state, action, reward, nextState, done));
         _stepCount++;
     }
 
