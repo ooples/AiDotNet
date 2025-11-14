@@ -1002,4 +1002,30 @@ public abstract class AsyncDecisionTreeRegressionBase<T> : IAsyncTreeBasedModel<
         // No-op for async tree models - trees are trained via splitting algorithms
         // Derived classes like GradientBoostingRegression can override with proper gradient-based updates
     }
+
+    /// <summary>
+    /// Saves the model's current state to a stream.
+    /// </summary>
+    public virtual void SaveState(Stream stream)
+    {
+        if (stream == null) throw new ArgumentNullException(nameof(stream));
+        if (!stream.CanWrite) throw new ArgumentException("Stream must be writable.", nameof(stream));
+        var data = Serialize();
+        stream.Write(data, 0, data.Length);
+        stream.Flush();
+    }
+
+    /// <summary>
+    /// Loads the model's state from a stream.
+    /// </summary>
+    public virtual void LoadState(Stream stream)
+    {
+        if (stream == null) throw new ArgumentNullException(nameof(stream));
+        if (!stream.CanRead) throw new ArgumentException("Stream must be readable.", nameof(stream));
+        using var ms = new MemoryStream();
+        stream.CopyTo(ms);
+        var data = ms.ToArray();
+        if (data.Length == 0) throw new InvalidOperationException("Stream contains no data.");
+        Deserialize(data);
+    }
 }

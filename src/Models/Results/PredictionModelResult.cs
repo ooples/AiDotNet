@@ -1476,4 +1476,126 @@ public class PredictionModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
         }
         return processedQuery;
     }
+
+    /// <summary>
+    /// Saves the prediction model result's current state to a stream.
+    /// </summary>
+    /// <param name="stream">The stream to write the model state to.</param>
+    /// <remarks>
+    /// <para>
+    /// This method serializes the entire PredictionModelResult, including the underlying model,
+    /// optimization results, normalization information, and metadata. It uses the existing
+    /// Serialize method and writes the data to the provided stream.
+    /// </para>
+    /// <para><b>For Beginners:</b> This is like creating a snapshot of your complete trained model package.
+    ///
+    /// When you call SaveState:
+    /// - The trained model and all its parameters are written to the stream
+    /// - Training results and metrics are saved
+    /// - Normalization settings are preserved
+    /// - All metadata is included
+    ///
+    /// This is particularly useful for:
+    /// - Checkpointing during long optimization runs
+    /// - Saving the best model found during training
+    /// - Knowledge distillation workflows
+    /// - Creating model backups before deployment
+    ///
+    /// You can later use LoadState to restore the complete model package.
+    /// </para>
+    /// </remarks>
+    /// <exception cref="ArgumentNullException">Thrown when stream is null.</exception>
+    /// <exception cref="IOException">Thrown when there's an error writing to the stream.</exception>
+    public virtual void SaveState(Stream stream)
+    {
+        if (stream == null)
+            throw new ArgumentNullException(nameof(stream));
+
+        if (!stream.CanWrite)
+            throw new ArgumentException("Stream must be writable.", nameof(stream));
+
+        try
+        {
+            var data = this.Serialize();
+            stream.Write(data, 0, data.Length);
+            stream.Flush();
+        }
+        catch (IOException ex)
+        {
+            throw new IOException($"Failed to save prediction model result state to stream: {ex.Message}", ex);
+        }
+        catch (Exception ex)
+        {
+            throw new InvalidOperationException($"Unexpected error while saving prediction model result state: {ex.Message}", ex);
+        }
+    }
+
+    /// <summary>
+    /// Loads the prediction model result's state from a stream.
+    /// </summary>
+    /// <param name="stream">The stream to read the model state from.</param>
+    /// <remarks>
+    /// <para>
+    /// This method deserializes a complete PredictionModelResult that was previously saved with SaveState,
+    /// restoring the model, optimization results, normalization information, and all metadata.
+    /// It uses the existing Deserialize method after reading data from the stream.
+    /// </para>
+    /// <para><b>For Beginners:</b> This is like loading a saved snapshot of your complete trained model package.
+    ///
+    /// When you call LoadState:
+    /// - The trained model and all its parameters are read from the stream
+    /// - Training results and metrics are restored
+    /// - Normalization settings are reapplied
+    /// - All metadata is recovered
+    ///
+    /// After loading, the model package can:
+    /// - Make predictions using the restored model
+    /// - Access training history and metrics
+    /// - Apply the same normalization as during training
+    /// - Be deployed to production
+    ///
+    /// This is essential for:
+    /// - Resuming interrupted optimization
+    /// - Loading the best model after training
+    /// - Deploying trained models to production
+    /// - Knowledge distillation workflows
+    /// </para>
+    /// </remarks>
+    /// <exception cref="ArgumentNullException">Thrown when stream is null.</exception>
+    /// <exception cref="IOException">Thrown when there's an error reading from the stream.</exception>
+    /// <exception cref="InvalidOperationException">Thrown when the stream contains invalid or incompatible data.</exception>
+    public virtual void LoadState(Stream stream)
+    {
+        if (stream == null)
+            throw new ArgumentNullException(nameof(stream));
+
+        if (!stream.CanRead)
+            throw new ArgumentException("Stream must be readable.", nameof(stream));
+
+        try
+        {
+            using var ms = new MemoryStream();
+            stream.CopyTo(ms);
+            var data = ms.ToArray();
+
+            if (data.Length == 0)
+                throw new InvalidOperationException("Stream contains no data.");
+
+            this.Deserialize(data);
+        }
+        catch (IOException ex)
+        {
+            throw new IOException($"Failed to read prediction model result state from stream: {ex.Message}", ex);
+        }
+        catch (InvalidOperationException)
+        {
+            // Re-throw InvalidOperationException from Deserialize
+            throw;
+        }
+        catch (Exception ex)
+        {
+            throw new InvalidOperationException(
+                $"Failed to deserialize prediction model result state. The stream may contain corrupted or incompatible data: {ex.Message}", ex);
+        }
+    }
 }

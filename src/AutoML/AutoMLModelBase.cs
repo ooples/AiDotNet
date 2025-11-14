@@ -774,5 +774,125 @@ namespace AiDotNet.AutoML
         }
 
         #endregion
+
+        /// <summary>
+        /// Saves the AutoML model's current state to a stream.
+        /// </summary>
+        /// <param name="stream">The stream to write the model state to.</param>
+        /// <remarks>
+        /// <para>
+        /// This method serializes the best model found during the AutoML search.
+        /// It uses the existing Serialize method and writes the data to the provided stream.
+        /// </para>
+        /// <para><b>For Beginners:</b> This is like creating a snapshot of your best AutoML model.
+        ///
+        /// When you call SaveState:
+        /// - The best model found during search is written to the stream
+        /// - All model parameters and configuration are preserved
+        ///
+        /// This is particularly useful for:
+        /// - Saving the best model after AutoML search
+        /// - Checkpointing during long-running searches
+        /// - Knowledge distillation from AutoML-optimized models
+        /// - Deploying optimized models to production
+        ///
+        /// You can later use LoadState to restore the model.
+        /// </para>
+        /// </remarks>
+        /// <exception cref="ArgumentNullException">Thrown when stream is null.</exception>
+        /// <exception cref="InvalidOperationException">Thrown when no best model exists.</exception>
+        /// <exception cref="IOException">Thrown when there's an error writing to the stream.</exception>
+        public virtual void SaveState(Stream stream)
+        {
+            if (stream == null)
+                throw new ArgumentNullException(nameof(stream));
+
+            if (!stream.CanWrite)
+                throw new ArgumentException("Stream must be writable.", nameof(stream));
+
+            try
+            {
+                var data = this.Serialize();
+                stream.Write(data, 0, data.Length);
+                stream.Flush();
+            }
+            catch (IOException ex)
+            {
+                throw new IOException($"Failed to save AutoML model state to stream: {ex.Message}", ex);
+            }
+            catch (InvalidOperationException)
+            {
+                // Re-throw InvalidOperationException from Serialize (no best model)
+                throw;
+            }
+            catch (Exception ex)
+            {
+                throw new InvalidOperationException($"Unexpected error while saving AutoML model state: {ex.Message}", ex);
+            }
+        }
+
+        /// <summary>
+        /// Loads the AutoML model's state from a stream.
+        /// </summary>
+        /// <param name="stream">The stream to read the model state from.</param>
+        /// <remarks>
+        /// <para>
+        /// This method deserializes a best model that was previously saved with SaveState.
+        /// It uses the existing Deserialize method after reading data from the stream.
+        /// </para>
+        /// <para><b>For Beginners:</b> This is like loading a saved snapshot of your best AutoML model.
+        ///
+        /// When you call LoadState:
+        /// - The best model is read from the stream
+        /// - All parameters and configuration are restored
+        ///
+        /// After loading, the model can:
+        /// - Make predictions using the restored best model
+        /// - Be further optimized if needed
+        /// - Be deployed to production
+        ///
+        /// This is essential for:
+        /// - Loading the best model after AutoML search
+        /// - Deploying optimized models to production
+        /// - Knowledge distillation workflows
+        /// </para>
+        /// </remarks>
+        /// <exception cref="ArgumentNullException">Thrown when stream is null.</exception>
+        /// <exception cref="IOException">Thrown when there's an error reading from the stream.</exception>
+        /// <exception cref="InvalidOperationException">Thrown when the stream contains invalid or incompatible data, or when BestModel is not initialized.</exception>
+        public virtual void LoadState(Stream stream)
+        {
+            if (stream == null)
+                throw new ArgumentNullException(nameof(stream));
+
+            if (!stream.CanRead)
+                throw new ArgumentException("Stream must be readable.", nameof(stream));
+
+            try
+            {
+                using var ms = new MemoryStream();
+                stream.CopyTo(ms);
+                var data = ms.ToArray();
+
+                if (data.Length == 0)
+                    throw new InvalidOperationException("Stream contains no data.");
+
+                this.Deserialize(data);
+            }
+            catch (IOException ex)
+            {
+                throw new IOException($"Failed to read AutoML model state from stream: {ex.Message}", ex);
+            }
+            catch (InvalidOperationException)
+            {
+                // Re-throw InvalidOperationException from Deserialize
+                throw;
+            }
+            catch (Exception ex)
+            {
+                throw new InvalidOperationException(
+                    $"Failed to deserialize AutoML model state. The stream may contain corrupted or incompatible data: {ex.Message}", ex);
+            }
+        }
     }
 }
