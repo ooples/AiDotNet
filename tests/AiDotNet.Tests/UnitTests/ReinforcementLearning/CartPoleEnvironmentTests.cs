@@ -44,7 +44,8 @@ public class CartPoleEnvironmentTests
         env.Reset();
 
         // Act
-        var (nextState, reward, done, info) = env.Step(0); // Push left
+        var action = new AiDotNet.LinearAlgebra.Vector<double>(new double[] { 0 }); // Push left
+        var (nextState, reward, done, info) = env.Step(action);
 
         // Assert
         Assert.NotNull(nextState);
@@ -61,8 +62,10 @@ public class CartPoleEnvironmentTests
         env.Reset();
 
         // Act & Assert
-        Assert.Throws<ArgumentException>(() => env.Step(-1));
-        Assert.Throws<ArgumentException>(() => env.Step(2));
+        var invalidAction1 = new AiDotNet.LinearAlgebra.Vector<double>(new double[] { -1 });
+        var invalidAction2 = new AiDotNet.LinearAlgebra.Vector<double>(new double[] { 2 });
+        Assert.Throws<ArgumentException>(() => env.Step(invalidAction1));
+        Assert.Throws<ArgumentException>(() => env.Step(invalidAction2));
     }
 
     [Fact]
@@ -80,7 +83,8 @@ public class CartPoleEnvironmentTests
         var random = new Random(42);
         while (!done && steps < maxSteps)
         {
-            int action = random.Next(2);
+            int actionIndex = random.Next(2);
+            var action = new AiDotNet.LinearAlgebra.Vector<double>(new double[] { actionIndex });
             (_, _, done, _) = env.Step(action);
             steps++;
         }
@@ -105,8 +109,9 @@ public class CartPoleEnvironmentTests
         var state2 = env2.Reset();
 
         // Take same actions
-        var (nextState1, _, _, _) = env1.Step(0);
-        var (nextState2, _, _, _) = env2.Step(0);
+        var action = new AiDotNet.LinearAlgebra.Vector<double>(new double[] { 0 });
+        var (nextState1, _, _, _) = env1.Step(action);
+        var (nextState2, _, _, _) = env2.Step(action);
 
         // Assert - states should be identical
         for (int i = 0; i < 4; i++)
