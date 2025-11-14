@@ -70,11 +70,17 @@ public class ProcessRewardModel<T> : IRewardModel<T>
         if (step == null)
             throw new ArgumentNullException(nameof(step));
 
+        // Check cancellation before making LLM call
+        cancellationToken.ThrowIfCancellationRequested();
+
         // Build evaluation prompt
         string prompt = BuildStepRewardPrompt(step, context);
 
         // Get reward score from LLM
         string response = await _chatModel.GenerateResponseAsync(prompt);
+
+        // Check cancellation after LLM call
+        cancellationToken.ThrowIfCancellationRequested();
 
         // Parse the reward score
         double reward = ParseRewardScore(response);
