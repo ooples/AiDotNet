@@ -56,6 +56,12 @@ public class BreadthFirstSearch<T> : ISearchAlgorithm<T>
     {
         if (root == null)
             throw new ArgumentNullException(nameof(root));
+        if (generator == null)
+            throw new ArgumentNullException(nameof(generator));
+        if (evaluator == null)
+            throw new ArgumentNullException(nameof(evaluator));
+        if (config == null)
+            throw new ArgumentNullException(nameof(config));
 
         // Track the best path found
         AiDotNet.Reasoning.Models.ThoughtNode<T>? bestTerminalNode = null;

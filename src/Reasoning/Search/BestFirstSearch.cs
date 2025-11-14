@@ -66,6 +66,12 @@ public class BestFirstSearch<T> : ISearchAlgorithm<T>
     {
         if (root == null)
             throw new ArgumentNullException(nameof(root));
+        if (generator == null)
+            throw new ArgumentNullException(nameof(generator));
+        if (evaluator == null)
+            throw new ArgumentNullException(nameof(evaluator));
+        if (config == null)
+            throw new ArgumentNullException(nameof(config));
 
         // Evaluate root
         root.EvaluationScore = await evaluator.EvaluateThoughtAsync(root, root.Thought, config, cancellationToken);

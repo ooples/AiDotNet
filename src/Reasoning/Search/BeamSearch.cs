@@ -64,6 +64,12 @@ public class BeamSearch<T> : ISearchAlgorithm<T>
     {
         if (root == null)
             throw new ArgumentNullException(nameof(root));
+        if (generator == null)
+            throw new ArgumentNullException(nameof(generator));
+        if (evaluator == null)
+            throw new ArgumentNullException(nameof(evaluator));
+        if (config == null)
+            throw new ArgumentNullException(nameof(config));
 
         if (config.BeamWidth < 1)
             throw new ArgumentException("BeamWidth must be at least 1", nameof(config));
