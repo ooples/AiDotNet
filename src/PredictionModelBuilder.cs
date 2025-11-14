@@ -987,10 +987,9 @@ public class PredictionModelBuilder<T, TInput, TOutput> : IPredictionModelBuilde
     /// - Park et al. (2019). Relational Knowledge Distillation</para>
     /// </remarks>
     public IPredictionModelBuilder<T, TInput, TOutput> ConfigureKnowledgeDistillation(
-        KnowledgeDistillationOptions<T, TInput, TOutput> options)
+        KnowledgeDistillationOptions<T, TInput, TOutput>? options = null)
     {
-        if (options == null) throw new ArgumentNullException(nameof(options));
-        _knowledgeDistillationOptions = options;
+        _knowledgeDistillationOptions = options ?? new KnowledgeDistillationOptions<T, TInput, TOutput>();
         return this;
     }
 

@@ -604,10 +604,10 @@ public interface IPredictionModelBuilder<T, TInput, TOutput>
     ///
     /// <b>Note:</b> Current implementation requires student model to use Vector&lt;T&gt; for both input and output types.
     /// </remarks>
-    /// <param name="options">The knowledge distillation configuration options.</param>
+    /// <param name="options">The knowledge distillation configuration options (optional, uses sensible defaults if null).</param>
     /// <returns>The builder instance for method chaining.</returns>
     IPredictionModelBuilder<T, TInput, TOutput> ConfigureKnowledgeDistillation(
-        KnowledgeDistillationOptions<T, TInput, TOutput> options);
+        KnowledgeDistillationOptions<T, TInput, TOutput>? options = null);
 
     /// <summary>
     /// Asynchronously builds a meta-trained model that can quickly adapt to new tasks.
