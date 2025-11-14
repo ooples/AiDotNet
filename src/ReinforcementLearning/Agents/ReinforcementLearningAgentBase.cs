@@ -222,9 +222,9 @@ public abstract class ReinforcementLearningAgentBase<T> : IRLAgent<T>, IDisposab
     /// <summary>
     /// Gets the indices of active features.
     /// </summary>
-    public virtual int[] GetActiveFeatureIndices()
+    public virtual IEnumerable<int> GetActiveFeatureIndices()
     {
-        return Enumerable.Range(0, FeatureCount).ToArray();
+        return Enumerable.Range(0, FeatureCount);
     }
 
     /// <summary>
@@ -269,7 +269,7 @@ public abstract class ReinforcementLearningAgentBase<T> : IRLAgent<T>, IDisposab
     /// <summary>
     /// Computes gradients for the agent.
     /// </summary>
-    public abstract (Vector<T> Gradients, T Loss) ComputeGradients(
+    public abstract Vector<T> ComputeGradients(
         Vector<T> input,
         Vector<T> target,
         ILossFunction<T>? lossFunction = null);
