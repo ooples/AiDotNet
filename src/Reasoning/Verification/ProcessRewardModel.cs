@@ -113,7 +113,7 @@ public class ProcessRewardModel<T> : IRewardModel<T>
             };
 
             // Use existing score if available and verified, otherwise calculate
-            if (step.IsVerified && !EqualityComparer<T>.Default.Equals(step.Score, default(T)))
+            if (step.IsVerified && !_numOps.Equals(step.Score, _numOps.Zero))
             {
                 stepRewards.Add(step.Score);
             }
@@ -200,8 +200,8 @@ Evaluate the step:";
 
             if (root["reward"] != null)
             {
-                double reward = root["reward"]!.Value<double>();
-                return MathHelper.Clamp(reward, 0.0, 1.0);
+                double rewardValue = root["reward"]!.Value<double>();
+                return MathHelper.Clamp(rewardValue, 0.0, 1.0);
             }
         }
         catch (JsonException)

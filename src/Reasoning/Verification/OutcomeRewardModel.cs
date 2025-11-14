@@ -124,15 +124,16 @@ public class OutcomeRewardModel<T> : IRewardModel<T>
 
         // Compare final answer with correct answer
         string finalAnswer = chain.FinalAnswer ?? string.Empty;
+        string correctAnswerNonNull = correctAnswer ?? string.Empty;
 
         // Try exact match first
-        if (AnswersMatch(finalAnswer, correctAnswer))
+        if (AnswersMatch(finalAnswer, correctAnswerNonNull))
         {
             return _numOps.FromDouble(1.0);
         }
 
         // Try numerical comparison
-        if (TryNumericalComparison(finalAnswer, correctAnswer, out double numericalSimilarity))
+        if (TryNumericalComparison(finalAnswer, correctAnswerNonNull, out double numericalSimilarity))
         {
             if (numericalSimilarity >= _partialCreditThreshold)
             {
@@ -146,7 +147,7 @@ public class OutcomeRewardModel<T> : IRewardModel<T>
         {
             double semanticSimilarity = await CompareSemanticSimilarityAsync(
                 finalAnswer,
-                correctAnswer,
+                correctAnswerNonNull,
                 cancellationToken
             );
 
@@ -167,6 +168,8 @@ public class OutcomeRewardModel<T> : IRewardModel<T>
         ReasoningChain<T> chain,
         CancellationToken cancellationToken)
     {
+        await Task.CompletedTask;  // Suppress CS1998 warning
+
         // Heuristic-based reward without ground truth
         double reward = 0.0;
 
