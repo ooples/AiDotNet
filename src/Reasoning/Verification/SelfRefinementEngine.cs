@@ -62,6 +62,9 @@ public class SelfRefinementEngine<T> : ISelfRefinementEngine<T>
         if (critique == null)
             throw new ArgumentNullException(nameof(critique));
 
+        if (context == null)
+            throw new ArgumentNullException(nameof(context));
+
         // Build refinement prompt
         string prompt = BuildRefinementPrompt(step, critique, context);
 
