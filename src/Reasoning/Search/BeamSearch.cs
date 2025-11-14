@@ -119,7 +119,7 @@ public class BeamSearch<T> : ISearchAlgorithm<T>
                 {
                     child.EvaluationScore = await evaluator.EvaluateThoughtAsync(
                         child,
-                        root.Thought,
+                        child.Thought,
                         config,
                         cancellationToken);
 
