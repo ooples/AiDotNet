@@ -345,7 +345,7 @@ Maximum {config.MaxSteps} steps. Think step by step.";
             string jsonContent = ExtractJsonFromResponse(response);
             var root = JObject.Parse(jsonContent);
             string? answer = root["final_answer"]?.Value<string>();
-            if (!string.IsNullOrWhiteSpace(answer))
+            if (answer is not null && !string.IsNullOrWhiteSpace(answer))
             {
                 return answer;
             }

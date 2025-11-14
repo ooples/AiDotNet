@@ -297,9 +297,10 @@ def separate_paren_groups(paren_string: str) -> List[str]:
     private bool CheckCodeCorrectness(string? generatedCode, string referenceCode)
     {
         // Simple heuristic check (in production, would execute tests)
-        if (string.IsNullOrWhiteSpace(generatedCode))
+        if (generatedCode is null || string.IsNullOrWhiteSpace(generatedCode))
             return false;
 
+        // After null check, generatedCode is guaranteed non-null
         // Check for required keywords
         bool hasReturn = generatedCode.Contains("return");
         bool hasLogic = generatedCode.Length > 20;

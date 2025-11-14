@@ -181,7 +181,7 @@ public class CodeExecutionVerifier<T>
         // Extract code from chain
         string? code = ExtractCode(chain);
 
-        if (string.IsNullOrEmpty(code))
+        if (code is null || string.IsNullOrEmpty(code))
         {
             return new VerificationResult<T>
             {
@@ -192,6 +192,7 @@ public class CodeExecutionVerifier<T>
             };
         }
 
+        // At this point, code is guaranteed to be non-null and non-empty
         // Try to extract or infer test cases
         var testCases = ExtractTestCases(chain, correctAnswer);
 
@@ -206,7 +207,7 @@ public class CodeExecutionVerifier<T>
             };
         }
 
-        // Detect language
+        // Detect language (code is guaranteed non-null after check above)
         string language = DetectLanguage(code);
 
         // Execute verification

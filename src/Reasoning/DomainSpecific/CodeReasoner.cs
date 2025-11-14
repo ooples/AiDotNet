@@ -111,7 +111,7 @@ public class CodeReasoner<T>
 
         // Extract code from the result
         var extractedCode = ExtractCode(result.FinalAnswer);
-        if (!string.IsNullOrEmpty(extractedCode))
+        if (extractedCode is not null && !string.IsNullOrEmpty(extractedCode))
         {
             result.Metadata["extracted_code"] = extractedCode;
         }

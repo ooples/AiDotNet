@@ -35,7 +35,7 @@ public class GSM8KDataLoader
                 var answer = json["answer"]?.ToString();
 
                 // Extract final answer (after ####)
-                var finalAnswer = ExtractFinalAnswer(answer);
+                var finalAnswer = ExtractFinalAnswer(answer ?? "");
 
                 problems.Add(new GSM8KProblem
                 {
@@ -63,7 +63,7 @@ public class GSM8KDataLoader
         {
             Question = item["question"]?.ToString() ?? "",
             FullSolution = item["answer"]?.ToString() ?? "",
-            FinalAnswer = ExtractFinalAnswer(item["answer"]?.ToString()),
+            FinalAnswer = ExtractFinalAnswer(item["answer"]?.ToString() ?? ""),
             Steps = ExtractSteps(item["answer"]?.ToString() ?? "")
         }).ToList();
 

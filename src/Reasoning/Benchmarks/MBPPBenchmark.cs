@@ -427,9 +427,10 @@ assert unique_char_count('') == 0",
     private bool CheckCodeCorrectness(string? generatedCode, string referenceCode)
     {
         // Simple heuristic check (in production, would execute tests with CodeExecutionVerifier)
-        if (string.IsNullOrWhiteSpace(generatedCode))
+        if (generatedCode is null || string.IsNullOrWhiteSpace(generatedCode))
             return false;
 
+        // After null check, generatedCode is guaranteed non-null
         // Check for required keywords
         bool hasFunction = generatedCode.Contains("def ");
         bool hasReturn = generatedCode.Contains("return ");
