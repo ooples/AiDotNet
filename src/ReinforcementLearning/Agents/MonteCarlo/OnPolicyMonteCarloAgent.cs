@@ -212,7 +212,7 @@ public class OnPolicyMonteCarloAgent<T> : ReinforcementLearningAgentBase<T>
     {
         return new ModelMetadata<T>
         {
-            ModelType = "OnPolicyMonteCarlo",
+            ModelType = ModelType.ReinforcementLearning,
         };
     }
 
@@ -283,9 +283,9 @@ public class OnPolicyMonteCarloAgent<T> : ReinforcementLearningAgentBase<T>
     {
         var prediction = Predict(input);
         var usedLossFunction = lossFunction ?? LossFunction;
-        var loss = usedLossFunction.CalculateLoss(new Matrix<T>(new[] { prediction }), new Matrix<T>(new[] { target }));
+        // Loss computation not used in Monte Carlo methods
 
-        var gradient = usedLossFunction.CalculateDerivative(new Matrix<T>(new[] { prediction }), new Matrix<T>(new[] { target }));
+        var gradient = usedLossFunction.CalculateDerivative(prediction, target);
         return gradient;
     }
 

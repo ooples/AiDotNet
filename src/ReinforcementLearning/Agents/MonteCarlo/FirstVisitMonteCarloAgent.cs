@@ -189,7 +189,7 @@ public class FirstVisitMonteCarloAgent<T> : ReinforcementLearningAgentBase<T>
     {
         return new ModelMetadata<T>
         {
-            ModelType = "FirstVisitMonteCarlo",
+            ModelType = ModelType.ReinforcementLearning,
         };
     }
 
