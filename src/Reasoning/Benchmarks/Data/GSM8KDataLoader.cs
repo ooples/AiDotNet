@@ -1,4 +1,4 @@
-using System.Text.Json;
+using Newtonsoft.Json.Linq;
 
 namespace AiDotNet.Reasoning.Benchmarks.Data;
 
@@ -14,7 +14,7 @@ namespace AiDotNet.Reasoning.Benchmarks.Data;
 /// </remarks>
 public class GSM8KDataLoader
 {
-    public static async Task<List<GSM8KProblem>> LoadFromFileAsync(string filePath)
+    public static Task<List<GSM8KProblem>> LoadFromFileAsync(string filePath)
     {
         if (!File.Exists(filePath))
         {
@@ -22,7 +22,7 @@ public class GSM8KDataLoader
         }
 
         var problems = new List<GSM8KProblem>();
-        var lines = await File.ReadAllLinesAsync(filePath);
+        var lines = File.ReadAllLines(filePath); // net462 compatible
 
         foreach (var line in lines)
         {
@@ -30,9 +30,9 @@ public class GSM8KDataLoader
 
             try
             {
-                var json = JsonSerializer.Deserialize<JsonElement>(line);
-                var question = json.GetProperty("question").GetString();
-                var answer = json.GetProperty("answer").GetString();
+                var json = JObject.Parse(line); // Use Newtonsoft.Json
+                var question = json["question"]?.ToString();
+                var answer = json["answer"]?.ToString();
 
                 // Extract final answer (after ####)
                 var finalAnswer = ExtractFinalAnswer(answer);
@@ -51,21 +51,23 @@ public class GSM8KDataLoader
             }
         }
 
-        return problems;
+        return Task.FromResult(problems); // Return completed task
     }
 
-    public static async Task<List<GSM8KProblem>> LoadFromJsonArrayAsync(string filePath)
+    public static Task<List<GSM8KProblem>> LoadFromJsonArrayAsync(string filePath)
     {
-        var json = await File.ReadAllTextAsync(filePath);
-        var data = JsonSerializer.Deserialize<List<Dictionary<string, string>>>(json);
+        var json = File.ReadAllText(filePath); // net462 compatible
+        var data = JArray.Parse(json); // Use Newtonsoft.Json
 
-        return data?.Select(item => new GSM8KProblem
+        var problems = data.Select(item => new GSM8KProblem
         {
-            Question = item["question"],
-            FullSolution = item["answer"],
-            FinalAnswer = ExtractFinalAnswer(item["answer"]),
-            Steps = ExtractSteps(item["answer"])
-        }).ToList() ?? new List<GSM8KProblem>();
+            Question = item["question"]?.ToString() ?? "",
+            FullSolution = item["answer"]?.ToString() ?? "",
+            FinalAnswer = ExtractFinalAnswer(item["answer"]?.ToString()),
+            Steps = ExtractSteps(item["answer"]?.ToString() ?? "")
+        }).ToList();
+
+        return Task.FromResult(problems); // Return completed task
     }
 
     public static List<GSM8KProblem> GetSampleProblems()
@@ -112,8 +114,10 @@ public class GSM8KDataLoader
 
     private static string ExtractFinalAnswer(string answer)
     {
+        if (answer == null) return "";
+
         // Format: "... #### 42"
-        var parts = answer.Split("####");
+        var parts = answer.Split(new[] { "####" }, StringSplitOptions.None); // net462 compatible
         if (parts.Length > 1)
         {
             return parts[1].Trim();
@@ -121,12 +125,13 @@ public class GSM8KDataLoader
 
         // Fallback: try to extract last number
         var numbers = System.Text.RegularExpressions.Regex.Matches(answer, @"-?\d+\.?\d*");
-        return numbers.Count > 0 ? numbers[^1].Value : "";
+        return numbers.Count > 0 ? numbers[numbers.Count - 1].Value : ""; // net462: can't use ^1
     }
 
     private static string[] ExtractSteps(string solution)
     {
-        var lines = solution.Split('\n', StringSplitOptions.RemoveEmptyEntries);
+        // net462 compatible: Split by char array with StringSplitOptions
+        var lines = solution.Split(new[] { '\n' }, StringSplitOptions.RemoveEmptyEntries);
         return lines.Where(l => !l.Contains("####")).ToArray();
     }
 }

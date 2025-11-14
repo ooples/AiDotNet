@@ -1,4 +1,4 @@
-using System.Text.Json;
+using Newtonsoft.Json.Linq;
 using System.Text.RegularExpressions;
 
 namespace AiDotNet.Reasoning.Benchmarks.Data;
@@ -18,7 +18,7 @@ namespace AiDotNet.Reasoning.Benchmarks.Data;
 /// </remarks>
 public class HumanEvalDataLoader
 {
-    public static async Task<List<HumanEvalProblem>> LoadFromFileAsync(string filePath)
+    public static Task<List<HumanEvalProblem>> LoadFromFileAsync(string filePath)
     {
         if (!File.Exists(filePath))
         {
@@ -26,7 +26,7 @@ public class HumanEvalDataLoader
         }
 
         var problems = new List<HumanEvalProblem>();
-        var lines = await File.ReadAllLinesAsync(filePath);
+        var lines = File.ReadAllLines(filePath); // net462 compatible
 
         foreach (var line in lines)
         {
@@ -34,15 +34,15 @@ public class HumanEvalDataLoader
 
             try
             {
-                var json = JsonSerializer.Deserialize<JsonElement>(line);
+                var json = JObject.Parse(line); // Use Newtonsoft.Json
 
                 problems.Add(new HumanEvalProblem
                 {
-                    TaskId = json.GetProperty("task_id").GetString() ?? "",
-                    Prompt = json.GetProperty("prompt").GetString() ?? "",
-                    CanonicalSolution = json.GetProperty("canonical_solution").GetString() ?? "",
-                    Test = json.GetProperty("test").GetString() ?? "",
-                    EntryPoint = json.GetProperty("entry_point").GetString() ?? ""
+                    TaskId = json["task_id"]?.ToString() ?? "",
+                    Prompt = json["prompt"]?.ToString() ?? "",
+                    CanonicalSolution = json["canonical_solution"]?.ToString() ?? "",
+                    Test = json["test"]?.ToString() ?? "",
+                    EntryPoint = json["entry_point"]?.ToString() ?? ""
                 });
             }
             catch (Exception ex)
@@ -51,7 +51,7 @@ public class HumanEvalDataLoader
             }
         }
 
-        return problems;
+        return Task.FromResult(problems); // Return completed task for compatibility
     }
 
     public static List<HumanEvalProblem> GetSampleProblems()
