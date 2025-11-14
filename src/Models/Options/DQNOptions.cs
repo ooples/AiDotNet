@@ -19,7 +19,7 @@ public class DQNOptions<T>
     public int ReplayBufferSize { get; set; } = 100000;
     public int TargetUpdateFrequency { get; set; } = 1000;
     public int WarmupSteps { get; set; } = 1000;
-    public ILossFunction<T> LossFunction { get; set; } = new MeanSquaredError<T>();
+    public ILossFunction<T> LossFunction { get; set; } = new MeanSquaredErrorLoss<T>();
     public List<int> HiddenLayers { get; set; } = new List<int> { 128, 128 };
     public int? Seed { get; set; }
 

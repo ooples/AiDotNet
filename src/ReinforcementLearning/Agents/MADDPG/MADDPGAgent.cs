@@ -64,12 +64,7 @@ public class MADDPGAgent<T> : DeepReinforcementLearningAgentBase<T>
         });
         _stepCount = 0;
 
-        InitializeNetworks();
-        InitializeReplayBuffer();
-    }
-
-    private void InitializeNetworks()
-    {
+        // Initialize networks directly in constructor
         _actorNetworks = new List<INeuralNetwork<T>>();
         _targetActorNetworks = new List<INeuralNetwork<T>>();
         _criticNetworks = new List<INeuralNetwork<T>>();

@@ -60,7 +60,7 @@ public class PPOAgent<T> : DeepReinforcementLearningAgentBase<T>
         {
             LearningRate = options.PolicyLearningRate,
             DiscountFactor = options.DiscountFactor,
-            LossFunction = new MeanSquaredError<T>(),  // For policy, though we compute custom loss
+            LossFunction = new MeanSquaredErrorLoss<T>(),  // For policy, though we compute custom loss
             Seed = options.Seed,
             BatchSize = options.MiniBatchSize
         })
@@ -95,12 +95,12 @@ public class PPOAgent<T> : DeepReinforcementLearningAgentBase<T>
         if (_ppoOptions.IsContinuous)
         {
             // For continuous: output mean and log_std for Gaussian policy
-            layers.Add(new DenseLayer<T>(prevSize, _ppoOptions.ActionSize * 2, (IActivationFunction<T>)new LinearActivation<T>()));
+            layers.Add(new DenseLayer<T>(prevSize, _ppoOptions.ActionSize * 2, (IActivationFunction<T>)new IdentityActivation<T>()));
         }
         else
         {
             // For discrete: output action logits (softmax applied later)
-            layers.Add(new DenseLayer<T>(prevSize, _ppoOptions.ActionSize, (IActivationFunction<T>)new LinearActivation<T>()));
+            layers.Add(new DenseLayer<T>(prevSize, _ppoOptions.ActionSize, (IActivationFunction<T>)new IdentityActivation<T>()));
         }
 
         var architecture = new NeuralNetworkArchitecture<T>
@@ -125,7 +125,7 @@ public class PPOAgent<T> : DeepReinforcementLearningAgentBase<T>
         }
 
         // Output layer (single value)
-        layers.Add(new DenseLayer<T>(prevSize, 1, (IActivationFunction<T>)new LinearActivation<T>()));
+        layers.Add(new DenseLayer<T>(prevSize, 1, (IActivationFunction<T>)new IdentityActivation<T>()));
 
         var architecture = new NeuralNetworkArchitecture<T>
         {

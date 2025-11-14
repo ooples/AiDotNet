@@ -56,7 +56,7 @@ public class REINFORCEAgent<T> : DeepReinforcementLearningAgentBase<T>
         {
             LearningRate = options.LearningRate,
             DiscountFactor = options.DiscountFactor,
-            LossFunction = new MeanSquaredError<T>(),
+            LossFunction = new MeanSquaredErrorLoss<T>(),
             Seed = options.Seed
         })
     {
@@ -82,7 +82,7 @@ public class REINFORCEAgent<T> : DeepReinforcementLearningAgentBase<T>
             ? _reinforceOptions.ActionSize * 2  // Mean and log_std for Gaussian
             : _reinforceOptions.ActionSize;      // Logits for categorical
 
-        layers.Add(new DenseLayer<T>(prevSize, outputSize, (IActivationFunction<T>)new LinearActivation<T>()));
+        layers.Add(new DenseLayer<T>(prevSize, outputSize, (IActivationFunction<T>)new IdentityActivation<T>()));
 
         return new NeuralNetwork<T>(new NeuralNetworkArchitecture<T>
         {

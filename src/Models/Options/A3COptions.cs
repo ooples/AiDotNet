@@ -43,7 +43,7 @@ public class A3COptions<T> : ReinforcementLearningOptions<T>
     public int NumWorkers { get; init; } = 4;  // Number of parallel agents
     public int TMax { get; init; } = 5;  // Steps before updating global network
 
-    public ILossFunction<T> ValueLossFunction { get; init; } = new MeanSquaredError<T>();
+    public ILossFunction<T> ValueLossFunction { get; init; } = new MeanSquaredErrorLoss<T>();
     public List<int> PolicyHiddenLayers { get; init; } = new List<int> { 128, 128 };
     public List<int> ValueHiddenLayers { get; init; } = new List<int> { 128, 128 };
 

@@ -139,7 +139,7 @@ public class PPOOptions<T>
     /// <summary>
     /// Loss function for value network (typically MSE).
     /// </summary>
-    public ILossFunction<T> ValueLossFunction { get; set; } = new MeanSquaredError<T>();
+    public ILossFunction<T> ValueLossFunction { get; set; } = new MeanSquaredErrorLoss<T>();
 
     /// <summary>
     /// Hidden layer sizes for policy network.

@@ -58,11 +58,7 @@ public class A3CAgent<T> : DeepReinforcementLearningAgentBase<T>
         });
         _globalSteps = 0;
 
-        InitializeGlobalNetworks();
-    }
-
-    private void InitializeGlobalNetworks()
-    {
+        // Initialize networks directly in constructor
         _globalPolicyNetwork = CreatePolicyNetwork();
         _globalValueNetwork = CreateValueNetwork();
 
@@ -75,52 +71,57 @@ public class A3CAgent<T> : DeepReinforcementLearningAgentBase<T>
     {
         int outputSize = _options.IsContinuous ? _options.ActionSize * 2 : _options.ActionSize;
 
-        var architecture = new NeuralNetworkArchitecture<T>
-        {
-            TaskType = NeuralNetworkTaskType.Regression
-        };
+        var layers = new List<ILayer<T>>();
+        int prevSize = _options.StateSize;
 
-        // Use LayerHelper to create production-ready network layers
-        var layers = LayerHelper<T>.CreateDefaultFeedForwardLayers(
-            architecture,
-            hiddenLayerCount: _options.PolicyHiddenLayers.Count,
-            hiddenLayerSize: _options.PolicyHiddenLayers.FirstOrDefault() > 0 ? _options.PolicyHiddenLayers.First() : 128
-        ).ToList();
-
-        // Override output layer activation for continuous vs discrete actions
-        if (!_options.IsContinuous)
+        foreach (var hiddenSize in _options.PolicyHiddenLayers)
         {
-            // For discrete actions, replace final layer with softmax activation
-            var lastLayer = layers[layers.Count - 1];
-            if (lastLayer is DenseLayer<T> denseLayer)
-            {
-                layers[layers.Count - 1] = new DenseLayer<T>(
-                    denseLayer.GetWeights().Rows,
-                    outputSize,
-                    new SoftmaxActivation<T>()
-                );
-            }
+            layers.Add(new DenseLayer<T>(prevSize, hiddenSize, new TanhActivation<T>()));
+            prevSize = hiddenSize;
         }
 
-        architecture.Layers = layers;
+        // Output layer
+        if (_options.IsContinuous)
+        {
+            layers.Add(new DenseLayer<T>(prevSize, outputSize, new IdentityActivation<T>()));
+        }
+        else
+        {
+            layers.Add(new DenseLayer<T>(prevSize, outputSize, new SoftmaxActivation<T>()));
+        }
+
+        var architecture = new NeuralNetworkArchitecture<T>(
+            inputType: InputType.OneDimensional,
+            taskType: NeuralNetworkTaskType.Regression,
+            complexity: NetworkComplexity.Medium,
+            inputSize: _options.StateSize,
+            outputSize: outputSize,
+            layers: layers);
+
         return new NeuralNetwork<T>(architecture, _options.ValueLossFunction);
     }
 
     private INeuralNetwork<T> CreateValueNetwork()
     {
-        var architecture = new NeuralNetworkArchitecture<T>
+        var layers = new List<ILayer<T>>();
+        int prevSize = _options.StateSize;
+
+        foreach (var hiddenSize in _options.ValueHiddenLayers)
         {
-            TaskType = NeuralNetworkTaskType.Regression
-        };
+            layers.Add(new DenseLayer<T>(prevSize, hiddenSize, new TanhActivation<T>()));
+            prevSize = hiddenSize;
+        }
 
-        // Use LayerHelper to create production-ready network layers
-        var layers = LayerHelper<T>.CreateDefaultFeedForwardLayers(
-            architecture,
-            hiddenLayerCount: _options.ValueHiddenLayers.Count,
-            hiddenLayerSize: _options.ValueHiddenLayers.FirstOrDefault() > 0 ? _options.ValueHiddenLayers.First() : 128
-        );
+        layers.Add(new DenseLayer<T>(prevSize, 1, new IdentityActivation<T>()));
 
-        architecture.Layers = layers.ToList();
+        var architecture = new NeuralNetworkArchitecture<T>(
+            inputType: InputType.OneDimensional,
+            taskType: NeuralNetworkTaskType.Regression,
+            complexity: NetworkComplexity.Medium,
+            inputSize: _options.StateSize,
+            outputSize: 1,
+            layers: layers);
+
         return new NeuralNetwork<T>(architecture, _options.ValueLossFunction);
     }
 
@@ -130,7 +131,9 @@ public class A3CAgent<T> : DeepReinforcementLearningAgentBase<T>
 
         lock (_globalLock)
         {
-            policyOutput = _globalPolicyNetwork.Predict(state);
+            var stateTensor = Tensor<T>.FromVector(state);
+            var policyOutputTensor = _globalPolicyNetwork.Predict(stateTensor);
+            policyOutput = policyOutputTensor.ToVector();
         }
 
         if (_options.IsContinuous)

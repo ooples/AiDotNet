@@ -53,12 +53,7 @@ public class MuZeroAgent<T> : DeepReinforcementLearningAgentBase<T>
         _options = options;
         _updateCount = 0;
 
-        InitializeNetworks();
-        InitializeReplayBuffer();
-    }
-
-    private void InitializeNetworks()
-    {
+        // Initialize networks directly in constructor
         // Representation function: observation -> hidden state
         _representationNetwork = CreateNetwork(_options.ObservationSize, _options.LatentStateSize, _options.RepresentationLayers);
 
@@ -67,6 +62,9 @@ public class MuZeroAgent<T> : DeepReinforcementLearningAgentBase<T>
 
         // Prediction function: hidden state -> (policy, value)
         _predictionNetwork = CreateNetwork(_options.LatentStateSize, _options.ActionSize + 1, _options.PredictionLayers);
+
+        // Initialize replay buffer
+        _replayBuffer = new UniformReplayBuffer<T>(_options.ReplayBufferSize, _options.Seed);
     }
 
     private NeuralNetwork<T> CreateNetwork(int inputSize, int outputSize, List<int> hiddenLayers)
@@ -77,7 +75,7 @@ public class MuZeroAgent<T> : DeepReinforcementLearningAgentBase<T>
         foreach (var layerSize in hiddenLayers)
         {
             network.AddLayer(new DenseLayer<T>(previousSize, layerSize, (IActivationFunction<T>?)null));
-            network.AddLayer(new ActivationLayer<T>(new ReLU<T>()));
+            network.AddLayer(new ActivationLayer<T>(new ReLUActivation<T>()));
             previousSize = layerSize;
         }
 

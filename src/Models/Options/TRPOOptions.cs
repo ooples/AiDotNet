@@ -49,7 +49,7 @@ public class TRPOOptions<T> : ReinforcementLearningOptions<T>
 
     public int StepsPerUpdate { get; init; } = 2048;
     public int ValueIterations { get; init; } = 5;
-    public ILossFunction<T> ValueLossFunction { get; init; } = new MeanSquaredError<T>();
+    public ILossFunction<T> ValueLossFunction { get; init; } = new MeanSquaredErrorLoss<T>();
     public List<int> PolicyHiddenLayers { get; init; } = new List<int> { 64, 64 };
     public List<int> ValueHiddenLayers { get; init; } = new List<int> { 64, 64 };
 

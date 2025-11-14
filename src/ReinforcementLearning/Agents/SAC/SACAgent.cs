@@ -108,7 +108,7 @@ public class SACAgent<T> : DeepReinforcementLearningAgentBase<T>
         }
 
         // Output: mean and log_std for each action dimension
-        layers.Add(new DenseLayer<T>(prevSize, _sacOptions.ActionSize * 2, (IActivationFunction<T>)new LinearActivation<T>()));
+        layers.Add(new DenseLayer<T>(prevSize, _sacOptions.ActionSize * 2, (IActivationFunction<T>)new IdentityActivation<T>()));
 
         var architecture = new NeuralNetworkArchitecture<T>
         {
@@ -133,7 +133,7 @@ public class SACAgent<T> : DeepReinforcementLearningAgentBase<T>
         }
 
         // Output: single Q-value
-        layers.Add(new DenseLayer<T>(prevSize, 1, (IActivationFunction<T>)new LinearActivation<T>()));
+        layers.Add(new DenseLayer<T>(prevSize, 1, (IActivationFunction<T>)new IdentityActivation<T>()));
 
         var architecture = new NeuralNetworkArchitecture<T>
         {

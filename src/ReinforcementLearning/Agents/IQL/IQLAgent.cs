@@ -62,12 +62,7 @@ public class IQLAgent<T> : DeepReinforcementLearningAgentBase<T>
         _random = options.Seed.HasValue ? new Random(options.Seed.Value) : new Random();
         _updateCount = 0;
 
-        InitializeNetworks();
-        InitializeBuffer();
-    }
-
-    private void InitializeNetworks()
-    {
+        // Initialize networks directly in constructor
         _policyNetwork = CreatePolicyNetwork();
         _valueNetwork = CreateValueNetwork();
         _q1Network = CreateQNetwork();
@@ -75,6 +70,9 @@ public class IQLAgent<T> : DeepReinforcementLearningAgentBase<T>
         _targetValueNetwork = CreateValueNetwork();
 
         CopyNetworkWeights(_valueNetwork, _targetValueNetwork);
+
+        // Initialize offline buffer
+        _offlineBuffer = new UniformReplayBuffer<T>(_options.BufferSize, _options.Seed);
     }
 
     private NeuralNetwork<T> CreatePolicyNetwork()
@@ -85,7 +83,7 @@ public class IQLAgent<T> : DeepReinforcementLearningAgentBase<T>
         foreach (var layerSize in _options.PolicyHiddenLayers)
         {
             network.AddLayer(new DenseLayer<T>(previousSize, layerSize, (IActivationFunction<T>?)null));
-            network.AddLayer(new ActivationLayer<T>(new ReLU<T>()));
+            network.AddLayer(new ActivationLayer<T>(new ReLUActivation<T>()));
             previousSize = layerSize;
         }
 
@@ -103,7 +101,7 @@ public class IQLAgent<T> : DeepReinforcementLearningAgentBase<T>
         foreach (var layerSize in _options.ValueHiddenLayers)
         {
             network.AddLayer(new DenseLayer<T>(previousSize, layerSize, (IActivationFunction<T>?)null));
-            network.AddLayer(new ActivationLayer<T>(new ReLU<T>()));
+            network.AddLayer(new ActivationLayer<T>(new ReLUActivation<T>()));
             previousSize = layerSize;
         }
 
@@ -121,7 +119,7 @@ public class IQLAgent<T> : DeepReinforcementLearningAgentBase<T>
         foreach (var layerSize in _options.QHiddenLayers)
         {
             network.AddLayer(new DenseLayer<T>(previousSize, layerSize, (IActivationFunction<T>?)null));
-            network.AddLayer(new ActivationLayer<T>(new ReLU<T>()));
+            network.AddLayer(new ActivationLayer<T>(new ReLUActivation<T>()));
             previousSize = layerSize;
         }
 

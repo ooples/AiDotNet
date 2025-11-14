@@ -6,8 +6,6 @@ using AiDotNet.NeuralNetworks.Layers;
 using AiDotNet.ActivationFunctions;
 using AiDotNet.ReinforcementLearning.ReplayBuffers;
 using AiDotNet.Helpers;
-using AiDotNet.Enums;
-using AiDotNet.LossFunctions;
 
 namespace AiDotNet.ReinforcementLearning.Agents.WorldModels;
 
@@ -56,7 +54,9 @@ public class WorldModelsAgent<T> : DeepReinforcementLearningAgentBase<T>
     private UniformReplayBuffer<T> _replayBuffer;
     private int _updateCount;
 
-    public WorldModelsAgent(WorldModelsOptions<T> options) : base(options)
+    public WorldModelsAgent(WorldModelsOptions<T> options) : base(
+        options.ObservationWidth * options.ObservationHeight * options.ObservationChannels,
+        options.ActionSize)
     {
         _options = options;
         _updateCount = 0;
@@ -95,26 +95,25 @@ public class WorldModelsAgent<T> : DeepReinforcementLearningAgentBase<T>
 
     private NeuralNetwork<T> CreateEncoderNetwork(int inputSize, int outputSize)
     {
-        var architecture = new NeuralNetworkArchitecture<T>();
-        var network = new NeuralNetwork<T>(architecture, new MeanSquaredErrorLoss<T>());
+        var network = new NeuralNetwork<T>();
         int previousSize = inputSize;
 
         // Simple feedforward approximation of convolutional VAE
         foreach (var channels in _options.VAEEncoderChannels)
         {
-            network.AddLayer(LayerType.Dense, channels, ActivationFunction.ReLU);
+            network.AddLayer(new DenseLayer<T>(previousSize, channels, (IActivationFunction<T>?)null));
+            network.AddLayer(new ActivationLayer<T>(new ReLU<T>()));
             previousSize = channels;
         }
 
-        network.AddLayer(LayerType.Dense, outputSize, ActivationFunction.Linear);
+        network.AddLayer(new DenseLayer<T>(previousSize, outputSize, (IActivationFunction<T>?)null));
 
         return network;
     }
 
     private NeuralNetwork<T> CreateDecoderNetwork(int inputSize, int outputSize)
     {
-        var architecture = new NeuralNetworkArchitecture<T>();
-        var network = new NeuralNetwork<T>(architecture, new MeanSquaredErrorLoss<T>());
+        var network = new NeuralNetwork<T>();
         int previousSize = inputSize;
 
         // Reverse of encoder
@@ -123,11 +122,13 @@ public class WorldModelsAgent<T> : DeepReinforcementLearningAgentBase<T>
 
         foreach (var channels in reversedChannels)
         {
-            network.AddLayer(LayerType.Dense, channels, ActivationFunction.ReLU);
+            network.AddLayer(new DenseLayer<T>(previousSize, channels, (IActivationFunction<T>?)null));
+            network.AddLayer(new ActivationLayer<T>(new ReLU<T>()));
             previousSize = channels;
         }
 
-        network.AddLayer(LayerType.Dense, outputSize, ActivationFunction.Sigmoid);
+        network.AddLayer(new DenseLayer<T>(previousSize, outputSize, (IActivationFunction<T>?)null));
+        network.AddLayer(new ActivationLayer<T>(new Sigmoid<T>()));
 
         return network;
     }
@@ -135,12 +136,12 @@ public class WorldModelsAgent<T> : DeepReinforcementLearningAgentBase<T>
     private NeuralNetwork<T> CreateRNNNetwork()
     {
         // Simplified RNN: (latent, action, hidden) -> (next_latent_mean, next_latent_logvar, next_hidden)
-        var architecture = new NeuralNetworkArchitecture<T>();
-        var network = new NeuralNetwork<T>(architecture, new MeanSquaredErrorLoss<T>());
+        var network = new NeuralNetwork<T>();
         int inputSize = _options.LatentSize + _options.ActionSize + _options.RNNHiddenSize;
 
-        network.AddLayer(LayerType.Dense, _options.RNNHiddenSize, ActivationFunction.Tanh);
-        network.AddLayer(LayerType.Dense, _options.LatentSize * _options.NumMixtures + _options.RNNHiddenSize, ActivationFunction.Linear);
+        network.AddLayer(new DenseLayer<T>(inputSize, _options.RNNHiddenSize, (IActivationFunction<T>?)null));
+        network.AddLayer(new ActivationLayer<T>(new Tanh<T>()));
+        network.AddLayer(new DenseLayer<T>(_options.RNNHiddenSize, _options.LatentSize * _options.NumMixtures + _options.RNNHiddenSize, (IActivationFunction<T>?)null));
 
         return network;
     }
@@ -148,7 +149,7 @@ public class WorldModelsAgent<T> : DeepReinforcementLearningAgentBase<T>
     public override Vector<T> SelectAction(Vector<T> observation, bool training = true)
     {
         // Encode observation to latent code
-        var encoderOutput = _vaeEncoder.Predict(Tensor<T>.FromVector(observation)).ToVector();
+        var encoderOutput = _vaeEncoder.Forward(observation);
         var latentMean = ExtractMean(encoderOutput);
 
         // Concatenate latent and RNN hidden state
@@ -168,7 +169,7 @@ public class WorldModelsAgent<T> : DeepReinforcementLearningAgentBase<T>
 
         // Update RNN hidden state for next step
         var rnnInput = ConcatenateVectors(ConcatenateVectors(latentMean, action), _rnnHiddenState);
-        var rnnOutput = _rnnNetwork.Predict(Tensor<T>.FromVector(rnnInput)).ToVector();
+        var rnnOutput = _rnnNetwork.Predict(rnnInput);
 
         // Extract new hidden state
         int hiddenOffset = _options.LatentSize * _options.NumMixtures;
@@ -225,7 +226,7 @@ public class WorldModelsAgent<T> : DeepReinforcementLearningAgentBase<T>
         foreach (var experience in batch)
         {
             // Encode
-            var encoderOutput = _vaeEncoder.Predict(Tensor<T>.FromVector(experience.State)).ToVector();
+            var encoderOutput = _vaeEncoder.Forward(experience.State);
             var latentMean = ExtractMean(encoderOutput);
             var latentLogVar = ExtractLogVar(encoderOutput);
 
@@ -233,7 +234,7 @@ public class WorldModelsAgent<T> : DeepReinforcementLearningAgentBase<T>
             var latentSample = SampleLatent(latentMean, latentLogVar);
 
             // Decode
-            var reconstruction = _vaeDecoder.Predict(Tensor<T>.FromVector(latentSample)).ToVector();
+            var reconstruction = _vaeDecoder.Forward(latentSample);
 
             // Reconstruction loss (MSE)
             T reconLoss = NumOps.Zero;
@@ -263,7 +264,7 @@ public class WorldModelsAgent<T> : DeepReinforcementLearningAgentBase<T>
                 gradient[i] = NumOps.Subtract(reconstruction[i], experience.State[i]);
             }
 
-            _vaeDecoder.Backpropagate(Tensor<T>.FromVector(gradient));
+            _vaeDecoder.Backpropagate(gradient);
             _vaeDecoder.UpdateParameters(_options.LearningRate);
 
             _vaeEncoder.UpdateParameters(_options.LearningRate);
@@ -280,12 +281,12 @@ public class WorldModelsAgent<T> : DeepReinforcementLearningAgentBase<T>
         foreach (var experience in batch)
         {
             // Encode current and next observation
-            var currentLatent = ExtractMean(_vaeEncoder.Predict(Tensor<T>.FromVector(experience.State)).ToVector());
-            var nextLatent = ExtractMean(_vaeEncoder.Predict(Tensor<T>.FromVector(experience.NextState)).ToVector());
+            var currentLatent = ExtractMean(_vaeEncoder.Forward(experience.State));
+            var nextLatent = ExtractMean(_vaeEncoder.Forward(experience.NextState));
 
             // Predict next latent using RNN
             var rnnInput = ConcatenateVectors(ConcatenateVectors(currentLatent, experience.Action), _rnnHiddenState);
-            var rnnOutput = _rnnNetwork.Predict(Tensor<T>.FromVector(rnnInput)).ToVector();
+            var rnnOutput = _rnnNetwork.Predict(rnnInput);
 
             // Extract predicted next latent
             var predictedNextLatent = new Vector<T>(_options.LatentSize);
@@ -311,7 +312,7 @@ public class WorldModelsAgent<T> : DeepReinforcementLearningAgentBase<T>
                 gradient[i] = NumOps.Subtract(predictedNextLatent[i], nextLatent[i]);
             }
 
-            _rnnNetwork.Backpropagate(Tensor<T>.FromVector(gradient));
+            _rnnNetwork.Backpropagate(gradient);
             _rnnNetwork.UpdateParameters(_options.LearningRate);
         }
 
@@ -502,7 +503,7 @@ public class WorldModelsAgent<T> : DeepReinforcementLearningAgentBase<T>
     {
         if (Networks.Count > 0)
         {
-            Networks[0].Backpropagate(Tensor<T>.FromVector(gradients));
+            Networks[0].Backpropagate(gradients);
             Networks[0].UpdateParameters(learningRate);
         }
     }

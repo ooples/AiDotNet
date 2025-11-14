@@ -62,11 +62,7 @@ public class DecisionTransformerAgent<T> : DeepReinforcementLearningAgentBase<T>
         _trajectoryBuffer = new List<(Vector<T>, Vector<T>, T, T)>();
         _currentContext = new SequenceContext<T>();
 
-        InitializeNetwork();
-    }
-
-    private void InitializeNetwork()
-    {
+        // Initialize network directly in constructor
         // Input: concatenated [return_to_go, state, previous_action]
         int inputSize = 1 + _options.StateSize + _options.ActionSize;
 

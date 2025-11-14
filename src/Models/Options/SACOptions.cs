@@ -136,7 +136,7 @@ public class SACOptions<T>
     /// <summary>
     /// Loss function for Q-networks (typically MSE).
     /// </summary>
-    public ILossFunction<T> QLossFunction { get; set; } = new MeanSquaredError<T>();
+    public ILossFunction<T> QLossFunction { get; set; } = new MeanSquaredErrorLoss<T>();
 
     /// <summary>
     /// Hidden layer sizes for policy network.

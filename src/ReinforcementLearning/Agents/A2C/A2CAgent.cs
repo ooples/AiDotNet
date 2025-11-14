@@ -50,7 +50,7 @@ public class A2CAgent<T> : DeepReinforcementLearningAgentBase<T>
         {
             LearningRate = options.PolicyLearningRate,
             DiscountFactor = options.DiscountFactor,
-            LossFunction = new MeanSquaredError<T>(),
+            LossFunction = new MeanSquaredErrorLoss<T>(),
             Seed = options.Seed
         })
     {
@@ -76,13 +76,17 @@ public class A2CAgent<T> : DeepReinforcementLearningAgentBase<T>
         }
 
         int outputSize = _a2cOptions.IsContinuous ? _a2cOptions.ActionSize * 2 : _a2cOptions.ActionSize;
-        layers.Add(new DenseLayer<T>(prevSize, outputSize, (IActivationFunction<T>)new LinearActivation<T>()));
+        layers.Add(new DenseLayer<T>(prevSize, outputSize, (IActivationFunction<T>)new IdentityActivation<T>()));
 
-        return new NeuralNetwork<T>(new NeuralNetworkArchitecture<T>
-        {
-            Layers = layers,
-            TaskType = NeuralNetworkTaskType.Regression
-        });
+        var architecture = new NeuralNetworkArchitecture<T>(
+            inputType: InputType.OneDimensional,
+            taskType: NeuralNetworkTaskType.Regression,
+            complexity: NetworkComplexity.Medium,
+            inputSize: _a2cOptions.StateSize,
+            outputSize: outputSize,
+            layers: layers);
+
+        return new NeuralNetwork<T>(architecture);
     }
 
     private NeuralNetwork<T> BuildValueNetwork()
@@ -96,19 +100,25 @@ public class A2CAgent<T> : DeepReinforcementLearningAgentBase<T>
             prevSize = hiddenSize;
         }
 
-        layers.Add(new DenseLayer<T>(prevSize, 1, (IActivationFunction<T>)new LinearActivation<T>()));
+        layers.Add(new DenseLayer<T>(prevSize, 1, (IActivationFunction<T>)new IdentityActivation<T>()));
 
-        return new NeuralNetwork<T>(new NeuralNetworkArchitecture<T>
-        {
-            Layers = layers,
-            TaskType = NeuralNetworkTaskType.Regression
-        }, _a2cOptions.ValueLossFunction);
+        var architecture = new NeuralNetworkArchitecture<T>(
+            inputType: InputType.OneDimensional,
+            taskType: NeuralNetworkTaskType.Regression,
+            complexity: NetworkComplexity.Medium,
+            inputSize: _a2cOptions.StateSize,
+            outputSize: 1,
+            layers: layers);
+
+        return new NeuralNetwork<T>(architecture, _a2cOptions.ValueLossFunction);
     }
 
     /// <inheritdoc/>
     public override Vector<T> SelectAction(Vector<T> state, bool training = true)
     {
-        var policyOutput = _policyNetwork.Predict(state);
+        var stateTensor = Tensor<T>.FromVector(state);
+        var policyOutputTensor = _policyNetwork.Predict(stateTensor);
+        var policyOutput = policyOutputTensor.ToVector();
 
         if (_a2cOptions.IsContinuous)
         {
@@ -158,14 +168,18 @@ public class A2CAgent<T> : DeepReinforcementLearningAgentBase<T>
     /// <inheritdoc/>
     public override void StoreExperience(Vector<T> state, Vector<T> action, T reward, Vector<T> nextState, bool done)
     {
-        var value = _valueNetwork.Predict(state)[0];
+        var stateTensor = Tensor<T>.FromVector(state);
+        var valueTensor = _valueNetwork.Predict(stateTensor);
+        var value = valueTensor.ToVector()[0];
         var logProb = ComputeLogProb(state, action);
         _trajectory.AddStep(state, action, reward, value, logProb, done);
     }
 
     private T ComputeLogProb(Vector<T> state, Vector<T> action)
     {
-        var policyOutput = _policyNetwork.Predict(state);
+        var stateTensor = Tensor<T>.FromVector(state);
+        var policyOutputTensor = _policyNetwork.Predict(stateTensor);
+        var policyOutput = policyOutputTensor.ToVector();
 
         if (_a2cOptions.IsContinuous)
         {
@@ -228,7 +242,9 @@ public class A2CAgent<T> : DeepReinforcementLearningAgentBase<T>
                 NumOps.Multiply(logProb, advantage));
 
             // Value loss: (V - return)^2
-            var predictedValue = _valueNetwork.Predict(state)[0];
+            var stateTensor = Tensor<T>.FromVector(state);
+            var valueTensor = _valueNetwork.Predict(stateTensor);
+            var predictedValue = valueTensor.ToVector()[0];
             var valueDiff = NumOps.Subtract(predictedValue, targetReturn);
             valueLoss = NumOps.Add(valueLoss,
                 NumOps.Multiply(valueDiff, valueDiff));
@@ -259,20 +275,26 @@ public class A2CAgent<T> : DeepReinforcementLearningAgentBase<T>
             var action = _trajectory.Actions[i];
             var advantage = _trajectory.Advantages![i];
             var targetReturn = _trajectory.Returns![i];
-            
+
             // Policy gradient: compute ∇ loss w.r.t. policy output
-            var policyOutput = _policyNetwork.Predict(state);
+            var stateTensor1 = Tensor<T>.FromVector(state);
+            var policyOutputTensor = _policyNetwork.Predict(stateTensor1);
+            var policyOutput = policyOutputTensor.ToVector();
             var policyGradient = ComputePolicyOutputGradient(policyOutput, action, advantage);
-            _policyNetwork.Backpropagate(policyGradient);
-            
+            var policyGradientTensor = Tensor<T>.FromVector(policyGradient);
+            _policyNetwork.Backpropagate(policyGradientTensor);
+
             // Value gradient: ∇ MSE w.r.t. value output = 2 * (V - target) / batchSize
-            var predictedValue = _valueNetwork.Predict(state)[0];
+            var stateTensor2 = Tensor<T>.FromVector(state);
+            var valueTensor = _valueNetwork.Predict(stateTensor2);
+            var predictedValue = valueTensor.ToVector()[0];
             var valueDiff = NumOps.Subtract(predictedValue, targetReturn);
             var valueGradient = new Vector<T>(1);
             valueGradient[0] = NumOps.Divide(
                 NumOps.Multiply(NumOps.FromDouble(2.0), valueDiff),
                 NumOps.FromDouble(_trajectory.Length));
-            _valueNetwork.Backpropagate(valueGradient);
+            var valueGradientTensor = Tensor<T>.FromVector(valueGradient);
+            _valueNetwork.Backpropagate(valueGradientTensor);
         }
         
         // Now update network parameters using accumulated gradients
@@ -333,7 +355,7 @@ public class A2CAgent<T> : DeepReinforcementLearningAgentBase<T>
     private void UpdatePolicyNetwork()
     {
         var params_ = _policyNetwork.GetParameters();
-        var grads = _policyNetwork.GetFlattenedGradients();
+        var grads = _policyNetwork.GetGradients();
 
         for (int i = 0; i < params_.Length; i++)
         {
@@ -347,7 +369,7 @@ public class A2CAgent<T> : DeepReinforcementLearningAgentBase<T>
     private void UpdateValueNetwork()
     {
         var params_ = _valueNetwork.GetParameters();
-        var grads = _valueNetwork.GetFlattenedGradients();
+        var grads = _valueNetwork.GetGradients();
 
         for (int i = 0; i < params_.Length; i++)
         {
@@ -360,7 +382,9 @@ public class A2CAgent<T> : DeepReinforcementLearningAgentBase<T>
 
     private T ComputeEntropy(Vector<T> state)
     {
-        var policyOutput = _policyNetwork.Predict(state);
+        var stateTensor = Tensor<T>.FromVector(state);
+        var policyOutputTensor = _policyNetwork.Predict(stateTensor);
+        var policyOutput = policyOutputTensor.ToVector();
 
         if (_a2cOptions.IsContinuous)
         {
@@ -628,7 +652,7 @@ public class A2CAgent<T> : DeepReinforcementLearningAgentBase<T>
     {
         for (int i = 0; i < action.Length; i++)
         {
-            if (NumOps.Compare(action[i], NumOps.FromDouble(0.5)) > 0)
+            if (NumOps.GreaterThan(action[i], NumOps.FromDouble(0.5)))
                 return i;
         }
         return 0;

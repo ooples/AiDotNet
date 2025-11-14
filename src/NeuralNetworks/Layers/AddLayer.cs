@@ -95,7 +95,7 @@ public class AddLayer<T> : LayerBase<T>
     /// // Create an AddLayer for combining two 28×28 feature maps with ReLU activation
     /// var addLayer = new AddLayer<float>(
     ///     new[] { new[] { 32, 28, 28, 64 }, new[] { 32, 28, 28, 64 } },
-    ///     new ReLU<float>()
+    ///     new ReLUActivation<float>()
     /// );
     /// ```
     /// 

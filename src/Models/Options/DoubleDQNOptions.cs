@@ -12,7 +12,7 @@ public class DoubleDQNOptions<T>
     public int ActionSize { get; set; }
     public T LearningRate { get; set; }
     public T DiscountFactor { get; set; }
-    public ILossFunction<T> LossFunction { get; set; } = new MeanSquaredError<T>();
+    public ILossFunction<T> LossFunction { get; set; } = new MeanSquaredErrorLoss<T>();
     public double EpsilonStart { get; set; } = 1.0;
     public double EpsilonEnd { get; set; } = 0.01;
     public double EpsilonDecay { get; set; } = 0.995;

@@ -20,6 +20,7 @@ public class SARSALambdaAgent<T> : ReinforcementLearningAgentBase<T>
         _qTable = new Dictionary<string, Dictionary<int, T>>();
         _eligibilityTraces = new Dictionary<string, Dictionary<int, T>>();
         _epsilon = options.EpsilonStart;
+        _lastState = new Vector<T>(options.StateSize);
     }
 
     public override Vector<T> SelectAction(Vector<T> state, bool training = true)

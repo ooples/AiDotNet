@@ -52,7 +52,7 @@ public class CQLAgent<T> : DeepReinforcementLearningAgentBase<T>
     private T _alpha;
     private int _updateCount;
 
-    public CQLAgent(CQLOptions<T> options) : base(options.StateSize, options.ActionSize)
+    public CQLAgent(CQLOptions<T> options) : base(CreateBaseOptions(options))
     {
         _options = options;
         _numOps = MathHelper.GetNumericOperations<T>();
@@ -62,12 +62,7 @@ public class CQLAgent<T> : DeepReinforcementLearningAgentBase<T>
         _logAlpha = NumOps.Log(_options.InitialTemperature);
         _alpha = _options.InitialTemperature;
 
-        InitializeNetworks();
-        InitializeBuffer();
-    }
-
-    private void InitializeNetworks()
-    {
+        // Initialize networks directly in constructor
         _policyNetwork = CreatePolicyNetwork();
         _q1Network = CreateQNetwork();
         _q2Network = CreateQNetwork();
@@ -76,42 +71,79 @@ public class CQLAgent<T> : DeepReinforcementLearningAgentBase<T>
 
         CopyNetworkWeights(_q1Network, _targetQ1Network);
         CopyNetworkWeights(_q2Network, _targetQ2Network);
+
+        // Initialize offline buffer
+        _offlineBuffer = new UniformReplayBuffer<T>(_options.BufferSize, _options.Seed);
+    }
+
+    private static ReinforcementLearningOptions<T> CreateBaseOptions(CQLOptions<T> options)
+    {
+        if (options == null)
+        {
+            throw new ArgumentNullException(nameof(options));
+        }
+
+        return new ReinforcementLearningOptions<T>
+        {
+            LearningRate = options.QLearningRate,
+            DiscountFactor = options.DiscountFactor,
+            LossFunction = options.QLossFunction,
+            Seed = options.Seed,
+            BatchSize = options.BatchSize,
+            ReplayBufferSize = options.BufferSize
+        };
     }
 
     private NeuralNetwork<T> CreatePolicyNetwork()
     {
-        var network = new NeuralNetwork<T>();
+        var layers = new List<ILayer<T>>();
         int previousSize = _options.StateSize;
 
         foreach (var layerSize in _options.PolicyHiddenLayers)
         {
-            network.AddLayer(new DenseLayer<T>(previousSize, layerSize, (IActivationFunction<T>?)null));
-            network.AddLayer(new ActivationLayer<T>(new ReLU<T>()));
+            layers.Add(new DenseLayer<T>(previousSize, layerSize, (IActivationFunction<T>)new ReLUActivation<T>()));
             previousSize = layerSize;
         }
 
         // Output: mean and log_std for Gaussian policy
-        network.AddLayer(new DenseLayer<T>(previousSize, _options.ActionSize * 2, (IActivationFunction<T>?)null));
+        layers.Add(new DenseLayer<T>(previousSize, _options.ActionSize * 2, (IActivationFunction<T>)new IdentityActivation<T>()));
 
-        return network;
+        var architecture = new NeuralNetworkArchitecture<T>(
+            inputType: InputType.OneDimensional,
+            taskType: NeuralNetworkTaskType.Regression,
+            complexity: NetworkComplexity.Medium,
+            inputSize: _options.StateSize,
+            outputSize: _options.ActionSize * 2,
+            layers: layers
+        );
+
+        return new NeuralNetwork<T>(architecture, null);
     }
 
     private NeuralNetwork<T> CreateQNetwork()
     {
-        var network = new NeuralNetwork<T>();
+        var layers = new List<ILayer<T>>();
         int inputSize = _options.StateSize + _options.ActionSize;
         int previousSize = inputSize;
 
         foreach (var layerSize in _options.QHiddenLayers)
         {
-            network.AddLayer(new DenseLayer<T>(previousSize, layerSize, (IActivationFunction<T>?)null));
-            network.AddLayer(new ActivationLayer<T>(new ReLU<T>()));
+            layers.Add(new DenseLayer<T>(previousSize, layerSize, (IActivationFunction<T>)new ReLUActivation<T>()));
             previousSize = layerSize;
         }
 
-        network.AddLayer(new DenseLayer<T>(previousSize, 1, (IActivationFunction<T>?)null));
+        layers.Add(new DenseLayer<T>(previousSize, 1, (IActivationFunction<T>)new IdentityActivation<T>()));
 
-        return network;
+        var architecture = new NeuralNetworkArchitecture<T>(
+            inputType: InputType.OneDimensional,
+            taskType: NeuralNetworkTaskType.Regression,
+            complexity: NetworkComplexity.Medium,
+            inputSize: inputSize,
+            outputSize: 1,
+            layers: layers
+        );
+
+        return new NeuralNetwork<T>(architecture, _options.QLossFunction);
     }
 
     private void InitializeBuffer()
@@ -132,7 +164,9 @@ public class CQLAgent<T> : DeepReinforcementLearningAgentBase<T>
 
     public override Vector<T> SelectAction(Vector<T> state, bool training = true)
     {
-        var policyOutput = _policyNetwork.Predict(state);
+        var stateTensor = Tensor<T>.FromVector(state);
+        var policyOutputTensor = _policyNetwork.Predict(stateTensor);
+        var policyOutput = policyOutputTensor.ToVector();
 
         // Extract mean and log_std
         var mean = new Vector<T>(_options.ActionSize);
@@ -210,25 +244,28 @@ public class CQLAgent<T> : DeepReinforcementLearningAgentBase<T>
         return _numOps.Divide(totalLoss, _numOps.FromDouble(2));
     }
 
-    private T UpdateQNetworks(List<(Vector<T> state, Vector<T> action, T reward, Vector<T> nextState, bool done)> batch)
+    private T UpdateQNetworks(List<Experience<T>> batch)
     {
         T totalLoss = _numOps.Zero;
 
         foreach (var experience in batch)
         {
             // Compute target Q-value
-            var nextAction = SelectAction(experience.nextState, training: true);
-            var nextStateAction = ConcatenateStateAction(experience.nextState, nextAction);
+            var nextAction = SelectAction(experience.NextState, training: true);
+            var nextStateAction = ConcatenateStateAction(experience.NextState, nextAction);
+            var nextStateActionTensor = Tensor<T>.FromVector(nextStateAction);
 
-            var q1TargetValue = _targetQ1Network.Predict(nextStateAction)[0];
-            var q2TargetValue = _targetQ2Network.Predict(nextStateAction)[0];
+            var q1TargetTensor = _targetQ1Network.Predict(nextStateActionTensor);
+            var q2TargetTensor = _targetQ2Network.Predict(nextStateActionTensor);
+            var q1TargetValue = q1TargetTensor.ToVector()[0];
+            var q2TargetValue = q2TargetTensor.ToVector()[0];
             var minQTarget = MathHelper.Min<T>(q1TargetValue, q2TargetValue);
 
             // Compute entropy term (simplified)
             var entropyTerm = _numOps.Multiply(_alpha, _numOps.FromDouble(0.1));  // Simplified entropy
 
             T targetQ;
-            if (experience.done)
+            if (experience.Done)
             {
                 targetQ = experience.Reward;
             }
@@ -239,12 +276,15 @@ public class CQLAgent<T> : DeepReinforcementLearningAgentBase<T>
             }
 
             // Compute current Q-values
-            var stateAction = ConcatenateStateAction(experience.state, experience.Action);
-            var q1Value = _q1Network.Predict(stateAction)[0];
-            var q2Value = _q2Network.Predict(stateAction)[0];
+            var stateAction = ConcatenateStateAction(experience.State, experience.Action);
+            var stateActionTensor = Tensor<T>.FromVector(stateAction);
+            var q1Tensor = _q1Network.Predict(stateActionTensor);
+            var q2Tensor = _q2Network.Predict(stateActionTensor);
+            var q1Value = q1Tensor.ToVector()[0];
+            var q2Value = q2Tensor.ToVector()[0];
 
             // CQL Conservative penalty: penalize Q-values for random/OOD actions
-            var cqlPenalty = ComputeCQLPenalty(experience.state, experience.Action, q1Value, q2Value);
+            var cqlPenalty = ComputeCQLPenalty(experience.State, experience.Action, q1Value, q2Value);
 
             // Q-learning loss + CQL penalty
             var q1Error = _numOps.Subtract(targetQ, q1Value);
@@ -260,18 +300,16 @@ public class CQLAgent<T> : DeepReinforcementLearningAgentBase<T>
             var q1MseGrad = _numOps.Multiply(_numOps.FromDouble(-2.0), q1Error);
             var q1CqlGrad = _numOps.Multiply(_numOps.FromDouble(-0.5), _options.CQLAlpha);
             var q1TotalGrad = _numOps.Add(q1MseGrad, q1CqlGrad);
-            var q1ErrorVec = new Vector<T>(1);
-            q1ErrorVec[0] = q1TotalGrad;
-            _q1Network.Backpropagate(q1ErrorVec);
+            var q1ErrorTensor = Tensor<T>.FromVector(new Vector<T>(new[] { q1TotalGrad }));
+            _q1Network.Backpropagate(q1ErrorTensor);
             _q1Network.UpdateParameters(_options.QLearningRate);
 
             // Backpropagate Q2: MSE gradient + CQL penalty gradient
             var q2MseGrad = _numOps.Multiply(_numOps.FromDouble(-2.0), q2Error);
             var q2CqlGrad = _numOps.Multiply(_numOps.FromDouble(-0.5), _options.CQLAlpha);
             var q2TotalGrad = _numOps.Add(q2MseGrad, q2CqlGrad);
-            var q2ErrorVec = new Vector<T>(1);
-            q2ErrorVec[0] = q2TotalGrad;
-            _q2Network.Backpropagate(q2ErrorVec);
+            var q2ErrorTensor = Tensor<T>.FromVector(new Vector<T>(new[] { q2TotalGrad }));
+            _q2Network.Backpropagate(q2ErrorTensor);
             _q2Network.UpdateParameters(_options.QLearningRate);
 
             totalLoss = _numOps.Add(totalLoss, _numOps.Add(q1Loss, q2Loss));
@@ -298,8 +336,11 @@ public class CQLAgent<T> : DeepReinforcementLearningAgentBase<T>
             }
 
             var stateAction = ConcatenateStateAction(state, randomAction);
-            var q1Random = _q1Network.Predict(stateAction)[0];
-            var q2Random = _q2Network.Predict(stateAction)[0];
+            var stateActionTensor = Tensor<T>.FromVector(stateAction);
+            var q1RandomTensor = _q1Network.Predict(stateActionTensor);
+            var q2RandomTensor = _q2Network.Predict(stateActionTensor);
+            var q1Random = q1RandomTensor.ToVector()[0];
+            var q2Random = q2RandomTensor.ToVector()[0];
 
             var avgQRandom = _numOps.Divide(_numOps.Add(q1Random, q2Random), _numOps.FromDouble(2));
             randomQSum = _numOps.Add(randomQSum, avgQRandom);
@@ -313,17 +354,20 @@ public class CQLAgent<T> : DeepReinforcementLearningAgentBase<T>
         return _numOps.Multiply(_options.CQLAlpha, gap);
     }
 
-    private T UpdatePolicy(List<(Vector<T> state, Vector<T> action, T reward, Vector<T> nextState, bool done)> batch)
+    private T UpdatePolicy(List<Experience<T>> batch)
     {
         T totalLoss = _numOps.Zero;
 
         foreach (var experience in batch)
         {
-            var action = SelectAction(experience.state, training: true);
-            var stateAction = ConcatenateStateAction(experience.state, action);
+            var action = SelectAction(experience.State, training: true);
+            var stateAction = ConcatenateStateAction(experience.State, action);
+            var stateActionTensor = Tensor<T>.FromVector(stateAction);
 
-            var q1Value = _q1Network.Predict(stateAction)[0];
-            var q2Value = _q2Network.Predict(stateAction)[0];
+            var q1Tensor = _q1Network.Predict(stateActionTensor);
+            var q2Tensor = _q2Network.Predict(stateActionTensor);
+            var q1Value = q1Tensor.ToVector()[0];
+            var q2Value = q2Tensor.ToVector()[0];
             var minQ = MathHelper.Min<T>(q1Value, q2Value);
 
             // Policy loss: -Q(s,a) + alpha * entropy (simplified)
@@ -332,9 +376,9 @@ public class CQLAgent<T> : DeepReinforcementLearningAgentBase<T>
             totalLoss = _numOps.Add(totalLoss, _numOps.Multiply(policyLoss, policyLoss));
 
             // Backprop through Q-network to get action gradient
-            var qGrad = new Vector<T>(1);
-            qGrad[0] = _numOps.One;
-            var actionGrad = _q1Network.Backpropagate(qGrad);
+            var qGradTensor = Tensor<T>.FromVector(new Vector<T>(new[] { _numOps.One }));
+            var actionGradTensor = _q1Network.Backpropagate(qGradTensor);
+            var actionGrad = actionGradTensor.ToVector();
 
             // Extract action part of gradient and negate for gradient ascent (maximize Q)
             var policyGrad = new Vector<T>(_options.ActionSize * 2);
@@ -346,14 +390,15 @@ public class CQLAgent<T> : DeepReinforcementLearningAgentBase<T>
                 policyGrad[_options.ActionSize + i] = _numOps.Zero;
             }
 
-            _policyNetwork.Backpropagate(policyGrad);
+            var policyGradTensor = Tensor<T>.FromVector(policyGrad);
+            _policyNetwork.Backpropagate(policyGradTensor);
             _policyNetwork.UpdateParameters(_options.PolicyLearningRate);
         }
 
         return _numOps.Divide(totalLoss, _numOps.FromDouble(batch.Count));
     }
 
-    private void UpdateTemperature(List<(Vector<T> state, Vector<T> action, T reward, Vector<T> nextState, bool done)> batch)
+    private void UpdateTemperature(List<Experience<T>> batch)
     {
         // Simplified temperature update
         _alpha = NumOps.Exp(_logAlpha);

@@ -45,7 +45,7 @@ public class IQLOptions<T>
     // Standard parameters
     public int BatchSize { get; set; } = 256;
     public int BufferSize { get; set; } = 1000000;
-    public ILossFunction<T> QLossFunction { get; set; } = new MeanSquaredError<T>();
+    public ILossFunction<T> QLossFunction { get; set; } = new MeanSquaredErrorLoss<T>();
     public List<int> PolicyHiddenLayers { get; set; } = new List<int> { 256, 256 };
     public List<int> QHiddenLayers { get; set; } = new List<int> { 256, 256 };
     public List<int> ValueHiddenLayers { get; set; } = new List<int> { 256, 256 };

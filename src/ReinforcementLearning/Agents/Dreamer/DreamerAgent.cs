@@ -69,12 +69,7 @@ public class DreamerAgent<T> : DeepReinforcementLearningAgentBase<T>
         });
         _updateCount = 0;
 
-        InitializeNetworks();
-        InitializeReplayBuffer();
-    }
-
-    private void InitializeNetworks()
-    {
+        // Initialize networks directly in constructor
         // Representation network: observation -> latent
         _representationNetwork = CreateEncoderNetwork(_options.ObservationSize, _options.LatentSize);
 
@@ -90,6 +85,9 @@ public class DreamerAgent<T> : DeepReinforcementLearningAgentBase<T>
         // Actor and critic
         _actorNetwork = CreateActorNetwork();
         _valueNetwork = CreateEncoderNetwork(_options.LatentSize, 1);
+
+        // Initialize replay buffer
+        _replayBuffer = new UniformReplayBuffer<T>(_options.ReplayBufferSize, _options.Seed);
     }
 
     private NeuralNetwork<T> CreateEncoderNetwork(int inputSize, int outputSize)
@@ -100,7 +98,7 @@ public class DreamerAgent<T> : DeepReinforcementLearningAgentBase<T>
         for (int i = 0; i < 2; i++)
         {
             network.AddLayer(new DenseLayer<T>(previousSize, _options.HiddenSize, (IActivationFunction<T>?)null));
-            network.AddLayer(new ActivationLayer<T>(new ReLU<T>()));
+            network.AddLayer(new ActivationLayer<T>(new ReLUActivation<T>()));
             previousSize = _options.HiddenSize;
         }
 
@@ -117,7 +115,7 @@ public class DreamerAgent<T> : DeepReinforcementLearningAgentBase<T>
         for (int i = 0; i < 2; i++)
         {
             network.AddLayer(new DenseLayer<T>(previousSize, _options.HiddenSize, (IActivationFunction<T>?)null));
-            network.AddLayer(new ActivationLayer<T>(new ReLU<T>()));
+            network.AddLayer(new ActivationLayer<T>(new ReLUActivation<T>()));
             previousSize = _options.HiddenSize;
         }
 

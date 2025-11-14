@@ -98,7 +98,7 @@ public class ActivationLayer<T> : LayerBase<T>
     /// For example:
     /// ```csharp
     /// // Create a ReLU activation layer for 28x28 images
-    /// var reluLayer = new ActivationLayer<float>(new[] { 32, 28, 28, 1 }, new ReLU<float>());
+    /// var reluLayer = new ActivationLayer<float>(new[] { 32, 28, 28, 1 }, new ReLUActivation<float>());
     /// ```
     /// 
     /// The inputShape parameter defines the dimensions of your data:

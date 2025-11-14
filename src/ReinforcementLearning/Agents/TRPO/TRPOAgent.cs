@@ -62,11 +62,7 @@ public class TRPOAgent<T> : DeepReinforcementLearningAgentBase<T>
         _updateCount = 0;
         _trajectoryBuffer = new List<(Vector<T>, Vector<T>, T, Vector<T>, bool)>();
 
-        InitializeNetworks();
-    }
-
-    private void InitializeNetworks()
-    {
+        // Initialize networks directly in constructor
         _policyNetwork = CreatePolicyNetwork();
         _oldPolicyNetwork = CreatePolicyNetwork();
         _valueNetwork = CreateValueNetwork();
