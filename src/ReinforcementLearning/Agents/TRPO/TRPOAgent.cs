@@ -160,7 +160,7 @@ public class TRPOAgent<T> : DeepReinforcementLearningAgentBase<T>
             var action = new Vector<T>(_options.ActionSize);
             for (int i = 0; i < _options.ActionSize; i++)
             {
-                var std = MathHelper.Exp(logStd[i]);
+                var std = NumOps.Exp(logStd[i]);
                 var noise = MathHelper.GetNormalRandom<T>(NumOps.Zero, NumOps.One);
                 action[i] = NumOps.Add(mean[i], NumOps.Multiply(std, noise));
             }
@@ -511,7 +511,7 @@ public class TRPOAgent<T> : DeepReinforcementLearningAgentBase<T>
             if (NumOps.GreaterThan(oldProb, NumOps.Zero) && NumOps.GreaterThan(newProb, NumOps.Zero))
             {
                 var ratio = NumOps.Divide(oldProb, newProb);
-                var logRatio = MathHelper.Log(ratio);
+                var logRatio = NumOps.Log(ratio);
                 kl = NumOps.Add(kl, NumOps.Multiply(oldProb, logRatio));
             }
         }

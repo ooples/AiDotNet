@@ -573,7 +573,7 @@ public class A2CAgent<T> : DeepReinforcementLearningAgentBase<T>
             {
                 var mean = policyOutput[i];
                 var logStd = policyOutput[actionSize + i];
-                var std = MathHelper.Exp(logStd);
+                var std = NumOps.Exp(logStd);
                 var actionDiff = NumOps.Subtract(action[i], mean);
                 var stdSquared = NumOps.Multiply(std, std);
                 
@@ -617,7 +617,7 @@ public class A2CAgent<T> : DeepReinforcementLearningAgentBase<T>
         T sumExp = NumOps.Zero;
         for (int i = 0; i < logits.Length; i++)
         {
-            var exp = MathHelper.Exp(NumOps.Subtract(logits[i], maxLogit));
+            var exp = NumOps.Exp(NumOps.Subtract(logits[i], maxLogit));
             softmax[i] = exp;
             sumExp = NumOps.Add(sumExp, exp);
         }

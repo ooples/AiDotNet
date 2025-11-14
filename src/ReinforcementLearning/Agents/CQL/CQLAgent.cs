@@ -59,7 +59,7 @@ public class CQLAgent<T> : DeepReinforcementLearningAgentBase<T>
         _random = options.Seed.HasValue ? new Random(options.Seed.Value) : new Random();
         _updateCount = 0;
 
-        _logAlpha = MathHelper.Log(_options.InitialTemperature);
+        _logAlpha = NumOps.Log(_options.InitialTemperature);
         _alpha = _options.InitialTemperature;
 
         InitializeNetworks();
@@ -161,7 +161,7 @@ public class CQLAgent<T> : DeepReinforcementLearningAgentBase<T>
         var action = new Vector<T>(_options.ActionSize);
         for (int i = 0; i < _options.ActionSize; i++)
         {
-            var std = MathHelper.Exp(logStd[i]);
+            var std = NumOps.Exp(logStd[i]);
             var noise = MathHelper.GetNormalRandom<T>(_numOps.Zero, _numOps.One);
             var rawAction = _numOps.Add(mean[i], _numOps.Multiply(std, noise));
             action[i] = MathHelper.Tanh<T>(rawAction);
@@ -356,7 +356,7 @@ public class CQLAgent<T> : DeepReinforcementLearningAgentBase<T>
     private void UpdateTemperature(List<(Vector<T> state, Vector<T> action, T reward, Vector<T> nextState, bool done)> batch)
     {
         // Simplified temperature update
-        _alpha = MathHelper.Exp(_logAlpha);
+        _alpha = NumOps.Exp(_logAlpha);
     }
 
     private void SoftUpdateTargetNetworks()

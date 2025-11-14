@@ -175,7 +175,7 @@ public class IQLAgent<T> : DeepReinforcementLearningAgentBase<T>
         var action = new Vector<T>(_options.ActionSize);
         for (int i = 0; i < _options.ActionSize; i++)
         {
-            var std = MathHelper.Exp(logStd[i]);
+            var std = NumOps.Exp(logStd[i]);
             var noise = MathHelper.GetNormalRandom<T>(_numOps.Zero, _numOps.One);
             var rawAction = _numOps.Add(mean[i], _numOps.Multiply(std, noise));
             action[i] = MathHelper.Tanh<T>(rawAction);
@@ -341,7 +341,7 @@ public class IQLAgent<T> : DeepReinforcementLearningAgentBase<T>
             var advantage = _numOps.Subtract(qValue, vValue);
 
             // Advantage-weighted regression: exp(advantage / temperature) * log_prob(a|s)
-            var weight = MathHelper.Exp(_numOps.Divide(advantage, _options.Temperature));
+            var weight = NumOps.Exp(_numOps.Divide(advantage, _options.Temperature));
             weight = MathHelper.Clamp<T>(weight, _numOps.FromDouble(0.0), _numOps.FromDouble(100.0));
 
             // Simplified policy loss (weighted MSE to match action)

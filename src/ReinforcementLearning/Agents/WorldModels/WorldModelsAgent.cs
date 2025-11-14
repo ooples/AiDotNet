@@ -256,7 +256,7 @@ public class WorldModelsAgent<T> : DeepReinforcementLearningAgentBase<T>
             for (int i = 0; i < latentMean.Length; i++)
             {
                 var meanSquared = NumOps.Multiply(latentMean[i], latentMean[i]);
-                var variance = MathHelper.Exp(latentLogVar[i]);
+                var variance = NumOps.Exp(latentLogVar[i]);
                 klLoss = NumOps.Add(klLoss, NumOps.Add(meanSquared, NumOps.Add(variance, NumOps.Negate(latentLogVar[i]))));
             }
             klLoss = NumOps.Multiply(NumOps.FromDouble(_options.VAEBeta * 0.5), klLoss);
@@ -378,7 +378,7 @@ public class WorldModelsAgent<T> : DeepReinforcementLearningAgentBase<T>
         var sample = new Vector<T>(_options.LatentSize);
         for (int i = 0; i < _options.LatentSize; i++)
         {
-            var std = MathHelper.Exp(NumOps.Divide(logVar[i], NumOps.FromDouble(2)));
+            var std = NumOps.Exp(NumOps.Divide(logVar[i], NumOps.FromDouble(2)));
             var noise = MathHelper.GetNormalRandom<T>(NumOps.Zero, NumOps.One);
             sample[i] = NumOps.Add(mean[i], NumOps.Multiply(std, noise));
         }

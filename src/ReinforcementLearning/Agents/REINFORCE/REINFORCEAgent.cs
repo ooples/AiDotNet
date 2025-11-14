@@ -231,7 +231,7 @@ public class REINFORCEAgent<T> : DeepReinforcementLearningAgentBase<T>
                 {
                     var mean = policyOutput[i];
                     var logStd = policyOutput[actionSize + i];
-                    var std = MathHelper.Exp(logStd);
+                    var std = NumOps.Exp(logStd);
                     
                     // Gradient of -log π(a|s) * G_t w.r.t. mean: -(a - μ) / σ² * G_t
                     var actionDiff = NumOps.Subtract(action[i], mean);
@@ -488,7 +488,7 @@ public class REINFORCEAgent<T> : DeepReinforcementLearningAgentBase<T>
         T sumExp = NumOps.Zero;
         for (int i = 0; i < logits.Length; i++)
         {
-            var exp = MathHelper.Exp(NumOps.Subtract(logits[i], maxLogit));
+            var exp = NumOps.Exp(NumOps.Subtract(logits[i], maxLogit));
             softmax[i] = exp;
             sumExp = NumOps.Add(sumExp, exp);
         }
