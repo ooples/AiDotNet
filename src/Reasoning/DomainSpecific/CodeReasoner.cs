@@ -119,7 +119,9 @@ public class CodeReasoner<T>
         // Add domain metadata
         result.Metadata["domain"] = "code";
         result.Metadata["tree_search_used"] = useTreeSearch;
-        result.Metadata["language"] = DetectProgrammingLanguage(result.FinalAnswer);
+        result.Metadata["language"] = string.IsNullOrEmpty(result.FinalAnswer)
+            ? "unknown"
+            : DetectProgrammingLanguage(result.FinalAnswer);
 
         return result;
     }
