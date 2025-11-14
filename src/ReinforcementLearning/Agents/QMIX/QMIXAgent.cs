@@ -113,13 +113,13 @@ public class QMIXAgent<T> : DeepReinforcementLearningAgentBase<T>
         var layers = new List<ILayer<T>>();
 
         // Input layer
-        layers.Add(new DenseLayer<T>(_options.StateSize, 64, new ReLUActivation<T>()));
+        layers.Add(new DenseLayer<T>(_options.StateSize, 64, (IActivationFunction<T>)new ReLUActivation<T>()));
 
         // Hidden layers
-        layers.Add(new DenseLayer<T>(64, 64, new ReLUActivation<T>()));
+        layers.Add(new DenseLayer<T>(64, 64, (IActivationFunction<T>)new ReLUActivation<T>()));
 
         // Output layer (Q-values for each action)
-        layers.Add(new DenseLayer<T>(64, _options.ActionSize, new IdentityActivation<T>()));
+        layers.Add(new DenseLayer<T>(64, _options.ActionSize, (IActivationFunction<T>)new IdentityActivation<T>()));
 
         var architecture = new NeuralNetworkArchitecture<T>(
             inputType: InputType.OneDimensional,
@@ -142,16 +142,16 @@ public class QMIXAgent<T> : DeepReinforcementLearningAgentBase<T>
 
         // Input layer
         int hiddenSize = _options.MixingHiddenLayers.FirstOrDefault() > 0 ? _options.MixingHiddenLayers.First() : 64;
-        layers.Add(new DenseLayer<T>(inputSize, hiddenSize, new ReLUActivation<T>()));
+        layers.Add(new DenseLayer<T>(inputSize, hiddenSize, (IActivationFunction<T>)new ReLUActivation<T>()));
 
         // Hidden layers
         for (int i = 1; i < _options.MixingHiddenLayers.Count; i++)
         {
-            layers.Add(new DenseLayer<T>(_options.MixingHiddenLayers[i - 1], _options.MixingHiddenLayers[i], new ReLUActivation<T>()));
+            layers.Add(new DenseLayer<T>(_options.MixingHiddenLayers[i - 1], _options.MixingHiddenLayers[i], (IActivationFunction<T>)new ReLUActivation<T>()));
         }
 
         // Output layer (team Q-value)
-        layers.Add(new DenseLayer<T>(hiddenSize, 1, new IdentityActivation<T>()));
+        layers.Add(new DenseLayer<T>(hiddenSize, 1, (IActivationFunction<T>)new IdentityActivation<T>()));
 
         var architecture = new NeuralNetworkArchitecture<T>(
             inputType: InputType.OneDimensional,
