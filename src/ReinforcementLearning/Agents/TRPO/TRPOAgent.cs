@@ -308,7 +308,10 @@ public class TRPOAgent<T> : DeepReinforcementLearningAgentBase<T>
 
             advantages.Insert(0, gaeAdvantage);
         }
-        // Normalize advantages        var mean = StatisticsHelper<T>.CalculateMean(advantages.ToArray());        var std = StatisticsHelper<T>.CalculateStandardDeviation(advantages.ToArray());
+
+        // Normalize advantages
+        var mean = StatisticsHelper<T>.CalculateMean(advantages.ToArray());
+        var std = StatisticsHelper<T>.CalculateStandardDeviation(advantages.ToArray());
 
         if (NumOps.GreaterThan(std, NumOps.Zero))
         {
