@@ -925,4 +925,26 @@ public abstract class RegressionBase<T> : IRegression<T>
         byte[] serializedData = File.ReadAllBytes(filePath);
         Deserialize(serializedData);
     }
+
+    /// <summary>
+    /// Saves the model's current state to a stream.
+    /// </summary>
+    /// <param name="stream">The stream to write the model state to.</param>
+    public virtual void SaveState(Stream stream)
+    {
+        byte[] serializedData = Serialize();
+        stream.Write(serializedData, 0, serializedData.Length);
+    }
+
+    /// <summary>
+    /// Loads the model's state from a stream.
+    /// </summary>
+    /// <param name="stream">The stream to read the model state from.</param>
+    public virtual void LoadState(Stream stream)
+    {
+        using var memoryStream = new MemoryStream();
+        stream.CopyTo(memoryStream);
+        byte[] serializedData = memoryStream.ToArray();
+        Deserialize(serializedData);
+    }
 }

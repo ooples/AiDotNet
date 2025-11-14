@@ -1341,6 +1341,125 @@ namespace AiDotNet.NeuralNetworks
         }
 
         #endregion
+
+        /// <summary>
+        /// Saves the SuperNet's current state (architecture parameters and weights) to a stream.
+        /// </summary>
+        /// <param name="stream">The stream to write the model state to.</param>
+        /// <remarks>
+        /// <para>
+        /// This method serializes all the information needed to recreate the SuperNet's current state,
+        /// including architecture parameters, operation weights, and model configuration.
+        /// It uses the existing Serialize method and writes the data to the provided stream.
+        /// </para>
+        /// <para><b>For Beginners:</b> This is like creating a snapshot of your neural architecture search model.
+        ///
+        /// When you call SaveState:
+        /// - All architecture parameters (alpha values) are written to the stream
+        /// - All operation weights are saved
+        /// - The model's configuration and structure are preserved
+        ///
+        /// This is particularly useful for:
+        /// - Checkpointing during neural architecture search
+        /// - Saving the best architecture found during search
+        /// - Knowledge distillation from SuperNet to final architecture
+        /// - Resuming interrupted architecture search
+        ///
+        /// You can later use LoadState to restore the model to this exact state.
+        /// </para>
+        /// </remarks>
+        /// <exception cref="ArgumentNullException">Thrown when stream is null.</exception>
+        /// <exception cref="IOException">Thrown when there's an error writing to the stream.</exception>
+        public virtual void SaveState(Stream stream)
+        {
+            if (stream == null)
+                throw new ArgumentNullException(nameof(stream));
+
+            if (!stream.CanWrite)
+                throw new ArgumentException("Stream must be writable.", nameof(stream));
+
+            try
+            {
+                var data = this.Serialize();
+                stream.Write(data, 0, data.Length);
+                stream.Flush();
+            }
+            catch (IOException ex)
+            {
+                throw new IOException($"Failed to save SuperNet state to stream: {ex.Message}", ex);
+            }
+            catch (Exception ex)
+            {
+                throw new InvalidOperationException($"Unexpected error while saving SuperNet state: {ex.Message}", ex);
+            }
+        }
+
+        /// <summary>
+        /// Loads the SuperNet's state (architecture parameters and weights) from a stream.
+        /// </summary>
+        /// <param name="stream">The stream to read the model state from.</param>
+        /// <remarks>
+        /// <para>
+        /// This method deserializes SuperNet state that was previously saved with SaveState,
+        /// restoring all architecture parameters, operation weights, and configuration.
+        /// It uses the existing Deserialize method after reading data from the stream.
+        /// </para>
+        /// <para><b>For Beginners:</b> This is like loading a saved snapshot of your neural architecture search model.
+        ///
+        /// When you call LoadState:
+        /// - All architecture parameters (alpha values) are read from the stream
+        /// - All operation weights are restored
+        /// - The model is configured to match the saved state
+        ///
+        /// After loading, the model can:
+        /// - Continue architecture search from where it left off
+        /// - Make predictions using the restored architecture
+        /// - Be used for further optimization or deployment
+        ///
+        /// This is essential for:
+        /// - Resuming interrupted architecture search
+        /// - Loading the best architecture found during search
+        /// - Deploying searched architectures to production
+        /// - Knowledge distillation workflows
+        /// </para>
+        /// </remarks>
+        /// <exception cref="ArgumentNullException">Thrown when stream is null.</exception>
+        /// <exception cref="IOException">Thrown when there's an error reading from the stream.</exception>
+        /// <exception cref="InvalidOperationException">Thrown when the stream contains invalid or incompatible data.</exception>
+        public virtual void LoadState(Stream stream)
+        {
+            if (stream == null)
+                throw new ArgumentNullException(nameof(stream));
+
+            if (!stream.CanRead)
+                throw new ArgumentException("Stream must be readable.", nameof(stream));
+
+            try
+            {
+                using var ms = new MemoryStream();
+                stream.CopyTo(ms);
+                var data = ms.ToArray();
+
+                if (data.Length == 0)
+                    throw new InvalidOperationException("Stream contains no data.");
+
+                this.Deserialize(data);
+            }
+            catch (IOException ex)
+            {
+                throw new IOException($"Failed to read SuperNet state from stream: {ex.Message}", ex);
+            }
+            catch (InvalidOperationException)
+            {
+                // Re-throw InvalidOperationException from Deserialize
+                throw;
+            }
+            catch (Exception ex)
+            {
+                throw new InvalidOperationException(
+                    $"Failed to deserialize SuperNet state. The stream may contain corrupted or incompatible data: {ex.Message}", ex);
+            }
+        }
     }
 }
 

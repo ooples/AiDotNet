@@ -347,4 +347,20 @@ public abstract class ShardedModelBase<T, TInput, TOutput> : IShardedModel<T, TI
     {
         WrappedModel.ApplyGradients(gradients, learningRate);
     }
+
+    /// <summary>
+    /// Saves the model's current state to a stream.
+    /// </summary>
+    public virtual void SaveState(Stream stream)
+    {
+        WrappedModel.SaveState(stream);
+    }
+
+    /// <summary>
+    /// Loads the model's state from a stream.
+    /// </summary>
+    public virtual void LoadState(Stream stream)
+    {
+        WrappedModel.LoadState(stream);
+    }
 }

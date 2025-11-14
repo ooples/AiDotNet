@@ -74,6 +74,10 @@ public class SimpleMockModel : IFullModel<double, Tensor<double>, Tensor<double>
     public byte[] Serialize() => Array.Empty<byte>();
     public void Deserialize(byte[] data) { }
 
+    // ICheckpointableModel implementation
+    public void SaveState(Stream stream) { }
+    public void LoadState(Stream stream) { }
+
     public IFullModel<double, Tensor<double>, Tensor<double>> DeepCopy()
     {
         var copy = new SimpleMockModel(_parameters.Length);

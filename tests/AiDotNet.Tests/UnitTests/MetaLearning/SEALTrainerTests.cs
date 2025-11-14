@@ -362,6 +362,11 @@ internal class SEALMockModel : IFullModel<double, Matrix<double>, Vector<double>
     public void LoadModel(string filePath) { }
     public byte[] Serialize() => Array.Empty<byte>();
     public void Deserialize(byte[] data) { }
+
+    // ICheckpointableModel implementation
+    public void SaveState(Stream stream) { }
+    public void LoadState(Stream stream) { }
+
     public IFullModel<double, Matrix<double>, Vector<double>> DeepCopy()
     {
         var copy = new SEALMockModel(_parameters.Length);
