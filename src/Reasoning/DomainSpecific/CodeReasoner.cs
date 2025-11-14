@@ -1,3 +1,4 @@
+using System.Linq;
 using AiDotNet.Interfaces;
 using AiDotNet.Reasoning.Models;
 using AiDotNet.Reasoning.Strategies;
