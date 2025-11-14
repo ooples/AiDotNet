@@ -12,13 +12,10 @@ namespace AiDotNet.ReinforcementLearning.Policies
     /// Policy for continuous action spaces using a neural network to output Gaussian parameters.
     /// </summary>
     /// <typeparam name="T">The numeric type used for calculations.</typeparam>
-    public class ContinuousPolicy<T> : IPolicy<T>
+    public class ContinuousPolicy<T> : PolicyBase<T>
     {
-        private static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();
-
         private readonly NeuralNetwork<T> _policyNetwork;
         private readonly IExplorationStrategy<T> _explorationStrategy;
-        private readonly Random _random;
         private readonly int _actionSize;
         private readonly bool _useTanhSquashing;
 
@@ -28,10 +25,10 @@ namespace AiDotNet.ReinforcementLearning.Policies
             IExplorationStrategy<T> explorationStrategy,
             bool useTanhSquashing = false,
             Random? random = null)
+            : base(random)
         {
             _policyNetwork = policyNetwork ?? throw new ArgumentNullException(nameof(policyNetwork));
             _explorationStrategy = explorationStrategy ?? throw new ArgumentNullException(nameof(explorationStrategy));
-            _random = random ?? new Random();
             _actionSize = actionSize;
             _useTanhSquashing = useTanhSquashing;
         }

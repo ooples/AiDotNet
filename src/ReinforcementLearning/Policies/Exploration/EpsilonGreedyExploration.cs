@@ -8,10 +8,8 @@ namespace AiDotNet.ReinforcementLearning.Policies.Exploration
     /// Epsilon-greedy exploration: with probability epsilon, select random action.
     /// </summary>
     /// <typeparam name="T">The numeric type used for calculations.</typeparam>
-    public class EpsilonGreedyExploration<T> : IExplorationStrategy<T>
+    public class EpsilonGreedyExploration<T> : ExplorationStrategyBase<T>
     {
-        private static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();
-
         private double _epsilon;
         private readonly double _epsilonStart;
         private readonly double _epsilonEnd;
@@ -25,7 +23,7 @@ namespace AiDotNet.ReinforcementLearning.Policies.Exploration
             _epsilon = epsilonStart;
         }
 
-        public Vector<T> GetExplorationAction(Vector<T> state, Vector<T> policyAction, int actionSpaceSize, Random random)
+        public override Vector<T> GetExplorationAction(Vector<T> state, Vector<T> policyAction, int actionSpaceSize, Random random)
         {
             if (random.NextDouble() < _epsilon)
             {
@@ -40,12 +38,12 @@ namespace AiDotNet.ReinforcementLearning.Policies.Exploration
             return policyAction;
         }
 
-        public void Update()
+        public override void Update()
         {
             _epsilon = Math.Max(_epsilonEnd, _epsilon * _epsilonDecay);
         }
 
-        public void Reset()
+        public override void Reset()
         {
             _epsilon = _epsilonStart;
         }
