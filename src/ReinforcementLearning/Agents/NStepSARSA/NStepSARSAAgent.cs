@@ -195,9 +195,6 @@ public class NStepSARSAAgent<T> : ReinforcementLearningAgentBase<T>
         return new ModelMetadata<T>
         {
             ModelType = "NStepSARSA",
-            InputSize = _options.StateSize,
-            OutputSize = _options.ActionSize,
-            ParameterCount = ParameterCount
         };
     }
 

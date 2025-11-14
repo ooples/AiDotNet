@@ -177,9 +177,6 @@ public class ExpectedSARSAAgent<T> : ReinforcementLearningAgentBase<T>
         return new ModelMetadata<T>
         {
             ModelType = "ExpectedSARSA",
-            InputSize = _options.StateSize,
-            OutputSize = _options.ActionSize,
-            ParameterCount = ParameterCount
         };
     }
 

@@ -434,9 +434,6 @@ public class WorldModelsAgent<T> : DeepReinforcementLearningAgentBase<T>
         return new ModelMetadata<T>
         {
             ModelType = "WorldModels",
-            InputSize = _options.ObservationWidth * _options.ObservationHeight * _options.ObservationChannels,
-            OutputSize = _options.ActionSize,
-            ParameterCount = ParameterCount
         };
     }
 

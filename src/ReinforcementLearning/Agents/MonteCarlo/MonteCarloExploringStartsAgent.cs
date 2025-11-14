@@ -212,9 +212,6 @@ public class MonteCarloExploringStartsAgent<T> : ReinforcementLearningAgentBase<
         return new ModelMetadata<T>
         {
             ModelType = "MonteCarloExploringStarts",
-            InputSize = _options.StateSize,
-            OutputSize = _options.ActionSize,
-            ParameterCount = ParameterCount
         };
     }
 

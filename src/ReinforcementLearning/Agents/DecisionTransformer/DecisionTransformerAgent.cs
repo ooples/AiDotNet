@@ -72,8 +72,6 @@ public class DecisionTransformerAgent<T> : DeepReinforcementLearningAgentBase<T>
 
         var architecture = new NeuralNetworkArchitecture<T>
         {
-            InputSize = inputSize,
-            OutputSize = _options.ActionSize,
             TaskType = TaskType.Regression
         };
 
@@ -294,9 +292,6 @@ public class DecisionTransformerAgent<T> : DeepReinforcementLearningAgentBase<T>
         return new ModelMetadata<T>
         {
             ModelType = "DecisionTransformer",
-            InputSize = _options.StateSize,
-            OutputSize = _options.ActionSize,
-            ParameterCount = ParameterCount
         };
     }
 

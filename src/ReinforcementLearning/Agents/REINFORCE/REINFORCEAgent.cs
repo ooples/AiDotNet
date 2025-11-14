@@ -86,8 +86,6 @@ public class REINFORCEAgent<T> : DeepReinforcementLearningAgentBase<T>
 
         return new NeuralNetwork<T>(new NeuralNetworkArchitecture<T>
         {
-            InputSize = _reinforceOptions.StateSize,
-            OutputSize = outputSize,
             Layers = layers,
             TaskType = TaskType.Regression
         });
@@ -346,8 +344,6 @@ public class REINFORCEAgent<T> : DeepReinforcementLearningAgentBase<T>
         {
             ModelType = ModelType.ReinforcementLearning,  // Generic RL type
             FeatureCount = _reinforceOptions.StateSize,
-            TrainingSampleCount = TrainingSteps,
-            Parameters = GetParameters()
         };
     }
 

@@ -190,9 +190,6 @@ public class FirstVisitMonteCarloAgent<T> : ReinforcementLearningAgentBase<T>
         return new ModelMetadata<T>
         {
             ModelType = "FirstVisitMonteCarlo",
-            InputSize = _options.StateSize,
-            OutputSize = _options.ActionSize,
-            ParameterCount = ParameterCount
         };
     }
 

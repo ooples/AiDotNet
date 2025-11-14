@@ -112,8 +112,6 @@ public class SACAgent<T> : DeepReinforcementLearningAgentBase<T>
 
         var architecture = new NeuralNetworkArchitecture<T>
         {
-            InputSize = _sacOptions.StateSize,
-            OutputSize = _sacOptions.ActionSize * 2,
             Layers = layers,
             TaskType = TaskType.Regression
         };
@@ -139,8 +137,6 @@ public class SACAgent<T> : DeepReinforcementLearningAgentBase<T>
 
         var architecture = new NeuralNetworkArchitecture<T>
         {
-            InputSize = inputSize,
-            OutputSize = 1,
             Layers = layers,
             TaskType = TaskType.Regression
         };
@@ -509,8 +505,6 @@ public class SACAgent<T> : DeepReinforcementLearningAgentBase<T>
         {
             ModelType = ModelType.SACAgent,
             FeatureCount = _sacOptions.StateSize,
-            TrainingSampleCount = _replayBuffer.Count,
-            Parameters = GetParameters()
         };
     }
 

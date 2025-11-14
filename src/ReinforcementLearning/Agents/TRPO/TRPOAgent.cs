@@ -85,8 +85,6 @@ public class TRPOAgent<T> : DeepReinforcementLearningAgentBase<T>
 
         var architecture = new NeuralNetworkArchitecture<T>
         {
-            InputSize = _options.StateSize,
-            OutputSize = outputSize,
             TaskType = TaskType.Regression
         };
 
@@ -120,8 +118,6 @@ public class TRPOAgent<T> : DeepReinforcementLearningAgentBase<T>
     {
         var architecture = new NeuralNetworkArchitecture<T>
         {
-            InputSize = _options.StateSize,
-            OutputSize = 1,
             TaskType = TaskType.Regression
         };
 
@@ -577,9 +573,6 @@ public class TRPOAgent<T> : DeepReinforcementLearningAgentBase<T>
         return new ModelMetadata<T>
         {
             ModelType = "TRPO",
-            InputSize = _options.StateSize,
-            OutputSize = _options.ActionSize,
-            ParameterCount = ParameterCount
         };
     }
 

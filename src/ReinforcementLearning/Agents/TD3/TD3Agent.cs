@@ -391,7 +391,6 @@ public class TD3Agent<T> : DeepReinforcementLearningAgentBase<T>
             ModelType = ModelType.TD3Agent,
             FeatureCount = _options.StateSize,
             Complexity = ParameterCount,
-            Parameters = GetParameters()
         };
     }
 

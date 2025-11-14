@@ -116,8 +116,6 @@ public class DDPGAgent<T> : DeepReinforcementLearningAgentBase<T>
 
         var architecture = new NeuralNetworkArchitecture<T>
         {
-            InputSize = _options.StateSize,
-            OutputSize = _options.ActionSize,
             Layers = layers,
             TaskType = TaskType.Regression
         };
@@ -143,8 +141,6 @@ public class DDPGAgent<T> : DeepReinforcementLearningAgentBase<T>
 
         var architecture = new NeuralNetworkArchitecture<T>
         {
-            InputSize = inputSize,
-            OutputSize = 1,
             Layers = layers,
             TaskType = TaskType.Regression
         };
@@ -374,8 +370,6 @@ public class DDPGAgent<T> : DeepReinforcementLearningAgentBase<T>
         {
             ModelType = ModelType.DDPGAgent,
             FeatureCount = _options.StateSize,
-            TrainingSampleCount = _replayBuffer.Count,
-            Parameters = GetParameters()
         };
     }
 

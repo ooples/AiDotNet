@@ -110,8 +110,6 @@ public class DoubleDQNAgent<T> : DeepReinforcementLearningAgentBase<T>
 
         var architecture = new NeuralNetworkArchitecture<T>
         {
-            InputSize = _options.StateSize,
-            OutputSize = _options.ActionSize,
             Layers = layers,
             TaskType = TaskType.Regression
         };
@@ -234,8 +232,6 @@ public class DoubleDQNAgent<T> : DeepReinforcementLearningAgentBase<T>
         {
             ModelType = ModelType.DoubleDQN,
             FeatureCount = _options.StateSize,
-            TrainingSampleCount = _replayBuffer.Count,
-            Parameters = GetParameters()
         };
     }
 

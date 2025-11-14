@@ -475,7 +475,6 @@ public class CQLAgent<T> : DeepReinforcementLearningAgentBase<T>
             ModelType = ModelType.CQLAgent,
             FeatureCount = _options.StateSize,
             Complexity = ParameterCount,
-            Parameters = GetParameters()
         };
     }
 

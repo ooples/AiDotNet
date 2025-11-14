@@ -204,8 +204,6 @@ public class DuelingDQNAgent<T> : DeepReinforcementLearningAgentBase<T>
         {
             ModelType = ModelType.DuelingDQN,
             FeatureCount = _options.StateSize,
-            TrainingSampleCount = _replayBuffer.Count,
-            Parameters = GetParameters()
         };
     }
 

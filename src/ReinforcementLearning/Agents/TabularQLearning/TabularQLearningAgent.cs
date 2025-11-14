@@ -174,9 +174,6 @@ public class TabularQLearningAgent<T> : ReinforcementLearningAgentBase<T>
         return new ModelMetadata<T>
         {
             ModelType = "TabularQLearning",
-            InputSize = _options.StateSize,
-            OutputSize = _options.ActionSize,
-            ParameterCount = ParameterCount
         };
     }
 

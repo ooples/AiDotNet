@@ -105,8 +105,6 @@ public class PPOAgent<T> : DeepReinforcementLearningAgentBase<T>
 
         var architecture = new NeuralNetworkArchitecture<T>
         {
-            InputSize = _ppoOptions.StateSize,
-            OutputSize = _ppoOptions.IsContinuous ? _ppoOptions.ActionSize * 2 : _ppoOptions.ActionSize,
             Layers = layers,
             TaskType = TaskType.Regression
         };
@@ -131,8 +129,6 @@ public class PPOAgent<T> : DeepReinforcementLearningAgentBase<T>
 
         var architecture = new NeuralNetworkArchitecture<T>
         {
-            InputSize = _ppoOptions.StateSize,
-            OutputSize = 1,
             Layers = layers,
             TaskType = TaskType.Regression
         };
@@ -556,8 +552,6 @@ public class PPOAgent<T> : DeepReinforcementLearningAgentBase<T>
         {
             ModelType = ModelType.PPOAgent,
             FeatureCount = _ppoOptions.StateSize,
-            TrainingSampleCount = TrainingSteps,
-            Parameters = GetParameters()
         };
     }
 

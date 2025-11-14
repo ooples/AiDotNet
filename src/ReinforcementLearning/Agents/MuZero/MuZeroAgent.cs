@@ -408,9 +408,6 @@ public class MuZeroAgent<T> : DeepReinforcementLearningAgentBase<T>
         return new ModelMetadata<T>
         {
             ModelType = "MuZero",
-            InputSize = _options.ObservationSize,
-            OutputSize = _options.ActionSize,
-            ParameterCount = ParameterCount
         };
     }
 

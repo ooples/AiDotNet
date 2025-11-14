@@ -480,7 +480,6 @@ public class IQLAgent<T> : DeepReinforcementLearningAgentBase<T>
             ModelType = ModelType.IQLAgent,
             FeatureCount = _options.StateSize,
             Complexity = ParameterCount,
-            Parameters = GetParameters()
         };
     }
 

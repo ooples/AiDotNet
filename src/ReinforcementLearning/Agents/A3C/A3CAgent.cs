@@ -77,8 +77,6 @@ public class A3CAgent<T> : DeepReinforcementLearningAgentBase<T>
 
         var architecture = new NeuralNetworkArchitecture<T>
         {
-            InputSize = _options.StateSize,
-            OutputSize = outputSize,
             TaskType = TaskType.Regression
         };
 
@@ -112,8 +110,6 @@ public class A3CAgent<T> : DeepReinforcementLearningAgentBase<T>
     {
         var architecture = new NeuralNetworkArchitecture<T>
         {
-            InputSize = _options.StateSize,
-            OutputSize = 1,
             TaskType = TaskType.Regression
         };
 
@@ -535,7 +531,6 @@ public class A3CAgent<T> : DeepReinforcementLearningAgentBase<T>
             ModelType = ModelType.A3CAgent,
             FeatureCount = _options.StateSize,
             Complexity = ParameterCount,
-            Parameters = GetParameters()
         };
     }
 

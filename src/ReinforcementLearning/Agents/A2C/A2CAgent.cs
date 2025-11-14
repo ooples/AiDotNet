@@ -80,8 +80,6 @@ public class A2CAgent<T> : DeepReinforcementLearningAgentBase<T>
 
         return new NeuralNetwork<T>(new NeuralNetworkArchitecture<T>
         {
-            InputSize = _a2cOptions.StateSize,
-            OutputSize = outputSize,
             Layers = layers,
             TaskType = TaskType.Regression
         });
@@ -102,8 +100,6 @@ public class A2CAgent<T> : DeepReinforcementLearningAgentBase<T>
 
         return new NeuralNetwork<T>(new NeuralNetworkArchitecture<T>
         {
-            InputSize = _a2cOptions.StateSize,
-            OutputSize = 1,
             Layers = layers,
             TaskType = TaskType.Regression
         }, _a2cOptions.ValueLossFunction);
@@ -410,8 +406,6 @@ public class A2CAgent<T> : DeepReinforcementLearningAgentBase<T>
         {
             ModelType = ModelType.A2CAgent,
             FeatureCount = _a2cOptions.StateSize,
-            TrainingSampleCount = TrainingSteps,
-            Parameters = GetParameters()
         };
     }
 

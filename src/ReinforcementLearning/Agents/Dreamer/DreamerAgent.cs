@@ -366,9 +366,6 @@ public class DreamerAgent<T> : DeepReinforcementLearningAgentBase<T>
         return new ModelMetadata<T>
         {
             ModelType = "Dreamer",
-            InputSize = _options.ObservationSize,
-            OutputSize = _options.ActionSize,
-            ParameterCount = ParameterCount
         };
     }
 
