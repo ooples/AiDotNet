@@ -272,9 +272,9 @@ public class WorldModelsAgent<T> : DeepReinforcementLearningAgentBase<T>
             }
 
             _vaeDecoder.Backward(gradient);
-            _vaeDecoder.UpdateWeights(_options.LearningRate);
+            _vaeDecoder.UpdateParameters(_options.LearningRate);
 
-            _vaeEncoder.UpdateWeights(_options.LearningRate);
+            _vaeEncoder.UpdateParameters(_options.LearningRate);
         }
 
         return NumOps.Divide(totalLoss, NumOps.FromDouble(batch.Count));
@@ -320,7 +320,7 @@ public class WorldModelsAgent<T> : DeepReinforcementLearningAgentBase<T>
             }
 
             _rnnNetwork.Backward(gradient);
-            _rnnNetwork.UpdateWeights(_options.LearningRate);
+            _rnnNetwork.UpdateParameters(_options.LearningRate);
         }
 
         return NumOps.Divide(totalLoss, NumOps.FromDouble(batch.Count));
@@ -511,7 +511,7 @@ public class WorldModelsAgent<T> : DeepReinforcementLearningAgentBase<T>
         if (Networks.Count > 0)
         {
             Networks[0].Backward(gradients);
-            Networks[0].UpdateWeights(learningRate);
+            Networks[0].UpdateParameters(learningRate);
         }
     }
 

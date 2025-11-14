@@ -221,7 +221,7 @@ public class TD3Agent<T> : DeepReinforcementLearningAgentBase<T>
             var q1ErrorVec = new Vector<T>(1);
             q1ErrorVec[0] = q1Error;
             _critic1Network.Backward(q1ErrorVec);
-            _critic1Network.UpdateWeights(_options.CriticLearningRate);
+            _critic1Network.UpdateParameters(_options.CriticLearningRate);
 
             // Update Critic 2
             var q2Value = _critic2Network.Predict(stateAction)[0];
@@ -229,7 +229,7 @@ public class TD3Agent<T> : DeepReinforcementLearningAgentBase<T>
             var q2ErrorVec = new Vector<T>(1);
             q2ErrorVec[0] = q2Error;
             _critic2Network.Backward(q2ErrorVec);
-            _critic2Network.UpdateWeights(_options.CriticLearningRate);
+            _critic2Network.UpdateParameters(_options.CriticLearningRate);
 
             // Accumulate loss (MSE)
             var loss1 = _numOps.Multiply(q1Error, q1Error);
@@ -269,7 +269,7 @@ public class TD3Agent<T> : DeepReinforcementLearningAgentBase<T>
 
             // Backpropagate through actor
             _actorNetwork.Backward(actorGradient);
-            _actorNetwork.UpdateWeights(_options.ActorLearningRate);
+            _actorNetwork.UpdateParameters(_options.ActorLearningRate);
         }
     }
 

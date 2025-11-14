@@ -265,7 +265,7 @@ public class QMIXAgent<T> : DeepReinforcementLearningAgentBase<T>
             var mixingGradient = new Vector<T>(1);
             mixingGradient[0] = tdError;
             _mixingNetwork.Backward(mixingGradient);
-            _mixingNetwork.UpdateWeights(_options.LearningRate);
+            _mixingNetwork.UpdateParameters(_options.LearningRate);
 
             // Backpropagate through agent networks
             for (int i = 0; i < _options.NumAgents; i++)
@@ -275,7 +275,7 @@ public class QMIXAgent<T> : DeepReinforcementLearningAgentBase<T>
                 agentGradient[actionIdx] = NumOps.Divide(tdError, NumOps.FromDouble(_options.NumAgents));
 
                 _agentNetworks[i].Backward(agentGradient);
-                _agentNetworks[i].UpdateWeights(_options.LearningRate);
+                _agentNetworks[i].UpdateParameters(_options.LearningRate);
             }
         }
 
@@ -551,7 +551,7 @@ public class QMIXAgent<T> : DeepReinforcementLearningAgentBase<T>
     public override void ApplyGradients(Vector<T> gradients, T learningRate)
     {
         _agentNetworks[0].Backward(gradients);
-        _agentNetworks[0].UpdateWeights(learningRate);
+        _agentNetworks[0].UpdateParameters(learningRate);
     }
 
     public override void SaveModel(string filepath)

@@ -313,7 +313,7 @@ public class TRPOAgent<T> : DeepReinforcementLearningAgentBase<T>
                 gradient[0] = error;
 
                 _valueNetwork.Backward(gradient);
-                _valueNetwork.UpdateWeights(_options.ValueLearningRate);
+                _valueNetwork.UpdateParameters(_options.ValueLearningRate);
             }
         }
     }
@@ -681,7 +681,7 @@ public class TRPOAgent<T> : DeepReinforcementLearningAgentBase<T>
     public override void ApplyGradients(Vector<T> gradients, T learningRate)
     {
         _policyNetwork.Backward(gradients);
-        _policyNetwork.UpdateWeights(learningRate);
+        _policyNetwork.UpdateParameters(learningRate);
     }
 
     public override void SaveModel(string filepath)

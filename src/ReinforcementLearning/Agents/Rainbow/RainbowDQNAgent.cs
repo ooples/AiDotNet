@@ -283,7 +283,7 @@ public class RainbowDQNAgent<T> : DeepReinforcementLearningAgentBase<T>
             var gradient = new Vector<T>(_options.ActionSize);
             gradient[actionIndex] = tdError;
             _onlineNetwork.Backward(gradient);
-            _onlineNetwork.UpdateWeights(LearningRate);
+            _onlineNetwork.UpdateParameters(LearningRate);
         }
 
         // Update priorities in replay buffer
@@ -445,7 +445,7 @@ public class RainbowDQNAgent<T> : DeepReinforcementLearningAgentBase<T>
     public override void ApplyGradients(Vector<T> gradients, T learningRate)
     {
         _onlineNetwork.Backward(gradients);
-        _onlineNetwork.UpdateWeights(learningRate);
+        _onlineNetwork.UpdateParameters(learningRate);
     }
 
     public override void SaveModel(string filepath)

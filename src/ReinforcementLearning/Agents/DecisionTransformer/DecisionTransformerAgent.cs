@@ -236,7 +236,7 @@ public class DecisionTransformerAgent<T> : DeepReinforcementLearningAgentBase<T>
             }
 
             _transformerNetwork.Backward(gradient);
-            _transformerNetwork.UpdateWeights(_options.LearningRate);
+            _transformerNetwork.UpdateParameters(_options.LearningRate);
         }
 
         _updateCount++;
@@ -338,7 +338,7 @@ public class DecisionTransformerAgent<T> : DeepReinforcementLearningAgentBase<T>
     public override void ApplyGradients(Vector<T> gradients, T learningRate)
     {
         _transformerNetwork.Backward(gradients);
-        _transformerNetwork.UpdateWeights(learningRate);
+        _transformerNetwork.UpdateParameters(learningRate);
     }
 
     public override void SaveModel(string filepath)

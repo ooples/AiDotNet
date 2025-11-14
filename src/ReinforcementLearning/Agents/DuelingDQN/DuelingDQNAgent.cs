@@ -171,7 +171,7 @@ public class DuelingDQNAgent<T> : DeepReinforcementLearningAgentBase<T>
             _qNetwork.Backward(experience.State, gradients);
 
             // Update parameters
-            _qNetwork.UpdateWeights(LearningRate);
+            _qNetwork.UpdateParameters(LearningRate);
         }
 
         var avgLoss = NumOps.Divide(totalLoss, NumOps.FromDouble(_options.BatchSize));

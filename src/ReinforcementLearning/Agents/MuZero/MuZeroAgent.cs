@@ -321,7 +321,7 @@ public class MuZeroAgent<T> : DeepReinforcementLearningAgentBase<T>
                 gradient[_options.ActionSize] = valueDiff;
 
                 _predictionNetwork.Backward(gradient);
-                _predictionNetwork.UpdateWeights(_options.LearningRate);
+                _predictionNetwork.UpdateParameters(_options.LearningRate);
 
                 // Dynamics step
                 var actionVec = experience.Action;

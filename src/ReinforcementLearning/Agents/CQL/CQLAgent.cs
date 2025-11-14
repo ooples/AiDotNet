@@ -263,7 +263,7 @@ public class CQLAgent<T> : DeepReinforcementLearningAgentBase<T>
             var q1ErrorVec = new Vector<T>(1);
             q1ErrorVec[0] = q1TotalGrad;
             _q1Network.Backward(q1ErrorVec);
-            _q1Network.UpdateWeights(_options.QLearningRate);
+            _q1Network.UpdateParameters(_options.QLearningRate);
 
             // Backpropagate Q2: MSE gradient + CQL penalty gradient
             var q2MseGrad = _numOps.Multiply(_numOps.FromDouble(-2.0), q2Error);
@@ -272,7 +272,7 @@ public class CQLAgent<T> : DeepReinforcementLearningAgentBase<T>
             var q2ErrorVec = new Vector<T>(1);
             q2ErrorVec[0] = q2TotalGrad;
             _q2Network.Backward(q2ErrorVec);
-            _q2Network.UpdateWeights(_options.QLearningRate);
+            _q2Network.UpdateParameters(_options.QLearningRate);
 
             totalLoss = _numOps.Add(totalLoss, _numOps.Add(q1Loss, q2Loss));
         }
@@ -347,7 +347,7 @@ public class CQLAgent<T> : DeepReinforcementLearningAgentBase<T>
             }
 
             _policyNetwork.Backward(policyGrad);
-            _policyNetwork.UpdateWeights(_options.PolicyLearningRate);
+            _policyNetwork.UpdateParameters(_options.PolicyLearningRate);
         }
 
         return _numOps.Divide(totalLoss, _numOps.FromDouble(batch.Count));
