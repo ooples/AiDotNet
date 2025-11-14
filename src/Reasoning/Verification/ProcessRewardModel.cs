@@ -131,7 +131,8 @@ public class ProcessRewardModel<T> : IRewardModel<T>
         // If correct answer provided, adjust reward based on correctness
         if (!string.IsNullOrEmpty(correctAnswer))
         {
-            bool answerCorrect = chain.FinalAnswer.Equals(correctAnswer, StringComparison.OrdinalIgnoreCase);
+            bool answerCorrect = chain.FinalAnswer is not null &&
+                                chain.FinalAnswer.Equals(correctAnswer, StringComparison.OrdinalIgnoreCase);
             if (!answerCorrect)
             {
                 // Penalize if final answer is wrong (even if process was good)
