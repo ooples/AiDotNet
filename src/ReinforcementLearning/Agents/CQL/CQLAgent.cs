@@ -262,7 +262,7 @@ public class CQLAgent<T> : DeepReinforcementLearningAgentBase<T>
             var q1TotalGrad = _numOps.Add(q1MseGrad, q1CqlGrad);
             var q1ErrorVec = new Vector<T>(1);
             q1ErrorVec[0] = q1TotalGrad;
-            _q1Network.Backward(q1ErrorVec);
+            _q1Network.Backpropagate(q1ErrorVec);
             _q1Network.UpdateParameters(_options.QLearningRate);
 
             // Backpropagate Q2: MSE gradient + CQL penalty gradient
@@ -271,7 +271,7 @@ public class CQLAgent<T> : DeepReinforcementLearningAgentBase<T>
             var q2TotalGrad = _numOps.Add(q2MseGrad, q2CqlGrad);
             var q2ErrorVec = new Vector<T>(1);
             q2ErrorVec[0] = q2TotalGrad;
-            _q2Network.Backward(q2ErrorVec);
+            _q2Network.Backpropagate(q2ErrorVec);
             _q2Network.UpdateParameters(_options.QLearningRate);
 
             totalLoss = _numOps.Add(totalLoss, _numOps.Add(q1Loss, q2Loss));
@@ -334,7 +334,7 @@ public class CQLAgent<T> : DeepReinforcementLearningAgentBase<T>
             // Backprop through Q-network to get action gradient
             var qGrad = new Vector<T>(1);
             qGrad[0] = _numOps.One;
-            var actionGrad = _q1Network.Backward(qGrad);
+            var actionGrad = _q1Network.Backpropagate(qGrad);
 
             // Extract action part of gradient and negate for gradient ascent (maximize Q)
             var policyGrad = new Vector<T>(_options.ActionSize * 2);
@@ -346,7 +346,7 @@ public class CQLAgent<T> : DeepReinforcementLearningAgentBase<T>
                 policyGrad[_options.ActionSize + i] = _numOps.Zero;
             }
 
-            _policyNetwork.Backward(policyGrad);
+            _policyNetwork.Backpropagate(policyGrad);
             _policyNetwork.UpdateParameters(_options.PolicyLearningRate);
         }
 

@@ -263,7 +263,7 @@ public class A2CAgent<T> : DeepReinforcementLearningAgentBase<T>
             // Policy gradient: compute ∇ loss w.r.t. policy output
             var policyOutput = _policyNetwork.Predict(state);
             var policyGradient = ComputePolicyOutputGradient(policyOutput, action, advantage);
-            _policyNetwork.Backward(policyGradient);
+            _policyNetwork.Backpropagate(policyGradient);
             
             // Value gradient: ∇ MSE w.r.t. value output = 2 * (V - target) / batchSize
             var predictedValue = _valueNetwork.Predict(state)[0];
@@ -272,7 +272,7 @@ public class A2CAgent<T> : DeepReinforcementLearningAgentBase<T>
             valueGradient[0] = NumOps.Divide(
                 NumOps.Multiply(NumOps.FromDouble(2.0), valueDiff),
                 NumOps.FromDouble(_trajectory.Length));
-            _valueNetwork.Backward(valueGradient);
+            _valueNetwork.Backpropagate(valueGradient);
         }
         
         // Now update network parameters using accumulated gradients

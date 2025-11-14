@@ -357,7 +357,7 @@ public class A3CAgent<T> : DeepReinforcementLearningAgentBase<T>
             // Compute policy gradient
             var policyOutput = localPolicy.Forward(exp.state);
             var policyGradient = ComputeA3CPolicyGradient(policyOutput, exp.action, advantage);
-            localPolicy.Backward(policyGradient);
+            localPolicy.Backpropagate(policyGradient);
             
             // Compute value gradient
             var predictedValue = localValue.Forward(exp.state)[0];
@@ -366,7 +366,7 @@ public class A3CAgent<T> : DeepReinforcementLearningAgentBase<T>
             valueGradient[0] = NumOps.Divide(
                 NumOps.Multiply(NumOps.FromDouble(2.0), valueDiff),
                 NumOps.FromDouble(trajectory.Count));
-            localValue.Backward(valueGradient);
+            localValue.Backpropagate(valueGradient);
         }
         
         // Update global networks with local gradients

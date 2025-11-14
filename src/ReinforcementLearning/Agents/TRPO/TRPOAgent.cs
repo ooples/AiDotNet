@@ -312,7 +312,7 @@ public class TRPOAgent<T> : DeepReinforcementLearningAgentBase<T>
                 var gradient = new Vector<T>(1);
                 gradient[0] = error;
 
-                _valueNetwork.Backward(gradient);
+                _valueNetwork.Backpropagate(gradient);
                 _valueNetwork.UpdateParameters(_options.ValueLearningRate);
             }
         }
@@ -346,7 +346,7 @@ public class TRPOAgent<T> : DeepReinforcementLearningAgentBase<T>
                 var weightedAdvantage = NumOps.Multiply(importanceRatio, advantage);
                 
                 var policyGradient = ComputeTRPOPolicyGradient(policyOutput, action, weightedAdvantage);
-                _policyNetwork.Backward(policyGradient);
+                _policyNetwork.Backpropagate(policyGradient);
             }
         }
     }
@@ -680,7 +680,7 @@ public class TRPOAgent<T> : DeepReinforcementLearningAgentBase<T>
 
     public override void ApplyGradients(Vector<T> gradients, T learningRate)
     {
-        _policyNetwork.Backward(gradients);
+        _policyNetwork.Backpropagate(gradients);
         _policyNetwork.UpdateParameters(learningRate);
     }
 

@@ -277,7 +277,7 @@ public class MADDPGAgent<T> : DeepReinforcementLearningAgentBase<T>
             // Backpropagate
             var gradient = new Vector<T>(1);
             gradient[0] = error;
-            _criticNetworks[agentId].Backward(gradient);
+            _criticNetworks[agentId].Backpropagate(gradient);
             _criticNetworks[agentId].UpdateParameters(_options.CriticLearningRate);
         }
 
@@ -321,7 +321,7 @@ public class MADDPGAgent<T> : DeepReinforcementLearningAgentBase<T>
                 actorGradient[i] = NumOps.Divide(qValue, NumOps.FromDouble(_options.ActionSize));
             }
 
-            _actorNetworks[agentId].Backward(actorGradient);
+            _actorNetworks[agentId].Backpropagate(actorGradient);
             _actorNetworks[agentId].UpdateParameters(_options.ActorLearningRate);
         }
 

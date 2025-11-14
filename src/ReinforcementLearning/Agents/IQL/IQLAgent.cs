@@ -249,7 +249,7 @@ public class IQLAgent<T> : DeepReinforcementLearningAgentBase<T>
             
             var gradient = new Vector<T>(1);
             gradient[0] = gradValue;
-            _valueNetwork.Backward(gradient);
+            _valueNetwork.Backpropagate(gradient);
             _valueNetwork.UpdateParameters(_options.ValueLearningRate);
         }
 
@@ -304,7 +304,7 @@ public class IQLAgent<T> : DeepReinforcementLearningAgentBase<T>
             var q1Grad = _numOps.Multiply(_numOps.FromDouble(-2.0), q1Error);
             var q1ErrorVec = new Vector<T>(1);
             q1ErrorVec[0] = q1Grad;
-            _q1Network.Backward(q1ErrorVec);
+            _q1Network.Backpropagate(q1ErrorVec);
             _q1Network.UpdateParameters(_options.QLearningRate);
 
             // Update Q2
@@ -316,7 +316,7 @@ public class IQLAgent<T> : DeepReinforcementLearningAgentBase<T>
             var q2Grad = _numOps.Multiply(_numOps.FromDouble(-2.0), q2Error);
             var q2ErrorVec = new Vector<T>(1);
             q2ErrorVec[0] = q2Grad;
-            _q2Network.Backward(q2ErrorVec);
+            _q2Network.Backpropagate(q2ErrorVec);
             _q2Network.UpdateParameters(_options.QLearningRate);
 
             totalLoss = _numOps.Add(totalLoss, _numOps.Add(q1Loss, q2Loss));
@@ -364,7 +364,7 @@ public class IQLAgent<T> : DeepReinforcementLearningAgentBase<T>
                 gradient[i] = _numOps.Multiply(weight, diff);
             }
 
-            _policyNetwork.Backward(gradient);
+            _policyNetwork.Backpropagate(gradient);
             _policyNetwork.UpdateParameters(_options.PolicyLearningRate);
         }
 

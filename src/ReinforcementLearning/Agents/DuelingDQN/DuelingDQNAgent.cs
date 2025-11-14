@@ -168,7 +168,7 @@ public class DuelingDQNAgent<T> : DeepReinforcementLearningAgentBase<T>
 
             // Backward pass through dueling architecture
             var gradients = LossFunction.ComputeGradient(currentQValues, targetQValues);
-            _qNetwork.Backward(experience.State, gradients);
+            _qNetwork.Backpropagate(experience.State, gradients);
 
             // Update parameters
             _qNetwork.UpdateParameters(LearningRate);
@@ -304,7 +304,7 @@ public class DuelingDQNAgent<T> : DeepReinforcementLearningAgentBase<T>
         var lossValue = loss.CalculateLoss(output, target);
         var gradient = loss.ComputeGradient(output, target);
 
-        _qNetwork.Backward(input, gradient);
+        _qNetwork.Backpropagate(input, gradient);
         var gradientVector = _qNetwork.GetFlattenedGradients();
 
         return gradientVector;

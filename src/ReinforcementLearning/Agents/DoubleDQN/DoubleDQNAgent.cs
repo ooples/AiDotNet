@@ -188,7 +188,7 @@ public class DoubleDQNAgent<T> : DeepReinforcementLearningAgentBase<T>
             totalLoss = NumOps.Add(totalLoss, loss);
 
             var gradients = LossFunction.ComputeGradient(currentQValues, targetQValues);
-            _qNetwork.Backward(gradients);
+            _qNetwork.Backpropagate(gradients);
 
             var parameters = _qNetwork.GetParameters();
             var gradientVector = _qNetwork.GetFlattenedGradients();
@@ -331,7 +331,7 @@ public class DoubleDQNAgent<T> : DeepReinforcementLearningAgentBase<T>
         var lossValue = loss.CalculateLoss(output, target);
         var gradient = loss.ComputeGradient(output, target);
 
-        _qNetwork.Backward(gradient);
+        _qNetwork.Backpropagate(gradient);
         var gradientVector = _qNetwork.GetFlattenedGradients();
 
         return gradientVector;

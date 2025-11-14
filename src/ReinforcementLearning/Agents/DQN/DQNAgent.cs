@@ -206,7 +206,7 @@ public class DQNAgent<T> : DeepReinforcementLearningAgentBase<T>
 
             // Backpropagate
             var gradients = LossFunction.ComputeGradient(currentQValues, targetQValues);
-            _qNetwork.Backward(gradients);
+            _qNetwork.Backpropagate(gradients);
 
             // Update weights using learning rate
             var parameters = _qNetwork.GetParameters();
@@ -358,7 +358,7 @@ public class DQNAgent<T> : DeepReinforcementLearningAgentBase<T>
         var lossValue = loss.CalculateLoss(output, target);
         var gradient = loss.ComputeGradient(output, target);
 
-        _qNetwork.Backward(gradient);
+        _qNetwork.Backpropagate(gradient);
         var gradientVector = _qNetwork.GetFlattenedGradients();
 
         return gradientVector;

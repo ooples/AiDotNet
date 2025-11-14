@@ -237,7 +237,7 @@ public class DDPGAgent<T> : DeepReinforcementLearningAgentBase<T>
 
             // Backprop
             var gradient = _options.CriticLossFunction.ComputeGradient(prediction, target);
-            _criticNetwork.Backward(gradient);
+            _criticNetwork.Backpropagate(gradient);
         }
 
         // Update critic weights
@@ -267,7 +267,7 @@ public class DDPGAgent<T> : DeepReinforcementLearningAgentBase<T>
             // Simplified: Use policy gradient with Q-value as advantage
             // This approximates the true DPG but works within current architecture
             var outputGradient = ComputeDDPGPolicyGradient(action, q);
-            _actorNetwork.Backward(outputGradient);
+            _actorNetwork.Backpropagate(outputGradient);
         }
 
         // Update actor weights

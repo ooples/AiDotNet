@@ -259,7 +259,7 @@ public class REINFORCEAgent<T> : DeepReinforcementLearningAgentBase<T>
             }
             
             // Backpropagate through policy network
-            _policyNetwork.Backward(outputGradient);
+            _policyNetwork.Backpropagate(outputGradient);
         }
 
         // Average loss

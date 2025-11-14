@@ -235,7 +235,7 @@ public class DecisionTransformerAgent<T> : DeepReinforcementLearningAgentBase<T>
                 gradient[i] = NumOps.Subtract(predictedAction[i], targetAction[i]);
             }
 
-            _transformerNetwork.Backward(gradient);
+            _transformerNetwork.Backpropagate(gradient);
             _transformerNetwork.UpdateParameters(_options.LearningRate);
         }
 
@@ -337,7 +337,7 @@ public class DecisionTransformerAgent<T> : DeepReinforcementLearningAgentBase<T>
 
     public override void ApplyGradients(Vector<T> gradients, T learningRate)
     {
-        _transformerNetwork.Backward(gradients);
+        _transformerNetwork.Backpropagate(gradients);
         _transformerNetwork.UpdateParameters(learningRate);
     }
 

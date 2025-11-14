@@ -220,7 +220,7 @@ public class TD3Agent<T> : DeepReinforcementLearningAgentBase<T>
             var q1Error = _numOps.Subtract(targetQ, q1Value);
             var q1ErrorVec = new Vector<T>(1);
             q1ErrorVec[0] = q1Error;
-            _critic1Network.Backward(q1ErrorVec);
+            _critic1Network.Backpropagate(q1ErrorVec);
             _critic1Network.UpdateParameters(_options.CriticLearningRate);
 
             // Update Critic 2
@@ -228,7 +228,7 @@ public class TD3Agent<T> : DeepReinforcementLearningAgentBase<T>
             var q2Error = _numOps.Subtract(targetQ, q2Value);
             var q2ErrorVec = new Vector<T>(1);
             q2ErrorVec[0] = q2Error;
-            _critic2Network.Backward(q2ErrorVec);
+            _critic2Network.Backpropagate(q2ErrorVec);
             _critic2Network.UpdateParameters(_options.CriticLearningRate);
 
             // Accumulate loss (MSE)
@@ -258,7 +258,7 @@ public class TD3Agent<T> : DeepReinforcementLearningAgentBase<T>
             policyGradient[0] = _numOps.Negate(qValue);
 
             // Backpropagate through critic to get gradient w.r.t. actions
-            var actionGradient = _critic1Network.Backward(policyGradient);
+            var actionGradient = _critic1Network.Backpropagate(policyGradient);
 
             // Extract action gradients (remove state part)
             var actorGradient = new Vector<T>(_options.ActionSize);
@@ -268,7 +268,7 @@ public class TD3Agent<T> : DeepReinforcementLearningAgentBase<T>
             }
 
             // Backpropagate through actor
-            _actorNetwork.Backward(actorGradient);
+            _actorNetwork.Backpropagate(actorGradient);
             _actorNetwork.UpdateParameters(_options.ActorLearningRate);
         }
     }

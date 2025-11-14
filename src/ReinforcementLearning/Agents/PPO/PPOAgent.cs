@@ -493,7 +493,7 @@ public class PPOAgent<T> : DeepReinforcementLearningAgentBase<T>
                 gradOutput[i] = NumOps.Multiply(gradOutput[i], advantage);
             }
 
-            _policyNetwork.Backward(gradOutput);
+            _policyNetwork.Backpropagate(gradOutput);
         }
 
         // Apply gradients
@@ -524,7 +524,7 @@ public class PPOAgent<T> : DeepReinforcementLearningAgentBase<T>
             target[0] = targetReturn;
 
             var grad = _ppoOptions.ValueLossFunction.ComputeGradient(valueOutput, target);
-            _valueNetwork.Backward(grad);
+            _valueNetwork.Backpropagate(grad);
         }
 
         var grads = _valueNetwork.GetFlattenedGradients();

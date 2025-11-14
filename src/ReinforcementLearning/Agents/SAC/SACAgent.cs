@@ -300,11 +300,11 @@ public class SACAgent<T> : DeepReinforcementLearningAgentBase<T>
 
             // Backprop Q1
             var q1Grad = _sacOptions.QLossFunction.ComputeGradient(q1Pred_vec, q1Target_vec);
-            _q1Network.Backward(q1Grad);
+            _q1Network.Backpropagate(q1Grad);
 
             // Backprop Q2
             var q2Grad = _sacOptions.QLossFunction.ComputeGradient(q2Pred_vec, q1Target_vec);
-            _q2Network.Backward(q2Grad);
+            _q2Network.Backpropagate(q2Grad);
         }
 
         // Apply gradients to Q-networks
@@ -344,7 +344,7 @@ public class SACAgent<T> : DeepReinforcementLearningAgentBase<T>
             var outputGradient = ComputeSACPolicyGradient(
                 policyOutput, action, alpha, logProb, minQ);
 
-            _policyNetwork.Backward(outputGradient);
+            _policyNetwork.Backpropagate(outputGradient);
         }
 
         // Apply gradients to policy network

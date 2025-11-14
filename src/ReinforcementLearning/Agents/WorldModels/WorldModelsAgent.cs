@@ -271,7 +271,7 @@ public class WorldModelsAgent<T> : DeepReinforcementLearningAgentBase<T>
                 gradient[i] = NumOps.Subtract(reconstruction[i], experience.State[i]);
             }
 
-            _vaeDecoder.Backward(gradient);
+            _vaeDecoder.Backpropagate(gradient);
             _vaeDecoder.UpdateParameters(_options.LearningRate);
 
             _vaeEncoder.UpdateParameters(_options.LearningRate);
@@ -319,7 +319,7 @@ public class WorldModelsAgent<T> : DeepReinforcementLearningAgentBase<T>
                 gradient[i] = NumOps.Subtract(predictedNextLatent[i], nextLatent[i]);
             }
 
-            _rnnNetwork.Backward(gradient);
+            _rnnNetwork.Backpropagate(gradient);
             _rnnNetwork.UpdateParameters(_options.LearningRate);
         }
 
@@ -510,7 +510,7 @@ public class WorldModelsAgent<T> : DeepReinforcementLearningAgentBase<T>
     {
         if (Networks.Count > 0)
         {
-            Networks[0].Backward(gradients);
+            Networks[0].Backpropagate(gradients);
             Networks[0].UpdateParameters(learningRate);
         }
     }

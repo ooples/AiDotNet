@@ -223,17 +223,17 @@ public class DreamerAgent<T> : DeepReinforcementLearningAgentBase<T>
                 gradient[i] = NumOps.Subtract(predictedNextLatent[i], nextLatentState[i]);
             }
 
-            _dynamicsNetwork.Backward(gradient);
+            _dynamicsNetwork.Backpropagate(gradient);
             _dynamicsNetwork.UpdateParameters(_options.LearningRate);
 
             var rewardGradient = new Vector<T>(1);
             rewardGradient[0] = rewardDiff;
-            _rewardNetwork.Backward(rewardGradient);
+            _rewardNetwork.Backpropagate(rewardGradient);
             _rewardNetwork.UpdateParameters(_options.LearningRate);
 
             var continueGradient = new Vector<T>(1);
             continueGradient[0] = continueDiff;
-            _continueNetwork.Backward(continueGradient);
+            _continueNetwork.Backpropagate(continueGradient);
             _continueNetwork.UpdateParameters(_options.LearningRate);
         }
 
@@ -267,7 +267,7 @@ public class DreamerAgent<T> : DeepReinforcementLearningAgentBase<T>
 
             var valueGradient = new Vector<T>(1);
             valueGradient[0] = valueDiff;
-            _valueNetwork.Backward(valueGradient);
+            _valueNetwork.Backpropagate(valueGradient);
             _valueNetwork.UpdateParameters(_options.LearningRate);
 
             // Update actor to maximize value
@@ -278,7 +278,7 @@ public class DreamerAgent<T> : DeepReinforcementLearningAgentBase<T>
                 actorGradient[i] = NumOps.Divide(valueDiff, NumOps.FromDouble(action.Length));
             }
 
-            _actorNetwork.Backward(actorGradient);
+            _actorNetwork.Backpropagate(actorGradient);
             _actorNetwork.UpdateParameters(_options.LearningRate);
 
             totalLoss = NumOps.Add(totalLoss, valueLoss);
@@ -442,7 +442,7 @@ public class DreamerAgent<T> : DeepReinforcementLearningAgentBase<T>
     {
         if (Networks.Count > 0)
         {
-            Networks[0].Backward(gradients);
+            Networks[0].Backpropagate(gradients);
             Networks[0].UpdateParameters(learningRate);
         }
     }
