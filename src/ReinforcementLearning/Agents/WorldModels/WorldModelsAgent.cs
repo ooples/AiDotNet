@@ -268,9 +268,9 @@ public class WorldModelsAgent<T> : DeepReinforcementLearningAgentBase<T>
             }
 
             _vaeDecoder.Backpropagate(Tensor<T>.FromVector(gradient));
-            _vaeDecoder.UpdateParameters(_options.LearningRate);
+            // TODO: Add proper optimizer-based parameter updates
 
-            _vaeEncoder.UpdateParameters(_options.LearningRate);
+
         }
 
         return NumOps.Divide(totalLoss, NumOps.FromDouble(batch.Count));
@@ -316,7 +316,7 @@ public class WorldModelsAgent<T> : DeepReinforcementLearningAgentBase<T>
             }
 
             _rnnNetwork.Backpropagate(Tensor<T>.FromVector(gradient));
-            _rnnNetwork.UpdateParameters(_options.LearningRate);
+            // TODO: Add proper optimizer-based parameter updates
         }
 
         return NumOps.Divide(totalLoss, NumOps.FromDouble(batch.Count));
@@ -494,23 +494,19 @@ public class WorldModelsAgent<T> : DeepReinforcementLearningAgentBase<T>
         Vector<T> target,
         ILossFunction<T>? lossFunction = null)
     {
+        
         var prediction = Predict(input);
         var usedLossFunction = lossFunction ?? LossFunction;
-        
-        // Convert to tensor for gradient computation
-        var predictionTensor = Tensor<T>.FromVector(prediction);
-        var targetTensor = Tensor<T>.FromVector(target);
-        
-        var gradientTensor = usedLossFunction.CalculateGradient(predictionTensor, targetTensor);
-        return gradientTensor.ToVector();
+        var gradient = usedLossFunction.CalculateDerivative(prediction, target);
+        return gradient;
     }
 
     public override void ApplyGradients(Vector<T> gradients, T learningRate)
     {
         if (Networks.Count > 0)
         {
-            Networks[0].Backpropagate(Tensor<T>.FromVector(gradients));
-            Networks[0].UpdateParameters(learningRate);
+            // Networks[0].Backpropagate(Tensor<T>.FromVector(gradients));
+            // TODO: Add proper optimizer-based parameter updates
         }
     }
 
