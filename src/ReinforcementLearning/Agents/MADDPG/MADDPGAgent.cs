@@ -510,7 +510,7 @@ public class MADDPGAgent<T> : DeepReinforcementLearningAgentBase<T>
         return new MADDPGAgent<T>(_options, _optimizer);
     }
 
-    public override (Vector<T> Gradients, T Loss) ComputeGradients(
+    public override Vector<T> ComputeGradients(
         Vector<T> input,
         Vector<T> target,
         ILossFunction<T>? lossFunction = null)
@@ -520,7 +520,7 @@ public class MADDPGAgent<T> : DeepReinforcementLearningAgentBase<T>
         var loss = usedLossFunction.CalculateLoss(prediction, target);
 
         var gradient = usedLossFunction.ComputeGradient(prediction, target);
-        return (gradient, loss);
+        return gradient;
     }
 
     public override void ApplyGradients(Vector<T> gradients, T learningRate)

@@ -352,7 +352,7 @@ public class DQNAgent<T> : DeepReinforcementLearningAgentBase<T>
     }
 
     /// <inheritdoc/>
-    public override (Vector<T> Gradients, T Loss) ComputeGradients(
+    public override Vector<T> ComputeGradients(
         Vector<T> input,
         Vector<T> target,
         ILossFunction<T>? lossFunction = null)
@@ -365,7 +365,7 @@ public class DQNAgent<T> : DeepReinforcementLearningAgentBase<T>
         _qNetwork.Backward(gradient);
         var gradientVector = _qNetwork.GetFlattenedGradients();
 
-        return (gradientVector, lossValue);
+        return gradientVector;
     }
 
     /// <inheritdoc/>

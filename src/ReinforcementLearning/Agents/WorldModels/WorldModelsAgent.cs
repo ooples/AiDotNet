@@ -496,7 +496,7 @@ public class WorldModelsAgent<T> : DeepReinforcementLearningAgentBase<T>
         return new WorldModelsAgent<T>(_options);
     }
 
-    public override (Vector<T> Gradients, T Loss) ComputeGradients(
+    public override Vector<T> ComputeGradients(
         Vector<T> input,
         Vector<T> target,
         ILossFunction<T>? lossFunction = null)
@@ -506,7 +506,7 @@ public class WorldModelsAgent<T> : DeepReinforcementLearningAgentBase<T>
         var loss = usedLossFunction.CalculateLoss(prediction, target);
 
         var gradient = usedLossFunction.ComputeGradient(prediction, target);
-        return (gradient, loss);
+        return gradient;
     }
 
     public override void ApplyGradients(Vector<T> gradients, T learningRate)

@@ -647,13 +647,13 @@ public class PPOAgent<T> : DeepReinforcementLearningAgentBase<T>
     }
 
     /// <inheritdoc/>
-    public override (Vector<T> Gradients, T Loss) ComputeGradients(
+    public override Vector<T> ComputeGradients(
         Vector<T> input,
         Vector<T> target,
         ILossFunction<T>? lossFunction = null)
     {
         // Not directly applicable for PPO (uses custom loss)
-        return (GetParameters(), NumOps.Zero);
+        return GetParameters();
     }
 
     /// <inheritdoc/>

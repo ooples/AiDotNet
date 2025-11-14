@@ -240,13 +240,13 @@ public class TabularQLearningAgent<T> : ReinforcementLearningAgentBase<T>
         return clone;
     }
 
-    public override (Vector<T> Gradients, T Loss) ComputeGradients(
+    public override Vector<T> ComputeGradients(
         Vector<T> input,
         Vector<T> target,
         ILossFunction<T>? lossFunction = null)
     {
         // Tabular methods don't use gradients
-        return (new Matrix<T>(1, 1), NumOps.Zero);
+        return GetParameters();
     }
 
     public override void ApplyGradients(Vector<T> gradients, T learningRate)

@@ -671,7 +671,7 @@ public class TRPOAgent<T> : DeepReinforcementLearningAgentBase<T>
         return new TRPOAgent<T>(_options, _optimizer);
     }
 
-    public override (Vector<T> Gradients, T Loss) ComputeGradients(
+    public override Vector<T> ComputeGradients(
         Vector<T> input,
         Vector<T> target,
         ILossFunction<T>? lossFunction = null)
@@ -682,7 +682,7 @@ public class TRPOAgent<T> : DeepReinforcementLearningAgentBase<T>
 
         var gradientMatrix = usedLossFunction.CalculateDerivative(new Matrix<T>(new[] { prediction }), new Matrix<T>(new[] { target }));
         var gradient = new Vector<T>(gradientMatrix.GetRow(0));
-        return (gradient, loss);
+        return gradient;
     }
 
     public override void ApplyGradients(Vector<T> gradients, T learningRate)

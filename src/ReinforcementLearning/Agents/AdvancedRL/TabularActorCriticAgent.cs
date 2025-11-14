@@ -163,13 +163,13 @@ public class TabularActorCriticAgent<T> : ReinforcementLearningAgentBase<T>
                     _policy[s.Key][a] = parameters[idx++];
     }
     public override IFullModel<T, Vector<T>, Vector<T>> Clone() => new TabularActorCriticAgent<T>(_options);
-    public override (Vector<T> Gradients, T Loss) ComputeGradients(Vector<T> input, Vector<T> target, ILossFunction<T>? lossFunction = null)
+    public override Vector<T> ComputeGradients(Vector<T> input, Vector<T> target, ILossFunction<T>? lossFunction = null)
     {
         var pred = Predict(input);
         var lf = lossFunction ?? LossFunction;
         var loss = lf.CalculateLoss(new Matrix<T>(new[] { pred }), new Matrix<T>(new[] { target }));
         var grad = lf.CalculateDerivative(new Matrix<T>(new[] { pred }), new Matrix<T>(new[] { target }));
-        return (grad, loss);
+        return grad;
     }
     public override void ApplyGradients(Vector<T> gradients, T learningRate) { }
     public override void SaveModel(string filepath) { var data = Serialize(); System.IO.File.WriteAllBytes(filepath, data); }

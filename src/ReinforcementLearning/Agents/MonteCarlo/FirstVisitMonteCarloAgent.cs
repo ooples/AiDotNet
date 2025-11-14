@@ -255,9 +255,9 @@ public class FirstVisitMonteCarloAgent<T> : ReinforcementLearningAgentBase<T>
         return clone;
     }
 
-    public override (Vector<T> Gradients, T Loss) ComputeGradients(Vector<T> input, Vector<T> target, ILossFunction<T>? lossFunction = null)
+    public override Vector<T> ComputeGradients(Vector<T> input, Vector<T> target, ILossFunction<T>? lossFunction = null)
     {
-        return (new Matrix<T>(1, 1), NumOps.Zero);
+        return GetParameters();
     }
 
     public override void ApplyGradients(Vector<T> gradients, T learningRate) { }

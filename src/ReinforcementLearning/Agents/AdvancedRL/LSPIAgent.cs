@@ -338,13 +338,13 @@ public class LSPIAgent<T> : ReinforcementLearningAgentBase<T>
 
     public override IFullModel<T, Vector<T>, Vector<T>> Clone() => new LSPIAgent<T>(_options);
 
-    public override (Vector<T> Gradients, T Loss) ComputeGradients(Vector<T> input, Vector<T> target, ILossFunction<T>? lossFunction = null)
+    public override Vector<T> ComputeGradients(Vector<T> input, Vector<T> target, ILossFunction<T>? lossFunction = null)
     {
         var pred = Predict(input);
         var lf = lossFunction ?? LossFunction;
         var loss = lf.CalculateLoss(new Matrix<T>(new[] { pred }), new Matrix<T>(new[] { target }));
         var grad = lf.CalculateDerivative(new Matrix<T>(new[] { pred }), new Matrix<T>(new[] { target }));
-        return (grad, loss);
+        return grad;
     }
 
     public override void ApplyGradients(Vector<T> gradients, T learningRate) { }

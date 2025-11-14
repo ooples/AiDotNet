@@ -278,7 +278,7 @@ public class MonteCarloExploringStartsAgent<T> : ReinforcementLearningAgentBase<
         return new MonteCarloExploringStartsAgent<T>(_options);
     }
 
-    public override (Vector<T> Gradients, T Loss) ComputeGradients(
+    public override Vector<T> ComputeGradients(
         Vector<T> input,
         Vector<T> target,
         ILossFunction<T>? lossFunction = null)
@@ -288,7 +288,7 @@ public class MonteCarloExploringStartsAgent<T> : ReinforcementLearningAgentBase<
         var loss = usedLossFunction.CalculateLoss(new Matrix<T>(new[] { prediction }), new Matrix<T>(new[] { target }));
 
         var gradient = usedLossFunction.CalculateDerivative(new Matrix<T>(new[] { prediction }), new Matrix<T>(new[] { target }));
-        return (gradient, loss);
+        return gradient;
     }
 
     public override void ApplyGradients(Vector<T> gradients, T learningRate)

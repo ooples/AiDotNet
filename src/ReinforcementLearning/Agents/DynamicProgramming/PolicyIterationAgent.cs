@@ -313,7 +313,7 @@ public class PolicyIterationAgent<T> : ReinforcementLearningAgentBase<T>
         return new PolicyIterationAgent<T>(_options);
     }
 
-    public override (Vector<T> Gradients, T Loss) ComputeGradients(
+    public override Vector<T> ComputeGradients(
         Vector<T> input,
         Vector<T> target,
         ILossFunction<T>? lossFunction = null)
@@ -323,7 +323,7 @@ public class PolicyIterationAgent<T> : ReinforcementLearningAgentBase<T>
         var loss = usedLossFunction.CalculateLoss(new Matrix<T>(new[] { prediction }), new Matrix<T>(new[] { target }));
 
         var gradient = usedLossFunction.CalculateDerivative(new Matrix<T>(new[] { prediction }), new Matrix<T>(new[] { target }));
-        return (gradient, loss);
+        return gradient;
     }
 
     public override void ApplyGradients(Vector<T> gradients, T learningRate)

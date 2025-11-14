@@ -145,7 +145,7 @@ public class ThompsonSamplingAgent<T> : ReinforcementLearningAgentBase<T>
     }
     public override void SetParameters(Vector<T> parameters) { int idx = 0; for (int i = 0; i < _options.NumArms && idx + 1 < parameters.Length; i++) { _successCounts[i] = (int)NumOps.ToDouble(parameters[idx++]); _failureCounts[i] = (int)NumOps.ToDouble(parameters[idx++]); } }
     public override IFullModel<T, Vector<T>, Vector<T>> Clone() => new ThompsonSamplingAgent<T>(_options);
-    public override (Vector<T> Gradients, T Loss) ComputeGradients(Vector<T> input, Vector<T> target, ILossFunction<T>? lossFunction = null) { var pred = Predict(input); var lf = lossFunction ?? LossFunction; var loss = lf.CalculateLoss(new Matrix<T>(new[] { pred }), new Matrix<T>(new[] { target })); var grad = lf.CalculateDerivative(new Matrix<T>(new[] { pred }), new Matrix<T>(new[] { target })); return (grad, loss); }
+    public override Vector<T> ComputeGradients(Vector<T> input, Vector<T> target, ILossFunction<T>? lossFunction = null) { var pred = Predict(input); var lf = lossFunction ?? LossFunction; var loss = lf.CalculateLoss(new Matrix<T>(new[] { pred }), new Matrix<T>(new[] { target })); var grad = lf.CalculateDerivative(new Matrix<T>(new[] { pred }), new Matrix<T>(new[] { target })); return grad; }
     public override void ApplyGradients(Vector<T> gradients, T learningRate) { }
     public override void SaveModel(string filepath) { var data = Serialize(); System.IO.File.WriteAllBytes(filepath, data); }
     public override void LoadModel(string filepath) { var data = System.IO.File.ReadAllBytes(filepath); Deserialize(data); }
