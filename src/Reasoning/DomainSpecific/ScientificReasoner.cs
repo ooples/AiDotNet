@@ -143,7 +143,7 @@ public class ScientificReasoner<T>
         bool useSelfConsistency = false,
         CancellationToken cancellationToken = default)
     {
-        config ???= ReasoningConfig.Default();
+        config ??= ReasoningConfig.Default();
 
         // Enhance prompt with scientific method
         string enhancedProblem = BuildScientificPrompt(problem, domain, useFormulas);
@@ -174,7 +174,7 @@ public class ScientificReasoner<T>
         ReasoningConfig? config = null,
         CancellationToken cancellationToken = default)
     {
-        config ???= ReasoningConfig.Default();
+        config ??= ReasoningConfig.Default();
 
         string prompt = $@"Scientific Hypothesis Generation:
 
@@ -210,7 +210,7 @@ Provide your reasoning and hypothesis:";
         ReasoningConfig? config = null,
         CancellationToken cancellationToken = default)
     {
-        config ???= ReasoningConfig.Default();
+        config ??= ReasoningConfig.Default();
 
         string prompt = $@"Experimental Design:
 
@@ -242,7 +242,7 @@ Provide a detailed experimental design:";
         ReasoningConfig? config = null,
         CancellationToken cancellationToken = default)
     {
-        config ???= ReasoningConfig.Default();
+        config ??= ReasoningConfig.Default();
 
         string prompt = $@"Scientific Data Analysis:
 
