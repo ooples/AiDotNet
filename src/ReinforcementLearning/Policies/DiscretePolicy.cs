@@ -12,11 +12,10 @@ namespace AiDotNet.ReinforcementLearning.Policies
     /// Policy for discrete action spaces using a neural network to output action logits.
     /// </summary>
     /// <typeparam name="T">The numeric type used for calculations.</typeparam>
-    public class DiscretePolicy<T> : IPolicy<T>
+    public class DiscretePolicy<T> : PolicyBase<T>
     {
         private readonly NeuralNetwork<T> _policyNetwork;
         private readonly IExplorationStrategy<T> _explorationStrategy;
-        private readonly Random _random;
         private readonly int _actionSize;
 
         public DiscretePolicy(
@@ -24,10 +23,10 @@ namespace AiDotNet.ReinforcementLearning.Policies
             int actionSize,
             IExplorationStrategy<T> explorationStrategy,
             Random? random = null)
+            : base(random)
         {
             _policyNetwork = policyNetwork ?? throw new ArgumentNullException(nameof(policyNetwork));
             _explorationStrategy = explorationStrategy ?? throw new ArgumentNullException(nameof(explorationStrategy));
-            _random = random ?? new Random();
             _actionSize = actionSize;
         }
 
@@ -67,7 +66,7 @@ namespace AiDotNet.ReinforcementLearning.Policies
             int actionIndex = 0;
             for (int i = 0; i < action.Length; i++)
             {
-                if (NumOps<T>.ToDouble(action[i]) > 0.5)
+                if (NumOps.ToDouble(action[i]) > 0.5)
                 {
                     actionIndex = i;
                     break;
@@ -76,7 +75,7 @@ namespace AiDotNet.ReinforcementLearning.Policies
 
             // Return log probability of that action
             var prob = probabilities[actionIndex];
-            var logProb = NumOps<T>.FromDouble(Math.Log(NumOps<T>.ToDouble(prob) + 1e-8));
+            var logProb = NumOps.FromDouble(Math.Log(NumOps.ToDouble(prob) + 1e-8));
             return logProb;
         }
 
@@ -103,23 +102,23 @@ namespace AiDotNet.ReinforcementLearning.Policies
 
             for (int i = 1; i < logits.Length; i++)
             {
-                if (NumOps<T>.ToDouble(logits[i]) > NumOps<T>.ToDouble(maxLogit))
+                if (NumOps.ToDouble(logits[i]) > NumOps.ToDouble(maxLogit))
                 {
                     maxLogit = logits[i];
                 }
             }
 
-            T sumExp = NumOps<T>.Zero;
+            T sumExp = NumOps.Zero;
             for (int i = 0; i < logits.Length; i++)
             {
-                var expValue = NumOps<T>.FromDouble(Math.Exp(NumOps<T>.ToDouble(NumOps<T>.Subtract(logits[i], maxLogit))));
+                var expValue = NumOps.FromDouble(Math.Exp(NumOps.ToDouble(NumOps.Subtract(logits[i], maxLogit))));
                 probabilities[i] = expValue;
-                sumExp = NumOps<T>.Add(sumExp, expValue);
+                sumExp = NumOps.Add(sumExp, expValue);
             }
 
             for (int i = 0; i < probabilities.Length; i++)
             {
-                probabilities[i] = NumOps<T>.Divide(probabilities[i], sumExp);
+                probabilities[i] = NumOps.Divide(probabilities[i], sumExp);
             }
 
             return probabilities;
@@ -132,18 +131,18 @@ namespace AiDotNet.ReinforcementLearning.Policies
 
             for (int i = 0; i < probabilities.Length; i++)
             {
-                cumulativeProbability += NumOps<T>.ToDouble(probabilities[i]);
+                cumulativeProbability += NumOps.ToDouble(probabilities[i]);
                 if (randomValue <= cumulativeProbability)
                 {
                     var action = new Vector<T>(probabilities.Length);
-                    action[i] = NumOps<T>.One;
+                    action[i] = NumOps.One;
                     return action;
                 }
             }
 
             // Fallback (should not happen)
             var fallbackAction = new Vector<T>(probabilities.Length);
-            fallbackAction[probabilities.Length - 1] = NumOps<T>.One;
+            fallbackAction[probabilities.Length - 1] = NumOps.One;
             return fallbackAction;
         }
     }

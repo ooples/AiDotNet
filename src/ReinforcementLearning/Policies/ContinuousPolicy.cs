@@ -12,11 +12,10 @@ namespace AiDotNet.ReinforcementLearning.Policies
     /// Policy for continuous action spaces using a neural network to output Gaussian parameters.
     /// </summary>
     /// <typeparam name="T">The numeric type used for calculations.</typeparam>
-    public class ContinuousPolicy<T> : IPolicy<T>
+    public class ContinuousPolicy<T> : PolicyBase<T>
     {
         private readonly NeuralNetwork<T> _policyNetwork;
         private readonly IExplorationStrategy<T> _explorationStrategy;
-        private readonly Random _random;
         private readonly int _actionSize;
         private readonly bool _useTanhSquashing;
 
@@ -26,10 +25,10 @@ namespace AiDotNet.ReinforcementLearning.Policies
             IExplorationStrategy<T> explorationStrategy,
             bool useTanhSquashing = false,
             Random? random = null)
+            : base(random)
         {
             _policyNetwork = policyNetwork ?? throw new ArgumentNullException(nameof(policyNetwork));
             _explorationStrategy = explorationStrategy ?? throw new ArgumentNullException(nameof(explorationStrategy));
-            _random = random ?? new Random();
             _actionSize = actionSize;
             _useTanhSquashing = useTanhSquashing;
         }
@@ -55,8 +54,8 @@ namespace AiDotNet.ReinforcementLearning.Policies
             var action = new Vector<T>(_actionSize);
             for (int i = 0; i < _actionSize; i++)
             {
-                double meanValue = NumOps<T>.ToDouble(mean[i]);
-                double stdValue = Math.Exp(NumOps<T>.ToDouble(logStd[i]));
+                double meanValue = NumOps.ToDouble(mean[i]);
+                double stdValue = Math.Exp(NumOps.ToDouble(logStd[i]));
 
                 // Box-Muller transform
                 double u1 = _random.NextDouble();
@@ -70,7 +69,7 @@ namespace AiDotNet.ReinforcementLearning.Policies
                     sampledValue = Math.Tanh(sampledValue);
                 }
 
-                action[i] = NumOps<T>.FromDouble(sampledValue);
+                action[i] = NumOps.FromDouble(sampledValue);
             }
 
             if (training)
@@ -88,15 +87,15 @@ namespace AiDotNet.ReinforcementLearning.Policies
             var outputTensor = _policyNetwork.Predict(stateTensor);
             var output = outputTensor.ToVector();
 
-            T logProb = NumOps<T>.Zero;
+            T logProb = NumOps.Zero;
 
             for (int i = 0; i < _actionSize; i++)
             {
-                double meanValue = NumOps<T>.ToDouble(output[i]);
-                double logStdValue = NumOps<T>.ToDouble(output[_actionSize + i]);
+                double meanValue = NumOps.ToDouble(output[i]);
+                double logStdValue = NumOps.ToDouble(output[_actionSize + i]);
                 double stdValue = Math.Exp(logStdValue);
 
-                double actionValue = NumOps<T>.ToDouble(action[i]);
+                double actionValue = NumOps.ToDouble(action[i]);
 
                 // Gaussian log probability: -0.5 * ((x - mu) / sigma)^2 - log(sigma) - 0.5 * log(2*pi)
                 double diff = (actionValue - meanValue) / stdValue;
@@ -109,7 +108,7 @@ namespace AiDotNet.ReinforcementLearning.Policies
                     gaussianLogProb -= tanhCorrection;
                 }
 
-                logProb = NumOps<T>.Add(logProb, NumOps<T>.FromDouble(gaussianLogProb));
+                logProb = NumOps.Add(logProb, NumOps.FromDouble(gaussianLogProb));
             }
 
             return logProb;
