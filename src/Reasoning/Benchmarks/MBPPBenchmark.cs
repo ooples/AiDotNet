@@ -409,7 +409,7 @@ assert unique_char_count('') == 0",
             return null;
 
         // Extract from markdown code blocks
-        var match = Regex.Match(text, @"```(?:python)?\\s*\\n([\\s\\S]*?)\\n```", RegexOptions.Multiline);
+        var match = Regex.Match(text, @"```(?:python)?\s*\n([\s\S]*?)\n```", RegexOptions.Multiline);
         if (match.Success)
         {
             return match.Groups[1].Value.Trim();
