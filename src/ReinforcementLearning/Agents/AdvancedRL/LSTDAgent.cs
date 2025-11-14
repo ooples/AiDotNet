@@ -311,20 +311,10 @@ public class LSTDAgent<T> : ReinforcementLearningAgentBase<T>
     {
         var pred = Predict(input);
         var lf = lossFunction ?? LossFunction;
-        
-        // CalculateLoss and CalculateDerivative expect Matrix<T>, so wrap Vectors
         var predMatrix = new Matrix<T>(new[] { pred });
         var targetMatrix = new Matrix<T>(new[] { target });
-        
-        var loss = lf.CalculateLoss(predMatrix, targetMatrix);
-        var gradMatrix = lf.CalculateDerivative(predMatrix, targetMatrix);
-        
-        // Extract first row as Vector
-        var grad = new Vector<T>(gradMatrix.Cols);
-        for (int i = 0; i < gradMatrix.Cols; i++)
-        {
-            grad[i] = gradMatrix[0, i];
-        }
+        var loss = lf.CalculateLoss(predMatrix.GetRow(0), targetMatrix.GetRow(0));
+        var grad = lf.CalculateDerivative(predMatrix.GetRow(0), targetMatrix.GetRow(0));
         return grad;
     }
 

@@ -92,6 +92,15 @@ public abstract class ReinforcementLearningAgentBase<T> : IRLAgent<T>, IDisposab
         Options = options ?? throw new ArgumentNullException(nameof(options));
         NumOps = MathHelper.GetNumericOperations<T>();
         Random = options.Seed.HasValue ? new Random(options.Seed.Value) : new Random();
+        
+        // Ensure required properties are provided
+        if (options.LossFunction is null)
+            throw new ArgumentNullException(nameof(options), "LossFunction must be provided in options.");
+        if (options.LearningRate is null)
+            throw new ArgumentNullException(nameof(options), "LearningRate must be provided in options.");
+        if (options.DiscountFactor is null)
+            throw new ArgumentNullException(nameof(options), "DiscountFactor must be provided in options.");
+        
         LossFunction = options.LossFunction;
         LearningRate = options.LearningRate;
         DiscountFactor = options.DiscountFactor;
@@ -348,17 +357,17 @@ public class ReinforcementLearningOptions<T>
     /// <summary>
     /// Learning rate for gradient updates.
     /// </summary>
-    public required T LearningRate { get; init; }
+    public T? LearningRate { get; init; }
 
     /// <summary>
     /// Discount factor (gamma) for future rewards.
     /// </summary>
-    public required T DiscountFactor { get; init; }
+    public T? DiscountFactor { get; init; }
 
     /// <summary>
     /// Loss function to use for training.
     /// </summary>
-    public required ILossFunction<T> LossFunction { get; init; }
+    public ILossFunction<T>? LossFunction { get; init; }
 
     /// <summary>
     /// Random seed for reproducibility (optional).

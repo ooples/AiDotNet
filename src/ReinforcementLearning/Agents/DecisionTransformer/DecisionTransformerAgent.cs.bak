@@ -329,7 +329,7 @@ public class DecisionTransformerAgent<T> : DeepReinforcementLearningAgentBase<T>
         var usedLossFunction = lossFunction ?? LossFunction;
         var loss = usedLossFunction.CalculateLoss(prediction, target);
 
-        var gradient = usedLossFunction.ComputeGradient(prediction, target);
+        var gradient = usedLossFunction.CalculateDerivative(prediction, target);
         return gradient;
     }
 
