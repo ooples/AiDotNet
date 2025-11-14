@@ -347,19 +347,30 @@ public class HybridRewardModel<T> : IRewardModel<T>
 public class RewardBreakdown<T>
 {
     /// <summary>
+    /// Initializes a new instance of the <see cref="RewardBreakdown{T}"/> class.
+    /// </summary>
+    public RewardBreakdown()
+    {
+        INumericOperations<T> numOps = MathHelper.GetNumericOperations<T>();
+        ProcessReward = numOps.Zero;
+        OutcomeReward = numOps.Zero;
+        HybridReward = numOps.Zero;
+    }
+
+    /// <summary>
     /// Process reward from PRM.
     /// </summary>
-    public T ProcessReward { get; set; } = default!;
+    public T ProcessReward { get; set; }
 
     /// <summary>
     /// Outcome reward from ORM.
     /// </summary>
-    public T OutcomeReward { get; set; } = default!;
+    public T OutcomeReward { get; set; }
 
     /// <summary>
     /// Combined hybrid reward.
     /// </summary>
-    public T HybridReward { get; set; } = default!;
+    public T HybridReward { get; set; }
 
     /// <summary>
     /// Weight used for process reward.
