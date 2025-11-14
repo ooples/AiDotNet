@@ -1,3 +1,5 @@
+using AiDotNet.Helpers;
+using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
 
 namespace AiDotNet.Reasoning.Models;
@@ -45,6 +47,17 @@ namespace AiDotNet.Reasoning.Models;
 /// </remarks>
 public class ReasoningResult<T>
 {
+    private readonly INumericOperations<T> _numOps;
+
+    /// <summary>
+    /// Initializes a new instance of the <see cref="ReasoningResult{T}"/> class.
+    /// </summary>
+    public ReasoningResult()
+    {
+        _numOps = MathHelper.GetNumericOperations<T>();
+        OverallConfidence = _numOps.Zero;
+    }
+
     /// <summary>
     /// The final answer or solution from the reasoning process.
     /// </summary>
@@ -98,7 +111,7 @@ public class ReasoningResult<T>
     /// Higher values mean you can trust the answer more.
     /// </para>
     /// </remarks>
-    public T OverallConfidence { get; set; } = default!;
+    public T OverallConfidence { get; set; }
 
     /// <summary>
     /// Vector of confidence scores across all attempted reasoning paths.

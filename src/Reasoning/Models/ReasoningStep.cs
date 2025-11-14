@@ -1,3 +1,6 @@
+using AiDotNet.Helpers;
+using AiDotNet.Interfaces;
+
 namespace AiDotNet.Reasoning.Models;
 
 /// <summary>
@@ -40,6 +43,17 @@ namespace AiDotNet.Reasoning.Models;
 /// </remarks>
 public class ReasoningStep<T>
 {
+    private readonly INumericOperations<T> _numOps;
+
+    /// <summary>
+    /// Initializes a new instance of the <see cref="ReasoningStep{T}"/> class.
+    /// </summary>
+    public ReasoningStep()
+    {
+        _numOps = MathHelper.GetNumericOperations<T>();
+        Score = _numOps.Zero;
+    }
+
     /// <summary>
     /// The sequential number of this step in the reasoning chain (starting from 1).
     /// </summary>
@@ -85,7 +99,7 @@ public class ReasoningStep<T>
     /// Higher scores mean the step is more trustworthy.
     /// </para>
     /// </remarks>
-    public T Score { get; set; } = default!;
+    public T Score { get; set; }
 
     /// <summary>
     /// Whether this step has been verified by a critic model or external tool.

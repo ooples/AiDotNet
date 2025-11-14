@@ -1,3 +1,5 @@
+using AiDotNet.Helpers;
+using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
 
 namespace AiDotNet.Reasoning.Models;
@@ -40,6 +42,17 @@ namespace AiDotNet.Reasoning.Models;
 /// </remarks>
 public class ReasoningChain<T>
 {
+    private readonly INumericOperations<T> _numOps;
+
+    /// <summary>
+    /// Initializes a new instance of the <see cref="ReasoningChain{T}"/> class.
+    /// </summary>
+    public ReasoningChain()
+    {
+        _numOps = MathHelper.GetNumericOperations<T>();
+        OverallScore = _numOps.Zero;
+    }
+
     /// <summary>
     /// The original query or problem that this reasoning chain addresses.
     /// </summary>
@@ -116,7 +129,7 @@ public class ReasoningChain<T>
     /// 0.8 (the minimum) or 0.88 (the average).
     /// </para>
     /// </remarks>
-    public T OverallScore { get; set; } = default!;
+    public T OverallScore { get; set; }
 
     /// <summary>
     /// Whether every step in this chain has been verified.
@@ -220,7 +233,7 @@ public class ReasoningChain<T>
     public T GetMinimumScore()
     {
         if (Steps.Count == 0)
-            return default!;
+            return _numOps.Zero;
 
         return StepScores.Min();
     }
@@ -237,7 +250,7 @@ public class ReasoningChain<T>
     public T GetAverageScore()
     {
         if (Steps.Count == 0)
-            return default!;
+            return _numOps.Zero;
 
         return StepScores.Mean();
     }

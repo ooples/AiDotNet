@@ -1,3 +1,5 @@
+using AiDotNet.Helpers;
+using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
 
 namespace AiDotNet.Reasoning.Models;
@@ -57,6 +59,17 @@ namespace AiDotNet.Reasoning.Models;
 /// </remarks>
 public class ThoughtNode<T>
 {
+    private readonly INumericOperations<T> _numOps;
+
+    /// <summary>
+    /// Initializes a new instance of the <see cref="ThoughtNode{T}"/> class.
+    /// </summary>
+    public ThoughtNode()
+    {
+        _numOps = MathHelper.GetNumericOperations<T>();
+        EvaluationScore = _numOps.Zero;
+    }
+
     /// <summary>
     /// The thought or reasoning content at this node.
     /// </summary>
@@ -128,7 +141,7 @@ public class ThoughtNode<T>
     /// Scores help the system decide which paths to explore further and which to abandon.
     /// </para>
     /// </remarks>
-    public T EvaluationScore { get; set; } = default!;
+    public T EvaluationScore { get; set; }
 
     /// <summary>
     /// Whether this node has been visited during tree exploration.
