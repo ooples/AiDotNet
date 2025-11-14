@@ -105,6 +105,10 @@ namespace AiDotNet.Tests.UnitTests.Genetics
                 _parameters = new Vector<double>(values);
             }
 
+            // ICheckpointableModel implementation
+            public void SaveState(Stream stream) { }
+            public void LoadState(Stream stream) { }
+
             public IEnumerable<int> GetActiveFeatureIndices()
             {
                 return new[] { 0, 1, 2 };

@@ -2,7 +2,6 @@ using AiDotNet.Models.Results;
 using AiDotNet.DistributedTraining;
 using AiDotNet.Enums;
 using AiDotNet.Models;
-using AiDotNet.MixedPrecision;
 
 namespace AiDotNet.Interfaces;
 
@@ -564,62 +563,51 @@ public interface IPredictionModelBuilder<T, TInput, TOutput>
     IPredictionModelBuilder<T, TInput, TOutput> ConfigureCrossValidation(ICrossValidator<T, TInput, TOutput> crossValidator);
 
     /// <summary>
-    /// Configures mixed-precision training for faster training on GPUs with Tensor Cores.
+    /// Configures knowledge distillation for training a smaller student model from a larger teacher model.
     /// </summary>
     /// <remarks>
-    /// Mixed-precision training uses FP16 (half precision) for computations and FP32 (single precision)
-    /// for master weights, providing 2-3x training speedup and ~50% memory reduction on modern GPUs.
+    /// Knowledge distillation enables model compression by transferring knowledge from a large,
+    /// accurate teacher model to a smaller, faster student model. The student learns to mimic
+    /// the teacher's predictions and internal representations.
     ///
-    /// <b>For Beginners:</b> Mixed-precision training makes your model train faster on modern GPUs
-    /// (NVIDIA V100, A100, H100, RTX 3000+) by using lower precision numbers for some calculations.
-    /// This gives you:
-    /// - 2-3x faster training
-    /// - ~50% less memory usage
-    /// - Same model accuracy
+    /// <b>For Beginners:</b> Knowledge distillation is like having an expert teacher help train
+    /// a smaller, faster student. The student model learns not just from the training labels,
+    /// but also from the teacher's "soft" predictions which contain richer information about
+    /// relationships between classes.
     ///
-    /// <b>Requirements:</b>
-    /// Mixed-precision training has specific technical requirements:
+    /// Benefits:
+    /// - Model compression: Deploy 10x smaller models with 90%+ of original accuracy
+    /// - Faster inference: Smaller models run significantly faster
+    /// - Lower memory: Fits on edge devices and mobile platforms
+    /// - Better generalization: Learning from soft labels often improves accuracy
     ///
-    /// 1. **Type Constraint: float only**
-    ///    - Type parameter T must be float (FP32)
-    ///    - Cannot use double, decimal, or integer types
-    ///    - Reason: Mixed-precision converts between FP32 (float) and FP16 (Half) representations
+    /// Common use cases:
+    /// - DistilBERT: 40% smaller than BERT, 97% performance, 60% faster
+    /// - MobileNet: Distilled from ResNet for mobile deployment
+    /// - Edge AI: Deploy powerful models on resource-constrained devices
     ///
-    /// 2. **Gradient-Based Optimizers Only**
-    ///    - Requires optimizers that compute gradients (SGD, Adam, RMSProp, etc.)
-    ///    - Does NOT work with non-gradient methods (genetic algorithms, random search, Bayesian optimization)
-    ///    - Reason: Requires gradient computation for loss scaling, master weights, and gradient accumulation
-    ///
-    /// 3. **Neural Networks (Recommended)**
-    ///    - Best suited for neural networks with large parameter counts
-    ///    - GPU with Tensor Core support (V100, A100, H100, RTX 3000/4000+)
-    ///
-    /// Only enable this if you have:
-    /// - A neural network trained with gradient-based optimizer
-    /// - Float as your numeric type (T = float)
-    /// - A GPU with Tensor Core support
-    ///
-    /// For CPU training, older GPUs, or non-gradient optimizers, this provides no benefit.
-    ///
-    /// Example usage:
+    /// <b>Quick Start Example:</b>
     /// <code>
-    /// var model = builder
-    ///     .ConfigureModel(myNetwork)
-    ///     .ConfigureOptimizer(myOptimizer)
-    ///     .ConfigureMixedPrecision()  // Use default settings
-    ///     .Build(xTrain, yTrain);
-    ///
-    /// // Or with custom configuration
-    /// var model = builder
-    ///     .ConfigureModel(myNetwork)
-    ///     .ConfigureOptimizer(myOptimizer)
-    ///     .ConfigureMixedPrecision(MixedPrecisionConfig.Conservative())
-    ///     .Build(xTrain, yTrain);
+    /// var distillationOptions = new KnowledgeDistillationOptions&lt;double, Vector&lt;double&gt;, Vector&lt;double&gt;&gt;
+    /// {
+    ///     TeacherModelType = TeacherModelType.NeuralNetwork,
+    ///     StrategyType = DistillationStrategyType.ResponseBased,
+    ///     Temperature = 3.0,
+    ///     Alpha = 0.3,
+    ///     Epochs = 20,
+    ///     BatchSize = 32
+    /// };
+    /// 
+    /// var builder = new PredictionModelBuilder&lt;double, Vector&lt;double&gt;, Vector&lt;double&gt;&gt;()
+    ///     .ConfigureKnowledgeDistillation(distillationOptions);
     /// </code>
+    ///
+    /// <b>Note:</b> Current implementation requires student model to use Vector&lt;T&gt; for both input and output types.
     /// </remarks>
-    /// <param name="config">Optional mixed-precision configuration. If null, uses default settings.</param>
+    /// <param name="options">The knowledge distillation configuration options (optional, uses sensible defaults if null).</param>
     /// <returns>The builder instance for method chaining.</returns>
-    IPredictionModelBuilder<T, TInput, TOutput> ConfigureMixedPrecision(MixedPrecisionConfig? config = null);
+    IPredictionModelBuilder<T, TInput, TOutput> ConfigureKnowledgeDistillation(
+        KnowledgeDistillationOptions<T, TInput, TOutput>? options = null);
 
     /// <summary>
     /// Asynchronously builds a meta-trained model that can quickly adapt to new tasks.

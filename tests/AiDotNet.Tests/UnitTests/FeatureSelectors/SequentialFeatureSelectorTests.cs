@@ -50,6 +50,10 @@ namespace AiDotNetTests.UnitTests.FeatureSelectors
         public void SaveModel(string filePath) { }
         public void LoadModel(string filePath) { }
 
+        // ICheckpointableModel implementation
+        public void SaveState(Stream stream) { }
+        public void LoadState(Stream stream) { }
+
         // IParameterizable implementation
         public Vector<double> GetParameters() => new Vector<double>(0);
         public void SetParameters(Vector<double> parameters) { }
@@ -403,6 +407,10 @@ namespace AiDotNetTests.UnitTests.FeatureSelectors
         public void Deserialize(byte[] data) { }
         public void SaveModel(string filePath) { }
         public void LoadModel(string filePath) { }
+
+        // ICheckpointableModel implementation
+        public void SaveState(Stream stream) { }
+        public void LoadState(Stream stream) { }
 
         // IParameterizable implementation
         public Vector<float> GetParameters() => new Vector<float>(0);

@@ -1,0 +1,724 @@
+using AiDotNet.Helpers;
+using AiDotNet.Interfaces;
+using AiDotNet.LinearAlgebra;
+
+namespace AiDotNet.KnowledgeDistillation.Strategies;
+
+/// <summary>
+/// Implements Contrastive Representation Distillation (CRD) which transfers knowledge through
+/// contrastive learning of sample relationships rather than just matching outputs.
+/// </summary>
+/// <typeparam name="T">The numeric type for calculations (e.g., double, float).</typeparam>
+/// <remarks>
+/// <para><b>For Beginners:</b> Contrastive distillation teaches the student to understand which
+/// samples are similar and which are different, not just to copy the teacher's predictions.
+/// It's like learning to group things by their similarities rather than just memorizing labels.</para>
+///
+/// <para><b>Real-world Analogy:</b>
+/// Instead of just teaching a student "This is a dog," you teach them "Dogs are more similar
+/// to wolves than to cats" and "Retrievers are more similar to Labs than to Chihuahuas."
+/// This relational understanding helps the student generalize better to new examples.</para>
+///
+/// <para><b>How CRD Works:</b>
+/// 1. Extract embeddings/features from teacher and student
+/// 2. For each sample (anchor), identify:
+///    - Positive samples: Same class or similar features
+///    - Negative samples: Different class or dissimilar features
+/// 3. Pull student embeddings of anchor and positives together
+/// 4. Push student embeddings of anchor and negatives apart
+/// 5. Ensure student's embedding space has same structure as teacher's</para>
+///
+/// <para><b>Key Differences from Standard Distillation:</b>
+/// - **Standard**: Match output probabilities [0.1, 0.7, 0.2]
+/// - **CRD**: Match embedding similarities and distances
+/// - **Benefit**: Better generalization, especially for few-shot learning</para>
+///
+/// <para><b>Mathematical Foundation:</b>
+/// CRD uses InfoNCE loss (Noise Contrastive Estimation):
+/// L = -log(exp(sim(t_i, s_i)/τ) / Σ_j exp(sim(t_i, s_j)/τ))
+/// where:
+/// - t_i, s_i are teacher/student embeddings of sample i
+/// - τ is temperature
+/// - j ranges over all samples in batch</para>
+///
+/// <para><b>Benefits:</b>
+/// - **Better Features**: Student learns richer representations
+/// - **Few-Shot Learning**: Transfers better to new classes
+/// - **Robustness**: Less sensitive to label noise
+/// - **Interpretability**: Embedding space is more structured
+/// - **Complementary**: Can combine with standard distillation</para>
+///
+/// <para><b>Use Cases:</b>
+/// - Few-shot/zero-shot learning
+/// - Transfer learning across domains
+/// - Learning with noisy labels
+/// - Metric learning tasks (face recognition, image retrieval)
+/// - Self-supervised pre-training</para>
+///
+/// <para><b>Performance Improvements:</b>
+/// - CRD often gives 2-4% better accuracy than standard distillation
+/// - Particularly strong for small student models
+/// - Excellent for tasks requiring good embeddings</para>
+///
+/// <para><b>References:</b>
+/// - Tian et al. (2020). Contrastive Representation Distillation. ICLR.
+/// - Chen et al. (2020). A Simple Framework for Contrastive Learning of Visual Representations. ICML.</para>
+/// </remarks>
+public class ContrastiveDistillationStrategy<T> : DistillationStrategyBase<T>, IIntermediateActivationStrategy<T>
+{
+    private readonly double _contrastiveWeight;
+    private readonly int _negativesSampleSize;
+    private readonly ContrastiveMode _mode;
+    private readonly string _embeddingLayerName;
+
+    /// <summary>
+    /// Initializes a new instance of the ContrastiveDistillationStrategy class.
+    /// </summary>
+    /// <param name="embeddingLayerName">Name of the layer to extract embeddings from (e.g., "layer_before_classifier").</param>
+    /// <param name="contrastiveWeight">Weight for contrastive loss vs standard output loss (default: 0.8).</param>
+    /// <param name="temperature">Temperature for contrastive softmax (default: 0.07).</param>
+    /// <param name="alpha">Balance between hard and soft loss (default: 0.2).</param>
+    /// <param name="negativesSampleSize">Number of negative samples to use (default: 1024).</param>
+    /// <param name="mode">Contrastive mode (default: NTXent for label-free operation).</param>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> Configure how much to weight contrastive learning:</para>
+    /// <para>- contrastiveWeight 0.6-0.9: More focus on learning representations
+    /// - temperature 0.05-0.1: Lower = sharper distinctions between similar/dissimilar
+    /// - negativesSampleSize 512-2048: More negatives = better discrimination</para>
+    ///
+    /// <para>Example:
+    /// <code>
+    /// var strategy = new ContrastiveDistillationStrategy&lt;double&gt;(
+    ///     embeddingLayerName: "embedding_layer",
+    ///     contrastiveWeight: 0.8,  // 80% contrastive, 20% standard
+    ///     temperature: 0.07,        // Standard for contrastive learning
+    ///     alpha: 0.2,              // Mostly teacher knowledge
+    ///     negativesSampleSize: 1024 // Large negative set for better discrimination
+    /// );
+    /// </code>
+    /// </para>
+    /// </remarks>
+    public ContrastiveDistillationStrategy(
+        string embeddingLayerName = "embeddings",
+        double contrastiveWeight = 0.8,
+        double temperature = 0.07,
+        double alpha = 0.2,
+        int negativesSampleSize = 1024,
+        ContrastiveMode mode = ContrastiveMode.NTXent)
+        : base(temperature, alpha)
+    {
+        if (string.IsNullOrWhiteSpace(embeddingLayerName))
+            throw new ArgumentException("Embedding layer name cannot be null or whitespace", nameof(embeddingLayerName));
+        if (contrastiveWeight < 0 || contrastiveWeight > 1)
+            throw new ArgumentException("Contrastive weight must be between 0 and 1", nameof(contrastiveWeight));
+        if (negativesSampleSize < 1)
+            throw new ArgumentException("Negatives sample size must be at least 1", nameof(negativesSampleSize));
+
+        _embeddingLayerName = embeddingLayerName;
+        _contrastiveWeight = contrastiveWeight;
+        _negativesSampleSize = negativesSampleSize;
+        _mode = mode;
+    }
+
+    /// <summary>
+    /// Computes standard output loss (contrastive loss computed separately on embeddings).
+    /// </summary>
+    public override T ComputeLoss(Matrix<T> studentBatchOutput, Matrix<T> teacherBatchOutput, Matrix<T>? trueLabelsBatch = null)
+    {
+        ValidateOutputDimensions(studentBatchOutput, teacherBatchOutput);
+        ValidateLabelDimensions(studentBatchOutput, trueLabelsBatch);
+
+        int batchSize = studentBatchOutput.Rows;
+        T totalLoss = NumOps.Zero;
+
+        for (int r = 0; r < batchSize; r++)
+        {
+            Vector<T> studentOutput = studentBatchOutput.GetRow(r);
+            Vector<T> teacherOutput = teacherBatchOutput.GetRow(r);
+            Vector<T>? trueLabels = trueLabelsBatch?.GetRow(r);
+
+            // Standard distillation loss (scaled by 1 - contrastiveWeight)
+            var studentSoft = DistillationHelper<T>.Softmax(studentOutput, Temperature);
+            var teacherSoft = DistillationHelper<T>.Softmax(teacherOutput, Temperature);
+            var softLoss = DistillationHelper<T>.KLDivergence(teacherSoft, studentSoft);
+            softLoss = NumOps.Multiply(softLoss, NumOps.FromDouble(Temperature * Temperature));
+
+            T sampleLoss;
+            if (trueLabels != null)
+            {
+                var studentProbs = DistillationHelper<T>.Softmax(studentOutput, 1.0);
+                var hardLoss = DistillationHelper<T>.CrossEntropy(studentProbs, trueLabels);
+
+                var alphaT = NumOps.FromDouble(Alpha);
+                var oneMinusAlpha = NumOps.FromDouble(1.0 - Alpha);
+
+                var combinedLoss = NumOps.Add(
+                    NumOps.Multiply(alphaT, hardLoss),
+                    NumOps.Multiply(oneMinusAlpha, softLoss));
+
+                // Scale by (1 - contrastiveWeight) to make room for contrastive loss
+                sampleLoss = NumOps.Multiply(combinedLoss, NumOps.FromDouble(1.0 - _contrastiveWeight));
+            }
+            else
+            {
+                sampleLoss = NumOps.Multiply(softLoss, NumOps.FromDouble(1.0 - _contrastiveWeight));
+            }
+
+            totalLoss = NumOps.Add(totalLoss, sampleLoss);
+        }
+
+        return NumOps.Divide(totalLoss, NumOps.FromDouble(batchSize));
+    }
+
+    /// <summary>
+    /// Computes gradient of standard loss.
+    /// </summary>
+    public override Matrix<T> ComputeGradient(Matrix<T> studentBatchOutput, Matrix<T> teacherBatchOutput, Matrix<T>? trueLabelsBatch = null)
+    {
+        ValidateOutputDimensions(studentBatchOutput, teacherBatchOutput);
+        ValidateLabelDimensions(studentBatchOutput, trueLabelsBatch);
+
+        int batchSize = studentBatchOutput.Rows;
+        int outputDim = studentBatchOutput.Columns;
+        var gradientBatch = new Matrix<T>(batchSize, outputDim);
+
+        for (int r = 0; r < batchSize; r++)
+        {
+            Vector<T> studentOutput = studentBatchOutput.GetRow(r);
+            Vector<T> teacherOutput = teacherBatchOutput.GetRow(r);
+            Vector<T>? trueLabels = trueLabelsBatch?.GetRow(r);
+
+            var gradient = new Vector<T>(outputDim);
+
+            var studentSoft = DistillationHelper<T>.Softmax(studentOutput, Temperature);
+            var teacherSoft = DistillationHelper<T>.Softmax(teacherOutput, Temperature);
+
+            for (int i = 0; i < outputDim; i++)
+            {
+                var diff = NumOps.Subtract(studentSoft[i], teacherSoft[i]);
+                gradient[i] = NumOps.Multiply(diff, NumOps.FromDouble(Temperature * Temperature));
+            }
+
+            if (trueLabels != null)
+            {
+                var studentProbs = DistillationHelper<T>.Softmax(studentOutput, 1.0);
+                var hardGradient = new Vector<T>(outputDim);
+
+                for (int i = 0; i < outputDim; i++)
+                {
+                    hardGradient[i] = NumOps.Subtract(studentProbs[i], trueLabels[i]);
+                }
+
+                var alphaT = NumOps.FromDouble(Alpha);
+                var oneMinusAlpha = NumOps.FromDouble(1.0 - Alpha);
+
+                for (int i = 0; i < outputDim; i++)
+                {
+                    gradient[i] = NumOps.Add(
+                        NumOps.Multiply(alphaT, hardGradient[i]),
+                        NumOps.Multiply(oneMinusAlpha, gradient[i]));
+                }
+            }
+
+            // Scale by (1 - contrastiveWeight)
+            var scale = NumOps.FromDouble(1.0 - _contrastiveWeight);
+            for (int i = 0; i < outputDim; i++)
+            {
+                gradient[i] = NumOps.Multiply(gradient[i], scale);
+            }
+
+            gradientBatch.SetRow(r, gradient);
+        }
+
+        return gradientBatch;
+    }
+
+    /// <summary>
+    /// Computes contrastive loss on embeddings/features.
+    /// </summary>
+    /// <param name="studentEmbeddings">Student embeddings for batch.</param>
+    /// <param name="teacherEmbeddings">Teacher embeddings for batch.</param>
+    /// <param name="labels">Sample labels for determining positives/negatives.</param>
+    /// <returns>Contrastive loss value.</returns>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> This measures how well the student's embedding space
+    /// matches the teacher's structural relationships. Lower loss means better match.</para>
+    ///
+    /// <para>The embeddings should be from intermediate layers (not final outputs),
+    /// as those contain richer representation information.</para>
+    /// </remarks>
+    public T ComputeContrastiveLoss(
+        Vector<T>[] studentEmbeddings,
+        Vector<T>[] teacherEmbeddings,
+        int[] labels)
+    {
+        if (studentEmbeddings.Length != teacherEmbeddings.Length || studentEmbeddings.Length != labels.Length)
+            throw new ArgumentException("All arrays must have same length");
+
+        T totalLoss = NumOps.Zero;
+        int batchSize = studentEmbeddings.Length;
+
+        switch (_mode)
+        {
+            case ContrastiveMode.InfoNCE:
+                totalLoss = ComputeInfoNCELoss(studentEmbeddings, teacherEmbeddings, labels);
+                break;
+
+            case ContrastiveMode.TripletLoss:
+                totalLoss = ComputeTripletLoss(studentEmbeddings, teacherEmbeddings, labels);
+                break;
+
+            case ContrastiveMode.NTXent:
+                totalLoss = ComputeNTXentLoss(studentEmbeddings, teacherEmbeddings);
+                break;
+        }
+
+        // Apply contrastive weight
+        return NumOps.Multiply(totalLoss, NumOps.FromDouble(_contrastiveWeight));
+    }
+
+    /// <summary>
+    /// Computes intermediate activation loss by matching embedding space structure between teacher and student.
+    /// </summary>
+    /// <param name="studentIntermediateActivations">Student's intermediate layer activations (must include embedding layer).</param>
+    /// <param name="teacherIntermediateActivations">Teacher's intermediate layer activations (must include embedding layer).</param>
+    /// <returns>The contrastive loss (already weighted by contrastiveWeight).</returns>
+    /// <remarks>
+    /// <para>This implements the IIntermediateActivationStrategy interface to properly integrate
+    /// contrastive learning into the training loop. The loss is computed from embeddings stored
+    /// in the intermediate activations for the layer specified in the constructor.</para>
+    ///
+    /// <para>Uses NTXent mode by default as it doesn't require labels. Each teacher-student pair
+    /// for the same sample is treated as a positive pair, while other samples are negatives.</para>
+    ///
+    /// <para>If the embedding layer is not found, returns zero loss.</para>
+    /// </remarks>
+    public T ComputeIntermediateLoss(
+        IntermediateActivations<T> studentIntermediateActivations,
+        IntermediateActivations<T> teacherIntermediateActivations)
+    {
+        if (studentIntermediateActivations == null)
+            throw new ArgumentNullException(nameof(studentIntermediateActivations));
+        if (teacherIntermediateActivations == null)
+            throw new ArgumentNullException(nameof(teacherIntermediateActivations));
+
+        var studentMatrix = studentIntermediateActivations.Get(_embeddingLayerName);
+        var teacherMatrix = teacherIntermediateActivations.Get(_embeddingLayerName);
+
+        // If layer not found, return zero loss
+        if (studentMatrix == null || teacherMatrix == null)
+            return NumOps.Zero;
+
+        // Validate dimensions match
+        if (studentMatrix.Rows != teacherMatrix.Rows || studentMatrix.Columns != teacherMatrix.Columns)
+        {
+            throw new ArgumentException(
+                $"Student and teacher embedding dimensions must match for layer '{_embeddingLayerName}'. " +
+                $"Student: [{studentMatrix.Rows} x {studentMatrix.Columns}], " +
+                $"Teacher: [{teacherMatrix.Rows} x {teacherMatrix.Columns}]");
+        }
+
+        int batchSize = studentMatrix.Rows;
+        if (batchSize == 0)
+            return NumOps.Zero;
+
+        // Convert matrices to vector arrays for contrastive loss computation
+        var studentEmbeddings = new Vector<T>[batchSize];
+        var teacherEmbeddings = new Vector<T>[batchSize];
+
+        for (int i = 0; i < batchSize; i++)
+        {
+            studentEmbeddings[i] = studentMatrix.GetRow(i);
+            teacherEmbeddings[i] = teacherMatrix.GetRow(i);
+        }
+
+        // Use NTXent mode since we don't have labels in IntermediateActivations
+        T contrastiveLoss = ComputeNTXentLoss(studentEmbeddings, teacherEmbeddings);
+
+        // Apply contrastive weight
+        return NumOps.Multiply(contrastiveLoss, NumOps.FromDouble(_contrastiveWeight));
+    }
+
+    /// <summary>
+    /// Computes InfoNCE (Noise Contrastive Estimation) loss.
+    /// </summary>
+    private T ComputeInfoNCELoss(Vector<T>[] studentEmbs, Vector<T>[] teacherEmbs, int[] labels)
+    {
+        int batchSize = studentEmbs.Length;
+        T totalLoss = NumOps.Zero;
+
+        for (int i = 0; i < batchSize; i++)
+        {
+            // Positive: teacher-student pair for same sample
+            double positiveSim = CosineSimilarity(teacherEmbs[i], studentEmbs[i]);
+            double positiveScore = Math.Exp(positiveSim / Temperature);
+
+            // Negatives: all other samples
+            double negativeSum = 0;
+            int negativeCount = 0;
+
+            for (int j = 0; j < Math.Min(batchSize, _negativesSampleSize); j++)
+            {
+                if (i != j)
+                {
+                    double negativeSim = CosineSimilarity(teacherEmbs[i], studentEmbs[j]);
+                    negativeSum += Math.Exp(negativeSim / Temperature);
+                    negativeCount++;
+                }
+            }
+
+            // InfoNCE loss
+            double loss = -Math.Log(positiveScore / (positiveScore + negativeSum + Epsilon));
+            totalLoss = NumOps.Add(totalLoss, NumOps.FromDouble(loss));
+        }
+
+        return NumOps.Divide(totalLoss, NumOps.FromDouble(batchSize));
+    }
+
+    /// <summary>
+    /// Computes triplet loss.
+    /// </summary>
+    private T ComputeTripletLoss(Vector<T>[] studentEmbs, Vector<T>[] teacherEmbs, int[] labels)
+    {
+        int batchSize = studentEmbs.Length;
+        T totalLoss = NumOps.Zero;
+        int tripletCount = 0;
+
+        double margin = 0.1;
+
+        for (int i = 0; i < batchSize; i++)
+        {
+            // Find positive: same class
+            int positiveIdx = -1;
+            for (int j = 0; j < batchSize; j++)
+            {
+                if (j != i && labels[j] == labels[i])
+                {
+                    positiveIdx = j;
+                    break;
+                }
+            }
+
+            if (positiveIdx == -1) continue;
+
+            // Find negative: different class
+            int negativeIdx = -1;
+            for (int j = 0; j < batchSize; j++)
+            {
+                if (labels[j] != labels[i])
+                {
+                    negativeIdx = j;
+                    break;
+                }
+            }
+
+            if (negativeIdx == -1) continue;
+
+            // Teacher-guided triplet loss:
+            // Positive distance: student to its corresponding teacher
+            // Negative distance: student to teacher of different class
+            // This ensures student embeddings align with teacher's embedding space
+            double posDist = EuclideanDistance(studentEmbs[i], teacherEmbs[i]);
+            double negDist = EuclideanDistance(studentEmbs[i], teacherEmbs[negativeIdx]);
+            double loss = Math.Max(0, posDist - negDist + margin);
+
+            totalLoss = NumOps.Add(totalLoss, NumOps.FromDouble(loss));
+            tripletCount++;
+        }
+
+        return tripletCount > 0 ?
+            NumOps.Divide(totalLoss, NumOps.FromDouble(tripletCount)) :
+            NumOps.Zero;
+    }
+
+    /// <summary>
+    /// Computes NT-Xent (Normalized Temperature-scaled Cross Entropy) loss.
+    /// </summary>
+    private T ComputeNTXentLoss(Vector<T>[] studentEmbs, Vector<T>[] teacherEmbs)
+    {
+        int batchSize = studentEmbs.Length;
+        T totalLoss = NumOps.Zero;
+
+        for (int i = 0; i < batchSize; i++)
+        {
+            // Positive: corresponding teacher embedding
+            double positiveSim = CosineSimilarity(studentEmbs[i], teacherEmbs[i]) / Temperature;
+
+            // Denominator: sum over ALL pairs (including positive)
+            double denominator = Math.Exp(positiveSim); // Include positive pair
+            for (int j = 0; j < batchSize; j++)
+            {
+                if (i != j)
+                {
+                    double sim = CosineSimilarity(studentEmbs[i], teacherEmbs[j]) / Temperature;
+                    denominator += Math.Exp(sim);
+                }
+            }
+
+            // NT-Xent: -log(exp(pos)/sum_all) = -pos + log(sum_all)
+            double loss = -positiveSim + Math.Log(denominator + Epsilon);
+            totalLoss = NumOps.Add(totalLoss, NumOps.FromDouble(loss));
+        }
+
+        return NumOps.Divide(totalLoss, NumOps.FromDouble(batchSize));
+    }
+
+    private double CosineSimilarity(Vector<T> v1, Vector<T> v2)
+    {
+        T dot = NumOps.Zero;
+        T norm1 = NumOps.Zero;
+        T norm2 = NumOps.Zero;
+
+        for (int i = 0; i < v1.Length; i++)
+        {
+            dot = NumOps.Add(dot, NumOps.Multiply(v1[i], v2[i]));
+            norm1 = NumOps.Add(norm1, NumOps.Multiply(v1[i], v1[i]));
+            norm2 = NumOps.Add(norm2, NumOps.Multiply(v2[i], v2[i]));
+        }
+
+        double dotVal = Convert.ToDouble(dot);
+        double norm1Val = Math.Sqrt(Convert.ToDouble(norm1));
+        double norm2Val = Math.Sqrt(Convert.ToDouble(norm2));
+
+        return dotVal / (norm1Val * norm2Val + Epsilon);
+    }
+
+    private double EuclideanDistance(Vector<T> v1, Vector<T> v2)
+    {
+        T sumSq = NumOps.Zero;
+        for (int i = 0; i < v1.Length; i++)
+        {
+            var diff = NumOps.Subtract(v1[i], v2[i]);
+            sumSq = NumOps.Add(sumSq, NumOps.Multiply(diff, diff));
+        }
+        return Math.Sqrt(Convert.ToDouble(sumSq));
+    }
+
+    /// <summary>
+    /// Computes gradients of intermediate activation loss with respect to student embeddings.
+    /// </summary>
+    /// <param name="studentIntermediateActivations">Student's intermediate layer activations (must include embedding layer).</param>
+    /// <param name="teacherIntermediateActivations">Teacher's intermediate layer activations (must include embedding layer).</param>
+    /// <returns>Gradients for the embedding layer (already weighted by contrastiveWeight).</returns>
+    /// <remarks>
+    /// <para>Computes analytical gradients for NT-Xent loss with respect to student embeddings.
+    /// Uses cosine similarity gradients derived from the quotient rule.</para>
+    ///
+    /// <para>For NT-Xent loss L_i = -sim(s_i, t_i)/τ + log(Σ_j exp(sim(s_i, t_j)/τ)),
+    /// the gradient involves both positive and negative pair contributions.</para>
+    /// </remarks>
+    public IntermediateActivations<T> ComputeIntermediateGradient(
+        IntermediateActivations<T> studentIntermediateActivations,
+        IntermediateActivations<T> teacherIntermediateActivations)
+    {
+        if (studentIntermediateActivations == null)
+            throw new ArgumentNullException(nameof(studentIntermediateActivations));
+        if (teacherIntermediateActivations == null)
+            throw new ArgumentNullException(nameof(teacherIntermediateActivations));
+
+        var gradients = new IntermediateActivations<T>();
+
+        var studentMatrix = studentIntermediateActivations.Get(_embeddingLayerName);
+        var teacherMatrix = teacherIntermediateActivations.Get(_embeddingLayerName);
+
+        // If layer not found, return empty gradients
+        if (studentMatrix == null || teacherMatrix == null)
+            return gradients;
+
+        // Validate dimensions match
+        if (studentMatrix.Rows != teacherMatrix.Rows || studentMatrix.Columns != teacherMatrix.Columns)
+        {
+            throw new ArgumentException(
+                $"Student and teacher embedding dimensions must match for layer '{_embeddingLayerName}'. " +
+                $"Student: [{studentMatrix.Rows} x {studentMatrix.Columns}], " +
+                $"Teacher: [{teacherMatrix.Rows} x {teacherMatrix.Columns}]");
+        }
+
+        int batchSize = studentMatrix.Rows;
+        if (batchSize == 0)
+            return gradients;
+
+        int embeddingDim = studentMatrix.Columns;
+
+        // Convert matrices to vector arrays for gradient computation
+        var studentEmbeddings = new Vector<T>[batchSize];
+        var teacherEmbeddings = new Vector<T>[batchSize];
+
+        for (int i = 0; i < batchSize; i++)
+        {
+            studentEmbeddings[i] = studentMatrix.GetRow(i);
+            teacherEmbeddings[i] = teacherMatrix.GetRow(i);
+        }
+
+        // Compute NT-Xent gradients for each sample
+        var gradientMatrix = new Matrix<T>(batchSize, embeddingDim);
+
+        for (int i = 0; i < batchSize; i++)
+        {
+            var sampleGradient = ComputeNTXentGradient(studentEmbeddings, teacherEmbeddings, i);
+            gradientMatrix.SetRow(i, sampleGradient);
+        }
+
+        // Average over batch
+        for (int r = 0; r < batchSize; r++)
+        {
+            for (int c = 0; c < embeddingDim; c++)
+            {
+                gradientMatrix[r, c] = NumOps.Divide(gradientMatrix[r, c], NumOps.FromDouble(batchSize));
+            }
+        }
+
+        // Scale by contrastive weight
+        for (int r = 0; r < batchSize; r++)
+        {
+            for (int c = 0; c < embeddingDim; c++)
+            {
+                gradientMatrix[r, c] = NumOps.Multiply(gradientMatrix[r, c], NumOps.FromDouble(_contrastiveWeight));
+            }
+        }
+
+        gradients.Add(_embeddingLayerName, gradientMatrix);
+        return gradients;
+    }
+
+    /// <summary>
+    /// Computes NT-Xent gradient for a single sample.
+    /// </summary>
+    /// <param name="studentEmbeddings">All student embeddings in the batch.</param>
+    /// <param name="teacherEmbeddings">All teacher embeddings in the batch.</param>
+    /// <param name="anchorIdx">Index of the anchor sample to compute gradient for.</param>
+    /// <returns>Gradient vector with respect to student embedding at anchorIdx.</returns>
+    /// <remarks>
+    /// <para>NT-Xent loss for sample i: L_i = -sim(s_i, t_i)/τ + log(Σ_j exp(sim(s_i, t_j)/τ))</para>
+    ///
+    /// <para>Gradient: ∂L_i/∂s_i = (-∂sim(s_i, t_i)/∂s_i + Σ_j softmax_j * ∂sim(s_i, t_j)/∂s_i) / τ</para>
+    ///
+    /// <para>Where softmax_j = exp(sim(s_i, t_j)/τ) / Σ_k exp(sim(s_i, t_k)/τ)</para>
+    /// </remarks>
+    private Vector<T> ComputeNTXentGradient(Vector<T>[] studentEmbeddings, Vector<T>[] teacherEmbeddings, int anchorIdx)
+    {
+        int batchSize = studentEmbeddings.Length;
+        int embeddingDim = studentEmbeddings[anchorIdx].Length;
+        var gradient = new Vector<T>(embeddingDim);
+
+        var studentAnchor = studentEmbeddings[anchorIdx];
+
+        // Compute similarities and softmax weights for all teacher embeddings
+        double[] similarities = new double[batchSize];
+        double[] expSims = new double[batchSize];
+        double sumExpSims = 0;
+
+        for (int j = 0; j < batchSize; j++)
+        {
+            similarities[j] = CosineSimilarity(studentAnchor, teacherEmbeddings[j]);
+            expSims[j] = Math.Exp(similarities[j] / Temperature);
+            sumExpSims += expSims[j];
+        }
+
+        // Compute softmax weights
+        double[] softmaxWeights = new double[batchSize];
+        for (int j = 0; j < batchSize; j++)
+        {
+            softmaxWeights[j] = expSims[j] / (sumExpSims + Epsilon);
+        }
+
+        // Compute gradient: -∂sim(s_i, t_i)/∂s_i + Σ_j softmax_j * ∂sim(s_i, t_j)/∂s_i
+        // Gradient of positive term (i == anchorIdx)
+        var positiveGrad = ComputeCosineSimilarityGradient(studentAnchor, teacherEmbeddings[anchorIdx]);
+
+        // Negate for the positive term contribution
+        for (int d = 0; d < embeddingDim; d++)
+        {
+            gradient[d] = NumOps.Multiply(positiveGrad[d], NumOps.FromDouble(-1.0));
+        }
+
+        // Add weighted gradients from all pairs
+        for (int j = 0; j < batchSize; j++)
+        {
+            var pairGrad = ComputeCosineSimilarityGradient(studentAnchor, teacherEmbeddings[j]);
+
+            for (int d = 0; d < embeddingDim; d++)
+            {
+                var weightedGrad = NumOps.Multiply(pairGrad[d], NumOps.FromDouble(softmaxWeights[j]));
+                gradient[d] = NumOps.Add(gradient[d], weightedGrad);
+            }
+        }
+
+        // Scale by 1/temperature
+        for (int d = 0; d < embeddingDim; d++)
+        {
+            gradient[d] = NumOps.Divide(gradient[d], NumOps.FromDouble(Temperature));
+        }
+
+        return gradient;
+    }
+
+    /// <summary>
+    /// Computes gradient of cosine similarity with respect to the first vector.
+    /// </summary>
+    /// <param name="student">Student embedding (variable with respect to which we compute gradient).</param>
+    /// <param name="teacher">Teacher embedding (constant).</param>
+    /// <returns>Gradient ∂sim(student, teacher)/∂student.</returns>
+    /// <remarks>
+    /// <para>For cosine similarity sim(s, t) = dot(s, t) / (||s|| * ||t||),
+    /// the gradient is: ∂sim/∂s_i = (t_i / (||s|| * ||t||)) - (dot(s, t) * s_i) / (||s||³ * ||t||)</para>
+    /// </remarks>
+    private Vector<T> ComputeCosineSimilarityGradient(Vector<T> student, Vector<T> teacher)
+    {
+        int dim = student.Length;
+        var gradient = new Vector<T>(dim);
+
+        // Compute dot product and norms
+        T dot = NumOps.Zero;
+        T normStudent = NumOps.Zero;
+        T normTeacher = NumOps.Zero;
+
+        for (int i = 0; i < dim; i++)
+        {
+            dot = NumOps.Add(dot, NumOps.Multiply(student[i], teacher[i]));
+            normStudent = NumOps.Add(normStudent, NumOps.Multiply(student[i], student[i]));
+            normTeacher = NumOps.Add(normTeacher, NumOps.Multiply(teacher[i], teacher[i]));
+        }
+
+        double dotVal = Convert.ToDouble(dot);
+        double normS = Math.Sqrt(Convert.ToDouble(normStudent)) + Epsilon;
+        double normT = Math.Sqrt(Convert.ToDouble(normTeacher)) + Epsilon;
+
+        // Compute gradient for each dimension
+        for (int i = 0; i < dim; i++)
+        {
+            double s_i = Convert.ToDouble(student[i]);
+            double t_i = Convert.ToDouble(teacher[i]);
+
+            // ∂sim/∂s_i = (t_i / (||s|| * ||t||)) - (dot * s_i) / (||s||³ * ||t||)
+            double grad = (t_i / (normS * normT)) - (dotVal * s_i) / (normS * normS * normS * normT);
+            gradient[i] = NumOps.FromDouble(grad);
+        }
+
+        return gradient;
+    }
+
+}
+
+/// <summary>
+/// Defines the contrastive learning mode.
+/// </summary>
+public enum ContrastiveMode
+{
+    /// <summary>
+    /// InfoNCE (Noise Contrastive Estimation) - most common, used in SimCLR, MoCo.
+    /// </summary>
+    InfoNCE,
+
+    /// <summary>
+    /// Triplet loss - anchor-positive-negative triplets.
+    /// </summary>
+    TripletLoss,
+
+    /// <summary>
+    /// NT-Xent (Normalized Temperature-scaled Cross Entropy) - symmetric version.
+    /// </summary>
+    NTXent
+}
+
+
