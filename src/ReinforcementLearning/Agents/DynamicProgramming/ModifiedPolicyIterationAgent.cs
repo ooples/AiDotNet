@@ -226,7 +226,7 @@ public class ModifiedPolicyIterationAgent<T> : ReinforcementLearningAgentBase<T>
     {
         return new ModelMetadata<T>
         {
-            ModelType = "ModifiedPolicyIteration",
+            ModelType = ModelType.ReinforcementLearning,
         };
     }
 
@@ -293,9 +293,8 @@ public class ModifiedPolicyIterationAgent<T> : ReinforcementLearningAgentBase<T>
     {
         var prediction = Predict(input);
         var usedLossFunction = lossFunction ?? LossFunction;
-        var loss = usedLossFunction.CalculateLoss(new Matrix<T>(new[] { prediction }), new Matrix<T>(new[] { target }));
-
-        var gradient = usedLossFunction.CalculateDerivative(new Matrix<T>(new[] { prediction }), new Matrix<T>(new[] { target }));
+        var loss = usedLossFunction.CalculateLoss(prediction, target);
+        var gradient = usedLossFunction.CalculateDerivative(prediction, target);
         return gradient;
     }
 

@@ -121,7 +121,7 @@ public class PolicyIterationAgent<T> : ReinforcementLearningAgentBase<T>
 
                 // Track maximum change
                 T diff = NumOps.Subtract(newValue, oldValue);
-                T absDiff = NumOps.Compare(diff, NumOps.Zero) >= 0 ? diff : NumOps.Negate(diff);
+                T absDiff = NumOps.GreaterThanOrEquals(diff, NumOps.Zero) ? diff : NumOps.Negate(diff);
                 if (NumOps.GreaterThan(absDiff, delta))
                 {
                     delta = absDiff;
@@ -129,7 +129,7 @@ public class PolicyIterationAgent<T> : ReinforcementLearningAgentBase<T>
             }
 
             // Check convergence
-            if (NumOps.Compare(delta, NumOps.FromDouble(_options.Theta)) < 0)
+            if (NumOps.LessThan(delta, NumOps.FromDouble(_options.Theta)))
             {
                 break;
             }
@@ -250,7 +250,7 @@ public class PolicyIterationAgent<T> : ReinforcementLearningAgentBase<T>
     {
         return new ModelMetadata<T>
         {
-            ModelType = "PolicyIteration",
+            ModelType = ModelType.ReinforcementLearning,
         };
     }
 
@@ -317,9 +317,8 @@ public class PolicyIterationAgent<T> : ReinforcementLearningAgentBase<T>
     {
         var prediction = Predict(input);
         var usedLossFunction = lossFunction ?? LossFunction;
-        var loss = usedLossFunction.CalculateLoss(new Matrix<T>(new[] { prediction }), new Matrix<T>(new[] { target }));
-
-        var gradient = usedLossFunction.CalculateDerivative(new Matrix<T>(new[] { prediction }), new Matrix<T>(new[] { target }));
+        var loss = usedLossFunction.CalculateLoss(prediction, target);
+        var gradient = usedLossFunction.CalculateDerivative(prediction, target);
         return gradient;
     }
 

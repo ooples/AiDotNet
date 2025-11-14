@@ -79,18 +79,18 @@ public class DuelingDQNAgent<T> : DeepReinforcementLearningAgentBase<T>
         _qNetwork = new DuelingNetwork<T>(
             _options.StateSize,
             _options.ActionSize,
-            _options.SharedLayers,
-            _options.ValueStreamLayers,
-            _options.AdvantageStreamLayers,
+            _options.SharedLayers.ToArray(),
+            _options.ValueStreamLayers.ToArray(),
+            _options.AdvantageStreamLayers.ToArray(),
             NumOps
         );
 
         _targetNetwork = new DuelingNetwork<T>(
             _options.StateSize,
             _options.ActionSize,
-            _options.SharedLayers,
-            _options.ValueStreamLayers,
-            _options.AdvantageStreamLayers,
+            _options.SharedLayers.ToArray(),
+            _options.ValueStreamLayers.ToArray(),
+            _options.AdvantageStreamLayers.ToArray(),
             NumOps
         );
 
@@ -108,7 +108,7 @@ public class DuelingDQNAgent<T> : DeepReinforcementLearningAgentBase<T>
             return action;
         }
 
-        var qValues = _qNetwork.Predict(state);
+        var qValues = _qNetwork.Forward(state);
         int bestAction = ArgMax(qValues);
 
         var greedyAction = new Vector<T>(_options.ActionSize);
@@ -119,7 +119,7 @@ public class DuelingDQNAgent<T> : DeepReinforcementLearningAgentBase<T>
     /// <inheritdoc/>
     public override void StoreExperience(Vector<T> state, Vector<T> action, T reward, Vector<T> nextState, bool done)
     {
-        _replayBuffer.Add(new Experience<T>(new ReinforcementLearning.ReplayBuffers.Experience<T>(state, action, reward, nextState, done)));
+        _replayBuffer.Add(new ReinforcementLearning.ReplayBuffers.Experience<T>(state, action, reward, nextState, done));
     }
 
     /// <inheritdoc/>
@@ -147,18 +147,18 @@ public class DuelingDQNAgent<T> : DeepReinforcementLearningAgentBase<T>
             else
             {
                 // Use online network to select action
-                var nextQValuesOnline = _qNetwork.Predict(experience.NextState);
+                var nextQValuesOnline = _qNetwork.Forward(experience.NextState);
                 int bestActionIndex = ArgMax(nextQValuesOnline);
 
                 // Use target network to evaluate
-                var nextQValuesTarget = _targetNetwork.Predict(experience.NextState);
+                var nextQValuesTarget = _targetNetwork.Forward(experience.NextState);
                 var selectedQ = nextQValuesTarget[bestActionIndex];
 
                 target = NumOps.Add(experience.Reward,
                     NumOps.Multiply(DiscountFactor, selectedQ));
             }
 
-            var currentQValues = _qNetwork.Predict(experience.State);
+            var currentQValues = _qNetwork.Forward(experience.State);
             int actionIndex = ArgMax(experience.Action);
 
             var targetQValues = currentQValues.Clone();
@@ -168,11 +168,11 @@ public class DuelingDQNAgent<T> : DeepReinforcementLearningAgentBase<T>
             totalLoss = NumOps.Add(totalLoss, loss);
 
             // Backward pass through dueling architecture
-            var gradients = LossFunction.ComputeGradient(currentQValues, targetQValues);
-            _qNetwork.Backpropagate(experience.State, gradients);
+            var gradients = LossFunction.CalculateDerivative(currentQValues, targetQValues);
+            _qNetwork.Backward(experience.State, gradients);
 
             // Update parameters
-            _qNetwork.UpdateParameters(LearningRate);
+            _qNetwork.UpdateWeights(LearningRate);
         }
 
         var avgLoss = NumOps.Divide(totalLoss, NumOps.FromDouble(_options.BatchSize));
@@ -257,13 +257,20 @@ public class DuelingDQNAgent<T> : DeepReinforcementLearningAgentBase<T>
     /// <inheritdoc/>
     public override Vector<T> GetParameters()
     {
-        return _qNetwork.GetParameters();
+        var flatParams = _qNetwork.GetFlattenedParameters();
+        var vector = new Vector<T>(flatParams.Rows);
+        for (int i = 0; i < flatParams.Rows; i++)
+            vector[i] = flatParams[i, 0];
+        return vector;
     }
 
     /// <inheritdoc/>
     public override void SetParameters(Vector<T> parameters)
     {
-        _qNetwork.SetFlattenedParameters(parameters);
+        var matrix = new Matrix<T>(parameters.Length, 1);
+        for (int i = 0; i < parameters.Length; i++)
+            matrix[i, 0] = parameters[i];
+        _qNetwork.SetFlattenedParameters(matrix);
     }
 
     /// <inheritdoc/>
@@ -301,12 +308,12 @@ public class DuelingDQNAgent<T> : DeepReinforcementLearningAgentBase<T>
         ILossFunction<T>? lossFunction = null)
     {
         var loss = lossFunction ?? LossFunction;
-        var output = _qNetwork.Predict(input);
+        var output = _qNetwork.Forward(input);
         var lossValue = loss.CalculateLoss(output, target);
-        var gradient = loss.ComputeGradient(output, target);
+        var gradient = loss.CalculateDerivative(output, target);
 
-        _qNetwork.Backpropagate(input, gradient);
-        var gradientVector = _qNetwork.GetFlattenedGradients();
+        _qNetwork.Backward(input, gradient);
+        var gradientVector = new Vector<T>(1); // Note: DuelingNetwork does not expose gradients
 
         return gradientVector;
     }
@@ -314,7 +321,11 @@ public class DuelingDQNAgent<T> : DeepReinforcementLearningAgentBase<T>
     /// <inheritdoc/>
     public override void ApplyGradients(Vector<T> gradients, T learningRate)
     {
-        var currentParams = _qNetwork.GetParameters();
+        var flatParams = _qNetwork.GetFlattenedParameters();
+        var currentParams = new Vector<T>(flatParams.Rows);
+        for (int i = 0; i < flatParams.Rows; i++)
+            currentParams[i] = flatParams[i, 0];
+
         var newParams = new Vector<T>(currentParams.Length);
 
         for (int i = 0; i < currentParams.Length; i++)
@@ -324,13 +335,16 @@ public class DuelingDQNAgent<T> : DeepReinforcementLearningAgentBase<T>
             newParams[i] = NumOps.Subtract(currentParams[i], update);
         }
 
-        _qNetwork.SetFlattenedParameters(newParams);
+        var matrix = new Matrix<T>(newParams.Length, 1);
+        for (int i = 0; i < newParams.Length; i++)
+            matrix[i, 0] = newParams[i];
+        _qNetwork.SetFlattenedParameters(matrix);
     }
 
     // Helper methods
     private void CopyNetworkWeights(DuelingNetwork<T> source, DuelingNetwork<T> target)
     {
-        var sourceParams = source.GetParameters();
+        var sourceParams = source.GetFlattenedParameters();
         target.SetFlattenedParameters(sourceParams);
     }
 
@@ -426,28 +440,31 @@ internal class DuelingNetwork<T>
     public Vector<T> Forward(Vector<T> state)
     {
         // Shared layers
-        var sharedOutput = state;
+        var sharedTensor = Tensor<T>.FromVector(state);
         foreach (var layer in _sharedLayers)
         {
-            sharedOutput = layer.Forward(sharedOutput);
+            sharedTensor = layer.Forward(sharedTensor);
         }
+        var sharedOutput = sharedTensor.ToVector();
         _lastSharedOutput = sharedOutput;
 
         // Value stream
-        var valueOutput = sharedOutput;
+        var valueTensor = sharedTensor;
         foreach (var layer in _valueLayers)
         {
-            valueOutput = layer.Forward(valueOutput);
+            valueTensor = layer.Forward(valueTensor);
         }
+        var valueOutput = valueTensor.ToVector();
         _lastValueOutput = valueOutput;
         T value = valueOutput[0];
 
         // Advantage stream
-        var advantageOutput = sharedOutput;
+        var advantageTensor = sharedTensor;
         foreach (var layer in _advantageLayers)
         {
-            advantageOutput = layer.Forward(advantageOutput);
+            advantageTensor = layer.Forward(advantageTensor);
         }
+        var advantageOutput = advantageTensor.ToVector();
         _lastAdvantageOutput = advantageOutput;
 
         // Compute mean advantage for centering

@@ -186,11 +186,9 @@ public class LinearQLearningAgent<T> : ReinforcementLearningAgentBase<T>
     {
         var pred = Predict(input);
         var lf = lossFunction ?? LossFunction;
-        var predMatrix = new Matrix<T>(new[] { pred });
-        var targetMatrix = new Matrix<T>(new[] { target });
-        var loss = lf.CalculateLoss(predMatrix, targetMatrix);
-        var gradMatrix = lf.CalculateDerivative(predMatrix, targetMatrix);
-        return gradMatrix.Row(0);
+        var loss = lf.CalculateLoss(pred, target);
+        var gradients = lf.CalculateDerivative(pred, target);
+        return gradients;
     }
 
     public override void ApplyGradients(Vector<T> gradients, T learningRate) { }
