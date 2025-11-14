@@ -242,8 +242,8 @@ public class CroppingLayer<T> : LayerBase<T>
     /// - Subtract how much you're trimming from the right
     /// - The result is the new size for that dimension
     ///
-    /// For example, if you start with an image that's 28×28 pixels and crop 2 pixels from each side,
-    /// the output will be 24×24 pixels (28 - 2 - 2 = 24).
+    /// For example, if you start with an image that's 28ï¿½28 pixels and crop 2 pixels from each side,
+    /// the output will be 24ï¿½24 pixels (28 - 2 - 2 = 24).
     /// </para>
     /// </remarks>
     private static int[] CalculateOutputShape(int[] inputShape, int[] cropTop, int[] cropBottom, int[] cropLeft, int[] cropRight)
@@ -281,6 +281,8 @@ public class CroppingLayer<T> : LayerBase<T>
     /// </remarks>
     public override Tensor<T> Forward(Tensor<T> input)
     {
+        _lastInput = input; // Store for autodiff backward pass
+
         int[] inputShape = input.Shape;
         int[] outputShape = GetOutputShape();
         Tensor<T> output = new Tensor<T>(outputShape);
@@ -316,7 +318,7 @@ public class CroppingLayer<T> : LayerBase<T>
     /// input that were kept during the forward pass.
     /// </para>
     /// <para><b>For Beginners:</b> This method helps pass error information backward through the network during training.
-    /// 
+    ///
     /// During the backward pass:
     /// - A tensor the same size as the original input is created
     /// - The gradient information is placed in the center (non-cropped) region
@@ -328,6 +330,18 @@ public class CroppingLayer<T> : LayerBase<T>
     /// </para>
     /// </remarks>
     public override Tensor<T> Backward(Tensor<T> outputGradient)
+    {
+        return UseAutodiff
+            ? BackwardViaAutodiff(outputGradient)
+            : BackwardManual(outputGradient);
+    }
+
+    /// <summary>
+    /// Manual backward pass implementation using optimized gradient calculations.
+    /// </summary>
+    /// <param name="outputGradient">The gradient of the loss with respect to the layer's output.</param>
+    /// <returns>The gradient of the loss with respect to the layer's input.</returns>
+    private Tensor<T> BackwardManual(Tensor<T> outputGradient)
     {
         int[] inputShape = GetInputShape();
         Tensor<T> inputGradient = new Tensor<T>(inputShape);
@@ -347,6 +361,181 @@ public class CroppingLayer<T> : LayerBase<T>
             }
         }
         return ApplyActivationDerivative(inputGradient, outputGradient);
+    }
+
+    /// <summary>
+    /// Stores the last input for use in autodiff backward pass.
+    /// </summary>
+    private Tensor<T>? _lastInput;
+
+    /// <summary>
+    /// Backward pass implementation using automatic differentiation.
+    /// </summary>
+    /// <param name="outputGradient">The gradient of the loss with respect to the layer's output.</param>
+    /// <returns>The gradient of the loss with respect to the layer's input.</returns>
+    /// <remarks>
+    /// <para>
+    /// This method uses automatic differentiation to compute gradients using the Crop operation.
+    /// The layer uses NHWC format [batch, H, W, channels], while TensorOperations uses NCHW format,
+    /// so format conversion is performed.
+    /// </para>
+    /// </remarks>
+    private Tensor<T> BackwardViaAutodiff(Tensor<T> outputGradient)
+    {
+        if (_lastInput == null)
+            throw new InvalidOperationException("Forward pass must be called before backward pass.");
+
+        // Convert from NHWC [batch, H, W, channels] to NCHW [batch, channels, H, W]
+        var inputNCHW = ConvertNHWCtoNCHW(_lastInput);
+
+        // Create computation node
+        var inputNode = Autodiff.TensorOperations<T>.Variable(inputNCHW, "input", requiresGradient: true);
+
+        // Apply crop operation
+        // Crop expects [top, bottom, left, right] for 4D tensors in NCHW format
+        var cropping = new int[] { _cropTop[1], _cropBottom[1], _cropLeft[2], _cropRight[2] };
+        var outputNode = Autodiff.TensorOperations<T>.Crop(inputNode, cropping);
+
+        // Apply activation if needed (usually Identity for cropping layers)
+        outputNode = ApplyActivationAutodiff(outputNode);
+
+        // Convert output gradient from NHWC to NCHW
+        var outputGradientNCHW = ConvertNHWCtoNCHW(outputGradient);
+
+        // Perform backward pass
+        outputNode.Gradient = outputGradientNCHW;
+        var topoOrder = GetTopologicalOrder(outputNode);
+        for (int i = topoOrder.Count - 1; i >= 0; i--)
+        {
+            var node = topoOrder[i];
+            if (node.RequiresGradient && node.BackwardFunction != null && node.Gradient != null)
+            {
+                node.BackwardFunction(node.Gradient);
+            }
+        }
+
+        // Convert input gradient from NCHW back to NHWC
+        var inputGradientNCHW = inputNode.Gradient ?? throw new InvalidOperationException("Gradient computation failed.");
+        return ConvertNCHWtoNHWC(inputGradientNCHW);
+    }
+
+    /// <summary>
+    /// Converts tensor from NHWC [batch, H, W, channels] to NCHW [batch, channels, H, W] format.
+    /// </summary>
+    private Tensor<T> ConvertNHWCtoNCHW(Tensor<T> nhwc)
+    {
+        int batch = nhwc.Shape[0];
+        int height = nhwc.Shape[1];
+        int width = nhwc.Shape[2];
+        int channels = nhwc.Shape[3];
+
+        var nchw = new Tensor<T>([batch, channels, height, width]);
+        for (int b = 0; b < batch; b++)
+            for (int c = 0; c < channels; c++)
+                for (int h = 0; h < height; h++)
+                    for (int w = 0; w < width; w++)
+                        nchw[b, c, h, w] = nhwc[b, h, w, c];
+
+        return nchw;
+    }
+
+    /// <summary>
+    /// Converts tensor from NCHW [batch, channels, H, W] to NHWC [batch, H, W, channels] format.
+    /// </summary>
+    private Tensor<T> ConvertNCHWtoNHWC(Tensor<T> nchw)
+    {
+        int batch = nchw.Shape[0];
+        int channels = nchw.Shape[1];
+        int height = nchw.Shape[2];
+        int width = nchw.Shape[3];
+
+        var nhwc = new Tensor<T>([batch, height, width, channels]);
+        for (int b = 0; b < batch; b++)
+            for (int h = 0; h < height; h++)
+                for (int w = 0; w < width; w++)
+                    for (int c = 0; c < channels; c++)
+                        nhwc[b, h, w, c] = nchw[b, c, h, w];
+
+        return nhwc;
+    }
+
+    /// <summary>
+    /// Applies activation function using autodiff operations.
+    /// </summary>
+    private Autodiff.ComputationNode<T> ApplyActivationAutodiff(Autodiff.ComputationNode<T> input)
+    {
+        // Apply the appropriate activation function
+        if (UsingVectorActivation)
+        {
+            if (VectorActivation is IdentityActivation<T>)
+                return input; // Identity: no operation needed
+            else if (VectorActivation is ReLUActivation<T>)
+                return Autodiff.TensorOperations<T>.ReLU(input);
+            else if (VectorActivation is SigmoidActivation<T>)
+                return Autodiff.TensorOperations<T>.Sigmoid(input);
+            else if (VectorActivation is TanhActivation<T>)
+                return Autodiff.TensorOperations<T>.Tanh(input);
+            else
+            {
+                var activationType = VectorActivation?.GetType().Name ?? "Unknown";
+                throw new NotSupportedException($"Activation {activationType} not yet supported in autodiff");
+            }
+        }
+        else
+        {
+            if (ScalarActivation is IdentityActivation<T>)
+                return input; // Identity: no operation needed
+            else if (ScalarActivation is ReLUActivation<T>)
+                return Autodiff.TensorOperations<T>.ReLU(input);
+            else if (ScalarActivation is SigmoidActivation<T>)
+                return Autodiff.TensorOperations<T>.Sigmoid(input);
+            else if (ScalarActivation is TanhActivation<T>)
+                return Autodiff.TensorOperations<T>.Tanh(input);
+            else
+            {
+                var activationType = ScalarActivation?.GetType().Name ?? "Unknown";
+                throw new NotSupportedException($"Activation {activationType} not yet supported in autodiff");
+            }
+        }
+    }
+
+    /// <summary>
+    /// Gets the topological order of nodes in the computation graph.
+    /// </summary>
+    /// <param name="root">The root node of the computation graph.</param>
+    /// <returns>A list of nodes in topological order.</returns>
+    private List<Autodiff.ComputationNode<T>> GetTopologicalOrder(Autodiff.ComputationNode<T> root)
+    {
+        var visited = new HashSet<Autodiff.ComputationNode<T>>();
+        var result = new List<Autodiff.ComputationNode<T>>();
+
+        var stack = new Stack<(Autodiff.ComputationNode<T> node, bool processed)>();
+        stack.Push((root, false));
+
+        while (stack.Count > 0)
+        {
+            var (node, processed) = stack.Pop();
+
+            if (visited.Contains(node))
+                continue;
+
+            if (processed)
+            {
+                visited.Add(node);
+                result.Add(node);
+            }
+            else
+            {
+                stack.Push((node, true));
+                foreach (var parent in node.Parents)
+                {
+                    if (!visited.Contains(parent))
+                        stack.Push((parent, false));
+                }
+            }
+        }
+
+        return result;
     }
    
     /// <summary>
@@ -421,7 +610,8 @@ public class CroppingLayer<T> : LayerBase<T>
     /// </remarks>
     public override void ResetState()
     {
-        // No state to reset in a cropping layer
+        // Clear cached input for autodiff
+        _lastInput = null;
     }
 
     /// <summary>

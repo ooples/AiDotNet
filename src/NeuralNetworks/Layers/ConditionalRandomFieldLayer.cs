@@ -407,7 +407,7 @@ public class ConditionalRandomFieldLayer<T> : LayerBase<T>
     /// error gradients back through the network. It computes the gradients of the loss with respect to the
     /// layer's parameters (transition matrix, start scores, and end scores) and the layer's input.
     /// </para>
-    /// <para><b>For Beginners:</b> This method is used during training to calculate how the layer's inputs 
+    /// <para><b>For Beginners:</b> This method is used during training to calculate how the layer's inputs
     /// and parameters should change to reduce errors.
     ///
     /// During the backward pass:
@@ -417,17 +417,29 @@ public class ConditionalRandomFieldLayer<T> : LayerBase<T>
     ///    - How start and end scores should change
     /// 3. It calculates how the input features contributed to the error
     /// 4. If an activation function was used, its derivative is applied
-    /// 
+    ///
     /// This lets the network learn:
     /// - Which label is likely to follow another
     /// - Which labels commonly appear at the start or end of sequences
     /// - How input features relate to labels
-    /// 
+    ///
     /// This is part of the "backpropagation" algorithm that helps neural networks learn
     /// from their mistakes and improve over time.
     /// </para>
     /// </remarks>
     public override Tensor<T> Backward(Tensor<T> outputGradient)
+    {
+        return UseAutodiff
+            ? BackwardViaAutodiff(outputGradient)
+            : BackwardManual(outputGradient);
+    }
+
+    /// <summary>
+    /// Manual backward pass implementation using optimized gradient calculations.
+    /// </summary>
+    /// <param name="outputGradient">The gradient of the loss with respect to the layer's output.</param>
+    /// <returns>The gradient of the loss with respect to the layer's input.</returns>
+    private Tensor<T> BackwardManual(Tensor<T> outputGradient)
     {
         if (_lastInput == null)
             throw new InvalidOperationException("Forward pass must be called before backward pass.");
@@ -512,6 +524,25 @@ public class ConditionalRandomFieldLayer<T> : LayerBase<T>
         }
 
         return inputGradient;
+    }
+
+    /// <summary>
+    /// Backward pass implementation using automatic differentiation.
+    /// </summary>
+    /// <param name="outputGradient">The gradient of the loss with respect to the layer's output.</param>
+    /// <returns>The gradient of the loss with respect to the layer's input.</returns>
+    /// <remarks>
+    /// <para>
+    /// This method uses automatic differentiation to compute gradients. Viterbi algorithm and CRF-specific
+    /// operations are not yet available in TensorOperations, so this falls back to the manual implementation.
+    /// </para>
+    /// </remarks>
+    private Tensor<T> BackwardViaAutodiff(Tensor<T> outputGradient)
+    {
+        // ConditionalRandomFieldLayer uses Forward-Backward algorithm and Viterbi decoding
+        // The manual implementation provides correct gradient computation through CRF inference
+        // These structured prediction algorithms are domain-specific to sequence labeling
+        return BackwardManual(outputGradient);
     }
 
     /// <summary>

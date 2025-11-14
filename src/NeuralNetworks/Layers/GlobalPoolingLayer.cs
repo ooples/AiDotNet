@@ -18,9 +18,9 @@ namespace AiDotNet.NeuralNetworks.Layers;
 /// - It creates a single number that represents that entire feature map
 /// - This dramatically reduces the amount of data while preserving the most important information
 /// 
-/// For example, with 64 feature maps of size 7×7:
-/// - Input: 7×7×64 (3,136 values)
-/// - Output: 1×1×64 (64 values, one per feature map)
+/// For example, with 64 feature maps of size 7ï¿½7:
+/// - Input: 7ï¿½7ï¿½64 (3,136 values)
+/// - Output: 1ï¿½1ï¿½64 (64 values, one per feature map)
 /// 
 /// There are two main types of global pooling:
 /// - Global Max Pooling: Takes the maximum value from each feature map
@@ -148,7 +148,7 @@ public class GlobalPoolingLayer<T> : LayerBase<T>
     /// <para>
     /// This constructor creates a new global pooling layer with the specified input shape,
     /// pooling type, and activation function. The output shape is calculated to have the same
-    /// batch size and number of channels as the input, but with spatial dimensions reduced to 1×1.
+    /// batch size and number of channels as the input, but with spatial dimensions reduced to 1ï¿½1.
     /// The activation function operates on individual scalar values in the output tensor.
     /// </para>
     /// <para><b>For Beginners:</b> This sets up the global pooling layer with your chosen settings.
@@ -160,7 +160,7 @@ public class GlobalPoolingLayer<T> : LayerBase<T>
     /// 
     /// For example:
     /// ```csharp
-    /// // Create a global average pooling layer for 28×28 feature maps with 64 channels
+    /// // Create a global average pooling layer for 28ï¿½28 feature maps with 64 channels
     /// var globalAvgPool = new GlobalPoolingLayer<float>(
     ///     new int[] { batchSize, 28, 28, 64 }, 
     ///     PoolingType.Average
@@ -174,7 +174,7 @@ public class GlobalPoolingLayer<T> : LayerBase<T>
     /// );
     /// ```
     /// 
-    /// The output will always have spatial dimensions of 1×1, preserving the batch size and number of channels.
+    /// The output will always have spatial dimensions of 1ï¿½1, preserving the batch size and number of channels.
     /// </para>
     /// </remarks>
     public GlobalPoolingLayer(int[] inputShape, PoolingType poolingType, IActivationFunction<T>? activationFunction = null)
@@ -193,7 +193,7 @@ public class GlobalPoolingLayer<T> : LayerBase<T>
     /// <para>
     /// This constructor creates a new global pooling layer with the specified input shape,
     /// pooling type, and vector activation function. The output shape is calculated to have the same
-    /// batch size and number of channels as the input, but with spatial dimensions reduced to 1×1.
+    /// batch size and number of channels as the input, but with spatial dimensions reduced to 1ï¿½1.
     /// Unlike the other constructor, this one accepts a vector activation function that operates on
     /// entire vectors rather than individual scalar values.
     /// </para>
@@ -220,11 +220,11 @@ public class GlobalPoolingLayer<T> : LayerBase<T>
     /// Calculates the output shape of the global pooling layer based on the input shape.
     /// </summary>
     /// <param name="inputShape">The shape of the input tensor (typically [batchSize, height, width, channels]).</param>
-    /// <returns>The calculated output shape with spatial dimensions reduced to 1×1.</returns>
+    /// <returns>The calculated output shape with spatial dimensions reduced to 1ï¿½1.</returns>
     /// <remarks>
     /// <para>
     /// This method calculates the output shape for the global pooling layer. Global pooling reduces
-    /// the spatial dimensions (height and width) to 1×1 while preserving the batch size and number of channels.
+    /// the spatial dimensions (height and width) to 1ï¿½1 while preserving the batch size and number of channels.
     /// </para>
     /// <para><b>For Beginners:</b> This determines what shape the output data will have after pooling.
     /// 
@@ -234,8 +234,8 @@ public class GlobalPoolingLayer<T> : LayerBase<T>
     /// - Reduces height and width to 1
     /// 
     /// For example:
-    /// - Input shape: [32, 7, 7, 64] (32 examples, 7×7 spatial dimensions, 64 channels)
-    /// - Output shape: [32, 1, 1, 64] (32 examples, 1×1 spatial dimensions, 64 channels)
+    /// - Input shape: [32, 7, 7, 64] (32 examples, 7ï¿½7 spatial dimensions, 64 channels)
+    /// - Output shape: [32, 1, 1, 64] (32 examples, 1ï¿½1 spatial dimensions, 64 channels)
     /// 
     /// This dramatic reduction in spatial dimensions helps prepare the feature maps for
     /// classification or other tasks that require a fixed-size vector input.
@@ -258,7 +258,7 @@ public class GlobalPoolingLayer<T> : LayerBase<T>
     /// it applies the specified pooling operation (max or average) across the entire spatial dimensions.
     /// For max pooling, it finds the maximum value in each channel. For average pooling, it computes the
     /// mean of all values in each channel. The result is a tensor with the same batch size and number of
-    /// channels, but with spatial dimensions reduced to 1×1.
+    /// channels, but with spatial dimensions reduced to 1ï¿½1.
     /// </para>
     /// <para><b>For Beginners:</b> This is where the layer processes input data by pooling across entire feature maps.
     /// 
@@ -335,24 +335,37 @@ public class GlobalPoolingLayer<T> : LayerBase<T>
     /// contributed to the output during the forward pass.
     /// </para>
     /// <para><b>For Beginners:</b> This is where the layer passes error information back to previous layers.
-    /// 
+    ///
     /// The backward pass works differently depending on the pooling type:
-    /// 
+    ///
     /// For average pooling:
     /// - The gradient for each output value is divided equally among all input positions
     /// - Every position in a feature map gets the same small portion of the gradient
     /// - This reflects that each input position contributed equally to the average
-    /// 
+    ///
     /// For max pooling:
     /// - The gradient for each output value is assigned only to the input position that had the maximum value
     /// - Only the "winning" position gets the gradient, all others get zero
     /// - This reflects that only the maximum value contributed to the output
-    /// 
+    ///
     /// This process ensures that the network learns appropriately based on how
     /// each input position influenced the pooled output.
     /// </para>
     /// </remarks>
     public override Tensor<T> Backward(Tensor<T> outputGradient)
+    {
+        return UseAutodiff
+            ? BackwardViaAutodiff(outputGradient)
+            : BackwardManual(outputGradient);
+    }
+
+    /// <summary>
+    /// Manual backward pass implementation using optimized gradient calculations.
+    /// </summary>
+    /// <param name="outputGradient">The gradient tensor from the next layer. Shape: [batchSize, 1, 1, channels].</param>
+    /// <returns>The gradient tensor to be passed to the previous layer. Shape: [batchSize, height, width, channels].</returns>
+    /// <exception cref="InvalidOperationException">Thrown when backward is called before forward.</exception>
+    private Tensor<T> BackwardManual(Tensor<T> outputGradient)
     {
         if (_lastInput == null || _lastOutput == null)
         {
@@ -413,6 +426,132 @@ public class GlobalPoolingLayer<T> : LayerBase<T>
         }
 
         return inputGradient;
+    }
+
+    /// <summary>
+    /// Backward pass implementation using automatic differentiation.
+    /// </summary>
+    /// <param name="outputGradient">The gradient tensor from the next layer. Shape: [batchSize, 1, 1, channels].</param>
+    /// <returns>The gradient tensor to be passed to the previous layer. Shape: [batchSize, height, width, channels].</returns>
+    /// <remarks>
+    /// <para>
+    /// This method uses automatic differentiation to compute gradients. Currently, global pooling operations
+    /// are not yet available in TensorOperations, so this method falls back to the manual implementation.
+    /// </para>
+    /// <para>
+    /// Once global pooling operations are added to TensorOperations, this method will provide:
+    /// - Automatic gradient computation through the computation graph
+    /// - Verification of manual gradient implementations
+    /// - Support for rapid prototyping with custom modifications
+    /// </para>
+    /// </remarks>
+    private Tensor<T> BackwardViaAutodiff(Tensor<T> outputGradient)
+    {
+        if (_lastInput == null)
+            throw new InvalidOperationException("Forward pass must be called before backward pass.");
+
+        // If vector activation is configured, fall back to manual path
+        if (VectorActivation != null)
+        {
+            return BackwardManual(outputGradient);
+        }
+
+        // Convert input to computation node
+        var inputNode = Autodiff.TensorOperations<T>.Variable(_lastInput, "input", requiresGradient: true);
+
+        // Apply global pooling using reduce operations
+        // Global pooling reduces over spatial dimensions (height and width), keeping channels
+        // Input format is NHWC: [batch, height, width, channels]
+        // So we reduce over dimensions 1 (height) and 2 (width), not 2 and 3
+        var axes = new int[] { 1, 2 }; // Reduce over height and width dimensions (corrected from {2, 3})
+
+        Autodiff.ComputationNode<T> outputNode;
+        if (_poolingType == PoolingType.Max)
+        {
+            outputNode = Autodiff.TensorOperations<T>.ReduceMax(inputNode, axes, keepDims: true);
+        }
+        else // Average pooling
+        {
+            outputNode = Autodiff.TensorOperations<T>.ReduceMean(inputNode, axes, keepDims: true);
+        }
+
+        // Remove the spatial dimensions to match expected output shape
+        var squeezed = Autodiff.TensorOperations<T>.Reshape(outputNode, OutputShape);
+
+        // Apply activation if present
+        var activated = ApplyScalarActivationAutodiff(squeezed);
+
+        // Perform backward pass
+        activated.Gradient = outputGradient;
+        var topoOrder = GetTopologicalOrder(activated);
+        for (int i = topoOrder.Count - 1; i >= 0; i--)
+        {
+            var node = topoOrder[i];
+            if (node.RequiresGradient && node.BackwardFunction != null && node.Gradient != null)
+            {
+                node.BackwardFunction(node.Gradient);
+            }
+        }
+
+        return inputNode.Gradient ?? throw new InvalidOperationException("Gradient computation failed.");
+    }
+
+    /// <summary>
+    /// Applies scalar activation function with autodiff support.
+    /// </summary>
+    /// <param name="input">The input computation node.</param>
+    /// <returns>The activated computation node, or the input unchanged if no scalar activation is configured.</returns>
+    private Autodiff.ComputationNode<T> ApplyScalarActivationAutodiff(Autodiff.ComputationNode<T> input)
+    {
+        if (ScalarActivation == null)
+            return input;
+
+        // Use generic activation support - works for ALL 39 built-in activations
+        return Autodiff.TensorOperations<T>.ApplyActivation(input, ScalarActivation);
+    }
+
+    /// <summary>
+    /// Gets the topological order of nodes in the computation graph.
+    /// </summary>
+    /// <param name="root">The root node of the computation graph.</param>
+    /// <returns>A list of nodes in topological order.</returns>
+    private List<Autodiff.ComputationNode<T>> GetTopologicalOrder(Autodiff.ComputationNode<T> root)
+    {
+        var visited = new HashSet<Autodiff.ComputationNode<T>>();
+        var result = new List<Autodiff.ComputationNode<T>>();
+
+        var stack = new Stack<(Autodiff.ComputationNode<T> node, bool processed)>();
+        stack.Push((root, false));
+
+        while (stack.Count > 0)
+        {
+            var (node, processed) = stack.Pop();
+
+            if (visited.Contains(node))
+            {
+                continue;
+            }
+
+            if (processed)
+            {
+                visited.Add(node);
+                result.Add(node);
+            }
+            else
+            {
+                stack.Push((node, true));
+
+                foreach (var parent in node.Parents)
+                {
+                    if (!visited.Contains(parent))
+                    {
+                        stack.Push((parent, false));
+                    }
+                }
+            }
+        }
+
+        return result;
     }
 
     /// <summary>
