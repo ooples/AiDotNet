@@ -99,12 +99,12 @@ public class DreamerAgent<T> : DeepReinforcementLearningAgentBase<T>
 
         for (int i = 0; i < 2; i++)
         {
-            network.AddLayer(new DenseLayer<T>(previousSize, _options.HiddenSize));
+            network.AddLayer(new DenseLayer<T>(previousSize, _options.HiddenSize, (IActivationFunction<T>?)null));
             network.AddLayer(new ActivationLayer<T>(new ReLU<T>()));
             previousSize = _options.HiddenSize;
         }
 
-        network.AddLayer(new DenseLayer<T>(previousSize, outputSize));
+        network.AddLayer(new DenseLayer<T>(previousSize, outputSize, (IActivationFunction<T>?)null));
 
         return network;
     }
@@ -116,12 +116,12 @@ public class DreamerAgent<T> : DeepReinforcementLearningAgentBase<T>
 
         for (int i = 0; i < 2; i++)
         {
-            network.AddLayer(new DenseLayer<T>(previousSize, _options.HiddenSize));
+            network.AddLayer(new DenseLayer<T>(previousSize, _options.HiddenSize, (IActivationFunction<T>?)null));
             network.AddLayer(new ActivationLayer<T>(new ReLU<T>()));
             previousSize = _options.HiddenSize;
         }
 
-        network.AddLayer(new DenseLayer<T>(previousSize, _options.ActionSize));
+        network.AddLayer(new DenseLayer<T>(previousSize, _options.ActionSize, (IActivationFunction<T>?)null));
         network.AddLayer(new ActivationLayer<T>(new Tanh<T>()));
 
         return network;

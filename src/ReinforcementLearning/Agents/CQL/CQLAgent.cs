@@ -85,13 +85,13 @@ public class CQLAgent<T> : DeepReinforcementLearningAgentBase<T>
 
         foreach (var layerSize in _options.PolicyHiddenLayers)
         {
-            network.AddLayer(new DenseLayer<T>(previousSize, layerSize));
+            network.AddLayer(new DenseLayer<T>(previousSize, layerSize, (IActivationFunction<T>?)null));
             network.AddLayer(new ActivationLayer<T>(new ReLU<T>()));
             previousSize = layerSize;
         }
 
         // Output: mean and log_std for Gaussian policy
-        network.AddLayer(new DenseLayer<T>(previousSize, _options.ActionSize * 2));
+        network.AddLayer(new DenseLayer<T>(previousSize, _options.ActionSize * 2, (IActivationFunction<T>?)null));
 
         return network;
     }
@@ -104,12 +104,12 @@ public class CQLAgent<T> : DeepReinforcementLearningAgentBase<T>
 
         foreach (var layerSize in _options.QHiddenLayers)
         {
-            network.AddLayer(new DenseLayer<T>(previousSize, layerSize));
+            network.AddLayer(new DenseLayer<T>(previousSize, layerSize, (IActivationFunction<T>?)null));
             network.AddLayer(new ActivationLayer<T>(new ReLU<T>()));
             previousSize = layerSize;
         }
 
-        network.AddLayer(new DenseLayer<T>(previousSize, 1));
+        network.AddLayer(new DenseLayer<T>(previousSize, 1, (IActivationFunction<T>?)null));
 
         return network;
     }

@@ -103,12 +103,12 @@ public class WorldModelsAgent<T> : DeepReinforcementLearningAgentBase<T>
         // Simple feedforward approximation of convolutional VAE
         foreach (var channels in _options.VAEEncoderChannels)
         {
-            network.AddLayer(new DenseLayer<T>(previousSize, channels));
+            network.AddLayer(new DenseLayer<T>(previousSize, channels, (IActivationFunction<T>?)null));
             network.AddLayer(new ActivationLayer<T>(new ReLU<T>()));
             previousSize = channels;
         }
 
-        network.AddLayer(new DenseLayer<T>(previousSize, outputSize));
+        network.AddLayer(new DenseLayer<T>(previousSize, outputSize, (IActivationFunction<T>?)null));
 
         return network;
     }
@@ -124,12 +124,12 @@ public class WorldModelsAgent<T> : DeepReinforcementLearningAgentBase<T>
 
         foreach (var channels in reversedChannels)
         {
-            network.AddLayer(new DenseLayer<T>(previousSize, channels));
+            network.AddLayer(new DenseLayer<T>(previousSize, channels, (IActivationFunction<T>?)null));
             network.AddLayer(new ActivationLayer<T>(new ReLU<T>()));
             previousSize = channels;
         }
 
-        network.AddLayer(new DenseLayer<T>(previousSize, outputSize));
+        network.AddLayer(new DenseLayer<T>(previousSize, outputSize, (IActivationFunction<T>?)null));
         network.AddLayer(new ActivationLayer<T>(new Sigmoid<T>()));
 
         return network;
@@ -141,9 +141,9 @@ public class WorldModelsAgent<T> : DeepReinforcementLearningAgentBase<T>
         var network = new NeuralNetwork<T>();
         int inputSize = _options.LatentSize + _options.ActionSize + _options.RNNHiddenSize;
 
-        network.AddLayer(new DenseLayer<T>(inputSize, _options.RNNHiddenSize));
+        network.AddLayer(new DenseLayer<T>(inputSize, _options.RNNHiddenSize, (IActivationFunction<T>?)null));
         network.AddLayer(new ActivationLayer<T>(new Tanh<T>()));
-        network.AddLayer(new DenseLayer<T>(_options.RNNHiddenSize, _options.LatentSize * _options.NumMixtures + _options.RNNHiddenSize));
+        network.AddLayer(new DenseLayer<T>(_options.RNNHiddenSize, _options.LatentSize * _options.NumMixtures + _options.RNNHiddenSize, (IActivationFunction<T>?)null));
 
         return network;
     }

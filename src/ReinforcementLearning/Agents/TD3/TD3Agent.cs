@@ -90,12 +90,12 @@ public class TD3Agent<T> : DeepReinforcementLearningAgentBase<T>
 
         foreach (var layerSize in _options.ActorHiddenLayers)
         {
-            network.AddLayer(new DenseLayer<T>(previousSize, layerSize));
+            network.AddLayer(new DenseLayer<T>(previousSize, layerSize, (IActivationFunction<T>?)null));
             network.AddLayer(new ActivationLayer<T>(new ReLU<T>()));
             previousSize = layerSize;
         }
 
-        network.AddLayer(new DenseLayer<T>(previousSize, _options.ActionSize));
+        network.AddLayer(new DenseLayer<T>(previousSize, _options.ActionSize, (IActivationFunction<T>?)null));
         network.AddLayer(new ActivationLayer<T>(new Tanh<T>()));
 
         return network;
@@ -109,12 +109,12 @@ public class TD3Agent<T> : DeepReinforcementLearningAgentBase<T>
 
         foreach (var layerSize in _options.CriticHiddenLayers)
         {
-            network.AddLayer(new DenseLayer<T>(previousSize, layerSize));
+            network.AddLayer(new DenseLayer<T>(previousSize, layerSize, (IActivationFunction<T>?)null));
             network.AddLayer(new ActivationLayer<T>(new ReLU<T>()));
             previousSize = layerSize;
         }
 
-        network.AddLayer(new DenseLayer<T>(previousSize, 1));
+        network.AddLayer(new DenseLayer<T>(previousSize, 1, (IActivationFunction<T>?)null));
 
         return network;
     }
