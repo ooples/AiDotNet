@@ -43,7 +43,7 @@ public class DecisionTransformerAgent<T> : DeepReinforcementLearningAgentBase<T>
     private DecisionTransformerOptions<T> _options;
     private IOptimizer<T, Vector<T>, Vector<T>> _optimizer;
 
-    private INeuralNetwork<T> _transformerNetwork;
+    private NeuralNetwork<T> _transformerNetwork;
     private List<(Vector<T> state, Vector<T> action, T reward, T returnToGo)> _trajectoryBuffer;
     private int _updateCount;
 
@@ -68,15 +68,19 @@ public class DecisionTransformerAgent<T> : DeepReinforcementLearningAgentBase<T>
         // Input: concatenated [return_to_go, state, previous_action]
         int inputSize = 1 + _options.StateSize + _options.ActionSize;
 
-        var architecture = new NeuralNetworkArchitecture<T>
-        {
-            TaskType = NeuralNetworkTaskType.Regression
-        };
+        // Create initial architecture for layer generation
+        var tempArchitecture = new NeuralNetworkArchitecture<T>(
+            inputType: InputType.OneDimensional,
+            taskType: NeuralNetworkTaskType.Regression,
+            complexity: NetworkComplexity.Medium,
+            inputSize: inputSize,
+            outputSize: _options.ActionSize
+        );
 
         // Use LayerHelper to create production-ready network layers
         // For DecisionTransformer, use feedforward layers to approximate the transformer
         var layers = LayerHelper<T>.CreateDefaultFeedForwardLayers(
-            architecture,
+            tempArchitecture,
             hiddenLayerCount: _options.NumLayers,
             hiddenLayerSize: _options.EmbeddingDim
         ).ToList();
@@ -85,14 +89,23 @@ public class DecisionTransformerAgent<T> : DeepReinforcementLearningAgentBase<T>
         var lastLayer = layers[layers.Count - 1];
         if (lastLayer is DenseLayer<T> denseLayer)
         {
+            int layerInputSize = denseLayer.GetInputShape()[0];
             layers[layers.Count - 1] = new DenseLayer<T>(
-                denseLayer.GetWeights().Rows,
+                layerInputSize,
                 _options.ActionSize,
-                new TanhActivation<T>()
+                (IActivationFunction<T>)new TanhActivation<T>()
             );
         }
 
-        architecture.Layers = layers;
+        // Create final architecture with the modified layers
+        var architecture = new NeuralNetworkArchitecture<T>(
+            inputType: InputType.OneDimensional,
+            taskType: NeuralNetworkTaskType.Regression,
+            complexity: NetworkComplexity.Medium,
+            inputSize: inputSize,
+            outputSize: _options.ActionSize,
+            layers: layers
+        );
         _transformerNetwork = new NeuralNetwork<T>(architecture, _options.LossFunction);
 
         // Register network with base class
