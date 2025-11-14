@@ -47,7 +47,8 @@ public class HumanEvalDataLoader
             }
             catch (Exception ex)
             {
-                Console.WriteLine($"Failed to parse HumanEval line: {ex.Message}");
+                // Skip malformed lines - diagnostic output for debugging
+                System.Diagnostics.Debug.WriteLine($"HumanEval: Failed to parse line: {ex.Message}");
             }
         }
 

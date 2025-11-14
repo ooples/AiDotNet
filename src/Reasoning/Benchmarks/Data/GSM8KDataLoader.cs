@@ -47,7 +47,8 @@ public class GSM8KDataLoader
             }
             catch (Exception ex)
             {
-                Console.WriteLine($"Failed to parse line: {ex.Message}");
+                // Skip malformed lines - diagnostic output for debugging
+                System.Diagnostics.Debug.WriteLine($"GSM8K: Failed to parse line: {ex.Message}");
             }
         }
 
