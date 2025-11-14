@@ -79,14 +79,17 @@ public class TRPOAgent<T> : DeepReinforcementLearningAgentBase<T>
     {
         int outputSize = _options.IsContinuous ? _options.ActionSize * 2 : _options.ActionSize;
 
-        var architecture = new NeuralNetworkArchitecture<T>
-        {
-            TaskType = NeuralNetworkTaskType.Regression
-        };
+        // Create initial architecture for LayerHelper
+        var tempArchitecture = new NeuralNetworkArchitecture<T>(
+            inputType: InputType.OneDimensional,
+            taskType: NeuralNetworkTaskType.Regression,
+            complexity: NetworkComplexity.Medium,
+            inputSize: _options.StateSize,
+            outputSize: outputSize);
 
         // Use LayerHelper to create production-ready network layers
         var layers = LayerHelper<T>.CreateDefaultFeedForwardLayers(
-            architecture,
+            tempArchitecture,
             hiddenLayerCount: _options.PolicyHiddenLayers.Count,
             hiddenLayerSize: _options.PolicyHiddenLayers.FirstOrDefault() > 0 ? _options.PolicyHiddenLayers.First() : 128
         ).ToList();
@@ -106,25 +109,42 @@ public class TRPOAgent<T> : DeepReinforcementLearningAgentBase<T>
             }
         }
 
-        architecture.Layers = layers;
+        var architecture = new NeuralNetworkArchitecture<T>(
+            inputType: InputType.OneDimensional,
+            taskType: NeuralNetworkTaskType.Regression,
+            complexity: NetworkComplexity.Medium,
+            inputSize: _options.StateSize,
+            outputSize: outputSize,
+            layers: layers);
+
         return new NeuralNetwork<T>(architecture, _options.ValueLossFunction);
     }
 
     private INeuralNetwork<T> CreateValueNetwork()
     {
-        var architecture = new NeuralNetworkArchitecture<T>
-        {
-            TaskType = NeuralNetworkTaskType.Regression
-        };
+        // Create initial architecture for LayerHelper
+        var tempArchitecture = new NeuralNetworkArchitecture<T>(
+            inputType: InputType.OneDimensional,
+            taskType: NeuralNetworkTaskType.Regression,
+            complexity: NetworkComplexity.Medium,
+            inputSize: _options.StateSize,
+            outputSize: 1);
 
         // Use LayerHelper to create production-ready network layers
         var layers = LayerHelper<T>.CreateDefaultFeedForwardLayers(
-            architecture,
+            tempArchitecture,
             hiddenLayerCount: _options.ValueHiddenLayers.Count,
             hiddenLayerSize: _options.ValueHiddenLayers.FirstOrDefault() > 0 ? _options.ValueHiddenLayers.First() : 128
-        );
+        ).ToList();
 
-        architecture.Layers = layers.ToList();
+        var architecture = new NeuralNetworkArchitecture<T>(
+            inputType: InputType.OneDimensional,
+            taskType: NeuralNetworkTaskType.Regression,
+            complexity: NetworkComplexity.Medium,
+            inputSize: _options.StateSize,
+            outputSize: 1,
+            layers: layers);
+
         return new NeuralNetwork<T>(architecture, _options.ValueLossFunction);
     }
 

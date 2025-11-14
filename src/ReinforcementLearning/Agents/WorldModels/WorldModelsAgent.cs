@@ -95,7 +95,7 @@ public class WorldModelsAgent<T> : DeepReinforcementLearningAgentBase<T>
 
     private NeuralNetwork<T> CreateEncoderNetwork(int inputSize, int outputSize)
     {
-        var architecture = new NeuralNetworkArchitecture<T>();
+        var architecture = new NeuralNetworkArchitecture<T>(inputSize, outputSize, NetworkComplexity.Medium);
         var network = new NeuralNetwork<T>(architecture, new MeanSquaredErrorLoss<T>());
         int previousSize = inputSize;
 
@@ -113,7 +113,7 @@ public class WorldModelsAgent<T> : DeepReinforcementLearningAgentBase<T>
 
     private NeuralNetwork<T> CreateDecoderNetwork(int inputSize, int outputSize)
     {
-        var architecture = new NeuralNetworkArchitecture<T>();
+        var architecture = new NeuralNetworkArchitecture<T>(inputSize, outputSize, NetworkComplexity.Medium);
         var network = new NeuralNetwork<T>(architecture, new MeanSquaredErrorLoss<T>());
         int previousSize = inputSize;
 
@@ -135,9 +135,10 @@ public class WorldModelsAgent<T> : DeepReinforcementLearningAgentBase<T>
     private NeuralNetwork<T> CreateRNNNetwork()
     {
         // Simplified RNN: (latent, action, hidden) -> (next_latent_mean, next_latent_logvar, next_hidden)
-        var architecture = new NeuralNetworkArchitecture<T>();
-        var network = new NeuralNetwork<T>(architecture, new MeanSquaredErrorLoss<T>());
         int inputSize = _options.LatentSize + _options.ActionSize + _options.RNNHiddenSize;
+        int outputSize = _options.LatentSize * _options.NumMixtures + _options.RNNHiddenSize;
+        var architecture = new NeuralNetworkArchitecture<T>(inputSize, outputSize, NetworkComplexity.Medium);
+        var network = new NeuralNetwork<T>(architecture, new MeanSquaredErrorLoss<T>());
 
         network.AddLayer(LayerType.Dense, _options.RNNHiddenSize, ActivationFunction.Tanh);
         network.AddLayer(LayerType.Dense, _options.LatentSize * _options.NumMixtures + _options.RNNHiddenSize, ActivationFunction.Linear);
@@ -182,7 +183,9 @@ public class WorldModelsAgent<T> : DeepReinforcementLearningAgentBase<T>
 
     public override void StoreExperience(Vector<T> observation, Vector<T> action, T reward, Vector<T> nextObservation, bool done)
     {
-        _replayBuffer.Add(observation, action, reward, nextObservation, done);
+        // Store using ReplayBuffers.Experience which expects Vector<T>
+        var experience = new AiDotNet.ReinforcementLearning.ReplayBuffers.Experience<T>(observation, action, reward, nextObservation, done);
+        _replayBuffer.Add(experience);
 
         if (done)
         {
@@ -224,6 +227,7 @@ public class WorldModelsAgent<T> : DeepReinforcementLearningAgentBase<T>
 
         foreach (var experience in batch)
         {
+            var stateVector = experience.State;
             // Encode
             var encoderOutput = _vaeEncoder.Predict(Tensor<T>.FromVector(experience.State)).ToVector();
             var latentMean = ExtractMean(encoderOutput);
@@ -239,7 +243,7 @@ public class WorldModelsAgent<T> : DeepReinforcementLearningAgentBase<T>
             T reconLoss = NumOps.Zero;
             for (int i = 0; i < reconstruction.Length; i++)
             {
-                var diff = NumOps.Subtract(experience.State[i], reconstruction[i]);
+                var diff = NumOps.Subtract(stateVector[i], reconstruction[i]);
                 reconLoss = NumOps.Add(reconLoss, NumOps.Multiply(diff, diff));
             }
 
@@ -260,7 +264,7 @@ public class WorldModelsAgent<T> : DeepReinforcementLearningAgentBase<T>
             var gradient = new Vector<T>(reconstruction.Length);
             for (int i = 0; i < gradient.Length; i++)
             {
-                gradient[i] = NumOps.Subtract(reconstruction[i], experience.State[i]);
+                gradient[i] = NumOps.Subtract(reconstruction[i], stateVector[i]);
             }
 
             _vaeDecoder.Backpropagate(Tensor<T>.FromVector(gradient));
@@ -425,7 +429,7 @@ public class WorldModelsAgent<T> : DeepReinforcementLearningAgentBase<T>
     {
         return new ModelMetadata<T>
         {
-            ModelType = "WorldModels",
+            ModelType = ModelType.ReinforcementLearning,
         };
     }
 
@@ -492,10 +496,13 @@ public class WorldModelsAgent<T> : DeepReinforcementLearningAgentBase<T>
     {
         var prediction = Predict(input);
         var usedLossFunction = lossFunction ?? LossFunction;
-        var loss = usedLossFunction.CalculateLoss(prediction, target);
-
-        var gradient = usedLossFunction.ComputeGradient(prediction, target);
-        return gradient;
+        
+        // Convert to tensor for gradient computation
+        var predictionTensor = Tensor<T>.FromVector(prediction);
+        var targetTensor = Tensor<T>.FromVector(target);
+        
+        var gradientTensor = usedLossFunction.CalculateGradient(predictionTensor, targetTensor);
+        return gradientTensor.ToVector();
     }
 
     public override void ApplyGradients(Vector<T> gradients, T learningRate)

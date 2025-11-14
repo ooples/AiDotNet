@@ -120,7 +120,7 @@ public class DreamerAgent<T> : DeepReinforcementLearningAgentBase<T>
         }
 
         network.AddLayer(new DenseLayer<T>(previousSize, _options.ActionSize, (IActivationFunction<T>?)null));
-        network.AddLayer(new ActivationLayer<T>(new Tanh<T>()));
+        network.AddLayer(new ActivationLayer<T>(new TanhActivation<T>()));
 
         return network;
     }
