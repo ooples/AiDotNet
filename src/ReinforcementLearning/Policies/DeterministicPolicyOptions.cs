@@ -1,0 +1,16 @@
+using AiDotNet.LossFunctions;
+using AiDotNet.ReinforcementLearning.Policies.Exploration;
+
+namespace AiDotNet.ReinforcementLearning.Policies
+{
+    public class DeterministicPolicyOptions<T>
+    {
+        public int StateSize { get; set; } = 0;
+        public int ActionSize { get; set; } = 0;
+        public int[] HiddenLayers { get; set; } = new int[] { 256, 256 };
+        public ILossFunction<T>? LossFunction { get; set; } = null;
+        public IExplorationStrategy<T>? ExplorationStrategy { get; set; } = null;
+        public bool UseTanhSquashing { get; set; } = true;
+        public int? Seed { get; set; } = null;
+    }
+}
