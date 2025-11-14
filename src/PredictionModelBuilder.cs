@@ -660,12 +660,12 @@ public class PredictionModelBuilder<T, TInput, TOutput> : IPredictionModelBuilde
             // Print progress
             if (verbose && (episode + 1) % Math.Max(1, episodes / 10) == 0)
             {
-                var recentRewards = episodeRewards.TakeLast(100).ToList();
+                var recentRewards = episodeRewards.Skip(Math.Max(0, episodeRewards.Count - 100)).Take(100).ToList();
                 var avgReward = recentRewards.Count > 0
                     ? ComputeAverage(recentRewards, numOps)
                     : numOps.Zero;
 
-                var recentLosses = losses.TakeLast(100).ToList();
+                var recentLosses = losses.Skip(Math.Max(0, losses.Count - 100)).Take(100).ToList();
                 var avgLoss = recentLosses.Count > 0
                     ? ComputeAverage(recentLosses, numOps)
                     : numOps.Zero;
@@ -681,7 +681,7 @@ public class PredictionModelBuilder<T, TInput, TOutput> : IPredictionModelBuilde
         {
             Console.WriteLine();
             Console.WriteLine("Training completed!");
-            var finalAvgReward = ComputeAverage(episodeRewards.TakeLast(100), numOps);
+            var finalAvgReward = ComputeAverage(episodeRewards.Skip(Math.Max(0, episodeRewards.Count - 100)).Take(100), numOps);
             Console.WriteLine($"Final average reward (last 100 episodes): {numOps.ToDouble(finalAvgReward):F2}");
         }
 
