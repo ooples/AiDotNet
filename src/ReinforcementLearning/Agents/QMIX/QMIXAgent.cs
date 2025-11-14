@@ -222,7 +222,7 @@ public class QMIXAgent<T> : DeepReinforcementLearningAgentBase<T>
         var jointAction = ConcatenateVectors(agentActions);
         var jointNextState = ConcatenateWithGlobal(nextAgentStates, nextGlobalState);
 
-        _replayBuffer.Add(new Experience<T>(jointState, jointAction, teamReward, jointNextState, done));
+        _replayBuffer.Add(new ReplayBuffers.Experience<T>(jointState, jointAction, teamReward, jointNextState, done));
         _stepCount++;
 
         // Decay epsilon
@@ -231,7 +231,7 @@ public class QMIXAgent<T> : DeepReinforcementLearningAgentBase<T>
 
     public override void StoreExperience(Vector<T> state, Vector<T> action, T reward, Vector<T> nextState, bool done)
     {
-        _replayBuffer.Add(new Experience<T>(state, action, reward, nextState, done));
+        _replayBuffer.Add(new ReplayBuffers.Experience<T>(state, action, reward, nextState, done));
         _stepCount++;
         _epsilon = Math.Max(_options.EpsilonEnd, _epsilon * _options.EpsilonDecay);
     }
@@ -285,7 +285,7 @@ public class QMIXAgent<T> : DeepReinforcementLearningAgentBase<T>
             var targetTeamQ = targetTeamQTensor.ToVector()[0];
 
             T target;
-            if (experience.IsDone)
+            if (experience.Done)
             {
                 target = experience.Reward;
             }
@@ -303,8 +303,17 @@ public class QMIXAgent<T> : DeepReinforcementLearningAgentBase<T>
             var mixingGradientVec = new Vector<T>(1);
             mixingGradientVec[0] = tdError;
             var mixingGradient = Tensor<T>.FromVector(mixingGradientVec);
-            _mixingNetwork.Backpropagate(mixingGradient);
-            _mixingNetwork.UpdateParameters(_options.LearningRate);
+            ((NeuralNetwork<T>)_mixingNetwork).Backpropagate(mixingGradient);
+
+            // Manual parameter update with learning rate
+            var mixingParams = _mixingNetwork.GetParameters();
+            var mixingGrads = ((NeuralNetwork<T>)_mixingNetwork).GetGradients();
+            for (int j = 0; j < mixingParams.Length; j++)
+            {
+                mixingParams[j] = NumOps.Subtract(mixingParams[j],
+                    NumOps.Multiply(_options.LearningRate, mixingGrads[j]));
+            }
+            _mixingNetwork.UpdateParameters(mixingParams);
 
             // Backpropagate through agent networks
             for (int i = 0; i < _options.NumAgents; i++)
@@ -315,8 +324,17 @@ public class QMIXAgent<T> : DeepReinforcementLearningAgentBase<T>
 
                 var stateTensor = Tensor<T>.FromVector(agentStates[i]);
                 var agentGradient = Tensor<T>.FromVector(agentGradientVec);
-                _agentNetworks[i].Backpropagate(agentGradient);
-                _agentNetworks[i].UpdateParameters(_options.LearningRate);
+                ((NeuralNetwork<T>)_agentNetworks[i]).Backpropagate(agentGradient);
+
+                // Manual parameter update with learning rate
+                var agentParams = _agentNetworks[i].GetParameters();
+                var agentGrads = ((NeuralNetwork<T>)_agentNetworks[i]).GetGradients();
+                for (int j = 0; j < agentParams.Length; j++)
+                {
+                    agentParams[j] = NumOps.Subtract(agentParams[j],
+                        NumOps.Multiply(_options.LearningRate, agentGrads[j]));
+                }
+                _agentNetworks[i].UpdateParameters(agentParams);
             }
         }
 
@@ -584,14 +602,24 @@ public class QMIXAgent<T> : DeepReinforcementLearningAgentBase<T>
         var usedLossFunction = lossFunction ?? LossFunction;
         var loss = usedLossFunction.CalculateLoss(prediction, target);
 
-        var gradient = usedLossFunction.CalculateGradient(prediction, target);
+        var gradient = usedLossFunction.CalculateDerivative(prediction, target);
         return gradient;
     }
 
     public override void ApplyGradients(Vector<T> gradients, T learningRate)
     {
-        _agentNetworks[0].Backpropagate(gradients);
-        _agentNetworks[0].UpdateParameters(learningRate);
+        var gradientsTensor = Tensor<T>.FromVector(gradients);
+        ((NeuralNetwork<T>)_agentNetworks[0]).Backpropagate(gradientsTensor);
+
+        // Manual parameter update with learning rate
+        var agentParams = _agentNetworks[0].GetParameters();
+        var agentGrads = ((NeuralNetwork<T>)_agentNetworks[0]).GetGradients();
+        for (int i = 0; i < agentParams.Length; i++)
+        {
+            agentParams[i] = NumOps.Subtract(agentParams[i],
+                NumOps.Multiply(learningRate, agentGrads[i]));
+        }
+        _agentNetworks[0].UpdateParameters(agentParams);
     }
 
     public override void SaveModel(string filepath)

@@ -78,18 +78,18 @@ public class A3CAgent<T> : DeepReinforcementLearningAgentBase<T>
 
         foreach (var hiddenSize in _options.PolicyHiddenLayers)
         {
-            layers.Add(new DenseLayer<T>(prevSize, hiddenSize, new TanhActivation<T>()));
+            layers.Add(new DenseLayer<T>(prevSize, hiddenSize, (IActivationFunction<T>)new TanhActivation<T>()));
             prevSize = hiddenSize;
         }
 
         // Output layer
         if (_options.IsContinuous)
         {
-            layers.Add(new DenseLayer<T>(prevSize, outputSize, new IdentityActivation<T>()));
+            layers.Add(new DenseLayer<T>(prevSize, outputSize, (IActivationFunction<T>)new IdentityActivation<T>()));
         }
         else
         {
-            layers.Add(new DenseLayer<T>(prevSize, outputSize, new SoftmaxActivation<T>()));
+            layers.Add(new DenseLayer<T>(prevSize, outputSize, (IActivationFunction<T>)new SoftmaxActivation<T>()));
         }
 
         var architecture = new NeuralNetworkArchitecture<T>(
@@ -110,11 +110,11 @@ public class A3CAgent<T> : DeepReinforcementLearningAgentBase<T>
 
         foreach (var hiddenSize in _options.ValueHiddenLayers)
         {
-            layers.Add(new DenseLayer<T>(prevSize, hiddenSize, new TanhActivation<T>()));
+            layers.Add(new DenseLayer<T>(prevSize, hiddenSize, (IActivationFunction<T>)new TanhActivation<T>()));
             prevSize = hiddenSize;
         }
 
-        layers.Add(new DenseLayer<T>(prevSize, 1, new IdentityActivation<T>()));
+        layers.Add(new DenseLayer<T>(prevSize, 1, (IActivationFunction<T>)new IdentityActivation<T>()));
 
         var architecture = new NeuralNetworkArchitecture<T>(
             inputType: InputType.OneDimensional,
@@ -254,7 +254,9 @@ public class A3CAgent<T> : DeepReinforcementLearningAgentBase<T>
             for (int t = 0; t < _options.TMax && _globalSteps < maxSteps; t++)
             {
                 var action = SelectActionWithLocalNetwork(state, localPolicy, training: true);
-                var value = localValue.Forward(state)[0];
+                var stateTensor = Tensor<T>.FromVector(state);
+                var valueTensor = localValue.Predict(stateTensor);
+                var value = valueTensor.ToVector()[0];
                 var (nextState, reward, done, info) = environment.Step(action);
 
                 trajectory.Add((state, action, reward, done, value));
@@ -282,7 +284,8 @@ public class A3CAgent<T> : DeepReinforcementLearningAgentBase<T>
 
     private Vector<T> SelectActionWithLocalNetwork(Vector<T> state, INeuralNetwork<T> policy, bool training)
     {
-        var policyOutput = policy.Forward(state);
+        var stateTensor = Tensor<T>.FromVector(state);
+        var policyOutputTensor = policy.Predict(stateTensor);
         // Simplified: reuse SelectAction logic but with local network output
         // In full implementation, would extract to shared method
         return SelectAction(state, training);
@@ -296,7 +299,9 @@ public class A3CAgent<T> : DeepReinforcementLearningAgentBase<T>
         if (trajectory.Count > 0 && !trajectory[trajectory.Count - 1].done)
         {
             var lastState = trajectory[trajectory.Count - 1].state;
-            nextValue = valueNetwork.Forward(lastState)[0];
+            var lastStateTensor = Tensor<T>.FromVector(lastState);
+            var nextValueTensor = valueNetwork.Predict(lastStateTensor);
+            nextValue = nextValueTensor.ToVector()[0];
         }
 
         T runningReturn = nextValue;
@@ -358,25 +363,31 @@ public class A3CAgent<T> : DeepReinforcementLearningAgentBase<T>
             var exp = trajectory[i];
             var advantage = advantages[i];
             var targetReturn = returns[i];
-            
+
             // Compute policy gradient
-            var policyOutput = localPolicy.Forward(exp.state);
+            var stateTensor1 = Tensor<T>.FromVector(exp.state);
+            var policyOutputTensor = localPolicy.Predict(stateTensor1);
+            var policyOutput = policyOutputTensor.ToVector();
             var policyGradient = ComputeA3CPolicyGradient(policyOutput, exp.action, advantage);
-            localPolicy.Backpropagate(policyGradient);
-            
+            var policyGradientTensor = Tensor<T>.FromVector(policyGradient);
+            ((NeuralNetwork<T>)localPolicy).Backpropagate(policyGradientTensor);
+
             // Compute value gradient
-            var predictedValue = localValue.Forward(exp.state)[0];
+            var stateTensor2 = Tensor<T>.FromVector(exp.state);
+            var predictedValueTensor = localValue.Predict(stateTensor2);
+            var predictedValue = predictedValueTensor.ToVector()[0];
             var valueDiff = NumOps.Subtract(predictedValue, targetReturn);
             var valueGradient = new Vector<T>(1);
             valueGradient[0] = NumOps.Divide(
                 NumOps.Multiply(NumOps.FromDouble(2.0), valueDiff),
                 NumOps.FromDouble(trajectory.Count));
-            localValue.Backpropagate(valueGradient);
+            var valueGradientTensor = Tensor<T>.FromVector(valueGradient);
+            ((NeuralNetwork<T>)localValue).Backpropagate(valueGradientTensor);
         }
-        
+
         // Update global networks with local gradients
-        UpdateNetworkParameters(_policyNetwork, localPolicy, _a3cOptions.PolicyLearningRate);
-        UpdateNetworkParameters(_valueNetwork, localValue, _a3cOptions.ValueLearningRate);
+        UpdateNetworkParameters(_globalPolicyNetwork, localPolicy, _options.PolicyLearningRate);
+        UpdateNetworkParameters(_globalValueNetwork, localValue, _options.ValueLearningRate);
     }
 
 
@@ -384,8 +395,8 @@ public class A3CAgent<T> : DeepReinforcementLearningAgentBase<T>
     {
         // A3C uses same policy gradient as A2C: ∇θ log π(a|s) * advantage
         // Supports both continuous (Gaussian) and discrete (Softmax) policies
-        
-        if (_a3cOptions.ActionSize == policyOutput.Length)
+
+        if (_options.ActionSize == policyOutput.Length)
         {
             // Discrete action space: softmax policy
             var softmax = ComputeSoftmax(policyOutput);
@@ -469,14 +480,14 @@ public class A3CAgent<T> : DeepReinforcementLearningAgentBase<T>
     private void UpdateNetworkParameters(INeuralNetwork<T> globalNetwork, INeuralNetwork<T> localNetwork, T learningRate)
     {
         var globalParams = globalNetwork.GetParameters();
-        var localGrads = localNetwork.GetFlattenedGradients();
-        
+        var localGrads = ((NeuralNetwork<T>)localNetwork).GetGradients();
+
         for (int i = 0; i < globalParams.Length; i++)
         {
             var update = NumOps.Multiply(learningRate, localGrads[i]);
             globalParams[i] = NumOps.Subtract(globalParams[i], update);
         }
-        
+
         globalNetwork.UpdateParameters(globalParams);
     }
 

@@ -99,16 +99,14 @@ public class TRPOAgent<T> : DeepReinforcementLearningAgentBase<T>
         // Override output layer activation for continuous vs discrete actions
         if (!_options.IsContinuous)
         {
-            // For discrete actions, replace final layer with softmax activation
-            var lastLayer = layers[layers.Count - 1];
-            if (lastLayer is DenseLayer<T> denseLayer)
-            {
-                layers[layers.Count - 1] = new DenseLayer<T>(
-                    denseLayer.GetWeights().Rows,
-                    outputSize,
-                    new SoftmaxActivation<T>()
-                );
-            }
+            // For discrete actions, use softmax activation
+            // Note: Just rebuild the last layer with correct activation
+            int lastInputSize = _options.PolicyHiddenLayers.LastOrDefault() > 0 ? _options.PolicyHiddenLayers.Last() : 128;
+            layers[layers.Count - 1] = new DenseLayer<T>(
+                lastInputSize,
+                outputSize,
+                (IActivationFunction<T>)new SoftmaxActivation<T>()
+            );
         }
 
         var architecture = new NeuralNetworkArchitecture<T>(
@@ -152,7 +150,9 @@ public class TRPOAgent<T> : DeepReinforcementLearningAgentBase<T>
 
     public override Vector<T> SelectAction(Vector<T> state, bool training = true)
     {
-        var policyOutput = _policyNetwork.Predict(state);
+        var stateTensor = Tensor<T>.FromVector(state);
+        var policyOutputTensor = _policyNetwork.Predict(stateTensor);
+        var policyOutput = policyOutputTensor.ToVector();
 
         if (_options.IsContinuous)
         {
@@ -220,7 +220,7 @@ public class TRPOAgent<T> : DeepReinforcementLearningAgentBase<T>
 
     public override void StoreExperience(Vector<T> state, Vector<T> action, T reward, Vector<T> nextState, bool done)
     {
-        _trajectoryBuffer.Add(new Experience<T>((state, action, reward, nextState, done)));
+        _trajectoryBuffer.Add((state, action, reward, nextState, done));
 
         if (_trajectoryBuffer.Count >= _options.StepsPerUpdate)
         {
@@ -257,12 +257,14 @@ public class TRPOAgent<T> : DeepReinforcementLearningAgentBase<T>
         var rewards = new List<T>();
         var values = new List<T>();
 
-        foreach (var (state, action, reward, done) in _trajectoryBuffer)
+        foreach (var (state, action, reward, nextState, done) in _trajectoryBuffer)
         {
             states.Add(state);
             actions.Add(action);
             rewards.Add(reward);
-            values.Add(_valueNetwork.Predict(state)[0]);
+            var stateTensor = Tensor<T>.FromVector(state);
+            var valueTensor = _valueNetwork.Predict(stateTensor);
+            values.Add(valueTensor.ToVector()[0]);
         }
 
         // Compute returns
@@ -324,14 +326,26 @@ public class TRPOAgent<T> : DeepReinforcementLearningAgentBase<T>
         {
             for (int i = 0; i < states.Count; i++)
             {
-                var predictedValue = _valueNetwork.Predict(states[i])[0];
+                var stateTensor = Tensor<T>.FromVector(states[i]);
+                var predictedValueTensor = _valueNetwork.Predict(stateTensor);
+                var predictedValue = predictedValueTensor.ToVector()[0];
                 var error = NumOps.Subtract(returns[i], predictedValue);
 
                 var gradient = new Vector<T>(1);
                 gradient[0] = error;
+                var gradientTensor = Tensor<T>.FromVector(gradient);
 
-                _valueNetwork.Backpropagate(gradient);
-                _valueNetwork.UpdateParameters(_options.ValueLearningRate);
+                ((NeuralNetwork<T>)_valueNetwork).Backpropagate(gradientTensor);
+
+                // Manual parameter update with learning rate
+                var valueParams = _valueNetwork.GetParameters();
+                var valueGrads = ((NeuralNetwork<T>)_valueNetwork).GetGradients();
+                for (int j = 0; j < valueParams.Length; j++)
+                {
+                    valueParams[j] = NumOps.Subtract(valueParams[j],
+                        NumOps.Multiply(_options.ValueLearningRate, valueGrads[j]));
+                }
+                _valueNetwork.UpdateParameters(valueParams);
             }
         }
     }
@@ -349,8 +363,12 @@ public class TRPOAgent<T> : DeepReinforcementLearningAgentBase<T>
             var advantage = advantages[i];
 
             // Compute policy gradient (simplified)
-            var policyOutput = _policyNetwork.Predict(states[i]);
-            var oldPolicyOutput = _oldPolicyNetwork.Predict(states[i]);
+            var stateTensor1 = Tensor<T>.FromVector(states[i]);
+            var policyOutputTensor = _policyNetwork.Predict(stateTensor1);
+            var policyOutput = policyOutputTensor.ToVector();
+            var stateTensor2 = Tensor<T>.FromVector(states[i]);
+            var oldPolicyOutputTensor = _oldPolicyNetwork.Predict(stateTensor2);
+            var oldPolicyOutput = oldPolicyOutputTensor.ToVector();
 
             // Compute KL divergence (simplified)
             var kl = ComputeKL(policyOutput, oldPolicyOutput);
@@ -364,7 +382,8 @@ public class TRPOAgent<T> : DeepReinforcementLearningAgentBase<T>
                 var weightedAdvantage = NumOps.Multiply(importanceRatio, advantage);
                 
                 var policyGradient = ComputeTRPOPolicyGradient(policyOutput, action, weightedAdvantage);
-                _policyNetwork.Backpropagate(policyGradient);
+                var policyGradientTensor = Tensor<T>.FromVector(policyGradient);
+                ((NeuralNetwork<T>)_policyNetwork).Backpropagate(policyGradientTensor);
             }
         }
     }
@@ -590,7 +609,7 @@ public class TRPOAgent<T> : DeepReinforcementLearningAgentBase<T>
     {
         return new ModelMetadata<T>
         {
-            ModelType = "TRPO",
+            ModelType = ModelType.TRPOAgent,
         };
     }
 
@@ -689,17 +708,26 @@ public class TRPOAgent<T> : DeepReinforcementLearningAgentBase<T>
     {
         var prediction = Predict(input);
         var usedLossFunction = lossFunction ?? LossFunction;
-        var loss = usedLossFunction.CalculateLoss(new Matrix<T>(new[] { prediction }), new Matrix<T>(new[] { target }));
+        var loss = usedLossFunction.CalculateLoss(prediction, target);
 
-        var gradientMatrix = usedLossFunction.CalculateDerivative(new Matrix<T>(new[] { prediction }), new Matrix<T>(new[] { target }));
-        var gradient = new Vector<T>(gradientMatrix.GetRow(0));
+        var gradient = usedLossFunction.CalculateDerivative(prediction, target);
         return gradient;
     }
 
     public override void ApplyGradients(Vector<T> gradients, T learningRate)
     {
-        _policyNetwork.Backpropagate(gradients);
-        _policyNetwork.UpdateParameters(learningRate);
+        var gradientsTensor = Tensor<T>.FromVector(gradients);
+        ((NeuralNetwork<T>)_policyNetwork).Backpropagate(gradientsTensor);
+
+        // Manual parameter update with learning rate
+        var policyParams = _policyNetwork.GetParameters();
+        var policyGrads = ((NeuralNetwork<T>)_policyNetwork).GetGradients();
+        for (int i = 0; i < policyParams.Length; i++)
+        {
+            policyParams[i] = NumOps.Subtract(policyParams[i],
+                NumOps.Multiply(learningRate, policyGrads[i]));
+        }
+        _policyNetwork.UpdateParameters(policyParams);
     }
 
     public override void SaveModel(string filepath)

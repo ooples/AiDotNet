@@ -111,11 +111,14 @@ public class SACAgent<T> : DeepReinforcementLearningAgentBase<T>
         // Output: mean and log_std for each action dimension
         layers.Add(new DenseLayer<T>(prevSize, _sacOptions.ActionSize * 2, (IActivationFunction<T>)new IdentityActivation<T>()));
 
-        var architecture = new NeuralNetworkArchitecture<T>
-        {
-            Layers = layers,
-            TaskType = NeuralNetworkTaskType.Regression
-        };
+        var architecture = new NeuralNetworkArchitecture<T>(
+            inputType: InputType.OneDimensional,
+            taskType: NeuralNetworkTaskType.Regression,
+            complexity: NetworkComplexity.Medium,
+            inputSize: _sacOptions.StateSize,
+            outputSize: _sacOptions.ActionSize * 2,
+            layers: layers
+        );
 
         return new NeuralNetwork<T>(architecture);
     }
@@ -136,11 +139,14 @@ public class SACAgent<T> : DeepReinforcementLearningAgentBase<T>
         // Output: single Q-value
         layers.Add(new DenseLayer<T>(prevSize, 1, (IActivationFunction<T>)new IdentityActivation<T>()));
 
-        var architecture = new NeuralNetworkArchitecture<T>
-        {
-            Layers = layers,
-            TaskType = NeuralNetworkTaskType.Regression
-        };
+        var architecture = new NeuralNetworkArchitecture<T>(
+            inputType: InputType.OneDimensional,
+            taskType: NeuralNetworkTaskType.Regression,
+            complexity: NetworkComplexity.Medium,
+            inputSize: inputSize,
+            outputSize: 1,
+            layers: layers
+        );
 
         return new NeuralNetwork<T>(architecture, _sacOptions.QLossFunction);
     }
@@ -148,7 +154,9 @@ public class SACAgent<T> : DeepReinforcementLearningAgentBase<T>
     /// <inheritdoc/>
     public override Vector<T> SelectAction(Vector<T> state, bool training = true)
     {
-        var policyOutput = _policyNetwork.Predict(state);
+        var stateTensor = Tensor<T>.FromVector(state);
+        var policyOutputTensor = _policyNetwork.Predict(stateTensor);
+        var policyOutput = policyOutputTensor.ToVector();
         var (action, _) = SampleAction(policyOutput, training);
         return action;
     }
@@ -204,7 +212,7 @@ public class SACAgent<T> : DeepReinforcementLearningAgentBase<T>
     /// <inheritdoc/>
     public override void StoreExperience(Vector<T> state, Vector<T> action, T reward, Vector<T> nextState, bool done)
     {
-        _replayBuffer.Add(new Experience<T>(new ReplayBuffers.Experience<T>(state, action, reward, nextState, done)));
+        _replayBuffer.Add(new ReplayBuffers.Experience<T>(state, action, reward, nextState, done));
     }
 
     /// <inheritdoc/>
@@ -256,15 +264,20 @@ public class SACAgent<T> : DeepReinforcementLearningAgentBase<T>
         foreach (var exp in batch)
         {
             // Compute target Q-value
-            var nextPolicyOutput = _policyNetwork.Predict(exp.NextState);
+            var nextStateTensor = Tensor<T>.FromVector(exp.NextState);
+            var nextPolicyOutputTensor = _policyNetwork.Predict(nextStateTensor);
+            var nextPolicyOutput = nextPolicyOutputTensor.ToVector();
             var (nextAction, nextLogProb) = SampleAction(nextPolicyOutput, training: true);
 
             // Concatenate next state and next action for Q-networks
             var nextStateAction = ConcatenateStateAction(exp.NextState, nextAction);
 
             // Target Q = min(Q1_target, Q2_target) using MathHelper
-            var q1Target = _q1TargetNetwork.Predict(nextStateAction)[0];
-            var q2Target = _q2TargetNetwork.Predict(nextStateAction)[0];
+            var nextStateActionTensor = Tensor<T>.FromVector(nextStateAction);
+            var q1TargetTensor = _q1TargetNetwork.Predict(nextStateActionTensor);
+            var q1Target = q1TargetTensor.ToVector()[0];
+            var q2TargetTensor = _q2TargetNetwork.Predict(nextStateActionTensor);
+            var q2Target = q2TargetTensor.ToVector()[0];
             var minQTarget = MathHelper.Min<T>(q1Target, q2Target);
 
             // Add entropy term
@@ -287,25 +300,31 @@ public class SACAgent<T> : DeepReinforcementLearningAgentBase<T>
             var stateAction = ConcatenateStateAction(exp.State, exp.Action);
 
             // Q1 update
-            var q1Pred = _q1Network.Predict(stateAction)[0];
+            var stateActionTensor1 = Tensor<T>.FromVector(stateAction);
+            var q1PredTensor = _q1Network.Predict(stateActionTensor1);
+            var q1Pred = q1PredTensor.ToVector()[0];
             var q1Target_vec = new Vector<T>(1) { [0] = targetQ };
             var q1Pred_vec = new Vector<T>(1) { [0] = q1Pred };
             var q1Loss = _sacOptions.QLossFunction.CalculateLoss(q1Pred_vec, q1Target_vec);
 
             // Q2 update
-            var q2Pred = _q2Network.Predict(stateAction)[0];
+            var stateActionTensor2 = Tensor<T>.FromVector(stateAction);
+            var q2PredTensor = _q2Network.Predict(stateActionTensor2);
+            var q2Pred = q2PredTensor.ToVector()[0];
             var q2Pred_vec = new Vector<T>(1) { [0] = q2Pred };
             var q2Loss = _sacOptions.QLossFunction.CalculateLoss(q2Pred_vec, q1Target_vec);
 
             totalQLoss = NumOps.Add(totalQLoss, NumOps.Add(q1Loss, q2Loss));
 
             // Backprop Q1
-            var q1Grad = _sacOptions.QLossFunction.ComputeGradient(q1Pred_vec, q1Target_vec);
-            _q1Network.Backpropagate(q1Grad);
+            var q1Grad = _sacOptions.QLossFunction.CalculateDerivative(q1Pred_vec, q1Target_vec);
+            var q1GradTensor = Tensor<T>.FromVector(q1Grad);
+            _q1Network.Backpropagate(q1GradTensor);
 
             // Backprop Q2
-            var q2Grad = _sacOptions.QLossFunction.ComputeGradient(q2Pred_vec, q1Target_vec);
-            _q2Network.Backpropagate(q2Grad);
+            var q2Grad = _sacOptions.QLossFunction.CalculateDerivative(q2Pred_vec, q1Target_vec);
+            var q2GradTensor = Tensor<T>.FromVector(q2Grad);
+            _q2Network.Backpropagate(q2GradTensor);
         }
 
         // Apply gradients to Q-networks
@@ -322,13 +341,19 @@ public class SACAgent<T> : DeepReinforcementLearningAgentBase<T>
         foreach (var exp in batch)
         {
             // Sample action from current policy
-            var policyOutput = _policyNetwork.Predict(exp.State);
+            var stateTensor = Tensor<T>.FromVector(exp.State);
+            var policyOutputTensor = _policyNetwork.Predict(stateTensor);
+            var policyOutput = policyOutputTensor.ToVector();
             var (action, logProb) = SampleAction(policyOutput, training: true);
 
             // Compute Q-values using MathHelper for min
             var stateAction = ConcatenateStateAction(exp.State, action);
-            var q1 = _q1Network.Predict(stateAction)[0];
-            var q2 = _q2Network.Predict(stateAction)[0];
+            var stateActionTensor1 = Tensor<T>.FromVector(stateAction);
+            var q1Tensor = _q1Network.Predict(stateActionTensor1);
+            var q1 = q1Tensor.ToVector()[0];
+            var stateActionTensor2 = Tensor<T>.FromVector(stateAction);
+            var q2Tensor = _q2Network.Predict(stateActionTensor2);
+            var q2 = q2Tensor.ToVector()[0];
             var minQ = MathHelper.Min<T>(q1, q2);
 
             // Policy loss: alpha * log_prob - Q
@@ -345,7 +370,8 @@ public class SACAgent<T> : DeepReinforcementLearningAgentBase<T>
             var outputGradient = ComputeSACPolicyGradient(
                 policyOutput, action, alpha, logProb, minQ);
 
-            _policyNetwork.Backpropagate(outputGradient);
+            var outputGradientTensor = Tensor<T>.FromVector(outputGradient);
+            _policyNetwork.Backpropagate(outputGradientTensor);
         }
 
         // Apply gradients to policy network
@@ -422,7 +448,9 @@ public class SACAgent<T> : DeepReinforcementLearningAgentBase<T>
 
         foreach (var exp in batch)
         {
-            var policyOutput = _policyNetwork.Predict(exp.State);
+            var stateTensor = Tensor<T>.FromVector(exp.State);
+            var policyOutputTensor = _policyNetwork.Predict(stateTensor);
+            var policyOutput = policyOutputTensor.ToVector();
             var (_, logProb) = SampleAction(policyOutput, training: true);
             totalEntropy = NumOps.Add(totalEntropy, logProb);
         }
@@ -469,7 +497,7 @@ public class SACAgent<T> : DeepReinforcementLearningAgentBase<T>
     private void UpdateNetworkParameters(NeuralNetwork<T> network, T learningRate)
     {
         var params_ = network.GetParameters();
-        var grads = network.GetFlattenedGradients();
+        var grads = network.GetGradients();
 
         for (int i = 0; i < params_.Length; i++)
         {
