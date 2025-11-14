@@ -47,6 +47,7 @@ public abstract class ReasoningStrategyBase<T> : IReasoningStrategy<T>
 {
     private readonly System.Text.StringBuilder _reasoningTrace;
     private readonly List<ITool> _tools;
+    private readonly object _traceLock = new object();
 
     /// <summary>
     /// Initializes a new instance of the <see cref="ReasoningStrategyBase{T}"/> class.
@@ -217,7 +218,10 @@ public abstract class ReasoningStrategyBase<T> : IReasoningStrategy<T>
     /// </remarks>
     protected void AppendTrace(string message)
     {
-        _reasoningTrace.AppendLine($"[{DateTime.UtcNow:HH:mm:ss.fff}] {message}");
+        lock (_traceLock)
+        {
+            _reasoningTrace.AppendLine($"[{DateTime.UtcNow:HH:mm:ss.fff}] {message}");
+        }
     }
 
     /// <summary>
@@ -230,7 +234,10 @@ public abstract class ReasoningStrategyBase<T> : IReasoningStrategy<T>
     /// </remarks>
     protected void ClearTrace()
     {
-        _reasoningTrace.Clear();
+        lock (_traceLock)
+        {
+            _reasoningTrace.Clear();
+        }
     }
 
     /// <summary>
