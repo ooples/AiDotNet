@@ -174,7 +174,7 @@ public class TD3Agent<T> : DeepReinforcementLearningAgentBase<T>
 
     public override void StoreExperience(Vector<T> state, Vector<T> action, T reward, Vector<T> nextState, bool done)
     {
-        _replayBuffer.Add(new Experience<T>(state, action, reward, nextState, done));
+        _replayBuffer.Add(new ReinforcementLearning.ReplayBuffers.Experience<T>(state, action, reward, nextState, done));
         _stepCount++;
     }
 
@@ -204,14 +204,16 @@ public class TD3Agent<T> : DeepReinforcementLearningAgentBase<T>
         return criticLoss;
     }
 
-    private T UpdateCritics(List<(Vector<T> state, Vector<T> action, T reward, Vector<T> nextState, bool done)> batch)
+    private T UpdateCritics(List<ReinforcementLearning.ReplayBuffers.Experience<T>> batch)
     {
         T totalLoss = _numOps.Zero;
 
         foreach (var experience in batch)
         {
             // Compute target Q-value with target policy smoothing
-            var nextAction = _targetActorNetwork.Predict(experience.nextState);
+            var nextStateTensor = Tensor<T>.FromVector(experience.NextState);
+            var nextActionTensor = _targetActorNetwork.Predict(nextStateTensor);
+            var nextAction = nextActionTensor.ToVector();
 
             // Add clipped noise to target action (target policy smoothing)
             for (int i = 0; i < nextAction.Length; i++)
@@ -223,16 +225,19 @@ public class TD3Agent<T> : DeepReinforcementLearningAgentBase<T>
             }
 
             // Concatenate next state and next action for critic input
-            var nextStateAction = ConcatenateStateAction(experience.nextState, nextAction);
+            var nextStateAction = ConcatenateStateAction(experience.NextState, nextAction);
 
             // Compute twin Q-targets and take minimum (clipped double Q-learning)
-            var q1Target = _targetCritic1Network.Predict(nextStateAction)[0];
-            var q2Target = _targetCritic2Network.Predict(nextStateAction)[0];
+            var nextStateActionTensor = Tensor<T>.FromVector(nextStateAction);
+            var q1TargetTensor = _targetCritic1Network.Predict(nextStateActionTensor);
+            var q2TargetTensor = _targetCritic2Network.Predict(nextStateActionTensor);
+            var q1Target = q1TargetTensor.ToVector()[0];
+            var q2Target = q2TargetTensor.ToVector()[0];
             var minQTarget = MathHelper.Min<T>(q1Target, q2Target);
 
             // Compute TD target
             T targetQ;
-            if (experience.done)
+            if (experience.Done)
             {
                 targetQ = experience.Reward;
             }
@@ -243,52 +248,84 @@ public class TD3Agent<T> : DeepReinforcementLearningAgentBase<T>
             }
 
             // Concatenate state and action for critic input
-            var stateAction = ConcatenateStateAction(experience.state, experience.Action);
+            var stateAction = ConcatenateStateAction(experience.State, experience.Action);
 
             // Update Critic 1
-            var q1Value = _critic1Network.Predict(stateAction)[0];
-            var q1Error = _numOps.Subtract(targetQ, q1Value);
-            var q1ErrorVec = new Vector<T>(1);
-            q1ErrorVec[0] = q1Error;
-            _critic1Network.Backpropagate(q1ErrorVec);
-            _critic1Network.UpdateParameters(_options.CriticLearningRate);
+            var stateActionTensor = Tensor<T>.FromVector(stateAction);
+            var q1ValueTensor = _critic1Network.Predict(stateActionTensor);
+            var q1Values = q1ValueTensor.ToVector();
+            var q1Value = q1Values[0];
+
+            // Create target vector for loss computation
+            var targetVec = new Vector<T>(1);
+            targetVec[0] = targetQ;
+
+            // Compute loss and gradients
+            var loss1 = _options.CriticLossFunction.CalculateLoss(q1Values, targetVec);
+            var gradients1 = _options.CriticLossFunction.CalculateDerivative(q1Values, targetVec);
+            var gradientsTensor1 = Tensor<T>.FromVector(gradients1);
+            _critic1Network.Backpropagate(gradientsTensor1);
+
+            // Update weights
+            var params1 = _critic1Network.GetParameters();
+            for (int i = 0; i < params1.Length; i++)
+            {
+                var update = _numOps.Multiply(_options.CriticLearningRate, gradients1[i % gradients1.Length]);
+                params1[i] = _numOps.Subtract(params1[i], update);
+            }
+            _critic1Network.UpdateParameters(params1);
 
             // Update Critic 2
-            var q2Value = _critic2Network.Predict(stateAction)[0];
-            var q2Error = _numOps.Subtract(targetQ, q2Value);
-            var q2ErrorVec = new Vector<T>(1);
-            q2ErrorVec[0] = q2Error;
-            _critic2Network.Backpropagate(q2ErrorVec);
-            _critic2Network.UpdateParameters(_options.CriticLearningRate);
+            var q2ValueTensor = _critic2Network.Predict(stateActionTensor);
+            var q2Values = q2ValueTensor.ToVector();
+            var q2Value = q2Values[0];
 
-            // Accumulate loss (MSE)
-            var loss1 = _numOps.Multiply(q1Error, q1Error);
-            var loss2 = _numOps.Multiply(q2Error, q2Error);
+            var loss2 = _options.CriticLossFunction.CalculateLoss(q2Values, targetVec);
+            var gradients2 = _options.CriticLossFunction.CalculateDerivative(q2Values, targetVec);
+            var gradientsTensor2 = Tensor<T>.FromVector(gradients2);
+            _critic2Network.Backpropagate(gradientsTensor2);
+
+            // Update weights
+            var params2 = _critic2Network.GetParameters();
+            for (int i = 0; i < params2.Length; i++)
+            {
+                var update = _numOps.Multiply(_options.CriticLearningRate, gradients2[i % gradients2.Length]);
+                params2[i] = _numOps.Subtract(params2[i], update);
+            }
+            _critic2Network.UpdateParameters(params2);
+
+            // Accumulate loss (already computed above)
             totalLoss = _numOps.Add(totalLoss, _numOps.Add(loss1, loss2));
         }
 
         return _numOps.Divide(totalLoss, _numOps.FromDouble(batch.Count * 2));
     }
 
-    private void UpdateActor(List<(Vector<T> state, Vector<T> action, T reward, Vector<T> nextState, bool done)> batch)
+    private void UpdateActor(List<ReinforcementLearning.ReplayBuffers.Experience<T>> batch)
     {
         foreach (var experience in batch)
         {
             // Compute action from current policy
-            var action = _actorNetwork.Predict(experience.state);
+            var stateTensor = Tensor<T>.FromVector(experience.State);
+            var actionTensor = _actorNetwork.Predict(stateTensor);
+            var action = actionTensor.ToVector();
 
             // Concatenate state and action
-            var stateAction = ConcatenateStateAction(experience.state, action);
+            var stateAction = ConcatenateStateAction(experience.State, action);
 
             // Compute Q-value from critic 1 (use only one critic for policy gradient)
-            var qValue = _critic1Network.Predict(stateAction)[0];
+            var stateActionTensor = Tensor<T>.FromVector(stateAction);
+            var qValueTensor = _critic1Network.Predict(stateActionTensor);
+            var qValue = qValueTensor.ToVector()[0];
 
             // Policy gradient: maximize Q-value, so negate for gradient ascent
             var policyGradient = new Vector<T>(1);
             policyGradient[0] = _numOps.Negate(qValue);
 
             // Backpropagate through critic to get gradient w.r.t. actions
-            var actionGradient = _critic1Network.Backpropagate(policyGradient);
+            var policyGradientTensor = Tensor<T>.FromVector(policyGradient);
+            var actionGradientTensor = _critic1Network.Backpropagate(policyGradientTensor);
+            var actionGradient = actionGradientTensor.ToVector();
 
             // Extract action gradients (remove state part)
             var actorGradient = new Vector<T>(_options.ActionSize);
@@ -298,8 +335,17 @@ public class TD3Agent<T> : DeepReinforcementLearningAgentBase<T>
             }
 
             // Backpropagate through actor
-            _actorNetwork.Backpropagate(actorGradient);
-            _actorNetwork.UpdateParameters(_options.ActorLearningRate);
+            var actorGradientTensor = Tensor<T>.FromVector(actorGradient);
+            _actorNetwork.Backpropagate(actorGradientTensor);
+
+            // Update actor weights
+            var actorParams = _actorNetwork.GetParameters();
+            for (int i = 0; i < actorParams.Length; i++)
+            {
+                var update = _numOps.Multiply(_options.ActorLearningRate, actorGradient[i % actorGradient.Length]);
+                actorParams[i] = _numOps.Subtract(actorParams[i], update);
+            }
+            _actorNetwork.UpdateParameters(actorParams);
         }
     }
 
@@ -312,58 +358,29 @@ public class TD3Agent<T> : DeepReinforcementLearningAgentBase<T>
 
     private void SoftUpdateNetwork(NeuralNetwork<T> source, NeuralNetwork<T> target)
     {
-        var sourceLayers = source.GetLayers();
-        var targetLayers = target.GetLayers();
+        var sourceParams = source.GetParameters();
+        var targetParams = target.GetParameters();
 
-        for (int i = 0; i < sourceLayers.Count; i++)
+        var tau = _options.TargetUpdateTau;
+        var oneMinusTau = _numOps.Subtract(_numOps.One, tau);
+
+        for (int i = 0; i < targetParams.Length; i++)
         {
-            if (sourceLayers[i] is DenseLayer<T> sourceLayer && targetLayers[i] is DenseLayer<T> targetLayer)
-            {
-                var sourceWeights = sourceLayer.GetWeights();
-                var sourceBiases = sourceLayer.GetBiases();
-                var targetWeights = targetLayer.GetWeights();
-                var targetBiases = targetLayer.GetBiases();
-
-                // θ_target = τ * θ_source + (1 - τ) * θ_target
-                var oneMinusTau = _numOps.Subtract(_numOps.One, _options.TargetUpdateTau);
-
-                for (int r = 0; r < targetWeights.Rows; r++)
-                {
-                    for (int c = 0; c < targetWeights.Columns; c++)
-                    {
-                        var sourceContribution = _numOps.Multiply(_options.TargetUpdateTau, sourceWeights[r, c]);
-                        var targetContribution = _numOps.Multiply(oneMinusTau, targetWeights[r, c]);
-                        targetWeights[r, c] = _numOps.Add(sourceContribution, targetContribution);
-                    }
-                }
-
-                for (int i = 0; i < targetBiases.Length; i++)
-                {
-                    var sourceContribution = _numOps.Multiply(_options.TargetUpdateTau, sourceBiases[i]);
-                    var targetContribution = _numOps.Multiply(oneMinusTau, targetBiases[i]);
-                    targetBiases[i] = _numOps.Add(sourceContribution, targetContribution);
-                }
-
-                targetLayer.SetWeights(targetWeights);
-                targetLayer.SetBiases(targetBiases);
-            }
+            targetParams[i] = _numOps.Add(
+                _numOps.Multiply(tau, sourceParams[i]),
+                _numOps.Multiply(oneMinusTau, targetParams[i])
+            );
         }
+
+        target.UpdateParameters(targetParams);
     }
 
     private void CopyNetworkWeights(NeuralNetwork<T> source, NeuralNetwork<T> target)
     {
-        var sourceLayers = source.GetLayers();
-        var targetLayers = target.GetLayers();
-
-        for (int i = 0; i < sourceLayers.Count; i++)
-        {
-            if (sourceLayers[i] is DenseLayer<T> sourceLayer && targetLayers[i] is DenseLayer<T> targetLayer)
-            {
-                targetLayer.SetWeights(sourceLayer.GetWeights().Clone());
-                targetLayer.SetBiases(sourceLayer.GetBiases().Clone());
-            }
-        }
+        var sourceParams = source.GetParameters();
+        target.UpdateParameters(sourceParams);
     }
+
 
     private Vector<T> ConcatenateStateAction(Vector<T> state, Vector<T> action)
     {
@@ -494,7 +511,9 @@ public class TD3Agent<T> : DeepReinforcementLearningAgentBase<T>
     public override Vector<T> ComputeGradients(
         Vector<T> input, Vector<T> target, ILossFunction<T>? lossFunction = null)
     {
-        return (GetParameters(), _numOps.Zero);
+        throw new NotSupportedException(
+            "TD3 uses actor-critic training via Train() method. " +
+            "Direct gradient computation through this interface is not applicable.");
     }
 
     /// <inheritdoc/>
