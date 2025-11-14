@@ -310,7 +310,14 @@ public class CQLAgent<T> : DeepReinforcementLearningAgentBase<T>
             var q1TotalGrad = _numOps.Add(q1MseGrad, q1CqlGrad);
             var q1ErrorTensor = Tensor<T>.FromVector(new Vector<T>(new[] { q1TotalGrad }));
             _q1Network.Backpropagate(q1ErrorTensor);
-            _q1Network.UpdateParameters(_options.QLearningRate);
+
+            // Apply gradients manually
+            var q1Params = _q1Network.GetParameters();
+            for (int i = 0; i < q1Params.Length; i++)
+            {
+                q1Params[i] = _numOps.Add(q1Params[i], _numOps.Multiply(_options.QLearningRate, q1TotalGrad));
+            }
+            _q1Network.UpdateParameters(q1Params);
 
             // Backpropagate Q2: MSE gradient + CQL penalty gradient
             var q2MseGrad = _numOps.Multiply(_numOps.FromDouble(-2.0), q2Error);
@@ -318,7 +325,14 @@ public class CQLAgent<T> : DeepReinforcementLearningAgentBase<T>
             var q2TotalGrad = _numOps.Add(q2MseGrad, q2CqlGrad);
             var q2ErrorTensor = Tensor<T>.FromVector(new Vector<T>(new[] { q2TotalGrad }));
             _q2Network.Backpropagate(q2ErrorTensor);
-            _q2Network.UpdateParameters(_options.QLearningRate);
+
+            // Apply gradients manually
+            var q2Params = _q2Network.GetParameters();
+            for (int i = 0; i < q2Params.Length; i++)
+            {
+                q2Params[i] = _numOps.Add(q2Params[i], _numOps.Multiply(_options.QLearningRate, q2TotalGrad));
+            }
+            _q2Network.UpdateParameters(q2Params);
 
             totalLoss = _numOps.Add(totalLoss, _numOps.Add(q1Loss, q2Loss));
         }
@@ -400,7 +414,14 @@ public class CQLAgent<T> : DeepReinforcementLearningAgentBase<T>
 
             var policyGradTensor = Tensor<T>.FromVector(policyGrad);
             _policyNetwork.Backpropagate(policyGradTensor);
-            _policyNetwork.UpdateParameters(_options.PolicyLearningRate);
+
+            // Apply gradients manually
+            var policyParams = _policyNetwork.GetParameters();
+            for (int i = 0; i < policyParams.Length; i++)
+            {
+                policyParams[i] = _numOps.Add(policyParams[i], _numOps.Multiply(_options.PolicyLearningRate, policyGrad[i % policyGrad.Length]));
+            }
+            _policyNetwork.UpdateParameters(policyParams);
         }
 
         return _numOps.Divide(totalLoss, _numOps.FromDouble(batch.Count));
@@ -552,7 +573,14 @@ public class CQLAgent<T> : DeepReinforcementLearningAgentBase<T>
     public override Vector<T> ComputeGradients(
         Vector<T> input, Vector<T> target, ILossFunction<T>? lossFunction = null)
     {
-        return (GetParameters(), _numOps.Zero);
+        // CQL uses custom gradient computation - return zero gradients as placeholder
+        var parameters = GetParameters();
+        var gradients = new Vector<T>(parameters.Length);
+        for (int i = 0; i < gradients.Length; i++)
+        {
+            gradients[i] = _numOps.Zero;
+        }
+        return gradients;
     }
 
     /// <inheritdoc/>

@@ -317,7 +317,7 @@ public class FeedForwardNeuralNetwork<T> : NeuralNetworkBase<T>
                 { "HiddenLayerSizes", Architecture.GetHiddenLayerSizes() },
                 { "LayerCount", Layers.Count },
                 { "LayerTypes", Layers.Select(l => l.GetType().Name).ToArray() },
-                { "TaskType", Architecture.NeuralNetworkTaskType.ToString() },
+                { "TaskType", Architecture.TaskType.ToString() },
                 { "ParameterCount", GetParameterCount() }
             },
             ModelData = this.Serialize()

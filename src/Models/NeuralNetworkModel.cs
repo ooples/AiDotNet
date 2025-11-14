@@ -666,7 +666,7 @@ public class NeuralNetworkModel<T> : IFullModel<T, Tensor<T>, Tensor<T>>
                 { "LayerSizes", layerSizes },
                 { "InputShape", Architecture.GetInputShape() },
                 { "OutputShape", Architecture.GetOutputShape() },
-                { "TaskType", Architecture.NeuralNetworkTaskType.ToString() },
+                { "TaskType", Architecture.TaskType.ToString() },
                 { "InputType", Architecture.InputType.ToString() },
                 { "HiddenLayerCount", Architecture.GetHiddenLayerSizes().Length },
                 { "ParameterCount", Network.GetParameterCount() },

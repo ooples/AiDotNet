@@ -506,7 +506,7 @@ public class REINFORCEAgent<T> : DeepReinforcementLearningAgentBase<T>
         // Find the index of the action (assumes one-hot encoding or argmax)
         for (int i = 0; i < action.Length; i++)
         {
-            if (NumOps.Compare(action[i], NumOps.FromDouble(0.5)) > 0)
+            if (NumOps.GreaterThan(action[i], NumOps.FromDouble(0.5)))
                 return i;
         }
         return 0;

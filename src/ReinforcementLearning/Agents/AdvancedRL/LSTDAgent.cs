@@ -165,7 +165,7 @@ public class LSTDAgent<T> : ReinforcementLearningAgentBase<T>
             T maxVal = augmented[k, k];
             for (int i = k + 1; i < n; i++)
             {
-                if (NumOps.Compare(NumOps.Abs(augmented[i, k]), NumOps.Abs(maxVal)) > 0)
+                if (NumOps.GreaterThan(NumOps.Abs(augmented[i, k]), NumOps.Abs(maxVal)))
                 {
                     maxVal = augmented[i, k];
                     maxRow = i;
@@ -311,8 +311,20 @@ public class LSTDAgent<T> : ReinforcementLearningAgentBase<T>
     {
         var pred = Predict(input);
         var lf = lossFunction ?? LossFunction;
-        var loss = lf.CalculateLoss(new Matrix<T>(new[] { pred }), new Matrix<T>(new[] { target }));
-        var grad = lf.CalculateDerivative(new Matrix<T>(new[] { pred }), new Matrix<T>(new[] { target }));
+        
+        // CalculateLoss and CalculateDerivative expect Matrix<T>, so wrap Vectors
+        var predMatrix = new Matrix<T>(new[] { pred });
+        var targetMatrix = new Matrix<T>(new[] { target });
+        
+        var loss = lf.CalculateLoss(predMatrix, targetMatrix);
+        var gradMatrix = lf.CalculateDerivative(predMatrix, targetMatrix);
+        
+        // Extract first row as Vector
+        var grad = new Vector<T>(gradMatrix.Cols);
+        for (int i = 0; i < gradMatrix.Cols; i++)
+        {
+            grad[i] = gradMatrix[0, i];
+        }
         return grad;
     }
 

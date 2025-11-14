@@ -297,20 +297,12 @@ public abstract class ReinforcementLearningAgentBase<T> : IRLAgent<T>, IDisposab
     /// <returns>Dictionary of metric names to values.</returns>
     public virtual Dictionary<string, T> GetMetrics()
     {
-        // Use Skip/Take instead of TakeLast for net462 compatibility
-        var recentLosses = LossHistory.Count > 0
-            ? LossHistory.Skip(Math.Max(0, LossHistory.Count - 100)).Take(100)
-            : Enumerable.Empty<T>();
-        var recentRewards = RewardHistory.Count > 0
-            ? RewardHistory.Skip(Math.Max(0, RewardHistory.Count - 100)).Take(100)
-            : Enumerable.Empty<T>();
-
         return new Dictionary<string, T>
         {
             { "TrainingSteps", NumOps.FromDouble(TrainingSteps) },
             { "Episodes", NumOps.FromDouble(Episodes) },
-            { "AverageLoss", LossHistory.Count > 0 ? ComputeAverage(recentLosses) : NumOps.Zero },
-            { "AverageReward", RewardHistory.Count > 0 ? ComputeAverage(recentRewards) : NumOps.Zero }
+            { "AverageLoss", LossHistory.Count > 0 ? ComputeAverage(LossHistory.TakeLast(100)) : NumOps.Zero },
+            { "AverageReward", RewardHistory.Count > 0 ? ComputeAverage(RewardHistory.TakeLast(100)) : NumOps.Zero }
         };
     }
 
@@ -348,17 +340,17 @@ public class ReinforcementLearningOptions<T>
     /// <summary>
     /// Learning rate for gradient updates.
     /// </summary>
-    public required T LearningRate { get; init; }
+    public T LearningRate { get; init; }
 
     /// <summary>
     /// Discount factor (gamma) for future rewards.
     /// </summary>
-    public required T DiscountFactor { get; init; }
+    public T DiscountFactor { get; init; }
 
     /// <summary>
     /// Loss function to use for training.
     /// </summary>
-    public required ILossFunction<T> LossFunction { get; init; }
+    public ILossFunction<T> LossFunction { get; init; }
 
     /// <summary>
     /// Random seed for reproducibility (optional).

@@ -321,7 +321,7 @@ public class NeuralNetwork<T> : NeuralNetworkBase<T>
                 { "LayerTypes", layerCounts },
                 { "LayerSizes", layerSizes },
                 { "HiddenLayerSizes", Architecture.GetHiddenLayerSizes() },
-                { "TaskType", Architecture.NeuralNetworkTaskType.ToString() }
+                { "TaskType", Architecture.TaskType.ToString() }
             },
             ModelData = this.Serialize()
         };

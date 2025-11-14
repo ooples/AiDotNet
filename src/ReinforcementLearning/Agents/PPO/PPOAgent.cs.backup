@@ -104,14 +104,11 @@ public class PPOAgent<T> : DeepReinforcementLearningAgentBase<T>
             layers.Add(new DenseLayer<T>(prevSize, _ppoOptions.ActionSize, (IActivationFunction<T>)new IdentityActivation<T>()));
         }
 
-        int finalOutputSize = _ppoOptions.IsContinuous ? _ppoOptions.ActionSize * 2 : _ppoOptions.ActionSize;
-        var architecture = new NeuralNetworkArchitecture<T>(
-            inputType: InputType.OneDimensional,
-            taskType: NeuralNetworkTaskType.Regression,
-            complexity: NetworkComplexity.Medium,
-            inputSize: _ppoOptions.StateSize,
-            outputSize: finalOutputSize,
-            layers: layers);
+        var architecture = new NeuralNetworkArchitecture<T>
+        {
+            Layers = layers,
+            TaskType = NeuralNetworkTaskType.Regression
+        };
 
         return new NeuralNetwork<T>(architecture);
     }
@@ -131,13 +128,11 @@ public class PPOAgent<T> : DeepReinforcementLearningAgentBase<T>
         // Output layer (single value)
         layers.Add(new DenseLayer<T>(prevSize, 1, (IActivationFunction<T>)new IdentityActivation<T>()));
 
-        var architecture = new NeuralNetworkArchitecture<T>(
-            inputType: InputType.OneDimensional,
-            taskType: NeuralNetworkTaskType.Regression,
-            complexity: NetworkComplexity.Medium,
-            inputSize: _ppoOptions.StateSize,
-            outputSize: 1,
-            layers: layers);
+        var architecture = new NeuralNetworkArchitecture<T>
+        {
+            Layers = layers,
+            TaskType = NeuralNetworkTaskType.Regression
+        };
 
         return new NeuralNetwork<T>(architecture, _ppoOptions.ValueLossFunction);
     }
@@ -145,9 +140,7 @@ public class PPOAgent<T> : DeepReinforcementLearningAgentBase<T>
     /// <inheritdoc/>
     public override Vector<T> SelectAction(Vector<T> state, bool training = true)
     {
-        var stateTensor = Tensor<T>.FromVector(state);
-        var policyOutputTensor = _policyNetwork.Predict(stateTensor);
-        var policyOutput = policyOutputTensor.ToVector();
+        var policyOutput = _policyNetwork.Predict(state);
 
         if (_ppoOptions.IsContinuous)
         {
@@ -215,9 +208,7 @@ public class PPOAgent<T> : DeepReinforcementLearningAgentBase<T>
     public override void StoreExperience(Vector<T> state, Vector<T> action, T reward, Vector<T> nextState, bool done)
     {
         // Get value estimate for current state
-        var stateTensor = Tensor<T>.FromVector(state);
-        var valueOutputTensor = _valueNetwork.Predict(stateTensor);
-        var valueOutput = valueOutputTensor.ToVector();
+        var valueOutput = _valueNetwork.Predict(state);
         var value = valueOutput[0];
 
         // Get log probability of action
@@ -228,9 +219,7 @@ public class PPOAgent<T> : DeepReinforcementLearningAgentBase<T>
 
     private T ComputeLogProb(Vector<T> state, Vector<T> action)
     {
-        var stateTensor = Tensor<T>.FromVector(state);
-        var policyOutputTensor = _policyNetwork.Predict(stateTensor);
-        var policyOutput = policyOutputTensor.ToVector();
+        var policyOutput = _policyNetwork.Predict(state);
 
         if (_ppoOptions.IsContinuous)
         {
@@ -412,9 +401,7 @@ public class PPOAgent<T> : DeepReinforcementLearningAgentBase<T>
             policyLoss = NumOps.Subtract(policyLoss, minSurr);  // Negative for gradient ascent
 
             // Value loss
-            var stateTensor = Tensor<T>.FromVector(state);
-            var valueOutputTensor = _valueNetwork.Predict(stateTensor);
-            var valueOutput = valueOutputTensor.ToVector();
+            var valueOutput = _valueNetwork.Predict(state);
             var predictedValue = valueOutput[0];
             var valueDiff = NumOps.Subtract(predictedValue, targetReturn);
             valueLoss = NumOps.Add(valueLoss, NumOps.Multiply(valueDiff, valueDiff));
@@ -447,9 +434,7 @@ public class PPOAgent<T> : DeepReinforcementLearningAgentBase<T>
 
     private T ComputeEntropy(Vector<T> state)
     {
-        var stateTensor = Tensor<T>.FromVector(state);
-        var policyOutputTensor = _policyNetwork.Predict(stateTensor);
-        var policyOutput = policyOutputTensor.ToVector();
+        var policyOutput = _policyNetwork.Predict(state);
 
         if (_ppoOptions.IsContinuous)
         {
@@ -500,8 +485,7 @@ public class PPOAgent<T> : DeepReinforcementLearningAgentBase<T>
             var advantage = _trajectory.Advantages![idx];
 
             // Forward pass
-            var stateTensor = Tensor<T>.FromVector(state);
-            _policyNetwork.Predict(stateTensor);
+            _policyNetwork.Predict(state);
 
             // Backward pass (simplified)
             var gradOutput = action.Clone();
@@ -510,12 +494,11 @@ public class PPOAgent<T> : DeepReinforcementLearningAgentBase<T>
                 gradOutput[i] = NumOps.Multiply(gradOutput[i], advantage);
             }
 
-            var gradTensor = Tensor<T>.FromVector(gradOutput);
-            _policyNetwork.Backpropagate(gradTensor);
+            _policyNetwork.Backpropagate(gradOutput);
         }
 
         // Apply gradients
-        var grads = _policyNetwork.GetParameters();
+        var grads = _policyNetwork.GetFlattenedGradients();
         for (int i = 0; i < params_.Length; i++)
         {
             var update = NumOps.Multiply(_ppoOptions.PolicyLearningRate, grads[i]);
@@ -535,21 +518,17 @@ public class PPOAgent<T> : DeepReinforcementLearningAgentBase<T>
             var state = _trajectory.States[idx];
             var targetReturn = _trajectory.Returns![idx];
 
-            var stateTensor = Tensor<T>.FromVector(state);
-            var valueOutputTensor = _valueNetwork.Predict(stateTensor);
-            var valueOutput = valueOutputTensor.ToVector();
+            var valueOutput = _valueNetwork.Predict(state);
             var predicted = valueOutput[0];
 
             var target = new Vector<T>(1);
             target[0] = targetReturn;
 
-            // Convert to vectors for loss function
-            var gradientVector = _ppoOptions.ValueLossFunction.CalculateDerivative(valueOutput, target);
-            var gradTensor = Tensor<T>.FromVector(gradientVector);
-            _valueNetwork.Backpropagate(gradTensor);
+            var grad = _ppoOptions.ValueLossFunction.ComputeGradient(valueOutput, target);
+            _valueNetwork.Backpropagate(grad);
         }
 
-        var grads = _valueNetwork.GetParameters();
+        var grads = _valueNetwork.GetFlattenedGradients();
         for (int i = 0; i < params_.Length; i++)
         {
             var update = NumOps.Multiply(_ppoOptions.ValueLearningRate, grads[i]);
