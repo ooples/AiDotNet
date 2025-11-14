@@ -46,16 +46,16 @@ public class DreamerAgent<T> : DeepReinforcementLearningAgentBase<T>
     private IOptimizer<T, Vector<T>, Vector<T>> _optimizer;
 
     // World model components
-    private INeuralNetwork<T> _representationNetwork;  // Observation -> latent state
-    private INeuralNetwork<T> _dynamicsNetwork;  // (latent state, action) -> next latent state
-    private INeuralNetwork<T> _rewardNetwork;  // latent state -> reward
-    private INeuralNetwork<T> _continueNetwork;  // latent state -> continue probability
+    private NeuralNetwork<T> _representationNetwork;  // Observation -> latent state
+    private NeuralNetwork<T> _dynamicsNetwork;  // (latent state, action) -> next latent state
+    private NeuralNetwork<T> _rewardNetwork;  // latent state -> reward
+    private NeuralNetwork<T> _continueNetwork;  // latent state -> continue probability
 
     // Actor-critic for policy learning
-    private INeuralNetwork<T> _actorNetwork;
-    private INeuralNetwork<T> _valueNetwork;
+    private NeuralNetwork<T> _actorNetwork;
+    private NeuralNetwork<T> _valueNetwork;
 
-    private UniformReplayBuffer<T> _replayBuffer;
+    private ReplayBuffers.UniformReplayBuffer<T> _replayBuffer;
     private int _updateCount;
 
     public DreamerAgent(DreamerOptions<T> options, IOptimizer<T, Vector<T>, Vector<T>>? optimizer = null)
@@ -89,56 +89,51 @@ public class DreamerAgent<T> : DeepReinforcementLearningAgentBase<T>
         _valueNetwork = CreateEncoderNetwork(_options.LatentSize, 1);
 
         // Initialize replay buffer
-        _replayBuffer = new UniformReplayBuffer<T>(_options.ReplayBufferSize, _options.Seed);
+        _replayBuffer = new ReplayBuffers.UniformReplayBuffer<T>(_options.ReplayBufferSize, _options.Seed);
     }
 
     private NeuralNetwork<T> CreateEncoderNetwork(int inputSize, int outputSize)
     {
-        var network = new NeuralNetwork<T>();
-        int previousSize = inputSize;
+        var architecture = new NeuralNetworkArchitecture<T>(inputSize, outputSize, NetworkComplexity.Medium);
+        var network = new NeuralNetwork<T>(architecture, new MeanSquaredErrorLoss<T>());
 
         for (int i = 0; i < 2; i++)
         {
-            network.AddLayer(new DenseLayer<T>(previousSize, _options.HiddenSize, (IActivationFunction<T>?)null));
-            network.AddLayer(new ActivationLayer<T>(new ReLUActivation<T>()));
-            previousSize = _options.HiddenSize;
+            network.AddLayer(LayerType.Dense, _options.HiddenSize, ActivationFunction.ReLU);
         }
 
-        network.AddLayer(new DenseLayer<T>(previousSize, outputSize, (IActivationFunction<T>?)null));
+        network.AddLayer(LayerType.Dense, outputSize, ActivationFunction.Linear);
 
         return network;
     }
 
     private NeuralNetwork<T> CreateActorNetwork()
     {
-        var network = new NeuralNetwork<T>();
-        int previousSize = _options.LatentSize;
+        var architecture = new NeuralNetworkArchitecture<T>(_options.LatentSize, _options.ActionSize, NetworkComplexity.Medium);
+        var network = new NeuralNetwork<T>(architecture, new MeanSquaredErrorLoss<T>());
 
         for (int i = 0; i < 2; i++)
         {
-            network.AddLayer(new DenseLayer<T>(previousSize, _options.HiddenSize, (IActivationFunction<T>?)null));
-            network.AddLayer(new ActivationLayer<T>(new ReLUActivation<T>()));
-            previousSize = _options.HiddenSize;
+            network.AddLayer(LayerType.Dense, _options.HiddenSize, ActivationFunction.ReLU);
         }
 
-        network.AddLayer(new DenseLayer<T>(previousSize, _options.ActionSize, (IActivationFunction<T>?)null));
-        network.AddLayer(new ActivationLayer<T>(new TanhActivation<T>()));
+        network.AddLayer(LayerType.Dense, _options.ActionSize, ActivationFunction.Tanh);
 
         return network;
     }
 
     private void InitializeReplayBuffer()
     {
-        _replayBuffer = new UniformReplayBuffer<T>(_options.ReplayBufferSize);
+        _replayBuffer = new ReplayBuffers.UniformReplayBuffer<T>(_options.ReplayBufferSize);
     }
 
     public override Vector<T> SelectAction(Vector<T> observation, bool training = true)
     {
         // Encode observation to latent state
-        var latentState = _representationNetwork.Predict(observation);
+        var latentState = _representationNetwork.Predict(Tensor<T>.FromVector(observation)).ToVector();
 
         // Select action from policy
-        var action = _actorNetwork.Predict(latentState);
+        var action = _actorNetwork.Predict(Tensor<T>.FromVector(latentState)).ToVector();
 
         if (training)
         {
@@ -156,7 +151,7 @@ public class DreamerAgent<T> : DeepReinforcementLearningAgentBase<T>
 
     public override void StoreExperience(Vector<T> observation, Vector<T> action, T reward, Vector<T> nextObservation, bool done)
     {
-        _replayBuffer.Add(new Experience<T>(observation, action, reward, nextObservation, done));
+        _replayBuffer.Add(new ReplayBuffers.Experience<T>(observation, action, reward, nextObservation, done));
     }
 
     public override T Train()
@@ -179,19 +174,19 @@ public class DreamerAgent<T> : DeepReinforcementLearningAgentBase<T>
         return NumOps.Add(worldModelLoss, policyLoss);
     }
 
-    private T TrainWorldModel(List<(Vector<T> observation, Vector<T> action, T reward, Vector<T> nextObservation, bool done)> batch)
+    private T TrainWorldModel(List<ReplayBuffers.Experience<T>> batch)
     {
         T totalLoss = NumOps.Zero;
 
         foreach (var experience in batch)
         {
             // Encode observations to latent states
-            var latentState = _representationNetwork.Predict(experience.State);
-            var nextLatentState = _representationNetwork.Predict(experience.NextState);
+            var latentState = _representationNetwork.Predict(Tensor<T>.FromVector(experience.State)).ToVector();
+            var nextLatentState = _representationNetwork.Predict(Tensor<T>.FromVector(experience.NextState)).ToVector();
 
             // Predict next latent from dynamics model
             var dynamicsInput = ConcatenateVectors(latentState, experience.Action);
-            var predictedNextLatent = _dynamicsNetwork.Predict(dynamicsInput);
+            var predictedNextLatent = _dynamicsNetwork.Predict(Tensor<T>.FromVector(dynamicsInput)).ToVector();
 
             // Dynamics loss: predict next latent state
             T dynamicsLoss = NumOps.Zero;
@@ -202,13 +197,13 @@ public class DreamerAgent<T> : DeepReinforcementLearningAgentBase<T>
             }
 
             // Reward prediction loss
-            var predictedReward = _rewardNetwork.Predict(latentState)[0];
+            var predictedReward = _rewardNetwork.Predict(Tensor<T>.FromVector(latentState)).ToVector()[0];
             var rewardDiff = NumOps.Subtract(experience.Reward, predictedReward);
             var rewardLoss = NumOps.Multiply(rewardDiff, rewardDiff);
 
             // Continue prediction loss (done = 0, continue = 1)
-            var continueTarget = experience.done ? NumOps.Zero : NumOps.One;
-            var predictedContinue = _continueNetwork.Predict(latentState)[0];
+            var continueTarget = experience.Done ? NumOps.Zero : NumOps.One;
+            var predictedContinue = _continueNetwork.Predict(Tensor<T>.FromVector(latentState)).ToVector()[0];
             var continueDiff = NumOps.Subtract(continueTarget, predictedContinue);
             var continueLoss = NumOps.Multiply(continueDiff, continueDiff);
 
@@ -223,18 +218,21 @@ public class DreamerAgent<T> : DeepReinforcementLearningAgentBase<T>
                 gradient[i] = NumOps.Subtract(predictedNextLatent[i], nextLatentState[i]);
             }
 
-            _dynamicsNetwork.Backpropagate(gradient);
-            _dynamicsNetwork.UpdateParameters(_options.LearningRate);
+            _dynamicsNetwork.Backpropagate(Tensor<T>.FromVector(gradient));
+            var dynamicsParams = _dynamicsNetwork.GetParameters();
+            _dynamicsNetwork.UpdateParameters(dynamicsParams);
 
             var rewardGradient = new Vector<T>(1);
             rewardGradient[0] = rewardDiff;
-            _rewardNetwork.Backpropagate(rewardGradient);
-            _rewardNetwork.UpdateParameters(_options.LearningRate);
+            _rewardNetwork.Backpropagate(Tensor<T>.FromVector(rewardGradient));
+            var rewardParams = _rewardNetwork.GetParameters();
+            _rewardNetwork.UpdateParameters(rewardParams);
 
             var continueGradient = new Vector<T>(1);
             continueGradient[0] = continueDiff;
-            _continueNetwork.Backpropagate(continueGradient);
-            _continueNetwork.UpdateParameters(_options.LearningRate);
+            _continueNetwork.Backpropagate(Tensor<T>.FromVector(continueGradient));
+            var continueParams = _continueNetwork.GetParameters();
+            _continueNetwork.UpdateParameters(continueParams);
         }
 
         return NumOps.Divide(totalLoss, NumOps.FromDouble(batch.Count));
@@ -255,31 +253,33 @@ public class DreamerAgent<T> : DeepReinforcementLearningAgentBase<T>
 
         foreach (var experience in batch)
         {
-            var latentState = _representationNetwork.Predict(experience.State);
+            var latentState = _representationNetwork.Predict(Tensor<T>.FromVector(experience.State)).ToVector();
 
             // Imagine future trajectory
             var imaginedReturns = ImagineTrajectory(latentState);
 
             // Update value network
-            var predictedValue = _valueNetwork.Predict(latentState)[0];
+            var predictedValue = _valueNetwork.Predict(Tensor<T>.FromVector(latentState)).ToVector()[0];
             var valueDiff = NumOps.Subtract(imaginedReturns, predictedValue);
             var valueLoss = NumOps.Multiply(valueDiff, valueDiff);
 
             var valueGradient = new Vector<T>(1);
             valueGradient[0] = valueDiff;
-            _valueNetwork.Backpropagate(valueGradient);
-            _valueNetwork.UpdateParameters(_options.LearningRate);
+            _valueNetwork.Backpropagate(Tensor<T>.FromVector(valueGradient));
+            var valueParams = _valueNetwork.GetParameters();
+            _valueNetwork.UpdateParameters(valueParams);
 
             // Update actor to maximize value
-            var action = _actorNetwork.Predict(latentState);
+            var action = _actorNetwork.Predict(Tensor<T>.FromVector(latentState)).ToVector();
             var actorGradient = new Vector<T>(action.Length);
             for (int i = 0; i < actorGradient.Length; i++)
             {
                 actorGradient[i] = NumOps.Divide(valueDiff, NumOps.FromDouble(action.Length));
             }
 
-            _actorNetwork.Backpropagate(actorGradient);
-            _actorNetwork.UpdateParameters(_options.LearningRate);
+            _actorNetwork.Backpropagate(Tensor<T>.FromVector(actorGradient));
+            var actorParams = _actorNetwork.GetParameters();
+            _actorNetwork.UpdateParameters(actorParams);
 
             totalLoss = NumOps.Add(totalLoss, valueLoss);
         }
@@ -296,19 +296,19 @@ public class DreamerAgent<T> : DeepReinforcementLearningAgentBase<T>
         for (int step = 0; step < _options.ImaginationHorizon; step++)
         {
             // Select action
-            var action = _actorNetwork.Predict(latentState);
+            var action = _actorNetwork.Predict(Tensor<T>.FromVector(latentState)).ToVector();
 
             // Predict reward
-            var reward = _rewardNetwork.Predict(latentState)[0];
+            var reward = _rewardNetwork.Predict(Tensor<T>.FromVector(latentState)).ToVector()[0];
             imaginedReturn = NumOps.Add(imaginedReturn, reward);
 
             // Predict next latent state
             var dynamicsInput = ConcatenateVectors(latentState, action);
-            latentState = _dynamicsNetwork.Predict(dynamicsInput);
+            latentState = _dynamicsNetwork.Predict(Tensor<T>.FromVector(dynamicsInput)).ToVector();
 
             // Check if episode continues
-            var continueProb = _continueNetwork.Predict(latentState)[0];
-            if (NumOps.Compare(continueProb, NumOps.FromDouble(0.5)) < 0)
+            var continueProb = _continueNetwork.Predict(Tensor<T>.FromVector(latentState)).ToVector()[0];
+            if (NumOps.ToDouble(continueProb) < 0.5)
             {
                 break;
             }
@@ -365,7 +365,7 @@ public class DreamerAgent<T> : DeepReinforcementLearningAgentBase<T>
     {
         return new ModelMetadata<T>
         {
-            ModelType = "Dreamer",
+            ModelType = ModelType.ReinforcementLearning,
         };
     }
 
@@ -434,16 +434,17 @@ public class DreamerAgent<T> : DeepReinforcementLearningAgentBase<T>
         var usedLossFunction = lossFunction ?? LossFunction;
         var loss = usedLossFunction.CalculateLoss(prediction, target);
 
-        var gradient = usedLossFunction.ComputeGradient(prediction, target);
+        var gradient = usedLossFunction.CalculateDerivative(prediction, target);
         return gradient;
     }
 
     public override void ApplyGradients(Vector<T> gradients, T learningRate)
     {
-        if (Networks.Count > 0)
+        if (Networks.Count > 0 && Networks[0] is NeuralNetwork<T> network)
         {
-            Networks[0].Backpropagate(gradients);
-            Networks[0].UpdateParameters(learningRate);
+            network.Backpropagate(Tensor<T>.FromVector(gradients));
+            var networkParams = network.GetParameters();
+            network.UpdateParameters(networkParams);
         }
     }
 
