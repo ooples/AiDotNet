@@ -8,6 +8,7 @@ using AiDotNet.NeuralNetworks.Layers;
 using AiDotNet.ActivationFunctions;
 using AiDotNet.ReinforcementLearning.ReplayBuffers;
 using AiDotNet.Helpers;
+using AiDotNet.Enums;
 
 namespace AiDotNet.ReinforcementLearning.Agents.DDPG;
 
@@ -114,11 +115,13 @@ public class DDPGAgent<T> : DeepReinforcementLearningAgentBase<T>
         // Output layer with tanh activation to bound actions to [-1, 1]
         layers.Add(new DenseLayer<T>(prevSize, _options.ActionSize, (IActivationFunction<T>)new TanhActivation<T>()));
 
-        var architecture = new NeuralNetworkArchitecture<T>
-        {
-            Layers = layers,
-            TaskType = NeuralNetworkTaskType.Regression
-        };
+        var architecture = new NeuralNetworkArchitecture<T>(
+            inputType: InputType.OneDimensional,
+            taskType: NeuralNetworkTaskType.Regression,
+            inputSize: _options.StateSize,
+            outputSize: _options.ActionSize,
+            layers: layers
+        );
 
         return new NeuralNetwork<T>(architecture);
     }
@@ -139,11 +142,13 @@ public class DDPGAgent<T> : DeepReinforcementLearningAgentBase<T>
         // Output single Q-value
         layers.Add(new DenseLayer<T>(prevSize, 1, (IActivationFunction<T>)new LinearActivation<T>()));
 
-        var architecture = new NeuralNetworkArchitecture<T>
-        {
-            Layers = layers,
-            TaskType = NeuralNetworkTaskType.Regression
-        };
+        var architecture = new NeuralNetworkArchitecture<T>(
+            inputType: InputType.OneDimensional,
+            taskType: NeuralNetworkTaskType.Regression,
+            inputSize: inputSize,
+            outputSize: 1,
+            layers: layers
+        );
 
         return new NeuralNetwork<T>(architecture, _options.CriticLossFunction);
     }
@@ -151,7 +156,9 @@ public class DDPGAgent<T> : DeepReinforcementLearningAgentBase<T>
     /// <inheritdoc/>
     public override Vector<T> SelectAction(Vector<T> state, bool training = true)
     {
-        var action = _actorNetwork.Predict(state);
+        var stateTensor = Tensor<T>.FromVector(state);
+        var actionTensor = _actorNetwork.Predict(stateTensor);
+        var action = actionTensor.ToVector();
 
         if (training)
         {
@@ -173,7 +180,7 @@ public class DDPGAgent<T> : DeepReinforcementLearningAgentBase<T>
     /// <inheritdoc/>
     public override void StoreExperience(Vector<T> state, Vector<T> action, T reward, Vector<T> nextState, bool done)
     {
-        _replayBuffer.Add(new Experience<T>(state, action, reward, nextState, done));
+        _replayBuffer.Add(new ReplayBuffers.Experience<T>(state, action, reward, nextState, done));
     }
 
     /// <inheritdoc/>
@@ -211,9 +218,13 @@ public class DDPGAgent<T> : DeepReinforcementLearningAgentBase<T>
         foreach (var exp in batch)
         {
             // Compute target Q-value
-            var nextAction = _actorTargetNetwork.Predict(exp.NextState);
+            var nextStateTensor = Tensor<T>.FromVector(exp.NextState);
+            var nextActionTensor = _actorTargetNetwork.Predict(nextStateTensor);
+            var nextAction = nextActionTensor.ToVector();
             var nextStateAction = ConcatenateStateAction(exp.NextState, nextAction);
-            var nextQ = _criticTargetNetwork.Predict(nextStateAction)[0];
+            var nextStateActionTensor = Tensor<T>.FromVector(nextStateAction);
+            var nextQTensor = _criticTargetNetwork.Predict(nextStateActionTensor);
+            var nextQ = nextQTensor.ToVector()[0];
 
             T targetQ;
             if (exp.Done)
@@ -227,7 +238,9 @@ public class DDPGAgent<T> : DeepReinforcementLearningAgentBase<T>
 
             // Compute current Q-value
             var stateAction = ConcatenateStateAction(exp.State, exp.Action);
-            var currentQ = _criticNetwork.Predict(stateAction)[0];
+            var stateActionTensor = Tensor<T>.FromVector(stateAction);
+            var currentQTensor = _criticNetwork.Predict(stateActionTensor);
+            var currentQ = currentQTensor.ToVector()[0];
 
             // Compute loss
             var target = new Vector<T>(1) { [0] = targetQ };
@@ -253,11 +266,15 @@ public class DDPGAgent<T> : DeepReinforcementLearningAgentBase<T>
         foreach (var exp in batch)
         {
             // Compute action from actor
-            var action = _actorNetwork.Predict(exp.State);
+            var stateTensor = Tensor<T>.FromVector(exp.State);
+            var actionTensor = _actorNetwork.Predict(stateTensor);
+            var action = actionTensor.ToVector();
 
             // Compute Q-value for this action
             var stateAction = ConcatenateStateAction(exp.State, action);
-            var q = _criticNetwork.Predict(stateAction)[0];
+            var stateActionTensor = Tensor<T>.FromVector(stateAction);
+            var qTensor = _criticNetwork.Predict(stateActionTensor);
+            var q = qTensor.ToVector()[0];
 
             // Actor loss is negative Q-value (we want to maximize Q)
             totalLoss = NumOps.Subtract(totalLoss, q);

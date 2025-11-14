@@ -8,6 +8,7 @@ using AiDotNet.NeuralNetworks.Layers;
 using AiDotNet.ActivationFunctions;
 using AiDotNet.ReinforcementLearning.ReplayBuffers;
 using AiDotNet.Helpers;
+using AiDotNet.Enums;
 
 namespace AiDotNet.ReinforcementLearning.Agents.TD3;
 
@@ -54,7 +55,7 @@ public class TD3Agent<T> : DeepReinforcementLearningAgentBase<T>
     private int _stepCount;
     private int _updateCount;
 
-    public TD3Agent(TD3Options<T> options) : base(options.StateSize, options.ActionSize)
+    public TD3Agent(TD3Options<T> options) : base(CreateBaseOptions(options))
     {
         _options = options;
         _numOps = MathHelper.GetNumericOperations<T>();
@@ -62,12 +63,7 @@ public class TD3Agent<T> : DeepReinforcementLearningAgentBase<T>
         _stepCount = 0;
         _updateCount = 0;
 
-        InitializeNetworks();
-        InitializeReplayBuffer();
-    }
-
-    private void InitializeNetworks()
-    {
+        // Initialize networks directly in constructor
         // Actor network: state -> action
         _actorNetwork = CreateActorNetwork();
         _targetActorNetwork = CreateActorNetwork();
@@ -81,52 +77,86 @@ public class TD3Agent<T> : DeepReinforcementLearningAgentBase<T>
 
         CopyNetworkWeights(_critic1Network, _targetCritic1Network);
         CopyNetworkWeights(_critic2Network, _targetCritic2Network);
+
+        // Initialize replay buffer
+        _replayBuffer = new UniformReplayBuffer<T>(_options.ReplayBufferSize, _options.Seed);
+    }
+
+    private static ReinforcementLearningOptions<T> CreateBaseOptions(TD3Options<T> options)
+    {
+        if (options == null)
+        {
+            throw new ArgumentNullException(nameof(options));
+        }
+
+        return new ReinforcementLearningOptions<T>
+        {
+            LearningRate = options.ActorLearningRate,
+            DiscountFactor = options.DiscountFactor,
+            LossFunction = new MeanSquaredErrorLoss<T>(),
+            Seed = options.Seed,
+            BatchSize = options.BatchSize,
+            ReplayBufferSize = options.ReplayBufferSize,
+            WarmupSteps = options.WarmupSteps
+        };
     }
 
     private NeuralNetwork<T> CreateActorNetwork()
     {
-        var network = new NeuralNetwork<T>();
-        int previousSize = _options.StateSize;
+        var layers = new List<ILayer<T>>();
+        int prevSize = _options.StateSize;
 
-        foreach (var layerSize in _options.ActorHiddenLayers)
+        foreach (var hiddenSize in _options.ActorHiddenLayers)
         {
-            network.AddLayer(new DenseLayer<T>(previousSize, layerSize, (IActivationFunction<T>?)null));
-            network.AddLayer(new ActivationLayer<T>(new ReLU<T>()));
-            previousSize = layerSize;
+            layers.Add(new DenseLayer<T>(prevSize, hiddenSize, (IActivationFunction<T>)new ReLUActivation<T>()));
+            prevSize = hiddenSize;
         }
 
-        network.AddLayer(new DenseLayer<T>(previousSize, _options.ActionSize, (IActivationFunction<T>?)null));
-        network.AddLayer(new ActivationLayer<T>(new Tanh<T>()));
+        // Output layer with tanh activation to bound actions to [-1, 1]
+        layers.Add(new DenseLayer<T>(prevSize, _options.ActionSize, (IActivationFunction<T>)new TanhActivation<T>()));
 
-        return network;
+        var architecture = new NeuralNetworkArchitecture<T>(
+            inputType: InputType.OneDimensional,
+            taskType: NeuralNetworkTaskType.Regression,
+            inputSize: _options.StateSize,
+            outputSize: _options.ActionSize,
+            layers: layers
+        );
+
+        return new NeuralNetwork<T>(architecture);
     }
 
     private NeuralNetwork<T> CreateCriticNetwork()
     {
-        var network = new NeuralNetwork<T>();
+        var layers = new List<ILayer<T>>();
         int inputSize = _options.StateSize + _options.ActionSize;
-        int previousSize = inputSize;
+        int prevSize = inputSize;
 
-        foreach (var layerSize in _options.CriticHiddenLayers)
+        foreach (var hiddenSize in _options.CriticHiddenLayers)
         {
-            network.AddLayer(new DenseLayer<T>(previousSize, layerSize, (IActivationFunction<T>?)null));
-            network.AddLayer(new ActivationLayer<T>(new ReLU<T>()));
-            previousSize = layerSize;
+            layers.Add(new DenseLayer<T>(prevSize, hiddenSize, (IActivationFunction<T>)new ReLUActivation<T>()));
+            prevSize = hiddenSize;
         }
 
-        network.AddLayer(new DenseLayer<T>(previousSize, 1, (IActivationFunction<T>?)null));
+        // Output single Q-value
+        layers.Add(new DenseLayer<T>(prevSize, 1, (IActivationFunction<T>)new LinearActivation<T>()));
 
-        return network;
-    }
+        var architecture = new NeuralNetworkArchitecture<T>(
+            inputType: InputType.OneDimensional,
+            taskType: NeuralNetworkTaskType.Regression,
+            inputSize: inputSize,
+            outputSize: 1,
+            layers: layers
+        );
 
-    private void InitializeReplayBuffer()
-    {
-        _replayBuffer = new UniformReplayBuffer<T>(_options.ReplayBufferSize);
+        return new NeuralNetwork<T>(architecture);
     }
 
     public override Vector<T> SelectAction(Vector<T> state, bool training = true)
     {
-        var action = _actorNetwork.Predict(state);
+        var stateTensor = Tensor<T>.FromVector(state);
+        var actionTensor = _actorNetwork.Predict(stateTensor);
+        var action = actionTensor.ToVector();
 
         if (training)
         {
