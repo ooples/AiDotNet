@@ -314,7 +314,7 @@ D) Success is important",
             new()
             {
                 Id = "logiqa_4",
-                Problem = @"Argument: "This medicine works because 80% of patients improved after taking it."
+                Problem = @"Argument: ""This medicine works because 80% of patients improved after taking it.""
 
 Which statement most weakens this argument?
 A) The medicine is expensive
