@@ -1,3 +1,4 @@
+using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.Reasoning.Models;
 
@@ -183,6 +184,9 @@ public class HybridRewardModel<T> : IRewardModel<T>
     public string ModelName => "Hybrid Reward Model (PRM + ORM)";
 
     /// <inheritdoc/>
+    public RewardModelType ModelType => RewardModelType.Hybrid;
+
+    /// <inheritdoc/>
     public string Description =>
         $"Combines Process ({_processWeight:P0}) and Outcome ({_outcomeWeight:P0}) rewards. " +
         "Rewards both correct reasoning steps AND final answer accuracy.";
@@ -221,12 +225,11 @@ public class HybridRewardModel<T> : IRewardModel<T>
     /// </summary>
     public async Task<T> CalculateStepRewardAsync(
         ReasoningStep<T> step,
-        ReasoningChain<T> chain,
-        string? correctAnswer = null,
+        ReasoningContext context,
         CancellationToken cancellationToken = default)
     {
         // For individual steps, use PRM (ORM doesn't score steps)
-        return await _prm.CalculateStepRewardAsync(step, chain, correctAnswer, cancellationToken);
+        return await _prm.CalculateStepRewardAsync(step, context, cancellationToken);
     }
 
     /// <summary>
@@ -303,7 +306,7 @@ public class HybridRewardModel<T> : IRewardModel<T>
     /// </remarks>
     public HybridRewardModel<T> WithAdaptiveWeights(double difficulty)
     {
-        difficulty = Math.Clamp(difficulty, 0.0, 1.0);
+        difficulty = MathHelper.Clamp(difficulty, 0.0, 1.0);
 
         double processWeight;
         double outcomeWeight;

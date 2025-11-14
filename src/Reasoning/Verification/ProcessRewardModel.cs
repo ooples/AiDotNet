@@ -1,3 +1,4 @@
+using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
 using AiDotNet.Reasoning.Models;
@@ -200,7 +201,7 @@ Evaluate the step:";
             if (root["reward"] != null)
             {
                 double reward = root["reward"]!.Value<double>();
-                return Math.Clamp(reward, 0.0, 1.0);
+                return MathHelper.Clamp(reward, 0.0, 1.0);
             }
         }
         catch (JsonException)
@@ -218,7 +219,7 @@ Evaluate the step:";
                 reward /= 10.0;
             }
 
-            return Math.Clamp(reward, 0.0, 1.0);
+            return MathHelper.Clamp(reward, 0.0, 1.0);
         }
 
         // Default to moderate reward if can't parse

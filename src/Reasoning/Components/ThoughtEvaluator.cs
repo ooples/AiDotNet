@@ -1,3 +1,4 @@
+using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.Reasoning.Models;
 using Newtonsoft.Json;
@@ -115,7 +116,7 @@ Evaluate the thought:";
             if (root["score"] != null)
             {
                 double score = root["score"]!.Value<double>();
-                return Math.Clamp(score, 0.0, 1.0);
+                return MathHelper.Clamp(score, 0.0, 1.0);
             }
         }
         catch (JsonException)
@@ -137,7 +138,7 @@ Evaluate the thought:";
                 fallbackScore /= 100.0;
             }
 
-            return Math.Clamp(fallbackScore, 0.0, 1.0);
+            return MathHelper.Clamp(fallbackScore, 0.0, 1.0);
         }
 
         // Default to middle score if parsing fails

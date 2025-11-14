@@ -1,3 +1,4 @@
+using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.Reasoning.Models;
 using Newtonsoft.Json;
@@ -202,7 +203,7 @@ Provide your critique:";
             if (root["score"] != null)
             {
                 double score = root["score"]!.Value<double>();
-                result.Score = _numOps.FromDouble(Math.Clamp(score, 0.0, 1.0));
+                result.Score = _numOps.FromDouble(MathHelper.Clamp(score, 0.0, 1.0));
             }
 
             // Parse feedback
@@ -254,7 +255,7 @@ Provide your critique:";
         if (scoreMatch.Success && double.TryParse(scoreMatch.Groups[1].Value, out double score))
         {
             if (score > 1.0 && score <= 10.0) score /= 10.0;
-            result.Score = _numOps.FromDouble(Math.Clamp(score, 0.0, 1.0));
+            result.Score = _numOps.FromDouble(MathHelper.Clamp(score, 0.0, 1.0));
         }
         else
         {

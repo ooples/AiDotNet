@@ -1,3 +1,4 @@
+using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.Reasoning.Models;
 using System.Text.RegularExpressions;
@@ -91,6 +92,9 @@ public class OutcomeRewardModel<T> : IRewardModel<T>
 
     /// <inheritdoc/>
     public string ModelName => "Outcome Reward Model (ORM)";
+
+    /// <inheritdoc/>
+    public RewardModelType ModelType => RewardModelType.Outcome;
 
     /// <inheritdoc/>
     public string Description =>
@@ -204,25 +208,25 @@ public class OutcomeRewardModel<T> : IRewardModel<T>
         }
 
         // 4. Verification: Did it pass any verifiers?
-        if (chain.VerificationResults?.Count > 0)
-        {
-            double verificationScore = chain.VerificationResults
-                .Where(v => v.IsValid)
-                .Select(v => Convert.ToDouble(v.Score))
-                .DefaultIfEmpty(0.0)
-                .Average();
+        // TODO: ReasoningChain<T> doesn't have VerificationResults property yet
+        // if (chain.VerificationResults?.Count > 0)
+        // {
+        //     double verificationScore = chain.VerificationResults
+        //         .Where(v => v.Passed)
+        //         .Select(v => Convert.ToDouble(v.Confidence))
+        //         .DefaultIfEmpty(0.0)
+        //         .Average();
+        //
+        //     reward += verificationScore * 0.1;
+        // }
 
-            reward += verificationScore * 0.1;
-        }
-
-        return _numOps.FromDouble(Math.Clamp(reward, 0.0, 1.0));
+        return _numOps.FromDouble(MathHelper.Clamp(reward, 0.0, 1.0));
     }
 
     /// <inheritdoc/>
     public Task<T> CalculateStepRewardAsync(
         ReasoningStep<T> step,
-        ReasoningChain<T> chain,
-        string? correctAnswer = null,
+        ReasoningContext context,
         CancellationToken cancellationToken = default)
     {
         // ORM doesn't score individual steps, only final outcome
@@ -331,13 +335,13 @@ Respond with ONLY a number between 0.0 and 1.0, nothing else.";
 
         try
         {
-            string response = await _chatModel.GenerateResponseAsync(prompt, cancellationToken);
+            string response = await _chatModel.GenerateResponseAsync(prompt);
 
             // Extract number from response
             var match = Regex.Match(response, @"([0-1]\.?\d*)");
             if (match.Success && double.TryParse(match.Value, out double similarity))
             {
-                return Math.Clamp(similarity, 0.0, 1.0);
+                return MathHelper.Clamp(similarity, 0.0, 1.0);
             }
         }
         catch

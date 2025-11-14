@@ -1,3 +1,4 @@
+using AiDotNet.Helpers;
 using AiDotNet.Reasoning.Models;
 
 namespace AiDotNet.Reasoning.ComputeScaling;
@@ -75,7 +76,7 @@ public class AdaptiveComputeScaler<T>
         double difficulty = estimatedDifficulty ?? EstimateDifficulty(problem);
 
         // Clamp to valid range
-        difficulty = Math.Clamp(difficulty, 0.0, 1.0);
+        difficulty = MathHelper.Clamp(difficulty, 0.0, 1.0);
 
         // Calculate scaling factor based on difficulty
         // Easy (0.0-0.3): 0.5x to 1.0x scaling
@@ -191,7 +192,7 @@ public class AdaptiveComputeScaler<T>
             difficulty += 0.2; // Technical problems are generally harder
         }
 
-        return Math.Clamp(difficulty, 0.0, 1.0);
+        return MathHelper.Clamp(difficulty, 0.0, 1.0);
     }
 
     /// <summary>
@@ -208,7 +209,7 @@ public class AdaptiveComputeScaler<T>
     /// </remarks>
     public string GetRecommendedStrategy(double difficulty)
     {
-        difficulty = Math.Clamp(difficulty, 0.0, 1.0);
+        difficulty = MathHelper.Clamp(difficulty, 0.0, 1.0);
 
         if (difficulty < 0.3)
             return "ChainOfThought";

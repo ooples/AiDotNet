@@ -56,7 +56,7 @@ namespace AiDotNet.Reasoning.Verification;
 /// - CodeT: Code Generation with Generated Tests (Chen et al., 2022)
 /// </para>
 /// </remarks>
-public class CodeExecutionVerifier<T> : IVerifier<T>
+public class CodeExecutionVerifier<T>
 {
     private readonly INumericOperations<T> _numOps;
     private readonly int _timeoutMilliseconds;
@@ -107,8 +107,8 @@ public class CodeExecutionVerifier<T> : IVerifier<T>
 
         try
         {
-            // Write code to file
-            await File.WriteAllTextAsync(tempFile, code, cancellationToken);
+            // Write code to file (net462 compatible)
+            File.WriteAllText(tempFile, code);
 
             // Execute tests
             var testResults = new List<TestCaseResult>();
@@ -185,10 +185,10 @@ public class CodeExecutionVerifier<T> : IVerifier<T>
         {
             return new VerificationResult<T>
             {
-                IsValid = false,
-                VerifierName = VerifierName,
-                Message = "No code found in reasoning chain",
-                Score = _numOps.Zero
+                Passed = false,
+                ToolUsed = VerifierName,
+                Explanation = "No code found in reasoning chain",
+                Confidence = _numOps.Zero
             };
         }
 
@@ -199,10 +199,10 @@ public class CodeExecutionVerifier<T> : IVerifier<T>
         {
             return new VerificationResult<T>
             {
-                IsValid = false,
-                VerifierName = VerifierName,
-                Message = "No test cases available for verification",
-                Score = _numOps.Zero
+                Passed = false,
+                ToolUsed = VerifierName,
+                Explanation = "No test cases available for verification",
+                Confidence = _numOps.Zero
             };
         }
 
@@ -214,13 +214,12 @@ public class CodeExecutionVerifier<T> : IVerifier<T>
 
         return new VerificationResult<T>
         {
-            IsValid = executionResult.AllTestsPassed,
-            VerifierName = VerifierName,
-            Message = executionResult.AllTestsPassed
-                ? $"All {executionResult.TotalTests} test cases passed"
-                : $"Failed {executionResult.TotalTests - executionResult.PassedTests}/{executionResult.TotalTests} tests",
-            Score = executionResult.Score,
-            Details = executionResult.GetSummary()
+            Passed = executionResult.AllTestsPassed,
+            ToolUsed = VerifierName,
+            Explanation = executionResult.AllTestsPassed
+                ? $"All {executionResult.TotalTests} test cases passed. {executionResult.GetSummary()}"
+                : $"Failed {executionResult.TotalTests - executionResult.PassedTests}/{executionResult.TotalTests} tests. {executionResult.GetSummary()}",
+            Confidence = executionResult.Score
         };
     }
 
@@ -283,7 +282,7 @@ public class CodeExecutionVerifier<T> : IVerifier<T>
 
             if (!finished)
             {
-                process.Kill(entireProcessTree: true);
+                process.Kill(); // net462 doesn't support entireProcessTree parameter
                 result.Passed = false;
                 result.Error = $"Execution timed out after {_timeoutMilliseconds}ms";
                 return result;

@@ -1,3 +1,4 @@
+using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.Reasoning.Models;
 using Newtonsoft.Json;
@@ -298,7 +299,7 @@ Analyze:";
 
             if (root["severity"] != null)
             {
-                contradiction.Severity = Math.Clamp(root["severity"]!.Value<double>(), 0.0, 1.0);
+                contradiction.Severity = MathHelper.Clamp(root["severity"]!.Value<double>(), 0.0, 1.0);
             }
             else
             {
