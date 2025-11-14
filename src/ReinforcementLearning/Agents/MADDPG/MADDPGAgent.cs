@@ -529,13 +529,13 @@ public class MADDPGAgent<T> : DeepReinforcementLearningAgentBase<T>
         _actorNetworks[0].UpdateWeights(learningRate);
     }
 
-    public override void Save(string filepath)
+    public override void SaveModel(string filepath)
     {
         var data = Serialize();
         System.IO.File.WriteAllBytes(filepath, data);
     }
 
-    public override void Load(string filepath)
+    public override void LoadModel(string filepath)
     {
         var data = System.IO.File.ReadAllBytes(filepath);
         Deserialize(data);

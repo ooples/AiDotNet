@@ -241,13 +241,13 @@ public abstract class ReinforcementLearningAgentBase<T> : IRLAgent<T>, IDisposab
     /// Saves the agent's state to a file.
     /// </summary>
     /// <param name="filepath">Path to save the agent.</param>
-    public abstract void Save(string filepath);
+    public abstract void SaveModel(string filepath);
 
     /// <summary>
     /// Loads the agent's state from a file.
     /// </summary>
     /// <param name="filepath">Path to load the agent from.</param>
-    public abstract void Load(string filepath);
+    public abstract void LoadModel(string filepath);
 
     /// <summary>
     /// Gets the current training metrics.

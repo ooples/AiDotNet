@@ -255,13 +255,13 @@ public class FirstVisitMonteCarloAgent<T> : ReinforcementLearningAgentBase<T>
 
     public override void ApplyGradients(Matrix<T> gradients, T learningRate) { }
 
-    public override void Save(string filepath)
+    public override void SaveModel(string filepath)
     {
         var data = Serialize();
         System.IO.File.WriteAllBytes(filepath, data);
     }
 
-    public override void Load(string filepath)
+    public override void LoadModel(string filepath)
     {
         var data = System.IO.File.ReadAllBytes(filepath);
         Deserialize(data);
