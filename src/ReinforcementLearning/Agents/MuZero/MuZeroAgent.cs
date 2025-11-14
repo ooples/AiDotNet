@@ -50,7 +50,13 @@ public class MuZeroAgent<T> : DeepReinforcementLearningAgentBase<T>
     private UniformReplayBuffer<T> _replayBuffer;
     private int _updateCount;
 
-    public MuZeroAgent(MuZeroOptions<T> options) : base(options.ObservationSize, options.ActionSize)
+    public MuZeroAgent(MuZeroOptions<T> options) : base(new ReinforcementLearningOptions<T>
+        {
+            LearningRate = options.LearningRate,
+            DiscountFactor = options.DiscountFactor,
+            LossFunction = new MeanSquaredErrorLoss<T>(),
+            Seed = options.Seed
+        })
     {
         _options = options;
         _updateCount = 0;
@@ -71,19 +77,26 @@ public class MuZeroAgent<T> : DeepReinforcementLearningAgentBase<T>
 
     private NeuralNetwork<T> CreateNetwork(int inputSize, int outputSize, List<int> hiddenLayers)
     {
-        var network = new NeuralNetwork<T>();
+        var layers = new List<ILayer<T>>();
         int previousSize = inputSize;
 
         foreach (var layerSize in hiddenLayers)
         {
-            network.AddLayer(new DenseLayer<T>(previousSize, layerSize, (IActivationFunction<T>?)null));
-            network.AddLayer(new ActivationLayer<T>(new ReLUActivation<T>()));
+            layers.Add(new DenseLayer<T>(previousSize, layerSize, (IActivationFunction<T>)new ReLUActivation<T>()));
             previousSize = layerSize;
         }
 
-        network.AddLayer(new DenseLayer<T>(previousSize, outputSize, (IActivationFunction<T>?)null));
+        layers.Add(new DenseLayer<T>(previousSize, outputSize, (IActivationFunction<T>)new IdentityActivation<T>()));
 
-        return network;
+        var architecture = new NeuralNetworkArchitecture<T>(
+            inputType: InputType.OneDimensional,
+            taskType: NeuralNetworkTaskType.Regression,
+            complexity: NetworkComplexity.Medium,
+            inputSize: inputSize,
+            outputSize: outputSize,
+            layers: layers);
+
+        return new NeuralNetwork<T>(architecture);
     }
 
     private void InitializeReplayBuffer()
@@ -94,12 +107,16 @@ public class MuZeroAgent<T> : DeepReinforcementLearningAgentBase<T>
     public override Vector<T> SelectAction(Vector<T> observation, bool training = true)
     {
         // Encode observation to hidden state
-        var hiddenState = _representationNetwork.Predict(observation);
+        var obsTensor = Tensor<T>.FromVector(observation);
+        var hiddenStateTensorOutput = _representationNetwork.Predict(obsTensor);
+        var hiddenState = hiddenStateTensorOutput.ToVector();
 
         if (!training)
         {
             // Greedy: just use policy network
-            var policyValue = _predictionNetwork.Predict(hiddenState);
+            var policyValueTensor = Tensor<T>.FromVector(hiddenState);
+        var policyValueTensorOutput = _predictionNetwork.Predict(policyValueTensor);
+        var policyValue = policyValueTensorOutput.ToVector();
             int bestAction = ArgMax(ExtractPolicy(policyValue));
             var action = new Vector<T>(_options.ActionSize);
             action[bestAction] = NumOps.One;
@@ -119,7 +136,9 @@ public class MuZeroAgent<T> : DeepReinforcementLearningAgentBase<T>
         var root = new MCTSNode<T> { HiddenState = rootHiddenState };
 
         // Initialize root
-        var rootPrediction = _predictionNetwork.Predict(rootHiddenState);
+        var rootPredictionTensor = Tensor<T>.FromVector(rootHiddenState);
+        var rootPredictionTensorOutput = _predictionNetwork.Predict(rootPredictionTensor);
+        var rootPrediction = rootPredictionTensorOutput.ToVector();
         root.Value = ExtractValue(rootPrediction);
 
         // Run simulations
@@ -207,7 +226,9 @@ public class MuZeroAgent<T> : DeepReinforcementLearningAgentBase<T>
     private int SelectActionPUCT(MCTSNode<T> node)
     {
         // PUCT formula: Q(s,a) + c * P(s,a) * sqrt(N(s)) / (1 + N(s,a))
-        var prediction = _predictionNetwork.Predict(node.HiddenState);
+        var predictionTensor = Tensor<T>.FromVector(node.HiddenState);
+        var predictionOutput = _predictionNetwork.Predict(predictionTensor);
+        var prediction = predictionOutput.ToVector();
         var policy = ExtractPolicy(prediction);
 
         double bestScore = double.NegativeInfinity;
@@ -245,7 +266,9 @@ public class MuZeroAgent<T> : DeepReinforcementLearningAgentBase<T>
         actionVec[action] = NumOps.One;
 
         var dynamicsInput = ConcatenateVectors(parent.HiddenState, actionVec);
-        var dynamicsOutput = _dynamicsNetwork.Predict(dynamicsInput);
+        var dynamicsInputTensor = Tensor<T>.FromVector(dynamicsInput);
+        var dynamicsOutputTensor = _dynamicsNetwork.Predict(dynamicsInputTensor);
+        var dynamicsOutput = dynamicsOutputTensor.ToVector();
 
         // Extract next hidden state and reward
         var nextHiddenState = new Vector<T>(_options.LatentStateSize);
@@ -255,7 +278,9 @@ public class MuZeroAgent<T> : DeepReinforcementLearningAgentBase<T>
         }
 
         // Get value from prediction network
-        var prediction = _predictionNetwork.Predict(nextHiddenState);
+        var predictionTensor = Tensor<T>.FromVector(nextHiddenState);
+        var predictionTensorOutput = _predictionNetwork.Predict(predictionTensor);
+        var prediction = predictionTensorOutput.ToVector();
         var value = ExtractValue(prediction);
 
         return new MCTSNode<T>
@@ -283,7 +308,7 @@ public class MuZeroAgent<T> : DeepReinforcementLearningAgentBase<T>
 
     public override void StoreExperience(Vector<T> observation, Vector<T> action, T reward, Vector<T> nextObservation, bool done)
     {
-        _replayBuffer.Add(new Experience<T>(observation, action, reward, nextObservation, done));
+        _replayBuffer.Add(new ReinforcementLearning.ReplayBuffers.Experience<T>(observation, action, reward, nextObservation, done));
     }
 
     public override T Train()
@@ -299,17 +324,20 @@ public class MuZeroAgent<T> : DeepReinforcementLearningAgentBase<T>
         foreach (var experience in batch)
         {
             // Encode observation
-            var hiddenState = _representationNetwork.Predict(experience.State);
+            var stateTensor = Tensor<T>.FromVector(experience.State);
+            var hiddenState = _representationNetwork.Predict(stateTensor).ToVector();
 
             // Unroll K steps
             for (int k = 0; k < _options.UnrollSteps; k++)
             {
                 // Prediction loss
-                var prediction = _predictionNetwork.Predict(hiddenState);
+                var hsTensor = Tensor<T>.FromVector(hiddenState);
+                var predictionOutputTensor = _predictionNetwork.Predict(hsTensor);
+                var prediction = predictionOutputTensor.ToVector();
                 var predictedValue = ExtractValue(prediction);
 
                 // Simplified target: use reward + discounted next value
-                var target = experience.done ? experience.Reward :
+                var target = experience.Done ? experience.Reward :
                     NumOps.Add(experience.Reward, NumOps.Multiply(_options.DiscountFactor, predictedValue));
 
                 var valueDiff = NumOps.Subtract(target, predictedValue);
@@ -320,16 +348,19 @@ public class MuZeroAgent<T> : DeepReinforcementLearningAgentBase<T>
                 var gradient = new Vector<T>(_options.ActionSize + 1);
                 gradient[_options.ActionSize] = valueDiff;
 
-                _predictionNetwork.Backpropagate(gradient);
-                _predictionNetwork.UpdateParameters(_options.LearningRate);
+                var gradTensor = Tensor<T>.FromVector(gradient);
+                _predictionNetwork.Backpropagate(gradTensor);
+                // Network will handle parameter updates during Backpropagate
 
                 // Dynamics step
                 var actionVec = experience.Action;
                 var dynamicsInput = ConcatenateVectors(hiddenState, actionVec);
-                var dynamicsOutput = _dynamicsNetwork.Predict(dynamicsInput);
+                var dynamicsInputTensor = Tensor<T>.FromVector(dynamicsInput);
+        var dynamicsOutputTensor = _dynamicsNetwork.Predict(dynamicsInputTensor);
+        var dynamicsOutput = dynamicsOutputTensor.ToVector();
 
                 // Extract next hidden state
-                hiddenState = new Vector<T>(_options.LatentStateSize);
+                var newHiddenState = new Vector<T>(_options.LatentStateSize);
                 for (int i = 0; i < _options.LatentStateSize; i++)
                 {
                     hiddenState[i] = dynamicsOutput[i];
@@ -407,7 +438,7 @@ public class MuZeroAgent<T> : DeepReinforcementLearningAgentBase<T>
     {
         return new ModelMetadata<T>
         {
-            ModelType = "MuZero",
+            // ModelType not set - MuZero not in enum yet
         };
     }
 
@@ -464,7 +495,7 @@ public class MuZeroAgent<T> : DeepReinforcementLearningAgentBase<T>
 
     public override IFullModel<T, Vector<T>, Vector<T>> Clone()
     {
-        return new MuZeroAgent<T>(_options, _optimizer);
+        return new MuZeroAgent<T>(_options);
     }
 
     public override Vector<T> ComputeGradients(
@@ -474,9 +505,7 @@ public class MuZeroAgent<T> : DeepReinforcementLearningAgentBase<T>
     {
         var prediction = Predict(input);
         var usedLossFunction = lossFunction ?? LossFunction;
-        var loss = usedLossFunction.CalculateLoss(prediction, target);
-
-        var gradient = usedLossFunction.ComputeGradient(prediction, target);
+        var gradient = usedLossFunction.CalculateDerivative(prediction, target);
         return gradient;
     }
 
