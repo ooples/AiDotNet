@@ -398,12 +398,7 @@ public class REINFORCEAgent<T> : DeepReinforcementLearningAgentBase<T>
     /// <inheritdoc/>
     public override void SetParameters(Vector<T> parameters)
     {
-        var vector = new Vector<T>(parameters.Rows);
-        for (int i = 0; i < parameters.Rows; i++)
-        {
-            vector[i] = parameters[i, 0];
-        }
-        _policyNetwork.UpdateParameters(vector);
+        _policyNetwork.UpdateParameters(parameters);
     }
 
     /// <inheritdoc/>

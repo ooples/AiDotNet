@@ -308,13 +308,8 @@ public class DuelingDQNAgent<T> : DeepReinforcementLearningAgentBase<T>
 
         _qNetwork.Backward(input, gradient);
         var gradientVector = _qNetwork.GetFlattenedGradients();
-        var gradientMatrix = new Matrix<T>(gradientVector.Length, 1);
-        for (int i = 0; i < gradientVector.Length; i++)
-        {
-            gradientMatrix[i, 0] = gradientVector[i];
-        }
 
-        return (gradientMatrix, lossValue);
+        return (gradientVector, lossValue);
     }
 
     /// <inheritdoc/>
@@ -325,7 +320,7 @@ public class DuelingDQNAgent<T> : DeepReinforcementLearningAgentBase<T>
 
         for (int i = 0; i < currentParams.Length; i++)
         {
-            var gradValue = (i < gradients.Rows) ? gradients[i, 0] : NumOps.Zero;
+            var gradValue = (i < gradients.Length) ? gradients[i] : NumOps.Zero;
             var update = NumOps.Multiply(learningRate, gradValue);
             newParams[i] = NumOps.Subtract(currentParams[i], update);
         }

@@ -316,24 +316,13 @@ public class DQNAgent<T> : DeepReinforcementLearningAgentBase<T>
     /// <inheritdoc/>
     public override Vector<T> GetParameters()
     {
-        var qNetworkParams = _qNetwork.GetParameters();
-        var matrix = new Matrix<T>(qNetworkParams.Length, 1);
-        for (int i = 0; i < qNetworkParams.Length; i++)
-        {
-            matrix[i, 0] = qNetworkParams[i];
-        }
-        return vector;
+        return _qNetwork.GetParameters();
     }
 
     /// <inheritdoc/>
     public override void SetParameters(Vector<T> parameters)
     {
-        var vector = new Vector<T>(parameters.Rows);
-        for (int i = 0; i < parameters.Rows; i++)
-        {
-            vector[i] = parameters[i, 0];
-        }
-        _qNetwork.UpdateParameters(vector);
+        _qNetwork.UpdateParameters(parameters);
     }
 
     /// <inheritdoc/>
@@ -374,21 +363,21 @@ public class DQNAgent<T> : DeepReinforcementLearningAgentBase<T>
         var gradient = loss.ComputeGradient(output, target);
 
         _qNetwork.Backward(gradient);
-        var gradients = GetParameters();
+        var gradientVector = _qNetwork.GetFlattenedGradients();
 
-        return (gradients, lossValue);
+        return (gradientVector, lossValue);
     }
 
     /// <inheritdoc/>
     public override void ApplyGradients(Vector<T> gradients, T learningRate)
     {
         var currentParams = GetParameters();
-        var newParams = new Matrix<T>(currentParams.Rows, 1);
+        var newParams = new Vector<T>(currentParams.Length);
 
-        for (int i = 0; i < currentParams.Rows; i++)
+        for (int i = 0; i < currentParams.Length; i++)
         {
-            var update = NumOps.Multiply(learningRate, gradients[i, 0]);
-            newParams[i, 0] = NumOps.Subtract(currentParams[i, 0], update);
+            var update = NumOps.Multiply(learningRate, gradients[i]);
+            newParams[i] = NumOps.Subtract(currentParams[i], update);
         }
 
         SetParameters(newParams);

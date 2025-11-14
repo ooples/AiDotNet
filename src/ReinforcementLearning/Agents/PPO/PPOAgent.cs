@@ -608,7 +608,7 @@ public class PPOAgent<T> : DeepReinforcementLearningAgentBase<T>
         var valueParams = _valueNetwork.GetParameters();
 
         var totalParams = policyParams.Length + valueParams.Length;
-        var matrix = new Matrix<T>(totalParams, 1);
+        var vector = new Vector<T>(totalParams);
 
         int idx = 0;
         for (int i = 0; i < policyParams.Length; i++)
