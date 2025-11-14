@@ -94,16 +94,27 @@ public class RainbowDQNAgent<T> : DeepReinforcementLearningAgentBase<T>
             ? _options.ActionSize * _options.NumAtoms
             : _options.ActionSize;
 
-        var architecture = new NeuralNetworkArchitecture<T>
-        {
-            TaskType = NeuralNetworkTaskType.Regression
-        };
+        var architecture = new NeuralNetworkArchitecture<T>(
+            inputType: InputType.OneDimensional,
+            taskType: NeuralNetworkTaskType.Regression,
+            complexity: NetworkComplexity.Medium,
+            inputSize: _options.StateSize,
+            outputSize: outputSize
+        );
 
         // Use LayerHelper for production-ready network
         var layers = LayerHelper<T>.CreateDefaultDeepQNetworkLayers(architecture);
 
-        architecture.Layers = layers.ToList();
-        return new NeuralNetwork<T>(architecture, LossFunction);
+        var finalArchitecture = new NeuralNetworkArchitecture<T>(
+            inputType: InputType.OneDimensional,
+            taskType: NeuralNetworkTaskType.Regression,
+            complexity: NetworkComplexity.Medium,
+            inputSize: _options.StateSize,
+            outputSize: outputSize,
+            layers: layers.ToList()
+        );
+
+        return new NeuralNetwork<T>(finalArchitecture, LossFunction);
     }
 
     private void InitializeReplayBuffer()
@@ -136,7 +147,9 @@ public class RainbowDQNAgent<T> : DeepReinforcementLearningAgentBase<T>
 
     private Vector<T> ComputeQValues(Vector<T> state)
     {
-        var output = _onlineNetwork.Predict(state);
+        var stateTensor = Tensor<T>.FromVector(state);
+        var outputTensor = _onlineNetwork.Predict(stateTensor);
+        var output = outputTensor.ToVector();
 
         if (_options.UseDistributional)
         {

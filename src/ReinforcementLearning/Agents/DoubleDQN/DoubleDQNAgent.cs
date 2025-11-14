@@ -106,13 +106,16 @@ public class DoubleDQNAgent<T> : DeepReinforcementLearningAgentBase<T>
             prevSize = hiddenSize;
         }
 
-        layers.Add(new DenseLayer<T>(prevSize, _options.ActionSize, (IActivationFunction<T>)new LinearActivation<T>()));
+        layers.Add(new DenseLayer<T>(prevSize, _options.ActionSize, (IActivationFunction<T>)new IdentityActivation<T>()));
 
-        var architecture = new NeuralNetworkArchitecture<T>
-        {
-            Layers = layers,
-            TaskType = NeuralNetworkTaskType.Regression
-        };
+        var architecture = new NeuralNetworkArchitecture<T>(
+            inputType: InputType.OneDimensional,
+            taskType: NeuralNetworkTaskType.Regression,
+            complexity: NetworkComplexity.Medium,
+            inputSize: _options.StateSize,
+            outputSize: _options.ActionSize,
+            layers: layers
+        );
 
         return new NeuralNetwork<T>(architecture, _options.LossFunction);
     }
@@ -128,7 +131,9 @@ public class DoubleDQNAgent<T> : DeepReinforcementLearningAgentBase<T>
             return action;
         }
 
-        var qValues = _qNetwork.Predict(state);
+        var stateTensor = Tensor<T>.FromVector(state);
+        var qValuesTensor = _qNetwork.Predict(stateTensor);
+        var qValues = qValuesTensor.ToVector();
         int bestAction = ArgMax(qValues);
 
         var greedyAction = new Vector<T>(_options.ActionSize);
@@ -139,7 +144,7 @@ public class DoubleDQNAgent<T> : DeepReinforcementLearningAgentBase<T>
     /// <inheritdoc/>
     public override void StoreExperience(Vector<T> state, Vector<T> action, T reward, Vector<T> nextState, bool done)
     {
-        _replayBuffer.Add(new Experience<T>(state, action, reward, nextState, done));
+        _replayBuffer.Add(new ReinforcementLearning.ReplayBuffers.Experience<T>(state, action, reward, nextState, done));
     }
 
     /// <inheritdoc/>
@@ -167,18 +172,23 @@ public class DoubleDQNAgent<T> : DeepReinforcementLearningAgentBase<T>
             else
             {
                 // Key difference from DQN: Use online network to select best action
-                var nextQValuesOnline = _qNetwork.Predict(experience.NextState);
+                var nextStateTensor = Tensor<T>.FromVector(experience.NextState);
+                var nextQValuesOnlineTensor = _qNetwork.Predict(nextStateTensor);
+                var nextQValuesOnline = nextQValuesOnlineTensor.ToVector();
                 int bestActionIndex = ArgMax(nextQValuesOnline);
 
                 // Use target network to evaluate that action
-                var nextQValuesTarget = _targetNetwork.Predict(experience.NextState);
+                var nextQValuesTargetTensor = _targetNetwork.Predict(nextStateTensor);
+                var nextQValuesTarget = nextQValuesTargetTensor.ToVector();
                 var selectedQ = nextQValuesTarget[bestActionIndex];
 
                 target = NumOps.Add(experience.Reward,
                     NumOps.Multiply(DiscountFactor, selectedQ));
             }
 
-            var currentQValues = _qNetwork.Predict(experience.State);
+            var stateTensor = Tensor<T>.FromVector(experience.State);
+            var currentQValuesTensor = _qNetwork.Predict(stateTensor);
+            var currentQValues = currentQValuesTensor.ToVector();
             int actionIndex = ArgMax(experience.Action);
 
             var targetQValues = currentQValues.Clone();
@@ -187,15 +197,15 @@ public class DoubleDQNAgent<T> : DeepReinforcementLearningAgentBase<T>
             var loss = LossFunction.CalculateLoss(currentQValues, targetQValues);
             totalLoss = NumOps.Add(totalLoss, loss);
 
-            var gradients = LossFunction.ComputeGradient(currentQValues, targetQValues);
-            _qNetwork.Backpropagate(gradients);
+            var gradients = LossFunction.CalculateDerivative(currentQValues, targetQValues);
+            var gradientsTensor = Tensor<T>.FromVector(gradients);
+            _qNetwork.Backpropagate(gradientsTensor);
 
             var parameters = _qNetwork.GetParameters();
-            var gradientVector = _qNetwork.GetFlattenedGradients();
 
             for (int i = 0; i < parameters.Length; i++)
             {
-                var update = NumOps.Multiply(LearningRate, gradientVector[i]);
+                var update = NumOps.Multiply(LearningRate, gradients[i]);
                 parameters[i] = NumOps.Subtract(parameters[i], update);
             }
 
@@ -327,14 +337,16 @@ public class DoubleDQNAgent<T> : DeepReinforcementLearningAgentBase<T>
         ILossFunction<T>? lossFunction = null)
     {
         var loss = lossFunction ?? LossFunction;
-        var output = _qNetwork.Predict(input);
+        var inputTensor = Tensor<T>.FromVector(input);
+        var outputTensor = _qNetwork.Predict(inputTensor);
+        var output = outputTensor.ToVector();
         var lossValue = loss.CalculateLoss(output, target);
-        var gradient = loss.ComputeGradient(output, target);
+        var gradient = loss.CalculateDerivative(output, target);
 
-        _qNetwork.Backpropagate(gradient);
-        var gradientVector = _qNetwork.GetFlattenedGradients();
+        var gradientTensor = Tensor<T>.FromVector(gradient);
+        _qNetwork.Backpropagate(gradientTensor);
 
-        return gradientVector;
+        return gradient;
     }
 
     /// <inheritdoc/>
