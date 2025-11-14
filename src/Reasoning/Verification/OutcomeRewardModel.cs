@@ -67,7 +67,7 @@ namespace AiDotNet.Reasoning.Verification;
 /// </remarks>
 public class OutcomeRewardModel<T> : IRewardModel<T>
 {
-    private readonly IChatModel? _chatModel;
+    private readonly IChatModel<T>? _chatModel;
     private readonly INumericOperations<T> _numOps;
     private readonly bool _useSemanticSimilarity;
     private readonly double _partialCreditThreshold;
@@ -79,7 +79,7 @@ public class OutcomeRewardModel<T> : IRewardModel<T>
     /// <param name="useSemanticSimilarity">Use LLM for semantic comparison vs exact match.</param>
     /// <param name="partialCreditThreshold">Threshold for partial credit (0.0-1.0, default: 0.8).</param>
     public OutcomeRewardModel(
-        IChatModel? chatModel = null,
+        IChatModel<T>? chatModel = null,
         bool useSemanticSimilarity = false,
         double partialCreditThreshold = 0.8)
     {

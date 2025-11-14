@@ -47,8 +47,8 @@ public class BreadthFirstSearch<T> : ISearchAlgorithm<T>
         "Guarantees finding the shortest path but may be memory intensive.";
 
     /// <inheritdoc/>
-    public async Task<List<ThoughtNode<T>>> SearchAsync(
-        ThoughtNode<T> root,
+    public async Task<List<AiDotNet.Reasoning.Models.ThoughtNode<T>>> SearchAsync(
+        AiDotNet.Reasoning.Models.ThoughtNode<T> root,
         IThoughtGenerator<T> generator,
         IThoughtEvaluator<T> evaluator,
         ReasoningConfig config,
@@ -58,12 +58,12 @@ public class BreadthFirstSearch<T> : ISearchAlgorithm<T>
             throw new ArgumentNullException(nameof(root));
 
         // Track the best path found
-        ThoughtNode<T>? bestTerminalNode = null;
+        AiDotNet.Reasoning.Models.ThoughtNode<T>? bestTerminalNode = null;
         var numOps = MathHelper.GetNumericOperations<T>();
         T bestScore = numOps.Zero;
 
         // BFS queue
-        var queue = new Queue<ThoughtNode<T>>();
+        var queue = new Queue<AiDotNet.Reasoning.Models.ThoughtNode<T>>();
         queue.Enqueue(root);
 
         // Evaluate root
@@ -124,18 +124,18 @@ public class BreadthFirstSearch<T> : ISearchAlgorithm<T>
             return bestTerminalNode.GetPathFromRoot()
                 .Select(thought => FindNodeWithThought(root, thought))
                 .Where(n => n != null)
-                .Cast<ThoughtNode<T>>()
+                .Cast<AiDotNet.Reasoning.Models.ThoughtNode<T>>()
                 .ToList();
         }
 
         // Fallback: return just the root if no terminal node found
-        return new List<ThoughtNode<T>> { root };
+        return new List<AiDotNet.Reasoning.Models.ThoughtNode<T>> { root };
     }
 
     /// <summary>
     /// Checks if a node represents a terminal/complete solution.
     /// </summary>
-    private bool IsTerminalNode(ThoughtNode<T> node)
+    private bool IsTerminalNode(AiDotNet.Reasoning.Models.ThoughtNode<T> node)
     {
         // Simple heuristic: check for solution indicators in the thought
         string thought = node.Thought.ToLowerInvariant();
@@ -149,7 +149,7 @@ public class BreadthFirstSearch<T> : ISearchAlgorithm<T>
     /// <summary>
     /// Finds a node in the tree with the given thought text (DFS helper).
     /// </summary>
-    private ThoughtNode<T>? FindNodeWithThought(ThoughtNode<T> root, string thought)
+    private AiDotNet.Reasoning.Models.ThoughtNode<T>? FindNodeWithThought(AiDotNet.Reasoning.Models.ThoughtNode<T> root, string thought)
     {
         if (root.Thought == thought)
             return root;

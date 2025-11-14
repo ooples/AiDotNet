@@ -40,7 +40,7 @@ public class ThoughtEvaluator<T> : IThoughtEvaluator<T>
 
     /// <inheritdoc/>
     public async Task<T> EvaluateThoughtAsync(
-        ThoughtNode<T> node,
+        AiDotNet.Reasoning.Models.ThoughtNode<T> node,
         string originalQuery,
         ReasoningConfig config,
         CancellationToken cancellationToken = default)

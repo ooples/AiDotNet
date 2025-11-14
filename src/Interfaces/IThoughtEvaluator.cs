@@ -30,7 +30,7 @@ public interface IThoughtEvaluator<T>
     /// <param name="cancellationToken">Cancellation token.</param>
     /// <returns>Evaluation score (typically 0.0 to 1.0).</returns>
     Task<T> EvaluateThoughtAsync(
-        ThoughtNode<T> node,
+        AiDotNet.Reasoning.Models.ThoughtNode<T> node,
         string originalQuery,
         ReasoningConfig config,
         CancellationToken cancellationToken = default);

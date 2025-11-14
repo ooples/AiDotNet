@@ -104,7 +104,7 @@ namespace AiDotNet.Reasoning.DomainSpecific;
 /// </remarks>
 public class ScientificReasoner<T>
 {
-    private readonly IChatModel _chatModel;
+    private readonly IChatModel<T> _chatModel;
     private readonly ChainOfThoughtStrategy<T> _cotStrategy;
     private readonly SelfConsistencyStrategy<T> _selfConsistencyStrategy;
     private readonly CriticModel<T>? _criticModel;
@@ -114,7 +114,7 @@ public class ScientificReasoner<T>
     /// Initializes a new instance of the <see cref="ScientificReasoner{T}"/> class.
     /// </summary>
     public ScientificReasoner(
-        IChatModel chatModel,
+        IChatModel<T> chatModel,
         CriticModel<T>? criticModel = null)
     {
         _chatModel = chatModel ?? throw new ArgumentNullException(nameof(chatModel));

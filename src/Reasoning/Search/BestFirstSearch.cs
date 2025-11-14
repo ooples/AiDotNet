@@ -57,8 +57,8 @@ public class BestFirstSearch<T> : ISearchAlgorithm<T>
         "Fast but may miss optimal solutions. Quality depends on evaluation function.";
 
     /// <inheritdoc/>
-    public async Task<List<ThoughtNode<T>>> SearchAsync(
-        ThoughtNode<T> root,
+    public async Task<List<AiDotNet.Reasoning.Models.ThoughtNode<T>>> SearchAsync(
+        AiDotNet.Reasoning.Models.ThoughtNode<T> root,
         IThoughtGenerator<T> generator,
         IThoughtEvaluator<T> evaluator,
         ReasoningConfig config,
@@ -72,8 +72,8 @@ public class BestFirstSearch<T> : ISearchAlgorithm<T>
         root.IsVisited = true;
 
         // Priority queue: ordered by evaluation score (descending)
-        var priorityQueue = new SortedSet<ThoughtNode<T>>(
-            Comparer<ThoughtNode<T>>.Create((a, b) =>
+        var priorityQueue = new SortedSet<AiDotNet.Reasoning.Models.ThoughtNode<T>>(
+            Comparer<AiDotNet.Reasoning.Models.ThoughtNode<T>>.Create((a, b) =>
             {
                 // Primary: score (descending)
                 double scoreA = Convert.ToDouble(a.EvaluationScore);
@@ -92,7 +92,7 @@ public class BestFirstSearch<T> : ISearchAlgorithm<T>
 
         priorityQueue.Add(root);
 
-        ThoughtNode<T>? bestTerminalNode = null;
+        AiDotNet.Reasoning.Models.ThoughtNode<T>? bestTerminalNode = null;
         var numOps = MathHelper.GetNumericOperations<T>();
         T bestScore = numOps.Zero;
         int nodesExpanded = 0;
@@ -159,10 +159,10 @@ public class BestFirstSearch<T> : ISearchAlgorithm<T>
             return ReconstructPath(bestNode);
         }
 
-        return new List<ThoughtNode<T>> { root };
+        return new List<AiDotNet.Reasoning.Models.ThoughtNode<T>> { root };
     }
 
-    private bool IsTerminalNode(ThoughtNode<T> node)
+    private bool IsTerminalNode(AiDotNet.Reasoning.Models.ThoughtNode<T> node)
     {
         string thought = node.Thought.ToLowerInvariant();
         return thought.Contains("final answer") ||
@@ -171,9 +171,9 @@ public class BestFirstSearch<T> : ISearchAlgorithm<T>
                node.IsTerminal;
     }
 
-    private List<ThoughtNode<T>> ReconstructPath(ThoughtNode<T> node)
+    private List<AiDotNet.Reasoning.Models.ThoughtNode<T>> ReconstructPath(AiDotNet.Reasoning.Models.ThoughtNode<T> node)
     {
-        var path = new List<ThoughtNode<T>>();
+        var path = new List<AiDotNet.Reasoning.Models.ThoughtNode<T>>();
         var current = node;
 
         while (current != null)

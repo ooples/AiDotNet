@@ -34,8 +34,8 @@ public interface IDiversitySampler<T>
     /// that represents different approaches rather than similar ones.
     /// </para>
     /// </remarks>
-    List<ThoughtNode<T>> SampleDiverse(
-        List<ThoughtNode<T>> candidates,
+    List<AiDotNet.Reasoning.Models.ThoughtNode<T>> SampleDiverse(
+        List<AiDotNet.Reasoning.Models.ThoughtNode<T>> candidates,
         int numToSample,
         ReasoningConfig config);
 
@@ -50,5 +50,5 @@ public interface IDiversitySampler<T>
     /// Used to ensure selected thoughts are sufficiently distinct.
     /// </para>
     /// </remarks>
-    T CalculateDiversity(ThoughtNode<T> thought1, ThoughtNode<T> thought2);
+    T CalculateDiversity(AiDotNet.Reasoning.Models.ThoughtNode<T> thought1, AiDotNet.Reasoning.Models.ThoughtNode<T> thought2);
 }

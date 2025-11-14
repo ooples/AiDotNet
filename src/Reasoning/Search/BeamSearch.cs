@@ -55,8 +55,8 @@ public class BeamSearch<T> : ISearchAlgorithm<T>
         "Memory efficient alternative to BFS with configurable quality/speed tradeoff via beam width.";
 
     /// <inheritdoc/>
-    public async Task<List<ThoughtNode<T>>> SearchAsync(
-        ThoughtNode<T> root,
+    public async Task<List<AiDotNet.Reasoning.Models.ThoughtNode<T>>> SearchAsync(
+        AiDotNet.Reasoning.Models.ThoughtNode<T> root,
         IThoughtGenerator<T> generator,
         IThoughtEvaluator<T> evaluator,
         ReasoningConfig config,
@@ -73,8 +73,8 @@ public class BeamSearch<T> : ISearchAlgorithm<T>
         root.IsVisited = true;
 
         // Current beam (starts with just the root)
-        var currentBeam = new List<ThoughtNode<T>> { root };
-        ThoughtNode<T>? bestTerminalNode = null;
+        var currentBeam = new List<AiDotNet.Reasoning.Models.ThoughtNode<T>> { root };
+        AiDotNet.Reasoning.Models.ThoughtNode<T>? bestTerminalNode = null;
         var numOps = MathHelper.GetNumericOperations<T>();
         T bestScore = numOps.Zero;
 
@@ -85,7 +85,7 @@ public class BeamSearch<T> : ISearchAlgorithm<T>
         {
             cancellationToken.ThrowIfCancellationRequested();
 
-            var nextBeam = new List<ThoughtNode<T>>();
+            var nextBeam = new List<AiDotNet.Reasoning.Models.ThoughtNode<T>>();
 
             // Expand each node in the current beam
             foreach (var node in currentBeam)
@@ -172,13 +172,13 @@ public class BeamSearch<T> : ISearchAlgorithm<T>
         }
 
         // Last resort: return just the root
-        return new List<ThoughtNode<T>> { root };
+        return new List<AiDotNet.Reasoning.Models.ThoughtNode<T>> { root };
     }
 
     /// <summary>
     /// Checks if a node represents a terminal/complete solution.
     /// </summary>
-    private bool IsTerminalNode(ThoughtNode<T> node)
+    private bool IsTerminalNode(AiDotNet.Reasoning.Models.ThoughtNode<T> node)
     {
         string thought = node.Thought.ToLowerInvariant();
         return thought.Contains("final answer") ||
@@ -191,9 +191,9 @@ public class BeamSearch<T> : ISearchAlgorithm<T>
     /// <summary>
     /// Reconstructs the path from root to a given node.
     /// </summary>
-    private List<ThoughtNode<T>> ReconstructPath(ThoughtNode<T> node)
+    private List<AiDotNet.Reasoning.Models.ThoughtNode<T>> ReconstructPath(AiDotNet.Reasoning.Models.ThoughtNode<T> node)
     {
-        var path = new List<ThoughtNode<T>>();
+        var path = new List<AiDotNet.Reasoning.Models.ThoughtNode<T>>();
         var current = node;
 
         while (current != null)

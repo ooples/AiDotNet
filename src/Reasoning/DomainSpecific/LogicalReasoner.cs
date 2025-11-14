@@ -1,4 +1,5 @@
 using AiDotNet.Interfaces;
+using AiDotNet.Reasoning.Components;
 using AiDotNet.Reasoning.Models;
 using AiDotNet.Reasoning.Strategies;
 using AiDotNet.Reasoning.Verification;
@@ -130,7 +131,7 @@ namespace AiDotNet.Reasoning.DomainSpecific;
 /// </remarks>
 public class LogicalReasoner<T>
 {
-    private readonly IChatModel _chatModel;
+    private readonly IChatModel<T> _chatModel;
     private readonly ChainOfThoughtStrategy<T> _cotStrategy;
     private readonly TreeOfThoughtsStrategy<T> _totStrategy;
     private readonly ContradictionDetector<T>? _contradictionDetector;
@@ -140,7 +141,7 @@ public class LogicalReasoner<T>
     /// Initializes a new instance of the <see cref="LogicalReasoner{T}"/> class.
     /// </summary>
     public LogicalReasoner(
-        IChatModel chatModel,
+        IChatModel<T> chatModel,
         ContradictionDetector<T>? contradictionDetector = null)
     {
         _chatModel = chatModel ?? throw new ArgumentNullException(nameof(chatModel));

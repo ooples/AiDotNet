@@ -28,8 +28,8 @@ public interface IThoughtGenerator<T>
     /// <param name="config">Reasoning configuration.</param>
     /// <param name="cancellationToken">Cancellation token.</param>
     /// <returns>List of new thought nodes.</returns>
-    Task<List<ThoughtNode<T>>> GenerateThoughtsAsync(
-        ThoughtNode<T> currentNode,
+    Task<List<AiDotNet.Reasoning.Models.ThoughtNode<T>>> GenerateThoughtsAsync(
+        AiDotNet.Reasoning.Models.ThoughtNode<T> currentNode,
         int numThoughts,
         ReasoningConfig config,
         CancellationToken cancellationToken = default);

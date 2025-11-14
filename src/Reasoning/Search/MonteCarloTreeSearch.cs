@@ -65,8 +65,8 @@ public class MonteCarloTreeSearch<T> : ISearchAlgorithm<T>
         "Used in AlphaGo and strategic planning.";
 
     /// <inheritdoc/>
-    public async Task<List<ThoughtNode<T>>> SearchAsync(
-        ThoughtNode<T> root,
+    public async Task<List<AiDotNet.Reasoning.Models.ThoughtNode<T>>> SearchAsync(
+        AiDotNet.Reasoning.Models.ThoughtNode<T> root,
         IThoughtGenerator<T> generator,
         IThoughtEvaluator<T> evaluator,
         ReasoningConfig config,
@@ -123,7 +123,7 @@ public class MonteCarloTreeSearch<T> : ISearchAlgorithm<T>
         }
 
         // Select best path based on visit counts (most explored = most promising)
-        var bestPath = new List<ThoughtNode<T>>();
+        var bestPath = new List<AiDotNet.Reasoning.Models.ThoughtNode<T>>();
         var current = root;
 
         while (current != null && current.Children.Count > 0)
@@ -142,13 +142,13 @@ public class MonteCarloTreeSearch<T> : ISearchAlgorithm<T>
             }
         }
 
-        return bestPath.Count > 0 ? bestPath : new List<ThoughtNode<T>> { root };
+        return bestPath.Count > 0 ? bestPath : new List<AiDotNet.Reasoning.Models.ThoughtNode<T>> { root };
     }
 
     /// <summary>
     /// Selection phase: Navigate to most promising leaf using UCB1.
     /// </summary>
-    private ThoughtNode<T> Select(ThoughtNode<T> node)
+    private AiDotNet.Reasoning.Models.ThoughtNode<T> Select(AiDotNet.Reasoning.Models.ThoughtNode<T> node)
     {
         while (node.Children.Count > 0)
         {
@@ -170,7 +170,7 @@ public class MonteCarloTreeSearch<T> : ISearchAlgorithm<T>
     /// <summary>
     /// Calculates UCB1 score for a node.
     /// </summary>
-    private double CalculateUCB1(ThoughtNode<T> node, ThoughtNode<T> parent)
+    private double CalculateUCB1(AiDotNet.Reasoning.Models.ThoughtNode<T> node, AiDotNet.Reasoning.Models.ThoughtNode<T> parent)
     {
         int visits = node.Metadata.ContainsKey("visits") ? (int)node.Metadata["visits"] : 0;
         int parentVisits = parent.Metadata.ContainsKey("visits") ? (int)parent.Metadata["visits"] : 1;
@@ -193,7 +193,7 @@ public class MonteCarloTreeSearch<T> : ISearchAlgorithm<T>
     /// <summary>
     /// Backpropagation phase: Update node statistics up the tree.
     /// </summary>
-    private void Backpropagate(ThoughtNode<T> node, double value)
+    private void Backpropagate(AiDotNet.Reasoning.Models.ThoughtNode<T> node, double value)
     {
         var current = node;
 
@@ -209,7 +209,7 @@ public class MonteCarloTreeSearch<T> : ISearchAlgorithm<T>
         }
     }
 
-    private bool IsTerminalNode(ThoughtNode<T> node)
+    private bool IsTerminalNode(AiDotNet.Reasoning.Models.ThoughtNode<T> node)
     {
         string thought = node.Thought.ToLowerInvariant();
         return thought.Contains("final answer") ||

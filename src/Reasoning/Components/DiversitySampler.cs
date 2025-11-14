@@ -49,8 +49,8 @@ public class DiversitySampler<T> : IDiversitySampler<T>
     }
 
     /// <inheritdoc/>
-    public List<ThoughtNode<T>> SampleDiverse(
-        List<ThoughtNode<T>> candidates,
+    public List<AiDotNet.Reasoning.Models.ThoughtNode<T>> SampleDiverse(
+        List<AiDotNet.Reasoning.Models.ThoughtNode<T>> candidates,
         int numToSample,
         ReasoningConfig config)
     {
@@ -63,11 +63,11 @@ public class DiversitySampler<T> : IDiversitySampler<T>
         // If requesting more than available, return all
         if (numToSample >= candidates.Count)
         {
-            return new List<ThoughtNode<T>>(candidates);
+            return new List<AiDotNet.Reasoning.Models.ThoughtNode<T>>(candidates);
         }
 
         // Use greedy selection for diversity
-        var selected = new List<ThoughtNode<T>>();
+        var selected = new List<AiDotNet.Reasoning.Models.ThoughtNode<T>>();
 
         // Start with the highest-scoring candidate
         var firstNode = candidates.OrderByDescending(c => Convert.ToDouble(c.EvaluationScore)).First();
@@ -76,7 +76,7 @@ public class DiversitySampler<T> : IDiversitySampler<T>
         // Greedily add candidates that maximize diversity from already-selected
         while (selected.Count < numToSample)
         {
-            ThoughtNode<T>? bestCandidate = null;
+            AiDotNet.Reasoning.Models.ThoughtNode<T>? bestCandidate = null;
             double maxMinDiversity = double.MinValue;
 
             foreach (var candidate in candidates)
@@ -122,7 +122,7 @@ public class DiversitySampler<T> : IDiversitySampler<T>
     }
 
     /// <inheritdoc/>
-    public T CalculateDiversity(ThoughtNode<T> thought1, ThoughtNode<T> thought2)
+    public T CalculateDiversity(AiDotNet.Reasoning.Models.ThoughtNode<T> thought1, AiDotNet.Reasoning.Models.ThoughtNode<T> thought2)
     {
         if (thought1 == null || thought2 == null)
             return _numOps.Zero;

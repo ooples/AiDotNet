@@ -39,8 +39,8 @@ public interface ISearchAlgorithm<T>
     /// <param name="config">Reasoning configuration.</param>
     /// <param name="cancellationToken">Cancellation token.</param>
     /// <returns>The best path found (list of nodes from root to solution).</returns>
-    Task<List<ThoughtNode<T>>> SearchAsync(
-        ThoughtNode<T> root,
+    Task<List<AiDotNet.Reasoning.Models.ThoughtNode<T>>> SearchAsync(
+        AiDotNet.Reasoning.Models.ThoughtNode<T> root,
         IThoughtGenerator<T> generator,
         IThoughtEvaluator<T> evaluator,
         ReasoningConfig config,

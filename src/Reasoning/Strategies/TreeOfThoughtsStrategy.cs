@@ -148,7 +148,7 @@ public class TreeOfThoughtsStrategy<T> : ReasoningStrategyBase<T>
         var startTime = DateTime.UtcNow;
 
         // Step 1: Create root node with the query
-        var rootNode = new ThoughtNode<T>
+        var rootNode = new AiDotNet.Reasoning.Models.ThoughtNode<T>
         {
             Thought = query,
             Depth = 0,
@@ -159,7 +159,7 @@ public class TreeOfThoughtsStrategy<T> : ReasoningStrategyBase<T>
         AppendTrace("Created root node, starting tree exploration...");
 
         // Step 2: Execute tree search
-        List<ThoughtNode<T>> bestPath;
+        List<AiDotNet.Reasoning.Models.ThoughtNode<T>> bestPath;
         try
         {
             bestPath = await _searchAlgorithm.SearchAsync(
@@ -256,7 +256,7 @@ public class TreeOfThoughtsStrategy<T> : ReasoningStrategyBase<T>
     /// Extracts or generates the final answer from the best reasoning path.
     /// </summary>
     private async Task<string> ExtractFinalAnswerAsync(
-        List<ThoughtNode<T>> path,
+        List<AiDotNet.Reasoning.Models.ThoughtNode<T>> path,
         string originalQuery,
         ReasoningConfig config,
         CancellationToken cancellationToken)
@@ -290,7 +290,7 @@ Provide a concise final answer:";
     /// <summary>
     /// Counts total nodes in the tree (DFS).
     /// </summary>
-    private int CountNodesInTree(ThoughtNode<T> root)
+    private int CountNodesInTree(AiDotNet.Reasoning.Models.ThoughtNode<T> root)
     {
         int count = 1; // Count this node
 

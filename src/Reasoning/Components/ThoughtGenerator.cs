@@ -40,8 +40,8 @@ public class ThoughtGenerator<T> : IThoughtGenerator<T>
     }
 
     /// <inheritdoc/>
-    public async Task<List<ThoughtNode<T>>> GenerateThoughtsAsync(
-        ThoughtNode<T> currentNode,
+    public async Task<List<AiDotNet.Reasoning.Models.ThoughtNode<T>>> GenerateThoughtsAsync(
+        AiDotNet.Reasoning.Models.ThoughtNode<T> currentNode,
         int numThoughts,
         ReasoningConfig config,
         CancellationToken cancellationToken = default)
@@ -66,13 +66,13 @@ public class ThoughtGenerator<T> : IThoughtGenerator<T>
         var thoughts = ParseThoughts(response, numThoughts);
 
         // Create nodes for each thought
-        var nodes = new List<ThoughtNode<T>>();
+        var nodes = new List<AiDotNet.Reasoning.Models.ThoughtNode<T>>();
         foreach (var thought in thoughts)
         {
             if (string.IsNullOrWhiteSpace(thought))
                 continue;
 
-            var node = new ThoughtNode<T>
+            var node = new AiDotNet.Reasoning.Models.ThoughtNode<T>
             {
                 Thought = thought.Trim(),
                 Parent = currentNode,
@@ -91,7 +91,7 @@ public class ThoughtGenerator<T> : IThoughtGenerator<T>
     /// Builds the prompt for generating thoughts.
     /// </summary>
     private string BuildGenerationPrompt(
-        ThoughtNode<T> currentNode,
+        AiDotNet.Reasoning.Models.ThoughtNode<T> currentNode,
         int numThoughts,
         string context,
         ReasoningConfig config)

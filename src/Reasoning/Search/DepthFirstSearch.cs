@@ -4,6 +4,20 @@ using AiDotNet.Reasoning.Models;
 namespace AiDotNet.Reasoning.Search;
 
 /// <summary>
+/// Helper class to track the best result during DFS traversal.
+/// </summary>
+internal class DFSBestResult<T>
+{
+    public AiDotNet.Reasoning.Models.ThoughtNode<T>? BestTerminal { get; set; }
+    public T BestScore { get; set; }
+
+    public DFSBestResult(T initialScore)
+    {
+        BestScore = initialScore;
+    }
+}
+
+/// <summary>
 /// Implements Depth-First Search for exploring reasoning trees.
 /// </summary>
 /// <typeparam name="T">The numeric type used for scoring (e.g., double, float).</typeparam>
@@ -45,8 +59,8 @@ public class DepthFirstSearch<T> : ISearchAlgorithm<T>
         "Explores paths deeply before backtracking. Memory efficient but may not find optimal solution.";
 
     /// <inheritdoc/>
-    public async Task<List<ThoughtNode<T>>> SearchAsync(
-        ThoughtNode<T> root,
+    public async Task<List<AiDotNet.Reasoning.Models.ThoughtNode<T>>> SearchAsync(
+        AiDotNet.Reasoning.Models.ThoughtNode<T> root,
         IThoughtGenerator<T> generator,
         IThoughtEvaluator<T> evaluator,
         ReasoningConfig config,
@@ -60,31 +74,29 @@ public class DepthFirstSearch<T> : ISearchAlgorithm<T>
         root.IsVisited = true;
 
         // Track best terminal node found
-        ThoughtNode<T>? bestTerminalNode = null;
         var numOps = MathHelper.GetNumericOperations<T>();
-        T bestScore = numOps.Zero;
+        var bestResult = new DFSBestResult<T>(numOps.Zero);
 
         // DFS with recursion
-        await DFSRecursive(root, root.Thought, generator, evaluator, config, 0, ref bestTerminalNode, ref bestScore, cancellationToken);
+        await DFSRecursive(root, root.Thought, generator, evaluator, config, 0, bestResult, cancellationToken);
 
         // Return best path
-        if (bestTerminalNode != null)
+        if (bestResult.BestTerminal != null)
         {
-            return ReconstructPath(bestTerminalNode);
+            return ReconstructPath(bestResult.BestTerminal);
         }
 
-        return new List<ThoughtNode<T>> { root };
+        return new List<AiDotNet.Reasoning.Models.ThoughtNode<T>> { root };
     }
 
     private async Task DFSRecursive(
-        ThoughtNode<T> node,
+        AiDotNet.Reasoning.Models.ThoughtNode<T> node,
         string originalQuery,
         IThoughtGenerator<T> generator,
         IThoughtEvaluator<T> evaluator,
         ReasoningConfig config,
         int currentDepth,
-        ref ThoughtNode<T>? bestTerminal,
-        ref T bestScore,
+        DFSBestResult<T> bestResult,
         CancellationToken cancellationToken)
     {
         cancellationToken.ThrowIfCancellationRequested();
@@ -96,12 +108,12 @@ public class DepthFirstSearch<T> : ISearchAlgorithm<T>
 
             // Update best if better
             double nodeScore = Convert.ToDouble(node.EvaluationScore);
-            double currentBest = Convert.ToDouble(bestScore);
+            double currentBest = Convert.ToDouble(bestResult.BestScore);
 
-            if (bestTerminal == null || nodeScore > currentBest)
+            if (bestResult.BestTerminal == null || nodeScore > currentBest)
             {
-                bestTerminal = node;
-                bestScore = node.EvaluationScore;
+                bestResult.BestTerminal = node;
+                bestResult.BestScore = node.EvaluationScore;
             }
 
             return;
@@ -120,11 +132,11 @@ public class DepthFirstSearch<T> : ISearchAlgorithm<T>
         // Recursively explore each child (DFS order)
         foreach (var child in node.Children)
         {
-            await DFSRecursive(child, originalQuery, generator, evaluator, config, currentDepth + 1, ref bestTerminal, ref bestScore, cancellationToken);
+            await DFSRecursive(child, originalQuery, generator, evaluator, config, currentDepth + 1, bestResult, cancellationToken);
         }
     }
 
-    private bool IsTerminalNode(ThoughtNode<T> node)
+    private bool IsTerminalNode(AiDotNet.Reasoning.Models.ThoughtNode<T> node)
     {
         string thought = node.Thought.ToLowerInvariant();
         return thought.Contains("final answer") ||
@@ -133,9 +145,9 @@ public class DepthFirstSearch<T> : ISearchAlgorithm<T>
                node.IsTerminal;
     }
 
-    private List<ThoughtNode<T>> ReconstructPath(ThoughtNode<T> node)
+    private List<AiDotNet.Reasoning.Models.ThoughtNode<T>> ReconstructPath(AiDotNet.Reasoning.Models.ThoughtNode<T> node)
     {
-        var path = new List<ThoughtNode<T>>();
+        var path = new List<AiDotNet.Reasoning.Models.ThoughtNode<T>>();
         var current = node;
 
         while (current != null)

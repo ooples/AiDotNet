@@ -173,7 +173,7 @@ namespace AiDotNet.Reasoning.Training;
 /// </remarks>
 public class ReinforcementLearner<T>
 {
-    private readonly IChatModel _model;
+    private readonly IChatModel<T> _model;
     private readonly IRewardModel<T> _rewardModel;
     private readonly PolicyGradientTrainer<T> _trainer;
     private readonly TrainingDataCollector<T> _dataCollector;
@@ -194,7 +194,7 @@ public class ReinforcementLearner<T>
     /// Initializes a new instance of the <see cref="ReinforcementLearner{T}"/> class.
     /// </summary>
     public ReinforcementLearner(
-        IChatModel model,
+        IChatModel<T> model,
         IRewardModel<T> rewardModel,
         RLConfig? config = null)
     {
