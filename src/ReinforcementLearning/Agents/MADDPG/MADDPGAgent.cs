@@ -63,6 +63,7 @@ public class MADDPGAgent<T> : DeepReinforcementLearningAgentBase<T>
             Epsilon = 1e-8
         });
         _stepCount = 0;
+        _replayBuffer = new UniformReplayBuffer<T>(_options.ReplayBufferSize);
 
         // Initialize networks directly in constructor
         _actorNetworks = new List<INeuralNetwork<T>>();
@@ -98,30 +99,29 @@ public class MADDPGAgent<T> : DeepReinforcementLearningAgentBase<T>
 
     private INeuralNetwork<T> CreateActorNetwork()
     {
-        var architecture = new NeuralNetworkArchitecture<T>
-        {
-            TaskType = NeuralNetworkTaskType.Regression
-        };
+        // Create layers
+        var layers = new List<ILayer<T>>();
 
-        // Use LayerHelper to create production-ready network layers
-        var layers = LayerHelper<T>.CreateDefaultFeedForwardLayers(
-            architecture,
-            hiddenLayerCount: _options.ActorHiddenLayers.Count,
-            hiddenLayerSize: _options.ActorHiddenLayers.FirstOrDefault() > 0 ? _options.ActorHiddenLayers.First() : 128
-        ).ToList();
+        // Input layer
+        layers.Add(new DenseLayer<T>(_options.StateSize, _options.ActorHiddenLayers.First(), new ReLUActivation<T>()));
 
-        // Override final activation to Tanh for continuous actions
-        var lastLayer = layers[layers.Count - 1];
-        if (lastLayer is DenseLayer<T> denseLayer)
+        // Hidden layers
+        for (int i = 1; i < _options.ActorHiddenLayers.Count; i++)
         {
-            layers[layers.Count - 1] = new DenseLayer<T>(
-                denseLayer.GetWeights().Rows,
-                _options.ActionSize,
-                new TanhActivation<T>()
-            );
+            layers.Add(new DenseLayer<T>(_options.ActorHiddenLayers[i - 1], _options.ActorHiddenLayers[i], new ReLUActivation<T>()));
         }
 
-        architecture.Layers = layers;
+        // Output layer with Tanh for continuous actions
+        layers.Add(new DenseLayer<T>(_options.ActorHiddenLayers.Last(), _options.ActionSize, new TanhActivation<T>()));
+
+        var architecture = new NeuralNetworkArchitecture<T>(
+            inputType: InputType.OneDimensional,
+            taskType: NeuralNetworkTaskType.Regression,
+            complexity: NetworkComplexity.Medium,
+            inputSize: _options.StateSize,
+            outputSize: _options.ActionSize,
+            layers: layers);
+
         return new NeuralNetwork<T>(architecture, _options.LossFunction);
     }
 
@@ -130,19 +130,29 @@ public class MADDPGAgent<T> : DeepReinforcementLearningAgentBase<T>
         // Centralized critic: observes all agents' states and actions
         int inputSize = (_options.StateSize + _options.ActionSize) * _options.NumAgents;
 
-        var architecture = new NeuralNetworkArchitecture<T>
+        // Create layers
+        var layers = new List<ILayer<T>>();
+
+        // Input layer
+        layers.Add(new DenseLayer<T>(inputSize, _options.CriticHiddenLayers.First(), new ReLUActivation<T>()));
+
+        // Hidden layers
+        for (int i = 1; i < _options.CriticHiddenLayers.Count; i++)
         {
-            TaskType = NeuralNetworkTaskType.Regression
-        };
+            layers.Add(new DenseLayer<T>(_options.CriticHiddenLayers[i - 1], _options.CriticHiddenLayers[i], new ReLUActivation<T>()));
+        }
 
-        // Use LayerHelper to create production-ready network layers
-        var layers = LayerHelper<T>.CreateDefaultFeedForwardLayers(
-            architecture,
-            hiddenLayerCount: _options.CriticHiddenLayers.Count,
-            hiddenLayerSize: _options.CriticHiddenLayers.FirstOrDefault() > 0 ? _options.CriticHiddenLayers.First() : 128
-        );
+        // Output layer (Q-value)
+        layers.Add(new DenseLayer<T>(_options.CriticHiddenLayers.Last(), 1, new LinearActivation<T>()));
 
-        architecture.Layers = layers.ToList();
+        var architecture = new NeuralNetworkArchitecture<T>(
+            inputType: InputType.OneDimensional,
+            taskType: NeuralNetworkTaskType.Regression,
+            complexity: NetworkComplexity.Medium,
+            inputSize: inputSize,
+            outputSize: 1,
+            layers: layers);
+
         return new NeuralNetwork<T>(architecture, _options.LossFunction);
     }
 
@@ -161,7 +171,9 @@ public class MADDPGAgent<T> : DeepReinforcementLearningAgentBase<T>
             throw new ArgumentException($"Invalid agent ID: {agentId}");
         }
 
-        var action = _actorNetworks[agentId].Forward(state);
+        var inputTensor = Tensor<T>.FromVector(state);
+        var actionTensor = _actorNetworks[agentId].Predict(inputTensor);
+        var action = actionTensor.ToVector();
 
         if (training)
         {
@@ -249,20 +261,26 @@ public class MADDPGAgent<T> : DeepReinforcementLearningAgentBase<T>
         foreach (var experience in batch)
         {
             // Compute target using target networks (centralized)
-            var targetQ = _targetCriticNetworks[agentId].Forward(ConcatenateStateAction(experience.nextState, experience.Action))[0];
+            var nextStateActionInput = ConcatenateStateAction(experience.nextState, experience.action);
+            var nextStateActionTensor = Tensor<T>.FromVector(nextStateActionInput);
+            var targetQTensor = _targetCriticNetworks[agentId].Predict(nextStateActionTensor);
+            var targetQ = targetQTensor.ToVector()[0];
 
             T target;
             if (experience.done)
             {
-                target = experience.Reward;
+                target = experience.reward;
             }
             else
             {
-                target = NumOps.Add(experience.Reward, NumOps.Multiply(_options.DiscountFactor, targetQ));
+                target = NumOps.Add(experience.reward, NumOps.Multiply(_options.DiscountFactor, targetQ));
             }
 
             // Current Q-value
-            var currentQ = _criticNetworks[agentId].Forward(ConcatenateStateAction(experience.state, experience.Action))[0];
+            var currentStateActionInput = ConcatenateStateAction(experience.state, experience.action);
+            var currentStateActionTensor = Tensor<T>.FromVector(currentStateActionInput);
+            var currentQTensor = _criticNetworks[agentId].Predict(currentStateActionTensor);
+            var currentQ = currentQTensor.ToVector()[0];
 
             // TD error
             var error = NumOps.Subtract(target, currentQ);
@@ -270,9 +288,10 @@ public class MADDPGAgent<T> : DeepReinforcementLearningAgentBase<T>
             totalLoss = NumOps.Add(totalLoss, loss);
 
             // Backpropagate
-            var gradient = new Vector<T>(1);
-            gradient[0] = error;
-            _criticNetworks[agentId].Backpropagate(gradient);
+            var gradientVec = new Vector<T>(1);
+            gradientVec[0] = error;
+            var gradientTensor = Tensor<T>.FromVector(gradientVec);
+            _criticNetworks[agentId].Backpropagate(currentStateActionTensor, gradientTensor);
             _criticNetworks[agentId].UpdateParameters(_options.CriticLearningRate);
         }
 
@@ -294,17 +313,22 @@ public class MADDPGAgent<T> : DeepReinforcementLearningAgentBase<T>
             }
 
             // Compute action from actor
-            var action = _actorNetworks[agentId].Forward(agentState);
+            var agentStateTensor = Tensor<T>.FromVector(agentState);
+            var actionTensor = _actorNetworks[agentId].Predict(agentStateTensor);
+            var action = actionTensor.ToVector();
 
             // Reconstruct joint action with this agent's new action
-            var jointAction = experience.Action.Clone();
+            var jointAction = experience.action.Clone();
             for (int i = 0; i < _options.ActionSize; i++)
             {
                 jointAction[agentId * _options.ActionSize + i] = action[i];
             }
 
             // Compute Q-value (policy gradient)
-            var qValue = _criticNetworks[agentId].Forward(ConcatenateStateAction(experience.state, jointAction))[0];
+            var jointStateAction = ConcatenateStateAction(experience.state, jointAction);
+            var jointStateActionTensor = Tensor<T>.FromVector(jointStateAction);
+            var qValueTensor = _criticNetworks[agentId].Predict(jointStateActionTensor);
+            var qValue = qValueTensor.ToVector()[0];
 
             // Actor loss: maximize Q-value
             totalLoss = NumOps.Add(totalLoss, NumOps.Negate(qValue));
@@ -316,7 +340,8 @@ public class MADDPGAgent<T> : DeepReinforcementLearningAgentBase<T>
                 actorGradient[i] = NumOps.Divide(qValue, NumOps.FromDouble(_options.ActionSize));
             }
 
-            _actorNetworks[agentId].Backpropagate(actorGradient);
+            var actorGradientTensor = Tensor<T>.FromVector(actorGradient);
+            _actorNetworks[agentId].Backpropagate(agentStateTensor, actorGradientTensor);
             _actorNetworks[agentId].UpdateParameters(_options.ActorLearningRate);
         }
 
@@ -417,7 +442,7 @@ public class MADDPGAgent<T> : DeepReinforcementLearningAgentBase<T>
     {
         return new ModelMetadata<T>
         {
-            ModelType = "MADDPG",
+            ModelType = Enums.ModelType.ReinforcementLearning,
         };
     }
 
@@ -507,7 +532,7 @@ public class MADDPGAgent<T> : DeepReinforcementLearningAgentBase<T>
         var usedLossFunction = lossFunction ?? LossFunction;
         var loss = usedLossFunction.CalculateLoss(prediction, target);
 
-        var gradient = usedLossFunction.ComputeGradient(prediction, target);
+        var gradient = usedLossFunction.CalculateGradient(prediction, target);
         return gradient;
     }
 
