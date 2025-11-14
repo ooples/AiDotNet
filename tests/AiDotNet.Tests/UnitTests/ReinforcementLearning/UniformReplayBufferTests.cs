@@ -1,5 +1,4 @@
 using AiDotNet.LinearAlgebra;
-using AiDotNet.NeuralNetworks;
 using AiDotNet.ReinforcementLearning.ReplayBuffers;
 using Xunit;
 
@@ -31,9 +30,10 @@ public class UniformReplayBufferTests
     {
         // Arrange
         var buffer = new UniformReplayBuffer<double>(capacity: 10);
-        var state = new Tensor<double>(new[] { 1.0, 2.0 }, [2]);
-        var nextState = new Tensor<double>(new[] { 3.0, 4.0 }, [2]);
-        var experience = new Experience<double>(state, 0, 1.0, nextState, false);
+        var state = new Vector<double>(new double[] { 1.0, 2.0 });
+        var nextState = new Vector<double>(new double[] { 3.0, 4.0 });
+        var action = new Vector<double>(new double[] { 0.0 });
+        var experience = new Experience<double>(state, action, 1.0, nextState, false);
 
         // Act
         buffer.Add(experience);
@@ -51,9 +51,10 @@ public class UniformReplayBufferTests
         // Add 4 experiences
         for (int i = 0; i < 4; i++)
         {
-            var state = new Tensor<double>(new[] { (double)i }, [1]);
-            var nextState = new Tensor<double>(new[] { (double)(i + 1) }, [1]);
-            var experience = new Experience<double>(state, 0, 1.0, nextState, false);
+            var state = new Vector<double>(new double[] { (double)i });
+            var nextState = new Vector<double>(new double[] { (double)(i + 1) });
+            var action = new Vector<double>(new double[] { 0.0 });
+            var experience = new Experience<double>(state, action, 1.0, nextState, false);
             buffer.Add(experience);
         }
 
@@ -70,9 +71,10 @@ public class UniformReplayBufferTests
         // Add 50 experiences
         for (int i = 0; i < 50; i++)
         {
-            var state = new Tensor<double>(new[] { (double)i }, [1]);
-            var nextState = new Tensor<double>(new[] { (double)(i + 1) }, [1]);
-            var experience = new Experience<double>(state, 0, 1.0, nextState, false);
+            var state = new Vector<double>(new double[] { (double)i });
+            var nextState = new Vector<double>(new double[] { (double)(i + 1) });
+            var action = new Vector<double>(new double[] { 0.0 });
+            var experience = new Experience<double>(state, action, 1.0, nextState, false);
             buffer.Add(experience);
         }
 
@@ -92,9 +94,10 @@ public class UniformReplayBufferTests
         // Add only 5 experiences
         for (int i = 0; i < 5; i++)
         {
-            var state = new Tensor<double>(new[] { (double)i }, [1]);
-            var nextState = new Tensor<double>(new[] { (double)(i + 1) }, [1]);
-            var experience = new Experience<double>(state, 0, 1.0, nextState, false);
+            var state = new Vector<double>(new double[] { (double)i });
+            var nextState = new Vector<double>(new double[] { (double)(i + 1) });
+            var action = new Vector<double>(new double[] { 0.0 });
+            var experience = new Experience<double>(state, action, 1.0, nextState, false);
             buffer.Add(experience);
         }
 
@@ -111,9 +114,10 @@ public class UniformReplayBufferTests
         // Add 5 experiences
         for (int i = 0; i < 5; i++)
         {
-            var state = new Tensor<double>(new[] { (double)i }, [1]);
-            var nextState = new Tensor<double>(new[] { (double)(i + 1) }, [1]);
-            var experience = new Experience<double>(state, 0, 1.0, nextState, false);
+            var state = new Vector<double>(new double[] { (double)i });
+            var nextState = new Vector<double>(new double[] { (double)(i + 1) });
+            var action = new Vector<double>(new double[] { 0.0 });
+            var experience = new Experience<double>(state, action, 1.0, nextState, false);
             buffer.Add(experience);
         }
 
@@ -131,9 +135,10 @@ public class UniformReplayBufferTests
         // Add experiences
         for (int i = 0; i < 10; i++)
         {
-            var state = new Tensor<double>(new[] { (double)i }, [1]);
-            var nextState = new Tensor<double>(new[] { (double)(i + 1) }, [1]);
-            var experience = new Experience<double>(state, 0, 1.0, nextState, false);
+            var state = new Vector<double>(new double[] { (double)i });
+            var nextState = new Vector<double>(new double[] { (double)(i + 1) });
+            var action = new Vector<double>(new double[] { 0.0 });
+            var experience = new Experience<double>(state, action, 1.0, nextState, false);
             buffer.Add(experience);
         }
 
