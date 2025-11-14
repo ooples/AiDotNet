@@ -75,6 +75,8 @@ public class QMIXAgent<T> : DeepReinforcementLearningAgentBase<T>
     {
         _agentNetworks = new List<INeuralNetwork<T>>();
         _targetAgentNetworks = new List<INeuralNetwork<T>>();
+        _mixingNetwork = CreateMixingNetwork();
+        _targetMixingNetwork = CreateMixingNetwork();
 
         // Create Q-network for each agent
         for (int i = 0; i < _options.NumAgents; i++)
@@ -91,9 +93,6 @@ public class QMIXAgent<T> : DeepReinforcementLearningAgentBase<T>
             Networks.Add(targetAgentNet);
         }
 
-        // Create mixing networks
-        _mixingNetwork = CreateMixingNetwork();
-        _targetMixingNetwork = CreateMixingNetwork();
         CopyNetworkWeights(_mixingNetwork, _targetMixingNetwork);
 
         // Register mixing networks with base class
@@ -103,15 +102,26 @@ public class QMIXAgent<T> : DeepReinforcementLearningAgentBase<T>
 
     private INeuralNetwork<T> CreateAgentNetwork()
     {
-        var architecture = new NeuralNetworkArchitecture<T>
-        {
-            TaskType = NeuralNetworkTaskType.Regression
-        };
+        // Create layers
+        var layers = new List<ILayer<T>>();
 
-        // Use LayerHelper to create Q-network layers
-        var layers = LayerHelper<T>.CreateDefaultDeepQNetworkLayers(architecture);
+        // Input layer
+        layers.Add(new DenseLayer<T>(_options.StateSize, 64, new ReLUActivation<T>()));
 
-        architecture.Layers = layers.ToList();
+        // Hidden layers
+        layers.Add(new DenseLayer<T>(64, 64, new ReLUActivation<T>()));
+
+        // Output layer (Q-values for each action)
+        layers.Add(new DenseLayer<T>(64, _options.ActionSize, new LinearActivation<T>()));
+
+        var architecture = new NeuralNetworkArchitecture<T>(
+            inputType: InputType.OneDimensional,
+            taskType: NeuralNetworkTaskType.Regression,
+            complexity: NetworkComplexity.Medium,
+            inputSize: _options.StateSize,
+            outputSize: _options.ActionSize,
+            layers: layers);
+
         return new NeuralNetwork<T>(architecture, _options.LossFunction);
     }
 
@@ -120,19 +130,30 @@ public class QMIXAgent<T> : DeepReinforcementLearningAgentBase<T>
         // Mixing network: (agent Q-values, global state) -> team Q-value
         int inputSize = _options.NumAgents + _options.GlobalStateSize;
 
-        var architecture = new NeuralNetworkArchitecture<T>
+        // Create layers
+        var layers = new List<ILayer<T>>();
+
+        // Input layer
+        int hiddenSize = _options.MixingHiddenLayers.FirstOrDefault() > 0 ? _options.MixingHiddenLayers.First() : 64;
+        layers.Add(new DenseLayer<T>(inputSize, hiddenSize, new ReLUActivation<T>()));
+
+        // Hidden layers
+        for (int i = 1; i < _options.MixingHiddenLayers.Count; i++)
         {
-            TaskType = NeuralNetworkTaskType.Regression
-        };
+            layers.Add(new DenseLayer<T>(_options.MixingHiddenLayers[i - 1], _options.MixingHiddenLayers[i], new ReLUActivation<T>()));
+        }
 
-        // Use LayerHelper to create production-ready network layers
-        var layers = LayerHelper<T>.CreateDefaultFeedForwardLayers(
-            architecture,
-            hiddenLayerCount: _options.MixingHiddenLayers.Count,
-            hiddenLayerSize: _options.MixingHiddenLayers.FirstOrDefault() > 0 ? _options.MixingHiddenLayers.First() : 64
-        );
+        // Output layer (team Q-value)
+        layers.Add(new DenseLayer<T>(hiddenSize, 1, new LinearActivation<T>()));
 
-        architecture.Layers = layers.ToList();
+        var architecture = new NeuralNetworkArchitecture<T>(
+            inputType: InputType.OneDimensional,
+            taskType: NeuralNetworkTaskType.Regression,
+            complexity: NetworkComplexity.Medium,
+            inputSize: inputSize,
+            outputSize: 1,
+            layers: layers);
+
         return new NeuralNetwork<T>(architecture, _options.LossFunction);
     }
 
@@ -161,7 +182,9 @@ public class QMIXAgent<T> : DeepReinforcementLearningAgentBase<T>
         }
 
         // Greedy action
-        var qValues = _agentNetworks[agentId].Forward(state);
+        var stateTensor = Tensor<T>.FromVector(state);
+        var qValuesTensor = _agentNetworks[agentId].Predict(stateTensor);
+        var qValues = qValuesTensor.ToVector();
         int bestAction = ArgMax(qValues);
 
         var result = new Vector<T>(_options.ActionSize);
@@ -219,35 +242,43 @@ public class QMIXAgent<T> : DeepReinforcementLearningAgentBase<T>
         foreach (var experience in batch)
         {
             // Decompose joint experience
-            var (agentStates, globalState, agentActions) = DecomposeJointState(experience.state, experience.Action);
-            var (nextAgentStates, nextGlobalState, _) = DecomposeJointState(experience.nextState, experience.Action);
+            var (agentStates, globalState, agentActions) = DecomposeJointState(experience.State, experience.Action);
+            var (nextAgentStates, nextGlobalState, _) = DecomposeJointState(experience.NextState, experience.Action);
 
             // Compute individual agent Q-values
             var agentQValues = new List<T>();
             for (int i = 0; i < _options.NumAgents; i++)
             {
-                var qValues = _agentNetworks[i].Forward(agentStates[i]);
+                var stateTensor = Tensor<T>.FromVector(agentStates[i]);
+                var qValuesTensor = _agentNetworks[i].Predict(stateTensor);
+                var qValues = qValuesTensor.ToVector();
                 int actionIdx = ArgMax(agentActions[i]);
                 agentQValues.Add(qValues[actionIdx]);
             }
 
             // Mix agent Q-values to get team Q-value
             var mixingInput = ConcatenateMixingInput(agentQValues, globalState);
-            var teamQ = _mixingNetwork.Predict(mixingInput)[0];
+            var mixingInputTensor = Tensor<T>.FromVector(mixingInput);
+            var teamQTensor = _mixingNetwork.Predict(mixingInputTensor);
+            var teamQ = teamQTensor.ToVector()[0];
 
             // Compute target team Q-value
             var nextAgentQValues = new List<T>();
             for (int i = 0; i < _options.NumAgents; i++)
             {
-                var nextQValues = _targetAgentNetworks[i].Forward(nextAgentStates[i]);
+                var nextStateTensor = Tensor<T>.FromVector(nextAgentStates[i]);
+                var nextQValuesTensor = _targetAgentNetworks[i].Predict(nextStateTensor);
+                var nextQValues = nextQValuesTensor.ToVector();
                 nextAgentQValues.Add(MaxValue(nextQValues));
             }
 
             var targetMixingInput = ConcatenateMixingInput(nextAgentQValues, nextGlobalState);
-            var targetTeamQ = _targetMixingNetwork.Predict(targetMixingInput)[0];
+            var targetMixingInputTensor = Tensor<T>.FromVector(targetMixingInput);
+            var targetTeamQTensor = _targetMixingNetwork.Predict(targetMixingInputTensor);
+            var targetTeamQ = targetTeamQTensor.ToVector()[0];
 
             T target;
-            if (experience.done)
+            if (experience.IsDone)
             {
                 target = experience.Reward;
             }
@@ -262,19 +293,22 @@ public class QMIXAgent<T> : DeepReinforcementLearningAgentBase<T>
             totalLoss = NumOps.Add(totalLoss, loss);
 
             // Backpropagate through mixing network
-            var mixingGradient = new Vector<T>(1);
-            mixingGradient[0] = tdError;
-            _mixingNetwork.Backpropagate(mixingGradient);
+            var mixingGradientVec = new Vector<T>(1);
+            mixingGradientVec[0] = tdError;
+            var mixingGradient = Tensor<T>.FromVector(mixingGradientVec);
+            _mixingNetwork.Backpropagate(mixingInputTensor, mixingGradient);
             _mixingNetwork.UpdateParameters(_options.LearningRate);
 
             // Backpropagate through agent networks
             for (int i = 0; i < _options.NumAgents; i++)
             {
-                var agentGradient = new Vector<T>(_options.ActionSize);
+                var agentGradientVec = new Vector<T>(_options.ActionSize);
                 int actionIdx = ArgMax(agentActions[i]);
-                agentGradient[actionIdx] = NumOps.Divide(tdError, NumOps.FromDouble(_options.NumAgents));
+                agentGradientVec[actionIdx] = NumOps.Divide(tdError, NumOps.FromDouble(_options.NumAgents));
 
-                _agentNetworks[i].Backpropagate(agentGradient);
+                var stateTensor = Tensor<T>.FromVector(agentStates[i]);
+                var agentGradient = Tensor<T>.FromVector(agentGradientVec);
+                _agentNetworks[i].Backpropagate(stateTensor, agentGradient);
                 _agentNetworks[i].UpdateParameters(_options.LearningRate);
             }
         }
@@ -460,7 +494,7 @@ public class QMIXAgent<T> : DeepReinforcementLearningAgentBase<T>
     {
         return new ModelMetadata<T>
         {
-            ModelType = "QMIX",
+            ModelType = Enums.ModelType.ReinforcementLearning,
         };
     }
 
@@ -541,10 +575,9 @@ public class QMIXAgent<T> : DeepReinforcementLearningAgentBase<T>
     {
         var prediction = Predict(input);
         var usedLossFunction = lossFunction ?? LossFunction;
-        var loss = usedLossFunction.CalculateLoss(new Matrix<T>(new[] { prediction }), new Matrix<T>(new[] { target }));
+        var loss = usedLossFunction.CalculateLoss(prediction, target);
 
-        var gradientMatrix = usedLossFunction.CalculateDerivative(new Matrix<T>(new[] { prediction }), new Matrix<T>(new[] { target }));
-        var gradient = new Vector<T>(gradientMatrix.GetRow(0));
+        var gradient = usedLossFunction.CalculateGradient(prediction, target);
         return gradient;
     }
 
