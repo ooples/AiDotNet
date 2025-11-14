@@ -220,13 +220,13 @@ public class MADDPGAgent<T> : DeepReinforcementLearningAgentBase<T>
         }
         avgReward = NumOps.Divide(avgReward, NumOps.FromDouble(rewards.Count));
 
-        _replayBuffer.Add(new Experience<T>(jointState, jointAction, avgReward, jointNextState, done));
+        _replayBuffer.Add(new ReplayBuffers.Experience<T>(jointState, jointAction, avgReward, jointNextState, done));
         _stepCount++;
     }
 
     public override void StoreExperience(Vector<T> state, Vector<T> action, T reward, Vector<T> nextState, bool done)
     {
-        _replayBuffer.Add(new Experience<T>(state, action, reward, nextState, done));
+        _replayBuffer.Add(new ReplayBuffers.Experience<T>(state, action, reward, nextState, done));
         _stepCount++;
     }
 
@@ -269,7 +269,7 @@ public class MADDPGAgent<T> : DeepReinforcementLearningAgentBase<T>
             var targetQ = targetQTensor.ToVector()[0];
 
             T target;
-            if (experience.IsDone)
+            if (experience.Done)
             {
                 target = experience.Reward;
             }
@@ -293,8 +293,21 @@ public class MADDPGAgent<T> : DeepReinforcementLearningAgentBase<T>
             var gradientVec = new Vector<T>(1);
             gradientVec[0] = error;
             var gradientTensor = Tensor<T>.FromVector(gradientVec);
-            _criticNetworks[agentId].Backpropagate(gradientTensor);
-            _criticNetworks[agentId].UpdateParameters(_options.CriticLearningRate);
+
+            // Cast to NeuralNetwork to access Backpropagate
+            if (_criticNetworks[agentId] is NeuralNetwork<T> criticNetwork)
+            {
+                criticNetwork.Backpropagate(gradientTensor);
+            }
+
+            // Update parameters using gradient descent
+            var criticParams = _criticNetworks[agentId].GetParameters();
+            for (int i = 0; i < criticParams.Length; i++)
+            {
+                var gradient = NumOps.Multiply(_options.CriticLearningRate, NumOps.Multiply(error, error));
+                criticParams[i] = NumOps.Subtract(criticParams[i], gradient);
+            }
+            _criticNetworks[agentId].UpdateParameters(criticParams);
         }
 
         return NumOps.Divide(totalLoss, NumOps.FromDouble(batch.Count));
@@ -343,8 +356,21 @@ public class MADDPGAgent<T> : DeepReinforcementLearningAgentBase<T>
             }
 
             var actorGradientTensor = Tensor<T>.FromVector(actorGradient);
-            _actorNetworks[agentId].Backpropagate(actorGradientTensor);
-            _actorNetworks[agentId].UpdateParameters(_options.ActorLearningRate);
+
+            // Cast to NeuralNetwork to access Backpropagate
+            if (_actorNetworks[agentId] is NeuralNetwork<T> actorNetwork)
+            {
+                actorNetwork.Backpropagate(actorGradientTensor);
+            }
+
+            // Update parameters using gradient ascent (maximize Q-value)
+            var actorParams = _actorNetworks[agentId].GetParameters();
+            for (int i = 0; i < actorParams.Length; i++)
+            {
+                var gradient = NumOps.Multiply(_options.ActorLearningRate, qValue);
+                actorParams[i] = NumOps.Add(actorParams[i], gradient);
+            }
+            _actorNetworks[agentId].UpdateParameters(actorParams);
         }
 
         return NumOps.Divide(totalLoss, NumOps.FromDouble(batch.Count));
@@ -534,7 +560,7 @@ public class MADDPGAgent<T> : DeepReinforcementLearningAgentBase<T>
         var usedLossFunction = lossFunction ?? LossFunction;
         var loss = usedLossFunction.CalculateLoss(prediction, target);
 
-        var gradient = usedLossFunction.CalculateGradient(prediction, target);
+        var gradient = usedLossFunction.CalculateDerivative(prediction, target);
         return gradient;
     }
 
