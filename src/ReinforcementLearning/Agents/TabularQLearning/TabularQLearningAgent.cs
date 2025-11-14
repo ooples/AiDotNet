@@ -194,7 +194,7 @@ public class TabularQLearningAgent<T> : ReinforcementLearningAgentBase<T>
         throw new NotImplementedException("Tabular Q-Learning deserialization not yet implemented");
     }
 
-    public override Matrix<T> GetParameters()
+    public override Vector<T> GetParameters()
     {
         // Flatten Q-table into matrix
         int stateCount = _qTable.Count;
@@ -213,7 +213,7 @@ public class TabularQLearningAgent<T> : ReinforcementLearningAgentBase<T>
         return parameters;
     }
 
-    public override void SetParameters(Matrix<T> parameters)
+    public override void SetParameters(Vector<T> parameters)
     {
         // Reconstruct Q-table from matrix
         _qTable.Clear();
@@ -240,7 +240,7 @@ public class TabularQLearningAgent<T> : ReinforcementLearningAgentBase<T>
         return clone;
     }
 
-    public override (Matrix<T> Gradients, T Loss) ComputeGradients(
+    public override (Vector<T> Gradients, T Loss) ComputeGradients(
         Vector<T> input,
         Vector<T> target,
         ILossFunction<T>? lossFunction = null)
@@ -249,7 +249,7 @@ public class TabularQLearningAgent<T> : ReinforcementLearningAgentBase<T>
         return (new Matrix<T>(1, 1), NumOps.Zero);
     }
 
-    public override void ApplyGradients(Matrix<T> gradients, T learningRate)
+    public override void ApplyGradients(Vector<T> gradients, T learningRate)
     {
         // Tabular methods don't use gradients
     }

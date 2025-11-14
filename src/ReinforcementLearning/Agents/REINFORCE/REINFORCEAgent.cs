@@ -382,7 +382,7 @@ public class REINFORCEAgent<T> : DeepReinforcementLearningAgentBase<T>
     }
 
     /// <inheritdoc/>
-    public override Matrix<T> GetParameters()
+    public override Vector<T> GetParameters()
     {
         var policyParams = _policyNetwork.GetParameters();
         var matrix = new Matrix<T>(policyParams.Length, 1);
@@ -392,11 +392,11 @@ public class REINFORCEAgent<T> : DeepReinforcementLearningAgentBase<T>
             matrix[i, 0] = policyParams[i];
         }
 
-        return matrix;
+        return vector;
     }
 
     /// <inheritdoc/>
-    public override void SetParameters(Matrix<T> parameters)
+    public override void SetParameters(Vector<T> parameters)
     {
         var vector = new Vector<T>(parameters.Rows);
         for (int i = 0; i < parameters.Rows; i++)
@@ -415,14 +415,14 @@ public class REINFORCEAgent<T> : DeepReinforcementLearningAgentBase<T>
     }
 
     /// <inheritdoc/>
-    public override (Matrix<T> Gradients, T Loss) ComputeGradients(
+    public override (Vector<T> Gradients, T Loss) ComputeGradients(
         Vector<T> input, Vector<T> target, ILossFunction<T>? lossFunction = null)
     {
         return (GetParameters(), NumOps.Zero);
     }
 
     /// <inheritdoc/>
-    public override void ApplyGradients(Matrix<T> gradients, T learningRate)
+    public override void ApplyGradients(Vector<T> gradients, T learningRate)
     {
         // Not directly applicable
     }

@@ -565,25 +565,25 @@ public class SACAgent<T> : DeepReinforcementLearningAgentBase<T>
     }
 
     /// <inheritdoc/>
-    public override Matrix<T> GetParameters()
+    public override Vector<T> GetParameters()
     {
         var policyParams = _policyNetwork.GetParameters();
         var q1Params = _q1Network.GetParameters();
         var q2Params = _q2Network.GetParameters();
 
         var total = policyParams.Length + q1Params.Length + q2Params.Length;
-        var matrix = new Matrix<T>(total, 1);
+        var vector = new Vector<T>(total);
 
         int idx = 0;
-        foreach (var p in policyParams) matrix[idx++, 0] = p;
-        foreach (var p in q1Params) matrix[idx++, 0] = p;
-        foreach (var p in q2Params) matrix[idx++, 0] = p;
+        foreach (var p in policyParams) vector[idx++] = p;
+        foreach (var p in q1Params) vector[idx++] = p;
+        foreach (var p in q2Params) vector[idx++] = p;
 
-        return matrix;
+        return vector;
     }
 
     /// <inheritdoc/>
-    public override void SetParameters(Matrix<T> parameters)
+    public override void SetParameters(Vector<T> parameters)
     {
         var policyParams = _policyNetwork.GetParameters();
         var q1Params = _q1Network.GetParameters();
@@ -594,9 +594,9 @@ public class SACAgent<T> : DeepReinforcementLearningAgentBase<T>
         var q1Vec = new Vector<T>(q1Params.Length);
         var q2Vec = new Vector<T>(q2Params.Length);
 
-        for (int i = 0; i < policyParams.Length; i++) policyVec[i] = parameters[idx++, 0];
-        for (int i = 0; i < q1Params.Length; i++) q1Vec[i] = parameters[idx++, 0];
-        for (int i = 0; i < q2Params.Length; i++) q2Vec[i] = parameters[idx++, 0];
+        for (int i = 0; i < policyParams.Length; i++) policyVec[i] = parameters[idx++];
+        for (int i = 0; i < q1Params.Length; i++) q1Vec[i] = parameters[idx++];
+        for (int i = 0; i < q2Params.Length; i++) q2Vec[i] = parameters[idx++];
 
         _policyNetwork.UpdateParameters(policyVec);
         _q1Network.UpdateParameters(q1Vec);
@@ -616,14 +616,14 @@ public class SACAgent<T> : DeepReinforcementLearningAgentBase<T>
     }
 
     /// <inheritdoc/>
-    public override (Matrix<T> Gradients, T Loss) ComputeGradients(
+    public override (Vector<T> Gradients, T Loss) ComputeGradients(
         Vector<T> input, Vector<T> target, ILossFunction<T>? lossFunction = null)
     {
         return (GetParameters(), NumOps.Zero);
     }
 
     /// <inheritdoc/>
-    public override void ApplyGradients(Matrix<T> gradients, T learningRate)
+    public override void ApplyGradients(Vector<T> gradients, T learningRate)
     {
         // Not directly applicable for SAC
     }

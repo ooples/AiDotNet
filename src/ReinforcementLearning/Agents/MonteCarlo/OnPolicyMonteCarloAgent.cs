@@ -233,7 +233,7 @@ public class OnPolicyMonteCarloAgent<T> : ReinforcementLearningAgentBase<T>
         throw new NotImplementedException("OnPolicyMonteCarlo deserialization not yet implemented");
     }
 
-    public override Matrix<T> GetParameters()
+    public override Vector<T> GetParameters()
     {
         var paramsList = new List<T>();
         foreach (var stateEntry in _qTable)
@@ -258,7 +258,7 @@ public class OnPolicyMonteCarloAgent<T> : ReinforcementLearningAgentBase<T>
         return new Matrix<T>(new[] { paramsVector });
     }
 
-    public override void SetParameters(Matrix<T> parameters)
+    public override void SetParameters(Vector<T> parameters)
     {
         int index = 0;
         foreach (var stateEntry in _qTable.ToList())
@@ -279,7 +279,7 @@ public class OnPolicyMonteCarloAgent<T> : ReinforcementLearningAgentBase<T>
         return new OnPolicyMonteCarloAgent<T>(_options);
     }
 
-    public override (Matrix<T> Gradients, T Loss) ComputeGradients(
+    public override (Vector<T> Gradients, T Loss) ComputeGradients(
         Vector<T> input,
         Vector<T> target,
         ILossFunction<T>? lossFunction = null)
@@ -292,7 +292,7 @@ public class OnPolicyMonteCarloAgent<T> : ReinforcementLearningAgentBase<T>
         return (gradient, loss);
     }
 
-    public override void ApplyGradients(Matrix<T> gradients, T learningRate)
+    public override void ApplyGradients(Vector<T> gradients, T learningRate)
     {
         // Monte Carlo methods don't use gradients in the traditional sense
     }

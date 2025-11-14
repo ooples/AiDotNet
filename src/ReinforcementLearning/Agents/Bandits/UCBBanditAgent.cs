@@ -121,11 +121,11 @@ public class UCBBanditAgent<T> : ReinforcementLearningAgentBase<T>
     public override int FeatureCount => 1;
     public override byte[] Serialize() => throw new NotImplementedException();
     public override void Deserialize(byte[] data) => throw new NotImplementedException();
-    public override Matrix<T> GetParameters() => new Matrix<T>(new[] { _qValues });
-    public override void SetParameters(Matrix<T> parameters) { for (int i = 0; i < _options.NumArms && i < parameters.Columns; i++) _qValues[i] = parameters[0, i]; }
+    public override Vector<T> GetParameters() => new Matrix<T>(new[] { _qValues });
+    public override void SetParameters(Vector<T> parameters) { for (int i = 0; i < _options.NumArms && i < parameters.Columns; i++) _qValues[i] = parameters[0, i]; }
     public override IFullModel<T, Vector<T>, Vector<T>> Clone() => new UCBBanditAgent<T>(_options);
-    public override (Matrix<T> Gradients, T Loss) ComputeGradients(Vector<T> input, Vector<T> target, ILossFunction<T>? lossFunction = null) { var pred = Predict(input); var lf = lossFunction ?? LossFunction; var loss = lf.CalculateLoss(new Matrix<T>(new[] { pred }), new Matrix<T>(new[] { target })); var grad = lf.CalculateDerivative(new Matrix<T>(new[] { pred }), new Matrix<T>(new[] { target })); return (grad, loss); }
-    public override void ApplyGradients(Matrix<T> gradients, T learningRate) { }
+    public override (Vector<T> Gradients, T Loss) ComputeGradients(Vector<T> input, Vector<T> target, ILossFunction<T>? lossFunction = null) { var pred = Predict(input); var lf = lossFunction ?? LossFunction; var loss = lf.CalculateLoss(new Matrix<T>(new[] { pred }), new Matrix<T>(new[] { target })); var grad = lf.CalculateDerivative(new Matrix<T>(new[] { pred }), new Matrix<T>(new[] { target })); return (grad, loss); }
+    public override void ApplyGradients(Vector<T> gradients, T learningRate) { }
     public override void SaveModel(string filepath) { var data = Serialize(); System.IO.File.WriteAllBytes(filepath, data); }
     public override void LoadModel(string filepath) { var data = System.IO.File.ReadAllBytes(filepath); Deserialize(data); }
 }

@@ -283,7 +283,7 @@ public class LSTDAgent<T> : ReinforcementLearningAgentBase<T>
     public override byte[] Serialize() => throw new NotImplementedException();
     public override void Deserialize(byte[] data) => throw new NotImplementedException();
 
-    public override Matrix<T> GetParameters()
+    public override Vector<T> GetParameters()
     {
         int paramCount = _options.ActionSize * _options.FeatureSize;
         var vector = new Vector<T>(paramCount);
@@ -296,7 +296,7 @@ public class LSTDAgent<T> : ReinforcementLearningAgentBase<T>
         return new Matrix<T>(new[] { vector });
     }
 
-    public override void SetParameters(Matrix<T> parameters)
+    public override void SetParameters(Vector<T> parameters)
     {
         int idx = 0;
         for (int a = 0; a < _options.ActionSize; a++)
@@ -307,7 +307,7 @@ public class LSTDAgent<T> : ReinforcementLearningAgentBase<T>
 
     public override IFullModel<T, Vector<T>, Vector<T>> Clone() => new LSTDAgent<T>(_options);
 
-    public override (Matrix<T> Gradients, T Loss) ComputeGradients(Vector<T> input, Vector<T> target, ILossFunction<T>? lossFunction = null)
+    public override (Vector<T> Gradients, T Loss) ComputeGradients(Vector<T> input, Vector<T> target, ILossFunction<T>? lossFunction = null)
     {
         var pred = Predict(input);
         var lf = lossFunction ?? LossFunction;
@@ -316,7 +316,7 @@ public class LSTDAgent<T> : ReinforcementLearningAgentBase<T>
         return (grad, loss);
     }
 
-    public override void ApplyGradients(Matrix<T> gradients, T learningRate) { }
+    public override void ApplyGradients(Vector<T> gradients, T learningRate) { }
     public override void SaveModel(string filepath) { var data = Serialize(); System.IO.File.WriteAllBytes(filepath, data); }
     public override void LoadModel(string filepath) { var data = System.IO.File.ReadAllBytes(filepath); Deserialize(data); }
 }

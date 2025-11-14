@@ -426,23 +426,23 @@ public class DDPGAgent<T> : DeepReinforcementLearningAgentBase<T>
     }
 
     /// <inheritdoc/>
-    public override Matrix<T> GetParameters()
+    public override Vector<T> GetParameters()
     {
         var actorParams = _actorNetwork.GetParameters();
         var criticParams = _criticNetwork.GetParameters();
 
         var total = actorParams.Length + criticParams.Length;
-        var matrix = new Matrix<T>(total, 1);
+        var vector = new Vector<T>(total);
 
         int idx = 0;
-        foreach (var p in actorParams) matrix[idx++, 0] = p;
-        foreach (var p in criticParams) matrix[idx++, 0] = p;
+        foreach (var p in actorParams) vector[idx++] = p;
+        foreach (var p in criticParams) vector[idx++] = p;
 
-        return matrix;
+        return vector;
     }
 
     /// <inheritdoc/>
-    public override void SetParameters(Matrix<T> parameters)
+    public override void SetParameters(Vector<T> parameters)
     {
         var actorParams = _actorNetwork.GetParameters();
         var criticParams = _criticNetwork.GetParameters();
@@ -451,8 +451,8 @@ public class DDPGAgent<T> : DeepReinforcementLearningAgentBase<T>
         var actorVec = new Vector<T>(actorParams.Length);
         var criticVec = new Vector<T>(criticParams.Length);
 
-        for (int i = 0; i < actorParams.Length; i++) actorVec[i] = parameters[idx++, 0];
-        for (int i = 0; i < criticParams.Length; i++) criticVec[i] = parameters[idx++, 0];
+        for (int i = 0; i < actorParams.Length; i++) actorVec[i] = parameters[idx++];
+        for (int i = 0; i < criticParams.Length; i++) criticVec[i] = parameters[idx++];
 
         _actorNetwork.UpdateParameters(actorVec);
         _criticNetwork.UpdateParameters(criticVec);
@@ -470,7 +470,7 @@ public class DDPGAgent<T> : DeepReinforcementLearningAgentBase<T>
     }
 
     /// <inheritdoc/>
-    public override (Matrix<T> Gradients, T Loss) ComputeGradients(
+    public override (Vector<T> Gradients, T Loss) ComputeGradients(
         Vector<T> input, Vector<T> target, ILossFunction<T>? lossFunction = null)
     {
         throw new NotSupportedException(
@@ -479,7 +479,7 @@ public class DDPGAgent<T> : DeepReinforcementLearningAgentBase<T>
     }
 
     /// <inheritdoc/>
-    public override void ApplyGradients(Matrix<T> gradients, T learningRate)
+    public override void ApplyGradients(Vector<T> gradients, T learningRate)
     {
         throw new NotSupportedException(
             "DDPG uses actor-critic training via Train() method. " +

@@ -178,12 +178,12 @@ public abstract class ReinforcementLearningAgentBase<T> : IRLAgent<T>, IDisposab
     /// <summary>
     /// Gets the agent's parameters.
     /// </summary>
-    public abstract Matrix<T> GetParameters();
+    public abstract Vector<T> GetParameters();
 
     /// <summary>
     /// Sets the agent's parameters.
     /// </summary>
-    public abstract void SetParameters(Matrix<T> parameters);
+    public abstract void SetParameters(Vector<T> parameters);
 
     /// <summary>
     /// Gets the number of parameters in the agent.
@@ -220,14 +220,56 @@ public abstract class ReinforcementLearningAgentBase<T> : IRLAgent<T>, IDisposab
     }
 
     /// <summary>
+    /// Gets the indices of active features.
+    /// </summary>
+    public virtual int[] GetActiveFeatureIndices()
+    {
+        return Enumerable.Range(0, FeatureCount).ToArray();
+    }
+
+    /// <summary>
+    /// Checks if a feature is used by the agent.
+    /// </summary>
+    public virtual bool IsFeatureUsed(int featureIndex)
+    {
+        return featureIndex >= 0 && featureIndex < FeatureCount;
+    }
+
+    /// <summary>
+    /// Sets the active feature indices.
+    /// </summary>
+    public virtual void SetActiveFeatureIndices(IEnumerable<int> indices)
+    {
+        // Default implementation - can be overridden by derived classes
+    }
+
+    /// <summary>
     /// Clones the agent.
     /// </summary>
     public abstract IFullModel<T, Vector<T>, Vector<T>> Clone();
 
     /// <summary>
+    /// Creates a deep copy of the agent.
+    /// </summary>
+    public virtual IFullModel<T, Vector<T>, Vector<T>> DeepCopy()
+    {
+        return Clone();
+    }
+
+    /// <summary>
+    /// Creates a new instance with the specified parameters.
+    /// </summary>
+    public virtual IFullModel<T, Vector<T>, Vector<T>> WithParameters(Vector<T> parameters)
+    {
+        var clone = Clone();
+        clone.SetParameters(parameters);
+        return clone;
+    }
+
+    /// <summary>
     /// Computes gradients for the agent.
     /// </summary>
-    public abstract (Matrix<T> Gradients, T Loss) ComputeGradients(
+    public abstract (Vector<T> Gradients, T Loss) ComputeGradients(
         Vector<T> input,
         Vector<T> target,
         ILossFunction<T>? lossFunction = null);
@@ -235,7 +277,7 @@ public abstract class ReinforcementLearningAgentBase<T> : IRLAgent<T>, IDisposab
     /// <summary>
     /// Applies gradients to update the agent.
     /// </summary>
-    public abstract void ApplyGradients(Matrix<T> gradients, T learningRate);
+    public abstract void ApplyGradients(Vector<T> gradients, T learningRate);
 
     /// <summary>
     /// Saves the agent's state to a file.

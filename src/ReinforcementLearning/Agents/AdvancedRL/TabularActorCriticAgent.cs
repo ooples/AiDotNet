@@ -130,7 +130,7 @@ public class TabularActorCriticAgent<T> : ReinforcementLearningAgentBase<T>
     public override int FeatureCount => _options.StateSize;
     public override byte[] Serialize() => throw new NotImplementedException();
     public override void Deserialize(byte[] data) => throw new NotImplementedException();
-    public override Matrix<T> GetParameters()
+    public override Vector<T> GetParameters()
     {
         int paramCount = _valueTable.Count + (_policy.Count * _options.ActionSize);
         if (paramCount == 0) paramCount = 1;
@@ -150,7 +150,7 @@ public class TabularActorCriticAgent<T> : ReinforcementLearningAgentBase<T>
 
         return new Matrix<T>(new[] { vector });
     }
-    public override void SetParameters(Matrix<T> parameters)
+    public override void SetParameters(Vector<T> parameters)
     {
         int idx = 0;
         foreach (var s in _valueTable.Keys.ToList())
@@ -163,7 +163,7 @@ public class TabularActorCriticAgent<T> : ReinforcementLearningAgentBase<T>
                     _policy[s.Key][a] = parameters[0, idx++];
     }
     public override IFullModel<T, Vector<T>, Vector<T>> Clone() => new TabularActorCriticAgent<T>(_options);
-    public override (Matrix<T> Gradients, T Loss) ComputeGradients(Vector<T> input, Vector<T> target, ILossFunction<T>? lossFunction = null)
+    public override (Vector<T> Gradients, T Loss) ComputeGradients(Vector<T> input, Vector<T> target, ILossFunction<T>? lossFunction = null)
     {
         var pred = Predict(input);
         var lf = lossFunction ?? LossFunction;
@@ -171,7 +171,7 @@ public class TabularActorCriticAgent<T> : ReinforcementLearningAgentBase<T>
         var grad = lf.CalculateDerivative(new Matrix<T>(new[] { pred }), new Matrix<T>(new[] { target }));
         return (grad, loss);
     }
-    public override void ApplyGradients(Matrix<T> gradients, T learningRate) { }
+    public override void ApplyGradients(Vector<T> gradients, T learningRate) { }
     public override void SaveModel(string filepath) { var data = Serialize(); System.IO.File.WriteAllBytes(filepath, data); }
     public override void LoadModel(string filepath) { var data = System.IO.File.ReadAllBytes(filepath); Deserialize(data); }
 }

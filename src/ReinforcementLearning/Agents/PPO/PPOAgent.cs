@@ -602,7 +602,7 @@ public class PPOAgent<T> : DeepReinforcementLearningAgentBase<T>
     }
 
     /// <inheritdoc/>
-    public override Matrix<T> GetParameters()
+    public override Vector<T> GetParameters()
     {
         var policyParams = _policyNetwork.GetParameters();
         var valueParams = _valueNetwork.GetParameters();
@@ -612,15 +612,15 @@ public class PPOAgent<T> : DeepReinforcementLearningAgentBase<T>
 
         int idx = 0;
         for (int i = 0; i < policyParams.Length; i++)
-            matrix[idx++, 0] = policyParams[i];
+            vector[idx++] = policyParams[i];
         for (int i = 0; i < valueParams.Length; i++)
-            matrix[idx++, 0] = valueParams[i];
+            vector[idx++] = valueParams[i];
 
-        return matrix;
+        return vector;
     }
 
     /// <inheritdoc/>
-    public override void SetParameters(Matrix<T> parameters)
+    public override void SetParameters(Vector<T> parameters)
     {
         var policyParams = _policyNetwork.GetParameters();
         var valueParams = _valueNetwork.GetParameters();
@@ -630,9 +630,9 @@ public class PPOAgent<T> : DeepReinforcementLearningAgentBase<T>
 
         int idx = 0;
         for (int i = 0; i < policyParams.Length; i++)
-            policyVector[i] = parameters[idx++, 0];
+            policyVector[i] = parameters[idx++];
         for (int i = 0; i < valueParams.Length; i++)
-            valueVector[i] = parameters[idx++, 0];
+            valueVector[i] = parameters[idx++];
 
         _policyNetwork.UpdateParameters(policyVector);
         _valueNetwork.UpdateParameters(valueVector);
@@ -647,7 +647,7 @@ public class PPOAgent<T> : DeepReinforcementLearningAgentBase<T>
     }
 
     /// <inheritdoc/>
-    public override (Matrix<T> Gradients, T Loss) ComputeGradients(
+    public override (Vector<T> Gradients, T Loss) ComputeGradients(
         Vector<T> input,
         Vector<T> target,
         ILossFunction<T>? lossFunction = null)
@@ -657,7 +657,7 @@ public class PPOAgent<T> : DeepReinforcementLearningAgentBase<T>
     }
 
     /// <inheritdoc/>
-    public override void ApplyGradients(Matrix<T> gradients, T learningRate)
+    public override void ApplyGradients(Vector<T> gradients, T learningRate)
     {
         // Not directly applicable for PPO
     }

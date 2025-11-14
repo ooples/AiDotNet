@@ -629,7 +629,7 @@ public class TRPOAgent<T> : DeepReinforcementLearningAgentBase<T>
         _oldPolicyNetwork.Deserialize(oldPolicyBytes);
     }
 
-    public override Matrix<T> GetParameters()
+    public override Vector<T> GetParameters()
     {
         var policyParams = _policyNetwork.GetParameters();
         var valueParams = _valueNetwork.GetParameters();
@@ -647,7 +647,7 @@ public class TRPOAgent<T> : DeepReinforcementLearningAgentBase<T>
         return new Matrix<T>(new[] { combinedParams });
     }
 
-    public override void SetParameters(Matrix<T> parameters)
+    public override void SetParameters(Vector<T> parameters)
     {
         int policyParamCount = _policyNetwork.ParameterCount;
         var policyParams = new Vector<T>(policyParamCount);
@@ -671,7 +671,7 @@ public class TRPOAgent<T> : DeepReinforcementLearningAgentBase<T>
         return new TRPOAgent<T>(_options, _optimizer);
     }
 
-    public override (Matrix<T> Gradients, T Loss) ComputeGradients(
+    public override (Vector<T> Gradients, T Loss) ComputeGradients(
         Vector<T> input,
         Vector<T> target,
         ILossFunction<T>? lossFunction = null)
@@ -684,7 +684,7 @@ public class TRPOAgent<T> : DeepReinforcementLearningAgentBase<T>
         return (gradient, loss);
     }
 
-    public override void ApplyGradients(Matrix<T> gradients, T learningRate)
+    public override void ApplyGradients(Vector<T> gradients, T learningRate)
     {
         _policyNetwork.Backward(new Vector<T>(gradients.GetRow(0)));
         _policyNetwork.UpdateWeights(learningRate);

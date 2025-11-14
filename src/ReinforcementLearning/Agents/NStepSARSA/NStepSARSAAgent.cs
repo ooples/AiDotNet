@@ -214,7 +214,7 @@ public class NStepSARSAAgent<T> : ReinforcementLearningAgentBase<T>
         throw new NotImplementedException("N-step SARSA deserialization not yet implemented");
     }
 
-    public override Matrix<T> GetParameters()
+    public override Vector<T> GetParameters()
     {
         int stateCount = Math.Max(_qTable.Count, 1);
         var parameters = new Matrix<T>(stateCount, _options.ActionSize);
@@ -230,7 +230,7 @@ public class NStepSARSAAgent<T> : ReinforcementLearningAgentBase<T>
         return parameters;
     }
 
-    public override void SetParameters(Matrix<T> parameters)
+    public override void SetParameters(Vector<T> parameters)
     {
         _qTable.Clear();
     }
@@ -243,12 +243,12 @@ public class NStepSARSAAgent<T> : ReinforcementLearningAgentBase<T>
         return clone;
     }
 
-    public override (Matrix<T> Gradients, T Loss) ComputeGradients(Vector<T> input, Vector<T> target, ILossFunction<T>? lossFunction = null)
+    public override (Vector<T> Gradients, T Loss) ComputeGradients(Vector<T> input, Vector<T> target, ILossFunction<T>? lossFunction = null)
     {
         return (new Matrix<T>(1, 1), NumOps.Zero);
     }
 
-    public override void ApplyGradients(Matrix<T> gradients, T learningRate) { }
+    public override void ApplyGradients(Vector<T> gradients, T learningRate) { }
 
     public override void SaveModel(string filepath)
     {

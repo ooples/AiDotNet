@@ -426,7 +426,7 @@ public class MuZeroAgent<T> : DeepReinforcementLearningAgentBase<T>
         throw new NotImplementedException("MuZero deserialization not yet implemented");
     }
 
-    public override Matrix<T> GetParameters()
+    public override Vector<T> GetParameters()
     {
         var allParams = new List<T>();
 
@@ -448,7 +448,7 @@ public class MuZeroAgent<T> : DeepReinforcementLearningAgentBase<T>
         return new Matrix<T>(new[] { paramVector });
     }
 
-    public override void SetParameters(Matrix<T> parameters)
+    public override void SetParameters(Vector<T> parameters)
     {
         int offset = 0;
 
@@ -470,7 +470,7 @@ public class MuZeroAgent<T> : DeepReinforcementLearningAgentBase<T>
         return new MuZeroAgent<T>(_options, _optimizer);
     }
 
-    public override (Matrix<T> Gradients, T Loss) ComputeGradients(
+    public override (Vector<T> Gradients, T Loss) ComputeGradients(
         Vector<T> input,
         Vector<T> target,
         ILossFunction<T>? lossFunction = null)
@@ -483,7 +483,7 @@ public class MuZeroAgent<T> : DeepReinforcementLearningAgentBase<T>
         return (gradient, loss);
     }
 
-    public override void ApplyGradients(Matrix<T> gradients, T learningRate)
+    public override void ApplyGradients(Vector<T> gradients, T learningRate)
     {
         if (Networks.Count > 0)
         {

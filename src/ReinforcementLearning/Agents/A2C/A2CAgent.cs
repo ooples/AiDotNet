@@ -454,23 +454,23 @@ public class A2CAgent<T> : DeepReinforcementLearningAgentBase<T>
     }
 
     /// <inheritdoc/>
-    public override Matrix<T> GetParameters()
+    public override Vector<T> GetParameters()
     {
         var policyParams = _policyNetwork.GetParameters();
         var valueParams = _valueNetwork.GetParameters();
 
         var total = policyParams.Length + valueParams.Length;
-        var matrix = new Matrix<T>(total, 1);
+        var vector = new Vector<T>(total);
 
         int idx = 0;
-        for (int i = 0; i < policyParams.Length; i++) matrix[idx++, 0] = policyParams[i];
-        for (int i = 0; i < valueParams.Length; i++) matrix[idx++, 0] = valueParams[i];
+        for (int i = 0; i < policyParams.Length; i++) vector[idx++] = policyParams[i];
+        for (int i = 0; i < valueParams.Length; i++) vector[idx++] = valueParams[i];
 
-        return matrix;
+        return vector;
     }
 
     /// <inheritdoc/>
-    public override void SetParameters(Matrix<T> parameters)
+    public override void SetParameters(Vector<T> parameters)
     {
         var policyParams = _policyNetwork.GetParameters();
         var valueParams = _valueNetwork.GetParameters();
@@ -479,8 +479,8 @@ public class A2CAgent<T> : DeepReinforcementLearningAgentBase<T>
         var valueVector = new Vector<T>(valueParams.Length);
 
         int idx = 0;
-        for (int i = 0; i < policyParams.Length; i++) policyVector[i] = parameters[idx++, 0];
-        for (int i = 0; i < valueParams.Length; i++) valueVector[i] = parameters[idx++, 0];
+        for (int i = 0; i < policyParams.Length; i++) policyVector[i] = parameters[idx++];
+        for (int i = 0; i < valueParams.Length; i++) valueVector[i] = parameters[idx++];
 
         _policyNetwork.UpdateParameters(policyVector);
         _valueNetwork.UpdateParameters(valueVector);
@@ -495,14 +495,14 @@ public class A2CAgent<T> : DeepReinforcementLearningAgentBase<T>
     }
 
     /// <inheritdoc/>
-    public override (Matrix<T> Gradients, T Loss) ComputeGradients(
+    public override (Vector<T> Gradients, T Loss) ComputeGradients(
         Vector<T> input, Vector<T> target, ILossFunction<T>? lossFunction = null)
     {
         return (GetParameters(), NumOps.Zero);
     }
 
     /// <inheritdoc/>
-    public override void ApplyGradients(Matrix<T> gradients, T learningRate)
+    public override void ApplyGradients(Vector<T> gradients, T learningRate)
     {
         // Not directly applicable
     }

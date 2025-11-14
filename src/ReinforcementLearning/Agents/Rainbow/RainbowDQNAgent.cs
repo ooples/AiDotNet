@@ -389,7 +389,7 @@ public class RainbowDQNAgent<T> : DeepReinforcementLearningAgentBase<T>
         throw new NotImplementedException("RainbowDQN deserialization not yet implemented");
     }
 
-    public override Matrix<T> GetParameters()
+    public override Vector<T> GetParameters()
     {
         var onlineParams = _onlineNetwork.GetParameters();
         var targetParams = _targetNetwork.GetParameters();
@@ -407,7 +407,7 @@ public class RainbowDQNAgent<T> : DeepReinforcementLearningAgentBase<T>
         return new Matrix<T>(new[] { combinedParams });
     }
 
-    public override void SetParameters(Matrix<T> parameters)
+    public override void SetParameters(Vector<T> parameters)
     {
         int onlineParamCount = _onlineNetwork.ParameterCount;
         var onlineParams = new Vector<T>(onlineParamCount);
@@ -433,7 +433,7 @@ public class RainbowDQNAgent<T> : DeepReinforcementLearningAgentBase<T>
         return new RainbowDQNAgent<T>(_options, _optimizer);
     }
 
-    public override (Matrix<T> Gradients, T Loss) ComputeGradients(
+    public override (Vector<T> Gradients, T Loss) ComputeGradients(
         Vector<T> input,
         Vector<T> target,
         ILossFunction<T>? lossFunction = null)
@@ -446,7 +446,7 @@ public class RainbowDQNAgent<T> : DeepReinforcementLearningAgentBase<T>
         return (gradient, loss);
     }
 
-    public override void ApplyGradients(Matrix<T> gradients, T learningRate)
+    public override void ApplyGradients(Vector<T> gradients, T learningRate)
     {
         _onlineNetwork.Backward(new Vector<T>(gradients.GetRow(0)));
         _onlineNetwork.UpdateWeights(learningRate);

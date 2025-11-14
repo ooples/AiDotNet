@@ -312,13 +312,13 @@ public class DecisionTransformerAgent<T> : DeepReinforcementLearningAgentBase<T>
         throw new NotImplementedException("DecisionTransformer deserialization not yet implemented");
     }
 
-    public override Matrix<T> GetParameters()
+    public override Vector<T> GetParameters()
     {
         var networkParams = _transformerNetwork.GetParameters();
         return new Matrix<T>(new[] { networkParams });
     }
 
-    public override void SetParameters(Matrix<T> parameters)
+    public override void SetParameters(Vector<T> parameters)
     {
         var networkParams = new Vector<T>(parameters.Columns);
         for (int i = 0; i < parameters.Columns; i++)
@@ -333,7 +333,7 @@ public class DecisionTransformerAgent<T> : DeepReinforcementLearningAgentBase<T>
         return new DecisionTransformerAgent<T>(_options, _optimizer);
     }
 
-    public override (Matrix<T> Gradients, T Loss) ComputeGradients(
+    public override (Vector<T> Gradients, T Loss) ComputeGradients(
         Vector<T> input,
         Vector<T> target,
         ILossFunction<T>? lossFunction = null)
@@ -346,7 +346,7 @@ public class DecisionTransformerAgent<T> : DeepReinforcementLearningAgentBase<T>
         return (gradient, loss);
     }
 
-    public override void ApplyGradients(Matrix<T> gradients, T learningRate)
+    public override void ApplyGradients(Vector<T> gradients, T learningRate)
     {
         _transformerNetwork.Backward(new Vector<T>(gradients.GetRow(0)));
         _transformerNetwork.UpdateWeights(learningRate);
