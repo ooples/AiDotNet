@@ -251,7 +251,7 @@ public class RainbowDQNAgent<T> : DeepReinforcementLearningAgentBase<T>
             T target;
             if (experience.done)
             {
-                target = experience.reward;
+                target = experience.Reward;
             }
             else
             {
@@ -260,12 +260,12 @@ public class RainbowDQNAgent<T> : DeepReinforcementLearningAgentBase<T>
                 {
                     nStepDiscount = NumOps.Multiply(nStepDiscount, DiscountFactor);
                 }
-                target = NumOps.Add(experience.reward, NumOps.Multiply(nStepDiscount, targetQ));
+                target = NumOps.Add(experience.Reward, NumOps.Multiply(nStepDiscount, targetQ));
             }
 
             // Current Q-value
             var currentQValues = ComputeQValues(experience.state);
-            int actionIndex = ArgMax(experience.action);
+            int actionIndex = ArgMax(experience.Action);
             var currentQ = currentQValues[actionIndex];
 
             // TD error

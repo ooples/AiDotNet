@@ -204,16 +204,16 @@ public class TD3Agent<T> : DeepReinforcementLearningAgentBase<T>
             T targetQ;
             if (experience.done)
             {
-                targetQ = experience.reward;
+                targetQ = experience.Reward;
             }
             else
             {
                 var discountedQ = _numOps.Multiply(_options.DiscountFactor, minQTarget);
-                targetQ = _numOps.Add(experience.reward, discountedQ);
+                targetQ = _numOps.Add(experience.Reward, discountedQ);
             }
 
             // Concatenate state and action for critic input
-            var stateAction = ConcatenateStateAction(experience.state, experience.action);
+            var stateAction = ConcatenateStateAction(experience.state, experience.Action);
 
             // Update Critic 1
             var q1Value = _critic1Network.Predict(stateAction)[0];

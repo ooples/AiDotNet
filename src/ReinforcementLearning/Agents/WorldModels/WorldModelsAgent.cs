@@ -233,7 +233,7 @@ public class WorldModelsAgent<T> : DeepReinforcementLearningAgentBase<T>
         foreach (var experience in batch)
         {
             // Encode
-            var encoderOutput = _vaeEncoder.Forward(experience.observation);
+            var encoderOutput = _vaeEncoder.Forward(experience.State);
             var latentMean = ExtractMean(encoderOutput);
             var latentLogVar = ExtractLogVar(encoderOutput);
 
@@ -247,7 +247,7 @@ public class WorldModelsAgent<T> : DeepReinforcementLearningAgentBase<T>
             T reconLoss = NumOps.Zero;
             for (int i = 0; i < reconstruction.Length; i++)
             {
-                var diff = NumOps.Subtract(experience.observation[i], reconstruction[i]);
+                var diff = NumOps.Subtract(experience.State[i], reconstruction[i]);
                 reconLoss = NumOps.Add(reconLoss, NumOps.Multiply(diff, diff));
             }
 
@@ -268,7 +268,7 @@ public class WorldModelsAgent<T> : DeepReinforcementLearningAgentBase<T>
             var gradient = new Vector<T>(reconstruction.Length);
             for (int i = 0; i < gradient.Length; i++)
             {
-                gradient[i] = NumOps.Subtract(reconstruction[i], experience.observation[i]);
+                gradient[i] = NumOps.Subtract(reconstruction[i], experience.State[i]);
             }
 
             _vaeDecoder.Backward(gradient);
@@ -288,11 +288,11 @@ public class WorldModelsAgent<T> : DeepReinforcementLearningAgentBase<T>
         foreach (var experience in batch)
         {
             // Encode current and next observation
-            var currentLatent = ExtractMean(_vaeEncoder.Forward(experience.observation));
-            var nextLatent = ExtractMean(_vaeEncoder.Forward(experience.nextObservation));
+            var currentLatent = ExtractMean(_vaeEncoder.Forward(experience.State));
+            var nextLatent = ExtractMean(_vaeEncoder.Forward(experience.NextState));
 
             // Predict next latent using RNN
-            var rnnInput = ConcatenateVectors(ConcatenateVectors(currentLatent, experience.action), _rnnHiddenState);
+            var rnnInput = ConcatenateVectors(ConcatenateVectors(currentLatent, experience.Action), _rnnHiddenState);
             var rnnOutput = _rnnNetwork.Predict(rnnInput);
 
             // Extract predicted next latent
@@ -334,7 +334,7 @@ public class WorldModelsAgent<T> : DeepReinforcementLearningAgentBase<T>
 
         foreach (var experience in batch)
         {
-            totalReward = NumOps.Add(totalReward, experience.reward);
+            totalReward = NumOps.Add(totalReward, experience.Reward);
         }
 
         // Gradient update (simplified)

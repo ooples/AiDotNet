@@ -299,7 +299,7 @@ public class MuZeroAgent<T> : DeepReinforcementLearningAgentBase<T>
         foreach (var experience in batch)
         {
             // Encode observation
-            var hiddenState = _representationNetwork.Predict(experience.observation);
+            var hiddenState = _representationNetwork.Predict(experience.State);
 
             // Unroll K steps
             for (int k = 0; k < _options.UnrollSteps; k++)
@@ -309,8 +309,8 @@ public class MuZeroAgent<T> : DeepReinforcementLearningAgentBase<T>
                 var predictedValue = ExtractValue(prediction);
 
                 // Simplified target: use reward + discounted next value
-                var target = experience.done ? experience.reward :
-                    NumOps.Add(experience.reward, NumOps.Multiply(_options.DiscountFactor, predictedValue));
+                var target = experience.done ? experience.Reward :
+                    NumOps.Add(experience.Reward, NumOps.Multiply(_options.DiscountFactor, predictedValue));
 
                 var valueDiff = NumOps.Subtract(target, predictedValue);
                 var loss = NumOps.Multiply(valueDiff, valueDiff);
@@ -324,7 +324,7 @@ public class MuZeroAgent<T> : DeepReinforcementLearningAgentBase<T>
                 _predictionNetwork.UpdateWeights(_options.LearningRate);
 
                 // Dynamics step
-                var actionVec = experience.action;
+                var actionVec = experience.Action;
                 var dynamicsInput = ConcatenateVectors(hiddenState, actionVec);
                 var dynamicsOutput = _dynamicsNetwork.Predict(dynamicsInput);
 

@@ -219,8 +219,8 @@ public class QMIXAgent<T> : DeepReinforcementLearningAgentBase<T>
         foreach (var experience in batch)
         {
             // Decompose joint experience
-            var (agentStates, globalState, agentActions) = DecomposeJointState(experience.state, experience.action);
-            var (nextAgentStates, nextGlobalState, _) = DecomposeJointState(experience.nextState, experience.action);
+            var (agentStates, globalState, agentActions) = DecomposeJointState(experience.state, experience.Action);
+            var (nextAgentStates, nextGlobalState, _) = DecomposeJointState(experience.nextState, experience.Action);
 
             // Compute individual agent Q-values
             var agentQValues = new List<T>();
@@ -249,11 +249,11 @@ public class QMIXAgent<T> : DeepReinforcementLearningAgentBase<T>
             T target;
             if (experience.done)
             {
-                target = experience.reward;
+                target = experience.Reward;
             }
             else
             {
-                target = NumOps.Add(experience.reward, NumOps.Multiply(_options.DiscountFactor, targetTeamQ));
+                target = NumOps.Add(experience.Reward, NumOps.Multiply(_options.DiscountFactor, targetTeamQ));
             }
 
             // TD error

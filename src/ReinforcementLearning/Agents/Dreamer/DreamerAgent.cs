@@ -186,11 +186,11 @@ public class DreamerAgent<T> : DeepReinforcementLearningAgentBase<T>
         foreach (var experience in batch)
         {
             // Encode observations to latent states
-            var latentState = _representationNetwork.Predict(experience.observation);
-            var nextLatentState = _representationNetwork.Predict(experience.nextObservation);
+            var latentState = _representationNetwork.Predict(experience.State);
+            var nextLatentState = _representationNetwork.Predict(experience.NextState);
 
             // Predict next latent from dynamics model
-            var dynamicsInput = ConcatenateVectors(latentState, experience.action);
+            var dynamicsInput = ConcatenateVectors(latentState, experience.Action);
             var predictedNextLatent = _dynamicsNetwork.Predict(dynamicsInput);
 
             // Dynamics loss: predict next latent state
@@ -203,7 +203,7 @@ public class DreamerAgent<T> : DeepReinforcementLearningAgentBase<T>
 
             // Reward prediction loss
             var predictedReward = _rewardNetwork.Predict(latentState)[0];
-            var rewardDiff = NumOps.Subtract(experience.reward, predictedReward);
+            var rewardDiff = NumOps.Subtract(experience.Reward, predictedReward);
             var rewardLoss = NumOps.Multiply(rewardDiff, rewardDiff);
 
             // Continue prediction loss (done = 0, continue = 1)
@@ -255,7 +255,7 @@ public class DreamerAgent<T> : DeepReinforcementLearningAgentBase<T>
 
         foreach (var experience in batch)
         {
-            var latentState = _representationNetwork.Predict(experience.observation);
+            var latentState = _representationNetwork.Predict(experience.State);
 
             // Imagine future trajectory
             var imaginedReturns = ImagineTrajectory(latentState);

@@ -228,7 +228,7 @@ public class IQLAgent<T> : DeepReinforcementLearningAgentBase<T>
         foreach (var experience in batch)
         {
             // Compute Q-values for current state-action
-            var stateAction = ConcatenateStateAction(experience.state, experience.action);
+            var stateAction = ConcatenateStateAction(experience.state, experience.Action);
             var q1Value = _q1Network.Predict(stateAction)[0];
             var q2Value = _q2Network.Predict(stateAction)[0];
             var qValue = MathHelper.Min<T>(q1Value, q2Value);
@@ -285,15 +285,15 @@ public class IQLAgent<T> : DeepReinforcementLearningAgentBase<T>
             T targetQ;
             if (experience.done)
             {
-                targetQ = experience.reward;
+                targetQ = experience.Reward;
             }
             else
             {
                 var nextValue = _targetValueNetwork.Predict(experience.nextState)[0];
-                targetQ = _numOps.Add(experience.reward, _numOps.Multiply(_options.DiscountFactor, nextValue));
+                targetQ = _numOps.Add(experience.Reward, _numOps.Multiply(_options.DiscountFactor, nextValue));
             }
 
-            var stateAction = ConcatenateStateAction(experience.state, experience.action);
+            var stateAction = ConcatenateStateAction(experience.state, experience.Action);
 
             // Update Q1
             var q1Value = _q1Network.Predict(stateAction)[0];
@@ -332,7 +332,7 @@ public class IQLAgent<T> : DeepReinforcementLearningAgentBase<T>
         foreach (var experience in batch)
         {
             // Compute advantage: A(s,a) = Q(s,a) - V(s)
-            var stateAction = ConcatenateStateAction(experience.state, experience.action);
+            var stateAction = ConcatenateStateAction(experience.state, experience.Action);
             var q1Value = _q1Network.Predict(stateAction)[0];
             var q2Value = _q2Network.Predict(stateAction)[0];
             var qValue = MathHelper.Min<T>(q1Value, q2Value);
@@ -349,7 +349,7 @@ public class IQLAgent<T> : DeepReinforcementLearningAgentBase<T>
             T actionDiff = _numOps.Zero;
             for (int i = 0; i < _options.ActionSize; i++)
             {
-                var diff = _numOps.Subtract(experience.action[i], predictedAction[i]);
+                var diff = _numOps.Subtract(experience.Action[i], predictedAction[i]);
                 actionDiff = _numOps.Add(actionDiff, _numOps.Multiply(diff, diff));
             }
 
@@ -360,7 +360,7 @@ public class IQLAgent<T> : DeepReinforcementLearningAgentBase<T>
             var gradient = new Vector<T>(_options.ActionSize * 2);
             for (int i = 0; i < _options.ActionSize; i++)
             {
-                var diff = _numOps.Subtract(predictedAction[i], experience.action[i]);
+                var diff = _numOps.Subtract(predictedAction[i], experience.Action[i]);
                 gradient[i] = _numOps.Multiply(weight, diff);
             }
 

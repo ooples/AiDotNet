@@ -254,20 +254,20 @@ public class MADDPGAgent<T> : DeepReinforcementLearningAgentBase<T>
         foreach (var experience in batch)
         {
             // Compute target using target networks (centralized)
-            var targetQ = _targetCriticNetworks[agentId].Forward(ConcatenateStateAction(experience.nextState, experience.action))[0];
+            var targetQ = _targetCriticNetworks[agentId].Forward(ConcatenateStateAction(experience.nextState, experience.Action))[0];
 
             T target;
             if (experience.done)
             {
-                target = experience.reward;
+                target = experience.Reward;
             }
             else
             {
-                target = NumOps.Add(experience.reward, NumOps.Multiply(_options.DiscountFactor, targetQ));
+                target = NumOps.Add(experience.Reward, NumOps.Multiply(_options.DiscountFactor, targetQ));
             }
 
             // Current Q-value
-            var currentQ = _criticNetworks[agentId].Forward(ConcatenateStateAction(experience.state, experience.action))[0];
+            var currentQ = _criticNetworks[agentId].Forward(ConcatenateStateAction(experience.state, experience.Action))[0];
 
             // TD error
             var error = NumOps.Subtract(target, currentQ);
@@ -302,7 +302,7 @@ public class MADDPGAgent<T> : DeepReinforcementLearningAgentBase<T>
             var action = _actorNetworks[agentId].Forward(agentState);
 
             // Reconstruct joint action with this agent's new action
-            var jointAction = experience.action.Clone();
+            var jointAction = experience.Action.Clone();
             for (int i = 0; i < _options.ActionSize; i++)
             {
                 jointAction[agentId * _options.ActionSize + i] = action[i];

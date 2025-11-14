@@ -230,21 +230,21 @@ public class CQLAgent<T> : DeepReinforcementLearningAgentBase<T>
             T targetQ;
             if (experience.done)
             {
-                targetQ = experience.reward;
+                targetQ = experience.Reward;
             }
             else
             {
                 var futureValue = _numOps.Subtract(minQTarget, entropyTerm);
-                targetQ = _numOps.Add(experience.reward, _numOps.Multiply(_options.DiscountFactor, futureValue));
+                targetQ = _numOps.Add(experience.Reward, _numOps.Multiply(_options.DiscountFactor, futureValue));
             }
 
             // Compute current Q-values
-            var stateAction = ConcatenateStateAction(experience.state, experience.action);
+            var stateAction = ConcatenateStateAction(experience.state, experience.Action);
             var q1Value = _q1Network.Predict(stateAction)[0];
             var q2Value = _q2Network.Predict(stateAction)[0];
 
             // CQL Conservative penalty: penalize Q-values for random/OOD actions
-            var cqlPenalty = ComputeCQLPenalty(experience.state, experience.action, q1Value, q2Value);
+            var cqlPenalty = ComputeCQLPenalty(experience.state, experience.Action, q1Value, q2Value);
 
             // Q-learning loss + CQL penalty
             var q1Error = _numOps.Subtract(targetQ, q1Value);
