@@ -145,7 +145,7 @@ public class MADDPGAgent<T> : DeepReinforcementLearningAgentBase<T>
         }
 
         // Output layer (Q-value)
-        layers.Add(new DenseLayer<T>(_options.CriticHiddenLayers.Last(), 1, new LinearActivation<T>()));
+        layers.Add(new DenseLayer<T>(_options.CriticHiddenLayers.Last(), 1, new IdentityActivation<T>()));
 
         var architecture = new NeuralNetworkArchitecture<T>(
             inputType: InputType.OneDimensional,
@@ -256,7 +256,7 @@ public class MADDPGAgent<T> : DeepReinforcementLearningAgentBase<T>
         return NumOps.Divide(totalLoss, NumOps.FromDouble(_options.NumAgents * 2));
     }
 
-    private T UpdateCritic(int agentId, List<(Vector<T> state, Vector<T> action, T reward, Vector<T> nextState, bool done)> batch)
+    private T UpdateCritic(int agentId, List<AiDotNet.ReinforcementLearning.ReplayBuffers.Experience<T>> batch)
     {
         T totalLoss = NumOps.Zero;
 
@@ -300,7 +300,7 @@ public class MADDPGAgent<T> : DeepReinforcementLearningAgentBase<T>
         return NumOps.Divide(totalLoss, NumOps.FromDouble(batch.Count));
     }
 
-    private T UpdateActor(int agentId, List<(Vector<T> state, Vector<T> action, T reward, Vector<T> nextState, bool done)> batch)
+    private T UpdateActor(int agentId, List<AiDotNet.ReinforcementLearning.ReplayBuffers.Experience<T>> batch)
     {
         T totalLoss = NumOps.Zero;
 

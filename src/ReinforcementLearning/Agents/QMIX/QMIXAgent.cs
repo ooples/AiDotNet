@@ -114,7 +114,7 @@ public class QMIXAgent<T> : DeepReinforcementLearningAgentBase<T>
         layers.Add(new DenseLayer<T>(64, 64, new ReLUActivation<T>()));
 
         // Output layer (Q-values for each action)
-        layers.Add(new DenseLayer<T>(64, _options.ActionSize, new LinearActivation<T>()));
+        layers.Add(new DenseLayer<T>(64, _options.ActionSize, new IdentityActivation<T>()));
 
         var architecture = new NeuralNetworkArchitecture<T>(
             inputType: InputType.OneDimensional,
@@ -146,7 +146,7 @@ public class QMIXAgent<T> : DeepReinforcementLearningAgentBase<T>
         }
 
         // Output layer (team Q-value)
-        layers.Add(new DenseLayer<T>(hiddenSize, 1, new LinearActivation<T>()));
+        layers.Add(new DenseLayer<T>(hiddenSize, 1, new IdentityActivation<T>()));
 
         var architecture = new NeuralNetworkArchitecture<T>(
             inputType: InputType.OneDimensional,
