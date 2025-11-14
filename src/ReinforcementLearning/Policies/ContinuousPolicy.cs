@@ -1,0 +1,133 @@
+using AiDotNet.Interfaces;
+using AiDotNet.LinearAlgebra;
+using AiDotNet.NeuralNetworks;
+using AiDotNet.Helpers;
+using AiDotNet.ReinforcementLearning.Policies.Exploration;
+using System;
+using System.Collections.Generic;
+
+namespace AiDotNet.ReinforcementLearning.Policies
+{
+    /// <summary>
+    /// Policy for continuous action spaces using a neural network to output Gaussian parameters.
+    /// </summary>
+    /// <typeparam name="T">The numeric type used for calculations.</typeparam>
+    public class ContinuousPolicy<T> : IPolicy<T>
+    {
+        private readonly NeuralNetwork<T> _policyNetwork;
+        private readonly IExplorationStrategy<T> _explorationStrategy;
+        private readonly Random _random;
+        private readonly int _actionSize;
+        private readonly bool _useTanhSquashing;
+
+        public ContinuousPolicy(
+            NeuralNetwork<T> policyNetwork,
+            int actionSize,
+            IExplorationStrategy<T> explorationStrategy,
+            bool useTanhSquashing = false,
+            Random? random = null)
+        {
+            _policyNetwork = policyNetwork ?? throw new ArgumentNullException(nameof(policyNetwork));
+            _explorationStrategy = explorationStrategy ?? throw new ArgumentNullException(nameof(explorationStrategy));
+            _random = random ?? new Random();
+            _actionSize = actionSize;
+            _useTanhSquashing = useTanhSquashing;
+        }
+
+        public Vector<T> SelectAction(Vector<T> state, bool training = true)
+        {
+            // Get mean and log_std from network
+            var stateTensor = Tensor<T>.FromVector(state);
+            var outputTensor = _policyNetwork.Predict(stateTensor);
+            var output = outputTensor.ToVector();
+
+            // Split output into mean and log_std
+            var mean = new Vector<T>(_actionSize);
+            var logStd = new Vector<T>(_actionSize);
+
+            for (int i = 0; i < _actionSize; i++)
+            {
+                mean[i] = output[i];
+                logStd[i] = output[_actionSize + i];
+            }
+
+            // Sample from Gaussian distribution
+            var action = new Vector<T>(_actionSize);
+            for (int i = 0; i < _actionSize; i++)
+            {
+                double meanValue = NumOps<T>.ToDouble(mean[i]);
+                double stdValue = Math.Exp(NumOps<T>.ToDouble(logStd[i]));
+
+                // Box-Muller transform
+                double u1 = _random.NextDouble();
+                double u2 = _random.NextDouble();
+                double normalSample = Math.Sqrt(-2.0 * Math.Log(u1)) * Math.Cos(2.0 * Math.PI * u2);
+
+                double sampledValue = meanValue + stdValue * normalSample;
+
+                if (_useTanhSquashing)
+                {
+                    sampledValue = Math.Tanh(sampledValue);
+                }
+
+                action[i] = NumOps<T>.FromDouble(sampledValue);
+            }
+
+            if (training)
+            {
+                return _explorationStrategy.GetExplorationAction(state, action, _actionSize, _random);
+            }
+
+            return action;
+        }
+
+        public T ComputeLogProb(Vector<T> state, Vector<T> action)
+        {
+            // Get mean and log_std from network
+            var stateTensor = Tensor<T>.FromVector(state);
+            var outputTensor = _policyNetwork.Predict(stateTensor);
+            var output = outputTensor.ToVector();
+
+            T logProb = NumOps<T>.Zero;
+
+            for (int i = 0; i < _actionSize; i++)
+            {
+                double meanValue = NumOps<T>.ToDouble(output[i]);
+                double logStdValue = NumOps<T>.ToDouble(output[_actionSize + i]);
+                double stdValue = Math.Exp(logStdValue);
+
+                double actionValue = NumOps<T>.ToDouble(action[i]);
+
+                // Gaussian log probability: -0.5 * ((x - mu) / sigma)^2 - log(sigma) - 0.5 * log(2*pi)
+                double diff = (actionValue - meanValue) / stdValue;
+                double gaussianLogProb = -0.5 * diff * diff - Math.Log(stdValue) - 0.5 * Math.Log(2.0 * Math.PI);
+
+                if (_useTanhSquashing)
+                {
+                    // Correction for tanh squashing: log_prob -= log(1 - tanh^2(x))
+                    double tanhCorrection = Math.Log(1.0 - Math.Tanh(actionValue) * Math.Tanh(actionValue) + 1e-6);
+                    gaussianLogProb -= tanhCorrection;
+                }
+
+                logProb = NumOps<T>.Add(logProb, NumOps<T>.FromDouble(gaussianLogProb));
+            }
+
+            return logProb;
+        }
+
+        public IReadOnlyList<INeuralNetwork<T>> GetNetworks()
+        {
+            return new List<INeuralNetwork<T>> { _policyNetwork };
+        }
+
+        public void Reset()
+        {
+            _explorationStrategy.Reset();
+        }
+
+        public void Dispose()
+        {
+            // Cleanup if needed
+        }
+    }
+}
