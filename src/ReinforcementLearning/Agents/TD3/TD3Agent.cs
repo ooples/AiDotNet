@@ -379,4 +379,186 @@ public class TD3Agent<T> : DeepReinforcementLearningAgentBase<T>
         Train();
         return Task.CompletedTask;
     }
+
+    /// <inheritdoc/>
+    public override int FeatureCount => _options.StateSize;
+
+    /// <inheritdoc/>
+    public override ModelMetadata<T> GetModelMetadata()
+    {
+        return new ModelMetadata<T>
+        {
+            ModelType = ModelType.TD3Agent,
+            FeatureCount = _options.StateSize,
+            Complexity = ParameterCount,
+            Parameters = GetParameters()
+        };
+    }
+
+    /// <inheritdoc/>
+    public override Vector<T> GetParameters()
+    {
+        var actorParams = _actorNetwork.GetParameters();
+        var targetActorParams = _targetActorNetwork.GetParameters();
+        var critic1Params = _critic1Network.GetParameters();
+        var critic2Params = _critic2Network.GetParameters();
+        var targetCritic1Params = _targetCritic1Network.GetParameters();
+        var targetCritic2Params = _targetCritic2Network.GetParameters();
+
+        var total = actorParams.Length + targetActorParams.Length + critic1Params.Length +
+                    critic2Params.Length + targetCritic1Params.Length + targetCritic2Params.Length;
+        var vector = new Vector<T>(total);
+
+        int idx = 0;
+        foreach (var p in actorParams) vector[idx++] = p;
+        foreach (var p in targetActorParams) vector[idx++] = p;
+        foreach (var p in critic1Params) vector[idx++] = p;
+        foreach (var p in critic2Params) vector[idx++] = p;
+        foreach (var p in targetCritic1Params) vector[idx++] = p;
+        foreach (var p in targetCritic2Params) vector[idx++] = p;
+
+        return vector;
+    }
+
+    /// <inheritdoc/>
+    public override void SetParameters(Vector<T> parameters)
+    {
+        var actorParams = _actorNetwork.GetParameters();
+        var targetActorParams = _targetActorNetwork.GetParameters();
+        var critic1Params = _critic1Network.GetParameters();
+        var critic2Params = _critic2Network.GetParameters();
+        var targetCritic1Params = _targetCritic1Network.GetParameters();
+        var targetCritic2Params = _targetCritic2Network.GetParameters();
+
+        int idx = 0;
+        var actorVec = new Vector<T>(actorParams.Length);
+        var targetActorVec = new Vector<T>(targetActorParams.Length);
+        var critic1Vec = new Vector<T>(critic1Params.Length);
+        var critic2Vec = new Vector<T>(critic2Params.Length);
+        var targetCritic1Vec = new Vector<T>(targetCritic1Params.Length);
+        var targetCritic2Vec = new Vector<T>(targetCritic2Params.Length);
+
+        for (int i = 0; i < actorParams.Length; i++) actorVec[i] = parameters[idx++];
+        for (int i = 0; i < targetActorParams.Length; i++) targetActorVec[i] = parameters[idx++];
+        for (int i = 0; i < critic1Params.Length; i++) critic1Vec[i] = parameters[idx++];
+        for (int i = 0; i < critic2Params.Length; i++) critic2Vec[i] = parameters[idx++];
+        for (int i = 0; i < targetCritic1Params.Length; i++) targetCritic1Vec[i] = parameters[idx++];
+        for (int i = 0; i < targetCritic2Params.Length; i++) targetCritic2Vec[i] = parameters[idx++];
+
+        _actorNetwork.UpdateParameters(actorVec);
+        _targetActorNetwork.UpdateParameters(targetActorVec);
+        _critic1Network.UpdateParameters(critic1Vec);
+        _critic2Network.UpdateParameters(critic2Vec);
+        _targetCritic1Network.UpdateParameters(targetCritic1Vec);
+        _targetCritic2Network.UpdateParameters(targetCritic2Vec);
+    }
+
+    /// <inheritdoc/>
+    public override IFullModel<T, Vector<T>, Vector<T>> Clone()
+    {
+        var clone = new TD3Agent<T>(_options);
+        clone.SetParameters(GetParameters());
+        return clone;
+    }
+
+    /// <inheritdoc/>
+    public override (Vector<T> Gradients, T Loss) ComputeGradients(
+        Vector<T> input, Vector<T> target, ILossFunction<T>? lossFunction = null)
+    {
+        return (GetParameters(), _numOps.Zero);
+    }
+
+    /// <inheritdoc/>
+    public override void ApplyGradients(Vector<T> gradients, T learningRate)
+    {
+        // TD3 uses direct network updates during training, not manual gradient application
+    }
+
+    /// <inheritdoc/>
+    public override byte[] Serialize()
+    {
+        using var ms = new MemoryStream();
+        using var writer = new BinaryWriter(ms);
+
+        writer.Write(_options.StateSize);
+        writer.Write(_options.ActionSize);
+        writer.Write(_stepCount);
+        writer.Write(_updateCount);
+
+        var actorBytes = _actorNetwork.Serialize();
+        writer.Write(actorBytes.Length);
+        writer.Write(actorBytes);
+
+        var targetActorBytes = _targetActorNetwork.Serialize();
+        writer.Write(targetActorBytes.Length);
+        writer.Write(targetActorBytes);
+
+        var critic1Bytes = _critic1Network.Serialize();
+        writer.Write(critic1Bytes.Length);
+        writer.Write(critic1Bytes);
+
+        var critic2Bytes = _critic2Network.Serialize();
+        writer.Write(critic2Bytes.Length);
+        writer.Write(critic2Bytes);
+
+        var targetCritic1Bytes = _targetCritic1Network.Serialize();
+        writer.Write(targetCritic1Bytes.Length);
+        writer.Write(targetCritic1Bytes);
+
+        var targetCritic2Bytes = _targetCritic2Network.Serialize();
+        writer.Write(targetCritic2Bytes.Length);
+        writer.Write(targetCritic2Bytes);
+
+        return ms.ToArray();
+    }
+
+    /// <inheritdoc/>
+    public override void Deserialize(byte[] data)
+    {
+        using var ms = new MemoryStream(data);
+        using var reader = new BinaryReader(ms);
+
+        reader.ReadInt32(); // stateSize
+        reader.ReadInt32(); // actionSize
+        _stepCount = reader.ReadInt32();
+        _updateCount = reader.ReadInt32();
+
+        var actorLength = reader.ReadInt32();
+        var actorBytes = reader.ReadBytes(actorLength);
+        _actorNetwork.Deserialize(actorBytes);
+
+        var targetActorLength = reader.ReadInt32();
+        var targetActorBytes = reader.ReadBytes(targetActorLength);
+        _targetActorNetwork.Deserialize(targetActorBytes);
+
+        var critic1Length = reader.ReadInt32();
+        var critic1Bytes = reader.ReadBytes(critic1Length);
+        _critic1Network.Deserialize(critic1Bytes);
+
+        var critic2Length = reader.ReadInt32();
+        var critic2Bytes = reader.ReadBytes(critic2Length);
+        _critic2Network.Deserialize(critic2Bytes);
+
+        var targetCritic1Length = reader.ReadInt32();
+        var targetCritic1Bytes = reader.ReadBytes(targetCritic1Length);
+        _targetCritic1Network.Deserialize(targetCritic1Bytes);
+
+        var targetCritic2Length = reader.ReadInt32();
+        var targetCritic2Bytes = reader.ReadBytes(targetCritic2Length);
+        _targetCritic2Network.Deserialize(targetCritic2Bytes);
+    }
+
+    /// <inheritdoc/>
+    public override void SaveModel(string filepath)
+    {
+        var data = Serialize();
+        System.IO.File.WriteAllBytes(filepath, data);
+    }
+
+    /// <inheritdoc/>
+    public override void LoadModel(string filepath)
+    {
+        var data = System.IO.File.ReadAllBytes(filepath);
+        Deserialize(data);
+    }
 }

@@ -463,4 +463,144 @@ public class CQLAgent<T> : DeepReinforcementLearningAgentBase<T>
         Train();
         return Task.CompletedTask;
     }
+
+    /// <inheritdoc/>
+    public override int FeatureCount => _options.StateSize;
+
+    /// <inheritdoc/>
+    public override ModelMetadata<T> GetModelMetadata()
+    {
+        return new ModelMetadata<T>
+        {
+            ModelType = ModelType.CQLAgent,
+            FeatureCount = _options.StateSize,
+            Complexity = ParameterCount,
+            Parameters = GetParameters()
+        };
+    }
+
+    /// <inheritdoc/>
+    public override Vector<T> GetParameters()
+    {
+        // Combine parameters from policy network and both Q-networks
+        var policyParams = _policyNetwork.GetParameters();
+        var q1Params = _q1Network.GetParameters();
+        var q2Params = _q2Network.GetParameters();
+
+        var total = policyParams.Length + q1Params.Length + q2Params.Length;
+        var vector = new Vector<T>(total);
+
+        int idx = 0;
+        foreach (var p in policyParams) vector[idx++] = p;
+        foreach (var p in q1Params) vector[idx++] = p;
+        foreach (var p in q2Params) vector[idx++] = p;
+
+        return vector;
+    }
+
+    /// <inheritdoc/>
+    public override void SetParameters(Vector<T> parameters)
+    {
+        var policyParams = _policyNetwork.GetParameters();
+        var q1Params = _q1Network.GetParameters();
+        var q2Params = _q2Network.GetParameters();
+
+        int idx = 0;
+        var policyVec = new Vector<T>(policyParams.Length);
+        var q1Vec = new Vector<T>(q1Params.Length);
+        var q2Vec = new Vector<T>(q2Params.Length);
+
+        for (int i = 0; i < policyParams.Length; i++) policyVec[i] = parameters[idx++];
+        for (int i = 0; i < q1Params.Length; i++) q1Vec[i] = parameters[idx++];
+        for (int i = 0; i < q2Params.Length; i++) q2Vec[i] = parameters[idx++];
+
+        _policyNetwork.UpdateParameters(policyVec);
+        _q1Network.UpdateParameters(q1Vec);
+        _q2Network.UpdateParameters(q2Vec);
+    }
+
+    /// <inheritdoc/>
+    public override IFullModel<T, Vector<T>, Vector<T>> Clone()
+    {
+        var clone = new CQLAgent<T>(_options);
+        clone.SetParameters(GetParameters());
+        return clone;
+    }
+
+    /// <inheritdoc/>
+    public override (Vector<T> Gradients, T Loss) ComputeGradients(
+        Vector<T> input, Vector<T> target, ILossFunction<T>? lossFunction = null)
+    {
+        return (GetParameters(), _numOps.Zero);
+    }
+
+    /// <inheritdoc/>
+    public override void ApplyGradients(Vector<T> gradients, T learningRate)
+    {
+        // CQL uses direct network updates - not directly applicable
+    }
+
+    /// <inheritdoc/>
+    public override byte[] Serialize()
+    {
+        using var ms = new MemoryStream();
+        using var writer = new BinaryWriter(ms);
+
+        writer.Write(_options.StateSize);
+        writer.Write(_options.ActionSize);
+        writer.Write(_updateCount);
+        writer.Write(Convert.ToDouble(_alpha));
+
+        var policyBytes = _policyNetwork.Serialize();
+        writer.Write(policyBytes.Length);
+        writer.Write(policyBytes);
+
+        var q1Bytes = _q1Network.Serialize();
+        writer.Write(q1Bytes.Length);
+        writer.Write(q1Bytes);
+
+        var q2Bytes = _q2Network.Serialize();
+        writer.Write(q2Bytes.Length);
+        writer.Write(q2Bytes);
+
+        return ms.ToArray();
+    }
+
+    /// <inheritdoc/>
+    public override void Deserialize(byte[] data)
+    {
+        using var ms = new MemoryStream(data);
+        using var reader = new BinaryReader(ms);
+
+        reader.ReadInt32(); // stateSize
+        reader.ReadInt32(); // actionSize
+        _updateCount = reader.ReadInt32();
+        _alpha = _numOps.FromDouble(reader.ReadDouble());
+
+        var policyLength = reader.ReadInt32();
+        var policyBytes = reader.ReadBytes(policyLength);
+        _policyNetwork.Deserialize(policyBytes);
+
+        var q1Length = reader.ReadInt32();
+        var q1Bytes = reader.ReadBytes(q1Length);
+        _q1Network.Deserialize(q1Bytes);
+
+        var q2Length = reader.ReadInt32();
+        var q2Bytes = reader.ReadBytes(q2Length);
+        _q2Network.Deserialize(q2Bytes);
+    }
+
+    /// <inheritdoc/>
+    public override void SaveModel(string filepath)
+    {
+        var data = Serialize();
+        System.IO.File.WriteAllBytes(filepath, data);
+    }
+
+    /// <inheritdoc/>
+    public override void LoadModel(string filepath)
+    {
+        var data = System.IO.File.ReadAllBytes(filepath);
+        Deserialize(data);
+    }
 }

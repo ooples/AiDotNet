@@ -523,4 +523,127 @@ public class A3CAgent<T> : DeepReinforcementLearningAgentBase<T>
     {
         return Task.CompletedTask;
     }
+
+    /// <inheritdoc/>
+    public override int FeatureCount => _options.StateSize;
+
+    /// <inheritdoc/>
+    public override ModelMetadata<T> GetModelMetadata()
+    {
+        return new ModelMetadata<T>
+        {
+            ModelType = ModelType.A3CAgent,
+            FeatureCount = _options.StateSize,
+            Complexity = ParameterCount,
+            Parameters = GetParameters()
+        };
+    }
+
+    /// <inheritdoc/>
+    public override Vector<T> GetParameters()
+    {
+        var policyParams = _globalPolicyNetwork.GetParameters();
+        var valueParams = _globalValueNetwork.GetParameters();
+
+        var total = policyParams.Length + valueParams.Length;
+        var vector = new Vector<T>(total);
+
+        int idx = 0;
+        foreach (var p in policyParams) vector[idx++] = p;
+        foreach (var p in valueParams) vector[idx++] = p;
+
+        return vector;
+    }
+
+    /// <inheritdoc/>
+    public override void SetParameters(Vector<T> parameters)
+    {
+        var policyParams = _globalPolicyNetwork.GetParameters();
+        var valueParams = _globalValueNetwork.GetParameters();
+
+        int idx = 0;
+        var policyVec = new Vector<T>(policyParams.Length);
+        var valueVec = new Vector<T>(valueParams.Length);
+
+        for (int i = 0; i < policyParams.Length; i++) policyVec[i] = parameters[idx++];
+        for (int i = 0; i < valueParams.Length; i++) valueVec[i] = parameters[idx++];
+
+        _globalPolicyNetwork.UpdateParameters(policyVec);
+        _globalValueNetwork.UpdateParameters(valueVec);
+    }
+
+    /// <inheritdoc/>
+    public override IFullModel<T, Vector<T>, Vector<T>> Clone()
+    {
+        var clone = new A3CAgent<T>(_options, _optimizer);
+        clone.SetParameters(GetParameters());
+        return clone;
+    }
+
+    /// <inheritdoc/>
+    public override (Vector<T> Gradients, T Loss) ComputeGradients(
+        Vector<T> input, Vector<T> target, ILossFunction<T>? lossFunction = null)
+    {
+        return (GetParameters(), NumOps.Zero);
+    }
+
+    /// <inheritdoc/>
+    public override void ApplyGradients(Vector<T> gradients, T learningRate)
+    {
+        // A3C uses asynchronous updates - not directly applicable
+    }
+
+    /// <inheritdoc/>
+    public override byte[] Serialize()
+    {
+        using var ms = new MemoryStream();
+        using var writer = new BinaryWriter(ms);
+
+        writer.Write(_options.StateSize);
+        writer.Write(_options.ActionSize);
+        writer.Write(_globalSteps);
+
+        var policyBytes = _globalPolicyNetwork.Serialize();
+        writer.Write(policyBytes.Length);
+        writer.Write(policyBytes);
+
+        var valueBytes = _globalValueNetwork.Serialize();
+        writer.Write(valueBytes.Length);
+        writer.Write(valueBytes);
+
+        return ms.ToArray();
+    }
+
+    /// <inheritdoc/>
+    public override void Deserialize(byte[] data)
+    {
+        using var ms = new MemoryStream(data);
+        using var reader = new BinaryReader(ms);
+
+        reader.ReadInt32(); // stateSize
+        reader.ReadInt32(); // actionSize
+        _globalSteps = reader.ReadInt32();
+
+        var policyLength = reader.ReadInt32();
+        var policyBytes = reader.ReadBytes(policyLength);
+        _globalPolicyNetwork.Deserialize(policyBytes);
+
+        var valueLength = reader.ReadInt32();
+        var valueBytes = reader.ReadBytes(valueLength);
+        _globalValueNetwork.Deserialize(valueBytes);
+    }
+
+    /// <inheritdoc/>
+    public override void SaveModel(string filepath)
+    {
+        var data = Serialize();
+        System.IO.File.WriteAllBytes(filepath, data);
+    }
+
+    /// <inheritdoc/>
+    public override void LoadModel(string filepath)
+    {
+        var data = System.IO.File.ReadAllBytes(filepath);
+        Deserialize(data);
+    }
 }

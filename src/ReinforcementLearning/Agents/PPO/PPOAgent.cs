@@ -720,4 +720,17 @@ public class PPOAgent<T> : DeepReinforcementLearningAgentBase<T>
         }
         return max;
     }
+    /// <inheritdoc/>
+    public override void SaveModel(string filepath)
+    {
+        var data = Serialize();
+        System.IO.File.WriteAllBytes(filepath, data);
+    }
+
+    /// <inheritdoc/>
+    public override void LoadModel(string filepath)
+    {
+        var data = System.IO.File.ReadAllBytes(filepath);
+        Deserialize(data);
+    }
 }

@@ -6,6 +6,7 @@ using AiDotNet.NeuralNetworks.Layers;
 using AiDotNet.ActivationFunctions;
 using AiDotNet.ReinforcementLearning.ReplayBuffers;
 using AiDotNet.Helpers;
+using System.IO;
 
 namespace AiDotNet.ReinforcementLearning.Agents.IQL;
 
@@ -466,5 +467,299 @@ public class IQLAgent<T> : DeepReinforcementLearningAgentBase<T>
     {
         Train();
         return Task.CompletedTask;
+    }
+
+    /// <inheritdoc/>
+    public override int FeatureCount => _options.StateSize;
+
+    /// <inheritdoc/>
+    public override ModelMetadata<T> GetModelMetadata()
+    {
+        return new ModelMetadata<T>
+        {
+            ModelType = ModelType.IQLAgent,
+            FeatureCount = _options.StateSize,
+            Complexity = ParameterCount,
+            Parameters = GetParameters()
+        };
+    }
+
+    /// <inheritdoc/>
+    public override Vector<T> GetParameters()
+    {
+        var policyParams = ExtractNetworkParameters(_policyNetwork);
+        var valueParams = ExtractNetworkParameters(_valueNetwork);
+        var q1Params = ExtractNetworkParameters(_q1Network);
+        var q2Params = ExtractNetworkParameters(_q2Network);
+
+        var total = policyParams.Length + valueParams.Length + q1Params.Length + q2Params.Length;
+        var vector = new Vector<T>(total);
+
+        int idx = 0;
+        foreach (var p in policyParams) vector[idx++] = p;
+        foreach (var p in valueParams) vector[idx++] = p;
+        foreach (var p in q1Params) vector[idx++] = p;
+        foreach (var p in q2Params) vector[idx++] = p;
+
+        return vector;
+    }
+
+    /// <inheritdoc/>
+    public override void SetParameters(Vector<T> parameters)
+    {
+        var policyParams = ExtractNetworkParameters(_policyNetwork);
+        var valueParams = ExtractNetworkParameters(_valueNetwork);
+        var q1Params = ExtractNetworkParameters(_q1Network);
+        var q2Params = ExtractNetworkParameters(_q2Network);
+
+        int idx = 0;
+        var policyVec = new Vector<T>(policyParams.Length);
+        var valueVec = new Vector<T>(valueParams.Length);
+        var q1Vec = new Vector<T>(q1Params.Length);
+        var q2Vec = new Vector<T>(q2Params.Length);
+
+        for (int i = 0; i < policyParams.Length; i++) policyVec[i] = parameters[idx++];
+        for (int i = 0; i < valueParams.Length; i++) valueVec[i] = parameters[idx++];
+        for (int i = 0; i < q1Params.Length; i++) q1Vec[i] = parameters[idx++];
+        for (int i = 0; i < q2Params.Length; i++) q2Vec[i] = parameters[idx++];
+
+        UpdateNetworkParameters(_policyNetwork, policyVec);
+        UpdateNetworkParameters(_valueNetwork, valueVec);
+        UpdateNetworkParameters(_q1Network, q1Vec);
+        UpdateNetworkParameters(_q2Network, q2Vec);
+    }
+
+    /// <inheritdoc/>
+    public override IFullModel<T, Vector<T>, Vector<T>> Clone()
+    {
+        var clone = new IQLAgent<T>(_options);
+        clone.SetParameters(GetParameters());
+        return clone;
+    }
+
+    /// <inheritdoc/>
+    public override (Vector<T> Gradients, T Loss) ComputeGradients()
+    {
+        return (GetParameters(), _numOps.Zero);
+    }
+
+    /// <inheritdoc/>
+    public override void ApplyGradients(Vector<T> gradients, T learningRate)
+    {
+        // IQL uses offline training with separate network updates
+        // Gradient application is handled by individual network updates
+    }
+
+    /// <inheritdoc/>
+    public override byte[] Serialize()
+    {
+        using var ms = new MemoryStream();
+        using var writer = new BinaryWriter(ms);
+
+        writer.Write(_options.StateSize);
+        writer.Write(_options.ActionSize);
+        writer.Write(_updateCount);
+
+        var policyBytes = SerializeNetwork(_policyNetwork);
+        writer.Write(policyBytes.Length);
+        writer.Write(policyBytes);
+
+        var valueBytes = SerializeNetwork(_valueNetwork);
+        writer.Write(valueBytes.Length);
+        writer.Write(valueBytes);
+
+        var q1Bytes = SerializeNetwork(_q1Network);
+        writer.Write(q1Bytes.Length);
+        writer.Write(q1Bytes);
+
+        var q2Bytes = SerializeNetwork(_q2Network);
+        writer.Write(q2Bytes.Length);
+        writer.Write(q2Bytes);
+
+        var targetValueBytes = SerializeNetwork(_targetValueNetwork);
+        writer.Write(targetValueBytes.Length);
+        writer.Write(targetValueBytes);
+
+        return ms.ToArray();
+    }
+
+    /// <inheritdoc/>
+    public override void Deserialize(byte[] data)
+    {
+        using var ms = new MemoryStream(data);
+        using var reader = new BinaryReader(ms);
+
+        reader.ReadInt32(); // stateSize
+        reader.ReadInt32(); // actionSize
+        _updateCount = reader.ReadInt32();
+
+        var policyLength = reader.ReadInt32();
+        var policyBytes = reader.ReadBytes(policyLength);
+        DeserializeNetwork(_policyNetwork, policyBytes);
+
+        var valueLength = reader.ReadInt32();
+        var valueBytes = reader.ReadBytes(valueLength);
+        DeserializeNetwork(_valueNetwork, valueBytes);
+
+        var q1Length = reader.ReadInt32();
+        var q1Bytes = reader.ReadBytes(q1Length);
+        DeserializeNetwork(_q1Network, q1Bytes);
+
+        var q2Length = reader.ReadInt32();
+        var q2Bytes = reader.ReadBytes(q2Length);
+        DeserializeNetwork(_q2Network, q2Bytes);
+
+        var targetValueLength = reader.ReadInt32();
+        var targetValueBytes = reader.ReadBytes(targetValueLength);
+        DeserializeNetwork(_targetValueNetwork, targetValueBytes);
+    }
+
+    /// <inheritdoc/>
+    public override void SaveModel(string filepath)
+    {
+        var data = Serialize();
+        File.WriteAllBytes(filepath, data);
+    }
+
+    /// <inheritdoc/>
+    public override void LoadModel(string filepath)
+    {
+        var data = File.ReadAllBytes(filepath);
+        Deserialize(data);
+    }
+
+    private Vector<T> ExtractNetworkParameters(NeuralNetwork<T> network)
+    {
+        var parameters = new List<T>();
+        var layers = network.GetLayers();
+
+        foreach (var layer in layers)
+        {
+            if (layer is DenseLayer<T> denseLayer)
+            {
+                var weights = denseLayer.GetWeights();
+                var biases = denseLayer.GetBiases();
+
+                for (int r = 0; r < weights.Rows; r++)
+                {
+                    for (int c = 0; c < weights.Columns; c++)
+                    {
+                        parameters.Add(weights[r, c]);
+                    }
+                }
+
+                foreach (var bias in biases)
+                {
+                    parameters.Add(bias);
+                }
+            }
+        }
+
+        return new Vector<T>(parameters);
+    }
+
+    private void UpdateNetworkParameters(NeuralNetwork<T> network, Vector<T> parameters)
+    {
+        var layers = network.GetLayers();
+        int idx = 0;
+
+        foreach (var layer in layers)
+        {
+            if (layer is DenseLayer<T> denseLayer)
+            {
+                var weights = denseLayer.GetWeights();
+                var biases = denseLayer.GetBiases();
+
+                for (int r = 0; r < weights.Rows; r++)
+                {
+                    for (int c = 0; c < weights.Columns; c++)
+                    {
+                        weights[r, c] = parameters[idx++];
+                    }
+                }
+
+                for (int i = 0; i < biases.Length; i++)
+                {
+                    biases[i] = parameters[idx++];
+                }
+
+                denseLayer.SetWeights(weights);
+                denseLayer.SetBiases(biases);
+            }
+        }
+    }
+
+    private byte[] SerializeNetwork(NeuralNetwork<T> network)
+    {
+        using var ms = new MemoryStream();
+        using var writer = new BinaryWriter(ms);
+
+        var layers = network.GetLayers();
+        writer.Write(layers.Count);
+
+        foreach (var layer in layers)
+        {
+            if (layer is DenseLayer<T> denseLayer)
+            {
+                var weights = denseLayer.GetWeights();
+                var biases = denseLayer.GetBiases();
+
+                writer.Write(weights.Rows);
+                writer.Write(weights.Columns);
+
+                for (int r = 0; r < weights.Rows; r++)
+                {
+                    for (int c = 0; c < weights.Columns; c++)
+                    {
+                        writer.Write(NumericOperations<T>.Instance.ToDouble(weights[r, c]));
+                    }
+                }
+
+                writer.Write(biases.Length);
+                foreach (var bias in biases)
+                {
+                    writer.Write(NumericOperations<T>.Instance.ToDouble(bias));
+                }
+            }
+        }
+
+        return ms.ToArray();
+    }
+
+    private void DeserializeNetwork(NeuralNetwork<T> network, byte[] data)
+    {
+        using var ms = new MemoryStream(data);
+        using var reader = new BinaryReader(ms);
+
+        var layers = network.GetLayers();
+        int layerCount = reader.ReadInt32();
+
+        for (int l = 0; l < layerCount && l < layers.Count; l++)
+        {
+            if (layers[l] is DenseLayer<T> denseLayer)
+            {
+                int rows = reader.ReadInt32();
+                int cols = reader.ReadInt32();
+                var weights = new Matrix<T>(rows, cols);
+
+                for (int r = 0; r < rows; r++)
+                {
+                    for (int c = 0; c < cols; c++)
+                    {
+                        weights[r, c] = _numOps.FromDouble(reader.ReadDouble());
+                    }
+                }
+
+                var biasCount = reader.ReadInt32();
+                var biases = new T[biasCount];
+                for (int i = 0; i < biasCount; i++)
+                {
+                    biases[i] = _numOps.FromDouble(reader.ReadDouble());
+                }
+
+                denseLayer.SetWeights(weights);
+                denseLayer.SetBiases(biases);
+            }
+        }
     }
 }
