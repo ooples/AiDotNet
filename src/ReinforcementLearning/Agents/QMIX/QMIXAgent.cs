@@ -67,6 +67,11 @@ public class QMIXAgent<T> : DeepReinforcementLearningAgentBase<T>
             Epsilon = 1e-8
         });
         _epsilon = options.EpsilonStart;
+        _agentNetworks = new List<INeuralNetwork<T>>();
+        _targetAgentNetworks = new List<INeuralNetwork<T>>();
+        _mixingNetwork = CreateMixingNetwork();
+        _targetMixingNetwork = CreateMixingNetwork();
+        _replayBuffer = new UniformReplayBuffer<T>(_options.ReplayBufferSize);
         _stepCount = 0;
 
         InitializeNetworks();
@@ -298,7 +303,7 @@ public class QMIXAgent<T> : DeepReinforcementLearningAgentBase<T>
             var mixingGradientVec = new Vector<T>(1);
             mixingGradientVec[0] = tdError;
             var mixingGradient = Tensor<T>.FromVector(mixingGradientVec);
-            _mixingNetwork.Backpropagate(mixingInputTensor, mixingGradient);
+            _mixingNetwork.Backpropagate(mixingGradient);
             _mixingNetwork.UpdateParameters(_options.LearningRate);
 
             // Backpropagate through agent networks
@@ -310,7 +315,7 @@ public class QMIXAgent<T> : DeepReinforcementLearningAgentBase<T>
 
                 var stateTensor = Tensor<T>.FromVector(agentStates[i]);
                 var agentGradient = Tensor<T>.FromVector(agentGradientVec);
-                _agentNetworks[i].Backpropagate(stateTensor, agentGradient);
+                _agentNetworks[i].Backpropagate(agentGradient);
                 _agentNetworks[i].UpdateParameters(_options.LearningRate);
             }
         }
