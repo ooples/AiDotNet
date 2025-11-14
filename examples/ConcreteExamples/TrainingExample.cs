@@ -14,13 +14,24 @@ public class TrainingExample
     {
         Console.WriteLine("=== RL Training Example ===\n");
 
+        // Configure training
+        var config = new RLConfig
+        {
+            Epochs = 3,  // Small number for demo
+            BatchSize = 10,
+            LearningRate = 0.0001,
+            ValidationFrequency = 1,
+            EarlyStoppingPatience = 2,
+            SaveCheckpoints = true
+        };
+
         // Setup reward models
         var prm = new ProcessRewardModel<double>(chatModel);
         var orm = new OutcomeRewardModel<double>(chatModel);
         var rewardModel = HybridRewardModel<double>.CreateBalanced(prm, orm);
 
-        // Create learner
-        var learner = new ReinforcementLearner<double>(chatModel, rewardModel);
+        // Create learner with config
+        var learner = new ReinforcementLearner<double>(chatModel, rewardModel, config);
 
         // Setup event handlers
         learner.OnEpochComplete += (sender, metrics) =>
@@ -56,17 +67,6 @@ public class TrainingExample
 
         Console.WriteLine($"Training samples: {trainingData.Count}");
         Console.WriteLine($"Validation samples: {validationData.Count}");
-
-        // Configure training
-        var config = new RLConfig
-        {
-            Epochs = 3,  // Small number for demo
-            BatchSize = 10,
-            LearningRate = 0.0001,
-            ValidationFrequency = 1,
-            EarlyStoppingPatience = 2,
-            SaveCheckpoints = true
-        };
 
         Console.WriteLine("\nStarting training...\n");
 
