@@ -109,7 +109,7 @@ public class BreadthFirstSearch<T> : ISearchAlgorithm<T>
             {
                 child.EvaluationScore = await evaluator.EvaluateThoughtAsync(
                     child,
-                    root.Thought,
+                    child.Thought,
                     config,
                     cancellationToken);
 

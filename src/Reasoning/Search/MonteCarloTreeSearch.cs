@@ -95,7 +95,7 @@ public class MonteCarloTreeSearch<T> : ISearchAlgorithm<T>
 
                 foreach (var child in children)
                 {
-                    child.EvaluationScore = await evaluator.EvaluateThoughtAsync(child, root.Thought, config, cancellationToken);
+                    child.EvaluationScore = await evaluator.EvaluateThoughtAsync(child, child.Thought, config, cancellationToken);
                     child.Metadata["visits"] = 0;
                     child.Metadata["total_value"] = 0.0;
                     node.Children.Add(child);
