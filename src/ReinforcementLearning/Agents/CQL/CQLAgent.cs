@@ -158,7 +158,13 @@ public class CQLAgent<T> : DeepReinforcementLearningAgentBase<T>
     {
         foreach (var transition in dataset)
         {
-            _offlineBuffer.Add(transition.state, transition.action, transition.reward, transition.nextState, transition.done);
+            var experience = new ReplayBuffers.Experience<T>(
+                transition.state,
+                transition.action,
+                transition.reward,
+                transition.nextState,
+                transition.done);
+            _offlineBuffer.Add(experience);
         }
     }
 
@@ -208,7 +214,8 @@ public class CQLAgent<T> : DeepReinforcementLearningAgentBase<T>
     {
         // CQL is offline - data is loaded beforehand
         // This method is kept for interface compliance but not used in offline setting
-        _offlineBuffer.Add(state, action, reward, nextState, done);
+        var experience = new ReplayBuffers.Experience<T>(state, action, reward, nextState, done);
+        _offlineBuffer.Add(experience);
     }
 
     public override T Train()
@@ -244,7 +251,7 @@ public class CQLAgent<T> : DeepReinforcementLearningAgentBase<T>
         return _numOps.Divide(totalLoss, _numOps.FromDouble(2));
     }
 
-    private T UpdateQNetworks(List<Experience<T>> batch)
+    private T UpdateQNetworks(List<ReplayBuffers.Experience<T>> batch)
     {
         T totalLoss = _numOps.Zero;
 
@@ -354,7 +361,7 @@ public class CQLAgent<T> : DeepReinforcementLearningAgentBase<T>
         return _numOps.Multiply(_options.CQLAlpha, gap);
     }
 
-    private T UpdatePolicy(List<Experience<T>> batch)
+    private T UpdatePolicy(List<ReplayBuffers.Experience<T>> batch)
     {
         T totalLoss = _numOps.Zero;
 
@@ -398,7 +405,7 @@ public class CQLAgent<T> : DeepReinforcementLearningAgentBase<T>
         return _numOps.Divide(totalLoss, _numOps.FromDouble(batch.Count));
     }
 
-    private void UpdateTemperature(List<Experience<T>> batch)
+    private void UpdateTemperature(List<ReplayBuffers.Experience<T>> batch)
     {
         // Simplified temperature update
         _alpha = NumOps.Exp(_logAlpha);
@@ -412,56 +419,25 @@ public class CQLAgent<T> : DeepReinforcementLearningAgentBase<T>
 
     private void SoftUpdateNetwork(NeuralNetwork<T> source, NeuralNetwork<T> target)
     {
-        var sourceLayers = source.GetLayers();
-        var targetLayers = target.GetLayers();
+        var sourceParams = source.GetParameters();
+        var targetParams = target.GetParameters();
+        var oneMinusTau = _numOps.Subtract(_numOps.One, _options.TargetUpdateTau);
 
-        for (int i = 0; i < sourceLayers.Count; i++)
+        var updatedParams = new Vector<T>(targetParams.Length);
+        for (int i = 0; i < targetParams.Length; i++)
         {
-            if (sourceLayers[i] is DenseLayer<T> sourceLayer && targetLayers[i] is DenseLayer<T> targetLayer)
-            {
-                var sourceWeights = sourceLayer.GetWeights();
-                var sourceBiases = sourceLayer.GetBiases();
-                var targetWeights = targetLayer.GetWeights();
-                var targetBiases = targetLayer.GetBiases();
-
-                var oneMinusTau = _numOps.Subtract(_numOps.One, _options.TargetUpdateTau);
-
-                for (int r = 0; r < targetWeights.Rows; r++)
-                {
-                    for (int c = 0; c < targetWeights.Columns; c++)
-                    {
-                        var sourceContrib = _numOps.Multiply(_options.TargetUpdateTau, sourceWeights[r, c]);
-                        var targetContrib = _numOps.Multiply(oneMinusTau, targetWeights[r, c]);
-                        targetWeights[r, c] = _numOps.Add(sourceContrib, targetContrib);
-                    }
-                }
-
-                for (int i = 0; i < targetBiases.Length; i++)
-                {
-                    var sourceContrib = _numOps.Multiply(_options.TargetUpdateTau, sourceBiases[i]);
-                    var targetContrib = _numOps.Multiply(oneMinusTau, targetBiases[i]);
-                    targetBiases[i] = _numOps.Add(sourceContrib, targetContrib);
-                }
-
-                targetLayer.SetWeights(targetWeights);
-                targetLayer.SetBiases(targetBiases);
-            }
+            var sourceContrib = _numOps.Multiply(_options.TargetUpdateTau, sourceParams[i]);
+            var targetContrib = _numOps.Multiply(oneMinusTau, targetParams[i]);
+            updatedParams[i] = _numOps.Add(sourceContrib, targetContrib);
         }
+
+        target.UpdateParameters(updatedParams);
     }
 
     private void CopyNetworkWeights(NeuralNetwork<T> source, NeuralNetwork<T> target)
     {
-        var sourceLayers = source.GetLayers();
-        var targetLayers = target.GetLayers();
-
-        for (int i = 0; i < sourceLayers.Count; i++)
-        {
-            if (sourceLayers[i] is DenseLayer<T> sourceLayer && targetLayers[i] is DenseLayer<T> targetLayer)
-            {
-                targetLayer.SetWeights(sourceLayer.GetWeights().Clone());
-                targetLayer.SetBiases(sourceLayer.GetBiases().Clone());
-            }
-        }
+        var sourceParams = source.GetParameters();
+        target.UpdateParameters(sourceParams);
     }
 
     private Vector<T> ConcatenateStateAction(Vector<T> state, Vector<T> action)
