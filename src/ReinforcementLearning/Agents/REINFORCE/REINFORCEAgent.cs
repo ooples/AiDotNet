@@ -7,6 +7,7 @@ using AiDotNet.NeuralNetworks.Layers;
 using AiDotNet.ActivationFunctions;
 using AiDotNet.ReinforcementLearning.Common;
 using AiDotNet.Helpers;
+using AiDotNet.Enums;
 
 namespace AiDotNet.ReinforcementLearning.Agents.REINFORCE;
 
@@ -84,17 +85,23 @@ public class REINFORCEAgent<T> : DeepReinforcementLearningAgentBase<T>
 
         layers.Add(new DenseLayer<T>(prevSize, outputSize, (IActivationFunction<T>)new IdentityActivation<T>()));
 
-        return new NeuralNetwork<T>(new NeuralNetworkArchitecture<T>
-        {
-            Layers = layers,
-            TaskType = NeuralNetworkTaskType.Regression
-        });
+        var architecture = new NeuralNetworkArchitecture<T>(
+            inputType: InputType.OneDimensional,
+            taskType: NeuralNetworkTaskType.Regression,
+            complexity: NetworkComplexity.Medium,
+            inputSize: _reinforceOptions.StateSize,
+            outputSize: outputSize,
+            layers: layers);
+
+        return new NeuralNetwork<T>(architecture);
     }
 
     /// <inheritdoc/>
     public override Vector<T> SelectAction(Vector<T> state, bool training = true)
     {
-        var policyOutput = _policyNetwork.Predict(state);
+        var stateTensor = Tensor<T>.FromVector(state);
+        var policyOutputTensor = _policyNetwork.Predict(stateTensor);
+        var policyOutput = policyOutputTensor.ToVector();
 
         if (_reinforceOptions.IsContinuous)
         {
@@ -151,7 +158,9 @@ public class REINFORCEAgent<T> : DeepReinforcementLearningAgentBase<T>
 
     private T ComputeLogProb(Vector<T> state, Vector<T> action)
     {
-        var policyOutput = _policyNetwork.Predict(state);
+        var stateTensor = Tensor<T>.FromVector(state);
+        var policyOutputTensor = _policyNetwork.Predict(stateTensor);
+        var policyOutput = policyOutputTensor.ToVector();
 
         if (_reinforceOptions.IsContinuous)
         {
@@ -217,14 +226,16 @@ public class REINFORCEAgent<T> : DeepReinforcementLearningAgentBase<T>
             // Compute output gradient for REINFORCE: ∇ loss w.r.t. policy output
             // For discrete: gradient is -G_t * (1_{a=a_t} - π(a|s)) for each action
             // For continuous: gradient depends on distribution type
-            var policyOutput = _policyNetwork.Predict(state);
+            var stateTensor = Tensor<T>.FromVector(state);
+            var policyOutputTensor = _policyNetwork.Predict(stateTensor);
+            var policyOutput = policyOutputTensor.ToVector();
             var outputGradient = new Vector<T>(policyOutput.Length);
-            
-            if (_options.IsContinuous)
+
+            if (_reinforceOptions.IsContinuous)
             {
                 // Continuous action space: Gaussian policy with mean and log_std
                 // Output is [mean_1, ..., mean_n, log_std_1, ..., log_std_n]
-                int actionSize = _options.ActionSize;
+                int actionSize = _reinforceOptions.ActionSize;
                 for (int i = 0; i < actionSize; i++)
                 {
                     var mean = policyOutput[i];
@@ -259,7 +270,8 @@ public class REINFORCEAgent<T> : DeepReinforcementLearningAgentBase<T>
             }
             
             // Backpropagate through policy network
-            _policyNetwork.Backpropagate(outputGradient);
+            var outputGradientTensor = Tensor<T>.FromVector(outputGradient);
+            _policyNetwork.Backpropagate(stateTensor, outputGradientTensor);
         }
 
         // Average loss
@@ -318,7 +330,7 @@ public class REINFORCEAgent<T> : DeepReinforcementLearningAgentBase<T>
     private void UpdatePolicyNetwork()
     {
         var params_ = _policyNetwork.GetParameters();
-        var grads = _policyNetwork.GetFlattenedGradients();
+        var grads = _policyNetwork.GetGradients();
 
         for (int i = 0; i < params_.Length; i++)
         {
@@ -380,15 +392,7 @@ public class REINFORCEAgent<T> : DeepReinforcementLearningAgentBase<T>
     /// <inheritdoc/>
     public override Vector<T> GetParameters()
     {
-        var policyParams = _policyNetwork.GetParameters();
-        var matrix = new Matrix<T>(policyParams.Length, 1);
-
-        for (int i = 0; i < policyParams.Length; i++)
-        {
-            matrix[i, 0] = policyParams[i];
-        }
-
-        return vector;
+        return _policyNetwork.GetParameters();
     }
 
     /// <inheritdoc/>
