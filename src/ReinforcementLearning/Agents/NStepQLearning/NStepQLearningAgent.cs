@@ -67,7 +67,7 @@ public class NStepQLearningAgent<T> : ReinforcementLearningAgentBase<T>
                 _nStepBuffer.RemoveAt(0);
             }
         }
-        _epsilon = Math.Max(_options.EpsilonEnd, _epsilon * _options.EpsilonDecay);
+        // Epsilon decay moved to ResetEpisode to decay per episode, not per step
     }
 
     private void UpdateNStep(Vector<T> finalState, bool done)
@@ -112,7 +112,13 @@ public class NStepQLearningAgent<T> : ReinforcementLearningAgentBase<T>
     }
 
     public override T Train() { return NumOps.Zero; }
-    public override void ResetEpisode() { _nStepBuffer.Clear(); base.ResetEpisode(); }
+    public override void ResetEpisode()
+    {
+        _nStepBuffer.Clear();
+        // Decay epsilon per episode, not per step
+        _epsilon = Math.Max(_options.EpsilonEnd, _epsilon * _options.EpsilonDecay);
+        base.ResetEpisode();
+    }
 
     private string VectorToStateKey(Vector<T> state)
     {
