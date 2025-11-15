@@ -157,12 +157,11 @@ public class TensorRTConfiguration
     /// Creates a configuration with INT8 quantization.
     /// </summary>
     /// <param name="calibrationDataPath">Path to calibration data file (required for INT8 quantization)</param>
-    /// <exception cref="ArgumentNullException">Thrown when calibrationDataPath is null or whitespace</exception>
+    /// <exception cref="ArgumentException">Thrown when calibrationDataPath is null or whitespace</exception>
     public static TensorRTConfiguration ForInt8(string calibrationDataPath)
     {
         if (string.IsNullOrWhiteSpace(calibrationDataPath))
-            throw new ArgumentNullException(nameof(calibrationDataPath),
-                "Calibration data path is required for INT8 quantization");
+            throw new ArgumentException("Calibration data path cannot be null or whitespace", nameof(calibrationDataPath));
 
         return new TensorRTConfiguration
         {

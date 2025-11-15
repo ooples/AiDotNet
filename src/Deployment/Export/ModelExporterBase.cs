@@ -38,7 +38,7 @@ public abstract class ModelExporterBase<T, TInput, TOutput> : IModelExporter<T, 
         // Ensure output directory exists
         // Path.GetDirectoryName can return null for root paths or relative filenames
         var directory = Path.GetDirectoryName(outputPath);
-        if (directory is not null && !string.IsNullOrWhiteSpace(directory))
+        if (!string.IsNullOrWhiteSpace(directory))
         {
             if (!Directory.Exists(directory))
             {

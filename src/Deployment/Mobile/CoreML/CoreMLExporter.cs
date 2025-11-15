@@ -84,7 +84,12 @@ public class CoreMLExporter<T, TInput, TOutput> : ModelExporterBase<T, TInput, T
                 ModelName = config.ModelName,
                 ModelDescription = config.ModelDescription,
                 OptimizeForSize = true,
-                QuantizationBits = config.QuantizationMode == QuantizationMode.Float16 ? 16 : 32
+                QuantizationBits = config.QuantizationMode switch
+                {
+                    QuantizationMode.Int8 => 8,
+                    QuantizationMode.Float16 => 16,
+                    _ => 32
+                }
             };
         }
 

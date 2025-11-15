@@ -145,14 +145,14 @@ internal static class OnnxToCoreMLConverter
 
             switch (fieldNumber)
             {
-                case 3: // name
-                    name = reader.ReadString();
+                case 1: // dims (repeated) - ONNX TensorProto field 1
+                    dims.Add(reader.ReadInt64());
                     break;
-                case 5: // data_type
+                case 2: // data_type - ONNX TensorProto field 2
                     dataType = reader.ReadInt32();
                     break;
-                case 7: // dims (repeated)
-                    dims.Add(reader.ReadInt64());
+                case 8: // name - ONNX TensorProto field 8
+                    name = reader.ReadString();
                     break;
                 case 9: // raw_data
                     var rawBytes = reader.ReadBytes().ToByteArray();
