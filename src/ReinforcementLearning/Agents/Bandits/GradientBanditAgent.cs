@@ -21,6 +21,7 @@ public class GradientBanditAgent<T> : ReinforcementLearningAgentBase<T>
     public GradientBanditAgent(GradientBanditOptions<T> options) : base(options)
     {
         _options = options ?? throw new ArgumentNullException(nameof(options));
+        _random = new Random();
         _preferences = new Vector<T>(_options.NumArms);
         for (int i = 0; i < _options.NumArms; i++)
         {
