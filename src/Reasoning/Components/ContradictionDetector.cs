@@ -325,7 +325,14 @@ Analyze:";
 
             if (root["severity"] != null)
             {
-                contradiction.Severity = MathHelper.Clamp(root["severity"]!.Value<double>(), 0.0, 1.0);
+                try
+                {
+                    contradiction.Severity = MathHelper.Clamp(root["severity"]!.Value<double>(), 0.0, 1.0);
+                }
+                catch (FormatException)
+                {
+                    contradiction.Severity = 0.8; // Default if non-numeric
+                }
             }
             else
             {

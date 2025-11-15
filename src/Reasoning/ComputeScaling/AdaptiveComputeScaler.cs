@@ -6,7 +6,6 @@ namespace AiDotNet.Reasoning.ComputeScaling;
 /// <summary>
 /// Implements adaptive test-time compute scaling based on problem difficulty.
 /// </summary>
-/// <typeparam name="T">The numeric type used for scoring (e.g., double, float).</typeparam>
 /// <remarks>
 /// <para><b>For Beginners:</b> Test-time compute scaling means allocating more "thinking time" and resources
 /// to harder problems. Just like you spend more time on difficult homework questions than easy ones.

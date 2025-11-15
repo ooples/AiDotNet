@@ -130,8 +130,34 @@ public class BreadthFirstSearch<T> : ISearchAlgorithm<T>
             return ReconstructPath(bestTerminalNode);
         }
 
-        // Fallback: return just the root if no terminal node found
+        // Fallback: find the best explored non-terminal node
+        var allNodes = new List<AiDotNet.Reasoning.Models.ThoughtNode<T>>();
+        CollectAllNodes(root, allNodes);
+
+        var bestExplored = allNodes
+            .Where(n => n.IsVisited)
+            .OrderByDescending(n => Convert.ToDouble(n.EvaluationScore))
+            .FirstOrDefault();
+
+        if (bestExplored != null && bestExplored != root)
+        {
+            return ReconstructPath(bestExplored);
+        }
+
+        // Last resort: return just the root
         return new List<AiDotNet.Reasoning.Models.ThoughtNode<T>> { root };
+    }
+
+    /// <summary>
+    /// Collects all nodes in the tree via recursion.
+    /// </summary>
+    private void CollectAllNodes(AiDotNet.Reasoning.Models.ThoughtNode<T> node, List<AiDotNet.Reasoning.Models.ThoughtNode<T>> collection)
+    {
+        collection.Add(node);
+        foreach (var child in node.Children)
+        {
+            CollectAllNodes(child, collection);
+        }
     }
 
     /// <summary>
