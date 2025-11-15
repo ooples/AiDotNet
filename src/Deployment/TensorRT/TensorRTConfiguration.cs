@@ -156,8 +156,13 @@ public class TensorRTConfiguration
     /// <summary>
     /// Creates a configuration with INT8 quantization.
     /// </summary>
+    /// <param name="calibrationDataPath">Path to calibration data file (required for INT8 quantization)</param>
+    /// <exception cref="ArgumentException">Thrown when calibrationDataPath is null or whitespace</exception>
     public static TensorRTConfiguration ForInt8(string calibrationDataPath)
     {
+        if (string.IsNullOrWhiteSpace(calibrationDataPath))
+            throw new ArgumentException("Calibration data path cannot be null or whitespace", nameof(calibrationDataPath));
+
         return new TensorRTConfiguration
         {
             MaxBatchSize = 8,
@@ -167,5 +172,58 @@ public class TensorRTConfiguration
             CalibrationDataPath = calibrationDataPath,
             BuilderOptimizationLevel = 4
         };
+    }
+
+    /// <summary>
+    /// Validates the configuration and throws exceptions for invalid settings.
+    /// </summary>
+    /// <exception cref="InvalidOperationException">Thrown when INT8 is enabled without calibration data</exception>
+    /// <exception cref="FileNotFoundException">Thrown when calibration data path is specified but file doesn't exist</exception>
+    public void Validate()
+    {
+        // Validate INT8 requires calibration data
+        if (UseInt8 && string.IsNullOrWhiteSpace(CalibrationDataPath))
+        {
+            throw new InvalidOperationException(
+                "INT8 quantization is enabled but CalibrationDataPath is not provided. " +
+                "Either provide calibration data or set UseInt8 = false.");
+        }
+
+        // Validate calibration data file exists if path is provided
+        if (!string.IsNullOrWhiteSpace(CalibrationDataPath) && !File.Exists(CalibrationDataPath))
+        {
+            throw new FileNotFoundException(
+                $"Calibration data file not found: {CalibrationDataPath}. " +
+                "Ensure the file exists before building TensorRT engine.",
+                CalibrationDataPath);
+        }
+
+        // Validate batch size
+        if (MaxBatchSize < 1)
+        {
+            throw new InvalidOperationException(
+                $"MaxBatchSize must be at least 1, got: {MaxBatchSize}");
+        }
+
+        // Validate workspace size
+        if (MaxWorkspaceSize < 0)
+        {
+            throw new InvalidOperationException(
+                $"MaxWorkspaceSize must be non-negative, got: {MaxWorkspaceSize}");
+        }
+
+        // Validate optimization level
+        if (BuilderOptimizationLevel < 0 || BuilderOptimizationLevel > 5)
+        {
+            throw new InvalidOperationException(
+                $"BuilderOptimizationLevel must be between 0 and 5, got: {BuilderOptimizationLevel}");
+        }
+
+        // Validate multi-stream configuration
+        if (EnableMultiStream && NumStreams < 1)
+        {
+            throw new InvalidOperationException(
+                $"NumStreams must be at least 1 when EnableMultiStream is true, got: {NumStreams}");
+        }
     }
 }
