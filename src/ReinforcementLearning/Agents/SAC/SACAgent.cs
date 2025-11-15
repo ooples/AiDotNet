@@ -648,7 +648,10 @@ public class SACAgent<T> : DeepReinforcementLearningAgentBase<T>
     /// <inheritdoc/>
     public override void ApplyGradients(Vector<T> gradients, T learningRate)
     {
-        // Not directly applicable for SAC
+        // SAC uses actor-critic architecture with separate policy and value networks.
+        // Gradients are computed and applied internally during Train() for each network.
+        // External gradient application is not applicable for this algorithm.
+        throw new NotSupportedException("SAC applies gradients internally during training. Use Train() method instead.");
     }
 
     // Helper methods
