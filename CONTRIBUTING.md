@@ -16,8 +16,8 @@ When you create or update a PR, a GitHub workflow automatically:
 4. Posts a comment explaining the change
 
 ### Format
-```
-<type>(<optional scope>): <description in lowercase>
+```text
+<type>(<optional scope>): <description>
 ```
 
 ### Valid Types and Version Impact
@@ -33,7 +33,7 @@ When you create or update a PR, a GitHub workflow automatically:
 
 ### Breaking Changes
 Add `!` after type or `BREAKING CHANGE:` in commit body to trigger MAJOR version bump (e.g., 0.1.0 → 1.0.0):
-```
+```text
 feat!: redesign public API
 ```
 
