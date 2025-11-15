@@ -127,11 +127,7 @@ public class BreadthFirstSearch<T> : ISearchAlgorithm<T>
         // Return the best path found
         if (bestTerminalNode != null)
         {
-            return bestTerminalNode.GetPathFromRoot()
-                .Select(thought => FindNodeWithThought(root, thought))
-                .Where(n => n != null)
-                .Cast<AiDotNet.Reasoning.Models.ThoughtNode<T>>()
-                .ToList();
+            return ReconstructPath(bestTerminalNode);
         }
 
         // Fallback: return just the root if no terminal node found
@@ -153,20 +149,19 @@ public class BreadthFirstSearch<T> : ISearchAlgorithm<T>
     }
 
     /// <summary>
-    /// Finds a node in the tree with the given thought text (DFS helper).
+    /// Reconstructs the path from root to a given node by traversing Parent pointers.
     /// </summary>
-    private AiDotNet.Reasoning.Models.ThoughtNode<T>? FindNodeWithThought(AiDotNet.Reasoning.Models.ThoughtNode<T> root, string thought)
+    private List<AiDotNet.Reasoning.Models.ThoughtNode<T>> ReconstructPath(AiDotNet.Reasoning.Models.ThoughtNode<T> node)
     {
-        if (root.Thought == thought)
-            return root;
+        var path = new List<AiDotNet.Reasoning.Models.ThoughtNode<T>>();
+        var current = node;
 
-        foreach (var child in root.Children)
+        while (current != null)
         {
-            var found = FindNodeWithThought(child, thought);
-            if (found != null)
-                return found;
+            path.Insert(0, current);
+            current = current.Parent;
         }
 
-        return null;
+        return path;
     }
 }
