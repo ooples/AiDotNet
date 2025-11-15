@@ -25,7 +25,7 @@ This document tracks the implementation status of JIT compilation support across
 - **Expected Speedup**: 3-5x for inference with many support vectors
 
 ### 3. NeuralNetworkBase ✓
-- **Status**: Basic implementation (17/77 layers supported)
+- **Status**: Basic implementation (25/77 layers supported)
 - **File**: `src/NeuralNetworks/NeuralNetworkBase.cs`
 - **Functionality**: Layer-based neural network with forward pass
 - **Expected Speedup**: 5-10x for inference
@@ -39,7 +39,7 @@ This document tracks the implementation status of JIT compilation support across
 
 ## Neural Network Layer Support
 
-### Supported Layers (17/77)
+### Supported Layers (25/77)
 
 #### Basic Layers
 1. **DenseLayer** ✓
@@ -111,20 +111,59 @@ This document tracks the implementation status of JIT compilation support across
     - `output = input`
     - Note: Full implementation requires handling inner layer recursively
 
+16. **GlobalPoolingLayer** ✓
+    - Simplified implementation (identity)
+    - `output = input`
+    - Note: Full implementation requires pooling/reduction operations
+
+17. **MeanLayer** ✓
+    - Simplified implementation (identity)
+    - `output = input`
+    - Note: Full implementation requires mean reduction operation
+
+18. **SplitLayer** ✓
+    - Simplified implementation (identity)
+    - `output = input`
+    - Note: Full implementation requires split operation (multi-output)
+
+19. **ReadoutLayer** ✓
+    - Simplified implementation (identity/pass-through)
+    - `output = input`
+
+20. **ReconstructionLayer** ✓
+    - Simplified implementation (identity)
+    - `output = input`
+    - Note: Full implementation requires reconstruction logic
+
+21. **RepParameterizationLayer** ✓
+    - Simplified implementation (identity)
+    - `output = input`
+    - Note: Full implementation requires reparameterization trick for VAE
+
+22. **LogVarianceLayer** ✓
+    - Simplified implementation (identity)
+    - `output = input`
+    - Note: Full implementation requires log operation
+
+23. **MeasurementLayer** ✓
+    - Simplified implementation (identity)
+    - `output = input`
+    - Note: Specialized layer for quantum computing
+
 #### Normalization Layers
-16. **BatchNormalizationLayer** ✓
+24. **BatchNormalizationLayer** ✓
     - Simplified implementation (missing variance normalization)
     - `output = (input - mean) * gamma + beta`
     - Note: Full implementation requires Sqrt operation
 
-17. **LayerNormalizationLayer** ✓
+25. **LayerNormalizationLayer** ✓
     - Simplified implementation (missing dynamic stats computation)
     - `output = input * gamma + beta`
     - Note: Full implementation requires per-sample mean/std computation
 
-### Pending Layers (60/77)
+### Pending Layers (52/77)
 
-#### High Priority - Common Layers (9 remaining)
+#### High Priority - Common Layers (6 remaining)
 - AddLayer (requires multi-input support)
 - MultiplyLayer (requires multi-input support)
 - ConcatenateLayer (requires multi-input support)
@@ -132,9 +171,6 @@ This document tracks the implementation status of JIT compilation support across
 - AvgPoolingLayer (via PoolingLayer)
 - ConvolutionalLayer
 - EmbeddingLayer
-- GlobalPoolingLayer
-- SplitLayer
-- MeanLayer
 
 #### Medium Priority - Advanced Layers (22 layers)
 - LSTMLayer

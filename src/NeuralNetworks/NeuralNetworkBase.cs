@@ -2439,6 +2439,14 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
             Layers.CroppingLayer<T> => input, // Simplified: requires Slice/Crop operation for full implementation
             Layers.UpsamplingLayer<T> => input, // Simplified: requires interpolation operations
             Layers.TimeDistributedLayer<T> => input, // Simplified: requires handling inner layer
+            Layers.GlobalPoolingLayer<T> => input, // Simplified: requires pooling/reduction operations
+            Layers.MeanLayer<T> => input, // Simplified: requires mean reduction operation
+            Layers.SplitLayer<T> => input, // Simplified: requires split operation (multi-output)
+            Layers.ReadoutLayer<T> => input, // Simplified: pass-through for now
+            Layers.ReconstructionLayer<T> => input, // Simplified: requires reconstruction logic
+            Layers.RepParameterizationLayer<T> => input, // Simplified: reparameterization trick for VAE
+            Layers.LogVarianceLayer<T> => input, // Simplified: requires log operation
+            Layers.MeasurementLayer<T> => input, // Simplified: measurement layer for quantum computing
             Layers.BatchNormalizationLayer<T> bnLayer => ConvertBatchNormalizationLayer(bnLayer, input),
             Layers.LayerNormalizationLayer<T> lnLayer => ConvertLayerNormalizationLayer(lnLayer, input),
 
@@ -2447,7 +2455,8 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
                 $"Layer type {layer.GetType().Name} is not yet supported for JIT compilation. " +
                 $"Supported layers: DenseLayer, FullyConnectedLayer, FeedForwardLayer, ActivationLayer, DropoutLayer, GaussianNoiseLayer, " +
                 $"FlattenLayer, ReshapeLayer, InputLayer, MaskingLayer, PositionalEncodingLayer, PaddingLayer, CroppingLayer, UpsamplingLayer, " +
-                $"TimeDistributedLayer, BatchNormalizationLayer, LayerNormalizationLayer. " +
+                $"TimeDistributedLayer, GlobalPoolingLayer, MeanLayer, SplitLayer, ReadoutLayer, ReconstructionLayer, RepParameterizationLayer, " +
+                $"LogVarianceLayer, MeasurementLayer, BatchNormalizationLayer, LayerNormalizationLayer. " +
                 $"Support for additional layer types will be added in future updates.")
         };
     }
