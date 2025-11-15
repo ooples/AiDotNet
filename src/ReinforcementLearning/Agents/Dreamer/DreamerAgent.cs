@@ -232,12 +232,13 @@ public class DreamerAgent<T> : DeepReinforcementLearningAgentBase<T>
             var dynamicsParams = _dynamicsNetwork.GetParameters();
             _dynamicsNetwork.UpdateParameters(dynamicsParams);
 
-            // FIX ISSUE 1: Train representation network
+            // Train representation network (backprop gradient from dynamics loss)
             // Representation network should minimize reconstruction error of latent states
+            // Gradient flows from dynamics prediction error back through representation
             var representationGradient = new Vector<T>(latentState.Length);
             for (int j = 0; j < representationGradient.Length; j++)
             {
-                // Gradient flows from dynamics prediction error back through representation
+                // Chain rule: gradient flows back from dynamics network
                 representationGradient[j] = NumOps.Divide(gradient[j], NumOps.FromDouble(2.0));
             }
             _representationNetwork.Backpropagate(Tensor<T>.FromVector(representationGradient));
