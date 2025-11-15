@@ -56,7 +56,7 @@ public class AdaptiveComputeScaler<T>
     public AdaptiveComputeScaler(ReasoningConfig? baselineConfig = null, double maxScalingFactor = 5.0)
     {
         _baselineConfig = baselineConfig ?? ReasoningConfig.Default();
-        _maxScalingFactor = Math.Max(1.0, maxScalingFactor);
+        _maxScalingFactor = Math.Max(2.0, maxScalingFactor);
     }
 
     /// <summary>
