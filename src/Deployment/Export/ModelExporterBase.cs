@@ -35,12 +35,17 @@ public abstract class ModelExporterBase<T, TInput, TOutput> : IModelExporter<T, 
                 $"Model cannot be exported to {ExportFormat}. Errors: {string.Join(", ", errors)}");
         }
 
-        // Ensure directory exists
+        // Ensure output directory exists
+        // Path.GetDirectoryName can return null for root paths or relative filenames
         var directory = Path.GetDirectoryName(outputPath);
-        if (!string.IsNullOrEmpty(directory) && !Directory.Exists(directory))
+        if (directory is not null && !string.IsNullOrWhiteSpace(directory))
         {
-            Directory.CreateDirectory(directory);
+            if (!Directory.Exists(directory))
+            {
+                Directory.CreateDirectory(directory);
+            }
         }
+        // If directory is null/empty, file will be written to current working directory
 
         // Perform the export
         var exportedBytes = ExportToBytes(model, config);
