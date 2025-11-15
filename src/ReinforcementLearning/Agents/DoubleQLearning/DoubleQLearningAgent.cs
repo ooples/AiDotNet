@@ -282,39 +282,54 @@ public class DoubleQLearningAgent<T> : ReinforcementLearningAgentBase<T>
 
     public override void SetParameters(Vector<T> parameters)
     {
-        // Save state keys before clearing
+        // Get expected parameter count
+        int expectedStates = parameters.Length / (2 * _options.ActionSize);
+
+        // If parameter count doesn't match current state count, we need state keys
+        // This implementation updates existing states in-place when possible
         var stateKeys = _qTable1.Keys.ToList();
 
-        // Clear both tables
-        _qTable1.Clear();
-        _qTable2.Clear();
-
-        // Reconstruct both Q-tables from flattened vector
-        int maxStates = parameters.Length / (2 * _options.ActionSize);
-        int stateCount = Math.Min(maxStates, stateKeys.Count);
-
-        // Reconstruct _qTable1 (indices 0 to stateCount*actionSize-1)
-        for (int i = 0; i < stateCount; i++)
+        if (expectedStates == 0 || parameters.Length < 2 * _options.ActionSize)
         {
-            var qValues = new Dictionary<int, T>();
-            for (int action = 0; action < _options.ActionSize; action++)
-            {
-                int idx = i * _options.ActionSize + action;
-                qValues[action] = parameters[idx];
-            }
-            _qTable1[stateKeys[i]] = qValues;
+            // Invalid parameter vector - keep current state
+            return;
         }
 
-        // Reconstruct _qTable2 (indices stateCount*actionSize to stateCount*2*actionSize-1)
-        for (int i = 0; i < stateCount; i++)
+        // Update _qTable1 values in-place (indices 0 to expectedStates*actionSize-1)
+        int idx = 0;
+        for (int i = 0; i < Math.Min(expectedStates, stateKeys.Count); i++)
         {
-            var qValues = new Dictionary<int, T>();
-            for (int action = 0; action < _options.ActionSize; action++)
+            string stateKey = stateKeys[i];
+            if (_qTable1.ContainsKey(stateKey))
             {
-                int idx = stateCount * _options.ActionSize + i * _options.ActionSize + action;
-                qValues[action] = parameters[idx];
+                for (int action = 0; action < _options.ActionSize; action++)
+                {
+                    _qTable1[stateKey][action] = parameters[idx++];
+                }
             }
-            _qTable2[stateKeys[i]] = qValues;
+            else
+            {
+                // Skip this state's parameters
+                idx += _options.ActionSize;
+            }
+        }
+
+        // Update _qTable2 values in-place (indices expectedStates*actionSize to end)
+        for (int i = 0; i < Math.Min(expectedStates, stateKeys.Count); i++)
+        {
+            string stateKey = stateKeys[i];
+            if (_qTable2.ContainsKey(stateKey))
+            {
+                for (int action = 0; action < _options.ActionSize; action++)
+                {
+                    _qTable2[stateKey][action] = parameters[idx++];
+                }
+            }
+            else
+            {
+                // Skip this state's parameters
+                idx += _options.ActionSize;
+            }
         }
     }
 
