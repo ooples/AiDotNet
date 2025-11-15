@@ -25,7 +25,7 @@ This document tracks the implementation status of JIT compilation support across
 - **Expected Speedup**: 3-5x for inference with many support vectors
 
 ### 3. NeuralNetworkBase ✓
-- **Status**: 33/77 layers with proper implementations
+- **Status**: 36/77 layers with proper implementations
 - **File**: `src/NeuralNetworks/NeuralNetworkBase.cs`
 - **Functionality**: Layer-based neural network with forward pass
 - **Expected Speedup**: 5-10x for inference
@@ -44,11 +44,11 @@ This document tracks the implementation status of JIT compilation support across
 
 - **Total Layer Files**: 77
 - **Actual Layer Types**: 75 (excluding LayerBase.cs and MixtureOfExpertsBuilder.cs)
-- **Fully Implemented**: 33 layers with proper conversion logic
-- **Identity/Pass-through**: 5 layers (correct for inference)
-- **Not Yet Supported**: 37 layers (throw NotSupportedException with clear error messages)
+- **Fully Implemented**: 36 layers with proper conversion logic
+- **Identity/Pass-through**: 6 layers (correct for inference)
+- **Not Yet Supported**: 33 layers (throw NotSupportedException with clear error messages)
 
-### Fully Implemented Layers (33) ✓
+### Fully Implemented Layers (36) ✓
 
 #### Basic Layers
 1. **DenseLayer** ✓
@@ -166,56 +166,69 @@ This document tracks the implementation status of JIT compilation support across
     - Uses TensorOperations.GraphConv
     - Graph convolution for graph neural networks
 
-### Identity/Pass-through Layers (5) ✓
+#### Gating & Channel Attention Layers
+28. **HighwayLayer** ✓
+    - Uses gating mechanism with transform and gate paths
+    - `output = gate * tanh(transform) + (1 - gate) * input`
+
+29. **SqueezeAndExcitationLayer** ✓
+    - Squeeze: Global average pooling
+    - Excitation: FC -> ReLU -> FC -> Sigmoid
+    - Channel-wise feature recalibration
+
+30. **GatedLinearUnitLayer** ✓
+    - Linear and gate paths with element-wise multiplication
+    - `output = linear * sigmoid(gate)`
+
+### Identity/Pass-through Layers (6) ✓
 
 These layers correctly return identity for inference mode:
 
-28. **DropoutLayer** ✓
+31. **DropoutLayer** ✓
     - Identity during inference
     - `output = input`
 
-29. **GaussianNoiseLayer** ✓
+32. **GaussianNoiseLayer** ✓
     - Identity during inference (noise disabled)
     - `output = input`
 
-30. **InputLayer** ✓
+33. **InputLayer** ✓
     - Pass-through operation
     - `output = input`
 
-31. **MaskingLayer** ✓
+34. **MaskingLayer** ✓
     - Identity during inference (mask is data-dependent)
     - `output = input`
 
-32. **PositionalEncodingLayer** ✓
+35. **PositionalEncodingLayer** ✓
     - Identity during inference (encoding added during training)
     - `output = input`
 
-33. **ReadoutLayer** ✓
+36. **ReadoutLayer** ✓
     - Pass-through layer for inference
     - `output = input`
 
-### Inference-Specific Identity Layers (5) ✓
+### Inference-Specific Identity Layers (3) ✓
 
 These layers are identity during inference because their operations are training-specific:
 
-34. **ReconstructionLayer** ✓
+37. **ReconstructionLayer** ✓
     - Identity during inference (reconstruction logic is training-specific)
     - `output = input`
 
-35. **RepParameterizationLayer** ✓
+38. **RepParameterizationLayer** ✓
     - Identity during inference (reparameterization is training-specific)
     - `output = input`
 
-36. **MeasurementLayer** ✓
+39. **MeasurementLayer** ✓
     - Identity for standard inference (quantum measurement is context-specific)
     - `output = input`
 
-### Not Yet Supported (37 layers)
+### Not Yet Supported (36 layers)
 
 These layers throw NotSupportedException with clear error messages explaining what operations are missing:
 
 #### Recurrent & Sequence Layers
-- **HighwayLayer** - Requires gating mechanism operations
 - **RecurrentLayer** - Requires recurrent cell operations and sequence processing
 - **LSTMLayer** - Requires LSTM cell operations (forget gate, input gate, output gate, cell state)
 - **GRULayer** - Requires GRU cell operations (update gate, reset gate)
@@ -248,8 +261,6 @@ These layers throw NotSupportedException with clear error messages explaining wh
 - **DigitCapsuleLayer** - Requires capsule routing and agreement operations
 
 #### Specialized Neural Layers
-- **SqueezeAndExcitationLayer** - Requires global pooling, FC layers, and channel-wise scaling
-- **GatedLinearUnitLayer** - Requires gating operations (element-wise multiply with learned gates)
 - **LambdaLayer** - Uses arbitrary custom functions which cannot be statically compiled
 - **QuantumLayer** - Requires quantum circuit operations
 - **SpikingLayer** - Requires spiking neuron dynamics and temporal coding
@@ -278,9 +289,9 @@ These layers throw NotSupportedException with clear error messages explaining wh
 ## Summary by Category
 
 ### By Implementation Type
-- **Fully Implemented with TensorOperations**: 27 layers
-- **Identity/Pass-through (Correct for Inference)**: 6 layers
-- **NotSupportedException (Missing Operations)**: 42 layers
+- **Fully Implemented with TensorOperations**: 30 layers
+- **Identity/Pass-through (Correct for Inference)**: 9 layers
+- **NotSupportedException (Missing Operations)**: 36 layers
 
 ### By Functional Category
 - **Basic/Dense Layers**: 7/7 ✓
@@ -288,9 +299,10 @@ These layers throw NotSupportedException with clear error messages explaining wh
 - **Normalization**: 2/2 ✓
 - **Convolutional**: 6/9 (67%)
 - **Pooling**: 3/3 ✓
-- **Recurrent/Sequence**: 0/6 (0%)
-- **Attention/Transformer**: 0/6 (0%)
-- **Specialized**: 11/38 (29%)
+- **Gating & Attention**: 3/9 (33%)
+- **Recurrent/Sequence**: 0/5 (0%)
+- **Attention/Transformer**: 0/5 (0%)
+- **Specialized**: 14/41 (34%)
 
 ## Implementation Strategy
 
@@ -305,7 +317,8 @@ These layers throw NotSupportedException with clear error messages explaining wh
 - Implement padding, cropping, upsampling ✓
 - Support convolution variants ✓
 - Add pooling operations ✓
-- Current: 33 layers properly implemented ✓
+- Add gating mechanisms (Highway, GLU, SE) ✓
+- Current: 36 layers properly implemented ✓
 
 ### Phase 3: Attention & Transformers (NEXT)
 - Implement attention mechanisms
@@ -385,7 +398,7 @@ All implemented ✓:
 ### Base Class Implementations
 - `src/Regression/RegressionBase.cs` ✓
 - `src/Regression/NonLinearRegressionBase.cs` ✓
-- `src/NeuralNetworks/NeuralNetworkBase.cs` ✓ (33/75 layers)
+- `src/NeuralNetworks/NeuralNetworkBase.cs` ✓ (36/75 layers - 48%)
 - `src/TimeSeries/TimeSeriesModelBase.cs` ✓
 
 ### TensorOperations (Autodiff)
