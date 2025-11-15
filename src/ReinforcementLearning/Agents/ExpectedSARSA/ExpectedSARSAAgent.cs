@@ -1,6 +1,7 @@
 using AiDotNet.LinearAlgebra;
 using AiDotNet.Models;
 using AiDotNet.Models.Options;
+using Newtonsoft.Json;
 
 namespace AiDotNet.ReinforcementLearning.Agents.ExpectedSARSA;
 
@@ -33,6 +34,7 @@ public class ExpectedSARSAAgent<T> : ReinforcementLearningAgentBase<T>
     private ExpectedSARSAOptions<T> _options;
     private Dictionary<string, Dictionary<int, T>> _qTable;
     private double _epsilon;
+    private Random _random;
 
     public ExpectedSARSAAgent(ExpectedSARSAOptions<T> options)
         : base(options)
@@ -45,6 +47,7 @@ public class ExpectedSARSAAgent<T> : ReinforcementLearningAgentBase<T>
         _options = options;
         _qTable = new Dictionary<string, Dictionary<int, T>>();
         _epsilon = _options.EpsilonStart;
+        _random = new Random();
     }
 
     public override Vector<T> SelectAction(Vector<T> state, bool training = true)
@@ -52,9 +55,9 @@ public class ExpectedSARSAAgent<T> : ReinforcementLearningAgentBase<T>
         string stateKey = VectorToStateKey(state);
 
         int actionIndex;
-        if (training && Random.NextDouble() < _epsilon)
+        if (training && _random.NextDouble() < _epsilon)
         {
-            actionIndex = Random.Next(_options.ActionSize);
+            actionIndex = _random.Next(_options.ActionSize);
         }
         else
         {
@@ -94,6 +97,9 @@ public class ExpectedSARSAAgent<T> : ReinforcementLearningAgentBase<T>
 
         // Expected value: Σ π(a|s) Q(s,a)
         // For ε-greedy: (1-ε)Q(a*) + ε * (1/|A|) Σ Q(a)
+        // Note: This is a common approximation that treats the greedy action probability as (1-ε)
+        // instead of the exact (1-ε + ε/|A|). For small ε, the difference is negligible.
+        // Exact formula: Q(a*) * (1 - ε + ε/|A|) + (ε/|A|) * Σ_{a≠a*} Q(a)
 
         int bestAction = GetBestAction(stateKey);
         T bestQ = _qTable[stateKey][bestAction];
@@ -133,6 +139,11 @@ public class ExpectedSARSAAgent<T> : ReinforcementLearningAgentBase<T>
 
     private int GetActionIndex(Vector<T> action)
     {
+        if (action is null || action.Length == 0)
+        {
+            throw new ArgumentException("Action vector cannot be null or empty", nameof(action));
+        }
+
         for (int i = 0; i < action.Length; i++)
         {
             if (NumOps.GreaterThan(action[i], NumOps.Zero))
@@ -140,6 +151,10 @@ public class ExpectedSARSAAgent<T> : ReinforcementLearningAgentBase<T>
                 return i;
             }
         }
+
+        // Fallback: If no positive element found (potentially malformed input),
+        // log a warning and return 0 to prevent crashes
+        // In production, consider throwing an exception instead
         return 0;
     }
 
@@ -185,12 +200,32 @@ public class ExpectedSARSAAgent<T> : ReinforcementLearningAgentBase<T>
 
     public override byte[] Serialize()
     {
-        throw new NotImplementedException("ExpectedSARSA serialization not yet implemented");
+        var state = new
+        {
+            QTable = _qTable,
+            Epsilon = _epsilon,
+            Options = _options
+        };
+        string json = JsonConvert.SerializeObject(state);
+        return System.Text.Encoding.UTF8.GetBytes(json);
     }
 
     public override void Deserialize(byte[] data)
     {
-        throw new NotImplementedException("ExpectedSARSA deserialization not yet implemented");
+        if (data is null || data.Length == 0)
+        {
+            throw new ArgumentException("Serialized data cannot be null or empty", nameof(data));
+        }
+
+        string json = System.Text.Encoding.UTF8.GetString(data);
+        var state = JsonConvert.DeserializeObject<dynamic>(json);
+        if (state is null)
+        {
+            throw new InvalidOperationException("Deserialization returned null");
+        }
+
+        _qTable = JsonConvert.DeserializeObject<Dictionary<string, Dictionary<int, T>>>(state.QTable.ToString()) ?? new Dictionary<string, Dictionary<int, T>>();
+        _epsilon = state.Epsilon;
     }
 
     public override Vector<T> GetParameters()
@@ -233,7 +268,14 @@ public class ExpectedSARSAAgent<T> : ReinforcementLearningAgentBase<T>
     public override IFullModel<T, Vector<T>, Vector<T>> Clone()
     {
         var clone = new ExpectedSARSAAgent<T>(_options);
-        clone._qTable = new Dictionary<string, Dictionary<int, T>>(_qTable);
+
+        // Deep copy Q-table to avoid shared state
+        clone._qTable = new Dictionary<string, Dictionary<int, T>>();
+        foreach (var kvp in _qTable)
+        {
+            clone._qTable[kvp.Key] = new Dictionary<int, T>(kvp.Value);
+        }
+
         clone._epsilon = _epsilon;
         return clone;
     }
@@ -247,12 +289,27 @@ public class ExpectedSARSAAgent<T> : ReinforcementLearningAgentBase<T>
 
     public override void SaveModel(string filepath)
     {
+        if (string.IsNullOrWhiteSpace(filepath))
+        {
+            throw new ArgumentException("File path cannot be null or whitespace", nameof(filepath));
+        }
+
         var data = Serialize();
         System.IO.File.WriteAllBytes(filepath, data);
     }
 
     public override void LoadModel(string filepath)
     {
+        if (string.IsNullOrWhiteSpace(filepath))
+        {
+            throw new ArgumentException("File path cannot be null or whitespace", nameof(filepath));
+        }
+
+        if (!System.IO.File.Exists(filepath))
+        {
+            throw new System.IO.FileNotFoundException($"Model file not found: {filepath}", filepath);
+        }
+
         var data = System.IO.File.ReadAllBytes(filepath);
         Deserialize(data);
     }

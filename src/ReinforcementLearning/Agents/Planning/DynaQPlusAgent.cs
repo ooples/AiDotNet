@@ -2,6 +2,7 @@ using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
 using AiDotNet.Models;
 using AiDotNet.Models.Options;
+using Newtonsoft.Json;
 
 namespace AiDotNet.ReinforcementLearning.Agents.Planning;
 
@@ -18,6 +19,7 @@ public class DynaQPlusAgent<T> : ReinforcementLearningAgentBase<T>
     private List<(string state, int action)> _visitedStateActions;
     private double _epsilon;
     private int _totalSteps;
+    private Random _random;
 
     public DynaQPlusAgent(DynaQPlusOptions<T> options) : base(options)
     {
@@ -28,13 +30,14 @@ public class DynaQPlusAgent<T> : ReinforcementLearningAgentBase<T>
         _visitedStateActions = new List<(string, int)>();
         _epsilon = options.EpsilonStart;
         _totalSteps = 0;
+        _random = new Random();
     }
 
     public override Vector<T> SelectAction(Vector<T> state, bool training = true)
     {
         EnsureStateExists(state);
         string stateKey = GetStateKey(state);
-        int selectedAction = (training && Random.NextDouble() < _epsilon) ? Random.Next(_options.ActionSize) : GetGreedyAction(stateKey);
+        int selectedAction = (training && _random.NextDouble() < _epsilon) ? _random.Next(_options.ActionSize) : GetGreedyAction(stateKey);
         var result = new Vector<T>(_options.ActionSize);
         result[selectedAction] = NumOps.One;
         return result;
@@ -78,7 +81,7 @@ public class DynaQPlusAgent<T> : ReinforcementLearningAgentBase<T>
         {
             if (_visitedStateActions.Count == 0) break;
 
-            var (planState, planAction) = _visitedStateActions[Random.Next(_visitedStateActions.Count)];
+            var (planState, planAction) = _visitedStateActions[_random.Next(_visitedStateActions.Count)];
 
             if (_model.ContainsKey(planState) && _model[planState].ContainsKey(planAction))
             {
@@ -131,27 +134,124 @@ public class DynaQPlusAgent<T> : ReinforcementLearningAgentBase<T>
     public override ModelMetadata<T> GetModelMetadata() => new ModelMetadata<T> { ModelType = ModelType.ReinforcementLearning, FeatureCount = this.FeatureCount, Complexity = ParameterCount };
     public override int ParameterCount => _qTable.Count * _options.ActionSize;
     public override int FeatureCount => _options.StateSize;
-    public override byte[] Serialize() => throw new NotImplementedException();
-    public override void Deserialize(byte[] data) => throw new NotImplementedException();
+    public override byte[] Serialize()
+    {
+        var state = new
+        {
+            QTable = _qTable,
+            Model = _model,
+            TimeSteps = _timeSteps,
+            VisitedStateActions = _visitedStateActions,
+            Epsilon = _epsilon,
+            TotalSteps = _totalSteps,
+            Options = _options
+        };
+        string json = JsonConvert.SerializeObject(state);
+        return System.Text.Encoding.UTF8.GetBytes(json);
+    }
+
+    public override void Deserialize(byte[] data)
+    {
+        string json = System.Text.Encoding.UTF8.GetString(data);
+        var state = JsonConvert.DeserializeObject<dynamic>(json);
+        if (state is null)
+        {
+            throw new InvalidOperationException("Deserialization returned null");
+        }
+
+        _qTable = JsonConvert.DeserializeObject<Dictionary<string, Dictionary<int, T>>>(state.QTable.ToString()) ?? new Dictionary<string, Dictionary<int, T>>();
+        _model = JsonConvert.DeserializeObject<Dictionary<string, Dictionary<int, (string, T)>>>(state.Model.ToString()) ?? new Dictionary<string, Dictionary<int, (string, T)>>();
+        _timeSteps = JsonConvert.DeserializeObject<Dictionary<string, Dictionary<int, int>>>(state.TimeSteps.ToString()) ?? new Dictionary<string, Dictionary<int, int>>();
+        _visitedStateActions = JsonConvert.DeserializeObject<List<(string, int)>>(state.VisitedStateActions.ToString()) ?? new List<(string, int)>();
+        _epsilon = state.Epsilon;
+        _totalSteps = state.TotalSteps;
+    }
     public override Vector<T> GetParameters()
     {
         int paramCount = _qTable.Count > 0 ? _qTable.Count * _options.ActionSize : 1;
         var v = new Vector<T>(paramCount);
         int idx = 0;
 
-        foreach (var s in _qTable)
-            foreach (var a in s.Value)
-                v[idx++] = a.Value;
+        // Sort state keys for deterministic ordering
+        var sortedStates = _qTable.Keys.OrderBy(k => k).ToList();
+        foreach (var stateKey in sortedStates)
+        {
+            var actionDict = _qTable[stateKey];
+            for (int a = 0; a < _options.ActionSize; a++)
+            {
+                if (actionDict.ContainsKey(a))
+                {
+                    v[idx++] = actionDict[a];
+                }
+                else
+                {
+                    v[idx++] = NumOps.Zero;
+                }
+            }
+        }
 
         if (idx == 0)
             v[0] = NumOps.Zero;
 
         return v;
     }
-    public override void SetParameters(Vector<T> parameters) { int idx = 0; foreach (var s in _qTable.ToList()) for (int a = 0; a < _options.ActionSize; a++) if (idx < parameters.Length) _qTable[s.Key][a] = parameters[idx++]; }
+    public override void SetParameters(Vector<T> parameters)
+    {
+        if (parameters is null || parameters.Length == 0)
+        {
+            return;
+        }
+
+        int idx = 0;
+        var sortedStates = _qTable.Keys.OrderBy(k => k).ToList();
+
+        foreach (var stateKey in sortedStates)
+        {
+            for (int a = 0; a < _options.ActionSize; a++)
+            {
+                if (idx < parameters.Length)
+                {
+                    if (!_qTable[stateKey].ContainsKey(a))
+                    {
+                        _qTable[stateKey][a] = NumOps.Zero;
+                    }
+                    _qTable[stateKey][a] = parameters[idx++];
+                }
+            }
+        }
+    }
     public override IFullModel<T, Vector<T>, Vector<T>> Clone() => new DynaQPlusAgent<T>(_options);
     public override Vector<T> ComputeGradients(Vector<T> input, Vector<T> target, ILossFunction<T>? lossFunction = null) { var pred = Predict(input); var lf = lossFunction ?? LossFunction; var loss = lf.CalculateLoss(pred, target); var grad = lf.CalculateDerivative(pred, target); return grad; }
-    public override void ApplyGradients(Vector<T> gradients, T learningRate) { }
-    public override void SaveModel(string filepath) { var data = Serialize(); System.IO.File.WriteAllBytes(filepath, data); }
-    public override void LoadModel(string filepath) { var data = System.IO.File.ReadAllBytes(filepath); Deserialize(data); }
+    public override void ApplyGradients(Vector<T> gradients, T learningRate)
+    {
+        // Dyna-Q+ uses model-based planning with Q-learning updates, not gradient-based optimization
+        // This method is not applicable for tabular Q-learning methods
+        throw new NotSupportedException("Dyna-Q+ uses model-based planning with Q-learning updates, not gradient-based optimization. Use StoreExperience for updates.");
+    }
+    public override void SaveModel(string filepath)
+    {
+        if (string.IsNullOrWhiteSpace(filepath))
+        {
+            throw new ArgumentException("File path cannot be null or whitespace", nameof(filepath));
+        }
+
+        var data = Serialize();
+        System.IO.File.WriteAllBytes(filepath, data);
+    }
+
+    public override void LoadModel(string filepath)
+    {
+        if (string.IsNullOrWhiteSpace(filepath))
+        {
+            throw new ArgumentException("File path cannot be null or whitespace", nameof(filepath));
+        }
+
+        if (!System.IO.File.Exists(filepath))
+        {
+            throw new System.IO.FileNotFoundException($"Model file not found: {filepath}", filepath);
+        }
+
+        var data = System.IO.File.ReadAllBytes(filepath);
+        Deserialize(data);
+    }
 }
