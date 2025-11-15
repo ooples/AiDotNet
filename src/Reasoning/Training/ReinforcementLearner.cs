@@ -542,10 +542,13 @@ public class ReinforcementLearner<T>
         _bestEpoch = checkpoint.BestEpoch;
         _epochsWithoutImprovement = checkpoint.EpochsWithoutImprovement;
 
-        // Note: Training data (checkpoint.TrainingData) is deserialized but not currently
-        // copied to _dataCollector. In a full implementation, TrainingDataCollector would
-        // need methods to merge or replace its internal state from a loaded checkpoint.
-        // For now, training data collection will continue from current state.
+        // Restore training data from checkpoint
+        if (checkpoint.TrainingData != null)
+        {
+            _dataCollector.Clear();
+            var samples = checkpoint.TrainingData.GetAllSamples();
+            _dataCollector.AddSamples(samples);
+        }
     }
 
     /// <summary>

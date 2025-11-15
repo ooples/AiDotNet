@@ -156,6 +156,23 @@ public class TrainingDataCollector<T>
     }
 
     /// <summary>
+    /// Gets all samples as a read-only list.
+    /// </summary>
+    public IReadOnlyList<TrainingSample<T>> GetAllSamples()
+    {
+        return _samples.AsReadOnly();
+    }
+
+    /// <summary>
+    /// Clears all collected samples and category counts.
+    /// </summary>
+    public void Clear()
+    {
+        _samples.Clear();
+        _categoryCount.Clear();
+    }
+
+    /// <summary>
     /// Removes low-quality samples based on reward threshold.
     /// </summary>
     public int FilterByQuality(double minReward)
