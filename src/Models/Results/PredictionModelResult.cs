@@ -1651,7 +1651,7 @@ public class PredictionModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
     /// Example:
     /// <code>
     /// var model = await new PredictionModelBuilder&lt;double&gt;()
-    ///     .ConfigureExport(ExportConfig.ForONNX())
+    ///     .ConfigureExport(new ExportConfig { TargetPlatform = TargetPlatform.CPU })
     ///     .BuildAsync(x, y);
     /// model.ExportToOnnx("model.onnx");
     /// </code>
@@ -1662,7 +1662,7 @@ public class PredictionModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
         if (Model == null)
             throw new InvalidOperationException("Cannot export: Model is null");
 
-        var exportConfig = DeploymentConfiguration?.Export ?? ExportConfig.ForONNX();
+        var exportConfig = DeploymentConfiguration?.Export ?? new ExportConfig();
 
         var onnxConfig = new ExportConfiguration
         {
@@ -1693,7 +1693,7 @@ public class PredictionModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
     /// Example:
     /// <code>
     /// var model = await new PredictionModelBuilder&lt;double&gt;()
-    ///     .ConfigureExport(ExportConfig.ForTensorRT(QuantizationMode.Float16))
+    ///     .ConfigureExport(new ExportConfig { TargetPlatform = TargetPlatform.TensorRT, Quantization = QuantizationMode.Float16 })
     ///     .BuildAsync(x, y);
     /// model.ExportToTensorRT("model.trt");
     /// </code>
@@ -1704,7 +1704,7 @@ public class PredictionModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
         if (Model == null)
             throw new InvalidOperationException("Cannot export: Model is null");
 
-        var exportConfig = DeploymentConfiguration?.Export ?? ExportConfig.ForTensorRT();
+        var exportConfig = DeploymentConfiguration?.Export ?? new ExportConfig { TargetPlatform = TargetPlatform.TensorRT };
 
         var tensorRTConfig = new TensorRTConfiguration
         {
@@ -1734,7 +1734,7 @@ public class PredictionModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
     /// Example:
     /// <code>
     /// var model = await new PredictionModelBuilder&lt;double&gt;()
-    ///     .ConfigureExport(ExportConfig.ForCoreML(QuantizationMode.Float16))
+    ///     .ConfigureExport(new ExportConfig { TargetPlatform = TargetPlatform.CoreML, Quantization = QuantizationMode.Float16 })
     ///     .BuildAsync(x, y);
     /// model.ExportToCoreML("model.mlmodel");
     /// </code>
@@ -1745,7 +1745,7 @@ public class PredictionModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
         if (Model == null)
             throw new InvalidOperationException("Cannot export: Model is null");
 
-        var exportConfig = DeploymentConfiguration?.Export ?? ExportConfig.ForCoreML();
+        var exportConfig = DeploymentConfiguration?.Export ?? new ExportConfig { TargetPlatform = TargetPlatform.CoreML };
         var exporter = new CoreMLExporter<T, TInput, TOutput>();
         exporter.Export(Model, outputPath, exportConfig);
     }
@@ -1767,7 +1767,7 @@ public class PredictionModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
     /// Example:
     /// <code>
     /// var model = await new PredictionModelBuilder&lt;double&gt;()
-    ///     .ConfigureExport(ExportConfig.ForTFLite(QuantizationMode.Int8))
+    ///     .ConfigureExport(new ExportConfig { TargetPlatform = TargetPlatform.TFLite, Quantization = QuantizationMode.Int8 })
     ///     .BuildAsync(x, y);
     /// model.ExportToTFLite("model.tflite");
     /// </code>
@@ -1778,7 +1778,7 @@ public class PredictionModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
         if (Model == null)
             throw new InvalidOperationException("Cannot export: Model is null");
 
-        var exportConfig = DeploymentConfiguration?.Export ?? ExportConfig.ForTFLite();
+        var exportConfig = DeploymentConfiguration?.Export ?? new ExportConfig { TargetPlatform = TargetPlatform.TFLite };
         var exporter = new TFLiteExporter<T, TInput, TOutput>();
         exporter.Export(Model, outputPath, exportConfig);
     }

@@ -626,7 +626,7 @@ public interface IPredictionModelBuilder<T, TInput, TOutput>
     /// // Use Float16 quantization (recommended for most cases)
     /// var result = await builder
     ///     .ConfigureModel(model)
-    ///     .ConfigureQuantization(QuantizationConfig.Float16())
+    ///     .ConfigureQuantization(new QuantizationConfig { Mode = QuantizationMode.Float16 })
     ///     .BuildAsync(x, y);
     /// </code>
     /// </remarks>
@@ -699,7 +699,12 @@ public interface IPredictionModelBuilder<T, TInput, TOutput>
     /// Example:
     /// <code>
     /// // 90% on v1.0 (stable), 10% on v2.0 (experimental)
-    /// var abConfig = ABTestingConfig.Simple9010("1.0", "2.0");
+    /// var abConfig = new ABTestingConfig
+    /// {
+    ///     Enabled = true,
+    ///     TrafficSplit = new Dictionary&lt;string, double&gt; { { "1.0", 0.9 }, { "2.0", 0.1 } },
+    ///     ControlVersion = "1.0"
+    /// };
     /// var result = await builder
     ///     .ConfigureModel(model)
     ///     .ConfigureABTesting(abConfig)
@@ -758,7 +763,11 @@ public interface IPredictionModelBuilder<T, TInput, TOutput>
     /// Example:
     /// <code>
     /// // Configure for TensorRT deployment with FP16 quantization
-    /// var exportConfig = ExportConfig.ForTensorRT(QuantizationMode.Float16);
+    /// var exportConfig = new ExportConfig
+    /// {
+    ///     TargetPlatform = TargetPlatform.TensorRT,
+    ///     Quantization = QuantizationMode.Float16
+    /// };
     /// var result = await builder
     ///     .ConfigureModel(model)
     ///     .ConfigureExport(exportConfig)

@@ -1,3 +1,5 @@
+using AiDotNet.Enums;
+
 namespace AiDotNet.Deployment.Configuration;
 
 /// <summary>
@@ -19,10 +21,20 @@ namespace AiDotNet.Deployment.Configuration;
 /// Then you monitor metrics like accuracy, latency, and user satisfaction to decide
 /// which version is better.
 ///
-/// Example Use Case:
-/// You've trained a new model that seems more accurate in testing. Instead of deploying
-/// it to all users immediately, you start with 10% of traffic. If metrics look good after
-/// a week, you increase to 50%, then 100%.
+/// Example:
+/// <code>
+/// var abConfig = new ABTestingConfig
+/// {
+///     Enabled = true,
+///     TrafficSplit = new Dictionary&lt;string, double&gt;
+///     {
+///         { "1.0.0", 0.9 },
+///         { "2.0.0", 0.1 }
+///     },
+///     ControlVersion = "1.0.0",
+///     AssignmentStrategy = AssignmentStrategy.Sticky
+/// };
+/// </code>
 /// </para>
 /// </remarks>
 public class ABTestingConfig
@@ -49,16 +61,16 @@ public class ABTestingConfig
     public Dictionary<string, double> TrafficSplit { get; set; } = new();
 
     /// <summary>
-    /// Gets or sets the strategy for assigning users to versions (default: "random").
+    /// Gets or sets the strategy for assigning users to versions (default: Random).
     /// </summary>
     /// <remarks>
     /// <para><b>For Beginners:</b> How to assign requests to versions:
-    /// - "random": Each request randomly assigned based on traffic split
-    /// - "sticky": Users consistently get the same version (based on user ID hash)
-    /// - "gradual": Gradually shift traffic from old to new version over time
+    /// - Random: Each request randomly assigned based on traffic split
+    /// - Sticky: Users consistently get the same version (based on user ID hash)
+    /// - Gradual: Gradually shift traffic from old to new version over time
     /// </para>
     /// </remarks>
-    public string AssignmentStrategy { get; set; } = "random";
+    public AssignmentStrategy AssignmentStrategy { get; set; } = AssignmentStrategy.Random;
 
     /// <summary>
     /// Gets or sets the duration in days for the A/B test (default: 7).
@@ -99,73 +111,4 @@ public class ABTestingConfig
     /// </para>
     /// </remarks>
     public string? ControlVersion { get; set; }
-
-    /// <summary>
-    /// Creates a simple 90/10 A/B test configuration.
-    /// </summary>
-    /// <param name="controlVersion">The stable control version.</param>
-    /// <param name="experimentVersion">The new experimental version.</param>
-    /// <returns>A 90/10 traffic split configuration.</returns>
-    /// <remarks>
-    /// <para><b>For Beginners:</b> Use this to test a new version on 10% of users.
-    /// 90% continue using the stable version. Users get consistent experience (sticky).
-    /// Good for initial rollouts.
-    /// </para>
-    /// </remarks>
-    public static ABTestingConfig Simple9010(string controlVersion, string experimentVersion)
-    {
-        return new ABTestingConfig
-        {
-            Enabled = true,
-            TrafficSplit = new Dictionary<string, double>
-            {
-                { controlVersion, 0.9 },
-                { experimentVersion, 0.1 }
-            },
-            ControlVersion = controlVersion,
-            AssignmentStrategy = "sticky"
-        };
-    }
-
-    /// <summary>
-    /// Creates a balanced 50/50 A/B test configuration.
-    /// </summary>
-    /// <param name="versionA">First version to test.</param>
-    /// <param name="versionB">Second version to test.</param>
-    /// <returns>A 50/50 traffic split configuration.</returns>
-    /// <remarks>
-    /// <para><b>For Beginners:</b> Use this for equal comparison between two versions.
-    /// Each gets 50% of traffic. Good for comparing similar-quality models.
-    /// </para>
-    /// </remarks>
-    public static ABTestingConfig Balanced5050(string versionA, string versionB)
-    {
-        return new ABTestingConfig
-        {
-            Enabled = true,
-            TrafficSplit = new Dictionary<string, double>
-            {
-                { versionA, 0.5 },
-                { versionB, 0.5 }
-            },
-            AssignmentStrategy = "sticky"
-        };
-    }
-
-    /// <summary>
-    /// Creates a disabled A/B testing configuration (single version).
-    /// </summary>
-    /// <returns>A configuration with A/B testing disabled.</returns>
-    /// <remarks>
-    /// <para><b>For Beginners:</b> Use this to disable A/B testing.
-    /// All traffic goes to the default version. Simplest deployment.
-    /// </para>
-    /// </remarks>
-    public static ABTestingConfig Disabled()
-    {
-        return new ABTestingConfig
-        {
-            Enabled = false
-        };
-    }
 }
