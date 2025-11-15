@@ -148,11 +148,15 @@ public class TelemetryCollector
     }
 
     /// <summary>
-    /// Gets all recorded events.
+    /// Gets the most recent recorded events ordered by timestamp descending.
     /// </summary>
+    /// <param name="limit">Maximum number of events to return (default: 100)</param>
+    /// <returns>List of telemetry events ordered from most recent to oldest</returns>
     public List<TelemetryEvent> GetEvents(int limit = 100)
     {
-        return _events.Take(limit).OrderByDescending(e => e.Timestamp).ToList();
+        // Order FIRST by timestamp descending, THEN take limit
+        // ConcurrentBag doesn't guarantee ordering, so Take() before OrderBy() would return arbitrary items
+        return _events.OrderByDescending(e => e.Timestamp).Take(limit).ToList();
     }
 
     /// <summary>

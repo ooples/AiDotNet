@@ -201,25 +201,25 @@ internal static class OnnxProto
         switch (value)
         {
             case int intValue:
-                writer.WriteTag(3, WireFormat.WireType.Varint); // type = INT
+                writer.WriteTag(20, WireFormat.WireType.Varint); // type = INT
                 writer.WriteInt32(2);
-                writer.WriteTag(4, WireFormat.WireType.Varint); // i
+                writer.WriteTag(3, WireFormat.WireType.Varint); // i
                 writer.WriteInt64(intValue);
                 break;
             case long longValue:
-                writer.WriteTag(3, WireFormat.WireType.Varint); // type = INT
+                writer.WriteTag(20, WireFormat.WireType.Varint); // type = INT
                 writer.WriteInt32(2);
-                writer.WriteTag(4, WireFormat.WireType.Varint); // i
+                writer.WriteTag(3, WireFormat.WireType.Varint); // i
                 writer.WriteInt64(longValue);
                 break;
             case float floatValue:
-                writer.WriteTag(3, WireFormat.WireType.Varint); // type = FLOAT
+                writer.WriteTag(20, WireFormat.WireType.Varint); // type = FLOAT
                 writer.WriteInt32(1);
-                writer.WriteTag(5, WireFormat.WireType.Fixed32); // f
+                writer.WriteTag(2, WireFormat.WireType.Fixed32); // f
                 writer.WriteFloat(floatValue);
                 break;
             case int[] intArray:
-                writer.WriteTag(3, WireFormat.WireType.Varint); // type = INTS
+                writer.WriteTag(20, WireFormat.WireType.Varint); // type = INTS
                 writer.WriteInt32(7);
                 foreach (var i in intArray)
                 {
@@ -228,9 +228,9 @@ internal static class OnnxProto
                 }
                 break;
             case string strValue:
-                writer.WriteTag(3, WireFormat.WireType.Varint); // type = STRING
+                writer.WriteTag(20, WireFormat.WireType.Varint); // type = STRING
                 writer.WriteInt32(3);
-                writer.WriteTag(6, WireFormat.WireType.LengthDelimited); // s
+                writer.WriteTag(4, WireFormat.WireType.LengthDelimited); // s
                 writer.WriteBytes(ByteString.CopyFromUtf8(strValue));
                 break;
         }
