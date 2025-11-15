@@ -13,6 +13,7 @@ public class MCTSNode<T>
     public Dictionary<int, MCTSNode<T>> Children { get; set; } = new();
     public Dictionary<int, int> VisitCounts { get; set; } = new();
     public Dictionary<int, T> QValues { get; set; } = new();
+    public Dictionary<int, T> Rewards { get; set; } = new();
     public T Value { get; set; } = default!;
     public int TotalVisits { get; set; }
 }

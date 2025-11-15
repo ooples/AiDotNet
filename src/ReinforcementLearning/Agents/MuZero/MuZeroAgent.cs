@@ -73,6 +73,14 @@ public class MuZeroAgent<T> : DeepReinforcementLearningAgentBase<T>
 
         // Initialize replay buffer
         _replayBuffer = new UniformReplayBuffer<T>(_options.ReplayBufferSize, _options.Seed);
+
+        // Initialize Networks list for base class (used by GetParameters/SetParameters)
+        Networks = new List<INeuralNetwork<T>>
+        {
+            _representationNetwork,
+            _dynamicsNetwork,
+            _predictionNetwork
+        };
     }
 
     private NeuralNetwork<T> CreateNetwork(int inputSize, int outputSize, List<int> hiddenLayers)
@@ -195,7 +203,7 @@ public class MuZeroAgent<T> : DeepReinforcementLearningAgentBase<T>
         // Evaluation: get value from prediction network
         T value = currentNode.Value;
 
-        // Backup: propagate value up the tree
+        // Backup: propagate value up the tree with rewards
         for (int i = path.Count - 1; i >= 0; i--)
         {
             var (pathNode, pathAction) = path[i];
@@ -209,17 +217,26 @@ public class MuZeroAgent<T> : DeepReinforcementLearningAgentBase<T>
             pathNode.VisitCounts[pathAction]++;
             pathNode.TotalVisits++;
 
-            // Update Q-value: Q = (Q * n + v) / (n + 1)
+            // Update Q-value using incremental mean: Q_new = Q_old + (value - Q_old) / n
+            // This is mathematically equivalent to: Q = (Q * (n-1) + value) / n
             var oldQ = pathNode.QValues[pathAction];
-            var visitCount = NumOps.FromDouble(pathNode.VisitCounts[pathAction]);
-            var newQ = NumOps.Divide(
-                NumOps.Add(NumOps.Multiply(oldQ, visitCount), value),
-                NumOps.Add(visitCount, NumOps.One));
+            var n = NumOps.FromDouble(pathNode.VisitCounts[pathAction]);
+            var diff = NumOps.Subtract(value, oldQ);
+            var update = NumOps.Divide(diff, n);
+            pathNode.QValues[pathAction] = NumOps.Add(oldQ, update);
 
-            pathNode.QValues[pathAction] = newQ;
-
-            // Discount value for parent
-            value = NumOps.Multiply(DiscountFactor, value);
+            // For parent: value = reward + discount * value
+            // Get the predicted reward for this action (stored during expansion)
+            if (pathNode.Rewards.ContainsKey(pathAction))
+            {
+                var reward = pathNode.Rewards[pathAction];
+                value = NumOps.Add(reward, NumOps.Multiply(DiscountFactor, value));
+            }
+            else
+            {
+                // If no reward stored, just discount (for root node initial actions)
+                value = NumOps.Multiply(DiscountFactor, value);
+            }
         }
     }
 
@@ -271,17 +288,24 @@ public class MuZeroAgent<T> : DeepReinforcementLearningAgentBase<T>
         var dynamicsOutput = dynamicsOutputTensor.ToVector();
 
         // Extract next hidden state and reward
+        // Dynamics output: [hidden_state (latentStateSize), reward (1)]
         var nextHiddenState = new Vector<T>(_options.LatentStateSize);
         for (int i = 0; i < _options.LatentStateSize; i++)
         {
             nextHiddenState[i] = dynamicsOutput[i];
         }
+        
+        // Extract predicted reward (last element of dynamics output)
+        var predictedReward = dynamicsOutput[_options.LatentStateSize];
 
         // Get value from prediction network
         var predictionTensor = Tensor<T>.FromVector(nextHiddenState);
         var predictionTensorOutput = _predictionNetwork.Predict(predictionTensor);
         var prediction = predictionTensorOutput.ToVector();
         var value = ExtractValue(prediction);
+
+        // Store reward in parent node for this action
+        parent.Rewards[action] = predictedReward;
 
         return new MCTSNode<T>
         {
@@ -320,58 +344,102 @@ public class MuZeroAgent<T> : DeepReinforcementLearningAgentBase<T>
 
         var batch = _replayBuffer.Sample(_options.BatchSize);
         T totalLoss = NumOps.Zero;
+        int lossCount = 0;
 
         foreach (var experience in batch)
         {
-            // Encode observation
+            // Step 1: Representation Network - encode initial observation to hidden state
             var stateTensor = Tensor<T>.FromVector(experience.State);
-            var hiddenState = _representationNetwork.Predict(stateTensor).ToVector();
+            var representationOutputTensor = _representationNetwork.Predict(stateTensor);
+            var hiddenState = representationOutputTensor.ToVector();
 
-            // Unroll K steps
+            // Step 2: Prediction Network at initial state - predict policy and value
+            var predictionTensor = Tensor<T>.FromVector(hiddenState);
+            var predictionOutputTensor = _predictionNetwork.Predict(predictionTensor);
+            var prediction = predictionOutputTensor.ToVector();
+            var predictedValue = ExtractValue(prediction);
+
+            // Compute value loss for initial state
+            var valueTarget = experience.Done ? experience.Reward :
+                NumOps.Add(experience.Reward, NumOps.Multiply(DiscountFactor, predictedValue));
+            
+            var valueDiff = NumOps.Subtract(valueTarget, predictedValue);
+            var valueLoss = NumOps.Multiply(valueDiff, valueDiff);
+            totalLoss = NumOps.Add(totalLoss, valueLoss);
+            lossCount++;
+
+            // Backpropagate prediction loss through prediction network
+            var predictionGradient = new Vector<T>(_options.ActionSize + 1);
+            predictionGradient[_options.ActionSize] = NumOps.Multiply(NumOps.FromDouble(2.0), valueDiff);
+            var predictionGradTensor = Tensor<T>.FromVector(predictionGradient);
+            _predictionNetwork.Backpropagate(predictionGradTensor);
+
+            // Step 3: Unroll dynamics for K steps
             for (int k = 0; k < _options.UnrollSteps; k++)
             {
-                // Prediction loss
-                var hsTensor = Tensor<T>.FromVector(hiddenState);
-                var predictionOutputTensor = _predictionNetwork.Predict(hsTensor);
-                var prediction = predictionOutputTensor.ToVector();
-                var predictedValue = ExtractValue(prediction);
-
-                // Simplified target: use reward + discounted next value
-                var target = experience.Done ? experience.Reward :
-                    NumOps.Add(experience.Reward, NumOps.Multiply(DiscountFactor, predictedValue));
-
-                var valueDiff = NumOps.Subtract(target, predictedValue);
-                var loss = NumOps.Multiply(valueDiff, valueDiff);
-                totalLoss = NumOps.Add(totalLoss, loss);
-
-                // Backprop
-                var gradient = new Vector<T>(_options.ActionSize + 1);
-                gradient[_options.ActionSize] = valueDiff;
-
-                var gradTensor = Tensor<T>.FromVector(gradient);
-                _predictionNetwork.Backpropagate(gradTensor);
-                // Network will handle parameter updates during Backpropagate
-
-                // Dynamics step
+                // Dynamics Network: predict next hidden state and reward
                 var actionVec = experience.Action;
                 var dynamicsInput = ConcatenateVectors(hiddenState, actionVec);
                 var dynamicsInputTensor = Tensor<T>.FromVector(dynamicsInput);
-        var dynamicsOutputTensor = _dynamicsNetwork.Predict(dynamicsInputTensor);
-        var dynamicsOutput = dynamicsOutputTensor.ToVector();
+                var dynamicsOutputTensor = _dynamicsNetwork.Predict(dynamicsInputTensor);
+                var dynamicsOutput = dynamicsOutputTensor.ToVector();
 
-                // Extract next hidden state
-                var newHiddenState = new Vector<T>(_options.LatentStateSize);
+                // Extract predicted reward and next hidden state
+                var predictedReward = dynamicsOutput[_options.LatentStateSize];
+                var nextHiddenState = new Vector<T>(_options.LatentStateSize);
                 for (int i = 0; i < _options.LatentStateSize; i++)
                 {
-                    hiddenState[i] = dynamicsOutput[i];
+                    nextHiddenState[i] = dynamicsOutput[i];
                 }
+
+                // Compute reward loss
+                var rewardDiff = NumOps.Subtract(experience.Reward, predictedReward);
+                var rewardLoss = NumOps.Multiply(rewardDiff, rewardDiff);
+                totalLoss = NumOps.Add(totalLoss, rewardLoss);
+                lossCount++;
+
+                // Backpropagate reward loss through dynamics network
+                var dynamicsGradient = new Vector<T>(_options.LatentStateSize + 1);
+                dynamicsGradient[_options.LatentStateSize] = NumOps.Multiply(NumOps.FromDouble(2.0), rewardDiff);
+                var dynamicsGradTensor = Tensor<T>.FromVector(dynamicsGradient);
+                _dynamicsNetwork.Backpropagate(dynamicsGradTensor);
+
+                // Prediction Network at next state
+                var nextPredictionTensor = Tensor<T>.FromVector(nextHiddenState);
+                var nextPredictionOutputTensor = _predictionNetwork.Predict(nextPredictionTensor);
+                var nextPrediction = nextPredictionOutputTensor.ToVector();
+                var nextPredictedValue = ExtractValue(nextPrediction);
+
+                // Compute value loss for next state
+                var nextValueTarget = experience.Done ? NumOps.Zero : nextPredictedValue;
+                var nextValueDiff = NumOps.Subtract(nextValueTarget, nextPredictedValue);
+                var nextValueLoss = NumOps.Multiply(nextValueDiff, nextValueDiff);
+                totalLoss = NumOps.Add(totalLoss, nextValueLoss);
+                lossCount++;
+
+                // Backpropagate next state value loss through prediction network
+                var nextPredictionGradient = new Vector<T>(_options.ActionSize + 1);
+                nextPredictionGradient[_options.ActionSize] = NumOps.Multiply(NumOps.FromDouble(2.0), nextValueDiff);
+                var nextPredictionGradTensor = Tensor<T>.FromVector(nextPredictionGradient);
+                _predictionNetwork.Backpropagate(nextPredictionGradTensor);
+
+                // Move to next state
+                hiddenState = nextHiddenState;
             }
+
+            // Step 4: Backpropagate through representation network
+            // The representation gradient comes from the prediction network loss
+            var representationGradient = new Vector<T>(_options.LatentStateSize);
+            representationGradient[0] = NumOps.Multiply(NumOps.FromDouble(2.0), valueDiff);
+            var representationGradTensor = Tensor<T>.FromVector(representationGradient);
+            _representationNetwork.Backpropagate(representationGradTensor);
         }
 
         _updateCount++;
 
-        return NumOps.Divide(totalLoss, NumOps.FromDouble(batch.Count * _options.UnrollSteps));
+        return lossCount > 0 ? NumOps.Divide(totalLoss, NumOps.FromDouble(lossCount)) : NumOps.Zero;
     }
+
 
     private Vector<T> ConcatenateVectors(Vector<T> a, Vector<T> b)
     {
@@ -438,7 +506,7 @@ public class MuZeroAgent<T> : DeepReinforcementLearningAgentBase<T>
     {
         return new ModelMetadata<T>
         {
-            // ModelType not set - MuZero not in enum yet
+            ModelType = ModelType.MuZeroAgent
         };
     }
 
@@ -446,12 +514,12 @@ public class MuZeroAgent<T> : DeepReinforcementLearningAgentBase<T>
 
     public override byte[] Serialize()
     {
-        throw new NotImplementedException("MuZero serialization not yet implemented");
+        throw new NotSupportedException("MuZero serialization is not supported. Use SaveModel/LoadModel to persist the model.");
     }
 
     public override void Deserialize(byte[] data)
     {
-        throw new NotImplementedException("MuZero deserialization not yet implemented");
+        throw new NotSupportedException("MuZero deserialization is not supported. Use SaveModel/LoadModel to persist the model.");
     }
 
     public override Vector<T> GetParameters()
