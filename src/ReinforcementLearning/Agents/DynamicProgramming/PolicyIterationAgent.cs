@@ -72,8 +72,11 @@ public class PolicyIterationAgent<T> : ReinforcementLearningAgentBase<T>
             _model[stateKey][actionIndex] = new List<(string, T, T)>();
         }
 
-        // Add transition (assuming deterministic for simplicity)
-        _model[stateKey][actionIndex].Add((nextStateKey, reward, NumOps.One));
+        // For deterministic transitions, replace existing transition if present
+        // This prevents accumulating duplicate transitions
+        var transitions = _model[stateKey][actionIndex];
+        transitions.Clear();
+        transitions.Add((nextStateKey, reward, NumOps.One));
     }
 
     public override T Train()
