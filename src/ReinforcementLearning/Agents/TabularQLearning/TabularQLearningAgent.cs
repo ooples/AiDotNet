@@ -255,7 +255,19 @@ public class TabularQLearningAgent<T> : ReinforcementLearningAgentBase<T>
     public override IFullModel<T, Vector<T>, Vector<T>> Clone()
     {
         var clone = new TabularQLearningAgent<T>(_options);
-        clone._qTable = new Dictionary<string, Dictionary<int, T>>(_qTable);
+        
+        // Deep copy the Q-table
+        clone._qTable = new Dictionary<string, Dictionary<int, T>>();
+        foreach (var stateEntry in _qTable)
+        {
+            var actionDict = new Dictionary<int, T>();
+            foreach (var actionEntry in stateEntry.Value)
+            {
+                actionDict[actionEntry.Key] = actionEntry.Value;
+            }
+            clone._qTable[stateEntry.Key] = actionDict;
+        }
+        
         clone._epsilon = _epsilon;
         return clone;
     }
