@@ -48,23 +48,45 @@ public class CoreMLExporter<T, TInput, TOutput> : ModelExporterBase<T, TInput, T
     {
         if (model == null)
             throw new ArgumentNullException(nameof(model));
+        if (config == null)
+            throw new ArgumentNullException(nameof(config));
         if (string.IsNullOrWhiteSpace(outputPath))
             throw new ArgumentException("Output path cannot be null or empty", nameof(outputPath));
 
         var exportConfig = config.ToExportConfiguration();
+
+        // Preserve CoreML-specific configuration in PlatformSpecificOptions
+        exportConfig.PlatformSpecificOptions["CoreMLConfiguration"] = config;
+
         Export(model, outputPath, exportConfig);
     }
 
     private byte[] ConvertOnnxToCoreML(byte[] onnxBytes, ExportConfiguration config)
     {
-        // Create CoreML configuration from export config
-        var coreMLConfig = new CoreMLConfiguration
+        if (config == null)
+            throw new ArgumentNullException(nameof(config));
+
+        // Try to retrieve preserved CoreML configuration from PlatformSpecificOptions
+        CoreMLConfiguration coreMLConfig;
+
+        if (config.PlatformSpecificOptions.TryGetValue("CoreMLConfiguration", out var configObj) &&
+            configObj is CoreMLConfiguration preservedConfig)
         {
-            ModelName = config.ModelName,
-            ModelDescription = config.ModelDescription,
-            OptimizeForSize = true,
-            QuantizationBits = config.QuantizationMode == QuantizationMode.Float16 ? 16 : 32
-        };
+            // Use the preserved CoreML-specific configuration
+            coreMLConfig = preservedConfig;
+        }
+        else
+        {
+            // Fallback: Create CoreML configuration from generic export config
+            // This preserves backward compatibility for direct ExportToBytes calls
+            coreMLConfig = new CoreMLConfiguration
+            {
+                ModelName = config.ModelName,
+                ModelDescription = config.ModelDescription,
+                OptimizeForSize = true,
+                QuantizationBits = config.QuantizationMode == QuantizationMode.Float16 ? 16 : 32
+            };
+        }
 
         // Perform ONNX→CoreML conversion using production-ready converter
         var coreMLModel = OnnxToCoreMLConverter.ConvertOnnxToCoreML(onnxBytes, coreMLConfig);
