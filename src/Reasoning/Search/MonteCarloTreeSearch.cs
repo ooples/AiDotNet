@@ -115,7 +115,7 @@ public class MonteCarloTreeSearch<T> : ISearchAlgorithm<T> where T : struct, ICo
             double value = Convert.ToDouble(node.EvaluationScore);
 
             // Check if terminal
-            if (IsTerminalNode(node))
+            if (node.CheckIsTerminalByHeuristic())
             {
                 node.IsTerminal = true;
                 value *= 1.5; // Boost terminal nodes
@@ -210,14 +210,5 @@ public class MonteCarloTreeSearch<T> : ISearchAlgorithm<T> where T : struct, ICo
 
             current = current.Parent;
         }
-    }
-
-    private bool IsTerminalNode(AiDotNet.Reasoning.Models.ThoughtNode<T> node)
-    {
-        string thought = node.Thought.ToLowerInvariant();
-        return thought.Contains("final answer") ||
-               thought.Contains("conclusion") ||
-               thought.Contains("therefore") ||
-               node.IsTerminal;
     }
 }

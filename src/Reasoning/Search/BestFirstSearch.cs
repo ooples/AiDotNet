@@ -114,7 +114,7 @@ public class BestFirstSearch<T> : ISearchAlgorithm<T>
             nodesExpanded++;
 
             // Check if terminal
-            if (IsTerminalNode(currentNode) || currentNode.Depth >= config.ExplorationDepth)
+            if (currentNode.CheckIsTerminalByHeuristic() || currentNode.Depth >= config.ExplorationDepth)
             {
                 currentNode.IsTerminal = true;
 
@@ -167,15 +167,6 @@ public class BestFirstSearch<T> : ISearchAlgorithm<T>
         }
 
         return new List<AiDotNet.Reasoning.Models.ThoughtNode<T>> { root };
-    }
-
-    private bool IsTerminalNode(AiDotNet.Reasoning.Models.ThoughtNode<T> node)
-    {
-        string thought = node.Thought.ToLowerInvariant();
-        return thought.Contains("final answer") ||
-               thought.Contains("conclusion") ||
-               thought.Contains("therefore") ||
-               node.IsTerminal;
     }
 
     private List<AiDotNet.Reasoning.Models.ThoughtNode<T>> ReconstructPath(AiDotNet.Reasoning.Models.ThoughtNode<T> node)

@@ -102,7 +102,7 @@ public class DepthFirstSearch<T> : ISearchAlgorithm<T>
         cancellationToken.ThrowIfCancellationRequested();
 
         // Check if terminal
-        if (IsTerminalNode(node) || currentDepth >= config.ExplorationDepth)
+        if (node.CheckIsTerminalByHeuristic() || currentDepth >= config.ExplorationDepth)
         {
             node.IsTerminal = true;
 
@@ -134,15 +134,6 @@ public class DepthFirstSearch<T> : ISearchAlgorithm<T>
         {
             await DFSRecursive(child, originalQuery, generator, evaluator, config, currentDepth + 1, bestResult, cancellationToken);
         }
-    }
-
-    private bool IsTerminalNode(AiDotNet.Reasoning.Models.ThoughtNode<T> node)
-    {
-        string thought = node.Thought.ToLowerInvariant();
-        return thought.Contains("final answer") ||
-               thought.Contains("conclusion") ||
-               thought.Contains("therefore") ||
-               node.IsTerminal;
     }
 
     private List<AiDotNet.Reasoning.Models.ThoughtNode<T>> ReconstructPath(AiDotNet.Reasoning.Models.ThoughtNode<T> node)

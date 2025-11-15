@@ -280,6 +280,34 @@ public class ThoughtNode<T>
     public int PathLength => Depth + 1;
 
     /// <summary>
+    /// Checks if this node appears to be terminal based on heuristics.
+    /// </summary>
+    /// <returns>True if the node is marked terminal or contains terminal indicators.</returns>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> This method uses simple heuristics to detect if a thought
+    /// represents a final answer rather than an intermediate reasoning step.
+    ///
+    /// It checks for:
+    /// - The IsTerminal flag being explicitly set
+    /// - Keywords that typically indicate conclusions ("final answer", "conclusion", etc.)
+    ///
+    /// This is useful for search algorithms that need to identify when they've reached
+    /// a complete solution and should stop expanding further.
+    /// </para>
+    /// </remarks>
+    public bool CheckIsTerminalByHeuristic()
+    {
+        if (IsTerminal)
+            return true;
+
+        string thought = Thought.ToLowerInvariant();
+        return thought.Contains("final answer") ||
+               thought.Contains("conclusion") ||
+               thought.Contains("therefore") ||
+               thought.Contains("the answer is");
+    }
+
+    /// <summary>
     /// Returns a string representation of this thought node.
     /// </summary>
     /// <returns>A formatted string with depth and thought content.</returns>

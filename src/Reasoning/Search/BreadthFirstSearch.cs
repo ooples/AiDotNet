@@ -86,7 +86,7 @@ public class BreadthFirstSearch<T> : ISearchAlgorithm<T>
             nodesExplored++;
 
             // Check if this is a terminal node
-            if (IsTerminalNode(currentNode) || currentNode.Depth >= config.ExplorationDepth)
+            if (currentNode.CheckIsTerminalByHeuristic() || currentNode.Depth >= config.ExplorationDepth)
             {
                 currentNode.IsTerminal = true;
 
@@ -132,20 +132,6 @@ public class BreadthFirstSearch<T> : ISearchAlgorithm<T>
 
         // Fallback: return just the root if no terminal node found
         return new List<AiDotNet.Reasoning.Models.ThoughtNode<T>> { root };
-    }
-
-    /// <summary>
-    /// Checks if a node represents a terminal/complete solution.
-    /// </summary>
-    private bool IsTerminalNode(AiDotNet.Reasoning.Models.ThoughtNode<T> node)
-    {
-        // Simple heuristic: check for solution indicators in the thought
-        string thought = node.Thought.ToLowerInvariant();
-        return thought.Contains("final answer") ||
-               thought.Contains("conclusion") ||
-               thought.Contains("therefore") ||
-               thought.Contains("the answer is") ||
-               node.IsTerminal;
     }
 
     /// <summary>

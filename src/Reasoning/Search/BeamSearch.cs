@@ -97,7 +97,7 @@ public class BeamSearch<T> : ISearchAlgorithm<T>
             foreach (var node in currentBeam)
             {
                 // Check if terminal
-                if (IsTerminalNode(node))
+                if (node.CheckIsTerminalByHeuristic())
                 {
                     node.IsTerminal = true;
 
@@ -148,7 +148,7 @@ public class BeamSearch<T> : ISearchAlgorithm<T>
             // Check if we've found good terminal nodes in the beam
             foreach (var node in currentBeam)
             {
-                if (IsTerminalNode(node))
+                if (node.CheckIsTerminalByHeuristic())
                 {
                     node.IsTerminal = true;
 
@@ -179,19 +179,6 @@ public class BeamSearch<T> : ISearchAlgorithm<T>
 
         // Last resort: return just the root
         return new List<AiDotNet.Reasoning.Models.ThoughtNode<T>> { root };
-    }
-
-    /// <summary>
-    /// Checks if a node represents a terminal/complete solution.
-    /// </summary>
-    private bool IsTerminalNode(AiDotNet.Reasoning.Models.ThoughtNode<T> node)
-    {
-        string thought = node.Thought.ToLowerInvariant();
-        return thought.Contains("final answer") ||
-               thought.Contains("conclusion") ||
-               thought.Contains("therefore") ||
-               thought.Contains("the answer is") ||
-               node.IsTerminal;
     }
 
     /// <summary>
