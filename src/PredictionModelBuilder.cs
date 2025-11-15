@@ -16,6 +16,7 @@ global using AiDotNet.Models;
 global using AiDotNet.Enums;
 global using AiDotNet.MixedPrecision;
 global using AiDotNet.KnowledgeDistillation;
+global using AiDotNet.Deployment.Configuration;
 
 namespace AiDotNet;
 
@@ -63,6 +64,14 @@ public class PredictionModelBuilder<T, TInput, TOutput> : IPredictionModelBuilde
     private AgentAssistanceOptions _agentOptions = AgentAssistanceOptions.Default;
     private KnowledgeDistillationOptions<T, TInput, TOutput>? _knowledgeDistillationOptions;
     private MixedPrecisionConfig? _mixedPrecisionConfig;
+
+    // Deployment configuration fields
+    private QuantizationConfig? _quantizationConfig;
+    private CacheConfig? _cacheConfig;
+    private VersioningConfig? _versioningConfig;
+    private ABTestingConfig? _abTestingConfig;
+    private TelemetryConfig? _telemetryConfig;
+    private ExportConfig? _exportConfig;
 
     /// <summary>
     /// Configures which features (input variables) should be used in the model.
@@ -990,6 +999,46 @@ public class PredictionModelBuilder<T, TInput, TOutput> : IPredictionModelBuilde
         KnowledgeDistillationOptions<T, TInput, TOutput>? options = null)
     {
         _knowledgeDistillationOptions = options ?? new KnowledgeDistillationOptions<T, TInput, TOutput>();
+        return this;
+    }
+
+    // ============================================================================
+    // Deployment Configuration Methods
+    // ============================================================================
+
+    public IPredictionModelBuilder<T, TInput, TOutput> ConfigureQuantization(QuantizationConfig? config = null)
+    {
+        _quantizationConfig = config;
+        return this;
+    }
+
+    public IPredictionModelBuilder<T, TInput, TOutput> ConfigureCaching(CacheConfig? config = null)
+    {
+        _cacheConfig = config;
+        return this;
+    }
+
+    public IPredictionModelBuilder<T, TInput, TOutput> ConfigureVersioning(VersioningConfig? config = null)
+    {
+        _versioningConfig = config;
+        return this;
+    }
+
+    public IPredictionModelBuilder<T, TInput, TOutput> ConfigureABTesting(ABTestingConfig? config = null)
+    {
+        _abTestingConfig = config;
+        return this;
+    }
+
+    public IPredictionModelBuilder<T, TInput, TOutput> ConfigureTelemetry(TelemetryConfig? config = null)
+    {
+        _telemetryConfig = config;
+        return this;
+    }
+
+    public IPredictionModelBuilder<T, TInput, TOutput> ConfigureExport(ExportConfig? config = null)
+    {
+        _exportConfig = config;
         return this;
     }
 
