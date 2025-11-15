@@ -82,7 +82,7 @@ public class RelationalDistillationStrategy<T> : DistillationStrategyBase<T, Vec
     // Batch accumulation buffers for relational loss computation
     private readonly List<Vector<T>> _batchStudentOutputs = new();
     private readonly List<Vector<T>> _batchTeacherOutputs = new();
-    private T _accumulatedRelationalLoss = default!;
+    private T _accumulatedRelationalLoss;
     private Vector<T>? _cachedRelationalGradient = null; // Cached average gradient for amortization
     private int _samplesSinceRelationalCompute = 0;
     private int _actualBatchCountForAmortization = 0; // Tracks actual count used for loss computation
