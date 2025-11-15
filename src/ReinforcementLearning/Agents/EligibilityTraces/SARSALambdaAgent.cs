@@ -2,6 +2,7 @@ using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
 using AiDotNet.Models;
 using AiDotNet.Models.Options;
+using Newtonsoft.Json;
 
 namespace AiDotNet.ReinforcementLearning.Agents.EligibilityTraces;
 
@@ -13,6 +14,7 @@ public class SARSALambdaAgent<T> : ReinforcementLearningAgentBase<T>
     private double _epsilon;
     private Vector<T> _lastState;
     private int _lastAction;
+    private Random _random;
 
     public SARSALambdaAgent(SARSALambdaOptions<T> options) : base(options)
     {
@@ -21,6 +23,7 @@ public class SARSALambdaAgent<T> : ReinforcementLearningAgentBase<T>
         _eligibilityTraces = new Dictionary<string, Dictionary<int, T>>();
         _epsilon = options.EpsilonStart;
         _lastState = new Vector<T>(options.StateSize);
+        _random = new Random();
     }
 
     public override Vector<T> SelectAction(Vector<T> state, bool training = true)
@@ -29,22 +32,19 @@ public class SARSALambdaAgent<T> : ReinforcementLearningAgentBase<T>
         string stateKey = GetStateKey(state);
 
         int selectedAction;
-        if (training && Random.NextDouble() < _epsilon)
+        if (training && _random.NextDouble() < _epsilon)
         {
-            selectedAction = Random.Next(_options.ActionSize);
+            selectedAction = _random.Next(_options.ActionSize);
         }
         else
         {
-            selectedAction = 0;
-            T bestValue = _qTable[stateKey][0];
-            for (int a = 1; a < _options.ActionSize; a++)
+            // Use ArgMax helper to get best action
+            var qValues = new Vector<T>(_options.ActionSize);
+            for (int a = 0; a < _options.ActionSize; a++)
             {
-                if (NumOps.GreaterThan(_qTable[stateKey][a], bestValue))
-                {
-                    bestValue = _qTable[stateKey][a];
-                    selectedAction = a;
-                }
+                qValues[a] = _qTable[stateKey][a];
             }
+            selectedAction = ArgMax(qValues);
         }
 
         var result = new Vector<T>(_options.ActionSize);
@@ -130,13 +130,42 @@ public class SARSALambdaAgent<T> : ReinforcementLearningAgentBase<T>
     public override Dictionary<string, T> GetMetrics() => new Dictionary<string, T> { ["states_visited"] = NumOps.FromDouble(_qTable.Count), ["epsilon"] = NumOps.FromDouble(_epsilon) };
     public override void ResetEpisode() { _lastState = new Vector<T>(_options.StateSize); foreach (var s in _eligibilityTraces.Keys.ToList()) { for (int a = 0; a < _options.ActionSize; a++) _eligibilityTraces[s][a] = NumOps.Zero; } }
     public override Vector<T> Predict(Vector<T> input) => SelectAction(input, false);
-    public Task<Vector<T>> PredictAsync(Vector<T> input) => Task.FromResult(Predict(input));
-    public Task TrainAsync() { Train(); return Task.CompletedTask; }
+    public override Task<Vector<T>> PredictAsync(Vector<T> input) => Task.FromResult(Predict(input));
+    public override Task TrainAsync() { Train(); return Task.CompletedTask; }
     public override ModelMetadata<T> GetModelMetadata() => new ModelMetadata<T> { ModelType = Enums.ModelType.ReinforcementLearning, FeatureCount = this.FeatureCount, Complexity = ParameterCount };
     public override int ParameterCount => _qTable.Count * _options.ActionSize;
     public override int FeatureCount => _options.StateSize;
-    public override byte[] Serialize() => throw new NotImplementedException();
-    public override void Deserialize(byte[] data) => throw new NotImplementedException();
+    public override byte[] Serialize()
+    {
+        var state = new
+        {
+            QTable = _qTable,
+            EligibilityTraces = _eligibilityTraces,
+            Epsilon = _epsilon,
+            Options = _options
+        };
+        string json = JsonConvert.SerializeObject(state);
+        return System.Text.Encoding.UTF8.GetBytes(json);
+    }
+
+    public override void Deserialize(byte[] data)
+    {
+        if (data is null || data.Length == 0)
+        {
+            throw new ArgumentException("Serialized data cannot be null or empty", nameof(data));
+        }
+
+        string json = System.Text.Encoding.UTF8.GetString(data);
+        var state = JsonConvert.DeserializeObject<dynamic>(json);
+        if (state is null)
+        {
+            throw new InvalidOperationException("Deserialization returned null");
+        }
+
+        _qTable = JsonConvert.DeserializeObject<Dictionary<string, Dictionary<int, T>>>(state.QTable.ToString()) ?? new Dictionary<string, Dictionary<int, T>>();
+        _eligibilityTraces = JsonConvert.DeserializeObject<Dictionary<string, Dictionary<int, T>>>(state.EligibilityTraces.ToString()) ?? new Dictionary<string, Dictionary<int, T>>();
+        _epsilon = state.Epsilon;
+    }
     public override Vector<T> GetParameters()
     {
         int paramCount = _qTable.Count > 0 ? _qTable.Count * _options.ActionSize : 1;
@@ -153,9 +182,53 @@ public class SARSALambdaAgent<T> : ReinforcementLearningAgentBase<T>
         return v;
     }
     public override void SetParameters(Vector<T> parameters) { int idx = 0; foreach (var s in _qTable.ToList()) for (int a = 0; a < _options.ActionSize; a++) if (idx < parameters.Length) _qTable[s.Key][a] = parameters[idx++]; }
-    public override IFullModel<T, Vector<T>, Vector<T>> Clone() => new SARSALambdaAgent<T>(_options);
+    public override IFullModel<T, Vector<T>, Vector<T>> Clone()
+    {
+        var clone = new SARSALambdaAgent<T>(_options);
+
+        // Deep copy Q-table and eligibility traces to avoid shared state
+        foreach (var kvp in _qTable)
+        {
+            clone._qTable[kvp.Key] = new Dictionary<int, T>(kvp.Value);
+        }
+
+        foreach (var kvp in _eligibilityTraces)
+        {
+            clone._eligibilityTraces[kvp.Key] = new Dictionary<int, T>(kvp.Value);
+        }
+
+        clone._epsilon = _epsilon;
+        clone._lastState = _lastState.Clone();
+        clone._lastAction = _lastAction;
+
+        return clone;
+    }
     public override Vector<T> ComputeGradients(Vector<T> input, Vector<T> target, ILossFunction<T>? lossFunction = null) { var pred = Predict(input); var lf = lossFunction ?? LossFunction; var loss = lf.CalculateLoss(pred, target); var grad = lf.CalculateDerivative(pred, target); return grad; }
     public override void ApplyGradients(Vector<T> gradients, T learningRate) { }
-    public override void SaveModel(string filepath) { var data = Serialize(); System.IO.File.WriteAllBytes(filepath, data); }
-    public override void LoadModel(string filepath) { var data = System.IO.File.ReadAllBytes(filepath); Deserialize(data); }
+    public override void SaveModel(string filepath)
+    {
+        if (string.IsNullOrWhiteSpace(filepath))
+        {
+            throw new ArgumentException("File path cannot be null or whitespace", nameof(filepath));
+        }
+
+        var data = Serialize();
+        System.IO.File.WriteAllBytes(filepath, data);
+    }
+
+    public override void LoadModel(string filepath)
+    {
+        if (string.IsNullOrWhiteSpace(filepath))
+        {
+            throw new ArgumentException("File path cannot be null or whitespace", nameof(filepath));
+        }
+
+        if (!System.IO.File.Exists(filepath))
+        {
+            throw new System.IO.FileNotFoundException($"Model file not found: {filepath}", filepath);
+        }
+
+        var data = System.IO.File.ReadAllBytes(filepath);
+        Deserialize(data);
+    }
 }
