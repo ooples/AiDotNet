@@ -57,6 +57,7 @@ public class FileGraphStore<T> : IGraphStore<T>, IDisposable
     private readonly string _edgesFilePath;
     private readonly BTreeIndex _nodeIndex;
     private readonly BTreeIndex _edgeIndex;
+    private readonly WriteAheadLog? _wal;
 
     // In-memory caches for indices and metadata
     private readonly Dictionary<string, HashSet<string>> _outgoingEdges; // nodeId -> edge IDs
@@ -76,7 +77,8 @@ public class FileGraphStore<T> : IGraphStore<T>, IDisposable
     /// Initializes a new instance of the <see cref="FileGraphStore{T}"/> class.
     /// </summary>
     /// <param name="storageDirectory">The directory where graph data files will be stored.</param>
-    public FileGraphStore(string storageDirectory)
+    /// <param name="wal">Optional Write-Ahead Log for ACID transactions and crash recovery.</param>
+    public FileGraphStore(string storageDirectory, WriteAheadLog? wal = null)
     {
         if (string.IsNullOrWhiteSpace(storageDirectory))
             throw new ArgumentException("Storage directory cannot be null or whitespace", nameof(storageDirectory));
@@ -84,6 +86,7 @@ public class FileGraphStore<T> : IGraphStore<T>, IDisposable
         _storageDirectory = storageDirectory;
         _nodesFilePath = Path.Combine(storageDirectory, "nodes.dat");
         _edgesFilePath = Path.Combine(storageDirectory, "edges.dat");
+        _wal = wal;
 
         // Create directory if it doesn't exist
         if (!Directory.Exists(storageDirectory))
@@ -116,6 +119,9 @@ public class FileGraphStore<T> : IGraphStore<T>, IDisposable
 
         try
         {
+            // Log to WAL first (durability)
+            _wal?.LogAddNode(node);
+
             // Serialize node to JSON
             var json = JsonSerializer.Serialize(node, _jsonOptions);
             var bytes = Encoding.UTF8.GetBytes(json);
@@ -179,6 +185,9 @@ public class FileGraphStore<T> : IGraphStore<T>, IDisposable
 
         try
         {
+            // Log to WAL first (durability)
+            _wal?.LogAddEdge(edge);
+
             // Serialize edge to JSON
             var json = JsonSerializer.Serialize(edge, _jsonOptions);
             var bytes = Encoding.UTF8.GetBytes(json);
@@ -294,6 +303,9 @@ public class FileGraphStore<T> : IGraphStore<T>, IDisposable
             if (node == null)
                 return false;
 
+            // Log to WAL first (durability)
+            _wal?.LogRemoveNode(nodeId);
+
             // Remove all outgoing edges
             if (_outgoingEdges.TryGetValue(nodeId, out var outgoing))
             {
@@ -345,6 +357,9 @@ public class FileGraphStore<T> : IGraphStore<T>, IDisposable
             var edge = GetEdge(edgeId);
             if (edge == null)
                 return false;
+
+            // Log to WAL first (durability)
+            _wal?.LogRemoveEdge(edgeId);
 
             // Remove from in-memory indices
             if (_outgoingEdges.TryGetValue(edge.SourceId, out var outgoing))
@@ -491,6 +506,9 @@ public class FileGraphStore<T> : IGraphStore<T>, IDisposable
 
         try
         {
+            // Log to WAL first (durability)
+            _wal?.LogAddNode(node);
+
             // Serialize node to JSON
             var json = JsonSerializer.Serialize(node, _jsonOptions);
             var bytes = Encoding.UTF8.GetBytes(json);
@@ -552,6 +570,9 @@ public class FileGraphStore<T> : IGraphStore<T>, IDisposable
 
         try
         {
+            // Log to WAL first (durability)
+            _wal?.LogAddEdge(edge);
+
             // Serialize edge to JSON
             var json = JsonSerializer.Serialize(edge, _jsonOptions);
             var bytes = Encoding.UTF8.GetBytes(json);
@@ -666,6 +687,9 @@ public class FileGraphStore<T> : IGraphStore<T>, IDisposable
             var node = await GetNodeAsync(nodeId);
             if (node == null)
                 return false;
+
+            // Log to WAL first (durability)
+            _wal?.LogRemoveNode(nodeId);
 
             // Remove all outgoing edges
             if (_outgoingEdges.TryGetValue(nodeId, out var outgoing))
