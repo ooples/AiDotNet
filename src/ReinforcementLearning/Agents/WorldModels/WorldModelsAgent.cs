@@ -382,7 +382,7 @@ public class WorldModelsAgent<T> : DeepReinforcementLearningAgentBase<T>
         currentReward = NumOps.Divide(currentReward, NumOps.FromDouble(batch.Count));
 
         // Try random perturbations and keep the best one
-        Matrix<T> bestWeights = null;
+        Matrix<T>? bestWeights = null;
         T bestReward = currentReward;
 
         for (int candidate = 0; candidate < numCandidates; candidate++)

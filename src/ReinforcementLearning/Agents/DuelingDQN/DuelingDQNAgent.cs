@@ -559,97 +559,22 @@ internal class DuelingNetwork<T>
 
     public void UpdateWeights(T learningRate)
     {
-        // Update shared layers
+        // Update shared layers using UpdateParameters method
         foreach (var layer in _sharedLayers)
         {
-            var weightsGradient = layer.GetWeightsGradient();
-            if (weightsGradient != null)
-            {
-                var weights = layer.GetWeights();
-                for (int i = 0; i < weights.Rows; i++)
-                {
-                    for (int j = 0; j < weights.Columns; j++)
-                    {
-                        var update = _numOps.Multiply(learningRate, weightsGradient[i, j]);
-                        weights[i, j] = _numOps.Subtract(weights[i, j], update);
-                    }
-                }
-                layer.SetWeights(weights);
-            }
-
-            var biasesGradient = layer.GetBiasesGradient();
-            if (biasesGradient != null)
-            {
-                var biases = layer.GetBiases();
-                for (int i = 0; i < biases.Length; i++)
-                {
-                    var update = _numOps.Multiply(learningRate, biasesGradient[i]);
-                    biases[i] = _numOps.Subtract(biases[i], update);
-                }
-                layer.SetBiases(biases);
-            }
+            layer.UpdateParameters(learningRate);
         }
 
         // Update value stream layers
         foreach (var layer in _valueLayers)
         {
-            var weightsGradient = layer.GetWeightsGradient();
-            if (weightsGradient != null)
-            {
-                var weights = layer.GetWeights();
-                for (int i = 0; i < weights.Rows; i++)
-                {
-                    for (int j = 0; j < weights.Columns; j++)
-                    {
-                        var update = _numOps.Multiply(learningRate, weightsGradient[i, j]);
-                        weights[i, j] = _numOps.Subtract(weights[i, j], update);
-                    }
-                }
-                layer.SetWeights(weights);
-            }
-
-            var biasesGradient = layer.GetBiasesGradient();
-            if (biasesGradient != null)
-            {
-                var biases = layer.GetBiases();
-                for (int i = 0; i < biases.Length; i++)
-                {
-                    var update = _numOps.Multiply(learningRate, biasesGradient[i]);
-                    biases[i] = _numOps.Subtract(biases[i], update);
-                }
-                layer.SetBiases(biases);
-            }
+            layer.UpdateParameters(learningRate);
         }
 
         // Update advantage stream layers
         foreach (var layer in _advantageLayers)
         {
-            var weightsGradient = layer.GetWeightsGradient();
-            if (weightsGradient != null)
-            {
-                var weights = layer.GetWeights();
-                for (int i = 0; i < weights.Rows; i++)
-                {
-                    for (int j = 0; j < weights.Columns; j++)
-                    {
-                        var update = _numOps.Multiply(learningRate, weightsGradient[i, j]);
-                        weights[i, j] = _numOps.Subtract(weights[i, j], update);
-                    }
-                }
-                layer.SetWeights(weights);
-            }
-
-            var biasesGradient = layer.GetBiasesGradient();
-            if (biasesGradient != null)
-            {
-                var biases = layer.GetBiases();
-                for (int i = 0; i < biases.Length; i++)
-                {
-                    var update = _numOps.Multiply(learningRate, biasesGradient[i]);
-                    biases[i] = _numOps.Subtract(biases[i], update);
-                }
-                layer.SetBiases(biases);
-            }
+            layer.UpdateParameters(learningRate);
         }
     }
 
@@ -660,57 +585,30 @@ internal class DuelingNetwork<T>
         // Collect parameters from shared layers
         foreach (var layer in _sharedLayers)
         {
-            var weights = layer.GetWeights();
-            for (int i = 0; i < weights.Rows; i++)
+            var layerParams = layer.GetParameters();
+            for (int i = 0; i < layerParams.Length; i++)
             {
-                for (int j = 0; j < weights.Columns; j++)
-                {
-                    paramsList.Add(weights[i, j]);
-                }
-            }
-
-            var biases = layer.GetBiases();
-            for (int i = 0; i < biases.Length; i++)
-            {
-                paramsList.Add(biases[i]);
+                paramsList.Add(layerParams[i]);
             }
         }
 
         // Collect parameters from value stream layers
         foreach (var layer in _valueLayers)
         {
-            var weights = layer.GetWeights();
-            for (int i = 0; i < weights.Rows; i++)
+            var layerParams = layer.GetParameters();
+            for (int i = 0; i < layerParams.Length; i++)
             {
-                for (int j = 0; j < weights.Columns; j++)
-                {
-                    paramsList.Add(weights[i, j]);
-                }
-            }
-
-            var biases = layer.GetBiases();
-            for (int i = 0; i < biases.Length; i++)
-            {
-                paramsList.Add(biases[i]);
+                paramsList.Add(layerParams[i]);
             }
         }
 
         // Collect parameters from advantage stream layers
         foreach (var layer in _advantageLayers)
         {
-            var weights = layer.GetWeights();
-            for (int i = 0; i < weights.Rows; i++)
+            var layerParams = layer.GetParameters();
+            for (int i = 0; i < layerParams.Length; i++)
             {
-                for (int j = 0; j < weights.Columns; j++)
-                {
-                    paramsList.Add(weights[i, j]);
-                }
-            }
-
-            var biases = layer.GetBiases();
-            for (int i = 0; i < biases.Length; i++)
-            {
-                paramsList.Add(biases[i]);
+                paramsList.Add(layerParams[i]);
             }
         }
 
@@ -734,75 +632,37 @@ internal class DuelingNetwork<T>
         // Set parameters for shared layers
         foreach (var layer in _sharedLayers)
         {
-            int weightsCount = layer.OutputShape[0] * layer.InputShape[0];
-            int biasesCount = layer.OutputShape[0];
-
-            // Extract and set weights
-            var weights = new Matrix<T>(layer.OutputShape[0], layer.InputShape[0]);
-            for (int i = 0; i < layer.OutputShape[0]; i++)
+            int paramCount = layer.ParameterCount;
+            var layerParams = new Vector<T>(paramCount);
+            for (int i = 0; i < paramCount; i++)
             {
-                for (int j = 0; j < layer.InputShape[0]; j++)
-                {
-                    weights[i, j] = parameters[offset++, 0];
-                }
+                layerParams[i] = parameters[offset++, 0];
             }
-            layer.SetWeights(weights);
-
-            // Extract and set biases
-            var biases = new Vector<T>(layer.OutputShape[0]);
-            for (int i = 0; i < layer.OutputShape[0]; i++)
-            {
-                biases[i] = parameters[offset++, 0];
-            }
-            layer.SetBiases(biases);
+            layer.SetParameters(layerParams);
         }
 
         // Set parameters for value stream layers
         foreach (var layer in _valueLayers)
         {
-            int weightsCount = layer.OutputShape[0] * layer.InputShape[0];
-            int biasesCount = layer.OutputShape[0];
-
-            var weights = new Matrix<T>(layer.OutputShape[0], layer.InputShape[0]);
-            for (int i = 0; i < layer.OutputShape[0]; i++)
+            int paramCount = layer.ParameterCount;
+            var layerParams = new Vector<T>(paramCount);
+            for (int i = 0; i < paramCount; i++)
             {
-                for (int j = 0; j < layer.InputShape[0]; j++)
-                {
-                    weights[i, j] = parameters[offset++, 0];
-                }
+                layerParams[i] = parameters[offset++, 0];
             }
-            layer.SetWeights(weights);
-
-            var biases = new Vector<T>(layer.OutputShape[0]);
-            for (int i = 0; i < layer.OutputShape[0]; i++)
-            {
-                biases[i] = parameters[offset++, 0];
-            }
-            layer.SetBiases(biases);
+            layer.SetParameters(layerParams);
         }
 
         // Set parameters for advantage stream layers
         foreach (var layer in _advantageLayers)
         {
-            int weightsCount = layer.OutputShape[0] * layer.InputShape[0];
-            int biasesCount = layer.OutputShape[0];
-
-            var weights = new Matrix<T>(layer.OutputShape[0], layer.InputShape[0]);
-            for (int i = 0; i < layer.OutputShape[0]; i++)
+            int paramCount = layer.ParameterCount;
+            var layerParams = new Vector<T>(paramCount);
+            for (int i = 0; i < paramCount; i++)
             {
-                for (int j = 0; j < layer.InputShape[0]; j++)
-                {
-                    weights[i, j] = parameters[offset++, 0];
-                }
+                layerParams[i] = parameters[offset++, 0];
             }
-            layer.SetWeights(weights);
-
-            var biases = new Vector<T>(layer.OutputShape[0]);
-            for (int i = 0; i < layer.OutputShape[0]; i++)
-            {
-                biases[i] = parameters[offset++, 0];
-            }
-            layer.SetBiases(biases);
+            layer.SetParameters(layerParams);
         }
 
         // Validate that we consumed exactly the right number of parameters
@@ -826,22 +686,22 @@ internal class DuelingNetwork<T>
         // Write layer sizes for shared layers
         foreach (var layer in _sharedLayers)
         {
-            writer.Write(layer.InputShape[0]);
-            writer.Write(layer.OutputShape[0]);
+            writer.Write(layer.GetInputShape()[0]);
+            writer.Write(layer.GetOutputShape()[0]);
         }
 
         // Write layer sizes for value layers
         foreach (var layer in _valueLayers)
         {
-            writer.Write(layer.InputShape[0]);
-            writer.Write(layer.OutputShape[0]);
+            writer.Write(layer.GetInputShape()[0]);
+            writer.Write(layer.GetOutputShape()[0]);
         }
 
         // Write layer sizes for advantage layers
         foreach (var layer in _advantageLayers)
         {
-            writer.Write(layer.InputShape[0]);
-            writer.Write(layer.OutputShape[0]);
+            writer.Write(layer.GetInputShape()[0]);
+            writer.Write(layer.GetOutputShape()[0]);
         }
 
         // Serialize parameters

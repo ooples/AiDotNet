@@ -415,17 +415,19 @@ public class CQLAgent<T> : DeepReinforcementLearningAgentBase<T>
             var actionGrad = actionGradTensor.ToVector();
 
             // Compute policy gradients for both mean and log-sigma
-            // We want to MAXIMIZE Q, so negate the gradient (gradient descent becomes ascent)
+            // CRITICAL FIX: We want to MAXIMIZE Q, so we need to negate actionGrad
+            // Policy loss is -Q(s,a), gradient is d(-Q)/dθ = -dQ/dθ
             var policyStateTensor = Tensor<T>.FromVector(experience.State);
-            var policyOutTensor = _policyNetwork.Forward(policyStateTensor);
+            var policyOutTensor = _policyNetwork.Predict(policyStateTensor);
             var policyOut = policyOutTensor.ToVector();
-            
+
             var policyGrad = new Vector<T>(_options.ActionSize * 2);
             for (int policyGradIdx = 0; policyGradIdx < _options.ActionSize; policyGradIdx++)
             {
-                // Negate gradient to maximize Q-value (flip sign for gradient descent optimizer)
+                // CRITICAL FIX: Negate actionGrad because policy loss is -Q(s,a)
+                // actionGrad contains dQ/da, but we want d(-Q)/da = -dQ/da
                 policyGrad[policyGradIdx] = _numOps.Negate(actionGrad[_options.StateSize + policyGradIdx]);
-                
+
                 // Compute log-sigma gradients from entropy regularization
                 // d/d(log_sigma) of entropy = 1 (from Gaussian entropy formula)
                 var logStd = policyOut[_options.ActionSize + policyGradIdx];

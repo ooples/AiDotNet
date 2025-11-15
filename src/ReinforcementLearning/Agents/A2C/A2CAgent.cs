@@ -297,7 +297,7 @@ public class A2CAgent<T> : DeepReinforcementLearningAgentBase<T>
             var valueGradientTensor = Tensor<T>.FromVector(valueGradient);
             _valueNetwork.Backpropagate(valueGradientTensor);
         }
-        
+
         // Now update network parameters using accumulated gradients
         UpdatePolicyNetwork();
         UpdateValueNetwork();

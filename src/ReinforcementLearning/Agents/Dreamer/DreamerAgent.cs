@@ -66,7 +66,7 @@ public class DreamerAgent<T> : DeepReinforcementLearningAgentBase<T>
         // FIX ISSUE 6: Use learning rate from options consistently
         _optimizer = optimizer ?? options.Optimizer ?? new AdamOptimizer<T, Vector<T>, Vector<T>>(this, new AdamOptimizerOptions<T, Vector<T>, Vector<T>>
         {
-            LearningRate = _options.LearningRate,
+            LearningRate = _options.LearningRate is not null ? NumOps.ToDouble(_options.LearningRate) : 0.001,
             Beta1 = 0.9,
             Beta2 = 0.999,
             Epsilon = 1e-8
@@ -336,7 +336,8 @@ public class DreamerAgent<T> : DeepReinforcementLearningAgentBase<T>
             var reward = _rewardNetwork.Predict(Tensor<T>.FromVector(latentState)).ToVector()[0];
 
             // FIX ISSUE 5: Add discount factor (gamma) to imagination rollout
-            var discountedReward = NumOps.Multiply(reward, NumOps.Pow(NumOps.FromDouble(_options.Gamma), NumOps.FromDouble(step)));
+            var gamma = _options.DiscountFactor is not null ? NumOps.ToDouble(_options.DiscountFactor) : 0.99;
+            var discountedReward = NumOps.Multiply(reward, NumOps.FromDouble(Math.Pow(gamma, step)));
             imaginedReturn = NumOps.Add(imaginedReturn, discountedReward);
 
             // Predict next latent state

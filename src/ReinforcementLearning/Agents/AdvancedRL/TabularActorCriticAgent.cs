@@ -128,8 +128,62 @@ public class TabularActorCriticAgent<T> : ReinforcementLearningAgentBase<T>
     public override ModelMetadata<T> GetModelMetadata() => new ModelMetadata<T> { ModelType = ModelType.ReinforcementLearning, FeatureCount = this.FeatureCount, Complexity = ParameterCount };
     public override int ParameterCount => _valueTable.Count + (_policy.Count * _options.ActionSize);
     public override int FeatureCount => _options.StateSize;
-    public override byte[] Serialize() => throw new NotImplementedException();
-    public override void Deserialize(byte[] data) => throw new NotImplementedException();
+    public override byte[] Serialize()
+    {
+        using var ms = new MemoryStream();
+        using var writer = new BinaryWriter(ms);
+
+        writer.Write(_valueTable.Count);
+        foreach (var kvp in _valueTable)
+        {
+            writer.Write(kvp.Key);
+            writer.Write(NumOps.ToDouble(kvp.Value));
+        }
+
+        writer.Write(_policy.Count);
+        foreach (var stateEntry in _policy)
+        {
+            writer.Write(stateEntry.Key);
+            writer.Write(stateEntry.Value.Count);
+            foreach (var actionEntry in stateEntry.Value)
+            {
+                writer.Write(actionEntry.Key);
+                writer.Write(NumOps.ToDouble(actionEntry.Value));
+            }
+        }
+
+        return ms.ToArray();
+    }
+
+    public override void Deserialize(byte[] data)
+    {
+        using var ms = new MemoryStream(data);
+        using var reader = new BinaryReader(ms);
+
+        int valueCount = reader.ReadInt32();
+        _valueTable.Clear();
+        for (int i = 0; i < valueCount; i++)
+        {
+            string key = reader.ReadString();
+            double value = reader.ReadDouble();
+            _valueTable[key] = NumOps.FromDouble(value);
+        }
+
+        int policyCount = reader.ReadInt32();
+        _policy.Clear();
+        for (int i = 0; i < policyCount; i++)
+        {
+            string stateKey = reader.ReadString();
+            int actionCount = reader.ReadInt32();
+            _policy[stateKey] = new Dictionary<int, T>();
+            for (int j = 0; j < actionCount; j++)
+            {
+                int actionKey = reader.ReadInt32();
+                double actionValue = reader.ReadDouble();
+                _policy[stateKey][actionKey] = NumOps.FromDouble(actionValue);
+            }
+        }
+    }
     public override Vector<T> GetParameters()
     {
         int paramCount = _valueTable.Count + (_policy.Count * _options.ActionSize);

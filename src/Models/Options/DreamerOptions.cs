@@ -32,8 +32,34 @@ namespace AiDotNet.Models.Options;
 /// </remarks>
 public class DreamerOptions<T> : ReinforcementLearningOptions<T>
 {
-    public int ObservationSize { get; init; }
-    public int ActionSize { get; init; }
+    private int _observationSize;
+    private int _actionSize;
+
+    public int ObservationSize
+    {
+        get => _observationSize;
+        init
+        {
+            if (value <= 0)
+            {
+                throw new ArgumentException("ObservationSize must be positive", nameof(ObservationSize));
+            }
+            _observationSize = value;
+        }
+    }
+
+    public int ActionSize
+    {
+        get => _actionSize;
+        init
+        {
+            if (value <= 0)
+            {
+                throw new ArgumentException("ActionSize must be positive", nameof(ActionSize));
+            }
+            _actionSize = value;
+        }
+    }
 
     // World model architecture
     public int LatentSize { get; init; } = 200;

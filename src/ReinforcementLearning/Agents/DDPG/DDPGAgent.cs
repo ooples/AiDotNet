@@ -280,10 +280,9 @@ public class DDPGAgent<T> : DeepReinforcementLearningAgentBase<T>
             totalLoss = NumOps.Subtract(totalLoss, q);
 
             // Compute deterministic policy gradient
-            // DDPG gradient: ∇θ J = E[∇θ μ(s) * ∇a Q(s,a)|a=μ(s)]
-            // Simplified: Use policy gradient with Q-value as advantage
-            // This approximates the true DPG but works within current architecture
-            var outputGradient = ComputeDDPGPolicyGradient(action, q);
+            // DDPG gradient: ∇θ J = E[∇a Q(s,a)|a=μ(s) * ∇θ μ(s)]
+            // This is the chain rule: gradient of Q w.r.t. actions times gradient of policy w.r.t. parameters
+            var outputGradient = ComputeDDPGPolicyGradient(exp.State, action);
             var outputGradientTensor = Tensor<T>.FromVector(outputGradient);
             _actorNetwork.Backpropagate(outputGradientTensor);
         }
@@ -295,31 +294,57 @@ public class DDPGAgent<T> : DeepReinforcementLearningAgentBase<T>
     }
 
 
-    private Vector<T> ComputeDDPGPolicyGradient(Vector<T> action, T qValue)
+    private Vector<T> ComputeDDPGPolicyGradient(Vector<T> state, Vector<T> action)
     {
-        // DDPG uses deterministic policy gradient: ∇θ J = E[∇θ μ(s) * ∇a Q(s,a)|a=μ(s)]
-        // Full implementation requires:
-        // 1. Computing ∂Q/∂a by backpropagating through critic
-        // 2. Computing ∂μ/∂θ and chaining with ∂Q/∂a
-        // 
-        // Simplified approach: Use policy gradient approximation
-        // Gradient direction points toward actions that increase Q-value
-        // This approximates the true deterministic policy gradient
-        
+        // DDPG uses deterministic policy gradient: ∇θ J = E[∇a Q(s,a)|a=μ(s) * ∇θ μ(s)]
+        //
+        // Step 1: Compute ∇a Q(s,a) - gradient of Q-value w.r.t. actions
+        // We approximate this using finite differences since we don't have direct access to critic gradients
+        //
+        // Step 2: This gradient is then backpropagated through the actor network
+        // to compute ∇θ μ(s) via the chain rule
+
         var gradient = new Vector<T>(action.Length);
-        
+        T epsilon = NumOps.FromDouble(0.001); // Small perturbation for finite differences
+
+        // Compute gradient of Q w.r.t. each action dimension using finite differences
         for (int i = 0; i < action.Length; i++)
         {
-            // Approximate gradient: ∂J/∂action_i ≈ sign(Q) * small_constant
-            // This encourages actions in direction of higher Q-values
-            // The actor network's Backward() will propagate this to parameters
-            var actionGrad = NumOps.Multiply(
-                NumOps.FromDouble(0.01),
-                qValue
+            // Create perturbed action: a + ε
+            var actionPlus = new Vector<T>(action.Length);
+            for (int j = 0; j < action.Length; j++)
+            {
+                actionPlus[j] = action[j];
+            }
+            actionPlus[i] = NumOps.Add(action[i], epsilon);
+
+            // Create perturbed action: a - ε
+            var actionMinus = new Vector<T>(action.Length);
+            for (int j = 0; j < action.Length; j++)
+            {
+                actionMinus[j] = action[j];
+            }
+            actionMinus[i] = NumOps.Subtract(action[i], epsilon);
+
+            // Compute Q(s, a+ε)
+            var stateActionPlus = ConcatenateStateAction(state, actionPlus);
+            var qPlus = _criticNetwork.Predict(Tensor<T>.FromVector(stateActionPlus)).ToVector()[0];
+
+            // Compute Q(s, a-ε)
+            var stateActionMinus = ConcatenateStateAction(state, actionMinus);
+            var qMinus = _criticNetwork.Predict(Tensor<T>.FromVector(stateActionMinus)).ToVector()[0];
+
+            // Finite difference approximation: ∂Q/∂a_i ≈ (Q(s,a+ε) - Q(s,a-ε)) / (2ε)
+            var dQda = NumOps.Divide(
+                NumOps.Subtract(qPlus, qMinus),
+                NumOps.Multiply(NumOps.FromDouble(2.0), epsilon)
             );
-            gradient[i] = NumOps.Negate(actionGrad); // Negate for gradient ascent
+
+            // This gradient will be backpropagated through the actor network
+            // We negate because we want to maximize Q (gradient ascent)
+            gradient[i] = NumOps.Negate(dQda);
         }
-        
+
         return gradient;
     }
 

@@ -210,6 +210,7 @@ public class TD3Agent<T> : DeepReinforcementLearningAgentBase<T>
     {
         T totalLoss = _numOps.Zero;
 
+        // CRITICAL FIX: Sample() returns List<Experience<T>>, not tuple
         foreach (var experience in batch)
         {
             // Compute target Q-value with target policy smoothing
