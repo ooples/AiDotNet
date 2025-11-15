@@ -256,6 +256,8 @@ public class TRPOAgent<T> : DeepReinforcementLearningAgentBase<T>
         var actions = new List<Vector<T>>();
         var rewards = new List<T>();
         var values = new List<T>();
+        var doneFlags = new List<bool>();
+        var nextValues = new List<T>();
 
         // Cache options values to avoid nullable warnings
         T discountFactor = DiscountFactor;
@@ -266,9 +268,24 @@ public class TRPOAgent<T> : DeepReinforcementLearningAgentBase<T>
             states.Add(state);
             actions.Add(action);
             rewards.Add(reward);
+            doneFlags.Add(done);
+
+            // Compute current state value
             var stateTensor = Tensor<T>.FromVector(state);
             var valueTensor = _valueNetwork.Predict(stateTensor);
             values.Add(valueTensor.ToVector()[0]);
+
+            // Compute next state value (correctly use nextState from buffer)
+            if (done)
+            {
+                nextValues.Add(NumOps.Zero);
+            }
+            else
+            {
+                var nextStateTensor = Tensor<T>.FromVector(nextState);
+                var nextValueTensor = _valueNetwork.Predict(nextStateTensor);
+                nextValues.Add(nextValueTensor.ToVector()[0]);
+            }
         }
 
         // Compute returns
@@ -277,7 +294,7 @@ public class TRPOAgent<T> : DeepReinforcementLearningAgentBase<T>
 
         for (int i = rewards.Count - 1; i >= 0; i--)
         {
-            if (_trajectoryBuffer[i].done)
+            if (doneFlags[i])
             {
                 runningReturn = rewards[i];
             }
@@ -294,8 +311,8 @@ public class TRPOAgent<T> : DeepReinforcementLearningAgentBase<T>
 
         for (int i = rewards.Count - 1; i >= 0; i--)
         {
-            T nextValue = (i == rewards.Count - 1) ? NumOps.Zero : values[i + 1];
-            if (_trajectoryBuffer[i].done)
+            T nextValue = nextValues[i];
+            if (doneFlags[i])
             {
                 nextValue = NumOps.Zero;
             }
