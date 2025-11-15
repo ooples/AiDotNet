@@ -1,6 +1,7 @@
 using AiDotNet.LinearAlgebra;
 using AiDotNet.Models;
 using AiDotNet.Models.Options;
+using Newtonsoft.Json;
 
 namespace AiDotNet.ReinforcementLearning.Agents.TabularQLearning;
 
@@ -32,6 +33,7 @@ public class TabularQLearningAgent<T> : ReinforcementLearningAgentBase<T>
 {
     private TabularQLearningOptions<T> _options;
     private Dictionary<string, Dictionary<int, T>> _qTable;
+    private Random _random;
     private double _epsilon;
 
     public TabularQLearningAgent(TabularQLearningOptions<T> options)
@@ -44,6 +46,7 @@ public class TabularQLearningAgent<T> : ReinforcementLearningAgentBase<T>
 
         _options = options;
         _qTable = new Dictionary<string, Dictionary<int, T>>();
+        _random = new Random();
         _epsilon = _options.EpsilonStart;
     }
 
@@ -52,10 +55,10 @@ public class TabularQLearningAgent<T> : ReinforcementLearningAgentBase<T>
         string stateKey = VectorToStateKey(state);
 
         // Epsilon-greedy exploration
-        if (training && Random.NextDouble() < _epsilon)
+        if (training && _random.NextDouble() < _epsilon)
         {
             // Random action
-            int randomAction = Random.Next(_options.ActionSize);
+            int randomAction = _random.Next(_options.ActionSize);
             var action = new Vector<T>(_options.ActionSize);
             action[randomAction] = NumOps.One;
             return action;
@@ -183,12 +186,32 @@ public class TabularQLearningAgent<T> : ReinforcementLearningAgentBase<T>
 
     public override byte[] Serialize()
     {
-        throw new NotImplementedException("Tabular Q-Learning serialization not yet implemented");
+        var state = new
+        {
+            QTable = _qTable,
+            Epsilon = _epsilon,
+            Options = _options
+        };
+        string json = JsonConvert.SerializeObject(state);
+        return System.Text.Encoding.UTF8.GetBytes(json);
     }
 
     public override void Deserialize(byte[] data)
     {
-        throw new NotImplementedException("Tabular Q-Learning deserialization not yet implemented");
+        if (data is null || data.Length == 0)
+        {
+            throw new ArgumentException("Serialized data cannot be null or empty", nameof(data));
+        }
+
+        string json = System.Text.Encoding.UTF8.GetString(data);
+        var state = JsonConvert.DeserializeObject<dynamic>(json);
+        if (state is null)
+        {
+            throw new InvalidOperationException("Deserialization returned null");
+        }
+
+        _qTable = JsonConvert.DeserializeObject<Dictionary<string, Dictionary<int, T>>>(state.QTable.ToString()) ?? new Dictionary<string, Dictionary<int, T>>();
+        _epsilon = state.Epsilon;
     }
 
     public override Vector<T> GetParameters()
