@@ -311,8 +311,37 @@ public class LSPIAgent<T> : ReinforcementLearningAgentBase<T>
     public override ModelMetadata<T> GetModelMetadata() => new ModelMetadata<T> { ModelType = ModelType.ReinforcementLearning, FeatureCount = this.FeatureCount, Complexity = ParameterCount };
     public override int ParameterCount => _options.ActionSize * _options.FeatureSize;
     public override int FeatureCount => _options.FeatureSize;
-    public override byte[] Serialize() => throw new NotImplementedException();
-    public override void Deserialize(byte[] data) => throw new NotImplementedException();
+    public override byte[] Serialize()
+    {
+        var state = new
+        {
+            Weights = _weights,
+            Samples = _samples,
+            Iterations = _iterations,
+            Options = _options
+        };
+        string json = JsonConvert.SerializeObject(state);
+        return System.Text.Encoding.UTF8.GetBytes(json);
+    }
+
+    public override void Deserialize(byte[] data)
+    {
+        if (data is null || data.Length == 0)
+        {
+            throw new ArgumentException("Serialized data cannot be null or empty", nameof(data));
+        }
+
+        string json = System.Text.Encoding.UTF8.GetString(data);
+        var state = JsonConvert.DeserializeObject<dynamic>(json);
+        if (state is null)
+        {
+            throw new InvalidOperationException("Deserialization returned null");
+        }
+
+        _weights = JsonConvert.DeserializeObject<Matrix<T>>(state.Weights.ToString()) ?? new Matrix<T>(_options.ActionSize, _options.FeatureSize);
+        _samples = JsonConvert.DeserializeObject<List<(Vector<T>, int, T, Vector<T>, bool)>>(state.Samples.ToString()) ?? new List<(Vector<T>, int, T, Vector<T>, bool)>();
+        _iterations = state.Iterations;
+    }
 
     public override Vector<T> GetParameters()
     {
