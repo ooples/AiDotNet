@@ -123,10 +123,5 @@ namespace AiDotNet.ReinforcementLearning.Policies
         {
             _explorationStrategy.Reset();
         }
-
-        public new void Dispose()
-        {
-            // Cleanup if needed
-        }
     }
 }

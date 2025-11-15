@@ -89,11 +89,6 @@ namespace AiDotNet.ReinforcementLearning.Policies
             _explorationStrategy.Reset();
         }
 
-        public new void Dispose()
-        {
-            // Cleanup if needed
-        }
-
         // Helper methods
         private Vector<T> Softmax(Vector<T> logits)
         {
