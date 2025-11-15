@@ -146,7 +146,7 @@ public class ContradictionDetector<T> : IContradictionDetector<T>
 
         // Use LLM for deeper analysis
         string prompt = BuildContradictionCheckPrompt(step1, step2);
-        string response = await _chatModel.GenerateResponseAsync(prompt);
+        string response = await _chatModel.GenerateResponseAsync(prompt, cancellationToken);
 
         return ParseContradictionResponse(response);
     }
@@ -160,7 +160,7 @@ public class ContradictionDetector<T> : IContradictionDetector<T>
         CancellationToken cancellationToken)
     {
         string prompt = BuildContradictionAnalysisPrompt(step1, step2);
-        string response = await _chatModel.GenerateResponseAsync(prompt);
+        string response = await _chatModel.GenerateResponseAsync(prompt, cancellationToken);
 
         return ParseContradictionAnalysis(response, step1.StepNumber, step2.StepNumber);
     }
