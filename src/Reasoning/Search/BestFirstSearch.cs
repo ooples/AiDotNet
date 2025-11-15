@@ -77,26 +77,27 @@ public class BestFirstSearch<T> : ISearchAlgorithm<T>
         root.EvaluationScore = await evaluator.EvaluateThoughtAsync(root, root.Thought, config, cancellationToken);
         root.IsVisited = true;
 
-        // Priority queue: ordered by evaluation score (descending)
-        var priorityQueue = new SortedSet<AiDotNet.Reasoning.Models.ThoughtNode<T>>(
-            Comparer<AiDotNet.Reasoning.Models.ThoughtNode<T>>.Create((a, b) =>
+        // Priority queue with unique counter to prevent duplicate dropping
+        int nodeCounter = 0;
+        var priorityQueue = new SortedSet<(AiDotNet.Reasoning.Models.ThoughtNode<T> node, int id)>(
+            Comparer<(AiDotNet.Reasoning.Models.ThoughtNode<T> node, int id)>.Create((a, b) =>
             {
                 // Primary: score (descending)
-                double scoreA = Convert.ToDouble(a.EvaluationScore);
-                double scoreB = Convert.ToDouble(b.EvaluationScore);
+                double scoreA = Convert.ToDouble(a.node.EvaluationScore);
+                double scoreB = Convert.ToDouble(b.node.EvaluationScore);
                 int scoreCompare = scoreB.CompareTo(scoreA);
                 if (scoreCompare != 0) return scoreCompare;
 
                 // Secondary: depth (ascending - prefer shallower)
-                int depthCompare = a.Depth.CompareTo(b.Depth);
+                int depthCompare = a.node.Depth.CompareTo(b.node.Depth);
                 if (depthCompare != 0) return depthCompare;
 
-                // Tertiary: hash code (for uniqueness)
-                return a.GetHashCode().CompareTo(b.GetHashCode());
+                // Tertiary: insertion order (guaranteed unique)
+                return a.id.CompareTo(b.id);
             })
         );
 
-        priorityQueue.Add(root);
+        priorityQueue.Add((root, nodeCounter++));
 
         AiDotNet.Reasoning.Models.ThoughtNode<T>? bestTerminalNode = null;
         var numOps = MathHelper.GetNumericOperations<T>();
@@ -107,9 +108,9 @@ public class BestFirstSearch<T> : ISearchAlgorithm<T>
         {
             cancellationToken.ThrowIfCancellationRequested();
 
-            // Pick best node
-            var currentNode = priorityQueue.First();
-            priorityQueue.Remove(currentNode);
+            // Pick best node (extract from tuple)
+            var (currentNode, _) = priorityQueue.First();
+            priorityQueue.Remove(priorityQueue.First());
             nodesExpanded++;
 
             // Check if terminal
@@ -137,7 +138,7 @@ public class BestFirstSearch<T> : ISearchAlgorithm<T>
                 cancellationToken
             );
 
-            // Evaluate and add children to queue
+            // Evaluate and add children to queue (with unique counter)
             foreach (var child in children)
             {
                 child.EvaluationScore = await evaluator.EvaluateThoughtAsync(
@@ -148,7 +149,7 @@ public class BestFirstSearch<T> : ISearchAlgorithm<T>
                 );
 
                 currentNode.Children.Add(child);
-                priorityQueue.Add(child);
+                priorityQueue.Add((child, nodeCounter++));
             }
         }
 
@@ -158,10 +159,10 @@ public class BestFirstSearch<T> : ISearchAlgorithm<T>
             return ReconstructPath(bestTerminalNode);
         }
 
-        // Fallback: return highest-scored node in queue
+        // Fallback: return highest-scored node in queue (extract from tuple)
         if (priorityQueue.Count > 0)
         {
-            var bestNode = priorityQueue.First();
+            var (bestNode, _) = priorityQueue.First();
             return ReconstructPath(bestNode);
         }
 
