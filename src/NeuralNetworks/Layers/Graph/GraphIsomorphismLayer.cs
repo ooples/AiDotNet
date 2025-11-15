@@ -163,6 +163,7 @@ public class GraphIsomorphismLayer<T> : LayerBase<T>, IGraphConvolutionLayer<T>
         _mlpWeights2 = new Matrix<T>(_mlpHiddenDim, _outputFeatures);
         _mlpBias1 = new Vector<T>(_mlpHiddenDim);
         _mlpBias2 = new Vector<T>(_outputFeatures);
+        _epsilonGradient = NumOps.Zero;
 
         InitializeParameters();
     }

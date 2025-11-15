@@ -281,7 +281,7 @@ public class GraphSAGELayer<T> : LayerBase<T>, IGraphConvolutionLayer<T>
                             {
                                 if (!NumOps.Equals(_adjacencyMatrix[b, i, j], NumOps.Zero))
                                 {
-                                    max = NumOps.Max(max, input[b, j, f]);
+                                    max = NumOps.GreaterThan(input[b, j, f], max) ? input[b, j, f] : max;
                                 }
                             }
                             aggregated[b, i, f] = max;

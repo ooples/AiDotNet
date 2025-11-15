@@ -1,4 +1,5 @@
 using System;
+using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
 using AiDotNet.NeuralNetworks.Layers.Graph;
 using Xunit;
@@ -13,7 +14,7 @@ namespace AiDotNetTests.UnitTests.NeuralNetworks.Layers
         public void GraphConvolutionalLayer_Constructor_InitializesCorrectly()
         {
             // Arrange & Act
-            var layer = new GraphConvolutionalLayer<double>(inputFeatures: 10, outputFeatures: 16);
+            var layer = new GraphConvolutionalLayer<double>(inputFeatures: 10, outputFeatures: 16, (IActivationFunction<double>?)null);
 
             // Assert
             Assert.NotNull(layer);
@@ -26,7 +27,7 @@ namespace AiDotNetTests.UnitTests.NeuralNetworks.Layers
         public void GraphConvolutionalLayer_Forward_WithoutAdjacencyMatrix_ThrowsException()
         {
             // Arrange
-            var layer = new GraphConvolutionalLayer<double>(inputFeatures: 10, outputFeatures: 16);
+            var layer = new GraphConvolutionalLayer<double>(inputFeatures: 10, outputFeatures: 16, (IActivationFunction<double>?)null);
             var input = new Tensor<double>([1, 5, 10]); // batch=1, nodes=5, features=10
 
             // Act & Assert
@@ -37,7 +38,7 @@ namespace AiDotNetTests.UnitTests.NeuralNetworks.Layers
         public void GraphConvolutionalLayer_Forward_WithAdjacencyMatrix_ReturnsCorrectShape()
         {
             // Arrange
-            var layer = new GraphConvolutionalLayer<double>(inputFeatures: 10, outputFeatures: 16);
+            var layer = new GraphConvolutionalLayer<double>(inputFeatures: 10, outputFeatures: 16, (IActivationFunction<double>?)null);
             int batchSize = 2;
             int numNodes = 5;
 
@@ -79,7 +80,7 @@ namespace AiDotNetTests.UnitTests.NeuralNetworks.Layers
         public void GraphConvolutionalLayer_GetAdjacencyMatrix_ReturnsSetMatrix()
         {
             // Arrange
-            var layer = new GraphConvolutionalLayer<double>(inputFeatures: 10, outputFeatures: 16);
+            var layer = new GraphConvolutionalLayer<double>(inputFeatures: 10, outputFeatures: 16, (IActivationFunction<double>?)null);
             var adjacency = new Tensor<double>([1, 5, 5]);
 
             // Act
@@ -457,7 +458,7 @@ namespace AiDotNetTests.UnitTests.NeuralNetworks.Layers
         public void AllGraphLayers_ImplementIGraphConvolutionLayer()
         {
             // Arrange & Act
-            var gcn = new GraphConvolutionalLayer<double>(5, 10);
+            var gcn = new GraphConvolutionalLayer<double>(5, 10, (IActivationFunction<double>?)null);
             var gat = new GraphAttentionLayer<double>(5, 10);
             var sage = new GraphSAGELayer<double>(5, 10);
             var gin = new GraphIsomorphismLayer<double>(5, 10);

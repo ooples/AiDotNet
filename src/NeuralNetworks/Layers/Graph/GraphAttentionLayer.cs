@@ -297,7 +297,7 @@ public class GraphAttentionLayer<T> : LayerBase<T>, IGraphConvolutionLayer<T>
                     {
                         if (!NumOps.Equals(_adjacencyMatrix[b, i, j], NumOps.Zero))
                         {
-                            maxScore = NumOps.Max(maxScore, _lastAttentionCoefficients[b, h, i, j]);
+                            maxScore = NumOps.GreaterThan(_lastAttentionCoefficients[b, h, i, j], maxScore) ? _lastAttentionCoefficients[b, h, i, j] : maxScore;
                         }
                     }
 
