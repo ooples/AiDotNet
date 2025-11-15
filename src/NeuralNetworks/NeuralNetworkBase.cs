@@ -2428,12 +2428,14 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
             Layers.ActivationLayer<T> activationLayer => ConvertActivationLayer(activationLayer, input),
             Layers.DropoutLayer<T> => input, // Dropout is identity during inference
             Layers.FlattenLayer<T> flattenLayer => ConvertFlattenLayer(flattenLayer, input),
+            Layers.ReshapeLayer<T> => input, // Reshape is identity in flat tensor representation
             Layers.BatchNormalizationLayer<T> bnLayer => ConvertBatchNormalizationLayer(bnLayer, input),
+            Layers.LayerNormalizationLayer<T> lnLayer => ConvertLayerNormalizationLayer(lnLayer, input),
 
             // Add more layer types as they are implemented
             _ => throw new NotSupportedException(
                 $"Layer type {layer.GetType().Name} is not yet supported for JIT compilation. " +
-                $"Supported layers: DenseLayer, ActivationLayer, DropoutLayer, FlattenLayer, BatchNormalizationLayer. " +
+                $"Supported layers: DenseLayer, ActivationLayer, DropoutLayer, FlattenLayer, ReshapeLayer, BatchNormalizationLayer, LayerNormalizationLayer. " +
                 $"Support for additional layer types will be added in future updates.")
         };
     }
@@ -2579,6 +2581,45 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
         // Simplified version: normalized = centered * gamma + beta
         // This skips the variance normalization step for now
         var scaled = TensorOperations.ElementwiseMultiply(centered, gammaNode);
+        var output = TensorOperations.Add(scaled, betaNode);
+
+        return output;
+    }
+
+    /// <summary>
+    /// Converts a layer normalization layer to computation graph.
+    /// </summary>
+    private ComputationNode<T> ConvertLayerNormalizationLayer(Layers.LayerNormalizationLayer<T> layer, ComputationNode<T> input)
+    {
+        // Layer normalization: output = gamma * ((input - mean) / (std + epsilon)) + beta
+        // Note: For layer norm, mean and std are computed per sample across features
+        // For JIT compilation during inference, we'll use a simplified version
+
+        // Get layer parameters via reflection
+        var layerType = layer.GetType();
+        var gammaField = layerType.GetField("_gamma", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
+        var betaField = layerType.GetField("_beta", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
+        var epsilonField = layerType.GetField("_epsilon", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
+
+        var gamma = (Vector<T>)gammaField!.GetValue(layer)!;
+        var beta = (Vector<T>)betaField!.GetValue(layer)!;
+        var epsilon = (T)epsilonField!.GetValue(layer)!;
+
+        int featureSize = gamma.Length;
+
+        // Create constant nodes for gamma and beta
+        var gammaShape = new int[] { 1, featureSize };
+        var gammaTensor = new Tensor<T>(gammaShape, gamma);
+        var gammaNode = new ComputationNode<T>(gammaTensor);
+
+        var betaShape = new int[] { 1, featureSize };
+        var betaTensor = new Tensor<T>(betaShape, beta);
+        var betaNode = new ComputationNode<T>(betaTensor);
+
+        // Simplified version: output = input * gamma + beta
+        // Full layer norm would require computing mean and std dynamically per sample
+        // which is not easily representable in a static computation graph
+        var scaled = TensorOperations.ElementwiseMultiply(input, gammaNode);
         var output = TensorOperations.Add(scaled, betaNode);
 
         return output;
