@@ -106,15 +106,18 @@ public class TrainingDataCollector<T>
     private readonly List<TrainingSample<T>> _samples;
     private readonly INumericOperations<T> _numOps;
     private readonly Dictionary<string, int> _categoryCount;
+    private readonly Random _random;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="TrainingDataCollector{T}"/> class.
     /// </summary>
-    public TrainingDataCollector()
+    /// <param name="randomSeed">Optional seed for reproducible shuffling. Default is 42.</param>
+    public TrainingDataCollector(int? randomSeed = 42)
     {
         _samples = new List<TrainingSample<T>>();
         _numOps = MathHelper.GetNumericOperations<T>();
         _categoryCount = new Dictionary<string, int>();
+        _random = randomSeed.HasValue ? new Random(randomSeed.Value) : new Random();
     }
 
     /// <summary>
@@ -204,7 +207,7 @@ public class TrainingDataCollector<T>
     /// </summary>
     public List<List<TrainingSample<T>>> GetBatches(int batchSize, bool shuffle = true)
     {
-        var samples = shuffle ? _samples.OrderBy(_ => Guid.NewGuid()).ToList() : _samples.ToList();
+        var samples = shuffle ? _samples.OrderBy(_ => _random.Next()).ToList() : _samples.ToList();
         var batches = new List<List<TrainingSample<T>>>();
 
         for (int i = 0; i < samples.Count; i += batchSize)
@@ -225,7 +228,7 @@ public class TrainingDataCollector<T>
         if (trainRatio + validationRatio >= 1.0)
             throw new ArgumentException("Train + validation ratios must be < 1.0");
 
-        var shuffled = _samples.OrderBy(_ => Guid.NewGuid()).ToList();
+        var shuffled = _samples.OrderBy(_ => _random.Next()).ToList();
         int trainSize = (int)(shuffled.Count * trainRatio);
         int validationSize = (int)(shuffled.Count * validationRatio);
 

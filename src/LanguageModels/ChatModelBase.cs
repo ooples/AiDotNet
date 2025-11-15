@@ -191,9 +191,10 @@ public abstract class ChatModelBase<T> : IChatModel<T>
     }
 
     /// <inheritdoc/>
-    public Task<string> GenerateResponseAsync(string prompt)
+    public Task<string> GenerateResponseAsync(string prompt, CancellationToken cancellationToken = default)
     {
         // Alias for GenerateAsync for IChatModel compatibility
+        // TODO: Pass cancellationToken when ILanguageModel.GenerateAsync supports it
         return GenerateAsync(prompt);
     }
 

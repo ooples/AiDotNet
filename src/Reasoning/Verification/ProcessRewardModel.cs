@@ -77,8 +77,8 @@ public class ProcessRewardModel<T> : IRewardModel<T>
         // Build evaluation prompt
         string prompt = BuildStepRewardPrompt(step, context);
 
-        // Get reward score from LLM
-        string response = await _chatModel.GenerateResponseAsync(prompt);
+        // Get reward score from LLM (pass cancellationToken)
+        string response = await _chatModel.GenerateResponseAsync(prompt, cancellationToken);
 
         // Check cancellation after LLM call
         cancellationToken.ThrowIfCancellationRequested();

@@ -61,7 +61,7 @@ public class MockChatModel<T> : IChatModel<T>
     }
 
     /// <inheritdoc/>
-    public Task<string> GenerateResponseAsync(string prompt)
+    public Task<string> GenerateResponseAsync(string prompt, CancellationToken cancellationToken = default)
     {
         // Alias for GenerateAsync
         return GenerateAsync(prompt);
