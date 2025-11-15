@@ -2433,6 +2433,7 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
             Layers.FlattenLayer<T> flattenLayer => ConvertFlattenLayer(flattenLayer, input),
             Layers.ReshapeLayer<T> => input, // Reshape is identity in flat tensor representation
             Layers.InputLayer<T> => input, // Input layer is pass-through
+            Layers.MaskingLayer<T> => input, // Masking is identity during inference (mask is data-dependent)
             Layers.BatchNormalizationLayer<T> bnLayer => ConvertBatchNormalizationLayer(bnLayer, input),
             Layers.LayerNormalizationLayer<T> lnLayer => ConvertLayerNormalizationLayer(lnLayer, input),
 
@@ -2440,7 +2441,7 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
             _ => throw new NotSupportedException(
                 $"Layer type {layer.GetType().Name} is not yet supported for JIT compilation. " +
                 $"Supported layers: DenseLayer, FullyConnectedLayer, FeedForwardLayer, ActivationLayer, DropoutLayer, GaussianNoiseLayer, " +
-                $"FlattenLayer, ReshapeLayer, InputLayer, BatchNormalizationLayer, LayerNormalizationLayer. " +
+                $"FlattenLayer, ReshapeLayer, InputLayer, MaskingLayer, BatchNormalizationLayer, LayerNormalizationLayer. " +
                 $"Support for additional layer types will be added in future updates.")
         };
     }

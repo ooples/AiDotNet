@@ -25,7 +25,7 @@ This document tracks the implementation status of JIT compilation support across
 - **Expected Speedup**: 3-5x for inference with many support vectors
 
 ### 3. NeuralNetworkBase ✓
-- **Status**: Basic implementation (11/77 layers supported)
+- **Status**: Basic implementation (12/77 layers supported)
 - **File**: `src/NeuralNetworks/NeuralNetworkBase.cs`
 - **Functionality**: Layer-based neural network with forward pass
 - **Expected Speedup**: 5-10x for inference
@@ -39,7 +39,7 @@ This document tracks the implementation status of JIT compilation support across
 
 ## Neural Network Layer Support
 
-### Supported Layers (11/77)
+### Supported Layers (12/77)
 
 #### Basic Layers
 1. **DenseLayer** ✓
@@ -81,20 +81,25 @@ This document tracks the implementation status of JIT compilation support across
    - Pass-through operation
    - `output = input`
 
+10. **MaskingLayer** ✓
+    - Identity during inference (mask is data-dependent)
+    - `output = input`
+    - Note: Full masking implementation requires dynamic masking operations
+
 #### Normalization Layers
-10. **BatchNormalizationLayer** ✓
+11. **BatchNormalizationLayer** ✓
     - Simplified implementation (missing variance normalization)
     - `output = (input - mean) * gamma + beta`
     - Note: Full implementation requires Sqrt operation
 
-11. **LayerNormalizationLayer** ✓
+12. **LayerNormalizationLayer** ✓
     - Simplified implementation (missing dynamic stats computation)
     - `output = input * gamma + beta`
     - Note: Full implementation requires per-sample mean/std computation
 
-### Pending Layers (66/77)
+### Pending Layers (65/77)
 
-#### High Priority - Common Layers (14 remaining)
+#### High Priority - Common Layers (13 remaining)
 - AddLayer (requires multi-input support)
 - MultiplyLayer (requires multi-input support)
 - ConcatenateLayer (requires multi-input support)
@@ -102,7 +107,6 @@ This document tracks the implementation status of JIT compilation support across
 - AvgPoolingLayer (via PoolingLayer)
 - ConvolutionalLayer
 - EmbeddingLayer
-- MaskingLayer
 - PaddingLayer
 - CroppingLayer
 - UpsamplingLayer
