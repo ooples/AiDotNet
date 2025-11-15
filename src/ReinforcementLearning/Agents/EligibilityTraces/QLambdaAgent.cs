@@ -2,6 +2,7 @@ using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
 using AiDotNet.Models;
 using AiDotNet.Models.Options;
+using Newtonsoft.Json;
 
 namespace AiDotNet.ReinforcementLearning.Agents.EligibilityTraces;
 
@@ -12,6 +13,7 @@ public class QLambdaAgent<T> : ReinforcementLearningAgentBase<T>
     private Dictionary<string, Dictionary<int, T>> _eligibilityTraces;
     private HashSet<string> _activeTraceStates;
     private double _epsilon;
+    private Random _random;
     private const double TraceThreshold = 1e-10;
 
     public QLambdaAgent(QLambdaOptions<T> options) : base(options)
@@ -21,13 +23,14 @@ public class QLambdaAgent<T> : ReinforcementLearningAgentBase<T>
         _eligibilityTraces = new Dictionary<string, Dictionary<int, T>>();
         _activeTraceStates = new HashSet<string>();
         _epsilon = options.EpsilonStart;
+        _random = new Random();
     }
 
     public override Vector<T> SelectAction(Vector<T> state, bool training = true)
     {
         EnsureStateExists(state);
         string stateKey = GetStateKey(state);
-        int selectedAction = (training && Random.NextDouble() < _epsilon) ? Random.Next(_options.ActionSize) : GetGreedyAction(stateKey);
+        int selectedAction = (training && _random.NextDouble() < _epsilon) ? _random.Next(_options.ActionSize) : GetGreedyAction(stateKey);
         var result = new Vector<T>(_options.ActionSize);
         result[selectedAction] = NumOps.One;
         return result;
@@ -163,8 +166,39 @@ public class QLambdaAgent<T> : ReinforcementLearningAgentBase<T>
     public override ModelMetadata<T> GetModelMetadata() => new ModelMetadata<T> { ModelType = ModelType.ReinforcementLearning, FeatureCount = this.FeatureCount, Complexity = ParameterCount };
     public override int ParameterCount => _qTable.Count * _options.ActionSize;
     public override int FeatureCount => _options.StateSize;
-    public override byte[] Serialize() => throw new NotSupportedException("Serialization is not supported for Q(λ) agents. Use GetParameters/SetParameters for state transfer.");
-    public override void Deserialize(byte[] data) => throw new NotSupportedException("Deserialization is not supported for Q(λ) agents. Use GetParameters/SetParameters for state transfer.");
+    public override byte[] Serialize()
+    {
+        var state = new
+        {
+            QTable = _qTable,
+            EligibilityTraces = _eligibilityTraces,
+            ActiveTraceStates = _activeTraceStates,
+            Epsilon = _epsilon,
+            Options = _options
+        };
+        string json = JsonConvert.SerializeObject(state);
+        return System.Text.Encoding.UTF8.GetBytes(json);
+    }
+
+    public override void Deserialize(byte[] data)
+    {
+        if (data is null || data.Length == 0)
+        {
+            throw new ArgumentException("Serialized data cannot be null or empty", nameof(data));
+        }
+
+        string json = System.Text.Encoding.UTF8.GetString(data);
+        var state = JsonConvert.DeserializeObject<dynamic>(json);
+        if (state is null)
+        {
+            throw new InvalidOperationException("Deserialization returned null");
+        }
+
+        _qTable = JsonConvert.DeserializeObject<Dictionary<string, Dictionary<int, T>>>(state.QTable.ToString()) ?? new Dictionary<string, Dictionary<int, T>>();
+        _eligibilityTraces = JsonConvert.DeserializeObject<Dictionary<string, Dictionary<int, T>>>(state.EligibilityTraces.ToString()) ?? new Dictionary<string, Dictionary<int, T>>();
+        _activeTraceStates = JsonConvert.DeserializeObject<HashSet<string>>(state.ActiveTraceStates.ToString()) ?? new HashSet<string>();
+        _epsilon = state.Epsilon;
+    }
     public override Vector<T> GetParameters()
     {
         int paramCount = _qTable.Count > 0 ? _qTable.Count * _options.ActionSize : 1;
@@ -246,6 +280,30 @@ public class QLambdaAgent<T> : ReinforcementLearningAgentBase<T>
     }
     public override Vector<T> ComputeGradients(Vector<T> input, Vector<T> target, ILossFunction<T>? lossFunction = null) { var pred = Predict(input); var lf = lossFunction ?? LossFunction; var loss = lf.CalculateLoss(pred, target); var grad = lf.CalculateDerivative(pred, target); return grad; }
     public override void ApplyGradients(Vector<T> gradients, T learningRate) { }
-    public override void SaveModel(string filepath) => throw new NotSupportedException("SaveModel is not supported for Q(λ) agents. Serialization of Q-tables is not implemented.");
-    public override void LoadModel(string filepath) => throw new NotSupportedException("LoadModel is not supported for Q(λ) agents. Serialization of Q-tables is not implemented.");
+    public override void SaveModel(string filepath)
+    {
+        if (string.IsNullOrWhiteSpace(filepath))
+        {
+            throw new ArgumentException("File path cannot be null or whitespace", nameof(filepath));
+        }
+
+        var data = Serialize();
+        System.IO.File.WriteAllBytes(filepath, data);
+    }
+
+    public override void LoadModel(string filepath)
+    {
+        if (string.IsNullOrWhiteSpace(filepath))
+        {
+            throw new ArgumentException("File path cannot be null or whitespace", nameof(filepath));
+        }
+
+        if (!System.IO.File.Exists(filepath))
+        {
+            throw new System.IO.FileNotFoundException($"Model file not found: {filepath}", filepath);
+        }
+
+        var data = System.IO.File.ReadAllBytes(filepath);
+        Deserialize(data);
+    }
 }
