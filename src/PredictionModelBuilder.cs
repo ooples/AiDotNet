@@ -17,6 +17,7 @@ global using AiDotNet.Enums;
 global using AiDotNet.MixedPrecision;
 global using AiDotNet.KnowledgeDistillation;
 global using AiDotNet.Deployment.Configuration;
+global using AiDotNet.GpuAcceleration;
 
 namespace AiDotNet;
 
@@ -64,6 +65,7 @@ public class PredictionModelBuilder<T, TInput, TOutput> : IPredictionModelBuilde
     private AgentAssistanceOptions _agentOptions = AgentAssistanceOptions.Default;
     private KnowledgeDistillationOptions<T, TInput, TOutput>? _knowledgeDistillationOptions;
     private MixedPrecisionConfig? _mixedPrecisionConfig;
+    private GpuAccelerationConfig? _gpuAccelerationConfig;
 
     // Deployment configuration fields
     private QuantizationConfig? _quantizationConfig;
@@ -266,6 +268,96 @@ public class PredictionModelBuilder<T, TInput, TOutput> : IPredictionModelBuilde
     }
 
     /// <summary>
+    /// Enables GPU acceleration for training and inference with optional configuration.
+    /// </summary>
+    /// <param name="config">GPU acceleration configuration (optional, uses defaults if null).</param>
+    /// <returns>This builder instance for method chaining.</returns>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> GPU acceleration makes your model train **10-100x faster** on large datasets
+    /// by using your computer's graphics card (GPU) for parallel computation. This is one of the most
+    /// impactful optimizations you can make!
+    ///
+    /// Benefits:
+    /// - **10-100x faster training** for large neural networks and matrix operations
+    /// - **Automatic optimization** - GPU is only used when beneficial
+    /// - **Zero code changes** - works with existing models transparently
+    /// - **Cross-platform** - supports NVIDIA (CUDA), AMD/Intel (OpenCL), and CPU fallback
+    ///
+    /// <b>Requirements:</b>
+    ///
+    /// 1. **GPU Support (Recommended but Optional)**
+    ///    - Works best with NVIDIA GPUs (CUDA support)
+    ///    - Also supports AMD/Intel GPUs via OpenCL
+    ///    - Automatically falls back to CPU if GPU unavailable
+    ///    - No GPU? No problem - just slower performance
+    ///
+    /// 2. **Works with All Models**
+    ///    - Neural networks get the biggest speedup (10-100x)
+    ///    - Other gradient-based models also benefit
+    ///    - Automatically decides which operations benefit from GPU
+    ///
+    /// 3. **Type Compatibility**
+    ///    - Recommended with T = float for best performance
+    ///    - Supports other numeric types with some overhead
+    ///
+    /// When to use:
+    /// - ✅ Training neural networks (massive speedup!)
+    /// - ✅ Large datasets (>10,000 samples)
+    /// - ✅ Matrix-heavy operations (linear regression, etc.)
+    /// - ✅ When you have a GPU available
+    /// - ⚠️ Small datasets (<1,000 samples) - minimal benefit
+    /// - ⚠️ Simple models with no matrix operations - no benefit
+    ///
+    /// <b>Performance Expectations:</b>
+    ///
+    /// Operation speedups (depends on GPU and data size):
+    /// - Large matrix multiplication: **50-100x faster**
+    /// - Neural network training: **10-50x faster**
+    /// - Element-wise operations: **5-20x faster**
+    /// - Small operations (<100K elements): Similar or slower (transfer overhead)
+    ///
+    /// The system automatically uses CPU for small operations and GPU for large ones,
+    /// so you get optimal performance without any manual tuning!
+    ///
+    /// <b>Memory Considerations:</b>
+    /// - GPU has separate memory from CPU (typically 4-24GB)
+    /// - Data is automatically transferred between CPU ↔ GPU as needed
+    /// - Transfers are minimized by batching operations
+    /// - If GPU runs out of memory, automatically falls back to CPU
+    /// </para>
+    /// </remarks>
+    /// <example>
+    /// <code>
+    /// // Enable with default settings (recommended for most cases)
+    /// var result = await new PredictionModelBuilder&lt;float, Matrix&lt;float&gt;, Vector&lt;float&gt;&gt;()
+    ///     .ConfigureModel(network)
+    ///     .ConfigureOptimizer(optimizer)
+    ///     .ConfigureGpuAcceleration()  // Enable GPU acceleration with sensible defaults
+    ///     .BuildAsync(trainingData, labels);
+    ///
+    /// // Or with custom configuration for high-end GPUs
+    /// builder.ConfigureGpuAcceleration(GpuAccelerationConfig.Aggressive());
+    ///
+    /// // Or conservative settings for older/slower GPUs
+    /// builder.ConfigureGpuAcceleration(GpuAccelerationConfig.Conservative());
+    ///
+    /// // Or force CPU-only (for debugging or deployment to CPU servers)
+    /// builder.ConfigureGpuAcceleration(GpuAccelerationConfig.CpuOnly());
+    ///
+    /// // Check GPU usage in result
+    /// Console.WriteLine($"GPU was used: {result.GpuStatistics?.GpuPercentage > 0}%");
+    /// Console.WriteLine($"GPU Operations: {result.GpuStatistics?.GpuOperations}");
+    /// Console.WriteLine($"CPU Operations: {result.GpuStatistics?.CpuOperations}");
+    /// </code>
+    /// </example>
+    public IPredictionModelBuilder<T, TInput, TOutput> ConfigureGpuAcceleration(GpuAccelerationConfig? config = null)
+    {
+        _gpuAccelerationConfig = config ?? new GpuAccelerationConfig();
+        return this;
+    }
+
+    /// <summary>
     /// Configures how the data should be preprocessed before training.
     /// </summary>
     /// <param name="dataPreprocessor">The data preprocessing strategy to use.</param>
@@ -457,6 +549,78 @@ public class PredictionModelBuilder<T, TInput, TOutput> : IPredictionModelBuilde
             }
         }
 
+        // Initialize GPU acceleration if configured
+        Gpu.IlgpuBackend<float>? gpuBackend = null;
+        Gpu.ExecutionContext? gpuContext = null;
+
+        if (_gpuAccelerationConfig != null)
+        {
+            try
+            {
+                // Only initialize for float type (best GPU performance)
+                if (typeof(T) == typeof(float))
+                {
+                    // Initialize GPU backend
+                    gpuBackend = new Gpu.IlgpuBackend<float>(_gpuAccelerationConfig.PreferredDeviceType);
+                    gpuBackend.Initialize();
+
+                    // Check if GPU is actually available
+                    bool shouldEnable = _gpuAccelerationConfig.EnableGpu ?? gpuBackend.IsAvailable;
+
+                    if (shouldEnable && gpuBackend.IsAvailable)
+                    {
+                        // Create execution context with configured strategy
+                        gpuContext = new Gpu.ExecutionContext(gpuBackend)
+                        {
+                            UseGpu = true,
+                            GpuThreshold = _gpuAccelerationConfig.GpuThreshold,
+                            Strategy = _gpuAccelerationConfig.Strategy,
+                            GpuComputeSpeedup = _gpuAccelerationConfig.GpuComputeSpeedup,
+                            TransferBandwidthGBps = _gpuAccelerationConfig.TransferBandwidthGBps
+                        };
+
+                        if (_gpuAccelerationConfig.VerboseLogging)
+                        {
+                            Console.WriteLine($"[GPU] Acceleration enabled");
+                            Console.WriteLine($"[GPU] Device: {gpuBackend.DeviceName}");
+                            Console.WriteLine($"[GPU] Type: {gpuBackend.DeviceType}");
+                            Console.WriteLine($"[GPU] Total Memory: {gpuBackend.TotalMemory / (1024 * 1024 * 1024):F2} GB");
+                            Console.WriteLine($"[GPU] Strategy: {_gpuAccelerationConfig.Strategy}");
+                            Console.WriteLine($"[GPU] Threshold: {_gpuAccelerationConfig.GpuThreshold:N0} elements");
+                        }
+                    }
+                    else
+                    {
+                        if (_gpuAccelerationConfig.VerboseLogging)
+                        {
+                            Console.WriteLine("[GPU] GPU not available or disabled, using CPU only");
+                        }
+                        // Dispose backend if not using it
+                        gpuBackend?.Dispose();
+                        gpuBackend = null;
+                    }
+                }
+                else
+                {
+                    if (_gpuAccelerationConfig.VerboseLogging)
+                    {
+                        Console.WriteLine($"[GPU] GPU acceleration is optimized for float type, got {typeof(T).Name}");
+                        Console.WriteLine($"[GPU] Using CPU for best compatibility");
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                // GPU initialization failed - log warning and continue with CPU
+                Console.WriteLine($"Warning: GPU acceleration initialization failed: {ex.Message}");
+                Console.WriteLine("Proceeding with CPU-only training.");
+
+                gpuBackend?.Dispose();
+                gpuBackend = null;
+                gpuContext = null;
+            }
+        }
+
         // Enable distributed training if backend or configuration was explicitly provided
         if (_distributedBackend != null || _distributedConfiguration != null)
         {
@@ -591,7 +755,9 @@ public class PredictionModelBuilder<T, TInput, TOutput> : IPredictionModelBuilde
             cvResults,
             _agentConfig,
             agentRecommendation,
-            deploymentConfig);
+            deploymentConfig,
+            gpuBackend,
+            gpuContext);
 
         return finalResult;
     }

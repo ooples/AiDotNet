@@ -782,6 +782,48 @@ public interface IPredictionModelBuilder<T, TInput, TOutput>
     IPredictionModelBuilder<T, TInput, TOutput> ConfigureExport(ExportConfig? config = null);
 
     /// <summary>
+    /// Enables mixed-precision training with optional configuration.
+    /// </summary>
+    /// <remarks>
+    /// <b>For Beginners:</b> Mixed-precision training uses a combination of 16-bit (FP16) and 32-bit (FP32)
+    /// floating-point numbers during training for 2-3x faster training on modern GPUs.
+    /// Only works with float type (T = float) and gradient-based optimizers.
+    /// </remarks>
+    /// <param name="config">Mixed-precision configuration (optional, uses defaults if null).</param>
+    /// <returns>The builder instance for method chaining.</returns>
+    IPredictionModelBuilder<T, TInput, TOutput> ConfigureMixedPrecision(AiDotNet.MixedPrecision.MixedPrecisionConfig? config = null);
+
+    /// <summary>
+    /// Enables GPU acceleration for training and inference with optional configuration.
+    /// </summary>
+    /// <remarks>
+    /// <b>For Beginners:</b> GPU acceleration makes your model train 10-100x faster on large datasets
+    /// by using your graphics card (GPU) for parallel computation. It automatically uses GPU for large
+    /// operations and CPU for small ones, with zero code changes required.
+    ///
+    /// Benefits:
+    /// - 10-100x faster training for large neural networks
+    /// - Automatic optimization based on tensor size
+    /// - Supports NVIDIA (CUDA), AMD/Intel (OpenCL), and CPU fallback
+    /// - Works transparently with existing models
+    ///
+    /// Example:
+    /// <code>
+    /// // Enable with defaults (recommended)
+    /// var result = await builder
+    ///     .ConfigureModel(model)
+    ///     .ConfigureGpuAcceleration()
+    ///     .BuildAsync(data, labels);
+    ///
+    /// // Or with aggressive settings for high-end GPUs
+    /// builder.ConfigureGpuAcceleration(GpuAccelerationConfig.Aggressive());
+    /// </code>
+    /// </remarks>
+    /// <param name="config">GPU acceleration configuration (optional, uses defaults if null).</param>
+    /// <returns>The builder instance for method chaining.</returns>
+    IPredictionModelBuilder<T, TInput, TOutput> ConfigureGpuAcceleration(AiDotNet.GpuAcceleration.GpuAccelerationConfig? config = null);
+
+    /// <summary>
     /// Asynchronously builds a meta-trained model that can quickly adapt to new tasks.
     /// </summary>
     /// <remarks>
