@@ -2426,6 +2426,7 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
         {
             Layers.DenseLayer<T> denseLayer => ConvertDenseLayer(denseLayer, input),
             Layers.FullyConnectedLayer<T> fcLayer => ConvertFullyConnectedLayer(fcLayer, input),
+            Layers.FeedForwardLayer<T> ffLayer => ConvertFeedForwardLayer(ffLayer, input),
             Layers.ActivationLayer<T> activationLayer => ConvertActivationLayer(activationLayer, input),
             Layers.DropoutLayer<T> => input, // Dropout is identity during inference
             Layers.GaussianNoiseLayer<T> => input, // Noise is disabled during inference
@@ -2438,7 +2439,7 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
             // Add more layer types as they are implemented
             _ => throw new NotSupportedException(
                 $"Layer type {layer.GetType().Name} is not yet supported for JIT compilation. " +
-                $"Supported layers: DenseLayer, FullyConnectedLayer, ActivationLayer, DropoutLayer, GaussianNoiseLayer, " +
+                $"Supported layers: DenseLayer, FullyConnectedLayer, FeedForwardLayer, ActivationLayer, DropoutLayer, GaussianNoiseLayer, " +
                 $"FlattenLayer, ReshapeLayer, InputLayer, BatchNormalizationLayer, LayerNormalizationLayer. " +
                 $"Support for additional layer types will be added in future updates.")
         };
@@ -2531,6 +2532,40 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
         var biasShape = new int[] { 1, outputSize };
         var biasTensor = new Tensor<T>(biasShape, biases);
         var biasNode = new ComputationNode<T>(biasTensor);
+
+        // Add bias: matmul + bias
+        var outputNode = TensorOperations.Add(matmulNode, biasNode);
+
+        return outputNode;
+    }
+
+    /// <summary>
+    /// Converts a feed-forward layer to computation graph.
+    /// </summary>
+    private ComputationNode<T> ConvertFeedForwardLayer(Layers.FeedForwardLayer<T> layer, ComputationNode<T> input)
+    {
+        // FeedForwardLayer: output = input @ weights + bias
+        // Very similar to DenseLayer, uses properties instead of fields
+
+        // Get layer parameters via reflection to access private Weights and Biases properties
+        var layerType = layer.GetType();
+        var weightsProperty = layerType.GetProperty("Weights", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
+        var biasesProperty = layerType.GetProperty("Biases", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
+
+        var weights = (Tensor<T>)weightsProperty!.GetValue(layer)!;
+        var biases = (Tensor<T>)biasesProperty!.GetValue(layer)!;
+
+        int inputSize = weights.Shape[0];
+        int outputSize = weights.Shape[1];
+
+        // Weights are already [inputSize, outputSize], can use directly
+        var weightsNode = new ComputationNode<T>(weights);
+
+        // Matrix multiply: input @ weights
+        var matmulNode = TensorOperations.MatrixMultiply(input, weightsNode);
+
+        // Biases are [1, outputSize]
+        var biasNode = new ComputationNode<T>(biases);
 
         // Add bias: matmul + bias
         var outputNode = TensorOperations.Add(matmulNode, biasNode);

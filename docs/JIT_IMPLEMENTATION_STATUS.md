@@ -25,7 +25,7 @@ This document tracks the implementation status of JIT compilation support across
 - **Expected Speedup**: 3-5x for inference with many support vectors
 
 ### 3. NeuralNetworkBase ✓
-- **Status**: Basic implementation (10/77 layers supported)
+- **Status**: Basic implementation (11/77 layers supported)
 - **File**: `src/NeuralNetworks/NeuralNetworkBase.cs`
 - **Functionality**: Layer-based neural network with forward pass
 - **Expected Speedup**: 5-10x for inference
@@ -39,7 +39,7 @@ This document tracks the implementation status of JIT compilation support across
 
 ## Neural Network Layer Support
 
-### Supported Layers (10/77)
+### Supported Layers (11/77)
 
 #### Basic Layers
 1. **DenseLayer** ✓
@@ -50,45 +50,49 @@ This document tracks the implementation status of JIT compilation support across
    - Matrix multiplication + bias (similar to DenseLayer)
    - `output = input @ weights + bias`
 
-3. **ActivationLayer** ✓
+3. **FeedForwardLayer** ✓
+   - Matrix multiplication + bias (similar to DenseLayer)
+   - `output = input @ weights + bias`
+
+4. **ActivationLayer** ✓
    - Supported activations:
      - ReLU ✓
      - Sigmoid ✓
      - Tanh ✓
      - Softmax ✓
 
-4. **DropoutLayer** ✓
+5. **DropoutLayer** ✓
    - Identity during inference
    - `output = input` (no-op for JIT)
 
-5. **GaussianNoiseLayer** ✓
+6. **GaussianNoiseLayer** ✓
    - Identity during inference (noise disabled)
    - `output = input`
 
-6. **FlattenLayer** ✓
+7. **FlattenLayer** ✓
    - Reshape operation
    - Currently simplified (identity)
 
-7. **ReshapeLayer** ✓
+8. **ReshapeLayer** ✓
    - Reshape operation
    - Currently simplified (identity)
 
-8. **InputLayer** ✓
+9. **InputLayer** ✓
    - Pass-through operation
    - `output = input`
 
 #### Normalization Layers
-9. **BatchNormalizationLayer** ✓
-   - Simplified implementation (missing variance normalization)
-   - `output = (input - mean) * gamma + beta`
-   - Note: Full implementation requires Sqrt operation
+10. **BatchNormalizationLayer** ✓
+    - Simplified implementation (missing variance normalization)
+    - `output = (input - mean) * gamma + beta`
+    - Note: Full implementation requires Sqrt operation
 
-10. **LayerNormalizationLayer** ✓
+11. **LayerNormalizationLayer** ✓
     - Simplified implementation (missing dynamic stats computation)
     - `output = input * gamma + beta`
     - Note: Full implementation requires per-sample mean/std computation
 
-### Pending Layers (67/77)
+### Pending Layers (66/77)
 
 #### High Priority - Common Layers (14 remaining)
 - AddLayer (requires multi-input support)
@@ -106,7 +110,7 @@ This document tracks the implementation status of JIT compilation support across
 - SplitLayer
 - MeanLayer
 
-#### Medium Priority - Advanced Layers (25 layers)
+#### Medium Priority - Advanced Layers (24 layers)
 - LSTMLayer
 - GRULayer
 - RecurrentLayer
@@ -126,7 +130,6 @@ This document tracks the implementation status of JIT compilation support across
 - DilatedConvolutionalLayer
 - SubpixelConvolutionalLayer
 - LocallyConnectedLayer
-- FeedForwardLayer
 - LambdaLayer
 - TimeDistributedLayer
 - ConvLSTMLayer
