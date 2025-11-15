@@ -11,7 +11,7 @@ namespace AiDotNet.Deployment.Edge;
 /// <typeparam name="T">The numeric type used in the model</typeparam>
 /// <typeparam name="TInput">The input type for the model</typeparam>
 /// <typeparam name="TOutput">The output type for the model</typeparam>
-public class EdgeOptimizer<T, TInput, TOutput> where T : struct
+public class EdgeOptimizer<T, TInput, TOutput>
 {
     private readonly EdgeConfiguration _config;
 
@@ -143,6 +143,7 @@ public class EdgeOptimizer<T, TInput, TOutput> where T : struct
         // Magnitude-based weight pruning: zero out weights below threshold
         var parameters = model.GetParameters();
         var prunedParams = new T[parameters.Length];
+        var numOps = MathHelper.GetNumericOperations<T>();
 
         // Calculate pruning threshold based on magnitude distribution
         var magnitudes = new double[parameters.Length];
@@ -163,7 +164,7 @@ public class EdgeOptimizer<T, TInput, TOutput> where T : struct
             var magnitude = Math.Abs(Convert.ToDouble(parameters[i]));
             if (magnitude < threshold)
             {
-                prunedParams[i] = default(T); // Zero
+                prunedParams[i] = numOps.Zero;
                 prunedCount++;
             }
             else

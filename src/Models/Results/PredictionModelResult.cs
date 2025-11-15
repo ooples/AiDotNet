@@ -1667,8 +1667,8 @@ public class PredictionModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
         var onnxConfig = new ExportConfiguration
         {
             ModelName = exportConfig.ModelName,
-            TargetPlatform = (int)exportConfig.TargetPlatform,
-            OptimizeForSize = exportConfig.OptimizeModel,
+            TargetPlatform = exportConfig.TargetPlatform,
+            OptimizeModel = exportConfig.OptimizeModel,
             BatchSize = exportConfig.BatchSize
         };
 
@@ -1746,8 +1746,17 @@ public class PredictionModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
             throw new InvalidOperationException("Cannot export: Model is null");
 
         var exportConfig = DeploymentConfiguration?.Export ?? new ExportConfig { TargetPlatform = TargetPlatform.CoreML };
+
+        var coreMLConfig = new ExportConfiguration
+        {
+            ModelName = exportConfig.ModelName,
+            TargetPlatform = exportConfig.TargetPlatform,
+            OptimizeModel = exportConfig.OptimizeModel,
+            BatchSize = exportConfig.BatchSize
+        };
+
         var exporter = new CoreMLExporter<T, TInput, TOutput>();
-        exporter.Export(Model, outputPath, exportConfig);
+        exporter.Export(Model, outputPath, coreMLConfig);
     }
 
     /// <summary>
@@ -1779,8 +1788,17 @@ public class PredictionModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
             throw new InvalidOperationException("Cannot export: Model is null");
 
         var exportConfig = DeploymentConfiguration?.Export ?? new ExportConfig { TargetPlatform = TargetPlatform.TFLite };
+
+        var tfliteConfig = new ExportConfiguration
+        {
+            ModelName = exportConfig.ModelName,
+            TargetPlatform = exportConfig.TargetPlatform,
+            OptimizeModel = exportConfig.OptimizeModel,
+            BatchSize = exportConfig.BatchSize
+        };
+
         var exporter = new TFLiteExporter<T, TInput, TOutput>();
-        exporter.Export(Model, outputPath, exportConfig);
+        exporter.Export(Model, outputPath, tfliteConfig);
     }
 
     /// <summary>

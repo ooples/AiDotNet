@@ -36,6 +36,9 @@ public enum TargetPlatform
     /// <summary>Android with NNAPI - Android's Neural Networks API</summary>
     NNAPI,
 
+    /// <summary>TensorFlow Lite - lightweight models for mobile and edge devices</summary>
+    TFLite,
+
     /// <summary>WebAssembly - run AI models in web browsers</summary>
     WebAssembly
 }

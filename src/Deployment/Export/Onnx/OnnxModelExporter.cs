@@ -13,7 +13,7 @@ namespace AiDotNet.Deployment.Export.Onnx;
 /// <typeparam name="T">The numeric type used in the model</typeparam>
 /// <typeparam name="TInput">The input type for the model</typeparam>
 /// <typeparam name="TOutput">The output type for the model</typeparam>
-public class OnnxModelExporter<T, TInput, TOutput> : ModelExporterBase<T, TInput, TOutput> where T : struct
+public class OnnxModelExporter<T, TInput, TOutput> : ModelExporterBase<T, TInput, TOutput>
 {
     /// <inheritdoc/>
     public override string ExportFormat => "ONNX";
@@ -434,7 +434,7 @@ public class OnnxModelExporter<T, TInput, TOutput> : ModelExporterBase<T, TInput
             "Could not determine input shape. Please specify InputShape in ExportConfiguration.");
     }
 
-    private string GetOnnxDataType<TData>() where TData : struct
+    private string GetOnnxDataType<TData>()
     {
         return typeof(TData).Name switch
         {
