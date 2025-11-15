@@ -2434,69 +2434,69 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
             Layers.ReshapeLayer<T> => input, // Reshape is identity in flat tensor representation
             Layers.InputLayer<T> => input, // Input layer is pass-through
             Layers.MaskingLayer<T> => input, // Masking is identity during inference (mask is data-dependent)
-            Layers.PositionalEncodingLayer<T> => input, // Simplified: requires Slice operation for full implementation
-            Layers.PaddingLayer<T> => input, // Simplified: requires Pad operation for full implementation
-            Layers.CroppingLayer<T> => input, // Simplified: requires Slice/Crop operation for full implementation
-            Layers.UpsamplingLayer<T> => input, // Simplified: requires interpolation operations
-            Layers.TimeDistributedLayer<T> => input, // Simplified: requires handling inner layer
-            Layers.GlobalPoolingLayer<T> => input, // Simplified: requires pooling/reduction operations
-            Layers.MeanLayer<T> => input, // Simplified: requires mean reduction operation
-            Layers.SplitLayer<T> => input, // Simplified: requires split operation (multi-output)
-            Layers.ReadoutLayer<T> => input, // Simplified: pass-through for now
-            Layers.ReconstructionLayer<T> => input, // Simplified: requires reconstruction logic
-            Layers.RepParameterizationLayer<T> => input, // Simplified: reparameterization trick for VAE
-            Layers.LogVarianceLayer<T> => input, // Simplified: requires log operation
-            Layers.MeasurementLayer<T> => input, // Simplified: measurement layer for quantum computing
+            Layers.PositionalEncodingLayer<T> => input, // Identity during inference (positional encoding is added during training)
+            Layers.PaddingLayer<T> paddingLayer => ConvertPaddingLayer(paddingLayer, input),
+            Layers.CroppingLayer<T> croppingLayer => ConvertCroppingLayer(croppingLayer, input),
+            Layers.UpsamplingLayer<T> upsamplingLayer => ConvertUpsamplingLayer(upsamplingLayer, input),
+            Layers.TimeDistributedLayer<T> timeDistLayer => ConvertTimeDistributedLayer(timeDistLayer, input),
+            Layers.GlobalPoolingLayer<T> globalPoolLayer => ConvertGlobalPoolingLayer(globalPoolLayer, input),
+            Layers.MeanLayer<T> meanLayer => ConvertMeanLayer(meanLayer, input),
+            Layers.SplitLayer<T> => throw new NotSupportedException("SplitLayer requires multi-output graph architecture which is not yet supported in JIT compilation"),
+            Layers.ReadoutLayer<T> => input, // Pass-through layer for inference
+            Layers.ReconstructionLayer<T> => input, // Identity during inference (reconstruction logic is training-specific)
+            Layers.RepParameterizationLayer<T> => input, // Identity during inference (reparameterization is training-specific)
+            Layers.LogVarianceLayer<T> logVarLayer => ConvertLogVarianceLayer(logVarLayer, input),
+            Layers.MeasurementLayer<T> => input, // Identity for standard inference (quantum measurement is context-specific)
             Layers.ResidualLayer<T> residualLayer => ConvertResidualLayer(residualLayer, input),
             Layers.HighwayLayer<T> => throw new NotSupportedException("HighwayLayer requires gating mechanism operations (element-wise multiply/add with learned gates) which are not yet implemented in TensorOperations"),
-            Layers.RecurrentLayer<T> => input, // Simplified: requires recurrent processing
-            Layers.LSTMLayer<T> => input, // Simplified: requires LSTM cell operations
-            Layers.GRULayer<T> => input, // Simplified: requires GRU cell operations
-            Layers.BidirectionalLayer<T> => input, // Simplified: requires bidirectional processing
-            Layers.AttentionLayer<T> => input, // Simplified: requires attention mechanism
-            Layers.SelfAttentionLayer<T> => input, // Simplified: requires self-attention mechanism
-            Layers.MultiHeadAttentionLayer<T> => input, // Simplified: requires multi-head attention
-            Layers.SqueezeAndExcitationLayer<T> => input, // Simplified: requires squeeze-excite ops
-            Layers.GatedLinearUnitLayer<T> => input, // Simplified: requires gating operations
-            Layers.TransformerEncoderLayer<T> => input, // Simplified: requires transformer encoder ops
-            Layers.TransformerDecoderLayer<T> => input, // Simplified: requires transformer decoder ops
-            Layers.ConvolutionalLayer<T> => input, // Simplified: requires convolution operation
-            Layers.DeconvolutionalLayer<T> => input, // Simplified: requires deconvolution/transpose convolution
-            Layers.DepthwiseSeparableConvolutionalLayer<T> => input, // Simplified: requires depthwise separable conv
-            Layers.SeparableConvolutionalLayer<T> => input, // Simplified: requires separable convolution
-            Layers.DilatedConvolutionalLayer<T> => input, // Simplified: requires dilated convolution
-            Layers.SubpixelConvolutionalLayer<T> => input, // Simplified: requires subpixel convolution
-            Layers.LocallyConnectedLayer<T> => input, // Simplified: requires locally connected ops
-            Layers.ConvLSTMLayer<T> => input, // Simplified: requires convolutional LSTM operations
-            Layers.MaxPoolingLayer<T> => input, // Simplified: requires max pooling operation
-            Layers.PoolingLayer<T> => input, // Simplified: requires pooling operations
-            Layers.EmbeddingLayer<T> => input, // Simplified: requires embedding lookup
-            Layers.PatchEmbeddingLayer<T> => input, // Simplified: requires patch embedding for vision transformers
-            Layers.AddLayer<T> => input, // Simplified: requires multi-input addition
-            Layers.MultiplyLayer<T> => input, // Simplified: requires multi-input multiplication
-            Layers.ConcatenateLayer<T> => input, // Simplified: requires multi-input concatenation
-            Layers.LambdaLayer<T> => input, // Simplified: custom function layer (cannot compile arbitrary functions)
-            Layers.CapsuleLayer<T> => input, // Simplified: requires dynamic routing and capsule operations
-            Layers.PrimaryCapsuleLayer<T> => input, // Simplified: requires capsule operations
-            Layers.DigitCapsuleLayer<T> => input, // Simplified: requires capsule operations
-            Layers.QuantumLayer<T> => input, // Simplified: quantum computing layer
-            Layers.SpikingLayer<T> => input, // Simplified: spiking neural network layer
-            Layers.RBFLayer<T> => input, // Simplified: requires radial basis function operations
-            Layers.RBMLayer<T> => input, // Simplified: restricted Boltzmann machine layer
-            Layers.SpatialTransformerLayer<T> => input, // Simplified: requires spatial transformation
-            Layers.SpatialPoolerLayer<T> => input, // Simplified: hierarchical temporal memory spatial pooler
-            Layers.TemporalMemoryLayer<T> => input, // Simplified: hierarchical temporal memory
-            Layers.ReservoirLayer<T> => input, // Simplified: reservoir computing/echo state networks
-            Layers.SynapticPlasticityLayer<T> => input, // Simplified: synaptic plasticity mechanisms
-            Layers.MemoryReadLayer<T> => input, // Simplified: neural Turing machine memory read
-            Layers.MemoryWriteLayer<T> => input, // Simplified: neural Turing machine memory write
-            Layers.ContinuumMemorySystemLayer<T> => input, // Simplified: continuum memory system
-            Layers.DecoderLayer<T> => input, // Simplified: decoder layer for autoencoders
-            Layers.ExpertLayer<T> => input, // Simplified: expert layer for mixture of experts
-            Layers.MixtureOfExpertsLayer<T> => input, // Simplified: mixture of experts layer
-            Layers.AnomalyDetectorLayer<T> => input, // Simplified: anomaly detection layer
-            Layers.ConditionalRandomFieldLayer<T> => input, // Simplified: conditional random field layer
-            Layers.GraphConvolutionalLayer<T> => input, // Simplified: graph convolutional network layer
+            Layers.RecurrentLayer<T> => throw new NotSupportedException("RecurrentLayer requires recurrent cell operations and sequence processing which are not yet implemented in TensorOperations"),
+            Layers.LSTMLayer<T> => throw new NotSupportedException("LSTMLayer requires LSTM cell operations (forget gate, input gate, output gate, cell state) which are not yet implemented in TensorOperations"),
+            Layers.GRULayer<T> => throw new NotSupportedException("GRULayer requires GRU cell operations (update gate, reset gate) which are not yet implemented in TensorOperations"),
+            Layers.BidirectionalLayer<T> => throw new NotSupportedException("BidirectionalLayer requires bidirectional sequence processing which is not yet implemented in TensorOperations"),
+            Layers.AttentionLayer<T> => throw new NotSupportedException("AttentionLayer requires attention mechanism operations (query-key similarity, softmax over sequence, weighted sum) which are not yet implemented in TensorOperations"),
+            Layers.SelfAttentionLayer<T> => throw new NotSupportedException("SelfAttentionLayer requires self-attention operations (Q/K/V projections, scaled dot-product attention) which are not yet implemented in TensorOperations"),
+            Layers.MultiHeadAttentionLayer<T> => throw new NotSupportedException("MultiHeadAttentionLayer requires multi-head attention operations (multiple parallel attention heads, concatenation, output projection) which are not yet implemented in TensorOperations"),
+            Layers.SqueezeAndExcitationLayer<T> => throw new NotSupportedException("SqueezeAndExcitationLayer requires global pooling, FC layers, and channel-wise scaling which are not yet implemented in TensorOperations"),
+            Layers.GatedLinearUnitLayer<T> => throw new NotSupportedException("GatedLinearUnitLayer requires gating operations (element-wise multiply with learned gates) which are not yet implemented in TensorOperations"),
+            Layers.TransformerEncoderLayer<T> => throw new NotSupportedException("TransformerEncoderLayer requires multi-head attention, layer normalization, and feed-forward networks which are not yet fully implemented in TensorOperations"),
+            Layers.TransformerDecoderLayer<T> => throw new NotSupportedException("TransformerDecoderLayer requires masked multi-head attention, cross-attention, and feed-forward networks which are not yet implemented in TensorOperations"),
+            Layers.ConvolutionalLayer<T> convLayer => ConvertConvolutionalLayer(convLayer, input),
+            Layers.DeconvolutionalLayer<T> deconvLayer => ConvertDeconvolutionalLayer(deconvLayer, input),
+            Layers.DepthwiseSeparableConvolutionalLayer<T> depthConvLayer => ConvertDepthwiseSeparableConvolutionalLayer(depthConvLayer, input),
+            Layers.SeparableConvolutionalLayer<T> => throw new NotSupportedException("SeparableConvolutionalLayer requires separable convolution operations which are not yet implemented in TensorOperations"),
+            Layers.DilatedConvolutionalLayer<T> dilatedConvLayer => ConvertDilatedConvolutionalLayer(dilatedConvLayer, input),
+            Layers.SubpixelConvolutionalLayer<T> subpixelConvLayer => ConvertSubpixelConvolutionalLayer(subpixelConvLayer, input),
+            Layers.LocallyConnectedLayer<T> localConnLayer => ConvertLocallyConnectedLayer(localConnLayer, input),
+            Layers.ConvLSTMLayer<T> => throw new NotSupportedException("ConvLSTMLayer requires convolutional LSTM cell operations which are not yet implemented in TensorOperations"),
+            Layers.MaxPoolingLayer<T> maxPoolLayer => ConvertMaxPoolingLayer(maxPoolLayer, input),
+            Layers.PoolingLayer<T> poolLayer => ConvertPoolingLayer(poolLayer, input),
+            Layers.EmbeddingLayer<T> => throw new NotSupportedException("EmbeddingLayer requires embedding lookup operation which is not yet implemented in TensorOperations"),
+            Layers.PatchEmbeddingLayer<T> => throw new NotSupportedException("PatchEmbeddingLayer requires patch extraction and embedding operations which are not yet implemented in TensorOperations"),
+            Layers.AddLayer<T> => throw new NotSupportedException("AddLayer requires multi-input graph architecture which is not yet supported in JIT compilation"),
+            Layers.MultiplyLayer<T> => throw new NotSupportedException("MultiplyLayer requires multi-input graph architecture which is not yet supported in JIT compilation"),
+            Layers.ConcatenateLayer<T> => throw new NotSupportedException("ConcatenateLayer requires multi-input graph architecture and concatenation operations which are not yet supported in JIT compilation"),
+            Layers.LambdaLayer<T> => throw new NotSupportedException("LambdaLayer uses arbitrary custom functions which cannot be statically compiled to computation graphs"),
+            Layers.CapsuleLayer<T> => throw new NotSupportedException("CapsuleLayer requires dynamic routing and capsule operations which are not yet implemented in TensorOperations"),
+            Layers.PrimaryCapsuleLayer<T> => throw new NotSupportedException("PrimaryCapsuleLayer requires capsule convolution and squashing operations which are not yet implemented in TensorOperations"),
+            Layers.DigitCapsuleLayer<T> => throw new NotSupportedException("DigitCapsuleLayer requires capsule routing and agreement operations which are not yet implemented in TensorOperations"),
+            Layers.QuantumLayer<T> => throw new NotSupportedException("QuantumLayer requires quantum circuit operations which are not yet implemented in TensorOperations"),
+            Layers.SpikingLayer<T> => throw new NotSupportedException("SpikingLayer requires spiking neuron dynamics and temporal coding which are not yet implemented in TensorOperations"),
+            Layers.RBFLayer<T> rbfLayer => ConvertRBFLayer(rbfLayer, input),
+            Layers.RBMLayer<T> => throw new NotSupportedException("RBMLayer requires restricted Boltzmann machine operations (contrastive divergence, energy computation) which are not yet implemented in TensorOperations"),
+            Layers.SpatialTransformerLayer<T> spatialTransformLayer => ConvertSpatialTransformerLayer(spatialTransformLayer, input),
+            Layers.SpatialPoolerLayer<T> => throw new NotSupportedException("SpatialPoolerLayer requires hierarchical temporal memory spatial pooling operations which are not yet implemented in TensorOperations"),
+            Layers.TemporalMemoryLayer<T> => throw new NotSupportedException("TemporalMemoryLayer requires hierarchical temporal memory operations which are not yet implemented in TensorOperations"),
+            Layers.ReservoirLayer<T> => throw new NotSupportedException("ReservoirLayer requires reservoir computing operations (echo state networks, fixed random weights) which are not yet implemented in TensorOperations"),
+            Layers.SynapticPlasticityLayer<T> => throw new NotSupportedException("SynapticPlasticityLayer requires synaptic plasticity mechanisms (STDP, etc.) which are not yet implemented in TensorOperations"),
+            Layers.MemoryReadLayer<T> => throw new NotSupportedException("MemoryReadLayer requires neural Turing machine memory read operations which are not yet implemented in TensorOperations"),
+            Layers.MemoryWriteLayer<T> => throw new NotSupportedException("MemoryWriteLayer requires neural Turing machine memory write operations which are not yet implemented in TensorOperations"),
+            Layers.ContinuumMemorySystemLayer<T> => throw new NotSupportedException("ContinuumMemorySystemLayer requires continuum memory system operations which are not yet implemented in TensorOperations"),
+            Layers.DecoderLayer<T> => throw new NotSupportedException("DecoderLayer requires autoencoder decoder operations which are not yet fully implemented in TensorOperations"),
+            Layers.ExpertLayer<T> => throw new NotSupportedException("ExpertLayer requires mixture of experts gating operations which are not yet implemented in TensorOperations"),
+            Layers.MixtureOfExpertsLayer<T> => throw new NotSupportedException("MixtureOfExpertsLayer requires mixture of experts routing and gating operations which are not yet implemented in TensorOperations"),
+            Layers.AnomalyDetectorLayer<T> => throw new NotSupportedException("AnomalyDetectorLayer requires anomaly detection operations which are not yet implemented in TensorOperations"),
+            Layers.ConditionalRandomFieldLayer<T> => throw new NotSupportedException("ConditionalRandomFieldLayer requires CRF operations (Viterbi decoding, forward-backward) which are not yet implemented in TensorOperations"),
+            Layers.GraphConvolutionalLayer<T> graphConvLayer => ConvertGraphConvolutionalLayer(graphConvLayer, input),
             Layers.BatchNormalizationLayer<T> bnLayer => ConvertBatchNormalizationLayer(bnLayer, input),
             Layers.LayerNormalizationLayer<T> lnLayer => ConvertLayerNormalizationLayer(lnLayer, input),
 
@@ -2812,6 +2812,373 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
         var output = TensorOperations.Add(input, innerOutput);
 
         return output;
+    }
+
+    /// <summary>
+    /// Converts a padding layer to computation graph.
+    /// </summary>
+    private ComputationNode<T> ConvertPaddingLayer(Layers.PaddingLayer<T> layer, ComputationNode<T> input)
+    {
+        // Get padding via reflection
+        var layerType = layer.GetType();
+        var paddingField = layerType.GetField("_padding", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
+        var padding = (int[])paddingField!.GetValue(layer)!;
+
+        return TensorOperations.Pad(input, padding);
+    }
+
+    /// <summary>
+    /// Converts a cropping layer to computation graph.
+    /// </summary>
+    private ComputationNode<T> ConvertCroppingLayer(Layers.CroppingLayer<T> layer, ComputationNode<T> input)
+    {
+        // Get cropping parameters via reflection
+        var layerType = layer.GetType();
+        var cropTopField = layerType.GetField("_cropTop", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
+        var cropBottomField = layerType.GetField("_cropBottom", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
+        var cropLeftField = layerType.GetField("_cropLeft", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
+        var cropRightField = layerType.GetField("_cropRight", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
+
+        var cropTop = (int[])cropTopField!.GetValue(layer)!;
+        var cropBottom = (int[])cropBottomField!.GetValue(layer)!;
+        var cropLeft = (int[])cropLeftField!.GetValue(layer)!;
+        var cropRight = (int[])cropRightField!.GetValue(layer)!;
+
+        // Combine into single cropping array for TensorOperations.Crop
+        // Crop expects [top, bottom, left, right] for spatial dimensions
+        var cropping = new int[] { cropTop[1], cropBottom[1], cropLeft[2], cropRight[2] };
+
+        return TensorOperations.Crop(input, cropping);
+    }
+
+    /// <summary>
+    /// Converts an upsampling layer to computation graph.
+    /// </summary>
+    private ComputationNode<T> ConvertUpsamplingLayer(Layers.UpsamplingLayer<T> layer, ComputationNode<T> input)
+    {
+        // Get scale factor via reflection
+        var layerType = layer.GetType();
+        var scaleFactorField = layerType.GetField("_scaleFactor", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
+        var scaleFactor = (int)scaleFactorField!.GetValue(layer)!;
+
+        return TensorOperations.Upsample(input, scaleFactor);
+    }
+
+    /// <summary>
+    /// Converts a time distributed layer to computation graph.
+    /// </summary>
+    private ComputationNode<T> ConvertTimeDistributedLayer(Layers.TimeDistributedLayer<T> layer, ComputationNode<T> input)
+    {
+        // Get inner layer via reflection
+        var layerType = layer.GetType();
+        var innerLayerField = layerType.GetField("_innerLayer", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
+        var innerLayer = (ILayer<T>)innerLayerField!.GetValue(layer)!;
+
+        // For now, apply inner layer directly (simplified - doesn't handle time dimension separately)
+        // Full implementation would require reshaping to process each time step independently
+        return ConvertLayerToGraph(innerLayer, input);
+    }
+
+    /// <summary>
+    /// Converts a global pooling layer to computation graph.
+    /// </summary>
+    private ComputationNode<T> ConvertGlobalPoolingLayer(Layers.GlobalPoolingLayer<T> layer, ComputationNode<T> input)
+    {
+        // Get pooling type via reflection
+        var layerType = layer.GetType();
+        var poolingTypeField = layerType.GetField("_poolingType", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
+        var poolingType = poolingTypeField!.GetValue(layer);
+
+        // Check pooling type using enum comparison
+        var poolingTypeEnum = poolingType!.GetType();
+        var poolingTypeName = Enum.GetName(poolingTypeEnum, poolingType);
+
+        if (poolingTypeName == "Max")
+        {
+            // Global max pooling: reduce max over spatial dimensions
+            return TensorOperations.ReduceMax(input, axes: new int[] { 2, 3 }, keepDims: false);
+        }
+        else // Average
+        {
+            // Global average pooling: reduce mean over spatial dimensions
+            return TensorOperations.ReduceMean(input, axes: new int[] { 2, 3 }, keepDims: false);
+        }
+    }
+
+    /// <summary>
+    /// Converts a mean layer to computation graph.
+    /// </summary>
+    private ComputationNode<T> ConvertMeanLayer(Layers.MeanLayer<T> layer, ComputationNode<T> input)
+    {
+        // Get axis via reflection or property
+        var axis = layer.Axis;
+
+        return TensorOperations.ReduceMean(input, axes: new int[] { axis }, keepDims: false);
+    }
+
+    /// <summary>
+    /// Converts a log variance layer to computation graph.
+    /// </summary>
+    private ComputationNode<T> ConvertLogVarianceLayer(Layers.LogVarianceLayer<T> layer, ComputationNode<T> input)
+    {
+        // Log variance layer computes log of variance
+        // Using the ReduceLogVariance operation
+        return TensorOperations.ReduceLogVariance(input, axes: null, keepDims: false);
+    }
+
+    /// <summary>
+    /// Converts a convolutional layer to computation graph.
+    /// </summary>
+    private ComputationNode<T> ConvertConvolutionalLayer(Layers.ConvolutionalLayer<T> layer, ComputationNode<T> input)
+    {
+        // Get parameters via reflection
+        var layerType = layer.GetType();
+        var kernelsField = layerType.GetField("_kernels", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
+        var biasesField = layerType.GetField("_biases", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
+        var strideField = layerType.GetField("_stride", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
+        var paddingField = layerType.GetField("_padding", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
+
+        var kernels = (Tensor<T>)kernelsField!.GetValue(layer)!;
+        var biases = (Tensor<T>)biasesField!.GetValue(layer)!;
+        var stride = (int)strideField!.GetValue(layer)!;
+        var padding = (int)paddingField!.GetValue(layer)!;
+
+        var kernelsNode = TensorOperations.Constant(kernels, "conv_kernels");
+        var biasesNode = TensorOperations.Constant(biases, "conv_biases");
+
+        return TensorOperations.Conv2D(input, kernelsNode, biasesNode, stride, padding);
+    }
+
+    /// <summary>
+    /// Converts a deconvolutional layer to computation graph.
+    /// </summary>
+    private ComputationNode<T> ConvertDeconvolutionalLayer(Layers.DeconvolutionalLayer<T> layer, ComputationNode<T> input)
+    {
+        // Get parameters via reflection
+        var layerType = layer.GetType();
+        var kernelsField = layerType.GetField("_kernels", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
+        var biasesField = layerType.GetField("_biases", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
+        var strideField = layerType.GetField("_stride", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
+        var paddingField = layerType.GetField("_padding", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
+
+        var kernels = (Tensor<T>)kernelsField!.GetValue(layer)!;
+        var biases = (Tensor<T>)biasesField!.GetValue(layer)!;
+        var stride = (int)strideField!.GetValue(layer)!;
+        var padding = (int)paddingField!.GetValue(layer)!;
+
+        var kernelsNode = TensorOperations.Constant(kernels, "deconv_kernels");
+        var biasesNode = TensorOperations.Constant(biases, "deconv_biases");
+
+        return TensorOperations.ConvTranspose2D(input, kernelsNode, biasesNode, stride, padding);
+    }
+
+    /// <summary>
+    /// Converts a depthwise separable convolutional layer to computation graph.
+    /// </summary>
+    private ComputationNode<T> ConvertDepthwiseSeparableConvolutionalLayer(Layers.DepthwiseSeparableConvolutionalLayer<T> layer, ComputationNode<T> input)
+    {
+        // Get parameters via reflection
+        var layerType = layer.GetType();
+        var depthwiseKernelsField = layerType.GetField("_depthwiseKernels", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
+        var pointwiseKernelsField = layerType.GetField("_pointwiseKernels", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
+        var biasesField = layerType.GetField("_biases", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
+        var strideField = layerType.GetField("_stride", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
+        var paddingField = layerType.GetField("_padding", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
+
+        var depthwiseKernels = (Tensor<T>)depthwiseKernelsField!.GetValue(layer)!;
+        var pointwiseKernels = (Tensor<T>)pointwiseKernelsField!.GetValue(layer)!;
+        var biases = (Tensor<T>)biasesField!.GetValue(layer)!;
+        var stride = (int)strideField!.GetValue(layer)!;
+        var padding = (int)paddingField!.GetValue(layer)!;
+
+        var depthwiseKernelsNode = TensorOperations.Constant(depthwiseKernels, "depthwise_kernels");
+        var pointwiseKernelsNode = TensorOperations.Constant(pointwiseKernels, "pointwise_kernels");
+        var biasesNode = TensorOperations.Constant(biases, "depthwise_sep_biases");
+
+        return TensorOperations.DepthwiseConv2D(input, depthwiseKernelsNode, pointwiseKernelsNode, biasesNode, stride, padding);
+    }
+
+    /// <summary>
+    /// Converts a dilated convolutional layer to computation graph.
+    /// </summary>
+    private ComputationNode<T> ConvertDilatedConvolutionalLayer(Layers.DilatedConvolutionalLayer<T> layer, ComputationNode<T> input)
+    {
+        // Get parameters via reflection
+        var layerType = layer.GetType();
+        var kernelsField = layerType.GetField("_kernels", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
+        var biasesField = layerType.GetField("_biases", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
+        var strideField = layerType.GetField("_stride", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
+        var paddingField = layerType.GetField("_padding", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
+        var dilationField = layerType.GetField("_dilation", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
+
+        var kernels = (Tensor<T>)kernelsField!.GetValue(layer)!;
+        var biases = (Tensor<T>)biasesField!.GetValue(layer)!;
+        var stride = (int)strideField!.GetValue(layer)!;
+        var padding = (int)paddingField!.GetValue(layer)!;
+        var dilation = (int)dilationField!.GetValue(layer)!;
+
+        var kernelsNode = TensorOperations.Constant(kernels, "dilated_conv_kernels");
+        var biasesNode = TensorOperations.Constant(biases, "dilated_conv_biases");
+
+        return TensorOperations.DilatedConv2D(input, kernelsNode, biasesNode, stride, padding, dilation);
+    }
+
+    /// <summary>
+    /// Converts a subpixel convolutional layer to computation graph.
+    /// </summary>
+    private ComputationNode<T> ConvertSubpixelConvolutionalLayer(Layers.SubpixelConvolutionalLayer<T> layer, ComputationNode<T> input)
+    {
+        // Get upscale factor via reflection
+        var layerType = layer.GetType();
+        var upscaleFactorField = layerType.GetField("_upscaleFactor", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
+        var upscaleFactor = (int)upscaleFactorField!.GetValue(layer)!;
+
+        // SubpixelConvolutionalLayer uses PixelShuffle (depth-to-space)
+        return TensorOperations.PixelShuffle(input, upscaleFactor);
+    }
+
+    /// <summary>
+    /// Converts a locally connected layer to computation graph.
+    /// </summary>
+    private ComputationNode<T> ConvertLocallyConnectedLayer(Layers.LocallyConnectedLayer<T> layer, ComputationNode<T> input)
+    {
+        // Get parameters via reflection
+        var layerType = layer.GetType();
+        var weightsField = layerType.GetField("_weights", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
+        var biasesField = layerType.GetField("_biases", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
+        var kernelSizeField = layerType.GetField("_kernelSize", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
+        var strideField = layerType.GetField("_stride", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
+
+        var weights = (Tensor<T>)weightsField!.GetValue(layer)!;
+        var biases = (Tensor<T>)biasesField!.GetValue(layer)!;
+        var kernelSize = (int)kernelSizeField!.GetValue(layer)!;
+        var stride = (int)strideField!.GetValue(layer)!;
+
+        var weightsNode = TensorOperations.Constant(weights, "locally_connected_weights");
+        var biasesNode = TensorOperations.Constant(biases, "locally_connected_biases");
+
+        return TensorOperations.LocallyConnectedConv2D(input, weightsNode, biasesNode, kernelSize, stride);
+    }
+
+    /// <summary>
+    /// Converts a max pooling layer to computation graph.
+    /// </summary>
+    private ComputationNode<T> ConvertMaxPoolingLayer(Layers.MaxPoolingLayer<T> layer, ComputationNode<T> input)
+    {
+        // Get parameters via reflection
+        var layerType = layer.GetType();
+        var poolSizeField = layerType.GetField("_poolSize", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
+        var strideField = layerType.GetField("_stride", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
+
+        var poolSize = (int)poolSizeField!.GetValue(layer)!;
+        var stride = (int)strideField!.GetValue(layer)!;
+
+        return TensorOperations.MaxPool2D(input, poolSize, stride);
+    }
+
+    /// <summary>
+    /// Converts a pooling layer to computation graph.
+    /// </summary>
+    private ComputationNode<T> ConvertPoolingLayer(Layers.PoolingLayer<T> layer, ComputationNode<T> input)
+    {
+        // Get parameters via reflection
+        var layerType = layer.GetType();
+        var poolSizeField = layerType.GetField("_poolSize", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
+        var strideField = layerType.GetField("_stride", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
+        var poolingTypeField = layerType.GetField("_poolingType", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
+
+        var poolSize = (int)poolSizeField!.GetValue(layer)!;
+        var stride = (int)strideField!.GetValue(layer)!;
+        var poolingType = poolingTypeField!.GetValue(layer);
+
+        // Check pooling type
+        var poolingTypeEnum = poolingType!.GetType();
+        var poolingTypeName = Enum.GetName(poolingTypeEnum, poolingType);
+
+        if (poolingTypeName == "Max")
+        {
+            return TensorOperations.MaxPool2D(input, poolSize, stride);
+        }
+        else // Average
+        {
+            return TensorOperations.AvgPool2D(input, poolSize, stride);
+        }
+    }
+
+    /// <summary>
+    /// Converts an RBF layer to computation graph.
+    /// </summary>
+    private ComputationNode<T> ConvertRBFLayer(Layers.RBFLayer<T> layer, ComputationNode<T> input)
+    {
+        // Get parameters via reflection
+        var layerType = layer.GetType();
+        var centersField = layerType.GetField("_centers", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
+        var sigmaField = layerType.GetField("_sigma", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
+
+        var centers = (Tensor<T>)centersField!.GetValue(layer)!;
+        var sigma = (T)sigmaField!.GetValue(layer)!;
+
+        var centersNode = TensorOperations.Constant(centers, "rbf_centers");
+
+        return TensorOperations.RBFKernel(input, centersNode, sigma);
+    }
+
+    /// <summary>
+    /// Converts a spatial transformer layer to computation graph.
+    /// </summary>
+    private ComputationNode<T> ConvertSpatialTransformerLayer(Layers.SpatialTransformerLayer<T> layer, ComputationNode<T> input)
+    {
+        // Get parameters via reflection
+        var layerType = layer.GetType();
+        var localizationNetworkField = layerType.GetField("_localizationNetwork", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
+
+        // Spatial transformer requires a localization network to predict transformation parameters
+        // For JIT compilation, we'll use a simplified approach with identity transform
+        // Full implementation would require converting the localization network and using its output
+
+        // Create identity affine matrix (simplified)
+        var outputSize = layer.GetOutputShape();
+        var batchSize = input.Value.Shape[0];
+        var height = outputSize[1];
+        var width = outputSize[2];
+
+        // Identity transformation
+        var theta = new Tensor<T>(new int[] { batchSize, 2, 3 });
+        for (int b = 0; b < batchSize; b++)
+        {
+            theta[b, 0, 0] = NumOps.FromDouble(1.0); // Scale x
+            theta[b, 0, 1] = NumOps.Zero;           // Shear
+            theta[b, 0, 2] = NumOps.Zero;           // Translate x
+            theta[b, 1, 0] = NumOps.Zero;           // Shear
+            theta[b, 1, 1] = NumOps.FromDouble(1.0); // Scale y
+            theta[b, 1, 2] = NumOps.Zero;           // Translate y
+        }
+
+        var thetaNode = TensorOperations.Constant(theta, "identity_transform");
+        var grid = TensorOperations.AffineGrid(thetaNode, height, width);
+        return TensorOperations.GridSample(input, grid);
+    }
+
+    /// <summary>
+    /// Converts a graph convolutional layer to computation graph.
+    /// </summary>
+    private ComputationNode<T> ConvertGraphConvolutionalLayer(Layers.GraphConvolutionalLayer<T> layer, ComputationNode<T> input)
+    {
+        // Get parameters via reflection
+        var layerType = layer.GetType();
+        var weightsField = layerType.GetField("_weights", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
+        var biasesField = layerType.GetField("_biases", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
+        var adjacencyMatrixField = layerType.GetField("_adjacencyMatrix", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
+
+        var weights = (Tensor<T>)weightsField!.GetValue(layer)!;
+        var biases = (Tensor<T>)biasesField!.GetValue(layer)!;
+        var adjacencyMatrix = (Tensor<T>)adjacencyMatrixField!.GetValue(layer)!;
+
+        var weightsNode = TensorOperations.Constant(weights, "graph_conv_weights");
+        var biasesNode = TensorOperations.Constant(biases, "graph_conv_biases");
+        var adjacencyNode = TensorOperations.Constant(adjacencyMatrix, "adjacency_matrix");
+
+        return TensorOperations.GraphConv(input, adjacencyNode, weightsNode, biasesNode);
     }
 
     #endregion
