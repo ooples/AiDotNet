@@ -170,6 +170,9 @@ public class ContradictionDetector<T> : IContradictionDetector<T>
     /// </summary>
     private bool HasObviousContradiction(string text1, string text2)
     {
+        if (string.IsNullOrWhiteSpace(text1) || string.IsNullOrWhiteSpace(text2))
+            return false;
+
         string lower1 = text1.ToLowerInvariant();
         string lower2 = text2.ToLowerInvariant();
 
@@ -187,8 +190,8 @@ public class ContradictionDetector<T> : IContradictionDetector<T>
 
         // Pattern 2: "X is not Y" vs "X is Y" (explicit negation)
         var isNotPattern = @"(\w+)\s+is\s+not\s+(\w+)";
-        match1 = Regex.Match(lower1, isPattern);
-        match2 = Regex.Match(lower2, isNotPattern);
+        match1 = Regex.Match(lower1, isNotPattern);
+        match2 = Regex.Match(lower2, isPattern);
         if (match1.Success && match2.Success &&
             match1.Groups[1].Value == match2.Groups[1].Value &&
             match1.Groups[2].Value == match2.Groups[2].Value)
@@ -292,6 +295,9 @@ Analyze:";
         }
 
         // Fallback: look for positive indicators
+        if (string.IsNullOrWhiteSpace(response))
+            return false;
+
         string lower = response.ToLowerInvariant();
         return lower.Contains("yes") ||
                lower.Contains("contradictory") ||
