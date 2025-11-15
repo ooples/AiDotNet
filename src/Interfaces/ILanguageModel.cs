@@ -137,7 +137,7 @@ public interface ILanguageModel<T>
     /// - Monitor token usage to control costs
     /// - Implement timeouts for long-running requests
     /// </remarks>
-    Task<string> GenerateAsync(string prompt);
+    Task<string> GenerateAsync(string prompt, CancellationToken cancellationToken = default);
 
     /// <summary>
     /// Generates a text response to the given prompt synchronously.

@@ -156,7 +156,7 @@ public class OpenAIChatModel<T> : ChatModelBase<T>
     }
 
     /// <inheritdoc/>
-    protected override async Task<string> GenerateAsyncCore(string prompt)
+    protected override async Task<string> GenerateAsyncCore(string prompt, CancellationToken cancellationToken)
     {
         // Build the request
         var requestPayload = new OpenAIRequest
@@ -187,8 +187,8 @@ public class OpenAIChatModel<T> : ChatModelBase<T>
         };
         request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", _apiKey);
 
-        // Make the API call
-        using var response = await HttpClient.SendAsync(request);
+        // Make the API call with cancellation support
+        using var response = await HttpClient.SendAsync(request, cancellationToken);
 
         // Check for errors
         if (!response.IsSuccessStatusCode)
