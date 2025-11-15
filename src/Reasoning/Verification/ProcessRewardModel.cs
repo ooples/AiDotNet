@@ -118,8 +118,8 @@ public class ProcessRewardModel<T> : IRewardModel<T>
                 PreviousSteps = chain.Steps.Take(i).Select(s => s.Content).ToList()
             };
 
-            // Use existing score if available and verified, otherwise calculate
-            if (step.IsVerified && !_numOps.Equals(step.Score, _numOps.Zero))
+            // Use existing score if verified (zero is a valid verified score)
+            if (step.IsVerified)
             {
                 stepRewards.Add(step.Score);
             }
