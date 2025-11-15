@@ -70,6 +70,8 @@ public class ModifiedPolicyIterationAgent<T> : ReinforcementLearningAgentBase<T>
             _model[stateKey][actionIndex] = new List<(string, T, T)>();
         }
 
+        // Store transition with count of 1 initially
+        // Probabilities will be normalized when computing expected values
         _model[stateKey][actionIndex].Add((nextStateKey, reward, NumOps.One));
     }
 
@@ -158,7 +160,11 @@ public class ModifiedPolicyIterationAgent<T> : ReinforcementLearningAgentBase<T>
 
         T expectedValue = NumOps.Zero;
 
-        foreach (var (nextStateKey, reward, probability) in _model[stateKey][action])
+        // Normalize probabilities by total count to prevent blow-up
+        var transitions = _model[stateKey][action];
+        T totalCount = NumOps.FromDouble(transitions.Count);
+
+        foreach (var (nextStateKey, reward, probability) in transitions)
         {
             T nextValue = NumOps.Zero;
             if (_valueTable.ContainsKey(nextStateKey))
@@ -166,8 +172,10 @@ public class ModifiedPolicyIterationAgent<T> : ReinforcementLearningAgentBase<T>
                 nextValue = _valueTable[nextStateKey];
             }
 
+            // Normalize probability: each transition gets weight 1/N
+            T normalizedProb = NumOps.Divide(probability, totalCount);
             T transitionValue = NumOps.Add(reward, NumOps.Multiply(DiscountFactor, nextValue));
-            expectedValue = NumOps.Add(expectedValue, NumOps.Multiply(probability, transitionValue));
+            expectedValue = NumOps.Add(expectedValue, NumOps.Multiply(normalizedProb, transitionValue));
         }
 
         return expectedValue;
