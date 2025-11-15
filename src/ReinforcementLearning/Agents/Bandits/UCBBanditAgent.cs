@@ -126,7 +126,22 @@ public class UCBBanditAgent<T> : ReinforcementLearningAgentBase<T>
     public override void Deserialize(byte[] data) => throw new NotImplementedException();
     public override Vector<T> GetParameters() => _qValues;
     public override void SetParameters(Vector<T> parameters) { for (int i = 0; i < _options.NumArms && i < parameters.Length; i++) _qValues[i] = parameters[i]; }
-    public override IFullModel<T, Vector<T>, Vector<T>> Clone() => new UCBBanditAgent<T>(_options);
+    public override IFullModel<T, Vector<T>, Vector<T>> Clone()
+    {
+        var clone = new UCBBanditAgent<T>(_options);
+
+        // Deep copy learned state to preserve training
+        clone._qValues = new Vector<T>(_options.NumArms);
+        clone._actionCounts = new Vector<int>(_options.NumArms);
+        for (int i = 0; i < _options.NumArms; i++)
+        {
+            clone._qValues[i] = _qValues[i];
+            clone._actionCounts[i] = _actionCounts[i];
+        }
+        clone._totalSteps = _totalSteps;
+
+        return clone;
+    }
     public override Vector<T> ComputeGradients(Vector<T> input, Vector<T> target, ILossFunction<T>? lossFunction = null) { var pred = Predict(input); var lf = lossFunction ?? LossFunction; var predMatrix = new Matrix<T>(new[] { pred }); var targetMatrix = new Matrix<T>(new[] { target }); var loss = lf.CalculateLoss(predMatrix.GetRow(0), targetMatrix.GetRow(0)); var grad = lf.CalculateDerivative(predMatrix.GetRow(0), targetMatrix.GetRow(0)); return grad; }
     public override void ApplyGradients(Vector<T> gradients, T learningRate) { }
     public override void SaveModel(string filepath) { var data = Serialize(); System.IO.File.WriteAllBytes(filepath, data); }
