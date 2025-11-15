@@ -1,6 +1,7 @@
 using AiDotNet.LinearAlgebra;
 using AiDotNet.Models;
 using AiDotNet.Models.Options;
+using Newtonsoft.Json;
 
 namespace AiDotNet.ReinforcementLearning.Agents.SARSA;
 
@@ -36,6 +37,7 @@ public class SARSAAgent<T> : ReinforcementLearningAgentBase<T>
     private SARSAOptions<T> _options;
     private Dictionary<string, Dictionary<int, T>> _qTable;
     private double _epsilon;
+    private Random _random;
 
     // Track last state-action for SARSA update
     private Vector<T>? _lastState;
@@ -52,6 +54,7 @@ public class SARSAAgent<T> : ReinforcementLearningAgentBase<T>
         _options = options;
         _qTable = new Dictionary<string, Dictionary<int, T>>();
         _epsilon = _options.EpsilonStart;
+        _random = new Random();
         _lastState = null;
         _lastAction = null;
     }
@@ -62,10 +65,10 @@ public class SARSAAgent<T> : ReinforcementLearningAgentBase<T>
 
         // Epsilon-greedy exploration
         int actionIndex;
-        if (training && Random.NextDouble() < _epsilon)
+        if (training && _random.NextDouble() < _epsilon)
         {
             // Random action
-            actionIndex = Random.Next(_options.ActionSize);
+            actionIndex = _random.Next(_options.ActionSize);
         }
         else
         {
@@ -191,12 +194,32 @@ public class SARSAAgent<T> : ReinforcementLearningAgentBase<T>
 
     public override byte[] Serialize()
     {
-        throw new NotImplementedException("SARSA serialization not yet implemented");
+        var state = new
+        {
+            QTable = _qTable,
+            Epsilon = _epsilon,
+            Options = _options
+        };
+        string json = JsonConvert.SerializeObject(state);
+        return System.Text.Encoding.UTF8.GetBytes(json);
     }
 
     public override void Deserialize(byte[] data)
     {
-        throw new NotImplementedException("SARSA deserialization not yet implemented");
+        if (data is null || data.Length == 0)
+        {
+            throw new ArgumentException("Serialized data cannot be null or empty", nameof(data));
+        }
+
+        string json = System.Text.Encoding.UTF8.GetString(data);
+        var state = JsonConvert.DeserializeObject<dynamic>(json);
+        if (state is null)
+        {
+            throw new InvalidOperationException("Deserialization returned null");
+        }
+
+        _qTable = JsonConvert.DeserializeObject<Dictionary<string, Dictionary<int, T>>>(state.QTable.ToString()) ?? new Dictionary<string, Dictionary<int, T>>();
+        _epsilon = state.Epsilon;
     }
 
     public override Vector<T> GetParameters()
@@ -240,7 +263,13 @@ public class SARSAAgent<T> : ReinforcementLearningAgentBase<T>
     public override IFullModel<T, Vector<T>, Vector<T>> Clone()
     {
         var clone = new SARSAAgent<T>(_options);
-        clone._qTable = new Dictionary<string, Dictionary<int, T>>(_qTable);
+
+        // Deep copy Q-table to avoid shared state
+        foreach (var kvp in _qTable)
+        {
+            clone._qTable[kvp.Key] = new Dictionary<int, T>(kvp.Value);
+        }
+
         clone._epsilon = _epsilon;
         return clone;
     }
@@ -260,12 +289,27 @@ public class SARSAAgent<T> : ReinforcementLearningAgentBase<T>
 
     public override void SaveModel(string filepath)
     {
+        if (string.IsNullOrWhiteSpace(filepath))
+        {
+            throw new ArgumentException("File path cannot be null or whitespace", nameof(filepath));
+        }
+
         var data = Serialize();
         System.IO.File.WriteAllBytes(filepath, data);
     }
 
     public override void LoadModel(string filepath)
     {
+        if (string.IsNullOrWhiteSpace(filepath))
+        {
+            throw new ArgumentException("File path cannot be null or whitespace", nameof(filepath));
+        }
+
+        if (!System.IO.File.Exists(filepath))
+        {
+            throw new System.IO.FileNotFoundException($"Model file not found: {filepath}", filepath);
+        }
+
         var data = System.IO.File.ReadAllBytes(filepath);
         Deserialize(data);
     }
