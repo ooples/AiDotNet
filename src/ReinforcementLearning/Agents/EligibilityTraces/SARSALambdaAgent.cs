@@ -130,8 +130,8 @@ public class SARSALambdaAgent<T> : ReinforcementLearningAgentBase<T>
     public override Dictionary<string, T> GetMetrics() => new Dictionary<string, T> { ["states_visited"] = NumOps.FromDouble(_qTable.Count), ["epsilon"] = NumOps.FromDouble(_epsilon) };
     public override void ResetEpisode() { _lastState = new Vector<T>(_options.StateSize); foreach (var s in _eligibilityTraces.Keys.ToList()) { for (int a = 0; a < _options.ActionSize; a++) _eligibilityTraces[s][a] = NumOps.Zero; } }
     public override Vector<T> Predict(Vector<T> input) => SelectAction(input, false);
-    public override Task<Vector<T>> PredictAsync(Vector<T> input) => Task.FromResult(Predict(input));
-    public override Task TrainAsync() { Train(); return Task.CompletedTask; }
+    public Task<Vector<T>> PredictAsync(Vector<T> input) => Task.FromResult(Predict(input));
+    public Task TrainAsync() { Train(); return Task.CompletedTask; }
     public override ModelMetadata<T> GetModelMetadata() => new ModelMetadata<T> { ModelType = Enums.ModelType.ReinforcementLearning, FeatureCount = this.FeatureCount, Complexity = ParameterCount };
     public override int ParameterCount => _qTable.Count * _options.ActionSize;
     public override int FeatureCount => _options.StateSize;

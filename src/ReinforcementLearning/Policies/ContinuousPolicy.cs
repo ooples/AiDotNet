@@ -124,7 +124,7 @@ namespace AiDotNet.ReinforcementLearning.Policies
             _explorationStrategy.Reset();
         }
 
-        public override void Dispose()
+        public new void Dispose()
         {
             // Cleanup if needed
         }
