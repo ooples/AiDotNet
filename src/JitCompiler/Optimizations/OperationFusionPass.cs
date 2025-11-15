@@ -40,7 +40,7 @@ namespace AiDotNet.JitCompiler.Optimizations;
 ///   t4 = ReLU(t3)
 ///
 /// After:
-///   t4 = FusedLinearReLU(input, weights, bias)
+///   t4 = FusedDenseLayer(input, weights, bias, activation="ReLU")
 ///
 /// This is ONE operation instead of THREE! Much faster and uses less memory.
 /// </para>
@@ -55,34 +55,50 @@ public class OperationFusionPass : IOptimizationPass
     /// <summary>
     /// Applies operation fusion optimization to an IR graph.
     /// </summary>
-    /// <param name="graph">The IR graph to optimize.</param>
-    /// <returns>An optimized IR graph with operations fused.</returns>
-    /// <remarks>
-    /// <para>
-    /// This method scans the graph for common fusion patterns and combines
-    /// matching sequences of operations into fused operations. It applies
-    /// multiple fusion rules in priority order.
-    /// </para>
-    /// <para><b>For Beginners:</b> This finds and combines operation sequences.
-    ///
-    /// The process:
-    /// 1. Scan through all operations looking for fusion patterns
-    /// 2. When a pattern is found (e.g., MatMul followed by Add):
-    ///    - Create a fused operation (e.g., Linear)
-    ///    - Remove the original operations
-    ///    - Update the graph connections
-    /// 3. Repeat for all fusion patterns
-    /// 4. Return the optimized graph
-    ///
-    /// We apply multiple passes to catch all opportunities:
-    /// - First pass might fuse MatMul + Add → Linear
-    /// - Second pass might fuse Linear + ReLU → LinearReLU
-    ///
-    /// This can result in dramatic performance improvements!
-    /// </para>
-    /// </remarks>
     public IRGraph Optimize(IRGraph graph)
     {
+        // Copy operations to working list
+        var operations = new List<IROp>(graph.Operations);
+        var fusedOps = new HashSet<IROp>();
+        var tensorMapping = new Dictionary<int, int>();
+
+        // Apply fusion patterns (multiple passes to catch chained fusions)
+        int fusionCount = 0;
+        bool changed = true;
+        int maxPasses = 5;
+        int passCount = 0;
+
+        while (changed && passCount < maxPasses)
+        {
+            changed = false;
+            int beforeCount = fusionCount;
+
+            // Pattern 1: MatMul + Add + Activation → FusedDenseLayer (3-op fusion first!)
+            fusionCount += FuseMatMulAddActivation(operations, fusedOps, tensorMapping);
+
+            // Pattern 2: MatMul + Add → FusedLinear
+            fusionCount += FuseMatMulAdd(operations, fusedOps, tensorMapping);
+
+            // Pattern 3: FusedLinear + Activation → FusedLinearActivation
+            fusionCount += FuseLinearActivation(operations, fusedOps, tensorMapping);
+
+            // Pattern 4: Add/Mul/etc + Activation → FusedElementwiseActivation
+            fusionCount += FuseElementwiseActivation(operations, fusedOps, tensorMapping);
+
+            // Pattern 5: Conv2D + BatchNorm → FusedConvBatchNorm
+            fusionCount += FuseConvBatchNorm(operations, fusedOps, tensorMapping);
+
+            // Pattern 6: Conv2D + Add (bias) → Conv2D with bias
+            fusionCount += FuseConv2DAdd(operations, fusedOps, tensorMapping);
+
+            // Pattern 7: Add (residual) + Activation → FusedResidualBlock
+            fusionCount += FuseResidualActivation(operations, fusedOps, tensorMapping);
+
+            changed = (fusionCount > beforeCount);
+            passCount++;
+        }
+
+        // Build optimized graph
         var optimizedGraph = new IRGraph
         {
             InputIds = new List<int>(graph.InputIds),
@@ -91,28 +107,7 @@ public class OperationFusionPass : IOptimizationPass
             Metadata = new Dictionary<string, object>(graph.Metadata)
         };
 
-        // Copy operations to working list
-        var operations = new List<IROp>(graph.Operations);
-
-        // Track which operations have been fused (and should be skipped)
-        var fusedOps = new HashSet<IROp>();
-
-        // Track tensor ID remapping (when operations are fused)
-        var tensorMapping = new Dictionary<int, int>();
-
-        // Apply fusion patterns
-        int fusionCount = 0;
-
-        // Pattern 1: MatMul + Add → Linear (matrix multiply + bias)
-        fusionCount += FuseMatMulAdd(operations, fusedOps, tensorMapping);
-
-        // Pattern 2: Add + Activation → FusedAddActivation
-        fusionCount += FuseElementwiseActivation(operations, fusedOps, tensorMapping);
-
-        // Pattern 3: Conv2D + Add (bias) → Conv2D with bias
-        fusionCount += FuseConv2DAdd(operations, fusedOps, tensorMapping);
-
-        // Build final operation list (excluding fused operations)
+        // Add non-fused operations
         foreach (var op in operations)
         {
             if (!fusedOps.Contains(op))
@@ -120,13 +115,12 @@ public class OperationFusionPass : IOptimizationPass
                 // Remap input tensor IDs if they were fused
                 var remappedInputs = op.InputIds.Select(id =>
                     tensorMapping.TryGetValue(id, out var newId) ? newId : id).ToArray();
-
                 op.InputIds = remappedInputs;
                 optimizedGraph.Operations.Add(op);
             }
         }
 
-        // Add metadata about fusion results
+        // Add metadata
         if (fusionCount > 0)
         {
             optimizedGraph.Metadata["Fusion_Count"] = fusionCount;
@@ -137,21 +131,6 @@ public class OperationFusionPass : IOptimizationPass
         return optimizedGraph;
     }
 
-    /// <summary>
-    /// Fuses MatMul + Add patterns into linear operations.
-    /// </summary>
-    /// <remarks>
-    /// <para><b>For Beginners:</b> Combines matrix multiply + bias addition.
-    ///
-    /// Pattern:
-    ///   t1 = MatMul(input, weights)
-    ///   t2 = Add(t1, bias)
-    /// Becomes:
-    ///   t2 = Linear(input, weights, bias)
-    ///
-    /// This is the fundamental operation of a neural network layer!
-    /// </para>
-    /// </remarks>
     private int FuseMatMulAdd(List<IROp> operations, HashSet<IROp> fusedOps, Dictionary<int, int> tensorMapping)
     {
         int count = 0;
@@ -159,47 +138,147 @@ public class OperationFusionPass : IOptimizationPass
         for (int i = 0; i < operations.Count - 1; i++)
         {
             if (fusedOps.Contains(operations[i])) continue;
+            if (operations[i] is not MatMulOp matmul) continue;
 
-            // Look for MatMul
-            if (operations[i] is MatMulOp matmul)
+            var matmulOutput = matmul.OutputId;
+
+            // Find Add using MatMul output
+            for (int j = i + 1; j < operations.Count; j++)
             {
-                // Check if output is only used by a single Add operation
-                var matmulOutput = matmul.OutputId;
+                if (fusedOps.Contains(operations[j])) continue;
+                if (operations[j] is not AddOp add) continue;
+                if (!add.InputIds.Contains(matmulOutput)) continue;
 
-                // Find potential Add operation that uses this MatMul output
-                for (int j = i + 1; j < operations.Count; j++)
+                // Check that MatMul output is only used by this Add (single consumer)
+                if (CountUsages(operations, matmulOutput, fusedOps) != 1) continue;
+
+                // Create fused operation
+                var fusedOp = new FusedLinearOp
                 {
-                    if (fusedOps.Contains(operations[j])) continue;
+                    OutputId = add.OutputId,
+                    InputIds = new[] { matmul.InputIds[0], matmul.InputIds[1], add.InputIds[0] == matmulOutput ? add.InputIds[1] : add.InputIds[0] },
+                    OutputType = add.OutputType,
+                    OutputShape = add.OutputShape
+                };
 
-                    if (operations[j] is AddOp add)
+                operations[i] = fusedOp;
+                fusedOps.Add(matmul);
+                fusedOps.Add(add);
+                tensorMapping[matmulOutput] = add.OutputId;
+                count++;
+                break;
+            }
+        }
+
+        return count;
+    }
+
+    private int FuseLinearActivation(List<IROp> operations, HashSet<IROp> fusedOps, Dictionary<int, int> tensorMapping)
+    {
+        int count = 0;
+
+        for (int i = 0; i < operations.Count - 1; i++)
+        {
+            if (fusedOps.Contains(operations[i])) continue;
+            if (operations[i] is not FusedLinearOp linear) continue;
+
+            var linearOutput = linear.OutputId;
+
+            // Find activation using Linear output
+            for (int j = i + 1; j < operations.Count; j++)
+            {
+                if (fusedOps.Contains(operations[j])) continue;
+
+                string? activationName = operations[j] switch
+                {
+                    ReLUOp => "ReLU",
+                    SigmoidOp => "Sigmoid",
+                    TanhOp => "Tanh",
+                    _ => null
+                };
+
+                if (activationName == null) continue;
+                if (operations[j].InputIds.Length != 1 || operations[j].InputIds[0] != linearOutput) continue;
+                if (CountUsages(operations, linearOutput, fusedOps) != 1) continue;
+
+                // Create fused operation
+                var fusedOp = new FusedLinearActivationOp
+                {
+                    OutputId = operations[j].OutputId,
+                    InputIds = linear.InputIds,
+                    OutputType = operations[j].OutputType,
+                    OutputShape = operations[j].OutputShape,
+                    ActivationName = activationName
+                };
+
+                operations[i] = fusedOp;
+                fusedOps.Add(linear);
+                fusedOps.Add(operations[j]);
+                tensorMapping[linearOutput] = operations[j].OutputId;
+                count++;
+                break;
+            }
+        }
+
+        return count;
+    }
+
+    private int FuseMatMulAddActivation(List<IROp> operations, HashSet<IROp> fusedOps, Dictionary<int, int> tensorMapping)
+    {
+        int count = 0;
+
+        for (int i = 0; i < operations.Count - 2; i++)
+        {
+            if (fusedOps.Contains(operations[i])) continue;
+            if (operations[i] is not MatMulOp matmul) continue;
+
+            var matmulOutput = matmul.OutputId;
+
+            // Find Add using MatMul output
+            for (int j = i + 1; j < operations.Count; j++)
+            {
+                if (fusedOps.Contains(operations[j])) continue;
+                if (operations[j] is not AddOp add) continue;
+                if (!add.InputIds.Contains(matmulOutput)) continue;
+                if (CountUsages(operations, matmulOutput, fusedOps) != 1) continue;
+
+                var addOutput = add.OutputId;
+
+                // Find activation using Add output
+                for (int k = j + 1; k < operations.Count; k++)
+                {
+                    if (fusedOps.Contains(operations[k])) continue;
+
+                    string? activationName = operations[k] switch
                     {
-                        // Check if this Add uses the MatMul output
-                        if (add.InputIds.Contains(matmulOutput))
-                        {
-                            // Found a fusion opportunity!
-                            // Note: In a full implementation, we'd create a specialized
-                            // FusedLinearOp here. For now, we'll mark it for metadata
-                            // but keep the operations separate.
+                        ReLUOp => "ReLU",
+                        SigmoidOp => "Sigmoid",
+                        TanhOp => "Tanh",
+                        _ => null
+                    };
 
-                            // Mark both operations as part of a fusion candidate
-                            count++;
+                    if (activationName == null) continue;
+                    if (operations[k].InputIds.Length != 1 || operations[k].InputIds[0] != addOutput) continue;
+                    if (CountUsages(operations, addOutput, fusedOps) != 1) continue;
 
-                            // In full implementation:
-                            // var fusedOp = new FusedLinearOp
-                            // {
-                            //     OutputId = add.OutputId,
-                            //     InputIds = new[] { matmul.InputIds[0], matmul.InputIds[1], add.InputIds[1] },
-                            //     OutputType = add.OutputType,
-                            //     OutputShape = add.OutputShape
-                            // };
-                            // operations[i] = fusedOp;
-                            // fusedOps.Add(matmul);
-                            // fusedOps.Add(add);
-                            // tensorMapping[matmulOutput] = add.OutputId;
+                    // Create fused 3-operation operation!
+                    var fusedOp = new FusedDenseLayerOp
+                    {
+                        OutputId = operations[k].OutputId,
+                        InputIds = new[] { matmul.InputIds[0], matmul.InputIds[1], add.InputIds[0] == matmulOutput ? add.InputIds[1] : add.InputIds[0] },
+                        OutputType = operations[k].OutputType,
+                        OutputShape = operations[k].OutputShape,
+                        ActivationName = activationName
+                    };
 
-                            break; // Move to next MatMul
-                        }
-                    }
+                    operations[i] = fusedOp;
+                    fusedOps.Add(matmul);
+                    fusedOps.Add(add);
+                    fusedOps.Add(operations[k]);
+                    tensorMapping[matmulOutput] = operations[k].OutputId;
+                    tensorMapping[addOutput] = operations[k].OutputId;
+                    count++;
+                    break;
                 }
             }
         }
@@ -207,19 +286,6 @@ public class OperationFusionPass : IOptimizationPass
         return count;
     }
 
-    /// <summary>
-    /// Fuses element-wise operations with activations.
-    /// </summary>
-    /// <remarks>
-    /// <para><b>For Beginners:</b> Combines element-wise ops with activation functions.
-    ///
-    /// Patterns:
-    ///   t1 = Add(a, b); t2 = ReLU(t1) → FusedAddReLU(a, b)
-    ///   t1 = Mul(a, b); t2 = Sigmoid(t1) → FusedMulSigmoid(a, b)
-    ///
-    /// Eliminates the need to store intermediate results!
-    /// </para>
-    /// </remarks>
     private int FuseElementwiseActivation(List<IROp> operations, HashSet<IROp> fusedOps, Dictionary<int, int> tensorMapping)
     {
         int count = 0;
@@ -228,57 +294,104 @@ public class OperationFusionPass : IOptimizationPass
         {
             if (fusedOps.Contains(operations[i])) continue;
 
-            // Look for element-wise operations
-            bool isElementwise = operations[i] is AddOp or SubtractOp or ElementwiseMultiplyOp or DivideOp;
-
-            if (isElementwise)
+            string? elementwiseOp = operations[i] switch
             {
-                var elementwiseOp = operations[i];
-                var elementwiseOutput = elementwiseOp.OutputId;
+                AddOp => "Add",
+                SubtractOp => "Subtract",
+                ElementwiseMultiplyOp => "Multiply",
+                DivideOp => "Divide",
+                _ => null
+            };
 
-                // Find potential activation that uses this output
-                for (int j = i + 1; j < operations.Count; j++)
+            if (elementwiseOp == null) continue;
+            if (operations[i].InputIds.Length != 2) continue;
+
+            var elemwiseOutput = operations[i].OutputId;
+
+            // Find activation
+            for (int j = i + 1; j < operations.Count; j++)
+            {
+                if (fusedOps.Contains(operations[j])) continue;
+
+                string? activationName = operations[j] switch
                 {
-                    if (fusedOps.Contains(operations[j])) continue;
+                    ReLUOp => "ReLU",
+                    SigmoidOp => "Sigmoid",
+                    TanhOp => "Tanh",
+                    _ => null
+                };
 
-                    bool isActivation = operations[j] is ReLUOp or SigmoidOp or TanhOp;
+                if (activationName == null) continue;
+                if (operations[j].InputIds.Length != 1 || operations[j].InputIds[0] != elemwiseOutput) continue;
+                if (CountUsages(operations, elemwiseOutput, fusedOps) != 1) continue;
 
-                    if (isActivation)
-                    {
-                        var activation = operations[j];
+                // Create fused operation
+                var fusedOp = new FusedElementwiseActivationOp
+                {
+                    OutputId = operations[j].OutputId,
+                    InputIds = operations[i].InputIds,
+                    OutputType = operations[j].OutputType,
+                    OutputShape = operations[j].OutputShape,
+                    ElementwiseOp = elementwiseOp,
+                    ActivationName = activationName
+                };
 
-                        // Check if activation uses elementwise output
-                        if (activation.InputIds.Length == 1 && activation.InputIds[0] == elementwiseOutput)
-                        {
-                            // Found fusion opportunity!
-                            count++;
-
-                            // In full implementation, create fused operation
-                            break;
-                        }
-                    }
-                }
+                operations[i] = fusedOp;
+                fusedOps.Add(operations[i]);
+                fusedOps.Add(operations[j]);
+                tensorMapping[elemwiseOutput] = operations[j].OutputId;
+                count++;
+                break;
             }
         }
 
         return count;
     }
 
-    /// <summary>
-    /// Fuses Conv2D + Add patterns into convolution with bias.
-    /// </summary>
-    /// <remarks>
-    /// <para><b>For Beginners:</b> Combines convolution with bias addition.
-    ///
-    /// Pattern:
-    ///   t1 = Conv2D(input, kernel)
-    ///   t2 = Add(t1, bias)
-    /// Becomes:
-    ///   t2 = Conv2D(input, kernel, bias)
-    ///
-    /// Convolution often needs a bias term, this fuses it for efficiency.
-    /// </para>
-    /// </remarks>
+    private int FuseConvBatchNorm(List<IROp> operations, HashSet<IROp> fusedOps, Dictionary<int, int> tensorMapping)
+    {
+        int count = 0;
+
+        for (int i = 0; i < operations.Count - 1; i++)
+        {
+            if (fusedOps.Contains(operations[i])) continue;
+            if (operations[i] is not Conv2DOp conv) continue;
+
+            var convOutput = conv.OutputId;
+
+            // Find BatchNorm using Conv output
+            for (int j = i + 1; j < operations.Count; j++)
+            {
+                if (fusedOps.Contains(operations[j])) continue;
+                if (operations[j] is not BatchNormOp bn) continue;
+                if (bn.InputIds.Length < 1 || bn.InputIds[0] != convOutput) continue;
+                if (CountUsages(operations, convOutput, fusedOps) != 1) continue;
+
+                // Create fused operation
+                var fusedOp = new FusedConvBatchNormOp
+                {
+                    OutputId = bn.OutputId,
+                    InputIds = new[] { conv.InputIds[0], conv.InputIds[1], bn.InputIds[1], bn.InputIds[2], bn.InputIds[3], bn.InputIds[4] },
+                    OutputType = bn.OutputType,
+                    OutputShape = bn.OutputShape,
+                    Stride = conv.Stride,
+                    Padding = conv.Padding,
+                    Epsilon = bn.Epsilon,
+                    Momentum = bn.Momentum
+                };
+
+                operations[i] = fusedOp;
+                fusedOps.Add(conv);
+                fusedOps.Add(bn);
+                tensorMapping[convOutput] = bn.OutputId;
+                count++;
+                break;
+            }
+        }
+
+        return count;
+    }
+
     private int FuseConv2DAdd(List<IROp> operations, HashSet<IROp> fusedOps, Dictionary<int, int> tensorMapping)
     {
         int count = 0;
@@ -286,37 +399,85 @@ public class OperationFusionPass : IOptimizationPass
         for (int i = 0; i < operations.Count - 1; i++)
         {
             if (fusedOps.Contains(operations[i])) continue;
+            if (operations[i] is not Conv2DOp conv) continue;
+            if (conv.HasBias) continue;
 
-            if (operations[i] is Conv2DOp conv)
+            var convOutput = conv.OutputId;
+
+            // Find Add using Conv output
+            for (int j = i + 1; j < operations.Count; j++)
             {
-                // Skip if already has bias
-                if (conv.HasBias) continue;
+                if (fusedOps.Contains(operations[j])) continue;
+                if (operations[j] is not AddOp add) continue;
+                if (!add.InputIds.Contains(convOutput)) continue;
+                if (CountUsages(operations, convOutput, fusedOps) != 1) continue;
 
-                var convOutput = conv.OutputId;
+                // Modify conv to include bias
+                conv.HasBias = true;
+                conv.InputIds = new[] { conv.InputIds[0], conv.InputIds[1], add.InputIds[0] == convOutput ? add.InputIds[1] : add.InputIds[0] };
+                conv.OutputId = add.OutputId;
+                conv.OutputShape = add.OutputShape;
 
-                // Find potential Add operation
-                for (int j = i + 1; j < operations.Count; j++)
+                fusedOps.Add(add);
+                tensorMapping[convOutput] = add.OutputId;
+                count++;
+                break;
+            }
+        }
+
+        return count;
+    }
+
+    private int FuseResidualActivation(List<IROp> operations, HashSet<IROp> fusedOps, Dictionary<int, int> tensorMapping)
+    {
+        int count = 0;
+
+        for (int i = 0; i < operations.Count - 1; i++)
+        {
+            if (fusedOps.Contains(operations[i])) continue;
+            if (operations[i] is not AddOp add) continue;
+
+            var addOutput = add.OutputId;
+
+            // Find activation using Add output
+            for (int j = i + 1; j < operations.Count; j++)
+            {
+                if (fusedOps.Contains(operations[j])) continue;
+
+                string? activationName = operations[j] switch
                 {
-                    if (fusedOps.Contains(operations[j])) continue;
+                    ReLUOp => "ReLU",
+                    SigmoidOp => "Sigmoid",
+                    TanhOp => "Tanh",
+                    _ => null
+                };
 
-                    if (operations[j] is AddOp add)
-                    {
-                        if (add.InputIds.Contains(convOutput))
-                        {
-                            // Found fusion opportunity!
-                            count++;
+                if (activationName == null) continue;
+                if (operations[j].InputIds.Length != 1 || operations[j].InputIds[0] != addOutput) continue;
+                if (CountUsages(operations, addOutput, fusedOps) != 1) continue;
 
-                            // In full implementation:
-                            // conv.HasBias = true;
-                            // conv.InputIds = new[] { conv.InputIds[0], conv.InputIds[1], add.InputIds[1] };
-                            // conv.OutputId = add.OutputId;
-                            // fusedOps.Add(add);
-                            // tensorMapping[convOutput] = add.OutputId;
+                // Check if this looks like a residual connection
+                // (both inputs to Add should come from different operations)
+                bool looksLikeResidual = add.InputIds[0] != add.InputIds[1];
 
-                            break;
-                        }
-                    }
-                }
+                if (!looksLikeResidual) continue;
+
+                // Create fused residual block
+                var fusedOp = new FusedResidualBlockOp
+                {
+                    OutputId = operations[j].OutputId,
+                    InputIds = add.InputIds,
+                    OutputType = operations[j].OutputType,
+                    OutputShape = operations[j].OutputShape,
+                    ActivationName = activationName
+                };
+
+                operations[i] = fusedOp;
+                fusedOps.Add(add);
+                fusedOps.Add(operations[j]);
+                tensorMapping[addOutput] = operations[j].OutputId;
+                count++;
+                break;
             }
         }
 
@@ -324,21 +485,22 @@ public class OperationFusionPass : IOptimizationPass
     }
 
     /// <summary>
+    /// Counts how many operations use a given tensor as input.
+    /// </summary>
+    private int CountUsages(List<IROp> operations, int tensorId, HashSet<IROp> fusedOps)
+    {
+        int count = 0;
+        foreach (var op in operations)
+        {
+            if (fusedOps.Contains(op)) continue;
+            if (op.InputIds.Contains(tensorId)) count++;
+        }
+        return count;
+    }
+
+    /// <summary>
     /// Identifies fusion opportunities in a graph without applying them (for analysis).
     /// </summary>
-    /// <param name="graph">The IR graph to analyze.</param>
-    /// <returns>A list of identified fusion patterns.</returns>
-    /// <remarks>
-    /// <para><b>For Beginners:</b> Finds fusion opportunities without actually fusing.
-    ///
-    /// Use this to:
-    /// - Analyze potential optimizations
-    /// - Debug fusion patterns
-    /// - Generate reports on optimization opportunities
-    ///
-    /// Returns descriptions of fusion patterns found in the graph.
-    /// </para>
-    /// </remarks>
     public List<string> IdentifyFusionOpportunities(IRGraph graph)
     {
         var opportunities = new List<string>();
@@ -363,6 +525,10 @@ public class OperationFusionPass : IOptimizationPass
                     else if (op1 is Conv2DOp && op2 is AddOp)
                     {
                         opportunities.Add($"Conv2D+Add fusion: t{op1.OutputId} → t{op2.OutputId}");
+                    }
+                    else if (op1 is Conv2DOp && op2 is BatchNormOp)
+                    {
+                        opportunities.Add($"Conv2D+BatchNorm fusion: t{op1.OutputId} → t{op2.OutputId}");
                     }
                     else if ((op1 is AddOp or SubtractOp or ElementwiseMultiplyOp) &&
                              (op2 is ReLUOp or SigmoidOp or TanhOp))
