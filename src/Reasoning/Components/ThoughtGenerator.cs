@@ -77,7 +77,7 @@ public class ThoughtGenerator<T> : IThoughtGenerator<T>
                 Thought = thought.Trim(),
                 Parent = currentNode,
                 Depth = currentNode.Depth + 1,
-                EvaluationScore = default!, // Will be set by evaluator
+                // EvaluationScore initialized by constructor, will be set by evaluator
                 IsVisited = false
             };
 

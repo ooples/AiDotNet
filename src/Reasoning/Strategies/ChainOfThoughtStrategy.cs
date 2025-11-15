@@ -151,14 +151,7 @@ public class ChainOfThoughtStrategy<T> : ReasoningStrategyBase<T>
         chain.CompletedAt = DateTime.UtcNow;
 
         // Step 5: Calculate overall score
-        if (chain.Steps.Count > 0)
-        {
-            chain.OverallScore = chain.GetAverageScore();
-        }
-        else
-        {
-            chain.OverallScore = default!;
-        }
+        chain.OverallScore = chain.GetAverageScore();
 
         // Step 6: Build result
         result.FinalAnswer = finalAnswer;

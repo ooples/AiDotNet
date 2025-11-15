@@ -154,7 +154,7 @@ public class SelfRefinementEngine<T> : ISelfRefinementEngine<T>
 
         refinedChain.FinalAnswer = chain.FinalAnswer;
         refinedChain.CompletedAt = DateTime.UtcNow;
-        refinedChain.OverallScore = refinedChain.Steps.Count > 0 ? refinedChain.GetAverageScore() : default!;
+        refinedChain.OverallScore = refinedChain.GetAverageScore();
 
         return refinedChain;
     }
