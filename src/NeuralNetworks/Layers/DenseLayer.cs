@@ -765,9 +765,73 @@ public class DenseLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     /// </remarks>
     public override Tensor<T> Backward(Tensor<T> outputGradient)
     {
+        // Try GPU backward if available and not using autodiff
+        if (!UseAutodiff && IsGpuAccelerationAvailable && typeof(T) == typeof(float))
+        {
+            return BackwardGpu(outputGradient);
+        }
+
         return UseAutodiff
             ? BackwardViaAutodiff(outputGradient)
             : BackwardManual(outputGradient);
+    }
+
+    /// <summary>
+    /// GPU-accelerated backward pass implementation.
+    /// </summary>
+    private Tensor<T> BackwardGpu(Tensor<T> outputGradient)
+    {
+        var backend = GpuContext!.GpuBackend as Gpu.IlgpuBackend<float>;
+        if (backend == null || _lastInput == null)
+            return BackwardManual(outputGradient);
+
+        int batchSize = _lastInput.Shape[0];
+        var flattenedInput = _lastInput.Reshape(batchSize, _lastInput.Shape[1]);
+
+        var gradFloat = outputGradient as Tensor<float>;
+        var inputFloat = flattenedInput as Tensor<float>;
+        var weightsFloat = MatrixToTensor(_weights) as Tensor<float>;
+
+        if (gradFloat == null || inputFloat == null || weightsFloat == null)
+            return BackwardManual(outputGradient);
+
+        bool useGpu = GpuContext.ShouldUseGpu(gradFloat) || GpuContext.ShouldUseGpu(inputFloat);
+
+        if (useGpu)
+        {
+            GpuContext.Statistics.IncrementGpuOperations();
+
+            // Transfer to GPU
+            using var gpuGrad = backend.ToGpu(gradFloat);
+            using var gpuInput = backend.ToGpu(inputFloat);
+            using var gpuWeights = backend.ToGpu(weightsFloat);
+
+            // Weight gradient: grad^T @ input = [outputSize, batchSize] @ [batchSize, inputSize]
+            using var gpuGradTransposed = backend.Transpose(gpuGrad);  // [batchSize, outputSize] -> [outputSize, batchSize]
+            using var gpuWeightGrad = backend.MatMul(gpuGradTransposed, gpuInput);  // [outputSize, inputSize]
+
+            // Bias gradient: sum over batch dimension
+            using var gpuBiasGrad = backend.Sum(gpuGrad);  // Sum all, then we'll reshape
+
+            // Input gradient: grad @ weights = [batchSize, outputSize] @ [outputSize, inputSize]
+            using var gpuInputGrad = backend.MatMul(gpuGrad, gpuWeights);
+
+            // Transfer back
+            var weightGradCpu = backend.ToCpu(gpuWeightGrad);
+            var biasGradCpu = backend.ToCpu(gpuBiasGrad);
+            var inputGradCpu = backend.ToCpu(gpuInputGrad);
+
+            // Store gradients
+            _weightsGradient = TensorToMatrix(weightGradCpu);
+            _biasesGradient = TensorToVector(biasGradCpu);
+
+            return inputGradCpu.Reshape(_lastInput.Shape) as Tensor<T> ?? outputGradient;
+        }
+        else
+        {
+            GpuContext.Statistics.IncrementCpuOperations();
+            return BackwardManual(outputGradient);
+        }
     }
 
     /// <summary>

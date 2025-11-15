@@ -360,6 +360,16 @@ public class FullyConnectedLayer<T> : LayerBase<T>
     public override Tensor<T> Forward(Tensor<T> input)
     {
         _lastInput = input;
+
+        // Try GPU acceleration if available
+        if (IsGpuAccelerationAvailable && typeof(T) == typeof(float))
+        {
+            var result = ForwardGpu(input);
+            _lastOutput = result;
+            return result;
+        }
+
+        // CPU implementation
         int batchSize = input.Shape[0];
         int inputSize = input.Shape[1];
         int outputSize = _weights.Rows;
@@ -385,6 +395,93 @@ public class FullyConnectedLayer<T> : LayerBase<T>
 
         _lastOutput = output;
         return output;
+    }
+
+    private Tensor<T> ForwardGpu(Tensor<T> input)
+    {
+        var backend = GpuContext!.GpuBackend as Gpu.IlgpuBackend<float>;
+        if (backend == null) return Forward(input);
+
+        int batchSize = input.Shape[0];
+        var inputFloat = input as Tensor<float>;
+        var weightsFloat = MatrixToTensor(_weights) as Tensor<float>;
+        var biasesFloat = VectorToTensor(_biases) as Tensor<float>;
+
+        if (inputFloat == null || weightsFloat == null || biasesFloat == null)
+            return Forward(input);
+
+        bool useGpu = GpuContext.ShouldUseGpu(inputFloat) || GpuContext.ShouldUseGpu(weightsFloat);
+
+        Tensor<float> result;
+
+        if (useGpu)
+        {
+            GpuContext.Statistics.IncrementGpuOperations();
+
+            using var gpuInput = backend.ToGpu(inputFloat);
+            using var gpuWeights = backend.ToGpu(weightsFloat);
+            using var gpuBiases = backend.ToGpu(biasesFloat);
+            using var gpuWeightsTransposed = backend.Transpose(gpuWeights);
+            using var gpuMatMul = backend.MatMul(gpuInput, gpuWeightsTransposed);
+            using var gpuLinear = backend.Add(gpuMatMul, gpuBiases);
+            using var gpuActivated = ApplyActivationGpu(gpuLinear, backend);
+
+            result = backend.ToCpu(gpuActivated);
+        }
+        else
+        {
+            GpuContext.Statistics.IncrementCpuOperations();
+            return Forward(input);
+        }
+
+        return result as Tensor<T> ?? input;
+    }
+
+    private Gpu.GpuTensor<float> ApplyActivationGpu(Gpu.GpuTensor<float> input, Gpu.IlgpuBackend<float> backend)
+    {
+        if (ScalarActivation is ReLUActivation<float>)
+            return backend.ReLU(input);
+        else if (ScalarActivation is SigmoidActivation<float>)
+            return backend.Sigmoid(input);
+        else if (ScalarActivation is TanhActivation<float>)
+            return backend.Tanh(input);
+        else if (ScalarActivation is LeakyReLUActivation<float> leakyRelu)
+            return backend.LeakyReLU(input, leakyRelu.Alpha);
+        else if (ScalarActivation is ELUActivation<float> elu)
+            return backend.ELU(input, elu.Alpha);
+        else if (ScalarActivation is GELUActivation<float>)
+            return backend.GELU(input);
+        else if (ScalarActivation is SwishActivation<float>)
+            return backend.Swish(input);
+        else
+        {
+            var cpuTensor = backend.ToCpu(input);
+            var activated = ApplyActivation(cpuTensor as Tensor<T>!) as Tensor<float>;
+            return backend.ToGpu(activated!);
+        }
+    }
+
+    private Tensor<float> MatrixToTensor(Matrix<T> matrix)
+    {
+        var tensor = new Tensor<float>(new[] { matrix.Rows, matrix.Columns });
+        for (int i = 0; i < matrix.Rows; i++)
+        {
+            for (int j = 0; j < matrix.Columns; j++)
+            {
+                tensor[i, j] = NumOps.ToFloat(matrix[i, j]);
+            }
+        }
+        return tensor;
+    }
+
+    private Tensor<float> VectorToTensor(Vector<T> vector)
+    {
+        var tensor = new Tensor<float>(new[] { vector.Length });
+        for (int i = 0; i < vector.Length; i++)
+        {
+            tensor[i] = NumOps.ToFloat(vector[i]);
+        }
+        return tensor;
     }
 
     /// <summary>
