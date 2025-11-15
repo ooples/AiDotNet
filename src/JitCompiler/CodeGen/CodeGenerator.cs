@@ -249,6 +249,20 @@ public class CodeGenerator
             LayerNormOp layerNormOp => GenerateLayerNormOp<T>(inputVars, layerNormOp),
             BatchNormOp batchNormOp => GenerateBatchNormOp<T>(inputVars, batchNormOp),
 
+            // Backward operations (gradient computation)
+            Operations.GradAccumulateOp => GenerateGradAccumulateOp<T>(inputVars),
+            Operations.GradAddOp gradAddOp => GenerateGradAddOp<T>(inputVars, gradAddOp.InputIndex),
+            Operations.GradSubtractOp gradSubtractOp => GenerateGradSubtractOp<T>(inputVars, gradSubtractOp.InputIndex),
+            Operations.GradElementwiseMultiplyOp gradMulOp => GenerateGradElementwiseMultiplyOp<T>(inputVars, gradMulOp.InputIndex),
+            Operations.GradMatMulLeftOp => GenerateGradMatMulLeftOp<T>(inputVars),
+            Operations.GradMatMulRightOp => GenerateGradMatMulRightOp<T>(inputVars),
+            Operations.GradReLUOp => GenerateGradReLUOp<T>(inputVars),
+            Operations.GradSigmoidOp => GenerateGradSigmoidOp<T>(inputVars),
+            Operations.GradTanhOp => GenerateGradTanhOp<T>(inputVars),
+            Operations.GradExpOp => GenerateGradExpOp<T>(inputVars),
+            Operations.GradLogOp => GenerateGradLogOp<T>(inputVars),
+            Operations.GradSoftmaxOp gradSoftmaxOp => GenerateGradSoftmaxOp<T>(inputVars, gradSoftmaxOp.Axis),
+
             _ => throw new NotImplementedException($"Code generation for {op.OpType} not yet implemented")
         };
 
@@ -436,5 +450,116 @@ public class CodeGenerator
         }
 
         return method;
+    }
+
+    // ========== Backward Operation Code Generators ==========
+
+    /// <summary>
+    /// Generates code for gradient accumulation operation.
+    /// </summary>
+    private Expression GenerateGradAccumulateOp<T>(ParameterExpression[] inputs)
+    {
+        var method = typeof(GradientOps).GetMethod("AccumulateGrad")!.MakeGenericMethod(typeof(T));
+        var inputArray = Expression.NewArrayInit(typeof(Tensor<T>), inputs);
+        return Expression.Call(method, inputArray);
+    }
+
+    /// <summary>
+    /// Generates code for GradAdd operation.
+    /// </summary>
+    private Expression GenerateGradAddOp<T>(ParameterExpression[] inputs, int inputIndex)
+    {
+        var method = typeof(GradientOps).GetMethod("GradAdd")!.MakeGenericMethod(typeof(T));
+        return Expression.Call(method, inputs[0], Expression.Constant(inputIndex));
+    }
+
+    /// <summary>
+    /// Generates code for GradSubtract operation.
+    /// </summary>
+    private Expression GenerateGradSubtractOp<T>(ParameterExpression[] inputs, int inputIndex)
+    {
+        var method = typeof(GradientOps).GetMethod("GradSubtract")!.MakeGenericMethod(typeof(T));
+        return Expression.Call(method, inputs[0], Expression.Constant(inputIndex));
+    }
+
+    /// <summary>
+    /// Generates code for GradElementwiseMultiply operation.
+    /// </summary>
+    private Expression GenerateGradElementwiseMultiplyOp<T>(ParameterExpression[] inputs, int inputIndex)
+    {
+        var method = typeof(GradientOps).GetMethod("GradElementwiseMultiply")!.MakeGenericMethod(typeof(T));
+        return Expression.Call(method, inputs[0], inputs[1], Expression.Constant(inputIndex));
+    }
+
+    /// <summary>
+    /// Generates code for GradMatMulLeft operation.
+    /// </summary>
+    private Expression GenerateGradMatMulLeftOp<T>(ParameterExpression[] inputs)
+    {
+        var method = typeof(GradientOps).GetMethod("GradMatMulLeft")!.MakeGenericMethod(typeof(T));
+        return Expression.Call(method, inputs[0], inputs[1]);
+    }
+
+    /// <summary>
+    /// Generates code for GradMatMulRight operation.
+    /// </summary>
+    private Expression GenerateGradMatMulRightOp<T>(ParameterExpression[] inputs)
+    {
+        var method = typeof(GradientOps).GetMethod("GradMatMulRight")!.MakeGenericMethod(typeof(T));
+        return Expression.Call(method, inputs[0], inputs[1]);
+    }
+
+    /// <summary>
+    /// Generates code for GradReLU operation.
+    /// </summary>
+    private Expression GenerateGradReLUOp<T>(ParameterExpression[] inputs)
+    {
+        var method = typeof(GradientOps).GetMethod("GradReLU")!.MakeGenericMethod(typeof(T));
+        return Expression.Call(method, inputs[0], inputs[1]);
+    }
+
+    /// <summary>
+    /// Generates code for GradSigmoid operation.
+    /// </summary>
+    private Expression GenerateGradSigmoidOp<T>(ParameterExpression[] inputs)
+    {
+        var method = typeof(GradientOps).GetMethod("GradSigmoid")!.MakeGenericMethod(typeof(T));
+        return Expression.Call(method, inputs[0], inputs[1]);
+    }
+
+    /// <summary>
+    /// Generates code for GradTanh operation.
+    /// </summary>
+    private Expression GenerateGradTanhOp<T>(ParameterExpression[] inputs)
+    {
+        var method = typeof(GradientOps).GetMethod("GradTanh")!.MakeGenericMethod(typeof(T));
+        return Expression.Call(method, inputs[0], inputs[1]);
+    }
+
+    /// <summary>
+    /// Generates code for GradExp operation.
+    /// </summary>
+    private Expression GenerateGradExpOp<T>(ParameterExpression[] inputs)
+    {
+        var method = typeof(GradientOps).GetMethod("GradExp")!.MakeGenericMethod(typeof(T));
+        return Expression.Call(method, inputs[0], inputs[1]);
+    }
+
+    /// <summary>
+    /// Generates code for GradLog operation.
+    /// </summary>
+    private Expression GenerateGradLogOp<T>(ParameterExpression[] inputs)
+    {
+        var method = typeof(GradientOps).GetMethod("GradLog")!.MakeGenericMethod(typeof(T));
+        return Expression.Call(method, inputs[0], inputs[1]);
+    }
+
+    /// <summary>
+    /// Generates code for GradSoftmax operation.
+    /// </summary>
+    private Expression GenerateGradSoftmaxOp<T>(ParameterExpression[] inputs, int axis)
+    {
+        var method = typeof(GradientOps).GetMethod("GradSoftmax")!.MakeGenericMethod(typeof(T));
+        return Expression.Call(method, inputs[0], inputs[1], Expression.Constant(axis));
     }
 }
