@@ -316,15 +316,9 @@ public class GraphAttentionLayer<T> : LayerBase<T>, IGraphConvolutionLayer<T>
                     // Normalize
                     for (int j = 0; j < numNodes; j++)
                     {
-                        if (!NumOps.Equals(_adjacencyMatrix[b, i, j], NumOps.Zero))
-                        {
-                            _lastAttentionCoefficients[b, h, i, j] =
-                                NumOps.Divide(_lastAttentionCoefficients[b, h, i, j], sumExp);
-                        }
-                        else
-                        {
-                            _lastAttentionCoefficients[b, h, i, j] = NumOps.Zero;
-                        }
+                        _lastAttentionCoefficients[b, h, i, j] = !NumOps.Equals(_adjacencyMatrix[b, i, j], NumOps.Zero)
+                            ? NumOps.Divide(_lastAttentionCoefficients[b, h, i, j], sumExp)
+                            : NumOps.Zero;
                     }
                 }
             }

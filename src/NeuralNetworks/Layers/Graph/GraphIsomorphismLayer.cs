@@ -504,7 +504,7 @@ public class GraphIsomorphismLayer<T> : LayerBase<T>, IGraphConvolutionLayer<T>
         // Epsilon (if learnable)
         if (_learnEpsilon)
         {
-            parameters[index++] = _epsilon;
+            parameters[index] = _epsilon;
         }
 
         return parameters;
@@ -558,7 +558,7 @@ public class GraphIsomorphismLayer<T> : LayerBase<T>, IGraphConvolutionLayer<T>
         // Set epsilon (if learnable)
         if (_learnEpsilon)
         {
-            _epsilon = parameters[index++];
+            _epsilon = parameters[index];
         }
     }
 

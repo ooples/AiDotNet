@@ -7,9 +7,8 @@ namespace AiDotNet.NeuralNetworks.Layers.Graph;
 /// <para><b>For Beginners:</b> These are different ways to combine information from neighbors.
 ///
 /// - Mean: Average all neighbor features (balanced, smooth)
-/// - Max: Take the maximum value from neighbors (emphasizes outliers)
+/// - MaxPool: Take the maximum value from neighbors (emphasizes outliers)
 /// - Sum: Add up all neighbor features (sensitive to number of neighbors)
-/// - LSTM: Use a recurrent network to aggregate (most expressive but slowest)
 /// </para>
 /// </remarks>
 public enum SAGEAggregatorType
