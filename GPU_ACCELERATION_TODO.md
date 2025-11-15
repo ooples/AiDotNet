@@ -20,14 +20,15 @@
 - [x] MultiplyLayer - forward
 - [ ] 68 other layers need GPU support
 
-### Optimizers (6/19)
+### Optimizers (7/19)
 - [x] AdamOptimizer - parameter updates
 - [x] MomentumOptimizer - parameter updates
 - [x] StochasticGradientDescentOptimizer - parameter updates
 - [x] RootMeanSquarePropagationOptimizer - parameter updates
 - [x] AdagradOptimizer - parameter updates
 - [x] NadamOptimizer - parameter updates
-- [ ] 13 other optimizers need GPU support
+- [x] AdaDeltaOptimizer - parameter updates
+- [ ] 12 other optimizers need GPU support
 
 ## High Priority - Common Layers
 
@@ -124,7 +125,7 @@
 - [ ] LocallyConnectedLayer
 - [ ] ConditionalRandomFieldLayer
 
-## Optimizers Remaining (13/19)
+## Optimizers Remaining (12/19)
 
 - [x] AdamOptimizer
 - [x] MomentumOptimizer
@@ -132,7 +133,7 @@
 - [x] RootMeanSquarePropagationOptimizer (RMSProp)
 - [x] AdagradOptimizer
 - [x] NadamOptimizer
-- [ ] AdaDeltaOptimizer
+- [x] AdaDeltaOptimizer
 - [ ] AdaMaxOptimizer
 - [ ] AMSGradOptimizer
 - [ ] LionOptimizer
@@ -173,6 +174,6 @@
 ## Current Status
 
 **Layers**: 6/74 complete (8.1%)
-**Optimizers**: 6/19 complete (31.6%)
+**Optimizers**: 7/19 complete (36.8%)
 **Operations**: 17+ GPU kernels implemented
 **Backward passes**: FeedForwardLayer, DenseLayer have GPU backward
