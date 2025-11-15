@@ -119,7 +119,11 @@ public class RainbowDQNAgent<T> : DeepReinforcementLearningAgentBase<T>
 
     public override Vector<T> SelectAction(Vector<T> state, bool training = true)
     {
-        // Noisy networks provide exploration, so we can use less epsilon
+        // TODO: Implement actual NoisyNet layers (parametric noise in network weights)
+        // Current implementation: UseNoisyNetworks flag disables epsilon-greedy but doesn't add noise
+        // Proper implementation requires NoisyLinear layers with factorized Gaussian noise
+        // See: Fortunato et al., "Noisy Networks for Exploration", 2017
+        // For now, we disable epsilon-greedy when flag is set (assuming exploration from distributional RL)
         double actualEpsilon = _options.UseNoisyNetworks ? 0.0 : _epsilon;
 
         if (training && Random.NextDouble() < actualEpsilon)
