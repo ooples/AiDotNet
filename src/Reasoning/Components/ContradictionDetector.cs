@@ -173,28 +173,48 @@ public class ContradictionDetector<T> : IContradictionDetector<T>
         string lower1 = text1.ToLowerInvariant();
         string lower2 = text2.ToLowerInvariant();
 
-        // Check for explicit contradictions like "is"/"is not"
-        var patterns = new[]
+        // Check for contradictions: same subject with different values
+        // Pattern 1: "X is Y" vs "X is Z" (where Y != Z)
+        var isPattern = @"(\w+)\s+is\s+(\w+)";
+        var match1 = Regex.Match(lower1, isPattern);
+        var match2 = Regex.Match(lower2, isPattern);
+        if (match1.Success && match2.Success &&
+            match1.Groups[1].Value == match2.Groups[1].Value &&
+            match1.Groups[2].Value != match2.Groups[2].Value)
         {
-            (@"(\w+)\s+is\s+(\w+)", @"\1\s+is\s+not\s+\2"),
-            (@"(\w+)\s+equals?\s+([0-9\.]+)", @"\1\s+equals?\s+([0-9\.]+)"),
-            (@"answer\s+is\s+([0-9\.]+)", @"answer\s+is\s+([0-9\.]+)")
-        };
+            return true;
+        }
 
-        foreach (var (pattern1, pattern2) in patterns)
+        // Pattern 2: "X is not Y" vs "X is Y" (explicit negation)
+        var isNotPattern = @"(\w+)\s+is\s+not\s+(\w+)";
+        match1 = Regex.Match(lower1, isPattern);
+        match2 = Regex.Match(lower2, isNotPattern);
+        if (match1.Success && match2.Success &&
+            match1.Groups[1].Value == match2.Groups[1].Value &&
+            match1.Groups[2].Value == match2.Groups[2].Value)
         {
-            var match1 = Regex.Match(lower1, pattern1);
-            var match2 = Regex.Match(lower2, pattern2);
+            return true;
+        }
 
-            if (match1.Success && match2.Success)
-            {
-                // Check if they reference the same thing but with different values
-                if (match1.Groups[1].Value == match2.Groups[1].Value &&
-                    match1.Groups[2].Value != match2.Groups[2].Value)
-                {
-                    return true;
-                }
-            }
+        // Pattern 3: "X equals N" vs "X equals M" (where N != M)
+        var equalsPattern = @"(\w+)\s+equals?\s+([0-9\.]+)";
+        match1 = Regex.Match(lower1, equalsPattern);
+        match2 = Regex.Match(lower2, equalsPattern);
+        if (match1.Success && match2.Success &&
+            match1.Groups[1].Value == match2.Groups[1].Value &&
+            match1.Groups[2].Value != match2.Groups[2].Value)
+        {
+            return true;
+        }
+
+        // Pattern 4: "answer is N" vs "answer is M" (where N != M)
+        var answerPattern = @"answer\s+is\s+([0-9\.]+)";
+        match1 = Regex.Match(lower1, answerPattern);
+        match2 = Regex.Match(lower2, answerPattern);
+        if (match1.Success && match2.Success &&
+            match1.Groups[1].Value != match2.Groups[1].Value)
+        {
+            return true;
         }
 
         return false;
