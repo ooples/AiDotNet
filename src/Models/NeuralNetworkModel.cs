@@ -11,17 +11,42 @@ namespace AiDotNet.Models;
 /// other model types in optimization and model selection processes.
 /// </para>
 /// <para><b>For Beginners:</b> This is a wrapper that makes neural networks work with the same interface as simpler models.
-/// 
+///
 /// Neural networks are powerful machine learning models that can:
 /// - Learn complex patterns in data that simpler models might miss
 /// - Process different types of data like images, text, or tabular data
 /// - Automatically extract useful features from raw data
-/// 
+///
 /// This class allows you to use neural networks anywhere you would use simpler models,
 /// making it easy to compare them or use them in the same optimization processes.
 /// </para>
+/// <para><b>TODO - Future Enhancement:</b> JIT Compilation Support
+///
+/// This neural network currently uses a layer-based architecture for forward propagation,
+/// which is not directly compatible with the JIT compiler's graph-based approach.
+///
+/// To enable 5-10x faster inference through JIT compilation, this class needs to:
+/// 1. Implement IJitCompilable&lt;T, Tensor&lt;T&gt;, Tensor&lt;T&gt;&gt;
+/// 2. Add an ExportComputationGraph() method that converts the layer structure to a ComputationNode graph
+/// 3. Set SupportsJitCompilation = true once graph export is implemented
+///
+/// Implementation approach:
+/// - Create placeholder ComputationNodes for inputs
+/// - Walk through layers and build equivalent TensorOperations-based graph
+/// - Handle layer-specific operations (DenseLayer → MatMul+Add, ActivationLayer → ReLU/Sigmoid/etc.)
+/// - Return final output node and populate input list
+///
+/// Once implemented, users can enable JIT compilation:
+/// <code>
+/// var result = await new PredictionModelBuilder&lt;float, Tensor&lt;float&gt;, Tensor&lt;float&gt;&gt;()
+///     .ConfigureModel(neuralNetworkModel)
+///     .ConfigureJitCompilation()  // Enable JIT for neural network
+///     .BuildAsync(x, y);
+/// </code>
+/// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric type used for calculations, typically float or double.</typeparam>
+// TODO: Implement IJitCompilable<T, Tensor<T>, Tensor<T>> to enable JIT compilation support for neural networks
 public class NeuralNetworkModel<T> : IFullModel<T, Tensor<T>, Tensor<T>>
 {
     /// <summary>
