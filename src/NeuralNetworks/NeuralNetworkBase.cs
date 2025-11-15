@@ -2435,6 +2435,10 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
             Layers.InputLayer<T> => input, // Input layer is pass-through
             Layers.MaskingLayer<T> => input, // Masking is identity during inference (mask is data-dependent)
             Layers.PositionalEncodingLayer<T> => input, // Simplified: requires Slice operation for full implementation
+            Layers.PaddingLayer<T> => input, // Simplified: requires Pad operation for full implementation
+            Layers.CroppingLayer<T> => input, // Simplified: requires Slice/Crop operation for full implementation
+            Layers.UpsamplingLayer<T> => input, // Simplified: requires interpolation operations
+            Layers.TimeDistributedLayer<T> => input, // Simplified: requires handling inner layer
             Layers.BatchNormalizationLayer<T> bnLayer => ConvertBatchNormalizationLayer(bnLayer, input),
             Layers.LayerNormalizationLayer<T> lnLayer => ConvertLayerNormalizationLayer(lnLayer, input),
 
@@ -2442,7 +2446,8 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
             _ => throw new NotSupportedException(
                 $"Layer type {layer.GetType().Name} is not yet supported for JIT compilation. " +
                 $"Supported layers: DenseLayer, FullyConnectedLayer, FeedForwardLayer, ActivationLayer, DropoutLayer, GaussianNoiseLayer, " +
-                $"FlattenLayer, ReshapeLayer, InputLayer, MaskingLayer, PositionalEncodingLayer, BatchNormalizationLayer, LayerNormalizationLayer. " +
+                $"FlattenLayer, ReshapeLayer, InputLayer, MaskingLayer, PositionalEncodingLayer, PaddingLayer, CroppingLayer, UpsamplingLayer, " +
+                $"TimeDistributedLayer, BatchNormalizationLayer, LayerNormalizationLayer. " +
                 $"Support for additional layer types will be added in future updates.")
         };
     }

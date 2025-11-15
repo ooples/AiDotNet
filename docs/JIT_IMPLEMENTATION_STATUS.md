@@ -25,7 +25,7 @@ This document tracks the implementation status of JIT compilation support across
 - **Expected Speedup**: 3-5x for inference with many support vectors
 
 ### 3. NeuralNetworkBase ✓
-- **Status**: Basic implementation (13/77 layers supported)
+- **Status**: Basic implementation (17/77 layers supported)
 - **File**: `src/NeuralNetworks/NeuralNetworkBase.cs`
 - **Functionality**: Layer-based neural network with forward pass
 - **Expected Speedup**: 5-10x for inference
@@ -39,7 +39,7 @@ This document tracks the implementation status of JIT compilation support across
 
 ## Neural Network Layer Support
 
-### Supported Layers (13/77)
+### Supported Layers (17/77)
 
 #### Basic Layers
 1. **DenseLayer** ✓
@@ -91,20 +91,40 @@ This document tracks the implementation status of JIT compilation support across
     - `output = input`
     - Note: Full implementation requires Slice operation and Add
 
+12. **PaddingLayer** ✓
+    - Simplified implementation (identity)
+    - `output = input`
+    - Note: Full implementation requires Pad operation
+
+13. **CroppingLayer** ✓
+    - Simplified implementation (identity)
+    - `output = input`
+    - Note: Full implementation requires Slice/Crop operation
+
+14. **UpsamplingLayer** ✓
+    - Simplified implementation (identity)
+    - `output = input`
+    - Note: Full implementation requires interpolation operations
+
+15. **TimeDistributedLayer** ✓
+    - Simplified implementation (identity)
+    - `output = input`
+    - Note: Full implementation requires handling inner layer recursively
+
 #### Normalization Layers
-12. **BatchNormalizationLayer** ✓
+16. **BatchNormalizationLayer** ✓
     - Simplified implementation (missing variance normalization)
     - `output = (input - mean) * gamma + beta`
     - Note: Full implementation requires Sqrt operation
 
-13. **LayerNormalizationLayer** ✓
+17. **LayerNormalizationLayer** ✓
     - Simplified implementation (missing dynamic stats computation)
     - `output = input * gamma + beta`
     - Note: Full implementation requires per-sample mean/std computation
 
-### Pending Layers (64/77)
+### Pending Layers (60/77)
 
-#### High Priority - Common Layers (13 remaining)
+#### High Priority - Common Layers (9 remaining)
 - AddLayer (requires multi-input support)
 - MultiplyLayer (requires multi-input support)
 - ConcatenateLayer (requires multi-input support)
@@ -112,14 +132,11 @@ This document tracks the implementation status of JIT compilation support across
 - AvgPoolingLayer (via PoolingLayer)
 - ConvolutionalLayer
 - EmbeddingLayer
-- PaddingLayer
-- CroppingLayer
-- UpsamplingLayer
 - GlobalPoolingLayer
 - SplitLayer
 - MeanLayer
 
-#### Medium Priority - Advanced Layers (23 layers)
+#### Medium Priority - Advanced Layers (22 layers)
 - LSTMLayer
 - GRULayer
 - RecurrentLayer
@@ -139,7 +156,6 @@ This document tracks the implementation status of JIT compilation support across
 - SubpixelConvolutionalLayer
 - LocallyConnectedLayer
 - LambdaLayer
-- TimeDistributedLayer
 - ConvLSTMLayer
 - PatchEmbeddingLayer
 - GatedLinearUnitLayer
