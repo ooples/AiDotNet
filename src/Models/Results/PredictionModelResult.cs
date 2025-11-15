@@ -7,6 +7,12 @@ using AiDotNet.Serialization;
 using AiDotNet.Agents;
 using AiDotNet.Models;
 using AiDotNet.Deployment.Configuration;
+using AiDotNet.Deployment.Export;
+using AiDotNet.Deployment.Export.Onnx;
+using AiDotNet.Deployment.TensorRT;
+using AiDotNet.Deployment.Mobile.CoreML;
+using AiDotNet.Deployment.Mobile.TensorFlowLite;
+using AiDotNet.Deployment.Runtime;
 
 namespace AiDotNet.Models.Results;
 
@@ -1626,5 +1632,200 @@ public class PredictionModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
             throw new InvalidOperationException(
                 $"Failed to deserialize prediction model result state. The stream may contain corrupted or incompatible data: {ex.Message}", ex);
         }
+    }
+
+    /// <summary>
+    /// Exports the model to ONNX format for cross-platform deployment.
+    /// </summary>
+    /// <param name="outputPath">The file path where the ONNX model will be saved.</param>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> ONNX (Open Neural Network Exchange) is a universal format for AI models
+    /// that works across different frameworks and platforms. Use this for:
+    /// - Cross-platform deployment (Windows, Linux, macOS)
+    /// - Cloud deployment
+    /// - General-purpose production serving
+    ///
+    /// The exported model will use the export configuration specified during model building,
+    /// or sensible defaults if no configuration was provided.
+    ///
+    /// Example:
+    /// <code>
+    /// var model = await new PredictionModelBuilder&lt;double&gt;()
+    ///     .ConfigureExport(ExportConfig.ForONNX())
+    ///     .BuildAsync(x, y);
+    /// model.ExportToOnnx("model.onnx");
+    /// </code>
+    /// </para>
+    /// </remarks>
+    public void ExportToOnnx(string outputPath)
+    {
+        if (Model == null)
+            throw new InvalidOperationException("Cannot export: Model is null");
+
+        var exportConfig = DeploymentConfiguration?.Export ?? ExportConfig.ForONNX();
+
+        var onnxConfig = new ExportConfiguration
+        {
+            ModelName = exportConfig.ModelName,
+            TargetPlatform = (int)exportConfig.TargetPlatform,
+            OptimizeForSize = exportConfig.OptimizeModel,
+            BatchSize = exportConfig.BatchSize
+        };
+
+        var exporter = new OnnxModelExporter<T, TInput, TOutput>();
+        exporter.Export(Model, outputPath, onnxConfig);
+    }
+
+    /// <summary>
+    /// Exports the model to TensorRT format for high-performance inference on NVIDIA GPUs.
+    /// </summary>
+    /// <param name="outputPath">The file path where the TensorRT model will be saved.</param>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> TensorRT is NVIDIA's high-performance inference engine.
+    /// Use this when:
+    /// - Deploying to servers with NVIDIA GPUs
+    /// - Maximum inference speed is required
+    /// - You need GPU-optimized inference
+    ///
+    /// TensorRT provides 2-4x faster inference than ONNX on NVIDIA hardware.
+    /// Requires NVIDIA GPU to run.
+    ///
+    /// Example:
+    /// <code>
+    /// var model = await new PredictionModelBuilder&lt;double&gt;()
+    ///     .ConfigureExport(ExportConfig.ForTensorRT(QuantizationMode.Float16))
+    ///     .BuildAsync(x, y);
+    /// model.ExportToTensorRT("model.trt");
+    /// </code>
+    /// </para>
+    /// </remarks>
+    public void ExportToTensorRT(string outputPath)
+    {
+        if (Model == null)
+            throw new InvalidOperationException("Cannot export: Model is null");
+
+        var exportConfig = DeploymentConfiguration?.Export ?? ExportConfig.ForTensorRT();
+
+        var tensorRTConfig = new TensorRTConfiguration
+        {
+            MaxBatchSize = exportConfig.BatchSize,
+            UseFp16 = exportConfig.Quantization == QuantizationMode.Float16,
+            UseInt8 = exportConfig.Quantization == QuantizationMode.Int8
+        };
+
+        var converter = new TensorRTConverter<T, TInput, TOutput>();
+        converter.ConvertToTensorRT(Model, outputPath, tensorRTConfig);
+    }
+
+    /// <summary>
+    /// Exports the model to CoreML format for deployment on Apple devices (iOS, macOS).
+    /// </summary>
+    /// <param name="outputPath">The file path where the CoreML model will be saved.</param>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> CoreML is Apple's machine learning framework.
+    /// Use this when deploying to:
+    /// - iPhone/iPad apps
+    /// - macOS applications
+    /// - Apple Watch apps
+    ///
+    /// CoreML models are optimized for Apple Silicon and Neural Engine,
+    /// providing excellent performance on Apple devices.
+    ///
+    /// Example:
+    /// <code>
+    /// var model = await new PredictionModelBuilder&lt;double&gt;()
+    ///     .ConfigureExport(ExportConfig.ForCoreML(QuantizationMode.Float16))
+    ///     .BuildAsync(x, y);
+    /// model.ExportToCoreML("model.mlmodel");
+    /// </code>
+    /// </para>
+    /// </remarks>
+    public void ExportToCoreML(string outputPath)
+    {
+        if (Model == null)
+            throw new InvalidOperationException("Cannot export: Model is null");
+
+        var exportConfig = DeploymentConfiguration?.Export ?? ExportConfig.ForCoreML();
+        var exporter = new CoreMLExporter<T, TInput, TOutput>();
+        exporter.Export(Model, outputPath, exportConfig);
+    }
+
+    /// <summary>
+    /// Exports the model to TensorFlow Lite format for mobile and edge deployment.
+    /// </summary>
+    /// <param name="outputPath">The file path where the TFLite model will be saved.</param>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> TensorFlow Lite is designed for mobile and edge devices.
+    /// Use this when deploying to:
+    /// - Android apps
+    /// - Raspberry Pi and edge devices
+    /// - Embedded systems
+    /// - IoT devices
+    ///
+    /// TFLite models are highly optimized for size and speed on resource-constrained devices.
+    ///
+    /// Example:
+    /// <code>
+    /// var model = await new PredictionModelBuilder&lt;double&gt;()
+    ///     .ConfigureExport(ExportConfig.ForTFLite(QuantizationMode.Int8))
+    ///     .BuildAsync(x, y);
+    /// model.ExportToTFLite("model.tflite");
+    /// </code>
+    /// </para>
+    /// </remarks>
+    public void ExportToTFLite(string outputPath)
+    {
+        if (Model == null)
+            throw new InvalidOperationException("Cannot export: Model is null");
+
+        var exportConfig = DeploymentConfiguration?.Export ?? ExportConfig.ForTFLite();
+        var exporter = new TFLiteExporter<T, TInput, TOutput>();
+        exporter.Export(Model, outputPath, exportConfig);
+    }
+
+    /// <summary>
+    /// Creates a deployment runtime for production features like versioning, A/B testing, caching, and telemetry.
+    /// </summary>
+    /// <param name="modelPath">The path to the exported ONNX model file.</param>
+    /// <param name="modelName">The name of the model (e.g., "HousePricePredictor").</param>
+    /// <param name="version">The version identifier (e.g., "1.0.0").</param>
+    /// <returns>A deployment runtime instance.</returns>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> The deployment runtime provides production features:
+    /// - **Model Versioning**: Manage multiple model versions and roll back if needed
+    /// - **A/B Testing**: Split traffic between different model versions
+    /// - **Telemetry**: Track latency, throughput, errors, and metrics
+    /// - **Caching**: Keep frequently-used models in memory for faster inference
+    ///
+    /// Before using this, you must first export your model to ONNX format.
+    ///
+    /// Example:
+    /// <code>
+    /// // Export model to ONNX
+    /// model.ExportToOnnx("model.onnx");
+    ///
+    /// // Create runtime with deployed model
+    /// var runtime = model.CreateDeploymentRuntime("model.onnx", "MyModel", "1.0.0");
+    ///
+    /// // Use runtime for inference with production features
+    /// var prediction = await runtime.InferAsync("MyModel", "1.0.0", inputData);
+    /// var stats = runtime.GetModelStatistics("MyModel");
+    /// </code>
+    /// </para>
+    /// </remarks>
+    public DeploymentRuntime<T> CreateDeploymentRuntime(string modelPath, string modelName, string version)
+    {
+        var runtimeConfig = new RuntimeConfiguration
+        {
+            EnableCaching = DeploymentConfiguration?.Caching?.Enabled ?? true,
+            EnableTelemetry = DeploymentConfiguration?.Telemetry?.Enabled ?? true,
+            EnableGpuAcceleration = DeploymentConfiguration?.Export?.TargetPlatform == TargetPlatform.GPU
+                                    || DeploymentConfiguration?.Export?.TargetPlatform == TargetPlatform.TensorRT
+        };
+
+        var runtime = new DeploymentRuntime<T>(runtimeConfig);
+        runtime.RegisterModel(modelName, version, modelPath);
+
+        return runtime;
     }
 }
