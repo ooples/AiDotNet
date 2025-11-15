@@ -204,39 +204,47 @@ public class MuZeroAgent<T> : DeepReinforcementLearningAgentBase<T>
         T value = currentNode.Value;
 
         // Backup: propagate value up the tree with rewards
+        // CRITICAL: Must compute backed-up value BEFORE updating Q-values
         for (int i = path.Count - 1; i >= 0; i--)
         {
             var (pathNode, pathAction) = path[i];
 
+            // Compute the backed-up value first (reward + gamma * child_value)
+            // This is the value we'll use to update Q
+            T backedUpValue = value;
+            if (pathNode.Rewards.ContainsKey(pathAction))
+            {
+                var reward = pathNode.Rewards[pathAction];
+                backedUpValue = NumOps.Add(reward, NumOps.Multiply(DiscountFactor, value));
+            }
+            else
+            {
+                // If no reward stored, just discount (for root node initial actions)
+                backedUpValue = NumOps.Multiply(DiscountFactor, value);
+            }
+
+            // Initialize visit counts and Q-values if this is first visit
+            // This should only happen for root node on first simulation
             if (!pathNode.VisitCounts.ContainsKey(pathAction))
             {
                 pathNode.VisitCounts[pathAction] = 0;
                 pathNode.QValues[pathAction] = NumOps.Zero;
             }
 
+            // Increment visit counts
             pathNode.VisitCounts[pathAction]++;
             pathNode.TotalVisits++;
 
-            // Update Q-value using incremental mean: Q_new = Q_old + (value - Q_old) / n
-            // This is mathematically equivalent to: Q = (Q * (n-1) + value) / n
+            // Update Q-value using incremental mean: Q_new = Q_old + (backed_up_value - Q_old) / n
+            // This is mathematically equivalent to: Q = (Q * (n-1) + backed_up_value) / n
             var oldQ = pathNode.QValues[pathAction];
             var n = NumOps.FromDouble(pathNode.VisitCounts[pathAction]);
-            var diff = NumOps.Subtract(value, oldQ);
+            var diff = NumOps.Subtract(backedUpValue, oldQ);
             var update = NumOps.Divide(diff, n);
             pathNode.QValues[pathAction] = NumOps.Add(oldQ, update);
 
-            // For parent: value = reward + discount * value
-            // Get the predicted reward for this action (stored during expansion)
-            if (pathNode.Rewards.ContainsKey(pathAction))
-            {
-                var reward = pathNode.Rewards[pathAction];
-                value = NumOps.Add(reward, NumOps.Multiply(DiscountFactor, value));
-            }
-            else
-            {
-                // If no reward stored, just discount (for root node initial actions)
-                value = NumOps.Multiply(DiscountFactor, value);
-            }
+            // Propagate the backed-up value to parent for next iteration
+            value = backedUpValue;
         }
     }
 
