@@ -180,16 +180,43 @@ public class ModelCache<T>
 
     private string ComputeHash(T[] input)
     {
-        // Convert input array to bytes
-        var bytes = new byte[input.Length * System.Runtime.InteropServices.Marshal.SizeOf<T>()];
-        Buffer.BlockCopy(input, 0, bytes, 0, bytes.Length);
+        if (input == null || input.Length == 0)
+            return "empty";
 
-        // Compute SHA256 hash
-        using var sha256 = SHA256.Create();
-        var hashBytes = sha256.ComputeHash(bytes);
+        // Compute stable hash using array content and length
+        // Uses unchecked context to allow overflow for hash combining
+        unchecked
+        {
+            int hash = 17;
+            hash = hash * 31 + input.Length;
 
-        // Convert to hex string
-        return BitConverter.ToString(hashBytes).Replace("-", "");
+            // Combine hash codes of all elements
+            // For large arrays, sample every nth element for performance
+            int sampleSize = Math.Min(input.Length, 100);
+            int step = Math.Max(1, input.Length / sampleSize);
+
+            for (int i = 0; i < input.Length; i += step)
+            {
+                T element = input[i];
+                if (element is not null)
+                {
+                    hash = hash * 31 + element.GetHashCode();
+                }
+            }
+
+            // Include last element if not already sampled
+            if (input.Length > 1 && (input.Length - 1) % step != 0)
+            {
+                T lastElement = input[input.Length - 1];
+                if (lastElement is not null)
+                {
+                    hash = hash * 31 + lastElement.GetHashCode();
+                }
+            }
+
+            // Convert to hex string for readability
+            return hash.ToString("X8");
+        }
     }
 }
 
