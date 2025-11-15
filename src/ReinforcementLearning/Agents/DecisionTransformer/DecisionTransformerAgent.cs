@@ -44,7 +44,7 @@ public class DecisionTransformerAgent<T> : DeepReinforcementLearningAgentBase<T>
     private IOptimizer<T, Vector<T>, Vector<T>> _optimizer;
 
     private NeuralNetwork<T> _transformerNetwork;
-    private List<(Vector<T> state, Vector<T> action, T reward, T returnToGo)> _trajectoryBuffer;
+    private List<(Vector<T> state, Vector<T> action, T reward, T returnToGo, Vector<T> previousAction)> _trajectoryBuffer;
     private int _updateCount;
 
     private SequenceContext<T> _currentContext;
@@ -61,7 +61,7 @@ public class DecisionTransformerAgent<T> : DeepReinforcementLearningAgentBase<T>
             Epsilon = 1e-8
         });
         _updateCount = 0;
-        _trajectoryBuffer = new List<(Vector<T>, Vector<T>, T, T)>();
+        _trajectoryBuffer = new List<(Vector<T>, Vector<T>, T, T, Vector<T>)>();
         _currentContext = new SequenceContext<T>();
 
         // Initialize network directly in constructor
@@ -130,14 +130,20 @@ public class DecisionTransformerAgent<T> : DeepReinforcementLearningAgentBase<T>
                 returnsToGo.Insert(0, returnToGo);
             }
 
-            // Store trajectory with returns-to-go
+            // Store trajectory with returns-to-go and previous actions
             for (int i = 0; i < trajectory.Count; i++)
             {
+                // Previous action is the action from the previous timestep (zero for first step)
+                Vector<T> previousAction = i > 0
+                    ? trajectory[i - 1].action
+                    : new Vector<T>(_options.ActionSize);
+
                 _trajectoryBuffer.Add((
                     trajectory[i].state,
                     trajectory[i].action,
                     trajectory[i].reward,
-                    returnsToGo[i]
+                    returnsToGo[i],
+                    previousAction
                 ));
             }
         }
@@ -222,10 +228,9 @@ public class DecisionTransformerAgent<T> : DeepReinforcementLearningAgentBase<T>
         // Sample a batch
         var batch = SampleBatch(_options.BatchSize);
 
-        foreach (var (state, targetAction, reward, returnToGo) in batch)
+        foreach (var (state, targetAction, reward, returnToGo, previousAction) in batch)
         {
-            // For simplicity, use zero previous action
-            var previousAction = new Vector<T>(_options.ActionSize);
+            // Use actual previous action from trajectory buffer
             var input = ConcatenateInputs(returnToGo, state, previousAction);
 
             // Forward pass
@@ -267,9 +272,9 @@ public class DecisionTransformerAgent<T> : DeepReinforcementLearningAgentBase<T>
         return NumOps.Divide(totalLoss, NumOps.FromDouble(batch.Count));
     }
 
-    private List<(Vector<T> state, Vector<T> action, T reward, T returnToGo)> SampleBatch(int batchSize)
+    private List<(Vector<T> state, Vector<T> action, T reward, T returnToGo, Vector<T> previousAction)> SampleBatch(int batchSize)
     {
-        var batch = new List<(Vector<T>, Vector<T>, T, T)>();
+        var batch = new List<(Vector<T>, Vector<T>, T, T, Vector<T>)>();
 
         for (int i = 0; i < batchSize && i < _trajectoryBuffer.Count; i++)
         {
