@@ -590,24 +590,31 @@ public class DenseLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     /// represents the activation of an output neuron.
     /// </para>
     /// <para><b>For Beginners:</b> This method transforms input data into output data.
-    /// 
+    ///
     /// During the forward pass:
     /// - The input values are multiplied by their corresponding weights
     /// - All weighted inputs for each output neuron are added together
     /// - The bias is added to each sum
     /// - The activation function is applied to each result
-    /// 
+    ///
     /// For example, if your inputs represent image features, the outputs might represent
     /// the probability of the image belonging to different categories.
-    /// 
+    ///
     /// This is where the actual "thinking" happens in the neural network.
     /// </para>
     /// </remarks>
     public override Tensor<T> Forward(Tensor<T> input)
     {
         _lastInput = input;
-        int batchSize = input.Shape[0];
 
+        // Try GPU acceleration if available
+        if (IsGpuAccelerationAvailable && typeof(T) == typeof(float))
+        {
+            return ForwardGpu(input);
+        }
+
+        // CPU fallback
+        int batchSize = input.Shape[0];
         var flattenedInput = input.Reshape(batchSize, input.Shape[1]);
         var output = flattenedInput.Multiply(_weights.Transpose()).Add(_biases);
 
@@ -618,6 +625,116 @@ public class DenseLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         else
         {
             return ApplyActivation(output);
+        }
+    }
+
+    /// <summary>
+    /// GPU-accelerated forward pass implementation.
+    /// </summary>
+    private Tensor<T> ForwardGpu(Tensor<T> input)
+    {
+        var backend = GpuContext!.GpuBackend as Gpu.IlgpuBackend<float>;
+        if (backend == null) return Forward(input);  // Fallback to CPU
+
+        int batchSize = input.Shape[0];
+        var flattenedInput = input.Reshape(batchSize, input.Shape[1]);
+
+        // Cast to float tensors
+        var inputFloat = flattenedInput as Tensor<float>;
+        var weightsFloat = MatrixToTensor(_weights) as Tensor<float>;
+        var biasesFloat = VectorToTensor(_biases) as Tensor<float>;
+
+        if (inputFloat == null || weightsFloat == null || biasesFloat == null)
+            return Forward(input);  // Type mismatch, fallback
+
+        // Check if should use GPU based on tensor size
+        bool useGpu = GpuContext.ShouldUseGpu(inputFloat) || GpuContext.ShouldUseGpu(weightsFloat);
+
+        Tensor<float> result;
+
+        if (useGpu)
+        {
+            GpuContext.Statistics.IncrementGpuOperations();
+
+            // Transfer to GPU
+            using var gpuInput = backend.ToGpu(inputFloat);
+            using var gpuWeights = backend.ToGpu(weightsFloat);
+            using var gpuBiases = backend.ToGpu(biasesFloat);
+
+            // Transpose weights: weights is [outputSize, inputSize], need [inputSize, outputSize]
+            using var gpuWeightsTransposed = backend.Transpose(gpuWeights);
+
+            // MatMul: input [batchSize, inputSize] @ weightsT [inputSize, outputSize] = [batchSize, outputSize]
+            using var gpuMatMul = backend.MatMul(gpuInput, gpuWeightsTransposed);
+
+            // Add biases (broadcasts automatically)
+            using var gpuLinear = backend.Add(gpuMatMul, gpuBiases);
+
+            // Apply activation if supported on GPU
+            using var gpuActivated = ApplyActivationGpu(gpuLinear, backend);
+
+            // Transfer back to CPU
+            result = backend.ToCpu(gpuActivated);
+        }
+        else
+        {
+            GpuContext.Statistics.IncrementCpuOperations();
+
+            // Use CPU
+            var output = flattenedInput.Multiply(_weights.Transpose()).Add(_biases);
+
+            if (UsingVectorActivation)
+            {
+                result = VectorActivation!.Activate(output) as Tensor<float> ?? output as Tensor<float>!;
+            }
+            else
+            {
+                result = ApplyActivation(output) as Tensor<float> ?? output as Tensor<float>!;
+            }
+        }
+
+        return result as Tensor<T> ?? input;
+    }
+
+    /// <summary>
+    /// Applies activation function on GPU if supported.
+    /// </summary>
+    private Gpu.GpuTensor<float> ApplyActivationGpu(Gpu.GpuTensor<float> input, Gpu.IlgpuBackend<float> backend)
+    {
+        if (ScalarActivation is ReLUActivation<float>)
+        {
+            return backend.ReLU(input);
+        }
+        else if (ScalarActivation is SigmoidActivation<float>)
+        {
+            return backend.Sigmoid(input);
+        }
+        else if (ScalarActivation is TanhActivation<float>)
+        {
+            return backend.Tanh(input);
+        }
+        else if (ScalarActivation is LeakyReLUActivation<float> leakyRelu)
+        {
+            return backend.LeakyReLU(input, leakyRelu.Alpha);
+        }
+        else if (ScalarActivation is ELUActivation<float> elu)
+        {
+            return backend.ELU(input, elu.Alpha);
+        }
+        else if (ScalarActivation is GELUActivation<float>)
+        {
+            return backend.GELU(input);
+        }
+        else if (ScalarActivation is SwishActivation<float>)
+        {
+            return backend.Swish(input);
+        }
+        else
+        {
+            // Unsupported activation, transfer to CPU and apply
+            var cpuTensor = backend.ToCpu(input);
+            var activated = ApplyActivation(cpuTensor as Tensor<T>!) as Tensor<float>;
+            return backend.ToGpu(activated!);
         }
     }
 

@@ -51,8 +51,19 @@ public class IlgpuBackend<T> : IGpuBackend<T>
     private Action<Index1D, ArrayView<T>, ArrayView<T>, ArrayView<T>>? _multiplyKernel;
     private Action<Index1D, ArrayView<T>, ArrayView<T>, ArrayView<T>>? _divideKernel;
     private Action<Index1D, ArrayView<T>, ArrayView<T>>? _reluKernel;
+    private Action<Index1D, ArrayView<T>, ArrayView<T>, T>? _leakyReluKernel;
+    private Action<Index1D, ArrayView<T>, ArrayView<T>, T>? _eluKernel;
+    private Action<Index1D, ArrayView<T>, ArrayView<T>>? _geluKernel;
+    private Action<Index1D, ArrayView<T>, ArrayView<T>>? _swishKernel;
     private Action<Index1D, ArrayView<T>, ArrayView<T>>? _sigmoidKernel;
     private Action<Index1D, ArrayView<T>, ArrayView<T>>? _tanhKernel;
+    private Action<Index1D, ArrayView<T>, ArrayView<T>>? _expKernel;
+    private Action<Index1D, ArrayView<T>, ArrayView<T>>? _logKernel;
+    private Action<Index1D, ArrayView<T>, ArrayView<T>>? _sqrtKernel;
+    private Action<Index1D, ArrayView<T>, ArrayView<T>, T>? _powerKernel;
+    private Action<Index1D, ArrayView<T>, ArrayView<T>>? _absKernel;
+    private Action<Index1D, ArrayView<T>, ArrayView<T>, T>? _maximumKernel;
+    private Action<Index1D, ArrayView<T>, ArrayView<T>, T>? _minimumKernel;
     private Action<Index2D, ArrayView<T>, ArrayView<T>, ArrayView<T>, int, int, int>? _matMulNaiveKernel;
     private Action<Index2D, ArrayView<T>, ArrayView<T>, ArrayView<T>, int, int, int>? _matMulTiledKernel;
     private Action<Index2D, ArrayView<T>, ArrayView<T>>? _transposeKernel;
@@ -242,8 +253,21 @@ public class IlgpuBackend<T> : IGpuBackend<T>
 
         // Compile activation kernels
         _reluKernel = _accelerator.LoadAutoGroupedStreamKernel<Index1D, ArrayView<T>, ArrayView<T>>(ReLUKernel);
+        _leakyReluKernel = _accelerator.LoadAutoGroupedStreamKernel<Index1D, ArrayView<T>, ArrayView<T>, T>(LeakyReLUKernel);
+        _eluKernel = _accelerator.LoadAutoGroupedStreamKernel<Index1D, ArrayView<T>, ArrayView<T>, T>(ELUKernel);
+        _geluKernel = _accelerator.LoadAutoGroupedStreamKernel<Index1D, ArrayView<T>, ArrayView<T>>(GELUKernel);
+        _swishKernel = _accelerator.LoadAutoGroupedStreamKernel<Index1D, ArrayView<T>, ArrayView<T>>(SwishKernel);
         _sigmoidKernel = _accelerator.LoadAutoGroupedStreamKernel<Index1D, ArrayView<T>, ArrayView<T>>(SigmoidKernel);
         _tanhKernel = _accelerator.LoadAutoGroupedStreamKernel<Index1D, ArrayView<T>, ArrayView<T>>(TanhKernel);
+
+        // Compile element-wise math kernels
+        _expKernel = _accelerator.LoadAutoGroupedStreamKernel<Index1D, ArrayView<T>, ArrayView<T>>(ExpKernel);
+        _logKernel = _accelerator.LoadAutoGroupedStreamKernel<Index1D, ArrayView<T>, ArrayView<T>>(LogKernel);
+        _sqrtKernel = _accelerator.LoadAutoGroupedStreamKernel<Index1D, ArrayView<T>, ArrayView<T>>(SqrtKernel);
+        _powerKernel = _accelerator.LoadAutoGroupedStreamKernel<Index1D, ArrayView<T>, ArrayView<T>, T>(PowerKernel);
+        _absKernel = _accelerator.LoadAutoGroupedStreamKernel<Index1D, ArrayView<T>, ArrayView<T>>(AbsKernel);
+        _maximumKernel = _accelerator.LoadAutoGroupedStreamKernel<Index1D, ArrayView<T>, ArrayView<T>, T>(MaximumKernel);
+        _minimumKernel = _accelerator.LoadAutoGroupedStreamKernel<Index1D, ArrayView<T>, ArrayView<T>, T>(MinimumKernel);
 
         // Compile linear algebra kernels
         _matMulNaiveKernel = _accelerator.LoadAutoGroupedStreamKernel<Index2D, ArrayView<T>, ArrayView<T>, ArrayView<T>, int, int, int>(MatMulNaiveKernel);
@@ -327,6 +351,158 @@ public class IlgpuBackend<T> : IGpuBackend<T>
     {
         var numOps = MathHelper.GetNumericOperations<T>();
         output[index] = numOps.Tanh(input[index]);
+    }
+
+    /// <summary>
+    /// GPU kernel for LeakyReLU activation: f(x) = x if x > 0, else alpha * x.
+    /// </summary>
+    private static void LeakyReLUKernel(Index1D index, ArrayView<T> input, ArrayView<T> output, T alpha)
+    {
+        var numOps = MathHelper.GetNumericOperations<T>();
+        var value = input[index];
+        output[index] = numOps.GreaterThan(value, numOps.Zero) ? value : numOps.Multiply(alpha, value);
+    }
+
+    /// <summary>
+    /// GPU kernel for ELU activation: f(x) = x if x > 0, else alpha * (exp(x) - 1).
+    /// </summary>
+    private static void ELUKernel(Index1D index, ArrayView<T> input, ArrayView<T> output, T alpha)
+    {
+        var numOps = MathHelper.GetNumericOperations<T>();
+        var value = input[index];
+        if (numOps.GreaterThan(value, numOps.Zero))
+        {
+            output[index] = value;
+        }
+        else
+        {
+            var expVal = numOps.Exp(value);
+            var expMinus1 = numOps.Subtract(expVal, numOps.One);
+            output[index] = numOps.Multiply(alpha, expMinus1);
+        }
+    }
+
+    /// <summary>
+    /// GPU kernel for GELU activation (Gaussian Error Linear Unit).
+    /// Approximation: 0.5 * x * (1 + tanh(sqrt(2/pi) * (x + 0.044715 * x^3)))
+    /// </summary>
+    private static void GELUKernel(Index1D index, ArrayView<T> input, ArrayView<T> output)
+    {
+        var numOps = MathHelper.GetNumericOperations<T>();
+        var x = input[index];
+
+        // Constants
+        var half = numOps.Divide(numOps.One, numOps.FromInt(2));
+        var sqrt2OverPi = numOps.FromDouble(0.7978845608028654); // sqrt(2/pi)
+        var coeff = numOps.FromDouble(0.044715);
+
+        // x^3
+        var x2 = numOps.Multiply(x, x);
+        var x3 = numOps.Multiply(x2, x);
+
+        // 0.044715 * x^3
+        var term = numOps.Multiply(coeff, x3);
+
+        // x + 0.044715 * x^3
+        var inner = numOps.Add(x, term);
+
+        // sqrt(2/pi) * (x + 0.044715 * x^3)
+        var scaled = numOps.Multiply(sqrt2OverPi, inner);
+
+        // tanh(...)
+        var tanhVal = numOps.Tanh(scaled);
+
+        // 1 + tanh(...)
+        var onePlusTanh = numOps.Add(numOps.One, tanhVal);
+
+        // x * (1 + tanh(...))
+        var xMult = numOps.Multiply(x, onePlusTanh);
+
+        // 0.5 * x * (1 + tanh(...))
+        output[index] = numOps.Multiply(half, xMult);
+    }
+
+    /// <summary>
+    /// GPU kernel for Swish/SiLU activation: f(x) = x * sigmoid(x).
+    /// </summary>
+    private static void SwishKernel(Index1D index, ArrayView<T> input, ArrayView<T> output)
+    {
+        var numOps = MathHelper.GetNumericOperations<T>();
+        var x = input[index];
+
+        // Compute sigmoid(x) = 1 / (1 + exp(-x))
+        var negX = numOps.Negate(x);
+        var expNeg = numOps.Exp(negX);
+        var onePlusExp = numOps.Add(numOps.One, expNeg);
+        var sigmoid = numOps.Divide(numOps.One, onePlusExp);
+
+        // x * sigmoid(x)
+        output[index] = numOps.Multiply(x, sigmoid);
+    }
+
+    /// <summary>
+    /// GPU kernel for element-wise exponential: f(x) = exp(x).
+    /// </summary>
+    private static void ExpKernel(Index1D index, ArrayView<T> input, ArrayView<T> output)
+    {
+        var numOps = MathHelper.GetNumericOperations<T>();
+        output[index] = numOps.Exp(input[index]);
+    }
+
+    /// <summary>
+    /// GPU kernel for element-wise natural logarithm: f(x) = ln(x).
+    /// </summary>
+    private static void LogKernel(Index1D index, ArrayView<T> input, ArrayView<T> output)
+    {
+        var numOps = MathHelper.GetNumericOperations<T>();
+        output[index] = numOps.Log(input[index]);
+    }
+
+    /// <summary>
+    /// GPU kernel for element-wise square root: f(x) = sqrt(x).
+    /// </summary>
+    private static void SqrtKernel(Index1D index, ArrayView<T> input, ArrayView<T> output)
+    {
+        var numOps = MathHelper.GetNumericOperations<T>();
+        output[index] = numOps.Sqrt(input[index]);
+    }
+
+    /// <summary>
+    /// GPU kernel for element-wise power: f(x) = x^exponent.
+    /// </summary>
+    private static void PowerKernel(Index1D index, ArrayView<T> input, ArrayView<T> output, T exponent)
+    {
+        var numOps = MathHelper.GetNumericOperations<T>();
+        output[index] = numOps.Pow(input[index], exponent);
+    }
+
+    /// <summary>
+    /// GPU kernel for element-wise absolute value: f(x) = |x|.
+    /// </summary>
+    private static void AbsKernel(Index1D index, ArrayView<T> input, ArrayView<T> output)
+    {
+        var numOps = MathHelper.GetNumericOperations<T>();
+        output[index] = numOps.Abs(input[index]);
+    }
+
+    /// <summary>
+    /// GPU kernel for element-wise maximum with a scalar: f(x) = max(x, value).
+    /// </summary>
+    private static void MaximumKernel(Index1D index, ArrayView<T> input, ArrayView<T> output, T value)
+    {
+        var numOps = MathHelper.GetNumericOperations<T>();
+        var x = input[index];
+        output[index] = numOps.GreaterThan(x, value) ? x : value;
+    }
+
+    /// <summary>
+    /// GPU kernel for element-wise minimum with a scalar: f(x) = min(x, value).
+    /// </summary>
+    private static void MinimumKernel(Index1D index, ArrayView<T> input, ArrayView<T> output, T value)
+    {
+        var numOps = MathHelper.GetNumericOperations<T>();
+        var x = input[index];
+        output[index] = numOps.LessThan(x, value) ? x : value;
     }
 
     /// <summary>
@@ -724,6 +900,192 @@ public class IlgpuBackend<T> : IGpuBackend<T>
     {
         var result = Allocate(a.Shape);
         _tanhKernel!(result.Length, a.Buffer.View, result.Buffer.View);
+        Synchronize();
+        return result;
+    }
+
+    /// <inheritdoc/>
+    public GpuTensor<T> LeakyReLU(GpuTensor<T> a, T alpha)
+    {
+        var result = Allocate(a.Shape);
+        _leakyReluKernel!(result.Length, a.Buffer.View, result.Buffer.View, alpha);
+        Synchronize();
+        return result;
+    }
+
+    /// <inheritdoc/>
+    public GpuTensor<T> ELU(GpuTensor<T> a, T alpha)
+    {
+        var result = Allocate(a.Shape);
+        _eluKernel!(result.Length, a.Buffer.View, result.Buffer.View, alpha);
+        Synchronize();
+        return result;
+    }
+
+    /// <inheritdoc/>
+    public GpuTensor<T> GELU(GpuTensor<T> a)
+    {
+        var result = Allocate(a.Shape);
+        _geluKernel!(result.Length, a.Buffer.View, result.Buffer.View);
+        Synchronize();
+        return result;
+    }
+
+    /// <inheritdoc/>
+    public GpuTensor<T> Swish(GpuTensor<T> a)
+    {
+        var result = Allocate(a.Shape);
+        _swishKernel!(result.Length, a.Buffer.View, result.Buffer.View);
+        Synchronize();
+        return result;
+    }
+
+    /// <inheritdoc/>
+    public GpuTensor<T> Softmax(GpuTensor<T> a)
+    {
+        // Softmax is more complex - needs to be computed along a dimension
+        // For now, implement a simple version that works along the last dimension
+        // This is a temporary CPU implementation
+        // TODO: Implement efficient GPU kernel with shared memory reduction
+
+        var cpuTensor = ToCpu(a);
+        var resultCpu = ComputeSoftmaxCpu(cpuTensor);
+        return ToGpu(resultCpu);
+    }
+
+    /// <summary>
+    /// CPU fallback for Softmax computation.
+    /// </summary>
+    private Tensor<T> ComputeSoftmaxCpu(Tensor<T> input)
+    {
+        var result = new Tensor<T>(input.Shape);
+
+        if (input.Rank == 1)
+        {
+            // 1D case: simple softmax
+            var max = input[0];
+            for (int i = 1; i < input.Length; i++)
+            {
+                if (_numOps.GreaterThan(input[i], max))
+                    max = input[i];
+            }
+
+            var sum = _numOps.Zero;
+            for (int i = 0; i < input.Length; i++)
+            {
+                var exp = _numOps.Exp(_numOps.Subtract(input[i], max));
+                result[i] = exp;
+                sum = _numOps.Add(sum, exp);
+            }
+
+            for (int i = 0; i < input.Length; i++)
+            {
+                result[i] = _numOps.Divide(result[i], sum);
+            }
+        }
+        else if (input.Rank == 2)
+        {
+            // 2D case: softmax along last dimension (each row independently)
+            int rows = input.Shape[0];
+            int cols = input.Shape[1];
+
+            for (int row = 0; row < rows; row++)
+            {
+                // Find max in this row
+                var max = input[row, 0];
+                for (int col = 1; col < cols; col++)
+                {
+                    if (_numOps.GreaterThan(input[row, col], max))
+                        max = input[row, col];
+                }
+
+                // Compute exp and sum
+                var sum = _numOps.Zero;
+                for (int col = 0; col < cols; col++)
+                {
+                    var exp = _numOps.Exp(_numOps.Subtract(input[row, col], max));
+                    result[row, col] = exp;
+                    sum = _numOps.Add(sum, exp);
+                }
+
+                // Normalize
+                for (int col = 0; col < cols; col++)
+                {
+                    result[row, col] = _numOps.Divide(result[row, col], sum);
+                }
+            }
+        }
+        else
+        {
+            throw new NotImplementedException("Softmax for tensors with rank > 2 not yet implemented");
+        }
+
+        return result;
+    }
+
+    #endregion
+
+    #region Element-wise Math Operations
+
+    /// <inheritdoc/>
+    public GpuTensor<T> Exp(GpuTensor<T> a)
+    {
+        var result = Allocate(a.Shape);
+        _expKernel!(result.Length, a.Buffer.View, result.Buffer.View);
+        Synchronize();
+        return result;
+    }
+
+    /// <inheritdoc/>
+    public GpuTensor<T> Log(GpuTensor<T> a)
+    {
+        var result = Allocate(a.Shape);
+        _logKernel!(result.Length, a.Buffer.View, result.Buffer.View);
+        Synchronize();
+        return result;
+    }
+
+    /// <inheritdoc/>
+    public GpuTensor<T> Sqrt(GpuTensor<T> a)
+    {
+        var result = Allocate(a.Shape);
+        _sqrtKernel!(result.Length, a.Buffer.View, result.Buffer.View);
+        Synchronize();
+        return result;
+    }
+
+    /// <inheritdoc/>
+    public GpuTensor<T> Power(GpuTensor<T> a, T exponent)
+    {
+        var result = Allocate(a.Shape);
+        _powerKernel!(result.Length, a.Buffer.View, result.Buffer.View, exponent);
+        Synchronize();
+        return result;
+    }
+
+    /// <inheritdoc/>
+    public GpuTensor<T> Abs(GpuTensor<T> a)
+    {
+        var result = Allocate(a.Shape);
+        _absKernel!(result.Length, a.Buffer.View, result.Buffer.View);
+        Synchronize();
+        return result;
+    }
+
+    /// <inheritdoc/>
+    public GpuTensor<T> Maximum(GpuTensor<T> a, T value)
+    {
+        var result = Allocate(a.Shape);
+        _maximumKernel!(result.Length, a.Buffer.View, result.Buffer.View, value);
+        Synchronize();
+        return result;
+    }
+
+    /// <inheritdoc/>
+    public GpuTensor<T> Minimum(GpuTensor<T> a, T value)
+    {
+        var result = Allocate(a.Shape);
+        _minimumKernel!(result.Length, a.Buffer.View, result.Buffer.View, value);
         Synchronize();
         return result;
     }

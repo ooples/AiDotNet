@@ -168,6 +168,99 @@ public interface IGpuBackend<T> : IDisposable
     /// <returns>A new GPU tensor with Tanh applied.</returns>
     GpuTensor<T> Tanh(GpuTensor<T> a);
 
+    /// <summary>
+    /// Applies LeakyReLU activation function element-wise: f(x) = x if x > 0, else alpha * x.
+    /// </summary>
+    /// <param name="a">The input tensor.</param>
+    /// <param name="alpha">The slope for negative values (typically 0.01).</param>
+    /// <returns>A new GPU tensor with LeakyReLU applied.</returns>
+    GpuTensor<T> LeakyReLU(GpuTensor<T> a, T alpha);
+
+    /// <summary>
+    /// Applies ELU activation function element-wise: f(x) = x if x > 0, else alpha * (exp(x) - 1).
+    /// </summary>
+    /// <param name="a">The input tensor.</param>
+    /// <param name="alpha">The scale for negative values (typically 1.0).</param>
+    /// <returns>A new GPU tensor with ELU applied.</returns>
+    GpuTensor<T> ELU(GpuTensor<T> a, T alpha);
+
+    /// <summary>
+    /// Applies GELU activation function element-wise (Gaussian Error Linear Unit).
+    /// </summary>
+    /// <param name="a">The input tensor.</param>
+    /// <returns>A new GPU tensor with GELU applied.</returns>
+    GpuTensor<T> GELU(GpuTensor<T> a);
+
+    /// <summary>
+    /// Applies Swish/SiLU activation function element-wise: f(x) = x * sigmoid(x).
+    /// </summary>
+    /// <param name="a">The input tensor.</param>
+    /// <returns>A new GPU tensor with Swish applied.</returns>
+    GpuTensor<T> Swish(GpuTensor<T> a);
+
+    /// <summary>
+    /// Applies Softmax activation function along the last dimension.
+    /// </summary>
+    /// <param name="a">The input tensor.</param>
+    /// <returns>A new GPU tensor with Softmax applied.</returns>
+    GpuTensor<T> Softmax(GpuTensor<T> a);
+
+    #endregion
+
+    #region Element-wise Math Operations
+
+    /// <summary>
+    /// Applies element-wise exponential: f(x) = exp(x).
+    /// </summary>
+    /// <param name="a">The input tensor.</param>
+    /// <returns>A new GPU tensor with exp applied.</returns>
+    GpuTensor<T> Exp(GpuTensor<T> a);
+
+    /// <summary>
+    /// Applies element-wise natural logarithm: f(x) = ln(x).
+    /// </summary>
+    /// <param name="a">The input tensor.</param>
+    /// <returns>A new GPU tensor with log applied.</returns>
+    GpuTensor<T> Log(GpuTensor<T> a);
+
+    /// <summary>
+    /// Applies element-wise square root: f(x) = sqrt(x).
+    /// </summary>
+    /// <param name="a">The input tensor.</param>
+    /// <returns>A new GPU tensor with sqrt applied.</returns>
+    GpuTensor<T> Sqrt(GpuTensor<T> a);
+
+    /// <summary>
+    /// Applies element-wise power: f(x) = x^exponent.
+    /// </summary>
+    /// <param name="a">The input tensor.</param>
+    /// <param name="exponent">The exponent to raise to.</param>
+    /// <returns>A new GPU tensor with power applied.</returns>
+    GpuTensor<T> Power(GpuTensor<T> a, T exponent);
+
+    /// <summary>
+    /// Applies element-wise absolute value: f(x) = |x|.
+    /// </summary>
+    /// <param name="a">The input tensor.</param>
+    /// <returns>A new GPU tensor with absolute value applied.</returns>
+    GpuTensor<T> Abs(GpuTensor<T> a);
+
+    /// <summary>
+    /// Applies element-wise maximum with a scalar: f(x) = max(x, value).
+    /// </summary>
+    /// <param name="a">The input tensor.</param>
+    /// <param name="value">The scalar value to compare against.</param>
+    /// <returns>A new GPU tensor with maximum applied.</returns>
+    GpuTensor<T> Maximum(GpuTensor<T> a, T value);
+
+    /// <summary>
+    /// Applies element-wise minimum with a scalar: f(x) = min(x, value).
+    /// </summary>
+    /// <param name="a">The input tensor.</param>
+    /// <param name="value">The scalar value to compare against.</param>
+    /// <returns>A new GPU tensor with minimum applied.</returns>
+    GpuTensor<T> Minimum(GpuTensor<T> a, T value);
+
     #endregion
 
     #region Reductions
