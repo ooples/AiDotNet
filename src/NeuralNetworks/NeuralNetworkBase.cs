@@ -2425,17 +2425,21 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
         return layer switch
         {
             Layers.DenseLayer<T> denseLayer => ConvertDenseLayer(denseLayer, input),
+            Layers.FullyConnectedLayer<T> fcLayer => ConvertFullyConnectedLayer(fcLayer, input),
             Layers.ActivationLayer<T> activationLayer => ConvertActivationLayer(activationLayer, input),
             Layers.DropoutLayer<T> => input, // Dropout is identity during inference
+            Layers.GaussianNoiseLayer<T> => input, // Noise is disabled during inference
             Layers.FlattenLayer<T> flattenLayer => ConvertFlattenLayer(flattenLayer, input),
             Layers.ReshapeLayer<T> => input, // Reshape is identity in flat tensor representation
+            Layers.InputLayer<T> => input, // Input layer is pass-through
             Layers.BatchNormalizationLayer<T> bnLayer => ConvertBatchNormalizationLayer(bnLayer, input),
             Layers.LayerNormalizationLayer<T> lnLayer => ConvertLayerNormalizationLayer(lnLayer, input),
 
             // Add more layer types as they are implemented
             _ => throw new NotSupportedException(
                 $"Layer type {layer.GetType().Name} is not yet supported for JIT compilation. " +
-                $"Supported layers: DenseLayer, ActivationLayer, DropoutLayer, FlattenLayer, ReshapeLayer, BatchNormalizationLayer, LayerNormalizationLayer. " +
+                $"Supported layers: DenseLayer, FullyConnectedLayer, ActivationLayer, DropoutLayer, GaussianNoiseLayer, " +
+                $"FlattenLayer, ReshapeLayer, InputLayer, BatchNormalizationLayer, LayerNormalizationLayer. " +
                 $"Support for additional layer types will be added in future updates.")
         };
     }
@@ -2478,6 +2482,54 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
         // Create bias vector node: shape [1, outputSize]
         var biasShape = new int[] { 1, outputSize };
         var biasTensor = new Tensor<T>(biasShape, new Vector<T>(biasData));
+        var biasNode = new ComputationNode<T>(biasTensor);
+
+        // Add bias: matmul + bias
+        var outputNode = TensorOperations.Add(matmulNode, biasNode);
+
+        return outputNode;
+    }
+
+    /// <summary>
+    /// Converts a fully connected layer to computation graph.
+    /// </summary>
+    private ComputationNode<T> ConvertFullyConnectedLayer(Layers.FullyConnectedLayer<T> layer, ComputationNode<T> input)
+    {
+        // FullyConnectedLayer: output = input @ weights + bias
+        // Very similar to DenseLayer
+
+        // Get layer parameters via reflection
+        var layerType = layer.GetType();
+        var weightsField = layerType.GetField("_weights", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
+        var biasesField = layerType.GetField("_biases", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
+
+        var weights = (Matrix<T>)weightsField!.GetValue(layer)!;
+        var biases = (Vector<T>)biasesField!.GetValue(layer)!;
+
+        int inputSize = weights.Columns;
+        int outputSize = weights.Rows;
+
+        // Convert weights Matrix to Tensor
+        // Weights are [outputSize, inputSize], need to transpose for matmul
+        var weightsData = new T[inputSize * outputSize];
+        for (int i = 0; i < inputSize; i++)
+        {
+            for (int j = 0; j < outputSize; j++)
+            {
+                weightsData[i * outputSize + j] = weights[j, i]; // Transpose
+            }
+        }
+
+        var weightsShape = new int[] { inputSize, outputSize };
+        var weightsTensor = new Tensor<T>(weightsShape, new Vector<T>(weightsData));
+        var weightsNode = new ComputationNode<T>(weightsTensor);
+
+        // Matrix multiply: input @ weights
+        var matmulNode = TensorOperations.MatrixMultiply(input, weightsNode);
+
+        // Create bias vector node
+        var biasShape = new int[] { 1, outputSize };
+        var biasTensor = new Tensor<T>(biasShape, biases);
         var biasNode = new ComputationNode<T>(biasTensor);
 
         // Add bias: matmul + bias
