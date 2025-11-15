@@ -55,13 +55,13 @@ public class TrainingExample
         var problems = GSM8KDataLoader.GetSampleProblems();
 
         var trainingData = problems
-            .Take(30)
+            .Take(3)
             .Select(p => (p.Question, p.FinalAnswer))
             .ToList();
 
         var validationData = problems
-            .Skip(30)
-            .Take(10)
+            .Skip(3)
+            .Take(2)
             .Select(p => (p.Question, p.FinalAnswer))
             .ToList();
 
@@ -121,13 +121,13 @@ public class TrainingExample
         var problems = GSM8KDataLoader.GetSampleProblems();
 
         var trainingData = problems
-            .Take(20)
+            .Take(3)
             .Select(p => (p.Question, p.FinalAnswer))
             .ToList();
 
         var validationData = problems
-            .Skip(20)
-            .Take(10)
+            .Skip(3)
+            .Take(2)
             .Select(p => (p.Question, p.FinalAnswer))
             .ToList();
 
