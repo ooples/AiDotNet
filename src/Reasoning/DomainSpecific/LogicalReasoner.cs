@@ -245,6 +245,9 @@ Show your reasoning clearly at each step:";
 
         string prompt = $@"Argument Evaluation:
 
+Argument:
+{argument}
+
 {premisesStr}
 Conclusion: {conclusion}
 
