@@ -365,7 +365,22 @@ public class LSPIAgent<T> : ReinforcementLearningAgentBase<T>
                     _weights[a, f] = parameters[idx++];
     }
 
-    public override IFullModel<T, Vector<T>, Vector<T>> Clone() => new LSPIAgent<T>(_options);
+    public override IFullModel<T, Vector<T>, Vector<T>> Clone()
+    {
+        var clone = new LSPIAgent<T>(_options);
+        // Copy learned weights
+        for (int a = 0; a < _options.ActionSize; a++)
+        {
+            for (int f = 0; f < _options.FeatureSize; f++)
+            {
+                clone._weights[a, f] = _weights[a, f];
+            }
+        }
+        // Copy samples and iterations
+        clone._samples.AddRange(_samples);
+        clone._iterations = _iterations;
+        return clone;
+    }
 
     public override Vector<T> ComputeGradients(Vector<T> input, Vector<T> target, ILossFunction<T>? lossFunction = null)
     {
