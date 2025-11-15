@@ -109,6 +109,8 @@ public interface ILanguageModel<T>
     /// </summary>
     /// <param name="prompt">The input text prompt to send to the language model.
     /// This can be a question, instruction, or any text that requires a response.</param>
+    /// <param name="cancellationToken">Optional cancellation token to cancel the generation operation.
+    /// Use this to implement timeouts or allow users to cancel long-running requests.</param>
     /// <returns>A task that represents the asynchronous operation. The task result contains
     /// the model's generated response as a string.</returns>
     /// <remarks>
@@ -135,7 +137,8 @@ public interface ILanguageModel<T>
     /// - Always use try-catch to handle errors (API failures, rate limits, etc.)
     /// - Consider retry logic for transient failures
     /// - Monitor token usage to control costs
-    /// - Implement timeouts for long-running requests
+    /// - Use CancellationToken to implement timeouts and allow cancellation
+    ///   (e.g., var cts = new CancellationTokenSource(TimeSpan.FromSeconds(30)))
     /// </remarks>
     Task<string> GenerateAsync(string prompt, CancellationToken cancellationToken = default);
 

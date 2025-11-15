@@ -39,7 +39,7 @@ public class MockChatModel<T> : IChatModel<T>
     public IReadOnlyList<string> ReceivedPrompts => _receivedPrompts.AsReadOnly();
 
     /// <inheritdoc/>
-    public Task<string> GenerateAsync(string prompt)
+    public Task<string> GenerateAsync(string prompt, CancellationToken cancellationToken = default)
     {
         _receivedPrompts.Add(prompt);
 
@@ -63,8 +63,8 @@ public class MockChatModel<T> : IChatModel<T>
     /// <inheritdoc/>
     public Task<string> GenerateResponseAsync(string prompt, CancellationToken cancellationToken = default)
     {
-        // Alias for GenerateAsync
-        return GenerateAsync(prompt);
+        // Alias for GenerateAsync - propagate cancellation token
+        return GenerateAsync(prompt, cancellationToken);
     }
 
     /// <summary>
