@@ -38,7 +38,7 @@ namespace AiDotNet.Reasoning.Search;
 /// "A Survey of Monte Carlo Tree Search Methods" (Browne et al., 2012)
 /// </para>
 /// </remarks>
-public class MonteCarloTreeSearch<T> : ISearchAlgorithm<T> where T : struct, IConvertible
+public class MonteCarloTreeSearch<T> : ISearchAlgorithm<T>
 {
     private readonly double _explorationConstant;
     private readonly int _numSimulations;
