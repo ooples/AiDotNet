@@ -424,15 +424,17 @@ public class CQLAgent<T> : DeepReinforcementLearningAgentBase<T>
             var policyGrad = new Vector<T>(_options.ActionSize * 2);
             for (int policyGradIdx = 0; policyGradIdx < _options.ActionSize; policyGradIdx++)
             {
-                // CRITICAL FIX: Negate actionGrad because policy loss is -Q(s,a)
+                // Mean (mu) gradient: Negate actionGrad because policy loss is -Q(s,a)
                 // actionGrad contains dQ/da, but we want d(-Q)/da = -dQ/da
                 policyGrad[policyGradIdx] = _numOps.Negate(actionGrad[_options.StateSize + policyGradIdx]);
 
-                // Compute log-sigma gradients from entropy regularization
-                // d/d(log_sigma) of entropy = 1 (from Gaussian entropy formula)
-                var logStd = policyOut[_options.ActionSize + policyGradIdx];
+                // Log-sigma gradient: Combine action gradient and entropy regularization
+                // The variance affects both Q-value and entropy
+                var varianceActionGrad = actionGrad.Length > _options.StateSize + _options.ActionSize + policyGradIdx
+                    ? actionGrad[_options.StateSize + _options.ActionSize + policyGradIdx]
+                    : _numOps.Zero;
                 var entropyGrad = _alpha; // Gradient of entropy w.r.t. log_sigma
-                policyGrad[_options.ActionSize + policyGradIdx] = entropyGrad;
+                policyGrad[_options.ActionSize + policyGradIdx] = _numOps.Add(_numOps.Negate(varianceActionGrad), entropyGrad);
             }
 
             var policyGradTensor = Tensor<T>.FromVector(policyGrad);
