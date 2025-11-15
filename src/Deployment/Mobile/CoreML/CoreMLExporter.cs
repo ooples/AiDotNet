@@ -11,7 +11,7 @@ namespace AiDotNet.Deployment.Mobile.CoreML;
 /// <typeparam name="T">The numeric type used in the model</typeparam>
 /// <typeparam name="TInput">The input type for the model</typeparam>
 /// <typeparam name="TOutput">The output type for the model</typeparam>
-public class CoreMLExporter<T, TInput, TOutput> : ModelExporterBase<T, TInput, TOutput> where T : struct
+public class CoreMLExporter<T, TInput, TOutput> : ModelExporterBase<T, TInput, TOutput>
 {
     private readonly OnnxModelExporter<T, TInput, TOutput> _onnxExporter;
 

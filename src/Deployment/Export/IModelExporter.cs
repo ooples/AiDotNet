@@ -10,7 +10,7 @@ namespace AiDotNet.Deployment.Export;
 /// <typeparam name="T">The numeric type used in the model (e.g., float, double)</typeparam>
 /// <typeparam name="TInput">The input type for the model</typeparam>
 /// <typeparam name="TOutput">The output type for the model</typeparam>
-public interface IModelExporter<T, TInput, TOutput> where T : struct
+public interface IModelExporter<T, TInput, TOutput>
 {
     /// <summary>
     /// Gets the target export format (e.g., "ONNX", "TensorFlowLite", "CoreML", "TensorRT")

@@ -340,7 +340,7 @@ internal static class OnnxProto
         };
     }
 
-    private static byte[] CreateTensorProto<T>(string name, Vector<T> data) where T : struct
+    private static byte[] CreateTensorProto<T>(string name, Vector<T> data)
     {
         using var stream = new MemoryStream();
         using var writer = new CodedOutputStream(stream);
@@ -401,7 +401,7 @@ internal static class OnnxProto
         return (int)DataType.FLOAT;
     }
 
-    private static byte[] VectorToBytes<T>(Vector<T> vector) where T : struct
+    private static byte[] VectorToBytes<T>(Vector<T> vector)
     {
         var elementSize = System.Runtime.InteropServices.Marshal.SizeOf<T>();
         var bytes = new byte[vector.Length * elementSize];

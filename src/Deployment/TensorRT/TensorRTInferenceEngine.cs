@@ -9,7 +9,7 @@ namespace AiDotNet.Deployment.TensorRT;
 /// Supports multi-stream execution and CUDA graph optimization.
 /// </summary>
 /// <typeparam name="T">The numeric type for input/output tensors</typeparam>
-public class TensorRTInferenceEngine<T> : IDisposable where T : struct
+public class TensorRTInferenceEngine<T> : IDisposable
 {
     private readonly string _enginePath;
     private readonly TensorRTConfiguration _config;

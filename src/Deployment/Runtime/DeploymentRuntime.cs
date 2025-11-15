@@ -9,7 +9,7 @@ namespace AiDotNet.Deployment.Runtime;
 /// Runtime environment for deployed models with warm-up, versioning, A/B testing, and telemetry.
 /// </summary>
 /// <typeparam name="T">The numeric type for input/output tensors</typeparam>
-public class DeploymentRuntime<T> where T : struct
+public class DeploymentRuntime<T>
 {
     private readonly RuntimeConfiguration _config;
     private readonly ConcurrentDictionary<string, ModelVersion<T>> _models;
@@ -537,7 +537,7 @@ public class DeploymentRuntime<T> where T : struct
 /// <summary>
 /// Represents a versioned model in the runtime.
 /// </summary>
-internal class ModelVersion<T> where T : struct
+internal class ModelVersion<T>
 {
     public string Name { get; set; } = string.Empty;
     public string Version { get; set; } = string.Empty;

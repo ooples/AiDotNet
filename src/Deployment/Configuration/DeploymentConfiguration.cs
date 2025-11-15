@@ -1,10 +1,10 @@
 namespace AiDotNet.Deployment.Configuration;
 
 /// <summary>
-/// Internal class that aggregates all deployment-related configurations.
+/// Aggregates all deployment-related configurations.
 /// Used to pass deployment settings from PredictionModelBuilder to PredictionModelResult.
 /// </summary>
-internal class DeploymentConfiguration
+public class DeploymentConfiguration
 {
     /// <summary>
     /// Gets or sets the quantization configuration (null = no quantization).

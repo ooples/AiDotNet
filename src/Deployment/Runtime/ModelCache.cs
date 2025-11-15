@@ -8,7 +8,7 @@ namespace AiDotNet.Deployment.Runtime;
 /// Cache for model inference results.
 /// </summary>
 /// <typeparam name="T">The numeric type for tensors</typeparam>
-public class ModelCache<T> where T : struct
+public class ModelCache<T>
 {
     private readonly bool _enabled;
     private readonly ConcurrentDictionary<string, CacheEntry<T>> _cache;
@@ -196,7 +196,7 @@ public class ModelCache<T> where T : struct
 /// <summary>
 /// Represents a cached inference result with thread-safe access tracking.
 /// </summary>
-internal class CacheEntry<T> where T : struct
+internal class CacheEntry<T>
 {
     public T[] Result { get; set; } = Array.Empty<T>();
     public DateTime CachedAt { get; set; }

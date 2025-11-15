@@ -8,7 +8,7 @@ namespace AiDotNet.Deployment.Edge;
 /// <typeparam name="T">The numeric type used in the model</typeparam>
 /// <typeparam name="TInput">The input type for the model</typeparam>
 /// <typeparam name="TOutput">The output type for the model</typeparam>
-public class PartitionedModel<T, TInput, TOutput> where T : struct
+public class PartitionedModel<T, TInput, TOutput>
 {
     /// <summary>Gets or sets the original model.</summary>
     public IFullModel<T, TInput, TOutput>? OriginalModel { get; set; }

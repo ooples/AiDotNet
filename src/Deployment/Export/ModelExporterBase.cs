@@ -9,7 +9,7 @@ namespace AiDotNet.Deployment.Export;
 /// <typeparam name="T">The numeric type used in the model</typeparam>
 /// <typeparam name="TInput">The input type for the model</typeparam>
 /// <typeparam name="TOutput">The output type for the model</typeparam>
-public abstract class ModelExporterBase<T, TInput, TOutput> : IModelExporter<T, TInput, TOutput> where T : struct
+public abstract class ModelExporterBase<T, TInput, TOutput> : IModelExporter<T, TInput, TOutput>
 {
     /// <inheritdoc/>
     public abstract string ExportFormat { get; }

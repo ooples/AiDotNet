@@ -11,7 +11,7 @@ namespace AiDotNet.Deployment.Optimization.Quantization;
 /// <typeparam name="T">The numeric type used in the model</typeparam>
 /// <typeparam name="TInput">The input type for the model</typeparam>
 /// <typeparam name="TOutput">The output type for the model</typeparam>
-public class Int8Quantizer<T, TInput, TOutput> : IQuantizer<T, TInput, TOutput> where T : struct
+public class Int8Quantizer<T, TInput, TOutput> : IQuantizer<T, TInput, TOutput>
 {
     private readonly Dictionary<string, double> _scaleFactors = new();
     private readonly Dictionary<string, int> _zeroPoints = new();
