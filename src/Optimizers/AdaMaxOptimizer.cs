@@ -302,6 +302,13 @@ public class AdaMaxOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T,
 
         _t++;
 
+        // Try GPU-accelerated parameter update for large parameter sets
+        if (IsGpuAccelerationEnabled && typeof(T) == typeof(float) && parameters.Length >= 10000)
+        {
+            return UpdateParametersGpu(parameters, gradient);
+        }
+
+        // CPU fallback
         var updatedParams = new Vector<T>(parameters.Length);
         var beta1 = NumOps.FromDouble(_options.Beta1);
         var oneMinusBeta1 = NumOps.FromDouble(1 - _options.Beta1);
@@ -324,6 +331,91 @@ public class AdaMaxOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T,
         }
 
         return updatedParams;
+    }
+
+    /// <summary>
+    /// GPU-accelerated version of parameter update.
+    /// </summary>
+    private Vector<T> UpdateParametersGpu(Vector<T> parameters, Vector<T> gradient)
+    {
+        var backend = _gpuContext!.GpuBackend as Gpu.IlgpuBackend<float>;
+        if (backend == null) return UpdateParameters(parameters, gradient);
+
+        // Cast to float
+        var paramsFloat = VectorToTensor(parameters as Vector<float>!);
+        var gradFloat = VectorToTensor(gradient as Vector<float>!);
+        var mFloat = VectorToTensor(_m as Vector<float>!);
+        var uFloat = VectorToTensor(_u as Vector<float>!);
+
+        _gpuContext.Statistics.IncrementGpuOperations();
+
+        // Transfer to GPU
+        using var gpuParams = backend.ToGpu(paramsFloat);
+        using var gpuGrad = backend.ToGpu(gradFloat);
+        using var gpuM = backend.ToGpu(mFloat);
+        using var gpuU = backend.ToGpu(uFloat);
+
+        // Constants
+        var beta1Tensor = backend.ToGpu(new LinearAlgebra.Tensor<float>(new[] { 1 }) { [0] = (float)_options.Beta1 });
+        var beta2Tensor = backend.ToGpu(new LinearAlgebra.Tensor<float>(new[] { 1 }) { [0] = (float)_options.Beta2 });
+        var oneMinusBeta1Tensor = backend.ToGpu(new LinearAlgebra.Tensor<float>(new[] { 1 }) { [0] = 1.0f - (float)_options.Beta1 });
+
+        // m = beta1 * m + (1 - beta1) * gradient
+        using var beta1M = backend.Multiply(gpuM, beta1Tensor);
+        using var gradTerm = backend.Multiply(gpuGrad, oneMinusBeta1Tensor);
+        using var newM = backend.Add(beta1M, gradTerm);
+
+        // u = max(beta2 * u, abs(gradient))
+        // Using mathematical trick: max(a,b) = 0.5 * (a + b + |a - b|)
+        using var beta2U = backend.Multiply(gpuU, beta2Tensor);
+        using var absGrad = backend.Abs(gpuGrad);
+        using var diff = backend.Subtract(beta2U, absGrad);
+        using var absDiff = backend.Abs(diff);
+        using var sum = backend.Add(beta2U, absGrad);
+        using var sumPlusAbsDiff = backend.Add(sum, absDiff);
+        var halfTensor = backend.ToGpu(new LinearAlgebra.Tensor<float>(new[] { 1 }) { [0] = 0.5f });
+        using var newU = backend.Multiply(sumPlusAbsDiff, halfTensor);
+        halfTensor.Dispose();
+
+        // alpha = lr / (1 - beta1^t)
+        var alphaTensor = backend.ToGpu(new LinearAlgebra.Tensor<float>(new[] { 1 })
+            { [0] = (float)CurrentLearningRate / (1.0f - (float)Math.Pow(_options.Beta1, _t)) });
+
+        // update = alpha * m / u
+        using var alphaM = backend.Multiply(newM, alphaTensor);
+        using var update = backend.Divide(alphaM, newU);
+
+        // params = params - update
+        using var newParams = backend.Subtract(gpuParams, update);
+
+        // Transfer back and update state
+        _m = TensorToVector(backend.ToCpu(newM)) as Vector<T>!;
+        _u = TensorToVector(backend.ToCpu(newU)) as Vector<T>!;
+        var result = backend.ToCpu(newParams);
+
+        // Cleanup
+        beta1Tensor.Dispose();
+        beta2Tensor.Dispose();
+        oneMinusBeta1Tensor.Dispose();
+        alphaTensor.Dispose();
+
+        return TensorToVector(result) as Vector<T>!;
+    }
+
+    private LinearAlgebra.Tensor<float> VectorToTensor(Vector<float> vector)
+    {
+        var tensor = new LinearAlgebra.Tensor<float>(new[] { vector.Length });
+        for (int i = 0; i < vector.Length; i++)
+            tensor[i] = vector[i];
+        return tensor;
+    }
+
+    private Vector<float> TensorToVector(LinearAlgebra.Tensor<float> tensor)
+    {
+        var vector = new Vector<float>(tensor.Length);
+        for (int i = 0; i < tensor.Length; i++)
+            vector[i] = tensor[i];
+        return vector;
     }
 
     /// <summary>
