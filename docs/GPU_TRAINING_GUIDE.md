@@ -461,11 +461,20 @@ var result = await builder
 | Transpose | ✅ | 20-40x |
 | Element-wise Add | ✅ | 5-20x |
 | Element-wise Multiply | ✅ | 5-20x |
+| Element-wise Divide | ✅ | 5-20x |
+| Element-wise Subtract | ✅ | 5-20x |
 | ReLU Activation | ✅ | 10-30x |
+| LeakyReLU Activation | ✅ | 10-30x |
+| ELU Activation | ✅ | 10-30x |
+| GELU Activation | ✅ | 10-30x |
+| Swish/SiLU Activation | ✅ | 10-30x |
+| Sigmoid | ✅ | 10-30x |
+| Tanh | ✅ | 10-30x |
+| Softmax | ⏳ | Planned (CPU fallback) |
+| Exp, Log, Sqrt | ✅ | 10-30x |
+| Power, Abs | ✅ | 10-30x |
+| Maximum, Minimum | ✅ | 10-30x |
 | Sum Reduction | ✅ | 10-30x |
-| Sigmoid | ⏳ | Planned |
-| Tanh | ⏳ | Planned |
-| Softmax | ⏳ | Planned |
 
 ### Memory Management
 
