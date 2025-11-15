@@ -242,13 +242,16 @@ public class SARSAAgent<T> : ReinforcementLearningAgentBase<T>
 
     public override void SetParameters(Vector<T> parameters)
     {
-        // Reconstruct Q-table from vector
+        // Preserve state keys before clearing
         var stateKeys = _qTable.Keys.ToList();
+
+        // Clear and reconstruct Q-table from vector
         _qTable.Clear();
 
         int maxStates = parameters.Length / _options.ActionSize;
+        int statesToRestore = Math.Min(maxStates, stateKeys.Count);
 
-        for (int i = 0; i < Math.Min(maxStates, stateKeys.Count); i++)
+        for (int i = 0; i < statesToRestore; i++)
         {
             var qValues = new Dictionary<int, T>();
             for (int action = 0; action < _options.ActionSize; action++)
