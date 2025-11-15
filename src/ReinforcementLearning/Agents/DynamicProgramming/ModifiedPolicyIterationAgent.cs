@@ -7,6 +7,17 @@ using Newtonsoft.Json;
 namespace AiDotNet.ReinforcementLearning.Agents.DynamicProgramming;
 
 /// <summary>
+/// Helper class for serializing model transition data.
+/// </summary>
+/// <typeparam name="T">The numeric type used for calculations.</typeparam>
+public class TransitionData<T>
+{
+    public string NextState { get; set; } = string.Empty;
+    public T Reward { get; set; } = default(T);
+    public T Probability { get; set; } = default(T);
+}
+
+/// <summary>
 /// Modified Policy Iteration agent - hybrid of Policy Iteration and Value Iteration.
 /// </summary>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
@@ -247,12 +258,33 @@ public class ModifiedPolicyIterationAgent<T> : ReinforcementLearningAgentBase<T>
 
     public override byte[] Serialize()
     {
+        // Convert model tuples to serializable format
+        var serializableModel = new Dictionary<string, Dictionary<int, List<TransitionData<T>>>>();
+        foreach (var stateEntry in _model)
+        {
+            var actionDict = new Dictionary<int, List<TransitionData<T>>>();
+            foreach (var actionEntry in stateEntry.Value)
+            {
+                var transitionList = new List<TransitionData<T>>();
+                foreach (var transition in actionEntry.Value)
+                {
+                    transitionList.Add(new TransitionData<T>
+                    {
+                        NextState = transition.nextState,
+                        Reward = transition.reward,
+                        Probability = transition.probability
+                    });
+                }
+                actionDict[actionEntry.Key] = transitionList;
+            }
+            serializableModel[stateEntry.Key] = actionDict;
+        }
+
         var state = new
         {
             ValueTable = _valueTable,
             Policy = _policy,
-            Model = _model,
-            Options = _options
+            Model = serializableModel
         };
         string json = JsonConvert.SerializeObject(state);
         return System.Text.Encoding.UTF8.GetBytes(json);
@@ -274,7 +306,25 @@ public class ModifiedPolicyIterationAgent<T> : ReinforcementLearningAgentBase<T>
 
         _valueTable = JsonConvert.DeserializeObject<Dictionary<string, T>>(state.ValueTable.ToString()) ?? new Dictionary<string, T>();
         _policy = JsonConvert.DeserializeObject<Dictionary<string, int>>(state.Policy.ToString()) ?? new Dictionary<string, int>();
-        _model = JsonConvert.DeserializeObject<Dictionary<string, Dictionary<int, List<(string, T, T)>>>>(state.Model.ToString()) ?? new Dictionary<string, Dictionary<int, List<(string, T, T)>>>();
+
+        // Deserialize model from serializable format
+        var serializableModel = JsonConvert.DeserializeObject<Dictionary<string, Dictionary<int, List<TransitionData<T>>>>>(state.Model.ToString()) ?? new Dictionary<string, Dictionary<int, List<TransitionData<T>>>>();
+        _model = new Dictionary<string, Dictionary<int, List<(string, T, T)>>>();
+
+        foreach (var stateEntry in serializableModel)
+        {
+            var actionDict = new Dictionary<int, List<(string, T, T)>>();
+            foreach (var actionEntry in stateEntry.Value)
+            {
+                var transitionList = new List<(string, T, T)>();
+                foreach (var transition in actionEntry.Value)
+                {
+                    transitionList.Add((transition.NextState, transition.Reward, transition.Probability));
+                }
+                actionDict[actionEntry.Key] = transitionList;
+            }
+            _model[stateEntry.Key] = actionDict;
+        }
     }
 
     public override Vector<T> GetParameters()
