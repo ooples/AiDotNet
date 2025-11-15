@@ -11,17 +11,23 @@
 - [x] Reductions: Sum, Mean
 - [ ] Softmax (GPU kernel) - currently CPU fallback
 
-### Layers with GPU Support (5/74)
+### Layers with GPU Support (6/74)
 - [x] FeedForwardLayer - forward + backward
 - [x] DenseLayer - forward + backward
 - [x] FullyConnectedLayer - forward
 - [x] ActivationLayer - forward
 - [x] AddLayer - forward
-- [ ] 69 other layers need GPU support
+- [x] MultiplyLayer - forward
+- [ ] 68 other layers need GPU support
 
-### Optimizers (1/19)
+### Optimizers (6/19)
 - [x] AdamOptimizer - parameter updates
-- [ ] 18 other optimizers need GPU support
+- [x] MomentumOptimizer - parameter updates
+- [x] StochasticGradientDescentOptimizer - parameter updates
+- [x] RootMeanSquarePropagationOptimizer - parameter updates
+- [x] AdagradOptimizer - parameter updates
+- [x] NadamOptimizer - parameter updates
+- [ ] 13 other optimizers need GPU support
 
 ## High Priority - Common Layers
 
@@ -77,7 +83,7 @@
 
 ### Combination Layers
 - [x] AddLayer - element-wise add
-- [ ] MultiplyLayer - element-wise multiply
+- [x] MultiplyLayer - element-wise multiply
 - [ ] ConcatenateLayer - tensor concatenation
 
 ### Reshaping
@@ -118,17 +124,17 @@
 - [ ] LocallyConnectedLayer
 - [ ] ConditionalRandomFieldLayer
 
-## Optimizers Remaining (18/19)
+## Optimizers Remaining (13/19)
 
 - [x] AdamOptimizer
-- [ ] SGDOptimizer
-- [ ] MomentumOptimizer
-- [ ] RMSPropOptimizer
-- [ ] AdagradOptimizer
+- [x] MomentumOptimizer
+- [x] StochasticGradientDescentOptimizer
+- [x] RootMeanSquarePropagationOptimizer (RMSProp)
+- [x] AdagradOptimizer
+- [x] NadamOptimizer
 - [ ] AdaDeltaOptimizer
 - [ ] AdaMaxOptimizer
 - [ ] AMSGradOptimizer
-- [ ] NadamOptimizer
 - [ ] LionOptimizer
 - [ ] FTRLOptimizer
 - [ ] BFGSOptimizer
@@ -136,7 +142,6 @@
 - [ ] NesterovAcceleratedGradientOptimizer
 - [ ] GradientDescentOptimizer
 - [ ] MiniBatchGradientDescentOptimizer
-- [ ] StochasticGradientDescentOptimizer
 - [ ] ProximalGradientDescentOptimizer
 - [ ] CMAESOptimizer
 
@@ -167,7 +172,7 @@
 
 ## Current Status
 
-**Layers**: 5/74 complete (6.8%)
-**Optimizers**: 1/19 complete (5.3%)
+**Layers**: 6/74 complete (8.1%)
+**Optimizers**: 6/19 complete (31.6%)
 **Operations**: 17+ GPU kernels implemented
 **Backward passes**: FeedForwardLayer, DenseLayer have GPU backward

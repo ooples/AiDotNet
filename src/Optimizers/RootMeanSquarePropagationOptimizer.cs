@@ -211,33 +211,115 @@ public class RootMeanSquarePropagationOptimizer<T, TInput, TOutput> : GradientBa
     /// 3. Updates the parameter by subtracting the product of the adaptive learning rate and the gradient
     /// </para>
     /// <para><b>For Beginners:</b> This method adjusts each parameter based on its gradient history.
-    /// 
+    ///
     /// For each parameter:
     /// - It updates the memory of how steep this direction has been (squared gradient)
     /// - It calculates a custom step size based on the steepness history
     /// - Parameters with consistently large gradients get smaller steps
     /// - Parameters with consistently small gradients get larger steps
     /// - It then updates the parameter value using this custom step size
-    /// 
+    ///
     /// This adaptive approach helps the algorithm converge faster by giving each parameter
     /// exactly the step size it needs.
     /// </para>
     /// </remarks>
     public override Vector<T> UpdateParameters(Vector<T> parameters, Vector<T> gradient)
     {
+        if (_squaredGradient == null || _squaredGradient.Length != parameters.Length)
+        {
+            _squaredGradient = new Vector<T>(parameters.Length);
+        }
+
+        // Try GPU-accelerated parameter update for large parameter sets
+        if (IsGpuAccelerationEnabled && typeof(T) == typeof(float) && parameters.Length >= 10000)
+        {
+            return UpdateParametersGpu(parameters, gradient);
+        }
+
+        // CPU fallback
         for (int i = 0; i < parameters.Length; i++)
         {
             var squaredGrad = NumOps.Multiply(gradient[i], gradient[i]);
             _squaredGradient[i] = NumOps.Add(NumOps.Multiply(NumOps.FromDouble(_options.Decay), _squaredGradient[i]), NumOps.Multiply(NumOps.FromDouble(1 - _options.Decay), squaredGrad));
-            
+
             var adaptiveLearningRate = CurrentLearningRate;
             var denominator = NumOps.Add(NumOps.Sqrt(_squaredGradient[i]), NumOps.FromDouble(_options.Epsilon));
             var update = NumOps.Divide(NumOps.Multiply(adaptiveLearningRate, gradient[i]), denominator);
-            
+
             parameters[i] = NumOps.Subtract(parameters[i], update);
         }
 
         return parameters;
+    }
+
+    /// <summary>
+    /// GPU-accelerated version of parameter update.
+    /// </summary>
+    private Vector<T> UpdateParametersGpu(Vector<T> parameters, Vector<T> gradient)
+    {
+        var backend = _gpuContext!.GpuBackend as Gpu.IlgpuBackend<float>;
+        if (backend == null) return UpdateParameters(parameters, gradient);
+
+        // Cast to float
+        var paramsFloat = VectorToTensor(parameters as Vector<float>!);
+        var gradFloat = VectorToTensor(gradient as Vector<float>!);
+        var sqGradFloat = VectorToTensor(_squaredGradient as Vector<float>!);
+
+        _gpuContext.Statistics.IncrementGpuOperations();
+
+        // Transfer to GPU
+        using var gpuParams = backend.ToGpu(paramsFloat);
+        using var gpuGrad = backend.ToGpu(gradFloat);
+        using var gpuSqGrad = backend.ToGpu(sqGradFloat);
+
+        // Constants
+        var decayTensor = backend.ToGpu(new LinearAlgebra.Tensor<float>(new[] { 1 }) { [0] = (float)_options.Decay });
+        var oneMinusDecayTensor = backend.ToGpu(new LinearAlgebra.Tensor<float>(new[] { 1 }) { [0] = 1.0f - (float)_options.Decay });
+        var epsilonTensor = backend.ToGpu(new LinearAlgebra.Tensor<float>(new[] { 1 }) { [0] = (float)_options.Epsilon });
+        var lrTensor = backend.ToGpu(new LinearAlgebra.Tensor<float>(new[] { 1 }) { [0] = (float)CurrentLearningRate });
+
+        // sqGrad = decay * sqGrad + (1 - decay) * gradient^2
+        using var decaySqGrad = backend.Multiply(gpuSqGrad, decayTensor);
+        using var gradSquared = backend.Multiply(gpuGrad, gpuGrad);
+        using var gradTerm = backend.Multiply(gradSquared, oneMinusDecayTensor);
+        using var newSqGrad = backend.Add(decaySqGrad, gradTerm);
+
+        // update = lr * gradient / (sqrt(sqGrad) + epsilon)
+        using var sqrtSqGrad = backend.Sqrt(newSqGrad);
+        using var denominator = backend.Add(sqrtSqGrad, epsilonTensor);
+        using var lrGrad = backend.Multiply(gpuGrad, lrTensor);
+        using var update = backend.Divide(lrGrad, denominator);
+
+        // params = params - update
+        using var newParams = backend.Subtract(gpuParams, update);
+
+        // Transfer back and update state
+        _squaredGradient = TensorToVector(backend.ToCpu(newSqGrad)) as Vector<T>!;
+        var result = backend.ToCpu(newParams);
+
+        // Cleanup
+        decayTensor.Dispose();
+        oneMinusDecayTensor.Dispose();
+        epsilonTensor.Dispose();
+        lrTensor.Dispose();
+
+        return TensorToVector(result) as Vector<T>!;
+    }
+
+    private LinearAlgebra.Tensor<float> VectorToTensor(Vector<float> vector)
+    {
+        var tensor = new LinearAlgebra.Tensor<float>(new[] { vector.Length });
+        for (int i = 0; i < vector.Length; i++)
+            tensor[i] = vector[i];
+        return tensor;
+    }
+
+    private Vector<float> TensorToVector(LinearAlgebra.Tensor<float> tensor)
+    {
+        var vector = new Vector<float>(tensor.Length);
+        for (int i = 0; i < tensor.Length; i++)
+            vector[i] = tensor[i];
+        return vector;
     }
 
     /// <summary>
