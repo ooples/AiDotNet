@@ -18,7 +18,6 @@ public class PrioritizedSweepingAgent<T> : ReinforcementLearningAgentBase<T>
     private Dictionary<string, List<(string predecessor, int action)>> _predecessors;
     private SortedSet<(double priority, string state, int action)> _priorityQueue;
     private double _epsilon;
-    private Random _random;
 
     public PrioritizedSweepingAgent(PrioritizedSweepingOptions<T> options) : base(options)
     {
@@ -35,14 +34,13 @@ public class PrioritizedSweepingAgent<T> : ReinforcementLearningAgentBase<T>
             return a.Item3.CompareTo(b.Item3);
         }));
         _epsilon = options.EpsilonStart;
-        _random = new Random();
     }
 
     public override Vector<T> SelectAction(Vector<T> state, bool training = true)
     {
         EnsureStateExists(state);
         string stateKey = GetStateKey(state);
-        int selectedAction = (training && _random.NextDouble() < _epsilon) ? _random.Next(_options.ActionSize) : GetGreedyAction(stateKey);
+        int selectedAction = (training && Random.NextDouble() < _epsilon) ? Random.Next(_options.ActionSize) : GetGreedyAction(stateKey);
         var result = new Vector<T>(_options.ActionSize);
         result[selectedAction] = NumOps.One;
         return result;
