@@ -222,10 +222,11 @@ public class DreamerAgent<T> : DeepReinforcementLearningAgentBase<T>
             totalLoss = NumOps.Add(totalLoss, loss);
 
             // Backprop through world model
+            // MSE derivative: d/dx[(pred - target)^2] = 2(pred - target)
             var gradient = new Vector<T>(predictedNextLatent.Length);
             for (int i = 0; i < gradient.Length; i++)
             {
-                gradient[i] = NumOps.Subtract(predictedNextLatent[i], nextLatentState[i]);
+                gradient[i] = NumOps.Multiply(NumOps.FromDouble(2.0), NumOps.Subtract(predictedNextLatent[i], nextLatentState[i]));
             }
 
             _dynamicsNetwork.Backpropagate(Tensor<T>.FromVector(gradient));
@@ -239,7 +240,8 @@ public class DreamerAgent<T> : DeepReinforcementLearningAgentBase<T>
             for (int j = 0; j < representationGradient.Length; j++)
             {
                 // Chain rule: gradient flows back from dynamics network
-                representationGradient[j] = NumOps.Divide(gradient[j], NumOps.FromDouble(2.0));
+                // The dynamics network receives (latent, action) as input, so gradient affects latent part
+                representationGradient[j] = j < gradient.Length ? gradient[j] : NumOps.Zero;
             }
             _representationNetwork.Backpropagate(Tensor<T>.FromVector(representationGradient));
             var representationParams = _representationNetwork.GetParameters();
@@ -295,21 +297,21 @@ public class DreamerAgent<T> : DeepReinforcementLearningAgentBase<T>
             _valueNetwork.UpdateParameters(valueParams);
 
             // FIX ISSUE 2: Implement proper policy gradient for actor
-            // Actor maximizes expected return by following gradient of value w.r.t. actions
-            // Use advantage (return - baseline) as policy gradient weight
+            // Actor maximizes expected return using REINFORCE-style policy gradient
+            // Policy gradient: advantage * grad_log_pi(action|state)
             var advantage = valueDiff;
 
             // Compute value gradient w.r.t. current action to get policy gradient direction
             var action = _actorNetwork.Predict(Tensor<T>.FromVector(latentState)).ToVector();
             var actorGradient = new Vector<T>(action.Length);
 
-            // Policy gradient: advantage * grad_action(log pi(action|state))
-            // For deterministic policy, approximate with advantage-weighted action gradient
+            // Policy gradient: For continuous actions, use advantage-weighted gradient
+            // Gradient direction: -advantage (negative because we want to maximize value)
+            // Each action dimension gets the advantage signal
             for (int i = 0; i < actorGradient.Length; i++)
             {
-                // Gradient direction: maximize value by adjusting actions
-                // Positive advantage -> increase action magnitude in current direction
-                actorGradient[i] = NumOps.Multiply(advantage, NumOps.FromDouble(-1.0 / action.Length));
+                // Negate advantage because networks minimize loss, but we want to maximize value
+                actorGradient[i] = NumOps.Negate(advantage);
             }
 
             _actorNetwork.Backpropagate(Tensor<T>.FromVector(actorGradient));
