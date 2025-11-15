@@ -2,6 +2,7 @@ using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
 using AiDotNet.Models;
 using AiDotNet.Models.Options;
+using Newtonsoft.Json;
 
 namespace AiDotNet.ReinforcementLearning.Agents.AdvancedRL;
 
@@ -280,8 +281,34 @@ public class LSTDAgent<T> : ReinforcementLearningAgentBase<T>
     public override ModelMetadata<T> GetModelMetadata() => new ModelMetadata<T> { ModelType = ModelType.ReinforcementLearning, FeatureCount = this.FeatureCount, Complexity = ParameterCount };
     public override int ParameterCount => _options.ActionSize * _options.FeatureSize;
     public override int FeatureCount => _options.FeatureSize;
-    public override byte[] Serialize() => throw new NotImplementedException();
-    public override void Deserialize(byte[] data) => throw new NotImplementedException();
+
+    public override byte[] Serialize()
+    {
+        var state = new
+        {
+            Weights = _weights,
+            Options = _options
+        };
+        string json = JsonConvert.SerializeObject(state);
+        return System.Text.Encoding.UTF8.GetBytes(json);
+    }
+
+    public override void Deserialize(byte[] data)
+    {
+        if (data is null || data.Length == 0)
+        {
+            throw new ArgumentException("Serialized data cannot be null or empty", nameof(data));
+        }
+
+        string json = System.Text.Encoding.UTF8.GetString(data);
+        var state = JsonConvert.DeserializeObject<dynamic>(json);
+        if (state is null)
+        {
+            throw new InvalidOperationException("Deserialization returned null");
+        }
+
+        _weights = JsonConvert.DeserializeObject<Matrix<T>>(state.Weights.ToString()) ?? new Matrix<T>(_options.ActionSize, _options.FeatureSize);
+    }
 
     public override Vector<T> GetParameters()
     {
@@ -305,7 +332,21 @@ public class LSTDAgent<T> : ReinforcementLearningAgentBase<T>
                     _weights[a, f] = parameters[idx++];
     }
 
-    public override IFullModel<T, Vector<T>, Vector<T>> Clone() => new LSTDAgent<T>(_options);
+    public override IFullModel<T, Vector<T>, Vector<T>> Clone()
+    {
+        var clone = new LSTDAgent<T>(_options);
+
+        // Deep copy weights matrix
+        for (int a = 0; a < _options.ActionSize; a++)
+        {
+            for (int f = 0; f < _options.FeatureSize; f++)
+            {
+                clone._weights[a, f] = _weights[a, f];
+            }
+        }
+
+        return clone;
+    }
 
     public override Vector<T> ComputeGradients(Vector<T> input, Vector<T> target, ILossFunction<T>? lossFunction = null)
     {
@@ -319,6 +360,31 @@ public class LSTDAgent<T> : ReinforcementLearningAgentBase<T>
     }
 
     public override void ApplyGradients(Vector<T> gradients, T learningRate) { }
-    public override void SaveModel(string filepath) { var data = Serialize(); System.IO.File.WriteAllBytes(filepath, data); }
-    public override void LoadModel(string filepath) { var data = System.IO.File.ReadAllBytes(filepath); Deserialize(data); }
+
+    public override void SaveModel(string filepath)
+    {
+        if (string.IsNullOrWhiteSpace(filepath))
+        {
+            throw new ArgumentException("File path cannot be null or whitespace", nameof(filepath));
+        }
+
+        var data = Serialize();
+        System.IO.File.WriteAllBytes(filepath, data);
+    }
+
+    public override void LoadModel(string filepath)
+    {
+        if (string.IsNullOrWhiteSpace(filepath))
+        {
+            throw new ArgumentException("File path cannot be null or whitespace", nameof(filepath));
+        }
+
+        if (!System.IO.File.Exists(filepath))
+        {
+            throw new System.IO.FileNotFoundException($"Model file not found: {filepath}", filepath);
+        }
+
+        var data = System.IO.File.ReadAllBytes(filepath);
+        Deserialize(data);
+    }
 }

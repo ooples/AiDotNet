@@ -1,6 +1,7 @@
 using AiDotNet.LinearAlgebra;
 using AiDotNet.Models;
 using AiDotNet.Models.Options;
+using Newtonsoft.Json;
 
 namespace AiDotNet.ReinforcementLearning.Agents.DoubleQLearning;
 
@@ -32,6 +33,7 @@ public class DoubleQLearningAgent<T> : ReinforcementLearningAgentBase<T>
     private Dictionary<string, Dictionary<int, T>> _qTable1;
     private Dictionary<string, Dictionary<int, T>> _qTable2;
     private double _epsilon;
+    private Random _random;
 
     public DoubleQLearningAgent(DoubleQLearningOptions<T> options)
         : base(options)
@@ -45,6 +47,7 @@ public class DoubleQLearningAgent<T> : ReinforcementLearningAgentBase<T>
         _qTable1 = new Dictionary<string, Dictionary<int, T>>();
         _qTable2 = new Dictionary<string, Dictionary<int, T>>();
         _epsilon = _options.EpsilonStart;
+        _random = new Random();
     }
 
     public override Vector<T> SelectAction(Vector<T> state, bool training = true)
@@ -52,9 +55,9 @@ public class DoubleQLearningAgent<T> : ReinforcementLearningAgentBase<T>
         string stateKey = VectorToStateKey(state);
 
         int actionIndex;
-        if (training && Random.NextDouble() < _epsilon)
+        if (training && _random.NextDouble() < _epsilon)
         {
-            actionIndex = Random.Next(_options.ActionSize);
+            actionIndex = _random.Next(_options.ActionSize);
         }
         else
         {
@@ -77,7 +80,7 @@ public class DoubleQLearningAgent<T> : ReinforcementLearningAgentBase<T>
         EnsureStateExists(nextStateKey);
 
         // Randomly choose which Q-table to update
-        bool updateQ1 = Random.NextDouble() < 0.5;
+        bool updateQ1 = _random.NextDouble() < 0.5;
 
         if (updateQ1)
         {
@@ -217,12 +220,34 @@ public class DoubleQLearningAgent<T> : ReinforcementLearningAgentBase<T>
 
     public override byte[] Serialize()
     {
-        throw new NotImplementedException("Double Q-Learning serialization not yet implemented");
+        var state = new
+        {
+            QTable1 = _qTable1,
+            QTable2 = _qTable2,
+            Epsilon = _epsilon,
+            Options = _options
+        };
+        string json = JsonConvert.SerializeObject(state);
+        return System.Text.Encoding.UTF8.GetBytes(json);
     }
 
     public override void Deserialize(byte[] data)
     {
-        throw new NotImplementedException("Double Q-Learning deserialization not yet implemented");
+        if (data is null || data.Length == 0)
+        {
+            throw new ArgumentException("Serialized data cannot be null or empty", nameof(data));
+        }
+
+        string json = System.Text.Encoding.UTF8.GetString(data);
+        var state = JsonConvert.DeserializeObject<dynamic>(json);
+        if (state is null)
+        {
+            throw new InvalidOperationException("Deserialization returned null");
+        }
+
+        _qTable1 = JsonConvert.DeserializeObject<Dictionary<string, Dictionary<int, T>>>(state.QTable1.ToString()) ?? new Dictionary<string, Dictionary<int, T>>();
+        _qTable2 = JsonConvert.DeserializeObject<Dictionary<string, Dictionary<int, T>>>(state.QTable2.ToString()) ?? new Dictionary<string, Dictionary<int, T>>();
+        _epsilon = state.Epsilon;
     }
 
     public override Vector<T> GetParameters()
@@ -296,8 +321,19 @@ public class DoubleQLearningAgent<T> : ReinforcementLearningAgentBase<T>
     public override IFullModel<T, Vector<T>, Vector<T>> Clone()
     {
         var clone = new DoubleQLearningAgent<T>(_options);
-        clone._qTable1 = new Dictionary<string, Dictionary<int, T>>(_qTable1);
-        clone._qTable2 = new Dictionary<string, Dictionary<int, T>>(_qTable2);
+
+        // Deep copy Q-table 1 to avoid shared state
+        foreach (var kvp in _qTable1)
+        {
+            clone._qTable1[kvp.Key] = new Dictionary<int, T>(kvp.Value);
+        }
+
+        // Deep copy Q-table 2 to avoid shared state
+        foreach (var kvp in _qTable2)
+        {
+            clone._qTable2[kvp.Key] = new Dictionary<int, T>(kvp.Value);
+        }
+
         clone._epsilon = _epsilon;
         return clone;
     }
@@ -311,12 +347,27 @@ public class DoubleQLearningAgent<T> : ReinforcementLearningAgentBase<T>
 
     public override void SaveModel(string filepath)
     {
+        if (string.IsNullOrWhiteSpace(filepath))
+        {
+            throw new ArgumentException("File path cannot be null or whitespace", nameof(filepath));
+        }
+
         var data = Serialize();
         System.IO.File.WriteAllBytes(filepath, data);
     }
 
     public override void LoadModel(string filepath)
     {
+        if (string.IsNullOrWhiteSpace(filepath))
+        {
+            throw new ArgumentException("File path cannot be null or whitespace", nameof(filepath));
+        }
+
+        if (!System.IO.File.Exists(filepath))
+        {
+            throw new System.IO.FileNotFoundException($"Model file not found: {filepath}", filepath);
+        }
+
         var data = System.IO.File.ReadAllBytes(filepath);
         Deserialize(data);
     }
