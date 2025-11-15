@@ -67,19 +67,10 @@ public class CoreMLExporter<T, TInput, TOutput> : ModelExporterBase<T, TInput, T
             throw new ArgumentNullException(nameof(config));
 
         // Try to retrieve preserved CoreML configuration from PlatformSpecificOptions
-        CoreMLConfiguration coreMLConfig;
-
-        if (config.PlatformSpecificOptions.TryGetValue("CoreMLConfiguration", out var configObj) &&
-            configObj is CoreMLConfiguration preservedConfig)
-        {
-            // Use the preserved CoreML-specific configuration
-            coreMLConfig = preservedConfig;
-        }
-        else
-        {
-            // Fallback: Create CoreML configuration from generic export config
-            // This preserves backward compatibility for direct ExportToBytes calls
-            coreMLConfig = new CoreMLConfiguration
+        var coreMLConfig = config.PlatformSpecificOptions.TryGetValue("CoreMLConfiguration", out var configObj) &&
+            configObj is CoreMLConfiguration preservedConfig
+            ? preservedConfig
+            : new CoreMLConfiguration
             {
                 ModelName = config.ModelName,
                 ModelDescription = config.ModelDescription,
@@ -91,7 +82,6 @@ public class CoreMLExporter<T, TInput, TOutput> : ModelExporterBase<T, TInput, T
                     _ => 32
                 }
             };
-        }
 
         // Perform ONNX→CoreML conversion using production-ready converter
         var coreMLModel = OnnxToCoreMLConverter.ConvertOnnxToCoreML(onnxBytes, coreMLConfig);
