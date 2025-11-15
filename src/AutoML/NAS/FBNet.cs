@@ -1,0 +1,288 @@
+using System;
+using System.Collections.Generic;
+using System.Linq;
+using AiDotNet.Helpers;
+using AiDotNet.LinearAlgebra;
+using AiDotNet.NumericOperations;
+
+namespace AiDotNet.AutoML.NAS
+{
+    /// <summary>
+    /// FBNet: Hardware-Aware Efficient ConvNet Design via Differentiable Neural Architecture Search.
+    /// Uses Gumbel-Softmax with hardware latency constraints to find efficient architectures
+    /// optimized for specific target devices.
+    ///
+    /// Reference: "FBNet: Hardware-Aware Efficient ConvNet Design via Differentiable NAS" (CVPR 2019)
+    /// </summary>
+    /// <typeparam name="T">The numeric type for calculations</typeparam>
+    public class FBNet<T>
+    {
+        private readonly INumericOperations<T> _ops;
+        private readonly SearchSpace<T> _searchSpace;
+        private readonly int _numLayers;
+        private readonly int _numOperations;
+        private readonly Random _random;
+
+        // Architecture parameters (theta in paper)
+        private readonly List<Vector<T>> _architectureParams;  // Per-layer operation selection
+        private readonly List<Vector<T>> _architectureGradients;
+
+        // Hardware cost model
+        private readonly HardwareCostModel<T> _hardwareCostModel;
+        private readonly HardwareConstraints<T> _constraints;
+
+        // FBNet-specific parameters
+        private T _temperature;
+        private readonly T _latencyWeight;
+        private readonly int _inputChannels;
+        private readonly int _spatialSize;
+
+        public FBNet(SearchSpace<T> searchSpace, int numLayers = 20,
+            HardwarePlatform targetPlatform = HardwarePlatform.Mobile,
+            double latencyWeight = 0.2, double initialTemperature = 5.0,
+            int inputChannels = 16, int spatialSize = 224)
+        {
+            _ops = MathHelper.GetNumericOperations<T>();
+            _searchSpace = searchSpace;
+            _numLayers = numLayers;
+            _numOperations = searchSpace.Operations?.Count ?? 5;
+            _random = new Random(42);
+
+            _hardwareCostModel = new HardwareCostModel<T>(targetPlatform);
+            _latencyWeight = _ops.FromDouble(latencyWeight);
+            _temperature = _ops.FromDouble(initialTemperature);
+            _inputChannels = inputChannels;
+            _spatialSize = spatialSize;
+
+            // Default hardware constraints (can be customized)
+            _constraints = new HardwareConstraints<T>
+            {
+                MaxLatency = _ops.FromDouble(100.0),  // 100ms
+                MaxMemory = _ops.FromDouble(100.0),    // 100MB
+                MaxEnergy = _ops.FromDouble(500.0)     // 500mJ
+            };
+
+            // Initialize architecture parameters (one per layer)
+            _architectureParams = new List<Vector<T>>();
+            _architectureGradients = new List<Vector<T>>();
+
+            for (int i = 0; i < _numLayers; i++)
+            {
+                var theta = new Vector<T>(_numOperations);
+                for (int j = 0; j < theta.Length; j++)
+                {
+                    theta[j] = _ops.FromDouble((_random.NextDouble() - 0.5) * 0.2);
+                }
+                _architectureParams.Add(theta);
+                _architectureGradients.Add(new Vector<T>(_numOperations));
+            }
+        }
+
+        /// <summary>
+        /// Applies Gumbel-Softmax to layer-wise architecture parameters
+        /// </summary>
+        public Vector<T> GumbelSoftmax(Vector<T> theta, bool hard = false)
+        {
+            var result = new Vector<T>(theta.Length);
+
+            // Sample Gumbel noise
+            var gumbel = new T[theta.Length];
+            for (int i = 0; i < theta.Length; i++)
+            {
+                double u = _random.NextDouble() * 0.99 + 0.005;
+                gumbel[i] = _ops.FromDouble(-Math.Log(-Math.Log(u)));
+            }
+
+            // Add Gumbel noise and divide by temperature
+            var logits = new T[theta.Length];
+            for (int i = 0; i < theta.Length; i++)
+            {
+                logits[i] = _ops.Divide(
+                    _ops.Add(theta[i], gumbel[i]),
+                    _temperature
+                );
+            }
+
+            // Apply softmax
+            T maxLogit = logits[0];
+            for (int i = 1; i < theta.Length; i++)
+            {
+                if (_ops.GreaterThan(logits[i], maxLogit))
+                    maxLogit = logits[i];
+            }
+
+            T sumExp = _ops.Zero;
+            var expValues = new T[theta.Length];
+            for (int i = 0; i < theta.Length; i++)
+            {
+                expValues[i] = _ops.Exp(_ops.Subtract(logits[i], maxLogit));
+                sumExp = _ops.Add(sumExp, expValues[i]);
+            }
+
+            for (int i = 0; i < theta.Length; i++)
+            {
+                result[i] = _ops.Divide(expValues[i], sumExp);
+            }
+
+            // Hard Gumbel-Softmax: convert to one-hot
+            if (hard)
+            {
+                int maxIdx = 0;
+                T maxVal = result[0];
+                for (int i = 1; i < result.Length; i++)
+                {
+                    if (_ops.GreaterThan(result[i], maxVal))
+                    {
+                        maxVal = result[i];
+                        maxIdx = i;
+                    }
+                }
+
+                for (int i = 0; i < result.Length; i++)
+                {
+                    result[i] = i == maxIdx ? _ops.One : _ops.Zero;
+                }
+            }
+
+            return result;
+        }
+
+        /// <summary>
+        /// Computes the expected latency cost for the entire architecture
+        /// </summary>
+        public T ComputeExpectedLatency()
+        {
+            T totalLatency = _ops.Zero;
+
+            for (int layerIdx = 0; layerIdx < _numLayers; layerIdx++)
+            {
+                var theta = _architectureParams[layerIdx];
+                var probs = GumbelSoftmax(theta, hard: false);
+
+                // Compute expected latency for this layer
+                for (int opIdx = 0; opIdx < _numOperations; opIdx++)
+                {
+                    if (_searchSpace.Operations != null && opIdx < _searchSpace.Operations.Count)
+                    {
+                        var operation = _searchSpace.Operations[opIdx];
+                        var cost = _hardwareCostModel.EstimateOperationCost(
+                            operation, _inputChannels, _inputChannels, _spatialSize);
+
+                        T weightedLatency = _ops.Multiply(probs[opIdx], cost.Latency);
+                        totalLatency = _ops.Add(totalLatency, weightedLatency);
+                    }
+                }
+            }
+
+            return totalLatency;
+        }
+
+        /// <summary>
+        /// Computes the total loss with latency regularization
+        /// Loss = Cross-Entropy + λ * log(Latency)
+        /// Using log(latency) makes the loss more sensitive to changes when latency is small
+        /// </summary>
+        public T ComputeTotalLoss(T taskLoss)
+        {
+            T latency = ComputeExpectedLatency();
+
+            // Avoid log(0) by adding small epsilon
+            T logLatency = _ops.Log(_ops.Add(latency, _ops.FromDouble(1e-8)));
+
+            T latencyLoss = _ops.Multiply(_latencyWeight, logLatency);
+            return _ops.Add(taskLoss, latencyLoss);
+        }
+
+        /// <summary>
+        /// Derives the discrete architecture by selecting the operation with highest probability
+        /// </summary>
+        public Architecture<T> DeriveArchitecture()
+        {
+            var architecture = new Architecture<T>();
+
+            for (int layerIdx = 0; layerIdx < _numLayers; layerIdx++)
+            {
+                var theta = _architectureParams[layerIdx];
+                var probs = GumbelSoftmax(theta, hard: true);
+
+                // Find selected operation
+                int selectedOp = 0;
+                T maxProb = probs[0];
+                for (int opIdx = 1; opIdx < _numOperations; opIdx++)
+                {
+                    if (_ops.GreaterThan(probs[opIdx], maxProb))
+                    {
+                        maxProb = probs[opIdx];
+                        selectedOp = opIdx;
+                    }
+                }
+
+                if (_searchSpace.Operations != null && selectedOp < _searchSpace.Operations.Count)
+                {
+                    var operation = _searchSpace.Operations[selectedOp];
+                    // In FBNet, each layer is a node connecting to the previous layer
+                    architecture.AddOperation(layerIdx + 1, layerIdx, operation);
+                }
+            }
+
+            return architecture;
+        }
+
+        /// <summary>
+        /// Checks if the derived architecture meets hardware constraints
+        /// </summary>
+        public bool MeetsConstraints()
+        {
+            var architecture = DeriveArchitecture();
+            return _hardwareCostModel.MeetsConstraints(architecture, _constraints, _inputChannels, _spatialSize);
+        }
+
+        /// <summary>
+        /// Gets the final architecture's hardware cost breakdown
+        /// </summary>
+        public HardwareCost<T> GetArchitectureCost()
+        {
+            var architecture = DeriveArchitecture();
+            return _hardwareCostModel.EstimateArchitectureCost(architecture, _inputChannels, _spatialSize);
+        }
+
+        /// <summary>
+        /// Anneals the temperature during training
+        /// </summary>
+        public void AnnealTemperature(int currentEpoch, int maxEpochs)
+        {
+            // Exponential decay from initial temperature to near 0
+            double ratio = (double)currentEpoch / maxEpochs;
+            double newTemp = 5.0 * Math.Pow(0.1, ratio);
+            _temperature = _ops.FromDouble(Math.Max(newTemp, 0.1));
+        }
+
+        /// <summary>
+        /// Sets hardware constraints for the search
+        /// </summary>
+        public void SetConstraints(HardwareConstraints<T> constraints)
+        {
+            if (constraints.MaxLatency != null)
+                _constraints.MaxLatency = constraints.MaxLatency;
+            if (constraints.MaxMemory != null)
+                _constraints.MaxMemory = constraints.MaxMemory;
+            if (constraints.MaxEnergy != null)
+                _constraints.MaxEnergy = constraints.MaxEnergy;
+        }
+
+        /// <summary>
+        /// Gets architecture parameters for optimization
+        /// </summary>
+        public List<Vector<T>> GetArchitectureParameters() => _architectureParams;
+
+        /// <summary>
+        /// Gets architecture gradients
+        /// </summary>
+        public List<Vector<T>> GetArchitectureGradients() => _architectureGradients;
+
+        /// <summary>
+        /// Gets current temperature
+        /// </summary>
+        public T GetTemperature() => _temperature;
+    }
+}
