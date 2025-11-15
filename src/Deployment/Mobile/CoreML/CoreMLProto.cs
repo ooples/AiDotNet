@@ -263,6 +263,12 @@ internal static class CoreMLProto
         using var stream = new MemoryStream();
         using var writer = new CodedOutputStream(stream);
 
+        // Validate layer sizes before casting to prevent negative values from wrapping to large unsigned values
+        if (layer.InputSize < 0 || layer.OutputSize < 0)
+            throw new ArgumentException(
+                $"Layer '{layer.Name}' has invalid size: InputSize={layer.InputSize}, OutputSize={layer.OutputSize}. " +
+                "Both must be non-negative for CoreML protobuf serialization.");
+
         // Field 1: inputChannels
         writer.WriteTag(1, WireFormat.WireType.Varint);
         writer.WriteUInt64((ulong)layer.InputSize);
