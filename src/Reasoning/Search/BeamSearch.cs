@@ -120,12 +120,12 @@ public class BeamSearch<T> : ISearchAlgorithm<T>
                     config,
                     cancellationToken);
 
-                // Evaluate each child
+                // Evaluate each child against the original query
                 foreach (var child in children)
                 {
                     child.EvaluationScore = await evaluator.EvaluateThoughtAsync(
                         child,
-                        child.Thought,
+                        root.Thought,
                         config,
                         cancellationToken);
 
