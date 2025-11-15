@@ -107,11 +107,8 @@ public class MonteCarloTreeSearch<T> : ISearchAlgorithm<T> where T : struct, ICo
                     node.Children.Add(child);
                 }
 
-                // Select first child for simulation
-                if (node.Children.Count > 0)
-                {
-                    node = node.Children[0];
-                }
+                // Use the expanded node itself for simulation (standard MCTS approach)
+                // This avoids positional bias from always selecting the first child
             }
 
             // 3. Simulation: Estimate value (use evaluation score)
