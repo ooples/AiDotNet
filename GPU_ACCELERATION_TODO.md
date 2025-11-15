@@ -11,10 +11,11 @@
 - [x] Reductions: Sum, Mean
 - [ ] Softmax (GPU kernel) - currently CPU fallback
 
-### Layers with GPU Support (2/74)
+### Layers with GPU Support (3/74)
 - [x] FeedForwardLayer - forward + backward
-- [x] DenseLayer - forward only
-- [ ] 72 other layers need GPU support
+- [x] DenseLayer - forward + backward
+- [x] FullyConnectedLayer - forward
+- [ ] 71 other layers need GPU support
 
 ### Optimizers (1/19)
 - [x] AdamOptimizer - parameter updates
