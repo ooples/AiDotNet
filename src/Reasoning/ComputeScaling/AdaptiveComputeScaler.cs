@@ -38,13 +38,13 @@ namespace AiDotNet.Reasoning.ComputeScaling;
 /// "Let's Think Dot by Dot" (Zelikman et al., 2024)
 /// </para>
 /// </remarks>
-public class AdaptiveComputeScaler<T>
+public class AdaptiveComputeScaler
 {
     private readonly ReasoningConfig _baselineConfig;
     private readonly double _maxScalingFactor;
 
     /// <summary>
-    /// Initializes a new instance of the <see cref="AdaptiveComputeScaler{T}"/> class.
+    /// Initializes a new instance of the <see cref="AdaptiveComputeScaler"/> class.
     /// </summary>
     /// <param name="baselineConfig">Baseline configuration for medium-difficulty problems.</param>
     /// <param name="maxScalingFactor">Maximum scaling multiplier for hardest problems (default: 5.0).</param>
