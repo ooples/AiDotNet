@@ -269,10 +269,13 @@ public class ExpectedSARSAAgent<T> : ReinforcementLearningAgentBase<T>
     {
         var clone = new ExpectedSARSAAgent<T>(_options);
 
-        // Deep copy Q-table to avoid shared state
+        // Deep copy Q-table to avoid shared state between original and clone
+        // Creates new outer dictionary and new inner dictionary for each state
+        // This ensures modifications to one agent don't affect the other
         clone._qTable = new Dictionary<string, Dictionary<int, T>>();
         foreach (var kvp in _qTable)
         {
+            // Dictionary<int, T>(kvp.Value) creates a new dictionary with copied values
             clone._qTable[kvp.Key] = new Dictionary<int, T>(kvp.Value);
         }
 
