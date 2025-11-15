@@ -59,5 +59,6 @@ public class A3COptions<T> : ReinforcementLearningOptions<T>
         ValueLearningRate = numOps.FromDouble(0.0005);
         EntropyCoefficient = numOps.FromDouble(0.01);
         ValueLossCoefficient = numOps.FromDouble(0.5);
+        DiscountFactor = numOps.FromDouble(0.99);
     }
 }
