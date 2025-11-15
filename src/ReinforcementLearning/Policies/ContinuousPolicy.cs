@@ -33,7 +33,7 @@ namespace AiDotNet.ReinforcementLearning.Policies
             _useTanhSquashing = useTanhSquashing;
         }
 
-        public Vector<T> SelectAction(Vector<T> state, bool training = true)
+        public override Vector<T> SelectAction(Vector<T> state, bool training = true)
         {
             // Get mean and log_std from network
             var stateTensor = Tensor<T>.FromVector(state);
@@ -80,7 +80,7 @@ namespace AiDotNet.ReinforcementLearning.Policies
             return action;
         }
 
-        public T ComputeLogProb(Vector<T> state, Vector<T> action)
+        public override T ComputeLogProb(Vector<T> state, Vector<T> action)
         {
             // Get mean and log_std from network
             var stateTensor = Tensor<T>.FromVector(state);
@@ -114,17 +114,17 @@ namespace AiDotNet.ReinforcementLearning.Policies
             return logProb;
         }
 
-        public IReadOnlyList<INeuralNetwork<T>> GetNetworks()
+        public override IReadOnlyList<INeuralNetwork<T>> GetNetworks()
         {
             return new List<INeuralNetwork<T>> { _policyNetwork };
         }
 
-        public void Reset()
+        public override void Reset()
         {
             _explorationStrategy.Reset();
         }
 
-        public void Dispose()
+        public override void Dispose()
         {
             // Cleanup if needed
         }

@@ -30,7 +30,7 @@ namespace AiDotNet.ReinforcementLearning.Policies
             _actionSize = actionSize;
         }
 
-        public Vector<T> SelectAction(Vector<T> state, bool training = true)
+        public override Vector<T> SelectAction(Vector<T> state, bool training = true)
         {
             // Get action probabilities from network
             var stateTensor = Tensor<T>.FromVector(state);
@@ -52,7 +52,7 @@ namespace AiDotNet.ReinforcementLearning.Policies
             return policyAction;
         }
 
-        public T ComputeLogProb(Vector<T> state, Vector<T> action)
+        public override T ComputeLogProb(Vector<T> state, Vector<T> action)
         {
             // Get logits from network
             var stateTensor = Tensor<T>.FromVector(state);
@@ -79,17 +79,17 @@ namespace AiDotNet.ReinforcementLearning.Policies
             return logProb;
         }
 
-        public IReadOnlyList<INeuralNetwork<T>> GetNetworks()
+        public override IReadOnlyList<INeuralNetwork<T>> GetNetworks()
         {
             return new List<INeuralNetwork<T>> { _policyNetwork };
         }
 
-        public void Reset()
+        public override void Reset()
         {
             _explorationStrategy.Reset();
         }
 
-        public void Dispose()
+        public override void Dispose()
         {
             // Cleanup if needed
         }
