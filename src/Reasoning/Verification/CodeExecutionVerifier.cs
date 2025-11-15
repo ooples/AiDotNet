@@ -251,61 +251,74 @@ public class CodeExecutionVerifier<T>
                 WorkingDirectory = _workingDirectory
             };
 
-            var process = new Process { StartInfo = startInfo };
-            var output = new StringBuilder();
-            var errors = new StringBuilder();
-
-            process.OutputDataReceived += (sender, e) =>
+            using (var process = new Process { StartInfo = startInfo })
             {
-                if (e.Data != null)
-                    output.AppendLine(e.Data);
-            };
+                var output = new StringBuilder();
+                var errors = new StringBuilder();
 
-            process.ErrorDataReceived += (sender, e) =>
-            {
-                if (e.Data != null)
-                    errors.AppendLine(e.Data);
-            };
-
-            var stopwatch = Stopwatch.StartNew();
-            process.Start();
-            process.BeginOutputReadLine();
-            process.BeginErrorReadLine();
-
-            // Wait with timeout (net462: WaitForExit returns void, not bool)
-            bool finished = await Task.Run(() =>
-            {
-                process.WaitForExit(_timeoutMilliseconds);
-                return process.HasExited;
-            },
-                cancellationToken
-            );
-
-            stopwatch.Stop();
-            result.ExecutionTime = stopwatch.Elapsed;
-
-            if (!finished)
-            {
-                process.Kill(); // net462 doesn't support entireProcessTree parameter
-                result.Passed = false;
-                result.Error = $"Execution timed out after {_timeoutMilliseconds}ms";
-                return result;
-            }
-
-            result.Output = output.ToString().Trim();
-            result.Error = errors.ToString().Trim();
-
-            // Check if test passed
-            if (process.ExitCode == 0 && string.IsNullOrEmpty(result.Error))
-            {
-                result.Passed = true;
-            }
-            else
-            {
-                result.Passed = false;
-                if (string.IsNullOrEmpty(result.Error))
+                process.OutputDataReceived += (sender, e) =>
                 {
-                    result.Error = $"Exit code: {process.ExitCode}";
+                    if (e.Data != null)
+                        output.AppendLine(e.Data);
+                };
+
+                process.ErrorDataReceived += (sender, e) =>
+                {
+                    if (e.Data != null)
+                        errors.AppendLine(e.Data);
+                };
+
+                var stopwatch = Stopwatch.StartNew();
+                process.Start();
+                process.BeginOutputReadLine();
+                process.BeginErrorReadLine();
+
+                // Wait with timeout (net462: WaitForExit returns void, not bool)
+                bool finished = await Task.Run(() =>
+                {
+                    process.WaitForExit(_timeoutMilliseconds);
+                    return process.HasExited;
+                },
+                    cancellationToken
+                );
+
+                stopwatch.Stop();
+                result.ExecutionTime = stopwatch.Elapsed;
+
+                if (!finished)
+                {
+                    try
+                    {
+                        if (!process.HasExited)
+                        {
+                            process.Kill(); // net462 doesn't support entireProcessTree parameter
+                        }
+                    }
+                    catch
+                    {
+                        // Process may have exited between check and kill
+                    }
+
+                    result.Passed = false;
+                    result.Error = $"Execution timed out after {_timeoutMilliseconds}ms";
+                    return result;
+                }
+
+                result.Output = output.ToString().Trim();
+                result.Error = errors.ToString().Trim();
+
+                // Check if test passed
+                if (process.ExitCode == 0 && string.IsNullOrEmpty(result.Error))
+                {
+                    result.Passed = true;
+                }
+                else
+                {
+                    result.Passed = false;
+                    if (string.IsNullOrEmpty(result.Error))
+                    {
+                        result.Error = $"Exit code: {process.ExitCode}";
+                    }
                 }
             }
         }
@@ -414,6 +427,18 @@ public class CodeExecutionVerifier<T>
 /// <typeparam name="T">The numeric type used for scoring.</typeparam>
 public class CodeExecutionResult<T>
 {
+    private readonly INumericOperations<T> _numOps;
+
+    /// <summary>
+    /// Initializes a new instance of the <see cref="CodeExecutionResult{T}"/> class.
+    /// </summary>
+    public CodeExecutionResult()
+    {
+        _numOps = MathHelper.GetNumericOperations<T>();
+        PassRate = _numOps.Zero;
+        Score = _numOps.Zero;
+    }
+
     /// <summary>
     /// Programming language of the code.
     /// </summary>
@@ -437,7 +462,7 @@ public class CodeExecutionResult<T>
     /// <summary>
     /// Pass rate (0.0-1.0).
     /// </summary>
-    public T PassRate { get; set; } = default!;
+    public T PassRate { get; set; }
 
     /// <summary>
     /// Whether all tests passed.
@@ -447,7 +472,7 @@ public class CodeExecutionResult<T>
     /// <summary>
     /// Overall verification score (0.0-1.0).
     /// </summary>
-    public T Score { get; set; } = default!;
+    public T Score { get; set; }
 
     /// <summary>
     /// Results for each test case.
