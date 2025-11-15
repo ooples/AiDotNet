@@ -104,7 +104,7 @@ public class SplitLayer<T> : LayerBase<T>
     /// - numSplits: How many equal pieces to divide the input into
     /// 
     /// The constructor checks that the input can be divided equally by the number of splits.
-    /// For example, if your input has 100 features and you want 4 splits, that works (100 � 4 = 25).
+    /// For example, if your input has 100 features and you want 4 splits, that works (100 ÷ 4 = 25).
     /// But if your input has 100 features and you want 3 splits, that won't work
     /// because you'd get splits of size 33.33... which isn't a whole number.
     /// </para>
@@ -215,6 +215,18 @@ public class SplitLayer<T> : LayerBase<T>
     /// </remarks>
     public override Tensor<T> Backward(Tensor<T> outputGradient)
     {
+        return UseAutodiff
+            ? BackwardViaAutodiff(outputGradient)
+            : BackwardManual(outputGradient);
+    }
+
+    /// <summary>
+    /// Manual backward pass implementation using optimized gradient calculations.
+    /// </summary>
+    /// <param name="outputGradient">The gradient of the loss with respect to the layer's output.</param>
+    /// <returns>The gradient of the loss with respect to the layer's input.</returns>
+    private Tensor<T> BackwardManual(Tensor<T> outputGradient)
+    {
         if (_lastInput == null)
             throw new InvalidOperationException("Forward pass must be called before backward pass.");
         int batchSize = _lastInput.Shape[0];
@@ -233,6 +245,90 @@ public class SplitLayer<T> : LayerBase<T>
         }
         return inputGradient;
     }
+
+    /// <summary>
+    /// Backward pass implementation using automatic differentiation.
+    /// </summary>
+    /// <param name="outputGradient">The gradient of the loss with respect to the layer's output.</param>
+    /// <returns>The gradient of the loss with respect to the layer's input.</returns>
+    /// <remarks>
+    /// <para>
+    /// This method uses automatic differentiation to compute gradients using the Reshape operation.
+    /// The split layer is effectively a reshape operation that adds a new dimension by dividing
+    /// one dimension into two.
+    /// </para>
+    /// </remarks>
+    private Tensor<T> BackwardViaAutodiff(Tensor<T> outputGradient)
+    {
+        if (_lastInput == null)
+            throw new InvalidOperationException("Forward pass must be called before backward pass.");
+
+        // Create computation node
+        var inputNode = Autodiff.TensorOperations<T>.Variable(_lastInput, "input", requiresGradient: true);
+
+        // Split is effectively a reshape: [batch, inputSize] → [batch, numSplits, splitSize]
+        int batchSize = _lastInput.Shape[0];
+        int inputSize = _lastInput.Shape[1];
+        int splitSize = inputSize / _numSplits;
+        var outputShape = new int[] { batchSize, _numSplits, splitSize };
+
+        var outputNode = Autodiff.TensorOperations<T>.Reshape(inputNode, outputShape);
+
+        // Perform backward pass
+        outputNode.Gradient = outputGradient;
+        var topoOrder = GetTopologicalOrder(outputNode);
+        for (int i = topoOrder.Count - 1; i >= 0; i--)
+        {
+            var node = topoOrder[i];
+            if (node.RequiresGradient && node.BackwardFunction != null && node.Gradient != null)
+            {
+                node.BackwardFunction(node.Gradient);
+            }
+        }
+
+        // Extract input gradient
+        return inputNode.Gradient ?? throw new InvalidOperationException("Gradient computation failed.");
+    }
+
+    /// <summary>
+    /// Gets the topological order of nodes in the computation graph.
+    /// </summary>
+    /// <param name="root">The root node of the computation graph.</param>
+    /// <returns>A list of nodes in topological order.</returns>
+    private List<Autodiff.ComputationNode<T>> GetTopologicalOrder(Autodiff.ComputationNode<T> root)
+    {
+        var visited = new HashSet<Autodiff.ComputationNode<T>>();
+        var result = new List<Autodiff.ComputationNode<T>>();
+
+        var stack = new Stack<(Autodiff.ComputationNode<T> node, bool processed)>();
+        stack.Push((root, false));
+
+        while (stack.Count > 0)
+        {
+            var (node, processed) = stack.Pop();
+
+            if (visited.Contains(node))
+                continue;
+
+            if (processed)
+            {
+                visited.Add(node);
+                result.Add(node);
+            }
+            else
+            {
+                stack.Push((node, true));
+                foreach (var parent in node.Parents)
+                {
+                    if (!visited.Contains(parent))
+                        stack.Push((parent, false));
+                }
+            }
+        }
+
+        return result;
+    }
+
 
     /// <summary>
     /// Updates the parameters of the layer using the calculated gradients.

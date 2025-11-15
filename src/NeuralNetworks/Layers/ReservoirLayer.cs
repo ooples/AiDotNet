@@ -283,7 +283,47 @@ public class ReservoirLayer<T> : LayerBase<T>
     /// </remarks>
     public override Tensor<T> Backward(Tensor<T> outputGradient)
     {
-        // In ESN, we don't backpropagate through the reservoir
+        return UseAutodiff
+            ? BackwardViaAutodiff(outputGradient)
+            : BackwardManual(outputGradient);
+    }
+
+    /// <summary>
+    /// Manual backward pass implementation - not supported for ReservoirLayer.
+    /// </summary>
+    /// <param name="outputGradient">The gradient of the loss with respect to the layer's output.</param>
+    /// <returns>This method does not return; it throws an exception.</returns>
+    /// <exception cref="InvalidOperationException">Always thrown because backward pass is not supported for ReservoirLayer.</exception>
+    /// <remarks>
+    /// In Echo State Networks (ESNs), the reservoir weights are randomly initialized
+    /// and remain fixed during training. Only the readout layer (placed after the reservoir)
+    /// is trained to interpret the reservoir states.
+    /// </remarks>
+    private Tensor<T> BackwardManual(Tensor<T> outputGradient)
+    {
+        throw new InvalidOperationException("Backward pass is not supported for ReservoirLayer in Echo State Networks as reservoir weights are typically fixed.");
+    }
+
+    /// <summary>
+    /// Backward pass implementation using automatic differentiation - not supported for ReservoirLayer.
+    /// </summary>
+    /// <param name="outputGradient">The gradient of the loss with respect to the layer's output.</param>
+    /// <returns>This method does not return; it throws an exception.</returns>
+    /// <exception cref="InvalidOperationException">Always thrown because backward pass is not supported for ReservoirLayer.</exception>
+    /// <remarks>
+    /// <para>
+    /// This method is provided for API consistency but is not supported for ReservoirLayer.
+    /// Echo State Networks do not train the reservoir weights through backpropagation.
+    /// </para>
+    /// <para>
+    /// Autodiff Note: Since the reservoir itself is not trained, there is no gradient
+    /// computation required for this layer. All training occurs in the separate readout layer.
+    /// If gradient flow verification is needed for research purposes, this method could be
+    /// implemented to compute gradients without applying them to the fixed reservoir weights.
+    /// </para>
+    /// </remarks>
+    private Tensor<T> BackwardViaAutodiff(Tensor<T> outputGradient)
+    {
         throw new InvalidOperationException("Backward pass is not supported for ReservoirLayer in Echo State Networks as reservoir weights are typically fixed.");
     }
 

@@ -140,24 +140,42 @@ public class ExpressionTree<T, TInput, TOutput> : IFullModel<T, TInput, TOutput>
     /// <param name="value">The value for this node (for constants and variables).</param>
     /// <param name="left">The left child node.</param>
     /// <param name="right">The right child node.</param>
+    /// <param name="lossFunction">Optional loss function to use for training. If null, uses Mean Squared Error (MSE) for symbolic regression.</param>
     /// <remarks>
     /// <b>For Beginners:</b> This creates a new part of your mathematical formula.
     /// You can create simple nodes (like numbers or variables) or operation nodes
     /// (like addition or multiplication) that connect to other nodes.
     /// </remarks>
-    public ExpressionTree(ExpressionNodeType type, T? value = default, ExpressionTree<T, TInput, TOutput>? left = null, ExpressionTree<T, TInput, TOutput>? right = null)
+    public ExpressionTree(ExpressionNodeType type, T? value = default, ExpressionTree<T, TInput, TOutput>? left = null, ExpressionTree<T, TInput, TOutput>? right = null, ILossFunction<T>? lossFunction = null)
     {
         _numOps = MathHelper.GetNumericOperations<T>();
         Type = type;
         Value = value ?? _numOps.Zero;
         Left = left;
         Right = right;
+        _defaultLossFunction = lossFunction ?? new MeanSquaredErrorLoss<T>();
     }
 
     /// <summary>
     /// Cached count of features used in this expression tree.
     /// </summary>
     private int _featureCount;
+
+    /// <summary>
+    /// The default loss function used by this model for gradient computation.
+    /// </summary>
+    private readonly ILossFunction<T> _defaultLossFunction;
+
+    /// <summary>
+    /// Gets the default loss function used by this model for gradient computation.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// For ExpressionTree (symbolic regression), the default loss function is Mean Squared Error (MSE),
+    /// which is the standard loss function for regression problems.
+    /// </para>
+    /// </remarks>
+    public ILossFunction<T> DefaultLossFunction => _defaultLossFunction;
 
     /// <summary>
     /// Gets the number of features (variables) used in this expression tree.
@@ -989,6 +1007,127 @@ public class ExpressionTree<T, TInput, TOutput> : IFullModel<T, TInput, TOutput>
     }
 
     /// <summary>
+    /// Computes gradients of the loss function with respect to model parameters WITHOUT updating parameters.
+    /// </summary>
+    /// <param name="input">The input data.</param>
+    /// <param name="target">The target/expected output.</param>
+    /// <param name="lossFunction">The loss function to use. If null, uses the model's default loss function.</param>
+    /// <returns>A vector containing gradients with respect to all model parameters (constants in the expression tree).</returns>
+    /// <exception cref="ArgumentNullException">If input or target is null.</exception>
+    /// <remarks>
+    /// <para>
+    /// This method computes gradients using numerical differentiation (finite differences).
+    /// For each constant in the expression tree, it slightly perturbs the value and
+    /// measures how the loss changes, approximating the gradient.
+    /// </para>
+    /// <para><b>For Beginners:</b>
+    /// This calculates how to adjust each constant in your mathematical formula to reduce error.
+    /// Since expression trees are symbolic, we use a numerical approximation:
+    /// we slightly change each constant and see how much the error changes.
+    /// </para>
+    /// </remarks>
+    public Vector<T> ComputeGradients(TInput input, TOutput target, ILossFunction<T>? lossFunction = null)
+    {
+        if (input == null)
+            throw new ArgumentNullException(nameof(input));
+        if (target == null)
+            throw new ArgumentNullException(nameof(target));
+
+        var loss = lossFunction ?? DefaultLossFunction;
+        var parameters = Coefficients;
+        var gradients = new Vector<T>(parameters.Length);
+
+        // Small epsilon for finite differences
+        T epsilon = _numOps.FromDouble(1e-7);
+
+        // Compute loss at current parameters
+        var currentPrediction = Predict(input);
+        Vector<T> currentPredVec = ConvertOutputToVector(currentPrediction);
+        Vector<T> targetVec = ConvertOutputToVector(target);
+        T currentLoss = loss.CalculateLoss(currentPredVec, targetVec);
+
+        // Compute gradient for each parameter using finite differences
+        for (int i = 0; i < parameters.Length; i++)
+        {
+            // Save original value
+            T originalValue = parameters[i];
+
+            // Perturb parameter forward
+            parameters[i] = _numOps.Add(originalValue, epsilon);
+            SetParameters(parameters);  // ✅ CRITICAL: Use SetParameters, NOT UpdateCoefficients
+            var forwardPrediction = Predict(input);
+            Vector<T> forwardPredVec = ConvertOutputToVector(forwardPrediction);
+            T forwardLoss = loss.CalculateLoss(forwardPredVec, targetVec);
+
+            // Compute gradient: (f(x+ε) - f(x)) / ε
+            T gradient = _numOps.Divide(_numOps.Subtract(forwardLoss, currentLoss), epsilon);
+            gradients[i] = gradient;
+
+            // Restore original value
+            parameters[i] = originalValue;
+            SetParameters(parameters);  // ✅ Restore original
+        }
+
+        return gradients;
+    }
+
+    /// <summary>
+    /// Applies pre-computed gradients to update the model parameters (constants in the expression tree).
+    /// </summary>
+    /// <param name="gradients">The gradient vector to apply.</param>
+    /// <param name="learningRate">The learning rate for the update.</param>
+    /// <exception cref="ArgumentNullException">If gradients is null.</exception>
+    /// <exception cref="ArgumentException">If gradient vector length doesn't match parameter count.</exception>
+    /// <remarks>
+    /// <para>
+    /// Updates constants using: constant = constant - learningRate * gradient
+    /// </para>
+    /// <para><b>For Beginners:</b>
+    /// After computing gradients (seeing which direction to adjust each constant),
+    /// this method actually adjusts them. The learning rate controls how big of an adjustment to make.
+    /// </para>
+    /// </remarks>
+    public void ApplyGradients(Vector<T> gradients, T learningRate)
+    {
+        if (gradients == null)
+            throw new ArgumentNullException(nameof(gradients));
+
+        var parameters = Coefficients;
+
+        if (gradients.Length != parameters.Length)
+        {
+            throw new ArgumentException(
+                $"Gradient vector length ({gradients.Length}) must match parameter count ({parameters.Length})",
+                nameof(gradients));
+        }
+
+        // Apply gradient descent: params = params - learningRate * gradients
+        for (int i = 0; i < parameters.Length; i++)
+        {
+            T update = _numOps.Multiply(learningRate, gradients[i]);
+            parameters[i] = _numOps.Subtract(parameters[i], update);
+        }
+
+        SetParameters(parameters);
+    }
+
+    /// <summary>
+    /// Helper method to convert output to Vector<T> for loss computation.
+    /// </summary>
+    private Vector<T> ConvertOutputToVector(TOutput output)
+    {
+        if (output is Vector<T> vec)
+            return vec;
+        if (output is T scalar)
+            return new Vector<T>(new[] { scalar });
+        if (output is Matrix<T> mat)
+            return mat.ToVector();
+
+        // Try to convert using reflection if needed
+        throw new InvalidOperationException($"Cannot convert output of type {typeof(TOutput).Name} to Vector<T> for gradient computation.");
+    }
+
+    /// <summary>
     /// Makes a prediction for an input example.
     /// </summary>
     /// <param name="input">The input data (Vector, Matrix, or Tensor).</param>
@@ -1287,5 +1426,124 @@ public class ExpressionTree<T, TInput, TOutput> : IFullModel<T, TInput, TOutput>
     {
         byte[] serializedData = File.ReadAllBytes(filePath);
         Deserialize(serializedData);
+    }
+
+    /// <summary>
+    /// Saves the expression tree's current state (structure and values) to a stream.
+    /// </summary>
+    /// <param name="stream">The stream to write the expression tree state to.</param>
+    /// <remarks>
+    /// <para>
+    /// This method serializes the complete expression tree structure, including all node types,
+    /// values, and connections. It uses the existing Serialize method and writes the data
+    /// to the provided stream.
+    /// </para>
+    /// <para><b>For Beginners:</b> This is like creating a snapshot of your mathematical formula.
+    ///
+    /// When you call SaveState:
+    /// - The entire tree structure is written to the stream
+    /// - All node types (constants, variables, operations) are preserved
+    /// - All values and connections are saved
+    ///
+    /// This is particularly useful for:
+    /// - Checkpointing during evolutionary algorithm training
+    /// - Knowledge distillation with symbolic models
+    /// - Saving the best formula found during optimization
+    /// - Creating formula ensembles
+    ///
+    /// You can later use LoadState to restore the formula to this exact state.
+    /// </para>
+    /// </remarks>
+    /// <exception cref="ArgumentNullException">Thrown when stream is null.</exception>
+    /// <exception cref="IOException">Thrown when there's an error writing to the stream.</exception>
+    public virtual void SaveState(Stream stream)
+    {
+        if (stream == null)
+            throw new ArgumentNullException(nameof(stream));
+
+        if (!stream.CanWrite)
+            throw new ArgumentException("Stream must be writable.", nameof(stream));
+
+        try
+        {
+            var data = this.Serialize();
+            stream.Write(data, 0, data.Length);
+            stream.Flush();
+        }
+        catch (IOException ex)
+        {
+            throw new IOException($"Failed to save expression tree state to stream: {ex.Message}", ex);
+        }
+        catch (Exception ex)
+        {
+            throw new InvalidOperationException($"Unexpected error while saving expression tree state: {ex.Message}", ex);
+        }
+    }
+
+    /// <summary>
+    /// Loads the expression tree's state (structure and values) from a stream.
+    /// </summary>
+    /// <param name="stream">The stream to read the expression tree state from.</param>
+    /// <remarks>
+    /// <para>
+    /// This method deserializes expression tree state that was previously saved with SaveState,
+    /// restoring the complete tree structure, node types, values, and connections.
+    /// It uses the existing Deserialize method after reading data from the stream.
+    /// </para>
+    /// <para><b>For Beginners:</b> This is like loading a saved snapshot of your mathematical formula.
+    ///
+    /// When you call LoadState:
+    /// - The tree structure is read from the stream
+    /// - All node types and values are restored
+    /// - The formula becomes identical to when SaveState was called
+    ///
+    /// After loading, the formula can:
+    /// - Make predictions using the restored structure
+    /// - Continue evolving during optimization
+    /// - Be used for symbolic regression or genetic programming
+    ///
+    /// This is essential for:
+    /// - Resuming interrupted evolutionary training
+    /// - Loading the best formula after optimization
+    /// - Deploying symbolic models to production
+    /// - Knowledge distillation with interpretable models
+    /// </para>
+    /// </remarks>
+    /// <exception cref="ArgumentNullException">Thrown when stream is null.</exception>
+    /// <exception cref="IOException">Thrown when there's an error reading from the stream.</exception>
+    /// <exception cref="InvalidOperationException">Thrown when the stream contains invalid or incompatible data.</exception>
+    public virtual void LoadState(Stream stream)
+    {
+        if (stream == null)
+            throw new ArgumentNullException(nameof(stream));
+
+        if (!stream.CanRead)
+            throw new ArgumentException("Stream must be readable.", nameof(stream));
+
+        try
+        {
+            using var ms = new MemoryStream();
+            stream.CopyTo(ms);
+            var data = ms.ToArray();
+
+            if (data.Length == 0)
+                throw new InvalidOperationException("Stream contains no data.");
+
+            this.Deserialize(data);
+        }
+        catch (IOException ex)
+        {
+            throw new IOException($"Failed to read expression tree state from stream: {ex.Message}", ex);
+        }
+        catch (InvalidOperationException)
+        {
+            // Re-throw InvalidOperationException from Deserialize
+            throw;
+        }
+        catch (Exception ex)
+        {
+            throw new InvalidOperationException(
+                $"Failed to deserialize expression tree state. The stream may contain corrupted or incompatible data: {ex.Message}", ex);
+        }
     }
 }

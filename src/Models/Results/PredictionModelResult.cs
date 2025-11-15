@@ -581,6 +581,88 @@ public class PredictionModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
     }
 
     /// <summary>
+    /// Gets the default loss function used by this model for gradient computation.
+    /// </summary>
+    /// <exception cref="InvalidOperationException">If Model is not initialized.</exception>
+    public ILossFunction<T> DefaultLossFunction
+    {
+        get
+        {
+            if (Model == null)
+            {
+                throw new InvalidOperationException("Model is not initialized.");
+            }
+            return Model.DefaultLossFunction;
+        }
+    }
+
+    /// <summary>
+    /// Computes gradients of the loss function with respect to model parameters WITHOUT updating parameters.
+    /// </summary>
+    /// <param name="input">The input data (will be normalized automatically).</param>
+    /// <param name="target">The target/expected output (will be normalized automatically).</param>
+    /// <param name="lossFunction">The loss function to use. If null, uses the model's default loss function.</param>
+    /// <returns>A vector containing gradients with respect to all model parameters.</returns>
+    /// <exception cref="InvalidOperationException">If Model or Normalizer is not initialized.</exception>
+    /// <remarks>
+    /// <para>
+    /// This method normalizes input and target before computing gradients, maintaining consistency
+    /// with the Predict method. Gradients are computed on normalized data and returned as-is
+    /// (gradients are with respect to parameters, not outputs, so no denormalization is needed).
+    /// </para>
+    /// <para><b>For Beginners:</b>
+    /// This calculates which direction to adjust the model's parameters to reduce error,
+    /// without actually changing them. Input and target are automatically normalized before
+    /// gradient computation, just like Predict normalizes input automatically.
+    /// </para>
+    /// </remarks>
+    public Vector<T> ComputeGradients(TInput input, TOutput target, ILossFunction<T>? lossFunction = null)
+    {
+        if (Model == null)
+        {
+            throw new InvalidOperationException("Model is not initialized.");
+        }
+
+        if (NormalizationInfo.Normalizer == null)
+        {
+            throw new InvalidOperationException("Normalizer is not initialized.");
+        }
+
+        // Normalize input and target to maintain API consistency with Predict
+        var (normalizedInput, _) = NormalizationInfo.Normalizer.NormalizeInput(input);
+        var (normalizedTarget, _) = NormalizationInfo.Normalizer.NormalizeOutput(target);
+
+        // Compute gradients on normalized data (gradients are wrt parameters, no denormalization needed)
+        return Model.ComputeGradients(normalizedInput, normalizedTarget, lossFunction);
+    }
+
+    /// <summary>
+    /// Applies pre-computed gradients to update the model parameters.
+    /// </summary>
+    /// <param name="gradients">The gradient vector to apply.</param>
+    /// <param name="learningRate">The learning rate for the update.</param>
+    /// <exception cref="InvalidOperationException">If Model is not initialized.</exception>
+    /// <remarks>
+    /// <para>
+    /// This method delegates to the underlying model's ApplyGradients implementation.
+    /// Updates parameters using: θ = θ - learningRate * gradients
+    /// </para>
+    /// <para><b>For Beginners:</b>
+    /// After computing gradients, this method actually updates the model's parameters
+    /// by moving them in the direction that reduces error. It delegates to the wrapped model.
+    /// </para>
+    /// </remarks>
+    public void ApplyGradients(Vector<T> gradients, T learningRate)
+    {
+        if (Model == null)
+        {
+            throw new InvalidOperationException("Model is not initialized.");
+        }
+
+        Model.ApplyGradients(gradients, learningRate);
+    }
+
+    /// <summary>
     /// Training is not supported on PredictionModelResult. Use PredictionModelBuilder to create and train new models.
     /// </summary>
     /// <param name="input">Input training data (not used).</param>
@@ -1393,5 +1475,127 @@ public class PredictionModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
             processedQuery = processor.ProcessQuery(processedQuery);
         }
         return processedQuery;
+    }
+
+    /// <summary>
+    /// Saves the prediction model result's current state to a stream.
+    /// </summary>
+    /// <param name="stream">The stream to write the model state to.</param>
+    /// <remarks>
+    /// <para>
+    /// This method serializes the entire PredictionModelResult, including the underlying model,
+    /// optimization results, normalization information, and metadata. It uses the existing
+    /// Serialize method and writes the data to the provided stream.
+    /// </para>
+    /// <para><b>For Beginners:</b> This is like creating a snapshot of your complete trained model package.
+    ///
+    /// When you call SaveState:
+    /// - The trained model and all its parameters are written to the stream
+    /// - Training results and metrics are saved
+    /// - Normalization settings are preserved
+    /// - All metadata is included
+    ///
+    /// This is particularly useful for:
+    /// - Checkpointing during long optimization runs
+    /// - Saving the best model found during training
+    /// - Knowledge distillation workflows
+    /// - Creating model backups before deployment
+    ///
+    /// You can later use LoadState to restore the complete model package.
+    /// </para>
+    /// </remarks>
+    /// <exception cref="ArgumentNullException">Thrown when stream is null.</exception>
+    /// <exception cref="IOException">Thrown when there's an error writing to the stream.</exception>
+    public virtual void SaveState(Stream stream)
+    {
+        if (stream == null)
+            throw new ArgumentNullException(nameof(stream));
+
+        if (!stream.CanWrite)
+            throw new ArgumentException("Stream must be writable.", nameof(stream));
+
+        try
+        {
+            var data = this.Serialize();
+            stream.Write(data, 0, data.Length);
+            stream.Flush();
+        }
+        catch (IOException ex)
+        {
+            throw new IOException($"Failed to save prediction model result state to stream: {ex.Message}", ex);
+        }
+        catch (Exception ex)
+        {
+            throw new InvalidOperationException($"Unexpected error while saving prediction model result state: {ex.Message}", ex);
+        }
+    }
+
+    /// <summary>
+    /// Loads the prediction model result's state from a stream.
+    /// </summary>
+    /// <param name="stream">The stream to read the model state from.</param>
+    /// <remarks>
+    /// <para>
+    /// This method deserializes a complete PredictionModelResult that was previously saved with SaveState,
+    /// restoring the model, optimization results, normalization information, and all metadata.
+    /// It uses the existing Deserialize method after reading data from the stream.
+    /// </para>
+    /// <para><b>For Beginners:</b> This is like loading a saved snapshot of your complete trained model package.
+    ///
+    /// When you call LoadState:
+    /// - The trained model and all its parameters are read from the stream
+    /// - Training results and metrics are restored
+    /// - Normalization settings are reapplied
+    /// - All metadata is recovered
+    ///
+    /// After loading, the model package can:
+    /// - Make predictions using the restored model
+    /// - Access training history and metrics
+    /// - Apply the same normalization as during training
+    /// - Be deployed to production
+    ///
+    /// This is essential for:
+    /// - Resuming interrupted optimization
+    /// - Loading the best model after training
+    /// - Deploying trained models to production
+    /// - Knowledge distillation workflows
+    /// </para>
+    /// </remarks>
+    /// <exception cref="ArgumentNullException">Thrown when stream is null.</exception>
+    /// <exception cref="IOException">Thrown when there's an error reading from the stream.</exception>
+    /// <exception cref="InvalidOperationException">Thrown when the stream contains invalid or incompatible data.</exception>
+    public virtual void LoadState(Stream stream)
+    {
+        if (stream == null)
+            throw new ArgumentNullException(nameof(stream));
+
+        if (!stream.CanRead)
+            throw new ArgumentException("Stream must be readable.", nameof(stream));
+
+        try
+        {
+            using var ms = new MemoryStream();
+            stream.CopyTo(ms);
+            var data = ms.ToArray();
+
+            if (data.Length == 0)
+                throw new InvalidOperationException("Stream contains no data.");
+
+            this.Deserialize(data);
+        }
+        catch (IOException ex)
+        {
+            throw new IOException($"Failed to read prediction model result state from stream: {ex.Message}", ex);
+        }
+        catch (InvalidOperationException)
+        {
+            // Re-throw InvalidOperationException from Deserialize
+            throw;
+        }
+        catch (Exception ex)
+        {
+            throw new InvalidOperationException(
+                $"Failed to deserialize prediction model result state. The stream may contain corrupted or incompatible data: {ex.Message}", ex);
+        }
     }
 }

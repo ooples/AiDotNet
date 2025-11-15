@@ -1,4 +1,5 @@
 using AiDotNet.Models.Results;
+using AiDotNet.DistributedTraining;
 using AiDotNet.Enums;
 using AiDotNet.Models;
 
@@ -414,6 +415,114 @@ public interface IPredictionModelBuilder<T, TInput, TOutput>
     IPredictionModelBuilder<T, TInput, TOutput> ConfigureMetaLearning(IMetaLearner<T, TInput, TOutput> metaLearner);
 
     /// <summary>
+    /// Configures distributed training across multiple GPUs or machines.
+    /// </summary>
+    /// <param name="backend">Communication backend to use. If null, uses InMemoryCommunicationBackend.</param>
+    /// <param name="strategy">Distributed training strategy. Default is FSDP.</param>
+    /// <param name="autoSyncGradients">Whether to automatically synchronize gradients. Default is true.</param>
+    /// <param name="minimumParameterGroupSize">Minimum parameter group size for communication. Default is 1024.</param>
+    /// <param name="enableGradientCompression">Whether to enable gradient compression. Default is false.</param>
+    /// <returns>This builder instance for method chaining.</returns>
+    /// <remarks>
+    /// <para>
+    /// When distributed training is configured, the builder automatically wraps the model and optimizer
+    /// with their distributed counterparts based on the chosen strategy. This enables:
+    /// - Training models too large to fit on a single GPU
+    /// - Faster training by distributing work across multiple processes
+    /// - Automatic gradient synchronization and parameter sharding
+    /// </para>
+    /// <para>
+    /// <b>Important:</b> The strategy parameter controls BOTH the model and optimizer as a matched pair.
+    /// You cannot mix and match strategies between model and optimizer because they must be compatible:
+    /// </para>
+    /// <para>
+    /// - <b>DDP</b> → Uses DDPModel + DDPOptimizer (replicated parameters, AllReduce gradients)
+    /// </para>
+    /// <para>
+    /// - <b>FSDP</b> → Uses FSDPModel + FSDPOptimizer (fully sharded parameters)
+    /// </para>
+    /// <para>
+    /// - <b>ZeRO1/2/3</b> → Uses matching ZeRO models + optimizers (progressive sharding)
+    /// </para>
+    /// <para>
+    /// - <b>PipelineParallel</b> → Uses PipelineParallelModel + PipelineParallelOptimizer
+    /// </para>
+    /// <para>
+    /// - <b>TensorParallel</b> → Uses TensorParallelModel + TensorParallelOptimizer
+    /// </para>
+    /// <para>
+    /// - <b>Hybrid</b> → Uses HybridShardedModel + HybridShardedOptimizer (3D parallelism)
+    /// </para>
+    /// <para>
+    /// This design follows industry standards (PyTorch DDP/FSDP, DeepSpeed ZeRO, Megatron-LM) where
+    /// the distributed training strategy is a cohesive unit that applies to both model and optimizer.
+    /// Mixing strategies would cause incompatibilities - for example, a DDP model (replicated parameters)
+    /// cannot work with an FSDP optimizer (expects sharded parameters).
+    /// </para>
+    /// <para>
+    /// <b>For Beginners:</b> Call this method to enable distributed training across multiple GPUs.
+    /// You can use it with no parameters for sensible defaults, or customize each aspect.
+    /// The strategy you choose automatically configures both the model and optimizer to work together.
+    /// </para>
+    /// <para>
+    /// <b>Beginner Usage (no parameters):</b>
+    /// <code>
+    /// var result = builder
+    ///     .ConfigureModel(myModel)
+    ///     .ConfigureDistributedTraining()  // InMemory backend, DDP strategy
+    ///     .Build(xTrain, yTrain);
+    /// </code>
+    /// </para>
+    /// <para>
+    /// <b>Intermediate Usage (specify backend):</b>
+    /// <code>
+    /// var backend = new MPICommunicationBackend&lt;double&gt;();
+    /// var result = builder
+    ///     .ConfigureModel(myModel)
+    ///     .ConfigureDistributedTraining(backend)  // MPI backend, DDP strategy
+    ///     .Build(xTrain, yTrain);
+    /// </code>
+    /// </para>
+    /// <para>
+    /// <b>Advanced Usage (specify strategy):</b>
+    /// <code>
+    /// var result = builder
+    ///     .ConfigureModel(myModel)
+    ///     .ConfigureDistributedTraining(
+    ///         backend: new NCCLCommunicationBackend&lt;double&gt;(),
+    ///         strategy: DistributedStrategy.FSDP)  // Use FSDP instead of DDP
+    ///     .Build(xTrain, yTrain);
+    /// </code>
+    /// </para>
+    /// <para>
+    /// <b>Expert Usage (full control):</b>
+    /// <code>
+    /// var backend = new NCCLCommunicationBackend&lt;double&gt;();
+    /// var config = new ShardingConfiguration&lt;double&gt;(backend)
+    /// {
+    ///     AutoSyncGradients = true,
+    ///     MinimumParameterGroupSize = 2048,
+    ///     EnableGradientCompression = true
+    /// };
+    /// var result = builder
+    ///     .ConfigureDistributedTraining(
+    ///         backend: backend,
+    ///         strategy: DistributedStrategy.ZeRO2,
+    ///         configuration: config)  // Full control over all options
+    ///     .Build(xTrain, yTrain);
+    /// </code>
+    /// </para>
+    /// </remarks>
+    /// <param name="backend">Communication backend. If null, uses InMemoryCommunicationBackend.</param>
+    /// <param name="strategy">Distributed training strategy. Default is DDP (most common).</param>
+    /// <param name="configuration">Sharding configuration. If null, created from backend with defaults.</param>
+    /// <returns>This builder instance for method chaining.</returns>
+    IPredictionModelBuilder<T, TInput, TOutput> ConfigureDistributedTraining(
+        ICommunicationBackend<T>? backend = null,
+        DistributedStrategy strategy = DistributedStrategy.DDP,
+        IShardingConfiguration<T>? configuration = null);
+
+    /// <summary>
     /// Configures the model evaluator component for comprehensive model evaluation and cross-validation.
     /// </summary>
     /// <remarks>
@@ -452,6 +561,53 @@ public interface IPredictionModelBuilder<T, TInput, TOutput>
     /// <param name="crossValidator">The cross-validation strategy to use.</param>
     /// <returns>The builder instance for method chaining.</returns>
     IPredictionModelBuilder<T, TInput, TOutput> ConfigureCrossValidation(ICrossValidator<T, TInput, TOutput> crossValidator);
+
+    /// <summary>
+    /// Configures knowledge distillation for training a smaller student model from a larger teacher model.
+    /// </summary>
+    /// <remarks>
+    /// Knowledge distillation enables model compression by transferring knowledge from a large,
+    /// accurate teacher model to a smaller, faster student model. The student learns to mimic
+    /// the teacher's predictions and internal representations.
+    ///
+    /// <b>For Beginners:</b> Knowledge distillation is like having an expert teacher help train
+    /// a smaller, faster student. The student model learns not just from the training labels,
+    /// but also from the teacher's "soft" predictions which contain richer information about
+    /// relationships between classes.
+    ///
+    /// Benefits:
+    /// - Model compression: Deploy 10x smaller models with 90%+ of original accuracy
+    /// - Faster inference: Smaller models run significantly faster
+    /// - Lower memory: Fits on edge devices and mobile platforms
+    /// - Better generalization: Learning from soft labels often improves accuracy
+    ///
+    /// Common use cases:
+    /// - DistilBERT: 40% smaller than BERT, 97% performance, 60% faster
+    /// - MobileNet: Distilled from ResNet for mobile deployment
+    /// - Edge AI: Deploy powerful models on resource-constrained devices
+    ///
+    /// <b>Quick Start Example:</b>
+    /// <code>
+    /// var distillationOptions = new KnowledgeDistillationOptions&lt;double, Vector&lt;double&gt;, Vector&lt;double&gt;&gt;
+    /// {
+    ///     TeacherModelType = TeacherModelType.NeuralNetwork,
+    ///     StrategyType = DistillationStrategyType.ResponseBased,
+    ///     Temperature = 3.0,
+    ///     Alpha = 0.3,
+    ///     Epochs = 20,
+    ///     BatchSize = 32
+    /// };
+    /// 
+    /// var builder = new PredictionModelBuilder&lt;double, Vector&lt;double&gt;, Vector&lt;double&gt;&gt;()
+    ///     .ConfigureKnowledgeDistillation(distillationOptions);
+    /// </code>
+    ///
+    /// <b>Note:</b> Current implementation requires student model to use Vector&lt;T&gt; for both input and output types.
+    /// </remarks>
+    /// <param name="options">The knowledge distillation configuration options (optional, uses sensible defaults if null).</param>
+    /// <returns>The builder instance for method chaining.</returns>
+    IPredictionModelBuilder<T, TInput, TOutput> ConfigureKnowledgeDistillation(
+        KnowledgeDistillationOptions<T, TInput, TOutput>? options = null);
 
     /// <summary>
     /// Asynchronously builds a meta-trained model that can quickly adapt to new tasks.

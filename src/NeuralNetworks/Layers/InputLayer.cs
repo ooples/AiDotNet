@@ -18,7 +18,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
 /// - A pass-through that doesn't change your data
 /// 
 /// For example, if you're processing images that are 28x28 pixels, you would use an InputLayer
-/// with inputSize=784 (28×28) to tell the network about the size of each image.
+/// with inputSize=784 (28ï¿½28) to tell the network about the size of each image.
 /// 
 /// Unlike other layers, the InputLayer doesn't learn or transform anything - it just
 /// passes your data into the network.
@@ -112,18 +112,50 @@ public class InputLayer<T> : LayerBase<T>
     /// the data and has no parameters to learn, it simply passes the gradient back unchanged.
     /// </para>
     /// <para><b>For Beginners:</b> This method passes error information backward through the network.
-    /// 
+    ///
     /// During the backward pass:
     /// - The layer receives information about how its output contributed to errors
     /// - Since this layer doesn't change anything, it passes this information back unchanged
     /// - There are no parameters to update
-    /// 
+    ///
     /// This method is still needed even though the layer doesn't learn, because
     /// it's part of the backpropagation process that allows the entire network to learn.
     /// </para>
     /// </remarks>
     public override Tensor<T> Backward(Tensor<T> outputGradient)
     {
+        return UseAutodiff
+            ? BackwardViaAutodiff(outputGradient)
+            : BackwardManual(outputGradient);
+    }
+
+    /// <summary>
+    /// Manual backward pass implementation (optimized).
+    /// </summary>
+    /// <param name="outputGradient">The gradient of the loss with respect to the layer's output.</param>
+    /// <returns>The same output gradient, unchanged.</returns>
+    private Tensor<T> BackwardManual(Tensor<T> outputGradient)
+    {
+        return outputGradient;
+    }
+
+    /// <summary>
+    /// Backward pass implementation using automatic differentiation.
+    /// </summary>
+    /// <param name="outputGradient">The gradient of the loss with respect to the layer's output.</param>
+    /// <returns>The same output gradient, unchanged.</returns>
+    /// <remarks>
+    /// <para>
+    /// This method uses automatic differentiation to compute gradients. For InputLayer,
+    /// since it performs identity operation (passthrough), the gradient is simply passed through.
+    /// This implementation exists for consistency with other layers and verification purposes.
+    /// </para>
+    /// </remarks>
+    private Tensor<T> BackwardViaAutodiff(Tensor<T> outputGradient)
+    {
+        // InputLayer is an identity operation: output = input
+        // The gradient of identity is 1, so: d(loss)/d(input) = d(loss)/d(output) * 1 = d(loss)/d(output)
+        // Therefore, we simply return the output gradient unchanged
         return outputGradient;
     }
 

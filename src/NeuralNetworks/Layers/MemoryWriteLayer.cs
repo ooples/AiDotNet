@@ -1,3 +1,5 @@
+using AiDotNet.Autodiff;
+
 namespace AiDotNet.NeuralNetworks.Layers;
 
 /// <summary>
@@ -27,8 +29,56 @@ namespace AiDotNet.NeuralNetworks.Layers;
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric type used for calculations, typically float or double.</typeparam>
-public class MemoryWriteLayer<T> : LayerBase<T>
+public class MemoryWriteLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
 {
+    /// <summary>
+    /// Gets or sets a value indicating whether auxiliary loss is enabled for this layer.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// When enabled, the layer computes an attention sparsity auxiliary loss that encourages focused memory writes.
+    /// This helps prevent the layer from writing to too many memory locations at once, promoting more selective updates.
+    /// </para>
+    /// <para><b>For Beginners:</b> This setting controls whether the layer uses an additional learning signal.
+    ///
+    /// When enabled (true):
+    /// - The layer encourages focused attention on specific memory locations for writing
+    /// - This helps the network learn to be more selective about where it updates memory
+    /// - Training may be more stable and produce better memory write patterns
+    ///
+    /// When disabled (false):
+    /// - Only the main task loss is used for training
+    /// - This is the default setting
+    /// </para>
+    /// </remarks>
+    public bool UseAuxiliaryLoss { get; set; } = false;
+
+    /// <summary>
+    /// Gets or sets the weight for the auxiliary loss contribution.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// This value determines how much the attention sparsity loss contributes to the total loss.
+    /// The default value of 0.005 provides a good balance between the main task and sparsity regularization.
+    /// </para>
+    /// <para><b>For Beginners:</b> This controls how much importance to give to the write attention sparsity penalty.
+    ///
+    /// The weight affects training:
+    /// - Higher values (e.g., 0.01) make the network prioritize focused writes more strongly
+    /// - Lower values (e.g., 0.001) make the sparsity penalty less important
+    /// - The default (0.005) works well for most memory-augmented tasks
+    ///
+    /// If your memory writes are too diffuse (spreading across too many locations), increase this value.
+    /// If the main task is more important, you might decrease it.
+    /// </para>
+    /// </remarks>
+    public T AuxiliaryLossWeight { get; set; }
+
+    /// <summary>
+    /// Stores the last computed attention sparsity loss for diagnostic purposes.
+    /// </summary>
+    private T _lastAttentionSparsityLoss;
+
     /// <summary>
     /// The weight matrix used to transform the input into query vectors.
     /// </summary>
@@ -205,6 +255,9 @@ public class MemoryWriteLayer<T> : LayerBase<T>
     public MemoryWriteLayer(int inputDimension, int memoryDimension, IActivationFunction<T>? activationFunction = null)
         : base([inputDimension], [memoryDimension], activationFunction ?? new IdentityActivation<T>())
     {
+        AuxiliaryLossWeight = NumOps.FromDouble(0.005);
+        _lastAttentionSparsityLoss = NumOps.Zero;
+
         _queryWeights = new Matrix<T>(inputDimension, memoryDimension);
         _keyWeights = new Matrix<T>(inputDimension, memoryDimension);
         _valueWeights = new Matrix<T>(inputDimension, memoryDimension);
@@ -242,6 +295,9 @@ public class MemoryWriteLayer<T> : LayerBase<T>
     public MemoryWriteLayer(int inputDimension, int memoryDimension, IVectorActivationFunction<T>? activationFunction = null)
         : base([inputDimension], [memoryDimension], activationFunction ?? new IdentityActivation<T>())
     {
+        AuxiliaryLossWeight = NumOps.FromDouble(0.005);
+        _lastAttentionSparsityLoss = NumOps.Zero;
+
         _queryWeights = new Matrix<T>(inputDimension, memoryDimension);
         _keyWeights = new Matrix<T>(inputDimension, memoryDimension);
         _valueWeights = new Matrix<T>(inputDimension, memoryDimension);
@@ -391,22 +447,279 @@ public class MemoryWriteLayer<T> : LayerBase<T>
     /// use in the parameter update step.
     /// </para>
     /// <para><b>For Beginners:</b> This method calculates how all parameters should change to reduce errors.
-    /// 
+    ///
     /// During the backward pass:
     /// - The layer receives gradients indicating how the output (updated memory) should change
     /// - It calculates how each weight, bias, and input value should change
     /// - These gradients are used later to update the parameters during training
-    /// 
+    ///
     /// The backward pass is complex because it needs to:
     /// - Calculate gradients for query, key, and value weights
     /// - Calculate gradients for the output weights and bias
     /// - Handle the chain rule through the softmax attention mechanism
     /// - Combine gradients from multiple paths
-    /// 
+    ///
     /// This process enables the layer to learn more effective memory writing strategies over time.
     /// </para>
     /// </remarks>
     public override Tensor<T> Backward(Tensor<T> outputGradient)
+    {
+        return UseAutodiff
+            ? BackwardViaAutodiff(outputGradient)
+            : BackwardManual(outputGradient);
+    }
+
+    /// <summary>
+    /// Backward pass implementation using automatic differentiation.
+    /// </summary>
+    /// <param name="outputGradient">The gradient of the loss with respect to the layer's output.</param>
+    /// <returns>The gradient of the loss with respect to the layer's input.</returns>
+    /// <remarks>
+    /// <para>
+    /// This method implements the backward pass using automatic differentiation through the
+    /// TensorOperations API. It recreates the forward computation graph including attention
+    /// mechanism, query-key-value transformations, and output projection, then manually
+    /// propagates gradients through the computation graph.
+    /// </para>
+    /// <para>
+    /// The autodiff implementation:
+    /// - Converts all cached inputs and parameters to ComputationNodes
+    /// - Replays the forward pass computation using autodiff operations
+    /// - Manually sets the output gradient and propagates it backward
+    /// - Extracts parameter gradients and input gradient from the computation graph
+    /// </para>
+    /// </remarks>
+    private Tensor<T> BackwardViaAutodiff(Tensor<T> outputGradient)
+    {
+        if (_lastInput == null || _lastMemory == null || _lastOutput == null)
+            throw new InvalidOperationException("Forward pass must be called before backward pass.");
+
+        // Convert Matrix and Vector to Tensor
+        var queryWeightsTensor = MatrixToTensor(_queryWeights);
+        var keyWeightsTensor = MatrixToTensor(_keyWeights);
+        var valueWeightsTensor = MatrixToTensor(_valueWeights);
+        var outputWeightsTensor = MatrixToTensor(_outputWeights);
+        var outputBiasTensor = VectorToTensor(_outputBias);
+
+        // Convert inputs and parameters to computation nodes
+        var inputNode = TensorOperations<T>.Variable(_lastInput, "input", requiresGradient: true);
+        var memoryNode = TensorOperations<T>.Variable(_lastMemory, "memory", requiresGradient: false);
+
+        var queryWeightsNode = TensorOperations<T>.Variable(queryWeightsTensor, "queryWeights", requiresGradient: true);
+        var keyWeightsNode = TensorOperations<T>.Variable(keyWeightsTensor, "keyWeights", requiresGradient: true);
+        var valueWeightsNode = TensorOperations<T>.Variable(valueWeightsTensor, "valueWeights", requiresGradient: true);
+        var outputWeightsNode = TensorOperations<T>.Variable(outputWeightsTensor, "outputWeights", requiresGradient: true);
+        var outputBiasNode = TensorOperations<T>.Variable(outputBiasTensor, "outputBias", requiresGradient: true);
+
+        // Replay forward pass using autodiff operations
+        // 1. Compute queries, keys, and values
+        var queries = TensorOperations<T>.MatrixMultiply(inputNode, queryWeightsNode);
+        var keys = TensorOperations<T>.MatrixMultiply(inputNode, keyWeightsNode);
+        var values = TensorOperations<T>.MatrixMultiply(inputNode, valueWeightsNode);
+
+        // 2. Compute attention scores: queries × memory^T
+        var memoryTransposed = TensorOperations<T>.Transpose(memoryNode);
+        var attentionScores = TensorOperations<T>.MatrixMultiply(queries, memoryTransposed);
+
+        // 3. Scale attention scores by sqrt(key_dim)
+        double scaleFactor = 1.0 / Math.Sqrt(keys.Value.Shape[1]);
+        var scaleTensor = new Tensor<T>(new int[] { 1 });
+        scaleTensor[0] = NumOps.FromDouble(scaleFactor);
+        var scaleConstant = TensorOperations<T>.Constant(scaleTensor, "scale");
+        var scaledAttention = TensorOperations<T>.ElementwiseMultiply(attentionScores, scaleConstant);
+
+        // 4. Apply softmax to get attention weights
+        var attentionWeights = TensorOperations<T>.Softmax(scaledAttention, axis: -1);
+
+        // 5. Compute write values: values × attentionWeights
+        var writeValues = TensorOperations<T>.ElementwiseMultiply(values, attentionWeights);
+
+        // 6. Apply output transformation: writeValues × outputWeights + outputBias
+        var outputBeforeActivation = TensorOperations<T>.MatrixMultiply(writeValues, outputWeightsNode);
+
+        // Broadcast bias across batch dimension
+        var batchSize = _lastInput.Shape[0];
+        var biasesBroadcast = BroadcastBiases(outputBiasTensor, batchSize);
+        var biasNode = TensorOperations<T>.Variable(biasesBroadcast, "biases_broadcast", requiresGradient: false);
+        var output = TensorOperations<T>.Add(outputBeforeActivation, biasNode);
+
+        // Manually propagate gradients
+        output.Gradient = outputGradient;
+
+        // Perform topological sort and backward pass
+        var topoOrder = GetTopologicalOrder(output);
+
+        // Execute backward pass in reverse topological order
+        for (int i = topoOrder.Count - 1; i >= 0; i--)
+        {
+            var node = topoOrder[i];
+            if (node.RequiresGradient && node.BackwardFunction != null && node.Gradient != null)
+            {
+                node.BackwardFunction(node.Gradient);
+            }
+        }
+
+        // Extract gradients for parameters
+        _queryWeightsGradient = TensorToMatrix(queryWeightsNode.Gradient!);
+        _keyWeightsGradient = TensorToMatrix(keyWeightsNode.Gradient!);
+        _valueWeightsGradient = TensorToMatrix(valueWeightsNode.Gradient!);
+        _outputWeightsGradient = TensorToMatrix(outputWeightsNode.Gradient!);
+        _outputBiasGradient = TensorToVector(outputBiasNode.Gradient!);
+
+        // Return input gradient
+        if (inputNode.Gradient == null)
+            throw new InvalidOperationException("Input gradient was not computed.");
+
+        return inputNode.Gradient;
+    }
+
+    /// <summary>
+    /// Converts a Matrix to a 2D Tensor.
+    /// </summary>
+    private Tensor<T> MatrixToTensor(Matrix<T> matrix)
+    {
+        var tensor = new Tensor<T>(new int[] { matrix.Rows, matrix.Columns });
+        for (int i = 0; i < matrix.Rows; i++)
+        {
+            for (int j = 0; j < matrix.Columns; j++)
+            {
+                tensor[i, j] = matrix[i, j];
+            }
+        }
+        return tensor;
+    }
+
+    /// <summary>
+    /// Converts a Vector to a 1D Tensor.
+    /// </summary>
+    private Tensor<T> VectorToTensor(Vector<T> vector)
+    {
+        var tensor = new Tensor<T>(new int[] { vector.Length });
+        for (int i = 0; i < vector.Length; i++)
+        {
+            tensor[i] = vector[i];
+        }
+        return tensor;
+    }
+
+    /// <summary>
+    /// Converts a 2D Tensor to a Matrix.
+    /// </summary>
+    private Matrix<T> TensorToMatrix(Tensor<T> tensor)
+    {
+        if (tensor.Rank != 2)
+            throw new ArgumentException("Tensor must be 2D to convert to Matrix");
+
+        var matrix = new Matrix<T>(tensor.Shape[0], tensor.Shape[1]);
+        for (int i = 0; i < tensor.Shape[0]; i++)
+        {
+            for (int j = 0; j < tensor.Shape[1]; j++)
+            {
+                matrix[i, j] = tensor[i, j];
+            }
+        }
+        return matrix;
+    }
+
+    /// <summary>
+    /// Converts a 1D Tensor to a Vector.
+    /// </summary>
+    private Vector<T> TensorToVector(Tensor<T> tensor)
+    {
+        int length = tensor.Length;
+        var vector = new Vector<T>(length);
+
+        for (int i = 0; i < length; i++)
+        {
+            vector[i] = tensor[i];
+        }
+
+        return vector;
+    }
+
+    /// <summary>
+    /// Broadcasts a bias vector across the batch dimension.
+    /// </summary>
+    private Tensor<T> BroadcastBiases(Tensor<T> biases, int batchSize)
+    {
+        int outputDim = biases.Length;
+        var broadcast = new Tensor<T>(new int[] { batchSize, outputDim });
+
+        for (int b = 0; b < batchSize; b++)
+        {
+            for (int o = 0; o < outputDim; o++)
+            {
+                broadcast[b, o] = biases[o];
+            }
+        }
+
+        return broadcast;
+    }
+
+    /// <summary>
+    /// Gets the topological order of nodes in the computation graph.
+    /// </summary>
+    private List<Autodiff.ComputationNode<T>> GetTopologicalOrder(Autodiff.ComputationNode<T> root)
+    {
+        var visited = new HashSet<Autodiff.ComputationNode<T>>();
+        var result = new List<Autodiff.ComputationNode<T>>();
+
+        var stack = new Stack<(Autodiff.ComputationNode<T> node, bool processed)>();
+        stack.Push((root, false));
+
+        while (stack.Count > 0)
+        {
+            var (node, processed) = stack.Pop();
+
+            if (visited.Contains(node))
+            {
+                continue;
+            }
+
+            if (processed)
+            {
+                visited.Add(node);
+                result.Add(node);
+            }
+            else
+            {
+                stack.Push((node, true));
+
+                if (node.Parents != null)
+                {
+                    foreach (var parent in node.Parents)
+                    {
+                        if (!visited.Contains(parent))
+                        {
+                            stack.Push((parent, false));
+                        }
+                    }
+                }
+            }
+        }
+
+        return result;
+    }
+
+    /// <summary>
+    /// Manual backward pass implementation for memory write layer with attention.
+    /// </summary>
+    /// <param name="outputGradient">The gradient of the loss with respect to the layer's output.</param>
+    /// <returns>The gradient of the loss with respect to the layer's input.</returns>
+    /// <remarks>
+    /// <para>
+    /// This method implements the backward pass using manual gradient calculations for
+    /// attention-based memory writing. It computes gradients through the attention mechanism,
+    /// including softmax, query/key/value transformations, and output projection.
+    /// </para>
+    /// <para>
+    /// Autodiff Note: The memory write operation involves complex attention mechanisms with
+    /// softmax over attention scores, query-key-value structure, and multiple weight matrices.
+    /// The manual implementation provides efficient gradient calculations for all components
+    /// of the attention-based memory update.
+    /// </para>
+    /// </remarks>
+    private Tensor<T> BackwardManual(Tensor<T> outputGradient)
     {
         if (_lastInput == null || _lastMemory == null || _lastOutput == null || _lastAttentionScores == null)
             throw new InvalidOperationException("Forward pass must be called before backward pass.");
@@ -702,17 +1015,17 @@ public class MemoryWriteLayer<T> : LayerBase<T>
     /// or batch of data, or when implementing stateful networks.
     /// </para>
     /// <para><b>For Beginners:</b> This method clears the layer's memory to start fresh.
-    /// 
+    ///
     /// When resetting the state:
     /// - Stored inputs, memory, outputs, and attention scores from previous processing are cleared
     /// - All calculated gradients are cleared
     /// - The layer forgets any information from previous data batches
-    /// 
+    ///
     /// This is important for:
     /// - Processing a new, unrelated batch of data
     /// - Ensuring clean state before a new training epoch
     /// - Preventing information from one batch affecting another
-    /// 
+    ///
     /// Resetting state helps ensure that each forward and backward pass is independent,
     /// which is important for correct behavior in many neural network architectures.
     /// </para>
@@ -724,11 +1037,143 @@ public class MemoryWriteLayer<T> : LayerBase<T>
         _lastMemory = null;
         _lastOutput = null;
         _lastAttentionScores = null;
-    
+
         _queryWeightsGradient = null;
         _keyWeightsGradient = null;
         _valueWeightsGradient = null;
         _outputWeightsGradient = null;
         _outputBiasGradient = null;
+    }
+
+    /// <summary>
+    /// Computes the auxiliary loss for this layer based on attention sparsity regularization.
+    /// </summary>
+    /// <returns>The computed auxiliary loss value.</returns>
+    /// <remarks>
+    /// <para>
+    /// This method computes an attention sparsity loss that encourages focused memory write patterns.
+    /// The loss is computed as the negative entropy of the attention weights: L = -Σ(p * log(p))
+    /// where p represents the attention probabilities. Lower entropy (more focused attention) results in lower loss.
+    /// This encourages the layer to write to specific memory locations rather than spreading writes uniformly.
+    /// </para>
+    /// <para><b>For Beginners:</b> This method calculates a penalty for unfocused write attention patterns.
+    ///
+    /// Attention sparsity loss for writing:
+    /// - Measures how focused the write attention is on specific memory locations
+    /// - Lower values mean more focused writes (good)
+    /// - Higher values mean writes are spread across many locations (less focused)
+    ///
+    /// Why this is useful:
+    /// - In most tasks, you want to update specific relevant memory locations
+    /// - Spreading writes too thin means you dilute the information being stored
+    /// - Focused writes means you update specific memory locations with clear information
+    ///
+    /// Example: If you're updating memory with "Paris is the capital of France",
+    /// you want focused writes to the France-related memory locations, not scattered writes
+    /// across all memory that dilute this information.
+    ///
+    /// Technical note: The loss is computed using entropy. Entropy measures how "spread out" a distribution is.
+    /// - Low entropy = focused distribution (e.g., [0.9, 0.05, 0.05] - mostly updating first location)
+    /// - High entropy = spread out distribution (e.g., [0.33, 0.33, 0.34] - updating all equally)
+    /// We use negative entropy as the loss, so the network is penalized for high entropy (unfocused writes).
+    /// </para>
+    /// </remarks>
+    public T ComputeAuxiliaryLoss()
+    {
+        if (_lastAttentionScores == null)
+        {
+            _lastAttentionSparsityLoss = NumOps.Zero;
+            return _lastAttentionSparsityLoss;
+        }
+
+        // Compute negative entropy to encourage low entropy (focused attention)
+        // L = -Σ(p * log(p))
+        T totalNegativeEntropy = NumOps.Zero;
+        int batchSize = _lastAttentionScores.Shape[0];
+        int sequenceLength = _lastAttentionScores.Shape.Length > 1 ? _lastAttentionScores.Shape[1] : 1;
+
+        for (int b = 0; b < batchSize; b++)
+        {
+            T entropy = NumOps.Zero;
+            for (int i = 0; i < sequenceLength; i++)
+            {
+                T attnWeight = _lastAttentionScores.Shape.Length > 1
+                    ? _lastAttentionScores[b, i]
+                    : _lastAttentionScores[b];
+
+                if (NumOps.LessThan(attnWeight, NumOps.FromDouble(1e-10)))
+                    continue;
+
+                T logWeight = NumOps.Log(attnWeight);
+                T term = NumOps.Multiply(attnWeight, logWeight);
+                entropy = NumOps.Subtract(entropy, term);
+            }
+            // Add entropy to accumulate positive negative-entropy loss
+            // (entropy is already positive from the subtraction above)
+            totalNegativeEntropy = NumOps.Add(totalNegativeEntropy, entropy);
+        }
+
+        // Average across batch
+        _lastAttentionSparsityLoss = NumOps.Divide(totalNegativeEntropy, NumOps.FromDouble(batchSize));
+        return _lastAttentionSparsityLoss;
+    }
+
+    /// <summary>
+    /// Gets diagnostic information about the auxiliary loss computation.
+    /// </summary>
+    /// <returns>A dictionary containing diagnostic information about the auxiliary loss.</returns>
+    /// <remarks>
+    /// <para>
+    /// This method returns diagnostic information that can be used to monitor the auxiliary loss during training.
+    /// The diagnostics include the total attention sparsity loss, the weight applied to it, and whether auxiliary loss is enabled.
+    /// </para>
+    /// <para><b>For Beginners:</b> This method provides information to help you understand how the auxiliary loss is working.
+    ///
+    /// The diagnostics show:
+    /// - TotalAttentionSparsityLoss: The computed penalty for unfocused write attention
+    /// - AttentionSparsityWeight: How much this penalty affects the overall training
+    /// - UseAttentionSparsity: Whether this penalty is currently enabled
+    ///
+    /// You can use this information to:
+    /// - Monitor if write attention is becoming more focused over time
+    /// - Debug training issues related to memory writing
+    /// - Understand how the layer is learning to update memory
+    ///
+    /// Example: If TotalAttentionSparsityLoss is decreasing during training, it means the layer
+    /// is learning to be more focused in its memory writes, which is typically a good sign.
+    /// If it's staying high or increasing, it might mean the layer is having trouble learning
+    /// which parts of memory to update.
+    /// </para>
+    /// </remarks>
+    public Dictionary<string, string> GetAuxiliaryLossDiagnostics()
+    {
+        return new Dictionary<string, string>
+        {
+            { "TotalAttentionSparsityLoss", System.Convert.ToString(_lastAttentionSparsityLoss) ?? "0" },
+            { "AttentionSparsityWeight", System.Convert.ToString(AuxiliaryLossWeight) ?? "0.005" },
+            { "UseAttentionSparsity", UseAuxiliaryLoss.ToString() }
+        };
+    }
+
+    /// <summary>
+    /// Gets diagnostic information about this component's state and behavior.
+    /// Overrides <see cref="LayerBase{T}.GetDiagnostics"/> to include auxiliary loss diagnostics.
+    /// </summary>
+    /// <returns>
+    /// A dictionary containing diagnostic metrics including both base layer diagnostics and
+    /// auxiliary loss diagnostics from <see cref="GetAuxiliaryLossDiagnostics"/>.
+    /// </returns>
+    public override Dictionary<string, string> GetDiagnostics()
+    {
+        var diagnostics = base.GetDiagnostics();
+
+        // Merge auxiliary loss diagnostics
+        var auxDiagnostics = GetAuxiliaryLossDiagnostics();
+        foreach (var kvp in auxDiagnostics)
+        {
+            diagnostics[kvp.Key] = kvp.Value;
+        }
+
+        return diagnostics;
     }
 }

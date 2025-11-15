@@ -119,11 +119,11 @@ public class NeuralNetworkModel<T> : IFullModel<T, Tensor<T>, Tensor<T>>
     /// This flag enables those components to adjust their behavior accordingly.
     /// </para>
     /// <para><b>For Beginners:</b> This tells the network whether it's learning or making predictions.
-    /// 
+    ///
     /// Some parts of neural networks work differently depending on whether the network is:
     /// - Training (learning from examples)
     /// - Making predictions (using what it learned)
-    /// 
+    ///
     /// For example, a technique called "dropout" randomly turns off some neurons during
     /// training to prevent overfitting, but doesn't do this during prediction.
     /// </para>
@@ -131,9 +131,15 @@ public class NeuralNetworkModel<T> : IFullModel<T, Tensor<T>, Tensor<T>>
     private bool _isTrainingMode = true;
 
     /// <summary>
+    /// The default loss function used by this model for gradient computation.
+    /// </summary>
+    private ILossFunction<T> _defaultLossFunction;
+
+    /// <summary>
     /// Initializes a new instance of the NeuralNetworkModel class with the specified architecture.
     /// </summary>
     /// <param name="architecture">The architecture defining the structure of the neural network.</param>
+    /// <param name="lossFunction">Optional loss function to use for training. If null, uses a default based on task type (CrossEntropy for classification, MSE for regression).</param>
     /// <remarks>
     /// <para>
     /// This constructor creates a new NeuralNetworkModel instance with the specified architecture. It initializes
@@ -142,23 +148,37 @@ public class NeuralNetworkModel<T> : IFullModel<T, Tensor<T>, Tensor<T>>
     /// the network is designed to perform.
     /// </para>
     /// <para><b>For Beginners:</b> This constructor creates a new neural network model with the specified design.
-    /// 
+    ///
     /// When creating a NeuralNetworkModel:
     /// - You provide an architecture that defines the network's structure
     /// - The constructor creates the actual neural network based on this design
     /// - The model is ready to be trained or to make predictions
-    /// 
+    ///
     /// The architecture is crucial as it determines what kind of data the network can process
     /// and what kind of problems it can solve. Different architectures work better for
     /// different types of problems.
     /// </para>
     /// </remarks>
-    public NeuralNetworkModel(NeuralNetworkArchitecture<T> architecture)
+    public NeuralNetworkModel(NeuralNetworkArchitecture<T> architecture, ILossFunction<T>? lossFunction = null)
     {
         Architecture = architecture ?? throw new ArgumentNullException(nameof(architecture));
         Network = new NeuralNetwork<T>(architecture);
         _learningRate = _numOps.FromDouble(0.01); // Default learning rate
+        _defaultLossFunction = lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(architecture.TaskType);
     }
+
+    /// <summary>
+    /// Gets the default loss function used by this model for gradient computation.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// The default loss function is determined by the network's task type:
+    /// - Classification tasks use CrossEntropyLoss
+    /// - Regression tasks use MeanSquaredErrorLoss
+    /// - Custom loss functions can be provided via the constructor
+    /// </para>
+    /// </remarks>
+    public ILossFunction<T> DefaultLossFunction => _defaultLossFunction;
 
     /// <summary>
     /// Gets the number of features used by the model.
@@ -301,6 +321,105 @@ public class NeuralNetworkModel<T> : IFullModel<T, Tensor<T>, Tensor<T>>
     }
 
     /// <summary>
+    /// Computes gradients of the loss function with respect to model parameters WITHOUT updating parameters.
+    /// </summary>
+    /// <param name="input">The input tensor.</param>
+    /// <param name="target">The target/expected output tensor.</param>
+    /// <param name="lossFunction">The loss function to use. If null, uses the model's default loss function.</param>
+    /// <returns>A vector containing gradients with respect to all model parameters.</returns>
+    /// <exception cref="InvalidOperationException">If the network doesn't support training or loss function is null and no default is configured.</exception>
+    /// <remarks>
+    /// <para>
+    /// This method performs a forward pass, computes the loss, and back-propagates to compute gradients,
+    /// but does NOT update the model's parameters. The parameters remain unchanged after this call.
+    /// </para>
+    /// <para><b>For Beginners:</b>
+    /// This method calculates which direction to move the model's parameters to reduce error,
+    /// but it doesn't actually move them. This is useful for:
+    /// - Distributed training: compute gradients on different machines and average them
+    /// - Custom optimization: apply your own learning algorithm to the gradients
+    /// - Analysis: inspect gradient values to understand what the model is learning
+    /// </para>
+    /// </remarks>
+    public Vector<T> ComputeGradients(Tensor<T> input, Tensor<T> target, ILossFunction<T>? lossFunction = null)
+    {
+        if (!Network.SupportsTraining)
+        {
+            throw new InvalidOperationException("This neural network does not support training.");
+        }
+
+        var loss = lossFunction ?? DefaultLossFunction;
+
+        // Ensure the network is in training mode
+        Network.SetTrainingMode(true);
+
+        // Convert tensors to the format expected by the network
+        Vector<T> inputVector = input.ToVector();
+        Vector<T> targetVector = target.ToVector();
+
+        // Forward pass with memory to store intermediate values for backpropagation
+        Tensor<T> outputTensor = Network.ForwardWithMemory(Tensor<T>.FromVector(inputVector));
+        Vector<T> outputVector = outputTensor.ToVector();
+
+        // Calculate error gradient using the loss function
+        Vector<T> error = loss.CalculateDerivative(outputVector, targetVector);
+
+        // Backpropagate error through the network
+        Network.Backpropagate(Tensor<T>.FromVector(error));
+
+        // Get and return gradients from the network
+        Vector<T> gradients = Network.GetParameterGradients();
+        return gradients;
+    }
+
+    /// <summary>
+    /// Applies pre-computed gradients to update the model parameters.
+    /// </summary>
+    /// <param name="gradients">The gradient vector to apply.</param>
+    /// <param name="learningRate">The learning rate for the update.</param>
+    /// <exception cref="ArgumentNullException">If gradients is null.</exception>
+    /// <exception cref="ArgumentException">If gradient vector length doesn't match parameter count.</exception>
+    /// <remarks>
+    /// <para>
+    /// Updates parameters using: θ = θ - learningRate * gradients
+    /// </para>
+    /// <para><b>For Beginners:</b>
+    /// After computing gradients (seeing which direction to move),
+    /// this method actually moves the model in that direction.
+    /// The learning rate controls how big of a step to take.
+    ///
+    /// In distributed training, this applies the synchronized (averaged) gradients after
+    /// communication across workers. Each worker applies the same averaged gradients
+    /// to keep parameters consistent.
+    /// </para>
+    /// </remarks>
+    public void ApplyGradients(Vector<T> gradients, T learningRate)
+    {
+        if (gradients == null)
+            throw new ArgumentNullException(nameof(gradients));
+
+        var currentParams = Network.GetParameters();
+
+        if (gradients.Length != currentParams.Length)
+        {
+            throw new ArgumentException(
+                $"Gradient vector length ({gradients.Length}) must match parameter count ({currentParams.Length})",
+                nameof(gradients));
+        }
+
+        var newParams = new Vector<T>(currentParams.Length);
+
+        // Apply gradient descent: params = params - learningRate * gradients
+        for (int i = 0; i < currentParams.Length; i++)
+        {
+            T update = _numOps.Multiply(learningRate, gradients[i]);
+            newParams[i] = _numOps.Subtract(currentParams[i], update);
+        }
+
+        Network.UpdateParameters(newParams);
+    }
+
+    /// <summary>
     /// Trains the model with the provided input and expected output.
     /// </summary>
     /// <param name="input">The input tensor to train with.</param>
@@ -331,37 +450,51 @@ public class NeuralNetworkModel<T> : IFullModel<T, Tensor<T>, Tensor<T>>
         {
             throw new InvalidOperationException("This neural network does not support training.");
         }
-        
-        // Ensure the network is in training mode
-        Network.SetTrainingMode(true);
-        
-        // Convert tensors to the format expected by the network
-        Vector<T> inputVector = input.ToVector();
-        Vector<T> expectedOutputVector = expectedOutput.ToVector();
-        
-        // Forward pass with memory to store intermediate values for backpropagation
-        Tensor<T> outputTensor = Network.ForwardWithMemory(Tensor<T>.FromVector(inputVector));
-        Vector<T> outputVector = outputTensor.ToVector();
 
-        // Calculate error gradient
-        Vector<T> error = CalculateError(outputVector, expectedOutputVector);
+        // Save the current training mode to restore it after training
+        bool previousTrainingMode = _isTrainingMode;
 
-        // Backpropagate error
-        Network.Backpropagate(Tensor<T>.FromVector(error));
-        
-        // Update weights using the calculated gradients
-        Vector<T> gradients = Network.GetParameterGradients();
-        Vector<T> currentParams = Network.GetParameters();
-        Vector<T> newParams = new Vector<T>(currentParams.Length);
-        
-        for (int i = 0; i < currentParams.Length; i++)
+        try
         {
-            // Simple gradient descent: param = param - learningRate * gradient
-            T update = _numOps.Multiply(_learningRate, gradients[i]);
-            newParams[i] = _numOps.Subtract(currentParams[i], update);
+            // Ensure the network is in training mode
+            Network.SetTrainingMode(true);
+
+            // Convert tensors to the format expected by the network
+            Vector<T> inputVector = input.ToVector();
+            Vector<T> expectedOutputVector = expectedOutput.ToVector();
+
+            // Forward pass with memory to store intermediate values for backpropagation
+            Tensor<T> outputTensor = Network.ForwardWithMemory(Tensor<T>.FromVector(inputVector));
+            Vector<T> outputVector = outputTensor.ToVector();
+
+            // Calculate error gradient
+            Vector<T> error = CalculateError(outputVector, expectedOutputVector);
+
+            // Backpropagate error
+            Network.Backpropagate(Tensor<T>.FromVector(error));
+
+            // Update weights using the calculated gradients
+            Vector<T> gradients = Network.GetParameterGradients();
+            Vector<T> currentParams = Network.GetParameters();
+            Vector<T> newParams = new Vector<T>(currentParams.Length);
+
+            for (int i = 0; i < currentParams.Length; i++)
+            {
+                // Simple gradient descent: param = param - learningRate * gradient
+                T update = _numOps.Multiply(_learningRate, gradients[i]);
+                newParams[i] = _numOps.Subtract(currentParams[i], update);
+            }
+
+            Network.UpdateParameters(newParams);
         }
-        
-        Network.UpdateParameters(newParams);
+        finally
+        {
+            // Restore the original training mode
+            // This ensures that if the model was in inference mode before,
+            // it returns to inference mode after training, preventing
+            // dropout and batch normalization from being in the wrong state
+            SetTrainingMode(previousTrainingMode);
+        }
     }
 
     /// <summary>
@@ -484,8 +617,8 @@ public class NeuralNetworkModel<T> : IFullModel<T, Tensor<T>, Tensor<T>>
             throw new ArgumentException("Predicted and expected vectors must have the same length.");
         }
 
-        // Get appropriate loss function based on the task type
-        var lossFunction = NeuralNetworkHelper<T>.GetDefaultLossFunction(Architecture.TaskType);
+        // Use the configured loss function (custom or default) with null fallback
+        var lossFunction = _defaultLossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(Architecture.TaskType);
     
         // Calculate gradients based on the loss function
         Vector<T> error = lossFunction.CalculateDerivative(predicted, expected);
@@ -522,8 +655,9 @@ public class NeuralNetworkModel<T> : IFullModel<T, Tensor<T>, Tensor<T>>
     public ModelMetadata<T> GetModelMetadata()
     {
         int[] layerSizes = Architecture.GetLayerSizes();
+        int outputDimension = Architecture.GetOutputShape()[0];
         
-        return new ModelMetadata<T>
+        var metadata = new ModelMetadata<T>
         {
             FeatureCount = FeatureCount,
             Complexity = Complexity,
@@ -540,6 +674,11 @@ public class NeuralNetworkModel<T> : IFullModel<T, Tensor<T>, Tensor<T>>
                 { "SupportsTraining", Network.SupportsTraining }
             }
         };
+        
+        metadata.SetProperty("OutputDimension", outputDimension);
+        metadata.SetProperty("NumClasses", outputDimension);
+        
+        return metadata;
     }
 
     /// <summary>
@@ -721,12 +860,8 @@ public class NeuralNetworkModel<T> : IFullModel<T, Tensor<T>, Tensor<T>>
     /// </remarks>
     public IFullModel<T, Tensor<T>, Tensor<T>> WithParameters(Vector<T> parameters)
     {
-        // Create a new model with the same architecture
-        var newModel = new NeuralNetworkModel<T>(Architecture);
-    
-        // Update the parameters of the new model
+        var newModel = new NeuralNetworkModel<T>(Architecture, _defaultLossFunction);
         newModel.Network.UpdateParameters(parameters);
-    
         return newModel;
     }
 
@@ -830,18 +965,12 @@ public class NeuralNetworkModel<T> : IFullModel<T, Tensor<T>, Tensor<T>>
     /// </remarks>
     public IFullModel<T, Tensor<T>, Tensor<T>> DeepCopy()
     {
-        // Create a new model with the same architecture
-        var copy = new NeuralNetworkModel<T>(Architecture);
-        
-        // Copy the network parameters
+        var copy = new NeuralNetworkModel<T>(Architecture, _defaultLossFunction);
         var parameters = Network.GetParameters();
         copy.Network.UpdateParameters(parameters);
-        
-        // Copy additional properties
         copy._learningRate = _learningRate;
         copy._isTrainingMode = _isTrainingMode;
         copy.Network.SetTrainingMode(_isTrainingMode);
-        
         return copy;
     }
 
@@ -906,5 +1035,124 @@ public class NeuralNetworkModel<T> : IFullModel<T, Tensor<T>, Tensor<T>>
         catch (UnauthorizedAccessException ex) { throw new InvalidOperationException($"Access denied when loading model from '{filePath}': {ex.Message}", ex); }
         catch (System.Security.SecurityException ex) { throw new InvalidOperationException($"Security error when loading model from '{filePath}': {ex.Message}", ex); }
         catch (Exception ex) { throw new InvalidOperationException($"Failed to deserialize model from file '{filePath}'. The file may be corrupted or incompatible: {ex.Message}", ex); }
+    }
+
+    /// <summary>
+    /// Saves the model's current state (parameters and configuration) to a stream.
+    /// </summary>
+    /// <param name="stream">The stream to write the model state to.</param>
+    /// <remarks>
+    /// <para>
+    /// This method serializes all the information needed to recreate the model's current state,
+    /// including trained parameters, network architecture, and any internal configuration.
+    /// It uses the existing Serialize method and writes the data to the provided stream.
+    /// </para>
+    /// <para><b>For Beginners:</b> This is like creating a snapshot of your trained neural network.
+    ///
+    /// When you call SaveState:
+    /// - All the learned parameters (weights and biases) are written to the stream
+    /// - The model's architecture information is saved
+    /// - Any other internal state (like learning rate) is preserved
+    ///
+    /// This is particularly useful for:
+    /// - Checkpointing during long training sessions
+    /// - Knowledge distillation (saving teacher/student models)
+    /// - Resuming interrupted training
+    /// - Creating model ensembles
+    ///
+    /// You can later use LoadState to restore the model to this exact state.
+    /// </para>
+    /// </remarks>
+    /// <exception cref="ArgumentNullException">Thrown when stream is null.</exception>
+    /// <exception cref="IOException">Thrown when there's an error writing to the stream.</exception>
+    public virtual void SaveState(Stream stream)
+    {
+        if (stream == null)
+            throw new ArgumentNullException(nameof(stream));
+
+        if (!stream.CanWrite)
+            throw new ArgumentException("Stream must be writable.", nameof(stream));
+
+        try
+        {
+            var data = this.Serialize();
+            stream.Write(data, 0, data.Length);
+            stream.Flush();
+        }
+        catch (IOException ex)
+        {
+            throw new IOException($"Failed to save model state to stream: {ex.Message}", ex);
+        }
+        catch (Exception ex)
+        {
+            throw new InvalidOperationException($"Unexpected error while saving model state: {ex.Message}", ex);
+        }
+    }
+
+    /// <summary>
+    /// Loads the model's state (parameters and configuration) from a stream.
+    /// </summary>
+    /// <param name="stream">The stream to read the model state from.</param>
+    /// <remarks>
+    /// <para>
+    /// This method deserializes model state that was previously saved with SaveState,
+    /// restoring all parameters, architecture configuration, and internal state to recreate
+    /// the saved model. It uses the existing Deserialize method after reading data from the stream.
+    /// </para>
+    /// <para><b>For Beginners:</b> This is like loading a saved snapshot of your neural network.
+    ///
+    /// When you call LoadState:
+    /// - All the parameters are read from the stream
+    /// - The model is configured to match the saved architecture
+    /// - The model becomes identical to when SaveState was called
+    ///
+    /// After loading, the model can:
+    /// - Make predictions using the restored parameters
+    /// - Continue training from where it left off
+    /// - Be used as a teacher model in knowledge distillation
+    ///
+    /// This is essential for:
+    /// - Resuming interrupted training sessions
+    /// - Loading the best checkpoint after training
+    /// - Deploying trained models to production
+    /// - Knowledge distillation workflows
+    /// </para>
+    /// </remarks>
+    /// <exception cref="ArgumentNullException">Thrown when stream is null.</exception>
+    /// <exception cref="IOException">Thrown when there's an error reading from the stream.</exception>
+    /// <exception cref="InvalidOperationException">Thrown when the stream contains invalid or incompatible data.</exception>
+    public virtual void LoadState(Stream stream)
+    {
+        if (stream == null)
+            throw new ArgumentNullException(nameof(stream));
+
+        if (!stream.CanRead)
+            throw new ArgumentException("Stream must be readable.", nameof(stream));
+
+        try
+        {
+            using var ms = new MemoryStream();
+            stream.CopyTo(ms);
+            var data = ms.ToArray();
+
+            if (data.Length == 0)
+                throw new InvalidOperationException("Stream contains no data.");
+
+            this.Deserialize(data);
+        }
+        catch (IOException ex)
+        {
+            throw new IOException($"Failed to read model state from stream: {ex.Message}", ex);
+        }
+        catch (InvalidOperationException)
+        {
+            // Re-throw InvalidOperationException from Deserialize
+            throw;
+        }
+        catch (Exception ex)
+        {
+            throw new InvalidOperationException(
+                $"Failed to deserialize model state. The stream may contain corrupted or incompatible data: {ex.Message}", ex);
+        }
     }
 }

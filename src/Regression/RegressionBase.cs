@@ -54,6 +54,14 @@ public abstract class RegressionBase<T> : IRegression<T>
     protected IRegularization<T, Matrix<T>, Vector<T>> Regularization { get; private set; }
 
     /// <summary>
+    /// Gets the default loss function for this regression model.
+    /// </summary>
+    /// <value>
+    /// The loss function used for gradient computation.
+    /// </value>
+    private readonly ILossFunction<T> _defaultLossFunction;
+
+    /// <summary>
     /// Gets or sets the coefficients (weights) of the regression model.
     /// </summary>
     /// <value>
@@ -98,6 +106,7 @@ public abstract class RegressionBase<T> : IRegression<T>
     /// </summary>
     /// <param name="options">Configuration options for the regression model. If null, default options will be used.</param>
     /// <param name="regularization">Regularization method to prevent overfitting. If null, no regularization will be applied.</param>
+    /// <param name="lossFunction">Loss function for gradient computation. If null, defaults to Mean Squared Error.</param>
     /// <remarks>
     /// <para>
     /// The constructor initializes the model with either the provided options or default settings.
@@ -106,16 +115,18 @@ public abstract class RegressionBase<T> : IRegression<T>
     /// <b>For Beginners:</b>
     /// This constructor sets up the regression model with your specified settings or uses
     /// default settings if none are provided. Regularization is an optional technique to prevent the model
-    /// from becoming too complex and overfitting to the training data.
+    /// from becoming too complex and overfitting to the training data. The loss function determines how
+    /// prediction errors are measured during training.
     /// </para>
     /// </remarks>
-    protected RegressionBase(RegressionOptions<T>? options = null, IRegularization<T, Matrix<T>, Vector<T>>? regularization = null)
+    protected RegressionBase(RegressionOptions<T>? options = null, IRegularization<T, Matrix<T>, Vector<T>>? regularization = null, ILossFunction<T>? lossFunction = null)
     {
         Regularization = regularization ?? new NoRegularization<T, Matrix<T>, Vector<T>>();
         NumOps = MathHelper.GetNumericOperations<T>();
         Options = options ?? new RegressionOptions<T>();
         Coefficients = new Vector<T>(0);
         Intercept = NumOps.Zero;
+        _defaultLossFunction = lossFunction ?? new MeanSquaredErrorLoss<T>();
     }
 
     /// <summary>
@@ -735,6 +746,130 @@ public abstract class RegressionBase<T> : IRegression<T>
         get { return ExpectedParameterCount; }
     }
 
+    /// <inheritdoc/>
+    /// <remarks>
+    /// <para>
+    /// For regression models, the default loss function is Mean Squared Error (MSE), which measures
+    /// the average squared difference between predicted and actual values. This can be customized
+    /// by passing a different loss function to the constructor.
+    /// </para>
+    /// <para><b>For Beginners:</b> This property specifies how the model measures prediction errors.
+    ///
+    /// Mean Squared Error (MSE) is the standard loss function for regression because it:
+    /// - Penalizes large errors more than small errors (due to squaring)
+    /// - Provides smooth gradients for optimization
+    /// - Has a clear mathematical interpretation (average squared distance from truth)
+    ///
+    /// You can customize this by passing your own loss function when creating the model.
+    /// The loss function is used during gradient computation to determine how to adjust parameters
+    /// to improve predictions.
+    /// </para>
+    /// </remarks>
+    public virtual ILossFunction<T> DefaultLossFunction => _defaultLossFunction;
+
+    /// <inheritdoc/>
+    /// <remarks>
+    /// <para>
+    /// This method computes gradients for regression models using numerical differentiation.
+    /// For linear regression models, the gradient of the loss with respect to coefficients is:
+    /// ∂L/∂w = (1/n) * X^T * (predictions - targets)
+    /// where X is the input matrix, predictions are model outputs, and targets are the desired outputs.
+    /// </para>
+    /// <para><b>For Beginners:</b> This method calculates how to adjust the model's parameters to reduce errors.
+    ///
+    /// Gradients tell us:
+    /// - Which direction to change each parameter (positive or negative)
+    /// - How much to change each parameter (magnitude)
+    ///
+    /// For regression, we compute gradients by:
+    /// 1. Making a prediction with current parameters
+    /// 2. Computing the error using the loss function
+    /// 3. Calculating how much each parameter contributed to the error
+    ///
+    /// These gradients are then used by ApplyGradients() to update the parameters and improve predictions.
+    /// </para>
+    /// </remarks>
+    public virtual Vector<T> ComputeGradients(Matrix<T> input, Vector<T> target, ILossFunction<T>? lossFunction = null)
+    {
+        // Note: Linear regression uses closed-form least-squares solution (MSE-based).
+        // The lossFunction parameter is ignored because the gradient computation is specific
+        // to the MSE objective function: ∇L = (1/n) * X^T * (predictions - target)
+        // For custom loss functions, use NonLinearRegressionBase instead.
+
+        // Make predictions
+        var predictions = Predict(input);
+
+        // Compute prediction errors (MSE gradient component)
+        var errors = predictions.Subtract(target);
+
+        // Compute gradients using MSE formula: (1/n) * X^T * errors
+        var n = NumOps.FromDouble(input.Rows);
+        var gradCoefficients = input.Transpose().Multiply(errors).Divide(n);
+
+        // Build full gradient vector (coefficients + intercept)
+        var gradients = new Vector<T>(ExpectedParameterCount);
+        for (int i = 0; i < Coefficients.Length; i++)
+        {
+            gradients[i] = gradCoefficients[i];
+        }
+
+        // Gradient for intercept is mean of errors
+        if (Options.UseIntercept)
+        {
+            T interceptGrad = NumOps.Zero;
+            for (int i = 0; i < errors.Length; i++)
+            {
+                interceptGrad = NumOps.Add(interceptGrad, errors[i]);
+            }
+            gradients[Coefficients.Length] = NumOps.Divide(interceptGrad, n);
+        }
+
+        return gradients;
+    }
+
+    /// <inheritdoc/>
+    /// <remarks>
+    /// <para>
+    /// This method updates the model's parameters (coefficients and intercept) using the computed gradients.
+    /// The update rule is: parameter_new = parameter_old - learningRate * gradient
+    /// </para>
+    /// <para><b>For Beginners:</b> This method adjusts the model's parameters to improve predictions.
+    ///
+    /// Think of it like adjusting a recipe:
+    /// - The gradients tell you which ingredients to increase or decrease
+    /// - The learning rate controls how big the adjustments are
+    /// - Small learning rates = slow, careful adjustments
+    /// - Large learning rates = fast, aggressive adjustments (but risk overshooting)
+    ///
+    /// The method:
+    /// 1. Takes the gradients (directions to improve)
+    /// 2. Scales them by the learning rate (controls step size)
+    /// 3. Subtracts them from current parameters (gradient descent moves opposite to gradient)
+    ///
+    /// After calling this method, the model should make better predictions (lower loss).
+    /// </para>
+    /// </remarks>
+    public virtual void ApplyGradients(Vector<T> gradients, T learningRate)
+    {
+        if (gradients.Length != ExpectedParameterCount)
+        {
+            throw new ArgumentException($"Expected {ExpectedParameterCount} gradients, but got {gradients.Length}", nameof(gradients));
+        }
+
+        // Get current parameters
+        var currentParams = GetParameters();
+
+        // Apply gradient descent: params = params - learningRate * gradients
+        var newParams = new Vector<T>(currentParams.Length);
+        for (int i = 0; i < currentParams.Length; i++)
+        {
+            newParams[i] = NumOps.Subtract(currentParams[i], NumOps.Multiply(learningRate, gradients[i]));
+        }
+
+        // Use SetParameters to update all model state
+        SetParameters(newParams);
+    }
+
     /// <summary>
     /// Saves the regression model to a file.
     /// </summary>
@@ -788,6 +923,28 @@ public abstract class RegressionBase<T> : IRegression<T>
     public virtual void LoadModel(string filePath)
     {
         byte[] serializedData = File.ReadAllBytes(filePath);
+        Deserialize(serializedData);
+    }
+
+    /// <summary>
+    /// Saves the model's current state to a stream.
+    /// </summary>
+    /// <param name="stream">The stream to write the model state to.</param>
+    public virtual void SaveState(Stream stream)
+    {
+        byte[] serializedData = Serialize();
+        stream.Write(serializedData, 0, serializedData.Length);
+    }
+
+    /// <summary>
+    /// Loads the model's state from a stream.
+    /// </summary>
+    /// <param name="stream">The stream to read the model state from.</param>
+    public virtual void LoadState(Stream stream)
+    {
+        using var memoryStream = new MemoryStream();
+        stream.CopyTo(memoryStream);
+        byte[] serializedData = memoryStream.ToArray();
         Deserialize(serializedData);
     }
 }

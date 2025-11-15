@@ -113,6 +113,11 @@ public abstract class TimeSeriesModelBase<T> : ITimeSeriesModel<T>
     protected bool IsTrained { get; private set; } = false;
 
     /// <summary>
+    /// The default loss function used for gradient computation.
+    /// </summary>
+    private readonly ILossFunction<T> _defaultLossFunction;
+
+    /// <summary>
     /// Gets the last computed error metrics when the model was evaluated.
     /// </summary>
     /// <remarks>
@@ -165,6 +170,7 @@ public abstract class TimeSeriesModelBase<T> : ITimeSeriesModel<T>
         Options = options;
         NumOps = MathHelper.GetNumericOperations<T>();
         ModelParameters = new Vector<T>(0); // Initialize with empty vector
+        _defaultLossFunction = options.LossFunction ?? new MeanSquaredErrorLoss<T>();
     }
 
     /// <summary>
@@ -1540,5 +1546,171 @@ public abstract class TimeSeriesModelBase<T> : ITimeSeriesModel<T>
         catch (UnauthorizedAccessException ex) { throw new InvalidOperationException($"Access denied when loading model from '{filePath}': {ex.Message}", ex); }
         catch (System.Security.SecurityException ex) { throw new InvalidOperationException($"Security error when loading model from '{filePath}': {ex.Message}", ex); }
         catch (Exception ex) { throw new InvalidOperationException($"Failed to deserialize model from file '{filePath}'. The file may be corrupted or incompatible: {ex.Message}", ex); }
+    }
+
+    public virtual ILossFunction<T> DefaultLossFunction => _defaultLossFunction;
+
+    public virtual Vector<T> ComputeGradients(Matrix<T> input, Vector<T> target, ILossFunction<T>? lossFunction = null)
+    {
+        var loss = lossFunction ?? DefaultLossFunction;
+        var parameters = GetParameters();
+        var gradients = new Vector<T>(parameters.Length);
+
+        T epsilon = NumOps.FromDouble(1e-8);
+
+        for (int i = 0; i < parameters.Length; i++)
+        {
+            var paramsPlus = parameters.Clone();
+            paramsPlus[i] = NumOps.Add(paramsPlus[i], epsilon);
+
+            var modelPlus = (TimeSeriesModelBase<T>)WithParameters(paramsPlus);
+            var predPlus = modelPlus.Predict(input);
+            var lossPlus = loss.CalculateLoss(predPlus, target);
+
+            var paramsMinus = parameters.Clone();
+            paramsMinus[i] = NumOps.Subtract(paramsMinus[i], epsilon);
+
+            var modelMinus = (TimeSeriesModelBase<T>)WithParameters(paramsMinus);
+            var predMinus = modelMinus.Predict(input);
+            var lossMinus = loss.CalculateLoss(predMinus, target);
+
+            var twoEpsilon = NumOps.Multiply(epsilon, NumOps.FromDouble(2.0));
+            gradients[i] = NumOps.Divide(NumOps.Subtract(lossPlus, lossMinus), twoEpsilon);
+        }
+
+        return gradients;
+    }
+
+    public virtual void ApplyGradients(Vector<T> gradients, T learningRate)
+    {
+        if (gradients == null)
+            throw new ArgumentNullException(nameof(gradients));
+
+        var parameters = GetParameters();
+
+        if (gradients.Length != parameters.Length)
+            throw new ArgumentException($"Gradient vector length ({gradients.Length}) must match parameter count ({parameters.Length}).");
+
+        for (int i = 0; i < parameters.Length; i++)
+        {
+            parameters[i] = NumOps.Subtract(parameters[i], NumOps.Multiply(learningRate, gradients[i]));
+        }
+
+        SetParameters(parameters);
+    }
+
+    /// <summary>
+    /// Saves the time series model's current state to a stream.
+    /// </summary>
+    /// <param name="stream">The stream to write the model state to.</param>
+    /// <remarks>
+    /// <para>
+    /// This method serializes the time series model's parameters and configuration.
+    /// It uses the existing Serialize method and writes the data to the provided stream.
+    /// </para>
+    /// <para><b>For Beginners:</b> This is like creating a snapshot of your trained time series model.
+    ///
+    /// When you call SaveState:
+    /// - All learned parameters and trends are written to the stream
+    /// - Model configuration and internal state are preserved
+    ///
+    /// This is particularly useful for:
+    /// - Checkpointing during long training sessions
+    /// - Saving the best model for forecasting
+    /// - Knowledge distillation from time series models
+    /// - Deploying forecasting models to production
+    ///
+    /// You can later use LoadState to restore the model.
+    /// </para>
+    /// </remarks>
+    /// <exception cref="ArgumentNullException">Thrown when stream is null.</exception>
+    /// <exception cref="IOException">Thrown when there's an error writing to the stream.</exception>
+    public virtual void SaveState(Stream stream)
+    {
+        if (stream == null)
+            throw new ArgumentNullException(nameof(stream));
+
+        if (!stream.CanWrite)
+            throw new ArgumentException("Stream must be writable.", nameof(stream));
+
+        try
+        {
+            var data = this.Serialize();
+            stream.Write(data, 0, data.Length);
+            stream.Flush();
+        }
+        catch (IOException ex)
+        {
+            throw new IOException($"Failed to save time series model state to stream: {ex.Message}", ex);
+        }
+        catch (Exception ex)
+        {
+            throw new InvalidOperationException($"Unexpected error while saving time series model state: {ex.Message}", ex);
+        }
+    }
+
+    /// <summary>
+    /// Loads the time series model's state from a stream.
+    /// </summary>
+    /// <param name="stream">The stream to read the model state from.</param>
+    /// <remarks>
+    /// <para>
+    /// This method deserializes a time series model that was previously saved with SaveState.
+    /// It uses the existing Deserialize method after reading data from the stream.
+    /// </para>
+    /// <para><b>For Beginners:</b> This is like loading a saved snapshot of your time series model.
+    ///
+    /// When you call LoadState:
+    /// - All parameters and trends are read from the stream
+    /// - Model configuration and state are restored
+    ///
+    /// After loading, the model can:
+    /// - Make forecasts using the restored parameters
+    /// - Continue training from where it left off
+    /// - Be deployed to production for time series prediction
+    ///
+    /// This is essential for:
+    /// - Resuming interrupted training sessions
+    /// - Loading the best model for forecasting
+    /// - Deploying trained models to production
+    /// - Knowledge distillation workflows
+    /// </para>
+    /// </remarks>
+    /// <exception cref="ArgumentNullException">Thrown when stream is null.</exception>
+    /// <exception cref="IOException">Thrown when there's an error reading from the stream.</exception>
+    /// <exception cref="InvalidOperationException">Thrown when the stream contains invalid or incompatible data.</exception>
+    public virtual void LoadState(Stream stream)
+    {
+        if (stream == null)
+            throw new ArgumentNullException(nameof(stream));
+
+        if (!stream.CanRead)
+            throw new ArgumentException("Stream must be readable.", nameof(stream));
+
+        try
+        {
+            using var ms = new MemoryStream();
+            stream.CopyTo(ms);
+            var data = ms.ToArray();
+
+            if (data.Length == 0)
+                throw new InvalidOperationException("Stream contains no data.");
+
+            this.Deserialize(data);
+        }
+        catch (IOException ex)
+        {
+            throw new IOException($"Failed to read time series model state from stream: {ex.Message}", ex);
+        }
+        catch (InvalidOperationException)
+        {
+            // Re-throw InvalidOperationException from Deserialize
+            throw;
+        }
+        catch (Exception ex)
+        {
+            throw new InvalidOperationException(
+                $"Failed to deserialize time series model state. The stream may contain corrupted or incompatible data: {ex.Message}", ex);
+        }
     }
 }
