@@ -2,6 +2,7 @@ using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
 using AiDotNet.Models;
 using AiDotNet.Models.Options;
+using Newtonsoft.Json;
 
 namespace AiDotNet.ReinforcementLearning.Agents.DynamicProgramming;
 
@@ -19,6 +20,7 @@ public class PolicyIterationAgent<T> : ReinforcementLearningAgentBase<T>
     private Dictionary<string, T> _valueTable;
     private Dictionary<string, int> _policy;
     private Dictionary<string, Dictionary<int, List<(string nextState, T reward, T probability)>>> _model;
+    private Random _random;
 
     public PolicyIterationAgent(PolicyIterationOptions<T> options)
         : base(options)
@@ -32,6 +34,7 @@ public class PolicyIterationAgent<T> : ReinforcementLearningAgentBase<T>
         _valueTable = new Dictionary<string, T>();
         _policy = new Dictionary<string, int>();
         _model = new Dictionary<string, Dictionary<int, List<(string, T, T)>>>();
+        _random = new Random();
     }
 
     public override Vector<T> SelectAction(Vector<T> state, bool training = true)
@@ -41,7 +44,7 @@ public class PolicyIterationAgent<T> : ReinforcementLearningAgentBase<T>
         // Initialize policy for new states
         if (!_policy.ContainsKey(stateKey))
         {
-            _policy[stateKey] = Random.Next(_options.ActionSize);
+            _policy[stateKey] = _random.Next(_options.ActionSize);
             _valueTable[stateKey] = NumOps.Zero;
         }
 
@@ -260,12 +263,34 @@ public class PolicyIterationAgent<T> : ReinforcementLearningAgentBase<T>
 
     public override byte[] Serialize()
     {
-        throw new NotImplementedException("PolicyIteration serialization not yet implemented");
+        var state = new
+        {
+            ValueTable = _valueTable,
+            Policy = _policy,
+            Model = _model,
+            Options = _options
+        };
+        string json = JsonConvert.SerializeObject(state);
+        return System.Text.Encoding.UTF8.GetBytes(json);
     }
 
     public override void Deserialize(byte[] data)
     {
-        throw new NotImplementedException("PolicyIteration deserialization not yet implemented");
+        if (data is null || data.Length == 0)
+        {
+            throw new ArgumentException("Serialized data cannot be null or empty", nameof(data));
+        }
+
+        string json = System.Text.Encoding.UTF8.GetString(data);
+        var state = JsonConvert.DeserializeObject<dynamic>(json);
+        if (state is null)
+        {
+            throw new InvalidOperationException("Deserialization returned null");
+        }
+
+        _valueTable = JsonConvert.DeserializeObject<Dictionary<string, T>>(state.ValueTable.ToString()) ?? new Dictionary<string, T>();
+        _policy = JsonConvert.DeserializeObject<Dictionary<string, int>>(state.Policy.ToString()) ?? new Dictionary<string, int>();
+        _model = JsonConvert.DeserializeObject<Dictionary<string, Dictionary<int, List<(string, T, T)>>>>(state.Model.ToString()) ?? new Dictionary<string, Dictionary<int, List<(string, T, T)>>>();
     }
 
     public override Vector<T> GetParameters()
@@ -307,7 +332,31 @@ public class PolicyIterationAgent<T> : ReinforcementLearningAgentBase<T>
 
     public override IFullModel<T, Vector<T>, Vector<T>> Clone()
     {
-        return new PolicyIterationAgent<T>(_options);
+        var clone = new PolicyIterationAgent<T>(_options);
+
+        // Deep copy value table
+        foreach (var kvp in _valueTable)
+        {
+            clone._valueTable[kvp.Key] = kvp.Value;
+        }
+
+        // Deep copy policy
+        foreach (var kvp in _policy)
+        {
+            clone._policy[kvp.Key] = kvp.Value;
+        }
+
+        // Deep copy model
+        foreach (var stateKvp in _model)
+        {
+            clone._model[stateKvp.Key] = new Dictionary<int, List<(string, T, T)>>();
+            foreach (var actionKvp in stateKvp.Value)
+            {
+                clone._model[stateKvp.Key][actionKvp.Key] = new List<(string, T, T)>(actionKvp.Value);
+            }
+        }
+
+        return clone;
     }
 
     public override Vector<T> ComputeGradients(
@@ -329,12 +378,27 @@ public class PolicyIterationAgent<T> : ReinforcementLearningAgentBase<T>
 
     public override void SaveModel(string filepath)
     {
+        if (string.IsNullOrWhiteSpace(filepath))
+        {
+            throw new ArgumentException("File path cannot be null or whitespace", nameof(filepath));
+        }
+
         var data = Serialize();
         System.IO.File.WriteAllBytes(filepath, data);
     }
 
     public override void LoadModel(string filepath)
     {
+        if (string.IsNullOrWhiteSpace(filepath))
+        {
+            throw new ArgumentException("File path cannot be null or whitespace", nameof(filepath));
+        }
+
+        if (!System.IO.File.Exists(filepath))
+        {
+            throw new System.IO.FileNotFoundException($"Model file not found: {filepath}", filepath);
+        }
+
         var data = System.IO.File.ReadAllBytes(filepath);
         Deserialize(data);
     }
