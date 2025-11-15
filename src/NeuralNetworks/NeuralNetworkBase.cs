@@ -2458,6 +2458,20 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
             Layers.MultiHeadAttentionLayer<T> => input, // Simplified: requires multi-head attention
             Layers.SqueezeAndExcitationLayer<T> => input, // Simplified: requires squeeze-excite ops
             Layers.GatedLinearUnitLayer<T> => input, // Simplified: requires gating operations
+            Layers.TransformerEncoderLayer<T> => input, // Simplified: requires transformer encoder ops
+            Layers.TransformerDecoderLayer<T> => input, // Simplified: requires transformer decoder ops
+            Layers.ConvolutionalLayer<T> => input, // Simplified: requires convolution operation
+            Layers.DeconvolutionalLayer<T> => input, // Simplified: requires deconvolution/transpose convolution
+            Layers.DepthwiseSeparableConvolutionalLayer<T> => input, // Simplified: requires depthwise separable conv
+            Layers.SeparableConvolutionalLayer<T> => input, // Simplified: requires separable convolution
+            Layers.DilatedConvolutionalLayer<T> => input, // Simplified: requires dilated convolution
+            Layers.SubpixelConvolutionalLayer<T> => input, // Simplified: requires subpixel convolution
+            Layers.LocallyConnectedLayer<T> => input, // Simplified: requires locally connected ops
+            Layers.ConvLSTMLayer<T> => input, // Simplified: requires convolutional LSTM operations
+            Layers.MaxPoolingLayer<T> => input, // Simplified: requires max pooling operation
+            Layers.PoolingLayer<T> => input, // Simplified: requires pooling operations
+            Layers.EmbeddingLayer<T> => input, // Simplified: requires embedding lookup
+            Layers.PatchEmbeddingLayer<T> => input, // Simplified: requires patch embedding for vision transformers
             Layers.BatchNormalizationLayer<T> bnLayer => ConvertBatchNormalizationLayer(bnLayer, input),
             Layers.LayerNormalizationLayer<T> lnLayer => ConvertLayerNormalizationLayer(lnLayer, input),
 
@@ -2469,7 +2483,9 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
                 $"TimeDistributedLayer, GlobalPoolingLayer, MeanLayer, SplitLayer, ReadoutLayer, ReconstructionLayer, RepParameterizationLayer, " +
                 $"LogVarianceLayer, MeasurementLayer, ResidualLayer, HighwayLayer, RecurrentLayer, LSTMLayer, GRULayer, BidirectionalLayer, " +
                 $"AttentionLayer, SelfAttentionLayer, MultiHeadAttentionLayer, SqueezeAndExcitationLayer, GatedLinearUnitLayer, " +
-                $"BatchNormalizationLayer, LayerNormalizationLayer. " +
+                $"TransformerEncoderLayer, TransformerDecoderLayer, ConvolutionalLayer, DeconvolutionalLayer, DepthwiseSeparableConvolutionalLayer, " +
+                $"SeparableConvolutionalLayer, DilatedConvolutionalLayer, SubpixelConvolutionalLayer, LocallyConnectedLayer, ConvLSTMLayer, " +
+                $"MaxPoolingLayer, PoolingLayer, EmbeddingLayer, PatchEmbeddingLayer, BatchNormalizationLayer, LayerNormalizationLayer. " +
                 $"Support for additional layer types will be added in future updates.")
         };
     }

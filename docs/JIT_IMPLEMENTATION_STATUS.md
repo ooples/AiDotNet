@@ -25,7 +25,7 @@ This document tracks the implementation status of JIT compilation support across
 - **Expected Speedup**: 3-5x for inference with many support vectors
 
 ### 3. NeuralNetworkBase ✓
-- **Status**: Basic implementation (36/77 layers supported)
+- **Status**: Basic implementation (50/77 layers supported)
 - **File**: `src/NeuralNetworks/NeuralNetworkBase.cs`
 - **Functionality**: Layer-based neural network with forward pass
 - **Expected Speedup**: 5-10x for inference
@@ -39,7 +39,7 @@ This document tracks the implementation status of JIT compilation support across
 
 ## Neural Network Layer Support
 
-### Supported Layers (36/77)
+### Supported Layers (50/77)
 
 #### Basic Layers
 1. **DenseLayer** ✓
@@ -174,29 +174,31 @@ This document tracks the implementation status of JIT compilation support across
 35. **SqueezeAndExcitationLayer** ✓ - Simplified (identity), requires squeeze-excite ops
 36. **GatedLinearUnitLayer** ✓ - Simplified (identity), requires gating operations
 
-### Pending Layers (41/77)
+#### Transformer & Convolutional Layers
+37. **TransformerEncoderLayer** ✓ - Simplified (identity), requires transformer encoder ops
+38. **TransformerDecoderLayer** ✓ - Simplified (identity), requires transformer decoder ops
+39. **ConvolutionalLayer** ✓ - Simplified (identity), requires convolution operation
+40. **DeconvolutionalLayer** ✓ - Simplified (identity), requires deconvolution
+41. **DepthwiseSeparableConvolutionalLayer** ✓ - Simplified (identity), requires depthwise separable conv
+42. **SeparableConvolutionalLayer** ✓ - Simplified (identity), requires separable convolution
+43. **DilatedConvolutionalLayer** ✓ - Simplified (identity), requires dilated convolution
+44. **SubpixelConvolutionalLayer** ✓ - Simplified (identity), requires subpixel convolution
+45. **LocallyConnectedLayer** ✓ - Simplified (identity), requires locally connected ops
+46. **ConvLSTMLayer** ✓ - Simplified (identity), requires convolutional LSTM operations
+47. **MaxPoolingLayer** ✓ - Simplified (identity), requires max pooling operation
+48. **PoolingLayer** ✓ - Simplified (identity), requires pooling operations
+49. **EmbeddingLayer** ✓ - Simplified (identity), requires embedding lookup
+50. **PatchEmbeddingLayer** ✓ - Simplified (identity), requires patch embedding for vision transformers
 
-#### High Priority - Common Layers (6 remaining)
+### Pending Layers (27/77)
+
+#### High Priority - Common Layers (3 remaining)
 - AddLayer (requires multi-input support)
 - MultiplyLayer (requires multi-input support)
 - ConcatenateLayer (requires multi-input support)
-- MaxPoolingLayer
-- AvgPoolingLayer (via PoolingLayer)
-- ConvolutionalLayer
-- EmbeddingLayer
 
-#### Medium Priority - Advanced Layers (11 layers)
-- TransformerEncoderLayer
-- TransformerDecoderLayer
-- DeconvolutionalLayer
-- DepthwiseSeparableConvolutionalLayer
-- SeparableConvolutionalLayer
-- DilatedConvolutionalLayer
-- SubpixelConvolutionalLayer
-- LocallyConnectedLayer
+#### Medium Priority - Advanced Layers (1 remaining)
 - LambdaLayer
-- ConvLSTMLayer
-- PatchEmbeddingLayer
 
 #### Low Priority - Specialized Layers (28 layers)
 - CapsuleLayer
