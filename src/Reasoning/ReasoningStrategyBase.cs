@@ -371,5 +371,8 @@ public abstract class ReasoningStrategyBase<T> : IReasoningStrategy<T>
 
         if (config.ComputeScalingFactor <= 0.0)
             throw new ArgumentException("ComputeScalingFactor must be positive", nameof(config));
+
+        if (config.MaxReasoningTimeSeconds < 0)
+            throw new ArgumentException("MaxReasoningTimeSeconds cannot be negative", nameof(config));
     }
 }
