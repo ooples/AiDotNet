@@ -2,6 +2,7 @@ using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
 using AiDotNet.Models;
 using AiDotNet.Models.Options;
+using Newtonsoft.Json;
 
 namespace AiDotNet.ReinforcementLearning.Agents.Planning;
 
@@ -167,8 +168,48 @@ public class PrioritizedSweepingAgent<T> : ReinforcementLearningAgentBase<T>
     public override ModelMetadata<T> GetModelMetadata() => new ModelMetadata<T> { ModelType = ModelType.ReinforcementLearning, FeatureCount = this.FeatureCount, Complexity = ParameterCount };
     public override int ParameterCount => _qTable.Count * _options.ActionSize;
     public override int FeatureCount => _options.StateSize;
-    public override byte[] Serialize() => throw new NotSupportedException("Serialization is not supported for tabular reinforcement learning agents. Use GetParameters() and SetParameters() for state transfer.");
-    public override void Deserialize(byte[] data) => throw new NotSupportedException("Deserialization is not supported for tabular reinforcement learning agents. Use GetParameters() and SetParameters() for state transfer.");
+    public override byte[] Serialize()
+    {
+        var state = new
+        {
+            QTable = _qTable,
+            Model = _model,
+            Predecessors = _predecessors,
+            PriorityQueue = _priorityQueue.ToList(),
+            Epsilon = _epsilon,
+            Options = _options
+        };
+        string json = JsonConvert.SerializeObject(state);
+        return System.Text.Encoding.UTF8.GetBytes(json);
+    }
+
+    public override void Deserialize(byte[] data)
+    {
+        if (data is null || data.Length == 0)
+        {
+            throw new ArgumentException("Serialized data cannot be null or empty", nameof(data));
+        }
+
+        string json = System.Text.Encoding.UTF8.GetString(data);
+        var state = JsonConvert.DeserializeObject<dynamic>(json);
+        if (state is null)
+        {
+            throw new InvalidOperationException("Deserialization returned null");
+        }
+
+        _qTable = JsonConvert.DeserializeObject<Dictionary<string, Dictionary<int, T>>>(state.QTable.ToString()) ?? new Dictionary<string, Dictionary<int, T>>();
+        _model = JsonConvert.DeserializeObject<Dictionary<string, Dictionary<int, (string, T)>>>(state.Model.ToString()) ?? new Dictionary<string, Dictionary<int, (string, T)>>();
+        _predecessors = JsonConvert.DeserializeObject<Dictionary<string, List<(string, int)>>>(state.Predecessors.ToString()) ?? new Dictionary<string, List<(string, int)>>();
+
+        var priorityList = JsonConvert.DeserializeObject<List<(double, string, int)>>(state.PriorityQueue.ToString()) ?? new List<(double, string, int)>();
+        _priorityQueue.Clear();
+        foreach (var item in priorityList)
+        {
+            _priorityQueue.Add(item);
+        }
+
+        _epsilon = state.Epsilon;
+    }
     public override Vector<T> GetParameters()
     {
         int paramCount = _qTable.Count > 0 ? _qTable.Count * _options.ActionSize : 1;
@@ -253,6 +294,31 @@ public class PrioritizedSweepingAgent<T> : ReinforcementLearningAgentBase<T>
     {
         throw new NotSupportedException("Gradient-based updates are not supported for tabular reinforcement learning agents. Q-values are updated directly through temporal difference learning in StoreExperience().");
     }
-    public override void SaveModel(string filepath) => throw new NotSupportedException("Model serialization is not supported for tabular reinforcement learning agents. Use GetParameters() to extract Q-table values.");
-    public override void LoadModel(string filepath) => throw new NotSupportedException("Model deserialization is not supported for tabular reinforcement learning agents. Use SetParameters() to restore Q-table values.");
+
+    public override void SaveModel(string filepath)
+    {
+        if (string.IsNullOrWhiteSpace(filepath))
+        {
+            throw new ArgumentException("File path cannot be null or whitespace", nameof(filepath));
+        }
+
+        var data = Serialize();
+        System.IO.File.WriteAllBytes(filepath, data);
+    }
+
+    public override void LoadModel(string filepath)
+    {
+        if (string.IsNullOrWhiteSpace(filepath))
+        {
+            throw new ArgumentException("File path cannot be null or whitespace", nameof(filepath));
+        }
+
+        if (!System.IO.File.Exists(filepath))
+        {
+            throw new System.IO.FileNotFoundException($"Model file not found: {filepath}", filepath);
+        }
+
+        var data = System.IO.File.ReadAllBytes(filepath);
+        Deserialize(data);
+    }
 }

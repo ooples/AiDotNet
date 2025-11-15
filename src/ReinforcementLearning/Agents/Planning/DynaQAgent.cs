@@ -2,6 +2,7 @@ using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
 using AiDotNet.Models;
 using AiDotNet.Models.Options;
+using Newtonsoft.Json;
 
 namespace AiDotNet.ReinforcementLearning.Agents.Planning;
 
@@ -16,6 +17,7 @@ public class DynaQAgent<T> : ReinforcementLearningAgentBase<T>
     private Dictionary<string, Dictionary<int, (string nextState, T reward)>> _model;
     private List<(string state, int action)> _visitedStateActions;
     private double _epsilon;
+    private Random _random;
 
     public DynaQAgent(DynaQOptions<T> options) : base(options)
     {
@@ -24,6 +26,7 @@ public class DynaQAgent<T> : ReinforcementLearningAgentBase<T>
         _model = new Dictionary<string, Dictionary<int, (string, T)>>();
         _visitedStateActions = new List<(string, int)>();
         _epsilon = options.EpsilonStart;
+        _random = new Random();
     }
 
     public override Vector<T> SelectAction(Vector<T> state, bool training = true)
@@ -32,9 +35,9 @@ public class DynaQAgent<T> : ReinforcementLearningAgentBase<T>
         string stateKey = GetStateKey(state);
 
         int selectedAction;
-        if (training && Random.NextDouble() < _epsilon)
+        if (training && _random.NextDouble() < _epsilon)
         {
-            selectedAction = Random.Next(_options.ActionSize);
+            selectedAction = _random.Next(_options.ActionSize);
         }
         else
         {
@@ -82,7 +85,7 @@ public class DynaQAgent<T> : ReinforcementLearningAgentBase<T>
             if (_visitedStateActions.Count == 0) break;
 
             // Random previously observed state-action
-            var (planState, planAction) = _visitedStateActions[Random.Next(_visitedStateActions.Count)];
+            var (planState, planAction) = _visitedStateActions[_random.Next(_visitedStateActions.Count)];
 
             if (_model.ContainsKey(planState) && _model[planState].ContainsKey(planAction))
             {
@@ -178,8 +181,39 @@ public class DynaQAgent<T> : ReinforcementLearningAgentBase<T>
     public override ModelMetadata<T> GetModelMetadata() => new ModelMetadata<T> { ModelType = ModelType.ReinforcementLearning, FeatureCount = this.FeatureCount, Complexity = ParameterCount };
     public override int ParameterCount => _qTable.Count * _options.ActionSize;
     public override int FeatureCount => _options.StateSize;
-    public override byte[] Serialize() => throw new NotImplementedException();
-    public override void Deserialize(byte[] data) => throw new NotImplementedException();
+    public override byte[] Serialize()
+    {
+        var state = new
+        {
+            QTable = _qTable,
+            Model = _model,
+            VisitedStateActions = _visitedStateActions,
+            Epsilon = _epsilon,
+            Options = _options
+        };
+        string json = JsonConvert.SerializeObject(state);
+        return System.Text.Encoding.UTF8.GetBytes(json);
+    }
+
+    public override void Deserialize(byte[] data)
+    {
+        if (data is null || data.Length == 0)
+        {
+            throw new ArgumentException("Serialized data cannot be null or empty", nameof(data));
+        }
+
+        string json = System.Text.Encoding.UTF8.GetString(data);
+        var state = JsonConvert.DeserializeObject<dynamic>(json);
+        if (state is null)
+        {
+            throw new InvalidOperationException("Deserialization returned null");
+        }
+
+        _qTable = JsonConvert.DeserializeObject<Dictionary<string, Dictionary<int, T>>>(state.QTable.ToString()) ?? new Dictionary<string, Dictionary<int, T>>();
+        _model = JsonConvert.DeserializeObject<Dictionary<string, Dictionary<int, (string, T)>>>(state.Model.ToString()) ?? new Dictionary<string, Dictionary<int, (string, T)>>();
+        _visitedStateActions = JsonConvert.DeserializeObject<List<(string, int)>>(state.VisitedStateActions.ToString()) ?? new List<(string, int)>();
+        _epsilon = state.Epsilon;
+    }
 
     public override Vector<T> GetParameters()
     {
@@ -202,7 +236,41 @@ public class DynaQAgent<T> : ReinforcementLearningAgentBase<T>
                     _qTable[s.Key][a] = parameters[idx++];
     }
 
-    public override IFullModel<T, Vector<T>, Vector<T>> Clone() => new DynaQAgent<T>(_options);
+    public override IFullModel<T, Vector<T>, Vector<T>> Clone()
+    {
+        var clone = new DynaQAgent<T>(_options);
+
+        // Deep copy Q-table
+        foreach (var stateEntry in _qTable)
+        {
+            clone._qTable[stateEntry.Key] = new Dictionary<int, T>();
+            foreach (var actionEntry in stateEntry.Value)
+            {
+                clone._qTable[stateEntry.Key][actionEntry.Key] = actionEntry.Value;
+            }
+        }
+
+        // Deep copy model
+        foreach (var stateEntry in _model)
+        {
+            clone._model[stateEntry.Key] = new Dictionary<int, (string, T)>();
+            foreach (var actionEntry in stateEntry.Value)
+            {
+                clone._model[stateEntry.Key][actionEntry.Key] = actionEntry.Value;
+            }
+        }
+
+        // Deep copy visited state-actions
+        foreach (var stateAction in _visitedStateActions)
+        {
+            clone._visitedStateActions.Add(stateAction);
+        }
+
+        // Copy epsilon value
+        clone._epsilon = _epsilon;
+
+        return clone;
+    }
 
     public override Vector<T> ComputeGradients(Vector<T> input, Vector<T> target, ILossFunction<T>? lossFunction = null)
     {
@@ -214,6 +282,31 @@ public class DynaQAgent<T> : ReinforcementLearningAgentBase<T>
     }
 
     public override void ApplyGradients(Vector<T> gradients, T learningRate) { }
-    public override void SaveModel(string filepath) { var data = Serialize(); System.IO.File.WriteAllBytes(filepath, data); }
-    public override void LoadModel(string filepath) { var data = System.IO.File.ReadAllBytes(filepath); Deserialize(data); }
+
+    public override void SaveModel(string filepath)
+    {
+        if (string.IsNullOrWhiteSpace(filepath))
+        {
+            throw new ArgumentException("File path cannot be null or whitespace", nameof(filepath));
+        }
+
+        var data = Serialize();
+        System.IO.File.WriteAllBytes(filepath, data);
+    }
+
+    public override void LoadModel(string filepath)
+    {
+        if (string.IsNullOrWhiteSpace(filepath))
+        {
+            throw new ArgumentException("File path cannot be null or whitespace", nameof(filepath));
+        }
+
+        if (!System.IO.File.Exists(filepath))
+        {
+            throw new System.IO.FileNotFoundException($"Model file not found: {filepath}", filepath);
+        }
+
+        var data = System.IO.File.ReadAllBytes(filepath);
+        Deserialize(data);
+    }
 }

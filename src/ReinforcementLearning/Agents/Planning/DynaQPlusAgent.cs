@@ -220,7 +220,52 @@ public class DynaQPlusAgent<T> : ReinforcementLearningAgentBase<T>
             }
         }
     }
-    public override IFullModel<T, Vector<T>, Vector<T>> Clone() => new DynaQPlusAgent<T>(_options);
+    public override IFullModel<T, Vector<T>, Vector<T>> Clone()
+    {
+        var clone = new DynaQPlusAgent<T>(_options);
+
+        // Deep copy Q-table
+        foreach (var stateEntry in _qTable)
+        {
+            clone._qTable[stateEntry.Key] = new Dictionary<int, T>();
+            foreach (var actionEntry in stateEntry.Value)
+            {
+                clone._qTable[stateEntry.Key][actionEntry.Key] = actionEntry.Value;
+            }
+        }
+
+        // Deep copy model
+        foreach (var stateEntry in _model)
+        {
+            clone._model[stateEntry.Key] = new Dictionary<int, (string, T)>();
+            foreach (var actionEntry in stateEntry.Value)
+            {
+                clone._model[stateEntry.Key][actionEntry.Key] = actionEntry.Value;
+            }
+        }
+
+        // Deep copy time steps
+        foreach (var stateEntry in _timeSteps)
+        {
+            clone._timeSteps[stateEntry.Key] = new Dictionary<int, int>();
+            foreach (var actionEntry in stateEntry.Value)
+            {
+                clone._timeSteps[stateEntry.Key][actionEntry.Key] = actionEntry.Value;
+            }
+        }
+
+        // Deep copy visited state-actions
+        foreach (var stateAction in _visitedStateActions)
+        {
+            clone._visitedStateActions.Add(stateAction);
+        }
+
+        // Copy scalar values
+        clone._epsilon = _epsilon;
+        clone._totalSteps = _totalSteps;
+
+        return clone;
+    }
     public override Vector<T> ComputeGradients(Vector<T> input, Vector<T> target, ILossFunction<T>? lossFunction = null) { var pred = Predict(input); var lf = lossFunction ?? LossFunction; var loss = lf.CalculateLoss(pred, target); var grad = lf.CalculateDerivative(pred, target); return grad; }
     public override void ApplyGradients(Vector<T> gradients, T learningRate)
     {
