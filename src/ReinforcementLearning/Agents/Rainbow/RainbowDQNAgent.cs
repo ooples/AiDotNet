@@ -449,7 +449,10 @@ public class RainbowDQNAgent<T> : DeepReinforcementLearningAgentBase<T>
 
     public override IFullModel<T, Vector<T>, Vector<T>> Clone()
     {
-        return new RainbowDQNAgent<T>(_options, _optimizer);
+        var clone = new RainbowDQNAgent<T>(_options, _optimizer);
+        // Copy learned network parameters to preserve trained state
+        clone.SetParameters(GetParameters());
+        return clone;
     }
 
     public override Vector<T> ComputeGradients(
