@@ -123,6 +123,91 @@ public class GradientDescentOptimizer<T, TInput, TOutput> : GradientBasedOptimiz
     }
 
     /// <summary>
+    /// Updates a vector of parameters using the Gradient Descent algorithm.
+    /// </summary>
+    /// <param name="parameters">The current parameter vector to be updated.</param>
+    /// <param name="gradient">The gradient vector corresponding to the parameters.</param>
+    /// <returns>The updated parameter vector.</returns>
+    /// <remarks>
+    /// <para>
+    /// Gradient Descent uses the simplest update rule: params_new = params_old - lr * gradient.
+    /// </para>
+    /// <para><b>For Beginners:</b> This is the basic gradient descent update - take a step
+    /// in the opposite direction of the gradient, scaled by the learning rate.
+    /// </para>
+    /// </remarks>
+    public override Vector<T> UpdateParameters(Vector<T> parameters, Vector<T> gradient)
+    {
+        // Try GPU-accelerated parameter update for large parameter sets
+        if (IsGpuAccelerationEnabled && typeof(T) == typeof(float) && parameters.Length >= 10000)
+        {
+            return UpdateParametersGpu(parameters, gradient);
+        }
+
+        // CPU fallback: params = params - lr * gradient
+        var updatedParams = new Vector<T>(parameters.Length);
+        for (int i = 0; i < parameters.Length; i++)
+        {
+            updatedParams[i] = NumOps.Subtract(
+                parameters[i],
+                NumOps.Multiply(CurrentLearningRate, gradient[i])
+            );
+        }
+
+        return updatedParams;
+    }
+
+    /// <summary>
+    /// GPU-accelerated version of parameter update.
+    /// </summary>
+    private Vector<T> UpdateParametersGpu(Vector<T> parameters, Vector<T> gradient)
+    {
+        var backend = _gpuContext!.GpuBackend as Gpu.IlgpuBackend<float>;
+        if (backend == null) return UpdateParameters(parameters, gradient);
+
+        // Cast to float
+        var paramsFloat = VectorToTensor(parameters as Vector<float>!);
+        var gradFloat = VectorToTensor(gradient as Vector<float>!);
+
+        _gpuContext.Statistics.IncrementGpuOperations();
+
+        // Transfer to GPU
+        using var gpuParams = backend.ToGpu(paramsFloat);
+        using var gpuGrad = backend.ToGpu(gradFloat);
+
+        // Constants
+        var lrTensor = backend.ToGpu(new LinearAlgebra.Tensor<float>(new[] { 1 }) { [0] = (float)CurrentLearningRate });
+
+        // params = params - lr * gradient
+        using var lrGrad = backend.Multiply(gpuGrad, lrTensor);
+        using var newParams = backend.Subtract(gpuParams, lrGrad);
+
+        // Transfer back
+        var result = backend.ToCpu(newParams);
+
+        // Cleanup
+        lrTensor.Dispose();
+
+        return TensorToVector(result) as Vector<T>!;
+    }
+
+    private LinearAlgebra.Tensor<float> VectorToTensor(Vector<float> vector)
+    {
+        var tensor = new LinearAlgebra.Tensor<float>(new[] { vector.Length });
+        for (int i = 0; i < vector.Length; i++)
+            tensor[i] = vector[i];
+        return tensor;
+    }
+
+    private Vector<float> TensorToVector(LinearAlgebra.Tensor<float> tensor)
+    {
+        var vector = new Vector<float>(tensor.Length);
+        for (int i = 0; i < tensor.Length; i++)
+            vector[i] = tensor[i];
+        return vector;
+    }
+
+    /// <summary>
     /// Reverses a Gradient Descent update to recover original parameters.
     /// </summary>
     /// <param name="updatedParameters">Parameters after GD update</param>
