@@ -2,6 +2,7 @@ using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
 using AiDotNet.Models;
 using AiDotNet.Models.Options;
+using Newtonsoft.Json;
 
 namespace AiDotNet.ReinforcementLearning.Agents.MonteCarlo;
 
@@ -20,6 +21,7 @@ public class OnPolicyMonteCarloAgent<T> : ReinforcementLearningAgentBase<T>
     private Dictionary<string, Dictionary<int, List<T>>> _returns;
     private List<(Vector<T> state, int action, T reward)> _episode;
     private double _epsilon;
+    private Random _random;
 
     public OnPolicyMonteCarloAgent(OnPolicyMonteCarloOptions<T> options)
         : base(options)
@@ -34,6 +36,7 @@ public class OnPolicyMonteCarloAgent<T> : ReinforcementLearningAgentBase<T>
         _returns = new Dictionary<string, Dictionary<int, List<T>>>();
         _episode = new List<(Vector<T>, int, T)>();
         _epsilon = options.EpsilonStart;
+        _random = new Random();
     }
 
     public override Vector<T> SelectAction(Vector<T> state, bool training = true)
@@ -43,10 +46,10 @@ public class OnPolicyMonteCarloAgent<T> : ReinforcementLearningAgentBase<T>
 
         int selectedAction;
 
-        if (training && Random.NextDouble() < _epsilon)
+        if (training && _random.NextDouble() < _epsilon)
         {
             // Explore: random action
-            selectedAction = Random.Next(_options.ActionSize);
+            selectedAction = _random.Next(_options.ActionSize);
         }
         else
         {
@@ -222,12 +225,34 @@ public class OnPolicyMonteCarloAgent<T> : ReinforcementLearningAgentBase<T>
 
     public override byte[] Serialize()
     {
-        throw new NotImplementedException("OnPolicyMonteCarlo serialization not yet implemented");
+        var state = new
+        {
+            QTable = _qTable,
+            Returns = _returns,
+            Epsilon = _epsilon,
+            Options = _options
+        };
+        string json = JsonConvert.SerializeObject(state);
+        return System.Text.Encoding.UTF8.GetBytes(json);
     }
 
     public override void Deserialize(byte[] data)
     {
-        throw new NotImplementedException("OnPolicyMonteCarlo deserialization not yet implemented");
+        if (data is null || data.Length == 0)
+        {
+            throw new ArgumentException("Serialized data cannot be null or empty", nameof(data));
+        }
+
+        string json = System.Text.Encoding.UTF8.GetString(data);
+        var state = JsonConvert.DeserializeObject<dynamic>(json);
+        if (state is null)
+        {
+            throw new InvalidOperationException("Deserialization returned null");
+        }
+
+        _qTable = JsonConvert.DeserializeObject<Dictionary<string, Dictionary<int, T>>>(state.QTable.ToString()) ?? new Dictionary<string, Dictionary<int, T>>();
+        _returns = JsonConvert.DeserializeObject<Dictionary<string, Dictionary<int, List<T>>>>(state.Returns.ToString()) ?? new Dictionary<string, Dictionary<int, List<T>>>();
+        _epsilon = state.Epsilon;
     }
 
     public override Vector<T> GetParameters()
@@ -273,7 +298,26 @@ public class OnPolicyMonteCarloAgent<T> : ReinforcementLearningAgentBase<T>
 
     public override IFullModel<T, Vector<T>, Vector<T>> Clone()
     {
-        return new OnPolicyMonteCarloAgent<T>(_options);
+        var clone = new OnPolicyMonteCarloAgent<T>(_options);
+
+        // Deep copy Q-table
+        foreach (var kvp in _qTable)
+        {
+            clone._qTable[kvp.Key] = new Dictionary<int, T>(kvp.Value);
+        }
+
+        // Deep copy returns
+        foreach (var kvp in _returns)
+        {
+            clone._returns[kvp.Key] = new Dictionary<int, List<T>>();
+            foreach (var returnKvp in kvp.Value)
+            {
+                clone._returns[kvp.Key][returnKvp.Key] = new List<T>(returnKvp.Value);
+            }
+        }
+
+        clone._epsilon = _epsilon;
+        return clone;
     }
 
     public override Vector<T> ComputeGradients(
@@ -296,12 +340,27 @@ public class OnPolicyMonteCarloAgent<T> : ReinforcementLearningAgentBase<T>
 
     public override void SaveModel(string filepath)
     {
+        if (string.IsNullOrWhiteSpace(filepath))
+        {
+            throw new ArgumentException("File path cannot be null or whitespace", nameof(filepath));
+        }
+
         var data = Serialize();
         System.IO.File.WriteAllBytes(filepath, data);
     }
 
     public override void LoadModel(string filepath)
     {
+        if (string.IsNullOrWhiteSpace(filepath))
+        {
+            throw new ArgumentException("File path cannot be null or whitespace", nameof(filepath));
+        }
+
+        if (!System.IO.File.Exists(filepath))
+        {
+            throw new System.IO.FileNotFoundException($"Model file not found: {filepath}", filepath);
+        }
+
         var data = System.IO.File.ReadAllBytes(filepath);
         Deserialize(data);
     }
