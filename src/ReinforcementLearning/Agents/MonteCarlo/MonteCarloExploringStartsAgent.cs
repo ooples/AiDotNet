@@ -2,6 +2,7 @@ using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
 using AiDotNet.Models;
 using AiDotNet.Models.Options;
+using Newtonsoft.Json;
 
 namespace AiDotNet.ReinforcementLearning.Agents.MonteCarlo;
 
@@ -20,6 +21,7 @@ public class MonteCarloExploringStartsAgent<T> : ReinforcementLearningAgentBase<
     private Dictionary<string, Dictionary<int, List<T>>> _returns;
     private List<(Vector<T> state, int action, T reward)> _episode;
     private bool _isFirstAction;
+    private Random _random;
 
     public MonteCarloExploringStartsAgent(MonteCarloExploringStartsOptions<T> options)
         : base(options)
@@ -34,6 +36,7 @@ public class MonteCarloExploringStartsAgent<T> : ReinforcementLearningAgentBase<
         _returns = new Dictionary<string, Dictionary<int, List<T>>>();
         _episode = new List<(Vector<T>, int, T)>();
         _isFirstAction = true;
+        _random = new Random();
     }
 
     public override Vector<T> SelectAction(Vector<T> state, bool training = true)
@@ -42,7 +45,7 @@ public class MonteCarloExploringStartsAgent<T> : ReinforcementLearningAgentBase<
         {
             // Exploring start: random action for first step
             _isFirstAction = false;
-            int randomAction = Random.Next(_options.ActionSize);
+            int randomAction = _random.Next(_options.ActionSize);
             var action = new Vector<T>(_options.ActionSize);
             action[randomAction] = NumOps.One;
             return action;
@@ -196,12 +199,12 @@ public class MonteCarloExploringStartsAgent<T> : ReinforcementLearningAgentBase<
         return SelectAction(input, training: false);
     }
 
-    public Task<Vector<T>> PredictAsync(Vector<T> input)
+    public override Task<Vector<T>> PredictAsync(Vector<T> input)
     {
         return Task.FromResult(Predict(input));
     }
 
-    public Task TrainAsync()
+    public override Task TrainAsync()
     {
         Train();
         return Task.CompletedTask;
@@ -221,12 +224,32 @@ public class MonteCarloExploringStartsAgent<T> : ReinforcementLearningAgentBase<
 
     public override byte[] Serialize()
     {
-        throw new NotImplementedException("MonteCarloExploringStarts serialization not yet implemented");
+        var state = new
+        {
+            QTable = _qTable,
+            Returns = _returns,
+            Options = _options
+        };
+        string json = JsonConvert.SerializeObject(state);
+        return System.Text.Encoding.UTF8.GetBytes(json);
     }
 
     public override void Deserialize(byte[] data)
     {
-        throw new NotImplementedException("MonteCarloExploringStarts deserialization not yet implemented");
+        if (data is null || data.Length == 0)
+        {
+            throw new ArgumentException("Serialized data cannot be null or empty", nameof(data));
+        }
+
+        string json = System.Text.Encoding.UTF8.GetString(data);
+        var state = JsonConvert.DeserializeObject<dynamic>(json);
+        if (state is null)
+        {
+            throw new InvalidOperationException("Deserialization returned null");
+        }
+
+        _qTable = JsonConvert.DeserializeObject<Dictionary<string, Dictionary<int, T>>>(state.QTable.ToString()) ?? new Dictionary<string, Dictionary<int, T>>();
+        _returns = JsonConvert.DeserializeObject<Dictionary<string, Dictionary<int, List<T>>>>(state.Returns.ToString()) ?? new Dictionary<string, Dictionary<int, List<T>>>();
     }
 
     public override Vector<T> GetParameters()
@@ -272,7 +295,24 @@ public class MonteCarloExploringStartsAgent<T> : ReinforcementLearningAgentBase<
 
     public override IFullModel<T, Vector<T>, Vector<T>> Clone()
     {
-        return new MonteCarloExploringStartsAgent<T>(_options);
+        var clone = new MonteCarloExploringStartsAgent<T>(_options);
+
+        // Deep copy Q-table and returns to avoid shared state
+        foreach (var kvp in _qTable)
+        {
+            clone._qTable[kvp.Key] = new Dictionary<int, T>(kvp.Value);
+        }
+
+        foreach (var kvp in _returns)
+        {
+            clone._returns[kvp.Key] = new Dictionary<int, List<T>>();
+            foreach (var returnKvp in kvp.Value)
+            {
+                clone._returns[kvp.Key][returnKvp.Key] = new List<T>(returnKvp.Value);
+            }
+        }
+
+        return clone;
     }
 
     public override Vector<T> ComputeGradients(
@@ -295,12 +335,27 @@ public class MonteCarloExploringStartsAgent<T> : ReinforcementLearningAgentBase<
 
     public override void SaveModel(string filepath)
     {
+        if (string.IsNullOrWhiteSpace(filepath))
+        {
+            throw new ArgumentException("File path cannot be null or whitespace", nameof(filepath));
+        }
+
         var data = Serialize();
         System.IO.File.WriteAllBytes(filepath, data);
     }
 
     public override void LoadModel(string filepath)
     {
+        if (string.IsNullOrWhiteSpace(filepath))
+        {
+            throw new ArgumentException("File path cannot be null or whitespace", nameof(filepath));
+        }
+
+        if (!System.IO.File.Exists(filepath))
+        {
+            throw new System.IO.FileNotFoundException($"Model file not found: {filepath}", filepath);
+        }
+
         var data = System.IO.File.ReadAllBytes(filepath);
         Deserialize(data);
     }

@@ -2,6 +2,7 @@ using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
 using AiDotNet.Models;
 using AiDotNet.Models.Options;
+using Newtonsoft.Json;
 
 namespace AiDotNet.ReinforcementLearning.Agents.MonteCarlo;
 
@@ -19,6 +20,7 @@ public class OffPolicyMonteCarloAgent<T> : ReinforcementLearningAgentBase<T>
     private Dictionary<string, Dictionary<int, T>> _qTable;
     private Dictionary<string, Dictionary<int, T>> _cTable;  // Cumulative weights
     private List<(Vector<T> state, int action, T reward)> _episode;
+    private Random _random;
 
     public OffPolicyMonteCarloAgent(OffPolicyMonteCarloOptions<T> options)
         : base(options)
@@ -32,6 +34,7 @@ public class OffPolicyMonteCarloAgent<T> : ReinforcementLearningAgentBase<T>
         _qTable = new Dictionary<string, Dictionary<int, T>>();
         _cTable = new Dictionary<string, Dictionary<int, T>>();
         _episode = new List<(Vector<T>, int, T)>();
+        _random = new Random();
     }
 
     public override Vector<T> SelectAction(Vector<T> state, bool training = true)
@@ -41,10 +44,10 @@ public class OffPolicyMonteCarloAgent<T> : ReinforcementLearningAgentBase<T>
 
         int selectedAction;
 
-        if (training && Random.NextDouble() < _options.BehaviorEpsilon)
+        if (training && _random.NextDouble() < _options.BehaviorEpsilon)
         {
             // Behavior policy: epsilon-greedy exploration
-            selectedAction = Random.Next(_options.ActionSize);
+            selectedAction = _random.Next(_options.ActionSize);
         }
         else
         {
@@ -201,12 +204,12 @@ public class OffPolicyMonteCarloAgent<T> : ReinforcementLearningAgentBase<T>
         return SelectAction(input, training: false);
     }
 
-    public Task<Vector<T>> PredictAsync(Vector<T> input)
+    public override Task<Vector<T>> PredictAsync(Vector<T> input)
     {
         return Task.FromResult(Predict(input));
     }
 
-    public Task TrainAsync()
+    public override Task TrainAsync()
     {
         Train();
         return Task.CompletedTask;
@@ -222,16 +225,36 @@ public class OffPolicyMonteCarloAgent<T> : ReinforcementLearningAgentBase<T>
 
     public override int ParameterCount => _qTable.Count * _options.ActionSize;
 
-    public override int FeatureCount => _options.StateSize;
+    public override int FeatureCount => _options.ActionSize;
 
     public override byte[] Serialize()
     {
-        throw new NotImplementedException("OffPolicyMonteCarlo serialization not yet implemented");
+        var state = new
+        {
+            QTable = _qTable,
+            CTable = _cTable,
+            Options = _options
+        };
+        string json = JsonConvert.SerializeObject(state);
+        return System.Text.Encoding.UTF8.GetBytes(json);
     }
 
     public override void Deserialize(byte[] data)
     {
-        throw new NotImplementedException("OffPolicyMonteCarlo deserialization not yet implemented");
+        if (data is null || data.Length == 0)
+        {
+            throw new ArgumentException("Serialized data cannot be null or empty", nameof(data));
+        }
+
+        string json = System.Text.Encoding.UTF8.GetString(data);
+        var state = JsonConvert.DeserializeObject<dynamic>(json);
+        if (state is null)
+        {
+            throw new InvalidOperationException("Deserialization returned null");
+        }
+
+        _qTable = JsonConvert.DeserializeObject<Dictionary<string, Dictionary<int, T>>>(state.QTable.ToString()) ?? new Dictionary<string, Dictionary<int, T>>();
+        _cTable = JsonConvert.DeserializeObject<Dictionary<string, Dictionary<int, T>>>(state.CTable.ToString()) ?? new Dictionary<string, Dictionary<int, T>>();
     }
 
     public override Vector<T> GetParameters()
@@ -277,7 +300,20 @@ public class OffPolicyMonteCarloAgent<T> : ReinforcementLearningAgentBase<T>
 
     public override IFullModel<T, Vector<T>, Vector<T>> Clone()
     {
-        return new OffPolicyMonteCarloAgent<T>(_options);
+        var clone = new OffPolicyMonteCarloAgent<T>(_options);
+
+        // Deep copy Q-table and C-table to avoid shared state
+        foreach (var kvp in _qTable)
+        {
+            clone._qTable[kvp.Key] = new Dictionary<int, T>(kvp.Value);
+        }
+
+        foreach (var kvp in _cTable)
+        {
+            clone._cTable[kvp.Key] = new Dictionary<int, T>(kvp.Value);
+        }
+
+        return clone;
     }
 
     public override Vector<T> ComputeGradients(
@@ -300,12 +336,27 @@ public class OffPolicyMonteCarloAgent<T> : ReinforcementLearningAgentBase<T>
 
     public override void SaveModel(string filepath)
     {
+        if (string.IsNullOrWhiteSpace(filepath))
+        {
+            throw new ArgumentException("File path cannot be null or whitespace", nameof(filepath));
+        }
+
         var data = Serialize();
         System.IO.File.WriteAllBytes(filepath, data);
     }
 
     public override void LoadModel(string filepath)
     {
+        if (string.IsNullOrWhiteSpace(filepath))
+        {
+            throw new ArgumentException("File path cannot be null or whitespace", nameof(filepath));
+        }
+
+        if (!System.IO.File.Exists(filepath))
+        {
+            throw new System.IO.FileNotFoundException($"Model file not found: {filepath}", filepath);
+        }
+
         var data = System.IO.File.ReadAllBytes(filepath);
         Deserialize(data);
     }
