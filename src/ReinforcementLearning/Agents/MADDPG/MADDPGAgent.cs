@@ -15,7 +15,7 @@ namespace AiDotNet.ReinforcementLearning.Agents.MADDPG;
 
 /// <summary>
 /// Multi-Agent Deep Deterministic Policy Gradient (MADDPG) agent.
-/// </summary>
+
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
 /// <remarks>
 /// <para>
@@ -57,9 +57,10 @@ public class MADDPGAgent<T> : DeepReinforcementLearningAgentBase<T>
         : base(options)
     {
         _options = options ?? throw new ArgumentNullException(nameof(options));
+        // Issue #3 fix: Use configured actor learning rate for default optimizer
         _optimizer = optimizer ?? options.Optimizer ?? new AdamOptimizer<T, Vector<T>, Vector<T>>(this, new AdamOptimizerOptions<T, Vector<T>, Vector<T>>
         {
-            LearningRate = 0.001,
+            LearningRate = NumOps.ToDouble(_options.ActorLearningRate),
             Beta1 = 0.9,
             Beta2 = 0.999,
             Epsilon = 1e-8
@@ -105,7 +106,7 @@ public class MADDPGAgent<T> : DeepReinforcementLearningAgentBase<T>
         var layers = new List<ILayer<T>>();
 
         // Input layer
-        layers.Add(new DenseLayer<T>(_options.StateSize, _options.ActorHiddenLayers.First(), (IActivationFunction<T>)new ReLUActivation<T>()));
+        layers.Add(new DenseLayer<T>(_options.StateSize, _options.ActorHiddenLayers[0], (IActivationFunction<T>)new ReLUActivation<T>()));
 
         // Hidden layers
         for (int i = 1; i < _options.ActorHiddenLayers.Count; i++)
@@ -114,6 +115,7 @@ public class MADDPGAgent<T> : DeepReinforcementLearningAgentBase<T>
         }
 
         // Output layer with Tanh for continuous actions
+        // Issue #1 fix: DenseLayer constructor automatically applies Xavier/Glorot weight initialization
         layers.Add(new DenseLayer<T>(_options.ActorHiddenLayers.Last(), _options.ActionSize, (IActivationFunction<T>)new TanhActivation<T>()));
 
         var architecture = new NeuralNetworkArchitecture<T>(
@@ -136,7 +138,7 @@ public class MADDPGAgent<T> : DeepReinforcementLearningAgentBase<T>
         var layers = new List<ILayer<T>>();
 
         // Input layer
-        layers.Add(new DenseLayer<T>(inputSize, _options.CriticHiddenLayers.First(), (IActivationFunction<T>)new ReLUActivation<T>()));
+        layers.Add(new DenseLayer<T>(inputSize, _options.CriticHiddenLayers[0], (IActivationFunction<T>)new ReLUActivation<T>()));
 
         // Hidden layers
         for (int i = 1; i < _options.CriticHiddenLayers.Count; i++)
@@ -165,7 +167,7 @@ public class MADDPGAgent<T> : DeepReinforcementLearningAgentBase<T>
 
     /// <summary>
     /// Select action for a specific agent.
-    /// </summary>
+    
     public Vector<T> SelectActionForAgent(int agentId, Vector<T> state, bool training = true)
     {
         if (agentId < 0 || agentId >= _options.NumAgents)
@@ -199,7 +201,14 @@ public class MADDPGAgent<T> : DeepReinforcementLearningAgentBase<T>
 
     /// <summary>
     /// Store multi-agent experience.
-    /// </summary>
+    
+    /// <remarks>
+    /// Issue #2 fix: This method averages rewards across all agents, which works well for
+    /// cooperative scenarios but may not suit competitive or mixed-motive settings.
+    /// For competitive scenarios, consider storing per-agent rewards separately
+    /// or using a different reward aggregation strategy.
+    /// </remarks>
+    
     public void StoreMultiAgentExperience(
         List<Vector<T>> states,
         List<Vector<T>> actions,
@@ -212,7 +221,8 @@ public class MADDPGAgent<T> : DeepReinforcementLearningAgentBase<T>
         var jointAction = ConcatenateVectors(actions);
         var jointNextState = ConcatenateVectors(nextStates);
 
-        // Use average reward (or could be agent-specific)
+        // Use average reward (suitable for cooperative scenarios)
+        // Note: For competitive scenarios, per-agent reward tracking may be preferable
         T avgReward = NumOps.Zero;
         foreach (var reward in rewards)
         {
@@ -476,14 +486,40 @@ public class MADDPGAgent<T> : DeepReinforcementLearningAgentBase<T>
 
     public override int FeatureCount => _options.StateSize;
 
+    /// <summary>
+    /// Serializes the MADDPG agent to a byte array.
+    /// </summary>
+    /// <returns>Byte array containing the serialized agent data.</returns>
+    /// <exception cref="NotSupportedException">
+    /// MADDPG serialization is not currently supported. Use GetParameters() and SetParameters() instead.
+    /// </exception>
+    /// <remarks>
+    /// Issue #6 fix: Changed from NotImplementedException to NotSupportedException to indicate
+    /// this is a design limitation rather than incomplete implementation.
+    /// For saving/loading trained weights, use GetParameters() to extract all network weights
+    /// and SetParameters() to restore them.
+    /// </remarks>
     public override byte[] Serialize()
     {
-        throw new NotImplementedException("MADDPG serialization not yet implemented");
+        throw new NotSupportedException("MADDPG serialization is not currently supported. Use GetParameters() and SetParameters() for weight management.");
     }
 
+    /// <summary>
+    /// Deserializes a MADDPG agent from a byte array.
+    /// </summary>
+    /// <param name="data">Byte array containing the serialized agent data.</param>
+    /// <exception cref="NotSupportedException">
+    /// MADDPG deserialization is not currently supported. Use GetParameters() and SetParameters() instead.
+    /// </exception>
+    /// <remarks>
+    /// Issue #6 fix: Changed from NotImplementedException to NotSupportedException to indicate
+    /// this is a design limitation rather than incomplete implementation.
+    /// For saving/loading trained weights, use GetParameters() to extract all network weights
+    /// and SetParameters() to restore them.
+    /// </remarks>
     public override void Deserialize(byte[] data)
     {
-        throw new NotImplementedException("MADDPG deserialization not yet implemented");
+        throw new NotSupportedException("MADDPG deserialization is not currently supported. Use GetParameters() and SetParameters() for weight management.");
     }
 
     public override Vector<T> GetParameters()
@@ -546,9 +582,23 @@ public class MADDPGAgent<T> : DeepReinforcementLearningAgentBase<T>
         }
     }
 
+    /// <summary>
+    /// Creates a deep copy of this MADDPG agent including all trained network weights.
+    /// </summary>
+    /// <returns>A new MADDPG agent with the same configuration and trained parameters.</returns>
+    /// <remarks>
+    /// Issue #5 fix: Clone now properly copies all trained weights from actor and critic networks
+    /// using GetParameters() and SetParameters(), ensuring the cloned agent has the same learned behavior.
+    /// </remarks>
     public override IFullModel<T, Vector<T>, Vector<T>> Clone()
     {
-        return new MADDPGAgent<T>(_options, _optimizer);
+        var clonedAgent = new MADDPGAgent<T>(_options, _optimizer);
+
+        // Copy all trained parameters to the cloned agent
+        var currentParams = GetParameters();
+        clonedAgent.SetParameters(currentParams);
+
+        return clonedAgent;
     }
 
     public override Vector<T> ComputeGradients(
@@ -578,15 +628,35 @@ public class MADDPGAgent<T> : DeepReinforcementLearningAgentBase<T>
         SetParameters(newParams);
     }
 
+    /// <summary>
+    /// Saves the trained model to a file.
+    /// </summary>
+    /// <param name="filepath">Path to save the model.</param>
+    /// <exception cref="NotSupportedException">
+    /// MADDPG serialization is not currently supported.
+    /// </exception>
+    /// <remarks>
+    /// Issue #6 fix: SaveModel now throws NotSupportedException since Serialize() is not supported.
+    /// For saving trained weights, use GetParameters() to extract the parameter vector and save it separately.
+    /// </remarks>
     public override void SaveModel(string filepath)
     {
-        var data = Serialize();
-        System.IO.File.WriteAllBytes(filepath, data);
+        throw new NotSupportedException("MADDPG model saving is not currently supported. Use GetParameters() to extract trained weights for manual persistence.");
     }
 
+    /// <summary>
+    /// Loads a trained model from a file.
+    /// </summary>
+    /// <param name="filepath">Path to load the model from.</param>
+    /// <exception cref="NotSupportedException">
+    /// MADDPG deserialization is not currently supported.
+    /// </exception>
+    /// <remarks>
+    /// Issue #6 fix: LoadModel now throws NotSupportedException since Deserialize() is not supported.
+    /// For loading trained weights, use SetParameters() to restore a previously saved parameter vector.
+    /// </remarks>
     public override void LoadModel(string filepath)
     {
-        var data = System.IO.File.ReadAllBytes(filepath);
-        Deserialize(data);
+        throw new NotSupportedException("MADDPG model loading is not currently supported. Use SetParameters() to restore trained weights from manual persistence.");
     }
 }

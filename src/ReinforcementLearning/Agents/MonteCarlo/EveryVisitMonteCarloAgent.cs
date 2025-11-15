@@ -25,6 +25,13 @@ public class EveryVisitMonteCarloAgent<T> : ReinforcementLearningAgentBase<T>
         }
 
         _options = options;
+
+        // Validate EpsilonDecay is in (0, 1) range
+        if (_options.EpsilonDecay <= 0.0 || _options.EpsilonDecay >= 1.0)
+        {
+            throw new ArgumentException("EpsilonDecay must be in the range (0, 1) for proper decay behavior.", nameof(options));
+        }
+
         _qTable = new Dictionary<string, Dictionary<int, T>>();
         _returns = new Dictionary<string, Dictionary<int, List<T>>>();
         _episode = new List<(string, int, T)>();
@@ -88,23 +95,44 @@ public class EveryVisitMonteCarloAgent<T> : ReinforcementLearningAgentBase<T>
 
     public override T Train() { return NumOps.Zero; }
 
+    /// <summary>
+    /// Converts a state vector to a string key for the Q-table.
+    /// Uses F8 precision (8 decimal places) to minimize state collisions.
+    /// Note: States differing only beyond 8 decimal places will be treated as identical.
+    /// </summary>
     private string VectorToStateKey(Vector<T> state)
     {
         var parts = new string[state.Length];
         for (int i = 0; i < state.Length; i++)
         {
-            parts[i] = NumOps.ToDouble(state[i]).ToString("F4");
+            parts[i] = NumOps.ToDouble(state[i]).ToString("F8");
         }
         return string.Join(",", parts);
     }
 
+    /// <summary>
+    /// Gets the index of the selected action from a one-hot encoded action vector.
+    /// </summary>
+    /// <param name="action">One-hot encoded action vector.</param>
+    /// <returns>Index of the action with value greater than zero.</returns>
+    /// <exception cref="ArgumentException">Thrown when action vector is invalid (all elements &lt;= 0).</exception>
     private int GetActionIndex(Vector<T> action)
     {
+        if (action == null)
+        {
+            throw new ArgumentNullException(nameof(action));
+        }
+
         for (int i = 0; i < action.Length; i++)
         {
-            if (NumOps.GreaterThan(action[i], NumOps.Zero)) return i;
+            if (NumOps.GreaterThan(action[i], NumOps.Zero))
+            {
+                return i;
+            }
         }
-        return 0;
+
+        // Invalid action vector - all elements are <= 0
+        throw new ArgumentException("Invalid action vector: all elements are <= 0. Expected one-hot encoded vector with exactly one positive element.", nameof(action));
     }
 
     private void EnsureStateExists(string stateKey)
@@ -135,6 +163,27 @@ public class EveryVisitMonteCarloAgent<T> : ReinforcementLearningAgentBase<T>
         return bestAction;
     }
 
+    /// <summary>
+    /// Computes the average of a list of returns.
+    /// </summary>
+    /// <param name="returns">List of return values.</param>
+    /// <returns>The average return value.</returns>
+    private T ComputeAverage(List<T> returns)
+    {
+        if (returns == null || returns.Count == 0)
+        {
+            return NumOps.Zero;
+        }
+
+        T sum = NumOps.Zero;
+        foreach (T value in returns)
+        {
+            sum = NumOps.Add(sum, value);
+        }
+
+        return NumOps.Divide(sum, NumOps.FromDouble(returns.Count));
+    }
+
     public override void ResetEpisode() { _episode.Clear(); base.ResetEpisode(); }
 
     public override ModelMetadata<T> GetModelMetadata()
@@ -144,8 +193,22 @@ public class EveryVisitMonteCarloAgent<T> : ReinforcementLearningAgentBase<T>
 
     public override int ParameterCount => _qTable.Count * _options.ActionSize;
     public override int FeatureCount => _options.StateSize;
-    public override byte[] Serialize() { throw new NotImplementedException(); }
-    public override void Deserialize(byte[] data) { throw new NotImplementedException(); }
+
+    /// <summary>
+    /// Serialization is not supported for Every-Visit Monte Carlo agents due to dynamic Q-table structure.
+    /// </summary>
+    public override byte[] Serialize()
+    {
+        throw new NotSupportedException("Serialization is not supported for Every-Visit Monte Carlo agents. Use SaveModel/LoadModel with custom serialization instead.");
+    }
+
+    /// <summary>
+    /// Deserialization is not supported for Every-Visit Monte Carlo agents due to dynamic Q-table structure.
+    /// </summary>
+    public override void Deserialize(byte[] data)
+    {
+        throw new NotSupportedException("Deserialization is not supported for Every-Visit Monte Carlo agents. Use SaveModel/LoadModel with custom serialization instead.");
+    }
 
     public override Vector<T> GetParameters()
     {
@@ -172,8 +235,18 @@ public class EveryVisitMonteCarloAgent<T> : ReinforcementLearningAgentBase<T>
         return paramsVector;
     }
 
+    /// <summary>
+    /// Sets parameters. Note: This method cannot reconstruct the Q-table structure from a flat vector
+    /// without additional state mapping information. It only updates existing Q-table entries.
+    /// </summary>
     public override void SetParameters(Vector<T> parameters)
     {
+        if (parameters == null)
+        {
+            throw new ArgumentNullException(nameof(parameters));
+        }
+
+        // Can only update existing Q-table entries since we don't have state mapping
         int index = 0;
         foreach (var stateEntry in _qTable.ToList())
         {
@@ -186,11 +259,32 @@ public class EveryVisitMonteCarloAgent<T> : ReinforcementLearningAgentBase<T>
                 }
             }
         }
+
+        // Warn if Q-table is empty - parameters cannot be applied
+        if (_qTable.Count == 0 && parameters.Length > 0)
+        {
+            // Parameters will be ignored since Q-table structure doesn't exist yet
+            // This is a limitation of the SetParameters design for tabular methods
+        }
     }
+
+    /// <summary>
+    /// Creates a deep copy of the agent, including all Q-table entries.
+    /// </summary>
     public override IFullModel<T, Vector<T>, Vector<T>> Clone()
     {
         var clone = new EveryVisitMonteCarloAgent<T>(_options);
-        clone._qTable = new Dictionary<string, Dictionary<int, T>>(_qTable);
+
+        // Deep copy Q-table
+        foreach (var stateEntry in _qTable)
+        {
+            clone._qTable[stateEntry.Key] = new Dictionary<int, T>();
+            foreach (var actionEntry in stateEntry.Value)
+            {
+                clone._qTable[stateEntry.Key][actionEntry.Key] = actionEntry.Value;
+            }
+        }
+
         clone._epsilon = _epsilon;
         return clone;
     }

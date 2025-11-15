@@ -112,14 +112,25 @@ public class QMIXAgent<T> : DeepReinforcementLearningAgentBase<T>
         // Create layers
         var layers = new List<ILayer<T>>();
 
+        // Use configured hidden layer sizes or defaults
+        var hiddenSizes = _options.AgentHiddenLayers;
+        if (hiddenSizes is null || hiddenSizes.Count == 0)
+        {
+            hiddenSizes = new List<int> { 64, 64 };
+        }
+
         // Input layer
-        layers.Add(new DenseLayer<T>(_options.StateSize, 64, (IActivationFunction<T>)new ReLUActivation<T>()));
+        layers.Add(new DenseLayer<T>(_options.StateSize, hiddenSizes[0], (IActivationFunction<T>)new ReLUActivation<T>()));
 
         // Hidden layers
-        layers.Add(new DenseLayer<T>(64, 64, (IActivationFunction<T>)new ReLUActivation<T>()));
+        for (int i = 1; i < hiddenSizes.Count; i++)
+        {
+            layers.Add(new DenseLayer<T>(hiddenSizes[i - 1], hiddenSizes[i], (IActivationFunction<T>)new ReLUActivation<T>()));
+        }
 
         // Output layer (Q-values for each action)
-        layers.Add(new DenseLayer<T>(64, _options.ActionSize, (IActivationFunction<T>)new IdentityActivation<T>()));
+        int lastHiddenSize = hiddenSizes[hiddenSizes.Count - 1];
+        layers.Add(new DenseLayer<T>(lastHiddenSize, _options.ActionSize, (IActivationFunction<T>)new IdentityActivation<T>()));
 
         var architecture = new NeuralNetworkArchitecture<T>(
             inputType: InputType.OneDimensional,
@@ -140,18 +151,25 @@ public class QMIXAgent<T> : DeepReinforcementLearningAgentBase<T>
         // Create layers
         var layers = new List<ILayer<T>>();
 
-        // Input layer
-        int hiddenSize = _options.MixingHiddenLayers.FirstOrDefault() > 0 ? _options.MixingHiddenLayers.First() : 64;
-        layers.Add(new DenseLayer<T>(inputSize, hiddenSize, (IActivationFunction<T>)new ReLUActivation<T>()));
-
-        // Hidden layers
-        for (int i = 1; i < _options.MixingHiddenLayers.Count; i++)
+        // Use configured hidden layer sizes or defaults
+        var hiddenSizes = _options.MixingHiddenLayers;
+        if (hiddenSizes is null || hiddenSizes.Count == 0)
         {
-            layers.Add(new DenseLayer<T>(_options.MixingHiddenLayers[i - 1], _options.MixingHiddenLayers[i], (IActivationFunction<T>)new ReLUActivation<T>()));
+            hiddenSizes = new List<int> { 64 };
         }
 
-        // Output layer (team Q-value)
-        layers.Add(new DenseLayer<T>(hiddenSize, 1, (IActivationFunction<T>)new IdentityActivation<T>()));
+        // Input layer
+        layers.Add(new DenseLayer<T>(inputSize, hiddenSizes[0], (IActivationFunction<T>)new ReLUActivation<T>()));
+
+        // Hidden layers
+        for (int i = 1; i < hiddenSizes.Count; i++)
+        {
+            layers.Add(new DenseLayer<T>(hiddenSizes[i - 1], hiddenSizes[i], (IActivationFunction<T>)new ReLUActivation<T>()));
+        }
+
+        // Output layer (team Q-value) - connect from last hidden layer
+        int lastHiddenSize = hiddenSizes[hiddenSizes.Count - 1];
+        layers.Add(new DenseLayer<T>(lastHiddenSize, 1, (IActivationFunction<T>)new IdentityActivation<T>()));
 
         var architecture = new NeuralNetworkArchitecture<T>(
             inputType: InputType.OneDimensional,
@@ -300,8 +318,9 @@ public class QMIXAgent<T> : DeepReinforcementLearningAgentBase<T>
             totalLoss = NumOps.Add(totalLoss, loss);
 
             // Backpropagate through mixing network
+            // TD loss gradient: d/dQ[loss] = d/dQ[(target - Q)^2] = -2 * (target - Q) = -2 * tdError
             var mixingGradientVec = new Vector<T>(1);
-            mixingGradientVec[0] = tdError;
+            mixingGradientVec[0] = NumOps.Multiply(NumOps.FromDouble(-2.0), tdError);
             var mixingGradient = Tensor<T>.FromVector(mixingGradientVec);
             ((NeuralNetwork<T>)_mixingNetwork).Backpropagate(mixingGradient);
 
@@ -404,7 +423,33 @@ public class QMIXAgent<T> : DeepReinforcementLearningAgentBase<T>
 
     private Vector<T> ConcatenateWithGlobal(List<Vector<T>> agentVectors, Vector<T> globalVector)
     {
-        int totalSize = agentVectors.Count * agentVectors[0].Length + globalVector.Length;
+        if (agentVectors is null || agentVectors.Count == 0)
+        {
+            throw new ArgumentException("Agent vectors list cannot be null or empty.", nameof(agentVectors));
+        }
+
+        if (globalVector is null)
+        {
+            throw new ArgumentNullException(nameof(globalVector));
+        }
+
+        // Validate all agent vectors have the same length
+        int vectorLength = agentVectors[0].Length;
+        for (int i = 1; i < agentVectors.Count; i++)
+        {
+            if (agentVectors[i] is null)
+            {
+                throw new ArgumentException($"Agent vector at index {i} is null.", nameof(agentVectors));
+            }
+            if (agentVectors[i].Length != vectorLength)
+            {
+                throw new ArgumentException(
+                    $"All agent vectors must have the same length. Expected {vectorLength} but got {agentVectors[i].Length} at index {i}.",
+                    nameof(agentVectors));
+            }
+        }
+
+        int totalSize = agentVectors.Count * vectorLength + globalVector.Length;
         var result = new Vector<T>(totalSize);
         int offset = 0;
 
@@ -456,6 +501,16 @@ public class QMIXAgent<T> : DeepReinforcementLearningAgentBase<T>
 
     private int ArgMax(Vector<T> values)
     {
+        if (values is null)
+        {
+            throw new ArgumentNullException(nameof(values));
+        }
+
+        if (values.Length == 0)
+        {
+            throw new ArgumentException("Cannot compute ArgMax of an empty vector.", nameof(values));
+        }
+
         int maxIndex = 0;
         T maxValue = values[0];
 
@@ -473,6 +528,16 @@ public class QMIXAgent<T> : DeepReinforcementLearningAgentBase<T>
 
     private T MaxValue(Vector<T> values)
     {
+        if (values is null)
+        {
+            throw new ArgumentNullException(nameof(values));
+        }
+
+        if (values.Length == 0)
+        {
+            throw new ArgumentException("Cannot compute MaxValue of an empty vector.", nameof(values));
+        }
+
         T maxValue = values[0];
         for (int i = 1; i < values.Length; i++)
         {
@@ -519,7 +584,7 @@ public class QMIXAgent<T> : DeepReinforcementLearningAgentBase<T>
     {
         return new ModelMetadata<T>
         {
-            ModelType = Enums.ModelType.ReinforcementLearning,
+            ModelType = ModelType.ReinforcementLearning,
         };
     }
 
@@ -527,12 +592,12 @@ public class QMIXAgent<T> : DeepReinforcementLearningAgentBase<T>
 
     public override byte[] Serialize()
     {
-        throw new NotImplementedException("QMIX serialization not yet implemented");
+        throw new NotSupportedException("QMIX serialization is not supported. Use GetParameters() and SetParameters() for parameter transfer.");
     }
 
     public override void Deserialize(byte[] data)
     {
-        throw new NotImplementedException("QMIX deserialization not yet implemented");
+        throw new NotSupportedException("QMIX deserialization is not supported. Use GetParameters() and SetParameters() for parameter transfer.");
     }
 
     public override Vector<T> GetParameters()
@@ -565,6 +630,26 @@ public class QMIXAgent<T> : DeepReinforcementLearningAgentBase<T>
 
     public override void SetParameters(Vector<T> parameters)
     {
+        if (parameters is null)
+        {
+            throw new ArgumentNullException(nameof(parameters));
+        }
+
+        // Calculate expected parameter count
+        int expectedParamCount = 0;
+        foreach (var network in _agentNetworks)
+        {
+            expectedParamCount += network.ParameterCount;
+        }
+        expectedParamCount += _mixingNetwork.ParameterCount;
+
+        if (parameters.Length != expectedParamCount)
+        {
+            throw new ArgumentException(
+                $"Parameter vector length mismatch. Expected {expectedParamCount} parameters but got {parameters.Length}.",
+                nameof(parameters));
+        }
+
         int offset = 0;
 
         foreach (var network in _agentNetworks)
@@ -590,7 +675,13 @@ public class QMIXAgent<T> : DeepReinforcementLearningAgentBase<T>
 
     public override IFullModel<T, Vector<T>, Vector<T>> Clone()
     {
-        return new QMIXAgent<T>(_options, _optimizer);
+        var clonedAgent = new QMIXAgent<T>(_options, _optimizer);
+
+        // Copy trained network parameters to the cloned agent
+        var currentParams = GetParameters();
+        clonedAgent.SetParameters(currentParams);
+
+        return clonedAgent;
     }
 
     public override Vector<T> ComputeGradients(
@@ -624,13 +715,11 @@ public class QMIXAgent<T> : DeepReinforcementLearningAgentBase<T>
 
     public override void SaveModel(string filepath)
     {
-        var data = Serialize();
-        System.IO.File.WriteAllBytes(filepath, data);
+        throw new NotSupportedException("QMIX model saving is not supported. Use GetParameters() and save the parameter vector separately.");
     }
 
     public override void LoadModel(string filepath)
     {
-        var data = System.IO.File.ReadAllBytes(filepath);
-        Deserialize(data);
+        throw new NotSupportedException("QMIX model loading is not supported. Use SetParameters() with a loaded parameter vector.");
     }
 }

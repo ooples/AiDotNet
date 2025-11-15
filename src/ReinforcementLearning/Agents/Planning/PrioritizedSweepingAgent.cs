@@ -17,6 +17,7 @@ public class PrioritizedSweepingAgent<T> : ReinforcementLearningAgentBase<T>
     private Dictionary<string, List<(string predecessor, int action)>> _predecessors;
     private SortedSet<(double priority, string state, int action)> _priorityQueue;
     private double _epsilon;
+    private Random _random;
 
     public PrioritizedSweepingAgent(PrioritizedSweepingOptions<T> options) : base(options)
     {
@@ -33,13 +34,14 @@ public class PrioritizedSweepingAgent<T> : ReinforcementLearningAgentBase<T>
             return a.Item3.CompareTo(b.Item3);
         }));
         _epsilon = options.EpsilonStart;
+        _random = new Random();
     }
 
     public override Vector<T> SelectAction(Vector<T> state, bool training = true)
     {
         EnsureStateExists(state);
         string stateKey = GetStateKey(state);
-        int selectedAction = (training && Random.NextDouble() < _epsilon) ? Random.Next(_options.ActionSize) : GetGreedyAction(stateKey);
+        int selectedAction = (training && _random.NextDouble() < _epsilon) ? _random.Next(_options.ActionSize) : GetGreedyAction(stateKey);
         var result = new Vector<T>(_options.ActionSize);
         result[selectedAction] = NumOps.One;
         return result;
@@ -89,8 +91,10 @@ public class PrioritizedSweepingAgent<T> : ReinforcementLearningAgentBase<T>
         int plannedUpdates = 0;
         while (_priorityQueue.Count > 0 && plannedUpdates < _options.PlanningSteps)
         {
-            var (p, s, a) = _priorityQueue.Min;
-            _priorityQueue.Remove(_priorityQueue.Min);
+            // Store Min value once to avoid double access
+            var highestPriority = _priorityQueue.Min;
+            _priorityQueue.Remove(highestPriority);
+            var (p, s, a) = highestPriority;
 
             if (_model.ContainsKey(s) && _model[s].ContainsKey(a))
             {
@@ -163,27 +167,92 @@ public class PrioritizedSweepingAgent<T> : ReinforcementLearningAgentBase<T>
     public override ModelMetadata<T> GetModelMetadata() => new ModelMetadata<T> { ModelType = ModelType.ReinforcementLearning, FeatureCount = this.FeatureCount, Complexity = ParameterCount };
     public override int ParameterCount => _qTable.Count * _options.ActionSize;
     public override int FeatureCount => _options.StateSize;
-    public override byte[] Serialize() => throw new NotImplementedException();
-    public override void Deserialize(byte[] data) => throw new NotImplementedException();
+    public override byte[] Serialize() => throw new NotSupportedException("Serialization is not supported for tabular reinforcement learning agents. Use GetParameters() and SetParameters() for state transfer.");
+    public override void Deserialize(byte[] data) => throw new NotSupportedException("Deserialization is not supported for tabular reinforcement learning agents. Use GetParameters() and SetParameters() for state transfer.");
     public override Vector<T> GetParameters()
     {
         int paramCount = _qTable.Count > 0 ? _qTable.Count * _options.ActionSize : 1;
         var v = new Vector<T>(paramCount);
         int idx = 0;
 
-        foreach (var s in _qTable)
-            foreach (var a in s.Value)
-                v[idx++] = a.Value;
+        // Sort states by key for deterministic ordering
+        var sortedStates = _qTable.OrderBy(kvp => kvp.Key);
+        foreach (var stateEntry in sortedStates)
+        {
+            // Actions are already in deterministic order (0 to ActionSize-1)
+            for (int a = 0; a < _options.ActionSize; a++)
+            {
+                v[idx++] = stateEntry.Value[a];
+            }
+        }
 
         if (idx == 0)
             v[0] = NumOps.Zero;
 
         return v;
     }
-    public override void SetParameters(Vector<T> parameters) { int idx = 0; foreach (var s in _qTable.ToList()) for (int a = 0; a < _options.ActionSize; a++) if (idx < parameters.Length) _qTable[s.Key][a] = parameters[idx++]; }
-    public override IFullModel<T, Vector<T>, Vector<T>> Clone() => new PrioritizedSweepingAgent<T>(_options);
+    public override void SetParameters(Vector<T> parameters)
+    {
+        int idx = 0;
+        // Sort states by key for deterministic ordering
+        var sortedStates = _qTable.Keys.OrderBy(k => k).ToList();
+        foreach (var stateKey in sortedStates)
+        {
+            for (int a = 0; a < _options.ActionSize; a++)
+            {
+                if (idx < parameters.Length)
+                {
+                    _qTable[stateKey][a] = parameters[idx++];
+                }
+            }
+        }
+    }
+    public override IFullModel<T, Vector<T>, Vector<T>> Clone()
+    {
+        var cloned = new PrioritizedSweepingAgent<T>(_options);
+
+        // Deep copy Q-table
+        foreach (var stateEntry in _qTable)
+        {
+            cloned._qTable[stateEntry.Key] = new Dictionary<int, T>();
+            foreach (var actionEntry in stateEntry.Value)
+            {
+                cloned._qTable[stateEntry.Key][actionEntry.Key] = actionEntry.Value;
+            }
+        }
+
+        // Deep copy model
+        foreach (var stateEntry in _model)
+        {
+            cloned._model[stateEntry.Key] = new Dictionary<int, (string, T)>();
+            foreach (var actionEntry in stateEntry.Value)
+            {
+                cloned._model[stateEntry.Key][actionEntry.Key] = actionEntry.Value;
+            }
+        }
+
+        // Deep copy predecessors
+        foreach (var stateEntry in _predecessors)
+        {
+            cloned._predecessors[stateEntry.Key] = new List<(string, int)>(stateEntry.Value);
+        }
+
+        // Deep copy priority queue
+        foreach (var item in _priorityQueue)
+        {
+            cloned._priorityQueue.Add(item);
+        }
+
+        // Copy epsilon value
+        cloned._epsilon = _epsilon;
+
+        return cloned;
+    }
     public override Vector<T> ComputeGradients(Vector<T> input, Vector<T> target, ILossFunction<T>? lossFunction = null) { var pred = Predict(input); var lf = lossFunction ?? LossFunction; var loss = lf.CalculateLoss(pred, target); var grad = lf.CalculateDerivative(pred, target); return grad; }
-    public override void ApplyGradients(Vector<T> gradients, T learningRate) { }
-    public override void SaveModel(string filepath) { var data = Serialize(); System.IO.File.WriteAllBytes(filepath, data); }
-    public override void LoadModel(string filepath) { var data = System.IO.File.ReadAllBytes(filepath); Deserialize(data); }
+    public override void ApplyGradients(Vector<T> gradients, T learningRate)
+    {
+        throw new NotSupportedException("Gradient-based updates are not supported for tabular reinforcement learning agents. Q-values are updated directly through temporal difference learning in StoreExperience().");
+    }
+    public override void SaveModel(string filepath) => throw new NotSupportedException("Model serialization is not supported for tabular reinforcement learning agents. Use GetParameters() to extract Q-table values.");
+    public override void LoadModel(string filepath) => throw new NotSupportedException("Model deserialization is not supported for tabular reinforcement learning agents. Use SetParameters() to restore Q-table values.");
 }

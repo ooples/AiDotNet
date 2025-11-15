@@ -203,7 +203,7 @@ public class CQLAgent<T> : DeepReinforcementLearningAgentBase<T>
         for (int i = 0; i < _options.ActionSize; i++)
         {
             var std = NumOps.Exp(logStd[i]);
-            var noise = MathHelper.GetNormalRandom<T>(_numOps.Zero, _numOps.One);
+            var noise = GetSeededNormalRandom(_numOps.Zero, _numOps.One, _random);
             var rawAction = _numOps.Add(mean[i], _numOps.Multiply(std, noise));
             action[i] = MathHelper.Tanh<T>(rawAction);
         }
@@ -269,8 +269,20 @@ public class CQLAgent<T> : DeepReinforcementLearningAgentBase<T>
             var q2TargetValue = q2TargetTensor.ToVector()[0];
             var minQTarget = MathHelper.Min<T>(q1TargetValue, q2TargetValue);
 
-            // Compute entropy term (simplified)
-            var entropyTerm = _numOps.Multiply(_alpha, _numOps.FromDouble(0.1));  // Simplified entropy
+            // Compute actual policy entropy from log probabilities
+            // For Gaussian policy: entropy = 0.5 * log(2 * pi * e * sigma^2)
+            var policyOutputTensor = _policyNetwork.Predict(Tensor<T>.FromVector(experience.NextState));
+            var policyOutput = policyOutputTensor.ToVector();
+            T policyEntropy = _numOps.Zero;
+            for (int entropyIdx = 0; entropyIdx < _options.ActionSize; entropyIdx++)
+            {
+                var logStd = policyOutput[_options.ActionSize + entropyIdx];
+                logStd = MathHelper.Clamp<T>(logStd, _numOps.FromDouble(-20), _numOps.FromDouble(2));
+                // Gaussian entropy: 0.5 * (1 + log(2*pi)) + log(sigma)
+                var gaussianConst = _numOps.FromDouble(0.5 * (1.0 + System.Math.Log(2.0 * System.Math.PI)));
+                policyEntropy = _numOps.Add(policyEntropy, _numOps.Add(gaussianConst, logStd));
+            }
+            var entropyTerm = _numOps.Multiply(_alpha, policyEntropy);
 
             T targetQ;
             if (experience.Done)
@@ -395,21 +407,30 @@ public class CQLAgent<T> : DeepReinforcementLearningAgentBase<T>
             // Policy loss: -Q(s,a) + alpha * entropy (simplified)
             var policyLoss = _numOps.Negate(minQ);
 
-            totalLoss = _numOps.Add(totalLoss, _numOps.Multiply(policyLoss, policyLoss));
+            totalLoss = _numOps.Add(totalLoss, policyLoss);
 
             // Backprop through Q-network to get action gradient
             var qGradTensor = Tensor<T>.FromVector(new Vector<T>(new[] { _numOps.One }));
             var actionGradTensor = _q1Network.Backpropagate(qGradTensor);
             var actionGrad = actionGradTensor.ToVector();
 
-            // Extract action part of gradient and negate for gradient ascent (maximize Q)
+            // Compute policy gradients for both mean and log-sigma
+            // We want to MAXIMIZE Q, so negate the gradient (gradient descent becomes ascent)
+            var policyStateTensor = Tensor<T>.FromVector(experience.State);
+            var policyOutTensor = _policyNetwork.Forward(policyStateTensor);
+            var policyOut = policyOutTensor.ToVector();
+            
             var policyGrad = new Vector<T>(_options.ActionSize * 2);
-            for (int i = 0; i < _options.ActionSize; i++)
+            for (int policyGradIdx = 0; policyGradIdx < _options.ActionSize; policyGradIdx++)
             {
-                // Negate gradient for ascent on Q-value
-                policyGrad[i] = _numOps.Negate(actionGrad[_options.StateSize + i]);
-                // Set log-sigma gradients to zero (exploration is handled separately)
-                policyGrad[_options.ActionSize + i] = _numOps.Zero;
+                // Negate gradient to maximize Q-value (flip sign for gradient descent optimizer)
+                policyGrad[policyGradIdx] = _numOps.Negate(actionGrad[_options.StateSize + policyGradIdx]);
+                
+                // Compute log-sigma gradients from entropy regularization
+                // d/d(log_sigma) of entropy = 1 (from Gaussian entropy formula)
+                var logStd = policyOut[_options.ActionSize + policyGradIdx];
+                var entropyGrad = _alpha; // Gradient of entropy w.r.t. log_sigma
+                policyGrad[_options.ActionSize + policyGradIdx] = entropyGrad;
             }
 
             var policyGradTensor = Tensor<T>.FromVector(policyGrad);
@@ -429,7 +450,39 @@ public class CQLAgent<T> : DeepReinforcementLearningAgentBase<T>
 
     private void UpdateTemperature(List<ReplayBuffers.Experience<T>> batch)
     {
-        // Simplified temperature update
+        // Temperature update using entropy target
+        // Loss: alpha * (entropy - target_entropy)
+        // Gradient: d_loss/d_log_alpha = alpha * (entropy - target_entropy)
+        
+        T avgEntropy = _numOps.Zero;
+        foreach (var experience in batch)
+        {
+            var policyOutputTensor = _policyNetwork.Predict(Tensor<T>.FromVector(experience.State));
+            var policyOutput = policyOutputTensor.ToVector();
+            
+            T entropy = _numOps.Zero;
+            for (int tempIdx = 0; tempIdx < _options.ActionSize; tempIdx++)
+            {
+                var logStd = policyOutput[_options.ActionSize + tempIdx];
+                logStd = MathHelper.Clamp<T>(logStd, _numOps.FromDouble(-20), _numOps.FromDouble(2));
+                var gaussianConst = _numOps.FromDouble(0.5 * (1.0 + System.Math.Log(2.0 * System.Math.PI)));
+                entropy = _numOps.Add(entropy, _numOps.Add(gaussianConst, logStd));
+            }
+            avgEntropy = _numOps.Add(avgEntropy, entropy);
+        }
+        avgEntropy = _numOps.Divide(avgEntropy, _numOps.FromDouble(batch.Count));
+        
+        // Target entropy: -dim(action_space)
+        var targetEntropy = _numOps.FromDouble(-_options.ActionSize);
+        var entropyGap = _numOps.Subtract(avgEntropy, targetEntropy);
+        
+        // Update log_alpha: log_alpha -= lr * alpha * entropy_gap
+        var alphaLr = _numOps.FromDouble(0.0003);
+        var alphaGrad = _numOps.Multiply(_alpha, entropyGap);
+        var alphaUpdate = _numOps.Multiply(alphaLr, alphaGrad);
+        _logAlpha = _numOps.Subtract(_logAlpha, alphaUpdate);
+        
+        // Update alpha from log_alpha
         _alpha = NumOps.Exp(_logAlpha);
     }
 
@@ -446,11 +499,11 @@ public class CQLAgent<T> : DeepReinforcementLearningAgentBase<T>
         var oneMinusTau = _numOps.Subtract(_numOps.One, _options.TargetUpdateTau);
 
         var updatedParams = new Vector<T>(targetParams.Length);
-        for (int i = 0; i < targetParams.Length; i++)
+        for (int softUpdateIdx = 0; softUpdateIdx < targetParams.Length; softUpdateIdx++)
         {
-            var sourceContrib = _numOps.Multiply(_options.TargetUpdateTau, sourceParams[i]);
-            var targetContrib = _numOps.Multiply(oneMinusTau, targetParams[i]);
-            updatedParams[i] = _numOps.Add(sourceContrib, targetContrib);
+            var sourceContrib = _numOps.Multiply(_options.TargetUpdateTau, sourceParams[softUpdateIdx]);
+            var targetContrib = _numOps.Multiply(oneMinusTau, targetParams[softUpdateIdx]);
+            updatedParams[softUpdateIdx] = _numOps.Add(sourceContrib, targetContrib);
         }
 
         target.UpdateParameters(updatedParams);
@@ -474,6 +527,16 @@ public class CQLAgent<T> : DeepReinforcementLearningAgentBase<T>
             result[state.Length + i] = action[i];
         }
         return result;
+    }
+
+    private T GetSeededNormalRandom(T mean, T stdDev, Random random)
+    {
+        // Box-Muller transform
+        double u1 = 1.0 - random.NextDouble();
+        double u2 = 1.0 - random.NextDouble();
+        double randStdNormal = Math.Sqrt(-2.0 * Math.Log(u1)) * Math.Sin(2.0 * Math.PI * u2);
+        double result = randStdNormal * Convert.ToDouble(stdDev) + Convert.ToDouble(mean);
+        return _numOps.FromDouble(result);
     }
 
     public override Dictionary<string, T> GetMetrics()

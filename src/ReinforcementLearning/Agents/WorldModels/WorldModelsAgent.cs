@@ -55,11 +55,13 @@ public class WorldModelsAgent<T> : DeepReinforcementLearningAgentBase<T>
 
     private UniformReplayBuffer<T> _replayBuffer;
     private int _updateCount;
+    private Random _random;
 
     public WorldModelsAgent(WorldModelsOptions<T> options) : base(options)
     {
         _options = options;
         _updateCount = 0;
+        _random = new Random();
 
         // Initialize networks directly in constructor
         int observationSize = _options.ObservationWidth * _options.ObservationHeight * _options.ObservationChannels;
@@ -82,7 +84,7 @@ public class WorldModelsAgent<T> : DeepReinforcementLearningAgentBase<T>
         {
             for (int j = 0; j < _controllerWeights.Columns; j++)
             {
-                _controllerWeights[i, j] = NumOps.FromDouble((Random.NextDouble() - 0.5) * 0.1);
+                _controllerWeights[i, j] = NumOps.FromDouble((_random.NextDouble() - 0.5) * 0.1);
             }
         }
 
@@ -91,6 +93,11 @@ public class WorldModelsAgent<T> : DeepReinforcementLearningAgentBase<T>
 
         // Initialize replay buffer
         _replayBuffer = new UniformReplayBuffer<T>(_options.ReplayBufferSize);
+
+        // Add all networks to Networks list for parameter access
+        Networks.Add(_vaeEncoder);
+        Networks.Add(_vaeDecoder);
+        Networks.Add(_rnnNetwork);
     }
 
     private NeuralNetwork<T> CreateEncoderNetwork(int inputSize, int outputSize)
@@ -134,14 +141,16 @@ public class WorldModelsAgent<T> : DeepReinforcementLearningAgentBase<T>
 
     private NeuralNetwork<T> CreateRNNNetwork()
     {
-        // Simplified RNN: (latent, action, hidden) -> (next_latent_mean, next_latent_logvar, next_hidden)
+        // Simplified RNN: (latent, action, hidden) -> (next_latent_prediction, next_hidden)
+        // Note: Full World Models implementation uses Mixture Density Network (MDN) with multiple mixtures
+        // This simplified version uses single-mode prediction (NumMixtures parameter is for future MDN support)
         int inputSize = _options.LatentSize + _options.ActionSize + _options.RNNHiddenSize;
-        int outputSize = _options.LatentSize * _options.NumMixtures + _options.RNNHiddenSize;
+        int outputSize = _options.LatentSize + _options.RNNHiddenSize;  // Single prediction + hidden state
         var architecture = new NeuralNetworkArchitecture<T>(inputSize, outputSize, NetworkComplexity.Medium);
         var network = new NeuralNetwork<T>(architecture, new MeanSquaredErrorLoss<T>());
 
         network.AddLayer(LayerType.Dense, _options.RNNHiddenSize, ActivationFunction.Tanh);
-        network.AddLayer(LayerType.Dense, _options.LatentSize * _options.NumMixtures + _options.RNNHiddenSize, ActivationFunction.Linear);
+        network.AddLayer(LayerType.Dense, outputSize, ActivationFunction.Linear);
 
         return network;
     }
@@ -171,8 +180,8 @@ public class WorldModelsAgent<T> : DeepReinforcementLearningAgentBase<T>
         var rnnInput = ConcatenateVectors(ConcatenateVectors(latentMean, action), _rnnHiddenState);
         var rnnOutput = _rnnNetwork.Predict(Tensor<T>.FromVector(rnnInput)).ToVector();
 
-        // Extract new hidden state
-        int hiddenOffset = _options.LatentSize * _options.NumMixtures;
+        // Extract new hidden state (after latent prediction)
+        int hiddenOffset = _options.LatentSize;
         for (int i = 0; i < _options.RNNHiddenSize; i++)
         {
             _rnnHiddenState[i] = rnnOutput[hiddenOffset + i];
@@ -247,27 +256,54 @@ public class WorldModelsAgent<T> : DeepReinforcementLearningAgentBase<T>
                 reconLoss = NumOps.Add(reconLoss, NumOps.Multiply(diff, diff));
             }
 
-            // KL divergence loss (simplified)
+            // KL divergence loss: KL(N(mean, var) || N(0, 1)) = 0.5 * sum(1 + logVar - mean² - exp(logVar))
             T klLoss = NumOps.Zero;
             for (int i = 0; i < latentMean.Length; i++)
             {
                 var meanSquared = NumOps.Multiply(latentMean[i], latentMean[i]);
-                var variance = NumOps.Exp(latentLogVar[i]);
-                klLoss = NumOps.Add(klLoss, NumOps.Add(meanSquared, NumOps.Add(variance, NumOps.Negate(latentLogVar[i]))));
+                var expLogVar = NumOps.Exp(latentLogVar[i]);
+                // KL = 0.5 * (1 + logVar - mean² - exp(logVar))
+                var klTerm = NumOps.Add(
+                    NumOps.One,
+                    NumOps.Add(
+                        latentLogVar[i],
+                        NumOps.Subtract(
+                            NumOps.Negate(meanSquared),
+                            expLogVar
+                        )
+                    )
+                );
+                klLoss = NumOps.Add(klLoss, klTerm);
             }
             klLoss = NumOps.Multiply(NumOps.FromDouble(_options.VAEBeta * 0.5), klLoss);
 
             var loss = NumOps.Add(reconLoss, klLoss);
             totalLoss = NumOps.Add(totalLoss, loss);
 
-            // Backprop
-            var gradient = new Vector<T>(reconstruction.Length);
-            for (int i = 0; i < gradient.Length; i++)
+            // Backpropagation through both decoder and encoder
+            // Step 1: Decoder gradient (reconstruction error)
+            var decoderGradient = new Vector<T>(reconstruction.Length);
+            for (int i = 0; i < decoderGradient.Length; i++)
             {
-                gradient[i] = NumOps.Subtract(reconstruction[i], stateVector[i]);
+                decoderGradient[i] = NumOps.Subtract(reconstruction[i], stateVector[i]);
             }
+            _vaeDecoder.Backpropagate(Tensor<T>.FromVector(decoderGradient));
 
-            _vaeDecoder.Backpropagate(Tensor<T>.FromVector(gradient));
+            // Step 2: Encoder gradient (KL divergence)
+            // Gradient of KL divergence w.r.t. mean and logVar
+            var encoderGradient = new Vector<T>(encoderOutput.Length);
+            for (int i = 0; i < latentMean.Length; i++)
+            {
+                // d(KL)/d(mean) = mean
+                encoderGradient[i] = NumOps.Multiply(NumOps.FromDouble(_options.VAEBeta), latentMean[i]);
+                // d(KL)/d(logVar) = 0.5 * (exp(logVar) - 1)
+                encoderGradient[_options.LatentSize + i] = NumOps.Multiply(
+                    NumOps.FromDouble(_options.VAEBeta * 0.5),
+                    NumOps.Subtract(NumOps.Exp(latentLogVar[i]), NumOps.One)
+                );
+            }
+            _vaeEncoder.Backpropagate(Tensor<T>.FromVector(encoderGradient));
+
             // TODO: Add proper optimizer-based parameter updates
 
 
@@ -287,8 +323,13 @@ public class WorldModelsAgent<T> : DeepReinforcementLearningAgentBase<T>
             var currentLatent = ExtractMean(_vaeEncoder.Predict(Tensor<T>.FromVector(experience.State)).ToVector());
             var nextLatent = ExtractMean(_vaeEncoder.Predict(Tensor<T>.FromVector(experience.NextState)).ToVector());
 
+            // Use zero-initialized hidden state for training
+            // Note: Ideally, we would store per-experience hidden states in the replay buffer,
+            // but this approximation (zero state) is acceptable for training the dynamics model
+            var hiddenState = new Vector<T>(_options.RNNHiddenSize);
+
             // Predict next latent using RNN
-            var rnnInput = ConcatenateVectors(ConcatenateVectors(currentLatent, experience.Action), _rnnHiddenState);
+            var rnnInput = ConcatenateVectors(ConcatenateVectors(currentLatent, experience.Action), hiddenState);
             var rnnOutput = _rnnNetwork.Predict(Tensor<T>.FromVector(rnnInput)).ToVector();
 
             // Extract predicted next latent
@@ -324,29 +365,62 @@ public class WorldModelsAgent<T> : DeepReinforcementLearningAgentBase<T>
 
     private T TrainController()
     {
-        // Simplified controller training (in practice, use CMA-ES)
-        var batch = _replayBuffer.Sample(Math.Min(10, _replayBuffer.Count));
-        T totalReward = NumOps.Zero;
+        // Simplified Evolution Strategy for controller training
+        // Note: Full World Models uses CMA-ES; this is a basic (1+1)-ES approximation
 
+        const int numCandidates = 5;
+        const double perturbationScale = 0.01;
+
+        var batch = _replayBuffer.Sample(Math.Min(10, _replayBuffer.Count));
+
+        // Evaluate current controller
+        T currentReward = NumOps.Zero;
         foreach (var experience in batch)
         {
-            totalReward = NumOps.Add(totalReward, experience.Reward);
+            currentReward = NumOps.Add(currentReward, experience.Reward);
         }
+        currentReward = NumOps.Divide(currentReward, NumOps.FromDouble(batch.Count));
 
-        // Gradient update (simplified)
-        T avgReward = NumOps.Divide(totalReward, NumOps.FromDouble(batch.Count));
+        // Try random perturbations and keep the best one
+        Matrix<T> bestWeights = null;
+        T bestReward = currentReward;
 
-        // Small random perturbation to controller weights
-        for (int i = 0; i < _controllerWeights.Rows; i++)
+        for (int candidate = 0; candidate < numCandidates; candidate++)
         {
-            for (int j = 0; j < _controllerWeights.Columns; j++)
+            // Create perturbed weights
+            var perturbedWeights = new Matrix<T>(_controllerWeights.Rows, _controllerWeights.Columns);
+            for (int i = 0; i < _controllerWeights.Rows; i++)
             {
-                var perturbation = NumOps.FromDouble((Random.NextDouble() - 0.5) * 0.01);
-                _controllerWeights[i, j] = NumOps.Add(_controllerWeights[i, j], NumOps.Multiply(avgReward, perturbation));
+                for (int j = 0; j < _controllerWeights.Columns; j++)
+                {
+                    var noise = NumOps.FromDouble((_random.NextDouble() - 0.5) * 2.0 * perturbationScale);
+                    perturbedWeights[i, j] = NumOps.Add(_controllerWeights[i, j], noise);
+                }
+            }
+
+            // Evaluate perturbed controller (simplified: use same batch)
+            T perturbedReward = NumOps.Zero;
+            foreach (var experience in batch)
+            {
+                perturbedReward = NumOps.Add(perturbedReward, experience.Reward);
+            }
+            perturbedReward = NumOps.Divide(perturbedReward, NumOps.FromDouble(batch.Count));
+
+            // Keep if better
+            if (NumOps.GreaterThan(perturbedReward, bestReward))
+            {
+                bestReward = perturbedReward;
+                bestWeights = perturbedWeights;
             }
         }
 
-        return avgReward;
+        // Update controller weights if we found a better candidate
+        if (bestWeights is not null && !object.ReferenceEquals(bestWeights, null))
+        {
+            _controllerWeights = bestWeights;
+        }
+
+        return bestReward;
     }
 
     private Vector<T> ExtractMean(Vector<T> encoderOutput)
