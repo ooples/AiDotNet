@@ -2447,8 +2447,8 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
             Layers.RepParameterizationLayer<T> => input, // Simplified: reparameterization trick for VAE
             Layers.LogVarianceLayer<T> => input, // Simplified: requires log operation
             Layers.MeasurementLayer<T> => input, // Simplified: measurement layer for quantum computing
-            Layers.ResidualLayer<T> => input, // Simplified: requires handling inner layer
-            Layers.HighwayLayer<T> => input, // Simplified: requires gating mechanism
+            Layers.ResidualLayer<T> residualLayer => ConvertResidualLayer(residualLayer, input),
+            Layers.HighwayLayer<T> => throw new NotSupportedException("HighwayLayer requires gating mechanism operations (element-wise multiply/add with learned gates) which are not yet implemented in TensorOperations"),
             Layers.RecurrentLayer<T> => input, // Simplified: requires recurrent processing
             Layers.LSTMLayer<T> => input, // Simplified: requires LSTM cell operations
             Layers.GRULayer<T> => input, // Simplified: requires GRU cell operations
@@ -2782,6 +2782,34 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
         // which is not easily representable in a static computation graph
         var scaled = TensorOperations.ElementwiseMultiply(input, gammaNode);
         var output = TensorOperations.Add(scaled, betaNode);
+
+        return output;
+    }
+
+    /// <summary>
+    /// Converts a residual layer to computation graph.
+    /// </summary>
+    private ComputationNode<T> ConvertResidualLayer(Layers.ResidualLayer<T> layer, ComputationNode<T> input)
+    {
+        // ResidualLayer: output = input + innerLayer.Forward(input) (if innerLayer exists)
+        // or output = input (if no inner layer)
+
+        // Get inner layer via reflection
+        var layerType = layer.GetType();
+        var innerLayerField = layerType.GetField("_innerLayer", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
+        var innerLayer = (ILayer<T>?)innerLayerField!.GetValue(layer);
+
+        if (innerLayer == null)
+        {
+            // No inner layer, just return input (identity mapping)
+            return input;
+        }
+
+        // Convert inner layer to computation graph
+        var innerOutput = ConvertLayerToGraph(innerLayer, input);
+
+        // Add input to inner layer output (residual connection)
+        var output = TensorOperations.Add(input, innerOutput);
 
         return output;
     }
