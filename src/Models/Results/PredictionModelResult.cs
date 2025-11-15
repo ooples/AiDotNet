@@ -6,6 +6,7 @@ using AiDotNet.Interpretability;
 using AiDotNet.Serialization;
 using AiDotNet.Agents;
 using AiDotNet.Models;
+using AiDotNet.Deployment.Configuration;
 
 namespace AiDotNet.Models.Results;
 
@@ -318,6 +319,28 @@ public class PredictionModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
     internal AgentRecommendation<T, TInput, TOutput>? AgentRecommendation { get; private set; }
 
     /// <summary>
+    /// Gets the deployment configuration for model export, caching, versioning, A/B testing, and telemetry.
+    /// </summary>
+    /// <value>Deployment configuration aggregating all deployment-related settings, or null if not configured.</value>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> This contains all deployment-related settings configured during model building,
+    /// including:
+    /// - Quantization: Model compression settings (Float16/Int8)
+    /// - Caching: Model caching and eviction policies
+    /// - Versioning: Model version management
+    /// - A/B Testing: Traffic splitting between model versions
+    /// - Telemetry: Performance monitoring and metrics
+    /// - Export: Platform-specific export settings
+    ///
+    /// These settings enable advanced deployment features like exporting models for mobile devices,
+    /// managing multiple model versions, and monitoring production performance.
+    ///
+    /// If null, deployment features were not configured and will use defaults when needed.
+    /// </para>
+    /// </remarks>
+    internal DeploymentConfiguration? DeploymentConfiguration { get; private set; }
+
+    /// <summary>
     /// Initializes a new instance of the PredictionModelResult class with the specified model, optimization results, and normalization information.
     /// </summary>
     /// <param name="model">The underlying model used for making predictions.</param>
@@ -372,6 +395,7 @@ public class PredictionModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
     /// <param name="crossValidationResult">Optional cross-validation results from training.</param>
     /// <param name="agentConfig">Optional agent configuration used during model building.</param>
     /// <param name="agentRecommendation">Optional agent recommendations from model building.</param>
+    /// <param name="deploymentConfiguration">Optional deployment configuration for export, caching, versioning, A/B testing, and telemetry.</param>
     public PredictionModelResult(OptimizationResult<T, TInput, TOutput> optimizationResult,
         NormalizationInfo<T, TInput, TOutput> normalizationInfo,
         IBiasDetector<T>? biasDetector = null,
@@ -383,7 +407,8 @@ public class PredictionModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
         ILoRAConfiguration<T>? loraConfiguration = null,
         CrossValidationResult<T, TInput, TOutput>? crossValidationResult = null,
         AgentConfiguration<T>? agentConfig = null,
-        AgentRecommendation<T, TInput, TOutput>? agentRecommendation = null)
+        AgentRecommendation<T, TInput, TOutput>? agentRecommendation = null,
+        DeploymentConfiguration? deploymentConfiguration = null)
     {
         Model = optimizationResult.BestSolution;
         OptimizationResult = optimizationResult;
@@ -399,6 +424,7 @@ public class PredictionModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
         CrossValidationResult = crossValidationResult;
         AgentConfig = agentConfig;
         AgentRecommendation = agentRecommendation;
+        DeploymentConfiguration = deploymentConfiguration;
     }
 
     /// <summary>
@@ -414,6 +440,7 @@ public class PredictionModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
     /// <param name="ragGenerator">Optional generator for RAG functionality during inference.</param>
     /// <param name="queryProcessors">Optional query processors for RAG query preprocessing.</param>
     /// <param name="agentConfig">Optional agent configuration for AI assistance during inference.</param>
+    /// <param name="deploymentConfiguration">Optional deployment configuration for export, caching, versioning, A/B testing, and telemetry.</param>
     /// <remarks>
     /// <para>
     /// This constructor is used when a model has been trained using meta-learning (e.g., MAML, Reptile, SEAL).
@@ -450,7 +477,8 @@ public class PredictionModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
         IReranker<T>? ragReranker = null,
         IGenerator<T>? ragGenerator = null,
         IEnumerable<IQueryProcessor>? queryProcessors = null,
-        AgentConfiguration<T>? agentConfig = null)
+        AgentConfiguration<T>? agentConfig = null,
+        DeploymentConfiguration? deploymentConfiguration = null)
     {
         Model = metaLearner.BaseModel;
         MetaLearner = metaLearner;
@@ -464,6 +492,7 @@ public class PredictionModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
         RagGenerator = ragGenerator;
         QueryProcessors = queryProcessors;
         AgentConfig = agentConfig;
+        DeploymentConfiguration = deploymentConfiguration;
 
         // Create placeholder OptimizationResult and NormalizationInfo for consistency
         OptimizationResult = new OptimizationResult<T, TInput, TOutput>();

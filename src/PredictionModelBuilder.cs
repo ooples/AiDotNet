@@ -331,6 +331,15 @@ public class PredictionModelBuilder<T, TInput, TOutput> : IPredictionModelBuilde
         // Perform meta-training using parameters from config (specified during meta-learner construction)
         var metaResult = _metaLearner.Train();
 
+        // Create deployment configuration from individual configs
+        var deploymentConfig = DeploymentConfiguration.Create(
+            _quantizationConfig,
+            _cacheConfig,
+            _versioningConfig,
+            _abTestingConfig,
+            _telemetryConfig,
+            _exportConfig);
+
         // Create PredictionModelResult with meta-learning constructor
         var result = new PredictionModelResult<T, TInput, TOutput>(
             metaLearner: _metaLearner,
@@ -342,7 +351,8 @@ public class PredictionModelBuilder<T, TInput, TOutput> : IPredictionModelBuilde
             ragReranker: _ragReranker,
             ragGenerator: _ragGenerator,
             queryProcessors: _queryProcessors,
-            agentConfig: _agentConfig);
+            agentConfig: _agentConfig,
+            deploymentConfiguration: deploymentConfig);
 
         return Task.FromResult(result);
     }
@@ -558,6 +568,15 @@ public class PredictionModelBuilder<T, TInput, TOutput> : IPredictionModelBuilde
             optimizationResult = finalOptimizer.Optimize(OptimizerHelper<T, TInput, TOutput>.CreateOptimizationInputData(XTrain, yTrain, XVal, yVal, XTest, yTest));
         }
 
+        // Create deployment configuration from individual configs
+        var deploymentConfig = DeploymentConfiguration.Create(
+            _quantizationConfig,
+            _cacheConfig,
+            _versioningConfig,
+            _abTestingConfig,
+            _telemetryConfig,
+            _exportConfig);
+
         // Return PredictionModelResult with CV results and agent data
         var finalResult = new PredictionModelResult<T, TInput, TOutput>(
             optimizationResult,
@@ -571,7 +590,8 @@ public class PredictionModelBuilder<T, TInput, TOutput> : IPredictionModelBuilde
             _loraConfiguration,
             cvResults,
             _agentConfig,
-            agentRecommendation);
+            agentRecommendation,
+            deploymentConfig);
 
         return finalResult;
     }
