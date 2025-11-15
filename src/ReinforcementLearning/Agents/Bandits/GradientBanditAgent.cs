@@ -2,6 +2,7 @@ using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
 using AiDotNet.Models;
 using AiDotNet.Models.Options;
+using Newtonsoft.Json;
 
 namespace AiDotNet.ReinforcementLearning.Agents.Bandits;
 
@@ -12,6 +13,7 @@ namespace AiDotNet.ReinforcementLearning.Agents.Bandits;
 public class GradientBanditAgent<T> : ReinforcementLearningAgentBase<T>
 {
     private GradientBanditOptions<T> _options;
+    private Random _random;
     private Vector<T> _preferences;  // H(a)
     private T _averageReward;
     private int _totalSteps;
@@ -34,7 +36,7 @@ public class GradientBanditAgent<T> : ReinforcementLearningAgentBase<T>
         var probs = ComputeSoftmax(_preferences);
 
         // Sample action according to probabilities
-        double r = Random.NextDouble();
+        double r = _random.NextDouble();
         double cumulative = 0.0;
         int selectedArm = 0;
 

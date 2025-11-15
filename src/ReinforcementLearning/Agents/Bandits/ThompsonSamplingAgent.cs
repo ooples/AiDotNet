@@ -2,6 +2,7 @@ using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
 using AiDotNet.Models;
 using AiDotNet.Models.Options;
+using Newtonsoft.Json;
 
 namespace AiDotNet.ReinforcementLearning.Agents.Bandits;
 
@@ -12,6 +13,7 @@ namespace AiDotNet.ReinforcementLearning.Agents.Bandits;
 public class ThompsonSamplingAgent<T> : ReinforcementLearningAgentBase<T>
 {
     private ThompsonSamplingOptions<T> _options;
+    private Random _random;
     private Vector<int> _successCounts;
     private Vector<int> _failureCounts;
 
@@ -79,7 +81,7 @@ public class ThompsonSamplingAgent<T> : ReinforcementLearningAgentBase<T>
         double sum = 0.0;
         for (int i = 0; i < shape; i++)
         {
-            sum += -Math.Log(Random.NextDouble());
+            sum += -Math.Log(_random.NextDouble());
         }
         return sum;
     }

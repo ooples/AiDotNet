@@ -2,6 +2,7 @@ using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
 using AiDotNet.Models;
 using AiDotNet.Models.Options;
+using Newtonsoft.Json;
 
 namespace AiDotNet.ReinforcementLearning.Agents.Bandits;
 
@@ -12,6 +13,7 @@ namespace AiDotNet.ReinforcementLearning.Agents.Bandits;
 public class UCBBanditAgent<T> : ReinforcementLearningAgentBase<T>
 {
     private UCBBanditOptions<T> _options;
+    private Random _random;
     private Vector<T> _qValues;
     private Vector<int> _actionCounts;
     private int _totalSteps;
