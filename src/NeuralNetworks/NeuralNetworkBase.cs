@@ -2450,12 +2450,12 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
             Layers.ResidualLayer<T> residualLayer => ConvertResidualLayer(residualLayer, input),
             Layers.HighwayLayer<T> highwayLayer => ConvertHighwayLayer(highwayLayer, input),
             Layers.RecurrentLayer<T> => throw new NotSupportedException("RecurrentLayer requires recurrent cell operations and sequence processing which are not yet implemented in TensorOperations"),
-            Layers.LSTMLayer<T> => throw new NotSupportedException("LSTMLayer requires LSTM cell operations (forget gate, input gate, output gate, cell state) which are not yet implemented in TensorOperations"),
-            Layers.GRULayer<T> => throw new NotSupportedException("GRULayer requires GRU cell operations (update gate, reset gate) which are not yet implemented in TensorOperations"),
+            Layers.LSTMLayer<T> lstmLayer => ConvertLSTMLayer(lstmLayer, input),
+            Layers.GRULayer<T> gruLayer => ConvertGRULayer(gruLayer, input),
             Layers.BidirectionalLayer<T> => throw new NotSupportedException("BidirectionalLayer requires bidirectional sequence processing which is not yet implemented in TensorOperations"),
-            Layers.AttentionLayer<T> => throw new NotSupportedException("AttentionLayer requires attention mechanism operations (query-key similarity, softmax over sequence, weighted sum) which are not yet implemented in TensorOperations"),
-            Layers.SelfAttentionLayer<T> => throw new NotSupportedException("SelfAttentionLayer requires self-attention operations (Q/K/V projections, scaled dot-product attention) which are not yet implemented in TensorOperations"),
-            Layers.MultiHeadAttentionLayer<T> => throw new NotSupportedException("MultiHeadAttentionLayer requires multi-head attention operations (multiple parallel attention heads, concatenation, output projection) which are not yet implemented in TensorOperations"),
+            Layers.AttentionLayer<T> attentionLayer => ConvertAttentionLayer(attentionLayer, input),
+            Layers.SelfAttentionLayer<T> selfAttentionLayer => ConvertSelfAttentionLayer(selfAttentionLayer, input),
+            Layers.MultiHeadAttentionLayer<T> mhaLayer => ConvertMultiHeadAttentionLayer(mhaLayer, input),
             Layers.SqueezeAndExcitationLayer<T> seLayer => ConvertSqueezeAndExcitationLayer(seLayer, input),
             Layers.GatedLinearUnitLayer<T> gluLayer => ConvertGatedLinearUnitLayer(gluLayer, input),
             Layers.TransformerEncoderLayer<T> => throw new NotSupportedException("TransformerEncoderLayer requires multi-head attention, layer normalization, and feed-forward networks which are not yet fully implemented in TensorOperations"),
@@ -2470,7 +2470,7 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
             Layers.ConvLSTMLayer<T> => throw new NotSupportedException("ConvLSTMLayer requires convolutional LSTM cell operations which are not yet implemented in TensorOperations"),
             Layers.MaxPoolingLayer<T> maxPoolLayer => ConvertMaxPoolingLayer(maxPoolLayer, input),
             Layers.PoolingLayer<T> poolLayer => ConvertPoolingLayer(poolLayer, input),
-            Layers.EmbeddingLayer<T> => throw new NotSupportedException("EmbeddingLayer requires embedding lookup operation which is not yet implemented in TensorOperations"),
+            Layers.EmbeddingLayer<T> embeddingLayer => ConvertEmbeddingLayer(embeddingLayer, input),
             Layers.PatchEmbeddingLayer<T> => throw new NotSupportedException("PatchEmbeddingLayer requires patch extraction and embedding operations which are not yet implemented in TensorOperations"),
             Layers.AddLayer<T> => throw new NotSupportedException("AddLayer requires multi-input graph architecture which is not yet supported in JIT compilation"),
             Layers.MultiplyLayer<T> => throw new NotSupportedException("MultiplyLayer requires multi-input graph architecture which is not yet supported in JIT compilation"),
@@ -3347,6 +3347,194 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
     {
         var shape = new int[] { 1, vector.Length };
         return new Tensor<T>(shape, vector);
+    }
+
+    /// <summary>
+    /// Converts an embedding layer to computation graph.
+    /// </summary>
+    private ComputationNode<T> ConvertEmbeddingLayer(Layers.EmbeddingLayer<T> layer, ComputationNode<T> input)
+    {
+        // Get embedding matrix via reflection
+        var layerType = layer.GetType();
+        var embeddingMatrixField = layerType.GetField("_embeddingMatrix", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
+        var embeddingMatrix = (Matrix<T>)embeddingMatrixField!.GetValue(layer)!;
+
+        var embeddingTensor = MatrixToTensor(embeddingMatrix);
+        var embeddingsNode = TensorOperations.Constant(embeddingTensor, "embeddings");
+
+        // Use EmbeddingLookup operation
+        return TensorOperations.EmbeddingLookup(embeddingsNode, input);
+    }
+
+    /// <summary>
+    /// Converts an LSTM layer to computation graph (simplified for single timestep).
+    /// </summary>
+    private ComputationNode<T> ConvertLSTMLayer(Layers.LSTMLayer<T> layer, ComputationNode<T> input)
+    {
+        // Get LSTM weights via reflection
+        var layerType = layer.GetType();
+        var weightIHField = layerType.GetField("_weightIH", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
+        var weightHHField = layerType.GetField("_weightHH", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
+        var biasField = layerType.GetField("_bias", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
+
+        var weightIH = (Matrix<T>)weightIHField!.GetValue(layer)!;
+        var weightHH = (Matrix<T>)weightHHField!.GetValue(layer)!;
+        var bias = (Vector<T>)biasField!.GetValue(layer)!;
+
+        var weightIHTensor = MatrixToTensor(weightIH);
+        var weightHHTensor = MatrixToTensor(weightHH);
+        var biasTensor = VectorToTensor(bias);
+
+        var weightIHNode = TensorOperations.Constant(weightIHTensor, "lstm_weight_ih");
+        var weightHHNode = TensorOperations.Constant(weightHHTensor, "lstm_weight_hh");
+        var biasNode = TensorOperations.Constant(biasTensor, "lstm_bias");
+
+        // Initialize hidden and cell states (zeros for inference)
+        var hiddenDim = weightHH.Rows;
+        var hiddenShape = new int[] { input.Value.Shape[0], hiddenDim };
+        var hiddenStateTensor = new Tensor<T>(hiddenShape);
+        var cellStateTensor = new Tensor<T>(hiddenShape);
+
+        var hiddenStateNode = TensorOperations.Constant(hiddenStateTensor, "lstm_h0");
+        var cellStateNode = TensorOperations.Constant(cellStateTensor, "lstm_c0");
+
+        // Apply LSTM cell
+        var (newHidden, newCell) = TensorOperations.LSTMCell(input, hiddenStateNode, cellStateNode, weightIHNode, weightHHNode, biasNode);
+
+        return newHidden;
+    }
+
+    /// <summary>
+    /// Converts a GRU layer to computation graph (simplified for single timestep).
+    /// </summary>
+    private ComputationNode<T> ConvertGRULayer(Layers.GRULayer<T> layer, ComputationNode<T> input)
+    {
+        // Get GRU weights via reflection
+        var layerType = layer.GetType();
+        var weightIHField = layerType.GetField("_weightIH", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
+        var weightHHField = layerType.GetField("_weightHH", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
+        var biasField = layerType.GetField("_bias", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
+
+        var weightIH = (Matrix<T>)weightIHField!.GetValue(layer)!;
+        var weightHH = (Matrix<T>)weightHHField!.GetValue(layer)!;
+        var bias = (Vector<T>)biasField!.GetValue(layer)!;
+
+        var weightIHTensor = MatrixToTensor(weightIH);
+        var weightHHTensor = MatrixToTensor(weightHH);
+        var biasTensor = VectorToTensor(bias);
+
+        var weightIHNode = TensorOperations.Constant(weightIHTensor, "gru_weight_ih");
+        var weightHHNode = TensorOperations.Constant(weightHHTensor, "gru_weight_hh");
+        var biasNode = TensorOperations.Constant(biasTensor, "gru_bias");
+
+        // Initialize hidden state (zeros for inference)
+        var hiddenDim = weightHH.Rows;
+        var hiddenShape = new int[] { input.Value.Shape[0], hiddenDim };
+        var hiddenStateTensor = new Tensor<T>(hiddenShape);
+
+        var hiddenStateNode = TensorOperations.Constant(hiddenStateTensor, "gru_h0");
+
+        // Apply GRU cell
+        var newHidden = TensorOperations.GRUCell(input, hiddenStateNode, weightIHNode, weightHHNode, biasNode);
+
+        return newHidden;
+    }
+
+    /// <summary>
+    /// Converts an attention layer to computation graph.
+    /// </summary>
+    private ComputationNode<T> ConvertAttentionLayer(Layers.AttentionLayer<T> layer, ComputationNode<T> input)
+    {
+        // Get attention weights via reflection
+        var layerType = layer.GetType();
+        var queryWeightsField = layerType.GetField("_queryWeights", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
+        var keyWeightsField = layerType.GetField("_keyWeights", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
+        var valueWeightsField = layerType.GetField("_valueWeights", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
+
+        var queryWeights = (Matrix<T>)queryWeightsField!.GetValue(layer)!;
+        var keyWeights = (Matrix<T>)keyWeightsField!.GetValue(layer)!;
+        var valueWeights = (Matrix<T>)valueWeightsField!.GetValue(layer)!;
+
+        var queryWeightsTensor = MatrixToTensor(queryWeights);
+        var keyWeightsTensor = MatrixToTensor(keyWeights);
+        var valueWeightsTensor = MatrixToTensor(valueWeights);
+
+        var queryWeightsNode = TensorOperations.Constant(queryWeightsTensor, "attention_query_weights");
+        var keyWeightsNode = TensorOperations.Constant(keyWeightsTensor, "attention_key_weights");
+        var valueWeightsNode = TensorOperations.Constant(valueWeightsTensor, "attention_value_weights");
+
+        // Project input to Q, K, V
+        var query = TensorOperations.MatrixMultiply(input, queryWeightsNode);
+        var key = TensorOperations.MatrixMultiply(input, keyWeightsNode);
+        var value = TensorOperations.MatrixMultiply(input, valueWeightsNode);
+
+        // Apply scaled dot-product attention
+        return TensorOperations.ScaledDotProductAttention(query, key, value);
+    }
+
+    /// <summary>
+    /// Converts a self-attention layer to computation graph.
+    /// </summary>
+    private ComputationNode<T> ConvertSelfAttentionLayer(Layers.SelfAttentionLayer<T> layer, ComputationNode<T> input)
+    {
+        // Get self-attention weights via reflection
+        var layerType = layer.GetType();
+        var queryWeightsField = layerType.GetField("_queryWeights", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
+        var keyWeightsField = layerType.GetField("_keyWeights", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
+        var valueWeightsField = layerType.GetField("_valueWeights", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
+
+        var queryWeights = (Matrix<T>)queryWeightsField!.GetValue(layer)!;
+        var keyWeights = (Matrix<T>)keyWeightsField!.GetValue(layer)!;
+        var valueWeights = (Matrix<T>)valueWeightsField!.GetValue(layer)!;
+
+        var queryWeightsTensor = MatrixToTensor(queryWeights);
+        var keyWeightsTensor = MatrixToTensor(keyWeights);
+        var valueWeightsTensor = MatrixToTensor(valueWeights);
+
+        var queryWeightsNode = TensorOperations.Constant(queryWeightsTensor, "self_attention_query_weights");
+        var keyWeightsNode = TensorOperations.Constant(keyWeightsTensor, "self_attention_key_weights");
+        var valueWeightsNode = TensorOperations.Constant(valueWeightsTensor, "self_attention_value_weights");
+
+        // Project input to Q, K, V (self-attention uses same input for all three)
+        var query = TensorOperations.MatrixMultiply(input, queryWeightsNode);
+        var key = TensorOperations.MatrixMultiply(input, keyWeightsNode);
+        var value = TensorOperations.MatrixMultiply(input, valueWeightsNode);
+
+        // Apply scaled dot-product attention
+        return TensorOperations.ScaledDotProductAttention(query, key, value);
+    }
+
+    /// <summary>
+    /// Converts a multi-head attention layer to computation graph.
+    /// </summary>
+    private ComputationNode<T> ConvertMultiHeadAttentionLayer(Layers.MultiHeadAttentionLayer<T> layer, ComputationNode<T> input)
+    {
+        // Get multi-head attention weights via reflection
+        var layerType = layer.GetType();
+        var numHeadsField = layerType.GetField("_numHeads", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
+        var wQField = layerType.GetField("_wQ", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
+        var wKField = layerType.GetField("_wK", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
+        var wVField = layerType.GetField("_wV", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
+        var wOField = layerType.GetField("_wO", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
+
+        var numHeads = (int)numHeadsField!.GetValue(layer)!;
+        var wQ = (Matrix<T>)wQField!.GetValue(layer)!;
+        var wK = (Matrix<T>)wKField!.GetValue(layer)!;
+        var wV = (Matrix<T>)wVField!.GetValue(layer)!;
+        var wO = (Matrix<T>)wOField!.GetValue(layer)!;
+
+        var wQTensor = MatrixToTensor(wQ);
+        var wKTensor = MatrixToTensor(wK);
+        var wVTensor = MatrixToTensor(wV);
+        var wOTensor = MatrixToTensor(wO);
+
+        var wQNode = TensorOperations.Constant(wQTensor, "mha_wq");
+        var wKNode = TensorOperations.Constant(wKTensor, "mha_wk");
+        var wVNode = TensorOperations.Constant(wVTensor, "mha_wv");
+        var wONode = TensorOperations.Constant(wOTensor, "mha_wo");
+
+        // Apply multi-head attention
+        return TensorOperations.MultiHeadAttention(input, input, input, numHeads, wQNode, wKNode, wVNode, wONode);
     }
 
     #endregion
