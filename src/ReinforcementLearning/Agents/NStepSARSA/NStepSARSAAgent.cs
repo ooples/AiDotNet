@@ -116,10 +116,13 @@ public class NStepSARSAAgent<T> : ReinforcementLearningAgentBase<T>
         if (!done)
         {
             string finalStateKey = VectorToStateKey(finalState);
-            Vector<T> nextAction = SelectAction(finalState, training: true);
-            int nextActionIndex = GetActionIndex(nextAction);
-
+            
+            // Use greedy action for bootstrap (proper n-step SARSA would track actual next action)
+            // This is a simplification - proper implementation would require tracking the actual
+            // action that will be taken at time t+n
             EnsureStateExists(finalStateKey);
+            int nextActionIndex = GetBestAction(finalStateKey);
+            
             T bootstrapValue = _qTable[finalStateKey][nextActionIndex];
             G = NumOps.Add(G, NumOps.Multiply(discount, bootstrapValue));
         }
