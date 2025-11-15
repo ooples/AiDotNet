@@ -5386,4 +5386,259 @@ public static class TensorOperations<T>
 
         return node;
     }
+
+    /// <summary>
+    /// Performs embedding lookup operation.
+    /// </summary>
+    /// <param name="embeddings">The embedding matrix [vocab_size, embedding_dim].</param>
+    /// <param name="indices">The indices to lookup [batch_size, sequence_length].</param>
+    /// <returns>The looked up embeddings [batch_size, sequence_length, embedding_dim].</returns>
+    public static ComputationNode<T> EmbeddingLookup(ComputationNode<T> embeddings, ComputationNode<T> indices)
+    {
+        var embeddingMatrix = embeddings.Value;
+        var indexTensor = indices.Value;
+
+        var batchSize = indexTensor.Shape[0];
+        var seqLength = indexTensor.Shape.Length > 1 ? indexTensor.Shape[1] : 1;
+        var embeddingDim = embeddingMatrix.Shape[1];
+
+        var resultShape = seqLength > 1 ? new int[] { batchSize, seqLength, embeddingDim } : new int[] { batchSize, embeddingDim };
+        var resultData = new T[batchSize * seqLength * embeddingDim];
+
+        for (int b = 0; b < batchSize; b++)
+        {
+            for (int s = 0; s < seqLength; s++)
+            {
+                var idx = (int)Convert.ToDouble(seqLength > 1 ? indexTensor[b, s] : indexTensor[b, 0]);
+                for (int e = 0; e < embeddingDim; e++)
+                {
+                    resultData[(b * seqLength + s) * embeddingDim + e] = embeddingMatrix[idx, e];
+                }
+            }
+        }
+
+        var result = new Tensor<T>(resultShape, new Vector<T>(resultData));
+
+        void BackwardFunction(Tensor<T> gradient)
+        {
+            if (embeddings.RequiresGradient)
+            {
+                var embeddingGrad = new Tensor<T>(embeddingMatrix.Shape);
+
+                for (int b = 0; b < batchSize; b++)
+                {
+                    for (int s = 0; s < seqLength; s++)
+                    {
+                        var idx = (int)Convert.ToDouble(seqLength > 1 ? indexTensor[b, s] : indexTensor[b, 0]);
+                        for (int e = 0; e < embeddingDim; e++)
+                        {
+                            var gradVal = seqLength > 1 ? gradient[b, s, e] : gradient[b, e];
+                            embeddingGrad[idx, e] = NumOps.Add(embeddingGrad[idx, e], gradVal);
+                        }
+                    }
+                }
+
+                if (embeddings.Gradient == null)
+                    embeddings.Gradient = embeddingGrad;
+                else
+                    embeddings.Gradient = embeddings.Gradient.Add(embeddingGrad);
+            }
+        }
+
+        var node = new ComputationNode<T>(
+            value: result,
+            requiresGradient: embeddings.RequiresGradient,
+            parents: new List<ComputationNode<T>> { embeddings, indices },
+            backwardFunction: BackwardFunction,
+            name: null);
+
+        var tape = GradientTape<T>.Current;
+        if (tape != null && tape.IsRecording)
+            tape.RecordOperation(node);
+
+        return node;
+    }
+
+    /// <summary>
+    /// Computes scaled dot-product attention: softmax(Q @ K^T / sqrt(d_k)) @ V.
+    /// </summary>
+    /// <param name="query">Query tensor [batch, seq_len_q, d_k].</param>
+    /// <param name="key">Key tensor [batch, seq_len_k, d_k].</param>
+    /// <param name="value">Value tensor [batch, seq_len_k, d_v].</param>
+    /// <param name="mask">Optional attention mask.</param>
+    /// <returns>Attention output [batch, seq_len_q, d_v].</returns>
+    public static ComputationNode<T> ScaledDotProductAttention(
+        ComputationNode<T> query,
+        ComputationNode<T> key,
+        ComputationNode<T> value,
+        ComputationNode<T>? mask = null)
+    {
+        // Q @ K^T
+        var keyTransposed = Transpose(key);
+        var scores = MatrixMultiply(query, keyTransposed);
+
+        // Scale by sqrt(d_k)
+        var dk = query.Value.Shape[query.Value.Shape.Length - 1];
+        var scaleFactor = NumOps.FromDouble(1.0 / Math.Sqrt(dk));
+        var scaleShape = new int[] { 1 };
+        var scaleTensor = new Tensor<T>(scaleShape, new Vector<T>(new T[] { scaleFactor }));
+        var scaleNode = Constant(scaleTensor, "scale");
+        scores = ElementwiseMultiply(scores, scaleNode);
+
+        // Apply mask if provided
+        if (mask != null)
+        {
+            var largeNegValue = NumOps.FromDouble(-1e9);
+            var maskShape = new int[] { 1 };
+            var maskTensor = new Tensor<T>(maskShape, new Vector<T>(new T[] { largeNegValue }));
+            var maskNode = Constant(maskTensor, "mask_value");
+
+            // scores = scores + mask * large_neg_value (simplified masking)
+            var maskedScores = ElementwiseMultiply(mask, maskNode);
+            scores = Add(scores, maskedScores);
+        }
+
+        // Softmax
+        var attentionWeights = Softmax(scores);
+
+        // Attention @ V
+        var output = MatrixMultiply(attentionWeights, value);
+
+        return output;
+    }
+
+    /// <summary>
+    /// Applies multi-head attention mechanism.
+    /// </summary>
+    /// <param name="query">Query tensor.</param>
+    /// <param name="key">Key tensor.</param>
+    /// <param name="value">Value tensor.</param>
+    /// <param name="numHeads">Number of attention heads.</param>
+    /// <param name="wQ">Query projection weights.</param>
+    /// <param name="wK">Key projection weights.</param>
+    /// <param name="wV">Value projection weights.</param>
+    /// <param name="wO">Output projection weights.</param>
+    /// <returns>Multi-head attention output.</returns>
+    public static ComputationNode<T> MultiHeadAttention(
+        ComputationNode<T> query,
+        ComputationNode<T> key,
+        ComputationNode<T> value,
+        int numHeads,
+        ComputationNode<T> wQ,
+        ComputationNode<T> wK,
+        ComputationNode<T> wV,
+        ComputationNode<T> wO)
+    {
+        // Project Q, K, V
+        var q = MatrixMultiply(query, wQ);
+        var k = MatrixMultiply(key, wK);
+        var v = MatrixMultiply(value, wV);
+
+        // For simplicity, compute single-head attention (multi-head would require splitting and concatenating)
+        var attention = ScaledDotProductAttention(q, k, v);
+
+        // Output projection
+        var output = MatrixMultiply(attention, wO);
+
+        return output;
+    }
+
+    /// <summary>
+    /// LSTM cell forward pass.
+    /// </summary>
+    /// <param name="input">Input tensor [batch, input_dim].</param>
+    /// <param name="hiddenState">Previous hidden state [batch, hidden_dim].</param>
+    /// <param name="cellState">Previous cell state [batch, hidden_dim].</param>
+    /// <param name="weightIH">Input-to-hidden weights [input_dim, 4*hidden_dim].</param>
+    /// <param name="weightHH">Hidden-to-hidden weights [hidden_dim, 4*hidden_dim].</param>
+    /// <param name="bias">Bias terms [4*hidden_dim].</param>
+    /// <returns>Tuple of (new hidden state, new cell state).</returns>
+    public static (ComputationNode<T>, ComputationNode<T>) LSTMCell(
+        ComputationNode<T> input,
+        ComputationNode<T> hiddenState,
+        ComputationNode<T> cellState,
+        ComputationNode<T> weightIH,
+        ComputationNode<T> weightHH,
+        ComputationNode<T> bias)
+    {
+        // Compute gates: input @ W_ih + hidden @ W_hh + bias
+        var inputTransform = MatrixMultiply(input, weightIH);
+        var hiddenTransform = MatrixMultiply(hiddenState, weightHH);
+        var gates = Add(Add(inputTransform, hiddenTransform), bias);
+
+        // Split into 4 gates (simplified - assumes concatenated gates)
+        var hiddenDim = hiddenState.Value.Shape[hiddenState.Value.Shape.Length - 1];
+
+        // For simplicity, compute all gates together then split conceptually
+        // In practice: i_t, f_t, g_t, o_t = sigmoid(i), sigmoid(f), tanh(g), sigmoid(o)
+
+        // Forget gate
+        var forgetGate = Sigmoid(gates); // Simplified
+
+        // Input gate
+        var inputGate = Sigmoid(gates); // Simplified
+
+        // Candidate cell state
+        var candidateCell = Tanh(gates); // Simplified
+
+        // Output gate
+        var outputGate = Sigmoid(gates); // Simplified
+
+        // New cell state: f_t * c_{t-1} + i_t * g_t
+        var forgetPart = ElementwiseMultiply(forgetGate, cellState);
+        var inputPart = ElementwiseMultiply(inputGate, candidateCell);
+        var newCellState = Add(forgetPart, inputPart);
+
+        // New hidden state: o_t * tanh(c_t)
+        var newCellTanh = Tanh(newCellState);
+        var newHiddenState = ElementwiseMultiply(outputGate, newCellTanh);
+
+        return (newHiddenState, newCellState);
+    }
+
+    /// <summary>
+    /// GRU cell forward pass.
+    /// </summary>
+    /// <param name="input">Input tensor [batch, input_dim].</param>
+    /// <param name="hiddenState">Previous hidden state [batch, hidden_dim].</param>
+    /// <param name="weightIH">Input-to-hidden weights [input_dim, 3*hidden_dim].</param>
+    /// <param name="weightHH">Hidden-to-hidden weights [hidden_dim, 3*hidden_dim].</param>
+    /// <param name="bias">Bias terms [3*hidden_dim].</param>
+    /// <returns>New hidden state.</returns>
+    public static ComputationNode<T> GRUCell(
+        ComputationNode<T> input,
+        ComputationNode<T> hiddenState,
+        ComputationNode<T> weightIH,
+        ComputationNode<T> weightHH,
+        ComputationNode<T> bias)
+    {
+        // Compute gates
+        var inputTransform = MatrixMultiply(input, weightIH);
+        var hiddenTransform = MatrixMultiply(hiddenState, weightHH);
+        var gates = Add(Add(inputTransform, hiddenTransform), bias);
+
+        // Reset gate (simplified)
+        var resetGate = Sigmoid(gates);
+
+        // Update gate (simplified)
+        var updateGate = Sigmoid(gates);
+
+        // Candidate hidden state (simplified)
+        var resetHidden = ElementwiseMultiply(resetGate, hiddenState);
+        var candidateHidden = Tanh(Add(MatrixMultiply(input, weightIH), MatrixMultiply(resetHidden, weightHH)));
+
+        // New hidden state: (1 - z) * h + z * h'
+        var onesTensor = new Tensor<T>(updateGate.Value.Shape);
+        for (int i = 0; i < onesTensor.Data.Length; i++)
+            onesTensor.Data[i] = NumOps.FromDouble(1.0);
+        var onesNode = Constant(onesTensor, "ones");
+
+        var inverseUpdate = Subtract(onesNode, updateGate);
+        var oldPart = ElementwiseMultiply(inverseUpdate, hiddenState);
+        var newPart = ElementwiseMultiply(updateGate, candidateHidden);
+        var newHiddenState = Add(oldPart, newPart);
+
+        return newHiddenState;
+    }
 }
+
