@@ -372,10 +372,10 @@ public class VectorModel<T> : IFullModel<T, Matrix<T>, Vector<T>>, IInterpretabl
     /// - Throws an error if the input has the wrong number of features
     /// 
     /// This is the core of how a linear model works - it's just a weighted sum:
-    /// prediction = (input1 � coefficient1) + (input2 � coefficient2) + ...
-    /// 
+    /// prediction = (input1 × coefficient1) + (input2 × coefficient2) + ...
+    ///
     /// For example, with coefficients [50000, 100, 20000] and input [3, 1500, 2],
-    /// the prediction would be: 3�50000 + 1500�100 + 2�20000 = 350,000
+    /// the prediction would be: 3×50000 + 1500×100 + 2×20000 = 350,000
     /// </para>
     /// </remarks>
     public T Evaluate(Vector<T> input)
@@ -1545,4 +1545,127 @@ public class VectorModel<T> : IFullModel<T, Matrix<T>, Vector<T>>, IInterpretabl
         }
 
     #endregion
+
+    /// <summary>
+    /// Saves the model's current state (parameters and configuration) to a stream.
+    /// </summary>
+    /// <param name="stream">The stream to write the model state to.</param>
+    /// <remarks>
+    /// <para>
+    /// This method serializes all the information needed to recreate the model's current state,
+    /// including the model's coefficients. It uses the existing Serialize method and writes
+    /// the data to the provided stream.
+    /// </para>
+    /// <para><b>For Beginners:</b> This is like creating a snapshot of your trained linear model.
+    ///
+    /// When you call SaveState:
+    /// - All the learned coefficients (weights) are written to the stream
+    /// - The model's configuration is preserved
+    ///
+    /// This is particularly useful for:
+    /// - Checkpointing during long training sessions
+    /// - Knowledge distillation (saving teacher/student models)
+    /// - Resuming interrupted training
+    /// - Creating model ensembles
+    ///
+    /// You can later use LoadState to restore the model to this exact state.
+    /// </para>
+    /// </remarks>
+    /// <exception cref="ArgumentNullException">Thrown when stream is null.</exception>
+    /// <exception cref="IOException">Thrown when there's an error writing to the stream.</exception>
+    public virtual void SaveState(Stream stream)
+    {
+        if (stream == null)
+            throw new ArgumentNullException(nameof(stream));
+
+        if (!stream.CanWrite)
+            throw new ArgumentException("Stream must be writable.", nameof(stream));
+
+        try
+        {
+            var data = this.Serialize();
+            stream.Write(data, 0, data.Length);
+            stream.Flush();
+        }
+        catch (IOException ex)
+        {
+            throw new IOException($"Failed to save model state to stream: {ex.Message}", ex);
+        }
+        catch (Exception ex)
+        {
+            throw new InvalidOperationException($"Unexpected error while saving model state: {ex.Message}", ex);
+        }
+    }
+
+    /// <summary>
+    /// Loads the model's state (parameters and configuration) from a stream.
+    /// </summary>
+    /// <param name="stream">The stream to read the model state from.</param>
+    /// <remarks>
+    /// <para>
+    /// This method deserializes model state that was previously saved with SaveState,
+    /// restoring all coefficients and configuration to recreate the saved model.
+    /// It uses the existing Deserialize method after reading data from the stream.
+    /// </para>
+    /// <para><b>For Beginners:</b> This is like loading a saved snapshot of your linear model.
+    ///
+    /// When you call LoadState:
+    /// - All the coefficients are read from the stream
+    /// - The model is configured to match the saved state
+    /// - The model becomes identical to when SaveState was called
+    ///
+    /// After loading, the model can:
+    /// - Make predictions using the restored coefficients
+    /// - Continue training from where it left off
+    /// - Be used as a teacher model in knowledge distillation
+    ///
+    /// This is essential for:
+    /// - Resuming interrupted training sessions
+    /// - Loading the best checkpoint after training
+    /// - Deploying trained models to production
+    /// - Knowledge distillation workflows
+    /// </para>
+    /// </remarks>
+    /// <exception cref="ArgumentNullException">Thrown when stream is null.</exception>
+    /// <exception cref="IOException">Thrown when there's an error reading from the stream.</exception>
+    /// <exception cref="InvalidOperationException">Thrown when the stream contains invalid or incompatible data.</exception>
+    public virtual void LoadState(Stream stream)
+    {
+        if (stream == null)
+            throw new ArgumentNullException(nameof(stream));
+
+        if (!stream.CanRead)
+            throw new ArgumentException("Stream must be readable.", nameof(stream));
+
+        try
+        {
+            using var ms = new MemoryStream();
+            stream.CopyTo(ms);
+            var data = ms.ToArray();
+
+            if (data.Length == 0)
+                throw new InvalidOperationException("Stream contains no data.");
+
+            this.Deserialize(data);
+        }
+        catch (IOException ex)
+        {
+            throw new IOException($"Failed to read model state from stream: {ex.Message}", ex);
+        }
+        catch (InvalidOperationException)
+        {
+            // Re-throw InvalidOperationException from Deserialize
+            throw;
+        }
+        catch (ArgumentException)
+        {
+            // Re-throw ArgumentException from Deserialize
+            throw;
+        }
+        catch (Exception ex)
+        {
+            throw new InvalidOperationException(
+                $"Failed to deserialize model state. The stream may contain corrupted or incompatible data: {ex.Message}", ex);
+        }
+    }
 }

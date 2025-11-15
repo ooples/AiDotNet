@@ -226,18 +226,29 @@ public class BidirectionalLayer<T> : LayerBase<T>
     /// </para>
     /// <para><b>For Beginners:</b> This method is used during training to calculate how the layer's input
     /// should change to reduce errors.
-    /// 
+    ///
     /// During the backward pass:
     /// - The error gradient from the next layer is received
     /// - If the outputs were merged, the same gradient is sent to both forward and backward layers
     /// - If the outputs were separate, the gradient is split for each direction
     /// - The gradients from both layers are combined to update the previous layer
-    /// 
+    ///
     /// This process is part of the "backpropagation" algorithm that helps neural networks learn.
     /// </para>
     /// </remarks>
     public override Tensor<T> Backward(Tensor<T> outputGradient)
     {
+        return UseAutodiff
+            ? BackwardViaAutodiff(outputGradient)
+            : BackwardManual(outputGradient);
+    }
+
+    private Tensor<T> BackwardManual(Tensor<T> outputGradient)
+    {
+        // Note: BidirectionalLayer delegates backward pass to inner forward and backward layers.
+        // Autodiff support is handled by the inner layers (e.g., LSTMLayer, GRULayer).
+        // This wrapper layer simply manages gradient flow for bidirectional processing.
+
         Tensor<T> forwardGradient, backwardGradient;
 
         if (_mergeMode)
@@ -258,6 +269,42 @@ public class BidirectionalLayer<T> : LayerBase<T>
         backwardInputGradient = ReverseSequence(backwardInputGradient);
 
         // Sum the gradients
+        return forwardInputGradient.Add(backwardInputGradient);
+    }
+
+    private Tensor<T> BackwardViaAutodiff(Tensor<T> outputGradient)
+    {
+        // Note: BidirectionalLayer is a wrapper that delegates to inner layers.
+        // The autodiff path simply ensures the inner layers use their autodiff implementations.
+        // This method manages the bidirectional gradient flow using autodiff-friendly operations.
+
+        if (_lastInput is null || _lastForwardOutput is null || _lastBackwardOutput is null)
+            throw new InvalidOperationException("Forward pass must be called before Backward");
+
+        // Split output gradient based on merge mode
+        Tensor<T> forwardGradient, backwardGradient;
+
+        if (_mergeMode)
+        {
+            // In merge mode, the same gradient flows to both directions
+            forwardGradient = outputGradient;
+            backwardGradient = outputGradient;
+        }
+        else
+        {
+            // In non-merge mode, split the gradient for each direction
+            forwardGradient = outputGradient.Slice(0);
+            backwardGradient = outputGradient.Slice(1);
+        }
+
+        // Propagate gradients through inner layers (they will use their autodiff implementations if UseAutodiff is set)
+        var forwardInputGradient = _forwardLayer.Backward(forwardGradient);
+        var backwardInputGradient = _backwardLayer.Backward(backwardGradient);
+
+        // Reverse the backward gradient to match input sequence order
+        backwardInputGradient = ReverseSequence(backwardInputGradient);
+
+        // Sum the gradients from both directions
         return forwardInputGradient.Add(backwardInputGradient);
     }
 

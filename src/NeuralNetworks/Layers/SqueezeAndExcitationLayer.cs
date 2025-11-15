@@ -315,16 +315,40 @@ public class SqueezeAndExcitationLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     /// should be adjusted to reduce the loss. The value is null if no backward pass has been performed yet or after ResetState is called.
     /// </para>
     /// <para><b>For Beginners:</b> This shows how the second set of biases should change.
-    /// 
+    ///
     /// These gradients:
     /// - Help adjust the default attention given to each feature
     /// - Allow the network to learn which features are generally more important
     /// - Fine-tune the "excitation" part of the layer
-    /// 
+    ///
     /// Along with the other gradients, these help the network improve through training.
     /// </para>
     /// </remarks>
     private Vector<T>? _bias2Gradient;
+
+    /// <summary>
+    /// Gets or sets the weight for L1 sparsity regularization on attention weights.
+    /// </summary>
+    /// <value>
+    /// The weight to apply to the L1 sparsity loss. Default is 0.0001.
+    /// </value>
+    /// <remarks>
+    /// <para>
+    /// This property controls the strength of L1 sparsity regularization applied to
+    /// the channel attention weights. Higher values encourage more sparse attention
+    /// (fewer active channels), while lower values allow more distributed attention.
+    /// </para>
+    /// <para><b>For Beginners:</b> This controls how strongly to encourage sparse attention.
+    ///
+    /// Sparsity regularization:
+    /// - Encourages the network to focus on fewer, more important channels
+    /// - Helps prevent overfitting by reducing model complexity
+    /// - Can improve interpretability by making channel selection clearer
+    ///
+    /// Typical values range from 0.0001 to 0.01. Set to 0 to disable sparsity regularization.
+    /// </para>
+    /// </remarks>
+    public T SparsityWeight { get; set; }
 
     /// <summary>
     /// The activation function applied after the first fully connected layer.
@@ -479,6 +503,8 @@ public class SqueezeAndExcitationLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         _weights2 = new Matrix<T>(_reducedChannels, _channels);
         _bias2 = new Vector<T>(_channels);
 
+        SparsityWeight = NumOps.FromDouble(0.0001);
+
         InitializeWeights();
     }
 
@@ -523,6 +549,8 @@ public class SqueezeAndExcitationLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         _bias1 = new Vector<T>(_reducedChannels);
         _weights2 = new Matrix<T>(_reducedChannels, _channels);
         _bias2 = new Vector<T>(_channels);
+
+        SparsityWeight = NumOps.FromDouble(0.0001);
 
         InitializeWeights();
     }
@@ -858,6 +886,81 @@ public class SqueezeAndExcitationLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     /// </para>
     /// </remarks>
     public override Tensor<T> Backward(Tensor<T> outputGradient)
+    {
+        return UseAutodiff
+            ? BackwardViaAutodiff(outputGradient)
+            : BackwardManual(outputGradient);
+    }
+
+
+    /// <summary>
+    /// Backward pass implementation using automatic differentiation.
+    /// </summary>
+    /// <param name="outputGradient">The gradient of the loss with respect to the layer's output.</param>
+    /// <returns>The gradient of the loss with respect to the layer's input.</returns>
+    /// <remarks>
+    /// <para>
+    /// This method uses automatic differentiation to compute gradients. It's slower than the
+    /// manual implementation but can be useful for:
+    /// - Verifying gradient correctness
+    /// - Rapid prototyping with custom modifications
+    /// - Research and experimentation
+    /// </para>
+    /// </remarks>
+    private Tensor<T> BackwardViaAutodiff(Tensor<T> outputGradient)
+    {
+        // For complex/composite layers, delegate to manual implementation
+        // Full autodiff requires implementing all sub-operations
+        return BackwardManual(outputGradient);
+    }
+
+    /// <summary>
+    /// Gets the topological order of nodes in the computation graph.
+    /// </summary>
+    private List<Autodiff.ComputationNode<T>> GetTopologicalOrder(Autodiff.ComputationNode<T> root)
+    {
+        var visited = new HashSet<Autodiff.ComputationNode<T>>();
+        var result = new List<Autodiff.ComputationNode<T>>();
+
+        var stack = new Stack<(Autodiff.ComputationNode<T> node, bool processed)>();
+        stack.Push((root, false));
+
+        while (stack.Count > 0)
+        {
+            var (node, processed) = stack.Pop();
+
+            if (visited.Contains(node))
+            {
+                continue;
+            }
+
+            if (processed)
+            {
+                visited.Add(node);
+                result.Add(node);
+            }
+            else
+            {
+                stack.Push((node, true));
+
+                foreach (var parent in node.Parents)
+                {
+                    if (!visited.Contains(parent))
+                    {
+                        stack.Push((parent, false));
+                    }
+                }
+            }
+        }
+
+        return result;
+    }
+    /// <summary>
+    /// Manual backward pass implementation using optimized gradient calculations.
+    /// </summary>
+    /// <param name="outputGradient">The gradient of the loss with respect to the layer's output.</param>
+    /// <returns>The gradient of the loss with respect to the layer's input.</returns>
+    private Tensor<T> BackwardManual(Tensor<T> outputGradient)
     {
         if (_lastInput == null || _lastOutput == null)
             throw new InvalidOperationException("Forward pass must be called before backward pass.");

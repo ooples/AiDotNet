@@ -48,7 +48,7 @@ public class EmbeddingLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     /// The embedding matrix works like this:
     /// - Each row corresponds to one token (word, character, etc.)
     /// - Each column is one dimension of the embedding space
-    /// - If you have 10,000 words and 300 dimensions, the matrix will be 10,000 � 300
+    /// - If you have 10,000 words and 300 dimensions, the matrix will be 10,000 × 300
     /// 
     /// For example, with a vocabulary of 5 words and 4 dimensions:
     /// ```
@@ -306,23 +306,35 @@ public class EmbeddingLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     /// Therefore, this method returns a zero-filled tensor with the same shape as the input.
     /// </para>
     /// <para><b>For Beginners:</b> This is where the embedding layer learns from its mistakes during training.
-    /// 
+    ///
     /// During the backward pass:
     /// 1. For each token in the input sequence:
     ///    - Look up which embedding was used (based on the token ID)
     ///    - Add the corresponding gradient to that specific embedding
     /// 2. Return a dummy gradient for the input (since we can't backpropagate through token IDs)
-    /// 
+    ///
     /// For example, if token ID 5 appears three times in different positions:
     /// - All three gradient contributions will be added together for embedding #5
     /// - This accumulates learning from all occurrences of that token
-    /// 
+    ///
     /// This is different from most layers because:
     /// - We only update the embeddings that were actually used in this batch
     /// - We don't pass meaningful gradients back to the input (the token IDs themselves don't change)
     /// </para>
     /// </remarks>
     public override Tensor<T> Backward(Tensor<T> outputGradient)
+    {
+        return UseAutodiff
+            ? BackwardViaAutodiff(outputGradient)
+            : BackwardManual(outputGradient);
+    }
+
+    /// <summary>
+    /// Manual backward pass implementation using optimized gradient calculations.
+    /// </summary>
+    /// <param name="outputGradient">The gradient of the loss with respect to the layer's output.</param>
+    /// <returns>The gradient of the loss with respect to the layer's input.</returns>
+    private Tensor<T> BackwardManual(Tensor<T> outputGradient)
     {
         if (_lastInput == null)
             throw new InvalidOperationException("Forward pass must be called before backward pass.");
@@ -346,6 +358,28 @@ public class EmbeddingLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
 
         // We don't compute input gradients for embedding layer
         return new Tensor<T>(_lastInput.Shape);
+    }
+
+    /// <summary>
+    /// Backward pass implementation using automatic differentiation.
+    /// </summary>
+    /// <param name="outputGradient">The gradient of the loss with respect to the layer's output.</param>
+    /// <returns>The gradient of the loss with respect to the layer's input.</returns>
+    /// <remarks>
+    /// <para>
+    /// EmbeddingLayer implements table lookup followed by scatter-add for gradients.
+    /// The manual implementation provides the correct gradient computation for embedding lookups.
+    /// Since embedding lookup is a discrete indexing operation (not differentiable with respect to indices),
+    /// and scatter-add operations are not available in TensorOperations, this falls back to manual implementation.
+    /// </para>
+    /// </remarks>
+    private Tensor<T> BackwardViaAutodiff(Tensor<T> outputGradient)
+    {
+        // EmbeddingLayer performs discrete table lookup: output = embeddingMatrix[indices[i]]
+        // The gradient computation requires scatter-add: embeddingGradient[indices[i]] += outputGradient[i]
+        // This is a discrete indexing operation that cannot be represented with standard differentiable operations
+        // Therefore, we fall back to the manual implementation which correctly handles the scatter operation
+        return BackwardManual(outputGradient);
     }
 
     /// <summary>

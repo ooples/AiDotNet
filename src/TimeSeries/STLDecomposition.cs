@@ -609,9 +609,9 @@ public class STLDecomposition<T> : TimeSeriesModelBase<T>
     /// by the sum of the weights.
     /// 
     /// For example, if we have values [10, 20, 30] with weights [1, 2, 1]:
-    /// - The weighted sum is 10�1 + 20�2 + 30�1 = 80
+    /// - The weighted sum is 10×1 + 20×2 + 30×1 = 80
     /// - The sum of weights is 1 + 2 + 1 = 4
-    /// - The weighted average is 80 � 4 = 20
+    /// - The weighted average is 80 ÷ 4 = 20
     /// 
     /// In LOESS smoothing, this gives more influence to points that are closer to the one being estimated.
     /// </para>

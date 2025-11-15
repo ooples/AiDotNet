@@ -501,5 +501,121 @@ internal class MappedRandomForestModel<T> : IFullModel<T, Matrix<T>, Vector<T>>
     {
         _baseModel.ApplyGradients(gradients, learningRate);
     }
+
+    /// <summary>
+    /// Saves the mapped Random Forest model's current state to a stream.
+    /// </summary>
+    /// <param name="stream">The stream to write the model state to.</param>
+    /// <remarks>
+    /// <para>
+    /// This method serializes the wrapped Random Forest model along with feature mapping metadata.
+    /// It uses the existing Serialize method and writes the data to the provided stream.
+    /// </para>
+    /// <para><b>For Beginners:</b> This is like creating a snapshot of your transfer learning model.
+    ///
+    /// When you call SaveState:
+    /// - The underlying Random Forest model is written to the stream
+    /// - Feature mapping metadata is preserved
+    /// - All model parameters and tree structures are saved
+    ///
+    /// This is particularly useful for:
+    /// - Saving transfer learning models after adaptation
+    /// - Checkpointing during cross-domain training
+    /// - Knowledge distillation from transfer-learned models
+    /// - Deploying adapted models to production
+    ///
+    /// You can later use LoadState to restore the model.
+    /// </para>
+    /// </remarks>
+    /// <exception cref="ArgumentNullException">Thrown when stream is null.</exception>
+    /// <exception cref="IOException">Thrown when there's an error writing to the stream.</exception>
+    public void SaveState(Stream stream)
+    {
+        if (stream == null)
+            throw new ArgumentNullException(nameof(stream));
+
+        if (!stream.CanWrite)
+            throw new ArgumentException("Stream must be writable.", nameof(stream));
+
+        try
+        {
+            var data = this.Serialize();
+            stream.Write(data, 0, data.Length);
+            stream.Flush();
+        }
+        catch (IOException ex)
+        {
+            throw new IOException($"Failed to save mapped Random Forest model state to stream: {ex.Message}", ex);
+        }
+        catch (Exception ex)
+        {
+            throw new InvalidOperationException($"Unexpected error while saving mapped Random Forest model state: {ex.Message}", ex);
+        }
+    }
+
+    /// <summary>
+    /// Loads the mapped Random Forest model's state from a stream.
+    /// </summary>
+    /// <param name="stream">The stream to read the model state from.</param>
+    /// <remarks>
+    /// <para>
+    /// This method deserializes a mapped Random Forest model that was previously saved with SaveState.
+    /// It uses the existing Deserialize method after reading data from the stream.
+    /// </para>
+    /// <para><b>For Beginners:</b> This is like loading a saved snapshot of your transfer learning model.
+    ///
+    /// When you call LoadState:
+    /// - The underlying Random Forest model is read from the stream
+    /// - Feature mapping metadata is restored
+    /// - All parameters and tree structures are recovered
+    ///
+    /// After loading, the model can:
+    /// - Make predictions on new data (with automatic feature mapping)
+    /// - Continue adaptation if needed
+    /// - Be deployed to production
+    ///
+    /// This is essential for:
+    /// - Loading transfer-learned models after training
+    /// - Deploying adapted models to production
+    /// - Knowledge distillation workflows
+    /// </para>
+    /// </remarks>
+    /// <exception cref="ArgumentNullException">Thrown when stream is null.</exception>
+    /// <exception cref="IOException">Thrown when there's an error reading from the stream.</exception>
+    /// <exception cref="InvalidOperationException">Thrown when the stream contains invalid or incompatible data.</exception>
+    public void LoadState(Stream stream)
+    {
+        if (stream == null)
+            throw new ArgumentNullException(nameof(stream));
+
+        if (!stream.CanRead)
+            throw new ArgumentException("Stream must be readable.", nameof(stream));
+
+        try
+        {
+            using var ms = new MemoryStream();
+            stream.CopyTo(ms);
+            var data = ms.ToArray();
+
+            if (data.Length == 0)
+                throw new InvalidOperationException("Stream contains no data.");
+
+            this.Deserialize(data);
+        }
+        catch (IOException ex)
+        {
+            throw new IOException($"Failed to read mapped Random Forest model state from stream: {ex.Message}", ex);
+        }
+        catch (InvalidOperationException)
+        {
+            // Re-throw InvalidOperationException from Deserialize
+            throw;
+        }
+        catch (Exception ex)
+        {
+            throw new InvalidOperationException(
+                $"Failed to deserialize mapped Random Forest model state. The stream may contain corrupted or incompatible data: {ex.Message}", ex);
+        }
+    }
 }
 
