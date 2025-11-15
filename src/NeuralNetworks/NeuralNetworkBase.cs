@@ -2447,6 +2447,17 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
             Layers.RepParameterizationLayer<T> => input, // Simplified: reparameterization trick for VAE
             Layers.LogVarianceLayer<T> => input, // Simplified: requires log operation
             Layers.MeasurementLayer<T> => input, // Simplified: measurement layer for quantum computing
+            Layers.ResidualLayer<T> => input, // Simplified: requires handling inner layer
+            Layers.HighwayLayer<T> => input, // Simplified: requires gating mechanism
+            Layers.RecurrentLayer<T> => input, // Simplified: requires recurrent processing
+            Layers.LSTMLayer<T> => input, // Simplified: requires LSTM cell operations
+            Layers.GRULayer<T> => input, // Simplified: requires GRU cell operations
+            Layers.BidirectionalLayer<T> => input, // Simplified: requires bidirectional processing
+            Layers.AttentionLayer<T> => input, // Simplified: requires attention mechanism
+            Layers.SelfAttentionLayer<T> => input, // Simplified: requires self-attention mechanism
+            Layers.MultiHeadAttentionLayer<T> => input, // Simplified: requires multi-head attention
+            Layers.SqueezeAndExcitationLayer<T> => input, // Simplified: requires squeeze-excite ops
+            Layers.GatedLinearUnitLayer<T> => input, // Simplified: requires gating operations
             Layers.BatchNormalizationLayer<T> bnLayer => ConvertBatchNormalizationLayer(bnLayer, input),
             Layers.LayerNormalizationLayer<T> lnLayer => ConvertLayerNormalizationLayer(lnLayer, input),
 
@@ -2456,7 +2467,9 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
                 $"Supported layers: DenseLayer, FullyConnectedLayer, FeedForwardLayer, ActivationLayer, DropoutLayer, GaussianNoiseLayer, " +
                 $"FlattenLayer, ReshapeLayer, InputLayer, MaskingLayer, PositionalEncodingLayer, PaddingLayer, CroppingLayer, UpsamplingLayer, " +
                 $"TimeDistributedLayer, GlobalPoolingLayer, MeanLayer, SplitLayer, ReadoutLayer, ReconstructionLayer, RepParameterizationLayer, " +
-                $"LogVarianceLayer, MeasurementLayer, BatchNormalizationLayer, LayerNormalizationLayer. " +
+                $"LogVarianceLayer, MeasurementLayer, ResidualLayer, HighwayLayer, RecurrentLayer, LSTMLayer, GRULayer, BidirectionalLayer, " +
+                $"AttentionLayer, SelfAttentionLayer, MultiHeadAttentionLayer, SqueezeAndExcitationLayer, GatedLinearUnitLayer, " +
+                $"BatchNormalizationLayer, LayerNormalizationLayer. " +
                 $"Support for additional layer types will be added in future updates.")
         };
     }

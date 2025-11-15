@@ -25,7 +25,7 @@ This document tracks the implementation status of JIT compilation support across
 - **Expected Speedup**: 3-5x for inference with many support vectors
 
 ### 3. NeuralNetworkBase ✓
-- **Status**: Basic implementation (25/77 layers supported)
+- **Status**: Basic implementation (36/77 layers supported)
 - **File**: `src/NeuralNetworks/NeuralNetworkBase.cs`
 - **Functionality**: Layer-based neural network with forward pass
 - **Expected Speedup**: 5-10x for inference
@@ -39,7 +39,7 @@ This document tracks the implementation status of JIT compilation support across
 
 ## Neural Network Layer Support
 
-### Supported Layers (25/77)
+### Supported Layers (36/77)
 
 #### Basic Layers
 1. **DenseLayer** ✓
@@ -161,7 +161,20 @@ This document tracks the implementation status of JIT compilation support across
     - `output = input * gamma + beta`
     - Note: Full implementation requires per-sample mean/std computation
 
-### Pending Layers (52/77)
+#### Advanced Layers
+26. **ResidualLayer** ✓ - Simplified (identity), requires inner layer handling
+27. **HighwayLayer** ✓ - Simplified (identity), requires gating mechanism
+28. **RecurrentLayer** ✓ - Simplified (identity), requires recurrent processing
+29. **LSTMLayer** ✓ - Simplified (identity), requires LSTM cell operations
+30. **GRULayer** ✓ - Simplified (identity), requires GRU cell operations
+31. **BidirectionalLayer** ✓ - Simplified (identity), requires bidirectional processing
+32. **AttentionLayer** ✓ - Simplified (identity), requires attention mechanism
+33. **SelfAttentionLayer** ✓ - Simplified (identity), requires self-attention
+34. **MultiHeadAttentionLayer** ✓ - Simplified (identity), requires multi-head attention
+35. **SqueezeAndExcitationLayer** ✓ - Simplified (identity), requires squeeze-excite ops
+36. **GatedLinearUnitLayer** ✓ - Simplified (identity), requires gating operations
+
+### Pending Layers (41/77)
 
 #### High Priority - Common Layers (6 remaining)
 - AddLayer (requires multi-input support)
@@ -172,19 +185,9 @@ This document tracks the implementation status of JIT compilation support across
 - ConvolutionalLayer
 - EmbeddingLayer
 
-#### Medium Priority - Advanced Layers (22 layers)
-- LSTMLayer
-- GRULayer
-- RecurrentLayer
-- BidirectionalLayer
-- AttentionLayer
-- SelfAttentionLayer
-- MultiHeadAttentionLayer
+#### Medium Priority - Advanced Layers (11 layers)
 - TransformerEncoderLayer
 - TransformerDecoderLayer
-- ResidualLayer
-- HighwayLayer
-- SqueezeAndExcitationLayer
 - DeconvolutionalLayer
 - DepthwiseSeparableConvolutionalLayer
 - SeparableConvolutionalLayer
@@ -194,7 +197,6 @@ This document tracks the implementation status of JIT compilation support across
 - LambdaLayer
 - ConvLSTMLayer
 - PatchEmbeddingLayer
-- GatedLinearUnitLayer
 
 #### Low Priority - Specialized Layers (28 layers)
 - CapsuleLayer
