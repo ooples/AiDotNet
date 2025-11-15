@@ -211,12 +211,12 @@ public class AdaptiveComputeScaler
         difficulty = MathHelper.Clamp(difficulty, 0.0, 1.0);
 
         if (difficulty < 0.3)
-            return "ChainOfThought";
+            return "Chain-of-Thought";
         else if (difficulty < 0.6)
-            return "ChainOfThought-Verified";
+            return "Chain-of-Thought";  // Use same strategy for medium-low difficulty
         else if (difficulty < 0.8)
-            return "SelfConsistency";
+            return "Self-Consistency";
         else
-            return "TreeOfThoughts";
+            return "Tree-of-Thoughts";
     }
 }
