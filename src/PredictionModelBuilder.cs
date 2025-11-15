@@ -588,6 +588,29 @@ public class PredictionModelBuilder<T, TInput, TOutput> : IPredictionModelBuilde
                             Console.WriteLine($"[GPU] Strategy: {_gpuAccelerationConfig.Strategy}");
                             Console.WriteLine($"[GPU] Threshold: {_gpuAccelerationConfig.GpuThreshold:N0} elements");
                         }
+
+                        // Enable GPU acceleration on model and optimizer
+                        // Enable on neural network model if applicable
+                        if (_model is NeuralNetworkBase<T> neuralNet)
+                        {
+                            neuralNet.EnableGpuAcceleration(gpuContext);
+
+                            if (_gpuAccelerationConfig.VerboseLogging)
+                            {
+                                Console.WriteLine("[GPU] Enabled on neural network model");
+                            }
+                        }
+
+                        // Enable on gradient-based optimizer if applicable
+                        if (optimizer is GradientBasedOptimizerBase<T, TInput, TOutput> gradOptimizer)
+                        {
+                            gradOptimizer.EnableGpuAcceleration(gpuContext);
+
+                            if (_gpuAccelerationConfig.VerboseLogging)
+                            {
+                                Console.WriteLine("[GPU] Enabled on gradient-based optimizer");
+                            }
+                        }
                     }
                     else
                     {

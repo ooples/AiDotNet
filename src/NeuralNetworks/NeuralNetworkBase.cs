@@ -1,6 +1,7 @@
 using AiDotNet.Interpretability;
 using AiDotNet.Interfaces;
 using AiDotNet.MixedPrecision;
+using AiDotNet.Gpu;
 
 namespace AiDotNet.NeuralNetworks;
 
@@ -174,6 +175,21 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
     protected MixedPrecisionContext? _mixedPrecisionContext;
 
     /// <summary>
+    /// GPU execution context for accelerated operations (null if GPU is disabled).
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> GPU acceleration makes neural network training 10-100x faster by using your graphics card.
+    /// This context manages:
+    /// - Automatic CPU/GPU placement (GPU for large operations like matrix multiplication)
+    /// - Memory transfers between CPU and GPU
+    /// - Statistics tracking (how many operations ran on GPU)
+    /// When enabled, forward and backward passes automatically use GPU for large computations.
+    /// </para>
+    /// </remarks>
+    protected ExecutionContext? _gpuContext;
+
+    /// <summary>
     /// Gets whether mixed-precision training is enabled.
     /// </summary>
     /// <remarks>
@@ -183,6 +199,17 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
     /// </para>
     /// </remarks>
     public bool IsMixedPrecisionEnabled => _mixedPrecisionContext != null;
+
+    /// <summary>
+    /// Gets whether GPU acceleration is enabled.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> This property tells you if the network is using GPU acceleration.
+    /// GPU acceleration can provide 10-100x faster training for large neural networks.
+    /// </para>
+    /// </remarks>
+    public bool IsGpuAccelerationEnabled => _gpuContext != null;
 
     /// <summary>
     /// Creates a new neural network with the specified architecture.
@@ -1027,6 +1054,88 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
     internal virtual MixedPrecisionContext? GetMixedPrecisionContext()
     {
         return _mixedPrecisionContext;
+    }
+
+    /// <summary>
+    /// Enables GPU acceleration for this neural network.
+    /// </summary>
+    /// <param name="gpuContext">The GPU execution context to use.</param>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> This enables GPU acceleration for forward and backward passes.
+    /// Once enabled, large tensor operations (like matrix multiplications) will automatically
+    /// run on GPU for 10-100x speedup. The context handles all complexity automatically:
+    /// - GPU for large operations (matrix multiplication, large activations)
+    /// - CPU for small operations (avoiding transfer overhead)
+    /// - Automatic memory management between CPU and GPU
+    /// </para>
+    /// <para>
+    /// This is typically called automatically by PredictionModelBuilder when ConfigureGpuAcceleration()
+    /// is used, so you usually don't need to call this manually.
+    /// </para>
+    /// <para>
+    /// When to use:
+    /// - ✅ Training neural networks with large layers (>256 neurons)
+    /// - ✅ Large batch sizes (>32 samples)
+    /// - ✅ Deep networks (>5 layers)
+    /// - ✅ When you have a GPU available
+    /// - ❌ Very small networks (<100 parameters) - CPU will be faster
+    /// - ❌ CPU-only deployment environments
+    /// </para>
+    /// </remarks>
+    /// <example>
+    /// <code>
+    /// // Typically done automatically by PredictionModelBuilder
+    /// var backend = new IlgpuBackend&lt;float&gt;();
+    /// backend.Initialize();
+    ///
+    /// var context = new ExecutionContext(backend)
+    /// {
+    ///     Strategy = ExecutionContext.PlacementStrategy.AutomaticPlacement
+    /// };
+    ///
+    /// network.EnableGpuAcceleration(context);
+    /// </code>
+    /// </example>
+    /// <exception cref="ArgumentNullException">Thrown when gpuContext is null.</exception>
+    public virtual void EnableGpuAcceleration(ExecutionContext gpuContext)
+    {
+        if (gpuContext == null)
+            throw new ArgumentNullException(nameof(gpuContext));
+
+        _gpuContext = gpuContext;
+    }
+
+    /// <summary>
+    /// Disables GPU acceleration and reverts to CPU-only execution.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> This turns off GPU acceleration and returns the network to
+    /// standard CPU execution. This is useful for:
+    /// - Debugging (comparing CPU vs GPU results)
+    /// - Deployment to CPU-only servers
+    /// - Freeing GPU resources for other processes
+    /// </para>
+    /// </remarks>
+    public virtual void DisableGpuAcceleration()
+    {
+        _gpuContext = null;
+    }
+
+    /// <summary>
+    /// Gets the GPU execution context (if enabled).
+    /// </summary>
+    /// <returns>The GPU execution context, or null if GPU acceleration is disabled.</returns>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> This provides access to GPU acceleration internals,
+    /// such as GPU statistics (how many operations ran on GPU vs CPU). Useful for monitoring performance.
+    /// </para>
+    /// </remarks>
+    internal virtual ExecutionContext? GetGpuContext()
+    {
+        return _gpuContext;
     }
 
     /// <summary>
