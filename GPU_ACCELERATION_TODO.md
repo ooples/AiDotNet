@@ -11,11 +11,13 @@
 - [x] Reductions: Sum, Mean
 - [ ] Softmax (GPU kernel) - currently CPU fallback
 
-### Layers with GPU Support (3/74)
+### Layers with GPU Support (5/74)
 - [x] FeedForwardLayer - forward + backward
 - [x] DenseLayer - forward + backward
 - [x] FullyConnectedLayer - forward
-- [ ] 71 other layers need GPU support
+- [x] ActivationLayer - forward
+- [x] AddLayer - forward
+- [ ] 69 other layers need GPU support
 
 ### Optimizers (1/19)
 - [x] AdamOptimizer - parameter updates
@@ -63,7 +65,7 @@
 ## Medium Priority
 
 ### Activation Layers
-- [ ] ActivationLayer - route to GPU activations
+- [x] ActivationLayer - route to GPU activations
 
 ### Embedding
 - [ ] EmbeddingLayer - lookup table on GPU
@@ -74,7 +76,7 @@
 - [ ] GaussianNoiseLayer
 
 ### Combination Layers
-- [ ] AddLayer - element-wise add
+- [x] AddLayer - element-wise add
 - [ ] MultiplyLayer - element-wise multiply
 - [ ] ConcatenateLayer - tensor concatenation
 
@@ -165,7 +167,7 @@
 
 ## Current Status
 
-**Layers**: 2/74 complete (2.7%)
+**Layers**: 5/74 complete (6.8%)
 **Optimizers**: 1/19 complete (5.3%)
 **Operations**: 17+ GPU kernels implemented
-**Backward passes**: Only FeedForwardLayer has GPU backward
+**Backward passes**: FeedForwardLayer, DenseLayer have GPU backward
