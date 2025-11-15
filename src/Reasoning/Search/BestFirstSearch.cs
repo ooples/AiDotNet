@@ -143,7 +143,7 @@ public class BestFirstSearch<T> : ISearchAlgorithm<T>
             {
                 child.EvaluationScore = await evaluator.EvaluateThoughtAsync(
                     child,
-                    child.Thought,
+                    root.Thought,
                     config,
                     cancellationToken
                 );

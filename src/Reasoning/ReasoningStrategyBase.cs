@@ -155,7 +155,6 @@ public abstract class ReasoningStrategyBase<T> : IReasoningStrategy<T>
             }
 
             result.Success = true;
-            result.StrategyUsed = StrategyName;
         }
         catch (OperationCanceledException)
         {
