@@ -447,4 +447,311 @@ public static class GraphAnalytics
             .Select(kvp => (kvp.Key, kvp.Value))
             .ToList();
     }
+
+    /// <summary>
+    /// Finds all connected components in the graph.
+    /// </summary>
+    /// <typeparam name="T">The numeric type used for vector operations.</typeparam>
+    /// <param name="graph">The knowledge graph to analyze.</param>
+    /// <returns>List of connected components, each containing a set of node IDs.</returns>
+    /// <remarks>
+    /// <para>
+    /// A connected component is a maximal subgraph where every node can reach every other node.
+    /// This helps identify isolated clusters or communities in the graph.
+    /// </para>
+    /// <para><b>For Beginners:</b> Connected components find separate "islands" in your graph.
+    ///
+    /// Think of a social network:
+    /// - Component 1: Alice's friend group (all connected to each other)
+    /// - Component 2: Bob's friend group (completely separate from Alice's)
+    /// - Component 3: Isolated person Charlie (no connections)
+    ///
+    /// Uses:
+    /// - Find isolated communities
+    /// - Detect fragmented knowledge bases
+    /// - Identify separate discussion topics
+    /// - Check if graph is fully connected
+    ///
+    /// Algorithm (Union-Find/DFS):
+    /// 1. Start with first unvisited node
+    /// 2. Find all nodes reachable from it (BFS/DFS)
+    /// 3. That's one component
+    /// 4. Repeat for remaining unvisited nodes
+    ///
+    /// Result: List of components, each containing node IDs in that island.
+    /// </para>
+    /// </remarks>
+    public static List<HashSet<string>> FindConnectedComponents<T>(KnowledgeGraph<T> graph)
+    {
+        if (graph == null)
+            throw new ArgumentNullException(nameof(graph));
+
+        var nodes = graph.GetAllNodes().ToList();
+        var visited = new HashSet<string>();
+        var components = new List<HashSet<string>>();
+
+        foreach (var node in nodes)
+        {
+            if (!visited.Contains(node.Id))
+            {
+                var component = new HashSet<string>();
+                var queue = new Queue<string>();
+                queue.Enqueue(node.Id);
+                visited.Add(node.Id);
+
+                while (queue.Count > 0)
+                {
+                    var current = queue.Dequeue();
+                    component.Add(current);
+
+                    // Check outgoing edges
+                    foreach (var edge in graph.GetOutgoingEdges(current))
+                    {
+                        if (!visited.Contains(edge.TargetId))
+                        {
+                            visited.Add(edge.TargetId);
+                            queue.Enqueue(edge.TargetId);
+                        }
+                    }
+
+                    // Check incoming edges (for undirected behavior)
+                    foreach (var edge in graph.GetIncomingEdges(current))
+                    {
+                        if (!visited.Contains(edge.SourceId))
+                        {
+                            visited.Add(edge.SourceId);
+                            queue.Enqueue(edge.SourceId);
+                        }
+                    }
+                }
+
+                components.Add(component);
+            }
+        }
+
+        return components;
+    }
+
+    /// <summary>
+    /// Detects communities using Label Propagation algorithm.
+    /// </summary>
+    /// <typeparam name="T">The numeric type used for vector operations.</typeparam>
+    /// <param name="graph">The knowledge graph to analyze.</param>
+    /// <param name="maxIterations">Maximum number of iterations (default: 100).</param>
+    /// <returns>Dictionary mapping node IDs to their community labels.</returns>
+    /// <remarks>
+    /// <para>
+    /// Label Propagation is a fast community detection algorithm. Each node starts with
+    /// a unique label, then iteratively adopts the most common label among its neighbors.
+    /// Nodes in the same community will converge to the same label.
+    /// </para>
+    /// <para><b>For Beginners:</b> Label Propagation finds groups of nodes that cluster together.
+    ///
+    /// Imagine a party where people wear colored hats:
+    /// 1. Everyone starts with a random color
+    /// 2. Every minute, you look at your friends' hats
+    /// 3. You change to the most popular color among your friends
+    /// 4. After a while, friend groups wear the same color
+    ///
+    /// In graphs:
+    /// - Start: Each node has unique label
+    /// - Iterate: Each node adopts most common neighbor label
+    /// - Converge: Nodes in same community have same label
+    ///
+    /// Why it works:
+    /// - Densely connected nodes influence each other
+    /// - They converge to the same label
+    /// - Weakly connected nodes drift apart
+    ///
+    /// Result: Community labels (numbers) for each node.
+    /// Nodes with the same label are in the same community.
+    ///
+    /// Fast: O(k * E) where k = iterations, E = edges
+    /// Great for: Large graphs, quick community detection
+    /// </para>
+    /// </remarks>
+    public static Dictionary<string, int> DetectCommunitiesLabelPropagation<T>(
+        KnowledgeGraph<T> graph,
+        int maxIterations = 100)
+    {
+        if (graph == null)
+            throw new ArgumentNullException(nameof(graph));
+
+        var nodes = graph.GetAllNodes().ToList();
+        var labels = new Dictionary<string, int>();
+        var random = new Random();
+
+        // Initialize each node with unique label
+        for (int i = 0; i < nodes.Count; i++)
+        {
+            labels[nodes[i].Id] = i;
+        }
+
+        // Iterate until convergence or max iterations
+        for (int iteration = 0; iteration < maxIterations; iteration++)
+        {
+            bool changed = false;
+
+            // Process nodes in random order
+            var shuffledNodes = nodes.OrderBy(n => random.Next()).ToList();
+
+            foreach (var node in shuffledNodes)
+            {
+                // Get labels of all neighbors
+                var neighborLabels = new List<int>();
+
+                foreach (var edge in graph.GetOutgoingEdges(node.Id))
+                {
+                    if (labels.ContainsKey(edge.TargetId))
+                        neighborLabels.Add(labels[edge.TargetId]);
+                }
+
+                foreach (var edge in graph.GetIncomingEdges(node.Id))
+                {
+                    if (labels.ContainsKey(edge.SourceId))
+                        neighborLabels.Add(labels[edge.SourceId]);
+                }
+
+                if (neighborLabels.Count == 0)
+                    continue;
+
+                // Find most common label
+                var labelCounts = neighborLabels
+                    .GroupBy(l => l)
+                    .Select(g => new { Label = g.Key, Count = g.Count() })
+                    .OrderByDescending(x => x.Count)
+                    .ThenBy(x => random.Next()) // Random tie-breaking
+                    .First();
+
+                // Update label if different
+                if (labels[node.Id] != labelCounts.Label)
+                {
+                    labels[node.Id] = labelCounts.Label;
+                    changed = true;
+                }
+            }
+
+            // Converged if no changes
+            if (!changed)
+                break;
+        }
+
+        return labels;
+    }
+
+    /// <summary>
+    /// Calculates the clustering coefficient for each node.
+    /// </summary>
+    /// <typeparam name="T">The numeric type used for vector operations.</typeparam>
+    /// <param name="graph">The knowledge graph to analyze.</param>
+    /// <returns>Dictionary mapping node IDs to their clustering coefficients (0 to 1).</returns>
+    /// <remarks>
+    /// <para>
+    /// The clustering coefficient measures how well a node's neighbors are connected to each other.
+    /// A high coefficient means the node is part of a tightly-knit cluster.
+    /// </para>
+    /// <para><b>For Beginners:</b> Clustering coefficient measures how "clique-like" connections are.
+    ///
+    /// Think of your friend group:
+    /// - High clustering: Your friends all know each other (tight group)
+    /// - Low clustering: Your friends don't know each other (you're the hub)
+    ///
+    /// Formula:
+    /// - Count how many of your friends are friends with each other
+    /// - Divide by maximum possible friendships between them
+    /// - Result: 0 (no friends know each other) to 1 (everyone knows everyone)
+    ///
+    /// Example:
+    /// - You have 3 friends: Alice, Bob, Charlie
+    /// - Maximum connections between them: 3 (Alice-Bob, Bob-Charlie, Alice-Charlie)
+    /// - Actual connections: 2 (Alice-Bob, Bob-Charlie)
+    /// - Clustering coefficient: 2/3 = 0.67
+    ///
+    /// Uses:
+    /// - Identify tight communities
+    /// - Find nodes embedded in groups vs connectors between groups
+    /// - Measure graph's overall "cliquishness"
+    ///
+    /// High coefficient = Node in dense cluster
+    /// Low coefficient = Node connects different groups
+    /// </para>
+    /// </remarks>
+    public static Dictionary<string, double> CalculateClusteringCoefficient<T>(
+        KnowledgeGraph<T> graph)
+    {
+        if (graph == null)
+            throw new ArgumentNullException(nameof(graph));
+
+        var nodes = graph.GetAllNodes().ToList();
+        var coefficients = new Dictionary<string, double>();
+
+        foreach (var node in nodes)
+        {
+            var neighbors = new HashSet<string>();
+
+            // Collect all neighbors (treat as undirected)
+            foreach (var edge in graph.GetOutgoingEdges(node.Id))
+                neighbors.Add(edge.TargetId);
+            foreach (var edge in graph.GetIncomingEdges(node.Id))
+                neighbors.Add(edge.SourceId);
+
+            if (neighbors.Count < 2)
+            {
+                coefficients[node.Id] = 0.0;
+                continue;
+            }
+
+            // Count connections between neighbors
+            int connectedPairs = 0;
+            var neighborList = neighbors.ToList();
+
+            for (int i = 0; i < neighborList.Count; i++)
+            {
+                for (int j = i + 1; j < neighborList.Count; j++)
+                {
+                    var n1 = neighborList[i];
+                    var n2 = neighborList[j];
+
+                    // Check if n1 and n2 are connected
+                    bool connected = graph.GetOutgoingEdges(n1).Any(e => e.TargetId == n2) ||
+                                   graph.GetOutgoingEdges(n2).Any(e => e.TargetId == n1);
+
+                    if (connected)
+                        connectedPairs++;
+                }
+            }
+
+            // Clustering coefficient = actual connections / possible connections
+            int possiblePairs = neighbors.Count * (neighbors.Count - 1) / 2;
+            coefficients[node.Id] = (double)connectedPairs / possiblePairs;
+        }
+
+        return coefficients;
+    }
+
+    /// <summary>
+    /// Calculates the average clustering coefficient for the entire graph.
+    /// </summary>
+    /// <typeparam name="T">The numeric type used for vector operations.</typeparam>
+    /// <param name="graph">The knowledge graph to analyze.</param>
+    /// <returns>The average clustering coefficient (0 to 1).</returns>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> This measures how "clustered" the entire graph is.
+    ///
+    /// - Close to 1: Graph has many tight groups (like friend circles)
+    /// - Close to 0: Graph is sparse, few triangles (like a tree)
+    ///
+    /// Compare to random graphs:
+    /// - Random graph: Low clustering (~0.01 for large graphs)
+    /// - Real social networks: High clustering (~0.3-0.6)
+    /// - Small-world networks: High clustering + short paths
+    ///
+    /// This is one measure of graph structure used in network science.
+    /// </para>
+    /// </remarks>
+    public static double CalculateAverageClusteringCoefficient<T>(KnowledgeGraph<T> graph)
+    {
+        var coefficients = CalculateClusteringCoefficient(graph);
+        return coefficients.Count > 0 ? coefficients.Values.Average() : 0.0;
+    }
 }
