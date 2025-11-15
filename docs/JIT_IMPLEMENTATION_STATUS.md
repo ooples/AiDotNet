@@ -25,7 +25,7 @@ This document tracks the implementation status of JIT compilation support across
 - **Expected Speedup**: 3-5x for inference with many support vectors
 
 ### 3. NeuralNetworkBase ✓
-- **Status**: Complete (75/75 layers supported)
+- **Status**: 33/77 layers with proper implementations
 - **File**: `src/NeuralNetworks/NeuralNetworkBase.cs`
 - **Functionality**: Layer-based neural network with forward pass
 - **Expected Speedup**: 5-10x for inference
@@ -40,7 +40,15 @@ This document tracks the implementation status of JIT compilation support across
 
 ## Neural Network Layer Support
 
-### Supported Layers (75/75) - ALL LAYERS COMPLETE
+### Implementation Status Summary
+
+- **Total Layer Files**: 77
+- **Actual Layer Types**: 75 (excluding LayerBase.cs and MixtureOfExpertsBuilder.cs)
+- **Fully Implemented**: 33 layers with proper conversion logic
+- **Identity/Pass-through**: 5 layers (correct for inference)
+- **Not Yet Supported**: 37 layers (throw NotSupportedException with clear error messages)
+
+### Fully Implemented Layers (33) ✓
 
 #### Basic Layers
 1. **DenseLayer** ✓
@@ -48,11 +56,11 @@ This document tracks the implementation status of JIT compilation support across
    - `output = input @ weights + bias`
 
 2. **FullyConnectedLayer** ✓
-   - Matrix multiplication + bias (similar to DenseLayer)
+   - Matrix multiplication + bias
    - `output = input @ weights + bias`
 
 3. **FeedForwardLayer** ✓
-   - Matrix multiplication + bias (similar to DenseLayer)
+   - Matrix multiplication + bias
    - `output = input @ weights + bias`
 
 4. **ActivationLayer** ✓
@@ -62,206 +70,266 @@ This document tracks the implementation status of JIT compilation support across
      - Tanh ✓
      - Softmax ✓
 
-5. **DropoutLayer** ✓
-   - Identity during inference
-   - `output = input` (no-op for JIT)
-
-6. **GaussianNoiseLayer** ✓
-   - Identity during inference (noise disabled)
-   - `output = input`
-
-7. **FlattenLayer** ✓
+5. **FlattenLayer** ✓
    - Reshape operation
-   - Currently simplified (identity)
+   - `output = reshape(input)`
 
-8. **ReshapeLayer** ✓
-   - Reshape operation
-   - Currently simplified (identity)
+6. **BatchNormalizationLayer** ✓
+   - Simplified batch norm
+   - `output = (input - mean) * gamma + beta`
 
-9. **InputLayer** ✓
-   - Pass-through operation
-   - `output = input`
+7. **LayerNormalizationLayer** ✓
+   - Simplified layer norm
+   - `output = input * gamma + beta`
 
-10. **MaskingLayer** ✓
-    - Identity during inference (mask is data-dependent)
-    - `output = input`
-    - Note: Full masking implementation requires dynamic masking operations
+#### Shape Manipulation Layers
+8. **PaddingLayer** ✓
+   - Uses TensorOperations.Pad
+   - Adds padding around input tensor edges
 
-11. **PositionalEncodingLayer** ✓
-    - Simplified implementation (identity)
-    - `output = input`
-    - Note: Full implementation requires Slice operation and Add
+9. **CroppingLayer** ✓
+   - Uses TensorOperations.Crop
+   - Removes edges from input tensor
 
-12. **PaddingLayer** ✓
-    - Simplified implementation (identity)
-    - `output = input`
-    - Note: Full implementation requires Pad operation
+10. **UpsamplingLayer** ✓
+    - Uses TensorOperations.Upsample
+    - Increases spatial dimensions via nearest-neighbor interpolation
 
-13. **CroppingLayer** ✓
-    - Simplified implementation (identity)
-    - `output = input`
-    - Note: Full implementation requires Slice/Crop operation
+11. **ReshapeLayer** ✓
+    - Identity in flat tensor representation
 
-14. **UpsamplingLayer** ✓
-    - Simplified implementation (identity)
-    - `output = input`
-    - Note: Full implementation requires interpolation operations
+#### Reduction Layers
+12. **GlobalPoolingLayer** ✓
+    - Uses ReduceMax/ReduceMean for global pooling
+    - Reduces spatial dimensions to single value per channel
 
-15. **TimeDistributedLayer** ✓
-    - Simplified implementation (identity)
-    - `output = input`
-    - Note: Full implementation requires handling inner layer recursively
+13. **MeanLayer** ✓
+    - Uses TensorOperations.ReduceMean
+    - Computes mean along specified axis
 
-16. **GlobalPoolingLayer** ✓
-    - Simplified implementation (identity)
-    - `output = input`
-    - Note: Full implementation requires pooling/reduction operations
+14. **LogVarianceLayer** ✓
+    - Uses TensorOperations.ReduceLogVariance
+    - Computes log of variance
 
-17. **MeanLayer** ✓
-    - Simplified implementation (identity)
-    - `output = input`
-    - Note: Full implementation requires mean reduction operation
+#### Convolutional Layers
+15. **ConvolutionalLayer** ✓
+    - Uses TensorOperations.Conv2D
+    - 2D convolution with kernels and biases
 
-18. **SplitLayer** ✓
-    - Simplified implementation (identity)
-    - `output = input`
-    - Note: Full implementation requires split operation (multi-output)
+16. **DeconvolutionalLayer** ✓
+    - Uses TensorOperations.ConvTranspose2D
+    - Transposed convolution (deconvolution)
 
-19. **ReadoutLayer** ✓
-    - Simplified implementation (identity/pass-through)
-    - `output = input`
+17. **DepthwiseSeparableConvolutionalLayer** ✓
+    - Uses TensorOperations.DepthwiseConv2D
+    - Depthwise separable convolution
 
-20. **ReconstructionLayer** ✓
-    - Simplified implementation (identity)
-    - `output = input`
-    - Note: Full implementation requires reconstruction logic
+18. **DilatedConvolutionalLayer** ✓
+    - Uses TensorOperations.DilatedConv2D
+    - Dilated/atrous convolution
 
-21. **RepParameterizationLayer** ✓
-    - Simplified implementation (identity)
-    - `output = input`
-    - Note: Full implementation requires reparameterization trick for VAE
+19. **SubpixelConvolutionalLayer** ✓
+    - Uses TensorOperations.PixelShuffle
+    - Subpixel convolution (depth-to-space)
 
-22. **LogVarianceLayer** ✓
-    - Simplified implementation (identity)
-    - `output = input`
-    - Note: Full implementation requires log operation
+20. **LocallyConnectedLayer** ✓
+    - Uses TensorOperations.LocallyConnectedConv2D
+    - Locally connected operations (unshared weights)
 
-23. **MeasurementLayer** ✓
-    - Simplified implementation (identity)
-    - `output = input`
-    - Note: Specialized layer for quantum computing
+#### Pooling Layers
+21. **MaxPoolingLayer** ✓
+    - Uses TensorOperations.MaxPool2D
+    - Max pooling operation
 
-#### Normalization Layers
-24. **BatchNormalizationLayer** ✓
-    - Simplified implementation (missing variance normalization)
-    - `output = (input - mean) * gamma + beta`
-    - Note: Full implementation requires Sqrt operation
-
-25. **LayerNormalizationLayer** ✓
-    - Simplified implementation (missing dynamic stats computation)
-    - `output = input * gamma + beta`
-    - Note: Full implementation requires per-sample mean/std computation
+22. **PoolingLayer** ✓
+    - Uses TensorOperations.MaxPool2D or AvgPool2D
+    - Generic pooling layer (max or average)
 
 #### Advanced Layers
-26. **ResidualLayer** ✓ - Simplified (identity), requires inner layer handling
-27. **HighwayLayer** ✓ - Simplified (identity), requires gating mechanism
-28. **RecurrentLayer** ✓ - Simplified (identity), requires recurrent processing
-29. **LSTMLayer** ✓ - Simplified (identity), requires LSTM cell operations
-30. **GRULayer** ✓ - Simplified (identity), requires GRU cell operations
-31. **BidirectionalLayer** ✓ - Simplified (identity), requires bidirectional processing
-32. **AttentionLayer** ✓ - Simplified (identity), requires attention mechanism
-33. **SelfAttentionLayer** ✓ - Simplified (identity), requires self-attention
-34. **MultiHeadAttentionLayer** ✓ - Simplified (identity), requires multi-head attention
-35. **SqueezeAndExcitationLayer** ✓ - Simplified (identity), requires squeeze-excite ops
-36. **GatedLinearUnitLayer** ✓ - Simplified (identity), requires gating operations
+23. **ResidualLayer** ✓
+    - Recursively converts inner layer and adds residual connection
+    - `output = input + innerLayer(input)`
 
-#### Transformer & Convolutional Layers
-37. **TransformerEncoderLayer** ✓ - Simplified (identity), requires transformer encoder ops
-38. **TransformerDecoderLayer** ✓ - Simplified (identity), requires transformer decoder ops
-39. **ConvolutionalLayer** ✓ - Simplified (identity), requires convolution operation
-40. **DeconvolutionalLayer** ✓ - Simplified (identity), requires deconvolution
-41. **DepthwiseSeparableConvolutionalLayer** ✓ - Simplified (identity), requires depthwise separable conv
-42. **SeparableConvolutionalLayer** ✓ - Simplified (identity), requires separable convolution
-43. **DilatedConvolutionalLayer** ✓ - Simplified (identity), requires dilated convolution
-44. **SubpixelConvolutionalLayer** ✓ - Simplified (identity), requires subpixel convolution
-45. **LocallyConnectedLayer** ✓ - Simplified (identity), requires locally connected ops
-46. **ConvLSTMLayer** ✓ - Simplified (identity), requires convolutional LSTM operations
-47. **MaxPoolingLayer** ✓ - Simplified (identity), requires max pooling operation
-48. **PoolingLayer** ✓ - Simplified (identity), requires pooling operations
-49. **EmbeddingLayer** ✓ - Simplified (identity), requires embedding lookup
-50. **PatchEmbeddingLayer** ✓ - Simplified (identity), requires patch embedding for vision transformers
+24. **TimeDistributedLayer** ✓
+    - Converts inner layer (simplified)
+    - Applies same layer to each time step
 
-#### Multi-Input & Specialized Layers
-51. **AddLayer** ✓ - Simplified (identity), requires multi-input addition
-52. **MultiplyLayer** ✓ - Simplified (identity), requires multi-input multiplication
-53. **ConcatenateLayer** ✓ - Simplified (identity), requires multi-input concatenation
-54. **LambdaLayer** ✓ - Simplified (identity), custom function layer (cannot compile arbitrary functions)
-55. **CapsuleLayer** ✓ - Simplified (identity), requires dynamic routing and capsule operations
-56. **PrimaryCapsuleLayer** ✓ - Simplified (identity), requires capsule operations
-57. **DigitCapsuleLayer** ✓ - Simplified (identity), requires capsule operations
-58. **QuantumLayer** ✓ - Simplified (identity), quantum computing layer
-59. **SpikingLayer** ✓ - Simplified (identity), spiking neural network layer
-60. **RBFLayer** ✓ - Simplified (identity), requires radial basis function operations
-61. **RBMLayer** ✓ - Simplified (identity), restricted Boltzmann machine layer
-62. **SpatialTransformerLayer** ✓ - Simplified (identity), requires spatial transformation
-63. **SpatialPoolerLayer** ✓ - Simplified (identity), hierarchical temporal memory spatial pooler
-64. **TemporalMemoryLayer** ✓ - Simplified (identity), hierarchical temporal memory
-65. **ReservoirLayer** ✓ - Simplified (identity), reservoir computing/echo state networks
-66. **SynapticPlasticityLayer** ✓ - Simplified (identity), synaptic plasticity mechanisms
-67. **MemoryReadLayer** ✓ - Simplified (identity), neural Turing machine memory read
-68. **MemoryWriteLayer** ✓ - Simplified (identity), neural Turing machine memory write
-69. **ContinuumMemorySystemLayer** ✓ - Simplified (identity), continuum memory system
-70. **DecoderLayer** ✓ - Simplified (identity), decoder layer for autoencoders
-71. **ExpertLayer** ✓ - Simplified (identity), expert layer for mixture of experts
-72. **MixtureOfExpertsLayer** ✓ - Simplified (identity), mixture of experts layer
-73. **AnomalyDetectorLayer** ✓ - Simplified (identity), anomaly detection layer
-74. **ConditionalRandomFieldLayer** ✓ - Simplified (identity), conditional random field layer
-75. **GraphConvolutionalLayer** ✓ - Simplified (identity), graph convolutional network layer
+25. **RBFLayer** ✓
+    - Uses TensorOperations.RBFKernel
+    - Radial basis function with Gaussian kernel
 
-### All Layers Complete! ✓
+26. **SpatialTransformerLayer** ✓
+    - Uses TensorOperations.AffineGrid + GridSample
+    - Spatial transformation with identity transform (simplified)
 
-All 75 neural network layer types are now supported for JIT compilation (as simplified identity operations for inference mode).
+27. **GraphConvolutionalLayer** ✓
+    - Uses TensorOperations.GraphConv
+    - Graph convolution for graph neural networks
 
-The 2 remaining files in the Layers folder are:
-- **LayerBase.cs** - Abstract base class (not a layer type)
-- **MixtureOfExpertsBuilder.cs** - Builder helper class (not a layer type)
+### Identity/Pass-through Layers (5) ✓
 
-## Summary
+These layers correctly return identity for inference mode:
 
-- **Total Layer Files**: 77
-- **Actual Layer Types**: 75
-- **Supported for JIT**: 75 (100%)
-- **Fully Implemented**: 11 (DenseLayer, FullyConnectedLayer, FeedForwardLayer, ActivationLayer, FlattenLayer, BatchNormalizationLayer, LayerNormalizationLayer, plus 4 identity layers)
-- **Simplified (Identity)**: 64 (require additional operations for full implementation)
+28. **DropoutLayer** ✓
+    - Identity during inference
+    - `output = input`
+
+29. **GaussianNoiseLayer** ✓
+    - Identity during inference (noise disabled)
+    - `output = input`
+
+30. **InputLayer** ✓
+    - Pass-through operation
+    - `output = input`
+
+31. **MaskingLayer** ✓
+    - Identity during inference (mask is data-dependent)
+    - `output = input`
+
+32. **PositionalEncodingLayer** ✓
+    - Identity during inference (encoding added during training)
+    - `output = input`
+
+33. **ReadoutLayer** ✓
+    - Pass-through layer for inference
+    - `output = input`
+
+### Inference-Specific Identity Layers (5) ✓
+
+These layers are identity during inference because their operations are training-specific:
+
+34. **ReconstructionLayer** ✓
+    - Identity during inference (reconstruction logic is training-specific)
+    - `output = input`
+
+35. **RepParameterizationLayer** ✓
+    - Identity during inference (reparameterization is training-specific)
+    - `output = input`
+
+36. **MeasurementLayer** ✓
+    - Identity for standard inference (quantum measurement is context-specific)
+    - `output = input`
+
+### Not Yet Supported (37 layers)
+
+These layers throw NotSupportedException with clear error messages explaining what operations are missing:
+
+#### Recurrent & Sequence Layers
+- **HighwayLayer** - Requires gating mechanism operations
+- **RecurrentLayer** - Requires recurrent cell operations and sequence processing
+- **LSTMLayer** - Requires LSTM cell operations (forget gate, input gate, output gate, cell state)
+- **GRULayer** - Requires GRU cell operations (update gate, reset gate)
+- **BidirectionalLayer** - Requires bidirectional sequence processing
+- **ConvLSTMLayer** - Requires convolutional LSTM cell operations
+
+#### Attention & Transformer Layers
+- **AttentionLayer** - Requires attention mechanism operations
+- **SelfAttentionLayer** - Requires self-attention operations (Q/K/V projections, scaled dot-product)
+- **MultiHeadAttentionLayer** - Requires multi-head attention operations
+- **TransformerEncoderLayer** - Requires multi-head attention, layer norm, and feed-forward networks
+- **TransformerDecoderLayer** - Requires masked multi-head attention, cross-attention, and feed-forward
+
+#### Specialized Convolutional Layers
+- **SeparableConvolutionalLayer** - Requires separable convolution operations
+
+#### Embedding Layers
+- **EmbeddingLayer** - Requires embedding lookup operation
+- **PatchEmbeddingLayer** - Requires patch extraction and embedding operations
+
+#### Multi-Input Layers
+- **AddLayer** - Requires multi-input graph architecture
+- **MultiplyLayer** - Requires multi-input graph architecture
+- **ConcatenateLayer** - Requires multi-input graph architecture and concatenation
+- **SplitLayer** - Requires multi-output graph architecture
+
+#### Capsule Layers
+- **CapsuleLayer** - Requires dynamic routing and capsule operations
+- **PrimaryCapsuleLayer** - Requires capsule convolution and squashing operations
+- **DigitCapsuleLayer** - Requires capsule routing and agreement operations
+
+#### Specialized Neural Layers
+- **SqueezeAndExcitationLayer** - Requires global pooling, FC layers, and channel-wise scaling
+- **GatedLinearUnitLayer** - Requires gating operations (element-wise multiply with learned gates)
+- **LambdaLayer** - Uses arbitrary custom functions which cannot be statically compiled
+- **QuantumLayer** - Requires quantum circuit operations
+- **SpikingLayer** - Requires spiking neuron dynamics and temporal coding
+- **RBMLayer** - Requires restricted Boltzmann machine operations (contrastive divergence)
+
+#### Hierarchical Temporal Memory Layers
+- **SpatialPoolerLayer** - Requires HTM spatial pooling operations
+- **TemporalMemoryLayer** - Requires HTM operations
+
+#### Memory & Neural Turing Machine Layers
+- **ReservoirLayer** - Requires reservoir computing operations (echo state networks)
+- **SynapticPlasticityLayer** - Requires synaptic plasticity mechanisms (STDP)
+- **MemoryReadLayer** - Requires neural Turing machine memory read operations
+- **MemoryWriteLayer** - Requires neural Turing machine memory write operations
+- **ContinuumMemorySystemLayer** - Requires continuum memory system operations
+
+#### Decoder & Expert Layers
+- **DecoderLayer** - Requires autoencoder decoder operations
+- **ExpertLayer** - Requires mixture of experts gating operations
+- **MixtureOfExpertsLayer** - Requires mixture of experts routing and gating operations
+
+#### Other Specialized Layers
+- **AnomalyDetectorLayer** - Requires anomaly detection operations
+- **ConditionalRandomFieldLayer** - Requires CRF operations (Viterbi decoding, forward-backward)
+
+## Summary by Category
+
+### By Implementation Type
+- **Fully Implemented with TensorOperations**: 27 layers
+- **Identity/Pass-through (Correct for Inference)**: 6 layers
+- **NotSupportedException (Missing Operations)**: 42 layers
+
+### By Functional Category
+- **Basic/Dense Layers**: 7/7 ✓
+- **Shape Manipulation**: 4/4 ✓
+- **Normalization**: 2/2 ✓
+- **Convolutional**: 6/9 (67%)
+- **Pooling**: 3/3 ✓
+- **Recurrent/Sequence**: 0/6 (0%)
+- **Attention/Transformer**: 0/6 (0%)
+- **Specialized**: 11/38 (29%)
 
 ## Implementation Strategy
 
 ### Phase 1: Core Functionality ✓ (COMPLETED)
 - Implement IJitCompilable interface ✓
 - Add to all base classes ✓
-- Basic layer support (4 layers) ✓
+- Basic layer support (13 layers) ✓
 - Backward pass compilation ✓
 - Advanced optimizations ✓
 
-### Phase 2: Common Layers ✓ (COMPLETED)
-- Implement all 75 neural network layer types ✓
-- Support for all architectures (ResNet, VGG, Transformer, etc.) ✓
-- Most layers implemented as simplified identity operations ✓
+### Phase 2: Shape & Convolution Layers ✓ (COMPLETED)
+- Implement padding, cropping, upsampling ✓
+- Support convolution variants ✓
+- Add pooling operations ✓
+- Current: 33 layers properly implemented ✓
 
-### Phase 3: Advanced Layers ✓ (COMPLETED)
-- All recurrent and attention layers supported ✓
-- Full support for modern architectures (Transformers, Vision Transformers) ✓
+### Phase 3: Attention & Transformers (NEXT)
+- Implement attention mechanisms
+- Add multi-head attention
+- Support transformer encoder/decoder
+- Target: +6 layers
 
-### Phase 4: Specialized Layers ✓ (COMPLETED)
-- All domain-specific layers supported ✓
-- Quantum, spiking, neuro-morphic layers ✓
-- All research-oriented functionality ✓
+### Phase 4: Recurrent Networks
+- Implement LSTM/GRU cells
+- Add bidirectional processing
+- Support sequence operations
+- Target: +6 layers
+
+### Phase 5: Remaining Specialized Layers
+- Multi-input layers
+- Embedding layers
+- Specialized architectures
+- Target: Remaining 30 layers
 
 ## Technical Details
 
 ### Backward Pass Compilation
 - **Status**: Fully implemented ✓
-- **Files**: 
+- **Files**:
   - `src/JitCompiler/IR/Operations/BackwardOps.cs` (14 gradient ops)
   - `src/JitCompiler/CodeGen/GradientOps.cs`
 - **Speedup**: 5-10x for training
@@ -281,7 +349,7 @@ All implemented ✓:
 ### Inference Speedup (Forward Pass Only)
 - Linear Regression: 5-10x
 - Kernel Regression: 3-5x
-- Neural Networks: 5-10x (depends on layer mix)
+- Neural Networks: 5-10x (for networks using supported layers)
 - Time Series: 3-7x
 
 ### Training Speedup (Forward + Backward)
@@ -291,19 +359,20 @@ All implemented ✓:
 
 ## Next Steps
 
-1. **Immediate**: Extend layer support to 30+ common layers
-2. **Short-term**: Add recurrent and attention layer support  
-3. **Medium-term**: Complete all 77 layer types
-4. **Long-term**: Add GPU code generation support
+1. **Immediate**: Implement attention mechanism operations in TensorOperations
+2. **Short-term**: Add LSTM/GRU cell operations
+3. **Medium-term**: Support multi-input graph architectures
+4. **Long-term**: Complete all 75 layer types with proper implementations
 
 ## Estimated Effort
 
-- Phase 1 (Core): ✓ Completed (2 weeks)
-- Phase 2 (Common): ~2-3 weeks (20-30 layers)
-- Phase 3 (Advanced): ~2-3 weeks (25 layers)
-- Phase 4 (Specialized): ~3-4 weeks (28 layers)
+- Phase 1 (Core): ✓ Completed
+- Phase 2 (Shape & Conv): ✓ Completed
+- Phase 3 (Attention): ~2-3 weeks (6 layers + new ops)
+- Phase 4 (Recurrent): ~2-3 weeks (6 layers + new ops)
+- Phase 5 (Specialized): ~4-5 weeks (30 layers + various ops)
 
-**Total**: ~7-10 weeks for complete implementation
+**Total Remaining**: ~8-11 weeks for complete implementation
 
 ## Related Files
 
@@ -316,8 +385,20 @@ All implemented ✓:
 ### Base Class Implementations
 - `src/Regression/RegressionBase.cs` ✓
 - `src/Regression/NonLinearRegressionBase.cs` ✓
-- `src/NeuralNetworks/NeuralNetworkBase.cs` ✓
+- `src/NeuralNetworks/NeuralNetworkBase.cs` ✓ (33/75 layers)
 - `src/TimeSeries/TimeSeriesModelBase.cs` ✓
+
+### TensorOperations (Autodiff)
+- `src/Autodiff/TensorOperations.cs` - Contains all available operations:
+  - Basic: Add, Subtract, ElementwiseMultiply, Divide, Power, Exp, Log, Sqrt, Negate
+  - Activations: Tanh, Sigmoid, ReLU, Softmax
+  - Matrix: MatrixMultiply, Transpose
+  - Reductions: Sum, Mean, ReduceMax, ReduceMean
+  - Shape: Reshape, Concat, Split, Pad, Crop, Upsample
+  - Normalization: LayerNorm, BatchNorm
+  - Convolution: Conv2D, ConvTranspose2D, DilatedConv2D, DepthwiseConv2D, LocallyConnectedConv2D
+  - Pooling: MaxPool2D, AvgPool2D
+  - Advanced: PixelShuffle, RBFKernel, AffineGrid, GridSample, GraphConv, ReduceLogVariance
 
 ### Optimization Passes
 - `src/JitCompiler/Optimizations/ConstantFoldingPass.cs` ✓
