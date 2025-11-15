@@ -610,6 +610,178 @@ public interface IPredictionModelBuilder<T, TInput, TOutput>
         KnowledgeDistillationOptions<T, TInput, TOutput>? options = null);
 
     /// <summary>
+    /// Configures model quantization for reducing model size and improving inference speed.
+    /// </summary>
+    /// <remarks>
+    /// <b>For Beginners:</b> Quantization compresses your model by using smaller numbers (like 8-bit instead of 32-bit).
+    /// This makes your model:
+    /// - Smaller (50-75% size reduction)
+    /// - Faster (2-4x speedup)
+    /// - Use less memory
+    ///
+    /// The trade-off is a small accuracy loss (usually 1-5%). For most applications, this is acceptable.
+    ///
+    /// Example:
+    /// <code>
+    /// // Use Float16 quantization (recommended for most cases)
+    /// var result = await builder
+    ///     .ConfigureModel(model)
+    ///     .ConfigureQuantization(new QuantizationConfig { Mode = QuantizationMode.Float16 })
+    ///     .BuildAsync(x, y);
+    /// </code>
+    /// </remarks>
+    /// <param name="config">The quantization configuration (optional, uses no quantization if null).</param>
+    /// <returns>The builder instance for method chaining.</returns>
+    IPredictionModelBuilder<T, TInput, TOutput> ConfigureQuantization(QuantizationConfig? config = null);
+
+    /// <summary>
+    /// Configures model caching to avoid reloading models from disk repeatedly.
+    /// </summary>
+    /// <remarks>
+    /// <b>For Beginners:</b> Caching keeps frequently-used models in memory so they load instantly.
+    /// Like keeping your favorite apps open on your phone instead of closing and reopening them.
+    ///
+    /// Benefits:
+    /// - Much faster inference (no model loading time)
+    /// - Better throughput for multiple requests
+    /// - Configurable cache size and eviction policies
+    ///
+    /// Example:
+    /// <code>
+    /// // Enable caching with default settings (10 models, LRU eviction)
+    /// var result = await builder
+    ///     .ConfigureModel(model)
+    ///     .ConfigureCaching()
+    ///     .BuildAsync(x, y);
+    /// </code>
+    /// </remarks>
+    /// <param name="config">The caching configuration (optional, uses default cache settings if null).</param>
+    /// <returns>The builder instance for method chaining.</returns>
+    IPredictionModelBuilder<T, TInput, TOutput> ConfigureCaching(CacheConfig? config = null);
+
+    /// <summary>
+    /// Configures model versioning for managing multiple versions of the same model.
+    /// </summary>
+    /// <remarks>
+    /// <b>For Beginners:</b> Versioning helps you manage different versions of your model as it improves over time.
+    /// You can:
+    /// - Keep track of which version is deployed
+    /// - Roll back to previous versions if needed
+    /// - Use "latest" to always get the newest version
+    /// - Compare performance between versions
+    ///
+    /// Example:
+    /// <code>
+    /// // Enable versioning (defaults to "latest")
+    /// var result = await builder
+    ///     .ConfigureModel(model)
+    ///     .ConfigureVersioning()
+    ///     .BuildAsync(x, y);
+    /// </code>
+    /// </remarks>
+    /// <param name="config">The versioning configuration (optional, uses "latest" version if null).</param>
+    /// <returns>The builder instance for method chaining.</returns>
+    IPredictionModelBuilder<T, TInput, TOutput> ConfigureVersioning(VersioningConfig? config = null);
+
+    /// <summary>
+    /// Configures A/B testing to compare multiple model versions by splitting traffic.
+    /// </summary>
+    /// <remarks>
+    /// <b>For Beginners:</b> A/B testing lets you safely test a new model version on a small percentage
+    /// of users before fully deploying it. For example, you might send 10% of traffic to a new model
+    /// and 90% to the current model, then compare performance metrics to decide which is better.
+    ///
+    /// This is useful for:
+    /// - Testing new models in production safely
+    /// - Gradually rolling out changes
+    /// - Making data-driven decisions about which model to use
+    ///
+    /// Example:
+    /// <code>
+    /// // 90% on v1.0 (stable), 10% on v2.0 (experimental)
+    /// var abConfig = new ABTestingConfig
+    /// {
+    ///     Enabled = true,
+    ///     TrafficSplit = new Dictionary&lt;string, double&gt; { { "1.0", 0.9 }, { "2.0", 0.1 } },
+    ///     ControlVersion = "1.0"
+    /// };
+    /// var result = await builder
+    ///     .ConfigureModel(model)
+    ///     .ConfigureABTesting(abConfig)
+    ///     .BuildAsync(x, y);
+    /// </code>
+    /// </remarks>
+    /// <param name="config">The A/B testing configuration (optional, disables A/B testing if null).</param>
+    /// <returns>The builder instance for method chaining.</returns>
+    IPredictionModelBuilder<T, TInput, TOutput> ConfigureABTesting(ABTestingConfig? config = null);
+
+    /// <summary>
+    /// Configures telemetry for tracking and monitoring model inference metrics.
+    /// </summary>
+    /// <remarks>
+    /// <b>For Beginners:</b> Telemetry collects performance data about your model in production, like:
+    /// - How long each inference takes (latency)
+    /// - How many inferences per second (throughput)
+    /// - When errors occur
+    /// - Cache hit/miss rates
+    /// - Which model versions are being used
+    ///
+    /// This helps you:
+    /// - Detect performance problems before users complain
+    /// - Understand usage patterns
+    /// - Debug production issues
+    /// - Make informed decisions about model updates
+    ///
+    /// Example:
+    /// <code>
+    /// // Enable telemetry with default settings
+    /// var result = await builder
+    ///     .ConfigureModel(model)
+    ///     .ConfigureTelemetry()
+    ///     .BuildAsync(x, y);
+    /// </code>
+    /// </remarks>
+    /// <param name="config">The telemetry configuration (optional, uses default telemetry settings if null).</param>
+    /// <returns>The builder instance for method chaining.</returns>
+    IPredictionModelBuilder<T, TInput, TOutput> ConfigureTelemetry(TelemetryConfig? config = null);
+
+    /// <summary>
+    /// Configures export settings for deploying the model to different platforms.
+    /// </summary>
+    /// <remarks>
+    /// <b>For Beginners:</b> Export settings determine how your trained model will be saved for deployment.
+    /// Different platforms need different formats:
+    /// - **ONNX**: Universal format, works everywhere (recommended)
+    /// - **TensorRT**: NVIDIA GPUs, maximum performance
+    /// - **CoreML**: Apple devices (iPhone, iPad, Mac)
+    /// - **TFLite**: Android devices and edge hardware
+    /// - **WASM**: Run models in web browsers
+    ///
+    /// Configure this BEFORE training if you know your target platform, so the model can be
+    /// optimized accordingly. After training, use the Export methods on PredictionModelResult.
+    ///
+    /// Example:
+    /// <code>
+    /// // Configure for TensorRT deployment with FP16 quantization
+    /// var exportConfig = new ExportConfig
+    /// {
+    ///     TargetPlatform = TargetPlatform.TensorRT,
+    ///     Quantization = QuantizationMode.Float16
+    /// };
+    /// var result = await builder
+    ///     .ConfigureModel(model)
+    ///     .ConfigureExport(exportConfig)
+    ///     .BuildAsync(x, y);
+    ///
+    /// // After training, export the model
+    /// result.ExportToTensorRT("model.trt");
+    /// </code>
+    /// </remarks>
+    /// <param name="config">The export configuration (optional, uses CPU/ONNX if null).</param>
+    /// <returns>The builder instance for method chaining.</returns>
+    IPredictionModelBuilder<T, TInput, TOutput> ConfigureExport(ExportConfig? config = null);
+
+    /// <summary>
     /// Asynchronously builds a meta-trained model that can quickly adapt to new tasks.
     /// </summary>
     /// <remarks>
