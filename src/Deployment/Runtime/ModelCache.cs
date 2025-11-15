@@ -183,40 +183,34 @@ public class ModelCache<T>
         if (input == null || input.Length == 0)
             return "empty";
 
-        // Compute stable hash using array content and length
-        // Uses unchecked context to allow overflow for hash combining
-        unchecked
+        // Use SHA256 for cryptographically secure hashing to prevent collisions
+        // This is critical for model caching where hash collisions would cause incorrect predictions
+        using (var sha256 = SHA256.Create())
         {
-            int hash = 17;
-            hash = hash * 31 + input.Length;
+            // Convert array to byte representation for hashing
+            var bytes = ArrayToBytes(input);
+            var hashBytes = sha256.ComputeHash(bytes);
 
-            // Combine hash codes of all elements
-            // For large arrays, sample every nth element for performance
-            int sampleSize = Math.Min(input.Length, 100);
-            int step = Math.Max(1, input.Length / sampleSize);
-
-            for (int i = 0; i < input.Length; i += step)
+            // Convert to hex string
+            var builder = new StringBuilder(hashBytes.Length * 2);
+            foreach (var b in hashBytes)
             {
-                T element = input[i];
-                if (element is not null)
-                {
-                    hash = hash * 31 + element.GetHashCode();
-                }
+                builder.Append(b.ToString("x2"));
             }
-
-            // Include last element if not already sampled
-            if (input.Length > 1 && (input.Length - 1) % step != 0)
-            {
-                T lastElement = input[input.Length - 1];
-                if (lastElement is not null)
-                {
-                    hash = hash * 31 + lastElement.GetHashCode();
-                }
-            }
-
-            // Convert to hex string for readability
-            return hash.ToString("X8");
+            return builder.ToString();
         }
+    }
+
+    private byte[] ArrayToBytes(T[] array)
+    {
+        // Get element size for the generic type T
+        var elementSize = System.Runtime.InteropServices.Marshal.SizeOf<T>();
+        var bytes = new byte[array.Length * elementSize];
+
+        // Copy array data to byte array for hashing
+        Buffer.BlockCopy(array, 0, bytes, 0, bytes.Length);
+
+        return bytes;
     }
 }
 
