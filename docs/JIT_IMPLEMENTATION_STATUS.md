@@ -25,7 +25,7 @@ This document tracks the implementation status of JIT compilation support across
 - **Expected Speedup**: 3-5x for inference with many support vectors
 
 ### 3. NeuralNetworkBase ✓
-- **Status**: Basic implementation (12/77 layers supported)
+- **Status**: Basic implementation (13/77 layers supported)
 - **File**: `src/NeuralNetworks/NeuralNetworkBase.cs`
 - **Functionality**: Layer-based neural network with forward pass
 - **Expected Speedup**: 5-10x for inference
@@ -39,7 +39,7 @@ This document tracks the implementation status of JIT compilation support across
 
 ## Neural Network Layer Support
 
-### Supported Layers (12/77)
+### Supported Layers (13/77)
 
 #### Basic Layers
 1. **DenseLayer** ✓
@@ -86,18 +86,23 @@ This document tracks the implementation status of JIT compilation support across
     - `output = input`
     - Note: Full masking implementation requires dynamic masking operations
 
+11. **PositionalEncodingLayer** ✓
+    - Simplified implementation (identity)
+    - `output = input`
+    - Note: Full implementation requires Slice operation and Add
+
 #### Normalization Layers
-11. **BatchNormalizationLayer** ✓
+12. **BatchNormalizationLayer** ✓
     - Simplified implementation (missing variance normalization)
     - `output = (input - mean) * gamma + beta`
     - Note: Full implementation requires Sqrt operation
 
-12. **LayerNormalizationLayer** ✓
+13. **LayerNormalizationLayer** ✓
     - Simplified implementation (missing dynamic stats computation)
     - `output = input * gamma + beta`
     - Note: Full implementation requires per-sample mean/std computation
 
-### Pending Layers (65/77)
+### Pending Layers (64/77)
 
 #### High Priority - Common Layers (13 remaining)
 - AddLayer (requires multi-input support)
@@ -114,7 +119,7 @@ This document tracks the implementation status of JIT compilation support across
 - SplitLayer
 - MeanLayer
 
-#### Medium Priority - Advanced Layers (24 layers)
+#### Medium Priority - Advanced Layers (23 layers)
 - LSTMLayer
 - GRULayer
 - RecurrentLayer
@@ -124,7 +129,6 @@ This document tracks the implementation status of JIT compilation support across
 - MultiHeadAttentionLayer
 - TransformerEncoderLayer
 - TransformerDecoderLayer
-- PositionalEncodingLayer
 - ResidualLayer
 - HighwayLayer
 - SqueezeAndExcitationLayer
