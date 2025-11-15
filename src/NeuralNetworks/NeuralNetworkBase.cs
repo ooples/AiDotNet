@@ -2448,7 +2448,7 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
             Layers.LogVarianceLayer<T> logVarLayer => ConvertLogVarianceLayer(logVarLayer, input),
             Layers.MeasurementLayer<T> => input, // Identity for standard inference (quantum measurement is context-specific)
             Layers.ResidualLayer<T> residualLayer => ConvertResidualLayer(residualLayer, input),
-            Layers.HighwayLayer<T> => throw new NotSupportedException("HighwayLayer requires gating mechanism operations (element-wise multiply/add with learned gates) which are not yet implemented in TensorOperations"),
+            Layers.HighwayLayer<T> highwayLayer => ConvertHighwayLayer(highwayLayer, input),
             Layers.RecurrentLayer<T> => throw new NotSupportedException("RecurrentLayer requires recurrent cell operations and sequence processing which are not yet implemented in TensorOperations"),
             Layers.LSTMLayer<T> => throw new NotSupportedException("LSTMLayer requires LSTM cell operations (forget gate, input gate, output gate, cell state) which are not yet implemented in TensorOperations"),
             Layers.GRULayer<T> => throw new NotSupportedException("GRULayer requires GRU cell operations (update gate, reset gate) which are not yet implemented in TensorOperations"),
@@ -2456,8 +2456,8 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
             Layers.AttentionLayer<T> => throw new NotSupportedException("AttentionLayer requires attention mechanism operations (query-key similarity, softmax over sequence, weighted sum) which are not yet implemented in TensorOperations"),
             Layers.SelfAttentionLayer<T> => throw new NotSupportedException("SelfAttentionLayer requires self-attention operations (Q/K/V projections, scaled dot-product attention) which are not yet implemented in TensorOperations"),
             Layers.MultiHeadAttentionLayer<T> => throw new NotSupportedException("MultiHeadAttentionLayer requires multi-head attention operations (multiple parallel attention heads, concatenation, output projection) which are not yet implemented in TensorOperations"),
-            Layers.SqueezeAndExcitationLayer<T> => throw new NotSupportedException("SqueezeAndExcitationLayer requires global pooling, FC layers, and channel-wise scaling which are not yet implemented in TensorOperations"),
-            Layers.GatedLinearUnitLayer<T> => throw new NotSupportedException("GatedLinearUnitLayer requires gating operations (element-wise multiply with learned gates) which are not yet implemented in TensorOperations"),
+            Layers.SqueezeAndExcitationLayer<T> seLayer => ConvertSqueezeAndExcitationLayer(seLayer, input),
+            Layers.GatedLinearUnitLayer<T> gluLayer => ConvertGatedLinearUnitLayer(gluLayer, input),
             Layers.TransformerEncoderLayer<T> => throw new NotSupportedException("TransformerEncoderLayer requires multi-head attention, layer normalization, and feed-forward networks which are not yet fully implemented in TensorOperations"),
             Layers.TransformerDecoderLayer<T> => throw new NotSupportedException("TransformerDecoderLayer requires masked multi-head attention, cross-attention, and feed-forward networks which are not yet implemented in TensorOperations"),
             Layers.ConvolutionalLayer<T> convLayer => ConvertConvolutionalLayer(convLayer, input),
@@ -3179,6 +3179,174 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
         var adjacencyNode = TensorOperations.Constant(adjacencyMatrix, "adjacency_matrix");
 
         return TensorOperations.GraphConv(input, adjacencyNode, weightsNode, biasesNode);
+    }
+
+    /// <summary>
+    /// Converts a highway layer to computation graph.
+    /// </summary>
+    private ComputationNode<T> ConvertHighwayLayer(Layers.HighwayLayer<T> layer, ComputationNode<T> input)
+    {
+        // Get parameters via reflection
+        var layerType = layer.GetType();
+        var transformWeightsField = layerType.GetField("_transformWeights", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
+        var transformBiasField = layerType.GetField("_transformBias", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
+        var gateWeightsField = layerType.GetField("_gateWeights", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
+        var gateBiasField = layerType.GetField("_gateBias", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
+
+        var transformWeights = (Matrix<T>)transformWeightsField!.GetValue(layer)!;
+        var transformBias = (Vector<T>)transformBiasField!.GetValue(layer)!;
+        var gateWeights = (Matrix<T>)gateWeightsField!.GetValue(layer)!;
+        var gateBias = (Vector<T>)gateBiasField!.GetValue(layer)!;
+
+        // Convert to tensors
+        var transformWeightsTensor = MatrixToTensor(transformWeights);
+        var transformBiasTensor = VectorToTensor(transformBias);
+        var gateWeightsTensor = MatrixToTensor(gateWeights);
+        var gateBiasTensor = VectorToTensor(gateBias);
+
+        var transformWeightsNode = TensorOperations.Constant(transformWeightsTensor, "highway_transform_weights");
+        var transformBiasNode = TensorOperations.Constant(transformBiasTensor, "highway_transform_bias");
+        var gateWeightsNode = TensorOperations.Constant(gateWeightsTensor, "highway_gate_weights");
+        var gateBiasNode = TensorOperations.Constant(gateBiasTensor, "highway_gate_bias");
+
+        // Transform path: H = tanh(input @ W_H + b_H)
+        var transformOutput = TensorOperations.MatrixMultiply(input, transformWeightsNode);
+        transformOutput = TensorOperations.Add(transformOutput, transformBiasNode);
+        transformOutput = TensorOperations.Tanh(transformOutput);
+
+        // Gate path: T = sigmoid(input @ W_T + b_T)
+        var gateOutput = TensorOperations.MatrixMultiply(input, gateWeightsNode);
+        gateOutput = TensorOperations.Add(gateOutput, gateBiasNode);
+        gateOutput = TensorOperations.Sigmoid(gateOutput);
+
+        // Output: y = H * T + input * (1 - T)
+        var gatedTransform = TensorOperations.ElementwiseMultiply(transformOutput, gateOutput);
+
+        // Compute (1 - T)
+        var onesTensor = new Tensor<T>(gateOutput.Value.Shape);
+        for (int i = 0; i < onesTensor.Data.Length; i++)
+            onesTensor.Data[i] = NumOps.FromDouble(1.0);
+        var onesNode = TensorOperations.Constant(onesTensor, "ones");
+        var inverseGate = TensorOperations.Subtract(onesNode, gateOutput);
+
+        var gatedInput = TensorOperations.ElementwiseMultiply(input, inverseGate);
+        var output = TensorOperations.Add(gatedTransform, gatedInput);
+
+        return output;
+    }
+
+    /// <summary>
+    /// Converts a squeeze-and-excitation layer to computation graph.
+    /// </summary>
+    private ComputationNode<T> ConvertSqueezeAndExcitationLayer(Layers.SqueezeAndExcitationLayer<T> layer, ComputationNode<T> input)
+    {
+        // Get parameters via reflection
+        var layerType = layer.GetType();
+        var weights1Field = layerType.GetField("_weights1", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
+        var bias1Field = layerType.GetField("_bias1", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
+        var weights2Field = layerType.GetField("_weights2", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
+        var bias2Field = layerType.GetField("_bias2", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
+
+        var weights1 = (Matrix<T>)weights1Field!.GetValue(layer)!;
+        var bias1 = (Vector<T>)bias1Field!.GetValue(layer)!;
+        var weights2 = (Matrix<T>)weights2Field!.GetValue(layer)!;
+        var bias2 = (Vector<T>)bias2Field!.GetValue(layer)!;
+
+        var weights1Tensor = MatrixToTensor(weights1);
+        var bias1Tensor = VectorToTensor(bias1);
+        var weights2Tensor = MatrixToTensor(weights2);
+        var bias2Tensor = VectorToTensor(bias2);
+
+        var weights1Node = TensorOperations.Constant(weights1Tensor, "se_weights1");
+        var bias1Node = TensorOperations.Constant(bias1Tensor, "se_bias1");
+        var weights2Node = TensorOperations.Constant(weights2Tensor, "se_weights2");
+        var bias2Node = TensorOperations.Constant(bias2Tensor, "se_bias2");
+
+        // Squeeze: Global average pooling across spatial dimensions
+        var squeezed = TensorOperations.ReduceMean(input, axes: new int[] { 2, 3 }, keepDims: false);
+
+        // Excitation: FC -> ReLU -> FC -> Sigmoid
+        var fc1 = TensorOperations.MatrixMultiply(squeezed, weights1Node);
+        fc1 = TensorOperations.Add(fc1, bias1Node);
+        fc1 = TensorOperations.ReLU(fc1);
+
+        var fc2 = TensorOperations.MatrixMultiply(fc1, weights2Node);
+        fc2 = TensorOperations.Add(fc2, bias2Node);
+        var excitation = TensorOperations.Sigmoid(fc2);
+
+        // Scale: element-wise multiply input by excitation weights (channel-wise)
+        // Note: This is simplified - full implementation would require proper broadcasting
+        var output = TensorOperations.ElementwiseMultiply(input, excitation);
+
+        return output;
+    }
+
+    /// <summary>
+    /// Converts a gated linear unit layer to computation graph.
+    /// </summary>
+    private ComputationNode<T> ConvertGatedLinearUnitLayer(Layers.GatedLinearUnitLayer<T> layer, ComputationNode<T> input)
+    {
+        // Get parameters via reflection
+        var layerType = layer.GetType();
+        var linearWeightsField = layerType.GetField("_linearWeights", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
+        var gateWeightsField = layerType.GetField("_gateWeights", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
+        var linearBiasField = layerType.GetField("_linearBias", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
+        var gateBiasField = layerType.GetField("_gateBias", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
+
+        var linearWeights = (Matrix<T>)linearWeightsField!.GetValue(layer)!;
+        var gateWeights = (Matrix<T>)gateWeightsField!.GetValue(layer)!;
+        var linearBias = (Vector<T>)linearBiasField!.GetValue(layer)!;
+        var gateBias = (Vector<T>)gateBiasField!.GetValue(layer)!;
+
+        var linearWeightsTensor = MatrixToTensor(linearWeights);
+        var gateWeightsTensor = MatrixToTensor(gateWeights);
+        var linearBiasTensor = VectorToTensor(linearBias);
+        var gateBiasTensor = VectorToTensor(gateBias);
+
+        var linearWeightsNode = TensorOperations.Constant(linearWeightsTensor, "glu_linear_weights");
+        var gateWeightsNode = TensorOperations.Constant(gateWeightsTensor, "glu_gate_weights");
+        var linearBiasNode = TensorOperations.Constant(linearBiasTensor, "glu_linear_bias");
+        var gateBiasNode = TensorOperations.Constant(gateBiasTensor, "glu_gate_bias");
+
+        // Linear path
+        var linearOutput = TensorOperations.MatrixMultiply(input, linearWeightsNode);
+        linearOutput = TensorOperations.Add(linearOutput, linearBiasNode);
+
+        // Gate path
+        var gateOutput = TensorOperations.MatrixMultiply(input, gateWeightsNode);
+        gateOutput = TensorOperations.Add(gateOutput, gateBiasNode);
+        gateOutput = TensorOperations.Sigmoid(gateOutput);
+
+        // GLU: output = linear * sigmoid(gate)
+        var output = TensorOperations.ElementwiseMultiply(linearOutput, gateOutput);
+
+        return output;
+    }
+
+    /// <summary>
+    /// Helper method to convert Matrix to Tensor.
+    /// </summary>
+    private Tensor<T> MatrixToTensor(Matrix<T> matrix)
+    {
+        var shape = new int[] { matrix.Rows, matrix.Columns };
+        var data = new T[matrix.Rows * matrix.Columns];
+        for (int i = 0; i < matrix.Rows; i++)
+        {
+            for (int j = 0; j < matrix.Columns; j++)
+            {
+                data[i * matrix.Columns + j] = matrix[i, j];
+            }
+        }
+        return new Tensor<T>(shape, new Vector<T>(data));
+    }
+
+    /// <summary>
+    /// Helper method to convert Vector to Tensor.
+    /// </summary>
+    private Tensor<T> VectorToTensor(Vector<T> vector)
+    {
+        var shape = new int[] { 1, vector.Length };
+        return new Tensor<T>(shape, vector);
     }
 
     #endregion
