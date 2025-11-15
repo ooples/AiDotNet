@@ -1104,6 +1104,12 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
             throw new ArgumentNullException(nameof(gpuContext));
 
         _gpuContext = gpuContext;
+
+        // Propagate GPU context to all layers
+        foreach (var layer in _layers)
+        {
+            layer.SetGpuContext(gpuContext);
+        }
     }
 
     /// <summary>
@@ -1121,6 +1127,12 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
     public virtual void DisableGpuAcceleration()
     {
         _gpuContext = null;
+
+        // Remove GPU context from all layers
+        foreach (var layer in _layers)
+        {
+            layer.SetGpuContext(null);
+        }
     }
 
     /// <summary>
