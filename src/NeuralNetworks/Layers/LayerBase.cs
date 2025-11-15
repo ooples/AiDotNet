@@ -1,5 +1,7 @@
 namespace AiDotNet.NeuralNetworks.Layers;
 
+using AiDotNet.Gpu;
+
 /// <summary>
 /// Represents the base class for all neural network layers, providing common functionality and interfaces.
 /// </summary>
@@ -158,17 +160,58 @@ public abstract class LayerBase<T> : ILayer<T>, IDiagnosticsProvider<T>
     /// indicate how each parameter should be adjusted during training to reduce the error.
     /// </para>
     /// <para><b>For Beginners:</b> These values show how to adjust the parameters during training.
-    /// 
+    ///
     /// Parameter gradients:
     /// - Tell the network which direction to change each parameter
     /// - Show how sensitive the error is to each parameter
     /// - Guide the learning process
-    /// 
+    ///
     /// A larger gradient means a parameter has more influence on the error and
     /// needs a bigger adjustment during training.
     /// </para>
     /// </remarks>
     protected Vector<T>? ParameterGradients;
+
+    /// <summary>
+    /// GPU execution context for accelerated operations (null if GPU is disabled).
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> This provides access to GPU acceleration for this layer.
+    /// When the parent neural network has GPU acceleration enabled, this context is set
+    /// and the layer can use GPU operations for 10-100x faster forward and backward passes.
+    /// </para>
+    /// <para>
+    /// Layers should check if this is not null before attempting GPU operations.
+    /// If null, the layer should fall back to CPU operations.
+    /// </para>
+    /// </remarks>
+    protected ExecutionContext? GpuContext { get; private set; }
+
+    /// <summary>
+    /// Gets whether GPU acceleration is available for this layer.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> This tells you if GPU acceleration is available.
+    /// When true, the layer can use GPU operations for faster computation.
+    /// </para>
+    /// </remarks>
+    protected bool IsGpuAccelerationAvailable => GpuContext != null;
+
+    /// <summary>
+    /// Sets the GPU execution context for this layer.
+    /// </summary>
+    /// <param name="gpuContext">The GPU context to use, or null to disable GPU acceleration.</param>
+    /// <remarks>
+    /// <para>
+    /// This is typically called by the parent neural network when GPU acceleration is enabled.
+    /// </para>
+    /// </remarks>
+    internal void SetGpuContext(ExecutionContext? gpuContext)
+    {
+        GpuContext = gpuContext;
+    }
 
     /// <summary>
     /// Gets the input shape for this layer.

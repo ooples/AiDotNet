@@ -13,6 +13,7 @@ using AiDotNet.Deployment.TensorRT;
 using AiDotNet.Deployment.Mobile.CoreML;
 using AiDotNet.Deployment.Mobile.TensorFlowLite;
 using AiDotNet.Deployment.Runtime;
+using AiDotNet.Gpu;
 
 namespace AiDotNet.Models.Results;
 
@@ -271,6 +272,74 @@ public class PredictionModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
     public CrossValidationResult<T, TInput, TOutput>? CrossValidationResult { get; internal set; }
 
     /// <summary>
+    /// Gets or sets the GPU backend used for GPU-accelerated operations.
+    /// </summary>
+    /// <value>GPU backend for acceleration, or null if GPU acceleration is not configured.</value>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> If GPU acceleration was enabled during model building (via ConfigureGpuAcceleration),
+    /// this contains the GPU backend that can be used for accelerated inference.
+    ///
+    /// The GPU backend:
+    /// - Manages GPU resources (memory allocation, kernel execution)
+    /// - Provides GPU-accelerated operations (matrix multiplication, activations, etc.)
+    /// - Automatically handles data transfers between CPU and GPU
+    ///
+    /// If null, the model uses CPU-only execution.
+    /// </para>
+    /// </remarks>
+    internal IlgpuBackend<float>? GpuBackend { get; private set; }
+
+    /// <summary>
+    /// Gets or sets the GPU execution context for CPU/GPU placement decisions.
+    /// </summary>
+    /// <value>Execution context for GPU operations, or null if GPU acceleration is not configured.</value>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> The execution context controls when operations run on GPU vs CPU.
+    ///
+    /// It provides:
+    /// - Automatic placement strategy (uses GPU for large tensors, CPU for small ones)
+    /// - GPU usage statistics (how many operations ran on GPU vs CPU)
+    /// - Configuration settings (threshold for GPU use, placement policy, etc.)
+    ///
+    /// If null, the model uses CPU-only execution.
+    /// </para>
+    /// </remarks>
+    internal ExecutionContext? GpuContext { get; private set; }
+
+    /// <summary>
+    /// Gets GPU execution statistics from training and inference.
+    /// </summary>
+    /// <value>Statistics about GPU usage, or null if GPU acceleration is not configured.</value>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> After training or making predictions with GPU acceleration enabled,
+    /// check these statistics to see how much the GPU was actually used.
+    ///
+    /// Example usage:
+    /// <code>
+    /// var result = await builder
+    ///     .ConfigureGpuAcceleration()
+    ///     .BuildAsync(data, labels);
+    ///
+    /// if (result.GpuStatistics != null)
+    /// {
+    ///     Console.WriteLine($"GPU Operations: {result.GpuStatistics.GpuOperations}");
+    ///     Console.WriteLine($"CPU Operations: {result.GpuStatistics.CpuOperations}");
+    ///     Console.WriteLine($"GPU Usage: {result.GpuStatistics.GpuPercentage:F1}%");
+    /// }
+    /// </code>
+    ///
+    /// The statistics show:
+    /// - How many operations ran on GPU
+    /// - How many operations ran on CPU
+    /// - What percentage of operations used GPU
+    ///
+    /// If GPU usage is low (0-20%), your operations might be too small to benefit from GPU.
+    /// If GPU usage is high (80-100%), you're getting good GPU acceleration!
+    /// </para>
+    /// </remarks>
+    public ExecutionStats? GpuStatistics => GpuContext?.Statistics;
+
+    /// <summary>
     /// Gets or sets the LoRA configuration for parameter-efficient fine-tuning.
     /// </summary>
     /// <value>LoRA configuration for adaptation, or null if not configured.</value>
@@ -402,6 +471,8 @@ public class PredictionModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
     /// <param name="agentConfig">Optional agent configuration used during model building.</param>
     /// <param name="agentRecommendation">Optional agent recommendations from model building.</param>
     /// <param name="deploymentConfiguration">Optional deployment configuration for export, caching, versioning, A/B testing, and telemetry.</param>
+    /// <param name="gpuBackend">Optional GPU backend for accelerated operations.</param>
+    /// <param name="gpuContext">Optional GPU execution context for CPU/GPU placement decisions.</param>
     public PredictionModelResult(OptimizationResult<T, TInput, TOutput> optimizationResult,
         NormalizationInfo<T, TInput, TOutput> normalizationInfo,
         IBiasDetector<T>? biasDetector = null,
@@ -414,7 +485,9 @@ public class PredictionModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
         CrossValidationResult<T, TInput, TOutput>? crossValidationResult = null,
         AgentConfiguration<T>? agentConfig = null,
         AgentRecommendation<T, TInput, TOutput>? agentRecommendation = null,
-        DeploymentConfiguration? deploymentConfiguration = null)
+        DeploymentConfiguration? deploymentConfiguration = null,
+        IlgpuBackend<float>? gpuBackend = null,
+        ExecutionContext? gpuContext = null)
     {
         Model = optimizationResult.BestSolution;
         OptimizationResult = optimizationResult;
@@ -431,6 +504,8 @@ public class PredictionModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
         AgentConfig = agentConfig;
         AgentRecommendation = agentRecommendation;
         DeploymentConfiguration = deploymentConfiguration;
+        GpuBackend = gpuBackend;
+        GpuContext = gpuContext;
     }
 
     /// <summary>
