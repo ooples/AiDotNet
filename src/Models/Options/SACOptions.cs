@@ -136,6 +136,11 @@ public class SACOptions<T>
     /// <summary>
     /// Loss function for Q-networks (typically MSE).
     /// </summary>
+    /// <remarks>
+    /// MSE (Mean Squared Error) is the standard loss for SAC Q-networks as it minimizes
+    /// the Bellman error: L = E[(Q(s,a) - (r + γ * Q_target(s',a')))^2].
+    /// This is the correct loss function for value-based RL algorithms.
+    /// </remarks>
     public ILossFunction<T> QLossFunction { get; set; } = new MeanSquaredErrorLoss<T>();
 
     /// <summary>
