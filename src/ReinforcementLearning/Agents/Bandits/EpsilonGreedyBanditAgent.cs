@@ -20,6 +20,7 @@ public class EpsilonGreedyBanditAgent<T> : ReinforcementLearningAgentBase<T>
     public EpsilonGreedyBanditAgent(EpsilonGreedyBanditOptions<T> options) : base(options)
     {
         _options = options ?? throw new ArgumentNullException(nameof(options));
+        _random = new Random();
         _qValues = new Vector<T>(_options.NumArms);
         _actionCounts = new Vector<int>(_options.NumArms);
         for (int i = 0; i < _options.NumArms; i++)
