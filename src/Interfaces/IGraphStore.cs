@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using System.Threading.Tasks;
 using AiDotNet.RetrievalAugmentedGeneration.Graph;
 
 namespace AiDotNet.Interfaces;
@@ -276,4 +277,105 @@ public interface IGraphStore<T>
     /// </para>
     /// </remarks>
     void Clear();
+
+    // Async methods for I/O-intensive operations
+
+    /// <summary>
+    /// Asynchronously adds a node to the graph or updates it if it already exists.
+    /// </summary>
+    /// <param name="node">The node to add.</param>
+    /// <returns>A task representing the asynchronous operation.</returns>
+    /// <remarks>
+    /// <para>
+    /// This is the async version of <see cref="AddNode"/>. Use this for file-based or
+    /// database-backed stores to avoid blocking the thread during I/O operations.
+    /// </para>
+    /// <para><b>For Beginners:</b> This does the same as AddNode but doesn't block your app.
+    ///
+    /// When should you use async?
+    /// - FileGraphStore: Yes! (writes to disk)
+    /// - MemoryGraphStore: Optional (no I/O, but provided for consistency)
+    /// - Database stores: Definitely! (network I/O)
+    ///
+    /// Example:
+    /// ```csharp
+    /// await store.AddNodeAsync(node);  // Non-blocking
+    /// ```
+    /// </para>
+    /// </remarks>
+    Task AddNodeAsync(GraphNode<T> node);
+
+    /// <summary>
+    /// Asynchronously adds an edge to the graph.
+    /// </summary>
+    /// <param name="edge">The edge to add.</param>
+    /// <returns>A task representing the asynchronous operation.</returns>
+    Task AddEdgeAsync(GraphEdge<T> edge);
+
+    /// <summary>
+    /// Asynchronously retrieves a node by its unique identifier.
+    /// </summary>
+    /// <param name="nodeId">The unique identifier of the node.</param>
+    /// <returns>A task that represents the asynchronous operation. The task result contains the node if found; otherwise, null.</returns>
+    Task<GraphNode<T>?> GetNodeAsync(string nodeId);
+
+    /// <summary>
+    /// Asynchronously retrieves an edge by its unique identifier.
+    /// </summary>
+    /// <param name="edgeId">The unique identifier of the edge.</param>
+    /// <returns>A task that represents the asynchronous operation. The task result contains the edge if found; otherwise, null.</returns>
+    Task<GraphEdge<T>?> GetEdgeAsync(string edgeId);
+
+    /// <summary>
+    /// Asynchronously removes a node and all its connected edges from the graph.
+    /// </summary>
+    /// <param name="nodeId">The unique identifier of the node to remove.</param>
+    /// <returns>A task that represents the asynchronous operation. The task result is true if the node was found and removed; otherwise, false.</returns>
+    Task<bool> RemoveNodeAsync(string nodeId);
+
+    /// <summary>
+    /// Asynchronously removes an edge from the graph.
+    /// </summary>
+    /// <param name="edgeId">The unique identifier of the edge to remove.</param>
+    /// <returns>A task that represents the asynchronous operation. The task result is true if the edge was found and removed; otherwise, false.</returns>
+    Task<bool> RemoveEdgeAsync(string edgeId);
+
+    /// <summary>
+    /// Asynchronously gets all outgoing edges from a specific node.
+    /// </summary>
+    /// <param name="nodeId">The source node ID.</param>
+    /// <returns>A task that represents the asynchronous operation. The task result contains the collection of outgoing edges.</returns>
+    Task<IEnumerable<GraphEdge<T>>> GetOutgoingEdgesAsync(string nodeId);
+
+    /// <summary>
+    /// Asynchronously gets all incoming edges to a specific node.
+    /// </summary>
+    /// <param name="nodeId">The target node ID.</param>
+    /// <returns>A task that represents the asynchronous operation. The task result contains the collection of incoming edges.</returns>
+    Task<IEnumerable<GraphEdge<T>>> GetIncomingEdgesAsync(string nodeId);
+
+    /// <summary>
+    /// Asynchronously gets all nodes with a specific label.
+    /// </summary>
+    /// <param name="label">The node label to filter by.</param>
+    /// <returns>A task that represents the asynchronous operation. The task result contains the collection of nodes with the specified label.</returns>
+    Task<IEnumerable<GraphNode<T>>> GetNodesByLabelAsync(string label);
+
+    /// <summary>
+    /// Asynchronously gets all nodes currently stored in the graph.
+    /// </summary>
+    /// <returns>A task that represents the asynchronous operation. The task result contains all nodes.</returns>
+    Task<IEnumerable<GraphNode<T>>> GetAllNodesAsync();
+
+    /// <summary>
+    /// Asynchronously gets all edges currently stored in the graph.
+    /// </summary>
+    /// <returns>A task that represents the asynchronous operation. The task result contains all edges.</returns>
+    Task<IEnumerable<GraphEdge<T>>> GetAllEdgesAsync();
+
+    /// <summary>
+    /// Asynchronously removes all nodes and edges from the graph.
+    /// </summary>
+    /// <returns>A task representing the asynchronous operation.</returns>
+    Task ClearAsync();
 }

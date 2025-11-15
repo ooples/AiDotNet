@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Threading.Tasks;
 using AiDotNet.Interfaces;
 
 namespace AiDotNet.RetrievalAugmentedGeneration.Graph;
@@ -214,5 +215,82 @@ public class MemoryGraphStore<T> : IGraphStore<T>
         _outgoingEdges.Clear();
         _incomingEdges.Clear();
         _nodesByLabel.Clear();
+    }
+
+    // Async methods (for MemoryGraphStore, these wrap synchronous operations)
+
+    /// <inheritdoc/>
+    public Task AddNodeAsync(GraphNode<T> node)
+    {
+        AddNode(node);
+        return Task.CompletedTask;
+    }
+
+    /// <inheritdoc/>
+    public Task AddEdgeAsync(GraphEdge<T> edge)
+    {
+        AddEdge(edge);
+        return Task.CompletedTask;
+    }
+
+    /// <inheritdoc/>
+    public Task<GraphNode<T>?> GetNodeAsync(string nodeId)
+    {
+        return Task.FromResult(GetNode(nodeId));
+    }
+
+    /// <inheritdoc/>
+    public Task<GraphEdge<T>?> GetEdgeAsync(string edgeId)
+    {
+        return Task.FromResult(GetEdge(edgeId));
+    }
+
+    /// <inheritdoc/>
+    public Task<bool> RemoveNodeAsync(string nodeId)
+    {
+        return Task.FromResult(RemoveNode(nodeId));
+    }
+
+    /// <inheritdoc/>
+    public Task<bool> RemoveEdgeAsync(string edgeId)
+    {
+        return Task.FromResult(RemoveEdge(edgeId));
+    }
+
+    /// <inheritdoc/>
+    public Task<IEnumerable<GraphEdge<T>>> GetOutgoingEdgesAsync(string nodeId)
+    {
+        return Task.FromResult(GetOutgoingEdges(nodeId));
+    }
+
+    /// <inheritdoc/>
+    public Task<IEnumerable<GraphEdge<T>>> GetIncomingEdgesAsync(string nodeId)
+    {
+        return Task.FromResult(GetIncomingEdges(nodeId));
+    }
+
+    /// <inheritdoc/>
+    public Task<IEnumerable<GraphNode<T>>> GetNodesByLabelAsync(string label)
+    {
+        return Task.FromResult(GetNodesByLabel(label));
+    }
+
+    /// <inheritdoc/>
+    public Task<IEnumerable<GraphNode<T>>> GetAllNodesAsync()
+    {
+        return Task.FromResult(GetAllNodes());
+    }
+
+    /// <inheritdoc/>
+    public Task<IEnumerable<GraphEdge<T>>> GetAllEdgesAsync()
+    {
+        return Task.FromResult(GetAllEdges());
+    }
+
+    /// <inheritdoc/>
+    public Task ClearAsync()
+    {
+        Clear();
+        return Task.CompletedTask;
     }
 }
