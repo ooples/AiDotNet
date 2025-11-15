@@ -353,8 +353,8 @@ internal static class OnnxProto
         writer.WriteTag(2, WireFormat.WireType.Varint);
         writer.WriteInt32(GetDataTypeValue(typeof(T)));
 
-        // Field 3: name
-        writer.WriteTag(3, WireFormat.WireType.LengthDelimited);
+        // Field 8: name (per ONNX TensorProto specification)
+        writer.WriteTag(8, WireFormat.WireType.LengthDelimited);
         writer.WriteString(name);
 
         // Field 9: raw_data

@@ -995,7 +995,8 @@ public class PredictionModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
         updatedOptimizationResult.BestSolution = newModel;
 
         // Create new result with updated optimization result
-        // Use constructor that preserves BiasDetector, FairnessEvaluator, and RAG components
+        // Preserve all configuration properties to ensure deployment behavior, model adaptation,
+        // and training history are maintained across parameter updates
         return new PredictionModelResult<T, TInput, TOutput>(
             updatedOptimizationResult,
             NormalizationInfo,
@@ -1004,7 +1005,12 @@ public class PredictionModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
             RagRetriever,
             RagReranker,
             RagGenerator,
-            QueryProcessors);
+            QueryProcessors,
+            loraConfiguration: LoRAConfiguration,
+            crossValidationResult: CrossValidationResult,
+            agentConfig: AgentConfig,
+            agentRecommendation: AgentRecommendation,
+            deploymentConfiguration: DeploymentConfiguration);
     }
 
     /// <summary>
@@ -1090,7 +1096,8 @@ public class PredictionModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
 
         var clonedNormalizationInfo = NormalizationInfo.DeepCopy();
 
-        // Use constructor that preserves BiasDetector, FairnessEvaluator, and RAG components
+        // Preserve all configuration properties to ensure deployment behavior, model adaptation,
+        // and training history are maintained across deep copy
         return new PredictionModelResult<T, TInput, TOutput>(
             clonedOptimizationResult,
             clonedNormalizationInfo,
@@ -1099,7 +1106,12 @@ public class PredictionModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
             RagRetriever,
             RagReranker,
             RagGenerator,
-            QueryProcessors);
+            QueryProcessors,
+            loraConfiguration: LoRAConfiguration,
+            crossValidationResult: CrossValidationResult,
+            agentConfig: AgentConfig,
+            agentRecommendation: AgentRecommendation,
+            deploymentConfiguration: DeploymentConfiguration);
     }
 
     /// <summary>
@@ -1218,6 +1230,17 @@ public class PredictionModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
                 ModelMetaData = deserializedObject.ModelMetaData;
                 BiasDetector = deserializedObject.BiasDetector;
                 FairnessEvaluator = deserializedObject.FairnessEvaluator;
+
+                // Preserve RAG components and all configuration properties
+                RagRetriever = deserializedObject.RagRetriever;
+                RagReranker = deserializedObject.RagReranker;
+                RagGenerator = deserializedObject.RagGenerator;
+                QueryProcessors = deserializedObject.QueryProcessors;
+                LoRAConfiguration = deserializedObject.LoRAConfiguration;
+                CrossValidationResult = deserializedObject.CrossValidationResult;
+                AgentConfig = deserializedObject.AgentConfig;
+                AgentRecommendation = deserializedObject.AgentRecommendation;
+                DeploymentConfiguration = deserializedObject.DeploymentConfiguration;
             }
             else
             {

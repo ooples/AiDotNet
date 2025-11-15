@@ -75,8 +75,8 @@ internal static class OnnxToCoreMLConverter
                     break;
                 case 5: // initializer (weights)
                     var initBytes = reader.ReadBytes();
-                    var (name, weights) = ParseTensor(initBytes.ToByteArray());
-                    graphInfo.Initializers[name] = weights;
+                    var tensor = ParseTensor(initBytes.ToByteArray());
+                    graphInfo.Initializers[tensor.Name] = tensor;
                     break;
                 case 11: // input
                     var inputBytes = reader.ReadBytes();
@@ -128,13 +128,15 @@ internal static class OnnxToCoreMLConverter
         return node;
     }
 
-    private static (string name, float[] weights) ParseTensor(byte[] tensorBytes)
+    private static OnnxTensor ParseTensor(byte[] tensorBytes)
     {
         using var stream = new MemoryStream(tensorBytes);
         using var reader = new CodedInputStream(stream);
 
         string name = string.Empty;
         float[] weights = Array.Empty<float>();
+        int dataType = -1; // ONNX TensorProto.DataType: 1 = FLOAT, 11 = DOUBLE, etc.
+        var dims = new List<long>();
 
         while (!reader.IsAtEnd)
         {
@@ -143,12 +145,34 @@ internal static class OnnxToCoreMLConverter
 
             switch (fieldNumber)
             {
-                case 3: // name
+                case 1: // dims (repeated) - ONNX TensorProto field 1
+                    dims.Add(reader.ReadInt64());
+                    break;
+                case 2: // data_type - ONNX TensorProto field 2
+                    dataType = reader.ReadInt32();
+                    break;
+                case 8: // name - ONNX TensorProto field 8
                     name = reader.ReadString();
                     break;
                 case 9: // raw_data
                     var rawBytes = reader.ReadBytes().ToByteArray();
-                    weights = BytesToFloatArray(rawBytes);
+                    // Validate data type before conversion
+                    if (dataType == 1) // FLOAT (32-bit)
+                    {
+                        weights = BytesToFloatArray(rawBytes);
+                    }
+                    else if (dataType == -1)
+                    {
+                        // data_type field not yet encountered, assume float for backward compatibility
+                        weights = BytesToFloatArray(rawBytes);
+                    }
+                    else
+                    {
+                        throw new NotSupportedException(
+                            $"Tensor '{name}' has unsupported data type {dataType}. " +
+                            $"Only FLOAT (type 1) tensors are supported for ONNX→CoreML conversion. " +
+                            $"Common types: 1=FLOAT, 11=DOUBLE, 2=UINT8, 3=INT8, 6=INT32, 7=INT64.");
+                    }
                     break;
                 default:
                     reader.SkipLastField();
@@ -156,7 +180,12 @@ internal static class OnnxToCoreMLConverter
             }
         }
 
-        return (name, weights);
+        return new OnnxTensor
+        {
+            Name = name,
+            Data = weights,
+            Shape = dims.Select(d => (int)d).ToArray()
+        };
     }
 
     private static OnnxValueInfo ParseValueInfo(byte[] valueInfoBytes)
@@ -191,7 +220,7 @@ internal static class OnnxToCoreMLConverter
 
     private static int[] ParseTypeProto(byte[] typeBytes)
     {
-        // Simplified: extract shape dimensions from tensor type
+        // Parse ONNX TypeProto structure: TypeProto → tensor_type → shape → repeated dim → dim_value
         var shape = new List<int>();
 
         using var stream = new MemoryStream(typeBytes);
@@ -200,10 +229,12 @@ internal static class OnnxToCoreMLConverter
         while (!reader.IsAtEnd)
         {
             var tag = reader.ReadTag();
-            if (WireFormat.GetTagWireType(tag) == WireFormat.WireType.Varint)
+            var fieldNumber = WireFormat.GetTagFieldNumber(tag);
+
+            if (fieldNumber == 1) // tensor_type (LengthDelimited)
             {
-                var dim = (int)reader.ReadInt64();
-                if (dim > 0) shape.Add(dim);
+                var tensorTypeBytes = reader.ReadBytes().ToByteArray();
+                shape = ParseTensorTypeProto(tensorTypeBytes);
             }
             else
             {
@@ -212,6 +243,88 @@ internal static class OnnxToCoreMLConverter
         }
 
         return shape.ToArray();
+    }
+
+    private static List<int> ParseTensorTypeProto(byte[] tensorTypeBytes)
+    {
+        // Parse TensorTypeProto: field 1 = elem_type (skip), field 2 = shape
+        var shape = new List<int>();
+
+        using var stream = new MemoryStream(tensorTypeBytes);
+        using var reader = new CodedInputStream(stream);
+
+        while (!reader.IsAtEnd)
+        {
+            var tag = reader.ReadTag();
+            var fieldNumber = WireFormat.GetTagFieldNumber(tag);
+
+            if (fieldNumber == 2) // shape (LengthDelimited)
+            {
+                var shapeBytes = reader.ReadBytes().ToByteArray();
+                shape = ParseTensorShapeProto(shapeBytes);
+            }
+            else
+            {
+                reader.SkipLastField(); // Skip elem_type and unknown fields
+            }
+        }
+
+        return shape;
+    }
+
+    private static List<int> ParseTensorShapeProto(byte[] shapeBytes)
+    {
+        // Parse TensorShapeProto: repeated field 1 = dim
+        var dims = new List<int>();
+
+        using var stream = new MemoryStream(shapeBytes);
+        using var reader = new CodedInputStream(stream);
+
+        while (!reader.IsAtEnd)
+        {
+            var tag = reader.ReadTag();
+            var fieldNumber = WireFormat.GetTagFieldNumber(tag);
+
+            if (fieldNumber == 1) // dim (LengthDelimited, repeated)
+            {
+                var dimBytes = reader.ReadBytes().ToByteArray();
+                var dimValue = ParseDimensionProto(dimBytes);
+                if (dimValue > 0)
+                {
+                    dims.Add(dimValue);
+                }
+            }
+            else
+            {
+                reader.SkipLastField();
+            }
+        }
+
+        return dims;
+    }
+
+    private static int ParseDimensionProto(byte[] dimBytes)
+    {
+        // Parse DimensionProto: field 1 = dim_value (Varint)
+        using var stream = new MemoryStream(dimBytes);
+        using var reader = new CodedInputStream(stream);
+
+        while (!reader.IsAtEnd)
+        {
+            var tag = reader.ReadTag();
+            var fieldNumber = WireFormat.GetTagFieldNumber(tag);
+
+            if (fieldNumber == 1) // dim_value
+            {
+                return (int)reader.ReadInt64();
+            }
+            else
+            {
+                reader.SkipLastField(); // Skip dim_param and unknown fields
+            }
+        }
+
+        return 0;
     }
 
     private static float[] BytesToFloatArray(byte[] bytes)
@@ -285,7 +398,7 @@ internal static class OnnxToCoreMLConverter
         return network;
     }
 
-    private static CoreMLLayer? ConvertOperatorToLayer(OnnxNode op, Dictionary<string, float[]> initializers, int layerIndex)
+    private static CoreMLLayer? ConvertOperatorToLayer(OnnxNode op, Dictionary<string, OnnxTensor> initializers, int layerIndex)
     {
         var layer = new CoreMLLayer
         {
@@ -303,18 +416,31 @@ internal static class OnnxToCoreMLConverter
 
                 // Extract weights from initializers
                 var weightsKey = op.Inputs.Count > 1 ? op.Inputs[1] : null;
-                if (weightsKey != null && initializers.TryGetValue(weightsKey, out var weights))
+                if (weightsKey != null && initializers.TryGetValue(weightsKey, out var weightsTensor))
                 {
-                    layer.Weights = weights;
-                    layer.InputSize = weights.Length / (weights.Length > 0 ? (int)Math.Sqrt(weights.Length) : 1);
-                    layer.OutputSize = (int)Math.Sqrt(weights.Length);
+                    layer.Weights = weightsTensor.Data;
+
+                    // Use actual tensor shape instead of sqrt approximation
+                    // ONNX weight matrices for MatMul/Gemm are typically [out_dim, in_dim]
+                    if (weightsTensor.Shape != null && weightsTensor.Shape.Length == 2)
+                    {
+                        layer.OutputSize = weightsTensor.Shape[0];
+                        layer.InputSize = weightsTensor.Shape[1];
+                    }
+                    else if (weightsTensor.Data.Length > 0)
+                    {
+                        // Fallback for 1D or missing shape: infer square matrix (legacy behavior)
+                        var sqrtLen = (int)Math.Sqrt(weightsTensor.Data.Length);
+                        layer.InputSize = sqrtLen;
+                        layer.OutputSize = sqrtLen;
+                    }
                 }
 
                 // Extract bias if present
                 var biasKey = op.Inputs.Count > 2 ? op.Inputs[2] : null;
-                if (biasKey != null && initializers.TryGetValue(biasKey, out var bias))
+                if (biasKey != null && initializers.TryGetValue(biasKey, out var biasTensor))
                 {
-                    layer.Bias = bias;
+                    layer.Bias = biasTensor.Data;
                     layer.HasBias = true;
                 }
                 break;
@@ -349,7 +475,7 @@ internal class OnnxGraphInfo
 {
     public string Name { get; set; } = string.Empty;
     public List<OnnxNode> Operations { get; set; } = new();
-    public Dictionary<string, float[]> Initializers { get; set; } = new();
+    public Dictionary<string, OnnxTensor> Initializers { get; set; } = new();
     public List<OnnxValueInfo> Inputs { get; set; } = new();
     public List<OnnxValueInfo> Outputs { get; set; } = new();
 }
@@ -371,5 +497,15 @@ internal class OnnxNode
 internal class OnnxValueInfo
 {
     public string Name { get; set; } = string.Empty;
+    public int[] Shape { get; set; } = Array.Empty<int>();
+}
+
+/// <summary>
+/// ONNX tensor with data and shape information.
+/// </summary>
+internal class OnnxTensor
+{
+    public string Name { get; set; } = string.Empty;
+    public float[] Data { get; set; } = Array.Empty<float>();
     public int[] Shape { get; set; } = Array.Empty<int>();
 }
