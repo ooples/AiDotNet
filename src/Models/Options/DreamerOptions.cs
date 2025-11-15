@@ -1,6 +1,5 @@
 using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
-using AiDotNet.LossFunctions;
 using AiDotNet.ReinforcementLearning.Agents;
 
 namespace AiDotNet.Models.Options;

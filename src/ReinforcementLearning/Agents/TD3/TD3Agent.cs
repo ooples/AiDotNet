@@ -118,12 +118,13 @@ public class TD3Agent<T> : DeepReinforcementLearningAgentBase<T>
         var architecture = new NeuralNetworkArchitecture<T>(
             inputType: InputType.OneDimensional,
             taskType: NeuralNetworkTaskType.Regression,
+            complexity: NetworkComplexity.Medium,
             inputSize: _options.StateSize,
             outputSize: _options.ActionSize,
             layers: layers
         );
 
-        return new NeuralNetwork<T>(architecture);
+        return new NeuralNetwork<T>(architecture, new MeanSquaredErrorLoss<T>());
     }
 
     private NeuralNetwork<T> CreateCriticNetwork()
@@ -144,12 +145,13 @@ public class TD3Agent<T> : DeepReinforcementLearningAgentBase<T>
         var architecture = new NeuralNetworkArchitecture<T>(
             inputType: InputType.OneDimensional,
             taskType: NeuralNetworkTaskType.Regression,
+            complexity: NetworkComplexity.Medium,
             inputSize: inputSize,
             outputSize: 1,
             layers: layers
         );
 
-        return new NeuralNetwork<T>(architecture);
+        return new NeuralNetwork<T>(architecture, new MeanSquaredErrorLoss<T>());
     }
 
     public override Vector<T> SelectAction(Vector<T> state, bool training = true)

@@ -36,7 +36,7 @@ namespace AiDotNet.ReinforcementLearning.Environments;
 public class CartPoleEnvironment<T> : IEnvironment<T>
 {
     private readonly INumericOperations<T> _numOps;
-    private readonly Random _random;
+    private Random _random;
     private readonly int _maxSteps;
 
     // Physics constants
@@ -164,7 +164,7 @@ public class CartPoleEnvironment<T> : IEnvironment<T>
     /// <inheritdoc/>
     public void Seed(int seed)
     {
-        // Cannot reassign readonly field _random after construction
+        _random = new Random(seed);
     }
 
     /// <inheritdoc/>

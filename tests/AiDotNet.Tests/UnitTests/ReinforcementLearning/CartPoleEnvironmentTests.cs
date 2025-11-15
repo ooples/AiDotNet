@@ -51,6 +51,7 @@ public class CartPoleEnvironmentTests
         Assert.NotNull(nextState);
         Assert.Equal(4, nextState.Length);
         Assert.True(reward >= 0); // Reward should be 0 or 1
+        Assert.False(done); // Episode should not be done after one step
         Assert.NotNull(info);
     }
 
@@ -108,12 +109,18 @@ public class CartPoleEnvironmentTests
         var state1 = env1.Reset();
         var state2 = env2.Reset();
 
+        // Assert - initial states should be identical
+        for (int i = 0; i < 4; i++)
+        {
+            Assert.Equal(state1[i], state2[i], precision: 10);
+        }
+
         // Take same actions
         var action = new AiDotNet.LinearAlgebra.Vector<double>(new double[] { 0 });
         var (nextState1, _, _, _) = env1.Step(action);
         var (nextState2, _, _, _) = env2.Step(action);
 
-        // Assert - states should be identical
+        // Assert - next states should be identical
         for (int i = 0; i < 4; i++)
         {
             Assert.Equal(nextState1[i], nextState2[i], precision: 10);
