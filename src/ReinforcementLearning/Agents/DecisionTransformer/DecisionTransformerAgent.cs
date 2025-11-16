@@ -367,14 +367,7 @@ public class DecisionTransformerAgent<T> : DeepReinforcementLearningAgentBase<T>
     {
         var gradientsTensor = Tensor<T>.FromVector(gradients);
         _transformerNetwork.Backpropagate(gradientsTensor);
-
-        var parameters = _transformerNetwork.GetParameters();
-        for (int i = 0; i < parameters.Length; i++)
-        {
-            var update = NumOps.Multiply(learningRate, gradients[i % gradients.Length]);
-            parameters[i] = NumOps.Subtract(parameters[i], update);
-        }
-        _transformerNetwork.UpdateParameters(parameters);
+        _optimizer.Step();
     }
 
     public override void SaveModel(string filepath)
