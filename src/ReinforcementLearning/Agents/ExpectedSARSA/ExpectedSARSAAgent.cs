@@ -192,6 +192,8 @@ public class ExpectedSARSAAgent<T> : ReinforcementLearningAgentBase<T>
         return new ModelMetadata<T>
         {
             ModelType = ModelType.ReinforcementLearning,
+            FeatureCount = _options.StateSize,
+            Complexity = _qTable.Count * _options.ActionSize
         };
     }
 
