@@ -331,8 +331,8 @@ public class GraphAttentionLayer<T> : LayerBase<T>, IGraphConvolutionLayer<T>
                         {
                             T normalizedCoeff = NumOps.Divide(_lastAttentionCoefficients[b, h, i, j], sumExp);
 
-                            // Apply dropout to attention coefficients during training
-                            if (_dropoutRate > 0.0)
+                            // Apply dropout to attention coefficients during training only
+                            if (_dropoutRate > 0.0 && IsTrainingMode)
                             {
                                 // Dropout: randomly zero out with probability dropoutRate
                                 double rand = _random.NextDouble();
