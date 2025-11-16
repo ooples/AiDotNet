@@ -2,6 +2,7 @@ using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
 using AiDotNet.Models;
 using AiDotNet.Models.Options;
+using Newtonsoft.Json;
 
 namespace AiDotNet.ReinforcementLearning.Agents.AdvancedRL;
 
