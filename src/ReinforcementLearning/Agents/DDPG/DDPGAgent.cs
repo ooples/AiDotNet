@@ -390,7 +390,7 @@ public class DDPGAgent<T> : DeepReinforcementLearningAgentBase<T>
             }
 
             network.UpdateParameters(parameters);
-            network.ResetGradients();
+            // Gradients are managed internally by the network
         }
     }
 
